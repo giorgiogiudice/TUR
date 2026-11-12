@@ -161,14 +161,16 @@ jobs:
         run: |
           show() { echo "::group::$1"; if [ -f "$1" ]; then tail -n "${2:-200}" "$1"; else echo "(absent)"; fi; echo "::endgroup::"; }
           show "$OUT/host/vm-result.json"
-          show "$OUT/guest/status"
-          show "$OUT/guest/failed-units-status.txt"
-          show "$OUT/guest/dm-status.txt"
-          show "$OUT/guest/greeter-journal.txt" 80
-          show "$OUT/guest/sessions.txt"
-          show "$OUT/guest/dm-processes.txt"
-          show "$OUT/guest/systemd-analyze-time.txt"
-          show "$OUT/guest/exit-status.tsv"
+          for boot in first-boot second-boot; do
+            show "$OUT/guest/$boot/status"
+            show "$OUT/guest/$boot/failed-units-status.txt"
+            show "$OUT/guest/$boot/dm-status.txt"
+            show "$OUT/guest/$boot/sessions.txt"
+            show "$OUT/guest/$boot/session-processes.txt"
+            show "$OUT/guest/$boot/session-journal.txt" 80
+            show "$OUT/guest/$boot/prepare-second-boot.txt"
+            show "$OUT/guest/$boot/exit-status.tsv"
+          done
           show "$OUT/host/qemu.log"
           echo "::group::serial console, last 150 lines"
           if [ -f "$OUT/serial.log" ]; then

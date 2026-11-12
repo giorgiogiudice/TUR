@@ -10,10 +10,11 @@ What it does:
   firmware, 2 vCPUs, 4 GiB of memory, a virtio disk, user-mode networking and a
   virtio display that needs no host GPU;
 - captures the serial console from firmware onwards in OUT_DIR/serial.log;
-- waits, with a hard timeout, for the marker the test agent in the guest prints
-  once it has observed the boot and sent its report over a virtio-serial port
-  (WORK_DIR/report.tar);
-- takes a screenshot through QMP `screendump` and converts it to PNG;
+- waits, with a hard timeout, for the markers the test agent in the guest prints.
+  The agent observes the first boot, sends its report over a virtio-serial port
+  (WORK_DIR/report.tar), prepares the second boot and reboots; it then observes
+  the second boot and reports again;
+- takes a screenshot of each boot through QMP `screendump` and converts it to PNG;
 - asks the guest to power off and waits for QEMU to exit.
 
 It writes OUT_DIR/host/vm-result.json and exits 0 only if the agent reported.
@@ -45,13 +46,14 @@ OVMF_CANDIDATES = [
     ("/usr/share/edk2/ovmf/OVMF_CODE.fd", "/usr/share/edk2/ovmf/OVMF_VARS.fd"),
 ]
 ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b[()][0-9A-Za-z]|\x1b[=>]")
-# What the host looks for in the serial stream, in the order a boot produces it.
-MILESTONES = [
-    ("firmware_output", re.compile(r"\S")),
-    ("kernel_started", re.compile(r"Linux version \d")),
+KERNEL_BANNER = re.compile(r"Linux version \d")
+# Agent markers, in the order a boot produces them. FIRST-BOOT-DONE ends the
+# first boot, COMPLETE the second.
+MARKERS = [
     ("agent_started", re.compile(re.escape(MARK) + "START")),
     ("graphical_target", re.compile(re.escape(MARK) + r"graphical\.target reached")),
-    ("greeter_processes", re.compile(re.escape(MARK) + "greeter processes running")),
+    ("graphical_session", re.compile(re.escape(MARK) + "graphical session running")),
+    ("first_boot_done", re.compile(re.escape(MARK) + "FIRST-BOOT-DONE")),
     ("agent_complete", re.compile(re.escape(MARK) + "COMPLETE")),
 ]
 
@@ -195,6 +197,53 @@ def screenshot(qmp: Qmp, work: pathlib.Path, target: pathlib.Path) -> dict:
     return describe_image(width, height, rgb)
 
 
+class SerialWatcher:
+    """Follows the serial log and notes when each boot reaches each marker."""
+
+    def __init__(self, path: pathlib.Path, elapsed):
+        self.path, self.elapsed = path, elapsed
+        self.offset, self.pending = 0, ""
+        self.boot = 0
+        self.milestones: dict[str, float] = {}
+        self.printed: set[str] = set()
+
+    def pump(self) -> None:
+        if not self.path.exists():
+            return
+        with open(self.path, "rb") as stream:
+            stream.seek(self.offset)
+            data = stream.read()
+        self.offset += len(data)
+        self.pending += data.decode("utf-8", errors="replace")
+        complete, _, self.pending = self.pending.rpartition("\n")
+        for line in clean(complete).split("\n"):
+            self.line(line)
+
+    def note(self, name: str) -> None:
+        if name not in self.milestones:
+            self.milestones[name] = self.elapsed()
+            print(f"[{self.elapsed():7.1f}s] milestone: {name}", flush=True)
+
+    def line(self, line: str) -> None:
+        if not line.strip():
+            return
+        self.note("firmware_output")
+        if KERNEL_BANNER.search(line):
+            self.boot += 1
+            self.note(f"boot{self.boot}.kernel_started")
+        if MARK in line:
+            text = line[line.index(MARK):]
+            if text not in self.printed:
+                self.printed.add(text)
+                print(f"[{self.elapsed():7.1f}s] guest: {text}", flush=True)
+            for name, pattern in MARKERS:
+                if pattern.search(text):
+                    self.note(f"boot{max(self.boot, 1)}.{name}")
+
+    def reached(self, name: str) -> bool:
+        return any(key.endswith("." + name) for key in self.milestones)
+
+
 def find_ovmf() -> tuple[str, str]:
     for code, variables in OVMF_CANDIDATES:
         if os.path.exists(code) and os.path.exists(variables):
@@ -263,7 +312,7 @@ def main() -> int:
         "guest": {"cpus": args.cpus, "memory_mib": args.memory, "display": "virtio-vga (no 3D acceleration)"},
         "timeout_seconds": args.timeout,
         "milestones": {},
-        "screenshot": None,
+        "screenshots": {},
     }
     qemu_log = open(host / "qemu.log", "w")
     process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=qemu_log, stderr=subprocess.STDOUT)
@@ -305,51 +354,58 @@ def main() -> int:
         return finish("kvm-not-enabled")
 
     # ---- watch the serial console ---------------------------------------------
-    offset, pending, seen = 0, "", ""
-    waiting = [name for name, _pattern in MILESTONES]
+    watcher = SerialWatcher(serial_log, elapsed)
+    result["milestones"] = watcher.milestones
+    result["screenshots"] = {}
     deadline = started + args.timeout
+
+    def shoot(name: str, attempts: int, pause: float) -> None:
+        """Screenshot a boot; retry while the display still looks unrendered."""
+        tries = []
+        for attempt in range(1, attempts + 1):
+            try:
+                shot = screenshot(qmp, work, out / f"screenshot-{name}.png")
+            except Exception as error:
+                shot = {"error": str(error), "looks_rendered": False}
+            shot["at_seconds"] = elapsed()
+            tries.append(shot)
+            print(f"[{elapsed():7.1f}s] screenshot {name} #{attempt}: {shot}", flush=True)
+            if shot["looks_rendered"] or attempt == attempts:
+                break
+            time.sleep(pause)
+        result["screenshots"][name] = dict(tries[-1], attempts=len(tries), taken="after the agent reported")
+
     outcome = "timeout"
+    first_boot_shot = False
     while time.monotonic() < deadline:
         if process.poll() is not None:
             outcome = "qemu-exited"
             break
         time.sleep(0.5)
-        if serial_log.exists():
-            with open(serial_log, "rb") as stream:
-                stream.seek(offset)
-                data = stream.read()
-            offset += len(data)
-            pending += data.decode("utf-8", errors="replace")
-            complete, _, pending = pending.rpartition("\n")
-            if complete:
-                text = clean(complete + "\n")
-                seen += text
-                for line in text.split("\n"):
-                    if MARK in line:
-                        print(f"[{elapsed():7.1f}s] guest: {line[line.index(MARK):]}", flush=True)
-        for name, pattern in MILESTONES:
-            if name in waiting and pattern.search(seen + clean(pending)):
-                waiting.remove(name)
-                result["milestones"][name] = elapsed()
-                print(f"[{elapsed():7.1f}s] milestone: {name}", flush=True)
-        seen = seen[-4096:]
+        watcher.pump()
         qmp.drain()
-        if "agent_complete" in result["milestones"]:
+        if watcher.reached("first_boot_done") and not first_boot_shot:
+            # The guest reboots about 20 s after this marker: be quick.
+            first_boot_shot = True
+            shoot("first-boot", attempts=3, pause=4)
+        if watcher.reached("agent_complete"):
             outcome = "agent-reported"
             break
 
+    result["boots_seen"] = watcher.boot
     result["resets_seen"] = sum(1 for event in qmp.events if event["event"] == "RESET")
     result["events"] = [
         {"event": event["event"], "at_seconds": round(event["host_time"] - started, 1)} for event in qmp.events
     ]
 
     if outcome != "agent-reported":
-        print(f"[{elapsed():7.1f}s] the guest did not report: {outcome}; still waiting for: {', '.join(waiting)}")
+        missing = [name for name, _pattern in MARKERS if not watcher.reached(name)]
+        print(f"[{elapsed():7.1f}s] the guest did not report: {outcome}; markers not seen: {', '.join(missing)}")
         if process.poll() is None:
             try:
-                shot = screenshot(qmp, work, out / "screenshot.png")
+                shot = screenshot(qmp, work, out / "screenshot-at-failure.png")
                 shot["taken"] = "at failure, for diagnosis"
-                result["screenshot"] = shot
+                result["screenshots"]["at-failure"] = shot
                 print(f"screenshot at failure: {shot}")
             except Exception as error:  # diagnosis only
                 print(f"no screenshot at failure: {error}")
@@ -360,29 +416,18 @@ def main() -> int:
         serial_tail()
         return finish(outcome)
 
-    # ---- screenshot: the greeter has had its hold time; allow slow painting ----
-    attempts = []
-    for attempt in range(1, 10):
-        try:
-            shot = screenshot(qmp, work, out / "screenshot.png")
-        except Exception as error:
-            shot = {"error": str(error), "looks_rendered": False}
-        shot["at_seconds"] = elapsed()
-        attempts.append(shot)
-        print(f"[{elapsed():7.1f}s] screenshot {attempt}: {shot}", flush=True)
-        if shot["looks_rendered"]:
-            break
-        time.sleep(5)
-    result["screenshot"] = dict(attempts[-1], attempts=len(attempts), taken="after the agent reported")
+    # ---- screenshot: the session has had its hold time; allow slow painting ----
+    shoot("second-boot", attempts=9, pause=5)
 
     # ---- power off ----------------------------------------------------------------
     result["shutdown"] = "forced"
     try:
+        asked = elapsed()
         qmp.command("system_powerdown")
         print(f"[{elapsed():7.1f}s] asked the guest to power off", flush=True)
         process.wait(timeout=180)
         result["shutdown"] = "clean"
-        result["shutdown_seconds"] = round(elapsed() - result["milestones"]["agent_complete"], 1)
+        result["shutdown_seconds"] = round(elapsed() - asked, 1)
     except Exception as error:
         print(f"[{elapsed():7.1f}s] the guest did not power off: {error}; stopping QEMU")
         try:

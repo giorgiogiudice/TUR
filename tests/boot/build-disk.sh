@@ -35,7 +35,7 @@ fallback_fs="${UOS_BOOT_ROOT_FS:-ext4}"
 # Kernel arguments added at install time, the documented way to make them
 # machine-local state. The last console= becomes /dev/console, so the serial
 # port carries the systemd status output and the agent's markers.
-kargs=(console=tty0 console=ttyS0,115200n8 uos.boot_test=1)
+kargs=("console=tty0" "console=ttyS0,115200n8" "uos.boot_test=1")
 
 mkdir -p "${work}" "${out}/host"
 work="$(cd "${work}" && pwd)"

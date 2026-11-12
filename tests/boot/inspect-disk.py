@@ -170,6 +170,13 @@ def inspect_root(disk: Disk, host: pathlib.Path, layout: dict) -> None:
     layout["boot_entries"] = len(entries)
     print("Boot loader entries:")
     print("".join(entries) or "(none found)")
+    # GRUB's own configuration and environment: where boot counting would live.
+    grub = []
+    for name in ("grub2/grub.cfg", "grub2/grubenv", "grub2/bootuuid.cfg", "loader/loader.conf"):
+        if (boot / name).is_file():
+            grub.append(f"### /boot/{name}\n{read_text(boot / name)}\n")
+    (host / "boot-grub-config.txt").write_text("\n".join(grub))
+    layout["grub_config_mentions_boot_counter"] = any("boot_counter" in text for text in grub)
     listed = []
     for name in ("", "boot", "boot/grub2", "boot/loader", "ostree", "ostree/deploy"):
         listed.append(f"### /{name}\n" + run("ls", "-la", str(mnt / name), check=False))
