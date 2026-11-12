@@ -212,7 +212,9 @@ fn destructive_operations_are_not_offered_anywhere() {
 #[test]
 fn dbus_interface_has_the_documented_members() {
     let xml = dbus_xml();
-    assert!(xml.starts_with("<!-- SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0 -->\n"));
+    assert!(
+        xml.starts_with("<!-- SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0 -->\n")
+    );
     assert_eq!(xml_names(&xml, "node"), ["/org/tur/Storage1"]);
     assert_eq!(xml_names(&xml, "interface"), ["org.tur.Storage1"]);
     assert_eq!(
@@ -302,7 +304,9 @@ fn every_rust_file_starts_with_the_licence_identifier() {
         for file in rust_files(directory) {
             let text = read(&file);
             assert!(
-                text.starts_with("// SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0\n"),
+                text.starts_with(
+                    "// SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0\n"
+                ),
                 "{}",
                 file.display()
             );
