@@ -833,6 +833,35 @@ def check_install_flow(bench: Bench) -> None:
     R.check("portable program: its logs are gone", not (logs / app).exists())
     R.check("portable program: no longer listed", app not in bench.tur_run(["app", "list"]).stdout)
 
+    # An application whose own uninstaller fails is removed all the same.
+    # No real uninstaller can be asked to fail, so the record of a fresh
+    # installation is edited to name one: the program itself, which exits
+    # with the status it is given.
+    status, report, _ = install(app, "console64.exe", "--portable")
+    R.equal("failing uninstaller: installed again", status, 0)
+    record_path = data / "prefixes" / app / "application.json"
+    edited = json.loads(record_path.read_text()) if record_path.is_file() else {}
+    edited["uninstall"] = {"method": "uninstaller", "program": edited.get("main_executable_windows"),
+                           "arguments": ["3"]}
+    record_path.write_text(json.dumps(edited, indent=2))
+    removed = bench.tur_run(["app", "uninstall", app, "--json"])
+    R.equal("failing uninstaller: the removal succeeds", removed.returncode, 0)
+    try:
+        outcome = json.loads(removed.stdout)
+    except json.JSONDecodeError:
+        outcome = {}
+    uninstaller = outcome.get("uninstaller", {})
+    R.equal("failing uninstaller: it was run", uninstaller.get("ran"), True)
+    R.equal("failing uninstaller: its status is reported", uninstaller.get("exit_status"), 3)
+    R.equal("failing uninstaller: reported as failed", uninstaller.get("succeeded"), False)
+    R.equal("failing uninstaller: code", uninstaller.get("code"), "TUR-WINDOWS-APP-011")
+    R.equal("failing uninstaller: what it left in the prefix is reported",
+            uninstaller.get("left_in_prefix", {}).get("main_executable_present"), True)
+    R.equal("failing uninstaller: nothing was left behind", outcome.get("left_behind"), [])
+    nothing_left("failing uninstaller, removed", app)
+    warned = bench.tur_run(["app", "uninstall", app])
+    R.check("failing uninstaller: removed is removed", "TUR-WINDOWS-APP-007" in warned.stderr, warned.stderr)
+
 
 def check_reset_and_remove(bench: Bench) -> None:
     section("Reset and remove")

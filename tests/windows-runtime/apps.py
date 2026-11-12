@@ -434,7 +434,8 @@ def check_open_file(context: Context) -> str:
     time.sleep(2)
     screenshot(context.evidence / "check.png")
     ended = launch.close(context.klass)
-    return f"started with a file as its argument, it showed a window titled {window.title!r} after {seconds:.1f} s ({ended})"
+    return (f"given a file on its command line, it opened it: its window is titled {window.title!r} "
+            f"after {seconds:.1f} s ({ended})")
 
 
 def one_connection(text: bytes, hold: threading.Event) -> tuple[int, dict]:
