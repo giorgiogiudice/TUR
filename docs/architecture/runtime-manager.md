@@ -142,20 +142,28 @@ design is settled. ARM translation is never detected. `--host-arch` and
 
 ### Error codes
 
-`tur-core` has no family for the runtime manager itself. Ecosystem-specific
-conditions use `WINDOWS`, `DARWIN` and `ANDROID`; refusals that keep an
-application inside its sandbox use `SECURITY`; the rest use `DESKTOP` with a
-`RUNTIME` or `PROFILE` topic until a family is agreed. A test checks that every
-code parses and that no two conditions share one.
+Conditions that are the runtime manager's own use its family, `RUNTIME`, with a
+`MANAGER` or `PROFILE` topic. Ecosystem-specific conditions use `WINDOWS`,
+`DARWIN` and `ANDROID`; refusals that keep an application inside its sandbox
+use `SECURITY`. A test checks that every code parses, that no two conditions
+share one, and which family each group is in.
+
+Until `tur-core` had a `RUNTIME` family, the first group was parked under
+`DESKTOP`. `TUR-DESKTOP-RUNTIME-00N` is now `TUR-RUNTIME-MANAGER-00N` and
+`TUR-DESKTOP-PROFILE-00N` is now `TUR-RUNTIME-PROFILE-00N`; the numbers are
+unchanged. Those ten strings were used by nothing outside this component and
+its tests. The `WINDOWS` and `SECURITY` codes did not move: they are in the
+families they belong to, and the Windows end-to-end test
+(`tests/windows-runtime/e2e.py`) reads eight of them.
 
 | Code | Condition |
 |---|---|
-| `TUR-DESKTOP-RUNTIME-001` | The path could not be read |
-| `TUR-DESKTOP-RUNTIME-002` | An ELF, zip, OLE or script file is truncated or malformed |
-| `TUR-DESKTOP-RUNTIME-003` | The file exceeds an inspection limit |
-| `TUR-DESKTOP-RUNTIME-004` | No supported runtime exists for the file |
-| `TUR-DESKTOP-RUNTIME-005` | The runtime manager's data or state directory cannot be found or used |
-| `TUR-DESKTOP-RUNTIME-006` | A program the operation needs (`tar`) is not installed |
+| `TUR-RUNTIME-MANAGER-001` | The path could not be read |
+| `TUR-RUNTIME-MANAGER-002` | An ELF, zip, OLE or script file is truncated or malformed |
+| `TUR-RUNTIME-MANAGER-003` | The file exceeds an inspection limit |
+| `TUR-RUNTIME-MANAGER-004` | No supported runtime exists for the file |
+| `TUR-RUNTIME-MANAGER-005` | The runtime manager's data or state directory cannot be found or used |
+| `TUR-RUNTIME-MANAGER-006` | A program the operation needs (`tar`) is not installed |
 | `TUR-WINDOWS-INSPECT-001` | A PE file is truncated or malformed |
 | `TUR-WINDOWS-RUNTIME-001` | Wine is not installed |
 | `TUR-WINDOWS-RUNTIME-002` | The file requires a Windows kernel |
@@ -188,10 +196,10 @@ code parses and that no two conditions share one.
 | `TUR-ANDROID-RUNTIME-001` | The Android runtime is not installed |
 | `TUR-ANDROID-RUNTIME-002` | ARM translation is not installed |
 | `TUR-ANDROID-RUNTIME-003` | An Android package no runtime handles |
-| `TUR-DESKTOP-PROFILE-001` | The profile could not be read |
-| `TUR-DESKTOP-PROFILE-002` | The profile is not JSON or does not match the schema |
-| `TUR-DESKTOP-PROFILE-003` | A profile field holds a value that is not allowed |
-| `TUR-DESKTOP-PROFILE-004` | The profile appears to hold a credential |
+| `TUR-RUNTIME-PROFILE-001` | The profile could not be read |
+| `TUR-RUNTIME-PROFILE-002` | The profile is not JSON or does not match the schema |
+| `TUR-RUNTIME-PROFILE-003` | A profile field holds a value that is not allowed |
+| `TUR-RUNTIME-PROFILE-004` | The profile appears to hold a credential |
 
 These are not yet registry entries in the sense of §29.3 (severity, detection
 criteria, recovery action); that registry does not exist yet.
