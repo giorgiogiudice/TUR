@@ -21,6 +21,11 @@ file, and is identified by the SPDX header of each file
 
 ## Third-party software in the TUR image
 
+TUR is built from software packaged by the Fedora Project and many other
+projects. TUR is not provided, endorsed or supported by the Fedora Project or
+by Red Hat. (This statement of origin is in the image as
+`/usr/share/tur/statement-of-origin.txt`; its wording awaits legal review.)
+
 The TUR operating-system image is built on Fedora Linux and contains
 third-party software: 1,750 packages in build `20261112.gdf32bacdf174`, the
 build this notice was written against. Each package is distributed under its
@@ -41,6 +46,31 @@ commercially where those licences allow it.
 | Licence review, obligations and open questions | [`docs/dependencies/licence-review.md`](docs/dependencies/licence-review.md) |
 | The exact contents of a given build | The SPDX file `sbom.spdx.json` produced with that build |
 | Licence texts and copyright notices of each package | Installed by each package under `/usr/share/licenses/` in the image |
+
+### Fedora's marks
+
+The image does not contain Fedora's logo package `fedora-logos` or its
+release packages `fedora-release-*`, as Fedora's trademark guidelines require
+of a system that mixes or modifies Fedora's packages. In their place are
+Fedora's own mark-free replacements, installed unmodified from Fedora's
+release tree ([`image/branding/packages.lock`](image/branding/packages.lock)):
+
+| Package | Licence | What TUR changes |
+|---|---|---|
+| `generic-release`, `generic-release-common` 45-0.4 | MIT | The identity files (`/usr/lib/os-release`, `/usr/lib/fedora-release`, `/usr/lib/system-release-cpe`) are rewritten with TUR's name |
+| `generic-logos` 18.0.0-29.fc45 | GPL-2.0-only | Two icons named `start-here` and `/usr/share/pixmaps/system-logo-white.png` are replaced with TUR's mark; the rest is as Fedora ships it |
+
+The polkit rule for rpm-ostree, `org.projectatomic.rpmostree1.rules`, is
+Fedora's file from `fedora-release-ostree-desktop`, kept unchanged under its
+MIT licence, which is in `/usr/share/licenses/tur-fedora-release-files/` in
+the image. Packages that only presented the system as Fedora were removed, or,
+where another package depends on them, their files were deleted and their
+licence files kept ([TUR-008](docs/reports/TUR-008.md)).
+
+TUR's mark, boot splash, wallpaper and the files under `branding/` are TUR's
+own work under the TUR licence (a first draft; whether a software licence is
+the right instrument for a brand is a question for the legal review,
+[desktop-experience.md](docs/architecture/desktop-experience.md), 14.2).
 
 ## Third-party code inside TUR's own programs
 

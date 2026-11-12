@@ -1,0 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR's statement of origin, in the owner's words of 12 November 2026
+# (desktop-experience.md, 17.1, answer 3). Subject to legal review. A program
+# that shows it skips the lines that begin with "#".
+TUR is built from software packaged by the Fedora Project and many other projects. TUR is not provided, endorsed or supported by the Fedora Project or by Red Hat.

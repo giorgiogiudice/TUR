@@ -1,0 +1,16 @@
+{
+    "KPackageStructure": "Plasma/LookAndFeel",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "TUR project authors"
+            }
+        ],
+        "Category": "",
+        "Description": "TUR's dark global theme (provisional: defaults only, Breeze's colours)",
+        "Id": "org.tur.dark",
+        "License": "LicenseRef-TUR-Noncommercial-1.0.0",
+        "Name": "TUR Dark",
+        "Website": "https://github.com/giorgiogiudice/TUR"
+    }
+}

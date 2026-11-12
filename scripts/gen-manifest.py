@@ -170,10 +170,13 @@ def main() -> int:
             "image": turrel.get("TUR_BASE_IMAGE"),
             "tag": lock.get("BASE_TAG"),
             "digest": turrel.get("TUR_BASE_DIGEST"),
-            "version": osrel.get("OSTREE_VERSION") or lock.get("BASE_VERSION"),
-            "os_id": osrel.get("ID"),
-            "os_version_id": osrel.get("VERSION_ID"),
-            "variant_id": osrel.get("VARIANT_ID"),
+            # The image's os-release is TUR's (image/branding/branding.sh); what
+            # the base called itself is in the TUR release file. An image built
+            # before that change has only its os-release to go by.
+            "version": turrel.get("TUR_BASE_VERSION") or osrel.get("OSTREE_VERSION") or lock.get("BASE_VERSION"),
+            "os_id": turrel.get("TUR_BASE_OS_ID") or osrel.get("ID"),
+            "os_version_id": turrel.get("TUR_BASE_OS_VERSION_ID") or osrel.get("VERSION_ID"),
+            "variant_id": turrel.get("TUR_BASE_OS_VARIANT_ID") or osrel.get("VARIANT_ID"),
         },
         "kernel_release": values.get("kernel_release"),
         "kernel_config_sha256": values.get("kernel_config_sha256"),

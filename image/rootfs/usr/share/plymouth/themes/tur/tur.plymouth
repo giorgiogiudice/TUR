@@ -1,0 +1,70 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# TUR's boot splash (desktop-experience.md, section 6.1): black ground, the
+# flat lotus mark, a spinner, the current stage in words below it. A theme for
+# Plymouth's two-step module: this file and images, no script. The mark and
+# the spinner are drawn by branding/render.py; the images of the passphrase
+# dialog are Plymouth's own, copied from the spinner theme at build time
+# (image/branding/branding.sh).
+[Plymouth Theme]
+Name=TUR
+Description=TUR's boot splash: the lotus mark on black and a spinner.
+ModuleName=two-step
+
+[two-step]
+Font=Cantarell 12
+TitleFont=Cantarell Light 30
+ImageDir=/usr/share/plymouth/themes/tur
+DialogHorizontalAlignment=.5
+DialogVerticalAlignment=.382
+TitleHorizontalAlignment=.5
+TitleVerticalAlignment=.382
+HorizontalAlignment=.5
+VerticalAlignment=.66
+WatermarkHorizontalAlignment=.5
+WatermarkVerticalAlignment=.42
+Transition=none
+TransitionDuration=0.0
+BackgroundStartColor=0x000000
+BackgroundEndColor=0x000000
+UseFirmwareBackground=false
+ProgressBarBackgroundColor=0x27324a
+ProgressBarForegroundColor=0x2aa9f8
+MessageBelowAnimation=true
+
+[boot-up]
+UseEndAnimation=false
+
+[shutdown]
+UseEndAnimation=false
+
+[reboot]
+UseEndAnimation=false
+
+[updates]
+SuppressMessages=true
+ProgressBarShowPercentComplete=true
+UseProgressBar=true
+Title=Installing updates
+SubTitle=Keep the computer switched on
+
+[system-upgrade]
+SuppressMessages=true
+ProgressBarShowPercentComplete=true
+UseProgressBar=true
+Title=Upgrading the system
+SubTitle=Keep the computer switched on
+
+[firmware-upgrade]
+SuppressMessages=true
+ProgressBarShowPercentComplete=true
+UseProgressBar=true
+Title=Updating firmware
+SubTitle=Keep the computer switched on
+
+[system-reset]
+SuppressMessages=true
+ProgressBarShowPercentComplete=true
+UseProgressBar=true
+Title=Resetting the system
+SubTitle=Keep the computer switched on

@@ -7,10 +7,11 @@ The TUR operating system is one bootc container image, defined by
 | Path | Purpose |
 |---|---|
 | `Containerfile` | The image definition |
-| `Containerfile.containerignore` | What is sent to the build: this directory, and the sources of the programs compiled into the image |
+| `Containerfile.containerignore` | What is sent to the build: this directory, TUR's artwork (`branding/`), and the sources of the programs compiled into the image |
 | `programs.tsv` | The TUR programs compiled into the image: component, program, where it is installed |
 | `programs.sh` | What the build stage runs: fetch the crates, compile the programs, gather what goes with them |
 | `base.lock` | The pinned base image: repository, tag, digest, version |
+| `branding/` | What replaces Fedora's marks: the script the build runs, the pinned replacement packages, Firefox's policy (section "Fedora's marks") |
 | `rootfs/` | Files copied into the image. Everything lives under `/usr` |
 | `third-party-licensed/` | Files that are **not** under the TUR licence, each directory with its own licence and README |
 
@@ -179,10 +180,56 @@ licence list kept in
 
 ## Identity
 
-The image keeps Fedora's distribution `ID` so that image and update tooling keep
-working, and identifies itself as TUR through `IMAGE_ID`, `IMAGE_VERSION` and
-`BUILD_ID` in `/usr/lib/os-release` and through `/usr/lib/tur/release`. Full
-rebranding is a Phase 3 task.
+`/usr/lib/os-release` is TUR's: `NAME="TUR"`, `ID=tur`, `ID_LIKE=fedora`,
+`VERSION_ID` and `IMAGE_VERSION` the TUR version, `BUILD_ID` the build,
+`LOGO=tur-logo-icon`, `DEFAULT_HOSTNAME=tur-pc` (not `tur`: see TUR-008), and the project's addresses on
+GitHub. `ID_LIKE=fedora` tells tools that look for the family (fwupd, for
+example) where they are. `/etc/system-release` reads `TUR release <version>`;
+the firmware boot entry that bootupd creates is named from it.
+`/usr/lib/tur/release` holds the build identity and what the base called
+itself (`TUR_BASE_OS_ID`, `TUR_BASE_OS_VERSION_ID`, `TUR_BASE_OS_VARIANT_ID`,
+read before the swap); the build manifest takes the base's identity from there.
+
+## Fedora's marks
+
+Fedora's trademark guidelines require a system that mixes or modifies Fedora's
+packages to remove `fedora-logos`, `fedora-release` and `fedora-release-notes`
+(AGENTS.md: no image may be published before that). The final `RUN` of the
+`Containerfile` runs [`branding/branding.sh`](branding/branding.sh), which
+does it and replaces everything else that presents the system as Fedora
+([desktop-experience.md](../docs/architecture/desktop-experience.md),
+section 12; the full inventory, before and after, is in
+[TUR-008](../docs/reports/TUR-008.md)):
+
+| What | How |
+|---|---|
+| `fedora-logos`, `fedora-release-common`, `-kinoite`, `-identity-kinoite`, `-ostree-desktop` | Removed; Fedora's mark-free `generic-release`, `generic-release-common` and `generic-logos` installed instead, downloaded from Fedora's release tree and checked against the SHA-256 in [`branding/packages.lock`](branding/packages.lock). `system-release` and `system-logos` are theirs. The rpm-ostree polkit rule is kept; the systemd presets live in other packages and stay. The build fails if the swap leaves any dependency unmet |
+| `os-release`, `/etc/system-release`, `system-release-cpe` | TUR's (section "Identity") |
+| Logo | TUR's flat mark ([`branding/`](../branding/)) as `tur-logo-icon` in `hicolor`, as `start-here`, and as `/usr/share/pixmaps/system-logo-white.png`, which KDE's "About this system" shows |
+| Boot splash | Plymouth theme `tur` ([`rootfs/usr/share/plymouth/themes/tur/`](rootfs/usr/share/plymouth/themes/tur/)), the default in `plymouthd.defaults` |
+| initramfs | Regenerated with the arguments the base used (`--reproducible --add ostree --no-hostonly`), at the time of the build ID's date, so that it carries TUR's `os-release`, release file and splash |
+| Desktop | Fedora's global themes removed; `org.tur.dark` (provisional, defaults only: Breeze's dark colours, TUR's wallpaper, no splash) is the default in kde-settings' `kdeglobals`; wallpaper `Tur`, also behind Fedora's names `Default` and `Fedora`; login screen (`rootfs/usr/lib/plasmalogin/plasmalogin.conf.d/10-tur.conf` and Fedora's `defaults.conf`) and lock screen (kde-settings' `kscreenlockerrc`) show it |
+| Removed: `fedora-bookmarks`, `plasma-welcome-fedora`, `fedora-workstation-backgrounds`, `fedora-appstream-metadata`, `NetworkManager-config-connectivity-fedora` | Nothing requires them |
+| Files deleted, record kept: `plasma-lookandfeel-fedora`, `f45-backgrounds-kde`, `f45-backgrounds-base` | Other packages require them; their licence files stay |
+| Firefox | `tur-default-prefs.js` replaces Fedora's start page and pinned tab; `distribution.ini` no longer names the build "for Fedora"; if Fedora's bookmarks are compiled into the browser, the policy `NoDefaultBookmarks` keeps them out of new profiles |
+| Contact nobody asked for | Installation counting (`rpm-ostree-countme.timer`) masked; the connectivity check against Fedora's server is gone with its package |
+
+What stays, and why, is
+[`tests/image/marks-allowlist.tsv`](../tests/image/marks-allowlist.tsv):
+Fedora's repositories and signing keys, the `.fc45` tag, file names, comments,
+and other projects' programs that mention Fedora. The `image` workflow fails
+when anything else carries Fedora's name or a file of `fedora-logos` comes
+back (`tests/image/marks.py`), and prints an inventory for people
+(`tests/image/marks-inventory.sh`). The `boot` workflow boots the installed
+disk once more with the splash shown and a user signed in, and fails if the
+text on any screenshot names Fedora (`tests/boot/splash.py`,
+`tests/boot/screenshot-text.py`).
+
+Not done here: the image's lower layers still contain the base's files,
+Fedora's logos among them, until a published image is squashed or re-chunked
+(design 12.1, item 3); the time servers are still Fedora's NTP pool zone; the
+splash is shown only with the `rhgb` or `splash` kernel argument, which the
+image does not set. See TUR-008.
 
 ## Updating the base pin
 

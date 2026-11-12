@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# TUR's default global theme, provisional (task D-03): the base's global
+# themes are removed from the image, and something must be the default. Data only:
+# the defaults Plasma writes at login, no layout script and no splash QML
+# (desktop-experience.md, sections 3.2 and 7.6). Task D-04 replaces it with
+# the themes generated from TUR's colour tokens.
+[kdeglobals][KDE]
+widgetStyle=Breeze
+
+[kdeglobals][General]
+ColorScheme=BreezeDark
+
+[kdeglobals][Icons]
+Theme=breeze-dark
+
+[plasmarc][Theme]
+name=default
+
+[Wallpaper]
+Image=Tur
+
+[kcminputrc][Mouse]
+cursorTheme=breeze_cursors
+
+[kwinrc][org.kde.kdecoration2]
+library=org.kde.breeze
+theme=Breeze
+
+# No splash screen at login (desktop-experience.md, 6.4).
+[ksplashrc][KSplash]
+Engine=none
+Theme=None

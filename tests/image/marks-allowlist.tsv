@@ -1,0 +1,99 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# What may keep Fedora's name in the TUR image: table C of
+# desktop-experience.md, section 12.4, written down for tests/image/marks.py.
+# kind<TAB>pattern<TAB>reason. "text": a file that contains the word "Fedora";
+# "name": a file, in a place artwork lives, named after Fedora. Patterns are
+# shell patterns in which * also matches "/"; initramfs paths begin with
+# "initramfs:". Documentation, licence texts, manual pages and translations
+# are not scanned at all. A file of Fedora's logo package is never allowed,
+# whatever its name. Keep this list short: every line is reviewed.
+#
+# --- Where packages come from, said truthfully (C3, C6)
+text	/usr/share/dnf5/repos.d/fedora*.repo	Fedora's package repositories, named as what they are (C3)
+text	/usr/share/dnf5/repos.d/rpmfusion-nonfree-*.repo	Third-party repositories Fedora's tool offers, disabled until a person enables one (C6)
+text	/usr/share/distribution-gpg-keys/*	Signing keys of Fedora and other distributions, with their own user IDs (C3)
+text	/usr/lib/systemd/system/flatpak-add-fedora-repos.service	Adds Fedora's Flatpak remotes under Fedora's name; a decision for the application centre (12.3)
+text	/usr/lib/systemd/system/fedora-third-party-refresh.service	Fedora's third-party repository tool (C6)
+text	/usr/share/polkit-1/actions/org.fedoraproject.thirdparty.policy	Fedora's third-party repository tool (C6)
+text	/usr/lib/python3*/site-packages/fedora_third_party*	Fedora's third-party repository tool (C6)
+text	/usr/share/tur/catalogue/*.toml	TUR's catalogue links an application's page on Fedora's package site and names that site truthfully
+#
+# --- TUR's own text about its origin, and Fedora's defaults that TUR's override
+text	/usr/share/tur/statement-of-origin.txt	TUR's statement of origin (desktop-experience.md, 17.1, answer 3)
+text	/usr/lib64/firefox/browser/defaults/preferences/firefox-redhat-default-prefs.js	The base's Firefox defaults; its start page and pinned tab are replaced by tur-default-prefs.js, read after it (the smoke test checks)
+text	/usr/share/containers/registries.conf.d/000-shortnames.conf	Short names of container images, Fedora's among them
+text	/usr/share/kf6/searchproviders/fedora.desktop	KDE's web shortcut for searching Fedora's package site: names the site it searches (C8)
+#
+# --- Technical: comments, policy names and file formats (C4, C5)
+text	/usr/lib/systemd/system-preset/90-default.preset	Comments of the presets kept from Fedora (redhat-systemd-presets-common)
+text	/usr/lib/systemd/user-preset/90-default-user.preset	Comments of the presets kept from Fedora (redhat-systemd-presets-common)
+text	/usr/lib/systemd/system/sshd.service	A comment about a Fedora 38 migration
+text	/usr/lib/systemd/system/sshd@.service	A comment about a Fedora 38 migration
+text	/usr/lib/systemd/system-generators/bootc-systemd-generator	A comment in bootc
+text	/usr/lib/bootc/fedora-bootc-destructive-cleanup	bootc's cleanup script for Fedora-based systems
+text	/usr/lib/dracut/dracut.conf.d/01-dist.conf	A comment in dracut's configuration
+text	/usr/lib/dracut/modules.d/77integrity/README	dracut's documentation inside its module directory
+text	/usr/share/crypto-policies/*	Names of Fedora's crypto policies and comments in them
+text	/usr/lib/rpm/sysusers.sh	A comment in rpm
+text	/usr/libexec/grub2/systemd-integration.sh	A comment in GRUB's tools
+text	/usr/share/rpm-ostree/treefile.json	The recipe the base image was composed from
+text	/etc/selinux/config	A comment in SELinux's configuration
+text	/etc/krb5.conf.d/kcm_default_ccache	A comment in SSSD's configuration
+text	/usr/share/sssd-kcm/kcm_default_ccache	A comment in SSSD's configuration
+text	/etc/krb5.conf.d/enable_sssd_conf_dir	A comment in SSSD's configuration
+text	/usr/share/sssd/krb5-snippets/enable_sssd_conf_dir	A comment in SSSD's configuration
+text	/usr/share/kde-settings/kde-profile/default/xdg/kde-mimeapps.list	A comment in kde-settings
+text	/etc/geoclue/geoclue.conf	A comment in GeoClue's configuration
+text	/etc/firewalld/firewalld-*.conf	firewalld's default zone for Fedora's editions, by name (follow-up: TUR's own zone)
+text	/usr/lib/firewalld/zones/FedoraWorkstation.xml	firewalld's zone for Fedora Workstation, the default zone of the base (follow-up: TUR's own zone)
+text	/usr/lib/realmd/realmd-distro.conf	realmd's per-distribution settings
+#
+# --- Programs and data of other projects that detect or mention Fedora
+text	/usr/libexec/os-probes/mounted/90linux-distro	os-prober recognises other installed systems, Fedora among them
+text	/usr/share/hplip/*	HP's printer tools detect the distribution
+text	/usr/libexec/openconnect/hipreport.sh	An example value in OpenConnect's script
+text	/usr/share/magic	file(1)'s database of file formats
+text	/usr/share/misc/magic	file(1)'s database of file formats
+text	/usr/bin/alsa-info.sh	ALSA's diagnostic script detects the distribution
+text	/usr/bin/lsb_release	Reports the distribution; recognises Fedora among others
+text	/usr/bin/lsb-release	Reports the distribution; recognises Fedora among others
+text	/usr/bin/dracut	A comment in dracut
+text	/usr/bin/firefox	A comment in the base's Firefox start script
+text	/usr/bin/fpaste	Fedora's pastebin client, which names the service it uses
+text	/usr/bin/gcore	GDB's package version string, "(Fedora Linux)" (C4)
+text	/usr/bin/gdb-add-index	GDB's package version string, "(Fedora Linux)" (C4)
+text	/usr/bin/gstack	GDB's package version string, "(Fedora Linux)" (C4)
+text	/usr/bin/pstack	GDB's package version string, "(Fedora Linux)" (C4)
+text	/usr/bin/pinentry	A copyright line
+text	/usr/bin/startx	A comment in xinit
+text	/usr/bin/update-ca-trust	Where to report bugs in the base's certificate store, which is Fedora's package
+text	/usr/bin/xdg-desktop-menu	A comment in xdg-utils
+text	/usr/lib/python3*/site-packages/cupshelpers/cupshelpers.py	A comment in the printer tools
+text	/usr/lib/python3*/site-packages/dasbus-*/PKG-INFO	A library's description
+text	/usr/lib/python3*/site-packages/distro/distro.py	A library that detects distributions
+text	/usr/lib/python3*/site-packages/pyudev-*/METADATA	A library's description
+text	/usr/lib/python3*/site-packages/requests/certs.py	A comment on the base's patch to the library
+text	/usr/lib/python3*/site-packages/seobject.py	A comment in SELinux's tools
+text	/usr/lib64/python3*/ensurepip/__init__.py	A comment in Python
+text	/usr/lib64/python3*/sysconfig/__init__.py	A comment in Python
+text	/usr/lib64/python3*/site-packages/libdnf5/base.py	An example in the package library's documentation
+text	/usr/lib64/python3*/site-packages/setools-*/METADATA	A library's description
+text	/usr/share/dict/linux.words	A word list
+text	/usr/share/vim/vimfiles/template.spec	Vim's template for RPM spec files
+text	/usr/share/gdb/auto-load/*	GDB's helper scripts
+text	/usr/share/mariadb-server/*	MariaDB's bundled documentation
+text	/usr/share/ibus-typing-booster/*	Upstream code and data of an input method
+text	/usr/share/ibus-anthy/dicts/emoji.t	An input method's dictionary
+text	/usr/share/m17n/te-pothana.mim	An input method's table
+text	/usr/share/metainfo/org.freedesktop.ibus.engine.*.metainfo.xml	Upstream release notes that mention Fedora
+text	/usr/share/metainfo/org.freedesktop.appstream.cli.metainfo.xml	Upstream release notes that mention Fedora
+text	/usr/share/kf6/LICENSE	A licence text
+text	/usr/lib/python3*/site-packages/sos/*	The sos report tool's distribution policies
+#
+# --- generic-logos: Fedora's mark-free artwork under the file names other packages look for (C5)
+name	/usr/share/icons/hicolor/scalable/apps/fedora-logo-icon.svg	generic-logos' neutral logo under Fedora's file name; not Fedora's artwork (checked by checksum)
+name	/usr/share/icons/hicolor/scalable/apps/fedora-logo-sprite.svg	generic-logos' neutral logo under Fedora's file name; not Fedora's artwork (checked by checksum)
+name	/usr/share/pixmaps/fedora-logo*	generic-logos' neutral logo under Fedora's file names; not Fedora's artwork (checked by checksum)
+name	/usr/share/pixmaps/bootloader/fedora*	generic-logos' neutral boot-loader art under Fedora's file names (checked by checksum)
+name	/usr/share/wallpapers/Fedora	Fedora's name for the default wallpaper; it leads to TUR's (kde-settings-plasma)

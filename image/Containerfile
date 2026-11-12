@@ -95,14 +95,11 @@ COPY --chmod=0644 image/third-party-licensed/grub/08_tur_boot_count.cfg \
 COPY --chmod=0644 image/third-party-licensed/grub/LICENSE \
      /usr/share/licenses/tur-grub-boot-count/LICENSE
 
-# Identify the image as TUR without changing the distribution ID, which image
-# and update tooling still key on. Full rebranding is a Phase 3 task.
+# The build identity, and what the base called itself before TUR's
+# os-release replaced Fedora's (below, image/branding/branding.sh).
 RUN set -eu; \
-    f=/usr/lib/os-release; \
-    base_pretty="$(. "$f"; printf '%s' "$PRETTY_NAME")"; \
-    sed -i --follow-symlinks -E '/^(IMAGE_ID|IMAGE_VERSION|BUILD_ID)=/d' "$f"; \
-    sed -i --follow-symlinks -E "s|^PRETTY_NAME=.*|PRETTY_NAME=\"TUR ${TUR_VERSION} (based on ${base_pretty})\"|" "$f"; \
-    printf 'IMAGE_ID=tur\nIMAGE_VERSION=%s\nBUILD_ID=%s\n' "${TUR_VERSION}" "${TUR_BUILD_ID}" >> "$f"; \
+    base() { ( . /usr/lib/os-release; eval "printf '%s' \"\${$1:-}\"" ); }; \
+    test "$(base ID)" = fedora; \
     printf '%s\n' \
         "TUR_VERSION=${TUR_VERSION}" \
         "TUR_BUILD_ID=${TUR_BUILD_ID}" \
@@ -110,6 +107,9 @@ RUN set -eu; \
         "TUR_BASE_IMAGE=${BASE_IMAGE}" \
         "TUR_BASE_DIGEST=${BASE_DIGEST}" \
         "TUR_BASE_VERSION=${BASE_VERSION}" \
+        "TUR_BASE_OS_ID=$(base ID)" \
+        "TUR_BASE_OS_VERSION_ID=$(base VERSION_ID)" \
+        "TUR_BASE_OS_VARIANT_ID=$(base VARIANT_ID)" \
         > /usr/lib/tur/release; \
     # The counting fragment sets variables that the menu entries use, so it
     # must be read before the fragment that builds the menu. Fail the build
@@ -130,7 +130,18 @@ RUN set -eu; \
     # masked whether or not the base enables it. GRUB's boot-success timer
     # sets a variable that means nothing with bootupd's static configuration.
     ln -sf /dev/null /usr/lib/systemd/system/bootc-fetch-apply-updates.timer; \
-    ln -sf /dev/null /usr/lib/systemd/user/grub-boot-success.timer; \
+    ln -sf /dev/null /usr/lib/systemd/user/grub-boot-success.timer
+
+# Fedora's marks replaced (desktop-experience.md, section 12; image/README.md,
+# "Fedora's marks"): Fedora's release and logo packages swapped for Fedora's
+# mark-free generic ones (pinned in image/branding/packages.lock); TUR's
+# os-release, logo, boot splash, wallpaper and desktop defaults; and the
+# initramfs regenerated so that it carries them. The artwork comes from
+# branding/, bound into this step rather than copied into a layer.
+RUN --mount=type=bind,source=branding,target=/run/tur-art \
+    --mount=type=bind,source=image/branding,target=/run/tur-branding \
+    /bin/bash /run/tur-branding/branding.sh /run/tur-art /run/tur-branding \
+        "${TUR_VERSION}" "${TUR_BUILD_ID}" && \
     bootc container lint
 
 LABEL org.opencontainers.image.title="TUR" \
