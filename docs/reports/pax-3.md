@@ -119,9 +119,11 @@ NEXT SAFE ACTION
 
 ## Runs
 
-For commit `03c4505`, the last code of this pull request. The commit that
-updates this report follows it and changes no code; its runs are on the
-pull request.
+For commit `03c4505`, the last commit of the programs. Two commits follow:
+`46e502a` (this report) and `9c0ceec` (the socket probe of the test, see
+"Found on the way"); the runs on `9c0ceec` are at the end of the table
+below. The commit that adds them to this report changes no code; its runs
+are on the pull request.
 
 | Workflow | Run | Result |
 |---|---|---|
@@ -141,6 +143,7 @@ The commits of this pull request, after the rebase onto main:
 | `73dead7` | That test, with `"Claude!"` | 43258423411: every test passed (405); rustfmt only | 43258423446 pass |
 | `03c4505` | Formatting from CI | 43259888409 pass | 43259888572 pass |
 | `46e502a` | This report, updated | 43261151424 pass | 43261151273 pass; `image` 43261151355 pass; `boot` 43261151190 **fail**, so `gate` 43261151435 fail: see "Found on the way" |
+| `9c0ceec` | The socket probe's race | 43268080959 pass | 43268080478 pass; `image` 43268080740 pass; `boot` 43268081125 pass (on the installed system, `tests/pax/e2e.py`: 349 checks in 17 scenarios, 0 failed; the canaries work); `gate` 43268080807 pass |
 
 Main gained TUR-006 (#49) while this was open: the image now builds
 `tur-pax` in and runs `tests/pax/e2e.py` on the booted system, so `image`
@@ -366,4 +369,8 @@ session service":
   "connected" depended on which thread ran first. The probe now counts a
   made connection as reached even if the send after it fails. Inside the
   sandbox the connection itself has to fail, so that check is only
-  stricter.
+  stricter. The same race had failed on other pull requests, on another
+  socket each time.
+- The `boot` report on `9c0ceec` lists one informational failure that is
+  not this change's: two SELinux denials (`nnp_transition`) when
+  `tur-diag` starts `bootc` with no new privileges, as in P@x's sandbox.
