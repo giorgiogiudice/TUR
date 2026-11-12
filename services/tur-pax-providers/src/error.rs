@@ -256,7 +256,10 @@ mod tests {
             assert_eq!(kind.code(), *code);
             assert_eq!(kind.user_message(), *message);
             assert_eq!(kind.error_code(), parsed);
-            assert!(message.ends_with('.'), "{code}: the message must be a sentence");
+            assert!(
+                message.ends_with('.'),
+                "{code}: the message must be a sentence"
+            );
         }
     }
 

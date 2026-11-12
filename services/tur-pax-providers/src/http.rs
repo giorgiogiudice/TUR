@@ -208,7 +208,9 @@ fn parse_retry_after(text: &str) -> Option<Duration> {
     if !seconds.is_finite() || seconds < 0.0 {
         return None;
     }
-    Some(Duration::from_secs_f64(seconds.min(RETRY_AFTER_MAX_SECONDS)))
+    Some(Duration::from_secs_f64(
+        seconds.min(RETRY_AFTER_MAX_SECONDS),
+    ))
 }
 
 /// The error kind for an HTTP status when the body says nothing more precise.
@@ -298,8 +300,18 @@ mod tests {
         assert_eq!(parse_retry_after("7"), Some(Duration::from_secs(7)));
         assert_eq!(parse_retry_after(" 0 "), Some(Duration::ZERO));
         assert_eq!(parse_retry_after("1.5"), Some(Duration::from_millis(1500)));
-        assert_eq!(parse_retry_after("999999999"), Some(Duration::from_secs(86_400)));
-        for unusable in ["", "soon", "-1", "NaN", "inf", "Wed, 21 Oct 2026 07:28:00 GMT"] {
+        assert_eq!(
+            parse_retry_after("999999999"),
+            Some(Duration::from_secs(86_400))
+        );
+        for unusable in [
+            "",
+            "soon",
+            "-1",
+            "NaN",
+            "inf",
+            "Wed, 21 Oct 2026 07:28:00 GMT",
+        ] {
             assert_eq!(parse_retry_after(unusable), None, "{unusable}");
         }
     }
@@ -322,10 +334,21 @@ mod tests {
             ErrorKind::KeyUnavailable,
             ErrorKind::SpendLimitReached,
         ] {
-            assert_eq!(retry_delay(&rules, &ProviderError::new(kind), 1), None, "{kind:?}");
+            assert_eq!(
+                retry_delay(&rules, &ProviderError::new(kind), 1),
+                None,
+                "{kind:?}"
+            );
         }
-        for kind in [ErrorKind::Overloaded, ErrorKind::Network, ErrorKind::TimedOut] {
-            assert!(retry_delay(&rules, &ProviderError::new(kind), 1).is_some(), "{kind:?}");
+        for kind in [
+            ErrorKind::Overloaded,
+            ErrorKind::Network,
+            ErrorKind::TimedOut,
+        ] {
+            assert!(
+                retry_delay(&rules, &ProviderError::new(kind), 1).is_some(),
+                "{kind:?}"
+            );
         }
     }
 
@@ -334,7 +357,10 @@ mod tests {
         let rules = policy(3, 100, 1000);
         let short = ProviderError::new(ErrorKind::RateLimited)
             .with_retry_after(Some(Duration::from_millis(400)));
-        assert_eq!(retry_delay(&rules, &short, 1), Some(Duration::from_millis(400)));
+        assert_eq!(
+            retry_delay(&rules, &short, 1),
+            Some(Duration::from_millis(400))
+        );
 
         let long = ProviderError::new(ErrorKind::RateLimited)
             .with_retry_after(Some(Duration::from_secs(60)));
@@ -360,7 +386,10 @@ mod tests {
         assert_eq!(timeout.kind(), ErrorKind::TimedOut);
         assert!(!timeout.to_string().contains("secret detail"));
 
-        let reset = read_error(io::Error::new(io::ErrorKind::ConnectionReset, "secret detail"));
+        let reset = read_error(io::Error::new(
+            io::ErrorKind::ConnectionReset,
+            "secret detail",
+        ));
         assert_eq!(reset.kind(), ErrorKind::Network);
         assert!(!reset.to_string().contains("secret detail"));
 

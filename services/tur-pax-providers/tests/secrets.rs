@@ -86,7 +86,9 @@ fn echoing_error(provider: ProviderId) -> String {
         ProviderId::OpenAi => {
             json!({ "error": { "message": message, "type": "a_type_added_later", "code": null } })
         }
-        ProviderId::Google => json!({ "error": { "code": "a_code_added_later", "message": message } }),
+        ProviderId::Google => {
+            json!({ "error": { "code": "a_code_added_later", "message": message } })
+        }
     };
     body.to_string()
 }

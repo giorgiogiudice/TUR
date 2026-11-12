@@ -201,7 +201,9 @@ impl ProviderConfig {
             let mut amounts = vec![prices.input_per_million, prices.output_per_million];
             amounts.extend(prices.cached_input_per_million);
             if amounts.iter().any(|amount| !is_price(*amount)) {
-                return Err(invalid("prices must be finite numbers that are not negative"));
+                return Err(invalid(
+                    "prices must be finite numbers that are not negative",
+                ));
             }
         }
         if let Some(limit) = &self.task_limit {
@@ -210,7 +212,9 @@ impl ProviderConfig {
             }
             if let Some(max_cost) = limit.max_cost {
                 if !is_price(max_cost) || max_cost == 0.0 {
-                    return Err(invalid("task_limit.max_cost must be a finite number above 0"));
+                    return Err(invalid(
+                        "task_limit.max_cost must be a finite number above 0",
+                    ));
                 }
                 if self.prices.is_none() {
                     return Err(invalid("task_limit.max_cost needs prices to be configured"));
@@ -312,7 +316,9 @@ fn check_base_url(base_url: &str) -> Result<(), ProviderError> {
         return Err(problem());
     }
     let loopback = host == "localhost"
-        || host.parse::<IpAddr>().is_ok_and(|address| address.is_loopback());
+        || host
+            .parse::<IpAddr>()
+            .is_ok_and(|address| address.is_loopback());
     if plain && !loopback {
         return Err(problem());
     }
@@ -404,7 +410,8 @@ mod tests {
         let config = with(|value| {
             value["base_url"] = json!("https://gateway.example.org/anthropic/");
             value["timeouts"] = json!({ "connect_ms": 1000, "response_ms": 2000, "idle_ms": 3000 });
-            value["retry"] = json!({ "max_attempts": 5, "initial_delay_ms": 10, "max_delay_ms": 100 });
+            value["retry"] =
+                json!({ "max_attempts": 5, "initial_delay_ms": 10, "max_delay_ms": 100 });
             value["prices"] = json!({
                 "currency": "USD",
                 "input_per_million": 3.0,
@@ -414,7 +421,10 @@ mod tests {
             value["task_limit"] = json!({ "max_cost": 2.5, "max_tokens": 500000 });
         })
         .unwrap();
-        assert_eq!(config.effective_base_url(), "https://gateway.example.org/anthropic");
+        assert_eq!(
+            config.effective_base_url(),
+            "https://gateway.example.org/anthropic"
+        );
         assert_eq!(config.timeouts.idle_ms, 3000);
         assert_eq!(config.retry.max_attempts, 5);
         let text = serde_json::to_string(&config).unwrap();
@@ -431,7 +441,10 @@ mod tests {
         assert_eq!(config.timeouts.idle_ms, 5000);
         assert_eq!(config.timeouts.connect_ms, Timeouts::default().connect_ms);
         assert_eq!(config.retry.max_attempts, 1);
-        assert_eq!(config.retry.max_delay_ms, RetryPolicy::default().max_delay_ms);
+        assert_eq!(
+            config.retry.max_delay_ms,
+            RetryPolicy::default().max_delay_ms
+        );
     }
 
     #[test]
@@ -444,7 +457,10 @@ mod tests {
             "http://[::1]:9000",
             "https://[2001:db8::1]/gateway",
         ] {
-            assert!(with(|value| value["base_url"] = json!(good)).is_ok(), "{good}");
+            assert!(
+                with(|value| value["base_url"] = json!(good)).is_ok(),
+                "{good}"
+            );
         }
         for bad in [
             "",

@@ -94,7 +94,10 @@ fn the_schema_agrees_with_the_loader() {
     let retry = RetryPolicy::default();
     let documented = &properties["retry"]["properties"];
     assert_eq!(documented["max_attempts"]["default"], retry.max_attempts);
-    assert_eq!(documented["initial_delay_ms"]["default"], retry.initial_delay_ms);
+    assert_eq!(
+        documented["initial_delay_ms"]["default"],
+        retry.initial_delay_ms
+    );
     assert_eq!(documented["max_delay_ms"]["default"], retry.max_delay_ms);
 
     // Every object is closed, as the loader's are.
@@ -140,7 +143,10 @@ fn the_schema_and_the_loader_have_the_same_fields() {
             .as_object_mut()
             .expect("an object")
             .remove(&field);
-        assert!(ProviderConfig::from_json(&without.to_string()).is_err(), "{field}");
+        assert!(
+            ProviderConfig::from_json(&without.to_string()).is_err(),
+            "{field}"
+        );
     }
 }
 
@@ -159,8 +165,16 @@ fn model_and_prices_have_no_default_anywhere() {
     assert!(properties["model"].get("default").is_none());
     assert!(properties["max_output_tokens"].get("default").is_none());
     assert!(properties["prices"].get("default").is_none());
-    for price in ["input_per_million", "output_per_million", "cached_input_per_million"] {
-        assert!(properties["prices"]["properties"][price].get("default").is_none());
+    for price in [
+        "input_per_million",
+        "output_per_million",
+        "cached_input_per_million",
+    ] {
+        assert!(
+            properties["prices"]["properties"][price]
+                .get("default")
+                .is_none()
+        );
     }
     assert!(schema["$defs"]["price"].get("default").is_none());
 
@@ -178,13 +192,19 @@ fn no_model_name_is_compiled_in() {
     for (name, text) in SOURCES {
         let lower = text.to_lowercase();
         for family in families {
-            assert!(!lower.contains(family), "{name} contains a model name ({family})");
+            assert!(
+                !lower.contains(family),
+                "{name} contains a model name ({family})"
+            );
         }
     }
     for example in [MINIMAL, FULL, TOKEN_LIMIT, SCHEMA] {
         let lower = example.to_lowercase();
         for family in families {
-            assert!(!lower.contains(family), "an example names a model ({family})");
+            assert!(
+                !lower.contains(family),
+                "an example names a model ({family})"
+            );
         }
     }
 }
@@ -207,7 +227,10 @@ fn the_examples_load() {
 
     let full = ProviderConfig::from_json(FULL).expect("the full example loads");
     assert_eq!(full.provider, ProviderId::OpenAi);
-    assert_eq!(full.effective_base_url(), "https://gateway.example.org/openai");
+    assert_eq!(
+        full.effective_base_url(),
+        "https://gateway.example.org/openai"
+    );
     assert_eq!(full.retry.max_attempts, 4);
     assert_eq!(
         serde_json::to_value(full.prices.expect("prices")).expect("prices serialise"),

@@ -205,7 +205,10 @@ fn check_request(request: &Recorded) {
     assert_eq!(request.header("authorization"), None);
     let body = request.json();
     assert_eq!(body["model"], "test-model");
-    assert_eq!(body["generation_config"], json!({ "max_output_tokens": 256 }));
+    assert_eq!(
+        body["generation_config"],
+        json!({ "max_output_tokens": 256 })
+    );
     assert_eq!(body["stream"], true);
     // The provider is not to keep the conversation.
     assert_eq!(body["store"], false);

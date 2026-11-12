@@ -38,7 +38,13 @@ pub(crate) struct ToolCalls {
 
 impl ToolCalls {
     /// A call started. `key` identifies it until it ends.
-    pub(crate) fn start(&mut self, key: u64, id: &str, name: &str, out: &mut VecDeque<StreamEvent>) {
+    pub(crate) fn start(
+        &mut self,
+        key: u64,
+        id: &str,
+        name: &str,
+        out: &mut VecDeque<StreamEvent>,
+    ) {
         let index = self.started;
         self.started += 1;
         let id = if id.is_empty() {
@@ -174,7 +180,10 @@ mod tests {
             StreamEvent::ToolCallEnd { index, call } => {
                 assert_eq!(*index, 0);
                 assert_eq!(call.id, "call-a");
-                assert_eq!(Value::Object(call.arguments.clone()), json!({ "volume_id": "vol-1" }));
+                assert_eq!(
+                    Value::Object(call.arguments.clone()),
+                    json!({ "volume_id": "vol-1" })
+                );
             }
             other => panic!("unexpected event: {other:?}"),
         }

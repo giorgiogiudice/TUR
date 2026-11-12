@@ -213,9 +213,10 @@ impl EventStream {
     }
 
     fn fail(&mut self, error: ProviderError) {
-        self.queue.push_back(StreamEvent::Finish(FinishReason::Error(
-            error.with_provider(self.provider),
-        )));
+        self.queue
+            .push_back(StreamEvent::Finish(FinishReason::Error(
+                error.with_provider(self.provider),
+            )));
     }
 
     /// The connection closed before the provider's own end of stream.
@@ -398,11 +399,18 @@ mod tests {
     #[test]
     fn a_stream_ends_with_exactly_one_finish_and_then_nothing() {
         let mut stream = stream_over(body("data: a\n\ndata: b\n\ndata: stop\n\ndata: late\n\n"));
-        assert_eq!(format!("{stream:?}"), "EventStream { provider: Anthropic, state: \"pending\", .. }");
+        assert_eq!(
+            format!("{stream:?}"),
+            "EventStream { provider: Anthropic, state: \"pending\", .. }"
+        );
         let events: Vec<StreamEvent> = stream.by_ref().collect();
         assert_eq!(
             events,
-            vec![text("a"), text("b"), StreamEvent::Finish(FinishReason::EndTurn)]
+            vec![
+                text("a"),
+                text("b"),
+                StreamEvent::Finish(FinishReason::EndTurn)
+            ]
         );
         assert_eq!(stream.next(), None);
         assert_eq!(stream.next(), None);
@@ -410,9 +418,14 @@ mod tests {
 
     #[test]
     fn the_done_marker_is_skipped() {
-        let events: Vec<StreamEvent> =
-            stream_over(body("data: a\n\nevent: done\ndata: [DONE]\n\ndata: stop\n\n")).collect();
-        assert_eq!(events, vec![text("a"), StreamEvent::Finish(FinishReason::EndTurn)]);
+        let events: Vec<StreamEvent> = stream_over(body(
+            "data: a\n\nevent: done\ndata: [DONE]\n\ndata: stop\n\n",
+        ))
+        .collect();
+        assert_eq!(
+            events,
+            vec![text("a"), StreamEvent::Finish(FinishReason::EndTurn)]
+        );
     }
 
     #[test]
@@ -427,7 +440,11 @@ mod tests {
 
     #[test]
     fn a_response_without_events_is_malformed() {
-        for garbage in ["", "<html>not a stream</html>\n\n", "\u{0}\u{1}\u{2}garbage\n\n"] {
+        for garbage in [
+            "",
+            "<html>not a stream</html>\n\n",
+            "\u{0}\u{1}\u{2}garbage\n\n",
+        ] {
             let events: Vec<StreamEvent> = stream_over(body(garbage)).collect();
             assert_eq!(events.len(), 1, "{garbage:?}");
             assert_eq!(only_error(&events).kind(), ErrorKind::MalformedResponse);

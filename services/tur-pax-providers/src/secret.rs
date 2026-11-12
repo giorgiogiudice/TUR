@@ -143,7 +143,14 @@ mod tests {
     #[test]
     fn unusable_keys_are_rejected_without_repeating_them() {
         let too_long = "k".repeat(KEY_MAX + 1);
-        for bad in ["", "   ", "has space", "line\nbreak", "naïve-key", too_long.as_str()] {
+        for bad in [
+            "",
+            "   ",
+            "has space",
+            "line\nbreak",
+            "naïve-key",
+            too_long.as_str(),
+        ] {
             let error = ApiKey::new(bad.to_owned()).unwrap_err();
             assert_eq!(error.kind(), ErrorKind::KeyUnavailable);
             if !bad.trim().is_empty() {
@@ -161,7 +168,8 @@ mod tests {
         assert_eq!(missing.kind(), ErrorKind::KeyUnavailable);
         assert!(missing.to_string().contains("TUR_TEST_KEY"));
 
-        let unusable = key_from_lookup("TUR_TEST_KEY", Some("bad key value".to_owned())).unwrap_err();
+        let unusable =
+            key_from_lookup("TUR_TEST_KEY", Some("bad key value".to_owned())).unwrap_err();
         assert_eq!(unusable.kind(), ErrorKind::KeyUnavailable);
         assert!(unusable.to_string().contains("TUR_TEST_KEY"));
         assert!(!unusable.to_string().contains("bad key value"));

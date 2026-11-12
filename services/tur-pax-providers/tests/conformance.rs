@@ -19,7 +19,9 @@ use tur_pax_providers::{
     ToolDefinition, ToolResult, Turn, Usage, capabilities_of,
 };
 
-use common::{FakeServer, FollowUp, Reply, SYSTEM, Wire, config, config_with, hello, provider, run};
+use common::{
+    FakeServer, FollowUp, Reply, SYSTEM, Wire, config, config_with, hello, provider, run,
+};
 
 /// The two tools of the manifest example in the design document.
 fn tools() -> Vec<ToolDefinition> {
@@ -101,7 +103,9 @@ fn plain_answer(wire: &Wire) {
     assert_eq!(last_usage(&events), Some(usage(25, 15)));
     assert!(!events.iter().any(|event| matches!(
         event,
-        StreamEvent::ToolCallStart { .. } | StreamEvent::ToolCallEnd { .. } | StreamEvent::Opaque(_)
+        StreamEvent::ToolCallStart { .. }
+            | StreamEvent::ToolCallEnd { .. }
+            | StreamEvent::Opaque(_)
     )));
 
     let requests = server.requests();
@@ -215,7 +219,11 @@ fn two_tool_calls_in_one_turn(wire: &Wire) {
         ended,
         vec![
             (0, "storage_list_volumes".to_owned(), json!({})),
-            (1, "storage_unmount".to_owned(), json!({ "volume_id": "vol-2" })),
+            (
+                1,
+                "storage_unmount".to_owned(),
+                json!({ "volume_id": "vol-2" })
+            ),
         ]
     );
     assert_eq!(finish(&events), &FinishReason::ToolUse);
@@ -330,10 +338,7 @@ fn rejected_request_is_not_retried(wire: &Wire) {
 }
 
 fn stream_cut_mid_way(wire: &Wire) {
-    let server = FakeServer::start(vec![
-        Reply::cut(wire.cut_short),
-        Reply::stream(wire.plain),
-    ]);
+    let server = FakeServer::start(vec![Reply::cut(wire.cut_short), Reply::stream(wire.plain)]);
     let config = config(wire.provider, &server);
     let events = run(&config, &hello(&config));
 
@@ -498,10 +503,7 @@ fn spend_limit_stops_a_stream(wire: &Wire) {
 }
 
 fn spend_is_counted_under_the_limit(wire: &Wire) {
-    let server = FakeServer::start(vec![
-        Reply::stream(wire.plain),
-        Reply::stream(wire.plain),
-    ]);
+    let server = FakeServer::start(vec![Reply::stream(wire.plain), Reply::stream(wire.plain)]);
     let config = config_with(wire.provider, &server, |value| {
         value["prices"] =
             json!({ "currency": "USD", "input_per_million": 2.0, "output_per_million": 10.0 });

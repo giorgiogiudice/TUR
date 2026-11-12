@@ -296,7 +296,8 @@ impl Decoder for OpenAiDecoder {
             }
             "response.failed" => {
                 usage(&data["response"]["usage"], out);
-                let error = error_from(&data["response"]["error"], None, ErrorKind::RequestRejected);
+                let error =
+                    error_from(&data["response"]["error"], None, ErrorKind::RequestRejected);
                 out.push_back(StreamEvent::Finish(failure(error)));
             }
             "error" => {
@@ -470,8 +471,9 @@ mod tests {
     fn tools_are_function_tools_with_the_schema_unchanged() {
         let mut request = request(vec![Message::user_text("Hello")]);
         let schema = json!({ "type": "object", "properties": {}, "additionalProperties": false });
-        request.tools =
-            vec![ToolDefinition::new("storage_list_volumes", "List volumes.", schema.clone()).unwrap()];
+        request.tools = vec![
+            ToolDefinition::new("storage_list_volumes", "List volumes.", schema.clone()).unwrap(),
+        ];
         let body = request_body(&request).unwrap();
         assert_eq!(
             body["tools"],
@@ -489,7 +491,8 @@ mod tests {
     fn a_tool_round_trip_uses_call_and_output_items() {
         let mut arguments = Map::new();
         arguments.insert("volume_id".to_owned(), json!("vol-1"));
-        let reasoning = json!({ "type": "reasoning", "id": "rs_1", "summary": [], "encrypted_content": "enc" });
+        let reasoning =
+            json!({ "type": "reasoning", "id": "rs_1", "summary": [], "encrypted_content": "enc" });
         let messages = vec![
             Message::user_text("Unmount it."),
             Message::assistant(vec![
@@ -546,8 +549,7 @@ mod tests {
             }),
         ])];
         let body = request_body(&request(messages)).unwrap();
-        let picture =
-            json!({ "type": "input_image", "detail": "auto", "image_url": "data:image/png;base64,AAAA" });
+        let picture = json!({ "type": "input_image", "detail": "auto", "image_url": "data:image/png;base64,AAAA" });
         assert_eq!(
             body["input"],
             json!([
@@ -582,16 +584,56 @@ mod tests {
                 .to_string()
         };
         for (status, kind, code, expected) in [
-            (401, "invalid_request_error", json!("invalid_api_key"), ErrorKind::AuthenticationFailed),
-            (403, "invalid_request_error", json!(null), ErrorKind::AuthenticationFailed),
-            (429, "rate_limit_error", json!("slow_down"), ErrorKind::RateLimited),
+            (
+                401,
+                "invalid_request_error",
+                json!("invalid_api_key"),
+                ErrorKind::AuthenticationFailed,
+            ),
+            (
+                403,
+                "invalid_request_error",
+                json!(null),
+                ErrorKind::AuthenticationFailed,
+            ),
+            (
+                429,
+                "rate_limit_error",
+                json!("slow_down"),
+                ErrorKind::RateLimited,
+            ),
             (429, "rate_limit_error", json!(null), ErrorKind::RateLimited),
-            (429, "insufficient_quota", json!("credit_balance_exhausted"), ErrorKind::QuotaExhausted),
-            (429, "insufficient_quota", json!(null), ErrorKind::QuotaExhausted),
-            (400, "invalid_request_error", json!(null), ErrorKind::RequestRejected),
-            (404, "invalid_request_error", json!("model_not_found"), ErrorKind::RequestRejected),
+            (
+                429,
+                "insufficient_quota",
+                json!("credit_balance_exhausted"),
+                ErrorKind::QuotaExhausted,
+            ),
+            (
+                429,
+                "insufficient_quota",
+                json!(null),
+                ErrorKind::QuotaExhausted,
+            ),
+            (
+                400,
+                "invalid_request_error",
+                json!(null),
+                ErrorKind::RequestRejected,
+            ),
+            (
+                404,
+                "invalid_request_error",
+                json!("model_not_found"),
+                ErrorKind::RequestRejected,
+            ),
             (500, "server_error", json!(null), ErrorKind::Overloaded),
-            (503, "service_unavailable_error", json!("server_is_overloaded"), ErrorKind::Overloaded),
+            (
+                503,
+                "service_unavailable_error",
+                json!("server_is_overloaded"),
+                ErrorKind::Overloaded,
+            ),
         ] {
             let error = classify(status, &body(kind, code.clone()));
             assert_eq!(error.kind(), expected, "{status} {kind} {code}");
@@ -617,11 +659,21 @@ mod tests {
         assert_eq!(limited.kind(), ErrorKind::RateLimited);
         assert!(matches!(failure(limited), FinishReason::Error(_)));
 
-        let unknown = error_from(&json!({ "code": "a_code_added_later" }), None, ErrorKind::Overloaded);
+        let unknown = error_from(
+            &json!({ "code": "a_code_added_later" }),
+            None,
+            ErrorKind::Overloaded,
+        );
         assert_eq!(unknown.kind(), ErrorKind::Overloaded);
 
         assert_eq!(incomplete("max_output_tokens"), FinishReason::OutputLimit);
-        assert!(matches!(incomplete("content_filter"), FinishReason::Refusal(_)));
-        assert!(matches!(incomplete("a_reason_added_later"), FinishReason::Error(_)));
+        assert!(matches!(
+            incomplete("content_filter"),
+            FinishReason::Refusal(_)
+        ));
+        assert!(matches!(
+            incomplete("a_reason_added_later"),
+            FinishReason::Error(_)
+        ));
     }
 }

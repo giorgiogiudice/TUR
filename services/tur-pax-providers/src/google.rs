@@ -276,8 +276,12 @@ impl GoogleDecoder {
                 );
                 // The arguments normally arrive in deltas. A step that starts
                 // with them already has them all.
-                if step["arguments"].as_object().is_some_and(|map| !map.is_empty()) {
-                    self.calls.set_arguments(index, &step["arguments"].to_string());
+                if step["arguments"]
+                    .as_object()
+                    .is_some_and(|map| !map.is_empty())
+                {
+                    self.calls
+                        .set_arguments(index, &step["arguments"].to_string());
                 }
             }
             "thought" => {
@@ -440,16 +444,36 @@ fn error_from(error: &Value, status: Option<u16>) -> ProviderError {
         }
         "deadline_exceeded" | "gateway_timeout" | "request_timeout" => ErrorKind::TimedOut,
         // The documented "generation blocked" codes.
-        "safety" | "recitation" | "language" | "prohibited_content" | "spii" | "blocklist"
-        | "image_safety" | "image_prohibited_content" | "image_recitation" | "image_other"
+        "safety"
+        | "recitation"
+        | "language"
+        | "prohibited_content"
+        | "spii"
+        | "blocklist"
+        | "image_safety"
+        | "image_prohibited_content"
+        | "image_recitation"
+        | "image_other"
         | "content_blocked" => ErrorKind::Refusal,
         // The documented "generation error" codes: the model's output was
         // structurally wrong.
-        "malformed_function_call" | "malformed_tool_call" | "unexpected_tool_call" | "no_image"
-        | "too_many_tool_calls" | "missing_thought_signature" => ErrorKind::MalformedResponse,
-        "invalid_request" | "failed_precondition" | "out_of_range" | "parameter_unknown"
-        | "not_found" | "model_not_found" | "already_exists" | "aborted" | "cancelled"
-        | "unimplemented" | "bad_request" => ErrorKind::RequestRejected,
+        "malformed_function_call"
+        | "malformed_tool_call"
+        | "unexpected_tool_call"
+        | "no_image"
+        | "too_many_tool_calls"
+        | "missing_thought_signature" => ErrorKind::MalformedResponse,
+        "invalid_request"
+        | "failed_precondition"
+        | "out_of_range"
+        | "parameter_unknown"
+        | "not_found"
+        | "model_not_found"
+        | "already_exists"
+        | "aborted"
+        | "cancelled"
+        | "unimplemented"
+        | "bad_request" => ErrorKind::RequestRejected,
         _ => match status {
             Some(status) => kind_for_status(status),
             None => ErrorKind::Overloaded,
@@ -502,8 +526,9 @@ mod tests {
     fn tools_are_function_tools_with_the_schema_unchanged() {
         let mut request = request(vec![Message::user_text("Hello")]);
         let schema = json!({ "type": "object", "properties": {}, "additionalProperties": false });
-        request.tools =
-            vec![ToolDefinition::new("storage_list_volumes", "List volumes.", schema.clone()).unwrap()];
+        request.tools = vec![
+            ToolDefinition::new("storage_list_volumes", "List volumes.", schema.clone()).unwrap(),
+        ];
         let body = request_body(&request).unwrap();
         assert_eq!(
             body["tools"],
@@ -570,7 +595,9 @@ mod tests {
                 name: "tool".to_owned(),
                 arguments: Map::new(),
             })]),
-            Message::assistant(vec![Part::ToolResult(ToolResult::text("call_1", "tool", "x"))]),
+            Message::assistant(vec![Part::ToolResult(ToolResult::text(
+                "call_1", "tool", "x",
+            ))]),
             Message::user(vec![Part::Image(Image::new("application/pdf", "AAAA"))]),
         ] {
             let error = request_body(&request(vec![message])).unwrap_err();
@@ -601,8 +628,12 @@ mod tests {
             assert_eq!(error.detail(), Some("m"));
         }
         // The older error body has a numeric code; the status decides.
-        let older = json!({ "error": { "code": 429, "message": "m", "status": "RESOURCE_EXHAUSTED" } });
-        assert_eq!(classify(429, &older.to_string()).kind(), ErrorKind::RateLimited);
+        let older =
+            json!({ "error": { "code": 429, "message": "m", "status": "RESOURCE_EXHAUSTED" } });
+        assert_eq!(
+            classify(429, &older.to_string()).kind(),
+            ErrorKind::RateLimited
+        );
         assert_eq!(classify(503, "").kind(), ErrorKind::Overloaded);
     }
 
@@ -620,7 +651,11 @@ mod tests {
             let error = error_from(&json!({ "code": code, "message": "blocked" }), None);
             assert!(matches!(failure(error), FinishReason::Refusal(_)), "{code}");
         }
-        for code in ["malformed_function_call", "unexpected_tool_call", "missing_thought_signature"] {
+        for code in [
+            "malformed_function_call",
+            "unexpected_tool_call",
+            "missing_thought_signature",
+        ] {
             let error = error_from(&json!({ "code": code }), None);
             assert_eq!(error.kind(), ErrorKind::MalformedResponse, "{code}");
             assert!(matches!(failure(error), FinishReason::Error(_)));
@@ -634,18 +669,33 @@ mod tests {
         let decoder = GoogleDecoder::default();
         let none = Value::Null;
         assert_eq!(decoder.finish("completed", &none), FinishReason::EndTurn);
-        assert_eq!(decoder.finish("incomplete", &none), FinishReason::OutputLimit);
+        assert_eq!(
+            decoder.finish("incomplete", &none),
+            FinishReason::OutputLimit
+        );
         assert_eq!(
             decoder.finish("requires_continuation", &none),
             FinishReason::OutputLimit
         );
         // An action is required, yet no tool call was made.
-        assert!(matches!(decoder.finish("requires_action", &none), FinishReason::Error(_)));
-        assert!(matches!(decoder.finish("cancelled", &none), FinishReason::Error(_)));
-        assert!(matches!(decoder.finish("a_status_added_later", &none), FinishReason::Error(_)));
+        assert!(matches!(
+            decoder.finish("requires_action", &none),
+            FinishReason::Error(_)
+        ));
+        assert!(matches!(
+            decoder.finish("cancelled", &none),
+            FinishReason::Error(_)
+        ));
+        assert!(matches!(
+            decoder.finish("a_status_added_later", &none),
+            FinishReason::Error(_)
+        ));
 
         let blocked = json!({ "errors": [{ "code": "safety", "message": "blocked" }] });
-        assert!(matches!(decoder.finish("failed", &blocked), FinishReason::Refusal(_)));
+        assert!(matches!(
+            decoder.finish("failed", &blocked),
+            FinishReason::Refusal(_)
+        ));
         let failed = json!({ "error": { "code": "api_error", "message": "failed" } });
         match decoder.finish("failed", &failed) {
             FinishReason::Error(error) => assert_eq!(error.kind(), ErrorKind::Overloaded),

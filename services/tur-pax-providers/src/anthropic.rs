@@ -392,7 +392,10 @@ fn finish_reason(reason: &str, details: &Value) -> FinishReason {
         "tool_use" => FinishReason::ToolUse,
         "max_tokens" | "model_context_window_exceeded" => FinishReason::OutputLimit,
         "refusal" => {
-            let detail = match (details["category"].as_str(), details["explanation"].as_str()) {
+            let detail = match (
+                details["category"].as_str(),
+                details["explanation"].as_str(),
+            ) {
                 (Some(category), Some(explanation)) => Some(format!("{category}: {explanation}")),
                 (Some(text), None) | (None, Some(text)) => Some(text.to_owned()),
                 (None, None) => None,
@@ -417,9 +420,7 @@ fn error_from(error: &Value, status: Option<u16>) -> ProviderError {
         "billing_error" => ErrorKind::QuotaExhausted,
         // The monthly spend cap is reported as a rate limit that no retry
         // clears. The API marks it with this code.
-        "rate_limit_error"
-            if error["details"]["error_code"] == "enforced_spend_limit_reached" =>
-        {
+        "rate_limit_error" if error["details"]["error_code"] == "enforced_spend_limit_reached" => {
             ErrorKind::QuotaExhausted
         }
         "rate_limit_error" => ErrorKind::RateLimited,
@@ -494,8 +495,9 @@ mod tests {
         let mut request = request(vec![Message::user_text("Hello")]);
         request.system = None;
         let schema = json!({ "type": "object", "properties": {}, "additionalProperties": false });
-        request.tools =
-            vec![ToolDefinition::new("storage_list_volumes", "List volumes.", schema.clone()).unwrap()];
+        request.tools = vec![
+            ToolDefinition::new("storage_list_volumes", "List volumes.", schema.clone()).unwrap(),
+        ];
         let body = request_body(&request).unwrap();
         assert!(body.get("system").is_none());
         assert_eq!(
@@ -527,7 +529,11 @@ mod tests {
             ]),
             Message::user(vec![
                 Part::text("Thanks."),
-                Part::ToolResult(ToolResult::error("toolu_1", "storage_list_volumes", "no bus")),
+                Part::ToolResult(ToolResult::error(
+                    "toolu_1",
+                    "storage_list_volumes",
+                    "no bus",
+                )),
             ]),
             Message::user(vec![Part::Image(Image::new("image/png", "AAAA"))]),
         ];
@@ -555,7 +561,9 @@ mod tests {
         for message in [
             Message::user(vec![Part::ToolCall(call("toolu_1"))]),
             Message::assistant(vec![Part::Image(Image::new("image/png", "AAAA"))]),
-            Message::assistant(vec![Part::ToolResult(ToolResult::text("toolu_1", "tool", "x"))]),
+            Message::assistant(vec![Part::ToolResult(ToolResult::text(
+                "toolu_1", "tool", "x",
+            ))]),
             Message::user(vec![Part::Image(Image::new("text/html", "AAAA"))]),
         ] {
             let error = request_body(&request(vec![message])).unwrap_err();
@@ -565,7 +573,9 @@ mod tests {
 
     #[test]
     fn error_bodies_map_to_kinds() {
-        let body = |kind: &str| json!({ "type": "error", "error": { "type": kind, "message": "m" } }).to_string();
+        let body = |kind: &str| {
+            json!({ "type": "error", "error": { "type": kind, "message": "m" } }).to_string()
+        };
         for (status, kind, expected) in [
             (401, "authentication_error", ErrorKind::AuthenticationFailed),
             (403, "permission_error", ErrorKind::AuthenticationFailed),
@@ -600,7 +610,10 @@ mod tests {
                 "details": { "error_code": "enforced_spend_limit_reached" }
             }
         });
-        assert_eq!(classify(429, &cap.to_string()).kind(), ErrorKind::QuotaExhausted);
+        assert_eq!(
+            classify(429, &cap.to_string()).kind(),
+            ErrorKind::QuotaExhausted
+        );
 
         let own_limit = json!({
             "type": "error",
@@ -609,7 +622,10 @@ mod tests {
                 "message": "You have reached your specified API usage limits."
             }
         });
-        assert_eq!(classify(400, &own_limit.to_string()).kind(), ErrorKind::QuotaExhausted);
+        assert_eq!(
+            classify(400, &own_limit.to_string()).kind(),
+            ErrorKind::QuotaExhausted
+        );
     }
 
     #[test]
@@ -618,7 +634,10 @@ mod tests {
         assert_eq!(finish_reason("end_turn", &none), FinishReason::EndTurn);
         assert_eq!(finish_reason("stop_sequence", &none), FinishReason::EndTurn);
         assert_eq!(finish_reason("tool_use", &none), FinishReason::ToolUse);
-        assert_eq!(finish_reason("max_tokens", &none), FinishReason::OutputLimit);
+        assert_eq!(
+            finish_reason("max_tokens", &none),
+            FinishReason::OutputLimit
+        );
         assert_eq!(
             finish_reason("model_context_window_exceeded", &none),
             FinishReason::OutputLimit
@@ -632,10 +651,16 @@ mod tests {
             other => panic!("unexpected reason: {other:?}"),
         }
         // A refusal with no named category is still a refusal.
-        assert!(matches!(finish_reason("refusal", &none), FinishReason::Refusal(_)));
+        assert!(matches!(
+            finish_reason("refusal", &none),
+            FinishReason::Refusal(_)
+        ));
         for unknown in ["pause_turn", "a_reason_added_later"] {
             let reason = finish_reason(unknown, &none);
-            assert_eq!(reason.error().map(ProviderError::kind), Some(ErrorKind::MalformedResponse));
+            assert_eq!(
+                reason.error().map(ProviderError::kind),
+                Some(ErrorKind::MalformedResponse)
+            );
         }
     }
 }

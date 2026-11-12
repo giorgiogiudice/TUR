@@ -122,7 +122,14 @@ fn ping_sends_one_request_and_reports_the_result() {
         let server = FakeServer::start(vec![Reply::stream(wire.plain)]);
         let path = config_file("ping", wire.provider, &server);
         let run = tool(
-            &["check", "--config", &path, "--ping", "--key-env", KEY_VARIABLE],
+            &[
+                "check",
+                "--config",
+                &path,
+                "--ping",
+                "--key-env",
+                KEY_VARIABLE,
+            ],
             Some(TEST_KEY),
         );
 
@@ -166,14 +173,25 @@ fn a_failed_ping_reports_a_stable_code_and_never_the_key() {
         let server = FakeServer::start(vec![Reply::status(401, &body)]);
         let path = config_file("refused", wire.provider, &server);
         let run = tool(
-            &["check", "--config", &path, "--ping", "--key-env", KEY_VARIABLE],
+            &[
+                "check",
+                "--config",
+                &path,
+                "--ping",
+                "--key-env",
+                KEY_VARIABLE,
+            ],
             Some(TEST_KEY),
         );
 
         assert_eq!(run.status, EXIT_PING_FAILED);
         assert!(run.stdout.contains("config: valid"));
         assert!(run.stdout.contains("ping: failed"));
-        assert!(run.stderr.starts_with("UOS-AI-PROVIDER-001"), "{}", run.stderr);
+        assert!(
+            run.stderr.starts_with("UOS-AI-PROVIDER-001"),
+            "{}",
+            run.stderr
+        );
         assert!(run.stderr.contains("[redacted]"), "{}", run.stderr);
         run.assert_no_key();
     }
@@ -185,11 +203,22 @@ fn ping_without_a_key_fails_before_any_network_call() {
     let path = config_file("no-key", ProviderId::Anthropic, &server);
 
     let run = tool(
-        &["check", "--config", &path, "--ping", "--key-env", KEY_VARIABLE],
+        &[
+            "check",
+            "--config",
+            &path,
+            "--ping",
+            "--key-env",
+            KEY_VARIABLE,
+        ],
         None,
     );
     assert_eq!(run.status, EXIT_PING_FAILED);
-    assert!(run.stderr.starts_with("UOS-AI-PROVIDER-012"), "{}", run.stderr);
+    assert!(
+        run.stderr.starts_with("UOS-AI-PROVIDER-012"),
+        "{}",
+        run.stderr
+    );
     assert!(run.stderr.contains(KEY_VARIABLE));
 
     // Without --key-env the documented default variable is read.
@@ -211,11 +240,19 @@ fn the_example_configurations_are_checked() {
         assert_eq!(run.status, EXIT_OK, "{valid}: {}", run.stderr);
         assert!(run.stdout.starts_with("config: valid\n"), "{valid}");
     }
-    for invalid in ["invalid-no-model.json", "invalid-plain-http.json", "no-such-file.json"] {
+    for invalid in [
+        "invalid-no-model.json",
+        "invalid-plain-http.json",
+        "no-such-file.json",
+    ] {
         let run = tool(&["check", "--config", &data(invalid)], None);
         assert_eq!(run.status, EXIT_INVALID, "{invalid}");
         assert!(run.stdout.is_empty(), "{invalid}");
-        assert!(run.stderr.starts_with("UOS-AI-PROVIDER-011"), "{invalid}: {}", run.stderr);
+        assert!(
+            run.stderr.starts_with("UOS-AI-PROVIDER-011"),
+            "{invalid}: {}",
+            run.stderr
+        );
     }
 }
 

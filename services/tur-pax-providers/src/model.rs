@@ -35,7 +35,11 @@ pub enum ProviderId {
 
 impl ProviderId {
     /// Every provider, in the priority order of the adapters.
-    pub const ALL: [ProviderId; 3] = [ProviderId::Anthropic, ProviderId::OpenAi, ProviderId::Google];
+    pub const ALL: [ProviderId; 3] = [
+        ProviderId::Anthropic,
+        ProviderId::OpenAi,
+        ProviderId::Google,
+    ];
 
     /// The provider's name as it appears in configuration.
     pub const fn as_str(self) -> &'static str {
@@ -194,7 +198,11 @@ pub struct ToolResult {
 
 impl ToolResult {
     /// A successful result holding one text.
-    pub fn text(call_id: impl Into<String>, name: impl Into<String>, text: impl Into<String>) -> Self {
+    pub fn text(
+        call_id: impl Into<String>,
+        name: impl Into<String>,
+        text: impl Into<String>,
+    ) -> Self {
         ToolResult {
             call_id: call_id.into(),
             name: name.into(),
@@ -204,7 +212,11 @@ impl ToolResult {
     }
 
     /// A failed result holding one text that says what went wrong.
-    pub fn error(call_id: impl Into<String>, name: impl Into<String>, text: impl Into<String>) -> Self {
+    pub fn error(
+        call_id: impl Into<String>,
+        name: impl Into<String>,
+        text: impl Into<String>,
+    ) -> Self {
         ToolResult {
             is_error: true,
             ..ToolResult::text(call_id, name, text)
@@ -577,18 +589,31 @@ mod tests {
     #[test]
     fn tool_definitions_are_validated() {
         let schema = json!({ "type": "object", "properties": {}, "additionalProperties": false });
-        let tool = ToolDefinition::new("storage_list_volumes", "List volumes.", schema.clone()).unwrap();
+        let tool =
+            ToolDefinition::new("storage_list_volumes", "List volumes.", schema.clone()).unwrap();
         assert_eq!(tool.name(), "storage_list_volumes");
         assert_eq!(tool.description(), "List volumes.");
         assert_eq!(tool.input_schema(), &schema);
 
         let too_long = "a".repeat(TOOL_NAME_MAX + 1);
-        for name in ["", "has space", "dot.name", "naïve", "semi;colon", too_long.as_str()] {
+        for name in [
+            "",
+            "has space",
+            "dot.name",
+            "naïve",
+            "semi;colon",
+            too_long.as_str(),
+        ] {
             let error = ToolDefinition::new(name, "A tool.", schema.clone()).unwrap_err();
             assert_eq!(error.kind(), ErrorKind::RequestRejected, "{name:?}");
         }
         assert!(ToolDefinition::new("ok", "  ", schema).is_err());
-        for bad in [json!({}), json!({ "type": "string" }), json!([]), json!(true)] {
+        for bad in [
+            json!({}),
+            json!({ "type": "string" }),
+            json!([]),
+            json!(true),
+        ] {
             assert!(ToolDefinition::new("ok", "A tool.", bad).is_err());
         }
     }
@@ -605,7 +630,10 @@ mod tests {
             ("image/png", "not base64!"),
             ("image/png", "AAAA\nBBBB"),
         ] {
-            assert!(Image::new(media_type, data).check().is_err(), "{media_type} {data}");
+            assert!(
+                Image::new(media_type, data).check().is_err(),
+                "{media_type} {data}"
+            );
         }
     }
 
