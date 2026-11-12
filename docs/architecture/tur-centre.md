@@ -221,7 +221,41 @@ All in CI, in the `desktop` workflow, except the first row.
 | Screenshots | `tests/shots/render_centre.qml`, `desktop/tests/screenshots/centre-*.png` | Each state looks as approved, in the kit's matrix |
 | `centre-starts*` | `CMakeLists.txt` | The program itself starts on a fixture, on an address, and without a catalogue program, with no QML warning |
 
-## 6. Gaps
+## 6. Departures from the design
+
+Each of these is a place where what was built is not what
+[desktop-experience.md](desktop-experience.md), section 8, says or draws, with
+the reason.
+
+| Design | Built | Why |
+|---|---|---|
+| The directory is `apps/centre/` (15.1) | `apps/tur-centre/` | The task named it so; the program's name is the directory's |
+| In-session programs use Kirigami and stock controls under `org.kde.breeze` (5.7, 14.1) | `Tur.Kit`'s controls only; the one stock control is a scroll bar | Nothing here needed Kirigami, so no dependency was added. What the program looks like under `org.kde.breeze`, beside KDE's applications, has not been seen |
+| The drawings shorten what is needed first: "Windows set up on this computer", "your own Windows licence" (8.3, 8.4) | The router's sentences: "The Windows guest must be set up.", "You must supply a Windows licence: TUR does not include one." | 8.2 says every prerequisite is the router's text and the application centre writes none. The drawings and the rule disagree; the rule was followed. The router's sentences name the engine ("Windows guest", "Wine"), which the labels avoid |
+| The router's reason is shown for a doubtful way and when there is no route (8.2) | Under every way, in the supporting colour | It is the router's text, and it is what tells two ways with the same label apart: Krita's Flatpak and its Fedora package are both "Linux application" |
+| A row of a search shows route and rating on one line (8.3) | On two lines, with what is needed first under them | So that each wraps by itself at 200 % text |
+| A blocked way is "greyed" (8.2) | Its label is in the supporting text colour, not the colour of unavailable controls | The reason it cannot be used is what the person came to read, and must meet the contrast requirement (13.1, X5) |
+| "Nobody has reported on this way of running it. It may still work." for every rating nobody gave (8.2) | Left out on a way that is blocked; "No reports" stands alone | "It may still work" is untrue of a way that cannot be used |
+| "Web application ... Opens office.com in its own window." (8.4) | "Opens the service's website in its own window." | The one-line explanation of 8.2, which is fixed; one explanation for each route |
+| The primary button acts (8.4) | It says what will happen next and is unavailable, with a line the design does not have: "The application centre cannot install applications yet." | Installing is D-11. The design states no placeholder for it; this is the nearest honest thing |
+| Host facts are detected (8.10, requirement 2) | When the router was told nothing, a warning the design does not have: "TUR has not checked what this computer has. How this application will run here is an assumption, and may turn out differently." | Nothing detects them yet, and "How it will run" must not read as a fact about this computer when it is not one |
+| Error text comes from the code's registry entry (5.6) | The catalogue's own title and message for its codes; for this program's seven codes, sentences in `answers.cpp` | No registry exists yet |
+| "Tell the project you need it" opens the project's issue page (8.3) | Hands `https://github.com/giorgiogiudice/TUR/issues` to the browser | The design does not give the address |
+| Icons are Breeze's; TUR draws the five rating icons and neutral glyphs for kinds of application (5.4) | The kit's glyphs; the two rating icons the kit lacks are drawn in `RatingGlyph.qml`; a tile with the first letter of the name stands for an application | As for the kit: nothing recolours a Breeze icon without KIconThemes. The catalogue has no icons |
+| The header has a menu sign and a magnifier in the field (8.3) | Neither | The side list does not collapse; the magnifier is decoration |
+
+**Words that are neither the design's nor the router's.** Beside the two
+sentences and the failure sentences above: the spinner's names for a screen
+reader ("Searching the catalogue", "Asking the catalogue about this
+application"); "Back to the results" and "Back to Home"; "Details of _name_";
+"Checked _date_" under a reference; "Linux application, from another Linux
+system" when the catalogue does not name the system; the names of nine of the
+ten categories (the design gives "Productivity"); "Try again"; and the words a
+screen reader hears before a caveat ("Warning:", "Note:"; the other two are the
+design's). They are in `Words.qml`, `answers.cpp` and the views, and are for
+the design's owner to confirm or replace.
+
+## 7. Gaps
 
 **What the router's output lacks for these screens.** None of these was
 changed; each is a proposal for the owner of `tur-catalogue`.
@@ -234,6 +268,9 @@ changed; each is a proposal for the owner of `tur-catalogue`.
 | The JSON of `route` does not carry the code `TUR-DESKTOP-CATALOGUE-011` when there is no route; only the exit status says so | The code is written in `Words.qml` and checked against the catalogue's list | Carry the code in the "no route" option |
 | Nothing detects host facts, and nothing says where they or the preferences are kept | By default the router assumes a machine, and every page says "TUR has not checked what this computer has" | The design's requirement 2 of 8.10 |
 | No installed location for the catalogue is defined | `--catalogue` must be given, or the program's default (`catalogue` in the current directory) applies | Decide the path with requirement 3 of 8.10 |
+| The catalogue's error messages are written for a terminal: "no application in the catalogue has the ID ...; use `tur-catalogue search` to find it", in lower case and without a full stop | Shown as it is, under "Reason" | A message for a person beside the one for a terminal, or the identifier and parameters of requirement 1 |
+| A way with a rating of `poor` or `broken` carries a caveat that repeats the rating, its source and the date, in another form ("Reported broken by WineHQ AppDB ("Garbage"), checked 2026-11-12.") | The same fact twice on the page, the second time with the date as the catalogue writes it | Leave the caveat out of the JSON, or mark it so that a caller that shows the rating can leave it out |
+| A way that is blocked still lists what is needed first (the Android runtime for the banking class) | "Needed first" under "Cannot be used on this computer" | Leave prerequisites out of a blocked option |
 | The catalogue has no icon, no long description and no screenshots | A tile with the first letter of the name; "About this application" is the one-line summary | Later; not needed to find an application |
 | The name of another Linux system is an identifier (`debian`) | The label would read "Linux application, from debian" | A display name in the entry |
 | No command lists the catalogue or a category | The Categories view cannot be built on the command line | With `org.tur.Catalogue1` |
