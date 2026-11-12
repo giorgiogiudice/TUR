@@ -8,7 +8,8 @@
 Evidence, all optional (a missing piece fails the checks that need it):
 
     WORK_DIR/report.tar               facts sent by the guest agent, one
-                                      archive per boot (first-boot, second-boot)
+                                      archive per boot (first-boot, second-boot,
+                                      third-boot)
     OUT_DIR/guest-from-disk/          the same facts recovered from the disk
     OUT_DIR/serial.log                serial console, both boots
     OUT_DIR/screenshot-<boot>.png     virtual display
@@ -37,7 +38,7 @@ import tarfile
 
 MARK = "TUR-BOOT-TEST: "
 ESP_GUID = "c12a7328-f81f-11d2-ba4b-00a0c93ec93b"
-BOOTS = ["first-boot", "second-boot"]
+BOOTS = ["first-boot", "second-boot", "third-boot"]
 SOFTWARE_RENDERERS = ("llvmpipe", "softpipe", "swrast", "lavapipe")
 
 
@@ -354,7 +355,7 @@ def check_boot(ev: Evidence, boot: str, checks: Checks, args, allowed: dict[str,
         f"class={session['class']} type={session['type']} state={session['state']} service={session['service']}; "
         f"kwin_wayland PID {session['compositor_pid']} then {session['compositor_pid_after_hold']}",
     )
-    if boot == "second-boot":
+    if boot != "first-boot":
         add(
             "login_greeter",
             "with first-run setup marked complete, the session is the display manager's login greeter",
@@ -522,6 +523,195 @@ def check_boot(ev: Evidence, boot: str, checks: Checks, args, allowed: dict[str,
     }
 
 
+def counter_of(text: str) -> str | None:
+    """boot_counter in the output of `grub2-editenv list`, or None."""
+    return props(text).get("boot_counter")
+
+
+def tur_words(cmdline: str) -> dict:
+    words = cmdline.split()
+    values = {}
+    for word in words:
+        key, sep, value = word.partition("=")
+        if key.startswith("tur."):
+            values[key] = value if sep else ""
+    return values
+
+
+def check_boot_health(ev: Evidence, checks: Checks) -> dict:
+    """Boot-attempt counting (ADR-0014): steps 1 and 2 of the design's brief.
+
+    Step 2 is required and is the design's go or no-go: a kernel argument
+    written as a GRUB variable must survive bootc and OSTree and be expanded
+    by GRUB, and GRUB must be able to count in its environment block. Step 1
+    is a list of facts the design assumed; those checks are informational.
+    """
+    first, second, third = (ev.boots[boot] for boot in BOOTS)
+    vm, layout = ev.vm, ev.layout
+    seen = [boot for boot in (first, second, third) if boot]
+    any_boot = seen[0] if seen else first
+
+    def add(ident: str, description: str, passed, detail: str, required: bool = True) -> None:
+        checks.add(f"counting.{ident}", f"Boot counting: {description}", passed, detail, required)
+
+    def fact(ident: str, description: str, guest: Guest, name: str, limit: int = 600) -> str:
+        text = " ".join(guest.text(name).split())
+        checks.add(
+            f"measured.{ident}", f"Measured: {description}", bool(text) if guest else None, text[:limit] or "no data", False
+        )
+        return text
+
+    # ---- step 2: the fragment, the variable, the expansion, the counter ---------
+    cfg = any_boot.text("grub.cfg")
+    counting, menu = cfg.find("### BEGIN 08_tur_boot_count.cfg ###"), cfg.find("### BEGIN 10_blscfg.cfg ###")
+    add(
+        "fragment_installed",
+        "bootupd wrote the counting fragment into grub.cfg, before the fragment that builds the menu",
+        (0 <= counting < menu and bool(layout.get("grub_cfg_counting_fragment_before_menu"))) if (cfg or layout) else None,
+        f"in the guest: fragment at offset {counting}, blscfg at {menu}; on the installed disk, read from the host: "
+        f"fragments {layout.get('grub_cfg_fragments')}, counting before menu: "
+        f"{layout.get('grub_cfg_counting_fragment_before_menu')}",
+    )
+    options = layout.get("boot_entry_options") or []
+    add(
+        "variable_in_entry",
+        "the GRUB variable survived bootc and OSTree: the loader entry on the installed disk has $tur_boot_args verbatim",
+        (bool(options) and all("$tur_boot_args" in option.split() for option in options)) if layout else None,
+        f"options: {options or 'no data'}",
+    )
+    ordinary = []
+    for guest in (first, second):
+        cmdline = guest.line("cmdline-early.txt") or guest.line("cmdline.txt")
+        words = tur_words(cmdline)
+        ordinary.append(
+            bool(cmdline)
+            and words.get("tur.boot_contract") == "1"
+            and "tur.boot" not in words
+            and "$" not in cmdline
+            and counter_of(guest.text("grubenv-early.txt")) is None
+        )
+    add(
+        "ordinary_boot",
+        "with no counter set, GRUB expanded the variable to the contract version alone and wrote nothing",
+        all(ordinary) if (first and second) else None,
+        f"first boot: {first.line('cmdline-early.txt') or 'no data'}; second boot: "
+        f"{second.line('cmdline-early.txt') or 'no data'}; boot_counter in the block: "
+        f"{counter_of(first.text('grubenv-early.txt'))}, {counter_of(second.text('grubenv-early.txt'))}",
+    )
+    armed = second.status.get("armed_boot_counter")
+    add(
+        "set_by_hand",
+        "the test set boot_counter=2 in GRUB's environment block before the third boot",
+        (armed == "2") if second else None,
+        f"boot_counter after grub2-editenv: {armed or 'no data'}; "
+        f"{' '.join(second.text('grubenv-armed.txt').split())[:500]}",
+    )
+    cmdline = third.line("cmdline-early.txt")
+    words = tur_words(cmdline)
+    early = counter_of(third.text("grubenv-early.txt"))
+    add(
+        "counted_boot",
+        "GRUB decremented and saved the counter before starting the kernel, and told the kernel: "
+        "tur.boot=trial tur.boot_tries_left=1",
+        (
+            words.get("tur.boot_contract") == "1"
+            and words.get("tur.boot") == "trial"
+            and words.get("tur.boot_tries_left") == "1"
+            and "$" not in cmdline
+            and early == "1"
+        )
+        if third
+        else None,
+        f"/proc/cmdline: {cmdline or 'no data'}; boot_counter read at the start of that boot: {early}",
+    )
+    console = vm.get("boot_sequence") or []
+    add(
+        "console_sequence",
+        "the kernel command lines printed on the serial console show the same three boots: none, none, trial/1",
+        (console == ["none", "none", "trial/1"]) if vm.get("boots") is not None else None,
+        f"read by the host from the console: {console or 'no data'}; contract versions: "
+        f"{[(boot.get('tur') or {}).get('contract') for boot in vm.get('boots') or []]}",
+    )
+    final = counter_of(third.text("grubenv-final.txt"))
+    late = counter_of(third.text("grubenv-late.txt"))
+    removed_by = third.status.get("counter_removed_by") or ("tur-boot-health" if late is None and third else "nobody")
+    add(
+        "counter_removed",
+        "the counter is gone at the end of the third boot, so the disk is left as an ordinary one",
+        (final is None) if third.text("grubenv-final.txt") or third else None,
+        f"boot_counter late in the third boot: {late}; at the end: {final}; removed by: {removed_by}",
+    )
+    step2 = [item for item in checks.items if item["id"].startswith("counting.") and item["required"]]
+    go = all(item["result"] == "pass" for item in step2)
+    checks.add(
+        "counting.step2_go",
+        "Step 2 of the design's brief, the go or no-go of ADR-0014: every check above passed",
+        go if all(item["result"] != "not-run" for item in step2) else None,
+        "GO: the argument expansion of design section 5.4 and the counter of section 5.3 work on this image"
+        if go
+        else "NO-GO: " + ", ".join(item["id"] for item in step2 if item["result"] != "pass"),
+    )
+
+    # ---- step 1: what the design assumed -------------------------------------------
+    guest = third or second or first
+    fact("boot_mount", "the filesystem and options behind /boot/grub2", guest, "measure/findmnt-grub2.txt")
+    fact("boot_mount_stack", "everything mounted at /boot", guest, "measure/findmnt-boot.txt")
+    fact("boot_mount_units", "the units behind /boot", guest, "measure/boot-mount-show.txt", 900)
+    fact("grub_cfg_fragments", "bootupd's fragment markers in grub.cfg", guest, "measure/grub-cfg-fragments.txt")
+    fact("unit_enablement", "units the design masks, conditions or relies on", guest, "measure/unit-enablement.txt", 1500)
+    fact("boot_complete_target", "what already orders against boot-complete.target", guest, "measure/boot-complete-target.txt", 900)
+    fact("is_default", "ostree admin status --is-default", guest, "measure/is-default.txt")
+    fact("watchdog_devices", "hardware watchdog devices in the guest", guest, "measure/watchdog-devices.txt")
+    fact("manager_watchdog", "PID 1's watchdog settings on an ordinary boot", guest, "measure/manager-watchdog.txt")
+    fact("pstore", "the pstore backend and what it holds", guest, "measure/pstore.txt")
+    fact("initramfs_watchdog", "watchdog drivers in the initramfs", guest, "measure/initramfs-watchdog.txt")
+    fact("kernel_drivers", "the guest kernel's watchdog, panic and fw_cfg drivers", guest, "measure/kernel-drivers.txt", 900)
+    fact("tools", "the tools the design calls", guest, "measure/tools.txt", 900)
+    block_moves = " ".join(second.text("grubenv-armed.txt").split())
+    physical = re.findall(r"0:\s+0\.\.\s*\d+:\s+(\d+)\.\.", second.text("grubenv-armed.txt"))
+    checks.add(
+        "measured.editenv_block_location",
+        "Measured: whether grub2-editenv keeps the environment block in the same disk block when it rewrites it",
+        (len(physical) == 2) if second else None,
+        (
+            f"physical block before {physical[0]}, after {physical[1]}: "
+            + ("unchanged" if physical[0] == physical[1] else "MOVED")
+            if len(physical) == 2
+            else f"filefrag output not understood: {block_moves[:300] or 'no data'}"
+        ),
+        False,
+    )
+    st = third.status
+    expired = st.get("canary_boot_mount_after_idle")
+    checks.add(
+        "measured.boot_automount_expiry",
+        "Measured: whether a unit that requires /boot is stopped when the idle automount behind /boot expires",
+        bool(expired) if third else None,
+        f"canary unit with RequiresMountsFor=/boot: {st.get('canary_started', 'no data')} at the start; after "
+        f"{st.get('canary_waited_seconds', '?')} s without access boot.mount was {expired or 'no data'} and the canary "
+        f"was {st.get('canary_after_idle', 'no data')}",
+        False,
+    )
+    ovmf = ev.out / "host" / "ovmf-files.txt"
+    checks.add(
+        "measured.ovmf_files",
+        "Measured: the firmware images the runner offers (a Secure Boot build is needed for scenario SB)",
+        ovmf.exists(),
+        " ".join(ovmf.read_text().split())[:900] if ovmf.exists() else "no data",
+        False,
+    )
+    return {
+        "console_sequence": console,
+        "console_boots": vm.get("boots"),
+        "step2_go": go,
+        "counter_summary": f"set to {armed} by hand; {early} at the start of the third boot; "
+        f"{final} at its end (removed by {removed_by})",
+        "kernel_arguments": {boot: ev.boots[boot].line("cmdline-early.txt") or None for boot in BOOTS},
+        "grubenv_early": {boot: ev.boots[boot].text("grubenv-early.txt").split() for boot in BOOTS},
+        "automount_canary": {key: value for key, value in st.items() if key.startswith("canary_")},
+    }
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--work", required=True)
@@ -535,7 +725,7 @@ def main() -> int:
     out.mkdir(parents=True, exist_ok=True)
     ev = Evidence(pathlib.Path(args.work), out)
     vm = ev.vm
-    first, second = ev.boots["first-boot"], ev.boots["second-boot"]
+    first, second, third = (ev.boots[boot] for boot in BOOTS)
     allowed = expected_failures(pathlib.Path(args.expected_failed_units) if args.expected_failed_units else None)
     checks = Checks()
 
@@ -552,15 +742,15 @@ def main() -> int:
     starts = len(re.findall(re.escape(MARK) + "START", ev.serial))
     checks.add(
         "serial_console",
-        "The serial console was captured from firmware to the test agent, for both boots",
-        bool(ev.serial) and banners >= 2 and starts >= 2,
+        "The serial console was captured from firmware to the test agent, for all three boots",
+        bool(ev.serial) and banners >= 3 and starts >= 3,
         f"{len(ev.serial)} bytes; kernel banners: {banners}; agent start markers: {starts}",
     )
-    boot_ids = {guest.status.get("boot_id") for guest in (first, second) if guest}
+    boot_ids = {guest.status.get("boot_id") for guest in (first, second, third) if guest}
     checks.add(
-        "two_boots",
-        "The same disk booted twice: as installed, and again after a reboot",
-        (len(boot_ids) == 2 and first.status.get("second_boot_prepared") == "yes") if (first or second) else None,
+        "three_boots",
+        "The same disk booted three times: as installed, after first-run setup, and with GRUB's boot counter set",
+        (len(boot_ids) == 3 and first.status.get("second_boot_prepared") == "yes") if (first or second) else None,
         f"distinct boot IDs: {len(boot_ids)}; second boot prepared by the agent: "
         f"{first.status.get('second_boot_prepared', 'no data')}; kernel banners on serial: {banners}",
     )
@@ -606,6 +796,7 @@ def main() -> int:
     )
 
     boots = [check_boot(ev, boot, checks, args, allowed) for boot in BOOTS]
+    boot_health = check_boot_health(ev, checks)
 
     checks.add(
         "clean_shutdown",
@@ -631,8 +822,9 @@ def main() -> int:
     report = {
         "schema_version": 1,
         "task": "TUR-003",
+        "tasks": ["TUR-003", "TUR-005"],
         "result": "pass" if checks.passed() else "fail",
-        "build_id": boots[0]["build_id"] or boots[1]["build_id"],
+        "build_id": boots[0]["build_id"] or boots[1]["build_id"] or boots[2]["build_id"],
         "expected_build_id": args.expected_build_id or None,
         "source_revision": tur_release.get("TUR_SOURCE_REVISION"),
         "kernel": boots[0]["kernel"] or boots[1]["kernel"],
@@ -651,6 +843,7 @@ def main() -> int:
             "root_filesystem_source": ev.disk_info.get("root_fs_source"),
         },
         "boots": boots,
+        "boot_health": boot_health,
         "vm": {
             "outcome": vm.get("outcome"),
             "qemu": vm.get("qemu_version"),
@@ -704,6 +897,8 @@ def main() -> int:
         ("QEMU", f"{vm.get('qemu_version')}; KVM {vm.get('kvm')}"),
         ("Guest report came by", ev.guest_source),
         ("Timings (s)", ", ".join(f"{k}={v}" for k, v in timings.items())),
+        ("Kind of each boot, read from the console", ", ".join(boot_health["console_sequence"]) or "no data"),
+        ("GRUB boot counter", boot_health["counter_summary"]),
     ]
     lines += ["", "| | |", "|---|---|"]
     lines += [f"| {key} | `{str(value).replace('|', '/')}` |" for key, value in facts]

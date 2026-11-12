@@ -20,6 +20,15 @@ ARG TUR_SOURCE_REVISION
 # and /etc and /var belong to the installed system.
 COPY image/rootfs/ /
 
+# Boot-attempt counting (ADR-0014). bootupd concatenates every *.cfg in
+# configs.d, sorted by name, into /boot/grub2/grub.cfg at installation. The
+# fragment is BSD-3-Clause, not under the TUR licence: see
+# image/third-party-licensed/grub/README.md.
+COPY --chmod=0644 image/third-party-licensed/grub/08_tur_boot_count.cfg \
+     /usr/lib/bootupd/grub2-static/configs.d/08_tur_boot_count.cfg
+COPY --chmod=0644 image/third-party-licensed/grub/LICENSE \
+     /usr/share/licenses/tur-grub-boot-count/LICENSE
+
 # Identify the image as TUR without changing the distribution ID, which image
 # and update tooling still key on. Full rebranding is a Phase 3 task.
 RUN set -eu; \
@@ -36,6 +45,10 @@ RUN set -eu; \
         "TUR_BASE_DIGEST=${BASE_DIGEST}" \
         "TUR_BASE_VERSION=${BASE_VERSION}" \
         > /usr/lib/tur/release; \
+    # The counting fragment sets variables that the menu entries use, so it
+    # must be read before the fragment that builds the menu. Fail the build
+    # if the base ever renames that fragment.
+    test -f /usr/lib/bootupd/grub2-static/configs.d/10_blscfg.cfg; \
     bootc container lint
 
 LABEL org.opencontainers.image.title="TUR" \

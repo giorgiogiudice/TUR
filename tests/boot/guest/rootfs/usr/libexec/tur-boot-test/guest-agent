@@ -9,20 +9,24 @@
 # that the host waits for. It decides nothing: tests/boot/report.py on the host
 # turns the facts into checks.
 #
-# The test boots the disk twice:
+# The test boots the disk three times:
 #
 #   first-boot   the disk exactly as installed. Nobody has an account, so the
 #                display manager starts the first-run setup session.
 #   second-boot  after the agent has created a user and the setup-done flag,
 #                standing in for a person who completed first-run setup. The
-#                display manager shows its login greeter.
+#                display manager shows its login greeter. At the end the agent
+#                sets GRUB's boot counter by hand (boot_counter=2).
+#   third-boot   the counted boot. GRUB must have decremented the counter and
+#                told the kernel so (ADR-0014; step 2 of the design's brief).
 #
 # Markers (all start with "TUR-BOOT-TEST: "):
 #   START phase=...                the agent is running
 #   graphical.target reached ...   systemd reports graphical.target active
 #   graphical session running ...  a compositor owns the seat
 #   FIRST-BOOT-DONE ...            first report sent; the guest reboots shortly
-#   COMPLETE ...                   second report sent; the host may take its
+#   SECOND-BOOT-DONE ...           second report sent; the guest reboots shortly
+#   COMPLETE ...                   third report sent; the host may take its
 #                                  screenshot and power the guest off
 set -u
 
@@ -32,8 +36,15 @@ state=/var/lib/tur-boot-test
 dm_unit=plasmalogin.service
 setup_done_flag=/etc/plasma-setup-done
 test_user=turtest
+grubenv=/boot/grub2/grubenv
 
-if [ -e "${state}/first-boot-done" ]; then phase=second-boot; else phase=first-boot; fi
+if [ -e "${state}/second-boot-done" ]; then
+    phase=third-boot
+elif [ -e "${state}/first-boot-done" ]; then
+    phase=second-boot
+else
+    phase=first-boot
+fi
 out="${state}/report/${phase}"
 status="${out}/status"
 
@@ -57,6 +68,30 @@ cap() {
     rc=$?
     printf '%s\t%s\n' "${name}" "${rc}" >> "${out}/exit-status.tsv"
     return 0
+}
+
+# capsh NAME SCRIPT: the same for a shell snippet.
+capsh() {
+    local name="$1"
+    shift
+    cap "${name}" /bin/bash -c "$1"
+}
+
+# editenv ARGS...: run grub2-editenv on GRUB's environment block with /boot
+# writable. /boot is mounted read-only, so the write happens in a private mount
+# namespace, as OSTree's own units do it. The first line makes sure the
+# automount behind /boot is mounted before the namespace is created.
+editenv() {
+    ls "${grubenv}" > /dev/null 2>&1
+    # shellcheck disable=SC2016  # expanded by the inner shell
+    unshare --mount --propagation slave -- /bin/bash -c '
+        block="$1"
+        shift
+        mount -o remount,rw /boot || exit 70
+        grub2-editenv "${block}" "$@"
+        rc=$?
+        sync -f "${block}"
+        exit "${rc}"' _ "${grubenv}" "$@"
 }
 
 # The session that owns the display: the active session on seat0.
@@ -103,6 +138,93 @@ wait_for() {
     return 0
 }
 
+# What the boot-health design assumes about this image (step 1 of its brief).
+# Facts only; tests/boot/report.py turns them into informational checks.
+# shellcheck disable=SC2016  # the snippets are expanded by the shell that runs them
+measure() {
+    local m="measure" kernel unit
+    kernel="$(uname -r)"
+    mkdir -p "${out}/${m}"
+    cap "${m}/findmnt-boot.txt" findmnt /boot
+    cap "${m}/findmnt-grub2.txt" findmnt -n -o SOURCE,FSTYPE,OPTIONS --target /boot/grub2
+    cap "${m}/lsblk-stack.txt" lsblk -s -o NAME,TYPE,FSTYPE,MOUNTPOINTS
+    cap "${m}/fstab.txt" cat /etc/fstab
+    cap "${m}/boot-mount-units.txt" systemctl cat --no-pager boot.mount boot.automount
+    cap "${m}/boot-mount-show.txt" systemctl show --no-pager boot.mount boot.automount \
+        -p Id -p ActiveState -p What -p Where -p Type -p Options -p FragmentPath -p SourcePath \
+        -p TimeoutIdleUSec -p RequiredBy -p WantedBy -p TriggeredBy
+    cap "${m}/generators.txt" ls -la /run/systemd/generator /run/systemd/generator.late /run/systemd/generator.early
+    cap "${m}/grubenv-stat.txt" stat "${grubenv}"
+    cap "${m}/grubenv-filefrag.txt" filefrag -v "${grubenv}"
+    capsh "${m}/grubenv-head.txt" "head -c 1024 '${grubenv}' | od -c | head -n 12"
+    capsh "${m}/grub-cfg-fragments.txt" "grep -n '^### ' /boot/grub2/grub.cfg"
+    cap "${m}/grub2-dir.txt" ls -la /boot/grub2
+    capsh "${m}/bootupd-configs.txt" 'ls -la /usr/lib/bootupd/grub2-static /usr/lib/bootupd/grub2-static/configs.d; for f in /usr/lib/bootupd/grub2-static/configs.d/*; do echo "### $f"; cat "$f"; done'
+    capsh "${m}/kargs-d.txt" 'for f in /usr/lib/bootc/kargs.d/*; do echo "### $f"; cat "$f"; done'
+    : > "${out}/${m}/unit-enablement.txt"
+    for unit in bootloader-update.service bootc-fetch-apply-updates.timer bootc-fetch-apply-updates.service \
+        rpm-ostreed-automatic.timer systemd-pstore.service ostree-boot-complete.service \
+        ostree-finalize-staged.path ostree-finalize-staged.service ostree-finalize-staged-hold.service \
+        systemd-boot-check-no-failures.service greenboot-healthcheck.service mcelog.service; do
+        printf '%s\tenabled=%s\tactive=%s\tload=%s\n' "${unit}" \
+            "$(systemctl is-enabled "${unit}" 2>&1 | head -n1)" \
+            "$(systemctl is-active "${unit}" 2>&1 | head -n1)" \
+            "$(systemctl show -p LoadState --value "${unit}" 2>&1 | head -n1)" \
+            >> "${out}/${m}/unit-enablement.txt"
+    done
+    printf 'grub-boot-success.timer (user unit)\tenabled=%s\n' \
+        "$(systemctl --global is-enabled grub-boot-success.timer 2>&1 | head -n1)" \
+        >> "${out}/${m}/unit-enablement.txt"
+    capsh "${m}/user-units-grub.txt" 'ls -la /usr/lib/systemd/user/grub-boot-success.* /usr/lib/systemd/user/*.wants/grub-boot-success.* 2>&1'
+    cap "${m}/timers.txt" systemctl list-timers --all --no-pager
+    cap "${m}/ostree-units.txt" systemctl cat --no-pager ostree-finalize-staged.service \
+        ostree-finalize-staged.path ostree-finalize-staged-hold.service ostree-boot-complete.service
+    cap "${m}/bootloader-update.txt" systemctl cat --no-pager bootloader-update.service
+    cap "${m}/boot-complete-target.txt" systemctl show --no-pager boot-complete.target \
+        -p LoadState -p ActiveState -p Requires -p Wants -p After -p Before -p RequiredBy -p WantedBy
+    cap "${m}/boot-complete-reverse.txt" systemctl list-dependencies --no-pager --reverse boot-complete.target
+    cap "${m}/boot-complete-forward.txt" systemctl list-dependencies --no-pager boot-complete.target
+    cap "${m}/is-default.txt" ostree admin status --is-default
+    cap "${m}/wdctl.txt" wdctl
+    capsh "${m}/watchdog-devices.txt" 'ls -la /dev/watchdog* /sys/class/watchdog/ 2>&1; for d in /sys/class/watchdog/*; do if [ -e "$d/identity" ]; then echo "$d: $(cat "$d/identity") timeout=$(cat "$d/timeout" 2> /dev/null) state=$(cat "$d/state" 2> /dev/null)"; fi; done'
+    cap "${m}/manager-watchdog.txt" systemctl show --no-pager -p RuntimeWatchdogUSec -p RebootWatchdogUSec \
+        -p WatchdogDevice -p WatchdogLastPingTimestampMonotonic -p Version
+    capsh "${m}/pstore.txt" 'echo "backend: $(cat /sys/module/pstore/parameters/backend 2>&1)"; echo "--- /sys/fs/pstore"; ls -la /sys/fs/pstore 2>&1; echo "--- /var/lib/systemd/pstore"; ls -laR /var/lib/systemd/pstore 2>&1; echo "--- modules"; lsmod | grep -i -E "pstore|ramoops" 2>&1'
+    capsh "${m}/initramfs-watchdog.txt" "lsinitrd '/usr/lib/modules/${kernel}/initramfs.img' 2> /dev/null | grep -i -E 'watchdog|wdt|softdog|i6300|pvpanic'; echo \"grep exit status: \$?\""
+    capsh "${m}/initramfs-modules.txt" "lsinitrd -m '/usr/lib/modules/${kernel}/initramfs.img'"
+    capsh "${m}/kernel-drivers.txt" "for mod in i6300esb pvpanic pvpanic-pci pvpanic-mmio qemu_fw_cfg softdog iTCO_wdt sp5100_tco efi_pstore; do printf '%s: ' \"\$mod\"; modinfo -F filename \"\$mod\" 2>&1 | head -n1; done; echo '--- loaded'; lsmod | grep -i -E 'i6300|pvpanic|fw_cfg|wdt|softdog'"
+    capsh "${m}/kernel-config.txt" "grep -E 'CONFIG_(I6300ESB_WDT|PVPANIC|PVPANIC_PCI|FW_CFG_SYSFS|SOFT_WATCHDOG|WATCHDOG_HANDLE_BOOT_ENABLED|WATCHDOG_NOWAYOUT|EFI_VARS_PSTORE|PSTORE|PANIC_TIMEOUT)[=_]' '/usr/lib/modules/${kernel}/config'"
+    capsh "${m}/tools.txt" 'for tool in grub2-editenv bootc ostree bootupctl journalctl systemctl loginctl zstd unshare filefrag lsinitrd skopeo; do printf "%s: %s\n" "$tool" "$(command -v "$tool" 2>&1)"; done; rpm -q grub2-tools-minimal grub2-efi-x64 shim-x64 bootc ostree bootupd systemd dracut skopeo 2>&1'
+    capsh "${m}/tur-boot-health.txt" 'ls -la /usr/libexec/tur 2>&1; systemctl list-units --all --no-pager "tur-boot-*" 2>&1; ls -laR /run/tur /var/lib/tur 2>&1'
+    cap "${m}/policy.json" cat /etc/containers/policy.json
+}
+
+# Does a unit that requires the mount behind /boot get stopped when the
+# automount expires? /boot is an automount with an idle timeout (measured), and
+# systemd stops a mount it unmounts for idleness together with the units that
+# require it. The design's arming unit requires /boot and acts when stopped.
+canary() {
+    local start
+    cap canary-start.txt systemd-run --unit=tur-boot-test-canary -p RequiresMountsFor=/boot \
+        -p RemainAfterExit=yes /usr/bin/true
+    sleep 1
+    put canary_started "$(systemctl is-active tur-boot-test-canary.service 2>&1 | head -n1)"
+    start="${SECONDS}"
+    # Nothing here may touch /boot: an access restarts the idle timer.
+    while [ $((SECONDS - start)) -lt 200 ]; do
+        if [ "$(systemctl is-active boot.mount 2> /dev/null)" != active ]; then break; fi
+        sleep 5
+    done
+    put canary_waited_seconds "$((SECONDS - start))"
+    put canary_boot_mount_after_idle "$(systemctl is-active boot.mount 2>&1 | head -n1)"
+    sleep 2
+    put canary_after_idle "$(systemctl is-active tur-boot-test-canary.service 2>&1 | head -n1)"
+    cap canary-status.txt systemctl status --no-pager -l tur-boot-test-canary.service boot.mount boot.automount
+    cap canary-journal.txt journalctl -b --no-pager -o short-monotonic \
+        -u tur-boot-test-canary.service -u boot.mount -u boot.automount
+    systemctl stop tur-boot-test-canary.service > /dev/null 2>&1
+}
+
 rm -rf "${out}"
 mkdir -p "${out}"
 : > "${status}"
@@ -113,6 +235,13 @@ put build_id "${build_id}"
 put kernel "$(uname -r)"
 put boot_id "$(cat /proc/sys/kernel/random/boot_id)"
 say "START phase=${phase} build_id=${build_id} kernel=$(uname -r) uptime=$(uptime_s)"
+
+# Before anything else can change them: what GRUB told the kernel, and what
+# GRUB left in its environment block.
+cat /proc/cmdline > "${out}/cmdline-early.txt" 2>&1
+grub2-editenv "${grubenv}" list > "${out}/grubenv-early.txt" 2>&1
+put grubenv_early_status "$?"
+say "kernel arguments: $(tr ' ' '\n' < /proc/cmdline | grep -E '^tur\.|\$' | tr '\n' ' ')boot_counter=$(sed -n 's/^boot_counter=//p' "${out}/grubenv-early.txt")"
 
 # --- graphical target -------------------------------------------------------
 if wait_for "${wait_graphical}" graphical; then
@@ -206,8 +335,8 @@ cap bootc-version.txt bootc --version
 cap bootc-status.json bootc status --json
 cap bootc-status.txt bootc status
 cap ostree-status.txt ostree admin status
-cap boot-listing.txt ls -laR /boot/loader /boot/grub2
-cap grubenv.txt grub2-editenv list
+cap boot-listing.txt ls -la /boot/loader /boot/loader/entries /boot/grub2/grubenv /boot/grub2/grub.cfg /boot/ostree
+cap grubenv.txt grub2-editenv "${grubenv}" list
 cap grub.cfg cat /boot/grub2/grub.cfg
 {
     for entry in /boot/loader/entries/*.conf; do
@@ -313,6 +442,20 @@ fi
 cap dmesg-drm.txt journalctl -b -k --no-pager -o short-monotonic -g 'drm|virtio_gpu|fbcon|fb0'
 cap avc-denials.txt journalctl -b --no-pager -o short-monotonic -g 'avc:  denied'
 
+# --- what the boot-health design assumes ---------------------------------------
+measure
+if [ "${phase}" = third-boot ]; then
+    canary
+    cap grubenv-late.txt grub2-editenv "${grubenv}" list
+    # Without tur-boot-health nothing removes the counter. Leave the disk as an
+    # ordinary one: the scenarios start from it.
+    if [ ! -x /usr/libexec/tur/tur-boot-health ] && grep -q '^boot_counter=' "${out}/grubenv-late.txt"; then
+        editenv unset boot_counter > "${out}/grubenv-cleanup.txt" 2>&1
+        put counter_removed_by agent
+    fi
+    cap grubenv-final.txt grub2-editenv "${grubenv}" list
+fi
+
 # --- journal ------------------------------------------------------------------
 journalctl -b --no-pager -o short-monotonic > "${out}/journal.txt" 2>&1
 journalctl -b --no-pager -p warning -o short-monotonic > "${out}/journal-warnings.txt" 2>&1
@@ -331,6 +474,25 @@ if [ "${phase}" = first-boot ]; then
     else
         put second_boot_prepared no
     fi
+fi
+
+# --- second boot only: set GRUB's boot counter by hand, as a trial would ---------
+# Step 2 of the design's brief. The next boot must be counted by GRUB and the
+# kernel must be told so. Done before the report is sent so that the report
+# carries what was written.
+if [ "${phase}" = second-boot ]; then
+    {
+        echo "--- before"
+        grub2-editenv "${grubenv}" list
+        filefrag -v "${grubenv}"
+        echo "--- set boot_counter=2"
+        editenv set boot_counter=2
+        echo "exit status: $?"
+        echo "--- after"
+        grub2-editenv "${grubenv}" list
+        filefrag -v "${grubenv}"
+    } > "${out}/grubenv-armed.txt" 2>&1
+    put armed_boot_counter "$(grub2-editenv "${grubenv}" list 2> /dev/null | sed -n 's/^boot_counter=//p')"
 fi
 
 put agent_finished_uptime "$(uptime_s)"
@@ -359,6 +521,20 @@ if [ "${phase}" = first-boot ]; then
     # Time for the host to take its screenshot of this boot.
     sleep 20
     say "rebooting for the second boot"
+    systemctl reboot
+    exit 0
+fi
+
+if [ "${phase}" = second-boot ]; then
+    touch "${state}/second-boot-done"
+    sync
+    for _ in 1 2 3; do
+        sleep 1
+        say "SECOND-BOOT-DONE uptime=${finished}"
+    done
+    # Time for the host to take its screenshots of this boot.
+    sleep 45
+    say "boot_counter set by hand to $(grub2-editenv "${grubenv}" list 2> /dev/null | sed -n 's/^boot_counter=//p'); rebooting for the third boot"
     systemctl reboot
     exit 0
 fi

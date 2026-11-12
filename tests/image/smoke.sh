@@ -54,5 +54,21 @@ check "default target is graphical"           test "$(systemctl get-default)" = 
 check "SELinux is configured enforcing"       grep -qx 'SELINUX=enforcing' /etc/selinux/config
 check "bootc container lint passes"           bootc container lint
 
+# Boot-attempt counting, GRUB half (ADR-0014; design sections 5.3, 5.4 and 10).
+configs=/usr/lib/bootupd/grub2-static/configs.d
+fragment="${configs}/08_tur_boot_count.cfg"
+check "GRUB counting fragment is installed"   test -s "${fragment}"
+check "fragment declares contract version 1"  grep -q 'tur.boot_contract=1' "${fragment}"
+check "fragment ends with a newline"          bash -c '[ -z "$(tail -c1 "$1")" ]' _ "${fragment}"
+check "fragment sorts before the menu builder" bash -c \
+    'a=$(ls -1 "$1" | grep -n -x 08_tur_boot_count.cfg | cut -d: -f1);
+     b=$(ls -1 "$1" | grep -n -x 10_blscfg.cfg | cut -d: -f1);
+     [ -n "$a" ] && [ -n "$b" ] && [ "$a" -lt "$b" ]' _ "${configs}"
+check "fragment's licence is in the image"    grep -q 'BSD 3-Clause' /usr/share/licenses/tur-grub-boot-count/LICENSE
+check "one kernel argument, a GRUB variable"  grep -qxF 'kargs = ["$tur_boot_args"]' /usr/lib/bootc/kargs.d/10-tur-boot.toml
+check "no other kernel-argument file"         bash -c '[ "$(ls -1 /usr/lib/bootc/kargs.d | wc -l)" = 1 ]'
+check "GRUB tools the design relies on"       bash -c 'command -v grub2-editenv && command -v bootupctl'
+check "greenboot is not installed"            bash -c '! rpm -q greenboot'
+
 exit "${fail}"
 INNER
