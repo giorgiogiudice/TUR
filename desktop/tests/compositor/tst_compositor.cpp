@@ -519,6 +519,11 @@ private Q_SLOTS:
 
     void cleanupTestCase()
     {
+        // KWayland's FakeInput sends a destructor request that the version
+        // it bound (4) does not have, and KWin answers with a protocol
+        // error. The object is left to the end of the process.
+        if (m_input)
+            m_input->setParent(nullptr);
         for (QProcess *process : { &m_overlay, &m_settings }) {
             if (process->state() != QProcess::NotRunning) {
                 process->terminate();
@@ -692,8 +697,11 @@ private Q_SLOTS:
         QTest::qWait(150);
         keep(capture(screen), QStringLiteral("e2e-2-travelling"));
         QVERIFY2(arrives(arrivals), "PointerArrived");
+        // The highlight fades in when the pointer arrives: wait for both.
         const QImage arrived = captureUntil(screen, [&](const QImage &image) {
-            return isGold(colourAt(screen, image, row.center() + QPointF(18, 18)));
+            return isGold(colourAt(screen, image, row.center() + QPointF(18, 18)))
+                   && isGold(colourAt(screen, image, QPointF(row.left() - 5.5, row.center().y())))
+                   && isGold(colourAt(screen, image, QPointF(row.left() + row.width() / 4, row.bottom() + 5.5)));
         });
         keep(arrived, QStringLiteral("e2e-3-arrived"));
 

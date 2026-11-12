@@ -438,6 +438,13 @@ arrangements (dark and light at scale 1 and 1.5, and two outputs at scale 1):
 7. It vanishes: on `Hide` (no gold left in any screenshot), when its owner's
    process is killed, and when the overlay's own process is killed.
 
+Three facts of KWin 6.8 the job had to meet (report desktop-4): the virtual
+backend renders with OpenGL only, and without a GPU through Mesa's software
+device and `/dev/udmabuf`; `--scale` does not set an output's scale (KWin's
+output configuration does, so the job writes it); and Fedora's
+`kwin_wayland` carries a file capability that a container's unprivileged
+user cannot execute, so a copy without it is run.
+
 Input is injected with KWin's fake-input protocol, which KWin 6.8 offers to
 any unsandboxed client and whose authentication request is a no-op ("TODO:
 make secure", `src/backends/fakeinput/fakeinputbackend.cpp`). Screenshots come
