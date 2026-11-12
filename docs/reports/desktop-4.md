@@ -8,8 +8,10 @@ Task ID:          desktop-4 (task D-15 of the desktop design,
 Subsystem:        Desktop (desktop/apps/tur-pax-overlay, desktop/tests/
                   compositor, desktop/kit/pax), desktop CI
 Build ID:         not applicable: this task builds no image
-Source revision:  FINALSHA (feat/pax-overlay, pull request 54), the commit
-                  the results below come from.
+Source revision:  5e167bd (feat/pax-overlay, pull request 54), the commit
+                  the results below come from. The commit that adds the
+                  final figures to this report follows it and changes no
+                  code.
 
 SUMMARY
 - What changed: P@x has a presence on the screen. tur-pax-overlay is a
@@ -55,7 +57,9 @@ from its cache key (the first rebuilt it with `kwayland-devel`).
 | 43255107059 | 09f36de | fails | The owner's answers built in. **KWin ran headless on the runner** (virtual backend, Mesa's software renderer through `/dev/udmabuf`); tur-settings and the overlay ran as its clients; KWin sees `tur-settings` as `org.tur.Settings`; the introspection under KWin matched the XML. Every screenshot came back empty: the test read KWin's `a{sv}` answer as a map, and an asynchronous call delivers it as a `QDBusArgument` |
 | 43256783580 | 2ef077e | fails | Screenshots arrived. At scale 1: **the highlight measured 0 px from where Reveal plus KWin said the row is, on all four sides**; the click on P@x's pointer pressed the button (`kcm_nightlight`); keys typed while the overlay was shown reached the probe window, which never lost the keyboard. After Hide, 159 gold pixels remained: KWin's decoration draws Wayland's generic window icon, which is gold. The "1.5x" arrangement turned out to be 1920 x 1200 at scale 1: `kwin_wayland --scale` does not decide an output's scale in 6.8 (below). Two QML tests were wrong about the new pill words |
 | 43258475145 | 04dd098 | fails | A real fractional scale through KWin's output configuration. At 1.5: the highlight 0, 0, +0.33, +0.33 px from its expected edges; click and keyboard tests pass. One check photographed the previous frame (the overlay at 1.5 in software takes more than 300 ms to redraw a full output), so the picture checks now wait for the frame they look for. Two outputs: pass. Build, lint and tests: pass. The 40 pictures were accepted after looking at them |
-| FINALRUN | FINALSHA | FINALRESULT | FINALNOTE |
+| 43260161348 | 86678f8 | fails | The 40 references matched; build, lint and tests passed. Under KWin, two of five arrangements failed once in the same place: the screenshot was taken when the pointer had arrived and the highlight was still fading in (200 ms), so its line was not found. The check now waits for the line as well as the pointer. At exit KWayland's fake-input object sends a request its bound version lacks and KWin answers with a protocol error; the test now leaves the object alone |
+| — | 9f5c9a5 | no run | Main had moved (ADR-0021's index line conflicted with ADR-0020's), so GitHub made no merge commit and ran nothing. Merged |
+| 43266086183 | 5e167bd | **pass** | Every workflow on the head commit green: desktop (boundary, builder, build-test, screenshots, compositor), rust, gate. Build-test: 821 test functions passed, 1 skipped (the kit's, as before), 34 tests, no compiler or qmllint warning, linked libraries within the boundary. Screenshots: 203 of 203 match (40 new). Under KWin: 11 of 11 functions in each one-output arrangement (the second-output test skipped there), 12 of 12 with two outputs |
 
 ## What was built, and what proves it
 
@@ -91,8 +95,10 @@ authentication is a no-op. Screenshots came from `org.kde.KWin.ScreenShot2`
 | light, 1.5x | 1280 x 800 | 1920 x 1200 | 0, 0, 0.33, 0.33 | button; probe at 196,76 | 55 673 / 367 (367) |
 | two outputs, 1x | 2 x 1280 x 800 | 1280 x 800 each | 0, 0, 0, 0 | button; probe at 196,76 | 47 667 / 159 (159) |
 
-(Run 43258475145; the final run's figures are in its artifact
-`desktop-compositor`, `observations.txt`.) The 0.33 px at 1.5 is one device
+(Run 43266086183, artifact `desktop-compositor`, `observations.txt`; the
+same figures as run 43258475145. The pill's share of gold pixels: 85.8 % at
+1x, 86.3 % at 1.5x. The button under P@x's pointer was pressed in all five
+arrangements.) The 0.33 px at 1.5 is one device
 pixel at the right and bottom edges: the measurement is in device pixels and
 a logical edge at x.0 falls inside a device pixel at 1.5.
 
