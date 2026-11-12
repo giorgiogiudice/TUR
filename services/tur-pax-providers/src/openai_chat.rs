@@ -586,8 +586,9 @@ impl ChatDecoder {
                     .with_detail("the service reported an error in the stream"),
             ),
             other => FinishReason::Error(
-                ProviderError::new(ErrorKind::MalformedResponse)
-                    .with_detail(format!("the response ended for a reason not known: {other}")),
+                ProviderError::new(ErrorKind::MalformedResponse).with_detail(format!(
+                    "the response ended for a reason not known: {other}"
+                )),
             ),
         }
     }
@@ -851,7 +852,10 @@ mod tests {
     fn reasoning_goes_back_only_where_the_service_requires_it() {
         let body = request_body(&request(round_trip()), true).unwrap();
         let assistant = &body["messages"][2];
-        assert_eq!(assistant["reasoning_content"], "The person wants it unmounted.");
+        assert_eq!(
+            assistant["reasoning_content"],
+            "The person wants it unmounted."
+        );
         assert_eq!(assistant["tool_calls"][0]["id"], "call_1");
         // Another family's content is never sent.
         assert!(!body.to_string().contains("thinking"));
@@ -1088,7 +1092,10 @@ mod tests {
             }
         }
         // No finish reason before the end is malformed.
-        let events = decode(&[r#"{"choices":[{"index":0,"delta":{"content":"Hi"}}]}"#, "[DONE]"]);
+        let events = decode(&[
+            r#"{"choices":[{"index":0,"delta":{"content":"Hi"}}]}"#,
+            "[DONE]",
+        ]);
         assert_eq!(
             finish_of(&events).error().map(ProviderError::kind),
             Some(ErrorKind::MalformedResponse)
@@ -1169,7 +1176,11 @@ mod tests {
                 r#"{"error":{"message":"m","type":"insufficient_quota","code":null}}"#,
                 ErrorKind::QuotaExhausted,
             ),
-            (422, r#"{"error":{"message":"m"}}"#, ErrorKind::RequestRejected),
+            (
+                422,
+                r#"{"error":{"message":"m"}}"#,
+                ErrorKind::RequestRejected,
+            ),
             (503, r#"{"error":{"message":"m"}}"#, ErrorKind::Overloaded),
             (500, r#"{"error":"m"}"#, ErrorKind::Overloaded),
         ] {

@@ -799,7 +799,11 @@ mod tests {
         assert_eq!(ProviderId::OpenAiChat.as_str(), "openai-chat");
         assert_eq!(json!(ProviderId::OpenAiChat), json!("openai-chat"));
         assert!(!ProviderId::OpenAiChat.is_company_interface());
-        for family in [ProviderId::Anthropic, ProviderId::OpenAi, ProviderId::Google] {
+        for family in [
+            ProviderId::Anthropic,
+            ProviderId::OpenAi,
+            ProviderId::Google,
+        ] {
             assert!(family.is_company_interface(), "{family}");
         }
         assert!(serde_json::from_value::<ProviderId>(json!("openaichat")).is_err());

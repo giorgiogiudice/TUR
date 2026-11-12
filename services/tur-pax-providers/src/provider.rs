@@ -629,7 +629,8 @@ mod tests {
     #[test]
     fn the_done_marker_and_an_interruption_reach_the_decoder() {
         // The marker is where this decoder finishes.
-        let events: Vec<StreamEvent> = hooked("data: a\n\ndata: [DONE]\n\ndata: late\n\n").collect();
+        let events: Vec<StreamEvent> =
+            hooked("data: a\n\ndata: [DONE]\n\ndata: late\n\n").collect();
         assert_eq!(
             events,
             vec![text("a"), StreamEvent::Finish(FinishReason::EndTurn)]

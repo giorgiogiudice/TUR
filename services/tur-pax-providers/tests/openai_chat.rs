@@ -270,7 +270,9 @@ fn a_service_that_sends_no_usage_is_counted_at_a_marked_estimate() {
             max_tokens: Some(100),
         },
     );
-    let events: Vec<StreamEvent> = meter.meter(provider(&config).stream(&hello(&config))).collect();
+    let events: Vec<StreamEvent> = meter
+        .meter(provider(&config).stream(&hello(&config)))
+        .collect();
     match finish(&events) {
         FinishReason::Error(error) => assert_eq!(error.kind(), ErrorKind::SpendLimitReached),
         other => panic!("not stopped: {other:?}"),

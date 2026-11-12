@@ -277,9 +277,12 @@ fn check_follow_up(body: &Value, expected: &FollowUp) {
     assert_eq!(call["id"], expected.call_id);
     assert_eq!(call["type"], "function");
     assert_eq!(call["function"]["name"], "storage_unmount");
-    let arguments: Value =
-        serde_json::from_str(call["function"]["arguments"].as_str().expect("a JSON string"))
-            .unwrap();
+    let arguments: Value = serde_json::from_str(
+        call["function"]["arguments"]
+            .as_str()
+            .expect("a JSON string"),
+    )
+    .unwrap();
     assert_eq!(arguments, json!({ "volume_id": "vol-1" }));
     // The untrusted output is a tool message tied to the call.
     assert_eq!(

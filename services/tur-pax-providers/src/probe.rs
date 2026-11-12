@@ -94,10 +94,7 @@ pub fn probe_tool_calling(provider: &dyn Provider, model: &str) -> ToolProbe {
 
 fn judge(turn: Turn) -> ToolProbe {
     let usage = turn.usage;
-    let called = turn
-        .tool_calls()
-        .iter()
-        .any(|call| call.name == PROBE_TOOL);
+    let called = turn.tool_calls().iter().any(|call| call.name == PROBE_TOOL);
     match turn.finish {
         FinishReason::ToolUse | FinishReason::EndTurn if called => ToolProbe::Verified { usage },
         FinishReason::ToolUse | FinishReason::EndTurn => ToolProbe::NotCalled { usage },

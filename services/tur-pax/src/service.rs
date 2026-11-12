@@ -58,9 +58,7 @@ use tur_pax_memory::{
     ScheduleEdit, ScheduleId, ScheduledAction, ShortMonth, StdFs, Timestamp, Trigger,
     UserConfirmation, is_known_zone, weekday_and_day_of,
 };
-use tur_pax_providers::{
-    Message, ProviderConfig, SpendMeter, Usage, connect, connect_without_key,
-};
+use tur_pax_providers::{Message, ProviderConfig, SpendMeter, Usage, connect, connect_without_key};
 
 use crate::audit::{AuditRecord, AuditWriteError};
 use crate::codes::{Code, Problem};

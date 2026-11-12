@@ -141,7 +141,12 @@ pub enum Wire {
 
 impl Wire {
     /// Every format an adapter exists for.
-    pub const ALL: [Wire; 4] = [Wire::Anthropic, Wire::OpenAi, Wire::Google, Wire::OpenAiChat];
+    pub const ALL: [Wire; 4] = [
+        Wire::Anthropic,
+        Wire::OpenAi,
+        Wire::Google,
+        Wire::OpenAiChat,
+    ];
 
     /// The provider name of a configuration file.
     pub fn provider(self) -> &'static str {
@@ -185,20 +190,27 @@ pub fn sse_openai_chat(turn: &Turn) -> String {
         &Value::Null,
     );
     if !turn.text.is_empty() {
-        stream.push_str(&chunk(&delta(json!({ "content": turn.text })), &Value::Null));
+        stream.push_str(&chunk(
+            &delta(json!({ "content": turn.text })),
+            &Value::Null,
+        ));
     }
     for (index, call) in turn.calls.iter().enumerate() {
         if turn.whole {
             stream.push_str(&chunk(
-                &delta(json!({ "tool_calls": [{ "index": index, "id": call.id, "type": "function",
-                    "function": { "name": call.name, "arguments": call.arguments } }] })),
+                &delta(
+                    json!({ "tool_calls": [{ "index": index, "id": call.id, "type": "function",
+                    "function": { "name": call.name, "arguments": call.arguments } }] }),
+                ),
                 &Value::Null,
             ));
             continue;
         }
         stream.push_str(&chunk(
-            &delta(json!({ "tool_calls": [{ "index": index, "id": call.id, "type": "function",
-                "function": { "name": call.name, "arguments": "" } }] })),
+            &delta(
+                json!({ "tool_calls": [{ "index": index, "id": call.id, "type": "function",
+                "function": { "name": call.name, "arguments": "" } }] }),
+            ),
             &Value::Null,
         ));
         let (first, second) = halves(&call.arguments);

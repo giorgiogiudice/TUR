@@ -290,7 +290,11 @@ fn is_date(text: &str) -> bool {
 impl DataTerms {
     /// Check the statements. The reason quotes nothing.
     fn check(&self) -> Result<(), &'static str> {
-        if self.reviewed_on.as_deref().is_some_and(|date| !is_date(date)) {
+        if self
+            .reviewed_on
+            .as_deref()
+            .is_some_and(|date| !is_date(date))
+        {
             return Err("the date its terms were read is not written YYYY-MM-DD");
         }
         for statement in [
@@ -597,10 +601,11 @@ impl ProviderEntry {
                 ));
             }
         }
-        let contexts = self
-            .capabilities
-            .iter()
-            .chain(self.models.iter().filter_map(|model| model.capabilities.as_ref()));
+        let contexts = self.capabilities.iter().chain(
+            self.models
+                .iter()
+                .filter_map(|model| model.capabilities.as_ref()),
+        );
         for declared in contexts {
             if declared.context_tokens == Some(0) {
                 return Err(format!("a context size of {} is zero", self.id));
@@ -1963,7 +1968,12 @@ mod tests {
             if entry.key_required {
                 // A cloud service: reviewed, with the pages it was read from,
                 // at an https address, offering tools.
-                assert_eq!(terms.reviewed_on.as_deref(), Some("2026-11-12"), "{}", entry.id);
+                assert_eq!(
+                    terms.reviewed_on.as_deref(),
+                    Some("2026-11-12"),
+                    "{}",
+                    entry.id
+                );
                 assert!(!terms.sources.is_empty(), "{}", entry.id);
                 assert!(!terms.runs_locally, "{}", entry.id);
                 assert!(
@@ -1988,7 +1998,10 @@ mod tests {
         // The three companies' terms were not reviewed.
         for id in ["anthropic", "openai", "google"] {
             let entry = shipped.provider(id).expect("listed");
-            assert!(entry.reviewed_terms(Origin::Listed, false).is_none(), "{id}");
+            assert!(
+                entry.reviewed_terms(Origin::Listed, false).is_none(),
+                "{id}"
+            );
         }
     }
 

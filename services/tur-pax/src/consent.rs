@@ -232,7 +232,11 @@ pub fn consent_text(subject: &Subject<'_>) -> String {
 mod tests {
     use super::*;
 
-    const COMPANIES: [ProviderId; 3] = [ProviderId::Anthropic, ProviderId::OpenAi, ProviderId::Google];
+    const COMPANIES: [ProviderId; 3] = [
+        ProviderId::Anthropic,
+        ProviderId::OpenAi,
+        ProviderId::Google,
+    ];
 
     fn native(adapter: ProviderId) -> Subject<'static> {
         Subject {

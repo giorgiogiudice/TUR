@@ -243,8 +243,7 @@ fn check(path: &str, ping: bool, probe: bool, key_variable: Option<&str>) -> Out
                 String::new(),
             ),
             ToolProbe::NotCalled { .. } => (
-                "tool probe: not verified (the model answered without calling the tool)"
-                    .to_owned(),
+                "tool probe: not verified (the model answered without calling the tool)".to_owned(),
                 EXIT_PROBE_NOT_VERIFIED,
                 String::new(),
             ),
