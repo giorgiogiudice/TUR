@@ -1,7 +1,7 @@
-# Contributing to UOS
+# Contributing to TUR
 
-UOS is at the specification stage. Contributions are welcome, and the most useful
-ones right now are review of the [specification](docs/architecture/specification.md)
+TUR is at an early stage and needs help of every kind. The most useful
+contributions right now are review of the [specification](docs/architecture/specification.md)
 and of open [decision records](docs/adr/README.md).
 
 The same rules apply to people and to automated agents. Agents must also follow
@@ -49,19 +49,20 @@ made. Reference the issue or task ID where one exists.
 
 ## Licence
 
-UOS is licensed for personal, noncommercial use under the
-[PolyForm Noncommercial License 1.0.0](LICENSE.md). By contributing you agree that
-your contribution to UOS's own code and documentation is licensed under those
-terms.
+TUR is free for people to use for themselves. Its own code and documentation are
+under the [TUR Noncommercial License](LICENSE.md), which does not permit business
+or government use. By contributing you agree that your contribution to the
+project's own code and documentation is licensed under those terms.
 
 One exception matters. A change that modifies an upstream project, or that links
 into one whose licence requires it (for example a patch to Wine or Darling, a KWin
 or Plasma plugin, or a kernel module), must be contributed under that upstream
 project's licence, and is kept in a clearly marked directory. See
-[ADR-0003](docs/adr/0003-licence.md).
+[ADR-0003](docs/adr/0003-licence.md) and
+[ADR-0010](docs/adr/0010-licence-excludes-government.md).
 
 Do not contribute code you do not have the right to license, and do not copy code
-from Microsoft, Apple or other proprietary sources.
+from Microsoft, Apple, Google or other proprietary sources.
 
 ## Security issues
 

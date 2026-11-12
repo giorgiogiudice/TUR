@@ -1,306 +1,319 @@
 <div align="center">
 
-# UOS — Universal Operating System
+<img src="branding/tur-logo.png" alt="TUR — The Unified Realm" width="720"/>
 
-**One Linux-based desktop for Linux, Windows and macOS applications —<br/>
-image-based, recoverable by design, and optionally driven end to end by AI.**
+# TUR — The Unified Realm
 
-[![Status: pre-alpha](https://img.shields.io/badge/status-pre--alpha-orange)](#project-status)
-[![License: PolyForm Noncommercial 1.0.0](https://img.shields.io/badge/license-PolyForm%20Noncommercial-blue)](LICENSE.md)
+### The operating system of the future
+
+**One computer. Every application. An assistant that can run it for you.<br/>
+And a system that cannot be broken by an update.**
+
+[![Status: pre-alpha](https://img.shields.io/badge/status-pre--alpha-orange)](#where-tur-is-today)
+[![License: TUR Noncommercial](https://img.shields.io/badge/license-TUR%20Noncommercial-blue)](LICENSE.md)
 [![Source available](https://img.shields.io/badge/source-available-informational)](#license)
 [![Platform: x86-64 UEFI](https://img.shields.io/badge/platform-x86--64%20UEFI-lightgrey)](docs/architecture/specification.md#4-supported-platform-and-hardware-baseline)
 [![Base: Fedora Kinoite (bootc)](https://img.shields.io/badge/base-Fedora%20Kinoite%20%C2%B7%20bootc-51a2da)](docs/adr/0001-base-distribution.md)
 
-[Specification](docs/architecture/specification.md) ·
-[Roadmap](#roadmap) ·
-[Decisions](docs/adr/README.md) ·
-[Contributing](CONTRIBUTING.md)
+[Why TUR](#why-tur) ·
+[What it does](#what-tur-does) ·
+[P@x](#px-your-assistant) ·
+[Help build it](#tur-needs-you) ·
+[Status](#where-tur-is-today) ·
+[Roadmap](#roadmap)
 
 </div>
 
 ---
 
+## Why TUR
+
+Today your applications decide which computer you can use. Some need Windows, some
+need Linux, some live on your phone, and none of them know about each other. When
+something goes wrong, the computer tells you nothing useful, and an update can
+leave it unable to start.
+
+**TUR is built on a different idea: the computer should adapt to you.**
+
+- You should be able to run the application you need, wherever it came from.
+- You should be able to ask your computer to do something, in your own words, and
+  have it done.
+- Your computer should explain itself when something fails, and repair itself
+  when it can.
+- An update should never be able to break it.
+- And it should stay yours: private by default, with nothing collected behind
+  your back.
+
+That is what we believe an operating system should be, and it is what TUR is being
+built to be. It is an ambitious project, and it is at the beginning.
+[It needs you](#tur-needs-you).
+
 > [!IMPORTANT]
-> **UOS is pre-alpha. There is nothing to install yet.**
-> The architecture, engineering rules and decision records are in place and the
-> first components are being built. The first milestone is an image that boots in
-> a virtual machine and proves automatic rollback. See
-> [Project status](#project-status).
+> **TUR is pre-alpha. There is nothing to install yet.**
+> The design is in place and the first components are being built and tested.
+> This page describes what TUR is being built to do, and says plainly
+> [what exists today](#where-tur-is-today).
 
-## What UOS is
+## What TUR does
 
-UOS is a research operating system built on a single Linux kernel. It aims to give
-applications from four ecosystems one coherent desktop, one hardware stack and one
-recovery story:
+### Every application, in one place
 
-| Ecosystem | How it runs | Expectation |
+You ask for an application. TUR works out the best way to run it and shows it as
+an ordinary window, in one launcher, on one desktop.
+
+| You want | How TUR runs it | What to expect |
 |---|---|---|
-| **Linux** | Natively | Full support; no regression against the base distribution |
-| **Windows** | Wine and Proton, with DXVK and VKD3D-Proton for graphics | Application-specific; measured and published |
-| **macOS** | Darling | Experimental; command-line tools first, a narrow GUI set later |
-| **Android** | Waydroid: an Android system in a container on the host kernel, off by default ([design](docs/architecture/android-runtime.md)) | Application-specific; measured and published. Apps that need Google certification (banking, payment, DRM video), phone hardware or ARM-only code are not expected to run |
-| **Windows, in full** | A genuine Windows guest under QEMU/KVM, or dual boot | Optional fallback for drivers, anti-cheat and kernel-level software |
+| **A Linux application** | Natively, or from a container when it was made for another Linux distribution | Full support |
+| **A Windows game** | Proton, the technology behind the Steam Deck | Very good for most games; games with kernel-level anti-cheat need dual boot |
+| **A Windows application** | A compatibility layer first, because it is fastest; a real Windows system running quietly in the background when that is not enough | Aimed at running as smoothly as on Windows. Measured and published per application |
+| **An Android application** | An Android system in a container, switched on when you want it | Most applications. Not those that demand a certified phone, such as many banking apps |
+| **A macOS application** | The same application's Windows or Linux edition; a macOS compatibility layer is available as an experimental option | Experimental |
 
-Windows and macOS programs run in userspace through compatibility layers. UOS does
-not merge kernels, emulate a CPU for same-architecture software, or load foreign
-kernel drivers. Compatibility is treated as something to **measure**, not to claim.
+**One application centre** brings every store together: you search once, and TUR
+shows where an application is available and how well it is known to work. Stores
+that belong to someone else, Google Play among them, are offered as a guided
+opt-in with your own account.
 
-## Why it is different
+TUR does not pretend. Compatibility is measured, application by application, and
+published, including what does not work and why.
 
-Most of the components UOS relies on already exist and are maintained by their own
-communities. What UOS adds is the layer that makes them behave like one system:
+### A system that looks after itself
 
-- **Recovery is a product feature.** The OS is an immutable image, updated
-  atomically. A deployment that fails its boot health checks is rolled back
-  automatically, and the evidence is preserved.
-- **It explains itself.** Installation, boot and updates report named phases and
-  stable error codes such as `UOS-STORAGE-NTFS-004`, each with a plain-language
-  message, the technical detail and a safe next step.
-- **Diagnostics you can hand to someone.** `uos-diag` produces a versioned,
-  checksummed, privacy-redacted support bundle. Nothing is uploaded unless the user
-  chooses to share it.
-- **One runtime manager.** Executables are inspected rather than guessed from their
-  extension, matched to a tested compatibility profile, and run in isolated,
-  per-application environments with a pinned runtime version.
-- **Safe storage by default.** NTFS is writable only when the volume is clean; APFS
-  is read-only. UOS refuses an unsafe write rather than risk another operating
-  system's data.
-- **AI-drivable, on your terms.** Add your own API key and UOS can be operated by
-  voice, with an assistant that can see and control applications on your behalf.
+- **Updates cannot break it.** The operating system is a sealed image. An update
+  is installed alongside the running system; if the new one fails to start
+  properly, TUR returns to the previous one by itself.
+- **It tells you what happened.** Installation, start-up and updates report what
+  they are doing in plain language. Every failure has a stable code, an
+  explanation, and a safe next step.
+- **Diagnostics you can hand to someone.** One command produces a support bundle
+  with personal details removed. Nothing is uploaded unless you choose to share
+  it.
+- **Your data is protected,** including data that belongs to another operating
+  system on the same machine. TUR refuses an unsafe write rather than risk it.
 
-## The AI layer
+### Light, because nothing runs until you need it
 
-The AI layer is optional and **off by default**. UOS is fully usable without it and
-never requires an account or a network connection to boot, install or recover.
+TUR starts as a fast, clean desktop. Windows, Android and the assistant cost
+nothing until you use them, and step back when you stop.
 
-When enabled, the assistant works through four ways of acting, preferring the
-most reliable one available:
+## P@x, your assistant
 
-1. **System tools.** UOS services expose typed operations (launch an application,
-   mount a volume, check an update, collect diagnostics), so common tasks do not
-   depend on reading the screen.
-2. **Commands.** It runs commands in a sandbox to inspect, troubleshoot and repair
-   the system, as a support engineer would at a terminal.
-3. **Accessibility tree.** Native applications are driven through their semantic
-   UI structure.
-4. **Screen and input.** For everything else, including Windows and macOS
-   applications, the assistant sees the screen and operates keyboard and pointer
-   through the compositor.
+**P@x** is the assistant built into TUR. Add your own key from Anthropic (Claude),
+OpenAI or Google, and you can speak or type to your computer and have things done.
 
-It is a full assistant, not only a remote control. It keeps a local memory of
-what it has been told and what worked, runs reminders and scheduled tasks, and
-when something breaks it investigates, explains the cause, fixes it and checks
-that the fix held.
+- **It can do what you can do.** It opens and operates applications from every
+  ecosystem, manages files, changes settings, installs software.
+- **It fixes problems.** When an application or the system misbehaves, P@x
+  investigates, explains the cause in plain language, repairs it, and checks that
+  the repair held, running the same commands a support engineer would.
+- **It shows you how.** P@x has its own pointer. Ask where a setting is and it
+  opens the right page and points at the exact line, or does it for you.
+- **It remembers and gets better.** It keeps a private, local memory of your
+  preferences and of what worked, and it runs reminders and scheduled tasks.
+- **It is optional.** P@x is off until you turn it on, and TUR is complete
+  without it.
 
-It is **provider-agnostic**. The first supported providers are Anthropic (Claude),
-OpenAI and Google (Gemini), behind one interface, using a key that you supply and
-that is held in the system keyring.
+**You stay in charge.** An assistant that can do anything needs limits you can
+trust, so they are built into the system, not left to the AI's judgement:
 
-An assistant that can read the screen can also be misled by what is on it, so
-authority is tiered. Reversible actions run freely. Consequential ones, such as
-sending, purchasing, deleting or installing, ask first. A repair that needs
-administrator rights runs in a short session the user opens once. Operations on
-disks, boot, firmware and encryption always require confirmation from a person
-through a prompt that the assistant cannot operate. Every action is logged, and a visible indicator
-shows whenever the assistant is observing or controlling the session.
+- Things that can be undone, P@x just does.
+- Sending, buying, deleting and installing: it asks first.
+- Repairs that need administrator rights: you unlock a short session, once.
+- Disks, start-up, firmware and encryption: only you can approve these, through a
+  prompt that P@x cannot see or touch.
+- Everything it does is logged, and you can always see when it is watching or
+  acting.
 
-The detailed design and threat model are in
-[`docs/architecture/ai-control-layer.md`](docs/architecture/ai-control-layer.md).
+The full design, including how P@x is protected against being misled by what it
+reads, is in [the AI control layer design](docs/architecture/ai-control-layer.md).
 
-## Architecture
+## TUR needs you
+
+An operating system for everybody cannot be built by a few. TUR is being developed
+in the open so that anyone can see how it works, check its claims, and help make
+it better. **Every kind of help counts.**
+
+| If you can… | Then… |
+|---|---|
+| **Spare a minute** | Star and watch this repository, and tell someone who is tired of their computer getting in their way. Attention is what brings testers and contributors. |
+| **Tell us what you need** | [Open an issue](https://github.com/giorgiogiudice/TUR/issues) naming the applications you cannot live without. That list decides what gets tested first. |
+| **Read critically** | The [specification](docs/architecture/specification.md) and the [decision records](docs/adr/README.md) are public. If something is wrong, unsafe or unclear, say so. |
+| **Test** | When the first images are published, try TUR on your hardware and report what works. Real machines are what a small team has least of. |
+| **Build** | Rust, Qt and QML, Linux systems, packaging, testing, security, design, translation and documentation are all needed. Start with [CONTRIBUTING.md](CONTRIBUTING.md). |
+| **Know an upstream project** | TUR stands on Wine, Proton, KDE, Fedora, Waydroid and many others. If you work on one, your advice is worth a great deal. |
+
+TUR is free for people to use for themselves, and it is meant to stay that way.
+The better it becomes, the better everybody's experience of their own computer
+becomes.
+
+## Where TUR is today
+
+**Pre-alpha.** Honest status, updated as work lands:
+
+| Area | State |
+|---|---|
+| Architecture and decisions | Published: [specification](docs/architecture/specification.md), [decision records](docs/adr/README.md) |
+| Operating-system image | Builds reproducibly and is tested in continuous integration ([report](docs/reports/UOS-002.md)). Not yet shown to boot |
+| P@x | [Design](docs/architecture/ai-control-layer.md) published. The engine that decides what P@x may do is written and tested ([details](docs/architecture/agent-policy.md)). No assistant can be used yet |
+| Android | [Design](docs/architecture/android-runtime.md) published; not yet built |
+| Diagnostics, application detection, installer, storage, devices | In development |
+| Desktop, application centre, Windows and Android running | Not started |
+| Anything you can install | Not yet |
+
+The code still uses the project's earlier working name, `uos`, in program names
+and identifiers. The rename to TUR is under way.
+
+## How it is built
 
 ```mermaid
 flowchart TB
     subgraph APPS["Applications"]
         direction LR
-        L["Linux<br/>native ELF"]
+        L["Linux<br/>native"]
         W["Windows<br/>Wine · Proton"]
-        M["macOS<br/>Darling<br/>experimental"]
-        AN["Android<br/>Waydroid<br/>opt-in"]
-        V["Full Windows<br/>QEMU/KVM<br/>optional"]
+        V["Windows<br/>seamless guest<br/>when needed"]
+        AN["Android<br/>container<br/>opt-in"]
+        M["macOS<br/>experimental"]
     end
 
-    subgraph AI["AI control layer · optional"]
-        AG["uos-agent<br/>voice · system tools<br/>screen and input"]
+    subgraph AI["P@x · optional"]
+        AG["Assistant<br/>voice · tools · commands<br/>screen and pointer"]
     end
 
-    subgraph UOS["UOS integration layer"]
+    subgraph TUR["TUR"]
         direction LR
-        RT["Runtime<br/>Manager"]
-        DB["Desktop<br/>Bridge"]
-        DM["Device<br/>Manager"]
-        SM["Storage<br/>Manager"]
-        DG["Diagnostics<br/>and Recovery"]
-        UP["Update<br/>Manager"]
+        AC["Application<br/>centre and router"]
+        RT["Runtime<br/>manager"]
+        SM["Storage"]
+        DM["Devices"]
+        DG["Diagnostics<br/>and recovery"]
+        UP["Updates"]
     end
 
     subgraph DESK["Desktop"]
-        K["KDE Plasma 6<br/>KWin on Wayland<br/>XDG Desktop Portals"]
+        K["KDE Plasma 6<br/>KWin on Wayland"]
     end
 
-    subgraph HOST["Host platform"]
+    subgraph HOST["Foundation"]
         direction LR
         S["systemd · PipeWire<br/>NetworkManager<br/>UDisks2 · fwupd"]
-        I["Image-based OS<br/>bootc · OSTree<br/>atomic rollback"]
-        KN["Linux kernel<br/>sole hardware authority"]
+        I["Sealed OS image<br/>bootc · OSTree<br/>automatic rollback"]
+        KN["Linux kernel<br/>one authority<br/>for hardware"]
     end
 
-    APPS --> UOS
-    AG --> UOS
-    AG -. "screen and input" .-> DESK
-    UOS --> DESK
-    UOS --> HOST
+    APPS --> TUR
+    AG --> TUR
+    AG -. "screen and pointer" .-> DESK
+    TUR --> DESK
+    TUR --> HOST
     DESK --> HOST
 ```
 
-The components UOS itself contributes:
+TUR does not reinvent what already works. The kernel, the desktop and the
+compatibility engines are maintained by their own communities. TUR adds what makes
+them one system: the application centre and router, the integration between
+ecosystems, the diagnostics and recovery, and P@x.
 
-| Component | Responsibility |
-|---|---|
-| `uos-runtime` | Inspect executables, select a runtime, manage isolated per-app environments |
-| `uos-desktop-bridge` | Give applications from every runtime one launcher, identity and set of desktop services |
-| `uos-device-manager` | One inventory of devices, drivers and firmware; explicit, exclusive hand-off to a VM |
-| `uos-storage` | Safe discovery and mounting; one volume namespace shared by every runtime |
-| `uos-diagnostics` | Boot stages, error-code registry, redacted support bundles (`uos-diag`) |
-| `uos-update` | Stage, verify, activate and roll back OS deployments |
-| `uos-agent` | The optional AI control layer |
+**Principles**
 
-Everything else is integrated from upstream rather than rewritten. The
-[specification](docs/architecture/specification.md#17-repository-shortlist-and-integration-strategy)
-lists each project and how it is used.
-
-## Design principles
-
-1. **One kernel, one hardware authority.** Linux owns scheduling, memory, storage,
-   networking and the GPU. Compatibility layers consume host services.
-2. **Translate APIs, not instructions.** Same-architecture code runs directly on
-   the CPU.
-3. **Integrate before building.** Prefer maintained upstream projects; keep patches
-   few and send fixes upstream.
+1. **One kernel, one authority over hardware.** Linux owns the machine.
+   Everything else is a guest of it.
+2. **Fastest route first.** An application runs natively or through a
+   compatibility layer whenever that works well, and in a virtual machine only
+   when it must.
+3. **Integrate before building.** Use maintained upstream projects; send fixes
+   back to them.
 4. **Diagnose first, repair second.** A failure must leave enough evidence to be
    explained.
-5. **Evidence over claims.** Compatibility and performance are published as tested
-   results, with versions, hardware and reproduction steps.
-6. **Private by default.** Diagnostics stay local; nothing is collected silently.
+5. **Evidence over claims.** Compatibility and performance are published as
+   tested results.
+6. **Private by default.** Nothing is collected silently.
 
-## What UOS is not
+**What TUR is not**
 
-- Not a merged Linux, Windows NT and XNU kernel, and not three operating systems
-  booted side by side.
-- Not a promise that every Windows or macOS application will run.
-- Not a way to load Windows `.sys` or macOS `.kext` drivers.
-- Not a redistribution of Microsoft or Apple software. You supply the applications
-  and licences you are entitled to use.
-- Not for business use. UOS is licensed for personal, noncommercial use only.
-
-## Project status
-
-**Pre-alpha.** An image builds in CI; nothing is installable yet.
-
-| Area | State |
-|---|---|
-| Architecture specification | Revision 1.0 published |
-| Foundational decisions | Recorded in [`docs/adr`](docs/adr/README.md) |
-| AI control layer design | Addendum A, revision 2 |
-| OS image | Builds reproducibly in CI from a pinned base ([report](docs/reports/UOS-002.md)); not yet boot-tested |
-| Services, installer | In development |
+- Not several operating systems merged into one kernel.
+- Not a promise that every application ever written will run.
+- Not a way to load Windows or macOS hardware drivers.
+- Not a redistribution of Microsoft, Apple or Google software. You bring the
+  applications and licences you are entitled to use.
+- Not for business or government use. See [License](#license).
 
 ## Roadmap
 
-Work proceeds in a fixed order: a system that boots, recovers and explains itself
-comes before any compatibility feature.
+A system that starts, recovers and explains itself comes before any other feature.
 
-| Phase | Focus | Exit criterion |
+| Phase | Focus | Done when |
 |---|---|---|
-| **0** | Repository, image pipeline, CI | A reproducible image boots in QEMU and emits a build manifest |
-| **1** | Boot, diagnostics, recovery | A deliberately broken deployment falls back automatically; a bundle is exported from both paths |
-| **2** | Hardware and storage | Hot-plug of USB, disks, audio and network with useful diagnostics |
-| **3** | Desktop and shell | A polished, responsive Plasma desktop with no compatibility dependencies |
-| **4** | Windows runtime | A defined set of Windows applications launches with reproducible test reports |
-| **5** | macOS runtime | A published list of working command-line tools and a limited GUI subset |
-| **6** | Full Windows backend | A licensed Windows guest receives an explicitly assigned device without conflict |
+| **0** | Repository, image, continuous integration | A reproducible image starts in a virtual machine and describes itself |
+| **1** | Start-up, diagnostics, recovery | A deliberately broken update is undone automatically, with the evidence kept |
+| **2** | Hardware and storage | Devices and disks come and go safely, with useful diagnostics |
+| **3** | Desktop and application centre | A polished, responsive desktop, and one place to find applications |
+| **4** | Windows applications | A published list of applications that run, by which route, and how well |
+| **5** | Android applications | A published list of applications that run, and Google Play as an opt-in |
+| **6** | macOS (experimental) | An optional feature with a published list of what works |
 | **7** | Hardening and release | An independent tester can install, update, break, recover and report unaided |
 
-The AI control layer is developed alongside these phases rather than after them:
-each service ships its assistant-facing tools as it lands, screen control arrives
-with the desktop, and voice follows. Full detail is in the
-[specification](docs/architecture/specification.md#20-development-roadmap-with-concrete-deliverables).
-
-Android support is designed in
-[addendum B](docs/architecture/android-runtime.md) and is likewise interleaved:
-package inspection and the kernel check in phases 0 and 1, the Android container
-in CI with phase 2, desktop integration with phase 3, installation, storage and
-device grants with phases 4 and 5, and the evaluation of a virtual-machine backend
-with phase 6. It never displaces a higher item in the order above.
-
-## Repository layout
-
-```text
-docs/
-  architecture/   Specification and subsystem designs
-  adr/            Architecture Decision Records
-AGENTS.md         Binding rules for automated development agents
-CONTRIBUTING.md   How changes are proposed, tested and reported
-SECURITY.md       How to report a vulnerability
-LICENSE.md        PolyForm Noncommercial License 1.0.0
-```
-
-Source directories (`image/`, `services/`, `desktop/`, `runtimes/`, `tests/`) are
-added as each phase begins; the planned structure is in
-[section 18 of the specification](docs/architecture/specification.md#18-build-ci-release-engineering-and-repository-layout).
+P@x is built alongside these phases, not after them: each part of the system
+becomes something P@x can use as it lands. Detail is in the
+[specification](docs/architecture/specification.md#20-development-roadmap-with-concrete-deliverables),
+the [AI control layer design](docs/architecture/ai-control-layer.md) and the
+[decision records](docs/adr/README.md).
 
 ## Documentation
 
 - [Architecture specification](docs/architecture/specification.md) — the project baseline
-- [Architecture Decision Records](docs/adr/README.md) — what was decided, and why
-- [Dependency and licence inventory](docs/dependencies/upstream-projects.md) — upstream projects, their licences, and the [licence review](docs/dependencies/licence-review.md)
-- [AGENTS.md](AGENTS.md) — constraints for automated contributors
-- [CONTRIBUTING.md](CONTRIBUTING.md) — workflow and completion reports
-- [SECURITY.md](SECURITY.md) — vulnerability reporting
+- [Decision records](docs/adr/README.md) — what was decided, and why
+- [P@x: the AI control layer](docs/architecture/ai-control-layer.md) and its [policy engine](docs/architecture/agent-policy.md)
+- [Android runtime](docs/architecture/android-runtime.md)
+- [Dependency and licence inventory](docs/dependencies/upstream-projects.md) and the [licence review](docs/dependencies/licence-review.md)
+- [CONTRIBUTING.md](CONTRIBUTING.md) — how to contribute
+- [AGENTS.md](AGENTS.md) — the rules automated contributors work under
+- [SECURITY.md](SECURITY.md) — how to report a vulnerability
 
-## Contributing
+## How TUR is developed
 
-UOS is developed largely by autonomous engineering agents working under human
-direction, and the same rules apply to every contributor: small reviewable changes,
-tests with a reproducible command, an ADR for anything touching interfaces, boot,
-storage, security or updates, and a completion report that states what was built
-and tested. Start with [CONTRIBUTING.md](CONTRIBUTING.md).
+Much of TUR is written by autonomous engineering agents working under human
+direction, in the open, with every change tested by continuous integration before
+it is accepted. The same rules apply to every contributor, human or not: small
+changes that can be reviewed, tests anyone can re-run, a written decision for
+anything that touches safety, and an honest report of what was and was not
+tested. They are in [AGENTS.md](AGENTS.md).
 
 ## Acknowledgements
 
-UOS stands on the work of the Linux kernel, systemd, bootc and OSTree, Fedora, KDE,
-Wine, Proton, DXVK, VKD3D-Proton, Darling, Mesa, PipeWire, QEMU and many other
-projects. It is an integration effort, and it intends to be a good upstream citizen.
+TUR stands on the work of the Linux kernel, systemd, bootc and OSTree, Fedora,
+KDE, Wine, Proton, DXVK, VKD3D-Proton, Waydroid, Darling, Mesa, PipeWire, QEMU and
+many other projects. It intends to be a good citizen of those communities.
 
 ## License
 
-UOS is **source-available software for personal, noncommercial use**. Its own code
-and documentation are licensed under the
-[PolyForm Noncommercial License 1.0.0](LICENSE.md).
+TUR is **source-available software, free for people to use for themselves.** Its
+own code and documentation are under the
+[TUR Noncommercial License](LICENSE.md).
 
-- **Allowed:** personal use, study, research, hobby projects, and modifying and
-  sharing UOS for those purposes.
-- **Not allowed:** any commercial or business use, including use inside a company,
-  offering UOS as a product or service, or selling it.
+- **Allowed:** personal use, study, research and hobby projects; use by charities
+  and by schools and other educational institutions; modifying TUR and sharing it
+  for those purposes.
+- **Not allowed:** commercial or business use of any kind, including use inside a
+  company or offering TUR as a product or service; and use by or for a government.
 
 The full terms are in [LICENSE.md](LICENSE.md), which governs if this summary and
 the licence differ. This is not an open-source licence as the Open Source
-Initiative defines the term.
+Initiative defines the term, and it has not yet had legal review.
 
-The third-party projects that UOS integrates are separate works and remain under
-their own licences, which this licence does not change. Contributions that modify
-or link into such a project are made under that project's licence; see
-[ADR-0003](docs/adr/0003-licence.md).
-
-The software in the UOS image and its licences are listed in
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+The licence covers what TUR itself adds. The third-party projects that TUR
+integrates are separate works under their own licences, which this licence does
+not change; they are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Contributions that modify or link into such a project are made under that
+project's licence; see [ADR-0003](docs/adr/0003-licence.md) and
+[ADR-0010](docs/adr/0010-licence-excludes-government.md).
 
 ---
 
 <sub>
-"UOS" is a working name. This project is not affiliated with UnionTech's UOS or
-with any other product of a similar name. Linux is a registered trademark of Linus
-Torvalds. Windows is a trademark of Microsoft Corporation. macOS is a trademark of
-Apple Inc. UOS is not affiliated with, endorsed by or sponsored by Microsoft, Apple
-or any upstream project it integrates.
+TUR and The Unified Realm are names of this project. Linux is a registered
+trademark of Linus Torvalds. Windows is a trademark of Microsoft Corporation.
+macOS is a trademark of Apple Inc. Android and Google Play are trademarks of
+Google LLC. Fedora is a trademark of Red Hat, Inc. TUR is not affiliated with,
+endorsed by or sponsored by any of them, or by any project it integrates.
 </sub>
