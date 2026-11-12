@@ -318,7 +318,7 @@ impl Decision {
     }
 }
 
-#[cfg(any())]
+#[cfg(test)]
 mod tests {
     use std::collections::BTreeSet;
 

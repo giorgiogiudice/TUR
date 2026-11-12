@@ -264,7 +264,7 @@ pub fn is_legible(text: &str) -> bool {
             .all(|c| matches!(c, ' '..='~') || TYPOGRAPHIC_MARKS.contains(&c))
 }
 
-#[cfg(any())]
+#[cfg(test)]
 mod tests {
     use super::*;
 

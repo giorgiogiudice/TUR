@@ -172,7 +172,7 @@ pub fn object_from_str(text: &str) -> Result<Map<String, Value>, serde_json::Err
     Ok(parsed)
 }
 
-#[cfg(any())]
+#[cfg(test)]
 mod tests {
     use serde_json::json;
 

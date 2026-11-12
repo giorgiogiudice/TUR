@@ -50,7 +50,7 @@ pub fn decide(action: &Action, context: &Context, policy: &UserPolicy, now: Time
         if policy.is_excluded(&ui.application) {
             return Decision::refuse(class, Refusal::ExcludedApplication);
         }
-        if context.target_window_owner == WindowOwner::Administrator && context.session_locked {
+        if context.target_window_owner == WindowOwner::Administrator {
             return Decision::refuse(class, Refusal::PrivilegedWindow);
         }
         if context.session_locked {
@@ -383,7 +383,7 @@ fn quoted(text: &str) -> String {
     out
 }
 
-#[cfg(any())]
+#[cfg(test)]
 mod tests {
     use serde_json::json;
 

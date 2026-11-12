@@ -485,7 +485,7 @@ fn is_desktop_form(shorter: &str, longer: &str) -> bool {
         && longer[shorter.len()..].eq_ignore_ascii_case(DESKTOP_SUFFIX)
 }
 
-#[cfg(any())]
+#[cfg(test)]
 mod tests {
     use super::*;
 
