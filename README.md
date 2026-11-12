@@ -157,7 +157,8 @@ becomes.
 | P@x | [Design](docs/architecture/ai-control-layer.md) published. The engine that decides what P@x may do is written and tested ([details](docs/architecture/agent-policy.md)). No assistant can be used yet |
 | Android | [Design](docs/architecture/android-runtime.md) published; not yet built |
 | Diagnostics, application detection, installer planning, storage safety | First versions written and tested as libraries and command-line tools; not yet part of the image |
-| Devices, updates and rollback, P@x's providers and memory, application catalogue, running Windows programs | In development |
+| Devices, P@x's connections to AI providers, P@x's memory and schedules, application catalogue and router | First versions written and tested; not yet part of the image |
+| Running Windows programs, updates and rollback, the desktop and application centre | In development |
 | Desktop, application centre, Windows and Android running | Not started |
 | Anything you can install | Not yet |
 

@@ -1,6 +1,6 @@
 # AI control layer
 
-**Specification addendum A — Revision 4 (12 November 2026)**
+**Specification addendum A — Revision 5 (12 November 2026)**
 **Applies to:** specification revision 1.0
 **Related decision:** [ADR-0004](../adr/0004-ai-provider-model.md)
 
@@ -741,4 +741,22 @@ own decision table and its tested invariants are in
 
 Where the design was silent, the engine takes the stricter reading. The full list
 of those choices is in [agent-policy.md](agent-policy.md), section 10.
+
+## 18. Resolutions from implementing memory and schedules
+
+Building P@x's memory and scheduler
+([pax-memory-and-schedules.md](pax-memory-and-schedules.md)) exposed further
+gaps. Where an earlier section says otherwise, this section governs.
+
+| # | Gap | Resolution |
+|---|---|---|
+| 1 | Schedules and their standing approvals were to live in the user's data directory, which P@x's own process can write. A compromised P@x could give itself an approval. | Standing approvals, and the schedules that carry them, are held by the same separate system component that owns the policy file (section 17, item 5). P@x can read them and propose changes; only that component writes them, on the user's confirmation. **Until that component exists, standing approvals are not honoured: an unattended class 2 action is always deferred.** Reminders and class 0 and 1 scheduled tasks are unaffected. |
+| 2 | Nothing said where the user confirms a memory entry taken from content. In conversation, the model that just read the content would be the one relaying it. | Pending entries are confirmed in settings, where the user sees the text and where it came from. P@x may say that entries are waiting; it cannot confirm one. |
+| 3 | "Writing a schedule is class 2" conflicted with "the user creates a schedule". | P@x proposes a schedule (class 1: nothing takes effect). The user creates it by confirming the proposal on screen. Granting a standing approval within it is part of that confirmation and is never an action P@x performs. |
+| 4 | An unattended task could record a memory entry as "stated by the user" with nobody present. | An unattended task can record only observed entries. |
+| 5 | The consent text did not say that confirmed entries from content are sent to the provider again whenever they are relevant. | The consent text and the memory settings page say so. Every entry shows whether it has been sent. |
+| 6 | An exact-match standing approval cannot cover a value that changes, such as "send today's report". | Unchanged for now, because it is the safe behaviour. A later design may let an approval fix the recipient and the kind of content while the content itself varies. Until then such a task is deferred for approval when the user returns. |
+| 7 | How long deferred actions and run records are kept was unspecified. | The last 50 run records per schedule; a deferred action until the user decides or 30 days pass, whichever is first. |
+
+Memory is off until the user turns it on.
 
