@@ -162,7 +162,7 @@ Earlier runs on the branch, for the record:
 | `0a83b50` fix 5 | 43214751976 | 43214752043 | 43214751963 | `rust`: formatting only. `pax` passes, with the memory scenario. |
 | `ed61fb6` fix 6 | 43215444535 | 43215444457 | 43215444432 | `rust`: formatting only, in `tur-core` and `tur-catalogue`. The other two pass. |
 
-Eleven pushes in all, the one that adds this report included. Every failed
+Twelve pushes in all, the two that add and correct this report included. Every failed
 run needed the lockfile or the formatting that CI computes, because no
 development machine has a toolchain; for three of them that was all. The
 other failures were in new tests: a type error, a clippy finding, four wrong
@@ -171,8 +171,10 @@ by CI on the first run that reached it. No run found a defect in code that
 an earlier run had passed, and none found a defect outside the tests.
 
 The commit that adds this report also brings two design notes up to date.
-It changes no code, so of the three workflows only `rust` runs on it; the
-`pax` and `windows-runtime` runs above are those of the code it contains.
+It changes no code. All three workflows run on it again, because the path
+filter of a pull request looks at the whole change and not at the last
+commit; those runs are of the same code as the ones above and are not listed
+here.
 The invariant sweep of the policy engine now takes two to four minutes of
 the `rust` job for `services/tur-pax`.
 
