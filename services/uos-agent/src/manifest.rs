@@ -259,7 +259,14 @@ impl ToolSpec {
     /// argument value, and repeat a property name only if the schema declares it.
     pub fn check_arguments(&self, arguments: &Map<String, Value>) -> Result<(), Vec<Problem>> {
         let mut problems = Vec::new();
-        check_object(&self.input_schema, arguments, "arguments", &mut problems);
+        // Checked as a value, so that every keyword of the top-level schema is
+        // enforced, `enum` included.
+        check_value(
+            &self.input_schema,
+            &Value::Object(arguments.clone()),
+            "arguments",
+            &mut problems,
+        );
         if problems.is_empty() {
             Ok(())
         } else {
@@ -921,6 +928,29 @@ mod tests {
                 .collect::<Vec<_>>(),
             [Code::ToolUnknown]
         );
+    }
+
+    #[test]
+    fn an_enum_on_the_top_level_schema_is_enforced() {
+        let text = manifest_with(tool_with(|tool| {
+            tool.insert(
+                "input_schema".to_owned(),
+                json!({
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": { "level": { "type": "integer" } },
+                    "enum": [{ "level": 1 }, { "level": 2 }]
+                }),
+            );
+        }));
+        let manifest = ToolManifest::from_json(&text).unwrap();
+        assert!(argument_codes(&manifest, json!({ "level": 1 })).is_empty());
+        assert!(argument_codes(&manifest, json!({ "level": 2 })).is_empty());
+        assert_eq!(
+            argument_codes(&manifest, json!({ "level": 3 })),
+            [Code::ToolArguments]
+        );
+        assert_eq!(argument_codes(&manifest, json!({})), [Code::ToolArguments]);
     }
 
     #[test]

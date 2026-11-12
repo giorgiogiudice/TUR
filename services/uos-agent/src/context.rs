@@ -43,13 +43,23 @@ pub struct RepairSession {
     pub expires_at: Timestamp,
 }
 
+/// The longest time a repair session may have left to run, in seconds.
+///
+/// This is a sanity bound, not the intended length of a session, which the
+/// design has yet to state. A record that claims more time than this is not a
+/// time-limited session, and is treated as closed.
+pub const MAX_REPAIR_SESSION_SECONDS: u64 = 24 * 60 * 60;
+
 impl RepairSession {
     /// Whether the session is open at `now`.
     ///
-    /// A session with no stated purpose is never open. The engine also treats
+    /// A session with no stated purpose is never open, and neither is one with
+    /// more than [`MAX_REPAIR_SESSION_SECONDS`] left. The engine also treats
     /// every session as closed while the session is locked or unattended.
     pub fn is_open_at(&self, now: Timestamp) -> bool {
-        !self.purpose.trim().is_empty() && now < self.expires_at
+        !self.purpose.trim().is_empty()
+            && now < self.expires_at
+            && self.expires_at.0 - now.0 <= MAX_REPAIR_SESSION_SECONDS
     }
 }
 
@@ -165,6 +175,20 @@ mod tests {
             };
             assert!(!session.is_open_at(Timestamp(0)));
         }
+    }
+
+    #[test]
+    fn repair_session_without_a_time_limit_is_never_open() {
+        let now = Timestamp(1_000);
+        let session = |expires_at: u64| RepairSession {
+            purpose: "fix printing".to_owned(),
+            expires_at: Timestamp(expires_at),
+        };
+        assert!(session(now.0 + MAX_REPAIR_SESSION_SECONDS).is_open_at(now));
+        assert!(!session(now.0 + MAX_REPAIR_SESSION_SECONDS + 1).is_open_at(now));
+        assert!(!session(u64::MAX).is_open_at(now));
+        // The latest possible time: everything has expired.
+        assert!(!session(u64::MAX).is_open_at(Timestamp(u64::MAX)));
     }
 
     #[test]

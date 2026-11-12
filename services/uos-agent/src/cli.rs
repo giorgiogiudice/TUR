@@ -277,10 +277,14 @@ fn evaluate(args: &CheckArgs) -> Result<(Decision, AuditRecord), Vec<Problem>> {
     Ok((decision, record))
 }
 
+/// The clock, in seconds since the Unix epoch.
+///
+/// If the clock cannot be read, the result is the latest possible time, at
+/// which every repair session has expired.
 fn clock_seconds() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map_or(0, |elapsed| elapsed.as_secs())
+        .map_or(u64::MAX, |elapsed| elapsed.as_secs())
 }
 
 fn invalid_input(detail: String) -> Vec<Problem> {

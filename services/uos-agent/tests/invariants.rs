@@ -215,16 +215,19 @@ fn repair_sessions() -> Vec<Option<RepairSession>> {
         session("fix printing", NOW.0 - 1),
         session("fix printing", NOW.0),
         session("", NOW.0 + 600),
+        // More than a day left: not a time-limited session.
+        session("fix printing", NOW.0 + 86_401),
     ]
 }
 
 /// Whether the context holds a repair session that is open at `NOW`, stated
 /// independently of the engine.
 fn repair_session_is_open(context: &Context) -> bool {
-    context
-        .repair_session
-        .as_ref()
-        .is_some_and(|session| !session.purpose.is_empty() && session.expires_at.0 > NOW.0)
+    context.repair_session.as_ref().is_some_and(|session| {
+        !session.purpose.is_empty()
+            && session.expires_at.0 > NOW.0
+            && session.expires_at.0 - NOW.0 <= 86_400
+    })
 }
 
 fn approvals_for(subject: &str) -> Vec<StandingApproval> {

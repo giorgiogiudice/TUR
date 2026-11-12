@@ -110,9 +110,11 @@ side.
 | Standing approvals | The approvals the user attached to the schedule that started the task |
 | Model hint | The model flagged the action as consequential |
 
-A repair session is open if it has a stated purpose and the time is before its
-expiry. At the expiry instant it is closed. The engine treats it as closed while
-the session is locked or the task is unattended, whatever the record says.
+A repair session is open if it has a stated purpose, the time is before its
+expiry, and it has at most 24 hours left. At the expiry instant it is closed. The
+24 hours are a sanity bound against a record with no real time limit, not the
+intended length of a session. The engine treats a session as closed while the
+session is locked or the task is unattended, whatever the record says.
 
 A standing approval names a service, a tool and a complete set of arguments. It
 matches a call only if all three are equal. JSON numbers compare as written, so
@@ -209,12 +211,13 @@ least one row for each of rules 2 to 10. Rule 1 is tested by
   commands in every sandbox, working context and privileged operation type; every
   agent operation;
 - context: attended or unattended; locked or not; trusted path or not; repair
-  session absent, open, expired, expiring now, or without a purpose; no standing
-  approvals, exact ones, or near misses; model hint or not;
+  session absent, open, expired, expiring now, without a purpose, or with more
+  than a day left; no standing approvals, exact ones, or near misses; model hint
+  or not;
 - user policy: each mode, with no per-application settings, with all of them, and
   with every application relaxed.
 
-That is 147 actions, 240 contexts and 9 policies: 317 520 decisions for each
+That is 147 actions, 288 contexts and 9 policies: 381 024 decisions for each
 sweep. Each generated action carries the class its source gives it, stated in the
 test independently of the engine.
 
@@ -232,7 +235,7 @@ test independently of the engine.
 | Unattended or locked: never `ask`, never `authenticate` | `nobody_is_asked_when_nobody_is_present` |
 | Unattended class 2 is `allow` only with an exactly matching standing approval, and only in a task that really is unattended | `unattended_class_2_runs_only_with_an_exactly_matching_standing_approval`; near misses in `standing_approval_matches_only_the_exact_call` (`src/context.rs`) and in `tests/cli.rs` |
 | Unattended class 3 is always `refuse` | `unattended_class_3_is_always_refused` |
-| An expired or absent repair session never permits a privileged command | `a_privileged_command_runs_only_inside_an_open_repair_session` |
+| An expired or absent repair session never permits a privileged command; nor does one without a purpose or without a time limit | `a_privileged_command_runs_only_inside_an_open_repair_session`; the boundaries in `src/context.rs` |
 | An open repair session never permits a system-critical operation; such an operation cannot be reached as a command | `a_system_critical_operation_never_runs_as_a_command`; the operation list in `repair_session_never_covers_the_system_critical_operations` (`src/action.rs`) |
 | Locked session: no accessibility or screen actions | `a_locked_session_has_no_accessibility_or_screen_actions` |
 | Locking the session is never more permissive, and an attended task does nothing while it is locked | `locking_the_session_is_never_more_permissive` |
@@ -429,6 +432,9 @@ Without `--trusted-path`, classes 2 and 3 are refused.
 | 13 | `refuse` |
 
 Only `allow` exits with 0, so a script that tests the exit status fails closed.
+Without `--now` the command reads the system clock; if the clock cannot be read
+it uses the latest possible time, at which every repair session has expired. This
+command is the only place in the crate that reads a file or the clock.
 
 The error codes are declared once, in the registry table in `src/codes.rs`. A unit
 test checks that every code parses as a `UOS-AI-*` code and that codes and titles
@@ -465,6 +471,7 @@ ambiguous. In each, the stricter reading was implemented.
 | 5 | Locked session with a task marked attended | The task is paused: every action that is not refused is deferred, classes 0 and 1 included (addendum A section 7: tasks pause when the session locks). Class 3 and privileged commands are refused. A repair session is treated as closed, whatever the record says. Standing approvals are not honoured: they belong to a schedule, and this task has none. |
 | 6 | Repair session with no stated purpose | Never open. |
 | 7 | Repair session at the exact expiry instant | Closed. |
+| 7a | Repair session with no effective time limit | A session with more than 24 hours left is closed. Revision 2 says a session has a time limit but not what it is; the bound is a sanity check and should be replaced by the stated maximum. |
 | 8 | Open repair session while the trusted path is unavailable | Permits nothing: rule 5 comes first. |
 | 9 | "Ask before every action" and class 0 | Class 0 is asked too. "Every" is read literally. |
 | 10 | "Ask before every action" in an unattended task | Everything is deferred, including a class 2 call with a matching standing approval, and including classes 0 and 1. |
