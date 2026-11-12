@@ -1101,8 +1101,7 @@ impl Plan {
             // The screen would show one phrase while another is required:
             // the plan was altered after it was built.
             return Err(ConfirmError::Plan(PlanError::Invalid {
-                reason: "the confirmation phrase does not belong to the target identity"
-                    .to_owned(),
+                reason: "the confirmation phrase does not belong to the target identity".to_owned(),
             }));
         }
         if preflight.target.as_ref() != Some(&self.target.identity) {
@@ -2006,7 +2005,11 @@ mod tests {
         let nvme_preflight = preflight_for(&inventory, NVME_SELECTOR);
         for typed in ["ERASE M700001B", "ERASE T123456A"] {
             let result = retargeted.confirm(typed, &nvme_preflight, now);
-            assert_eq!(result.unwrap_err().code(), InstallCode::PlanInvalid, "{typed}");
+            assert_eq!(
+                result.unwrap_err().code(),
+                InstallCode::PlanInvalid,
+                "{typed}"
+            );
         }
     }
 
