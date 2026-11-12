@@ -72,9 +72,13 @@ T.TextField {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
+        anchors.bottom: parent.bottom
         anchors.leftMargin: control.leftPadding
         anchors.rightMargin: control.rightPadding
         anchors.topMargin: control.topPadding
+        anchors.bottomMargin: control.bottomPadding
+        // On the line the typed text will be on.
+        verticalAlignment: Text.AlignVCenter
         visible: control.length === 0 && control.preeditText.length === 0
         text: control.placeholderText
         color: control.enabled ? control.placeholderTextColor : Theme.textDisabled
