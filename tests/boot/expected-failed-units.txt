@@ -1,0 +1,7 @@
+# systemd units that are allowed to fail when UOS boots in the CI virtual machine.
+#
+# One unit per line, followed by the reason. A unit belongs here only if its
+# failure is caused by the virtual machine, not by UOS, and the reason says why.
+# Any failed unit that is not listed fails the boot test.
+#
+# unit-name.service  reason
