@@ -49,7 +49,10 @@ fn uos_device(args: &[&str]) -> Run {
         .output()
         .expect("uos-device starts");
     Run {
-        status: output.status.code().expect("uos-device exits with a status"),
+        status: output
+            .status
+            .code()
+            .expect("uos-device exits with a status"),
         stdout: output.stdout,
         stderr: String::from_utf8(output.stderr).expect("stderr is UTF-8"),
     }
@@ -57,10 +60,8 @@ fn uos_device(args: &[&str]) -> Run {
 
 /// A fresh, empty directory under Cargo's directory for test files.
 fn scratch(name: &str) -> PathBuf {
-    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
-        "uos-device-{name}-{}",
-        std::process::id()
-    ));
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR"))
+        .join(format!("uos-device-{name}-{}", std::process::id()));
     if dir.exists() {
         fs::remove_dir_all(&dir).expect("the old scratch directory can be removed");
     }
@@ -141,7 +142,10 @@ fn inventory_text_lists_every_category() {
     assert_eq!(run.status, EXIT_OK, "{}", run.stderr);
     assert!(run.stderr.is_empty());
     let text = run.text();
-    assert!(text.starts_with("UOS hardware inventory\n\nPlatform\n"), "{text}");
+    assert!(
+        text.starts_with("UOS hardware inventory\n\nPlatform\n"),
+        "{text}"
+    );
     for expected in [
         "  System:      Example Computer Notebook 14 G2 1.0\n",
         "  Firmware:    Example Firmware N3HET74W (1.46) (03/15/2026)\n",
@@ -191,7 +195,9 @@ fn inventory_text_lists_every_category() {
     assert!(text.starts_with("UOS hardware inventory (redacted)\n"));
     assert!(text.contains("  Serial:      <redacted>\n"));
     assert!(text.contains("    serial: <redacted>\n"));
-    assert!(text.contains("  enx<redacted>  ethernet  state: up  driver: r8152  address: <redacted>\n"));
+    assert!(
+        text.contains("  enx<redacted>  ethernet  state: up  driver: r8152  address: <redacted>\n")
+    );
     assert!(!text.contains("4C530001230915112345"));
     assert!(!text.contains("PF2ABCDE"));
 }
@@ -248,7 +254,12 @@ fn problems_text_has_a_message_an_action_and_detail_for_each_finding() {
         ),
         "{text}"
     );
-    assert_eq!(text.lines().filter(|line| line.starts_with("UOS-DEVICE-")).count(), 10);
+    assert_eq!(
+        text.lines()
+            .filter(|line| line.starts_with("UOS-DEVICE-"))
+            .count(),
+        10
+    );
     assert_eq!(text.matches("\nAction:\n").count(), 10);
     assert_eq!(text.matches("\nTechnical detail:\n").count(), 10);
     assert!(text.contains("  firmware_file: rtw88/rtw8822c_fw.bin\n"));
@@ -336,7 +347,13 @@ fn an_empty_directory_gives_an_empty_inventory() {
         .collect();
     assert_eq!(
         sources,
-        ["machine-id", "udev", "kernel-module-aliases", "fwupd", "kernel-log"]
+        [
+            "machine-id",
+            "udev",
+            "kernel-module-aliases",
+            "fwupd",
+            "kernel-log"
+        ]
     );
 
     let run = uos_device(&["problems", "--from", from]);
@@ -385,10 +402,21 @@ fn hostile_descriptor_strings_on_disk_do_not_reach_the_output() {
     link(&dir, &format!("{device}/1-2:1.0/driver"), "/etc/passwd");
     link(&dir, "sys/bus/usb/devices/1-9", "1-9");
     // A directory entry whose name is not UTF-8.
-    fs::create_dir_all(dir.join("sys/class/net").join(OsStr::from_bytes(b"eth\xff\xfe")))
-        .expect("a directory with a non-UTF-8 name can be created");
-    write(&dir, "etc/machine-id", b"0123456789abcdef0123456789abcdef\n");
-    write(&dir, "commands/fwupdmgr-get-devices.json", b"{\"Devices\": [{\"Name\": 7}]");
+    fs::create_dir_all(
+        dir.join("sys/class/net")
+            .join(OsStr::from_bytes(b"eth\xff\xfe")),
+    )
+    .expect("a directory with a non-UTF-8 name can be created");
+    write(
+        &dir,
+        "etc/machine-id",
+        b"0123456789abcdef0123456789abcdef\n",
+    );
+    write(
+        &dir,
+        "commands/fwupdmgr-get-devices.json",
+        b"{\"Devices\": [{\"Name\": 7}]",
+    );
     write(&dir, "commands/udevadm-info-export-db.txt", &[0x00; 4096]);
     write(&dir, "commands/journalctl-kernel.txt", b"\x1b[31m\xff\n");
 
@@ -400,9 +428,14 @@ fn hostile_descriptor_strings_on_disk_do_not_reach_the_output() {
     assert_eq!(document["usb"].as_array().map(Vec::len), Some(1));
     let usb = &document["usb"][0];
     assert_eq!(usb["manufacturer"], "]0;pwned [2JAcme");
-    assert_eq!(usb["product"], "Disk \u{FFFD}\u{FFFD}\u{FFFD}\u{FFFD}\u{FFFD}\u{FFFD}\u{FFFD} drive");
     assert_eq!(
-        usb["serial"]["value"].as_str().map(|text| text.chars().count()),
+        usb["product"],
+        "Disk \u{FFFD}\u{FFFD}\u{FFFD}\u{FFFD}\u{FFFD}\u{FFFD}\u{FFFD} drive"
+    );
+    assert_eq!(
+        usb["serial"]["value"]
+            .as_str()
+            .map(|text| text.chars().count()),
         Some(256)
     );
     assert_eq!(usb["interfaces"][0]["modalias"], Value::Null);
@@ -415,7 +448,9 @@ fn hostile_descriptor_strings_on_disk_do_not_reach_the_output() {
     // The raw output holds no escape byte either: only printable text and
     // line feeds.
     assert!(
-        run.stdout.iter().all(|byte| *byte == b'\n' || *byte >= 0x20),
+        run.stdout
+            .iter()
+            .all(|byte| *byte == b'\n' || *byte >= 0x20),
         "control bytes in the JSON output"
     );
 

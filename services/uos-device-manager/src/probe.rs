@@ -632,7 +632,10 @@ mod tests {
     fn small_tree() -> FakeProbe {
         FakeProbe::new()
             .file("/sys/devices/pci0000:00/0000:00:02.0/vendor", "0x8086\n")
-            .file("/sys/devices/pci0000:00/0000:00:02.0/drm/card0/dev", "226:0\n")
+            .file(
+                "/sys/devices/pci0000:00/0000:00:02.0/drm/card0/dev",
+                "226:0\n",
+            )
             .link(
                 "/sys/devices/pci0000:00/0000:00:02.0/driver",
                 "../../../bus/pci/drivers/i915",
@@ -701,7 +704,11 @@ mod tests {
         let probe = small_tree();
         assert_eq!(
             probe.list("/sys/bus/pci/devices/0000:00:02.0"),
-            Ok(vec!["driver".to_owned(), "drm".to_owned(), "vendor".to_owned()])
+            Ok(vec![
+                "driver".to_owned(),
+                "drm".to_owned(),
+                "vendor".to_owned()
+            ])
         );
         assert_eq!(probe.list("/sys/firmware/efi"), Ok(Vec::new()));
         assert_eq!(probe.list("/sys/firmware/acpi"), Err(ProbeError::NotFound));
@@ -759,9 +766,24 @@ mod tests {
             // the system.
             for argument in command.arguments() {
                 for verb in [
-                    "trigger", "control", "update", "install", "activate", "unlock", "rotate",
-                    "vacuum", "flush", "sync", "refresh", "downgrade", "reinstall", "clear",
-                    "modify", "set-", "enable", "disable",
+                    "trigger",
+                    "control",
+                    "update",
+                    "install",
+                    "activate",
+                    "unlock",
+                    "rotate",
+                    "vacuum",
+                    "flush",
+                    "sync",
+                    "refresh",
+                    "downgrade",
+                    "reinstall",
+                    "clear",
+                    "modify",
+                    "set-",
+                    "enable",
+                    "disable",
                 ] {
                     assert!(!argument.contains(verb), "{command:?}: {argument}");
                 }

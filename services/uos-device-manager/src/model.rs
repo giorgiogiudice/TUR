@@ -957,10 +957,7 @@ impl DeviceRef<'_> {
         let (name, driver) = match self {
             Self::Pci(device) => (
                 first_of(
-                    &[
-                        device.device_name.as_deref(),
-                        device.class_name.as_deref(),
-                    ],
+                    &[device.device_name.as_deref(), device.class_name.as_deref()],
                     &device.address,
                 ),
                 device.driver.clone(),
@@ -987,10 +984,7 @@ impl DeviceRef<'_> {
                 first_of(&[device.model.as_deref()], &device.name),
                 device.driver.clone(),
             ),
-            Self::Input(device) => (
-                first_of(&[device.name.as_deref()], "input device"),
-                None,
-            ),
+            Self::Input(device) => (first_of(&[device.name.as_deref()], "input device"), None),
             Self::Bluetooth(device) => (device.name.clone(), device.driver.clone()),
             Self::Camera(device) => (
                 first_of(&[device.name.as_deref()], &device.node),
@@ -1093,7 +1087,10 @@ mod tests {
             json(serde_json::to_value(OperState::LowerLayerDown).unwrap()),
             "lower_layer_down"
         );
-        assert_eq!(json(serde_json::to_value(InputBus::I8042).unwrap()), "i8042");
+        assert_eq!(
+            json(serde_json::to_value(InputBus::I8042).unwrap()),
+            "i8042"
+        );
         assert_eq!(json(serde_json::to_value(InputBus::I2c).unwrap()), "i2c");
         assert_eq!(
             json(serde_json::to_value(StorageControllerKind::UsbMassStorage).unwrap()),

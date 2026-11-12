@@ -21,9 +21,9 @@
 
 use crate::model::{
     AudioCard, BlockDevice, BluetoothAdapter, Camera, Firmware, FirmwareDevice,
-    FirmwareLoadFailure, FirmwareRelease, InputDevice, Inventory, KernelEvidence,
-    NetworkInterface, PciDevice, Platform, ProbeFailure, Sensitive, StorageController,
-    ThunderboltDevice, UsbDevice, UsbInterface,
+    FirmwareLoadFailure, FirmwareRelease, InputDevice, Inventory, KernelEvidence, NetworkInterface,
+    PciDevice, Platform, ProbeFailure, Sensitive, StorageController, ThunderboltDevice, UsbDevice,
+    UsbInterface,
 };
 
 /// What replaces a removed value where it occurred inside other text.
@@ -90,8 +90,19 @@ macro_rules! walk {
 
 walk!(Inventory {
     walk: [
-        platform, pci, usb, network, audio, storage_controllers, block, input, bluetooth,
-        cameras, thunderbolt, firmware, kernel,
+        platform,
+        pci,
+        usb,
+        network,
+        audio,
+        storage_controllers,
+        block,
+        input,
+        bluetooth,
+        cameras,
+        thunderbolt,
+        firmware,
+        kernel,
     ],
     // `source_notes` holds only text written by this crate.
     skip: [schema_version, redacted, source_notes]
@@ -99,8 +110,18 @@ walk!(Inventory {
 
 walk!(Platform {
     walk: [
-        sys_vendor, product_name, product_version, product_family, board_vendor, board_name,
-        bios_vendor, bios_version, bios_date, product_serial, product_uuid, board_serial,
+        sys_vendor,
+        product_name,
+        product_version,
+        product_family,
+        board_vendor,
+        board_name,
+        bios_vendor,
+        bios_version,
+        bios_date,
+        product_serial,
+        product_uuid,
+        board_serial,
         chassis_serial,
     ],
     skip: [chassis_type, boot_mode, secure_boot]
@@ -109,27 +130,57 @@ walk!(Platform {
 walk!(PciDevice {
     walk: [sysfs_path, vendor_name, device_name, modalias],
     skip: [
-        id, id_basis, address, vendor_id, device_id, class, class_name, subsystem_vendor_id,
-        subsystem_device_id, revision, driver, kernel_modules, gpu,
+        id,
+        id_basis,
+        address,
+        vendor_id,
+        device_id,
+        class,
+        class_name,
+        subsystem_vendor_id,
+        subsystem_device_id,
+        revision,
+        driver,
+        kernel_modules,
+        gpu,
     ]
 });
 
 walk!(UsbDevice {
     walk: [sysfs_path, manufacturer, product, serial, interfaces],
     skip: [
-        id, id_basis, bus_port, vendor_id, product_id, class, class_name, speed_mbps,
-        usb_version, removable, is_root_hub,
+        id,
+        id_basis,
+        bus_port,
+        vendor_id,
+        product_id,
+        class,
+        class_name,
+        speed_mbps,
+        usb_version,
+        removable,
+        is_root_hub,
     ]
 });
 
 walk!(UsbInterface {
     walk: [modalias],
-    skip: [name, class, subclass, protocol, class_name, driver, kernel_modules]
+    skip: [
+        name,
+        class,
+        subclass,
+        protocol,
+        class_name,
+        driver,
+        kernel_modules
+    ]
 });
 
 walk!(NetworkInterface {
     walk: [sysfs_path, name, mac_address],
-    skip: [id, id_basis, kind, wireless, is_virtual, link_type, driver, operstate, parent]
+    skip: [
+        id, id_basis, kind, wireless, is_virtual, link_type, driver, operstate, parent
+    ]
 });
 
 walk!(AudioCard {
@@ -144,12 +195,16 @@ walk!(StorageController {
 
 walk!(BlockDevice {
     walk: [sysfs_path, name, model, vendor, serial, wwid],
-    skip: [id, id_basis, transport, removable, rotational, size_bytes, driver, parent]
+    skip: [
+        id, id_basis, transport, removable, rotational, size_bytes, driver, parent
+    ]
 });
 
 walk!(InputDevice {
     walk: [sysfs_path, name, phys, uniq],
-    skip: [id, id_basis, bus, vendor_id, product_id, version, kinds, parent]
+    skip: [
+        id, id_basis, bus, vendor_id, product_id, version, kinds, parent
+    ]
 });
 
 walk!(BluetoothAdapter {
@@ -164,7 +219,15 @@ walk!(Camera {
 
 walk!(ThunderboltDevice {
     walk: [sysfs_path, name, vendor_name, device_name, unique_id],
-    skip: [id, id_basis, vendor_id, device_id, authorised, is_host, security_level]
+    skip: [
+        id,
+        id_basis,
+        vendor_id,
+        device_id,
+        authorised,
+        is_host,
+        security_level
+    ]
 });
 
 walk!(Firmware {
@@ -233,7 +296,9 @@ impl Scrubber {
                 // ASCII lower-casing keeps every byte offset, so offsets found
                 // in the lower-cased copy are valid in the original.
                 let lower = text.to_ascii_lowercase();
-                let Some(found) = lower.get(from..).and_then(|rest| rest.find(needle.as_str()))
+                let Some(found) = lower
+                    .get(from..)
+                    .and_then(|rest| rest.find(needle.as_str()))
                 else {
                     break;
                 };
@@ -294,7 +359,10 @@ mod tests {
             scrubbed(&mac, "/sys/devices/x/net/enx00e04c680001"),
             "/sys/devices/x/net/enx<redacted>"
         );
-        assert_eq!(scrubbed(&mac, "addr 00:e0:4C:68:00:01!"), "addr <redacted>!");
+        assert_eq!(
+            scrubbed(&mac, "addr 00:e0:4C:68:00:01!"),
+            "addr <redacted>!"
+        );
         assert_eq!(scrubbed(&mac, "unrelated"), "unrelated");
         assert_eq!(
             scrubbed(&["SERIAL99"], "serial99 and SERIAL99 and Serial99"),
@@ -322,9 +390,15 @@ mod tests {
     #[test]
     fn scrub_handles_non_ascii_text() {
         assert_eq!(
-            scrubbed(&["s\u{00e9}rie-123"], "caf\u{00e9} S\u{00e9}RIE-123 \u{2026}"),
+            scrubbed(
+                &["s\u{00e9}rie-123"],
+                "caf\u{00e9} S\u{00e9}RIE-123 \u{2026}"
+            ),
             "caf\u{00e9} <redacted> \u{2026}"
         );
-        assert_eq!(scrubbed(&["abcdef"], "\u{00e9}abcdef\u{00e9}"), "\u{00e9}<redacted>\u{00e9}");
+        assert_eq!(
+            scrubbed(&["abcdef"], "\u{00e9}abcdef\u{00e9}"),
+            "\u{00e9}<redacted>\u{00e9}"
+        );
     }
 }

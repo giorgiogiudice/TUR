@@ -15,12 +15,11 @@ use std::path::Path;
 
 use serde_json::Value;
 use uos_device_manager::model::{
-    BlockTransport, BootMode, Category, ConnectorStatus, FwupdStatus, IdBasis, InputBus,
-    InputKind, NetKind, OperState, Removable, SecureBoot, StorageControllerKind,
-    ThunderboltAuthorisation,
+    BlockTransport, BootMode, Category, ConnectorStatus, FwupdStatus, IdBasis, InputBus, InputKind,
+    NetKind, OperState, Removable, SecureBoot, StorageControllerKind, ThunderboltAuthorisation,
 };
 use uos_device_manager::{
-    FakeProbe, FsProbe, Inventory, ProblemReport, ProbeCommand, Sensitive, Severity, collect,
+    FakeProbe, FsProbe, Inventory, ProbeCommand, ProblemReport, Sensitive, Severity, collect,
     detect,
 };
 
@@ -74,7 +73,11 @@ fn every_source_of_the_fixture_is_used() {
     let inventory = inventory();
     assert_eq!(inventory.schema_version, 1);
     assert!(!inventory.redacted);
-    assert!(inventory.source_notes.is_empty(), "{:?}", inventory.source_notes);
+    assert!(
+        inventory.source_notes.is_empty(),
+        "{:?}",
+        inventory.source_notes
+    );
 }
 
 #[test]
@@ -150,13 +153,19 @@ fn pci_devices_are_listed_with_ids_class_and_driver() {
         gpu.modalias.as_deref(),
         Some("pci:v00008086d00009A49sv000017AAsd000022D5bc03sc00i00")
     );
-    let modules = gpu.kernel_modules.as_deref().expect("the alias table was read");
+    let modules = gpu
+        .kernel_modules
+        .as_deref()
+        .expect("the alias table was read");
     assert_eq!(modules.len(), 1);
     assert_eq!(modules[0].name, "i915");
     assert!(modules[0].loaded);
 
     // The GPU's DRM card and the state of each connector.
-    let display = gpu.gpu.as_ref().expect("a display controller has GPU details");
+    let display = gpu
+        .gpu
+        .as_ref()
+        .expect("a display controller has GPU details");
     assert_eq!(display.boot_vga, Some(true));
     assert_eq!(display.drm_cards.len(), 1);
     assert_eq!(display.drm_cards[0].name, "card1");
@@ -183,8 +192,14 @@ fn pci_devices_are_listed_with_ids_class_and_driver() {
     );
     assert_eq!(second.driver, None);
     assert_eq!(second.class.as_deref(), Some("030200"));
-    assert_eq!(second.device_name.as_deref(), Some("TU117M [GeForce MX550]"));
-    let display = second.gpu.as_ref().expect("a display controller has GPU details");
+    assert_eq!(
+        second.device_name.as_deref(),
+        Some("TU117M [GeForce MX550]")
+    );
+    let display = second
+        .gpu
+        .as_ref()
+        .expect("a display controller has GPU details");
     assert_eq!(display.boot_vga, Some(false));
     assert!(display.drm_cards.is_empty());
     let modules = second.kernel_modules.as_deref().unwrap();
@@ -195,7 +210,10 @@ fn pci_devices_are_listed_with_ids_class_and_driver() {
     // udev names the class name comes from the class code.
     let management = &inventory.pci[7];
     assert_eq!(management.gpu, None);
-    assert_eq!(management.class_name.as_deref(), Some("Communication controller"));
+    assert_eq!(
+        management.class_name.as_deref(),
+        Some("Communication controller")
+    );
     assert_eq!(management.vendor_name, None);
     assert_eq!(management.kernel_modules.as_ref().map(Vec::len), Some(0));
 
@@ -237,7 +255,10 @@ fn usb_devices_are_listed_with_strings_speed_and_interface_drivers() {
     assert_eq!(receiver.vendor_id.as_deref(), Some("046d"));
     assert_eq!(receiver.product_id.as_deref(), Some("c52b"));
     assert_eq!(receiver.class.as_deref(), Some("00"));
-    assert_eq!(receiver.class_name.as_deref(), Some("Defined by the interfaces"));
+    assert_eq!(
+        receiver.class_name.as_deref(),
+        Some("Defined by the interfaces")
+    );
     assert_eq!(receiver.manufacturer.as_deref(), Some("Logitech"));
     assert_eq!(receiver.product.as_deref(), Some("USB Receiver"));
     assert_eq!(receiver.serial, Sensitive::Absent);
@@ -251,7 +272,10 @@ fn usb_devices_are_listed_with_strings_speed_and_interface_drivers() {
     assert_eq!(keyboard.class.as_deref(), Some("03"));
     assert_eq!(keyboard.subclass.as_deref(), Some("01"));
     assert_eq!(keyboard.protocol.as_deref(), Some("01"));
-    assert_eq!(keyboard.class_name.as_deref(), Some("Human interface device"));
+    assert_eq!(
+        keyboard.class_name.as_deref(),
+        Some("Human interface device")
+    );
     assert_eq!(keyboard.driver.as_deref(), Some("usbhid"));
     assert_eq!(receiver.interfaces[1].protocol.as_deref(), Some("02"));
 
@@ -259,7 +283,10 @@ fn usb_devices_are_listed_with_strings_speed_and_interface_drivers() {
     let reader = &inventory.usb[1];
     assert_eq!(reader.removable, Removable::Fixed);
     assert_eq!(reader.interfaces[0].driver, None);
-    assert_eq!(reader.interfaces[0].class_name.as_deref(), Some("Vendor specific"));
+    assert_eq!(
+        reader.interfaces[0].class_name.as_deref(),
+        Some("Vendor specific")
+    );
 
     // A device with a serial number: the identifier is the hash of it with
     // the machine identifier, computed independently for this assertion.
@@ -313,7 +340,10 @@ fn network_interfaces_are_listed_with_kind_driver_and_state() {
     let adapter = &inventory.network[1];
     assert_eq!(adapter.kind, NetKind::Ethernet);
     assert_eq!(adapter.driver.as_deref(), Some("r8152"));
-    assert_eq!(adapter.parent.as_deref(), Some("usb-0bda:8153-s06464f7630521add"));
+    assert_eq!(
+        adapter.parent.as_deref(),
+        Some("usb-0bda:8153-s06464f7630521add")
+    );
 
     let loopback = &inventory.network[2];
     assert_eq!(loopback.id, "net-name-lo");
@@ -335,7 +365,10 @@ fn network_interfaces_are_listed_with_kind_driver_and_state() {
     assert!(wireless.wireless);
     assert_eq!(wireless.driver.as_deref(), Some("iwlwifi"));
     assert_eq!(wireless.operstate, OperState::Up);
-    assert_eq!(wireless.parent.as_deref(), Some("pci-0000:00:14.3-8086:a0f0"));
+    assert_eq!(
+        wireless.parent.as_deref(),
+        Some("pci-0000:00:14.3-8086:a0f0")
+    );
 }
 
 #[test]
@@ -426,7 +459,10 @@ fn sound_cards_and_storage_are_listed() {
     assert_eq!(stick.transport, BlockTransport::Usb);
     assert_eq!(stick.removable, Some(true));
     assert_eq!(stick.wwid, Sensitive::Absent);
-    assert_eq!(stick.parent.as_deref(), Some("usb-0781:5581-sc98eb119b0e5002d"));
+    assert_eq!(
+        stick.parent.as_deref(),
+        Some("usb-0781:5581-sc98eb119b0e5002d")
+    );
 }
 
 #[test]
@@ -464,7 +500,11 @@ fn input_bluetooth_and_video_devices_are_listed() {
                 InputBus::Usb,
                 "input-usb-1-1-046d:c52b-1"
             ),
-            ("MX Anywhere 3", InputBus::Bluetooth, "input-b0005-046d:b023-0"),
+            (
+                "MX Anywhere 3",
+                InputBus::Bluetooth,
+                "input-b0005-046d:b023-0"
+            ),
         ]
     );
     assert_eq!(inventory.input[0].kinds, [InputKind::Key]);
@@ -474,7 +514,10 @@ fn input_bluetooth_and_video_devices_are_listed() {
         inventory.input[1].kinds,
         [InputKind::Keyboard, InputKind::Key]
     );
-    assert_eq!(inventory.input[2].parent.as_deref(), Some("usb-1-1-046d:c52b"));
+    assert_eq!(
+        inventory.input[2].parent.as_deref(),
+        Some("usb-1-1-046d:c52b")
+    );
     assert_eq!(inventory.input[2].version.as_deref(), Some("0111"));
     assert_eq!(inventory.input[3].kinds, [InputKind::Mouse]);
     // For a Bluetooth device both fields are addresses.
@@ -488,7 +531,10 @@ fn input_bluetooth_and_video_devices_are_listed() {
     assert_eq!(adapter.id, "bluetooth-usb-1-10-8087:0026-0");
     assert_eq!(adapter.driver.as_deref(), Some("btusb"));
     assert_eq!(adapter.address, Sensitive::Absent);
-    let rfkill = adapter.rfkill.as_ref().expect("the adapter has a kill switch");
+    let rfkill = adapter
+        .rfkill
+        .as_ref()
+        .expect("the adapter has a kill switch");
     assert_eq!(rfkill.soft_blocked, Some(false));
     assert_eq!(rfkill.hard_blocked, Some(false));
     assert_eq!(adapter.parent.as_deref(), Some("usb-1-10-8087:0026"));
@@ -496,7 +542,10 @@ fn input_bluetooth_and_video_devices_are_listed() {
     assert_eq!(inventory.cameras.len(), 2);
     let capture = &inventory.cameras[0];
     assert_eq!(capture.node, "video0");
-    assert_eq!(capture.name.as_deref(), Some("Integrated Camera: Integrated C"));
+    assert_eq!(
+        capture.name.as_deref(),
+        Some("Integrated Camera: Integrated C")
+    );
     assert_eq!(capture.index, Some(0));
     assert_eq!(capture.capture, Some(true));
     assert_eq!(capture.driver.as_deref(), Some("uvcvideo"));
@@ -679,7 +728,12 @@ fn identifiers_survive_re_enumeration_where_the_hardware_allows() {
     // A device without a serial number is known only by its port, and every
     // PCI device only by its address: the document says which is which.
     assert_eq!(before.usb[0].id_basis, IdBasis::Topology);
-    assert!(before.pci.iter().all(|device| device.id_basis == IdBasis::Topology));
+    assert!(
+        before
+            .pci
+            .iter()
+            .all(|device| device.id_basis == IdBasis::Topology)
+    );
 }
 
 #[test]
@@ -765,7 +819,10 @@ fn problems_are_found_ordered_and_explained() {
         "The driver nouveau did not accept the Display controller (NVIDIA Corporation TU117M [GeForce MX550]) at PCI address 0000:04:00.0 (kernel error -12), so the device will not work."
     );
     assert_eq!(refused.technical_detail["ids"], "10de:25a2");
-    assert_eq!(refused.technical_detail["matching_modules"], "nouveau (loaded)");
+    assert_eq!(
+        refused.technical_detail["matching_modules"],
+        "nouveau (loaded)"
+    );
 
     let firmware = &findings[2];
     assert_eq!(
@@ -780,7 +837,10 @@ fn problems_are_found_ordered_and_explained() {
         assert!(!finding.user_message.is_empty());
         assert!(!finding.next_step.is_empty());
         assert!(finding.technical_detail.contains_key("evidence"));
-        let id = finding.device_id.as_deref().expect("a device of the fixture");
+        let id = finding
+            .device_id
+            .as_deref()
+            .expect("a device of the fixture");
         let device = inventory.find(id).expect("the device is in the inventory");
         assert_eq!(Some(device.category()), finding.category);
     }
@@ -794,7 +854,15 @@ fn no_finding_suggests_a_driver_from_another_operating_system() {
             finding.title, finding.user_message, finding.next_step
         )
         .to_lowercase();
-        for word in ["windows", "macos", "mac os", ".sys", ".kext", ".inf", "ndiswrapper"] {
+        for word in [
+            "windows",
+            "macos",
+            "mac os",
+            ".sys",
+            ".kext",
+            ".inf",
+            "ndiswrapper",
+        ] {
             assert!(!text.contains(word), "{}: {text}", finding.code);
         }
     }
@@ -834,11 +902,19 @@ fn the_schema_check_notices_drift() {
 
     let mut missing = good.clone();
     missing["pci"][0].as_object_mut().unwrap().remove("driver");
-    assert!(support::validate(&missing).unwrap_err().contains("missing field driver"));
+    assert!(
+        support::validate(&missing)
+            .unwrap_err()
+            .contains("missing field driver")
+    );
 
     let mut extra = good.clone();
     extra["usb"][0]["colour"] = Value::from("red");
-    assert!(support::validate(&extra).unwrap_err().contains("unexpected field colour"));
+    assert!(
+        support::validate(&extra)
+            .unwrap_err()
+            .contains("unexpected field colour")
+    );
 
     let mut wrong_enum = good.clone();
     wrong_enum["network"][0]["kind"] = Value::from("carrier_pigeon");
@@ -874,7 +950,10 @@ fn redaction_removes_every_sensitive_value() {
     // something.
     let plain_text = plain.to_string().to_lowercase();
     for secret in SECRETS {
-        assert!(plain_text.contains(&secret.to_lowercase()), "{secret} not in fixture");
+        assert!(
+            plain_text.contains(&secret.to_lowercase()),
+            "{secret} not in fixture"
+        );
     }
     let redacted_text = redacted.to_string().to_lowercase();
     for secret in SECRETS {
@@ -893,7 +972,11 @@ fn redaction_removes_every_sensitive_value() {
     for ((path, was), (_, now)) in before.iter().zip(&after) {
         assert_eq!(now["value"], Value::Null, "{path}");
         assert_eq!(now["sensitive"], Value::Bool(true), "{path}");
-        assert_eq!(now["redacted"], Value::Bool(!was["value"].is_null()), "{path}");
+        assert_eq!(
+            now["redacted"],
+            Value::Bool(!was["value"].is_null()),
+            "{path}"
+        );
         if !was["value"].is_null() {
             held_a_value += 1;
         }
@@ -931,8 +1014,14 @@ fn redaction_keeps_identifiers_and_everything_that_is_not_sensitive() {
     assert_eq!(inventory.kernel, redacted.kernel);
     assert_eq!(redacted.usb[4].product.as_deref(), Some("Ultra"));
     assert_eq!(redacted.usb[4].serial, Sensitive::Redacted);
-    assert_eq!(redacted.block[0].model.as_deref(), Some("Samsung SSD 980 PRO 1TB"));
-    assert_eq!(redacted.platform.sys_vendor.as_deref(), Some("Example Computer"));
+    assert_eq!(
+        redacted.block[0].model.as_deref(),
+        Some("Samsung SSD 980 PRO 1TB")
+    );
+    assert_eq!(
+        redacted.platform.sys_vendor.as_deref(),
+        Some("Example Computer")
+    );
 
     // Redacting twice changes nothing more, and the findings are the same.
     assert_eq!(redacted.redacted(), redacted);
@@ -971,8 +1060,14 @@ fn hostile_descriptor_strings_cannot_break_the_document() {
         .iter()
         .find(|device| device.bus_port == "2-1")
         .expect("the drive is still listed");
-    assert_eq!(stick.manufacturer.as_deref(), Some("[2J [1;1H Trusted Vendor"));
-    assert_eq!(stick.product.as_deref().map(|text| text.chars().count()), Some(256));
+    assert_eq!(
+        stick.manufacturer.as_deref(),
+        Some("[2J [1;1H Trusted Vendor")
+    );
+    assert_eq!(
+        stick.product.as_deref().map(|text| text.chars().count()),
+        Some(256)
+    );
     assert_eq!(stick.vendor_id, None);
     assert_eq!(stick.speed_mbps, None);
     // Without a vendor ID there is no hash; the identifier is the port.

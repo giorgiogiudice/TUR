@@ -52,7 +52,9 @@ impl UdevDb {
             } else if let Some(path) = line.strip_prefix(b"P: ") {
                 let path = clean_to(path, MAX_PATH_CHARS);
                 current = None;
-                if path.starts_with('/') && (records.len() < MAX_RECORDS || records.contains_key(&path)) {
+                if path.starts_with('/')
+                    && (records.len() < MAX_RECORDS || records.contains_key(&path))
+                {
                     records.entry(path.clone()).or_default();
                     current = Some(path);
                 }
@@ -131,7 +133,10 @@ E: EQUALS=a=b=c
         let db = UdevDb::parse(SAMPLE.as_bytes());
         assert_eq!(db.len(), 2);
         assert_eq!(
-            db.property("/sys/devices/pci0000:00/0000:00:03.0", "ID_VENDOR_FROM_DATABASE"),
+            db.property(
+                "/sys/devices/pci0000:00/0000:00:03.0",
+                "ID_VENDOR_FROM_DATABASE"
+            ),
             Some("Red Hat, Inc.")
         );
         assert_eq!(
@@ -144,17 +149,25 @@ E: EQUALS=a=b=c
         );
         // A property belongs to its own record only.
         assert_eq!(
-            db.property("/sys/devices/pci0000:00/0000:00:03.0/virtio1", "ID_VENDOR_FROM_DATABASE"),
+            db.property(
+                "/sys/devices/pci0000:00/0000:00:03.0/virtio1",
+                "ID_VENDOR_FROM_DATABASE"
+            ),
             None
         );
-        assert_eq!(db.property("/sys/devices/pci0000:00/0000:00:03.0", "EMPTY"), None);
+        assert_eq!(
+            db.property("/sys/devices/pci0000:00/0000:00:03.0", "EMPTY"),
+            None
+        );
         assert_eq!(db.property("/sys/devices/none", "SUBSYSTEM"), None);
     }
 
     #[test]
     fn tolerates_garbage() {
         assert!(UdevDb::parse(b"").is_empty());
-        assert!(UdevDb::parse(b"\xff\xfe\x00\n\n\nE: ORPHAN=1\nP: relative/path\nE: X=1\n").is_empty());
+        assert!(
+            UdevDb::parse(b"\xff\xfe\x00\n\n\nE: ORPHAN=1\nP: relative/path\nE: X=1\n").is_empty()
+        );
 
         let db = UdevDb::parse(b"P: /devices/a\nE: no-equals\nE: bad key=1\nE: lower=1\nE: =1\nE: OK=\x1b[2Jfine\xff\n");
         assert_eq!(db.len(), 1);

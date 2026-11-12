@@ -239,8 +239,14 @@ mod tests {
             "pci:v00008086d000015FBsv000017AAsd000022D5bc02sc00i00"
         ));
         let hid = "usb:v*p*d*dc*dsc*dp*ic03isc*ip*in*";
-        assert!(glob(hid, "usb:v046DpC52Bd1211dc00dsc00dp00ic03isc01ip01in00"));
-        assert!(!glob(hid, "usb:v046DpC52Bd1211dc00dsc00dp00ic08isc06ip50in00"));
+        assert!(glob(
+            hid,
+            "usb:v046DpC52Bd1211dc00dsc00dp00ic03isc01ip01in00"
+        ));
+        assert!(!glob(
+            hid,
+            "usb:v046DpC52Bd1211dc00dsc00dp00ic08isc06ip50in00"
+        ));
     }
 
     #[test]
@@ -297,7 +303,11 @@ softdep nouveau pre: drm
             table.matching("pci:v000010ECd0000522Asv000017AAsd000022D5bcFFsc00i00"),
             ["rtsx_pci"]
         );
-        assert!(table.matching("pci:v00001234d00005678sv0sd0bc07sc80i00").is_empty());
+        assert!(
+            table
+                .matching("pci:v00001234d00005678sv0sd0bc07sc80i00")
+                .is_empty()
+        );
         assert!(table.matching("").is_empty());
     }
 

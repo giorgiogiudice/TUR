@@ -110,7 +110,10 @@ fn the_tool_manifest_follows_the_documented_format() {
         );
 
         let name = tool["name"].as_str().expect("a tool has a name");
-        assert!(support::pattern_matches("^[a-z][a-z0-9_]{0,63}$", name), "{name}");
+        assert!(
+            support::pattern_matches("^[a-z][a-z0-9_]{0,63}$", name),
+            "{name}"
+        );
         assert!(name.starts_with("device_"), "{name}");
         assert!(names.insert(name), "{name} is declared twice");
 

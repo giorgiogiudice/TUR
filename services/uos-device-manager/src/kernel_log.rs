@@ -76,7 +76,10 @@ fn firmware_name(text: &str) -> Option<String> {
     let plain = !name.is_empty()
         && name.bytes().all(|b| {
             b.is_ascii_alphanumeric()
-                || matches!(b, b'.' | b'_' | b'/' | b'+' | b'-' | b':' | b',' | b'@' | b' ')
+                || matches!(
+                    b,
+                    b'.' | b'_' | b'/' | b'+' | b'-' | b':' | b',' | b'@' | b' '
+                )
         });
     plain.then_some(name)
 }

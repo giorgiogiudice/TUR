@@ -301,9 +301,7 @@ pub fn transition(
 
         // Nobody holds the device, and the host could not take it back.
         (S::HostRebindAttempted, E::HostRebindFailed) => Some(S::Unavailable(R::HostRebindFailed)),
-        (S::Unavailable(R::HostRebindFailed), E::HostRebindRetried) => {
-            Some(S::HostRebindAttempted)
-        }
+        (S::Unavailable(R::HostRebindFailed), E::HostRebindRetried) => Some(S::HostRebindAttempted),
 
         _ => None,
     };
@@ -327,22 +325,57 @@ mod tests {
         (S::Available, E::HandoffRequested, S::HandoffRequested),
         (S::HandoffRequested, E::HandoffCancelled, S::Available),
         (S::HandoffRequested, E::HostUnbindFailed, S::Available),
-        (S::HandoffRequested, E::HostDriverUnbound, S::HostDriverUnbound),
+        (
+            S::HandoffRequested,
+            E::HostDriverUnbound,
+            S::HostDriverUnbound,
+        ),
         (S::HostDriverUnbound, E::GuestAttached, S::GuestAttached),
-        (S::HostDriverUnbound, E::GuestAttachFailed, S::HostRebindAttempted),
+        (
+            S::HostDriverUnbound,
+            E::GuestAttachFailed,
+            S::HostRebindAttempted,
+        ),
         (S::GuestAttached, E::GuestClaimed, S::GuestOwned),
         (S::GuestAttached, E::GuestDetached, S::GuestDetached),
-        (S::GuestAttached, E::GuestDetachFailed, S::Unavailable(R::GuestDetachFailed)),
+        (
+            S::GuestAttached,
+            E::GuestDetachFailed,
+            S::Unavailable(R::GuestDetachFailed),
+        ),
         (S::GuestOwned, E::GuestDetached, S::GuestDetached),
-        (S::GuestOwned, E::GuestDetachFailed, S::Unavailable(R::GuestDetachFailed)),
-        (S::GuestDetached, E::HostRebindStarted, S::HostRebindAttempted),
+        (
+            S::GuestOwned,
+            E::GuestDetachFailed,
+            S::Unavailable(R::GuestDetachFailed),
+        ),
+        (
+            S::GuestDetached,
+            E::HostRebindStarted,
+            S::HostRebindAttempted,
+        ),
         (S::HostRebindAttempted, E::HostRebindSucceeded, S::Available),
-        (S::HostRebindAttempted, E::HostRebindFailed, S::Unavailable(R::HostRebindFailed)),
-        (S::Unavailable(R::GuestDetachFailed), E::GuestReleaseConfirmed, S::GuestDetached),
-        (S::Unavailable(R::HostRebindFailed), E::HostRebindRetried, S::HostRebindAttempted),
+        (
+            S::HostRebindAttempted,
+            E::HostRebindFailed,
+            S::Unavailable(R::HostRebindFailed),
+        ),
+        (
+            S::Unavailable(R::GuestDetachFailed),
+            E::GuestReleaseConfirmed,
+            S::GuestDetached,
+        ),
+        (
+            S::Unavailable(R::HostRebindFailed),
+            E::HostRebindRetried,
+            S::HostRebindAttempted,
+        ),
     ];
 
-    fn run(start: HandoffState, events: &[HandoffEvent]) -> Result<HandoffState, IllegalTransition> {
+    fn run(
+        start: HandoffState,
+        events: &[HandoffEvent],
+    ) -> Result<HandoffState, IllegalTransition> {
         events
             .iter()
             .try_fold(start, |state, event| transition(state, *event))
@@ -465,7 +498,11 @@ mod tests {
 
     #[test]
     fn a_failed_rebind_can_be_retried() {
-        let failed = run(S::GuestDetached, &[E::HostRebindStarted, E::HostRebindFailed]).unwrap();
+        let failed = run(
+            S::GuestDetached,
+            &[E::HostRebindStarted, E::HostRebindFailed],
+        )
+        .unwrap();
         assert_eq!(failed, S::Unavailable(R::HostRebindFailed));
         assert_eq!(failed.owner(), Owner::Nobody);
         assert_eq!(
@@ -482,7 +519,11 @@ mod tests {
             if state == S::Removed {
                 continue;
             }
-            assert_eq!(transition(state, E::DeviceRemoved), Ok(S::Removed), "{state:?}");
+            assert_eq!(
+                transition(state, E::DeviceRemoved),
+                Ok(S::Removed),
+                "{state:?}"
+            );
         }
         for event in HandoffEvent::ALL {
             assert_eq!(
@@ -507,7 +548,11 @@ mod tests {
                 let pair = (state.owner(), next.owner());
                 assert_ne!(pair, (Owner::Host, Owner::Guest), "{state:?} + {event:?}");
                 assert_ne!(pair, (Owner::Guest, Owner::Host), "{state:?} + {event:?}");
-                assert_ne!(pair, (Owner::Uncertain, Owner::Host), "{state:?} + {event:?}");
+                assert_ne!(
+                    pair,
+                    (Owner::Uncertain, Owner::Host),
+                    "{state:?} + {event:?}"
+                );
             }
         }
     }

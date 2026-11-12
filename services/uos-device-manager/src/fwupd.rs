@@ -205,7 +205,10 @@ mod tests {
         assert_eq!(parse(b""), Err("not JSON: unexpected end".to_owned()));
         assert_eq!(parse(b"{ nope"), Err("not JSON: syntax error".to_owned()));
         assert_eq!(parse(b"[]"), Err("no \"Devices\" array".to_owned()));
-        assert_eq!(parse(br#"{"Devices": 3}"#), Err("no \"Devices\" array".to_owned()));
+        assert_eq!(
+            parse(br#"{"Devices": 3}"#),
+            Err("no \"Devices\" array".to_owned())
+        );
         assert_eq!(parse(br#"{"Devices": []}"#), Ok(Vec::new()));
         // Deep nesting is refused by the JSON parser, not by the stack.
         let deep = "[".repeat(100_000);
@@ -254,7 +257,9 @@ mod tests {
         let many: Vec<Value> = (0..(MAX_DEVICES + 100))
             .map(|index| serde_json::json!({ "Name": format!("d{index}") }))
             .collect();
-        let flags: Vec<Value> = (0..1000).map(|index| Value::from(format!("f{index}"))).collect();
+        let flags: Vec<Value> = (0..1000)
+            .map(|index| Value::from(format!("f{index}")))
+            .collect();
         let mut devices = many;
         devices.insert(0, serde_json::json!({ "Flags": flags }));
         let document = serde_json::json!({ "Devices": devices });

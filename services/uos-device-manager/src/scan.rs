@@ -492,7 +492,8 @@ impl<'a> Scanner<'a> {
     }
 
     fn hex(&self, dir: &str, name: &str, digits: usize) -> Option<String> {
-        self.attr(dir, name).and_then(|value| hex_id(&value, digits))
+        self.attr(dir, name)
+            .and_then(|value| hex_id(&value, digits))
     }
 
     fn flag(&self, dir: &str, name: &str) -> Option<bool> {
@@ -1327,7 +1328,8 @@ impl<'a> Scanner<'a> {
                 devices,
             },
             Err(_) => {
-                self.notes.push(note("fwupd", SourceStatus::Invalid, effect));
+                self.notes
+                    .push(note("fwupd", SourceStatus::Invalid, effect));
                 Firmware {
                     fwupd: FwupdStatus::Invalid,
                     devices: Vec::new(),
@@ -1408,7 +1410,13 @@ mod tests {
             .collect();
         assert_eq!(
             sources,
-            ["machine-id", "udev", "kernel-module-aliases", "fwupd", "kernel-log"]
+            [
+                "machine-id",
+                "udev",
+                "kernel-module-aliases",
+                "fwupd",
+                "kernel-log"
+            ]
         );
     }
 
@@ -1424,10 +1432,7 @@ mod tests {
                     b"Evil\x1b]0;owned\x07 Corp\r\n\x00".as_slice(),
                 ),
                 ("product", long.as_slice()),
-                (
-                    "serial",
-                    b"\xff\xfe\xfd\x80SER\xc3\x28IAL".as_slice(),
-                ),
+                ("serial", b"\xff\xfe\xfd\x80SER\xc3\x28IAL".as_slice()),
                 ("speed", b"480; rm -rf /\n".as_slice()),
                 ("version", b" 2.00\n".as_slice()),
                 ("removable", b"\x00\x01\x02".as_slice()),
@@ -1481,7 +1486,10 @@ mod tests {
             .file(&format!("{dir}/device"), "0x12345678\n")
             .file(&format!("{dir}/class"), "")
             .file(&format!("{dir}/modalias"), "pci:\x01bad\n")
-            .link(&format!("{dir}/driver"), "../../../bus/pci/drivers/bad name")
+            .link(
+                &format!("{dir}/driver"),
+                "../../../bus/pci/drivers/bad name",
+            )
             // Entries that are not PCI addresses are ignored.
             .dir("/sys/bus/pci/devices/not-an-address")
             .dir("/sys/bus/pci/devices/0000:00:zz.0");
@@ -1503,8 +1511,16 @@ mod tests {
     #[test]
     fn a_usb_identifier_follows_the_device_to_another_port() {
         let base = || FakeProbe::new().file("/etc/machine-id", MACHINE_ID);
-        let at_port_one = collect(&usb_device(base(), "1-1", &[("serial", b"4C53000123".as_slice())]));
-        let at_port_two = collect(&usb_device(base(), "1-4.2", &[("serial", b"4C53000123".as_slice())]));
+        let at_port_one = collect(&usb_device(
+            base(),
+            "1-1",
+            &[("serial", b"4C53000123".as_slice())],
+        ));
+        let at_port_two = collect(&usb_device(
+            base(),
+            "1-4.2",
+            &[("serial", b"4C53000123".as_slice())],
+        ));
         assert_eq!(at_port_one.usb[0].id_basis, IdBasis::HardwareIdentifier);
         assert_eq!(at_port_one.usb[0].id, at_port_two.usb[0].id);
         assert_ne!(at_port_one.usb[0].bus_port, at_port_two.usb[0].bus_port);
@@ -1533,7 +1549,11 @@ mod tests {
 
     #[test]
     fn without_a_machine_identifier_no_serial_number_is_hashed() {
-        let probe = usb_device(FakeProbe::new(), "1-1", &[("serial", b"4C53000123".as_slice())]);
+        let probe = usb_device(
+            FakeProbe::new(),
+            "1-1",
+            &[("serial", b"4C53000123".as_slice())],
+        );
         let inventory = collect(&probe);
         assert_eq!(inventory.usb[0].id, "usb-1-1-0781:5581");
         assert_eq!(inventory.usb[0].id_basis, IdBasis::Topology);
@@ -1685,7 +1705,10 @@ mod tests {
         let probe = FakeProbe::new()
             .file("/sys/class/net/evil\u{202e}name/operstate", "up\n")
             .file("/sys/class/net/ok0/operstate", "up\n")
-            .file(&format!("/sys/class/net/{}/operstate", "n".repeat(300)), "up\n");
+            .file(
+                &format!("/sys/class/net/{}/operstate", "n".repeat(300)),
+                "up\n",
+            );
         let inventory = collect(&probe);
         let names: Vec<&str> = inventory
             .network

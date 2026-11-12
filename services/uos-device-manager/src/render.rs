@@ -56,7 +56,11 @@ pub fn inventory_text(inventory: &Inventory) -> String {
     let _ = writeln!(
         out,
         "UOS hardware inventory{}",
-        if inventory.redacted { " (redacted)" } else { "" }
+        if inventory.redacted {
+            " (redacted)"
+        } else {
+            ""
+        }
     );
     let _ = writeln!(out, "\nPlatform");
     let _ = writeln!(
@@ -216,9 +220,10 @@ pub fn inventory_text(inventory: &Inventory) -> String {
 
     heading(&mut out, "Bluetooth adapters", inventory.bluetooth.len());
     for adapter in &inventory.bluetooth {
-        let blocked = adapter.rfkill.as_ref().map(|rfkill| {
-            rfkill.soft_blocked == Some(true) || rfkill.hard_blocked == Some(true)
-        });
+        let blocked = adapter
+            .rfkill
+            .as_ref()
+            .map(|rfkill| rfkill.soft_blocked == Some(true) || rfkill.hard_blocked == Some(true));
         let _ = writeln!(
             out,
             "  {}  driver: {}  blocked: {}",
@@ -338,7 +343,10 @@ mod tests {
         assert!(text.contains("  Boot mode:   unknown\n"));
         assert!(text.contains("\nSources not used\n"));
         assert!(text.contains("  fwupd (unavailable): "));
-        assert_eq!(problems_text(&detect(&inventory)), "No hardware problems found.\n");
+        assert_eq!(
+            problems_text(&detect(&inventory)),
+            "No hardware problems found.\n"
+        );
     }
 
     #[test]

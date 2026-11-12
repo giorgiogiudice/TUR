@@ -138,7 +138,10 @@ fn check(root: &Value, node: &Value, value: &Value, path: &str) -> Result<(), St
             }
             "maxItems" => {
                 let limit = rule.as_u64().expect("maxItems is a number");
-                if value.as_array().is_some_and(|items| items.len() as u64 > limit) {
+                if value
+                    .as_array()
+                    .is_some_and(|items| items.len() as u64 > limit)
+                {
                     return Err(format!("{path}: more than {limit} items"));
                 }
             }
@@ -152,7 +155,9 @@ fn check(root: &Value, node: &Value, value: &Value, path: &str) -> Result<(), St
                         length <= limit
                     };
                     if !ok {
-                        return Err(format!("{path}: length {length} violates {keyword} {limit}"));
+                        return Err(format!(
+                            "{path}: length {length} violates {keyword} {limit}"
+                        ));
                     }
                 }
             }

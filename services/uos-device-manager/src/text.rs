@@ -94,7 +94,11 @@ pub fn clean_to(raw: &[u8], max_chars: usize) -> String {
 /// [`clean`], with empty text reported as `None`.
 pub fn clean_opt(raw: &[u8]) -> Option<String> {
     let cleaned = clean(raw);
-    if cleaned.is_empty() { None } else { Some(cleaned) }
+    if cleaned.is_empty() {
+        None
+    } else {
+        Some(cleaned)
+    }
 }
 
 /// Normalise a hexadecimal identifier such as `0x8086` or `046D` to exactly
@@ -117,9 +121,9 @@ pub fn kernel_name(raw: &str) -> Option<String> {
     let trimmed = raw.trim();
     let valid = !trimmed.is_empty()
         && trimmed.len() <= MAX_NAME_CHARS
-        && trimmed
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-' | b'.' | b':' | b'+' | b'@'));
+        && trimmed.bytes().all(|b| {
+            b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-' | b'.' | b':' | b'+' | b'@')
+        });
     valid.then(|| trimmed.to_owned())
 }
 
@@ -138,7 +142,11 @@ pub fn id_token(raw: &str) -> String {
             }
         })
         .collect();
-    if token.is_empty() { "_".to_owned() } else { token }
+    if token.is_empty() {
+        "_".to_owned()
+    } else {
+        token
+    }
 }
 
 /// Parse a sysfs flag that is `0` or `1`.
@@ -242,7 +250,10 @@ mod tests {
 
     #[test]
     fn kernel_name_accepts_only_plain_names() {
-        assert_eq!(kernel_name("snd_hda_intel\n"), Some("snd_hda_intel".to_owned()));
+        assert_eq!(
+            kernel_name("snd_hda_intel\n"),
+            Some("snd_hda_intel".to_owned())
+        );
         assert_eq!(kernel_name("usb-storage"), Some("usb-storage".to_owned()));
         assert_eq!(kernel_name("0000:00:14.3"), Some("0000:00:14.3".to_owned()));
         assert_eq!(kernel_name(""), None);

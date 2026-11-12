@@ -187,7 +187,12 @@ mod tests {
 
     #[test]
     fn no_machine_id_means_no_hash() {
-        for bad in [None, Some(""), Some("short"), Some("zz23456789abcdef0123456789abcdef")] {
+        for bad in [
+            None,
+            Some(""),
+            Some("short"),
+            Some("zz23456789abcdef0123456789abcdef"),
+        ] {
             let maker = IdMaker::new(bad);
             assert!(!maker.can_hash());
             assert_eq!(maker.digest("usb", "A"), None);

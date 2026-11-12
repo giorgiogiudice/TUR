@@ -193,7 +193,11 @@ fn modules_text(modules: Option<&[ModuleMatch]>) -> String {
         Some(modules) => modules
             .iter()
             .map(|module| {
-                let state = if module.loaded { "loaded" } else { "not loaded" };
+                let state = if module.loaded {
+                    "loaded"
+                } else {
+                    "not loaded"
+                };
                 format!("{} ({state})", module.name)
             })
             .collect::<Vec<_>>()
@@ -491,10 +495,7 @@ fn firmware_finding(
     known: &BTreeMap<&str, KnownDevice<'_>>,
     inactive: &BTreeSet<&str>,
 ) -> Option<Finding> {
-    let device = failure
-        .device
-        .as_deref()
-        .and_then(|name| known.get(name));
+    let device = failure.device.as_deref().and_then(|name| known.get(name));
     let unusable = device.is_some_and(|device| device.unbound || inactive.contains(device.id));
     let subject = match (device, failure.device.as_deref()) {
         (Some(device), _) => device.subject.clone(),
@@ -788,7 +789,10 @@ mod tests {
         let finding = only(&findings);
         assert_eq!(finding.code.as_str(), "UOS-DEVICE-DRIVER-001");
         assert_eq!(finding.severity, Severity::Warning);
-        assert_eq!(finding.device_id.as_deref(), Some("pci-0000:00:05.0-10de:25a2"));
+        assert_eq!(
+            finding.device_id.as_deref(),
+            Some("pci-0000:00:05.0-10de:25a2")
+        );
         assert_eq!(finding.category, Some(Category::Pci));
         assert!(finding.user_message.contains("0000:00:05.0"));
         assert!(finding.user_message.contains("no loadable driver"));
@@ -904,7 +908,10 @@ mod tests {
         let finding = only(&findings);
         assert_eq!(finding.code.as_str(), "UOS-DEVICE-FIRMWARE-001");
         assert_eq!(finding.severity, Severity::Info);
-        assert_eq!(finding.device_id.as_deref(), Some("pci-0000:00:05.0-10de:25a2"));
+        assert_eq!(
+            finding.device_id.as_deref(),
+            Some("pci-0000:00:05.0-10de:25a2")
+        );
         assert_eq!(
             finding.technical_detail["firmware_file"],
             "nvidia/tu117/gsp.bin"
@@ -912,8 +919,8 @@ mod tests {
         assert!(finding.user_message.contains("may still work"));
 
         // No driver bound: the device does not work.
-        let unbound = pci_without_driver("0x030200\n", GPU_MODALIAS)
-            .command(ProbeCommand::KernelLog, log);
+        let unbound =
+            pci_without_driver("0x030200\n", GPU_MODALIAS).command(ProbeCommand::KernelLog, log);
         let findings = detect(&collect(&unbound));
         assert_eq!(findings.len(), 2);
         let firmware = findings
@@ -935,7 +942,10 @@ mod tests {
             .file(&format!("{dir}/vendor"), "0x10ec\n")
             .file(&format!("{dir}/device"), "0xc822\n")
             .file(&format!("{dir}/class"), "0x028000\n")
-            .link(&format!("{dir}/driver"), "../../../bus/pci/drivers/rtw_8822ce")
+            .link(
+                &format!("{dir}/driver"),
+                "../../../bus/pci/drivers/rtw_8822ce",
+            )
             // Some interface must exist, or nothing can be concluded.
             .file("/sys/devices/virtual/net/lo/type", "772\n")
             .link("/sys/class/net/lo", "../../devices/virtual/net/lo");
@@ -947,9 +957,10 @@ mod tests {
         assert_eq!(finding.technical_detail["driver"], "rtw_8822ce");
 
         // With its interface present there is nothing to report.
-        let healthy = probe
-            .file(&format!("{dir}/net/wlan0/type"), "1\n")
-            .link("/sys/class/net/wlan0", "../../devices/pci0000:00/0000:03:00.0/net/wlan0");
+        let healthy = probe.file(&format!("{dir}/net/wlan0/type"), "1\n").link(
+            "/sys/class/net/wlan0",
+            "../../devices/pci0000:00/0000:03:00.0/net/wlan0",
+        );
         assert!(detect(&collect(&healthy)).is_empty());
 
         // With no interface readable at all, nothing is concluded.
@@ -975,7 +986,11 @@ mod tests {
         assert_eq!(finding.severity, Severity::Info);
         assert_eq!(finding.category, Some(Category::Usb));
         assert!(finding.user_message.contains("Fingerprint Reader"));
-        assert!(finding.user_message.contains("used directly by applications"));
+        assert!(
+            finding
+                .user_message
+                .contains("used directly by applications")
+        );
         assert_eq!(finding.technical_detail["interface"], "1-3:1.0");
     }
 
@@ -1037,7 +1052,14 @@ mod tests {
         for step in steps {
             let lower = step.to_lowercase();
             for word in [
-                "windows", "macos", "mac os", ".sys", ".kext", ".inf", "ndiswrapper", "vendor's",
+                "windows",
+                "macos",
+                "mac os",
+                ".sys",
+                ".kext",
+                ".inf",
+                "ndiswrapper",
+                "vendor's",
                 "download",
             ] {
                 assert!(!lower.contains(word), "{step}");

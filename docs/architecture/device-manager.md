@@ -233,8 +233,8 @@ error.
 
 ## 10. D-Bus interface
 
-`org.uos.Device1` on the system bus, object `/org/uos/Device1`. **Proposed, not
-implemented and not frozen.** JSON results are documents of
+`org.uos.Device1` on the system bus, object `/org/uos/Device1`.
+**Proposed, not implemented and not frozen.** JSON results are documents of
 `schemas/device-inventory.schema.json`.
 
 | Member | Returns | Authorisation |
