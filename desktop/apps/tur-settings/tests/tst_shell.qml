@@ -290,6 +290,10 @@ Item {
             // The same title on Overview is another match, with its own place.
             compare(findChild(shell, "searchHit-tur.overview#version").subtitle, "Overview › This system")
 
+            // The matches take their places before the next frame; until
+            // then they lie on top of one another, and a press would reach
+            // the last of them.
+            wait(50)
             asked.target = host.service
             mouseClick(hit)
             // The window was asked once, for the match that was pressed.
@@ -327,6 +331,7 @@ Item {
             const kde = findChild(shell, "searchHit-kde.kcm_fonts")
             verify(kde !== null, "the Fonts page of System Settings is found")
             compare(kde.subtitle, "System Settings › Fonts")
+            wait(50)
             mouseClick(kde)
             compare(helperArguments(), ["kcm_fonts"])
             verify(!findChild(shell, "shellFailure").visible)
@@ -343,6 +348,7 @@ Item {
             // are not in a registry.
             compare(nothing.text, "None of TUR's own settings matches. Displays, sound, network, printers and most other "
                     + "settings are in System Settings.")
+            wait(50)
             mouseClick(findChild(shell, "searchOpenSystemSettings"))
             compare(helperArguments(), [])
         }

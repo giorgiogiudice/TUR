@@ -568,10 +568,19 @@ private Q_SLOTS:
         // that change when the row is made invisible. All of them lie inside
         // the rectangle, and they begin at its left and top edges: the
         // rectangle is the row's, not something near it.
-        // Nothing has the keyboard meanwhile: a focus ring, round the row or
-        // round its control, reaches a few pixels outside what it is round.
-        if (QQuickItem *focused = m_window->activeFocusItem())
-            focused->setFocus(false);
+        // The keyboard is put on the search field meanwhile: a focus ring,
+        // round the row or round its control, reaches a few pixels outside
+        // what it is round. (Taking the keyboard away from the row with
+        // nowhere to go would give it to the card the row stands on, and the
+        // page would scroll to show the whole card.)
+        QQuickItem *field = itemNamed(m_window->contentItem(), QStringLiteral("shellSearch"));
+        QVERIFY(field);
+        field->forceActiveFocus();
+        QVERIFY(field->hasActiveFocus());
+        drawn();
+        const QRectF still = row->mapRectToScene(QRectF(0, 0, row->width(), row->height()));
+        QVERIFY2(sameRect(rect, RectD { still.x(), still.y(), still.width(), still.height() }),
+                 "the row moved when the keyboard left it");
         const QImage with = settledPicture();
         row->setOpacity(0);
         const QImage without = settledPicture();
