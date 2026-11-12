@@ -24,7 +24,9 @@ from __future__ import annotations
 import json
 import os
 import pathlib
+import re
 import shutil
+import struct
 import subprocess
 import sys
 import tempfile
@@ -128,6 +130,35 @@ def listing(root: pathlib.Path) -> list[tuple[int, str]]:
     return found
 
 
+def authenticode(path: pathlib.Path) -> dict:
+    """Whether an EFI binary carries an Authenticode signature, and names in it.
+
+    Reads the PE certificate table. This shows that a signature is attached and
+    which organisations its certificates name. It does not verify the signature
+    or the chain: only firmware with Secure Boot enforced does that.
+    """
+    data = path.read_bytes()
+    try:
+        pe = struct.unpack_from("<I", data, 0x3C)[0]
+        if data[pe:pe + 4] != b"PE\0\0":
+            return {"signed": False, "note": "not a PE file"}
+        optional = pe + 24
+        magic = struct.unpack_from("<H", data, optional)[0]
+        directories = optional + (112 if magic == 0x20B else 96)
+        offset, size = struct.unpack_from("<II", data, directories + 4 * 8)
+    except struct.error:
+        return {"signed": False, "note": "truncated PE header"}
+    table = data[offset:offset + size] if size else b""
+    names = sorted(
+        {
+            name.decode().strip()
+            for name in re.findall(rb"[A-Za-z][A-Za-z0-9 .,()-]{6,60}", table)
+            if any(word in name for word in (b"Fedora", b"Microsoft", b"Red Hat"))
+        }
+    )
+    return {"signed": size > 0, "signature_bytes": size, "names_in_certificates": names}
+
+
 def read_text(path: pathlib.Path) -> str:
     return path.read_bytes().decode("utf-8", errors="replace")
 
@@ -143,6 +174,11 @@ def inspect_esp(disk: Disk, host: pathlib.Path, layout: dict) -> None:
     print("EFI system partition:")
     print(text)
     layout["esp_files"] = [name for _size, name in files]
+    layout["esp_efi_binaries"] = {
+        name: authenticode(mnt / name.lstrip("/")) for _size, name in files if name.lower().endswith(".efi")
+    }
+    print("EFI binaries and their signatures:")
+    print(json.dumps(layout["esp_efi_binaries"], indent=2))
     configs = []
     for cfg in sorted(mnt.rglob("*")):
         if cfg.is_file() and cfg.name.lower() in ("grub.cfg", "bootuuid.cfg", "loader.conf"):

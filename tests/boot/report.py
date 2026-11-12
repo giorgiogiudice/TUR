@@ -200,6 +200,7 @@ def boot_loader(ev: Evidence) -> dict:
         "esp_has_shim": has_shim,
         "esp_has_grub": has_grub,
         "esp_has_systemd_boot": has_sdboot,
+        "esp_efi_binaries": ev.layout.get("esp_efi_binaries"),
         "grub_seen_on_serial_console": "GRUB" in ev.serial[:400_000],
         "boot_loader_entries": ev.layout.get("boot_entries"),
         "grub_config_mentions_boot_counter": ev.layout.get("grub_config_mentions_boot_counter"),
@@ -587,6 +588,21 @@ def main() -> int:
         f"{loader['in_use'] or 'not identified'}; LoaderInfo: {loader['loader_info'] or 'not set'}; "
         f"first boot through: {entry_first or 'no data'}; second boot through: {entry_second or 'no data'}; "
         f"boot loader entries: {loader['boot_loader_entries']}",
+    )
+
+    binaries = ev.layout.get("esp_efi_binaries") or {}
+    chain = {name: info for name, info in binaries.items() if name.lower().endswith(("/shimx64.efi", "/grubx64.efi"))}
+    checks.add(
+        "boot_chain_signed",
+        "shim and GRUB on the EFI system partition carry Authenticode signatures (presence only; not verified by firmware)",
+        (len(chain) >= 2 and all(info.get("signed") for info in chain.values())) if binaries else None,
+        "; ".join(
+            f"{name}: {'signed' if info.get('signed') else 'NOT signed'}"
+            f" ({', '.join(info.get('names_in_certificates') or []) or 'no names read'})"
+            for name, info in sorted(chain.items())
+        )
+        or "no data",
+        required=False,
     )
 
     boots = [check_boot(ev, boot, checks, args, allowed) for boot in BOOTS]

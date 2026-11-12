@@ -17,10 +17,12 @@ the image carries and booted it under UEFI in CI (run 43153380759, report
 
 - `bootc install to-disk` (bootc 1.17.1) reported `Bootloader: grub` and
   `Installing bootloader via bootupd`. Nothing was passed to choose a bootloader.
-- The EFI system partition holds Fedora's signed shim and GRUB
+- The EFI system partition holds Fedora's shim and GRUB
   (`EFI/BOOT/BOOTX64.EFI`, `EFI/fedora/shimx64.efi`, `EFI/fedora/grubx64.efi`) and
   a small `grub.cfg` that chains to `/boot/grub2/grub.cfg` on the root
-  filesystem. bootupd reports `grub2-1:2.12-83.fc45, shim-16.1-7`.
+  filesystem. bootupd reports `grub2-1:2.12-83.fc45, shim-16.1-7`. The boot
+  test records whether each binary has a signature attached; no firmware has
+  verified one yet (see Verification).
 - The kernel is started from a Boot Loader Specification entry that OSTree wrote
   (`/boot/loader/entries/ostree-1.conf`), read by GRUB's `blscfg`.
 - The first boot goes through the removable-media path (`EFI/BOOT/BOOTX64.EFI`,
@@ -54,9 +56,9 @@ What upstream documents for this version:
 ## Options considered
 
 1. **GRUB 2 loaded by shim, installed by bootupd.** What the installer does
-   today, with no UOS code. Signed by Fedora, so Secure Boot keeps working
-   through Fedora's chain as long as UOS ships these binaries unmodified
-   (ADR-0001). BIOS boot is available from the same disk. Cost: no systemd-boot
+   today, with no UOS code. These are the binaries Fedora ships for Secure
+   Boot, so its chain should keep working as long as UOS ships them unmodified
+   (ADR-0001); that is still to be shown. BIOS boot is available from the same disk. Cost: no systemd-boot
    boot counting, so rollback on a bad boot must be built on GRUB's environment
    block; and the ESP directory and firmware entry are named "fedora"/"Fedora"
    by the signed binaries themselves.
