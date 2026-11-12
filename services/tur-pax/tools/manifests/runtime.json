@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "service": "org.tur.Runtime1",
+  "tools": [
+    {
+      "name": "runtime_inspect_file",
+      "description": "Identify a program file or application bundle from its content (a Linux, Windows, macOS or Android program, a script, an installer package) and say which runtime could run it on this computer. The file is read, never executed. Only files the assistant has been given access to for this task can be inspected.",
+      "class": 0,
+      "method": "Inspect",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "The full path of the file or bundle.",
+            "minLength": 1,
+            "maxLength": 4096
+          }
+        },
+        "required": ["path"],
+        "additionalProperties": false
+      }
+    }
+  ]
+}

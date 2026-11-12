@@ -125,12 +125,18 @@ fn tool_calls_of_one_response_are_decided_one_by_one_and_performed() {
     // One decision each, with the class of the manifest.
     assert_eq!(
         harness.decisions("TUR_AI_ACTION"),
-        ["org.tur.Test1:test_observe", "org.tur.Test1:test_reversible"]
+        [
+            "org.tur.Test1:test_observe",
+            "org.tur.Test1:test_reversible"
+        ]
     );
     assert_eq!(harness.decisions("TUR_AI_CLASS"), ["0", "1"]);
     assert_eq!(harness.decisions("TUR_AI_DECISION"), ["allowed", "allowed"]);
     assert_eq!(harness.decisions("TUR_AI_TIER"), ["1", "1"]);
-    assert_eq!(harness.decisions("TUR_AI_PROVIDER"), ["anthropic", "anthropic"]);
+    assert_eq!(
+        harness.decisions("TUR_AI_PROVIDER"),
+        ["anthropic", "anthropic"]
+    );
     assert_eq!(harness.decisions("TUR_AI_ATTENDED"), ["yes", "yes"]);
 
     // Performed through the adapters, as argument vectors.
@@ -244,7 +250,12 @@ fn a_command_is_a_read_only_command_whatever_it_says() {
     let plan = &harness.executor.plans[0];
     assert_eq!(plan.argv, ["/usr/bin/sudo", "rm", "-rf", "/home"]);
     assert_eq!(plan.program, BWRAP);
-    for option in ["--unshare-net", "--unshare-user", "--clearenv", "--new-session"] {
+    for option in [
+        "--unshare-net",
+        "--unshare-user",
+        "--clearenv",
+        "--new-session",
+    ] {
         assert!(plan.arguments.iter().any(|argument| argument == option));
     }
     assert!(!plan.arguments.iter().any(|argument| argument == "--bind"));
@@ -318,8 +329,16 @@ fn a_decision_that_needs_the_user_is_never_resolved() {
     // Ask (the user asked to approve everything), defer (nobody is there to
     // ask), defer (the session is locked).
     let cases = [
-        (policy("ask_every_action"), Situation::attended(), "confirmation_required"),
-        (policy("ask_every_action"), Situation::unattended(), "deferred"),
+        (
+            policy("ask_every_action"),
+            Situation::attended(),
+            "confirmation_required",
+        ),
+        (
+            policy("ask_every_action"),
+            Situation::unattended(),
+            "deferred",
+        ),
         (
             policy("normal"),
             Situation {
@@ -391,7 +410,10 @@ fn observe_only_lets_only_class_zero_run() {
     let report = harness.run(&server, "Read the value and set it.");
     assert_eq!(report.outcome, TaskOutcome::Completed);
     assert_eq!(harness.decisions("TUR_AI_DECISION"), ["allowed", "refused"]);
-    assert_eq!(harness.decisions("TUR_ERROR_CODE"), ["", "TUR-AI-POLICY-005"]);
+    assert_eq!(
+        harness.decisions("TUR_ERROR_CODE"),
+        ["", "TUR-AI-POLICY-005"]
+    );
     assert_eq!(
         harness.executor.commands(),
         [vec!["/usr/bin/tur-pax-test-tool", "observe"]]
@@ -434,13 +456,25 @@ fn nothing_above_class_one_runs_whatever_the_policy_and_the_situation() {
 
                 // Every offered tool, in one response: the whole tool set.
                 let offered = harness.registry.offered();
-                assert!(offered.iter().any(|tool| tool.class == ActionClass::Consequential));
-                assert!(offered.iter().any(|tool| tool.class == ActionClass::SystemCritical));
+                assert!(
+                    offered
+                        .iter()
+                        .any(|tool| tool.class == ActionClass::Consequential)
+                );
+                assert!(
+                    offered
+                        .iter()
+                        .any(|tool| tool.class == ActionClass::SystemCritical)
+                );
                 let proposed: Vec<common::Call> = offered
                     .iter()
                     .enumerate()
                     .map(|(index, tool)| {
-                        call(&format!("toolu_{index}"), &tool.name, valid_arguments(&tool.name))
+                        call(
+                            &format!("toolu_{index}"),
+                            &tool.name,
+                            valid_arguments(&tool.name),
+                        )
                     })
                     .collect();
                 let server = FakeServer::start(vec![calls("", proposed), says("Finished.")]);
@@ -497,11 +531,9 @@ fn the_engine_allows_no_offered_tool_above_class_one_in_any_situation() {
     .expect("a valid tool set");
     let mut checked = 0;
     for tool in registry.offered() {
-        let arguments = tur_pax::strict::object_from_str(valid_arguments(&tool.name))
-            .expect("valid arguments");
-        let proposal = registry
-            .propose(&tool.name, arguments)
-            .expect("a proposal");
+        let arguments =
+            tur_pax::strict::object_from_str(valid_arguments(&tool.name)).expect("valid arguments");
+        let proposal = registry.propose(&tool.name, arguments).expect("a proposal");
         for mode in Mode::ALL {
             for presence in Presence::ALL {
                 for session_locked in [false, true] {
@@ -552,17 +584,18 @@ fn a_model_that_never_stops_is_cut_off_at_the_step_limit() {
         harness.events(EventKind::TaskFinished, "TUR_AI_OUTCOME"),
         ["step_limit"]
     );
-    assert_eq!(harness.events(EventKind::TaskFinished, "TUR_AI_STEPS"), ["3"]);
+    assert_eq!(
+        harness.events(EventKind::TaskFinished, "TUR_AI_STEPS"),
+        ["3"]
+    );
     // A task that did not complete leaves the conversation as it was.
     assert!(harness.history.is_empty());
 }
 
 #[test]
 fn a_model_that_never_stops_is_cut_off_at_the_spend_limit() {
-    let server = FakeServer::repeating(vec![calls(
-        "",
-        vec![call("toolu_s", "test_observe", "{}")],
-    )]);
+    let server =
+        FakeServer::repeating(vec![calls("", vec![call("toolu_s", "test_observe", "{}")])]);
     let config = server.config_with(|config| {
         config["task_limit"] = json!({ "max_tokens": 100 });
     });
@@ -590,10 +623,8 @@ fn a_model_that_never_stops_is_cut_off_at_the_spend_limit() {
 
 #[test]
 fn a_task_is_stopped_at_its_time_limit() {
-    let server = FakeServer::repeating(vec![calls(
-        "",
-        vec![call("toolu_t", "test_observe", "{}")],
-    )]);
+    let server =
+        FakeServer::repeating(vec![calls("", vec![call("toolu_t", "test_observe", "{}")])]);
     let mut harness = Harness::new();
     // Every reading of the clock moves it ten seconds.
     harness.clock = ManualClock::new(Duration::from_secs(10));
@@ -661,7 +692,11 @@ fn a_paused_task_waits_and_its_waiting_counts_towards_the_time_limit() {
 #[test]
 fn a_response_that_does_not_end_well_is_discarded_whole() {
     let cases = [
-        ("refusal", TaskOutcome::ProviderRefusal, "TUR-AI-PROVIDER-005"),
+        (
+            "refusal",
+            TaskOutcome::ProviderRefusal,
+            "TUR-AI-PROVIDER-005",
+        ),
         ("error", TaskOutcome::ProviderError, "TUR-AI-PROVIDER-003"),
         ("max_tokens", TaskOutcome::OutputLimit, "TUR-AI-TASK-007"),
     ];
@@ -811,7 +846,11 @@ fn a_tool_that_fails_times_out_or_cannot_start_is_reported_as_such() {
     );
     assert_eq!(
         harness.events(EventKind::Executed, "TUR_ERROR_CODE"),
-        ["TUR-AI-TASK-008", "TUR-AI-SANDBOX-004", "TUR-AI-SANDBOX-001"]
+        [
+            "TUR-AI-TASK-008",
+            "TUR-AI-SANDBOX-004",
+            "TUR-AI-SANDBOX-001"
+        ]
     );
     assert_eq!(
         harness.events(EventKind::Executed, "TUR_AI_EXIT"),
@@ -843,7 +882,11 @@ fn credential_like_output_is_withheld_and_the_trail_says_so_without_saying_what(
             "",
             vec![
                 call("toolu_1", "test_observe", "{}"),
-                call("toolu_2", COMMAND_TOOL, r#"{"argv": ["/usr/bin/cat", "/etc/app.conf"]}"#),
+                call(
+                    "toolu_2",
+                    COMMAND_TOOL,
+                    r#"{"argv": ["/usr/bin/cat", "/etc/app.conf"]}"#,
+                ),
             ],
         ),
         says("I read both."),
@@ -853,7 +896,9 @@ fn credential_like_output_is_withheld_and_the_trail_says_so_without_saying_what(
         printed(&format!(
             r#"{{"user":"ada","api_key":"{KEY}","note":"fine"}}"#
         )),
-        printed(&format!("region = eu\naws_access_key_id = {AWS}\nretries = 3\n")),
+        printed(&format!(
+            "region = eu\naws_access_key_id = {AWS}\nretries = 3\n"
+        )),
     ]
     .into();
     let report = harness.run(&server, "Show me the configuration.");
@@ -880,7 +925,10 @@ fn credential_like_output_is_withheld_and_the_trail_says_so_without_saying_what(
     );
 
     // The trail records that something was withheld, and of what kind.
-    assert_eq!(harness.events(EventKind::Executed, "TUR_AI_WITHHELD"), ["1", "1"]);
+    assert_eq!(
+        harness.events(EventKind::Executed, "TUR_AI_WITHHELD"),
+        ["1", "1"]
+    );
     assert_eq!(
         harness.events(EventKind::Executed, "TUR_AI_WITHHELD_KINDS"),
         ["password", "known_token"]
@@ -905,8 +953,16 @@ fn the_trail_never_holds_a_request_an_answer_or_an_argument() {
             "My private thought about plums.",
             vec![
                 call("toolu_1", "test_reversible", r#"{"value": "marmalade"}"#),
-                call("toolu_2", COMMAND_TOOL, r#"{"argv": ["/usr/bin/echo", "quince"]}"#),
-                call("toolu_3", "made up tool; with spaces", r#"{"value": "damson"}"#),
+                call(
+                    "toolu_2",
+                    COMMAND_TOOL,
+                    r#"{"argv": ["/usr/bin/echo", "quince"]}"#,
+                ),
+                call(
+                    "toolu_3",
+                    "made up tool; with spaces",
+                    r#"{"value": "damson"}"#,
+                ),
             ],
         ),
         says("The answer mentions apricots."),
@@ -999,7 +1055,12 @@ fn a_feeding_command_runs_first_and_its_output_becomes_the_input() {
     assert_eq!(plans[0].limits.output_bytes, FEED_OUTPUT_BYTES);
     assert_eq!(
         plans[1].argv,
-        ["/usr/bin/tur-pax-test-tool", "volumes", "--from", "/dev/stdin"]
+        [
+            "/usr/bin/tur-pax-test-tool",
+            "volumes",
+            "--from",
+            "/dev/stdin"
+        ]
     );
     assert_eq!(
         plans[1].stdin.as_deref(),
@@ -1073,8 +1134,13 @@ fn a_grant_is_checked_against_the_file_system_and_shown_read_only() {
     let text = |path: &Path| path.to_str().expect("a UTF-8 path").to_owned();
 
     let rules = GrantRules::new(Some(home.as_path()));
-    assert!(!rules.homes().is_empty(), "the build directory is a usable home");
-    let grant = rules.admit(&text(&granted)).expect("an ordinary folder is granted");
+    assert!(
+        !rules.homes().is_empty(),
+        "the build directory is a usable home"
+    );
+    let grant = rules
+        .admit(&text(&granted))
+        .expect("an ordinary folder is granted");
     assert_eq!(grant.path(), text(&granted));
     assert!(rules.admit(&text(&granted.join("note.txt"))).is_ok());
 

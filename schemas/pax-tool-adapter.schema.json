@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/giorgiogiudice/TUR/schemas/pax-tool-adapter.schema.json",
+  "title": "P@x tool adapters",
+  "description": "How P@x performs the tools of one service. A tool manifest (agent-tool-manifest.schema.json) says what a tool is: its name, its class and the shape of its input. An adapter says how the tool is performed today, while the D-Bus services the manifests name do not exist: by running a TUR command-line program in the read-only sandbox and returning what it prints. An adapter never adds a tool and never states a class. The loader in services/tur-pax (src/adapter.rs, src/registry.rs) is authoritative. It also enforces rules this schema cannot express: the service and every tool must be declared by a loaded manifest; a tool has at most one adapter; every input an argument refers to must be declared by the tool's input schema, with type string or integer for 'input' and boolean for 'when'; and a path may have no empty, '.' or '..' component and no control character.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "service", "adapters"],
+  "$defs": {
+    "path": {
+      "description": "A plain absolute path. A program is never looked up along a search path.",
+      "type": "string",
+      "pattern": "^/[^/]",
+      "maxLength": 4096
+    },
+    "option": {
+      "description": "A long option of the program.",
+      "type": "string",
+      "pattern": "^--[a-z][a-z0-9-]{0,63}$"
+    },
+    "argument": {
+      "description": "One argument of the command line. Exactly one of four forms. {literal}: a fixed argument. {input}: the value of a string or integer input of the tool, as one argument; left out when the input is absent; refused when the value begins with '-'. {option, input}: the value attached to an option, as the one argument --option=value; left out when the input is absent. {flag, when}: a fixed option that is present when a boolean input is true. A value taken from an input is refused when it holds a control character or is longer than 4096 bytes. No form joins values into one string, and nothing is ever given to a shell.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "literal": {
+          "description": "The fixed text of the argument.",
+          "type": "string",
+          "maxLength": 4096
+        },
+        "input": {
+          "description": "The name of an input property of the tool.",
+          "type": "string"
+        },
+        "option": { "$ref": "#/$defs/option" },
+        "flag": { "$ref": "#/$defs/option" },
+        "when": {
+          "description": "The name of a boolean input property of the tool.",
+          "type": "string"
+        }
+      },
+      "oneOf": [
+        { "required": ["literal"], "maxProperties": 1 },
+        { "required": ["input"], "maxProperties": 1 },
+        { "required": ["option", "input"], "maxProperties": 2 },
+        { "required": ["flag", "when"], "maxProperties": 2 }
+      ]
+    },
+    "feed": {
+      "description": "A fixed command that is run first, in a sandbox of its own, and whose standard output becomes the standard input of the adapter's program. It takes nothing from the tool's input. If it does not exit with 0, or prints more than 1048576 bytes, the program is not run.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["program"],
+      "properties": {
+        "program": { "$ref": "#/$defs/path" },
+        "arguments": {
+          "description": "The arguments of the feeding command, all fixed.",
+          "type": "array",
+          "items": { "type": "string", "maxLength": 4096 }
+        }
+      }
+    },
+    "adapter": {
+      "description": "How one tool is performed.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tool", "kind", "program"],
+      "properties": {
+        "tool": {
+          "description": "The name of a tool the service's manifest declares.",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "kind": {
+          "description": "How the tool is performed. command: run a program in the read-only sandbox. This is the only kind.",
+          "const": "command"
+        },
+        "program": { "$ref": "#/$defs/path" },
+        "arguments": {
+          "description": "The arguments of the program, in order.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/argument" }
+        },
+        "success_exit_codes": {
+          "description": "The exit statuses that mean the program succeeded. Without it, 0 only. With any other status the output is still returned to the model, marked as a failure.",
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "integer", "minimum": 0, "maximum": 255 }
+        },
+        "reads": {
+          "description": "Paths outside the system view of the sandbox that the program has to read. Each must pass the same rules as a folder the user grants; a path under /usr or /etc needs no entry.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/path" }
+        },
+        "feed": { "$ref": "#/$defs/feed" },
+        "timeout_seconds": {
+          "description": "The wall-clock limit of the program. Without it, 20.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 120
+        },
+        "max_output_bytes": {
+          "description": "How much of each of standard output and standard error is kept. Without it, 65536.",
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 262144
+        }
+      }
+    }
+  },
+  "properties": {
+    "schema_version": { "const": 1 },
+    "service": {
+      "description": "The D-Bus well-known name of the service whose tools these adapters perform, as its manifest states it.",
+      "type": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)+$",
+      "maxLength": 255
+    },
+    "adapters": {
+      "description": "The adapters, at most one for each tool.",
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/adapter" }
+    }
+  }
+}

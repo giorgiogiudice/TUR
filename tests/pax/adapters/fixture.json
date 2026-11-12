@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "service": "org.tur.PaxFixture1",
+  "adapters": [
+    {
+      "tool": "fixture_device_problems",
+      "kind": "command",
+      "program": "/usr/bin/tur-device",
+      "arguments": [
+        { "literal": "problems" },
+        { "literal": "--from" },
+        { "literal": "/usr/share/tur-pax-e2e/laptop" },
+        { "literal": "--json" }
+      ]
+    }
+  ]
+}

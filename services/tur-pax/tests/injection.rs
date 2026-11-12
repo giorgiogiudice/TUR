@@ -309,7 +309,10 @@ fn hostile_commands_are_only_ever_handed_to_the_read_only_sandbox() {
             assert!(options.iter().any(|option| option == required), "{context}");
         }
         for forbidden in ["--bind", "--dev-bind", "--share-net"] {
-            assert!(!options.iter().any(|option| option == forbidden), "{context}");
+            assert!(
+                !options.iter().any(|option| option == forbidden),
+                "{context}"
+            );
         }
         // Nothing of the user's is in the view: no grant was made.
         assert!(
@@ -450,9 +453,8 @@ fn recalled_notes_are_left_out_when_the_recall_itself_is_not_allowed() {
     let server = FakeServer::start(vec![says("Hello.")]);
     let mut harness = Harness::new();
     harness.recalled = poisoned_memory();
-    harness.policy =
-        UserPolicy::from_json(r#"{"schema_version":1,"mode":"ask_every_action"}"#)
-            .expect("a valid policy");
+    harness.policy = UserPolicy::from_json(r#"{"schema_version":1,"mode":"ask_every_action"}"#)
+        .expect("a valid policy");
     let report = harness.run(&server, "Check the test volume vol-1");
     assert_eq!(report.outcome, TaskOutcome::Completed);
     assert_eq!(
@@ -465,7 +467,11 @@ fn recalled_notes_are_left_out_when_the_recall_itself_is_not_allowed() {
     );
     let body = &server.bodies()[0];
     assert_eq!(first_user_texts(body), ["Check the test volume vol-1"]);
-    assert!(!server.requests()[0].body.contains("approved this in advance"));
+    assert!(
+        !server.requests()[0]
+            .body
+            .contains("approved this in advance")
+    );
 }
 
 // ------------------------------------------------ (e) a model that never stops

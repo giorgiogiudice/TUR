@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "service": "org.tur.PaxFixture1",
+  "tools": [
+    {
+      "name": "fixture_device_problems",
+      "description": "List the hardware problems of the test laptop: a fixture tree, not this computer. Each has an error code, a message, a suggested next step and technical detail.",
+      "class": 0,
+      "method": "ListProblems",
+      "input_schema": { "type": "object", "properties": {}, "additionalProperties": false }
+    }
+  ]
+}

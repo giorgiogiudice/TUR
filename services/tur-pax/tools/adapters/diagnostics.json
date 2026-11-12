@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "service": "org.tur.Diagnostics1",
+  "adapters": [
+    {
+      "tool": "diag_get_status",
+      "kind": "command",
+      "program": "/usr/bin/tur-diag",
+      "arguments": [{ "literal": "status" }, { "literal": "--json" }]
+    }
+  ]
+}

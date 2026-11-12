@@ -1,0 +1,20 @@
+{
+  "name": "readonly-command",
+  "what": "Two real commands in the read-only sandbox, and their output used: a system file, and a file in the folder the user granted for the task.",
+  "request": "Which system is this, and what does my report say?",
+  "turns": [
+    {
+      "text": "I will read the release file.",
+      "calls": [
+        { "id": "toolu_release", "name": "run_readonly_command", "arguments": { "argv": ["/usr/bin/cat", "/etc/os-release"] } }
+      ]
+    },
+    {
+      "text": "Now the report.",
+      "calls": [
+        { "id": "toolu_report", "name": "run_readonly_command", "arguments": { "argv": ["/usr/bin/cat", "{{GRANTED}}/report.txt"] } }
+      ]
+    },
+    { "text": "This is the system named in the release file, and your report is in order." }
+  ]
+}

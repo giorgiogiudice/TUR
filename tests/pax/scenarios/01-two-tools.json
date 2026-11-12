@@ -1,0 +1,17 @@
+{
+  "name": "two-tools",
+  "what": "A question answered with two real tools: the hardware problems of a fixture laptop (tur-device problems --from) and a catalogue route (tur-catalogue route). Both programs really run, in the read-only sandbox.",
+  "request": "My laptop has hardware trouble. What is wrong with it, and how would I run Discord?",
+  "turns": [
+    {
+      "text": "I will check the hardware and the catalogue.",
+      "calls": [
+        { "id": "toolu_problems", "name": "fixture_device_problems", "arguments": {} },
+        { "id": "toolu_route", "name": "catalogue_route", "arguments": { "id": "com.discord.discord" } }
+      ]
+    },
+    {
+      "text": "The laptop has devices without a working driver; the details are above. Discord can be run on this system by the route the catalogue recommends."
+    }
+  ]
+}

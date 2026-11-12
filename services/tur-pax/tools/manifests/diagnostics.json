@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "service": "org.tur.Diagnostics1",
+  "tools": [
+    {
+      "name": "diag_get_status",
+      "description": "Show the state of this system in one view: the TUR build and version, the kernel, the boot identifier and how many system units have failed. Reads only; nothing is collected or sent anywhere.",
+      "class": 0,
+      "method": "GetStatus",
+      "input_schema": { "type": "object", "properties": {}, "additionalProperties": false }
+    }
+  ]
+}

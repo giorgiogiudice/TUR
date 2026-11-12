@@ -131,18 +131,27 @@ fn run_prints_the_answer_and_writes_the_trail() {
             .args(files.options()),
     );
     assert_eq!(run.status, EXIT_COMPLETED, "{}", run.stderr);
-    assert!(run.stdout.contains("answer:\nThe answer is 42."), "{}", run.stdout);
+    assert!(
+        run.stdout.contains("answer:\nThe answer is 42."),
+        "{}",
+        run.stdout
+    );
     assert!(run.stdout.contains("outcome: completed"), "{}", run.stdout);
     assert!(run.stdout.contains("task task-cli: provider anthropic"));
     assert!(run.stdout.contains("test_system_critical (class 3)"));
     assert!(run.stderr.is_empty(), "{}", run.stderr);
     assert_eq!(events(&files.audit()), ["task_started", "task_finished"]);
-    assert_eq!(first_user_texts(&server.bodies()[0]), ["What is six times seven?"]);
+    assert_eq!(
+        first_user_texts(&server.bodies()[0]),
+        ["What is six times seven?"]
+    );
     // The key is sent to the provider and appears nowhere else.
     assert!(!run.stdout.contains(TEST_KEY));
-    assert!(!fs::read_to_string(files.root.join("audit.jsonl"))
-        .expect("the audit log")
-        .contains(TEST_KEY));
+    assert!(
+        !fs::read_to_string(files.root.join("audit.jsonl"))
+            .expect("the audit log")
+            .contains(TEST_KEY)
+    );
 }
 
 #[test]
@@ -232,7 +241,11 @@ fn there_is_no_option_that_grants_authority() {
                 .arg(option)
                 .args(files.options()),
         );
-        assert_eq!(run.status, EXIT_USAGE, "{option} was accepted: {}", run.stdout);
+        assert_eq!(
+            run.status, EXIT_USAGE,
+            "{option} was accepted: {}",
+            run.stdout
+        );
     }
     assert!(server.requests().is_empty());
 }
@@ -251,7 +264,11 @@ fn nothing_starts_without_a_key_a_configuration_or_a_valid_grant() {
             .args(files.options()),
     );
     assert_eq!(no_key.status, EXIT_NOT_STARTED);
-    assert!(no_key.stderr.contains("TUR-AI-PROVIDER-012"), "{}", no_key.stderr);
+    assert!(
+        no_key.stderr.contains("TUR-AI-PROVIDER-012"),
+        "{}",
+        no_key.stderr
+    );
 
     let other_variable = finish(
         files
@@ -263,13 +280,21 @@ fn nothing_starts_without_a_key_a_configuration_or_a_valid_grant() {
             .args(["--key-env", "TUR_PAX_TEST_NO_SUCH_VARIABLE"]),
     );
     assert_eq!(other_variable.status, EXIT_NOT_STARTED);
-    assert!(other_variable.stderr.contains("TUR_PAX_TEST_NO_SUCH_VARIABLE"));
+    assert!(
+        other_variable
+            .stderr
+            .contains("TUR_PAX_TEST_NO_SUCH_VARIABLE")
+    );
 
     let mut options = files.options();
     options[1] = files.path("missing.json");
     let no_config = finish(files.program().arg("run").arg("Hello.").args(options));
     assert_eq!(no_config.status, EXIT_NOT_STARTED);
-    assert!(no_config.stderr.contains("TUR-AI-INPUT-001"), "{}", no_config.stderr);
+    assert!(
+        no_config.stderr.contains("TUR-AI-INPUT-001"),
+        "{}",
+        no_config.stderr
+    );
 
     for path in ["/", "/etc", "/run/user/1000", "relative"] {
         let refused = finish(
@@ -281,7 +306,11 @@ fn nothing_starts_without_a_key_a_configuration_or_a_valid_grant() {
                 .args(["--grant-read", path]),
         );
         assert_eq!(refused.status, EXIT_NOT_STARTED, "{path}");
-        assert!(refused.stderr.contains("TUR-AI-SANDBOX-002"), "{}", refused.stderr);
+        assert!(
+            refused.stderr.contains("TUR-AI-SANDBOX-002"),
+            "{}",
+            refused.stderr
+        );
     }
     let hidden = files.root.join("home/.ssh");
     fs::create_dir_all(&hidden).expect("a directory");
@@ -294,12 +323,26 @@ fn nothing_starts_without_a_key_a_configuration_or_a_valid_grant() {
             .args(["--grant-read", hidden.to_str().expect("a UTF-8 path")]),
     );
     assert_eq!(refused.status, EXIT_NOT_STARTED);
-    assert!(refused.stderr.contains("the SSH directory"), "{}", refused.stderr);
+    assert!(
+        refused.stderr.contains("the SSH directory"),
+        "{}",
+        refused.stderr
+    );
 
     fs::write(files.root.join("manifests/broken.json"), "{}").expect("a file");
-    let broken = finish(files.program().arg("run").arg("Hello.").args(files.options()));
+    let broken = finish(
+        files
+            .program()
+            .arg("run")
+            .arg("Hello.")
+            .args(files.options()),
+    );
     assert_eq!(broken.status, EXIT_NOT_STARTED);
-    assert!(broken.stderr.contains("TUR-AI-MANIFEST-001"), "{}", broken.stderr);
+    assert!(
+        broken.stderr.contains("TUR-AI-MANIFEST-001"),
+        "{}",
+        broken.stderr
+    );
 
     // Nothing was sent to the provider by any of these.
     assert!(server.requests().is_empty());
@@ -326,7 +369,11 @@ fn a_policy_file_that_cannot_be_used_leaves_observation_only() {
             .args(["--policy", files.path("policy.json").as_str()]),
     );
     assert_eq!(run.status, EXIT_COMPLETED, "{}", run.stderr);
-    assert!(run.stderr.contains("TUR-AI-POLICYFILE-001"), "{}", run.stderr);
+    assert!(
+        run.stderr.contains("TUR-AI-POLICYFILE-001"),
+        "{}",
+        run.stderr
+    );
     assert!(run.stderr.contains("only observes"), "{}", run.stderr);
     let document: Value = serde_json::from_str(run.stdout.trim()).expect("one JSON document");
     assert_eq!(document["items"][0]["decision"], "refused");
@@ -355,7 +402,11 @@ fn the_outcome_decides_the_exit_status() {
             .args(["--max-steps", "3"]),
     );
     assert_eq!(run.status, EXIT_STOPPED, "{}", run.stderr);
-    assert!(run.stdout.contains("outcome: step_limit (TUR-AI-TASK-001)"), "{}", run.stdout);
+    assert!(
+        run.stdout.contains("outcome: step_limit (TUR-AI-TASK-001)"),
+        "{}",
+        run.stdout
+    );
     assert_eq!(server.requests().len(), 3);
 
     // The model declines.
@@ -456,7 +507,12 @@ fn chat_keeps_the_conversation_between_requests() {
     let audit = files.audit();
     assert_eq!(
         events(&audit),
-        ["task_started", "task_finished", "task_started", "task_finished"]
+        [
+            "task_started",
+            "task_finished",
+            "task_started",
+            "task_finished"
+        ]
     );
     assert_eq!(audit[0]["TUR_AI_TASK"], "task-cli-1");
     assert_eq!(audit[2]["TUR_AI_TASK"], "task-cli-2");
