@@ -1179,7 +1179,7 @@ mod tests {
             r#"{"schema_version": 2}"#,
             r#"{"schema_version": 1, "api_key": "x"}"#,
             r#"{"schema_version": 1, "key": "x"}"#,
-            r#"{"schema_version": 1, "provider": "claude"}"#,
+            r#"{"schema_version": 1, "provider": "Claude!"}"#,
             r#"{"schema_version": 1, "model": ""}"#,
             r#"{"schema_version": 1, "max_output_tokens": 0}"#,
             r#"{"schema_version": 1, "limits": {"day_cost": 0}}"#,
