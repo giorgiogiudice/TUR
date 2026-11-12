@@ -22,6 +22,21 @@ import subprocess
 import sys
 
 
+# What may name Fedora on a screenshot: the names and descriptions of the
+# base's own services, which systemd prints on the text console while no
+# splash covers it ("Starting fedora-third-party-refresh.service - Refresh
+# Fedora Third-party Repositories"). They describe Fedora's services
+# truthfully (desktop-experience.md, 12.4, table C; TUR-008). The patterns
+# allow for the recogniser reading "-" as "—" or "~".
+ALLOWED = [
+    r"fedora\W{1,2}third\W{1,2}party\S*",
+    r"fedora\W{1,2}atomic\W{1,2}desktop\S*",
+    r"fedora\W{1,2}kinoite\W{1,2}plasmalogin\S*",
+    r"flatpak\W{1,2}add\W{1,2}fedora\W{1,2}repos\S*",
+    r"add fedora flatpak",
+]
+
+
 def main() -> int:
     if len(sys.argv) != 2:
         sys.exit(__doc__)
@@ -36,8 +51,16 @@ def main() -> int:
         result = subprocess.run(["tesseract", str(picture), "-", "--psm", "11"], capture_output=True, text=True)
         text = " ".join(result.stdout.split())
         read[str(picture.relative_to(out))] = text
-        hits = re.findall(r"\S*fedora\S*", text, re.I)
-        print(f"{'FEDORA' if hits else 'clean '}  {picture.relative_to(out)}: {text[:200]}")
+        rest = text
+        allowed = []
+        for pattern in ALLOWED:
+            allowed += re.findall(pattern, rest, re.I)
+            rest = re.sub(pattern, " ", rest, flags=re.I)
+        hits = re.findall(r"\S*fedora\S*", rest, re.I)
+        verdict = "FEDORA" if hits else ("allowed" if allowed else "clean ")
+        print(f"{verdict}  {picture.relative_to(out)}: {text[:200]}")
+        if allowed:
+            print(f"         allowed: {sorted(set(allowed))}")
         if hits:
             found.append({"picture": str(picture.relative_to(out)), "words": hits})
     (out / "screenshot-text.json").write_text(json.dumps({"found": found, "read": read}, indent=2) + "\n")

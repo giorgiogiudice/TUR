@@ -99,7 +99,11 @@ def prepare(disk: str, work: pathlib.Path) -> int:
             # The GRUB variable the counting fragment fills in (ADR-0014); an
             # ordinary, counted-as-good boot sets it to this.
             words.append("tur.boot_contract=1" if word == "$tur_boot_args" else word)
-        words += ["console=ttyS0,115200n8", "console=tty0", "rhgb", "quiet", "enforcing=0"]
+        # Plymouth shows text, not the splash, when a serial console is
+        # listed, unless told to leave serial consoles alone (seen in the
+        # first run of this step).
+        words += ["console=ttyS0,115200n8", "console=tty0", "rhgb", "quiet", "plymouth.ignore-serial-consoles",
+                  "enforcing=0"]
         (out / "cmdline.txt").write_text(" ".join(words) + "\n")
 
         # The deployment's /etc, by the ostree= argument (a link inside /ostree).
