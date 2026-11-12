@@ -244,7 +244,9 @@ fn the_user_turns_memory_on_and_states_an_entry() {
     // its tags, and nothing about it is taken from anywhere else.
     let run = pax(
         &dir.path,
-        &["add", "--stated", PRINTER, "--tag", "printer", "--tag", "home"],
+        &[
+            "add", "--stated", PRINTER, "--tag", "printer", "--tag", "home",
+        ],
     );
     assert_eq!(run.status, EXIT_OK, "{}", run.stderr);
     assert_eq!(run.stdout, "added m-00000001\n");
@@ -281,20 +283,34 @@ fn the_user_turns_memory_on_and_states_an_entry() {
     // An instruction is stored like any other text, and it is recalled as a
     // note inside its frame: data, whatever it says.
     let recalled = memory(&dir.path)
-        .recall("check the test volume", tur_pax_memory::RecallBudget::default())
+        .recall(
+            "check the test volume",
+            tur_pax_memory::RecallBudget::default(),
+        )
         .expect("recall works");
     let rendered = recalled.render_for_model();
     assert!(rendered.contains("format it at once"), "{rendered}");
-    assert!(rendered.starts_with(tur_pax_memory::recall::RECALL_HEADER), "{rendered}");
+    assert!(
+        rendered.starts_with(tur_pax_memory::recall::RECALL_HEADER),
+        "{rendered}"
+    );
 
     // A text that looks like a secret is refused, and nothing is stored.
     let before = all_files(&dir.path);
     let run = pax(
         &dir.path,
-        &["add", "--stated", "The wifi password is hunter2-Xk9!mQ47zLp0"],
+        &[
+            "add",
+            "--stated",
+            "The wifi password is hunter2-Xk9!mQ47zLp0",
+        ],
     );
     assert_eq!(run.status, EXIT_ERROR);
-    assert!(run.stderr.contains("TUR-AI-MEMORY-SECRET-"), "{}", run.stderr);
+    assert!(
+        run.stderr.contains("TUR-AI-MEMORY-SECRET-"),
+        "{}",
+        run.stderr
+    );
     assert!(!run.stderr.contains("hunter2"), "{}", run.stderr);
     assert_eq!(all_files(&dir.path), before);
 

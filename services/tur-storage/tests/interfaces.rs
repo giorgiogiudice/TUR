@@ -362,14 +362,19 @@ fn the_sources_read_no_environment_write_no_file_and_start_only_lsblk() {
         // program an emptied environment and no standard input.
         assert_eq!(text.matches("Command::new").count(), 1, "{name}");
         assert_eq!(text.matches(".env_clear()").count(), 1, "{name}");
-        assert_eq!(text.matches(".stdin(std::process::Stdio::null())").count(), 1);
+        assert_eq!(
+            text.matches(".stdin(std::process::Stdio::null())").count(),
+            1
+        );
         // One caller hands that place a program: the capture, with the
         // fixed command line. The other calls of `run` in the file are the
         // stand-in of its unit tests.
         let shipped = text.split("#[cfg(test)]").next().unwrap_or_default();
         assert_eq!(shipped.matches(".run(").count(), 1, "{name}");
         assert_eq!(
-            shipped.matches(".run(LSBLK_PROGRAM, &LSBLK_ARGUMENTS)").count(),
+            shipped
+                .matches(".run(LSBLK_PROGRAM, &LSBLK_ARGUMENTS)")
+                .count(),
             1,
             "{name}"
         );
