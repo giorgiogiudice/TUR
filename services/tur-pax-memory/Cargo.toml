@@ -1,0 +1,41 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+[package]
+name = "tur-pax-memory"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+license = "LicenseRef-TUR-Noncommercial-1.0.0"
+description = "P@x local memory, reminders and scheduled tasks: storage, rules and schedule computation. No model, no network, no D-Bus."
+repository = "https://github.com/giorgiogiudice/TUR"
+publish = false
+
+# Each component is its own workspace with its own lockfile. See ADR-0005.
+[workspace]
+
+[lib]
+name = "tur_pax_memory"
+path = "src/lib.rs"
+
+[[bin]]
+name = "tur-pax-memory"
+path = "src/main.rs"
+
+[dependencies]
+# Calendar arithmetic and conversion between UTC and local wall-clock time. The
+# clock feature is left out on purpose: this crate reads the time only through
+# its own Clock trait.
+chrono = { version = "0.4.38", default-features = false, features = ["std"] }
+# The IANA time-zone database, compiled in, so that daylight-saving behaviour is
+# the same on every machine and in CI and does not depend on the host's zoneinfo.
+chrono-tz = "0.10"
+# Command-line parsing. Colour and suggestion features are left out to keep the
+# dependency tree small.
+clap = { version = "4.5", default-features = false, features = ["std", "derive", "help", "usage", "error-context"] }
+# Memory entries, schedules and run records are JSON documents.
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+uos-core = { path = "../../crates/uos-core" }
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"

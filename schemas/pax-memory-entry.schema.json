@@ -1,0 +1,180 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/giorgiogiudice/TUR/schemas/pax-memory-entry.schema.json",
+  "title": "P@x memory entry",
+  "description": "One entry of the assistant's local memory (AI control layer, section 16.1), as stored in <store>/memory/entries/<id>.json. An entry is data and never authority: nothing in it can lower an action's class, stand in for a confirmation or act as a standing approval, and no property of this document is read by the policy engine. The loader in services/tur-pax-memory is authoritative. It also enforces what this schema cannot express: sizes are counted in bytes, not characters; text fields hold no control characters (the entry text may hold line breaks and tabs); a service name has at least two dot-separated elements; the arguments of a procedure step are at most 8192 bytes as JSON; updated_at is not before created_at; and the identifier equals the file name.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "kind",
+    "state",
+    "trust",
+    "text",
+    "provenance",
+    "created_at",
+    "updated_at"
+  ],
+  "$defs": {
+    "timestamp": {
+      "description": "Whole seconds since the Unix epoch, UTC. At most the last second of the year 9999.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 253402300799
+    },
+    "provenance": {
+      "description": "Where the entry came from. For an entry taken from content, the origin is itself content and is not trusted.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["origin", "recorded_at"],
+      "properties": {
+        "origin": {
+          "description": "Where it came from, in words: a conversation, a window title, a file path, a tool name.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "task": {
+          "description": "The task during which the entry was recorded.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "recorded_at": { "$ref": "#/$defs/timestamp" }
+      }
+    },
+    "step": {
+      "description": "One step of a saved procedure: a tool and a template for its arguments. The template is stored as written and is not interpreted.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["service", "tool", "arguments"],
+      "properties": {
+        "service": {
+          "description": "The D-Bus name of the service that owns the tool.",
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 255,
+          "pattern": "^[A-Za-z0-9_-]+(\\.[A-Za-z0-9_-]+)+$"
+        },
+        "tool": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "arguments": { "type": "object" }
+      }
+    },
+    "procedure": {
+      "description": "A named sequence of steps recorded from a task the user accepted. It is a note of what worked, not a permission: replaying it is an ordinary task and every step goes through the policy engine again.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "steps"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "steps": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/step" }
+        }
+      }
+    }
+  },
+  "properties": {
+    "schema_version": { "const": 1 },
+    "id": {
+      "description": "The entry identifier: m- and 8 to 16 lower-case hexadecimal digits.",
+      "type": "string",
+      "pattern": "^m-[0-9a-f]{8,16}$"
+    },
+    "kind": {
+      "description": "stated: the user said it. observed: recorded by the assistant from its own completed actions. procedure: steps saved from a task the user accepted. from_content: taken from something the assistant read.",
+      "enum": ["stated", "observed", "procedure", "from_content"]
+    },
+    "state": {
+      "description": "active: the entry can be recalled. pending: the entry was taken from content and waits for the user's confirmation; it is never recalled.",
+      "enum": ["active", "pending"]
+    },
+    "trust": {
+      "description": "Follows from the kind and cannot be raised: stated is user_stated, observed and procedure are assistant_observed, from_content is untrusted, also after the user confirmed that it may be kept. A file whose trust does not follow from its kind is rejected.",
+      "enum": ["user_stated", "assistant_observed", "untrusted"]
+    },
+    "text": {
+      "description": "What was remembered. Refused at the point of writing if it looks like a secret.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4000
+    },
+    "procedure": { "$ref": "#/$defs/procedure" },
+    "provenance": { "$ref": "#/$defs/provenance" },
+    "created_at": { "$ref": "#/$defs/timestamp" },
+    "updated_at": { "$ref": "#/$defs/timestamp" },
+    "confirmed_at": {
+      "description": "When the user confirmed an entry taken from content.",
+      "$ref": "#/$defs/timestamp"
+    },
+    "tags": {
+      "type": "array",
+      "maxItems": 16,
+      "items": { "type": "string", "minLength": 1, "maxLength": 64 }
+    },
+    "application": {
+      "description": "The application the entry concerns.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255
+    }
+  },
+  "oneOf": [
+    {
+      "description": "Stated by the user.",
+      "properties": {
+        "kind": { "const": "stated" },
+        "trust": { "const": "user_stated" },
+        "state": { "const": "active" },
+        "confirmed_at": false,
+        "procedure": false
+      }
+    },
+    {
+      "description": "Observed by the assistant.",
+      "properties": {
+        "kind": { "const": "observed" },
+        "trust": { "const": "assistant_observed" },
+        "state": { "const": "active" },
+        "confirmed_at": false,
+        "procedure": false
+      }
+    },
+    {
+      "description": "A saved procedure.",
+      "required": ["procedure"],
+      "properties": {
+        "kind": { "const": "procedure" },
+        "trust": { "const": "assistant_observed" },
+        "state": { "const": "active" },
+        "confirmed_at": false
+      }
+    },
+    {
+      "description": "Taken from content, waiting for the user.",
+      "properties": {
+        "kind": { "const": "from_content" },
+        "trust": { "const": "untrusted" },
+        "state": { "const": "pending" },
+        "confirmed_at": false,
+        "procedure": false
+      }
+    },
+    {
+      "description": "Taken from content and confirmed by the user. It stays untrusted.",
+      "required": ["confirmed_at"],
+      "properties": {
+        "kind": { "const": "from_content" },
+        "trust": { "const": "untrusted" },
+        "state": { "const": "active" },
+        "procedure": false
+      }
+    }
+  ]
+}
