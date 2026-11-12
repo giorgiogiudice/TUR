@@ -1,6 +1,6 @@
 # AI control layer
 
-**Specification addendum A — Revision 8 (12 November 2026)**
+**Specification addendum A — Revision 9 (12 November 2026)**
 **Applies to:** specification revision 1.0
 **Related decision:** [ADR-0004](../adr/0004-ai-provider-model.md)
 
@@ -823,3 +823,25 @@ In this milestone P@x performs class 0 and class 1 actions only. There is no
 option, environment variable or file that lets anything above class 1 run; a test
 enforces that over the whole tool set.
 
+## 22. Resolutions from connecting the components
+
+Connecting the provider adapters, the policy engine, the memory store and the
+tool programs ([report pax-2](../reports/pax-2.md)) settled further points. Where
+an earlier section says otherwise, this section governs.
+
+| # | Point | Resolution |
+|---|---|---|
+| 1 | Tool-call arguments in which a key appears twice. An adapter that keeps the last value and a checker that reads the first would disagree about what was asked. | A response in which any tool call repeats a key, at any depth, is malformed and is discarded whole (section 10). The task ends; it is not retried with the offending call removed. |
+| 2 | Where a standing approval comes from (section 18, item 1). | Only from the policy store. The policy engine accepts a standing approval from no other source, a command line included. Until the policy store exists, no standing approval is honoured. |
+| 3 | A memory record an unattended task may not make (section 18, item 4). | Deferred, not refused: it is offered to the person when they return. |
+| 4 | Changing or removing a memory entry. | An observed entry: class 1. A stated or confirmed entry, or a procedure: class 2. Confirming a pending entry is the person's act and P@x cannot perform it. |
+| 5 | What "trusted path available" means after section 19. | P@x may go above class 1 only when a separate trusted session exists and has passed the trusted-path tests. A prompt on the person's desktop never counts. |
+| 6 | Where a component's assistant tools live. | Each component ships its own manifest and adapters, installed at `/usr/share/tur/pax/tools/<component>/`. |
+| 7 | Audit order (section 21, item 7). | `executed` first, then `output_withheld` with a count, the kinds and `TUR-AI-OUTPUT-001`; both are written before a result is passed on. |
+| 8 | Stating a memory entry and turning memory on. | Both are the person's acts, done with `tur-pax-memory` or in settings. P@x cannot do either. |
+
+The built-in lists of sensitive and excluded applications and of protected units
+were checked against upstream sources and Fedora package file lists on
+12 November 2026 ([agent-policy.md](agent-policy.md), section 2.5). Fourteen
+identifiers could not be verified and are marked there. None has been checked on
+the TUR image.

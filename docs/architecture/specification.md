@@ -2054,6 +2054,8 @@ Suggested families:
 - `TUR-DESKTOP-*`
 - `TUR-SECURITY-*`
 - `TUR-DIAG-*`
+- `TUR-RUNTIME-*` (added 12 November 2026: the runtime manager)
+- `TUR-CATALOGUE-*` (added 12 November 2026: reserved; the catalogue's codes have not moved to it)
 
 Each code must have a registry entry with title, severity, detection criteria, user message, technical explanation, recovery action, and tests.
 
