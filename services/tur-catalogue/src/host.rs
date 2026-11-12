@@ -146,8 +146,7 @@ impl Preferences {
 /// refused: left to itself, a derived reader would also accept a list of
 /// values in field order.
 fn parse_object<T: DeserializeOwned>(json: &str) -> Result<T, String> {
-    let value: serde_json::Value =
-        serde_json::from_str(json).map_err(|error| error.to_string())?;
+    let value: serde_json::Value = serde_json::from_str(json).map_err(|error| error.to_string())?;
     if !value.is_object() {
         return Err("expected a JSON object".to_owned());
     }
