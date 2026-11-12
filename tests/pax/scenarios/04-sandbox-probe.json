@@ -5,7 +5,7 @@
   "turns": [
     {
       "calls": [
-        { "id": "toolu_env", "name": "run_readonly_command", "arguments": { "argv": ["/usr/bin/env"] } },
+        { "id": "toolu_env", "name": "run_readonly_command", "arguments": { "argv": ["/usr/bin/python3", "-c", "import json, os; print(json.dumps({'names': sorted(os.environ), 'home': os.environ.get('HOME'), 'path': os.environ.get('PATH')}))"] } },
         { "id": "toolu_privileges", "name": "run_readonly_command", "arguments": { "argv": ["/usr/bin/grep", "-E", "^(NoNewPrivs|CapEff|CapPrm|CapBnd):", "/proc/self/status"] } },
         { "id": "toolu_limits", "name": "run_readonly_command", "arguments": { "argv": ["/usr/bin/prlimit", "--noheadings", "--raw", "--output", "RESOURCE,SOFT,HARD"] } },
         { "id": "toolu_home", "name": "run_readonly_command", "arguments": { "argv": ["/usr/bin/ls", "-A", "{{HOME}}"] } },

@@ -128,7 +128,13 @@ fn every_shipped_adapter_builds_the_command_line_of_its_program() {
         (
             "storage_list_volumes",
             json!({}),
-            vec!["/usr/bin/tur-storage", "volumes", "--from", "/dev/stdin", "--json"],
+            vec![
+                "/usr/bin/tur-storage",
+                "volumes",
+                "--from",
+                "/dev/stdin",
+                "--json",
+            ],
         ),
         (
             "catalogue_search",
@@ -172,7 +178,13 @@ fn every_shipped_adapter_builds_the_command_line_of_its_program() {
         (
             "runtime_inspect_file",
             json!({ "path": "/usr/bin/true" }),
-            vec!["/usr/bin/tur-runtime", "inspect", "--json", "--", "/usr/bin/true"],
+            vec![
+                "/usr/bin/tur-runtime",
+                "inspect",
+                "--json",
+                "--",
+                "/usr/bin/true",
+            ],
         ),
     ];
     for (tool, arguments, expected) in cases {
@@ -187,7 +199,10 @@ fn a_value_from_the_model_cannot_become_an_option_of_a_shipped_program() {
         ("catalogue_search", json!({ "query": "--catalogue=/etc" })),
         ("catalogue_show", json!({ "id": "-h" })),
         ("catalogue_route", json!({ "id": "--host=/etc/shadow" })),
-        ("runtime_inspect_file", json!({ "path": "--available=wine" })),
+        (
+            "runtime_inspect_file",
+            json!({ "path": "--available=wine" }),
+        ),
         ("runtime_inspect_file", json!({ "path": "/tmp/a\nb" })),
     ] {
         let proposal = registry
@@ -206,7 +221,11 @@ fn every_shipped_program_and_path_is_in_the_system_view_of_the_sandbox() {
     for text in ADAPTERS {
         let file = tur_pax::adapter::AdapterFile::from_json(text).expect("a valid adapter file");
         for adapter in file.adapters() {
-            assert!(is_system_visible(adapter.program()), "{}", adapter.program());
+            assert!(
+                is_system_visible(adapter.program()),
+                "{}",
+                adapter.program()
+            );
             for path in adapter.reads() {
                 assert!(is_system_visible(path), "{path}");
             }
@@ -245,7 +264,10 @@ fn the_shipped_adapters_use_only_what_the_published_format_describes() {
                 if name == "arguments" {
                     for argument in value.as_array().expect("arguments") {
                         for field in argument.as_object().expect("an object").keys() {
-                            assert!(argument_fields.contains_key(field), "argument field {field}");
+                            assert!(
+                                argument_fields.contains_key(field),
+                                "argument field {field}"
+                            );
                         }
                     }
                 }

@@ -608,20 +608,32 @@ class Test:
         machine = self.machine
         self.all_allowed_observations(outcome, 8, action="command:read_only", tier="4")
 
-        environment = outcome.output("toolu_env") or ""
-        names = {line.split("=", 1)[0] for line in environment.splitlines() if "=" in line}
+        # The names of the variables, which the output filter has no reason to
+        # touch: a check on values could pass because a value was withheld.
+        result = outcome.result("toolu_env")
+        frame = {} if result is None else result["frame"]
+        self.checks.equal(name, "nothing was withheld from the list of variable names", frame.get("withheld"), 0)
+        try:
+            environment = json.loads(frame.get("output") or "")
+        except ValueError:
+            environment = {}
         self.checks.equal(
             name,
-            "the environment is the fixed one and nothing of the caller's",
-            names - {"PWD"},
-            {"PATH", "HOME", "LANG", "LC_ALL", "TERM"},
+            "the environment is the fixed one (and PWD, which bubblewrap sets) and nothing of the caller's",
+            environment.get("names"),
+            ["HOME", "LANG", "LC_ALL", "PATH", "PWD", "TERM"],
+        )
+        self.checks.equal(
+            name,
+            "HOME is the private /tmp and PATH is the fixed one",
+            (environment.get("home"), environment.get("path")),
+            ("/tmp", "/usr/bin:/bin:/usr/sbin:/sbin"),
         )
         self.checks.check(
             name,
             "the canary variable is not in the environment",
-            machine.env_canary not in environment and "TUR_PAX" not in environment,
+            machine.env_canary not in json.dumps(frame) and "TUR_PAX" not in json.dumps(frame),
         )
-        self.checks.check(name, "HOME is the private /tmp", "HOME=/tmp" in environment.splitlines())
 
         privileges = outcome.output("toolu_privileges") or ""
         fields = dict(line.split(":", 1) for line in privileges.splitlines() if ":" in line)
