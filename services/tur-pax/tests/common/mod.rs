@@ -31,8 +31,8 @@ use serde_json::{Value, json};
 use tur_pax::audit::{AuditRecord, AuditWriteError};
 use tur_pax::exec::{ExecOutput, ExecStatus, Executor};
 use tur_pax::orchestrator::{
-    Control, NoControl, NoObserver, Orchestrator, Signal, Situation, TaskClock, TaskLimits,
-    TaskReport, TaskRequest,
+    Control, NoAssistant, NoBudget, NoControl, NoObserver, Orchestrator, Signal, Situation,
+    TaskClock, TaskLimits, TaskReport, TaskRequest,
 };
 use tur_pax::registry::ToolRegistry;
 use tur_pax::sandbox::{Grant, GrantRules, SandboxPlan};
@@ -989,6 +989,8 @@ impl Harness {
         let provider = provider(config);
         let mut meter = SpendMeter::for_config(config);
         let mut observer = NoObserver;
+        let mut budget = NoBudget;
+        let mut assistant = NoAssistant;
         let mut failing;
         let trail: &mut dyn Trail = match self.trail_capacity {
             Some(left) => {
@@ -1014,6 +1016,8 @@ impl Harness {
             clock: &self.clock,
             control: &*self.control,
             observer: &mut observer,
+            budget: &mut budget,
+            assistant: &mut assistant,
         };
         let task = TaskRequest {
             task_id: &task_id,

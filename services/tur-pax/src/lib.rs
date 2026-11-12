@@ -17,6 +17,14 @@
 //! interface ([`textui`]). It reaches a model only through
 //! `tur-pax-providers`, and it runs nothing outside the sandbox.
 //!
+//! The third part is the session service, described in
+//! `docs/architecture/pax-service.md`: `org.tur.Agent1` on the session bus
+//! ([`dbus`], over a small D-Bus implementation of its own, [`bus`]), the
+//! service behind it ([`service`]), its settings and consent ([`settings`],
+//! [`consent`]), the key in the password store ([`keyring`]), the limit of
+//! one day ([`spending`]), and the schedule runner with its notifications
+//! and its timer ([`scheduler`], [`notify`], [`wake`]).
+//!
 //! The central item is [`decide`], a pure function from a proposed [`Action`],
 //! its [`Context`], the [`UserPolicy`] and the current time to a [`Decision`].
 //! Nothing the model says can make a decision more permissive.
@@ -57,25 +65,36 @@
 pub mod action;
 pub mod adapter;
 pub mod audit;
+pub mod bus;
 pub mod class;
 pub mod cli;
 pub mod codes;
+pub mod consent;
 pub mod context;
+pub mod daemon;
+pub mod dbus;
 pub mod decision;
 pub mod engine;
 pub mod exec;
 pub mod faults;
+pub mod keyring;
 pub mod manifest;
+pub mod notify;
 pub mod orchestrator;
 pub mod patterns;
 pub mod policy;
 pub mod redact;
 pub mod registry;
 pub mod sandbox;
+pub mod scheduler;
+pub mod service;
+pub mod settings;
+pub mod spending;
 pub mod store;
 pub mod strict;
 pub mod textui;
 pub mod trail;
+pub mod wake;
 
 pub use action::{
     Action, AgentOperation, CommandAction, OperationContent, PrivilegedOperation,

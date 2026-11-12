@@ -733,16 +733,29 @@ is resolved here.
 
 ## 16. Not built
 
-- The orchestrator that calls this: deciding the kind of an entry, including
-  recalled notes in a request, running a scheduled task, calling the policy engine
-  with a schedule's standing approvals, recording runs.
-- Installing, starting or removing systemd units, and the program a unit runs.
+Since [pax-3](../reports/pax-3.md), the session service in `services/tur-pax`
+([pax-service.md](pax-service.md)) is the caller this section waited for. It
+recalls notes into a request, records the one kind of entry a model may ask for
+(an entry taken from content, pending), runs scheduled tasks and shows
+reminders (the runner, `tur-pax/src/scheduler.rs`), records runs, offers
+`ListMemory`, `ForgetMemory`, `ConfirmMemory`, `ListSchedules`,
+`RemoveSchedule`, `CreateSchedule` and "while you were away" on
+`org.tur.Agent1`, sends reminders as desktop notifications, and writes audit
+events for runs and for the person's changes. It implements `UserConfirmation`
+for whoever calls those methods from outside a task: pax-service.md, section 3,
+says what that is worth. It does **not** use the per-schedule units of
+[section 12](#12-systemd-units-as-text): one transient timer for the next
+occurrence of any schedule wakes the runner (pax-service.md, section 6), and
+`/usr/libexec/tur-pax-run-schedule` is not needed. Two helpers were added to
+`time.rs` for it: reading a wall-clock date and time in a named zone with the
+daylight-saving rule of section 8, and the weekday of a date.
+
+Still not built:
+
+- Calling the policy engine with a schedule's standing approvals: none is
+  honoured, and the session service refuses to create a schedule that has one.
 - Delivery of system events.
-- The settings interface, and any implementation of `UserConfirmation` other than
-  the command-line one.
-- D-Bus (`ListMemory`, `ForgetMemory`, `ListSchedules`, `RemoveSchedule`).
-- Notifications for reminders.
-- The audit records for memory and schedule operations (tier 0 in the audit log).
+- The settings interface on the trusted path.
 - A lock for concurrent writers; ownership and permissions beyond file modes.
 - Migration of stored documents to a later schema version.
 - Any check of the two schemas by a general JSON Schema validator: the tests use a
