@@ -528,7 +528,8 @@ Decisions taken where the designs were silent (the owner may reverse any):
 
 ## 14. Known gaps
 
-1. No real provider, no real model.
+1. No real provider, no real model. The manual workflow `pax-live` exists
+   (pax-3 report) and has not been run.
 2. Not on the image; not run on Fedora, Plasma, KWallet or dbus-broker.
 3. Any program of the person can operate every method ([section 3](#3-who-is-served)).
 4. "Check the key", a running task's live cost, and the pages' missing actions

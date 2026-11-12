@@ -42,7 +42,9 @@ FILES
   services/tur-pax/data/models.json (an example, dated);
   services/tur-pax/tests/{service,scheduler,agent1_interface}.rs;
   schemas/pax-settings.schema.json, schemas/pax-models.schema.json;
-  tests/pax/service_e2e.py; docs/architecture/pax-service.md;
+  tests/pax/service_e2e.py; tests/pax/live.py, tests/pax/live_ping.py and
+  .github/workflows/pax-live.yml (the manual real-provider workflow, not
+  run); docs/architecture/pax-service.md;
   docs/reports/pax-3.md
 - Modified: services/tur-pax/src/{orchestrator,registry,exec,trail,faults,
   textui,cli,lib}.rs and tests/{common/mod,orchestrator,tools}.rs;
@@ -135,6 +137,43 @@ Earlier runs on the branch, before the history was squashed into one commit:
 
 Six pushes of code. One defect outside the tests was found by CI, the
 ordering one above; the rest were my tests, lints and formatting.
+
+## The real-provider workflow (not run)
+
+Added at the owner's request (ai-control-layer.md section 23, item 4):
+`.github/workflows/pax-live.yml` with `tests/pax/live_ping.py` and
+`tests/pax/live.py`. **It has not been run**: it starts by hand only, and
+this change did not start it.
+
+- **Trigger:** `workflow_dispatch` only; `permissions: contents: read`.
+  Start it from the Actions tab (workflow "pax-live", "Run workflow", choose
+  the model) or with `gh workflow run pax-live.yml -f model=claude-haiku-5-5`.
+- **Key:** the repository secret `CLAUDE_KEY`, mapped to the environment
+  variable `TUR_PAX_API_KEY` of the steps that need it; never on a command
+  line, never printed. Without it, a notice and a successful end with
+  nothing called.
+- **First step:** one minimal request (one short message, at most 8 output
+  tokens, the adapter's pinned API version `2026-10-21`). If the API rejects
+  the key, the step reports the HTTP status and the error type (for example
+  `HTTP 401, error type authentication_error`) and the job stops. The key's
+  prefix is not the usual one; nothing in TUR checks a prefix.
+- **Then:** the requests of scenarios 03, 06 and 07 through `tur-pax run`
+  with the real Anthropic adapter, the test service's tools and the command
+  tool, in the real sandbox. Checked whatever the model does: the task ends
+  normally or at a limit; no decision above class 1 is allowed; nothing
+  above class 1 is performed; the trail names the adapter; the key is in no
+  transcript, error output, trail or file. A last step searches every file
+  the job wrote, its own log included, for the key; the evidence is
+  uploaded only if that passes.
+- **Cap, enforced in `live.py`:** 5 requests and 16 000 tokens per run (each
+  task's `--max-steps` and `task_limit.max_tokens` are what is left; retries
+  off), 400 output tokens a response; only `claude-haiku-5-5` (default) and
+  `claude-sonnet-5-5` can be named, both read from Anthropic's models page on
+  2026-11-12. A response the meter cuts was already under way, so a run can
+  pass 16 000 tokens by one request.
+- **Cost per run, worst case** at the prices of 2026-11-12: about 24 000
+  input and 2 000 output tokens plus the first step's 23: under 0.005 USD
+  with `claude-haiku-5-5`, under 0.07 USD with `claude-sonnet-5-5`.
 
 ## What each part is, and what proves it
 
