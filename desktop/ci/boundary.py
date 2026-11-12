@@ -322,6 +322,15 @@ def self_test(rules_text: str) -> int:
         "desktop/apps/welcome/CMakeLists.txt": (hash_header + "find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui "
                                                 "Qml Quick)\ntarget_link_libraries(x PRIVATE Qt6::Quick turkit)\n",
                                                 None),
+        # libplasma stays refused; KWayland's client library, which is also
+        # exported as Plasma::, is allowed to the overlay alone (ADR-0020).
+        "desktop/apps/ui/CMakeLists.txt": (hash_header + "target_link_libraries(x PRIVATE Plasma::Plasma)\n",
+                                           "libplasma is not for TUR's programs"),
+        "desktop/apps/notes/CMakeLists.txt": (hash_header + "target_link_libraries(x PRIVATE Plasma::KWaylandClient)\n",
+                                              "allowed elsewhere"),
+        "desktop/apps/tur-pax-overlay/CMakeLists.txt": (hash_header + "find_package(KWayland 6.0 CONFIG REQUIRED)\n"
+                                                        "target_link_libraries(x PRIVATE Plasma::KWaylandClient)\n",
+                                                        None),
         "desktop/upstream-licensed/README.md": (f"<!-- {tag}: {PROJECT_ID} -->\nThe rule.\n", None),
         "desktop/upstream-licensed/plasma-layout/layout.js": (gpl_header + "var a\n",
                                                               None),

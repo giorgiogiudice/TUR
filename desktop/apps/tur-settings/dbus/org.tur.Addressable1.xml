@@ -42,6 +42,9 @@
                               top left corner of the program's window, in the
                               window's own (logical) pixels. For a page, of the
                               area the page is shown in.
+        control       (dddd)  the row's control (a button, a list, a switch), when
+                              it has one, in the same coordinates: what a person
+                              presses, and what P@x's pointer points at
         scale         d       device pixels to one logical pixel
         highlighted   b       whether the highlight was drawn
         focused       b       whether keyboard focus is on the row

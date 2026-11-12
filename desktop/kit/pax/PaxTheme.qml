@@ -22,4 +22,6 @@ QtObject {
     readonly property color overlayOutline: "#0B1220"
     readonly property color overlayHairline: "#FFFFFF"
     readonly property color overlayText: "#1A1204"
+    readonly property color overlayQuietText: "#EEF1F6"
+    readonly property color overlayPaused: "#A9B4C6"
 }
