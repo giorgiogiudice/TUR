@@ -1,0 +1,3 @@
+# Broken on purpose: the third line is not KEY=value.
+DEVNAME=/dev/sda1
+this line has no equals sign

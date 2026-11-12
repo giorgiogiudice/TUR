@@ -361,6 +361,12 @@ and commands the assistant runs, and the memory entries relevant to the task.
 surfaces, windows of excluded applications, keyring contents, and diagnostic
 bundles unless the user attaches one.
 
+**What the provider keeps.** Some providers store requests on their servers by
+default, for weeks. P@x always asks a provider not to store the conversation
+where the provider offers that choice. What a provider retains despite that is
+governed by its own terms, which the setup screen links to; TUR cannot control
+it and says so.
+
 **Controls**
 
 - **Consent at setup.** Before the first use, UOS shows what will be sent, to
@@ -416,6 +422,16 @@ Rules:
   published per provider.
 - Adapters are written against the provider's current documentation at the time,
   and pinned to an API version where the provider supports that.
+- A provider's own hosted tool connectors are never used. If the provider called
+  a tool server itself, the call would not pass through the policy engine. P@x
+  sends plain tool definitions and performs every call on the machine.
+- A response that ends in a refusal or an error is discarded whole, including any
+  actions it proposed before the refusal arrived.
+- The spend limit takes effect between responses, because providers report usage
+  at the end of one. A single response is bounded by its output limit.
+
+The adapters, the neutral conversation model and what was verified in each
+provider's documentation are described in [pax-providers.md](pax-providers.md).
 
 ## 11. Interfaces, logging and undo
 

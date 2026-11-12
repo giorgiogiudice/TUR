@@ -1,0 +1,1682 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/giorgiogiudice/UOS/schemas/device-inventory.schema.json",
+  "title": "UOS device inventory",
+  "description": "The read-only hardware inventory printed by `uos-device inventory --json` and returned by org.uos.Device1.GetInventory. Every field is always present; null means the value could not be read or does not exist. The other documents of the device manager are defined under $defs: problem_report, device_summary and device_document.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "redacted",
+    "platform",
+    "pci",
+    "usb",
+    "network",
+    "audio",
+    "storage_controllers",
+    "block",
+    "input",
+    "bluetooth",
+    "cameras",
+    "thunderbolt",
+    "firmware",
+    "kernel",
+    "source_notes"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "redacted": {
+      "description": "true if sensitive values have been removed.",
+      "type": "boolean"
+    },
+    "platform": {
+      "$ref": "#/$defs/platform"
+    },
+    "pci": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/pci_device"
+      }
+    },
+    "usb": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/usb_device"
+      }
+    },
+    "network": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/network_interface"
+      }
+    },
+    "audio": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/audio_card"
+      }
+    },
+    "storage_controllers": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/storage_controller"
+      }
+    },
+    "block": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/block_device"
+      }
+    },
+    "input": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/input_device"
+      }
+    },
+    "bluetooth": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/bluetooth_adapter"
+      }
+    },
+    "cameras": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/camera"
+      }
+    },
+    "thunderbolt": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/thunderbolt_device"
+      }
+    },
+    "firmware": {
+      "$ref": "#/$defs/firmware"
+    },
+    "kernel": {
+      "$ref": "#/$defs/kernel_evidence"
+    },
+    "source_notes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/source_note"
+      }
+    }
+  },
+  "$defs": {
+    "text": {
+      "description": "Text read from the system: no control characters, at most 256 characters; longer text is cut and ends in an ellipsis.",
+      "type": "string",
+      "maxLength": 256
+    },
+    "optional_text": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 256
+    },
+    "optional_name": {
+      "description": "A driver, module or kernel device name, or null.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 64,
+      "pattern": "^[A-Za-z0-9_.:+@-]+$"
+    },
+    "hex2": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[0-9a-f]{2}$"
+    },
+    "hex4": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[0-9a-f]{4}$"
+    },
+    "hex6": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[0-9a-f]{6}$"
+    },
+    "device_id": {
+      "description": "A stable device identifier. It never contains a serial number or address: where it is derived from one, that value is hashed with the machine identifier.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[A-Za-z0-9:._~-]+$"
+    },
+    "sysfs_path": {
+      "description": "The device's directory in sysfs (for a sound card known only to procfs, under /proc/asound).",
+      "type": "string",
+      "maxLength": 512
+    },
+    "modalias": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 1024
+    },
+    "id_basis": {
+      "description": "What the identifier is derived from. hardware_identifier: a serial number, permanent MAC address, WWN or UUID, hashed; follows the device to another port. topology: the device's position; lost if the device is moved. kernel_name: a kernel-assigned name only; not stable.",
+      "enum": [
+        "hardware_identifier",
+        "topology",
+        "kernel_name"
+      ]
+    },
+    "category": {
+      "description": "The kind of device.",
+      "enum": [
+        "pci",
+        "usb",
+        "network",
+        "audio",
+        "storage_controller",
+        "block",
+        "input",
+        "bluetooth",
+        "camera",
+        "thunderbolt"
+      ]
+    },
+    "sensitive": {
+      "description": "A value that identifies a person's hardware (serial number, MAC address, UUID). Always an object with sensitive: true, so that a consumer can recognise and redact it without knowing this schema. value is null if the hardware gave none, if it could not be read, or if it has been redacted.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sensitive",
+        "redacted",
+        "value"
+      ],
+      "properties": {
+        "sensitive": {
+          "const": true
+        },
+        "redacted": {
+          "description": "true if a value existed and has been removed.",
+          "type": "boolean"
+        },
+        "value": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 256
+        }
+      }
+    },
+    "module_match": {
+      "description": "A kernel module whose alias table matches a device.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "loaded"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_.:+@-]+$"
+        },
+        "loaded": {
+          "description": "Whether /sys/module/<name> exists.",
+          "type": "boolean"
+        }
+      }
+    },
+    "drm_connector": {
+      "description": "A display connector.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "status",
+        "enabled"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/text"
+        },
+        "status": {
+          "enum": [
+            "connected",
+            "disconnected",
+            "unknown"
+          ]
+        },
+        "enabled": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      }
+    },
+    "drm_card": {
+      "description": "A DRM card.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "connectors"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/text"
+        },
+        "connectors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/drm_connector"
+          }
+        }
+      }
+    },
+    "gpu": {
+      "description": "Display details of a display-class PCI device.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "boot_vga",
+        "drm_cards"
+      ],
+      "properties": {
+        "boot_vga": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "drm_cards": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/drm_card"
+          }
+        }
+      }
+    },
+    "pci_device": {
+      "description": "A PCI or PCI Express function.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "id_basis",
+        "sysfs_path",
+        "address",
+        "vendor_id",
+        "device_id",
+        "class",
+        "class_name",
+        "subsystem_vendor_id",
+        "subsystem_device_id",
+        "revision",
+        "vendor_name",
+        "device_name",
+        "driver",
+        "modalias",
+        "kernel_modules",
+        "gpu"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/device_id"
+        },
+        "id_basis": {
+          "$ref": "#/$defs/id_basis"
+        },
+        "sysfs_path": {
+          "$ref": "#/$defs/sysfs_path"
+        },
+        "address": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{4,8}:[0-9a-f]{2}:[0-9a-f]{2}\\.[0-9a-f]$"
+        },
+        "vendor_id": {
+          "$ref": "#/$defs/hex4"
+        },
+        "device_id": {
+          "$ref": "#/$defs/hex4"
+        },
+        "class": {
+          "$ref": "#/$defs/hex6"
+        },
+        "class_name": {
+          "$ref": "#/$defs/optional_text"
+        },
+        "subsystem_vendor_id": {
+          "$ref": "#/$defs/hex4"
+        },
+        "subsystem_device_id": {
+          "$ref": "#/$defs/hex4"
+        },
+        "revision": {
+          "$ref": "#/$defs/hex2"
+        },
+        "vendor_name": {
+          "$ref": "#/$defs/optional_text"
+        },
+        "device_name": {
+          "$ref": "#/$defs/optional_text"
+        },
+        "driver": {
+          "$ref": "#/$defs/optional_name"
+        },
+        "modalias": {
+          "$ref": "#/$defs/modalias"
+        },
+        "kernel_modules": {
+          "description": "Kernel modules whose aliases match the modalias. null if the kernel's alias table could not be read.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/module_match"
+          }
+        },
+        "gpu": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/gpu"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "usb_interface": {
+      "description": "One interface of a USB device.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "class",
+        "subclass",
+        "protocol",
+        "class_name",
+        "driver",
+        "modalias",
+        "kernel_modules"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/text"
+        },
+        "class": {
+          "$ref": "#/$defs/hex2"
+        },
+        "subclass": {
+          "$ref": "#/$defs/hex2"
+        },
+        "protocol": {
+          "$ref": "#/$defs/hex2"
+        },
+        "class_name": {
+          "$ref": "#/$defs/optional_text"
+        },
+        "driver": {
+          "$ref": "#/$defs/optional_name"
+        },
+        "modalias": {
+          "$ref": "#/$defs/modalias"
+        },
+        "kernel_modules": {
+          "description": "Kernel modules whose aliases match the modalias. null if the kernel's alias table could not be read.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/module_match"
+          }
+        }
+      }
+    },
+    "usb_device": {
+      "description": "A USB device. manufacturer, product and serial are supplied by the device itself.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "id_basis",
+        "sysfs_path",
+        "bus_port",
+        "vendor_id",
+        "product_id",
+        "class",
+        "class_name",
+        "manufacturer",
+        "product",
+        "serial",
+        "speed_mbps",
+        "usb_version",
+        "removable",
+        "is_root_hub",
+        "interfaces"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/device_id"
+        },
+        "id_basis": {
+          "$ref": "#/$defs/id_basis"
+        },
+        "sysfs_path": {
+          "$ref": "#/$defs/sysfs_path"
+        },
+        "bus_port": {
+          "$ref": "#/$defs/text"
+        },
+        "vendor_id": {
+          "$ref": "#/$defs/hex4"
+        },
+        "product_id": {
+          "$ref": "#/$defs/hex4"
+        },
+        "class": {
+          "$ref": "#/$defs/hex2"
+        },
+        "class_name": {
+          "$ref": "#/$defs/optional_text"
+        },
+        "manufacturer": {
+          "$ref": "#/$defs/optional_text"
+        },
+        "product": {
+          "$ref": "#/$defs/optional_text"
+        },
+        "serial": {
+          "$ref": "#/$defs/sensitive"
+        },
+        "speed_mbps": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9.]{1,8}$"
+        },
+        "usb_version": {
+          "$ref": "#/$defs/optional_text"
+        },
+        "removable": {
+          "enum": [
+            "removable",
+            "fixed",
+            "unknown"
+          ]
+        },
+        "is_root_hub": {
+          "type": "boolean"
+        },
+        "interfaces": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/usb_interface"
+          }
+        }
+      }
+    },
+    "network_interface": {
+      "description": "A network interface.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "id_basis",
+        "sysfs_path",
+        "name",
+        "kind",
+        "wireless",
+        "is_virtual",
+        "link_type",
+        "driver",
+        "operstate",
+        "mac_address",
+        "parent"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/device_id"
+        },
+        "id_basis": {
+          "$ref": "#/$defs/id_basis"
+        },
+        "sysfs_path": {
+          "$ref": "#/$defs/sysfs_path"
+        },
+        "name": {
+          "$ref": "#/$defs/text"
+        },
+        "kind": {
+          "enum": [
+            "ethernet",
+            "wireless",
+            "loopback",
+            "bridge",
+            "wwan",
+            "virtual",
+            "other"
+          ]
+        },
+        "wireless": {
+          "type": "boolean"
+        },
+        "is_virtual": {
+          "type": "boolean"
+        },
+        "link_type": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "driver": {
+          "$ref": "#/$defs/optional_name"
+        },
+        "operstate": {
+          "enum": [
+            "up",
+            "down",
+            "dormant",
+            "lower_layer_down",
+            "not_present",
+            "testing",
+            "unknown"
+          ]
+        },
+        "mac_address": {
+          "$ref": "#/$defs/sensitive"
+        },
+        "parent": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/device_id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "audio_card": {
+      "description": "A sound card.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "id_basis",
+        "sysfs_path",
+        "index",
+        "card_id",
+        "name",
+        "long_name",
+        "alsa_driver",
+        "driver",
+        "parent"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/device_id"
+        },
+        "id_basis": {
+          "$ref": "#/$defs/id_basis"
+        },
+        "sysfs_path": {
+          "$ref": "#/$defs/sysfs_path"
+        },
+        "index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "card_id": {
+          "$ref": "#/$defs/optional_text"
+        },
+        "name": {
+          "$ref": "#/$defs/optional_text"
+        },
+        "long_name": {
+          "$ref": "#/$defs/optional_text"
+        },
+        "alsa_driver": {
+          "$ref": "#/$defs/optional_text"
+        },
+        "driver": {
+          "$ref": "#/$defs/optional_name"
+        },
+        "parent": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/device_id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "storage_controller": {
+      "description": "A storage controller: a view of a PCI function of the mass-storage class or of a USB mass-storage interface.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "id_basis",
+        "sysfs_path",
+        "kind",
+        "driver",
+        "parent"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/device_id"
+        },
+        "id_basis": {
+          "$ref": "#/$defs/id_basis"
+        },
+        "sysfs_path": {
+          "$ref": "#/$defs/sysfs_path"
+        },
+        "kind": {
+          "enum": [
+            "nvme",
+            "sata",
+            "ata",
+            "scsi",
+            "sas",
+            "raid",
+            "ufs",
+            "sd_host",
+            "usb_mass_storage",
+            "other"
+          ]
+        },
+        "driver": {
+          "$ref": "#/$defs/optional_name"
+        },
+        "parent": {
+          "$ref": "#/$defs/device_id"
+        }
+      }
+    },
+    "block_device": {
+      "description": "A whole block device. Partitions and volumes belong to the storage service and are not listed.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "id_basis",
+        "sysfs_path",
+        "name",
+        "model",
+        "vendor",
+        "serial",
+        "wwid",
+        "transport",
+        "removable",
+        "rotational",
+        "size_bytes",
+        "driver",
+        "parent"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/device_id"
+        },
+        "id_basis": {
+          "$ref": "#/$defs/id_basis"
+        },
+        "sysfs_path": {
+          "$ref": "#/$defs/sysfs_path"
+        },
+        "name": {
+          "$ref": "#/$defs/text"
+        },
+        "model": {
+          "$ref": "#/$defs/optional_text"
+        },
+        "vendor": {
+          "$ref": "#/$defs/optional_text"
+        },
+        "serial": {
+          "$ref": "#/$defs/sensitive"
+        },
+        "wwid": {
+          "$ref": "#/$defs/sensitive"
+        },
+        "transport": {
+          "enum": [
+            "nvme",
+            "scsi",
+            "usb",
+            "mmc",
+            "virtio",
+            "other"
+          ]
+        },
+        "removable": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "rotational": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "size_bytes": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "driver": {
+          "$ref": "#/$defs/optional_name"
+        },
+        "parent": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/device_id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "input_device": {
+      "description": "An input device.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "id_basis",
+        "sysfs_path",
+        "name",
+        "bus",
+        "vendor_id",
+        "product_id",
+        "version",
+        "kinds",
+        "phys",
+        "uniq",
+        "parent"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/device_id"
+        },
+        "id_basis": {
+          "$ref": "#/$defs/id_basis"
+        },
+        "sysfs_path": {
+          "$ref": "#/$defs/sysfs_path"
+        },
+        "name": {
+          "$ref": "#/$defs/optional_text"
+        },
+        "bus": {
+          "enum": [
+            "pci",
+            "usb",
+            "bluetooth",
+            "virtual",
+            "i8042",
+            "i2c",
+            "host",
+            "spi",
+            "rmi",
+            "other",
+            "unknown"
+          ]
+        },
+        "vendor_id": {
+          "$ref": "#/$defs/hex4"
+        },
+        "product_id": {
+          "$ref": "#/$defs/hex4"
+        },
+        "version": {
+          "$ref": "#/$defs/hex4"
+        },
+        "kinds": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "keyboard",
+              "key",
+              "mouse",
+              "touchpad",
+              "touchscreen",
+              "tablet",
+              "joystick",
+              "switch",
+              "pointing_stick",
+              "accelerometer"
+            ]
+          }
+        },
+        "phys": {
+          "$ref": "#/$defs/sensitive"
+        },
+        "uniq": {
+          "$ref": "#/$defs/sensitive"
+        },
+        "parent": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/device_id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "rfkill": {
+      "description": "The state of a radio kill switch.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "soft_blocked",
+        "hard_blocked"
+      ],
+      "properties": {
+        "soft_blocked": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "hard_blocked": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      }
+    },
+    "bluetooth_adapter": {
+      "description": "A Bluetooth adapter.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "id_basis",
+        "sysfs_path",
+        "name",
+        "driver",
+        "address",
+        "rfkill",
+        "parent"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/device_id"
+        },
+        "id_basis": {
+          "$ref": "#/$defs/id_basis"
+        },
+        "sysfs_path": {
+          "$ref": "#/$defs/sysfs_path"
+        },
+        "name": {
+          "$ref": "#/$defs/text"
+        },
+        "driver": {
+          "$ref": "#/$defs/optional_name"
+        },
+        "address": {
+          "$ref": "#/$defs/sensitive"
+        },
+        "rfkill": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/rfkill"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "parent": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/device_id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "camera": {
+      "description": "A V4L2 video device node.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "id_basis",
+        "sysfs_path",
+        "node",
+        "name",
+        "index",
+        "capture",
+        "driver",
+        "parent"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/device_id"
+        },
+        "id_basis": {
+          "$ref": "#/$defs/id_basis"
+        },
+        "sysfs_path": {
+          "$ref": "#/$defs/sysfs_path"
+        },
+        "node": {
+          "$ref": "#/$defs/text"
+        },
+        "name": {
+          "$ref": "#/$defs/optional_text"
+        },
+        "index": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "capture": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "driver": {
+          "$ref": "#/$defs/optional_name"
+        },
+        "parent": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/device_id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "thunderbolt_device": {
+      "description": "A Thunderbolt or USB4 device, including the host's own router.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "id_basis",
+        "sysfs_path",
+        "name",
+        "vendor_name",
+        "device_name",
+        "vendor_id",
+        "device_id",
+        "unique_id",
+        "authorised",
+        "is_host",
+        "security_level"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/device_id"
+        },
+        "id_basis": {
+          "$ref": "#/$defs/id_basis"
+        },
+        "sysfs_path": {
+          "$ref": "#/$defs/sysfs_path"
+        },
+        "name": {
+          "$ref": "#/$defs/text"
+        },
+        "vendor_name": {
+          "$ref": "#/$defs/optional_text"
+        },
+        "device_name": {
+          "$ref": "#/$defs/optional_text"
+        },
+        "vendor_id": {
+          "$ref": "#/$defs/hex4"
+        },
+        "device_id": {
+          "$ref": "#/$defs/hex4"
+        },
+        "unique_id": {
+          "$ref": "#/$defs/sensitive"
+        },
+        "authorised": {
+          "enum": [
+            "not_authorised",
+            "authorised",
+            "authorised_secure",
+            "unknown"
+          ]
+        },
+        "is_host": {
+          "type": "boolean"
+        },
+        "security_level": {
+          "$ref": "#/$defs/optional_name"
+        }
+      }
+    },
+    "platform": {
+      "description": "The machine itself: DMI identity and firmware mode. The serial numbers and the UUID are readable only by the administrator.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sys_vendor",
+        "product_name",
+        "product_version",
+        "product_family",
+        "chassis_type",
+        "board_vendor",
+        "board_name",
+        "bios_vendor",
+        "bios_version",
+        "bios_date",
+        "product_serial",
+        "product_uuid",
+        "board_serial",
+        "chassis_serial",
+        "boot_mode",
+        "secure_boot"
+      ],
+      "properties": {
+        "sys_vendor": {
+          "$ref": "#/$defs/optional_text"
+        },
+        "product_name": {
+          "$ref": "#/$defs/optional_text"
+        },
+        "product_version": {
+          "$ref": "#/$defs/optional_text"
+        },
+        "product_family": {
+          "$ref": "#/$defs/optional_text"
+        },
+        "chassis_type": {
+          "$ref": "#/$defs/optional_text"
+        },
+        "board_vendor": {
+          "$ref": "#/$defs/optional_text"
+        },
+        "board_name": {
+          "$ref": "#/$defs/optional_text"
+        },
+        "bios_vendor": {
+          "$ref": "#/$defs/optional_text"
+        },
+        "bios_version": {
+          "$ref": "#/$defs/optional_text"
+        },
+        "bios_date": {
+          "$ref": "#/$defs/optional_text"
+        },
+        "product_serial": {
+          "$ref": "#/$defs/sensitive"
+        },
+        "product_uuid": {
+          "$ref": "#/$defs/sensitive"
+        },
+        "board_serial": {
+          "$ref": "#/$defs/sensitive"
+        },
+        "chassis_serial": {
+          "$ref": "#/$defs/sensitive"
+        },
+        "boot_mode": {
+          "enum": [
+            "uefi",
+            "bios",
+            "unknown"
+          ]
+        },
+        "secure_boot": {
+          "enum": [
+            "enabled",
+            "disabled",
+            "unknown",
+            "not_applicable"
+          ]
+        }
+      }
+    },
+    "firmware_release": {
+      "description": "A firmware release newer than the installed version.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "urgency",
+        "remote"
+      ],
+      "properties": {
+        "version": {
+          "$ref": "#/$defs/optional_text"
+        },
+        "urgency": {
+          "$ref": "#/$defs/optional_text"
+        },
+        "remote": {
+          "$ref": "#/$defs/optional_text"
+        }
+      }
+    },
+    "firmware_device": {
+      "description": "A device whose firmware fwupd knows about.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fwupd_device_id",
+        "name",
+        "vendor",
+        "plugin",
+        "version",
+        "serial",
+        "flags",
+        "updatable",
+        "update_state",
+        "pending_updates"
+      ],
+      "properties": {
+        "fwupd_device_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 64
+        },
+        "name": {
+          "$ref": "#/$defs/optional_text"
+        },
+        "vendor": {
+          "$ref": "#/$defs/optional_text"
+        },
+        "plugin": {
+          "$ref": "#/$defs/optional_text"
+        },
+        "version": {
+          "$ref": "#/$defs/optional_text"
+        },
+        "serial": {
+          "$ref": "#/$defs/sensitive"
+        },
+        "flags": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "maxItems": 64
+        },
+        "updatable": {
+          "type": "boolean"
+        },
+        "update_state": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 64
+        },
+        "pending_updates": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/firmware_release"
+          },
+          "maxItems": 64
+        }
+      }
+    },
+    "firmware": {
+      "description": "Firmware devices and updates known to fwupd.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fwupd",
+        "devices"
+      ],
+      "properties": {
+        "fwupd": {
+          "enum": [
+            "available",
+            "unavailable",
+            "invalid"
+          ]
+        },
+        "devices": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/firmware_device"
+          },
+          "maxItems": 512
+        }
+      }
+    },
+    "firmware_load_failure": {
+      "description": "A firmware file the kernel could not load.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "driver",
+        "device",
+        "firmware",
+        "error"
+      ],
+      "properties": {
+        "driver": {
+          "$ref": "#/$defs/optional_name"
+        },
+        "device": {
+          "$ref": "#/$defs/optional_name"
+        },
+        "firmware": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "error": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      }
+    },
+    "probe_failure": {
+      "description": "A driver that refused a device.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "driver",
+        "device",
+        "error"
+      ],
+      "properties": {
+        "driver": {
+          "$ref": "#/$defs/optional_name"
+        },
+        "device": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "error": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      }
+    },
+    "kernel_evidence": {
+      "description": "What the kernel log says about drivers and firmware. If available is false the lists are empty and prove nothing.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "available",
+        "firmware_failures",
+        "probe_failures"
+      ],
+      "properties": {
+        "available": {
+          "type": "boolean"
+        },
+        "firmware_failures": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/firmware_load_failure"
+          },
+          "maxItems": 64
+        },
+        "probe_failures": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/probe_failure"
+          },
+          "maxItems": 64
+        }
+      }
+    },
+    "source_note": {
+      "description": "A source that could not be used, and what the inventory lacks without it.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "status",
+        "effect"
+      ],
+      "properties": {
+        "source": {
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "unavailable",
+            "denied",
+            "invalid",
+            "too_large"
+          ]
+        },
+        "effect": {
+          "type": "string"
+        }
+      }
+    },
+    "device_summary": {
+      "description": "One line of a device listing: an element of what ListDevices returns.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "category",
+        "name",
+        "driver"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/device_id"
+        },
+        "category": {
+          "$ref": "#/$defs/category"
+        },
+        "name": {
+          "$ref": "#/$defs/text"
+        },
+        "driver": {
+          "$ref": "#/$defs/optional_name"
+        }
+      }
+    },
+    "device_document": {
+      "description": "One device of any category: what GetDevice returns.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "category",
+            "device"
+          ],
+          "properties": {
+            "category": {
+              "const": "pci"
+            },
+            "device": {
+              "$ref": "#/$defs/pci_device"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "category",
+            "device"
+          ],
+          "properties": {
+            "category": {
+              "const": "usb"
+            },
+            "device": {
+              "$ref": "#/$defs/usb_device"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "category",
+            "device"
+          ],
+          "properties": {
+            "category": {
+              "const": "network"
+            },
+            "device": {
+              "$ref": "#/$defs/network_interface"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "category",
+            "device"
+          ],
+          "properties": {
+            "category": {
+              "const": "audio"
+            },
+            "device": {
+              "$ref": "#/$defs/audio_card"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "category",
+            "device"
+          ],
+          "properties": {
+            "category": {
+              "const": "storage_controller"
+            },
+            "device": {
+              "$ref": "#/$defs/storage_controller"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "category",
+            "device"
+          ],
+          "properties": {
+            "category": {
+              "const": "block"
+            },
+            "device": {
+              "$ref": "#/$defs/block_device"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "category",
+            "device"
+          ],
+          "properties": {
+            "category": {
+              "const": "input"
+            },
+            "device": {
+              "$ref": "#/$defs/input_device"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "category",
+            "device"
+          ],
+          "properties": {
+            "category": {
+              "const": "bluetooth"
+            },
+            "device": {
+              "$ref": "#/$defs/bluetooth_adapter"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "category",
+            "device"
+          ],
+          "properties": {
+            "category": {
+              "const": "camera"
+            },
+            "device": {
+              "$ref": "#/$defs/camera"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "category",
+            "device"
+          ],
+          "properties": {
+            "category": {
+              "const": "thunderbolt"
+            },
+            "device": {
+              "$ref": "#/$defs/thunderbolt_device"
+            }
+          }
+        }
+      ]
+    },
+    "finding": {
+      "description": "One problem found in the inventory, in the two layers of specification section 6.3.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "severity",
+        "title",
+        "device_id",
+        "category",
+        "user_message",
+        "next_step",
+        "technical_detail"
+      ],
+      "properties": {
+        "code": {
+          "description": "The stable error code.",
+          "type": "string",
+          "pattern": "^UOS-DEVICE-[A-Z0-9]+-[0-9]{3}$"
+        },
+        "severity": {
+          "enum": [
+            "info",
+            "warning",
+            "error"
+          ]
+        },
+        "title": {
+          "type": "string"
+        },
+        "device_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/device_id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "category": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/category"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "user_message": {
+          "description": "What happened, for the user.",
+          "type": "string"
+        },
+        "next_step": {
+          "description": "What the user can do next.",
+          "type": "string"
+        },
+        "technical_detail": {
+          "description": "Identifiers and evidence, for a developer.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "problem_report": {
+      "description": "What `uos-device problems --json` prints and ListProblems returns.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "findings"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/finding"
+          }
+        }
+      }
+    }
+  }
+}

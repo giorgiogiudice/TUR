@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "provider": "openai",
+  "base_url": "http://gateway.example.org",
+  "model": "example-model-name",
+  "max_output_tokens": 4096
+}

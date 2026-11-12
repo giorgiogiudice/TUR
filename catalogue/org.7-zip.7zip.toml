@@ -1,0 +1,38 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR application catalogue entry. Format: schemas/app-catalogue-entry.schema.json.
+# How entries are written and sourced: catalogue/README.md.
+# TUR has not tested this application. Every rating below is reported by the
+# named source, which was checked on the date given; no record means unknown.
+
+schema_version = 1
+id = "org.7-zip.7zip"
+name = "7-Zip"
+aliases = ["7z"]
+publisher = "Igor Pavlov"
+category = "utility"
+summary = "File archiver."
+homepage = "https://www.7-zip.org/"
+
+[[editions]]
+kind = "linux-native"
+obtain = "fedora-package"
+package = "7zip"
+licence = "open-source"
+packaging = "community"
+notes = "The console version; the graphical file manager exists for Windows only."
+
+[[editions.references]]
+title = "Fedora Packages: 7zip"
+url = "https://packages.fedoraproject.org/pkgs/7zip/7zip/"
+checked = "2026-11-12"
+
+[[editions]]
+kind = "windows"
+obtain = "publisher-page"
+download_page = "https://www.7-zip.org/download.html"
+licence = "open-source"
+
+[[editions.references]]
+title = "7-Zip download page: installers for Windows; console versions for Linux and macOS"
+url = "https://www.7-zip.org/download.html"
+checked = "2026-11-12"

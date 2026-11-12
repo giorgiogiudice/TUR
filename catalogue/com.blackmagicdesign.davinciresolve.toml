@@ -1,0 +1,50 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR application catalogue entry. Format: schemas/app-catalogue-entry.schema.json.
+# How entries are written and sourced: catalogue/README.md.
+# TUR has not tested this application. Every rating below is reported by the
+# named source, which was checked on the date given; no record means unknown.
+
+schema_version = 1
+id = "com.blackmagicdesign.davinciresolve"
+name = "DaVinci Resolve"
+aliases = ["Resolve"]
+publisher = "Blackmagic Design"
+category = "creative"
+summary = "Video editing, colour correction, visual effects and audio post-production."
+
+[[editions]]
+kind = "linux-native"
+obtain = "publisher-page"
+download_page = "https://www.blackmagicdesign.com/products/davinciresolve"
+licence = "proprietary"
+packaging = "publisher"
+requirements = ["heavy-gpu"]
+
+[[editions.references]]
+title = "Blackmagic Design product page: for Mac, Windows and Linux; GPU-accelerated effects"
+url = "https://www.blackmagicdesign.com/products/davinciresolve"
+checked = "2026-11-12"
+
+[[editions]]
+kind = "windows"
+obtain = "publisher-page"
+download_page = "https://www.blackmagicdesign.com/products/davinciresolve"
+licence = "proprietary"
+requirements = ["heavy-gpu"]
+
+[[editions.references]]
+title = "Blackmagic Design product page: for Mac, Windows and Linux; GPU-accelerated effects"
+url = "https://www.blackmagicdesign.com/products/davinciresolve"
+checked = "2026-11-12"
+
+[[editions]]
+kind = "macos"
+obtain = "publisher-page"
+download_page = "https://www.blackmagicdesign.com/products/davinciresolve"
+licence = "proprietary"
+requirements = ["heavy-gpu"]
+
+[[editions.references]]
+title = "Blackmagic Design product page: for Mac, Windows and Linux; GPU-accelerated effects"
+url = "https://www.blackmagicdesign.com/products/davinciresolve"
+checked = "2026-11-12"

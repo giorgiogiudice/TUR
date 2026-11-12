@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR application catalogue entry. Format: schemas/app-catalogue-entry.schema.json.
+# How entries are written and sourced: catalogue/README.md.
+# TUR has not tested this application. Every rating below is reported by the
+# named source, which was checked on the date given; no record means unknown.
+
+schema_version = 1
+id = "tur.class.android-banking"
+entry_kind = "class"
+name = "Banking and payment applications for Android"
+aliases = ["banking app", "bank app", "mobile banking", "payment app"]
+publisher = "Banks and payment providers"
+category = "finance"
+summary = "A class entry: Android applications of banks and payment providers that enforce Google's device check."
+
+[[editions]]
+kind = "android"
+requirements = ["play-integrity"]
+notes = "A class, not one application: it stands for Android applications that refuse to run without a Play Integrity device verdict. TUR's Android runtime design (docs/architecture/android-runtime.md, section 11) lists banking, payment, wallet and many government identity applications in this class. One application may differ; an entry of its own then takes precedence."
+
+[[editions.references]]
+title = "Android Developers, Play Integrity API overview: the device verdict needs a genuine and certified Android device and detects emulated environments"
+url = "https://developer.android.com/google/play/integrity/overview"
+checked = "2026-11-12"

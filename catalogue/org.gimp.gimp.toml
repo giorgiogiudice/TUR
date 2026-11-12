@@ -1,0 +1,37 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR application catalogue entry. Format: schemas/app-catalogue-entry.schema.json.
+# How entries are written and sourced: catalogue/README.md.
+# TUR has not tested this application. Every rating below is reported by the
+# named source, which was checked on the date given; no record means unknown.
+
+schema_version = 1
+id = "org.gimp.gimp"
+name = "GIMP"
+aliases = ["GNU Image Manipulation Program"]
+publisher = "The GIMP team"
+category = "creative"
+summary = "Image editor."
+homepage = "https://www.gimp.org/"
+
+[[editions]]
+kind = "flatpak"
+flatpak_id = "org.gimp.GIMP"
+licence = "open-source"
+packaging = "publisher"
+
+[[editions.references]]
+title = "Flathub listing; verified by Flathub as published by the application's own project (gimp.org); licence GPL-3.0+ and LGPL-3.0+"
+url = "https://flathub.org/apps/org.gimp.GIMP"
+checked = "2026-11-12"
+
+[[editions]]
+kind = "linux-native"
+obtain = "fedora-package"
+package = "gimp"
+licence = "open-source"
+packaging = "community"
+
+[[editions.references]]
+title = "Fedora Packages: gimp"
+url = "https://packages.fedoraproject.org/pkgs/gimp/gimp/"
+checked = "2026-11-12"

@@ -1,0 +1,31 @@
+{
+  "by_id": {
+    "usb-JMicron_Tech_0123456789ABCDEF-0:0": "/dev/sdc",
+    "usb-JMicron_Tech_0123456789ABCDEF-0:0-part1": "/dev/sdc1",
+    "wwn-0x5000c500a1b2c3d4": "/dev/sde",
+    "dm-uuid-mpath-35000c500a1b2c3d4": "/dev/dm-3",
+    "dm-name-mpatha": "/dev/dm-3",
+    "nvme-WD_Blue_SN550_1TB_LVMLUKS0001": "/dev/nvme1n1",
+    "nvme-eui.e8238fa6bf530001001b448b4a1b2c3d": "/dev/nvme1n1",
+    "nvme-WD_Blue_SN550_1TB_LVMLUKS0001-part1": "/dev/nvme1n1p1",
+    "nvme-WD_Blue_SN550_1TB_LVMLUKS0001-part2": "/dev/nvme1n1p2",
+    "nvme-WD_Blue_SN550_1TB_LVMLUKS0001-part3": "/dev/nvme1n1p3",
+    "dm-name-luks-4f6d2c1a-9b8e-4d7c-a6f5-3e2d1c0b9a8f": "/dev/dm-0",
+    "dm-name-fedora-root": "/dev/dm-1",
+    "dm-name-fedora-home": "/dev/dm-2"
+  },
+  "by_path": {
+    "pci-0000:00:14.0-usb-0:3:1.0-scsi-0:0:0:0": "/dev/sda",
+    "pci-0000:00:14.0-usb-0:3:1.0-scsi-0:0:0:0-part1": "/dev/sda1",
+    "pci-0000:00:14.0-usb-0:1:1.0-scsi-0:0:0:0": "/dev/sdb",
+    "pci-0000:00:14.0-usb-0:1:1.0-scsi-0:0:0:0-part1": "/dev/sdb1",
+    "pci-0000:00:14.0-usb-0:2:1.0-scsi-0:0:0:0": "/dev/sdc",
+    "pci-0000:00:14.0-usb-0:2:1.0-scsi-0:0:0:0-part1": "/dev/sdc1",
+    "pci-0000:3b:00.0-fc-0x500a09818d3f1c2a-lun-0": "/dev/sdd",
+    "pci-0000:3b:00.1-fc-0x500a09828d3f1c2a-lun-0": "/dev/sde",
+    "pci-0000:02:00.0-nvme-1": "/dev/nvme1n1",
+    "pci-0000:02:00.0-nvme-1-part1": "/dev/nvme1n1p1",
+    "pci-0000:02:00.0-nvme-1-part2": "/dev/nvme1n1p2",
+    "pci-0000:02:00.0-nvme-1-part3": "/dev/nvme1n1p3"
+  }
+}

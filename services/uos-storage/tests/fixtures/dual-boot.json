@@ -1,0 +1,88 @@
+{
+  "blockdevices": [
+    {
+      "name": "nvme0n1", "kname": "nvme0n1", "path": "/dev/nvme0n1", "maj:min": "259:0",
+      "type": "disk", "size": 1000204886016, "rm": false, "hotplug": false, "ro": false,
+      "tran": "nvme", "model": "Example NVMe 1TB", "serial": "EXAMPLE0001",
+      "wwn": "eui.0011223344556677", "pttype": "gpt",
+      "ptuuid": "5f0c1d2e-0000-4000-8000-00000000a001",
+      "fstype": null, "fsver": null, "label": null, "uuid": null, "partuuid": null,
+      "mountpoint": null, "mountpoints": [null], "fsroots": [null],
+      "children": [
+        {
+          "name": "nvme0n1p1", "kname": "nvme0n1p1", "path": "/dev/nvme0n1p1", "type": "part",
+          "size": 629145600, "start": 2048, "rm": false, "hotplug": false, "ro": false,
+          "tran": null, "fstype": "vfat", "fsver": "FAT32", "label": null, "uuid": "7A1B-22C3",
+          "partuuid": "5f0c1d2e-0001-4000-8000-00000000a001",
+          "parttype": "c12a7328-f81f-11d2-ba4b-00a0c93ec93b", "parttypename": "EFI System",
+          "mountpoint": "/boot/efi", "mountpoints": ["/boot/efi"], "fsroots": ["/"]
+        },
+        {
+          "name": "nvme0n1p2", "kname": "nvme0n1p2", "path": "/dev/nvme0n1p2", "type": "part",
+          "size": 16777216, "start": 1230848, "rm": false, "hotplug": false, "ro": false,
+          "tran": null, "fstype": null, "fsver": null, "label": null, "uuid": null,
+          "partuuid": "5f0c1d2e-0002-4000-8000-00000000a001",
+          "parttype": "e3c9e316-0b5c-4db8-817d-f92df00215ae",
+          "parttypename": "Microsoft reserved",
+          "mountpoint": null, "mountpoints": [null], "fsroots": [null]
+        },
+        {
+          "name": "nvme0n1p3", "kname": "nvme0n1p3", "path": "/dev/nvme0n1p3", "type": "part",
+          "size": 500000000000, "start": 1263616, "rm": false, "hotplug": false, "ro": false,
+          "tran": null, "fstype": "ntfs", "fsver": null, "label": "Windows",
+          "uuid": "01D9A7C2E4F6B801", "partuuid": "5f0c1d2e-0003-4000-8000-00000000a001",
+          "parttype": "ebd0a0a2-b9e5-4433-87c0-68b6b72699c7",
+          "parttypename": "Microsoft basic data",
+          "mountpoint": null, "mountpoints": [null], "fsroots": [null]
+        },
+        {
+          "name": "nvme0n1p4", "kname": "nvme0n1p4", "path": "/dev/nvme0n1p4", "type": "part",
+          "size": 1073741824, "start": 977826116, "rm": false, "hotplug": false, "ro": false,
+          "tran": null, "fstype": "ntfs", "fsver": null, "label": "WinRE_DRV",
+          "uuid": "01D9A7C2E4F6B802", "partuuid": "5f0c1d2e-0004-4000-8000-00000000a001",
+          "parttype": "de94bba4-06d1-4d40-a16a-bfd50179d6ac",
+          "parttypename": "Windows recovery environment",
+          "mountpoint": null, "mountpoints": [null], "fsroots": [null]
+        },
+        {
+          "name": "nvme0n1p5", "kname": "nvme0n1p5", "path": "/dev/nvme0n1p5", "type": "part",
+          "size": 1073741824, "start": 979923268, "rm": false, "hotplug": false, "ro": false,
+          "tran": null, "fstype": "ext4", "fsver": "1.0", "label": null,
+          "uuid": "0b6f2a57-3c1d-4e8f-9a10-000000000b05",
+          "partuuid": "5f0c1d2e-0005-4000-8000-00000000a001",
+          "parttype": "bc13c2ff-59e6-4262-a352-b275fd6f7172",
+          "parttypename": "Linux extended boot",
+          "mountpoint": "/boot", "mountpoints": ["/boot"], "fsroots": ["/"]
+        },
+        {
+          "name": "nvme0n1p6", "kname": "nvme0n1p6", "path": "/dev/nvme0n1p6", "type": "part",
+          "size": 497000000000, "start": 982020420, "rm": false, "hotplug": false, "ro": false,
+          "tran": null, "fstype": "crypto_LUKS", "fsver": "2", "label": null,
+          "uuid": "c0ffee00-1111-4222-8333-000000000c06",
+          "partuuid": "5f0c1d2e-0006-4000-8000-00000000a001",
+          "parttype": "0fc63daf-8483-4772-8e79-3d69d8477de4", "parttypename": "Linux filesystem",
+          "mountpoint": null, "mountpoints": [null], "fsroots": [null],
+          "children": [
+            {
+              "name": "luks-c0ffee00-1111-4222-8333-000000000c06", "kname": "dm-0",
+              "path": "/dev/mapper/luks-c0ffee00-1111-4222-8333-000000000c06", "type": "crypt",
+              "size": 496983222784, "rm": false, "hotplug": false, "ro": false, "tran": null,
+              "fstype": "btrfs", "fsver": null, "label": "uos",
+              "uuid": "b7a1c3d5-2222-4333-8444-000000000d07", "partuuid": null,
+              "mountpoint": "/var",
+              "mountpoints": ["/var", "/sysroot", "/etc", "/var/home"],
+              "fsroots": ["/var", "/root", "/root/ostree/deploy/default/deploy/0000.0/etc", "/home"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "zram0", "kname": "zram0", "path": "/dev/zram0", "type": "disk",
+      "size": 8589934592, "rm": false, "hotplug": false, "ro": false, "tran": null,
+      "fstype": "swap", "fsver": "1", "label": "zram0",
+      "uuid": "5ad0e1f2-3333-4444-8555-000000000e08",
+      "mountpoint": "[SWAP]", "mountpoints": ["[SWAP]"], "fsroots": [null]
+    }
+  ]
+}

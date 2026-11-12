@@ -1,0 +1,83 @@
+P: /devices/pci0000:00/0000:00:02.0
+E: SUBSYSTEM=pci
+E: DRIVER=i915
+E: ID_PCI_CLASS_FROM_DATABASE=Display controller
+E: ID_VENDOR_FROM_DATABASE=Intel Corporation
+E: ID_MODEL_FROM_DATABASE=TigerLake-LP GT2 [Iris Xe Graphics]
+
+P: /devices/pci0000:00/0000:00:1f.6
+E: SUBSYSTEM=pci
+E: DRIVER=e1000e
+E: ID_PCI_CLASS_FROM_DATABASE=Network controller
+E: ID_VENDOR_FROM_DATABASE=Intel Corporation
+E: ID_MODEL_FROM_DATABASE=Ethernet Connection (13) I219-V
+
+P: /devices/pci0000:00/0000:00:14.3
+E: SUBSYSTEM=pci
+E: DRIVER=iwlwifi
+E: ID_PCI_CLASS_FROM_DATABASE=Network controller
+E: ID_VENDOR_FROM_DATABASE=Intel Corporation
+E: ID_MODEL_FROM_DATABASE=Wi-Fi 6 AX201
+
+P: /devices/pci0000:00/0000:00:1d.0/0000:03:00.0
+E: SUBSYSTEM=pci
+E: DRIVER=rtw_8822ce
+E: ID_PCI_CLASS_FROM_DATABASE=Network controller
+E: ID_VENDOR_FROM_DATABASE=Realtek Semiconductor Co., Ltd.
+E: ID_MODEL_FROM_DATABASE=RTL8822CE 802.11ac PCIe Wireless Network Adapter
+
+P: /devices/pci0000:00/0000:00:01.0/0000:04:00.0
+E: SUBSYSTEM=pci
+E: ID_PCI_CLASS_FROM_DATABASE=Display controller
+E: ID_VENDOR_FROM_DATABASE=NVIDIA Corporation
+E: ID_MODEL_FROM_DATABASE=TU117M [GeForce MX550]
+
+P: /devices/LNXSYSTM:00/LNXPWRBN:00/input/input0
+E: SUBSYSTEM=input
+E: ID_INPUT=1
+E: ID_INPUT_KEY=1
+
+P: /devices/platform/i8042/serio0/input/input3
+E: SUBSYSTEM=input
+E: ID_INPUT=1
+E: ID_INPUT_KEY=1
+E: ID_INPUT_KEYBOARD=1
+
+P: /devices/pci0000:00/0000:00:14.0/usb1/1-1/1-1:1.0/0003:046D:C52B.0001/input/input5
+E: SUBSYSTEM=input
+E: ID_INPUT=1
+E: ID_INPUT_KEY=1
+E: ID_INPUT_KEYBOARD=1
+E: ID_BUS=usb
+
+P: /devices/pci0000:00/0000:00:14.0/usb1/1-1/1-1:1.1/0003:046D:C52B.0002/input/input6
+E: SUBSYSTEM=input
+E: ID_INPUT=1
+E: ID_INPUT_MOUSE=1
+E: ID_BUS=usb
+
+P: /devices/virtual/misc/uhid/0005:046D:B023.0004/input/input12
+E: SUBSYSTEM=input
+E: ID_INPUT=1
+E: ID_INPUT_MOUSE=1
+E: ID_BUS=bluetooth
+
+P: /devices/pci0000:00/0000:00:17.0/ata1/host0/target0:0:0/0:0:0:0/block/sda
+E: SUBSYSTEM=block
+E: DEVTYPE=disk
+E: ID_SERIAL_SHORT=S3Z9NB0K123456
+E: ID_WWN=0x5002538e40a1b2c3
+
+P: /devices/pci0000:00/0000:00:14.0/usb2/2-1/2-1:1.0/host1/target1:0:0/1:0:0:0/block/sdb
+E: SUBSYSTEM=block
+E: DEVTYPE=disk
+E: ID_SERIAL_SHORT=4C530001230915112345
+
+P: /devices/pci0000:00/0000:00:14.0/usb1/1-5/1-5:1.0/video4linux/video0
+E: SUBSYSTEM=video4linux
+E: ID_V4L_CAPABILITIES=:capture:
+
+P: /devices/pci0000:00/0000:00:14.0/usb1/1-5/1-5:1.0/video4linux/video1
+E: SUBSYSTEM=video4linux
+E: ID_V4L_CAPABILITIES=:
+

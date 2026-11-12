@@ -1,0 +1,46 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR application catalogue entry. Format: schemas/app-catalogue-entry.schema.json.
+# How entries are written and sourced: catalogue/README.md.
+# TUR has not tested this application. Every rating below is reported by the
+# named source, which was checked on the date given; no record means unknown.
+
+schema_version = 1
+id = "com.larian.baldursgate3"
+name = "Baldur's Gate 3"
+aliases = ["BG3"]
+publisher = "Larian Studios"
+category = "game"
+summary = "Role-playing game set in the Dungeons and Dragons universe."
+
+[[editions]]
+kind = "windows"
+obtain = "steam"
+store_id = "1086940"
+licence = "proprietary"
+notes = "Valve's Steam Deck rating (Verified) is not entered: it was not confirmed that the Deck runs this Windows edition rather than a build of its own."
+
+[[editions.records]]
+route = "proton"
+rating = "usable"
+reported_by = "external"
+source_name = "ProtonDB"
+source_url = "https://www.protondb.com/app/1086940"
+source_rating = "gold"
+date = "2026-11-12"
+notes = "ProtonDB summary tier, from 1,532 user reports; trending tier platinum."
+
+[[editions.references]]
+title = "Steam store listing; platforms listed by the store's public API: Windows and macOS"
+url = "https://store.steampowered.com/app/1086940/"
+checked = "2026-11-12"
+
+[[editions]]
+kind = "macos"
+obtain = "steam"
+store_id = "1086940"
+licence = "proprietary"
+
+[[editions.references]]
+title = "Steam store listing; platforms listed by the store's public API: Windows and macOS"
+url = "https://store.steampowered.com/app/1086940/"
+checked = "2026-11-12"

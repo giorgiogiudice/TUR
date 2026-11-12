@@ -1,0 +1,48 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR application catalogue entry. Format: schemas/app-catalogue-entry.schema.json.
+# How entries are written and sourced: catalogue/README.md.
+# TUR has not tested this application. Every rating below is reported by the
+# named source, which was checked on the date given; no record means unknown.
+
+schema_version = 1
+id = "com.bandainamco.eldenring"
+name = "Elden Ring"
+publisher = "FromSoftware, Bandai Namco Entertainment"
+category = "game"
+summary = "Action role-playing game by FromSoftware."
+
+[[editions]]
+kind = "windows"
+obtain = "steam"
+store_id = "1245620"
+licence = "proprietary"
+
+[[editions.records]]
+route = "proton"
+rating = "usable"
+reported_by = "external"
+source_name = "ProtonDB"
+source_url = "https://www.protondb.com/app/1245620"
+source_rating = "gold"
+date = "2026-11-12"
+notes = "ProtonDB summary tier, from 2,107 user reports; trending tier platinum."
+
+[[editions.records]]
+route = "proton"
+rating = "good"
+reported_by = "external"
+source_name = "Valve Steam Deck compatibility"
+source_url = "https://store.steampowered.com/app/1245620/"
+source_rating = "Verified"
+date = "2026-11-12"
+notes = "Valve's review for the Steam Deck, which runs this Windows edition through Proton. It says nothing about other hardware."
+
+[[editions.references]]
+title = "Steam store listing; platforms listed by the store's public API: Windows only"
+url = "https://store.steampowered.com/app/1245620/"
+checked = "2026-11-12"
+
+[[editions.references]]
+title = "AreWeAntiCheatYet lists it as Supported, with Easy Anti-Cheat"
+url = "https://areweanticheatyet.com/"
+checked = "2026-11-12"
