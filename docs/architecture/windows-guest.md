@@ -4,7 +4,7 @@
 **Applies to:** specification revision 1.0
 **Related decisions:**
 [ADR-0007](../adr/0007-app-centric-routing.md) (Accepted),
-[ADR-0015](../adr/0015-seamless-windows-guest.md) (Proposed)
+[ADR-0015](../adr/0015-seamless-windows-guest.md) (Accepted)
 
 This document designs the tier that ADR-0007 calls the seamless Windows guest: a
 real Windows installation in a virtual machine whose applications appear as

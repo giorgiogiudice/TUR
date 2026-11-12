@@ -65,10 +65,19 @@ From the [licence review](docs/dependencies/licence-review.md) and
   scripts and effects, Calamares modules and kernel modules. If such code is
   unavoidable it goes in a clearly marked directory under the upstream licence,
   with an ADR.
-- Project-licensed code must not link GPL-only libraries. Known cases: the Qt
-  modules that are GPL-only (Virtual Keyboard, Wayland Compositor, Quick 3D,
-  Quick Timeline, Graphs) and `libbluetooth`. Check a library's licence before
-  depending on it.
+- Project-licensed code must not link or import GPL-only libraries. Check a
+  library's licence, file by file where the project mixes licences, before
+  depending on it. Known cases:
+  - Qt modules that are GPL-only: Virtual Keyboard, Wayland Compositor, Quick 3D,
+    Quick 3D Physics, Quick Timeline, Graphs, Charts, Data Visualization, Lottie,
+    HTTP Server, GRPC, MQTT, CoAP, Network Authorization, Canvas Painter.
+  - KDE frameworks described as LGPL that contain GPL files: parts of Kirigami
+    Addons, KSvg's QML plugin, KIconThemes' icon dialog, parts of KIO, libplasma
+    and Purpose. A `QApplication` also loads the GPL Breeze widget style; use
+    Qt Quick with the project's own controls.
+  - `libbluetooth`.
+  The desktop design ([desktop-experience.md](docs/architecture/desktop-experience.md),
+  section 4) lists what each desktop program may use.
 - **Never ship or redistribute:** Microsoft or Apple binaries; Google Mobile
   Services or an Android image that contains them; ARM translation libraries
   (`libhoudini`, `libndk_translation`); Proton builds (they bundle a proprietary
@@ -140,7 +149,7 @@ image is built or a VM is started
 | `crates/` | Shared Rust libraries | Rust |
 | `services/` | UOS services and their command-line tools | Rust |
 | `installer/` | Installer | Rust, QML |
-| `desktop/` | Desktop UI | QML |
+| `desktop/` | Desktop programs, themes and defaults | QML, C++, data |
 | `schemas/` | Versioned JSON schemas for every interchange format | JSON Schema |
 | `tests/` | Image, boot, installer and integration tests | shell, Python |
 | `scripts/` | Build and CI scripts; `scripts/dev/` for developer helpers | shell, Python |

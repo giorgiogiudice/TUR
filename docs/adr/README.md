@@ -31,6 +31,7 @@ the [specification](../architecture/specification.md).
 | [0013](0013-bootloader.md) | Bootloader: GRUB 2 through shim, installed by bootupd | Accepted |
 | [0014](0014-boot-health-and-rollback.md) | Boot health and rollback: a TUR attempt counter in GRUB's environment block | Accepted |
 | [0015](0015-seamless-windows-guest.md) | Seamless Windows guest on QEMU/KVM, libvirt and FreeRDP RemoteApp | Accepted |
+| [0016](0016-desktop-and-user-interface.md) | Desktop and user interface: standalone programs, Plasma by configuration, one identity | Accepted |
 
 ## Open questions from the specification
 
@@ -38,5 +39,4 @@ the [specification](../architecture/specification.md).
 lists the questions still to be settled. ADR-0001 answers questions 2, 3 and 4.
 ADR-0013 answers question 1 (bootloader), with evidence from the boot test.
 
-Numbers reserved for records under review: 0012 (assistant policy model), 0016
-(desktop and user interface).
+Number 0012 is reserved for the assistant policy model, under review.

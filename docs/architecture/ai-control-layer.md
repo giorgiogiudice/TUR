@@ -1,6 +1,6 @@
 # AI control layer
 
-**Specification addendum A — Revision 5 (12 November 2026)**
+**Specification addendum A — Revision 6 (12 November 2026)**
 **Applies to:** specification revision 1.0
 **Related decision:** [ADR-0004](../adr/0004-ai-provider-model.md)
 
@@ -759,4 +759,24 @@ gaps. Where an earlier section says otherwise, this section governs.
 | 7 | How long deferred actions and run records are kept was unspecified. | The last 50 run records per schedule; a deferred action until the user decides or 30 days pass, whichever is first. |
 
 Memory is off until the user turns it on.
+
+## 19. Corrections from the desktop design
+
+Research for the desktop design
+([desktop-experience.md](desktop-experience.md)) checked what the compositor
+shipped in the image, KWin 6.8, actually provides. Several statements in sections
+4, 6, 8 and 16.6 assumed more than exists. Where they differ, this section
+governs.
+
+| # | Earlier statement | What is true on KWin 6.8 | Consequence |
+|---|---|---|---|
+| 1 | Section 4: an ordinary application cannot read other windows or inject input; the compositor is the single point of control. | **False.** Any unsandboxed process in the user's session can capture the screen and inject input without a prompt. | The compositor does not contain P@x. Containment comes from the command sandbox: **every command P@x runs is denied access to the compositor and the session bus**, and P@x's screen control lives in one small audited component. This is now a requirement of milestone A5, tested. The same fact means other software in the session has these powers too; that is a property of the desktop today, stated plainly in the privacy text. |
+| 2 | Section 6: protected surfaces ignore emulated input and are excluded from capture. | KWin has no surface that ignores emulated input, not even the lock screen, and no per-consumer capture exclusion. | **Class 3 confirmation, opening a repair session and loosening policy take place in a separate trusted session outside the user's desktop**, which P@x's processes cannot reach, with a personal phrase and picture so that it cannot be imitated. To be proven by a prototype against the trusted-path tests before the assistant is allowed above class 1. |
+| 3 | Section 8: a compositor-drawn indicator. | Not available to a separate program. | The indicator is an overlay drawn by a small TUR program, with a lease rule: P@x's screen component holds access only while the indicator is running and shown. A compositor-drawn one is proposed upstream. |
+| 4 | Section 16.6: P@x has its own pointer when acting. | KWin has one seat: one pointer and one focus. | P@x's pointer is fully available for pointing and highlighting (guide mode). When P@x acts through the screen it takes turns with the user on the one real pointer, and the user's input always wins and pauses P@x. A second seat is proposed upstream. |
+| 5 | Section 6: a stop key nothing can suppress. | A global shortcut works but can be rebound by software in the session. | Interim: the global shortcut. An unsuppressible stop needs either upstream work or a small system service that watches physical keyboards for the stop combination; the second is an owner decision. |
+| 6 | Section 16.6: every setting addressable from outside. | True for TUR's own settings program. KDE System Settings cannot highlight a given row from outside. | Exact pointing in TUR's programs; in System Settings, a curated and tested mapping onto the accessibility tree until upstream support exists. |
+
+Work on KWin itself to close items 2 to 5 would be contributed upstream under
+KWin's licence; it is not TUR code.
 

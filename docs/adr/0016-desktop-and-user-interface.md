@@ -1,6 +1,6 @@
 # ADR-0016: Desktop and user interface — standalone programs, Plasma by configuration, one identity
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-12
 - **Specification sections:** §9 (all), §6.1, §6.3, §27.1, §28.4, §28.5, §30;
   AI control layer §6, §8, §16.6; [ADR-0003](0003-licence.md),
@@ -172,3 +172,13 @@ Adopt option 3.
 - **At each Plasma rebase:** layer-shell availability, the input and capture
   interfaces and who may use them, capture exclusion, window rules, the
   global-theme package format, the login manager's configuration keys.
+
+## Acceptance (12 November 2026)
+
+Accepted for the engineering decisions: standalone programs, Plasma shaped by
+configuration, one visual identity, and the rule on where upstream-licensed
+pieces may live. The questions the design puts to the owner (where a class 2
+action is approved, a keyboard-watching stop service, how TUR states its origin,
+which browser ships, a flat redrawing of the logo) remain open and are not
+decided by this record.
+
