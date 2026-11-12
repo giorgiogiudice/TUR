@@ -647,9 +647,10 @@ fn a_cancellation_is_honoured_between_two_actions() {
         ],
     )]);
     let mut harness = Harness::new();
-    // Go on before the request and before the first action; then cancel.
+    // Go on before the request, when the response has arrived and before
+    // the first action; then cancel.
     harness.control = Box::new(ScriptedControl::new(
-        vec![Signal::Proceed, Signal::Proceed],
+        vec![Signal::Proceed, Signal::Proceed, Signal::Proceed],
         Signal::Cancel,
     ));
     let report = harness.run(&server, "Read the value and set it.");

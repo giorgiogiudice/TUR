@@ -387,9 +387,13 @@ Limits of this, stated plainly:
 - The key is an `ApiKey`. `Debug` and `Display` print `[redacted]`. The type
   implements neither `Clone` nor `Serialize`, and its memory is overwritten when
   it is dropped.
-- A key arrives through the `KeySource` trait. The keyring implementation is
-  separate work. `EnvKeySource` reads an environment variable and is for
-  development only.
+- A key arrives through the `KeySource` trait. `EnvKeySource` reads an
+  environment variable and is for development only. The session service in
+  `tur-pax` takes the key from the Secret Service (`tur-pax/src/keyring.rs`,
+  [pax-service.md](pax-service.md), section 5), holding it as this crate
+  does: `is_usable_key` checks the form of a text without keeping it, and
+  `Zeroizing` is re-exported so that the bytes read from the store are
+  overwritten too.
 - The key is sent in a header, never in a URL or a body. The header value is
   marked sensitive for the HTTP client.
 - A base URL must be `https`, except for a loopback host, so that a key is not
@@ -449,8 +453,9 @@ the end; OpenAI and Google report both at the end. So the meter stops a task
 between responses, not in the middle of one. A single response is bounded by
 `max_output_tokens`, which is why that field is required. The cost is an
 estimate for display; the provider's invoice is the authority. The per-day
-limit of the design is the orchestrator's to keep: this layer has no state
-across tasks.
+limit of the design is kept by the session service in `tur-pax`
+([pax-service.md](pax-service.md), section 9): this layer has no state
+across tasks. Prices are configuration there too, from a model list.
 
 **Command line.**
 

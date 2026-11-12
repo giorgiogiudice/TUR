@@ -47,9 +47,29 @@ tur-pax run "<request>"
       └─ anything else ─▶ refusal, with its reason ─┴─▶ tool result, back to the model
 ```
 
-It is a library and a command-line program. It is not yet a session service:
-there is no `org.tur.Agent1`, no indicator and no stop key
-([section 10](#10-not-built)).
+It is a library and a command-line program, and since
+[pax-3](../reports/pax-3.md) the session service `org.tur.Agent1` runs it
+([pax-service.md](pax-service.md)). There is still no indicator and no stop
+key ([section 10](#10-not-built)).
+
+What pax-3 added to the loop, none of which can widen what it may do:
+
+- **A limit of one day** (`Budget`): looked at before every request with the
+  step and spend limits; reached, nothing is sent and the task stops with
+  `TUR-AI-SPEND-001`. After every response the loop reports the task's usage
+  so far. `tur-pax run` and `chat` use none (`NoBudget`).
+- **P@x's own operations** (`Assistant`): the tools `propose_reminder`,
+  `propose_scheduled_task` and `keep_note`, which the registry turns into the
+  engine's class 1 operations, performed by the caller and filtered like any
+  output. Offered only by the session service.
+- **Two more observer calls**: a decision before it is performed
+  (`Observer::decided`, so a desktop can show a step as it starts), and an
+  action an unattended task may not take alone (`Observer::held`, with a
+  `held_for_return` event in the trail).
+- **A response that arrives after the task was cancelled** is discarded
+  whole, like a refusal; the task ends cancelled.
+- **A cancelled task's program is killed** at once by the session service's
+  executor (`StoppableExecutor`), the same way as at its time limit.
 
 | Module | What it holds |
 |---|---|
@@ -620,13 +640,14 @@ The injection scenarios, as the task names them:
 10. **The policy file is read by P@x itself.** `--policy` names a file; the
     component that owns it does not exist. A file that cannot be used leaves
     observation only.
-11. **The key comes from an environment variable.** For development. The keyring
-    source is not built.
+11. **The key comes from an environment variable** for `tur-pax run` and
+    `chat`, which are for development. The session service takes it from the
+    Secret Service (pax-service.md, section 5).
 12. **Cancellation from a terminal** is the terminal's interrupt, which ends the
-    process; the sandbox dies with it. The `Control` trait is honoured between
-    steps but nothing operates it yet.
-13. **The per-day spend limit** of the design is not kept: there is no state
-    across tasks.
+    process; the sandbox dies with it. Through the session service,
+    `CancelTask` operates the `Control` and kills the running program.
+13. **The per-day spend limit** is kept by the session service
+    (pax-service.md, section 9), not by `tur-pax run`.
 14. **The model's "consequential" hint** has no channel. It could only make a
     decision stricter.
 15. **The adapter schema is not checked against the loader** beyond the shipped
@@ -638,9 +659,10 @@ The injection scenarios, as the task names them:
 Deliberately outside this change: the confirmation interface and the trusted
 session; the user-level and the privileged sandbox (with no trusted path they
 could never run); repair sessions and the privileged helper; screen and
-accessibility control; the MCP server and client of ADR-0008; the runner for
-scheduled tasks; voice; the D-Bus interface `org.tur.Agent1`; the activity
-indicator; the journal sink; keyring storage of the key; writing to memory.
+accessibility control; the MCP server and client of ADR-0008; voice; the
+activity indicator; the journal sink. The runner for scheduled tasks, the
+D-Bus interface `org.tur.Agent1`, keyring storage of the key and the one kind
+of memory write a model may ask for came with pax-3 ([pax-service.md](pax-service.md)).
 
 ## 11. Changes to the policy engine
 

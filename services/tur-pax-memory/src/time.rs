@@ -10,7 +10,8 @@ use std::cell::Cell;
 use std::fmt;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use chrono::{DateTime, SecondsFormat, Utc};
+use chrono::{DateTime, Datelike, NaiveDate, SecondsFormat, Timelike, Utc};
+use chrono_tz::Tz;
 use serde::{Deserialize, Serialize};
 
 /// A point in time, in whole seconds since the Unix epoch (UTC).
@@ -71,6 +72,72 @@ impl Timestamp {
             Some(utc) => utc.to_rfc3339_opts(SecondsFormat::Secs, true),
             None => format!("@{}", self.0),
         }
+    }
+}
+
+/// Whether `name` is a zone of the IANA time-zone database compiled into this
+/// crate, for example `Europe/Rome`.
+pub fn is_known_zone(name: &str) -> bool {
+    name.parse::<Tz>().is_ok()
+}
+
+// A calendar date written `YYYY-MM-DD`, and nothing else.
+fn parse_date(text: &str) -> Option<NaiveDate> {
+    let bytes = text.as_bytes();
+    let shaped = bytes.len() == 10
+        && bytes[4] == b'-'
+        && bytes[7] == b'-'
+        && bytes
+            .iter()
+            .enumerate()
+            .all(|(index, byte)| index == 4 || index == 7 || byte.is_ascii_digit());
+    if !shaped {
+        return None;
+    }
+    let year = text[0..4].parse::<i32>().ok()?;
+    let month = text[5..7].parse::<u32>().ok()?;
+    let day = text[8..10].parse::<u32>().ok()?;
+    NaiveDate::from_ymd_opt(year, month, day)
+}
+
+/// The weekday a calendar date (`YYYY-MM-DD`) falls on, and its day of the
+/// month. `None` if the text is not a date.
+pub fn weekday_and_day_of(date: &str) -> Option<(crate::trigger::Weekday, u8)> {
+    let date = parse_date(date)?;
+    let weekday = crate::trigger::Weekday::ALL
+        .get(usize::try_from(date.weekday().num_days_from_monday()).ok()?)
+        .copied()?;
+    Some((weekday, u8::try_from(date.day()).ok()?))
+}
+
+impl Timestamp {
+    /// What a wall clock in the named zone shows at this time: the date as
+    /// `YYYY-MM-DD` and the time of day as `HH:MM`. `None` if the zone is not
+    /// known or the time is out of range.
+    pub fn wall_clock_in(self, zone: &str) -> Option<(String, String)> {
+        let zone: Tz = zone.parse().ok()?;
+        let local = self.to_utc()?.with_timezone(&zone).naive_local();
+        Some((
+            format!(
+                "{:04}-{:02}-{:02}",
+                local.year(),
+                local.month(),
+                local.day()
+            ),
+            format!("{:02}:{:02}", local.hour(), local.minute()),
+        ))
+    }
+
+    /// The one instant a wall-clock date (`YYYY-MM-DD`) and time of day in a
+    /// named zone stand for, by the daylight-saving rule of
+    /// [`crate::trigger`]: the instant if the time exists once on that date,
+    /// the first of the two if it occurs twice, and the end of the gap if the
+    /// clocks go forward over it. `None` if the date, the time or the zone is
+    /// not valid.
+    pub fn from_wall_clock(date: &str, hour: u8, minute: u8, zone: &str) -> Option<Timestamp> {
+        let zone: Tz = zone.parse().ok()?;
+        let local = parse_date(date)?.and_hms_opt(u32::from(hour), u32::from(minute), 0)?;
+        crate::trigger::resolve_local(zone, local)
     }
 }
 
@@ -154,6 +221,76 @@ mod tests {
         assert_eq!(Timestamp(u64::MAX).checked_add(1), None);
         assert_eq!(Timestamp::from_signed(-1), None);
         assert_eq!(Timestamp::from_signed(7), Some(Timestamp(7)));
+    }
+
+    #[test]
+    fn a_wall_clock_time_in_a_zone_is_one_instant_and_back() {
+        // 2026-11-12T10:00:00Z is 11:00 in Rome and 05:00 in New York.
+        let instant = Timestamp(1_794_477_600);
+        assert_eq!(
+            instant.wall_clock_in("Europe/Rome"),
+            Some(("2026-11-12".to_owned(), "11:00".to_owned()))
+        );
+        assert_eq!(
+            instant.wall_clock_in("America/New_York"),
+            Some(("2026-11-12".to_owned(), "05:00".to_owned()))
+        );
+        assert_eq!(
+            Timestamp::from_wall_clock("2026-11-12", 11, 0, "Europe/Rome"),
+            Some(instant)
+        );
+        assert_eq!(instant.wall_clock_in("Mars/Olympus"), None);
+        assert_eq!(Timestamp(u64::MAX).wall_clock_in("UTC"), None);
+        // 12 November 2026 is a Thursday.
+        assert_eq!(
+            weekday_and_day_of("2026-11-12"),
+            Some((crate::trigger::Weekday::Thursday, 12))
+        );
+        assert_eq!(
+            weekday_and_day_of("2024-02-29"),
+            Some((crate::trigger::Weekday::Thursday, 29))
+        );
+        assert_eq!(weekday_and_day_of("2026-02-29"), None);
+        assert!(is_known_zone("Europe/Rome"));
+        assert!(is_known_zone("UTC"));
+        assert!(!is_known_zone("Europe/Atlantis"));
+        assert!(!is_known_zone(""));
+
+        // Dates that are not dates, and times that are not times.
+        for date in [
+            "2026-02-30",
+            "2026-13-01",
+            "2026-1-01",
+            "26-11-12",
+            "2026/11/12",
+            "2026-11-12 ",
+            "",
+        ] {
+            assert_eq!(
+                Timestamp::from_wall_clock(date, 9, 0, "UTC"),
+                None,
+                "{date:?}"
+            );
+        }
+        assert_eq!(Timestamp::from_wall_clock("2026-11-12", 24, 0, "UTC"), None);
+        assert_eq!(Timestamp::from_wall_clock("2026-11-12", 9, 60, "UTC"), None);
+        assert_eq!(
+            Timestamp::from_wall_clock("2026-11-12", 9, 0, "Nowhere"),
+            None
+        );
+    }
+
+    #[test]
+    fn a_wall_clock_time_follows_the_daylight_saving_rule_of_the_triggers() {
+        // Rome, 29 March 2026: 02:00 jumps to 03:00. 02:30 does not exist and
+        // stands for the end of the gap, 03:00 local, which is 01:00 UTC.
+        let gap = Timestamp::from_wall_clock("2026-03-29", 2, 30, "Europe/Rome").expect("resolved");
+        assert_eq!(gap.to_rfc3339(), "2026-03-29T01:00:00Z");
+        // Rome, 25 October 2026: 03:00 falls back to 02:00. 02:30 occurs
+        // twice and stands for the first, 00:30 UTC.
+        let twice =
+            Timestamp::from_wall_clock("2026-10-25", 2, 30, "Europe/Rome").expect("resolved");
+        assert_eq!(twice.to_rfc3339(), "2026-10-25T00:30:00Z");
     }
 
     #[test]

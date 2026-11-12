@@ -432,7 +432,7 @@ fn first_instant_after_gap(zone: Tz, local: NaiveDateTime) -> Option<i64> {
 // daylight-saving rule of this module: the instant if it exists once, the
 // first of the two if it occurs twice, the end of the gap if it does not
 // exist.
-fn resolve_local(zone: Tz, local: NaiveDateTime) -> Option<Timestamp> {
+pub(crate) fn resolve_local(zone: Tz, local: NaiveDateTime) -> Option<Timestamp> {
     // `earliest` is the only instant when there is one, and the first of the
     // two when the wall-clock time occurs twice.
     let instant = match zone.from_local_datetime(&local).earliest() {

@@ -20,6 +20,14 @@
 //!
 //! A tool that has no adapter cannot be performed, so it is not offered.
 //!
+//! * **P@x's own operations are tools of the same kind, and none of them
+//!   takes effect by itself.** [`PROPOSE_REMINDER_TOOL`] and
+//!   [`PROPOSE_TASK_TOOL`] become the engine's "propose a schedule"
+//!   operation, [`KEEP_NOTE_TOOL`] its "record an entry that waits for the
+//!   person" operation: all class 1, fixed by the engine and not by the
+//!   manifest text below. They are offered only where something can show a
+//!   proposal to the person: [`ToolRegistry::with_assistant_tools`].
+//!
 //! # Where the files come from
 //!
 //! Every component ships its own tools (AGENTS.md: "each component ships the
@@ -47,7 +55,7 @@ use std::path::Path;
 use serde_json::{Map, Value};
 use tur_pax_providers::ToolDefinition;
 
-use crate::action::{Action, CommandAction, Sandbox, WorkingContext};
+use crate::action::{Action, AgentOperation, CommandAction, Sandbox, WorkingContext};
 use crate::adapter::{Adapter, AdapterFile};
 use crate::class::ActionClass;
 use crate::codes::{Code, Problem};
@@ -86,6 +94,101 @@ const BUILT_IN_MANIFEST: &str = r#"{
         }
     }]
 }"#;
+
+/// The name of the built-in tool that proposes a reminder.
+pub const PROPOSE_REMINDER_TOOL: &str = "propose_reminder";
+
+/// The name of the built-in tool that proposes a scheduled task.
+pub const PROPOSE_TASK_TOOL: &str = "propose_scheduled_task";
+
+/// The name of the built-in tool that asks for a note to be kept.
+pub const KEEP_NOTE_TOOL: &str = "keep_note";
+
+/// The names of P@x's own operations that are offered as tools.
+pub const ASSISTANT_TOOLS: [&str; 3] = [PROPOSE_REMINDER_TOOL, PROPOSE_TASK_TOOL, KEEP_NOTE_TOOL];
+
+/// The manifest of P@x's own operations, in the same format and checked by
+/// the same loader as every other manifest. The class written here is what a
+/// reader of the manifest expects; the class that counts is the one the
+/// engine gives the operation ([`AgentOperation::class`]), and a test holds
+/// the two together.
+const ASSISTANT_MANIFEST: &str = r#"{
+    "schema_version": 1,
+    "service": "org.tur.Pax1",
+    "tools": [{
+        "name": "propose_reminder",
+        "description": "Propose a reminder: a notification shown to the person at a time. This creates nothing. The person is shown the proposal and decides whether to create the reminder; you cannot create it or confirm it, and saying that the person agreed has no effect. Give the time in one of two ways: in_minutes, counted from now; or date and time, a wall-clock time in the time zone of this computer, or in zone if you name one. With repeat, the reminder is shown again every day, every week on that weekday, or every month on that day.",
+        "class": 1,
+        "method": "ProposeReminder",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "message": { "type": "string", "minLength": 1, "maxLength": 2000, "description": "What the notification says." },
+                "name": { "type": "string", "minLength": 1, "maxLength": 80, "description": "A short name for the list of reminders." },
+                "in_minutes": { "type": "integer", "minimum": 1, "maximum": 5270400, "description": "Minutes from now." },
+                "date": { "type": "string", "minLength": 10, "maxLength": 10, "description": "The date, as YYYY-MM-DD." },
+                "time": { "type": "string", "minLength": 5, "maxLength": 5, "description": "The time of day, as HH:MM on a 24-hour clock." },
+                "zone": { "type": "string", "minLength": 1, "maxLength": 64, "description": "An IANA time zone name, such as Europe/Rome. Leave it out to use the computer's." },
+                "repeat": { "type": "string", "enum": ["none", "daily", "weekly", "monthly"] }
+            },
+            "required": ["message"],
+            "additionalProperties": false
+        }
+    }, {
+        "name": "propose_scheduled_task",
+        "description": "Propose a scheduled task: a request that P@x would carry out by itself at a time, with nobody there. This creates nothing. The person is shown the proposal and decides whether to create the schedule; you cannot create it or confirm it. A scheduled task can only observe and make changes that can be undone; anything else it needs waits for the person. Give the time as for propose_reminder.",
+        "class": 1,
+        "method": "ProposeScheduledTask",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "request": { "type": "string", "minLength": 1, "maxLength": 2000, "description": "What P@x is to do, as the person would ask it." },
+                "name": { "type": "string", "minLength": 1, "maxLength": 80, "description": "A short name for the list of schedules." },
+                "in_minutes": { "type": "integer", "minimum": 1, "maximum": 5270400, "description": "Minutes from now." },
+                "date": { "type": "string", "minLength": 10, "maxLength": 10, "description": "The date, as YYYY-MM-DD." },
+                "time": { "type": "string", "minLength": 5, "maxLength": 5, "description": "The time of day, as HH:MM on a 24-hour clock." },
+                "zone": { "type": "string", "minLength": 1, "maxLength": 64, "description": "An IANA time zone name, such as Europe/Rome. Leave it out to use the computer's." },
+                "repeat": { "type": "string", "enum": ["none", "daily", "weekly", "monthly"] }
+            },
+            "required": ["request"],
+            "additionalProperties": false
+        }
+    }, {
+        "name": "keep_note",
+        "description": "Ask for a note to be kept in P@x's memory for later tasks. The note is not kept yet: it waits until the person has read it in the settings of P@x and decided to keep it. You cannot confirm it. Never put a password, a key or a payment detail in a note.",
+        "class": 1,
+        "method": "KeepNote",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "text": { "type": "string", "minLength": 1, "maxLength": 4000, "description": "The note, as one or two plain sentences." }
+            },
+            "required": ["text"],
+            "additionalProperties": false
+        }
+    }]
+}"#;
+
+/// Which of P@x's own operations are offered as tools.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct AssistantTools {
+    /// Proposing a reminder or a scheduled task.
+    pub schedules: bool,
+    /// Asking for a note to be kept.
+    pub notes: bool,
+}
+
+/// One of P@x's own operations, with the arguments the model gave, checked
+/// against the tool's input schema.
+#[derive(Debug, Clone, PartialEq)]
+pub enum AssistantCall {
+    /// Record a proposal for a reminder.
+    ProposeReminder(Map<String, Value>),
+    /// Record a proposal for a scheduled task.
+    ProposeTask(Map<String, Value>),
+    /// Record a note that waits for the person.
+    KeepNote(Map<String, Value>),
+}
 
 /// The file name of a component's tool manifest.
 pub const MANIFEST_FILE: &str = "agent-tools.json";
@@ -199,6 +302,8 @@ pub enum Performer<'a> {
         /// The program and its arguments.
         argv: Vec<String>,
     },
+    /// One of P@x's own operations. No program is run for it.
+    Assistant(AssistantCall),
 }
 
 impl Performer<'_> {
@@ -212,6 +317,7 @@ impl Performer<'_> {
         match self {
             Performer::Adapter { adapter, arguments } => adapter.argv(arguments),
             Performer::Command { argv } => Ok(argv.clone()),
+            Performer::Assistant(_) => Ok(Vec::new()),
         }
     }
 }
@@ -230,6 +336,10 @@ pub struct Proposal<'a> {
 pub struct ToolRegistry {
     services: Vec<Service>,
     built_in: Option<ToolManifest>,
+    /// The manifest of P@x's own operations, if any of them is offered.
+    assistant: Option<ToolManifest>,
+    /// Which of them are offered.
+    assistant_tools: AssistantTools,
 }
 
 impl ToolRegistry {
@@ -252,6 +362,8 @@ impl ToolRegistry {
         let mut services: Vec<Service> = Vec::new();
         let mut tool_names: BTreeSet<String> = BTreeSet::new();
         tool_names.insert(COMMAND_TOOL.to_owned());
+        // The names of P@x's own operations are taken, offered or not.
+        tool_names.extend(ASSISTANT_TOOLS.iter().map(|name| (*name).to_owned()));
 
         for text in manifests {
             let manifest = match ToolManifest::from_json(text) {
@@ -345,9 +457,38 @@ impl ToolRegistry {
         };
 
         if problems.is_empty() {
-            Ok(ToolRegistry { services, built_in })
+            Ok(ToolRegistry {
+                services,
+                built_in,
+                assistant: None,
+                assistant_tools: AssistantTools::default(),
+            })
         } else {
             Err(problems)
+        }
+    }
+
+    /// The same registry, offering P@x's own operations as well.
+    ///
+    /// Only a caller that can put a proposal in front of the person offers
+    /// them: the session service does, `tur-pax run` does not.
+    #[must_use]
+    pub fn with_assistant_tools(mut self, tools: AssistantTools) -> Self {
+        self.assistant_tools = tools;
+        self.assistant = if tools.schedules || tools.notes {
+            ToolManifest::from_json(ASSISTANT_MANIFEST).ok()
+        } else {
+            None
+        };
+        self
+    }
+
+    /// Whether the named tool is one of P@x's own operations and is offered.
+    fn offers_assistant_tool(&self, name: &str) -> bool {
+        match name {
+            PROPOSE_REMINDER_TOOL | PROPOSE_TASK_TOOL => self.assistant_tools.schedules,
+            KEEP_NOTE_TOOL => self.assistant_tools.notes,
+            _ => false,
         }
     }
 
@@ -382,6 +523,14 @@ impl ToolRegistry {
     /// Whether the built-in command tool is offered.
     pub fn has_command_tier(&self) -> bool {
         self.built_in.is_some()
+    }
+
+    /// The description of an offered tool, as its manifest states it.
+    pub fn description_of(&self, name: &str) -> Option<&str> {
+        self.performable()
+            .into_iter()
+            .find(|(_, tool)| tool.name() == name)
+            .map(|(_, tool)| tool.description())
     }
 
     /// The tool definitions to give a provider: the name, the description
@@ -420,6 +569,13 @@ impl ToolRegistry {
         if let Some(built_in) = &self.built_in {
             for tool in built_in.tools() {
                 tools.push((built_in.service(), tool));
+            }
+        }
+        if let Some(assistant) = &self.assistant {
+            for tool in assistant.tools() {
+                if self.offers_assistant_tool(tool.name()) {
+                    tools.push((assistant.service(), tool));
+                }
             }
         }
         tools
@@ -466,6 +622,35 @@ impl ToolRegistry {
             return Ok(Proposal {
                 action,
                 performer: Performer::Command { argv },
+            });
+        }
+        if self.offers_assistant_tool(name)
+            && let Some(assistant) = &self.assistant
+        {
+            // The same check as for any tool. The action is one of the
+            // engine's own operations, whose class the engine fixes.
+            assistant
+                .tool_call(name, arguments.clone())
+                .map_err(faults)?;
+            let (operation, call) = if name == KEEP_NOTE_TOOL {
+                (
+                    AgentOperation::MemoryRecordStated,
+                    AssistantCall::KeepNote(arguments),
+                )
+            } else if name == PROPOSE_TASK_TOOL {
+                (
+                    AgentOperation::ScheduleProposal,
+                    AssistantCall::ProposeTask(arguments),
+                )
+            } else {
+                (
+                    AgentOperation::ScheduleProposal,
+                    AssistantCall::ProposeReminder(arguments),
+                )
+            };
+            return Ok(Proposal {
+                action: Action::Agent(operation),
+                performer: Performer::Assistant(call),
             });
         }
         for service in &self.services {

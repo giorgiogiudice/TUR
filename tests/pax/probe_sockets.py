@@ -19,11 +19,23 @@ import sys
 
 
 def attempt(family, address):
+    """Whether a connection to the address is made.
+
+    A connection that was made counts as reached even if the bytes after it
+    cannot be sent: a canary listener accepts and closes at once, and on a
+    Unix socket a send after that close fails with a broken pipe. Counting
+    that as blocked made the control outside the sandbox fail by timing
+    alone. Inside the sandbox the connection itself must fail, so this only
+    makes the check there stricter.
+    """
     try:
         with socket.socket(family, socket.SOCK_STREAM) as probe:
             probe.settimeout(3)
             probe.connect(address)
-            probe.sendall(b"probe")
+            try:
+                probe.sendall(b"probe")
+            except (BrokenPipeError, ConnectionResetError):
+                pass
         return "connected"
     except OSError as error:
         return f"blocked: {type(error).__name__}: {error.strerror or error}"

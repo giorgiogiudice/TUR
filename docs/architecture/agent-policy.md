@@ -1001,11 +1001,14 @@ What this engine cannot guarantee by itself.
     exist, so standing approvals cannot be honoured at all, and the stand-in
     store of the tests is the only evidence of what the engine does with one;
     (b) the engine is told which kind of memory entry an operation concerns by
-    whoever builds the action. Nothing writes to memory through the engine
-    yet, so nothing shows that a caller tells it the truth; (c) the kinds of
-    the memory layer (`tur-pax-memory`: stated, observed, procedure, from
-    content) are mapped onto the engine's operations in this document only,
-    not in code; (d) the built-in names were checked against upstream sources
+    whoever builds the action. Since pax-3 one caller exists: the session
+    service's tool `keep_note` is the operation "record an entry on the
+    user's word" for an entry taken from content, which waits for the person;
+    the registry fixes the operation, not the model
+    ([pax-service.md](pax-service.md), section 4). No caller records an
+    observed, stated or procedure entry; (c) the other kinds of the memory
+    layer (`tur-pax-memory`: stated, observed, procedure) are mapped onto the
+    engine's operations in this document only, not in code; (d) the built-in names were checked against upstream sources
     and distribution packages, not against the image (section 2.5).
 
 ## 12. Not in A0

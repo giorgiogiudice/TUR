@@ -96,5 +96,9 @@ pub use provider::{
     Capabilities, EventStream, NativeComputerControl, Provider, capabilities_of, connect,
     endpoint_path,
 };
-pub use secret::{ApiKey, EnvKeySource, KeySource};
+pub use secret::{ApiKey, EnvKeySource, KeySource, is_usable_key};
 pub use spend::{MeteredStream, SpendMeter};
+/// A wrapper that overwrites its content when it is dropped. Re-exported so
+/// that the component that takes a key from the keyring can hold it the same
+/// way this crate does.
+pub use zeroize::Zeroizing;
