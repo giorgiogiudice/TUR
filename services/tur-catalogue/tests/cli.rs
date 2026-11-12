@@ -277,8 +277,19 @@ fn search_finds_applications_and_tolerates_typos() {
         "{}",
         outcome.stdout
     );
+
+    // An alias that matched is named.
+    let outcome = on_seed(&["search", "bg3"]);
+    assert_eq!(outcome.status, EXIT_OK, "{}", outcome.stderr);
     assert!(
-        outcome.stdout.contains("[matched \"Photoshop\"]"),
+        outcome
+            .stdout
+            .starts_with("com.larian.baldursgate3  Baldur's Gate 3 (game, Larian Studios)"),
+        "{}",
+        outcome.stdout
+    );
+    assert!(
+        outcome.stdout.contains("[matched \"BG3\"]"),
         "{}",
         outcome.stdout
     );
