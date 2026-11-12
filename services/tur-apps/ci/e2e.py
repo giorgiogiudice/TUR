@@ -230,6 +230,18 @@ def launch_and_find(world: World, checks: Checks, app_id: str, title: str, shot:
         checks.measure(f"{app_id}: seconds to its window", round(seconds, 1))
         time.sleep(2.0)
         checks.check(f"{app_id}: screenshot {shot}.png", screenshot(world, shot))
+        # A second look, later, at the window alone: is anything drawn in
+        # it? The mean brightness is a measurement, not a check: a window
+        # that is all black has been mapped and drawn nothing visible.
+        time.sleep(6.0)
+        later = world.evidence / f"{shot}-window-later.png"
+        world.run(["import", "-display", DISPLAY, "-window", window["id"], str(later)], timeout=60)
+        if later.is_file():
+            mean = world.run(["convert", str(later), "-colorspace", "Gray", "-format", "%[fx:mean]", "info:"],
+                             timeout=60).stdout.strip()
+            colours = world.run(["identify", "-format", "%k", str(later)], timeout=60).stdout.strip()
+            checks.measure(f"{app_id}: its window 8 s after it appeared, mean brightness (0 black, 1 white)", mean)
+            checks.measure(f"{app_id}: its window 8 s after it appeared, distinct colours", colours)
         world.run(["wmctrl", "-i", "-c", window["id"]], timeout=20)
     try:
         process.wait(timeout=30)
