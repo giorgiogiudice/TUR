@@ -25,7 +25,10 @@ added or removed are followed.
 It draws:
 
 - **The pill** of the activity indicator, at the top centre of every output,
-  in the designed states.
+  in the designed states, and, while P@x is switched on, at all times: idle
+  included, it shows P@x's stop combination and the key of the list of its
+  keys (section 5.1).
+- **The list of P@x's keys**, under the pill, when asked for.
 - **The frame** round the window P@x is reading or acting in, or at the edge
   of the screen.
 - **P@x's pointer**, a gold flame that travels; and a click shown as a ring.
@@ -55,11 +58,12 @@ platform. The program adds the two things only a Wayland session has:
 layer-shell surfaces (LayerShellQt) and the window locator (KWayland).
 
 ```text
-tur-pax-overlay [--hide] [--no-dbus] [--check]
+tur-pax-overlay [--hide] [--commands] [--no-dbus] [--check]
 ```
 
 `--hide` tells a running overlay to switch off and exits (0 also when none is
-running). `--check` loads the surfaces, reports any QML warning and exits.
+running). `--commands` shows the list of P@x's keys on the running overlay, or
+takes it away. `--check` loads the surfaces, reports any QML warning and exits.
 
 ## 3. org.tur.PaxOverlay1
 
@@ -86,9 +90,10 @@ Methods   Acquire(s purpose) -> s lease
           SetCaption(s lease, u id, s text, as controls)
           Clear(s lease, u id)                                              0: every highlight of the lease
           Hide()
+          ShowCommands(b shown)                                             the list of P@x's keys
 Signals   PointerArrived(s lease)  HighlightLost(u id, s reason)  LeaseEnded(s lease, s reason)
           StopRequested()  PauseRequested()  ResumeRequested()  GuideControl(u id, s control)
-Property  Shown (b)  Screens (as)
+Property  Shown (b)  Screens (as)  CommandsShown (b)
 ```
 
 **Coordinates.** Logical pixels, as KWin and Qt count them. A `screen` is an
@@ -116,8 +121,9 @@ lease, so that a lease's token is not told to anyone else on the bus. The
 other four are declared for the design's buttons and are never sent (section
 7).
 
-**Shown** is true while the state is not idle and a frame of the overlay's
-surface has reached the compositor on every output. **Screens** lists the
+**Shown** is true while P@x is on (some lease is held, whatever the state)
+and a frame of the overlay's surface has reached the compositor on every
+output. **Screens** lists the
 outputs where that is so. Both send `PropertiesChanged`.
 
 **Differences from the design's sketch** (14.1):
@@ -128,6 +134,8 @@ outputs where that is so. Both send `PropertiesChanged`.
 | — | `Hide()` without a lease | Switching P@x's presence off must always be possible and instant (section 6) |
 | — | `LeaseEnded` | A lease holder must learn that its lease ended (by `Hide`, for instance) so that, under the design's lease rule, capture and input stop |
 | — | `Screens` | What "every screen concerned" means, checkable |
+| — | `ShowCommands`, `CommandsShown` | The owner's answer 17.1.2: the list of P@x's keys one action away from the indicator |
+| Idle: no pill | Idle with a lease held: the pill, with the stop keys | The owner's answer 17.1.2 |
 | `HighlightLost` reasons "window moved, covered or closed" | `resized`, `minimized`, `covered`, `closed`, `expired` | A highlight follows its window when it moves (section 4) |
 | `SetCaption(..., as controls)` | `controls` accepted and not drawn | Section 7 |
 
@@ -197,19 +205,57 @@ colour is never the only difference:
 
 | State | Icon | Words | Look |
 |---|---|---|---|
-| idle | — | — | Nothing is drawn |
+| idle, P@x off (no lease) | — | — | Nothing is drawn |
+| idle, P@x on | flame | P@x is on | Dark, gold outline |
 | listening | microphone | Listening… | Dark, gold outline |
 | working | flame | P@x is working | Dark, gold outline |
 | observing | eye | P@x can see this window / this screen | Dark, gold outline |
-| acting | flame | P@x is controlling · Stop: Meta+Esc | Solid gold, dark text, dark outline, white hairline |
+| acting | flame | P@x is controlling | Solid gold, dark text, dark outline, white hairline |
 | waiting | hand | P@x is waiting for you | Dark, gold outline |
 | paused | pause sign | P@x is paused | Dark, grey dashed outline |
 
-The brief's "thinking" is the design's *working*; its "stopped" is the
+In every state the words go on: "· Stop: Meta+Esc · Keys: Meta+/" (section
+5.1); at 200 % text, or on a narrow screen, the pill grows a line rather than
+leave the screen. The brief's "thinking" is the design's *working*; its "stopped" is the
 design's *paused* (the stop control pauses, 9.3). Where several leases set a
 state, the one that tells the person most is shown: acting, waiting,
 observing, working, listening, paused, idle. The repair-session segment and
 private mode of the design's table are not drawn (section 10).
+
+### 5.1 P@x's keys, at all times
+
+The owner's answer of 12 November 2026 (desktop-experience.md 17.1, answer 2):
+while P@x is switched on, its stop combination is on screen at all times, not
+only while it acts, and the full list of its keyboard commands is one action
+away from the indicator; the list shown and the bindings come from one
+source, so that they cannot disagree.
+
+- **One source**: `desktop/kit/pax/commands.json` (stop `Meta+Esc`, ask
+  `Meta+Space`, talk `Hold Meta+Space`, the list `Meta+/`). `gen_commands.py`
+  generates `Tur.Kit.Pax`'s `PaxCommands` singleton from it, which the pill
+  and the list read; the `boundary` job runs `gen_commands.py --check`, which
+  fails if the generated file is stale or if a desktop file of P@x's programs
+  binds one of the commands to other keys (with `--self-test` proving that it
+  would catch that).
+- **"On"** is "a lease is held": `tur-pax` takes one when P@x is switched on.
+  With a lease held and nothing happening, the pill reads "P@x is on · Stop:
+  Meta+Esc · Keys: Meta+/".
+- **One action away**: the pill names the key of the list (`Meta+/`), and
+  `ShowCommands(true)` or `tur-pax-overlay --commands` puts the list under the
+  pill. The list cannot be clicked open from the pill, which takes no input.
+- **What is not true yet, stated plainly**: **nothing binds any of these keys
+  yet.** `commands.json` says `"bound": false` for each; the stop key belongs
+  to the stop control (a global shortcut or the input witness, design 9.8),
+  the others to `tur-pax-ui` (D-17). Whether `Meta+/` and `Meta+Space` are
+  free in Plasma 6.8's defaults is not verified (`"verified": false`). The
+  indicator shows what the bindings will be; the check makes sure a binding,
+  when one is written, says the same.
+- Tests: `tst_overlay.qml` reads `commands.json` as it is and checks that
+  the pill shows its stop keys and list key in every state, idle included,
+  and that the list shows every command with its keys and words; at 200 %
+  text the pill and the list stay on the screen with no word cut; contrast
+  of the idle pill and of the list is in `tst_overlay_contrast.qml`; under
+  KWin, the idle pill and the list are photographed.
 
 **The frame.** Observing: 2 px gold, solid. Acting: 3 px gold, solid.
 Waiting: 2 px gold, dashed. Paused: 2 px grey, dashed. Round the window when
@@ -219,9 +265,14 @@ it**, outside a window's frame and inside the screen's edge: gold alone is
 1.9:1 on white, below the 3:1 a line that carries meaning needs. The design
 names only the gold line.
 
-**P@x's pointer** (9.4). The flame of the design's drawing with its tip as
-the hot spot, gold (#E8B44C) with a dark outline (#0B1220, 1.5 px) and a white
-hairline outside that; 1.5 times the cursor size (`XCURSOR_SIZE`, 24 when
+**P@x's pointer** (9.4). P@x's flame, tilted 45 degrees so that its tip is
+the hot spot: gold (#E8B44C) with a dark outline (#0B1220, 1.5 px) and a white
+hairline outside that, and the logo's inner flame (dark) and core (gold)
+inside. The flame is `Tur.Kit.Pax`'s new `PaxFlame`, **a first draft** of the
+flat mark the owner allowed (17.1, answer 5), redrawn by hand from the flame
+in `branding/tur-logo.png` for the owner to look at; the older `PaxMark` is
+left as it was, so the kit's and the settings' pictures do not change until
+the owner has decided. The pointer is 1.5 times the cursor size (`XCURSOR_SIZE`, 24 when
 unset: 36 px). A tag "P@x" trails it at rest. Its first appearance starts
 below the pill of the screen it is going to and fades in as it travels.
 
@@ -317,8 +368,8 @@ presented as, a security boundary.
   them are declared and never sent. Where they should live is a decision for
   the owner (section 11): a small input-taking surface for the pill only, as
   the design has it, or the conversation panel's pill (`tur-pax-ui`, D-17).
-  The acting pill's words name the stop shortcut, Meta+Esc, as the design
-  writes them; **no program handles that shortcut yet**.
+  The pill's words name the stop shortcut and the key of the list in every
+  state (section 5.1); **no program handles those keys yet**.
 - **The dark line beside every gold line** (sections 5): an addition, for
   contrast on light content.
 - **A highlight follows its window** when the window moves; the design
@@ -415,6 +466,10 @@ facts are the AI control layer's section 19 seen from the other side.
 ## 11. For the owner, and upstream
 
 Decisions the owner may want to reverse:
+
+0. "On" means "a lease is held", and the list's key is `Meta+/` (both
+   section 5.1); the pill of every state carries the stop keys and the list's
+   key.
 
 1. `Hide` is never refused, even while a lease is held (section 6).
 2. No buttons on the pill (section 7).

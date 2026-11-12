@@ -270,7 +270,8 @@ private:
             ::close(fds[0]);
             return QImage();
         }
-        const QVariantMap results = reply.arguments().value(0).toMap();
+        // a{sv} arrives as a QDBusArgument from an asynchronous call.
+        const QVariantMap results = qdbus_cast<QVariantMap>(reply.arguments().value(0));
         const int width = int(results.value(QStringLiteral("width")).toUInt());
         const int height = int(results.value(QStringLiteral("height")).toUInt());
         const int stride = int(results.value(QStringLiteral("stride")).toUInt());
@@ -288,8 +289,10 @@ private:
                 break;
         }
         ::close(fds[0]);
-        if (got != data.size())
+        if (width <= 0 || height <= 0 || got != data.size()) {
+            qWarning() << "ScreenShot2 gave" << results << "and" << got << "bytes";
             return QImage();
+        }
         return QImage(reinterpret_cast<const uchar *>(data.constData()), width, height, stride, format)
             .convertToFormat(QImage::Format_RGB32);
     }
@@ -881,21 +884,21 @@ private Q_SLOTS:
         QCOMPARE(overlay(QStringLiteral("Hide")).type(), QDBusMessage::ReplyMessage);
         QCOMPARE(overlayProperty(QStringLiteral("Shown")).toBool(), false);
         QTest::qWait(200);
+        const qint64 waited = clock.elapsed();
         int after = 0;
         for (QScreen *screen : screens) {
             const QImage picture = capture(screen);
             keep(picture, QStringLiteral("after-hide-") + screen->name());
             after += goldCount(picture);
         }
-        report(QStringLiteral("Hide: gold pixels %1 before, %2 after, screenshots taken %3 ms after the call")
-                   .arg(before).arg(after).arg(clock.elapsed()));
-        QVERIFY(before > 1000);
-        QCOMPARE(after, 0);
-
+        report(QStringLiteral("Hide: gold pixels %1 before, %2 after, screenshots begun %3 ms after the call")
+                   .arg(before).arg(after).arg(waited));
         // The lease ended with Hide; a new one for what follows.
         const QDBusMessage lease = overlay(QStringLiteral("Acquire"), { QStringLiteral("compositor test, again") });
         QCOMPARE(lease.type(), QDBusMessage::ReplyMessage);
         m_lease = lease.arguments().value(0).toString();
+        QVERIFY(before > 1000);
+        QCOMPARE(after, 0);
     }
 
     // Its owner dies: it goes.
