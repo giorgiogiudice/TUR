@@ -337,7 +337,11 @@ fn list_prints_a_summary_of_every_device_and_no_sensitive_value() {
         .collect();
     assert!(wanted.len() >= 8);
     let listed = filtered.json();
-    let listed: Vec<&Value> = listed["devices"].as_array().expect("devices").iter().collect();
+    let listed: Vec<&Value> = listed["devices"]
+        .as_array()
+        .expect("devices")
+        .iter()
+        .collect();
     assert_eq!(listed, wanted);
 
     // A category is spelled as the inventory spells it, and nothing else is

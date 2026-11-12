@@ -677,10 +677,9 @@ mod tests {
                       "arguments":{arguments}}}]}}"#
             ))
         };
-        let file = with(
-            r#"[{"literal":"list"},{"option":"--tag","each":"tags"},{"literal":"--json"}]"#,
-        )
-        .expect("a valid adapter file");
+        let file =
+            with(r#"[{"literal":"list"},{"option":"--tag","each":"tags"},{"literal":"--json"}]"#)
+                .expect("a valid adapter file");
         let adapter = &file.adapters()[0];
         assert_eq!(
             adapter.arguments()[1],
@@ -744,7 +743,11 @@ mod tests {
             r#"[{"option":"--tag","each":"missing"}]"#,
         ] {
             let file = with(arguments).expect("a valid adapter file");
-            assert_eq!(file.adapters()[0].check_against(tool).len(), 1, "{arguments}");
+            assert_eq!(
+                file.adapters()[0].check_against(tool).len(),
+                1,
+                "{arguments}"
+            );
         }
         // And it is one form of its own: with an option, and nothing else.
         for arguments in [

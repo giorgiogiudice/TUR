@@ -325,7 +325,10 @@ fn list_text(devices: &[DeviceSummary]) -> String {
             device.id,
             category,
             printable(&device.name),
-            device.driver.as_deref().map_or_else(|| "no driver".to_owned(), printable),
+            device
+                .driver
+                .as_deref()
+                .map_or_else(|| "no driver".to_owned(), printable),
         ));
     }
     text

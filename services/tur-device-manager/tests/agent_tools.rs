@@ -275,7 +275,10 @@ fn the_tools_run_against_a_recorded_machine() {
     let (status, stdout, stderr) = run(&recorded(line));
     assert_eq!(status, Some(3), "{stderr}");
     assert!(stdout.is_empty(), "{stdout}");
-    assert!(stderr.starts_with("error: TUR-DEVICE-INPUT-002"), "{stderr}");
+    assert!(
+        stderr.starts_with("error: TUR-DEVICE-INPUT-002"),
+        "{stderr}"
+    );
 }
 
 #[test]

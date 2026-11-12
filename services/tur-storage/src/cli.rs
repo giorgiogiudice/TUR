@@ -159,12 +159,7 @@ pub struct DecideArgs {
     #[arg(long, value_name = "ID")]
     pub volume: String,
     /// Access to ask for
-    #[arg(
-        long,
-        value_enum,
-        value_name = "ACCESS",
-        default_value = "read-write"
-    )]
+    #[arg(long, value_enum, value_name = "ACCESS", default_value = "read-write")]
     pub access: AccessArg,
 }
 
@@ -361,8 +356,7 @@ fn probe_for(input: &InputArgs, runner: &dyn CommandRunner) -> Result<Box<dyn Pr
         }
         None => {
             // `--live`: the command line requires one of the two.
-            let mut probe =
-                LiveProbe::capture(runner).map_err(|error| invalid(&source, &error))?;
+            let mut probe = LiveProbe::capture(runner).map_err(|error| invalid(&source, &error))?;
             if let Some((name, text)) = properties()? {
                 probe = probe
                     .with_properties(&text)
@@ -836,7 +830,10 @@ mod tests {
         // The help names the one spelling.
         let (status, help, _) = run_with(&["decide", "--help"]);
         assert_eq!(status, 0);
-        assert!(help.contains("read-only") && help.contains("read-write"), "{help}");
+        assert!(
+            help.contains("read-only") && help.contains("read-write"),
+            "{help}"
+        );
         assert!(help.contains("--live"), "{help}");
         // Anything else is refused.
         for access in ["write", "readonly", "read_only", "RO", ""] {

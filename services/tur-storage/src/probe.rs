@@ -495,7 +495,10 @@ mod tests {
         fn run(&self, program: &str, arguments: &[&str]) -> Result<CommandOutput, String> {
             self.asked.borrow_mut().push((
                 program.to_owned(),
-                arguments.iter().map(|argument| (*argument).to_owned()).collect(),
+                arguments
+                    .iter()
+                    .map(|argument| (*argument).to_owned())
+                    .collect(),
             ));
             self.answer.clone()
         }
@@ -546,7 +549,10 @@ mod tests {
             .with_properties("DEVNAME=/dev/sda1\nTUR_NTFS_STATE=clean\n")
             .expect("valid properties");
         assert_eq!(
-            probe.properties("/dev/sda1").get(PROP_NTFS_STATE).map(String::as_str),
+            probe
+                .properties("/dev/sda1")
+                .get(PROP_NTFS_STATE)
+                .map(String::as_str),
             Some("clean")
         );
         assert!(
@@ -565,7 +571,10 @@ mod tests {
         };
         // The program is not there.
         let message = command(&FakeRunner::failing("No such file or directory"));
-        assert!(message.contains("/usr/bin/lsblk could not be run"), "{message}");
+        assert!(
+            message.contains("/usr/bin/lsblk could not be run"),
+            "{message}"
+        );
         // It failed, and what it said is repeated on one line without
         // control characters.
         let message = command(&FakeRunner::ending(
