@@ -26,8 +26,8 @@ echo "${SYFT_SHA256}  ${work}/syft.tar.gz" | sha256sum -c -
 tar -xzf "${work}/syft.tar.gz" -C "${work}" syft
 
 # Copy the package database and OS identity out of the image.
-# shellcheck disable=SC2016  # the script below runs inside the container
 mkdir -p "${work}/root"
+# shellcheck disable=SC2016  # the script below runs inside the container
 "${podman[@]}" run --rm --network none "${image}" /bin/bash -c '
     set -e
     db=/usr/lib/sysimage/rpm
