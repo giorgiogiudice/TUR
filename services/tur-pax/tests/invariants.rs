@@ -22,10 +22,11 @@
 use serde_json::{Map, Value, json};
 use tur_core::Family;
 use tur_pax::{
-    Action, ActionClass, AgentOperation, CommandAction, Context, Decision, Mode, OperationContent,
-    Presence, PrivilegedOperation, Reason, Refusal, Relaxation, RelaxationLevel, RepairSession,
-    Sandbox, StandingApproval, Timestamp, ToolManifest, TypedOperation, TypedOperationKind,
-    UiAction, UiActionKind, UserPolicy, Verdict, WindowOwner, WorkingContext, decide,
+    Action, ActionClass, AgentOperation, CommandAction, Context, Decision, HeldApprovals, Mode,
+    OperationContent, PolicyStore, Presence, PrivilegedOperation, Reason, Refusal, Relaxation,
+    RelaxationLevel, RepairSession, Sandbox, StandingApproval, Timestamp, ToolManifest,
+    TypedOperation, TypedOperationKind, UiAction, UiActionKind, UserPolicy, Verdict, WindowOwner,
+    WorkingContext, decide,
 };
 
 const NOW: Timestamp = Timestamp(1_000_000);
@@ -398,8 +399,14 @@ fn cases() -> Vec<Case> {
             Action::Agent(operation),
             match operation {
                 AgentOperation::MemoryRead => ActionClass::Observe,
-                AgentOperation::MemoryWrite => ActionClass::Reversible,
-                AgentOperation::ScheduleWrite => ActionClass::Consequential,
+                // Addendum section 18, items 3 and 4.
+                AgentOperation::MemoryRecordObserved
+                | AgentOperation::MemoryRecordStated
+                | AgentOperation::MemoryChangeObserved
+                | AgentOperation::ScheduleProposal => ActionClass::Reversible,
+                AgentOperation::MemoryChangeStated => ActionClass::Consequential,
+                // Everything else is the user's act or forbidden outright,
+                // creating a schedule and confirming a pending entry included.
                 _ => ActionClass::Prohibited,
             },
         ));
@@ -468,18 +475,31 @@ fn repair_session_is_open(context: &Context) -> bool {
     !session.ended && has_purpose && has_begun && has_not_expired && at_most_an_hour
 }
 
-fn approvals(service: &str, tool_suffix: &str, subject: &str) -> Vec<StandingApproval> {
-    (0..=3)
+/// A stand-in for the policy store, the system component that owns standing
+/// approvals. It does not exist yet (addendum section 18, item 1), and a
+/// store is the only thing that can hand the engine an approval. The sweep
+/// uses this one to show what the engine will do once a store exists.
+struct TestStore(Vec<StandingApproval>);
+
+impl PolicyStore for TestStore {
+    fn standing_approvals(&self, _schedule: &str) -> Vec<StandingApproval> {
+        self.0.clone()
+    }
+}
+
+fn approvals(service: &str, tool_suffix: &str, subject: &str) -> HeldApprovals {
+    let held: Vec<StandingApproval> = (0..=3)
         .map(|class| StandingApproval {
             service: service.to_owned(),
             tool: format!("tool_class_{class}{tool_suffix}"),
             arguments: arguments(subject),
         })
-        .collect()
+        .collect();
+    HeldApprovals::read(&TestStore(held), "sweep")
 }
 
 /// Approvals that match every tool call with the approved subject.
-fn approvals_for(subject: &str) -> Vec<StandingApproval> {
+fn approvals_for(subject: &str) -> HeldApprovals {
     approvals(SERVICE, "", subject)
 }
 
@@ -495,13 +515,13 @@ struct Space {
 
 fn contexts(
     sessions: &[Option<RepairSession>],
-    approval_sets: &[Vec<StandingApproval>],
+    approval_sets: &[HeldApprovals],
     owners: &[WindowOwner],
 ) -> Vec<Context> {
     let mut contexts = Vec::new();
     for presence in Presence::ALL {
         for session_locked in [false, true] {
-            for trusted_path_available in [false, true] {
+            for trusted_session_proven in [false, true] {
                 for model_flags_consequential in [false, true] {
                     for repair_session in sessions {
                         for standing_approvals in approval_sets {
@@ -509,7 +529,7 @@ fn contexts(
                                 contexts.push(Context {
                                     presence,
                                     session_locked,
-                                    trusted_path_available,
+                                    trusted_session_proven,
                                     repair_session: repair_session.clone(),
                                     standing_approvals: standing_approvals.clone(),
                                     model_flags_consequential,
@@ -534,14 +554,14 @@ impl Space {
         // Absent, and open: the two extremes.
         let two_sessions = [every_session[0].clone(), every_session[1].clone()];
         let every_approval_set = [
-            Vec::new(),
+            HeldApprovals::none(),
             approvals_for(SUBJECT_APPROVED),
             // Near misses: another letter case, another service, another tool.
             approvals_for(SUBJECT_NEAR_MISS),
             approvals(OTHER_SERVICE, "", SUBJECT_APPROVED),
             approvals(SERVICE, "_extra", SUBJECT_APPROVED),
         ];
-        let two_approval_sets = [Vec::new(), approvals_for(SUBJECT_APPROVED)];
+        let two_approval_sets = [HeldApprovals::none(), approvals_for(SUBJECT_APPROVED)];
         let two_owners = [WindowOwner::User, WindowOwner::Administrator];
 
         Space {
@@ -758,7 +778,7 @@ fn the_generators_cover_what_they_claim() {
     }
 
     // The sizes stated in docs/architecture/agent-policy.md.
-    assert_eq!(space.cases.len(), 250);
+    assert_eq!(space.cases.len(), 255);
     assert_eq!(space.tool_contexts.len(), 320);
     assert_eq!(space.ui_contexts.len(), 192);
     assert_eq!(space.privileged_contexts.len(), 960);
@@ -769,7 +789,7 @@ fn the_generators_cover_what_they_claim() {
         .iter()
         .map(|case| space.contexts_for(case).len() * space.policies.len())
         .sum();
-    assert_eq!(inputs, 732_672);
+    assert_eq!(inputs, 738_432);
 
     // The statement of which sessions are open agrees with the list.
     let sessions = repair_sessions();
@@ -1073,7 +1093,7 @@ fn a_sensitive_application_is_never_observed_or_acted_on_without_asking() {
         // way, the user is asked.
         if !is_excluded(policy, &target.application)
             && !nobody_present(context)
-            && context.trusted_path_available
+            && context.trusted_session_proven
             && context.target_window_owner != WindowOwner::Administrator
             && policy.mode != Mode::ObserveOnly
         {
@@ -1196,7 +1216,7 @@ fn a_relaxation_only_turns_an_attended_class_2_ui_ask_into_allow() {
         assert_eq!(policy.mode, Mode::Normal, "{explain}");
         assert_eq!(context.presence, Presence::Attended, "{explain}");
         assert!(!context.session_locked, "{explain}");
-        assert!(context.trusted_path_available, "{explain}");
+        assert!(context.trusted_session_proven, "{explain}");
         assert_eq!(context.target_window_owner, WindowOwner::User, "{explain}");
         assert!(!context.model_flags_consequential, "{explain}");
     });
@@ -1208,7 +1228,7 @@ fn a_relaxation_only_turns_an_attended_class_2_ui_ask_into_allow() {
 fn without_the_trusted_path_nothing_above_class_1_runs_and_nothing_authenticates() {
     let mut seen = 0_usize;
     for_every_input(|case, context, policy, decision| {
-        if context.trusted_path_available {
+        if context.trusted_session_proven {
             return;
         }
         let explain = describe(case, context, policy, decision);
@@ -1273,7 +1293,7 @@ fn unattended_class_2_runs_only_with_an_exactly_matching_standing_approval() {
             // Only a task that really is unattended: an attended task in a
             // locked session is paused, and has no schedule to approve it.
             assert_eq!(context.presence, Presence::Unattended, "{explain}");
-            assert!(context.trusted_path_available, "{explain}");
+            assert!(context.trusted_session_proven, "{explain}");
             assert_eq!(policy.mode, Mode::Normal, "{explain}");
         } else {
             deferred += 1;
@@ -1285,7 +1305,7 @@ fn unattended_class_2_runs_only_with_an_exactly_matching_standing_approval() {
         // The other direction: an exact match is honoured in normal mode.
         if exact_match
             && context.presence == Presence::Unattended
-            && context.trusted_path_available
+            && context.trusted_session_proven
             && policy.mode == Mode::Normal
         {
             assert!(decision.is_allow(), "{explain}");
@@ -1330,7 +1350,7 @@ fn a_privileged_request_runs_only_inside_an_open_repair_session() {
             // A free-text command never runs without its own approval.
             assert!(!request.free_text, "{explain}");
             assert!(!nobody_present(context), "{explain}");
-            assert!(context.trusted_path_available, "{explain}");
+            assert!(context.trusted_session_proven, "{explain}");
             assert!(!context.model_flags_consequential, "{explain}");
             assert_eq!(policy.mode, Mode::Normal, "{explain}");
             assert_eq!(decision.reason(), Reason::RepairSessionOpen, "{explain}");
@@ -1347,7 +1367,7 @@ fn a_privileged_request_runs_only_inside_an_open_repair_session() {
         // The other direction, so that the test is not vacuous.
         let reachable = !request.critical
             && !nobody_present(context)
-            && context.trusted_path_available
+            && context.trusted_session_proven
             && policy.mode != Mode::ObserveOnly;
         if reachable && !open {
             assert_eq!(
@@ -1406,7 +1426,7 @@ fn a_system_critical_operation_never_runs_as_a_privileged_request() {
         // exists only as a tool of the owning service.
         assert_eq!(decision.verdict(), &Verdict::Refuse, "{explain}");
         assert_eq!(decision.class(), ActionClass::SystemCritical, "{explain}");
-        if context.trusted_path_available && policy.mode != Mode::ObserveOnly {
+        if context.trusted_session_proven && policy.mode != Mode::ObserveOnly {
             assert_eq!(
                 decision.reason(),
                 Reason::Refused(Refusal::SystemCriticalAsCommand),
@@ -1537,10 +1557,10 @@ fn losing_the_trusted_path_is_never_more_permissive() {
         for trusted in space
             .contexts_for(case)
             .iter()
-            .filter(|context| context.trusted_path_available)
+            .filter(|context| context.trusted_session_proven)
         {
             let untrusted = Context {
-                trusted_path_available: false,
+                trusted_session_proven: false,
                 ..trusted.clone()
             };
             for policy in &space.policies {
@@ -1587,7 +1607,7 @@ fn a_standing_approval_affects_only_unattended_class_2_tool_calls() {
     let mut honoured = 0_usize;
     for_every_input(|case, context, policy, decision| {
         let without_approvals = Context {
-            standing_approvals: Vec::new(),
+            standing_approvals: HeldApprovals::none(),
             ..context.clone()
         };
         let baseline = decide(&case.action, &without_approvals, policy, NOW);
@@ -1613,10 +1633,178 @@ fn a_standing_approval_affects_only_unattended_class_2_tool_calls() {
         assert!(case.floor <= ActionClass::Consequential, "{explain}");
         assert_eq!(decision.class(), ActionClass::Consequential, "{explain}");
         assert_eq!(context.presence, Presence::Unattended, "{explain}");
-        assert!(context.trusted_path_available, "{explain}");
+        assert!(context.trusted_session_proven, "{explain}");
         assert_eq!(policy.mode, Mode::Normal, "{explain}");
     });
     assert!(honoured > 0);
+}
+
+/// Addendum section 18, item 1: until the component that owns standing
+/// approvals exists, they are not honoured and an unattended class 2 action
+/// is always deferred. Every shipped caller has `HeldApprovals::none()`,
+/// because nothing it could call returns anything else.
+#[test]
+fn without_a_policy_store_an_unattended_class_2_action_never_runs() {
+    let mut held_back = 0_usize;
+    for_every_input(|case, context, policy, _| {
+        let shipped = Context {
+            standing_approvals: HeldApprovals::none(),
+            ..context.clone()
+        };
+        let decision = decide(&case.action, &shipped, policy, NOW);
+        let explain = describe(case, &shipped, policy, &decision);
+        assert_ne!(
+            decision.reason(),
+            Reason::StandingApprovalMatched,
+            "{explain}"
+        );
+        if shipped.presence == Presence::Unattended
+            && decision.class() == ActionClass::Consequential
+        {
+            held_back += 1;
+            assert!(
+                matches!(decision.verdict(), Verdict::Defer | Verdict::Refuse),
+                "{explain}"
+            );
+        }
+    });
+    assert!(held_back > 0);
+}
+
+/// The other half of the same rule: no source file of the crate, outside its
+/// test modules, implements the policy store or reads approvals from one.
+/// When the component is built this test is what has to change, in review.
+#[test]
+fn no_shipped_code_can_hand_the_engine_a_standing_approval() {
+    let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let mut files = 0_usize;
+    let mut saw_the_definition = false;
+    for entry in std::fs::read_dir(&directory).expect("the source directory") {
+        let path = entry.expect("a directory entry").path();
+        if path.extension().and_then(|extension| extension.to_str()) != Some("rs") {
+            continue;
+        }
+        files += 1;
+        let text = std::fs::read_to_string(&path).expect("a source file");
+        // Unit tests are at the end of each file, behind this attribute.
+        let shipped = text.split("#[cfg(test)]").next().unwrap_or_default();
+        let name = path.display();
+        assert!(
+            !shipped.contains("PolicyStore for "),
+            "{name} implements the policy store outside its tests"
+        );
+        assert!(
+            !shipped.contains("HeldApprovals::read("),
+            "{name} reads standing approvals from a store outside its tests"
+        );
+        // The wrapper's content is private, and nothing converts into it.
+        if shipped.contains("pub struct HeldApprovals") {
+            saw_the_definition = true;
+            assert!(shipped.contains("    approvals: Vec<StandingApproval>,\n}"));
+            assert!(!shipped.contains("pub approvals"));
+            assert!(!shipped.contains("Deserialize"));
+            assert!(!shipped.contains("From<"));
+        }
+    }
+    assert!(files > 15, "only {files} source files were read");
+    assert!(saw_the_definition);
+}
+
+/// Addendum section 18, item 4: an unattended task records only observed
+/// memory entries.
+#[test]
+fn an_unattended_task_records_only_observed_memory_entries() {
+    let mut deferred = 0_usize;
+    let mut recorded = 0_usize;
+    let mut stated = 0_usize;
+    for_every_input(|case, context, policy, decision| {
+        let Action::Agent(operation) = &case.action else {
+            return;
+        };
+        let explain = describe(case, context, policy, decision);
+        let plain = policy.mode == Mode::Normal && !context.model_flags_consequential;
+        match operation {
+            AgentOperation::MemoryRecordStated => {
+                if context.presence == Presence::Unattended {
+                    deferred += 1;
+                    assert!(!decision.is_allow(), "{explain}");
+                    if plain {
+                        assert_eq!(
+                            (decision.verdict(), decision.reason()),
+                            (&Verdict::Defer, Reason::UnattendedMemoryNotObserved),
+                            "{explain}"
+                        );
+                    }
+                } else if plain && !context.session_locked {
+                    // With the user there it is an ordinary class 1 action.
+                    stated += 1;
+                    assert!(decision.is_allow(), "{explain}");
+                }
+            }
+            AgentOperation::MemoryRecordObserved => {
+                if context.presence == Presence::Unattended && plain {
+                    // Locked or not: it is not a command and drives no screen.
+                    recorded += 1;
+                    assert!(decision.is_allow(), "{explain}");
+                }
+            }
+            _ => {
+                assert_ne!(
+                    decision.reason(),
+                    Reason::UnattendedMemoryNotObserved,
+                    "{explain}"
+                );
+            }
+        }
+    });
+    assert!(deferred > 0);
+    assert!(recorded > 0);
+    assert!(stated > 0);
+}
+
+/// Addendum section 18, items 2 and 3, and the stricter reading for a stated
+/// entry: what is the user's act is never performed, and changing or
+/// removing what the user stated is never allowed without asking.
+#[test]
+fn the_users_acts_on_memory_and_schedules_are_never_performed() {
+    let mut proposed = 0_usize;
+    for_every_input(|case, context, policy, decision| {
+        let Action::Agent(operation) = &case.action else {
+            return;
+        };
+        let explain = describe(case, context, policy, decision);
+        match operation {
+            AgentOperation::ScheduleWrite
+            | AgentOperation::StandingApprovalWrite
+            | AgentOperation::MemoryConfirmPending => {
+                assert_eq!(
+                    decision.reason(),
+                    Reason::Refused(Refusal::Prohibited),
+                    "{explain}"
+                );
+            }
+            AgentOperation::MemoryChangeStated => {
+                assert_eq!(decision.class(), ActionClass::Consequential, "{explain}");
+                // Class 2, and not a tool call: no standing approval covers
+                // it. The best it gets is a question to the user.
+                assert!(!decision.is_allow(), "{explain}");
+            }
+            AgentOperation::ScheduleProposal => {
+                // A proposal changes nothing, so it is an ordinary class 1
+                // action, attended or not.
+                if policy.mode == Mode::Normal
+                    && !context.model_flags_consequential
+                    && !(context.presence == Presence::Attended && context.session_locked)
+                {
+                    proposed += 1;
+                    assert!(decision.is_allow(), "{explain}");
+                    assert_eq!(decision.class(), ActionClass::Reversible, "{explain}");
+                }
+            }
+            _ => {}
+        }
+    });
+    assert!(proposed > 0);
 }
 
 #[test]
@@ -1943,12 +2131,12 @@ fn hostile_text_as_the_target_of_a_typed_operation_is_refused_or_confined() {
 #[test]
 fn the_documented_decision_table_holds() {
     let trusted = Context {
-        trusted_path_available: true,
+        trusted_session_proven: true,
         target_window_owner: WindowOwner::User,
         ..Context::attended()
     };
     let untrusted = Context {
-        trusted_path_available: false,
+        trusted_session_proven: false,
         ..trusted.clone()
     };
     let unattended = Context {
@@ -2036,7 +2224,7 @@ fn the_documented_decision_table_holds() {
         ..repair_open.clone()
     };
     let repair_open_untrusted = Context {
-        trusted_path_available: false,
+        trusted_session_proven: false,
         ..repair_open.clone()
     };
 
@@ -2461,12 +2649,53 @@ fn the_documented_decision_table_holds() {
             "reversible_permitted",
         ),
         (
-            "memory write unattended",
-            Action::Agent(AgentOperation::MemoryWrite),
+            "record an observed memory entry, unattended",
+            Action::Agent(AgentOperation::MemoryRecordObserved),
             &unattended,
             &normal,
             "allow",
             "reversible_permitted",
+        ),
+        (
+            "record an observed memory entry, unattended and locked",
+            Action::Agent(AgentOperation::MemoryRecordObserved),
+            &unattended_locked,
+            &normal,
+            "allow",
+            "reversible_permitted",
+        ),
+        (
+            "propose a schedule, unattended",
+            Action::Agent(AgentOperation::ScheduleProposal),
+            &unattended,
+            &normal,
+            "allow",
+            "reversible_permitted",
+        ),
+        // Rule 9b2.
+        (
+            "record a stated memory entry, unattended",
+            Action::Agent(AgentOperation::MemoryRecordStated),
+            &unattended,
+            &normal,
+            "defer",
+            "unattended_memory_not_observed",
+        ),
+        (
+            "record a stated memory entry, unattended, approvals present",
+            Action::Agent(AgentOperation::MemoryRecordStated),
+            &unattended_approved,
+            &normal,
+            "defer",
+            "unattended_memory_not_observed",
+        ),
+        (
+            "change a stated memory entry, unattended",
+            Action::Agent(AgentOperation::MemoryChangeStated),
+            &unattended_approved,
+            &normal,
+            "defer",
+            "unattended_without_standing_approval",
         ),
         // Rule 9d.
         (
@@ -2617,9 +2846,33 @@ fn the_documented_decision_table_holds() {
             "observe_permitted",
         ),
         (
-            "memory write",
-            Action::Agent(AgentOperation::MemoryWrite),
+            "record an observed memory entry",
+            Action::Agent(AgentOperation::MemoryRecordObserved),
             &trusted,
+            &normal,
+            "allow",
+            "reversible_permitted",
+        ),
+        (
+            "record a stated memory entry",
+            Action::Agent(AgentOperation::MemoryRecordStated),
+            &trusted,
+            &normal,
+            "allow",
+            "reversible_permitted",
+        ),
+        (
+            "change an observed memory entry",
+            Action::Agent(AgentOperation::MemoryChangeObserved),
+            &trusted,
+            &normal,
+            "allow",
+            "reversible_permitted",
+        ),
+        (
+            "propose a schedule",
+            Action::Agent(AgentOperation::ScheduleProposal),
+            &untrusted,
             &normal,
             "allow",
             "reversible_permitted",
@@ -2659,12 +2912,37 @@ fn the_documented_decision_table_holds() {
             "consequential_needs_confirmation",
         ),
         (
-            "schedule write",
-            Action::Agent(AgentOperation::ScheduleWrite),
+            "change a stated memory entry",
+            Action::Agent(AgentOperation::MemoryChangeStated),
             &trusted,
             &normal,
             "ask",
             "consequential_needs_confirmation",
+        ),
+        (
+            "change a stated memory entry, no proven trusted session",
+            Action::Agent(AgentOperation::MemoryChangeStated),
+            &untrusted,
+            &normal,
+            "refuse",
+            "trusted_path_unavailable",
+        ),
+        // Rule 1: the user's acts.
+        (
+            "create a schedule",
+            Action::Agent(AgentOperation::ScheduleWrite),
+            &trusted,
+            &normal,
+            "refuse",
+            "prohibited",
+        ),
+        (
+            "confirm a pending memory entry",
+            Action::Agent(AgentOperation::MemoryConfirmPending),
+            &trusted,
+            &normal,
+            "refuse",
+            "prohibited",
         ),
         (
             "act on Send",

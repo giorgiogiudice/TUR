@@ -76,8 +76,11 @@ engine except as part of a proposed action, where it is data.
 | **Privileged request, operation type a repair session may cover** | 2, with its own rule (rule 7 below) |
 | **Privileged request, system-critical or unclassified operation type** | 3 |
 | **Agent operation: memory read** | 0 |
-| **Agent operation: memory write** | 1 |
-| **Agent operation: schedule write** | 2 |
+| **Agent operation: record an observed memory entry; change or remove an observed entry** | 1 |
+| **Agent operation: record a memory entry on the user's word** (stated by the user, a procedure the user accepted, content waiting for confirmation) | 1; deferred in an unattended task (rule 9b2; addendum A section 18, item 4) |
+| **Agent operation: change or remove a memory entry the user stated or confirmed, or a saved procedure** | 2 |
+| **Agent operation: propose a reminder or a schedule** | 1: nothing takes effect until the user confirms the proposal (addendum A section 18, item 3) |
+| **Agent operation: create, change or remove a schedule; confirm a pending memory entry** | 4: the user's acts, never performed by P@x (addendum A section 18, items 1 to 3) |
 | **Agent operation: read a keyring secret; change policy, permissions or standing approvals; disable the indicator or the audit log; operate the trusted path; enable APFS write** | 4 |
 
 A command is never classified by parsing its text. The class comes from the sandbox
@@ -168,9 +171,9 @@ nature; see [section 11](#11-known-limits), limit 4.
 |---|---|
 | Presence | Attended (the user is present and asked for the task) or unattended (a scheduled task or reminder firing) |
 | Session locked | The session is locked |
-| Trusted path available | All five compositor guarantees of addendum A section 6 hold |
+| Trusted session proven (`trusted_session_proven`) | A separate trusted session exists and has been proven (addendum A section 19, item 2). See below. |
 | Repair session | Purpose, opening time, expiry and an "ended" mark, if the user opened one |
-| Standing approvals | The approvals the user attached to the schedule that started the task |
+| Standing approvals (`HeldApprovals`) | The approvals of the schedule that started the task, as the policy store holds them. Empty unless read from a policy store, and none exists yet. See below. |
 | Model hint | The model flagged the action as consequential |
 | Owner of the target window | For an accessibility or screen action: the user, a process with administrator rights, or unknown |
 
@@ -185,6 +188,52 @@ outside 1 second to 60 minutes. The engine treats a session as closed while the
 session is locked or the task is unattended, whatever the record says. The owner
 of the record sets the "ended" mark when the user ends the session, when the task
 finishes and when the session locks, so that a session does not reopen on unlock.
+
+**Trusted session proven.** Until revision 8 of this document the field was
+called "trusted path available" and meant the five compositor guarantees of
+addendum A section 6. Section 19 of the addendum found that the compositor in
+the image provides none of them: it has no surface that ignores emulated input
+or is kept out of screen capture, so a prompt drawn on the user's desktop is
+one the assistant could read and operate. The field is renamed so that no
+caller can take such a prompt for it. It is true only when all of these hold:
+
+1. class 3 confirmation, opening a repair session and loosening policy take
+   place in a session of their own, outside the user's desktop, which P@x's
+   processes cannot reach;
+2. that session shows the user's personal phrase and picture, so that it cannot
+   be imitated;
+3. a prototype of it has passed the trusted-path tests of addendum A
+   section 12 on the image P@x runs on.
+
+"A confirmation dialog can be shown" is not among them. No shipped code sets
+the field: the task loop builds its context with it false, and
+`tur-pax policy check --trusted-session-proven` sets it only to answer what
+the engine would decide, and performs nothing. The refusal that results from it
+being false keeps its name and code (`trusted_path_unavailable`,
+`TUR-AI-POLICY-006`).
+
+**Standing approvals and the policy store.** Addendum A section 18, item 1:
+standing approvals are held by the separate system component that owns the
+policy file, and until that component exists they are not honoured. In the
+engine this is structural (`src/store.rs`):
+
+- `PolicyStore` is the interface of that component as far as the engine needs
+  it: the standing approvals it holds for a schedule.
+- A context carries `HeldApprovals`, whose content is private. It is either
+  empty (`HeldApprovals::none()`) or read from a policy store
+  (`HeldApprovals::read`). There is no conversion from a list, no
+  deserialisation and no public field; two `compile_fail` examples in the
+  module's documentation show the attempts that do not compile.
+- Nothing in the crate implements `PolicyStore`, outside its tests. So no
+  shipped code path can hand the engine an approval: not the task loop, not a
+  file, not `tur-pax policy check --standing-approval`, which checks the form
+  of what it is given and then ignores it. An unattended class 2 action is
+  therefore always deferred.
+
+The tests use a stand-in store to show what the engine will do once a real one
+exists. When the component is built, its client implements `PolicyStore`, and
+the test `no_shipped_code_can_hand_the_engine_a_standing_approval` has to be
+changed in the same review.
 
 A standing approval names a service, a tool and a complete set of arguments. It
 matches a call only if all three are equal. The order of keys does not matter. An
@@ -223,6 +272,84 @@ its own form with `.desktop` appended. A relaxation compares exactly.
 characters with no space at either end. The policy file accepts plain identifiers
 only. An application whose reported identifier is not plain is sensitive: such an
 identifier may look like a listed one without being equal to it.
+
+### 2.5 Where the built-in names were checked
+
+A wrong name in a built-in list fails open: the terminal is treated as an
+ordinary application, the password manager is observed, the unit is restarted.
+The lists were first written from memory. On 2026-11-12 every entry was checked
+against a published source: the application's own repository (the name of its
+desktop file, a `StartupWMClass` line, an identifier set in its code), the file
+list of a Fedora 44 or Debian package, or its Flathub identifier. Nothing was
+checked on the TUR image, which is still the place that decides.
+
+**Applications.** The source of each entry is in the code, beside the entry:
+`SENSITIVE_APPLICATION_SOURCES` and `EXCLUDED_APPLICATION_SOURCES` in
+`src/policy.rs` are generated from the same rows as the two lists and state
+for each identifier what kind of name it is (`DesktopFile`, `WindowClass`,
+`Program`, `Unverified`) and where it was seen. What the check changed:
+
+| Finding | Before | Now |
+|---|---|---|
+| 1Password | `com.1password.1Password`, found in no source | `com.onepassword.OnePassword` added (its Flathub identifier and the desktop file in the vendor's archive). The old entry is kept, marked unverified. |
+| KWallet's daemon | `org.kde.kwalletd5`, `org.kde.kwalletd6` | `org.kde.kwalletd` added: the name from KDE Frameworks 6.30, which the older two do not match |
+| Seahorse | `org.gnome.seahorse.Application` | `org.gnome.Seahorse` added: upstream's new name, in no release yet |
+| pinentry | program names only | `org.gnupg.pinentry-qt` and `org.gnupg.pinentry-qt5` added: the desktop file names the Qt pinentry sets for its windows |
+| Contour | `contour`, which is the program | `org.contourterminal.Contour` added: the desktop file |
+| Other prompts and managers | – | `org.gnome.keyring.PrivatePrompter`, four more `ssh-askpass` programs, two more polkit agents, `kwalletmanager5-kwalletd`, `keepass` (Fedora), `secrets`, `authenticator`, `Proton Pass` |
+| Other terminals and launchers | – | development and preview builds of Ptyxis, GNOME Console, Ghostty and Warp; `foot-server`; `rxvt-unicode`; Debian's `debian-xterm`; `qterminal-drop`; `xfce4-run`; `tofi-run`, `tofi-drun`; `com.rioterm.Rio` |
+| Letter case | `Alacritty` (the program is `alacritty`), `org.ijhack.QtPass` (upstream writes `org.ijhack.qtpass`), `rio` (the window class is `Rio`) | Unchanged: identifiers are compared without regard to ASCII case |
+
+Fourteen entries could not be confirmed and are marked `Unverified` in the
+tables: `org.codeberg.dnkl.foot` (an AppStream identifier only), `hyper`, the
+six Windows console names (not checked against a Wine session),
+`org.keepass.KeePass`, `com.1password.1Password`, `1password`, `proton-pass`,
+`com.enpass.Enpass` and `org.qtpass.QtPass`. They are kept: an entry too many
+costs a question; it protects nothing until it is confirmed. The test
+`every_built_in_identifier_has_a_source` names them, so an entry cannot be
+added without a source unnoticed.
+
+Konsole (`org.kde.konsole`), Yakuake (`org.kde.yakuake`), KRunner
+(`org.kde.krunner`), GNOME Terminal (`org.gnome.Terminal`), Ptyxis
+(`org.gnome.Ptyxis`; `app.devsuite.Ptyxis` on Flathub), KeePassXC
+(`org.keepassxc.KeePassXC`), Bitwarden (`com.bitwarden.desktop`), KWallet's
+manager (`org.kde.kwalletmanager` from KDE Gear 25.04, `org.kde.kwalletmanager5`
+before) and Seahorse were correct as written.
+
+**Protected units.** The prefixes in `PROTECTED_TARGETS` were checked against
+the unit files that Fedora 44 and 43 packages ship
+(`packages.fedoraproject.org`, file lists of the packages named):
+
+| Units seen | Package | Covered by the prefix |
+|---|---|---|
+| `polkit.service`, `polkit-agent-helper@.service` | polkit | `polkit` |
+| `firewalld.service` | firewalld | `firewalld` |
+| `nftables.service` | nftables-services | `nftables` |
+| `iptables.service`, `ip6tables.service`, `ebtables.service`, `arptables.service` | iptables-services | `iptables`, `ip6tables`, `ebtables`, **`arptables`** (added) |
+| `auditd.service`, `audit-rules.service` | audit, audit-rules | `auditd`, `audit-` |
+| `systemd-journald.service` and its sockets, `systemd-logind.service`, `systemd-userdbd.service` | systemd | `systemd-journal`, `systemd-logind`, **`systemd-userdbd`** (added) |
+| `systemd-homed.service`, `systemd-boot-update.service`, `systemd-pcrphase*.service`, `systemd-pcrextend@.service`, `systemd-pcrlock*.service` | systemd-udev | `systemd-homed`, `systemd-boot`, **`systemd-pcr`** (added) |
+| `sshd.service`, `sshd.socket`, `sshd@.service` | openssh-server | `sshd` |
+| `sssd.service` and its responders | sssd-common | `sssd` |
+| `fprintd.service` | fprintd | `fprintd` |
+| `selinux-autorelabel.service`, `selinux-autorelabel-mark.service` | policycoreutils | `selinux` |
+| `usbguard.service`, `usbguard-dbus.service` | usbguard, usbguard-dbus | `usbguard` |
+| `fwupd.service`, `fwupd-refresh.service` | fwupd | `fwupd` |
+| `rpm-ostreed.service`, `rpm-ostreed-automatic.service` | rpm-ostree | `rpm-ostree` |
+| `bootc-fetch-apply-updates.service`, `bootc-finalize-staged.service` | bootc | `bootc` |
+| `clevis-luks-askpass.service`, `.path` | clevis-systemd | `clevis` |
+| `tpm2-abrmd.service` | tpm2-abrmd | **`tpm2-abrmd`** (added) |
+| `dbus-broker.service` | dbus-broker | `dbus` |
+| `sddm.service`, `greetd.service`, `plasmalogin.service` (Fedora 44 only) | sddm, greetd, plasma-login-manager | **`sddm`**, **`greetd`**, **`plasmalogin`** (added) |
+
+`apparmor.service` was seen in Debian's package only. `systemd-cryptsetup@` has
+no unit file: its instances are generated, and the name was seen in systemd's
+sources. The test `the_real_names_of_the_protected_units_are_covered` holds
+these names against the table. The prefixes for files and packages were not
+checked in this pass; the units `fapolicyd`, `systemd-repart`, `systemd-growfs`,
+`systemd-makefs`, `systemd-mkswap`, `systemd-fsck`, `lvm2`, `mdadm`, `mdmon`,
+`multipathd`, `udisks`, `bootupd`, `bootloader-update`, `grub` and `ostree`
+were not looked up either.
 
 ## 3. Decisions
 
@@ -272,8 +399,9 @@ The rules are evaluated in this order. The first that applies decides.
 | 8 | Attended task, session locked | defer | `paused_while_locked` |
 | 9a | Unattended, mode ask-every-action | defer | `unattended_ask_every_action_mode` |
 | 9b | Unattended, session locked, a command outside the read-only sandbox | defer | `unattended_command_while_locked` |
+| 9b2 | Unattended, recording a memory entry on the user's word | defer | `unattended_memory_not_observed` |
 | 9c | Unattended, class 0 or 1 | allow | `observe_permitted`, `reversible_permitted` |
-| 9d | Unattended, class 2, a tool call that exactly matches a standing approval | allow | `standing_approval_matched` |
+| 9d | Unattended, class 2, a tool call that exactly matches a standing approval held by the policy store. No store exists, so no shipped caller reaches this rule. | allow | `standing_approval_matched` |
 | 9e | Unattended, class 2, otherwise | defer | `unattended_without_standing_approval` |
 | 10a | Attended, mode ask-every-action | ask | `ask_every_action_mode` |
 | 10b | Attended, class 0 or 1 | allow | `observe_permitted`, `reversible_permitted` |
@@ -309,7 +437,7 @@ least one row for every rule of the table.
 
 `tests/invariants.rs` enumerates:
 
-- **250 actions.** Tool calls of class 0 to 3 with two argument sets.
+- **255 actions.** Tool calls of class 0 to 3 with two argument sets.
   Accessibility and screen actions in eleven applications (plain; excluded by the
   user, and the same in another letter case with `.desktop` appended; sensitive;
   relaxed; sensitive and relaxed; a terminal on the built-in list, and the same
@@ -340,7 +468,7 @@ least one row for every rule of the table.
 - **9 user policies**: each mode, with no per-application settings, with all of
   them, and with every application relaxed.
 
-That is 732 672 decisions for each sweep. The test
+That is 738 432 decisions for each sweep. The test
 `the_generators_cover_what_they_claim` asserts these numbers and that every
 variant of every enumerated type appears. Everything a test compares a decision
 with is stated in the test file and not taken from the engine: the class each
@@ -381,6 +509,12 @@ window, the identifier of an application and the target of a typed operation.
 | Losing the trusted path is never more permissive | `losing_the_trusted_path_is_never_more_permissive` |
 | A repair session changes the decision for privileged requests only | `a_repair_session_affects_only_privileged_requests` |
 | A standing approval changes exactly one thing: an unattended class 2 tool call that would be deferred is allowed | `a_standing_approval_affects_only_unattended_class_2_tool_calls` |
+| With the approvals every shipped caller has (none), an unattended class 2 action never runs and no decision is `standing_approval_matched` (addendum A section 18, item 1) | `without_a_policy_store_an_unattended_class_2_action_never_runs` |
+| No source file of the crate implements the policy store or reads approvals from one, outside its tests; the content of `HeldApprovals` is private | `no_shipped_code_can_hand_the_engine_a_standing_approval`; the `compile_fail` examples of `src/store.rs`; unit tests in `src/store.rs` |
+| An unattended task records only observed memory entries: a record on the user's word is deferred; an observed one runs, locked or not (section 18, item 4) | `an_unattended_task_records_only_observed_memory_entries` |
+| Creating a schedule, changing a standing approval and confirming a pending memory entry are always refused as prohibited; changing a stated memory entry is never allowed without asking; proposing a schedule is class 1 (section 18, items 2 and 3) | `the_users_acts_on_memory_and_schedules_are_never_performed`; `agent_operation_classes_are_as_documented` (`src/action.rs`) |
+| The built-in application identifiers each have a source, and the identifiers upstream really uses are covered | `every_built_in_identifier_has_a_source`, `the_identifiers_upstream_really_uses_are_covered` (`src/policy.rs`) |
+| The real names of the protected units are covered by the deny list | `the_real_names_of_the_protected_units_are_covered` (`src/action.rs`) |
 | Observe-only mode: only class 0 is allowed; nothing is asked | `observe_only_mode_allows_only_class_0` |
 | Ask-every-action mode: nothing is allowed without asking | `ask_every_action_mode_allows_nothing_by_itself` |
 | A refusal, and only a refusal, carries an error code; a prompt is printable ASCII | `a_refusal_and_only_a_refusal_carries_an_error_code` |
@@ -576,12 +710,28 @@ tests. This crate has no journald dependency; the journal sink belongs to the
 service. `decide_and_record` writes the record before returning the decision, and
 refuses the action if the record cannot be written.
 
+**Two further events** (addendum A section 21, item 7). `TUR_AI_DECISION` is
+about the decision; it cannot say what became of an action that was allowed.
+The audit module defines the two events that do, beside the record
+(`src/audit.rs`); the orchestrator writes them to the trail of a task.
+
+| Event | `TUR_AI_EVENT` | Type | Fields |
+|---|---|---|---|
+| Action outcome | `executed` | `ActionOutcome` | `TUR_AI_ACTION`; `TUR_AI_RESULT` (`ok`, `failed`, `timed_out`, `not_started`: `ActionResult`); `TUR_AI_EXIT`; `TUR_AI_OUTPUT_BYTES`; `TUR_AI_TRUNCATED`; `TUR_AI_WITHHELD` (a count); `TUR_ERROR_CODE` if the action did not end well |
+| Output withheld | `output_withheld` | `OutputWithheld` | `TUR_AI_ACTION`; `TUR_AI_WITHHELD` (the number of pieces, never zero); `TUR_AI_WITHHELD_KINDS` (sorted, each once); `TUR_ERROR_CODE` = `TUR-AI-OUTPUT-001` |
+
+Neither type has a field for output. `OutputWithheld` takes the kind of each
+withheld piece as a name fixed in the program, so nothing read from the output
+can be put into it. An output-withheld event is written only when something
+was withheld, after the outcome of its action and before the result is passed
+on; if either cannot be written the result is not passed on and the task stops.
+
 ## 9. Command line and error codes
 
 ```text
 tur-pax manifest validate <file>
 tur-pax policy check --manifest <file> --tool <name> [--args <json>]
-                       [--policy <file>] [--unattended] [--locked] [--trusted-path]
+                       [--policy <file>] [--unattended] [--locked] [--trusted-session-proven]
                        [--repair-session-until <seconds> --repair-session-purpose <text>
                         [--repair-session-opened <seconds>]]
                        [--standing-approval <json>]... [--model-flags-consequential]
@@ -590,10 +740,22 @@ tur-pax policy check --manifest <file> --tool <name> [--args <json>]
 
 `policy check` decides tool calls only. It prints the decision, and with `--json`
 also the audit record. The defaults are the strict ones: attended, unlocked,
-**trusted path not available**. Without `--trusted-path`, classes 2 and 3 are
-refused. Without `--repair-session-opened` a repair session is taken to have the
-default length of 15 minutes. `--args` and `--standing-approval` must not repeat a
-key.
+**no proven trusted session**. Without `--trusted-session-proven`, classes 2 and
+3 are refused; the flag supposes a trusted session that does not exist, to show
+what the engine would decide, and performs nothing. `--trusted-path` is its
+former name and is still accepted. Without `--repair-session-opened` a repair
+session is taken to have the default length of 15 minutes. `--args` and
+`--standing-approval` must not repeat a key.
+
+**`--standing-approval` is checked and not honoured.** Only the policy store can
+hand the engine an approval (section 2.3), and this program is not one. The
+approval's form is validated; the decision is made without it; the output
+states how many were ignored (`standing_approvals_ignored` with `--json`).
+`tur-pax policy check --unattended --trusted-session-proven --standing-approval
+<exact match>` therefore prints `defer`, where it used to print `allow`.
+
+`tur-pax run` and `tur-pax chat`, the text interface of the orchestrator, are
+described in [pax-orchestrator.md](pax-orchestrator.md).
 
 | Exit status | Meaning |
 |---|---|
@@ -677,8 +839,10 @@ it changed. Choices 39 onward were made while aligning the engine with revision 
 | 23 | A standing approval without the trusted path | Does not apply; the decision is refuse, not defer. | Kept. |
 | 24 | Standing approval and JSON numbers | `1` and `1.0` do not match. | Kept. The earlier text said numbers "compare as written"; they compare as parsed (section 2.3). |
 | 25 | The model hint on a class 2 action that a standing approval, a relaxation or a repair session already allows | No effect. | **Overruled in part.** Addendum A section 5.1 says the hint can "add a confirmation". It now does for a relaxation and for a typed operation in a repair session, where the user is present to be asked. For a standing approval it still has no effect: nobody can be asked, and the user approved that exact call in advance. |
-| 26 | Class of creating or changing a reminder or schedule | Class 2. | Kept, with a reservation: section 17, item 10, says P@x proposes a schedule and the user creates it. The operation should be a proposal. Changing it changes the interface the scheduler is being built against, so it is left to that work (limit 16). |
-| 27 | Class of removing a memory entry | Class 1, the same operation as writing. | Kept, with a reservation: it is not the stricter reading. Removing or changing something the user stated ("always ask before emailing my manager") can change later behaviour and should be asked. It needs the operation to be split, which is the memory component's interface. |
+| 26 | Class of creating or changing a reminder or schedule | Class 2. | **Replaced** (addendum A section 18, item 3). Proposing a schedule is class 1: nothing takes effect until the user confirms it. Creating, changing or removing one is the user's act and is class 4 for P@x, like changing a standing approval. |
+| 27 | Class of removing a memory entry | Class 1, the same operation as writing. | **Replaced.** The operation is split. Recording, and changing or removing an observed entry, are class 1. Changing or removing an entry the user stated or confirmed, or a saved procedure, is **class 2**: the stricter of the two readings that keep it possible at all. It is asked on screen, so until a trusted session is proven it is refused, and unattended it is deferred. Confirming a pending entry is class 4 (section 18, item 2). |
+| 27a | An unattended task that proposes a record on the user's word | Deferred (`unattended_memory_not_observed`), not refused: the entry is offered to the user on return, as a deferred action is. | New (section 18, item 4). |
+| 27b | A standing approval given to `policy check` | Checked for its form, then ignored. | New (section 18, item 1). |
 | 28 | Unattended class 2 without the trusted path | Refused, not deferred. | Kept. |
 | 29 | Class 2 confirmation without the trusted path | Refused. | Kept. |
 | 30 | `TUR_AI_DECISION` for a decision that is not final | `confirmation_required`, `authentication_required`, `deferred`. | Kept; now the design (section 17, item 11). |
@@ -723,11 +887,14 @@ What this engine cannot guarantee by itself.
    tests"). That is a property of each service and is tested there, from milestone
    A1. Nothing in A0 tests it.
 
-2. **The trusted path is a compositor feature.** The engine takes "trusted path
-   available" as an input. It cannot check any of the five guarantees. Until
-   milestone A3 delivers them, the input must be false, and the engine then
-   refuses everything above class 1. Setting it to true without the guarantees
-   removes the protection the rest of the design assumes.
+2. **The trusted session is not the engine's to check.** The engine takes
+   `trusted_session_proven` as an input (section 2.3). It cannot check any of
+   the three conditions. Until the trusted session of addendum A section 19,
+   item 2, exists and has passed the trusted-path tests, the input must be
+   false, and the engine then refuses everything above class 1. Setting it to
+   true without that proof removes the protection the rest of the design
+   assumes. The name of the field says what has to be true; nothing in the
+   type system stops a caller from lying.
 
 3. **Confirmation is not bound to the action here.** The engine returns `ask` or
    `authenticate` with the text to show. Showing it, collecting the answer, and
@@ -829,20 +996,18 @@ What this engine cannot guarantee by itself.
     schemas use. It is not a general JSON Schema validator and has not been
     compared with one.
 
-16. **Revisions 5 and 6 of addendum A.** Sections 18 and 19 of the addendum were
-    merged while this revision of the engine was in review. Three items of
-    section 18 bear on the engine and are not implemented here. (a) Item 1: until the component that owns
-    standing approvals exists, they are not honoured. The engine honours whatever
-    approvals the context holds, so the orchestrator must pass none. (b) Item 3:
-    P@x proposes a schedule (class 1) and the user creates it; the engine still
-    has a class 2 "schedule write" (interpretation 26), which is stricter. (c)
-    Item 4: an unattended task records only observed memory entries; the engine
-    has one "memory write" operation and cannot tell the kinds apart. Section 19
-    reports that the compositor in the image provides none of the protected
-    surfaces of section 6, and moves class 3 confirmation and the opening of a
-    repair session to a separate trusted session. The engine's rules do not
-    change, but what its "trusted path available" input must mean does: it has to
-    be redefined against that session before it may be set to true.
+16. **Revisions 5 to 8 of addendum A: implemented, with what is left.** Section
+    18, items 1, 3 and 4, and section 19, item 2, are implemented as sections
+    2.2, 2.3 and 4 describe. What is left: (a) the policy store itself does not
+    exist, so standing approvals cannot be honoured at all, and the stand-in
+    store of the tests is the only evidence of what the engine does with one;
+    (b) the engine is told which kind of memory entry an operation concerns by
+    whoever builds the action. Nothing writes to memory through the engine
+    yet, so nothing shows that a caller tells it the truth; (c) the kinds of
+    the memory layer (`tur-pax-memory`: stated, observed, procedure, from
+    content) are mapped onto the engine's operations in this document only,
+    not in code; (d) the built-in names were checked against upstream sources
+    and distribution packages, not against the image (section 2.5).
 
 ## 12. Not in A0
 

@@ -808,6 +808,47 @@ pub const PROTECTED_TARGETS: &[ProtectedTarget] = &[
         "usbguard",
         PrivilegedOperation::SecurityPolicy,
     ),
+    // Added when the unit names were checked against the Fedora 44 and 43
+    // package file lists on 2026-11-12 (agent-policy.md, section 2.5): the
+    // ARP firewall of iptables-services, the user database, and the login
+    // screens, which are where a person authenticates.
+    protect(
+        TargetRule::Unit,
+        "arptables",
+        PrivilegedOperation::SecurityPolicy,
+    ),
+    protect(
+        TargetRule::Unit,
+        "systemd-userdbd",
+        PrivilegedOperation::SecurityPolicy,
+    ),
+    protect(
+        TargetRule::Unit,
+        "sddm",
+        PrivilegedOperation::SecurityPolicy,
+    ),
+    protect(
+        TargetRule::Unit,
+        "greetd",
+        PrivilegedOperation::SecurityPolicy,
+    ),
+    protect(
+        TargetRule::Unit,
+        "plasmalogin",
+        PrivilegedOperation::SecurityPolicy,
+    ),
+    // The measurements a disk key is sealed to, and the broker of the device
+    // that holds it.
+    protect(
+        TargetRule::Unit,
+        "systemd-pcr",
+        PrivilegedOperation::Encryption,
+    ),
+    protect(
+        TargetRule::Unit,
+        "tpm2-abrmd",
+        PrivilegedOperation::Encryption,
+    ),
     // The project's own services, the assistant and its policy owner included.
     protect(
         TargetRule::Unit,
@@ -1458,9 +1499,30 @@ pub const PROTECTED_TARGETS: &[ProtectedTarget] = &[
 pub enum AgentOperation {
     /// Recall from the assistant's memory.
     MemoryRead,
-    /// Store, change or remove an entry in the assistant's memory.
-    MemoryWrite,
-    /// Create, change or remove a reminder or scheduled task.
+    /// Record an observed entry: something the assistant's own completed
+    /// action showed. The one kind of entry an unattended task may record
+    /// (addendum section 18, item 4).
+    MemoryRecordObserved,
+    /// Record an entry on the user's word: something the user stated, a
+    /// procedure the user accepted, or content that waits for the user's
+    /// confirmation. With nobody present there is no such word, so the
+    /// engine defers it in an unattended task.
+    MemoryRecordStated,
+    /// Change or remove an observed entry.
+    MemoryChangeObserved,
+    /// Change or remove an entry the user stated or confirmed, or a saved
+    /// procedure. This can change what the assistant does later ("always ask
+    /// before emailing my manager"), so it is class 2: the user is asked.
+    MemoryChangeStated,
+    /// Confirm a pending entry taken from content. The user does that in
+    /// settings; the assistant cannot (addendum section 18, item 2).
+    MemoryConfirmPending,
+    /// Propose a reminder or a scheduled task. Nothing takes effect until the
+    /// user confirms the proposal on screen (addendum section 18, item 3).
+    ScheduleProposal,
+    /// Create, change or remove a reminder or scheduled task. That is the
+    /// user's act, in the component that owns schedules; the assistant never
+    /// performs it (addendum section 18, items 1 and 3).
     ScheduleWrite,
     /// Read a secret from the keyring.
     KeyringSecretRead,
@@ -1482,9 +1544,14 @@ pub enum AgentOperation {
 
 impl AgentOperation {
     /// Every built-in operation.
-    pub const ALL: [AgentOperation; 11] = [
+    pub const ALL: [AgentOperation; 16] = [
         AgentOperation::MemoryRead,
-        AgentOperation::MemoryWrite,
+        AgentOperation::MemoryRecordObserved,
+        AgentOperation::MemoryRecordStated,
+        AgentOperation::MemoryChangeObserved,
+        AgentOperation::MemoryChangeStated,
+        AgentOperation::MemoryConfirmPending,
+        AgentOperation::ScheduleProposal,
         AgentOperation::ScheduleWrite,
         AgentOperation::KeyringSecretRead,
         AgentOperation::PolicyWrite,
@@ -1500,9 +1567,14 @@ impl AgentOperation {
     pub const fn class(self) -> ActionClass {
         match self {
             AgentOperation::MemoryRead => ActionClass::Observe,
-            AgentOperation::MemoryWrite => ActionClass::Reversible,
-            AgentOperation::ScheduleWrite => ActionClass::Consequential,
-            AgentOperation::KeyringSecretRead
+            AgentOperation::MemoryRecordObserved
+            | AgentOperation::MemoryRecordStated
+            | AgentOperation::MemoryChangeObserved
+            | AgentOperation::ScheduleProposal => ActionClass::Reversible,
+            AgentOperation::MemoryChangeStated => ActionClass::Consequential,
+            AgentOperation::MemoryConfirmPending
+            | AgentOperation::ScheduleWrite
+            | AgentOperation::KeyringSecretRead
             | AgentOperation::PolicyWrite
             | AgentOperation::PermissionWrite
             | AgentOperation::StandingApprovalWrite
@@ -1513,11 +1585,23 @@ impl AgentOperation {
         }
     }
 
+    /// Whether the operation records something on the user's word, so that
+    /// it needs the user to be there. An unattended task is deferred instead
+    /// (addendum section 18, item 4).
+    pub const fn needs_the_user_present(self) -> bool {
+        matches!(self, AgentOperation::MemoryRecordStated)
+    }
+
     /// The operation as text, for prompts and the audit log.
     pub const fn as_str(self) -> &'static str {
         match self {
             AgentOperation::MemoryRead => "memory_read",
-            AgentOperation::MemoryWrite => "memory_write",
+            AgentOperation::MemoryRecordObserved => "memory_record_observed",
+            AgentOperation::MemoryRecordStated => "memory_record_stated",
+            AgentOperation::MemoryChangeObserved => "memory_change_observed",
+            AgentOperation::MemoryChangeStated => "memory_change_stated",
+            AgentOperation::MemoryConfirmPending => "memory_confirm_pending",
+            AgentOperation::ScheduleProposal => "schedule_propose",
             AgentOperation::ScheduleWrite => "schedule_write",
             AgentOperation::KeyringSecretRead => "keyring_secret_read",
             AgentOperation::PolicyWrite => "policy_write",
@@ -1746,6 +1830,93 @@ mod tests {
     }
 
     #[test]
+    fn the_real_names_of_the_protected_units_are_covered() {
+        use PrivilegedOperation as Op;
+        // Unit names as packages really ship them: seen in the Fedora 44 and
+        // 43 package file lists on 2026-11-12 (apparmor in Debian's; the
+        // cryptsetup template in systemd's sources). A wrong prefix in the
+        // table would fail open; this is the check against the real names.
+        let units = [
+            ("polkit.service", Op::SecurityPolicy),
+            ("polkit-agent-helper@.service", Op::SecurityPolicy),
+            ("firewalld.service", Op::SecurityPolicy),
+            ("nftables.service", Op::SecurityPolicy),
+            ("iptables.service", Op::SecurityPolicy),
+            ("ip6tables.service", Op::SecurityPolicy),
+            ("ebtables.service", Op::SecurityPolicy),
+            ("arptables.service", Op::SecurityPolicy),
+            ("auditd.service", Op::SecurityPolicy),
+            ("audit-rules.service", Op::SecurityPolicy),
+            ("systemd-journald.service", Op::SecurityPolicy),
+            ("systemd-journald.socket", Op::SecurityPolicy),
+            ("systemd-logind.service", Op::SecurityPolicy),
+            ("systemd-homed.service", Op::SecurityPolicy),
+            ("systemd-userdbd.service", Op::SecurityPolicy),
+            ("systemd-userdbd.socket", Op::SecurityPolicy),
+            ("sshd.service", Op::SecurityPolicy),
+            ("sshd.socket", Op::SecurityPolicy),
+            ("sshd@.service", Op::SecurityPolicy),
+            ("sssd.service", Op::SecurityPolicy),
+            ("sssd-pam.socket", Op::SecurityPolicy),
+            ("fprintd.service", Op::SecurityPolicy),
+            ("selinux-autorelabel.service", Op::SecurityPolicy),
+            ("selinux-autorelabel-mark.service", Op::SecurityPolicy),
+            ("apparmor.service", Op::SecurityPolicy),
+            ("usbguard.service", Op::SecurityPolicy),
+            ("usbguard-dbus.service", Op::SecurityPolicy),
+            ("sddm.service", Op::SecurityPolicy),
+            ("greetd.service", Op::SecurityPolicy),
+            ("plasmalogin.service", Op::SecurityPolicy),
+            ("systemd-cryptsetup@luks\\x2droot.service", Op::Encryption),
+            ("clevis-luks-askpass.service", Op::Encryption),
+            ("clevis-luks-askpass.path", Op::Encryption),
+            ("systemd-pcrphase.service", Op::Encryption),
+            ("systemd-pcrphase-initrd.service", Op::Encryption),
+            ("systemd-pcrextend@.service", Op::Encryption),
+            ("systemd-pcrextend.socket", Op::Encryption),
+            ("systemd-pcrlock.service", Op::Encryption),
+            ("systemd-pcrmachine.service", Op::Encryption),
+            ("tpm2-abrmd.service", Op::Encryption),
+            ("fwupd.service", Op::Firmware),
+            ("fwupd-refresh.service", Op::Firmware),
+            ("fwupd-refresh.timer", Op::Firmware),
+            ("systemd-boot-update.service", Op::Bootloader),
+            ("rpm-ostreed.service", Op::OsUpdate),
+            ("rpm-ostreed-automatic.timer", Op::OsUpdate),
+            ("bootc-fetch-apply-updates.service", Op::OsUpdate),
+            ("bootc-fetch-apply-updates.timer", Op::OsUpdate),
+            ("bootc-finalize-staged.service", Op::OsUpdate),
+            ("dbus-broker.service", Op::Unclassified),
+            ("dbus-org.freedesktop.login1.service", Op::Unclassified),
+        ];
+        for (unit, expected) in units {
+            let covering: Vec<&ProtectedTarget> = PROTECTED_TARGETS
+                .iter()
+                .filter(|entry| entry.rule == TargetRule::Unit && entry.covers(unit))
+                .collect();
+            assert!(!covering.is_empty(), "{unit} is not protected");
+            assert_eq!(covering[0].operation, expected, "{unit}");
+            // Written in another letter case it is the same unit.
+            assert!(
+                PROTECTED_TARGETS.iter().any(|entry| entry.rule == TargetRule::Unit
+                    && entry.covers(&unit.to_ascii_uppercase())),
+                "{unit}"
+            );
+            // Whatever it is treated as, no repair session covers it.
+            assert!(!expected.repair_session_may_cover(), "{unit}");
+        }
+        // An ordinary unit is not caught by any of the prefixes.
+        for unit in ["cups.service", "bluetooth.service", "NetworkManager.service"] {
+            assert!(
+                !PROTECTED_TARGETS
+                    .iter()
+                    .any(|entry| entry.rule == TargetRule::Unit && entry.covers(unit)),
+                "{unit}"
+            );
+        }
+    }
+
+    #[test]
     fn a_protected_target_makes_a_typed_operation_system_critical() {
         use PrivilegedOperation as Op;
         use TypedOperationKind as Kind;
@@ -1944,9 +2115,30 @@ mod tests {
     fn agent_operation_classes_are_as_documented() {
         use AgentOperation as Op;
         assert_eq!(Op::MemoryRead.class(), ActionClass::Observe);
-        assert_eq!(Op::MemoryWrite.class(), ActionClass::Reversible);
-        assert_eq!(Op::ScheduleWrite.class(), ActionClass::Consequential);
+        // Addendum section 18, items 3 and 4: recording is class 1, and so is
+        // proposing a schedule, because a proposal changes nothing.
         for operation in [
+            Op::MemoryRecordObserved,
+            Op::MemoryRecordStated,
+            Op::MemoryChangeObserved,
+            Op::ScheduleProposal,
+        ] {
+            assert_eq!(operation.class(), ActionClass::Reversible, "{operation:?}");
+        }
+        // Changing or removing what the user stated is asked, not class 1.
+        assert_eq!(Op::MemoryChangeStated.class(), ActionClass::Consequential);
+        // Only a record made on the user's word needs the user there.
+        for operation in Op::ALL {
+            assert_eq!(
+                operation.needs_the_user_present(),
+                operation == Op::MemoryRecordStated,
+                "{operation:?}"
+            );
+        }
+        for operation in [
+            // The user's acts, which the assistant never performs.
+            Op::MemoryConfirmPending,
+            Op::ScheduleWrite,
             Op::KeyringSecretRead,
             Op::PolicyWrite,
             Op::PermissionWrite,

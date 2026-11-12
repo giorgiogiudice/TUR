@@ -144,7 +144,8 @@ In words, for one task:
       written, and the model is told the action was refused for that reason.
    5. *Perform.* A sandbox plan is built and run ([section 5](#5-the-read-only-sandbox)).
       The output is bounded, filtered ([section 6](#6-the-output-filter)) and
-      framed. An `executed` event is written before the result is passed on.
+      framed. An `executed` event, and an `output_withheld` event if anything
+      was withheld, are written before the result is passed on.
 7. **The results go back** in one user message, each in the provider's
    tool-result position, and the loop returns to step 2.
 
@@ -177,7 +178,7 @@ other way leaves the history as it was.
 ## 3. The limit on authority
 
 The engine's `Context` decides how much the engine allows, and one field of it,
-`trusted_path_available`, lifts the limit to classes 0 and 1. The loop is built
+`trusted_session_proven`, lifts the limit to classes 0 and 1. The loop is built
 so that this field cannot be set:
 
 - **The context is not an input.** A caller gives a `Situation`: whether a person
@@ -196,7 +197,8 @@ so that this field cannot be set:
   variable. `tur-pax run` has no option for the trusted path, for approval or
   for running without the sandbox.
 
-The engine's command `tur-pax policy check --trusted-path` still exists. It
+The engine's command `tur-pax policy check --trusted-session-proven` (formerly
+`--trusted-path`) still exists. It
 answers "what would the engine decide if the trusted path existed" and prints
 the decision. It performs nothing.
 
@@ -458,8 +460,9 @@ strings. `redact.rs` adds only the removal:
 - Standard error is filtered the same way, and so is the reason a sandbox could
   not start.
 
-The `executed` event records how many pieces were withheld and of which kinds
-(`TUR_AI_WITHHELD`, `TUR_AI_WITHHELD_KINDS`, `TUR-AI-OUTPUT-001`). It never
+The `executed` event records how many pieces were withheld
+(`TUR_AI_WITHHELD`), and an `output_withheld` event of its own records the
+count and the kinds (`TUR_AI_WITHHELD_KINDS`, `TUR-AI-OUTPUT-001`). It never
 records the text.
 
 The redactor of `tur-diagnostics` (identifiers: serial numbers, addresses, user
@@ -490,7 +493,8 @@ nothing is started.
 | `task_started` | A task begins | `TUR_AI_ATTENDED` |
 | `proposal_rejected` | A tool call did not become an action | `TUR_AI_ACTION` (the name, if it is an identifier; otherwise `<invalid>`), `TUR_AI_REASON`, `TUR_ERROR_CODE` |
 | `approval_unavailable` | The engine asked, wanted authentication or deferred | `TUR_AI_ACTION`, `TUR_AI_CLASS`, `TUR_AI_DECISION`, `TUR_ERROR_CODE` |
-| `executed` | An allowed action was performed, or tried | `TUR_AI_ACTION`, `TUR_AI_RESULT` (`ok`, `failed`, `timed_out`, `not_started`), `TUR_AI_EXIT`, `TUR_AI_OUTPUT_BYTES`, `TUR_AI_TRUNCATED`, `TUR_AI_WITHHELD`, `TUR_AI_WITHHELD_KINDS`, `TUR_ERROR_CODE` |
+| `executed` | An allowed action was performed, or tried: the action-outcome event (`audit::ActionOutcome`) | `TUR_AI_ACTION`, `TUR_AI_RESULT` (`ok`, `failed`, `timed_out`, `not_started`), `TUR_AI_EXIT`, `TUR_AI_OUTPUT_BYTES`, `TUR_AI_TRUNCATED`, `TUR_AI_WITHHELD` (a count), `TUR_ERROR_CODE` if it did not end well |
+| `output_withheld` | Part of what an action returned was withheld; follows the `executed` event of that action (`audit::OutputWithheld`) | `TUR_AI_ACTION`, `TUR_AI_WITHHELD`, `TUR_AI_WITHHELD_KINDS`, `TUR_ERROR_CODE` = `TUR-AI-OUTPUT-001` |
 | `response_discarded` | A response was discarded whole | `TUR_AI_REASON` (`refusal`, `error`, `output_limit`), `TUR_AI_DISCARDED_CALLS`, `TUR_ERROR_CODE` |
 | `task_finished` | A task ends | `TUR_AI_OUTCOME`, `TUR_AI_STEPS`, `TUR_AI_REQUESTS`, `TUR_AI_TOKENS`, `TUR_ERROR_CODE` |
 
@@ -639,7 +643,7 @@ change: they were accepted when the two components were added.
 | `tur-storage` | A way to list volumes of the live system (`volumes` takes only a captured `lsblk` file), and an access spelling shared by the manifest (`read-only`) and the command line (`ro`). | The adapter feeds `lsblk` to `volumes --from /dev/stdin`. `storage_preview_mount` has no adapter. |
 | `tur-device-manager` | Command-line forms for `device_list` (with categories) and `device_get`. | Not offered. |
 | The image | Install manifests to `/usr/share/tur/pax/manifests`, adapters to `/usr/share/tur/pax/adapters`, the catalogue to `/usr/share/tur/catalogue`; make sure `bubblewrap` and `prlimit` are present. | `tur-pax run --manifests DIR --adapters DIR`. |
-| `agent-policy.md` | Mention the two new subcommands. | This document. |
+| `agent-policy.md` | Done: section 9 points here for `run` and `chat`. | – |
 
 ## 13. Findings on the design
 
@@ -670,8 +674,10 @@ Reported, not changed: `ai-control-layer.md` is not edited by this change.
    in the memory layer's frame.
 6. **The audit fields have no way to say that an allowed action then failed, or
    that output was withheld.** `TUR_AI_DECISION` is about the decision. The
-   events of [section 7](#7-the-audit-trail) add what was needed; the design
-   should adopt or replace them.
+   events of [section 7](#7-the-audit-trail) add what was needed. Revision 8
+   of the design adopted them (section 21, item 7); they are now two typed
+   events of the audit module, `ActionOutcome` and `OutputWithheld`
+   ([agent-policy.md](agent-policy.md), section 8).
 
 ## 14. Interpretations
 

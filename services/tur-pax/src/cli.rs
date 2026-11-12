@@ -38,6 +38,7 @@ use crate::decision::{Decision, Verdict};
 use crate::engine::decide;
 use crate::manifest::ToolManifest;
 use crate::policy::UserPolicy;
+use crate::store::HeldApprovals;
 use crate::strict;
 
 /// Exit status: the decision is `allow`, or the manifest is valid.
@@ -124,10 +125,13 @@ pub struct CheckArgs {
     /// The session is locked.
     #[arg(long)]
     pub locked: bool,
-    /// The trusted confirmation path is available. Without this flag only
-    /// classes 0 and 1 can be allowed.
-    #[arg(long)]
-    pub trusted_path: bool,
+    /// Suppose a separate trusted session existed and had been proven
+    /// (addendum A section 19, item 2). It does not exist; this asks what
+    /// the engine would decide if it did, and performs nothing. Without the
+    /// flag only classes 0 and 1 can be allowed. `--trusted-path` is the
+    /// former name of the flag.
+    #[arg(long = "trusted-session-proven", alias = "trusted-path")]
+    pub trusted_session_proven: bool,
     /// A repair session expires at this time, in seconds since the Unix epoch.
     #[arg(long, requires = "repair_session_purpose")]
     pub repair_session_until: Option<u64>,
@@ -139,7 +143,10 @@ pub struct CheckArgs {
     #[arg(long, requires = "repair_session_until")]
     pub repair_session_purpose: Option<String>,
     /// A standing approval, as JSON with "service", "tool" and "arguments".
-    /// May be given more than once.
+    /// May be given more than once. It is checked and then NOT honoured:
+    /// standing approvals reach the engine only from the policy store, which
+    /// does not exist yet (addendum A section 18, item 1). The output says
+    /// how many were ignored.
     #[arg(long = "standing-approval")]
     pub standing_approvals: Vec<String>,
     /// The model flagged the action as consequential.
@@ -202,6 +209,8 @@ fn policy_check(args: &CheckArgs, out: &mut dyn Write, err: &mut dyn Write) -> i
             return Ok(EXIT_INPUT_ERROR);
         }
     };
+    // Checked, and not passed to the engine: see `evaluate`.
+    let ignored = args.standing_approvals.len();
 
     if args.json {
         let audit: serde_json::Map<String, Value> = record
@@ -215,6 +224,7 @@ fn policy_check(args: &CheckArgs, out: &mut dyn Write, err: &mut dyn Write) -> i
             "reason": decision.reason().as_str(),
             "error_code": decision.code().map(Code::as_str),
             "prompt": decision.prompt(),
+            "standing_approvals_ignored": ignored,
             "audit": audit,
         });
         writeln!(out, "{document}")?;
@@ -227,6 +237,12 @@ fn policy_check(args: &CheckArgs, out: &mut dyn Write, err: &mut dyn Write) -> i
         }
         if let Some(prompt) = decision.prompt() {
             writeln!(out, "prompt: {prompt}")?;
+        }
+        if ignored > 0 {
+            writeln!(
+                out,
+                "standing approvals: {ignored} given, not honoured (no policy store exists yet)"
+            )?;
         }
     }
     Ok(exit_status(&decision))
@@ -260,11 +276,14 @@ fn evaluate(args: &CheckArgs) -> Result<(Decision, AuditRecord), Vec<Problem>> {
         None => UserPolicy::default(),
     };
 
-    let mut standing_approvals = Vec::with_capacity(args.standing_approvals.len());
+    // A standing approval given here is checked for its form and goes no
+    // further. Only a policy store can hand the engine an approval
+    // (`HeldApprovals`), and this program is not one: a text typed on a
+    // command line is exactly what addendum A section 18, item 1 says must
+    // not be honoured.
     for text in &args.standing_approvals {
-        let approval: StandingApproval = serde_json::from_str(text)
+        serde_json::from_str::<StandingApproval>(text)
             .map_err(|error| invalid_input(format!("--standing-approval is not valid: {error}")))?;
-        standing_approvals.push(approval);
     }
 
     let repair_session = match (&args.repair_session_purpose, args.repair_session_until) {
@@ -287,9 +306,9 @@ fn evaluate(args: &CheckArgs) -> Result<(Decision, AuditRecord), Vec<Problem>> {
             Presence::Attended
         },
         session_locked: args.locked,
-        trusted_path_available: args.trusted_path,
+        trusted_session_proven: args.trusted_session_proven,
         repair_session,
-        standing_approvals,
+        standing_approvals: HeldApprovals::none(),
         model_flags_consequential: args.model_flags_consequential,
         // The command decides tool calls only, which have no target window.
         target_window_owner: WindowOwner::Unknown,
@@ -369,7 +388,7 @@ mod tests {
         else {
             panic!("expected policy check");
         };
-        assert!(!args.trusted_path);
+        assert!(!args.trusted_session_proven);
         assert!(!args.unattended);
         assert!(!args.locked);
         assert!(!args.model_flags_consequential);

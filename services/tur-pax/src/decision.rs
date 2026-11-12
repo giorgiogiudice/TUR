@@ -172,13 +172,16 @@ pub enum Reason {
     UnattendedCommandWhileLocked,
     /// Defer: an attended task is paused while the session is locked.
     PausedWhileLocked,
+    /// Defer: an unattended task records only observed memory entries; an
+    /// entry on the user's word waits for the user.
+    UnattendedMemoryNotObserved,
     /// Refused, for the stated reason.
     Refused(Refusal),
 }
 
 impl Reason {
     /// Every reason that is not a refusal. The refusals are [`Refusal::ALL`].
-    pub const ALL_BUT_REFUSALS: [Reason; 14] = [
+    pub const ALL_BUT_REFUSALS: [Reason; 15] = [
         Reason::ObservePermitted,
         Reason::ReversiblePermitted,
         Reason::StandingApprovalMatched,
@@ -193,6 +196,7 @@ impl Reason {
         Reason::UnattendedAskEveryActionMode,
         Reason::UnattendedCommandWhileLocked,
         Reason::PausedWhileLocked,
+        Reason::UnattendedMemoryNotObserved,
     ];
 
     /// The machine-readable name of the reason.
@@ -212,6 +216,7 @@ impl Reason {
             Reason::PausedWhileLocked => "paused_while_locked",
             Reason::UnattendedAskEveryActionMode => "unattended_ask_every_action_mode",
             Reason::UnattendedCommandWhileLocked => "unattended_command_while_locked",
+            Reason::UnattendedMemoryNotObserved => "unattended_memory_not_observed",
             Reason::Refused(refusal) => refusal.as_str(),
         }
     }

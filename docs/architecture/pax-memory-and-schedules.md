@@ -637,7 +637,7 @@ Where a choice had to be made, the stricter reading was taken.
 | 1 | Is memory on by default? (open question 10) | Off. The user turns it on |
 | 2 | What trust does a confirmed entry from content have? | Still `untrusted`. Confirmation allows recall; it does not vouch |
 | 3 | Who may confirm, correct, or switch memory? | The user only; each takes a confirmation the library cannot produce |
-| 4 | Who may forget? | Anyone. Removing a memory entry is class 1 in the policy engine, and forgetting never adds authority |
+| 4 | Who may forget? | Anyone, as far as this library goes: forgetting never adds authority. In the policy engine, removing or changing an observed entry is class 1, and removing or changing an entry the user stated or confirmed is class 2, so P@x asks first ([agent-policy.md](agent-policy.md), interpretation 27) |
 | 5 | Does forgetting or reading work while memory is off? | Yes. Only writing and recall stop |
 | 6 | What is recalled when the state file is damaged? | Nothing, and nothing is written, until the user sets the switch |
 | 7 | What trust does a procedure have? | `assistant_observed`: it is a record of what the assistant did |
@@ -692,10 +692,16 @@ is resolved here.
    could create a schedule with no approvals, and only the trusted path can attach
    one. The design should say so, and say which of the two produces the
    confirmation this crate asks for.
+   *Settled by addendum A section 18, item 3, and implemented in the engine:*
+   proposing a schedule is a class 1 operation of its own, and creating,
+   changing or removing one is class 4 for P@x: the user's act.
 4. **Memory writes are class 1 and unattended.** An unattended task may write
    memory (class 1 runs). Content it reads becomes pending and is harmless; but the
    orchestrator decides the kind, and nothing in the design says that an unattended
    task must never record `stated`. It should: nobody is there to state anything.
+   *Settled by addendum A section 18, item 4, and implemented in the engine:*
+   recording on the user's word is an operation of its own, which the engine
+   defers in an unattended task.
 5. **Recalled memory is sent to the provider** (section 8). Entries taken from
    content, once confirmed, are sent with every relevant task for as long as they
    exist. The consent text of section 8 should say that memory persists what was

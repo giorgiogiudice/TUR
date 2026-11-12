@@ -50,7 +50,7 @@ use tur_pax_providers::{
 
 use crate::action::{Action, AgentOperation};
 use crate::adapter::FEED_OUTPUT_BYTES;
-use crate::audit::{AuditMeta, decide_and_record};
+use crate::audit::{ActionOutcome, ActionResult, AuditMeta, OutputWithheld, decide_and_record};
 use crate::class::ActionClass;
 use crate::codes::Code;
 use crate::context::{Context, Presence, Timestamp, WindowOwner};
@@ -62,6 +62,7 @@ use crate::policy::UserPolicy;
 use crate::redact::{filter_json, filter_text, kind_name};
 use crate::registry::{Performer, ToolRegistry};
 use crate::sandbox::{Grant, GrantRules, Limits, SandboxPlan, is_system_visible};
+use crate::store::HeldApprovals;
 use crate::strict;
 use crate::trail::{DecisionSink, EventKind, Trail, TrailEvent, identifier};
 
@@ -140,9 +141,9 @@ impl Situation {
         Context {
             presence: self.presence,
             session_locked: self.session_locked,
-            trusted_path_available: false,
+            trusted_session_proven: false,
             repair_session: None,
-            standing_approvals: Vec::new(),
+            standing_approvals: HeldApprovals::none(),
             model_flags_consequential: false,
             target_window_owner: WindowOwner::Unknown,
         }
@@ -748,14 +749,22 @@ impl Performed {
         }
     }
 
-    fn code(&self) -> Option<TaskCode> {
+    /// The code of an action that did not end well.
+    fn failure(&self) -> Option<TaskCode> {
         match self.state {
             "not_started" => Some(TaskCode::SandboxUnavailable),
             "timed_out" => Some(TaskCode::SandboxTimedOut),
             "failed" => Some(TaskCode::TaskToolFailed),
-            _ if !self.withheld.is_empty() => Some(TaskCode::OutputWithheld),
             _ => None,
         }
+    }
+
+    /// The code the user is shown: the failure, or else that output was
+    /// withheld.
+    fn code(&self) -> Option<TaskCode> {
+        self.failure().or_else(|| {
+            (!self.withheld.is_empty()).then_some(TaskCode::OutputWithheld)
+        })
     }
 
     /// The text of the tool result: the output inside a frame that says what
@@ -1197,40 +1206,44 @@ impl Orchestrator<'_> {
         let result = match decision.verdict() {
             Verdict::Allow if decision.class() <= ActionClass::Reversible => {
                 let performed = self.perform(&proposal.performer);
-                let mut event =
-                    TrailEvent::new(EventKind::Executed, session.task, session.provider)
-                        .with("TUR_AI_ACTION", identifier(&action_label(&proposal.action)))
-                        .with("TUR_AI_RESULT", performed.state)
-                        .with(
-                            "TUR_AI_EXIT",
-                            performed
-                                .exit
-                                .map_or_else(|| "none".to_owned(), |code| code.to_string()),
-                        )
-                        .with("TUR_AI_OUTPUT_BYTES", performed.bytes.to_string())
-                        .with(
-                            "TUR_AI_TRUNCATED",
-                            if performed.truncated { "yes" } else { "no" },
-                        )
-                        .with("TUR_AI_WITHHELD", performed.withheld.len().to_string());
-                if !performed.withheld.is_empty() {
-                    let mut kinds: Vec<&str> = performed
-                        .withheld
-                        .iter()
-                        .map(|kind| kind_name(*kind))
-                        .collect();
-                    kinds.sort_unstable();
-                    kinds.dedup();
-                    event = event.with("TUR_AI_WITHHELD_KINDS", kinds.join(","));
-                }
+                let label = action_label(&proposal.action);
+                // The two events of the audit vocabulary: what became of the
+                // action, and, if anything was withheld from its output, how
+                // much and of which kinds. Never the output.
+                let outcome = ActionOutcome {
+                    action: label.clone(),
+                    result: ActionResult::from_name(performed.state)
+                        .unwrap_or(ActionResult::NotStarted),
+                    exit_code: performed.exit,
+                    output_bytes: performed.bytes,
+                    truncated: performed.truncated,
+                    withheld: performed.withheld.len(),
+                    error_code: performed
+                        .failure()
+                        .map(|code| code.as_str().to_owned()),
+                };
+                let kinds: Vec<&'static str> = performed
+                    .withheld
+                    .iter()
+                    .map(|kind| kind_name(*kind))
+                    .collect();
+                let withheld = OutputWithheld::new(&label, &kinds);
                 if let Some(code) = performed.code() {
-                    event = event.with("TUR_ERROR_CODE", code.as_str());
                     report.error_code = Some(code.as_str().to_owned());
                     report.message = Some(code.user_message().to_owned());
                 }
-                // The record comes before the result is passed on.
+                // The records come before the result is passed on.
+                let event =
+                    TrailEvent::action_outcome(session.task, session.provider, &outcome);
                 if self.trail.event(&event).is_err() {
                     return Err(Stop::audit());
+                }
+                if let Some(withheld) = &withheld {
+                    let event =
+                        TrailEvent::output_withheld(session.task, session.provider, withheld);
+                    if self.trail.event(&event).is_err() {
+                        return Err(Stop::audit());
+                    }
                 }
                 report.executed = performed.state != "not_started";
                 report.result = Some(performed.state);
@@ -1440,7 +1453,7 @@ mod tests {
                 let context = situation.context();
                 assert_eq!(context.presence, presence);
                 assert_eq!(context.session_locked, session_locked);
-                assert!(!context.trusted_path_available);
+                assert!(!context.trusted_session_proven);
                 assert!(context.repair_session.is_none());
                 assert!(context.standing_approvals.is_empty());
                 assert!(!context.model_flags_consequential);

@@ -26,7 +26,10 @@ use std::path::Path;
 
 use serde_json::{Map, Value};
 
-use crate::audit::{AuditRecord, AuditSink, AuditWriteError};
+use crate::audit::{
+    ACTION_OUTCOME_EVENT, ActionOutcome, AuditRecord, AuditSink, AuditWriteError,
+    OUTPUT_WITHHELD_EVENT, OutputWithheld,
+};
 
 /// The value of `TUR_AI_EVENT` for a decision of the policy engine.
 pub const DECISION_EVENT: &str = "decision";
@@ -42,8 +45,13 @@ pub enum EventKind {
     /// The engine asked for a confirmation, an authentication or the user's
     /// return, and no way to give one exists.
     ApprovalUnavailable,
-    /// An allowed action was performed, or was attempted and failed.
+    /// An allowed action was performed, or was attempted and failed: the
+    /// action-outcome event of the audit vocabulary
+    /// ([`crate::audit::ActionOutcome`]).
     Executed,
+    /// Part of what an action returned was withheld before it left the
+    /// machine ([`crate::audit::OutputWithheld`]).
+    OutputWithheld,
     /// A response of the model was discarded whole.
     ResponseDiscarded,
     /// A task ended.
@@ -52,11 +60,12 @@ pub enum EventKind {
 
 impl EventKind {
     /// Every kind.
-    pub const ALL: [EventKind; 6] = [
+    pub const ALL: [EventKind; 7] = [
         EventKind::TaskStarted,
         EventKind::ProposalRejected,
         EventKind::ApprovalUnavailable,
         EventKind::Executed,
+        EventKind::OutputWithheld,
         EventKind::ResponseDiscarded,
         EventKind::TaskFinished,
     ];
@@ -67,7 +76,8 @@ impl EventKind {
             EventKind::TaskStarted => "task_started",
             EventKind::ProposalRejected => "proposal_rejected",
             EventKind::ApprovalUnavailable => "approval_unavailable",
-            EventKind::Executed => "executed",
+            EventKind::Executed => ACTION_OUTCOME_EVENT,
+            EventKind::OutputWithheld => OUTPUT_WITHHELD_EVENT,
             EventKind::ResponseDiscarded => "response_discarded",
             EventKind::TaskFinished => "task_finished",
         }
@@ -109,6 +119,22 @@ impl TrailEvent {
             provider: identifier(provider),
             fields: Vec::new(),
         }
+    }
+
+    /// The action-outcome event of a task: what became of an action the
+    /// engine allowed.
+    pub fn action_outcome(task: &str, provider: &str, outcome: &ActionOutcome) -> Self {
+        let mut event = TrailEvent::new(EventKind::Executed, task, provider);
+        event.fields = outcome.fields();
+        event
+    }
+
+    /// The output-withheld event of a task: how many pieces of what an
+    /// action returned were withheld, and of which kinds.
+    pub fn output_withheld(task: &str, provider: &str, withheld: &OutputWithheld) -> Self {
+        let mut event = TrailEvent::new(EventKind::OutputWithheld, task, provider);
+        event.fields = withheld.fields();
+        event
     }
 
     /// Add a field. The caller passes only identifiers, counts, statuses and
@@ -350,6 +376,60 @@ mod tests {
             provider: "anthropic",
         };
         AuditRecord::new(&meta, &action, &context, &decision)
+    }
+
+    #[test]
+    fn the_events_of_the_audit_vocabulary_become_trail_events() {
+        let outcome = ActionOutcome {
+            action: "command:read_only".to_owned(),
+            result: crate::audit::ActionResult::Ok,
+            exit_code: Some(0),
+            output_bytes: 64,
+            truncated: false,
+            withheld: 2,
+            error_code: None,
+        };
+        let event = TrailEvent::action_outcome("task-1", "google", &outcome);
+        assert_eq!(event.kind(), EventKind::Executed);
+        assert_eq!(event.field("TUR_AI_RESULT"), Some("ok"));
+        assert_eq!(event.field("TUR_AI_WITHHELD"), Some("2"));
+        // The kinds and the code are the withheld event's.
+        assert_eq!(event.field("TUR_AI_WITHHELD_KINDS"), None);
+        assert_eq!(event.field("TUR_ERROR_CODE"), None);
+        let fields = event.journal_fields();
+        assert_eq!(fields[1], ("TUR_AI_EVENT", "executed".to_owned()));
+        assert_eq!(fields[3], ("TUR_AI_PROVIDER", "google".to_owned()));
+
+        let withheld = OutputWithheld::new("command:read_only", &["password", "password"])
+            .expect("something was withheld");
+        let event = TrailEvent::output_withheld("task-1", "google", &withheld);
+        assert_eq!(event.kind(), EventKind::OutputWithheld);
+        let names: Vec<&str> = event
+            .journal_fields()
+            .iter()
+            .map(|(name, _)| *name)
+            .collect();
+        assert_eq!(
+            names,
+            [
+                "MESSAGE",
+                "TUR_AI_EVENT",
+                "TUR_AI_TASK",
+                "TUR_AI_PROVIDER",
+                "TUR_AI_ACTION",
+                "TUR_AI_WITHHELD",
+                "TUR_AI_WITHHELD_KINDS",
+                "TUR_ERROR_CODE"
+            ]
+        );
+        assert_eq!(event.field("TUR_AI_WITHHELD"), Some("2"));
+        assert_eq!(event.field("TUR_AI_WITHHELD_KINDS"), Some("password"));
+        assert_eq!(event.field("TUR_ERROR_CODE"), Some("TUR-AI-OUTPUT-001"));
+        assert_eq!(
+            event.message(),
+            "tur-pax: output_withheld action=command:read_only withheld=2 \
+             withheld_kinds=password error_code=TUR-AI-OUTPUT-001"
+        );
     }
 
     #[test]

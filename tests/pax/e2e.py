@@ -1102,12 +1102,29 @@ class Test:
         sent = outcome.sent()
         leaked = [kind for kind, secret in machine.secrets.items() if secret in sent]
         self.checks.equal(name, "no credential was sent to the provider", leaked, [])
-        executed = outcome.events("executed")
         self.checks.equal(
             name,
-            "the trail records how much was withheld and of what kinds",
-            [(entry.get("TUR_AI_WITHHELD"), entry.get("TUR_AI_WITHHELD_KINDS"), entry.get("TUR_ERROR_CODE")) for entry in executed],
+            "the outcome of the action is that it ran, with three pieces withheld",
+            [
+                (entry.get("TUR_AI_RESULT"), entry.get("TUR_AI_WITHHELD"), entry.get("TUR_ERROR_CODE"))
+                for entry in outcome.events("executed")
+            ],
+            [("ok", "3", None)],
+        )
+        self.checks.equal(
+            name,
+            "an event of its own records how much was withheld and of what kinds",
+            [
+                (entry.get("TUR_AI_WITHHELD"), entry.get("TUR_AI_WITHHELD_KINDS"), entry.get("TUR_ERROR_CODE"))
+                for entry in outcome.events("output_withheld")
+            ],
             [("3", "known_token,password,private_key", "TUR-AI-OUTPUT-001")],
+        )
+        self.checks.equal(
+            name,
+            "the withheld event follows the outcome of its action",
+            [entry.get("TUR_AI_EVENT") for entry in outcome.audit],
+            ["task_started", "decision", "executed", "output_withheld", "task_finished"],
         )
         trail = json.dumps(outcome.audit)
         self.checks.equal(
