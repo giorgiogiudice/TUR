@@ -114,12 +114,10 @@ impl Filter {
                 .application
                 .as_deref()
                 .is_none_or(|application| entry.application() == Some(application))
-            && self.contains.as_ref().is_none_or(|needle| {
-                entry
-                    .text()
-                    .to_lowercase()
-                    .contains(&needle.to_lowercase())
-            })
+            && self
+                .contains
+                .as_ref()
+                .is_none_or(|needle| entry.text().to_lowercase().contains(&needle.to_lowercase()))
     }
 }
 
@@ -754,14 +752,22 @@ mod tests {
 
         assert_eq!(
             memory
-                .correct(entry.id(), "The printer is in the study.", &TestUser::refusing(6))
+                .correct(
+                    entry.id(),
+                    "The printer is in the study.",
+                    &TestUser::refusing(6)
+                )
                 .expect_err("not confirmed")
                 .code,
             Code::MemoryNotConfirmed
         );
         assert_eq!(
             memory
-                .correct(entry.id(), "the printer password is hunter2", &TestUser::agreeing(6))
+                .correct(
+                    entry.id(),
+                    "the printer password is hunter2",
+                    &TestUser::agreeing(6)
+                )
                 .expect_err("a secret")
                 .code,
             Code::MemorySecretPassword
@@ -773,10 +779,18 @@ mod tests {
                 .code,
             Code::MemoryInvalidEntry
         );
-        assert_eq!(memory.get(entry.id()), Ok(entry.clone()), "unchanged so far");
+        assert_eq!(
+            memory.get(entry.id()),
+            Ok(entry.clone()),
+            "unchanged so far"
+        );
 
         let corrected = memory
-            .correct(entry.id(), "The printer is in the study.", &TestUser::agreeing(7))
+            .correct(
+                entry.id(),
+                "The printer is in the study.",
+                &TestUser::agreeing(7),
+            )
             .expect("corrects");
         assert_eq!(corrected.text(), "The printer is in the study.");
         assert_eq!(corrected.kind(), entry.kind());

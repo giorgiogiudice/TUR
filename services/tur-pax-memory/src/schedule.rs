@@ -220,8 +220,7 @@ impl Schedule {
         created_at: Timestamp,
         confirmed_at: Timestamp,
     ) -> Result<Schedule, Problem> {
-        if !created_at.is_supported() || !confirmed_at.is_supported() || confirmed_at < created_at
-        {
+        if !created_at.is_supported() || !confirmed_at.is_supported() || confirmed_at < created_at {
             return Err(invalid_proposal(
                 "the creation and confirmation times are not in order".to_owned(),
             ));
@@ -393,7 +392,11 @@ impl Schedule {
 
     /// What the schedule is to do at `now`, given the time of its last run.
     /// See [`crate::trigger::next_run`].
-    pub fn next_run(&self, last_run: Option<Timestamp>, now: Timestamp) -> Result<NextRun, Problem> {
+    pub fn next_run(
+        &self,
+        last_run: Option<Timestamp>,
+        now: Timestamp,
+    ) -> Result<NextRun, Problem> {
         let since = last_run.map_or(self.confirmed_at, |last| last.max(self.confirmed_at));
         next_run(&self.trigger, self.missed_runs, since, now)
     }
@@ -785,7 +788,10 @@ impl<S: Store> ScheduleBook<S> {
     }
 
     fn read_run(&self, id: &str) -> Result<Option<RunRecord>, Problem> {
-        let bytes = self.store.get(Collection::Runs, id).map_err(store_problem)?;
+        let bytes = self
+            .store
+            .get(Collection::Runs, id)
+            .map_err(store_problem)?;
         let Some(bytes) = bytes else {
             return Ok(None);
         };
@@ -1443,7 +1449,12 @@ mod tests {
         assert_eq!(book.get(&id).expect("loads").standing_approvals().len(), 1);
         book.apply(&revoke, &TestUser::agreeing(3_000))
             .expect("revokes");
-        assert!(book.get(&id).expect("loads").standing_approvals().is_empty());
+        assert!(
+            book.get(&id)
+                .expect("loads")
+                .standing_approvals()
+                .is_empty()
+        );
         assert_eq!(
             book.apply(&revoke, &TestUser::agreeing(3_000))
                 .expect_err("already revoked")
@@ -1477,7 +1488,8 @@ mod tests {
     fn deferred_actions_are_kept_for_the_users_return() {
         let mut book = book();
         let schedule = book.create(task("Report"), &user()).expect("creates");
-        let other = json!({ "to": "everyone@example.org", "subject": "Weekly report", "copies": 1 });
+        let other =
+            json!({ "to": "everyone@example.org", "subject": "Weekly report", "copies": 1 });
         let mut run = run_of(&schedule, RunOutcome::Deferred);
         run.performed = vec![call(Value::Object(report_arguments()))];
         run.deferred = vec![DeferredAction {
@@ -1492,7 +1504,7 @@ mod tests {
         assert_eq!(record.deferred[0].action.arguments, object(other));
 
         let waiting = book.unpresented_deferrals().expect("lists");
-        assert_eq!(waiting, [record.clone()]);
+        assert_eq!(waiting, std::slice::from_ref(&record));
         let shown = book
             .mark_presented(&record.id, Timestamp(9_000))
             .expect("marks");
@@ -1522,7 +1534,9 @@ mod tests {
         // Deferred outcome without a deferred action, and the reverse.
         let run = run_of(&schedule, RunOutcome::Deferred);
         assert_eq!(
-            book.record_run(run, Timestamp(2_010)).expect_err("empty").code,
+            book.record_run(run, Timestamp(2_010))
+                .expect_err("empty")
+                .code,
             Code::ScheduleInvalidRun
         );
         let mut run = run_of(&schedule, RunOutcome::Completed);
@@ -1550,7 +1564,9 @@ mod tests {
         let mut run = run_of(&schedule, RunOutcome::Completed);
         run.schedule = ScheduleId::from_sequence(99);
         assert_eq!(
-            book.record_run(run, Timestamp(2_010)).expect_err("missing").code,
+            book.record_run(run, Timestamp(2_010))
+                .expect_err("missing")
+                .code,
             Code::ScheduleNotFound
         );
         assert!(book.runs(None).expect("lists").runs.is_empty());
@@ -1632,7 +1648,10 @@ mod tests {
         assert_eq!(kept.len(), MAX_RUNS_KEPT);
         // The oldest of this schedule went; the newest stayed.
         let newest = u64::try_from(MAX_RUNS_KEPT + extra + 1).expect("fits");
-        assert_eq!(kept.last().map(|run| run.id.clone()), Some(RunId::from_sequence(newest)));
+        assert_eq!(
+            kept.last().map(|run| run.id.clone()),
+            Some(RunId::from_sequence(newest))
+        );
         // The other schedule's record is untouched.
         assert_eq!(book.runs(Some(bins.id())).expect("lists").runs.len(), 1);
     }

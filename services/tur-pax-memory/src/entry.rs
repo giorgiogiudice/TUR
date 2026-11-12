@@ -75,7 +75,9 @@ impl EntryKind {
 
     /// Parse a kind from its text form.
     pub fn parse(text: &str) -> Option<EntryKind> {
-        EntryKind::ALL.into_iter().find(|kind| kind.as_str() == text)
+        EntryKind::ALL
+            .into_iter()
+            .find(|kind| kind.as_str() == text)
     }
 
     /// The trust level of an entry of this kind. The kind alone decides it;
@@ -302,7 +304,11 @@ pub struct MemoryEntry {
 
 impl MemoryEntry {
     /// A new entry. The state and the trust level follow from the kind.
-    pub(crate) fn create(id: EntryId, new: NewEntry, now: Timestamp) -> Result<MemoryEntry, String> {
+    pub(crate) fn create(
+        id: EntryId,
+        new: NewEntry,
+        now: Timestamp,
+    ) -> Result<MemoryEntry, String> {
         let entry = MemoryEntry {
             id,
             kind: new.kind,
@@ -691,7 +697,10 @@ mod tests {
         }
         assert_eq!(EntryKind::parse("authority"), None);
         // Stated outranks the rest, and content comes last.
-        let ranks: Vec<u8> = EntryKind::ALL.iter().map(|kind| kind.recall_rank()).collect();
+        let ranks: Vec<u8> = EntryKind::ALL
+            .iter()
+            .map(|kind| kind.recall_rank())
+            .collect();
         assert_eq!(ranks, [0, 1, 2, 3]);
     }
 
@@ -755,9 +764,12 @@ mod tests {
 
     #[test]
     fn only_content_can_be_pending_or_confirmed() {
-        let entry =
-            MemoryEntry::create(id(), NewEntry::stated("A fact.", "conversation"), Timestamp(5))
-                .expect("a valid entry");
+        let entry = MemoryEntry::create(
+            id(),
+            NewEntry::stated("A fact.", "conversation"),
+            Timestamp(5),
+        )
+        .expect("a valid entry");
         let mut value = serde_json::to_value(&entry).expect("serialises");
         value["state"] = json!("pending");
         assert!(serde_json::from_value::<MemoryEntry>(value.clone()).is_err());
@@ -775,8 +787,20 @@ mod tests {
         assert!(make(NewEntry::stated("", "conversation")).is_err());
         assert!(make(NewEntry::stated("   \n", "conversation")).is_err());
         assert!(make(NewEntry::stated("fine", "")).is_err());
-        assert!(make(NewEntry::stated(&"x".repeat(MAX_TEXT_BYTES), "conversation")).is_ok());
-        assert!(make(NewEntry::stated(&"x".repeat(MAX_TEXT_BYTES + 1), "conversation")).is_err());
+        assert!(
+            make(NewEntry::stated(
+                &"x".repeat(MAX_TEXT_BYTES),
+                "conversation"
+            ))
+            .is_ok()
+        );
+        assert!(
+            make(NewEntry::stated(
+                &"x".repeat(MAX_TEXT_BYTES + 1),
+                "conversation"
+            ))
+            .is_err()
+        );
         assert!(make(NewEntry::stated("two\nlines\tand a tab", "conversation")).is_ok());
         assert!(make(NewEntry::stated("escape \u{1b}[31m", "conversation")).is_err());
         assert!(make(NewEntry::stated("fine", "line\nbreak")).is_err());
@@ -785,8 +809,12 @@ mod tests {
         let many: Vec<&str> = many.iter().map(String::as_str).collect();
         assert!(make(NewEntry::stated("fine", "conversation").with_tags(&many)).is_err());
         assert!(
-            MemoryEntry::create(id(), NewEntry::stated("fine", "conversation"), Timestamp(u64::MAX))
-                .is_err()
+            MemoryEntry::create(
+                id(),
+                NewEntry::stated("fine", "conversation"),
+                Timestamp(u64::MAX)
+            )
+            .is_err()
         );
     }
 

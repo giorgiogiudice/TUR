@@ -235,7 +235,10 @@ fn has_known_token(text: &str) -> bool {
     let words = value_words(text);
     for (index, word) in words.iter().copied().enumerate() {
         // `name=value`: look at the value.
-        let candidate = word.rsplit('=').find(|part| !part.is_empty()).unwrap_or(word);
+        let candidate = word
+            .rsplit('=')
+            .find(|part| !part.is_empty())
+            .unwrap_or(word);
         if has_token_prefix(candidate) || has_token_prefix(word) || is_aws_key_id(candidate) {
             return true;
         }
@@ -267,7 +270,10 @@ fn has_token_prefix(word: &str) -> bool {
 // An AWS access key identifier: AKIA or ASIA and sixteen upper-case letters
 // and digits, at least one of them a digit.
 fn is_aws_key_id(word: &str) -> bool {
-    let rest = match word.strip_prefix("AKIA").or_else(|| word.strip_prefix("ASIA")) {
+    let rest = match word
+        .strip_prefix("AKIA")
+        .or_else(|| word.strip_prefix("ASIA"))
+    {
         Some(rest) => rest,
         None => return false,
     };
@@ -324,7 +330,9 @@ fn has_payment_card(text: &str) -> bool {
             let before = chars[start - 1];
             !(before.is_alphanumeric() || before == '+')
         };
-        let free_after = chars.get(index).is_none_or(|after| !after.is_alphanumeric());
+        let free_after = chars
+            .get(index)
+            .is_none_or(|after| !after.is_alphanumeric());
         if free_before && free_after && is_card_number(&digits) {
             return true;
         }
@@ -496,13 +504,73 @@ const WEAK_PHRASES: &[&[&str]] = &[&["token"], &["secret"]];
 // After "password is", these words continue a sentence rather than give the
 // password.
 const SENTENCE_WORDS: &[&str] = &[
-    "a", "about", "also", "always", "an", "at", "being", "by", "changed", "correct", "different",
-    "empty", "encrypted", "expired", "for", "forgotten", "from", "going", "here", "hidden", "in",
-    "incorrect", "it", "kept", "like", "located", "locked", "long", "lost", "managed", "my",
-    "needed", "never", "no", "not", "now", "on", "only", "optional", "protected", "remembered",
-    "required", "reset", "safe", "same", "saved", "secure", "set", "shared", "short", "something",
-    "still", "stored", "strong", "that", "the", "there", "this", "to", "too", "unknown", "weak",
-    "what", "with", "written", "wrong", "your",
+    "a",
+    "about",
+    "also",
+    "always",
+    "an",
+    "at",
+    "being",
+    "by",
+    "changed",
+    "correct",
+    "different",
+    "empty",
+    "encrypted",
+    "expired",
+    "for",
+    "forgotten",
+    "from",
+    "going",
+    "here",
+    "hidden",
+    "in",
+    "incorrect",
+    "it",
+    "kept",
+    "like",
+    "located",
+    "locked",
+    "long",
+    "lost",
+    "managed",
+    "my",
+    "needed",
+    "never",
+    "no",
+    "not",
+    "now",
+    "on",
+    "only",
+    "optional",
+    "protected",
+    "remembered",
+    "required",
+    "reset",
+    "safe",
+    "same",
+    "saved",
+    "secure",
+    "set",
+    "shared",
+    "short",
+    "something",
+    "still",
+    "stored",
+    "strong",
+    "that",
+    "the",
+    "there",
+    "this",
+    "to",
+    "too",
+    "unknown",
+    "weak",
+    "what",
+    "with",
+    "written",
+    "wrong",
+    "your",
 ];
 
 // Values that stand in for a secret without being one.
@@ -890,7 +958,14 @@ mod tests {
             join(&["AI", "za", body]),
             join(&["sk_", "live_", body]),
             join(&["AK", "IA", "IOSFODNN7EXAMPLE"]),
-            join(&["ey", "JhbGciOiJIUzI1NiJ9", ".", "eyJzdWIiOiIxMjM0NTY3ODkwIn0", ".", body]),
+            join(&[
+                "ey",
+                "JhbGciOiJIUzI1NiJ9",
+                ".",
+                "eyJzdWIiOiIxMjM0NTY3ODkwIn0",
+                ".",
+                body,
+            ]),
         ];
         for token in &tokens {
             let text = format!("use {token} for the build");

@@ -11,8 +11,8 @@ use chrono::{DateTime, Datelike, NaiveDateTime, Timelike, Utc};
 use chrono_tz::Tz;
 use tur_pax_memory::trigger::{MIN_INTERVAL_SECONDS, ON_TIME_GRACE_SECONDS};
 use tur_pax_memory::{
-    IntervalUnit, LocalTime, MissedRunPolicy, NextRun, ShortMonth, SystemEvent, Timestamp,
-    Trigger, Weekday, next_run,
+    IntervalUnit, LocalTime, MissedRunPolicy, NextRun, ShortMonth, SystemEvent, Timestamp, Trigger,
+    Weekday, next_run,
 };
 
 // xorshift64*: enough to spread test cases; nothing here needs more.
@@ -64,7 +64,11 @@ fn random_time(random: &mut Random) -> LocalTime {
 }
 
 fn random_interval(random: &mut Random) -> (u32, IntervalUnit) {
-    let unit = random.pick(&[IntervalUnit::Minutes, IntervalUnit::Hours, IntervalUnit::Days]);
+    let unit = random.pick(&[
+        IntervalUnit::Minutes,
+        IntervalUnit::Hours,
+        IntervalUnit::Days,
+    ]);
     let every = match unit {
         IntervalUnit::Minutes => random.between(5, 10_000),
         IntervalUnit::Hours => random.between(1, 500),
@@ -187,7 +191,11 @@ fn the_next_run_is_always_after_now() {
             } => {
                 assert!(scheduled_for <= now, "{place}");
                 assert!(scheduled_for > since, "{place}");
-                assert_eq!(late, now.0 - scheduled_for.0 > ON_TIME_GRACE_SECONDS, "{place}");
+                assert_eq!(
+                    late,
+                    now.0 - scheduled_for.0 > ON_TIME_GRACE_SECONDS,
+                    "{place}"
+                );
                 if late {
                     assert_eq!(policy, MissedRunPolicy::RunOnce, "{place}");
                 }
@@ -424,8 +432,13 @@ fn a_monthly_schedule_follows_its_rule_for_short_months() {
                 // Months come in order. Under `last_day` none is missed;
                 // under `skip` exactly the short ones are.
                 if let Some((year, month)) = previous {
-                    let mut expected = if month == 12 { (year + 1, 1) } else { (year, month + 1) };
-                    while rule == ShortMonth::Skip && days_in_month(expected.0, expected.1) < wanted {
+                    let mut expected = if month == 12 {
+                        (year + 1, 1)
+                    } else {
+                        (year, month + 1)
+                    };
+                    while rule == ShortMonth::Skip && days_in_month(expected.0, expected.1) < wanted
+                    {
                         expected = if expected.1 == 12 {
                             (expected.0 + 1, 1)
                         } else {

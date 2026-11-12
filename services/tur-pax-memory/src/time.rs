@@ -16,9 +16,7 @@ use serde::{Deserialize, Serialize};
 /// A point in time, in whole seconds since the Unix epoch (UTC).
 ///
 /// The same representation as the policy engine's `Timestamp`.
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct Timestamp(pub u64);
 
@@ -141,7 +139,10 @@ mod tests {
     fn renders_utc() {
         assert_eq!(Timestamp(0).to_rfc3339(), "1970-01-01T00:00:00Z");
         // 2026-11-12T10:00:00Z.
-        assert_eq!(Timestamp(1_794_477_600).to_rfc3339(), "2026-11-12T10:00:00Z");
+        assert_eq!(
+            Timestamp(1_794_477_600).to_rfc3339(),
+            "2026-11-12T10:00:00Z"
+        );
         assert_eq!(Timestamp::MAX.to_rfc3339(), "9999-12-31T23:59:59Z");
         assert_eq!(Timestamp(u64::MAX).to_rfc3339(), format!("@{}", u64::MAX));
     }

@@ -356,7 +356,10 @@ mod tests {
         );
         assert_eq!(approved.service(), "org.uos.Mail1");
         assert_eq!(approved.tool(), "mail_send");
-        assert_eq!(approved.arguments(), &object(json!({ "to": "a@example.org" })));
+        assert_eq!(
+            approved.arguments(),
+            &object(json!({ "to": "a@example.org" }))
+        );
         assert_eq!(approved.to_request().arguments, *approved.arguments());
     }
 
@@ -378,7 +381,11 @@ mod tests {
             ("org.uos.Mail1", "mail send"),
         ] {
             let problem = request(service, tool).validate().expect_err("invalid");
-            assert_eq!(problem.code, Code::ScheduleInvalidApproval, "{service} {tool}");
+            assert_eq!(
+                problem.code,
+                Code::ScheduleInvalidApproval,
+                "{service} {tool}"
+            );
         }
         let mut large = request("org.uos.Mail1", "mail_send");
         large.arguments.insert(

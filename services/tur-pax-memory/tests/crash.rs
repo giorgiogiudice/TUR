@@ -110,9 +110,7 @@ fn add(fs: &MemFs) -> Result<(), Problem> {
 
 fn correct(fs: &MemFs) -> Result<(), Problem> {
     let text = "A corrected fact with the marker quagga-marker-three.";
-    memory(fs)
-        .correct(&id(1), text, &TheUser(21))
-        .map(|_| ())
+    memory(fs).correct(&id(1), text, &TheUser(21)).map(|_| ())
 }
 
 fn confirm(fs: &MemFs) -> Result<(), Problem> {
@@ -168,7 +166,10 @@ fn crash_everywhere(name: &str, operation: Operation) {
                 listing.entries == before || listing.entries == after,
                 "{place}: the store holds neither the old nor the new state"
             );
-            assert!(reopened.is_enabled().is_ok(), "{place}: the state file is torn");
+            assert!(
+                reopened.is_enabled().is_ok(),
+                "{place}: the state file is torn"
+            );
 
             // The store goes on working, and the next change removes whatever
             // the interrupted write left behind.
@@ -276,10 +277,7 @@ fn a_truncated_state_file_fails_closed_and_loses_no_entry() {
         fs.set_file(&path, &bytes[..length]);
         let mut memory = memory(&fs);
         // Reading the entries never depends on the state file.
-        assert_eq!(
-            memory.list(&Filter::default()).expect("lists").entries,
-            all
-        );
+        assert_eq!(memory.list(&Filter::default()).expect("lists").entries, all);
         let intact = length + 1 >= bytes.len();
         let added = memory.add(
             NewEntry::stated("written beside a damaged state file", "conversation"),
@@ -301,10 +299,7 @@ fn a_truncated_state_file_fails_closed_and_loses_no_entry() {
         );
         assert_eq!(added.expect_err("damaged").code, Code::MemoryDamaged);
         assert_eq!(recalled.expect_err("damaged").code, Code::MemoryDamaged);
-        assert_eq!(
-            memory.list(&Filter::default()).expect("lists").entries,
-            all
-        );
+        assert_eq!(memory.list(&Filter::default()).expect("lists").entries, all);
         // The user sets the switch again, and memory works.
         memory
             .set_enabled(MemorySwitch { enabled: true }, &TheUser(41))
@@ -426,9 +421,16 @@ fn correcting_removes_the_old_text() {
     let mut memory = memory(&fs);
     assert!(holds(&fs, b"alpha fact one"));
     memory
-        .correct(&id(1), "A corrected fact, quagga-marker-three.", &TheUser(30))
+        .correct(
+            &id(1),
+            "A corrected fact, quagga-marker-three.",
+            &TheUser(30),
+        )
         .expect("corrects");
-    assert!(!holds(&fs, b"alpha fact one"), "the old text is still in a file");
+    assert!(
+        !holds(&fs, b"alpha fact one"),
+        "the old text is still in a file"
+    );
     assert!(holds(&fs, b"quagga-marker-three"));
 }
 
@@ -469,7 +471,10 @@ fn what_an_interrupted_write_left_behind_is_removed_by_the_next_change() {
         memory(&fs).forget(&id(1)).expect("forgets");
         assert!(!holds(&fs, marker), "the leftover survived a later change");
     }
-    assert!(found, "no crash left a temporary file with the entry's text");
+    assert!(
+        found,
+        "no crash left a temporary file with the entry's text"
+    );
 }
 
 fn proposal(name: &str) -> Proposal {
@@ -548,9 +553,7 @@ fn record_run(fs: &MemFs) -> Result<(), Problem> {
 
 fn mark_presented(fs: &MemFs) -> Result<(), Problem> {
     let run = tur_pax_memory::RunId::parse("r-00000001").expect("a valid identifier");
-    book(fs)
-        .mark_presented(&run, Timestamp(95_000))
-        .map(|_| ())
+    book(fs).mark_presented(&run, Timestamp(95_000)).map(|_| ())
 }
 
 #[test]
@@ -606,7 +609,11 @@ fn a_schedule_file_truncated_at_any_byte_never_hides_the_others() {
             assert!(listing.damaged.is_empty());
             continue;
         }
-        assert_eq!(listing.schedules, schedules[1..], "truncated to {length} bytes");
+        assert_eq!(
+            listing.schedules,
+            schedules[1..],
+            "truncated to {length} bytes"
+        );
         assert_eq!(listing.damaged.len(), 1);
         assert_eq!(listing.damaged[0].id, "s-00000001");
         assert_eq!(
@@ -657,7 +664,13 @@ fn files_on_the_real_file_system_are_private_and_leave_no_temporaries() {
     let entries_dir = store.collection_dir(Collection::MemoryEntries);
     let mut names: Vec<String> = fs::read_dir(&entries_dir)
         .expect("the directory")
-        .map(|entry| entry.expect("an entry").file_name().to_string_lossy().into_owned())
+        .map(|entry| {
+            entry
+                .expect("an entry")
+                .file_name()
+                .to_string_lossy()
+                .into_owned()
+        })
         .collect();
     names.sort();
     assert_eq!(names, ["m-00000001.json", "m-00000002.json"]);
@@ -680,8 +693,14 @@ fn files_on_the_real_file_system_are_private_and_leave_no_temporaries() {
         .mode();
     assert_eq!(dir_mode & 0o077, 0, "{dir_mode:o}");
 
-    assert_eq!(store.remove(Collection::MemoryEntries, "m-00000001"), Ok(true));
-    assert_eq!(store.remove(Collection::MemoryEntries, "m-00000001"), Ok(false));
+    assert_eq!(
+        store.remove(Collection::MemoryEntries, "m-00000001"),
+        Ok(true)
+    );
+    assert_eq!(
+        store.remove(Collection::MemoryEntries, "m-00000001"),
+        Ok(false)
+    );
     assert!(!file.exists());
     assert_eq!(store.get(Collection::MemoryEntries, "m-00000001"), Ok(None));
     let _ = fs::remove_dir_all(store.root());

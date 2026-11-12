@@ -853,7 +853,9 @@ mod tests {
         assert_eq!(time("07:30").to_string(), "07:30");
         assert_eq!(time("00:00").hour(), 0);
         assert_eq!(time("23:59").minute(), 59);
-        for text in ["24:00", "7:30", "07:60", "0730", "07:30:00", " 07:30", "ab:cd", "", "07-30"] {
+        for text in [
+            "24:00", "7:30", "07:60", "0730", "07:30:00", " 07:30", "ab:cd", "", "07-30",
+        ] {
             assert_eq!(LocalTime::parse(text), None, "{text:?}");
         }
         assert!(serde_json::from_str::<LocalTime>("\"25:00\"").is_err());
@@ -865,8 +867,13 @@ mod tests {
 
     #[test]
     fn once_fires_once() {
-        let trigger = Trigger::Once { at: Timestamp(1_000) };
-        assert_eq!(trigger.occurrence_after(Timestamp(999)), Ok(Some(Timestamp(1_000))));
+        let trigger = Trigger::Once {
+            at: Timestamp(1_000),
+        };
+        assert_eq!(
+            trigger.occurrence_after(Timestamp(999)),
+            Ok(Some(Timestamp(1_000)))
+        );
         assert_eq!(trigger.occurrence_after(Timestamp(1_000)), Ok(None));
         assert_eq!(trigger.occurrence_at_or_before(Timestamp(999)), Ok(None));
         assert_eq!(
@@ -907,28 +914,43 @@ mod tests {
             anchor: Timestamp(0),
         };
         assert_eq!(
-            every(4, IntervalUnit::Minutes).validate().expect_err("too frequent").code,
+            every(4, IntervalUnit::Minutes)
+                .validate()
+                .expect_err("too frequent")
+                .code,
             Code::ScheduleTooFrequent
         );
         assert_eq!(every(5, IntervalUnit::Minutes).validate(), Ok(()));
         assert_eq!(
-            every(0, IntervalUnit::Days).validate().expect_err("zero").code,
+            every(0, IntervalUnit::Days)
+                .validate()
+                .expect_err("zero")
+                .code,
             Code::ScheduleInvalidTrigger
         );
         assert_eq!(every(3660, IntervalUnit::Days).validate(), Ok(()));
         assert_eq!(
-            every(3661, IntervalUnit::Days).validate().expect_err("too long").code,
+            every(3661, IntervalUnit::Days)
+                .validate()
+                .expect_err("too long")
+                .code,
             Code::ScheduleInvalidTrigger
         );
         assert_eq!(
-            every(u32::MAX, IntervalUnit::Days).validate().expect_err("too long").code,
+            every(u32::MAX, IntervalUnit::Days)
+                .validate()
+                .expect_err("too long")
+                .code,
             Code::ScheduleInvalidTrigger
         );
 
         assert!(daily("07:30", "Europe/Rome").validate().is_ok());
         for zone in ["Europe/Atlantis", "", "CEST+2", "../../etc/localtime"] {
             assert_eq!(
-                daily("07:30", zone).validate().expect_err("unknown zone").code,
+                daily("07:30", zone)
+                    .validate()
+                    .expect_err("unknown zone")
+                    .code,
                 Code::ScheduleInvalidTrigger,
                 "{zone:?}"
             );
@@ -939,7 +961,11 @@ mod tests {
             zone: "UTC".to_owned(),
         };
         assert!(weekly(Vec::new()).validate().is_err());
-        assert!(weekly(vec![Weekday::Monday, Weekday::Monday]).validate().is_err());
+        assert!(
+            weekly(vec![Weekday::Monday, Weekday::Monday])
+                .validate()
+                .is_err()
+        );
         assert!(weekly(Weekday::ALL.to_vec()).validate().is_ok());
         let monthly = |day: u8| Trigger::Monthly {
             day,
@@ -950,30 +976,60 @@ mod tests {
         assert!(monthly(0).validate().is_err());
         assert!(monthly(32).validate().is_err());
         assert!(monthly(31).validate().is_ok());
-        assert!(Trigger::Once { at: Timestamp(u64::MAX) }.validate().is_err());
+        assert!(
+            Trigger::Once {
+                at: Timestamp(u64::MAX)
+            }
+            .validate()
+            .is_err()
+        );
     }
 
     #[test]
     fn daily_keeps_its_wall_clock_time_across_daylight_saving() {
         // Rome is UTC+1 in winter and UTC+2 in summer.
         let trigger = daily("07:30", "Europe/Rome");
-        assert_eq!(after(&trigger, utc(2026, 1, 10, 0, 0)), utc(2026, 1, 10, 6, 30));
-        assert_eq!(after(&trigger, utc(2026, 1, 10, 6, 30)), utc(2026, 1, 11, 6, 30));
+        assert_eq!(
+            after(&trigger, utc(2026, 1, 10, 0, 0)),
+            utc(2026, 1, 10, 6, 30)
+        );
+        assert_eq!(
+            after(&trigger, utc(2026, 1, 10, 6, 30)),
+            utc(2026, 1, 11, 6, 30)
+        );
         // Summer time starts on 29 March 2026.
-        assert_eq!(after(&trigger, utc(2026, 3, 28, 6, 30)), utc(2026, 3, 29, 5, 30));
-        assert_eq!(after(&trigger, utc(2026, 3, 29, 5, 30)), utc(2026, 3, 30, 5, 30));
+        assert_eq!(
+            after(&trigger, utc(2026, 3, 28, 6, 30)),
+            utc(2026, 3, 29, 5, 30)
+        );
+        assert_eq!(
+            after(&trigger, utc(2026, 3, 29, 5, 30)),
+            utc(2026, 3, 30, 5, 30)
+        );
         // Summer time ends on 25 October 2026.
-        assert_eq!(after(&trigger, utc(2026, 10, 24, 5, 30)), utc(2026, 10, 25, 6, 30));
+        assert_eq!(
+            after(&trigger, utc(2026, 10, 24, 5, 30)),
+            utc(2026, 10, 25, 6, 30)
+        );
     }
 
     #[test]
     fn a_time_that_does_not_exist_fires_when_the_gap_ends() {
         // Rome, 29 March 2026: 02:00 jumps to 03:00 at 01:00 UTC.
         let trigger = daily("02:30", "Europe/Rome");
-        assert_eq!(after(&trigger, utc(2026, 3, 28, 12, 0)), utc(2026, 3, 29, 1, 0));
+        assert_eq!(
+            after(&trigger, utc(2026, 3, 28, 12, 0)),
+            utc(2026, 3, 29, 1, 0)
+        );
         // The day before and the day after are ordinary.
-        assert_eq!(after(&trigger, utc(2026, 3, 27, 12, 0)), utc(2026, 3, 28, 1, 30));
-        assert_eq!(after(&trigger, utc(2026, 3, 29, 1, 0)), utc(2026, 3, 30, 0, 30));
+        assert_eq!(
+            after(&trigger, utc(2026, 3, 27, 12, 0)),
+            utc(2026, 3, 28, 1, 30)
+        );
+        assert_eq!(
+            after(&trigger, utc(2026, 3, 29, 1, 0)),
+            utc(2026, 3, 30, 0, 30)
+        );
         // It fires once that day, not also at 03:30.
         assert_eq!(
             trigger.occurrence_at_or_before(utc(2026, 3, 29, 23, 0)),
@@ -982,12 +1038,18 @@ mod tests {
 
         // New York, 8 March 2026: 02:00 jumps to 03:00 at 07:00 UTC.
         let trigger = daily("02:30", "America/New_York");
-        assert_eq!(after(&trigger, utc(2026, 3, 7, 12, 0)), utc(2026, 3, 8, 7, 0));
+        assert_eq!(
+            after(&trigger, utc(2026, 3, 7, 12, 0)),
+            utc(2026, 3, 8, 7, 0)
+        );
 
         // Lord Howe Island moves by half an hour: on 4 October 2026, 02:00
         // (UTC+10:30) jumps to 02:30 (UTC+11) at 15:30 UTC the day before.
         let trigger = daily("02:15", "Australia/Lord_Howe");
-        assert_eq!(after(&trigger, utc(2026, 10, 3, 0, 0)), utc(2026, 10, 3, 15, 30));
+        assert_eq!(
+            after(&trigger, utc(2026, 10, 3, 0, 0)),
+            utc(2026, 10, 3, 15, 30)
+        );
     }
 
     #[test]
@@ -1007,8 +1069,14 @@ mod tests {
 
         // New York, 1 November 2026: 01:30 happens at 05:30 and 06:30 UTC.
         let trigger = daily("01:30", "America/New_York");
-        assert_eq!(after(&trigger, utc(2026, 10, 31, 12, 0)), utc(2026, 11, 1, 5, 30));
-        assert_eq!(after(&trigger, utc(2026, 11, 1, 5, 30)), utc(2026, 11, 2, 6, 30));
+        assert_eq!(
+            after(&trigger, utc(2026, 10, 31, 12, 0)),
+            utc(2026, 11, 1, 5, 30)
+        );
+        assert_eq!(
+            after(&trigger, utc(2026, 11, 1, 5, 30)),
+            utc(2026, 11, 2, 6, 30)
+        );
     }
 
     #[test]
@@ -1129,7 +1197,12 @@ mod tests {
         // Having run once, nothing more is due: the two older occurrences are
         // not made up one by one.
         assert_eq!(
-            next_run(&trigger, MissedRunPolicy::RunOnce, back, Timestamp(back.0 + 5)),
+            next_run(
+                &trigger,
+                MissedRunPolicy::RunOnce,
+                back,
+                Timestamp(back.0 + 5)
+            ),
             Ok(NextRun::Wait {
                 next,
                 skipped_missed: false
@@ -1159,7 +1232,9 @@ mod tests {
 
     #[test]
     fn a_once_trigger_finishes() {
-        let trigger = Trigger::Once { at: Timestamp(10_000) };
+        let trigger = Trigger::Once {
+            at: Timestamp(10_000),
+        };
         let created = Timestamp(5_000);
         assert_eq!(
             next_run(&trigger, MissedRunPolicy::Skip, created, Timestamp(9_000)),
@@ -1177,7 +1252,12 @@ mod tests {
             })
         );
         assert_eq!(
-            next_run(&trigger, MissedRunPolicy::RunOnce, created, Timestamp(99_000)),
+            next_run(
+                &trigger,
+                MissedRunPolicy::RunOnce,
+                created,
+                Timestamp(99_000)
+            ),
             Ok(NextRun::Due {
                 scheduled_for: Timestamp(10_000),
                 late: true,
@@ -1192,7 +1272,12 @@ mod tests {
         );
         // After it has run.
         assert_eq!(
-            next_run(&trigger, MissedRunPolicy::RunOnce, Timestamp(10_010), Timestamp(10_020)),
+            next_run(
+                &trigger,
+                MissedRunPolicy::RunOnce,
+                Timestamp(10_010),
+                Timestamp(10_020)
+            ),
             Ok(NextRun::Finished {
                 skipped_missed: false
             })

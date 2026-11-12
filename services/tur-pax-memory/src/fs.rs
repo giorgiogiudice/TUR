@@ -314,7 +314,9 @@ impl FileSystem for MemFs {
         match cut {
             Some(written) => {
                 let kept = written.min(bytes.len());
-                state.files.insert(path.to_path_buf(), bytes[..kept].to_vec());
+                state
+                    .files
+                    .insert(path.to_path_buf(), bytes[..kept].to_vec());
                 Err(crashed())
             }
             None => {

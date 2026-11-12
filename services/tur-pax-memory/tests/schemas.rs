@@ -139,12 +139,18 @@ fn validate(root: &Value, schema: &Value, instance: &Value) -> Result<(), String
                 }
             }
             "minItems" => {
-                if instance.as_array().is_some_and(|items| items.len() < length(rule)) {
+                if instance
+                    .as_array()
+                    .is_some_and(|items| items.len() < length(rule))
+                {
                     return Err(format!("fewer than {rule} items"));
                 }
             }
             "maxItems" => {
-                if instance.as_array().is_some_and(|items| items.len() > length(rule)) {
+                if instance
+                    .as_array()
+                    .is_some_and(|items| items.len() > length(rule))
+                {
                     return Err(format!("more than {rule} items"));
                 }
             }
@@ -250,7 +256,10 @@ fn sample_entries() -> Vec<Value> {
         )
         .expect("adds");
     memory
-        .add(NewEntry::observed("Firefox is the default browser.", "task"), now)
+        .add(
+            NewEntry::observed("Firefox is the default browser.", "task"),
+            now,
+        )
         .expect("adds");
     let procedure = Procedure {
         name: "Reset the wireless profile".to_owned(),
@@ -334,7 +343,10 @@ fn what_the_entry_schema_rejects_the_loader_rejects() {
             entry["standing_approval"] = json!(true);
         }),
         ("no provenance", 0, |entry| {
-            entry.as_object_mut().expect("an object").remove("provenance");
+            entry
+                .as_object_mut()
+                .expect("an object")
+                .remove("provenance");
         }),
         ("another schema version", 0, |entry| {
             entry["schema_version"] = json!(2);
@@ -361,7 +373,10 @@ fn what_the_entry_schema_rejects_the_loader_rejects() {
             });
         }),
         ("a procedure without steps", 2, |entry| {
-            entry.as_object_mut().expect("an object").remove("procedure");
+            entry
+                .as_object_mut()
+                .expect("an object")
+                .remove("procedure");
         }),
         ("a procedure with an empty list of steps", 2, |entry| {
             entry["procedure"]["steps"] = json!([]);
@@ -432,7 +447,10 @@ fn the_entry_schema_states_the_limits_of_the_code() {
     assert_eq!(properties["text"]["maxLength"], MAX_TEXT_BYTES);
     assert_eq!(properties["tags"]["maxItems"], MAX_TAGS);
     assert_eq!(properties["tags"]["items"]["maxLength"], MAX_TAG_BYTES);
-    assert_eq!(properties["application"]["maxLength"], MAX_APPLICATION_BYTES);
+    assert_eq!(
+        properties["application"]["maxLength"],
+        MAX_APPLICATION_BYTES
+    );
     let defs = &schema["$defs"];
     assert_eq!(defs["timestamp"]["maximum"], Timestamp::MAX.0);
     assert_eq!(
@@ -559,9 +577,17 @@ fn every_stored_schedule_is_valid_against_the_schema() {
         let on_disk: Value = serde_json::from_slice(&bytes).expect("valid JSON");
         assert_eq!(&on_disk, document);
         assert!(loads(id, document));
-        kinds.push(document["trigger"]["type"].as_str().expect("a type").to_owned());
+        kinds.push(
+            document["trigger"]["type"]
+                .as_str()
+                .expect("a type")
+                .to_owned(),
+        );
     }
-    assert_eq!(kinds, ["once", "every", "daily", "weekly", "monthly", "event"]);
+    assert_eq!(
+        kinds,
+        ["once", "every", "daily", "weekly", "monthly", "event"]
+    );
     let from_code: Vec<&str> = sample_triggers().iter().map(Trigger::kind).collect();
     assert_eq!(kinds, from_code);
 }
@@ -677,7 +703,10 @@ fn the_schedule_schema_states_the_limits_of_the_code() {
     assert_eq!(schema["additionalProperties"], false);
     let properties = &schema["properties"];
     let defs = &schema["$defs"];
-    assert_eq!(properties["schema_version"]["const"], SCHEDULE_SCHEMA_VERSION);
+    assert_eq!(
+        properties["schema_version"]["const"],
+        SCHEDULE_SCHEMA_VERSION
+    );
     assert_eq!(properties["name"]["maxLength"], MAX_NAME_BYTES);
     assert_eq!(defs["timestamp"]["maximum"], Timestamp::MAX.0);
     assert_eq!(
@@ -719,14 +748,21 @@ fn the_schedule_schema_states_the_limits_of_the_code() {
         strings(&defs["trigger_event"]["properties"]["event"]["enum"]),
         sorted(events)
     );
-    let units = [IntervalUnit::Days, IntervalUnit::Hours, IntervalUnit::Minutes];
+    let units = [
+        IntervalUnit::Days,
+        IntervalUnit::Hours,
+        IntervalUnit::Minutes,
+    ];
     assert_eq!(
         strings(&defs["trigger_every"]["properties"]["unit"]["enum"]),
         units.map(IntervalUnit::as_str)
     );
     assert_eq!(
         strings(&properties["missed_runs"]["enum"]),
-        [MissedRunPolicy::RunOnce.as_str(), MissedRunPolicy::Skip.as_str()]
+        [
+            MissedRunPolicy::RunOnce.as_str(),
+            MissedRunPolicy::Skip.as_str()
+        ]
     );
     assert_eq!(
         strings(&defs["trigger_monthly"]["properties"]["if_day_missing"]["enum"]),

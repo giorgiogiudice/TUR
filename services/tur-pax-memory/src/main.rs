@@ -57,12 +57,7 @@ fn main() -> ExitCode {
     };
     let stdout = io::stdout();
     let stderr = io::stderr();
-    let status = run(
-        &cli,
-        &environment,
-        &mut stdout.lock(),
-        &mut stderr.lock(),
-    )
-    .unwrap_or(EXIT_ERROR);
+    let status =
+        run(&cli, &environment, &mut stdout.lock(), &mut stderr.lock()).unwrap_or(EXIT_ERROR);
     ExitCode::from(status)
 }

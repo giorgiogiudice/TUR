@@ -100,7 +100,10 @@ fn filled(store: &Path) {
         .expect("turns memory on");
     let now = Timestamp(1_700_000_100);
     memory
-        .add(NewEntry::stated(PRINTER, "conversation").with_tags(&["printer"]), now)
+        .add(
+            NewEntry::stated(PRINTER, "conversation").with_tags(&["printer"]),
+            now,
+        )
         .expect("adds");
     memory
         .add(
@@ -153,9 +156,17 @@ fn list_show_and_pending() {
     assert_eq!(run.status, EXIT_OK, "{}", run.stderr);
     let lines: Vec<&str> = run.stdout.lines().collect();
     assert_eq!(lines.len(), 3, "{}", run.stdout);
-    assert!(lines[0].starts_with("m-00000001  active   stated"), "{}", lines[0]);
+    assert!(
+        lines[0].starts_with("m-00000001  active   stated"),
+        "{}",
+        lines[0]
+    );
     assert!(lines[0].ends_with(PRINTER), "{}", lines[0]);
-    assert!(lines[2].starts_with("m-00000003  pending  from_content"), "{}", lines[2]);
+    assert!(
+        lines[2].starts_with("m-00000003  pending  from_content"),
+        "{}",
+        lines[2]
+    );
 
     let run = pax(&dir.path, &["list", "--kind", "observed", "--json"]);
     assert_eq!(run.status, EXIT_OK, "{}", run.stderr);
@@ -164,7 +175,10 @@ fn list_show_and_pending() {
     assert_eq!(listed["entries"][0]["id"], "m-00000002");
     assert_eq!(listed["entries"][0]["trust"], "assistant_observed");
 
-    let run = pax(&dir.path, &["list", "--tag", "printer", "--contains", "STUDY"]);
+    let run = pax(
+        &dir.path,
+        &["list", "--tag", "printer", "--contains", "STUDY"],
+    );
     assert_eq!(run.stdout.lines().count(), 1, "{}", run.stdout);
     let run = pax(&dir.path, &["list", "--application", "org.mozilla.firefox"]);
     assert_eq!(run.stdout.lines().count(), 1, "{}", run.stdout);
@@ -184,7 +198,11 @@ fn list_show_and_pending() {
         "source: web page: Example",
         PLANTED,
     ] {
-        assert!(run.stdout.contains(expected), "missing {expected:?} in {}", run.stdout);
+        assert!(
+            run.stdout.contains(expected),
+            "missing {expected:?} in {}",
+            run.stdout
+        );
     }
 
     let run = pax(&dir.path, &["show", "m-00000001", "--json"]);
@@ -286,9 +304,14 @@ fn export_holds_everything() {
         .collect();
     assert_eq!(texts, [PRINTER, BROWSER, PLANTED]);
     assert_eq!(entries[2]["state"], "pending");
-    let listed = exported["schedules"]["schedules"].as_array().expect("schedules");
+    let listed = exported["schedules"]["schedules"]
+        .as_array()
+        .expect("schedules");
     assert_eq!(listed.len(), 2);
-    assert_eq!(listed[0]["action"]["standing_approvals"][0]["tool"], "mail_send");
+    assert_eq!(
+        listed[0]["action"]["standing_approvals"][0]["tool"],
+        "mail_send"
+    );
     assert_eq!(exported["schedules"]["runs"], json!([]));
 }
 
@@ -318,7 +341,10 @@ fn a_damaged_file_is_reported_and_the_rest_still_listed() {
     let run = pax(&dir.path, &["export"]);
     assert_eq!(run.status, EXIT_DAMAGED);
     let exported = parse(&run.stdout);
-    assert_eq!(exported["memory"]["entries"].as_array().map(Vec::len), Some(2));
+    assert_eq!(
+        exported["memory"]["entries"].as_array().map(Vec::len),
+        Some(2)
+    );
     assert_eq!(exported["memory"]["damaged"][0]["id"], "m-00000002");
 
     // The damaged file is still there until the user forgets it.
@@ -399,7 +425,10 @@ fn schedules_list_next_and_show() {
         "s-00000001  next run 2026-11-13T06:30:00Z\ns-00000002  runs on its event\n"
     );
 
-    let run = pax(&dir.path, &["schedules", "next", "s-00000001", "--now", &now, "--json"]);
+    let run = pax(
+        &dir.path,
+        &["schedules", "next", "s-00000001", "--now", &now, "--json"],
+    );
     assert_eq!(run.status, EXIT_OK, "{}", run.stderr);
     assert_eq!(
         parse(&run.stdout),
@@ -412,13 +441,19 @@ fn schedules_list_next_and_show() {
     // Ten seconds after the occurrence it is due; three days later it is due
     // once, late, because the schedule's policy is to run once on return.
     let due = (1_794_551_400u64 + 10).to_string();
-    let run = pax(&dir.path, &["schedules", "next", "s-00000001", "--now", &due]);
+    let run = pax(
+        &dir.path,
+        &["schedules", "next", "s-00000001", "--now", &due],
+    );
     assert_eq!(
         run.stdout,
         "s-00000001  due now (scheduled for 2026-11-13T06:30:00Z, on time); then 2026-11-14T06:30:00Z\n"
     );
     let later = (1_794_551_400u64 + 3 * 86_400 + 7_200).to_string();
-    let run = pax(&dir.path, &["schedules", "next", "s-00000001", "--now", &later]);
+    let run = pax(
+        &dir.path,
+        &["schedules", "next", "s-00000001", "--now", &later],
+    );
     assert_eq!(
         run.stdout,
         "s-00000001  due now (scheduled for 2026-11-16T06:30:00Z, late); then 2026-11-17T06:30:00Z\n"
@@ -456,11 +491,18 @@ fn schedules_list_next_and_show() {
         "--- tur-pax-schedule-s-00000001.timer (not installed)",
         "OnCalendar=2026-11-13 06:30:00 UTC",
     ] {
-        assert!(run.stdout.contains(expected), "missing {expected:?} in {}", run.stdout);
+        assert!(
+            run.stdout.contains(expected),
+            "missing {expected:?} in {}",
+            run.stdout
+        );
     }
 
     // The event schedule has a service and no timer.
-    let run = pax(&dir.path, &["schedules", "show", "s-00000002", "--units", "--json"]);
+    let run = pax(
+        &dir.path,
+        &["schedules", "show", "s-00000002", "--units", "--json"],
+    );
     assert_eq!(run.status, EXIT_OK, "{}", run.stderr);
     let shown = parse(&run.stdout);
     assert_eq!(shown["next_run"]["state"], "on_event");
@@ -483,7 +525,11 @@ fn schedules_list_next_and_show() {
     // Rendering units wrote nothing outside the store, and nothing new in it.
     let files: Vec<String> = all_files(&dir.path)
         .iter()
-        .filter_map(|(path, _)| path.file_name().and_then(|name| name.to_str()).map(str::to_owned))
+        .filter_map(|(path, _)| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .map(str::to_owned)
+        })
         .collect();
     assert!(
         files.iter().all(|name| name.ends_with(".json")),
@@ -509,10 +555,18 @@ fn usage_errors_and_invalid_values() {
     }
     let run = pax(&dir.path, &["list", "--kind", "authority"]);
     assert_eq!(run.status, EXIT_ERROR);
-    assert!(run.stderr.contains("UOS-AI-MEMORY-INPUT-001"), "{}", run.stderr);
+    assert!(
+        run.stderr.contains("UOS-AI-MEMORY-INPUT-001"),
+        "{}",
+        run.stderr
+    );
     let run = pax(&dir.path, &["list", "--state", "trusted"]);
     assert_eq!(run.status, EXIT_ERROR);
-    assert!(run.stderr.contains("UOS-AI-MEMORY-INPUT-001"), "{}", run.stderr);
+    assert!(
+        run.stderr.contains("UOS-AI-MEMORY-INPUT-001"),
+        "{}",
+        run.stderr
+    );
 }
 
 #[test]

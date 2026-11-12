@@ -208,11 +208,7 @@ fn candidate(entry: &MemoryEntry) -> Candidate<'_> {
     }
     let mut all = body;
     all.extend(labels.iter().cloned());
-    Candidate {
-        entry,
-        all,
-        labels,
-    }
+    Candidate { entry, all, labels }
 }
 
 /// Recall from a set of entries. Pending entries are ignored.
@@ -326,11 +322,7 @@ fn quoted_line(entry: &MemoryEntry) -> String {
         line.push_str(&format!(",\"application\":{}", quote(application)));
     }
     if !entry.tags().is_empty() {
-        let tags: Vec<String> = entry
-            .tags()
-            .iter()
-            .map(|tag| quote(tag.as_str()))
-            .collect();
+        let tags: Vec<String> = entry.tags().iter().map(|tag| quote(tag.as_str())).collect();
         line.push_str(&format!(",\"tags\":[{}]", tags.join(",")));
     }
     line.push_str(&format!(",\"text\":{}", quote(entry.text())));
@@ -370,7 +362,11 @@ mod tests {
     }
 
     fn ids(notes: &RecalledNotes) -> Vec<&str> {
-        notes.notes().iter().map(|note| note.id().as_str()).collect()
+        notes
+            .notes()
+            .iter()
+            .map(|note| note.id().as_str())
+            .collect()
     }
 
     #[test]
@@ -387,12 +383,32 @@ mod tests {
     #[test]
     fn the_most_relevant_entries_come_first() {
         let entries = [
-            entry(1, NewEntry::stated("My printer is the one in the study.", "conversation"), 10),
-            entry(2, NewEntry::stated("I prefer dark mode in every application.", "conversation"), 20),
-            entry(3, NewEntry::observed("The study printer needs the hplip driver.", "task"), 30),
-            entry(4, NewEntry::observed("Firefox is the default browser.", "task"), 40),
+            entry(
+                1,
+                NewEntry::stated("My printer is the one in the study.", "conversation"),
+                10,
+            ),
+            entry(
+                2,
+                NewEntry::stated("I prefer dark mode in every application.", "conversation"),
+                20,
+            ),
+            entry(
+                3,
+                NewEntry::observed("The study printer needs the hplip driver.", "task"),
+                30,
+            ),
+            entry(
+                4,
+                NewEntry::observed("Firefox is the default browser.", "task"),
+                40,
+            ),
         ];
-        let notes = recall_from(&entries, "print this on the study printer", RecallBudget::default());
+        let notes = recall_from(
+            &entries,
+            "print this on the study printer",
+            RecallBudget::default(),
+        );
         // Both printer entries match "study" and "printer"; the stated one
         // outranks the observed one at equal score.
         assert_eq!(ids(&notes), ["m-00000001", "m-00000003"]);
@@ -407,10 +423,26 @@ mod tests {
     #[test]
     fn rarer_terms_and_labels_count_for_more() {
         let entries = [
-            entry(1, NewEntry::observed("The backup runs with borg.", "task"), 10),
-            entry(2, NewEntry::observed("The backup disk is the grey one.", "task"), 10),
-            entry(3, NewEntry::observed("The backup log is in the journal.", "task"), 10),
-            entry(4, NewEntry::observed("Uses borg.", "task").with_tags(&["backup"]), 10),
+            entry(
+                1,
+                NewEntry::observed("The backup runs with borg.", "task"),
+                10,
+            ),
+            entry(
+                2,
+                NewEntry::observed("The backup disk is the grey one.", "task"),
+                10,
+            ),
+            entry(
+                3,
+                NewEntry::observed("The backup log is in the journal.", "task"),
+                10,
+            ),
+            entry(
+                4,
+                NewEntry::observed("Uses borg.", "task").with_tags(&["backup"]),
+                10,
+            ),
         ];
         // "backup" is in all four entries (weight 1000); "borg" in two (1250).
         let notes = recall_from(&entries, "backup borg", RecallBudget::default());
@@ -436,24 +468,47 @@ mod tests {
             entry(5, NewEntry::observed("alpha observed old", "task"), 10),
             entry(4, NewEntry::observed("alpha observed new", "task"), 99),
             entry(3, NewEntry::stated("alpha stated", "conversation"), 1),
-            entry(2, NewEntry::observed("alpha observed same time b", "task"), 50),
-            entry(1, NewEntry::observed("alpha observed same time a", "task"), 50),
+            entry(
+                2,
+                NewEntry::observed("alpha observed same time b", "task"),
+                50,
+            ),
+            entry(
+                1,
+                NewEntry::observed("alpha observed same time a", "task"),
+                50,
+            ),
         ];
         let notes = recall_from(&entries, "alpha", RecallBudget::default());
         assert_eq!(
             ids(&notes),
-            ["m-00000003", "m-00000004", "m-00000001", "m-00000002", "m-00000005"]
+            [
+                "m-00000003",
+                "m-00000004",
+                "m-00000001",
+                "m-00000002",
+                "m-00000005"
+            ]
         );
         // The order of the input does not matter.
         let mut reversed = entries.to_vec();
         reversed.reverse();
-        assert_eq!(recall_from(&reversed, "alpha", RecallBudget::default()), notes);
+        assert_eq!(
+            recall_from(&reversed, "alpha", RecallBudget::default()),
+            notes
+        );
     }
 
     #[test]
     fn the_budget_bounds_entries_and_bytes() {
         let entries: Vec<MemoryEntry> = (1..=20)
-            .map(|n| entry(n, NewEntry::observed(&format!("gamma note number {n}"), "task"), n))
+            .map(|n| {
+                entry(
+                    n,
+                    NewEntry::observed(&format!("gamma note number {n}"), "task"),
+                    n,
+                )
+            })
             .collect();
         let two = RecallBudget {
             max_entries: 2,

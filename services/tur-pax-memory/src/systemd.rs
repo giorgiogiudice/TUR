@@ -100,7 +100,10 @@ pub fn sanitise_name(name: &str) -> String {
         .take(MAX_DESCRIPTION_NAME_CHARS)
         .map(|c| {
             let allowed = c.is_alphanumeric()
-                || matches!(c, ' ' | '-' | '_' | '.' | ',' | ':' | '!' | '?' | '(' | ')' | '@' | '/' | '+');
+                || matches!(
+                    c,
+                    ' ' | '-' | '_' | '.' | ',' | ':' | '!' | '?' | '(' | ')' | '@' | '/' | '+'
+                );
             if allowed { c } else { '_' }
         })
         .collect();
@@ -164,7 +167,8 @@ fn description(schedule: &Schedule, what: &str) -> String {
     )
 }
 
-const HEADER: &str = "# Rendered by tur-pax-memory. Do not edit: it is written again after every run.";
+const HEADER: &str =
+    "# Rendered by tur-pax-memory. Do not edit: it is written again after every run.";
 
 /// The service unit of a schedule.
 pub fn render_service(schedule: &Schedule, options: &UnitOptions) -> Result<UnitFile, Problem> {
@@ -203,9 +207,7 @@ pub fn render_units(
     options: &UnitOptions,
 ) -> Result<Units, Problem> {
     let service = render_service(schedule, options)?;
-    let timer = next
-        .map(|next| render_timer(schedule, next))
-        .transpose()?;
+    let timer = next.map(|next| render_timer(schedule, next)).transpose()?;
     Ok(Units { service, timer })
 }
 
@@ -245,8 +247,7 @@ mod tests {
     #[test]
     fn the_units_of_a_reminder() {
         let schedule = schedule_named("Bins", daily());
-        let units =
-            render_units(&schedule, Some(NEXT), &UnitOptions::default()).expect("renders");
+        let units = render_units(&schedule, Some(NEXT), &UnitOptions::default()).expect("renders");
         assert_eq!(units.service.name, "tur-pax-schedule-s-00000001.service");
         assert_eq!(
             units.service.contents,
@@ -339,18 +340,21 @@ mod tests {
         ];
         for name in hostile {
             let safe = sanitise_name(name);
-            for forbidden in ['\n', '\r', '%', '\\', '=', '[', ']', ';', '#', '"', '\'', '`', '$', '{', '\u{2028}', '\u{0085}'] {
+            for forbidden in [
+                '\n', '\r', '%', '\\', '=', '[', ']', ';', '#', '"', '\'', '`', '$', '{',
+                '\u{2028}', '\u{0085}',
+            ] {
                 assert!(!safe.contains(forbidden), "{name:?} kept {forbidden:?}");
             }
             assert!(!safe.is_empty());
             assert!(safe.chars().count() <= MAX_DESCRIPTION_NAME_CHARS);
         }
         assert_eq!(sanitise_name("   "), "unnamed");
-        assert_eq!(sanitise_name("Wöchentlicher Bericht (Büro)"), "Wöchentlicher Bericht (Büro)");
         assert_eq!(
-            sanitise_name("x\nExecStart=/bin/sh"),
-            "x_ExecStart_/bin/sh"
+            sanitise_name("Wöchentlicher Bericht (Büro)"),
+            "Wöchentlicher Bericht (Büro)"
         );
+        assert_eq!(sanitise_name("x\nExecStart=/bin/sh"), "x_ExecStart_/bin/sh");
         assert_eq!(sanitise_name(&"n".repeat(500)).chars().count(), 60);
 
         // Names a schedule can really have: everything but control characters.
@@ -373,7 +377,10 @@ mod tests {
                 .lines()
                 .filter(|line| line.starts_with("ExecStart="))
                 .collect();
-            assert_eq!(exec, ["ExecStart=/usr/libexec/tur-pax-run-schedule s-00000001"]);
+            assert_eq!(
+                exec,
+                ["ExecStart=/usr/libexec/tur-pax-run-schedule s-00000001"]
+            );
         }
     }
 
