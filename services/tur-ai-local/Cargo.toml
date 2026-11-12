@@ -1,0 +1,51 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+[package]
+name = "tur-ai-local"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+license = "LicenseRef-TUR-Noncommercial-1.0.0"
+description = "TUR local AI, first slice: reads the hardware, keeps a curated catalogue of models, recommends one that fits, downloads and verifies it, and serves it with llama.cpp's llama-server on the loopback interface only."
+repository = "https://github.com/giorgiogiudice/TUR"
+publish = false
+
+# Each component is its own workspace with its own lockfile. See ADR-0005.
+[workspace]
+
+[lib]
+name = "tur_ai_local"
+path = "src/lib.rs"
+
+[[bin]]
+name = "tur-ai-local"
+path = "src/main.rs"
+
+# Every third-party crate here is already used by another TUR program in the
+# image (docs/dependencies/image-crates.csv); none is new to the project.
+[dependencies]
+tur-core = { path = "../../crates/tur-core" }
+# The catalogue entries, the state file and the versioned JSON reports.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# The model catalogue is written in TOML, like the application catalogue.
+toml = "1"
+# SHA-256 of a downloaded model, checked before the model can be used.
+sha2 = "0.10"
+# Blocking HTTP client: the download from the publisher (https only) and the
+# engine's health and metrics on the loopback interface. TLS is rustls with
+# the bundled web PKI roots, as in tur-pax-providers.
+ureq = { version = "3.5", default-features = false, features = ["rustls"] }
+# Command-line parsing. Colour and suggestion features are left out to keep the
+# dependency tree small; the `env` feature is deliberately not enabled, so no
+# argument can be supplied through the environment.
+clap = { version = "4", default-features = false, features = ["std", "derive", "help", "usage", "error-context"] }
+
+[dev-dependencies]
+# P@x's loader of tool manifests and adapters, to check the ones this
+# component ships (tests/agent_tools.rs). Only that test uses it; the
+# program does not depend on the assistant.
+tur-pax = { path = "../tur-pax" }
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"

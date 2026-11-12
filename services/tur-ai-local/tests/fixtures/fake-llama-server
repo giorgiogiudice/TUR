@@ -1,0 +1,96 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+"""A stand-in for llama-server, for the tests of tur-ai-local's supervisor.
+
+It answers the three things the supervisor uses: GET /health (no key),
+GET /metrics (with the key, in llama-server's Prometheus names) and a
+trivial POST /v1/chat/completions that moves the counters. It writes the
+arguments it was started with to fake-engine-args.json in its working
+directory, so that a test can check the command line.
+
+It is not llama-server and proves nothing about it; the local-ai workflow
+runs the real engine.
+"""
+
+import json
+import sys
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+
+def option(name, default=None):
+    if name in sys.argv:
+        index = sys.argv.index(name)
+        if index + 1 < len(sys.argv):
+            return sys.argv[index + 1]
+    return default
+
+
+with open("fake-engine-args.json", "w") as handle:
+    json.dump(sys.argv[1:], handle)
+
+HOST = option("--host", "127.0.0.1")
+PORT = int(option("--port", "8080"))
+KEY_FILE = option("--api-key-file")
+KEY = open(KEY_FILE).read().strip() if KEY_FILE else None
+LOCK = threading.Lock()
+COUNTERS = {"prompt": 0, "predicted": 0, "decode": 0}
+
+
+class Handler(BaseHTTPRequestHandler):
+    def log_message(self, *args):
+        pass
+
+    def authorised(self):
+        if KEY is None:
+            return True
+        return self.headers.get("Authorization", "") == f"Bearer {KEY}"
+
+    def send(self, status, body, kind="application/json"):
+        data = body.encode()
+        self.send_response(status)
+        self.send_header("Content-Type", kind)
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def do_GET(self):
+        if self.path == "/health":
+            self.send(200, '{"status":"ok"}')
+        elif self.path == "/metrics":
+            if not self.authorised():
+                self.send(401, '{"error":"unauthorised"}')
+                return
+            with LOCK:
+                text = (
+                    "# HELP llamacpp:prompt_tokens_total Number of prompt tokens processed.\n"
+                    f"llamacpp:prompt_tokens_total {COUNTERS['prompt']}\n"
+                    f"llamacpp:tokens_predicted_total {COUNTERS['predicted']}\n"
+                    f"llamacpp:n_decode_total {COUNTERS['decode']}\n"
+                    "llamacpp:requests_processing 0\n"
+                    "llamacpp:requests_deferred 0\n"
+                )
+            self.send(200, text, "text/plain")
+        else:
+            self.send(404, '{"error":"not found"}')
+
+    def do_POST(self):
+        length = int(self.headers.get("Content-Length", "0"))
+        self.rfile.read(length)
+        if not self.authorised():
+            self.send(401, '{"error":"unauthorised"}')
+            return
+        if self.path != "/v1/chat/completions":
+            self.send(404, '{"error":"not found"}')
+            return
+        with LOCK:
+            COUNTERS["prompt"] += 5
+            COUNTERS["predicted"] += 2
+            COUNTERS["decode"] += 3
+        self.send(200, json.dumps({
+            "object": "chat.completion",
+            "choices": [{"index": 0, "message": {"role": "assistant", "content": "ok"}, "finish_reason": "stop"}],
+        }))
+
+
+ThreadingHTTPServer((HOST, PORT), Handler).serve_forever()

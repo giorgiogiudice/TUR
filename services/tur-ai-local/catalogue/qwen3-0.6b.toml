@@ -1,0 +1,51 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR local model catalogue entry. Format: schemas/local-model.schema.json.
+# How entries are written and sourced: services/tur-ai-local/catalogue/README.md.
+#
+# Sources read on 2026-11-12: the Hugging Face API for Qwen/Qwen3-0.6B-GGUF
+# (revision, file list, sizes and LFS SHA-256 digests), the model card
+# README.md and the LICENSE file at the pinned revision.
+
+schema_version = 1
+id = "qwen3-0.6b"
+name = "Qwen3 0.6B"
+publisher = "Qwen (Alibaba Cloud)"
+repository = "https://huggingface.co/Qwen/Qwen3-0.6B-GGUF"
+revision = "23749fefcc72300e3a2ad315e1317431b06b590a"
+format = "gguf"
+quantisation = "Q8_0"
+parameters = "0.6B"
+# The model card: "Context Length: 32,768".
+context_length = 32768
+# Estimate: the file, the 16-bit context cache at 8192 tokens
+# (28 layers x 8 KV heads x 128 x 2 x 2 bytes = 114,688 bytes per token)
+# and 512 MiB for the engine's working memory. Measured values are below.
+memory_bytes = 2150000000
+memory_context = 8192
+kv_bytes_per_token = 114688
+capabilities = ["chat", "tools"]
+# Thinking and non-thinking mode in one model; tur-ai-local starts it with
+# thinking off unless asked (--reasoning).
+thinking = "hybrid"
+languages = ["mul"]
+languages_note = "The publisher states support for 100+ languages and dialects, with multilingual instruction following and translation."
+good_for = [
+  "Quick conversation and short answers on modest computers.",
+  "Simple tool calls.",
+  "Smallest model in the list: the first to try on a computer with little memory.",
+]
+checked = "2026-11-12"
+
+[file]
+name = "Qwen3-0.6B-Q8_0.gguf"
+url = "https://huggingface.co/Qwen/Qwen3-0.6B-GGUF/resolve/23749fefcc72300e3a2ad315e1317431b06b590a/Qwen3-0.6B-Q8_0.gguf"
+size_bytes = 639446688
+sha256 = "9465e63a22add5354d9bb4b99e90117043c7124007664907259bd16d043bb031"
+
+[licence]
+id = "Apache-2.0"
+url = "https://huggingface.co/Qwen/Qwen3-0.6B-GGUF/blob/23749fefcc72300e3a2ad315e1317431b06b590a/LICENSE"
+summary = "Apache License 2.0. You may use, copy, change and share the model for any purpose, commercial use included. If you pass it on, include the licence and keep its notices."
+restrictions = "none"
+evidence = "The repository's LICENSE file at the pinned revision was read: it is the Apache License 2.0 text, word for word, with the appendix's copyright line filled in as \"Copyright 2025 Alibaba Cloud\". The model card header declares apache-2.0."
+checked = "2026-11-12"
