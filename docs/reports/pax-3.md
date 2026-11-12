@@ -51,7 +51,7 @@ FILES
   textui,cli,lib}.rs and tests/{common/mod,orchestrator,tools}.rs;
   services/tur-pax-memory/src/{time,trigger,lib}.rs;
   services/tur-pax-providers/src/{secret,lib}.rs;
-  .github/workflows/pax.yml; docs/architecture/{pax-orchestrator,
+  tests/pax/probe_sockets.py (a race, see the end); .github/workflows/pax.yml; docs/architecture/{pax-orchestrator,
   pax-providers,pax-memory-and-schedules,agent-policy}.md
 - Removed: nothing
 
@@ -140,6 +140,11 @@ The commits of this pull request, after the rebase onto main:
 | `8abc6a9` | Providers by identifier (ADR-0004 as amended) | 43256242047: one settings test of mine expected `"claude"` to be refused, which is now a valid identifier | 43256242301 pass |
 | `73dead7` | That test, with `"Claude!"` | 43258423411: every test passed (405); rustfmt only | 43258423446 pass |
 | `03c4505` | Formatting from CI | 43259888409 pass | 43259888572 pass |
+| `46e502a` | This report, updated | 43261151424 pass | 43261151273 pass; `image` 43261151355 pass; `boot` 43261151190 **fail**, so `gate` 43261151435 fail: see "Found on the way" |
+
+Main gained TUR-006 (#49) while this was open: the image now builds
+`tur-pax` in and runs `tests/pax/e2e.py` on the booted system, so `image`
+and `boot` run on this pull request too.
 
 Earlier runs on the branch, before the history was squashed into one commit:
 
@@ -352,3 +357,13 @@ session service":
   before the run it points at was recorded; the `pax` workflow caught it
   (a check read the run right after the notification and found nothing),
   and the notification now goes out after the record.
+- `boot` on `46e502a` (run 43261151190) failed one control of
+  `tests/pax/e2e.py` on the installed system: outside the sandbox, the probe
+  of the stand-in session bus socket reported `BrokenPipeError`. Nothing of
+  this change was involved; it is a race in `tests/pax/probe_sockets.py`.
+  The canary listener accepts and closes at once, and on a Unix socket a
+  send after that close fails, so whether a made connection counted as
+  "connected" depended on which thread ran first. The probe now counts a
+  made connection as reached even if the send after it fails. Inside the
+  sandbox the connection itself has to fail, so that check is only
+  stricter.
