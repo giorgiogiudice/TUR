@@ -1,0 +1,77 @@
+{
+  "licence": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+  "generated_by": "services/tur-catalogue/tests/desktop_fixtures.rs writes this from the output of tur-catalogue for the seed catalogue; do not edit",
+  "invocations": [
+    {
+      "command": "show",
+      "subject": "com.riotgames.valorant",
+      "host": "not used",
+      "arguments": ["show", "--json", "--", "com.riotgames.valorant"],
+      "exit_status": 0,
+      "stderr": "",
+      "stdout": {
+        "schema_version": 1,
+        "id": "com.riotgames.valorant",
+        "entry_kind": "application",
+        "name": "Valorant",
+        "aliases": [],
+        "publisher": "Riot Games",
+        "category": "game",
+        "summary": "Competitive first-person shooter.",
+        "homepage": null,
+        "editions": [
+          {
+            "kind": "windows",
+            "flatpak_id": null,
+            "remote": null,
+            "obtain": "publisher-page",
+            "package": null,
+            "distribution": null,
+            "store_id": null,
+            "download_page": "https://playvalorant.com/en-gb/download/",
+            "stores": [],
+            "url": null,
+            "primary": false,
+            "licence": "proprietary",
+            "packaging": null,
+            "requirements": [
+              "kernel-anti-cheat"
+            ],
+            "records": [
+              {
+                "route": "proton",
+                "rating": "broken",
+                "reported_by": "external",
+                "source_name": "AreWeAntiCheatYet",
+                "source_url": "https://areweanticheatyet.com/game/valorant",
+                "source_rating": "Denied",
+                "test_report": null,
+                "version_tested": null,
+                "date": "2026-11-12",
+                "notes": "Anti-cheat: Vanguard. AreWeAntiCheatYet's status Denied means the game does not run through Proton and its publisher has ruled out support."
+              }
+            ],
+            "references": [
+              {
+                "title": "Riot Games Support, What is Vanguard?: it consists of a client and a kernel mode driver",
+                "url": "https://support-valorant.riotgames.com/hc/en-us/articles/360046160933-What-is-Vanguard",
+                "checked": "2026-11-12"
+              },
+              {
+                "title": "Riot's specifications page lists Windows only, and requires TPM 2.0 and UEFI Secure Boot on Windows 11",
+                "url": "https://playvalorant.com/en-gb/specs/",
+                "checked": "2026-11-12"
+              },
+              {
+                "title": "AreWeAntiCheatYet: Valorant, status Denied",
+                "url": "https://areweanticheatyet.com/game/valorant",
+                "checked": "2026-11-12"
+              }
+            ],
+            "notes": null
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,127 @@
+{
+  "licence": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+  "generated_by": "services/tur-catalogue/tests/desktop_fixtures.rs writes this from the output of tur-catalogue for the seed catalogue; do not edit",
+  "invocations": [
+    {
+      "command": "show",
+      "subject": "org.libreoffice.libreoffice",
+      "host": "not used",
+      "arguments": ["show", "--json", "--", "org.libreoffice.libreoffice"],
+      "exit_status": 0,
+      "stderr": "",
+      "stdout": {
+        "schema_version": 1,
+        "id": "org.libreoffice.libreoffice",
+        "entry_kind": "application",
+        "name": "LibreOffice",
+        "aliases": [],
+        "publisher": "The Document Foundation",
+        "category": "productivity",
+        "summary": "Office suite.",
+        "homepage": "https://www.libreoffice.org/",
+        "editions": [
+          {
+            "kind": "flatpak",
+            "flatpak_id": "org.libreoffice.LibreOffice",
+            "remote": null,
+            "obtain": null,
+            "package": null,
+            "distribution": null,
+            "store_id": null,
+            "download_page": null,
+            "stores": [],
+            "url": null,
+            "primary": false,
+            "licence": "open-source",
+            "packaging": "publisher",
+            "requirements": [],
+            "records": [],
+            "references": [
+              {
+                "title": "Flathub listing; verified by Flathub as published by the application's own project (libreoffice.org); licence MPL-2.0",
+                "url": "https://flathub.org/apps/org.libreoffice.LibreOffice",
+                "checked": "2026-11-12"
+              }
+            ],
+            "notes": null
+          },
+          {
+            "kind": "linux-native",
+            "flatpak_id": null,
+            "remote": null,
+            "obtain": "fedora-package",
+            "package": "libreoffice",
+            "distribution": null,
+            "store_id": null,
+            "download_page": null,
+            "stores": [],
+            "url": null,
+            "primary": false,
+            "licence": "open-source",
+            "packaging": "community",
+            "requirements": [],
+            "records": [],
+            "references": [
+              {
+                "title": "Fedora Packages: libreoffice",
+                "url": "https://packages.fedoraproject.org/pkgs/libreoffice/libreoffice/",
+                "checked": "2026-11-12"
+              }
+            ],
+            "notes": null
+          },
+          {
+            "kind": "windows",
+            "flatpak_id": null,
+            "remote": null,
+            "obtain": "publisher-page",
+            "package": null,
+            "distribution": null,
+            "store_id": null,
+            "download_page": "https://www.libreoffice.org/download/download-libreoffice/",
+            "stores": [],
+            "url": null,
+            "primary": false,
+            "licence": "open-source",
+            "packaging": null,
+            "requirements": [],
+            "records": [],
+            "references": [
+              {
+                "title": "LibreOffice download page",
+                "url": "https://www.libreoffice.org/download/download-libreoffice/",
+                "checked": "2026-11-12"
+              }
+            ],
+            "notes": null
+          },
+          {
+            "kind": "macos",
+            "flatpak_id": null,
+            "remote": null,
+            "obtain": "publisher-page",
+            "package": null,
+            "distribution": null,
+            "store_id": null,
+            "download_page": "https://www.libreoffice.org/download/download-libreoffice/",
+            "stores": [],
+            "url": null,
+            "primary": false,
+            "licence": "open-source",
+            "packaging": null,
+            "requirements": [],
+            "records": [],
+            "references": [
+              {
+                "title": "LibreOffice download page",
+                "url": "https://www.libreoffice.org/download/download-libreoffice/",
+                "checked": "2026-11-12"
+              }
+            ],
+            "notes": null
+          }
+        ]
+      }
+    }
+  ]
+}

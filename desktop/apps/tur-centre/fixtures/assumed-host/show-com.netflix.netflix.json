@@ -1,0 +1,86 @@
+{
+  "licence": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+  "generated_by": "services/tur-catalogue/tests/desktop_fixtures.rs writes this from the output of tur-catalogue for the seed catalogue; do not edit",
+  "invocations": [
+    {
+      "command": "show",
+      "subject": "com.netflix.netflix",
+      "host": "not used",
+      "arguments": ["show", "--json", "--", "com.netflix.netflix"],
+      "exit_status": 0,
+      "stderr": "",
+      "stdout": {
+        "schema_version": 1,
+        "id": "com.netflix.netflix",
+        "entry_kind": "application",
+        "name": "Netflix",
+        "aliases": [],
+        "publisher": "Netflix",
+        "category": "media",
+        "summary": "Subscription video streaming.",
+        "homepage": null,
+        "editions": [
+          {
+            "kind": "web",
+            "flatpak_id": null,
+            "remote": null,
+            "obtain": null,
+            "package": null,
+            "distribution": null,
+            "store_id": null,
+            "download_page": null,
+            "stores": [],
+            "url": "https://www.netflix.com/",
+            "primary": true,
+            "licence": "proprietary",
+            "packaging": null,
+            "requirements": [],
+            "records": [],
+            "references": [
+              {
+                "title": "Netflix Help: supported browsers and system requirements, with a section on Linux",
+                "url": "https://help.netflix.com/en/node/30081",
+                "checked": "2026-11-12"
+              }
+            ],
+            "notes": "Netflix says it cannot guarantee that it works on Linux and gives no support for it. No rating is entered."
+          },
+          {
+            "kind": "android",
+            "flatpak_id": null,
+            "remote": null,
+            "obtain": null,
+            "package": "com.netflix.mediaclient",
+            "distribution": null,
+            "store_id": null,
+            "download_page": null,
+            "stores": [
+              "google-play"
+            ],
+            "url": null,
+            "primary": false,
+            "licence": "proprietary",
+            "packaging": null,
+            "requirements": [
+              "hardware-attested-drm"
+            ],
+            "records": [],
+            "references": [
+              {
+                "title": "Google Play listing",
+                "url": "https://play.google.com/store/apps/details?id=com.netflix.mediaclient&hl=en",
+                "checked": "2026-11-12"
+              },
+              {
+                "title": "Netflix Help: streaming in HD on Android needs Widevine L1; with L3 only SD plays",
+                "url": "https://help.netflix.com/en/node/23939",
+                "checked": "2026-11-12"
+              }
+            ],
+            "notes": null
+          }
+        ]
+      }
+    }
+  ]
+}

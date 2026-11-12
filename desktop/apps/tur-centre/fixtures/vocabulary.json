@@ -1,0 +1,19 @@
+{
+  "licence": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+  "generated_by": "services/tur-catalogue/tests/desktop_fixtures.rs writes this from the output of tur-catalogue for the seed catalogue; do not edit",
+  "routes": ["flatpak", "native", "distro-container", "proton", "wine", "windows-guest", "android-runtime", "darling", "web", "no-route"],
+  "ratings": ["good", "usable", "poor", "broken", "unknown"],
+  "reporters": ["nobody", "external", "tur-test"],
+  "rating_source_kinds": ["unrated", "external", "tur-test"],
+  "outlooks": ["clear", "doubtful", "blocked"],
+  "severities": ["note", "warning", "obstacle", "blocker"],
+  "caveat_codes": ["requirement", "architecture", "guest-memory", "experimental", "closed-store", "community-package", "reported-inadequate", "guest-not-offered", "guest-unsuitable-for-games", "pin-unavailable"],
+  "prerequisite_codes": ["install-flatpak", "install-container-tool", "install-wine", "install-proton", "enable-android-runtime", "opt-into-google-play", "set-up-windows-guest", "provide-windows-licence"],
+  "alternative_kinds": ["dual-boot", "certified-android-device", "mac", "another-computer", "none-known"],
+  "requirements": ["kernel-anti-cheat", "hardware-attested-drm", "play-integrity", "arm-only-native-code", "kernel-driver", "hardware-dongle", "heavy-gpu", "online-account"],
+  "categories": ["game", "productivity", "creative", "communication", "development", "utility", "media", "internet", "finance", "education"],
+  "edition_kinds": ["flatpak", "linux-native", "windows", "android", "web", "macos"],
+  "obtain": ["fedora-package", "other-distribution-package", "steam", "epic", "gog", "publisher-page", "microsoft-store", "mac-app-store"],
+  "match_kinds": ["exact", "prefix", "words", "substring", "typo"],
+  "error_codes": ["TUR-DESKTOP-CATALOGUE-001", "TUR-DESKTOP-CATALOGUE-002", "TUR-DESKTOP-CATALOGUE-003", "TUR-DESKTOP-CATALOGUE-004", "TUR-DESKTOP-CATALOGUE-005", "TUR-DESKTOP-CATALOGUE-006", "TUR-DESKTOP-CATALOGUE-007", "TUR-DESKTOP-CATALOGUE-008", "TUR-DESKTOP-CATALOGUE-009", "TUR-DESKTOP-CATALOGUE-010", "TUR-DESKTOP-CATALOGUE-011", "TUR-DESKTOP-CATALOGUE-012"]
+}

@@ -1,0 +1,108 @@
+{
+  "licence": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+  "generated_by": "services/tur-catalogue/tests/desktop_fixtures.rs writes this from the output of tur-catalogue for the seed catalogue; do not edit",
+  "invocations": [
+    {
+      "command": "route",
+      "subject": "com.riotgames.valorant",
+      "host": "stated",
+      "arguments": ["route", "--json", "--host", "<host-facts>", "--", "com.riotgames.valorant"],
+      "exit_status": 3,
+      "stderr": "",
+      "stdout": {
+        "application": {
+          "id": "com.riotgames.valorant",
+          "name": "Valorant",
+          "category": "game"
+        },
+        "host": {
+          "arch": "x86_64",
+          "flatpak": true,
+          "distro_containers": true,
+          "wine": true,
+          "proton": true,
+          "android_runtime": false,
+          "arm_translation": false,
+          "google_play": false,
+          "windows_guest": false,
+          "windows_licence": false,
+          "darling_enabled": false,
+          "gpu": "integrated",
+          "memory_mib": 32768
+        },
+        "host_assumed": false,
+        "preferences": {
+          "never_use_virtual_machine": false,
+          "prefer_open_source": false,
+          "pinned_routes": {}
+        },
+        "offer_windows_guest": false,
+        "recommended": "no-route",
+        "options": [
+          {
+            "route": "no-route",
+            "edition_index": null,
+            "edition_kind": null,
+            "edition": null,
+            "rating": "unknown",
+            "rating_source": {
+              "kind": "unrated"
+            },
+            "outlook": "blocked",
+            "recommended": true,
+            "pinned": false,
+            "reason": "No route on TUR runs Valorant on this machine. Proton (through umu-launcher): This game's anti-cheat will not work: it runs only on real Windows, with a kernel driver that a compatibility layer cannot provide. Dual boot is the only way.",
+            "caveats": [
+              {
+                "code": "requirement",
+                "severity": "blocker",
+                "requirement": "kernel-anti-cheat",
+                "text": "This game's anti-cheat will not work: it runs only on real Windows, with a kernel driver that a compatibility layer cannot provide. Dual boot is the only way."
+              }
+            ],
+            "prerequisites": [],
+            "alternative": {
+              "kind": "dual-boot",
+              "text": "Dual boot: install Windows beside TUR and run it there. That is the only way."
+            }
+          },
+          {
+            "route": "proton",
+            "edition_index": 0,
+            "edition_kind": "windows",
+            "edition": "Windows edition: the publisher's page https://playvalorant.com/en-gb/download/",
+            "rating": "broken",
+            "rating_source": {
+              "kind": "external",
+              "name": "AreWeAntiCheatYet",
+              "url": "https://areweanticheatyet.com/game/valorant",
+              "source_rating": "Denied",
+              "version_tested": null,
+              "date": "2026-11-12"
+            },
+            "outlook": "blocked",
+            "recommended": false,
+            "pinned": false,
+            "reason": "A Windows edition exists and this is a game: Proton, through umu-launcher, is the first route for games.",
+            "caveats": [
+              {
+                "code": "requirement",
+                "severity": "blocker",
+                "requirement": "kernel-anti-cheat",
+                "text": "This game's anti-cheat will not work: it runs only on real Windows, with a kernel driver that a compatibility layer cannot provide. Dual boot is the only way."
+              },
+              {
+                "code": "reported-inadequate",
+                "severity": "warning",
+                "requirement": null,
+                "text": "Reported broken by AreWeAntiCheatYet (\"Denied\"), checked 2026-11-12. Not tested by TUR."
+              }
+            ],
+            "prerequisites": [],
+            "alternative": null
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,125 @@
+{
+  "licence": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+  "generated_by": "services/tur-catalogue/tests/desktop_fixtures.rs writes this from the output of tur-catalogue for the seed catalogue; do not edit",
+  "invocations": [
+    {
+      "command": "route",
+      "subject": "com.microsoft.office",
+      "host": "stated",
+      "arguments": ["route", "--json", "--host", "<host-facts>", "--", "com.microsoft.office"],
+      "exit_status": 4,
+      "stderr": "",
+      "stdout": {
+        "application": {
+          "id": "com.microsoft.office",
+          "name": "Microsoft 365",
+          "category": "productivity"
+        },
+        "host": {
+          "arch": "x86_64",
+          "flatpak": true,
+          "distro_containers": true,
+          "wine": true,
+          "proton": true,
+          "android_runtime": false,
+          "arm_translation": false,
+          "google_play": false,
+          "windows_guest": false,
+          "windows_licence": false,
+          "darling_enabled": false,
+          "gpu": "integrated",
+          "memory_mib": 32768
+        },
+        "host_assumed": false,
+        "preferences": {
+          "never_use_virtual_machine": false,
+          "prefer_open_source": false,
+          "pinned_routes": {}
+        },
+        "offer_windows_guest": false,
+        "recommended": "windows-guest",
+        "options": [
+          {
+            "route": "wine",
+            "edition_index": 0,
+            "edition_kind": "windows",
+            "edition": "Windows edition: the publisher's page https://www.office.com/",
+            "rating": "broken",
+            "rating_source": {
+              "kind": "external",
+              "name": "WineHQ AppDB",
+              "url": "https://appdb.winehq.org/objectManager.php?sClass=application&iId=31",
+              "source_rating": "Garbage",
+              "version_tested": "365 Business",
+              "date": "2026-11-12"
+            },
+            "outlook": "doubtful",
+            "recommended": false,
+            "pinned": false,
+            "reason": "A Windows edition exists: Wine, a compatibility layer, comes before a virtual machine.",
+            "caveats": [
+              {
+                "code": "reported-inadequate",
+                "severity": "warning",
+                "requirement": null,
+                "text": "Reported broken by WineHQ AppDB (\"Garbage\"), checked 2026-11-12. Not tested by TUR."
+              }
+            ],
+            "prerequisites": [],
+            "alternative": null
+          },
+          {
+            "route": "windows-guest",
+            "edition_index": 0,
+            "edition_kind": "windows",
+            "edition": "Windows edition: the publisher's page https://www.office.com/",
+            "rating": "unknown",
+            "rating_source": {
+              "kind": "unrated"
+            },
+            "outlook": "clear",
+            "recommended": true,
+            "pinned": false,
+            "reason": "Offered because Wine is rated broken for this application. It runs in real Windows, in a virtual machine, and its windows appear on the desktop.",
+            "caveats": [
+              {
+                "code": "guest-memory",
+                "severity": "note",
+                "requirement": null,
+                "text": "Needs about 16 GB of memory while the Windows guest runs; this machine has that much."
+              }
+            ],
+            "prerequisites": [
+              {
+                "code": "set-up-windows-guest",
+                "text": "The Windows guest must be set up."
+              },
+              {
+                "code": "provide-windows-licence",
+                "text": "You must supply a Windows licence: TUR does not include one."
+              }
+            ],
+            "alternative": null
+          },
+          {
+            "route": "web",
+            "edition_index": 1,
+            "edition_kind": "web",
+            "edition": "Web edition: https://www.office.com/",
+            "rating": "unknown",
+            "rating_source": {
+              "kind": "unrated"
+            },
+            "outlook": "clear",
+            "recommended": false,
+            "pinned": false,
+            "reason": "A web edition exists, and no better route is free of known obstacles.",
+            "caveats": [],
+            "prerequisites": [],
+            "alternative": null
+          }
+        ]
+      }
+    }
+  ]
+}

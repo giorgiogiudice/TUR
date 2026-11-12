@@ -92,6 +92,15 @@ allow cmake turkitgallery         desktop/kit/**               LicenseRef-TUR-No
 allow soname libturkit.so*        *                            LicenseRef-TUR-Noncommercial-1.0.0
 allow soname libturkitgallery.so* *                            LicenseRef-TUR-Noncommercial-1.0.0
 
+# The application centre, tur-centre (design, section 8; task D-10): its own
+# QML module and library, under the project licence. It adds no dependency:
+# it links Qt Core, Gui, Qml and Quick and the kit, all allowed above, and
+# talks to the catalogue by running `tur-catalogue` as a separate program
+# (QProcess, in Qt Core), which is the command-line side of the boundary.
+allow qml Tur.Centre              desktop/apps/tur-centre/**   LicenseRef-TUR-Noncommercial-1.0.0
+allow cmake turcentre             desktop/apps/tur-centre/**   LicenseRef-TUR-Noncommercial-1.0.0
+allow soname libturcentre.so*     *                            LicenseRef-TUR-Noncommercial-1.0.0
+
 # Gold is P@x and nothing else (design, section 5.1). The gold tokens and the
 # components drawn in them are the module Tur.Kit.Pax; only P@x's surfaces,
 # the gallery and the tests may import it.

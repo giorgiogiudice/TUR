@@ -1,0 +1,15 @@
+{
+  "licence": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+  "generated_by": "services/tur-catalogue/tests/desktop_fixtures.rs writes this from the output of tur-catalogue for the seed catalogue; do not edit",
+  "invocations": [
+    {
+      "command": "route",
+      "subject": "org.example.missing",
+      "host": "stated",
+      "arguments": ["route", "--json", "--host", "<host-facts>", "--", "org.example.missing"],
+      "exit_status": 6,
+      "stderr": "",
+      "stdout": {"error":{"code":"TUR-DESKTOP-CATALOGUE-009","message":"no application in the catalogue has the ID \"org.example.missing\"; use `tur-catalogue search` to find it","title":"No application has this ID"}}
+    }
+  ]
+}

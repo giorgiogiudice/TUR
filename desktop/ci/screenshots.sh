@@ -1,8 +1,9 @@
 #!/bin/sh
 # SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
 #
-# Render every page of the gallery and the toolchain proof, twice, and
-# compare the pictures with the references in desktop/tests/screenshots.
+# Render every page of the gallery, the toolchain proof and every state of
+# the application centre, twice, and compare the pictures with the references
+# in desktop/tests/screenshots.
 # Runs inside the builder, after build.sh.
 #
 #   screenshots.sh PRESET
@@ -17,6 +18,7 @@ preset=${1:?usage: screenshots.sh PRESET}
 build=$PWD/desktop/build/$preset
 out=$PWD/${OUT:-out/desktop}/screenshots
 runner=$build/kit/tests/tst_kit
+centre=$build/apps/tur-centre/tests/tst_centre
 rm -rf "$out"
 mkdir -p "$out/actual" "$out/repeat" "$out/logs" "$out/empty-config"
 
@@ -30,10 +32,10 @@ status=0
 # pictures matched.
 python3 desktop/ci/compare_screenshots.py --self-test
 
-# render DIRECTORY SCALE INPUT
+# render DIRECTORY SCALE INPUT [RUNNER]
 render() {
     name=$(basename "$3" .qml)-$2-$(basename "$1")
-    if ! TUR_SCREENSHOT_DIR="$1" QT_SCALE_FACTOR="$2" "$runner" -input "$3" > "$out/logs/$name.log" 2>&1; then
+    if ! TUR_SCREENSHOT_DIR="$1" QT_SCALE_FACTOR="$2" "${4:-$runner}" -input "$3" > "$out/logs/$name.log" 2>&1; then
         status=1
         echo "::error::rendering failed: $name"
         grep -E -A 8 '^(FAIL!|QFATAL|QWARN)' "$out/logs/$name.log" | head -n 120 || tail -n 60 "$out/logs/$name.log"
@@ -45,6 +47,8 @@ for pass in actual repeat; do
     render "$out/$pass" 1 desktop/ci/probe/tst_probe.qml
     render "$out/$pass" 1 desktop/kit/tests/shots/render_gallery.qml
     render "$out/$pass" 1.5 desktop/kit/tests/shots/render_gallery.qml
+    render "$out/$pass" 1 desktop/apps/tur-centre/tests/shots/render_centre.qml "$centre"
+    render "$out/$pass" 1.5 desktop/apps/tur-centre/tests/shots/render_centre.qml "$centre"
 done
 
 python3 desktop/ci/compare_screenshots.py \

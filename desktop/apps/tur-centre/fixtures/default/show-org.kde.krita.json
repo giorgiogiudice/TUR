@@ -1,0 +1,77 @@
+{
+  "licence": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+  "generated_by": "services/tur-catalogue/tests/desktop_fixtures.rs writes this from the output of tur-catalogue for the seed catalogue; do not edit",
+  "invocations": [
+    {
+      "command": "show",
+      "subject": "org.kde.krita",
+      "host": "not used",
+      "arguments": ["show", "--json", "--", "org.kde.krita"],
+      "exit_status": 0,
+      "stderr": "",
+      "stdout": {
+        "schema_version": 1,
+        "id": "org.kde.krita",
+        "entry_kind": "application",
+        "name": "Krita",
+        "aliases": [],
+        "publisher": "Krita Foundation",
+        "category": "creative",
+        "summary": "Digital painting application.",
+        "homepage": "https://www.krita.org/",
+        "editions": [
+          {
+            "kind": "flatpak",
+            "flatpak_id": "org.kde.krita",
+            "remote": null,
+            "obtain": null,
+            "package": null,
+            "distribution": null,
+            "store_id": null,
+            "download_page": null,
+            "stores": [],
+            "url": null,
+            "primary": false,
+            "licence": "open-source",
+            "packaging": null,
+            "requirements": [],
+            "records": [],
+            "references": [
+              {
+                "title": "Flathub listing; marked verified by Flathub; licence GPL-3.0-only",
+                "url": "https://flathub.org/apps/org.kde.krita",
+                "checked": "2026-11-12"
+              }
+            ],
+            "notes": null
+          },
+          {
+            "kind": "linux-native",
+            "flatpak_id": null,
+            "remote": null,
+            "obtain": "fedora-package",
+            "package": "krita",
+            "distribution": null,
+            "store_id": null,
+            "download_page": null,
+            "stores": [],
+            "url": null,
+            "primary": false,
+            "licence": "open-source",
+            "packaging": "community",
+            "requirements": [],
+            "records": [],
+            "references": [
+              {
+                "title": "Fedora Packages: krita",
+                "url": "https://packages.fedoraproject.org/pkgs/krita/krita/",
+                "checked": "2026-11-12"
+              }
+            ],
+            "notes": null
+          }
+        ]
+      }
+    }
+  ]
+}

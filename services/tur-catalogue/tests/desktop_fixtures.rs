@@ -456,11 +456,8 @@ fn expected_files() -> BTreeMap<String, String> {
             .map(|facts| scratch.file(&format!("{}/host-facts.json", set.directory), facts));
         let host_file = host_file.as_deref();
 
-        let mut applications: BTreeSet<String> = set
-            .applications
-            .iter()
-            .map(|id| (*id).to_owned())
-            .collect();
+        let mut applications: BTreeSet<String> =
+            set.applications.iter().map(|id| (*id).to_owned()).collect();
 
         let mut searches = Vec::new();
         for query in set.searches {

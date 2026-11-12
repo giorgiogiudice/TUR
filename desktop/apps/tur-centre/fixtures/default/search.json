@@ -1,0 +1,181 @@
+{
+  "licence": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+  "generated_by": "services/tur-catalogue/tests/desktop_fixtures.rs writes this from the output of tur-catalogue for the seed catalogue; do not edit",
+  "invocations": [
+    {
+      "command": "search",
+      "subject": "office",
+      "host": "not used",
+      "arguments": ["search", "--json", "--", "office"],
+      "exit_status": 0,
+      "stderr": "",
+      "stdout": {
+        "query": "office",
+        "hits": [
+          {
+            "id": "com.microsoft.office",
+            "name": "Microsoft 365",
+            "category": "productivity",
+            "publisher": "Microsoft",
+            "matched": "Office 365",
+            "kind": "prefix",
+            "score": 896
+          },
+          {
+            "id": "org.libreoffice.libreoffice",
+            "name": "LibreOffice",
+            "category": "productivity",
+            "publisher": "The Document Foundation",
+            "matched": "LibreOffice",
+            "kind": "substring",
+            "score": 605
+          }
+        ]
+      }
+    },
+    {
+      "command": "search",
+      "subject": "ms office",
+      "host": "not used",
+      "arguments": ["search", "--json", "--", "ms office"],
+      "exit_status": 0,
+      "stderr": "",
+      "stdout": {
+        "query": "ms office",
+        "hits": [
+          {
+            "id": "com.microsoft.office",
+            "name": "Microsoft 365",
+            "category": "productivity",
+            "publisher": "Microsoft",
+            "matched": "MS Office",
+            "kind": "exact",
+            "score": 1000
+          }
+        ]
+      }
+    },
+    {
+      "command": "search",
+      "subject": "ofice",
+      "host": "not used",
+      "arguments": ["search", "--json", "--", "ofice"],
+      "exit_status": 0,
+      "stderr": "",
+      "stdout": {
+        "query": "ofice",
+        "hits": [
+          {
+            "id": "com.microsoft.office",
+            "name": "Microsoft 365",
+            "category": "productivity",
+            "publisher": "Microsoft",
+            "matched": "Microsoft Office",
+            "kind": "typo",
+            "score": 350
+          }
+        ]
+      }
+    },
+    {
+      "command": "search",
+      "subject": "krita",
+      "host": "not used",
+      "arguments": ["search", "--json", "--", "krita"],
+      "exit_status": 0,
+      "stderr": "",
+      "stdout": {
+        "query": "krita",
+        "hits": [
+          {
+            "id": "org.kde.krita",
+            "name": "Krita",
+            "category": "creative",
+            "publisher": "Krita Foundation",
+            "matched": "Krita",
+            "kind": "exact",
+            "score": 1005
+          }
+        ]
+      }
+    },
+    {
+      "command": "search",
+      "subject": "valorant",
+      "host": "not used",
+      "arguments": ["search", "--json", "--", "valorant"],
+      "exit_status": 0,
+      "stderr": "",
+      "stdout": {
+        "query": "valorant",
+        "hits": [
+          {
+            "id": "com.riotgames.valorant",
+            "name": "Valorant",
+            "category": "game",
+            "publisher": "Riot Games",
+            "matched": "Valorant",
+            "kind": "exact",
+            "score": 1005
+          }
+        ]
+      }
+    },
+    {
+      "command": "search",
+      "subject": "banking app",
+      "host": "not used",
+      "arguments": ["search", "--json", "--", "banking app"],
+      "exit_status": 0,
+      "stderr": "",
+      "stdout": {
+        "query": "banking app",
+        "hits": [
+          {
+            "id": "tur.class.android-banking",
+            "name": "Banking and payment applications for Android",
+            "category": "finance",
+            "publisher": "Banks and payment providers",
+            "matched": "banking app",
+            "kind": "exact",
+            "score": 1000
+          }
+        ]
+      }
+    },
+    {
+      "command": "search",
+      "subject": "elden ring",
+      "host": "not used",
+      "arguments": ["search", "--json", "--", "elden ring"],
+      "exit_status": 0,
+      "stderr": "",
+      "stdout": {
+        "query": "elden ring",
+        "hits": [
+          {
+            "id": "com.bandainamco.eldenring",
+            "name": "Elden Ring",
+            "category": "game",
+            "publisher": "FromSoftware, Bandai Namco Entertainment",
+            "matched": "Elden Ring",
+            "kind": "exact",
+            "score": 1005
+          }
+        ]
+      }
+    },
+    {
+      "command": "search",
+      "subject": "photothing",
+      "host": "not used",
+      "arguments": ["search", "--json", "--", "photothing"],
+      "exit_status": 6,
+      "stderr": "",
+      "stdout": {
+        "query": "photothing",
+        "hits": []
+      }
+    }
+  ]
+}

@@ -1,0 +1,102 @@
+{
+  "licence": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+  "generated_by": "services/tur-catalogue/tests/desktop_fixtures.rs writes this from the output of tur-catalogue for the seed catalogue; do not edit",
+  "invocations": [
+    {
+      "command": "show",
+      "subject": "com.microsoft.office",
+      "host": "not used",
+      "arguments": ["show", "--json", "--", "com.microsoft.office"],
+      "exit_status": 0,
+      "stderr": "",
+      "stdout": {
+        "schema_version": 1,
+        "id": "com.microsoft.office",
+        "entry_kind": "application",
+        "name": "Microsoft 365",
+        "aliases": [
+          "Microsoft Office",
+          "Office 365",
+          "MS Office",
+          "Microsoft Word",
+          "Microsoft Excel",
+          "Microsoft PowerPoint"
+        ],
+        "publisher": "Microsoft",
+        "category": "productivity",
+        "summary": "Office suite: Word, Excel, PowerPoint and others.",
+        "homepage": null,
+        "editions": [
+          {
+            "kind": "windows",
+            "flatpak_id": null,
+            "remote": null,
+            "obtain": "publisher-page",
+            "package": null,
+            "distribution": null,
+            "store_id": null,
+            "download_page": "https://www.office.com/",
+            "stores": [],
+            "url": null,
+            "primary": false,
+            "licence": "proprietary",
+            "packaging": null,
+            "requirements": [],
+            "records": [
+              {
+                "route": "wine",
+                "rating": "broken",
+                "reported_by": "external",
+                "source_name": "WineHQ AppDB",
+                "source_url": "https://appdb.winehq.org/objectManager.php?sClass=application&iId=31",
+                "source_rating": "Garbage",
+                "test_report": null,
+                "version_tested": "365 Business",
+                "date": "2026-11-12",
+                "notes": "AppDB entry 'Microsoft Office (installer only)'; latest Wine version tested for this release: 11.0. Releases 2021 Pro Plus and 365 ProPlus (2016) are also rated Garbage. Older releases are rated higher there, for example 2010 (32 bit) Gold and 2016 (32-bit) Silver."
+              }
+            ],
+            "references": [
+              {
+                "title": "WineHQ AppDB: Microsoft Office (installer only)",
+                "url": "https://appdb.winehq.org/objectManager.php?sClass=application&iId=31",
+                "checked": "2026-11-12"
+              },
+              {
+                "title": "Microsoft 365 sign-in page",
+                "url": "https://www.office.com/",
+                "checked": "2026-11-12"
+              }
+            ],
+            "notes": null
+          },
+          {
+            "kind": "web",
+            "flatpak_id": null,
+            "remote": null,
+            "obtain": null,
+            "package": null,
+            "distribution": null,
+            "store_id": null,
+            "download_page": null,
+            "stores": [],
+            "url": "https://www.office.com/",
+            "primary": false,
+            "licence": null,
+            "packaging": null,
+            "requirements": [],
+            "records": [],
+            "references": [
+              {
+                "title": "Microsoft 365 sign-in page",
+                "url": "https://www.office.com/",
+                "checked": "2026-11-12"
+              }
+            ],
+            "notes": null
+          }
+        ]
+      }
+    }
+  ]
+}

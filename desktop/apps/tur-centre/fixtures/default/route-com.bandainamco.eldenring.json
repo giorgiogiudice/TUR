@@ -1,0 +1,68 @@
+{
+  "licence": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+  "generated_by": "services/tur-catalogue/tests/desktop_fixtures.rs writes this from the output of tur-catalogue for the seed catalogue; do not edit",
+  "invocations": [
+    {
+      "command": "route",
+      "subject": "com.bandainamco.eldenring",
+      "host": "stated",
+      "arguments": ["route", "--json", "--host", "<host-facts>", "--", "com.bandainamco.eldenring"],
+      "exit_status": 0,
+      "stderr": "",
+      "stdout": {
+        "application": {
+          "id": "com.bandainamco.eldenring",
+          "name": "Elden Ring",
+          "category": "game"
+        },
+        "host": {
+          "arch": "x86_64",
+          "flatpak": true,
+          "distro_containers": true,
+          "wine": true,
+          "proton": true,
+          "android_runtime": false,
+          "arm_translation": false,
+          "google_play": false,
+          "windows_guest": false,
+          "windows_licence": false,
+          "darling_enabled": false,
+          "gpu": "integrated",
+          "memory_mib": 32768
+        },
+        "host_assumed": false,
+        "preferences": {
+          "never_use_virtual_machine": false,
+          "prefer_open_source": false,
+          "pinned_routes": {}
+        },
+        "offer_windows_guest": false,
+        "recommended": "proton",
+        "options": [
+          {
+            "route": "proton",
+            "edition_index": 0,
+            "edition_kind": "windows",
+            "edition": "Windows edition: Steam (1245620)",
+            "rating": "usable",
+            "rating_source": {
+              "kind": "external",
+              "name": "ProtonDB",
+              "url": "https://www.protondb.com/app/1245620",
+              "source_rating": "gold",
+              "version_tested": null,
+              "date": "2026-11-12"
+            },
+            "outlook": "clear",
+            "recommended": true,
+            "pinned": false,
+            "reason": "A Windows edition exists and this is a game: Proton, through umu-launcher, is the first route for games.",
+            "caveats": [],
+            "prerequisites": [],
+            "alternative": null
+          }
+        ]
+      }
+    }
+  ]
+}
