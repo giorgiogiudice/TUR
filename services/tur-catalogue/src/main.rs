@@ -54,7 +54,12 @@ const MAX_INPUT_BYTES: usize = 1024 * 1024;
 #[command(name = "tur-catalogue", version)]
 struct Cli {
     /// The catalogue directory: one .toml file per application.
-    #[arg(long, global = true, value_name = "DIR", default_value = "catalogue")]
+    #[arg(
+        long,
+        global = true,
+        value_name = "DIR",
+        default_value = "/usr/share/tur/catalogue"
+    )]
     catalogue: PathBuf,
     #[command(subcommand)]
     command: Command,

@@ -25,6 +25,11 @@ where a whole tag is a single identifier the SBOM tool recognises, the tool
 writes its canonical SPDX spelling ("zlib" becomes "Zlib", the deprecated
 "LGPL-2.1" becomes "LGPL-2.1-only"). The CSV therefore has a few fewer
 distinct expressions than licences.txt; the package count is the same.
+
+TUR's own programs and the crates compiled into them, which
+scripts/sbom-programs.py adds to the SBOM, are not packages of the image and
+are left out here. The crates are listed in
+docs/dependencies/image-crates.csv, which scripts/sbom.sh writes.
 """
 
 from __future__ import annotations
@@ -67,6 +72,8 @@ def main(argv: list[str]) -> int:
     for package in document.get("packages", []):
         if package.get("SPDXID", "").startswith("SPDXRef-DocumentRoot"):
             continue  # the scanned directory itself, not a package
+        if package.get("SPDXID", "").startswith(("SPDXRef-Package-tur-program-", "SPDXRef-Package-tur-crate-")):
+            continue  # TUR's own programs and their crates: see the module text
         declared = package.get("licenseDeclared") or "NOASSERTION"
         licence = original.get(declared) or strip_outer_parentheses(declared)
         rows.append((package.get("name", ""), package.get("versionInfo", ""), licence))

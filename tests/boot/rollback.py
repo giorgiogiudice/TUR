@@ -63,6 +63,10 @@ MSG_FALLBACK = "8f1c2a6e4b7d4c0f9a3e5d6b7c8a9e03"
 BOOTC_ROLLBACK = "26f3b1eb24464d12aa5e7b544a6b5468"
 TRIAL_ARGUMENTS = ["panic=30", "rd.shell=0", "rd.emergency=reboot", "systemd.watchdog_sec=180"]
 FAILING = ["trial/2", "trial/1", "trial/0", "fallback"]
+# Seconds added to every scenario's bound for the support bundle the agent
+# collects in the last boot: tur-diag runs some thirty collectors, each with a
+# limit of its own.
+BUNDLE_SECONDS = 240
 
 # Console texts counted per boot. They show why a boot failed.
 PATTERNS = [
@@ -494,7 +498,9 @@ def drive(name: str, spec: dict, args, out: pathlib.Path, work: pathlib.Path) ->
         if not kvm.get("enabled"):
             machine.quit()
             raise RuntimeError("KVM is not enabled")
-        deadline = started + spec["timeout"]
+        # The scenario's own bound, and time for the support bundle the agent
+        # collects in the last boot (each collector of tur-diag has a limit).
+        deadline = started + spec["timeout"] + BUNDLE_SECONDS
         while time.monotonic() < deadline:
             if not machine.alive():
                 outcome = "qemu-exited"
@@ -664,7 +670,7 @@ def evaluate(name: str, spec: dict, seen: dict, out: pathlib.Path, guest_source:
         "completed",
         "The scenario ran to its end within its time bound",
         seen["outcome"] == "complete",
-        f"{seen['outcome']} after {seen['elapsed_seconds']} s (bound {spec['timeout']} s); QEMU was started "
+        f"{seen['outcome']} after {seen['elapsed_seconds']} s (bound {spec['timeout']} s and {BUNDLE_SECONDS} s for the support bundle); QEMU was started "
         f"{seen['starts']} time(s); guest reports: {', '.join(reports) or 'none'} ({guest_source})",
     )
 
@@ -1065,14 +1071,80 @@ def evaluate(name: str, spec: dict, seen: dict, out: pathlib.Path, guest_source:
                 and sequence[-2:] == ["none", "none"],
                 f"last two reports: {[(r.status.get('running'), r.status.get('classification'), r.status.get('counter_at_start')) for r in tail]}",
             )
+    diagnostics(checks, last)
+    return finish(name, spec, seen, checks, reports, sequence, milliseconds)
+
+
+def diagnostics(checks: Checks, last) -> None:
+    """Design section 11.5, item 7: a support bundle from the system the scenario ended on.
+
+    The agent runs `tur-diag collect` and `verify-bundle` in the last boot of
+    a scenario that settled. A scenario that ends without such a boot (the
+    machine was left stopped on purpose) has nothing to collect from.
+    """
+    status = last.status if last else {}
+    ran = status.get("final_system") == "yes" and "diag_collect_status" in status
+    listing = last.text("diag-listing.txt").split() if last else []
+    manifest = (last.json("diag/manifest.json") or {}) if last else {}
+    missing = [f"{entry.get('path')} ({entry.get('reason')})" for entry in manifest.get("missing") or []]
     checks.add(
-        "tur_diag",
-        "tur-diag collect succeeds on the final system and the bundle contains the boot-health files",
-        None,
-        "NOT RUN: tur-diag is not built into the image yet (step 12 of the design's brief)",
+        "tur_diag_collect",
+        "tur-diag collect succeeds on the final system and the bundle it wrote verifies",
+        (status.get("diag_collect_status") == "0" and status.get("diag_verify_status") == "0" and len(listing) > 10)
+        if ran
+        else None,
+        f"collect exit status {status.get('diag_collect_status')}, verify-bundle {status.get('diag_verify_status')}; "
+        f"{status.get('diag_bundle_bytes')} bytes, {len(listing)} members; not collected: {', '.join(missing) or 'nothing'}"
+        if ran
+        else "NOT RUN: the scenario did not end in a boot that settled (final_system="
+        f"{status.get('final_system', 'no report')})",
+        required=ran,
+    )
+    health = last.json("diag/boot/boot-health.json") if last else None
+    health = health if isinstance(health, dict) else {}
+    history = last.history() if last else []
+    events = [event.get("event") for event in health.get("recent_events") or [] if isinstance(event, dict)]
+    rejected = len((health.get("rejected") or {}).get("images") or [])
+    fallbacks_on_disk = sum(1 for event in history if event.get("event") == "fallback")
+    records = status.get("diag_boot_health_journal_records", "")
+    # What the bundle must hold of boot health: the state tur-boot-health
+    # reports (the rejected images, the notice, the recent events) and its
+    # records in the journal. After a fallback, the event must be among them.
+    # Where the scenario masked TUR's units (the GRUB half alone), the program
+    # never ran in this boot and wrote nothing to the journal.
+    masked = status.get("gate_unit_state") == "masked"
+    holds = (
+        "boot/boot-health.json" in listing
+        and "recent_events" in health
+        and (masked or (records.isdigit() and int(records) > 0))
+        and (events.count("fallback") >= 1 and rejected >= 1 if fallbacks_on_disk else True)
+    )
+    in_bundle = [name for name in listing if "boot-health" in name or "boot_health" in name]
+    checks.add(
+        "tur_diag_boot_health",
+        "The bundle holds the boot-health state: what tur-boot-health reports (rejected images, notice, recent "
+        "events) and its journal records; after a fallback, the fallback event and the rejected image",
+        holds if ran else None,
+        f"members naming boot health: {in_bundle or 'none'}; events in the bundle: {events}; rejected images in the "
+        f"bundle: {rejected}; fallback events on disk: {fallbacks_on_disk}; tur-boot-health records in the bundle's "
+        f"journal: {records or 'no data'}"
+        if ran
+        else "NOT RUN: no bundle was collected",
+        required=ran,
+    )
+    files = [name for name in listing if "history.jsonl" in name or "/evidence/" in name]
+    checks.add(
+        "tur_diag_boot_health_files",
+        "The bundle holds the files under /var/lib/tur/boot-health themselves: the whole history and the "
+        "evidence of each fallback",
+        bool(files) if ran else None,
+        f"{files}"
+        if files
+        else "tur-diag has no collector for /var/lib/tur/boot-health: its collectors may read only /proc, /sys, "
+        "/usr/lib and /etc/os-release. The bundle holds the state tur-boot-health reports (the last ten events), "
+        "not history.jsonl or the evidence directory (step 12 of the design's brief; docs/reports/TUR-006.md)",
         required=False,
     )
-    return finish(name, spec, seen, checks, reports, sequence, milliseconds)
 
 
 def evaluate_probe(name: str, spec: dict, seen: dict, checks: Checks, reports: dict, stage) -> dict:

@@ -35,6 +35,7 @@ the [specification](../architecture/specification.md).
 | [0016](0016-desktop-and-user-interface.md) | Desktop and user interface: standalone programs, Plasma by configuration, one identity | Accepted |
 | [0017](0017-update-manager.md) | The update manager: TUR drives bootc in three steps, and stages nothing boot health cannot undo | Accepted, amended |
 | [0020](0020-overlay-window-positions.md) | P@x's overlay finds other programs' windows through the Plasma window-management protocol, read with KWayland | Proposed |
+| [0021](0021-local-ai.md) | Local AI: models that run on the computer, for P@x and for every application | Accepted |
 
 ## Open questions from the specification
 
