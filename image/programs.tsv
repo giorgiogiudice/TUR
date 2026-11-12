@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# The TUR programs compiled into the image (image/README.md, "Programs built
+# into the image"). One line each, three fields separated by tabs:
+#
+#   the component's directory, a Cargo workspace
+#   the program to build from it
+#   where the program is installed
+#
+# /usr/bin holds what a person types and what an assistant tool adapter
+# starts; /usr/libexec/tur holds what units and other programs start.
+# image/programs.sh reads this file in the build stage. A component
+# that joins the image adds its line here, its directory to
+# Containerfile.containerignore and a COPY to the Containerfile.
+services/tur-boot-health	tur-boot-health	/usr/libexec/tur/tur-boot-health
+services/tur-diagnostics	tur-diag	/usr/bin/tur-diag
+services/tur-device-manager	tur-device	/usr/bin/tur-device
+services/tur-storage	tur-storage	/usr/bin/tur-storage
+services/tur-catalogue	tur-catalogue	/usr/bin/tur-catalogue
+services/tur-runtime	tur-runtime	/usr/bin/tur-runtime
+services/tur-update	tur-update	/usr/bin/tur-update
+services/tur-pax	tur-pax	/usr/bin/tur-pax
+services/tur-pax-memory	tur-pax-memory	/usr/bin/tur-pax-memory
+services/tur-pax-providers	tur-pax-providers	/usr/libexec/tur/tur-pax-providers
+installer/tur-installer-core	tur-installer	/usr/libexec/tur/tur-installer

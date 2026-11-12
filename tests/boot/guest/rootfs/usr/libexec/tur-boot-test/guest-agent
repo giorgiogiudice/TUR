@@ -15,8 +15,9 @@
 #                display manager starts the first-run setup session.
 #   second-boot  after the agent has created a user and the setup-done flag,
 #                standing in for a person who completed first-run setup. The
-#                display manager shows its login greeter. At the end the agent
-#                sets GRUB's boot counter by hand (boot_counter=2).
+#                display manager shows its login greeter. TUR's own programs
+#                are then run as that user (component-checks). At the end the
+#                agent sets GRUB's boot counter by hand (boot_counter=2).
 #   third-boot   the counted boot. GRUB must have decremented the counter and
 #                told the kernel so (ADR-0014; step 2 of the design's brief).
 #
@@ -298,6 +299,93 @@ canary() {
     systemctl stop tur-boot-test-canary.service > /dev/null 2>&1
 }
 
+# TUR's own programs on the installed system (component-checks beside this
+# script). They are run as the ordinary user the first boot created, inside
+# that user's own session: the user's service manager, started as a login
+# starts it, so the programs get the SELinux context, the runtime directory
+# and the limits a person at a terminal has. If no such session can be had,
+# the next best thing is used and the report says which.
+#
+# For the length of the run the user may use sudo without a password: the P@x
+# end-to-end test shows that sudo gives root outside its sandbox and nothing
+# inside, and a few programs are also run as root. The rule is removed again.
+components() {
+    local uid home group dir how rc start since session="${out}/components-session.txt"
+    uid="$(id -u "${test_user}" 2> /dev/null)"
+    group="$(id -gn "${test_user}" 2> /dev/null)"
+    home="$(readlink -f "$(getent passwd "${test_user}" | cut -d: -f6)")"
+    if [ -z "${uid}" ] || [ ! -d "${home}" ]; then
+        put components_run_as "not run: the user ${test_user} does not exist"
+        return
+    fi
+    dir="${home}/tur-component-checks"
+    since="$(date '+%Y-%m-%d %H:%M:%S')"
+    put components_started_uptime "$(uptime_s)"
+
+    printf '%s ALL=(ALL) NOPASSWD: ALL\n' "${test_user}" > /etc/sudoers.d/90-tur-boot-test
+    chmod 0440 /etc/sudoers.d/90-tur-boot-test
+
+    {
+        echo "--- loginctl enable-linger ${test_user}"
+        loginctl enable-linger "${test_user}"
+        start="${SECONDS}"
+        until [ -S "/run/user/${uid}/bus" ] || [ $((SECONDS - start)) -ge 60 ]; do sleep 1; done
+        echo "waited $((SECONDS - start)) s for /run/user/${uid}/bus"
+        find "/run/user/${uid}" -maxdepth 1 2>&1 | head -n 20
+        systemctl status --no-pager "user@${uid}.service" 2>&1 | head -n 12
+    } > "${session}" 2>&1
+
+    how=user-session
+    rm -rf "${dir}"
+    install -d -o "${test_user}" -g "${group}" -m 0755 "${dir}"
+    echo "--- systemd-run --machine=${test_user}@.host --user" >> "${session}"
+    # Nothing of this command may point at a file here. To reach the user's
+    # service manager it hands its own standard error to the system bus, and
+    # SELinux does not let the bus daemon write to a file under /var/lib: the
+    # first run of this test lost the connection that way (TUR-006).
+    timeout 2100 systemd-run --machine="${test_user}@.host" --user --wait --collect --quiet \
+        --unit=tur-component-checks /usr/libexec/tur-boot-test/component-checks "${dir}" \
+        > /dev/null 2>&1 < /dev/null
+    rc=$?
+    if [ ! -e "${dir}/finished" ]; then
+        # A login session made by the system's service manager, through PAM.
+        how=pam-login
+        rm -rf "${dir}"
+        install -d -o "${test_user}" -g "${group}" -m 0755 "${dir}"
+        echo "--- exit status ${rc}; systemd-run --uid=${test_user} -p PAMName=login" >> "${session}"
+        timeout 2100 systemd-run --wait --collect --quiet --unit=tur-component-checks-login \
+            --uid="${test_user}" -p PAMName=login -p "WorkingDirectory=${home}" \
+            /usr/libexec/tur-boot-test/component-checks "${dir}" >> "${session}" 2>&1
+        rc=$?
+    fi
+    if [ ! -e "${dir}/finished" ]; then
+        # No session at all: the user's identity only, in this unit's context.
+        how=runuser
+        rm -rf "${dir}"
+        install -d -o "${test_user}" -g "${group}" -m 0755 "${dir}"
+        echo "--- exit status ${rc}; runuser -l ${test_user}" >> "${session}"
+        timeout 2100 runuser -l "${test_user}" -c "/usr/libexec/tur-boot-test/component-checks '${dir}'" \
+            >> "${session}" 2>&1
+        rc=$?
+    fi
+    put components_run_as "${how}"
+    put components_exit_status "${rc}"
+    if [ -e "${dir}/finished" ]; then put components_finished yes; else put components_finished no; fi
+    put components_finished_uptime "$(uptime_s)"
+
+    cp -a "${dir}" "${out}/components" >> "${session}" 2>&1
+    chmod -R a+rX "${out}/components" 2> /dev/null
+    rm -f /etc/sudoers.d/90-tur-boot-test
+    loginctl disable-linger "${test_user}" >> "${session}" 2>&1
+
+    # What SELinux refused while the programs ran, and what failed.
+    journalctl -b --no-pager -o short-monotonic --since "${since}" -g 'avc:  denied' \
+        > "${out}/components-avc.txt" 2>&1
+    journalctl -b --no-pager -o short-monotonic --since "${since}" > "${out}/components-journal.txt" 2>&1
+    cap components-failed-units.txt systemctl list-units --failed --no-pager --plain --no-legend
+    cap components-ausearch.txt ausearch -m AVC,USER_AVC,SELINUX_ERR -ts today
+}
+
 rm -rf "${out}"
 mkdir -p "${out}"
 : > "${status}"
@@ -543,6 +631,15 @@ if [ "${phase}" = third-boot ]; then
         put counter_removed_by agent
     fi
     cap grubenv-final.txt grub2-editenv "${grubenv}" list
+fi
+
+# --- TUR's own programs, on the installed system (second boot of the boot test) ----
+# After everything above, so that what the boot itself is judged by was
+# recorded before these ran; before the journal is kept, so that it holds them.
+if [ "${phase}" = second-boot ] && [ "${prepare_only}" = no ]; then
+    say "COMPONENTS-START running TUR's programs as ${test_user} uptime=$(uptime_s)"
+    components
+    say "COMPONENTS-DONE run_as=$(sed -n 's/^components_run_as=//p' "${status}") finished=$(sed -n 's/^components_finished=//p' "${status}") pax_e2e=$(sed -n 's/^pax_e2e_exit_status=//p' "${out}/components/status" 2> /dev/null) uptime=$(uptime_s)"
 fi
 
 # --- journal ------------------------------------------------------------------

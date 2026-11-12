@@ -237,6 +237,26 @@ journals() {
         | tail -n 200 > "${out}/journal-notable.txt"
 }
 
+# A support bundle from the system the scenario ended on (design section 11.5,
+# item 7): tur-diag collects one, verifies it, and the report carries what is
+# in it. The bundle itself stays in the guest: it holds whole journals.
+diagnostics() {
+    local bundle=/var/tmp/tur-boot-test-bundle.tar.zst
+    rm -f "${bundle}"
+    timeout 300 tur-diag collect --output "${bundle}" > "${out}/diag-collect.txt" 2>&1
+    put diag_collect_status "$?"
+    timeout 120 tur-diag verify-bundle "${bundle}" > "${out}/diag-verify.txt" 2>&1
+    put diag_verify_status "$?"
+    put diag_bundle_bytes "$(stat -c %s "${bundle}" 2> /dev/null)"
+    cap diag-listing.txt tar --zstd -tf "${bundle}"
+    mkdir -p "${out}/diag"
+    tar --zstd -xf "${bundle}" -C "${out}/diag" manifest.json boot/boot-health.json \
+        services/tur-service-status.txt system/kernel-cmdline.txt > "${out}/diag-extract.txt" 2>&1
+    put diag_boot_health_journal_records \
+        "$(tar --zstd -xOf "${bundle}" boot/current-journal.jsonl 2> /dev/null | grep -c '"SYSLOG_IDENTIFIER":"tur-boot-health"')"
+    rm -f "${bundle}"
+}
+
 send() {
     local start="${SECONDS}"
     until [ -e "${port}" ] || [ $((SECONDS - start)) -ge 20 ]; do sleep 1; done
@@ -396,6 +416,13 @@ if [ -z "${left}" ] || grep -qw 'tur.boot=fallback' /proc/cmdline; then settled=
 put settled "${settled}"
 done_reboots="$(cat "${state}/extra-reboots-done" 2> /dev/null || echo 0)"
 put extra_reboots_done "${done_reboots}"
+# The system the scenario ends on: settled, and no restart left to do.
+if [ "${settled}" = yes ] && [ "${done_reboots}" -ge "${extra_reboots}" ]; then
+    put final_system yes
+    diagnostics
+else
+    put final_system no
+fi
 send "running=${marker} classification=${classification:-none} verdict=${verdict:-none} boot_counter=${left} settled=${settled}"
 
 if [ "${settled}" = yes ] && [ "${done_reboots}" -lt "${extra_reboots}" ]; then
