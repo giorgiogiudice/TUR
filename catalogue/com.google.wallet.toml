@@ -1,0 +1,36 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR application catalogue entry. Format: schemas/app-catalogue-entry.schema.json.
+# How entries are written and sourced: catalogue/README.md.
+# TUR has not tested this application. Every rating below is reported by the
+# named source, which was checked on the date given; no record means unknown.
+
+schema_version = 1
+id = "com.google.wallet"
+name = "Google Wallet"
+aliases = ["Google Pay", "GPay"]
+publisher = "Google"
+category = "finance"
+summary = "Contactless payments, passes and tickets."
+
+[[editions]]
+kind = "android"
+package = "com.google.android.apps.walletnfcrel"
+stores = ["google-play"]
+licence = "proprietary"
+requirements = ["play-integrity"]
+notes = "Entered as play-integrity because the publisher requires a certified device that meets its security requirements. Paying in shops also needs NFC hardware."
+
+[[editions.references]]
+title = "Google Play listing"
+url = "https://play.google.com/store/apps/details?id=com.google.android.apps.walletnfcrel&hl=en"
+checked = "2026-11-12"
+
+[[editions.references]]
+title = "Google Wallet Help: the phone must be Play Protect certified and meet security requirements; it does not run on rooted phones, custom ROMs or phones not approved by Google"
+url = "https://support.google.com/wallet/answer/12200245"
+checked = "2026-11-12"
+
+[[editions.references]]
+title = "Android Developers, Play Integrity API overview: checks for a genuine and certified Android device"
+url = "https://developer.android.com/google/play/integrity/overview"
+checked = "2026-11-12"

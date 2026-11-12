@@ -1,0 +1,53 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR application catalogue entry. Format: schemas/app-catalogue-entry.schema.json.
+# How entries are written and sourced: catalogue/README.md.
+# TUR has not tested this application. Every rating below is reported by the
+# named source, which was checked on the date given; no record means unknown.
+
+schema_version = 1
+id = "org.mozilla.thunderbird"
+name = "Thunderbird"
+aliases = ["Mozilla Thunderbird"]
+publisher = "MZLA Technologies"
+category = "communication"
+summary = "Mail and calendar client."
+homepage = "https://www.thunderbird.net/"
+
+[[editions]]
+kind = "flatpak"
+flatpak_id = "org.mozilla.Thunderbird"
+licence = "open-source"
+packaging = "publisher"
+
+[[editions.references]]
+title = "Flathub listing; verified by Flathub as published by the application's own project; licence MPL-2.0"
+url = "https://flathub.org/apps/org.mozilla.Thunderbird"
+checked = "2026-11-12"
+
+[[editions]]
+kind = "linux-native"
+obtain = "fedora-package"
+package = "thunderbird"
+licence = "open-source"
+packaging = "community"
+
+[[editions.references]]
+title = "Fedora Packages: thunderbird"
+url = "https://packages.fedoraproject.org/pkgs/thunderbird/thunderbird/"
+checked = "2026-11-12"
+
+[[editions]]
+kind = "android"
+package = "net.thunderbird.android"
+stores = ["f-droid", "google-play"]
+licence = "open-source"
+
+[[editions.references]]
+title = "Google Play listing"
+url = "https://play.google.com/store/apps/details?id=net.thunderbird.android&hl=en"
+checked = "2026-11-12"
+
+[[editions.references]]
+title = "F-Droid listing"
+url = "https://f-droid.org/en/packages/net.thunderbird.android/"
+checked = "2026-11-12"

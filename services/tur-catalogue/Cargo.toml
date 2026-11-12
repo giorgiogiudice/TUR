@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+[package]
+name = "tur-catalogue"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+license = "LicenseRef-TUR-Noncommercial-1.0.0"
+description = "TUR application catalogue and router: validates catalogue entries, searches them and orders the routes by which an application can run. It never installs or launches anything."
+repository = "https://github.com/giorgiogiudice/TUR"
+publish = false
+
+# Each component is its own workspace with its own lockfile. See ADR-0005.
+[workspace]
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "1"
+uos-core = { path = "../../crates/uos-core" }
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"

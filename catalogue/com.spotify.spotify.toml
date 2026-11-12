@@ -1,0 +1,58 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR application catalogue entry. Format: schemas/app-catalogue-entry.schema.json.
+# How entries are written and sourced: catalogue/README.md.
+# TUR has not tested this application. Every rating below is reported by the
+# named source, which was checked on the date given; no record means unknown.
+
+schema_version = 1
+id = "com.spotify.spotify"
+name = "Spotify"
+publisher = "Spotify"
+category = "media"
+summary = "Music and podcast streaming."
+
+[[editions]]
+kind = "flatpak"
+flatpak_id = "com.spotify.Client"
+licence = "proprietary"
+packaging = "community"
+
+[[editions.references]]
+title = "Flathub listing; not verified by Flathub as coming from the publisher"
+url = "https://flathub.org/apps/com.spotify.Client"
+checked = "2026-11-12"
+
+[[editions]]
+kind = "linux-native"
+obtain = "other-distribution-package"
+distribution = "debian"
+package = "spotify-client"
+download_page = "https://www.spotify.com/us/download/linux/"
+licence = "proprietary"
+packaging = "publisher"
+
+[[editions.references]]
+title = "Spotify for Linux: released as a Snap and as a Debian package (spotify-client)"
+url = "https://www.spotify.com/us/download/linux/"
+checked = "2026-11-12"
+
+[[editions]]
+kind = "web"
+url = "https://open.spotify.com/"
+licence = "proprietary"
+
+[[editions.references]]
+title = "Spotify web player"
+url = "https://open.spotify.com/"
+checked = "2026-11-12"
+
+[[editions]]
+kind = "android"
+package = "com.spotify.music"
+stores = ["google-play"]
+licence = "proprietary"
+
+[[editions.references]]
+title = "Google Play listing"
+url = "https://play.google.com/store/apps/details?id=com.spotify.music&hl=en"
+checked = "2026-11-12"

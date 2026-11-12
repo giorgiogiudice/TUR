@@ -1,0 +1,193 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+#
+# Boot test (UOS-003): install the image to a disk with the installer it
+# carries, boot that disk under UEFI in QEMU/KVM, and prove from outside that
+# it reaches a graphical session. See tests/boot and docs/reports/UOS-003.md.
+name: boot
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "image/**"
+      - "tests/boot/**"
+      - "scripts/build-image.sh"
+      - "VERSION"
+      - ".github/workflows/boot.yml"
+  pull_request:
+    paths:
+      - "image/**"
+      - "tests/boot/**"
+      - "scripts/build-image.sh"
+      - "VERSION"
+      - ".github/workflows/boot.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: boot-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PODMAN: sudo podman
+  IMAGE: localhost/uos:ci
+  OUT: out/boot
+
+jobs:
+  lint:
+    name: Lint boot test scripts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Lint
+        run: |
+          shellcheck --version | sed -n 2p
+          shellcheck -x tests/boot/*.sh tests/boot/guest/rootfs/usr/libexec/uos-boot-test/guest-agent
+          python3 -m py_compile tests/boot/*.py
+
+  boot:
+    name: Install to disk and boot under UEFI in QEMU/KVM
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Runner environment
+        run: |
+          echo "podman: $(podman --version)"
+          echo "kernel: $(uname -r)"
+          echo "cpus:   $(nproc) ($(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2 | xargs))"
+          free -g | sed -n 2p
+          df -h / /mnt 2>/dev/null || df -h /
+          sudo podman info --format 'podman storage: driver={{.Store.GraphDriverName}} root={{.Store.GraphRoot}}' || true
+          mkdir -p "$OUT/host"
+
+      # Hosted runners expose /dev/kvm but not to the runner user. The udev rule
+      # is the method GitHub documents:
+      # https://github.blog/changelog/2024-04-02-github-actions-hardware-accelerated-android-virtualization-now-available/
+      - name: Enable KVM for the runner user
+        run: |
+          ls -la /dev/kvm || echo "/dev/kvm is absent"
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          sudo udevadm settle
+          ls -la /dev/kvm
+
+      # No software-emulation fallback (ADR-0002): without KVM the job stops here.
+      - name: Verify KVM
+        run: python3 tests/boot/check-kvm.py "$OUT/host/kvm.json"
+
+      # The image, the boot-test layer and the disk need about 15 GB. Removing the
+      # preinstalled toolchains takes two minutes, so do it only when space is short.
+      - name: Free disk space if needed
+        run: |
+          free=$(df --output=avail -B1G / | tail -1 | tr -d ' G')
+          echo "free on /: ${free} GiB"
+          if [ "$free" -lt 40 ]; then
+            sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache/CodeQL
+          fi
+          df -h / /mnt 2>/dev/null || df -h /
+
+      - name: Choose a work directory
+        run: |
+          work="$RUNNER_TEMP/uos-boot"
+          here=$(df --output=avail -B1G "$RUNNER_TEMP" | tail -1 | tr -d ' G')
+          if [ -d /mnt ]; then
+            there=$(df --output=avail -B1G /mnt | tail -1 | tr -d ' G')
+            if [ "$there" -gt "$here" ]; then
+              sudo mkdir -p /mnt/uos-boot
+              sudo chown "$(id -u):$(id -g)" /mnt/uos-boot
+              work=/mnt/uos-boot
+            fi
+          fi
+          mkdir -p "$work"
+          echo "work directory: $work ($(df --output=avail -h "$work" | tail -1 | xargs) free)"
+          echo "WORK=$work" >> "$GITHUB_ENV"
+
+      - name: Install QEMU and UEFI firmware
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 ovmf
+          qemu-system-x86_64 --version | head -1
+          dpkg-query -W -f='${Package} ${Version}\n' qemu-system-x86 ovmf seabios
+          ls -la /usr/share/OVMF/
+
+      - name: Build image
+        run: |
+          start=$(date +%s)
+          UOS_BUILD_ID_FILE="$RUNNER_TEMP/build-id" scripts/build-image.sh "$IMAGE"
+          echo "BUILD_ID=$(cat "$RUNNER_TEMP/build-id")" >> "$GITHUB_ENV"
+          echo "IMAGE_BUILD_SECONDS=$(( $(date +%s) - start ))" >> "$GITHUB_ENV"
+          df -h / | tail -1
+
+      - name: Build the boot-test image and install it to a disk
+        run: |
+          start=$(date +%s)
+          tests/boot/build-disk.sh "$IMAGE" "$WORK" "$OUT"
+          echo "DISK_BUILD_SECONDS=$(( $(date +%s) - start ))" >> "$GITHUB_ENV"
+          df -h / "$WORK"
+
+      - name: Inspect the installed disk
+        run: sudo python3 tests/boot/inspect-disk.py installed "$WORK/disk.raw" "$OUT"
+
+      - name: Boot under UEFI in QEMU/KVM
+        run: python3 tests/boot/run-vm.py --disk "$WORK/disk.raw" --work "$WORK" --out "$OUT" --timeout 900
+
+      - name: Recover the journal from the disk
+        if: always()
+        run: |
+          if [ -f "$WORK/disk.raw" ]; then
+            sudo python3 tests/boot/inspect-disk.py postmortem "$WORK/disk.raw" "$OUT"
+          else
+            echo "no disk image was produced"
+          fi
+
+      - name: Boot report
+        if: always()
+        run: |
+          python3 tests/boot/report.py --work "${WORK:-$RUNNER_TEMP}" --out "$OUT" \
+            --expected-build-id "${BUILD_ID:-}" \
+            --expected-failed-units tests/boot/expected-failed-units.txt \
+            --timing "image_build_seconds=${IMAGE_BUILD_SECONDS:-}" \
+            --timing "test_image_and_disk_seconds=${DISK_BUILD_SECONDS:-}"
+
+      - name: Summary
+        if: always()
+        run: |
+          if [ -f "$OUT/summary.md" ]; then cat "$OUT/summary.md" >> "$GITHUB_STEP_SUMMARY"; fi
+
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          show() { echo "::group::$1"; if [ -f "$1" ]; then tail -n "${2:-200}" "$1"; else echo "(absent)"; fi; echo "::endgroup::"; }
+          show "$OUT/host/vm-result.json"
+          for boot in first-boot second-boot; do
+            show "$OUT/guest/$boot/status"
+            show "$OUT/guest/$boot/failed-units-status.txt"
+            show "$OUT/guest/$boot/dm-status.txt"
+            show "$OUT/guest/$boot/sessions.txt"
+            show "$OUT/guest/$boot/session-processes.txt"
+            show "$OUT/guest/$boot/session-journal.txt" 80
+            show "$OUT/guest/$boot/prepare-second-boot.txt"
+            show "$OUT/guest/$boot/exit-status.tsv"
+          done
+          show "$OUT/host/qemu.log"
+          echo "::group::serial console, last 150 lines"
+          if [ -f "$OUT/serial.log" ]; then
+            sed 's/\x1b\[[0-9;?]*[A-Za-z]//g; s/\r//g' "$OUT/serial.log" | tail -n 150
+          fi
+          echo "::endgroup::"
+          ls -laR "$OUT" | head -150
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: uos-boot-test
+          path: out/boot/
+          if-no-files-found: warn

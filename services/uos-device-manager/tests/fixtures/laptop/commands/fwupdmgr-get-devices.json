@@ -1,0 +1,47 @@
+{
+  "Devices" : [
+    {
+      "Name" : "System Firmware",
+      "DeviceId" : "a45df35ac0e948ee180fe216a5f703f32dda163f",
+      "Guid" : [ "7ceaf7a8-0611-4480-9e30-64d8de420c7c" ],
+      "Plugin" : "uefi_capsule",
+      "Flags" : [ "internal", "updatable", "require-ac", "supported", "registered", "needs-reboot" ],
+      "Vendor" : "Example Computer",
+      "Version" : "1.46",
+      "VersionFormat" : "pair",
+      "UpdateState" : 0,
+      "Releases" : [
+        {
+          "Version" : "1.52",
+          "RemoteId" : "lvfs",
+          "Urgency" : "high",
+          "Flags" : [ "trusted-payload", "trusted-metadata", "is-upgrade" ]
+        },
+        {
+          "Version" : "1.46",
+          "RemoteId" : "lvfs",
+          "Urgency" : "medium",
+          "Flags" : [ "trusted-payload", "trusted-metadata" ]
+        }
+      ]
+    },
+    {
+      "Name" : "Samsung SSD 980 PRO 1TB",
+      "DeviceId" : "71b677ca0f1bc2c5b804fa1d59e52064ce589293",
+      "Serial" : "S5GXNX0R123456",
+      "Plugin" : "nvme",
+      "Flags" : [ "internal", "updatable", "require-ac", "supported", "registered", "needs-reboot" ],
+      "Vendor" : "Samsung",
+      "Version" : "5B2QGXA7",
+      "VersionFormat" : "plain"
+    },
+    {
+      "Name" : "Integrated Camera",
+      "DeviceId" : "08d460be0f1f9f128413f816022a6439e0078018",
+      "Plugin" : "usb",
+      "Flags" : [ "registered" ],
+      "Vendor" : "Chicony Electronics Co.,Ltd.",
+      "Version" : "27.11"
+    }
+  ]
+}

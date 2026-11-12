@@ -1,0 +1,8 @@
+# One journalled and one non-journalled HFS+ volume.
+DEVNAME=/dev/sda1
+TYPE=hfsplus
+UOS_HFS_JOURNAL=journalled
+
+DEVNAME=/dev/sda2
+TYPE=hfsplus
+UOS_HFS_JOURNAL=not-journalled

@@ -1,0 +1,41 @@
+{
+  "by_id": {
+    "nvme-Samsung_SSD_980_PRO_1TB_S5GXNX0T123456A": "/dev/nvme0n1",
+    "nvme-eui.002538b111b2c3d4": "/dev/nvme0n1",
+    "nvme-Samsung_SSD_980_PRO_1TB_S5GXNX0T123456A-part1": "/dev/nvme0n1p1",
+    "nvme-Samsung_SSD_980_PRO_1TB_S5GXNX0T123456A-part2": "/dev/nvme0n1p2",
+    "nvme-Samsung_SSD_980_PRO_1TB_S5GXNX0T123456A-part3": "/dev/nvme0n1p3",
+    "nvme-Samsung_SSD_980_PRO_1TB_S5GXNX0T123456A-part4": "/dev/nvme0n1p4",
+    "nvme-eui.002538b111b2c3d4-part1": "/dev/nvme0n1p1",
+    "nvme-eui.002538b111b2c3d4-part2": "/dev/nvme0n1p2",
+    "nvme-eui.002538b111b2c3d4-part3": "/dev/nvme0n1p3",
+    "nvme-eui.002538b111b2c3d4-part4": "/dev/nvme0n1p4",
+    "ata-Samsung_SSD_860_EVO_500GB_S4EWNX0M700001B": "/dev/sda",
+    "wwn-0x5002538e40a1b2c3": "/dev/sda",
+    "ata-Samsung_SSD_860_EVO_500GB_S4EWNX0M700001B-part1": "/dev/sda1",
+    "ata-Samsung_SSD_860_EVO_500GB_S4EWNX0M700001B-part2": "/dev/sda2",
+    "ata-Samsung_SSD_860_EVO_500GB_S4EWNX0M700001B-part3": "/dev/sda3",
+    "wwn-0x5002538e40a1b2c3-part1": "/dev/sda1",
+    "wwn-0x5002538e40a1b2c3-part2": "/dev/sda2",
+    "wwn-0x5002538e40a1b2c3-part3": "/dev/sda3",
+    "usb-SanDisk_Ultra_4C530001230506112345-0:0": "/dev/sdb",
+    "usb-SanDisk_Ultra_4C530001230506112345-0:0-part1": "/dev/sdb1",
+    "usb-SanDisk_Ultra_4C530001230506112345-0:0-part2": "/dev/sdb2",
+    "usb-Generic_Card_Reader_058F63666485-0:0": "/dev/sdc"
+  },
+  "by_path": {
+    "pci-0000:01:00.0-nvme-1": "/dev/nvme0n1",
+    "pci-0000:01:00.0-nvme-1-part1": "/dev/nvme0n1p1",
+    "pci-0000:01:00.0-nvme-1-part2": "/dev/nvme0n1p2",
+    "pci-0000:01:00.0-nvme-1-part3": "/dev/nvme0n1p3",
+    "pci-0000:01:00.0-nvme-1-part4": "/dev/nvme0n1p4",
+    "pci-0000:00:17.0-ata-1": "/dev/sda",
+    "pci-0000:00:17.0-ata-1-part1": "/dev/sda1",
+    "pci-0000:00:17.0-ata-1-part2": "/dev/sda2",
+    "pci-0000:00:17.0-ata-1-part3": "/dev/sda3",
+    "pci-0000:00:14.0-usb-0:2:1.0-scsi-0:0:0:0": "/dev/sdb",
+    "pci-0000:00:14.0-usb-0:2:1.0-scsi-0:0:0:0-part1": "/dev/sdb1",
+    "pci-0000:00:14.0-usb-0:2:1.0-scsi-0:0:0:0-part2": "/dev/sdb2",
+    "pci-0000:00:14.0-usb-0:4:1.0-scsi-0:0:0:0": "/dev/sdc"
+  }
+}

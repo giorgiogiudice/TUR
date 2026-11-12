@@ -1,0 +1,43 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR application catalogue entry. Format: schemas/app-catalogue-entry.schema.json.
+# How entries are written and sourced: catalogue/README.md.
+# TUR has not tested this application. Every rating below is reported by the
+# named source, which was checked on the date given; no record means unknown.
+
+schema_version = 1
+id = "com.adobe.photoshop"
+name = "Adobe Photoshop"
+aliases = ["Photoshop"]
+publisher = "Adobe"
+category = "creative"
+summary = "Image editor."
+
+[[editions]]
+kind = "windows"
+obtain = "publisher-page"
+download_page = "https://www.adobe.com/products/photoshop.html"
+licence = "proprietary"
+notes = "Adobe's own pages refused automated requests on 2026-11-12 (HTTP 403), so the address of the download page was not confirmed by fetching it, and no requirement is entered from Adobe's system requirements."
+
+[[editions.records]]
+route = "wine"
+rating = "usable"
+reported_by = "external"
+source_name = "WineHQ AppDB"
+source_url = "https://appdb.winehq.org/objectManager.php?sClass=application&iId=17"
+source_rating = "Silver"
+version_tested = "CC 2024"
+date = "2026-11-12"
+notes = "Latest Wine version tested for this release: 9.15-staging. Ratings vary by release: CC 2018 Bronze, CC 2015 and CC 2017 Gold, CC 2019 to CC 2023 Silver."
+
+[[editions.references]]
+title = "WineHQ AppDB: Adobe Photoshop"
+url = "https://appdb.winehq.org/objectManager.php?sClass=application&iId=17"
+checked = "2026-11-12"
+
+[[editions]]
+kind = "macos"
+obtain = "publisher-page"
+download_page = "https://www.adobe.com/products/photoshop.html"
+licence = "proprietary"
+notes = "Not confirmed against Adobe's own pages, which refused automated requests on 2026-11-12 (HTTP 403)."

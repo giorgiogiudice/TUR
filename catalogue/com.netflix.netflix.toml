@@ -1,0 +1,41 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR application catalogue entry. Format: schemas/app-catalogue-entry.schema.json.
+# How entries are written and sourced: catalogue/README.md.
+# TUR has not tested this application. Every rating below is reported by the
+# named source, which was checked on the date given; no record means unknown.
+
+schema_version = 1
+id = "com.netflix.netflix"
+name = "Netflix"
+publisher = "Netflix"
+category = "media"
+summary = "Subscription video streaming."
+
+[[editions]]
+kind = "web"
+url = "https://www.netflix.com/"
+primary = true
+licence = "proprietary"
+notes = "Netflix says it cannot guarantee that it works on Linux and gives no support for it. No rating is entered."
+
+[[editions.references]]
+title = "Netflix Help: supported browsers and system requirements, with a section on Linux"
+url = "https://help.netflix.com/en/node/30081"
+checked = "2026-11-12"
+
+[[editions]]
+kind = "android"
+package = "com.netflix.mediaclient"
+stores = ["google-play"]
+licence = "proprietary"
+requirements = ["hardware-attested-drm"]
+
+[[editions.references]]
+title = "Google Play listing"
+url = "https://play.google.com/store/apps/details?id=com.netflix.mediaclient&hl=en"
+checked = "2026-11-12"
+
+[[editions.references]]
+title = "Netflix Help: streaming in HD on Android needs Widevine L1; with L3 only SD plays"
+url = "https://help.netflix.com/en/node/23939"
+checked = "2026-11-12"

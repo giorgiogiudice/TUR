@@ -1,0 +1,37 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR application catalogue entry. Format: schemas/app-catalogue-entry.schema.json.
+# How entries are written and sourced: catalogue/README.md.
+# TUR has not tested this application. Every rating below is reported by the
+# named source, which was checked on the date given; no record means unknown.
+
+schema_version = 1
+id = "com.obsproject.studio"
+name = "OBS Studio"
+aliases = ["OBS", "Open Broadcaster Software"]
+publisher = "OBS Project"
+category = "media"
+summary = "Video recording and live streaming."
+homepage = "https://obsproject.com/"
+
+[[editions]]
+kind = "flatpak"
+flatpak_id = "com.obsproject.Studio"
+licence = "open-source"
+packaging = "publisher"
+
+[[editions.references]]
+title = "Flathub listing; verified by Flathub as published by the application's own project (obsproject.com); licence GPL-2.0-or-later"
+url = "https://flathub.org/apps/com.obsproject.Studio"
+checked = "2026-11-12"
+
+[[editions]]
+kind = "linux-native"
+obtain = "fedora-package"
+package = "obs-studio"
+licence = "open-source"
+packaging = "community"
+
+[[editions.references]]
+title = "Fedora Packages: obs-studio"
+url = "https://packages.fedoraproject.org/pkgs/obs-studio/obs-studio/"
+checked = "2026-11-12"
