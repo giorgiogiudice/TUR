@@ -69,6 +69,7 @@
 #include <cmath>
 #include <csignal>
 #include <cstdlib>
+#include <functional>
 #include <optional>
 #include <fcntl.h>
 #include <unistd.h>
@@ -298,6 +299,23 @@ private:
         }
         return QImage(reinterpret_cast<const uchar *>(data.constData()), width, height, stride, format)
             .convertToFormat(QImage::Format_RGB32);
+    }
+
+    // Screenshots until one shows what `drawn` looks for, or 10 s have
+    // passed: the overlay draws its next frame in its own time, and at a
+    // fractional scale in software that takes a while.
+    QImage captureUntil(QScreen *screen, const std::function<bool(const QImage &)> &drawn)
+    {
+        QImage picture;
+        QElapsedTimer clock;
+        clock.start();
+        do {
+            picture = capture(screen);
+            if (!picture.isNull() && drawn(picture))
+                return picture;
+            QTest::qWait(200);
+        } while (clock.elapsed() < 10000);
+        return picture;
     }
 
     // Keeps a screenshot for the artifact and the report.
@@ -550,13 +568,13 @@ private Q_SLOTS:
         QCOMPARE(overlay(QStringLiteral("SetActivity"), { m_lease, QStringLiteral("idle"), QVariantMap() }).type(),
                  QDBusMessage::ReplyMessage);
         QVERIFY2(shownBecomes(true), "P@x is on: the indicator is shown while idle");
-        QTest::qWait(300);
         QScreen *screen = QGuiApplication::primaryScreen();
         const QRectF area(screen->geometry());
-        const QImage idle = capture(screen);
+        const QRectF top(area.center().x() - 200, area.top() + 8, 400, 44);
+        const QImage idle = captureUntil(screen, [&](const QImage &image) { return goldShare(screen, image, top) > 0.01; });
         keep(idle, QStringLiteral("on-idle"));
         // The quiet pill: a dark pill with a gold outline at the top centre.
-        QVERIFY2(goldShare(screen, idle, QRectF(area.center().x() - 200, area.top() + 8, 400, 44)) > 0.01,
+        QVERIFY2(goldShare(screen, idle, top) > 0.01,
                  "the pill is drawn while P@x is idle");
         QCOMPARE(overlay(QStringLiteral("ShowCommands"), { true }).type(), QDBusMessage::ReplyMessage);
         QCOMPARE(overlayProperty(QStringLiteral("CommandsShown")).toBool(), true);
@@ -583,10 +601,12 @@ private Q_SLOTS:
         QCOMPARE(overlayProperty(QStringLiteral("Screens")).toStringList(), names);
 
         for (QScreen *screen : screens) {
-            const QImage picture = capture(screen);
+            const QRectF area(screen->geometry());
+            const QImage picture = captureUntil(screen, [&](const QImage &image) {
+                return isGold(colourAt(screen, image, QPointF(area.left() + 1, area.center().y())));
+            });
             QVERIFY2(!picture.isNull(), "KWin took a screenshot");
             keep(picture, QStringLiteral("acting-") + screen->name());
-            const QRectF area(screen->geometry());
             report(QStringLiteral("output %1: picture %2 x %3 for %4 x %5 logical")
                        .arg(screen->name()).arg(picture.width()).arg(picture.height())
                        .arg(area.width()).arg(area.height()));
@@ -672,8 +692,9 @@ private Q_SLOTS:
         QTest::qWait(150);
         keep(capture(screen), QStringLiteral("e2e-2-travelling"));
         QVERIFY2(arrives(arrivals), "PointerArrived");
-        QTest::qWait(400);
-        const QImage arrived = capture(screen);
+        const QImage arrived = captureUntil(screen, [&](const QImage &image) {
+            return isGold(colourAt(screen, image, row.center() + QPointF(18, 18)));
+        });
         keep(arrived, QStringLiteral("e2e-3-arrived"));
 
         // Where the pointer is: its tip is the row's centre, and the core of
@@ -793,9 +814,11 @@ private Q_SLOTS:
                  QDBusMessage::ReplyMessage);
         QVERIFY(arrives(arrivals));
         QVERIFY(shownBecomes(true));
-        QTest::qWait(300);
         QScreen *screen = screenAt(client.center());
-        const QImage shown = capture(screen);
+        const QPointF tipAt = client.topLeft() + QPointF(190, 70);
+        const QImage shown = captureUntil(screen, [&](const QImage &image) {
+            return isGold(colourAt(screen, image, tipAt + QPointF(18, 18)));
+        });
         keep(shown, QStringLiteral("focus-probe"));
         const QPointF tip = client.topLeft() + QPointF(190, 70);
         QVERIFY2(isGold(colourAt(screen, shown, tip + QPointF(18, 18))), "P@x's pointer is over the probe");
@@ -900,7 +923,8 @@ private Q_SLOTS:
         int after = 0;
         int baseline = 0;
         for (QScreen *screen : screens) {
-            const QImage picture = capture(screen);
+            const int icons = m_baseline.value(screen->name());
+            const QImage picture = captureUntil(screen, [&](const QImage &image) { return goldCount(image) <= icons; });
             keep(picture, QStringLiteral("after-hide-") + screen->name());
             after += goldCount(picture);
             baseline += m_baseline.value(screen->name());
@@ -934,8 +958,9 @@ private Q_SLOTS:
         ::kill(pid_t(owner.processId()), SIGKILL);
         QVERIFY(owner.waitForFinished(10000));
         QVERIFY2(shownBecomes(false), "the overlay noticed its owner had gone");
-        QTest::qWait(200);
-        const QImage picture = capture(screens.constFirst());
+        const int icons = m_baseline.value(screens.constFirst()->name());
+        const QImage picture =
+            captureUntil(screens.constFirst(), [&](const QImage &image) { return goldCount(image) <= icons; });
         keep(picture, QStringLiteral("after-owner-died"));
         QVERIFY(goldCount(picture) <= m_baseline.value(screens.constFirst()->name()));
 
@@ -958,8 +983,9 @@ private Q_SLOTS:
         QVERIFY(goldCount(capture(screens.constFirst())) > 1000);
         ::kill(pid_t(m_overlay.processId()), SIGKILL);
         QVERIFY(m_overlay.waitForFinished(10000));
-        QTest::qWait(500);
-        const QImage picture = capture(screens.constFirst());
+        const int icons = m_baseline.value(screens.constFirst()->name());
+        const QImage picture =
+            captureUntil(screens.constFirst(), [&](const QImage &image) { return goldCount(image) <= icons; });
         keep(picture, QStringLiteral("after-overlay-killed"));
         QVERIFY(goldCount(picture) <= m_baseline.value(screens.constFirst()->name()));
     }
