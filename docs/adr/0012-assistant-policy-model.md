@@ -1,6 +1,6 @@
 # ADR-0012: The assistant's authority is enforced by a pure decision function outside the model
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-12
 - **Specification sections:** §12, §29.3, §29.4; AI control layer (addendum A) sections 2, 5, 6, 7 and 17
 

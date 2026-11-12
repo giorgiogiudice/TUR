@@ -1,6 +1,6 @@
 # AI control layer
 
-**Specification addendum A — Revision 6 (12 November 2026)**
+**Specification addendum A — Revision 7 (12 November 2026)**
 **Applies to:** specification revision 1.0
 **Related decision:** [ADR-0004](../adr/0004-ai-provider-model.md)
 
@@ -779,4 +779,26 @@ governs.
 
 Work on KWin itself to close items 2 to 5 would be contributed upstream under
 KWin's licence; it is not TUR code.
+
+## 20. Resolutions from the independent review of the policy engine
+
+An independent review of the policy engine
+([review report](../reviews/policy-engine-review-1.md)) found no input that lets a
+class 3 or class 4 action run, and 25 lesser defects, now fixed. It also settled
+points this document had left open. Where an earlier section says otherwise,
+this section governs.
+
+| # | Point | Resolution |
+|---|---|---|
+| 1 | A control whose label cannot be read (an icon, a symbol, look-alike or invisible characters, another language) or that merely affirms ("OK", "Yes", "Continue", "Apply") | Treated as consequential: class 2. When P@x cannot tell what a control does, it asks. |
+| 2 | Who owns a window | The compositor reports whether a target window belongs to the user, to an administrator process, or is unknown. Administrator: refused. Unknown: class 2. |
+| 3 | The built-in lists of sensitive applications (terminals, launchers) and excluded applications (password managers and similar) | Always apply. The user can add to them; nothing can remove an entry. |
+| 4 | A relaxation and the model's own warning | A relaxation does not cover an action the model itself flagged as consequential; that action is asked. |
+| 5 | A locked, unattended task | Tools and read-only commands only. A workspace command is deferred until the user returns. |
+| 6 | The repair-session record | Carries its opening time and an ended mark, so a session cannot reopen after a lock or outlive its limit. |
+| 7 | Marking a value secret in a privileged request | Only the component that builds the request from a typed operation can mark a value secret. Free text is recorded as written. |
+| 8 | Audit fields | Adds `UOS_AI_REQUEST` (the privileged request in full) and `privileged` as a sandbox value. |
+
+The engine's decision table, its invariants and the tests that enforce them are in
+[agent-policy.md](agent-policy.md).
 
