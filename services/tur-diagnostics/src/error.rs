@@ -53,6 +53,30 @@ pub enum ErrorKind {
     BundleTooLarge,
     /// A defect in `tur-diag` itself.
     Internal,
+    /// A problem report's fields are missing or not acceptable.
+    ReportInvalid,
+    /// No problem-report receiver is configured.
+    ReportNoReceiver,
+    /// `--to` names a receiver other than the configured one.
+    ReportWrongReceiver,
+    /// Sending was not confirmed.
+    ReportNotConfirmed,
+    /// The file to send is not a prepared problem report.
+    ReportNotPrepared,
+    /// The receiver could not be reached.
+    ReportUnreachable,
+    /// The receiver answered, and refused the report.
+    ReportRefused,
+    /// The problem-report configuration file cannot be used.
+    ReportConfigInvalid,
+    /// Boot health has no failed update or failed start to report.
+    ReportNothingFromBootHealth,
+    /// The local list of reports cannot be read or written.
+    ReportRecordsUnavailable,
+    /// No sent report has the given identifier.
+    ReportUnknown,
+    /// The prepared report is larger than a receiver accepts.
+    ReportTooLarge,
 }
 
 /// A registry entry for one error code (specification §29.3).
@@ -78,7 +102,7 @@ pub struct RegistryEntry {
 
 impl ErrorKind {
     /// Every kind, in registry order.
-    pub const ALL: [ErrorKind; 12] = [
+    pub const ALL: [ErrorKind; 24] = [
         ErrorKind::OutputWrite,
         ErrorKind::OutputExists,
         ErrorKind::BundleRead,
@@ -91,6 +115,18 @@ impl ErrorKind {
         ErrorKind::FileListMismatch,
         ErrorKind::BundleTooLarge,
         ErrorKind::Internal,
+        ErrorKind::ReportInvalid,
+        ErrorKind::ReportNoReceiver,
+        ErrorKind::ReportWrongReceiver,
+        ErrorKind::ReportNotConfirmed,
+        ErrorKind::ReportNotPrepared,
+        ErrorKind::ReportUnreachable,
+        ErrorKind::ReportRefused,
+        ErrorKind::ReportConfigInvalid,
+        ErrorKind::ReportNothingFromBootHealth,
+        ErrorKind::ReportRecordsUnavailable,
+        ErrorKind::ReportUnknown,
+        ErrorKind::ReportTooLarge,
     ];
 
     /// The registry entry for this kind.
@@ -232,6 +268,159 @@ impl ErrorKind {
                 explanation: "This is a defect in tur-diag, not a problem with the computer.",
                 recovery: "Report this message, including the technical detail, to the TUR \
                            developers.",
+            },
+            ErrorKind::ReportInvalid => RegistryEntry {
+                kind: self,
+                code: "TUR-DIAG-REPORT-001",
+                title: "Problem report is not valid",
+                severity: Severity::Error,
+                detection: "A field of the problem report is missing, too long, has control \
+                            characters, or is not one of the accepted values.",
+                user_message: "The problem report could not be prepared as given.",
+                explanation: "A report needs a title and a component from the fixed list; an \
+                              error code must be a TUR code; texts have length limits.",
+                recovery: "Correct the value named in the technical detail and prepare the \
+                           report again.",
+            },
+            ErrorKind::ReportNoReceiver => RegistryEntry {
+                kind: self,
+                code: "TUR-DIAG-REPORT-002",
+                title: "No problem-report receiver is configured",
+                severity: Severity::Error,
+                detection: "RECEIVER_URL is empty or absent in every problem-report \
+                            configuration file.",
+                user_message: "TUR has no address to send problem reports to yet. Nothing was \
+                               sent.",
+                explanation: "Sending is possible only once TUR's receiver is configured in \
+                              /etc/tur/problem-reports.conf or /usr/lib/tur/problem-reports.conf. \
+                              The prepared report stays on this computer.",
+                recovery: "Keep the prepared report, or share it yourself. It can be sent once \
+                           a receiver is configured.",
+            },
+            ErrorKind::ReportWrongReceiver => RegistryEntry {
+                kind: self,
+                code: "TUR-DIAG-REPORT-003",
+                title: "Not TUR's configured receiver",
+                severity: Severity::Error,
+                detection: "The address given with --to differs from the configured \
+                            RECEIVER_URL.",
+                user_message: "Problem reports go only to TUR's configured receiver. Nothing was \
+                               sent.",
+                explanation: "tur-diag refuses to send a report to any other address, so that a \
+                              mistyped or suggested address cannot receive it.",
+                recovery: "Give the configured receiver's address with --to, exactly as \
+                           configured.",
+            },
+            ErrorKind::ReportNotConfirmed => RegistryEntry {
+                kind: self,
+                code: "TUR-DIAG-REPORT-004",
+                title: "Sending was not confirmed",
+                severity: Severity::Error,
+                detection: "Neither --yes was given nor was 'yes' typed at the question.",
+                user_message: "The report was not sent, because sending was not confirmed.",
+                explanation: "A report is sent only after the person confirms it, with --yes or \
+                              by typing yes when asked. Without a terminal to ask on, --yes is \
+                              required.",
+                recovery: "Read what will be sent, then run the command again and confirm.",
+            },
+            ErrorKind::ReportNotPrepared => RegistryEntry {
+                kind: self,
+                code: "TUR-DIAG-REPORT-005",
+                title: "Not a prepared problem report",
+                severity: Severity::Error,
+                detection: "The file is not a bundle that verifies, or it has no valid \
+                            report.json, or it was made with the technical profile.",
+                user_message: "This file is not a problem report prepared by tur-diag.",
+                explanation: "Only a bundle made by 'tur-diag report prepare' can be sent: it \
+                              must verify, carry report.json and use the default redaction \
+                              profile.",
+                recovery: "Prepare the report with 'tur-diag report prepare' and send that file.",
+            },
+            ErrorKind::ReportUnreachable => RegistryEntry {
+                kind: self,
+                code: "TUR-DIAG-REPORT-006",
+                title: "Receiver could not be reached",
+                severity: Severity::Error,
+                detection: "curl failed, timed out, or the receiver's answer was not a \
+                            receipt.",
+                user_message: "The report could not be delivered. It was not sent, and it is \
+                               kept on this computer.",
+                explanation: "The network, the receiver or curl failed before the receiver \
+                              acknowledged the report. Nothing is retried in the background.",
+                recovery: "Check the network connection and send the same file again later.",
+            },
+            ErrorKind::ReportRefused => RegistryEntry {
+                kind: self,
+                code: "TUR-DIAG-REPORT-007",
+                title: "Receiver refused the report",
+                severity: Severity::Error,
+                detection: "The receiver answered with an error and a TUR-DIAG-RECEIVER code.",
+                user_message: "TUR's receiver did not accept the report. It is kept on this \
+                               computer.",
+                explanation: "The technical detail carries the receiver's code and message, \
+                              for example a size or rate limit.",
+                recovery: "Follow the receiver's message; for a rate limit, try again later.",
+            },
+            ErrorKind::ReportConfigInvalid => RegistryEntry {
+                kind: self,
+                code: "TUR-DIAG-REPORT-008",
+                title: "Problem-report configuration is not usable",
+                severity: Severity::Error,
+                detection: "The configuration file cannot be read, has a line that is not \
+                            KEY=VALUE, or RECEIVER_URL is not an https address.",
+                user_message: "The problem-report settings of this computer are not valid. \
+                               Nothing was sent.",
+                explanation: "RECEIVER_URL must be https://host[:port][/path] without user \
+                              name, query or fragment; plain http is accepted only for this \
+                              computer itself (testing).",
+                recovery: "Correct the file named in the technical detail.",
+            },
+            ErrorKind::ReportNothingFromBootHealth => RegistryEntry {
+                kind: self,
+                code: "TUR-DIAG-REPORT-009",
+                title: "Nothing to report from boot health",
+                severity: Severity::Error,
+                detection: "tur-boot-health status shows no pending notice, or cannot be read.",
+                user_message: "There is no failed update or failed start to report.",
+                explanation: "A report from boot health is made from its pending notice. There \
+                              is none, or tur-boot-health could not be run.",
+                recovery: "Describe the problem yourself with --title and --component instead.",
+            },
+            ErrorKind::ReportRecordsUnavailable => RegistryEntry {
+                kind: self,
+                code: "TUR-DIAG-REPORT-010",
+                title: "Report list cannot be used",
+                severity: Severity::Error,
+                detection: "The directory for prepared and sent reports cannot be found, \
+                            created, read or written.",
+                user_message: "tur-diag cannot keep its list of problem reports.",
+                explanation: "Prepared and sent reports are kept under $XDG_STATE_HOME/tur/\
+                              reports (by default ~/.local/state/tur/reports).",
+                recovery: "Check that the home directory is writable, or name a directory with \
+                           --state-dir.",
+            },
+            ErrorKind::ReportUnknown => RegistryEntry {
+                kind: self,
+                code: "TUR-DIAG-REPORT-011",
+                title: "No such sent report",
+                severity: Severity::Error,
+                detection: "No record of a sent report has the identifier given.",
+                user_message: "There is no sent report with that identifier on this computer.",
+                explanation: "Only reports sent from this account are listed.",
+                recovery: "Run 'tur-diag report list' to see the identifiers.",
+            },
+            ErrorKind::ReportTooLarge => RegistryEntry {
+                kind: self,
+                code: "TUR-DIAG-REPORT-012",
+                title: "Report is too large",
+                severity: Severity::Error,
+                detection: "The prepared bundle is larger than 8 MiB, or expands to more than \
+                            64 MiB.",
+                user_message: "The problem report is larger than TUR's receiver accepts.",
+                explanation: "Receivers accept bundles up to the limits given. A report collects \
+                              less of the journal than 'tur-diag collect', so this is rare.",
+                recovery: "Prepare the report again with --since-boot, or share a bundle made \
+                           with 'tur-diag collect' yourself.",
             },
         }
     }
@@ -383,6 +572,21 @@ mod tests {
             (ErrorKind::FileListMismatch, "TUR-DIAG-BUNDLE-008"),
             (ErrorKind::BundleTooLarge, "TUR-DIAG-BUNDLE-009"),
             (ErrorKind::Internal, "TUR-DIAG-INTERNAL-001"),
+            (ErrorKind::ReportInvalid, "TUR-DIAG-REPORT-001"),
+            (ErrorKind::ReportNoReceiver, "TUR-DIAG-REPORT-002"),
+            (ErrorKind::ReportWrongReceiver, "TUR-DIAG-REPORT-003"),
+            (ErrorKind::ReportNotConfirmed, "TUR-DIAG-REPORT-004"),
+            (ErrorKind::ReportNotPrepared, "TUR-DIAG-REPORT-005"),
+            (ErrorKind::ReportUnreachable, "TUR-DIAG-REPORT-006"),
+            (ErrorKind::ReportRefused, "TUR-DIAG-REPORT-007"),
+            (ErrorKind::ReportConfigInvalid, "TUR-DIAG-REPORT-008"),
+            (
+                ErrorKind::ReportNothingFromBootHealth,
+                "TUR-DIAG-REPORT-009",
+            ),
+            (ErrorKind::ReportRecordsUnavailable, "TUR-DIAG-REPORT-010"),
+            (ErrorKind::ReportUnknown, "TUR-DIAG-REPORT-011"),
+            (ErrorKind::ReportTooLarge, "TUR-DIAG-REPORT-012"),
         ];
         assert_eq!(pinned.len(), ErrorKind::ALL.len());
         for (kind, code) in pinned {

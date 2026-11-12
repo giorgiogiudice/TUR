@@ -10,8 +10,13 @@ Specification sections: §5.5, §6.3, §6.4, §6.5, §29.1 to §29.3.
 
 `tur-diag` produces a support bundle: one local file that describes the state of a
 machine well enough for someone else to diagnose a problem, with personal and
-machine identifiers replaced. It runs only when a person asks. It has no network
-code and uploads nothing.
+machine identifiers replaced. It runs only when a person asks.
+
+It also prepares problem reports, and sends one, through the system's `curl`,
+only when the person runs `tur-diag report send` and confirms it, and only to
+the receiver configured for TUR, which is empty by default
+([problem-reports.md](problem-reports.md), ADR-0024). Nothing else in
+`tur-diag` uses the network, and nothing is sent in the background.
 
 ## Commands
 
@@ -19,6 +24,7 @@ code and uploads nothing.
 tur-diag status [--json]
 tur-diag collect --output FILE.tar.zst [--since-boot] [--profile default|technical]
 tur-diag verify-bundle FILE
+tur-diag report prepare|send|list|status ...     (problem-reports.md, section 2)
 ```
 
 - `status` prints the TUR build (from `/usr/lib/tur/release`), source revision,
@@ -47,6 +53,7 @@ is recorded in the manifest and the rest is still collected.
 | `bundle` | Builds, writes and verifies the archive. |
 | `identity` | Build identity and status; the names given to the redactor. |
 | `error` | The `TUR-DIAG-*` registry. |
+| `report` | Problem reports: `report.json`, preparing, checking, the configuration, the local list, sending through `curl` ([problem-reports.md](problem-reports.md)). |
 
 `main.rs` only parses arguments and prints.
 
@@ -192,6 +199,10 @@ installer session ID (always `null` for now), the redaction profile, whether
 `checksums.sha256` lists every other member, including the manifest, in
 `sha256sum --check` format.
 
+A problem report adds one member, `report.json`, listed in the manifest and the
+checksum list like every other file and redacted with the rest
+(`bundle::build_bundle_with`). `README.txt` then names it.
+
 `verify-bundle` checks that the archive decompresses and holds only regular files
 with safe, unique paths; that the manifest and the checksum list are present, well
 formed and of a supported schema version; that every member matches its recorded
@@ -199,6 +210,11 @@ SHA-256 (and its size, for files listed in the manifest); and that the archive,
 the manifest and the checksum list name exactly the same files. It guards against
 damage and incomplete copies. It is not a signature: someone who rewrites a file
 and both lists consistently is not detected.
+
+The same checks are available with a smaller limit on the unpacked size
+(`bundle::verify_members`, `bundle::unpack_within`), which return the verified
+members too. Problem reports use 64 MiB, and the receiver links this library to
+check every upload with exactly these rules.
 
 ### Differences from §29.1
 
@@ -232,6 +248,18 @@ the `DIAG` family, is unique, and has not changed.
 | `TUR-DIAG-BUNDLE-008` | Files were added or removed: the lists and the archive disagree. |
 | `TUR-DIAG-BUNDLE-009` | The archive expands beyond the 2 GiB verification limit. |
 | `TUR-DIAG-INTERNAL-001` | A defect in `tur-diag`. |
+| `TUR-DIAG-REPORT-001` | A field of a problem report is missing, too long, or not an accepted value. |
+| `TUR-DIAG-REPORT-002` | No receiver is configured; nothing was sent. |
+| `TUR-DIAG-REPORT-003` | `--to` is not the configured receiver; nothing was sent. |
+| `TUR-DIAG-REPORT-004` | Sending was not confirmed (`--yes`, or `yes` typed on a terminal). |
+| `TUR-DIAG-REPORT-005` | The file is not a prepared report a receiver accepts. |
+| `TUR-DIAG-REPORT-006` | The receiver could not be reached, or its answer was not a receipt; the prepared file is kept. |
+| `TUR-DIAG-REPORT-007` | The receiver refused the report; the detail carries its `TUR-DIAG-RECEIVER-*` code. |
+| `TUR-DIAG-REPORT-008` | The problem-report configuration file is not usable. |
+| `TUR-DIAG-REPORT-009` | Boot health has no notice to make a report from. |
+| `TUR-DIAG-REPORT-010` | The directory of prepared and sent reports cannot be used. |
+| `TUR-DIAG-REPORT-011` | No sent report has that identifier. |
+| `TUR-DIAG-REPORT-012` | The prepared report is over 8 MiB, or expands beyond 64 MiB. |
 
 Command-line usage errors are reported by the argument parser with exit code 2 and
 have no TUR code.
@@ -261,8 +289,9 @@ have no TUR code.
 - **Not signed.** See the note on `verify-bundle` above.
 - The registry holds title, severity, detection, user message, explanation and
   recovery for each code. §29.3 also asks for tests per code; the paths that
-  produce `COLLECT-001`, `COLLECT-002` and `BUNDLE-001` to `BUNDLE-008` are
-  tested, `BUNDLE-009` and `INTERNAL-001` are not.
+  produce `COLLECT-001`, `COLLECT-002`, `BUNDLE-001` to `BUNDLE-009` and the
+  `REPORT-*` codes other than `-011` are tested (`BUNDLE-009` through the
+  smaller limit of a report); `INTERNAL-001` and `REPORT-011` are not.
 
 ## Out of scope for this slice
 
@@ -270,7 +299,8 @@ have no TUR code.
 - `collect --installer-session` and installer logs.
 - The other §6.4 subcommands: `boot-report`, `hardware`, `storage`, `drivers`,
   `runtimes`.
-- Upload of any kind.
+- Upload other than a problem report the person sends
+  ([problem-reports.md](problem-reports.md)).
 - journald persistence configuration in the image (§5.5), and installing
   `tur-diag` into the image.
 - Test of export to a removable disk image (TUR-004).

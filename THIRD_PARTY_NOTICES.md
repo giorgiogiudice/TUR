@@ -81,6 +81,22 @@ of the copyleft components must be available with each published image, as
 their licences require. What has to be in place first is tracked in the licence
 review.
 
+## Third-party code in the problem report receiver
+
+The problem report receiver (`server/report-receiver/`, ADR-0024) is not part
+of the TUR image: it runs on a server of its own, from a container image built
+by the `reports` workflow. Like TUR's other programs it is one Rust binary with
+its third-party crates linked statically. Every crate compiled into it, with
+version and declared licence, is in
+[`docs/dependencies/receiver-crates.csv`](docs/dependencies/receiver-crates.csv);
+the workflow fails if a licence is not permissive or the list is stale. Besides
+the crates of `tur-diag` (it links that library), it uses `hyper`, `tokio`,
+`ureq` with `rustls`, `ring` (C and assembly derived from BoringSSL and
+OpenSSL) and `webpki-roots` (the Mozilla root certificates,
+CDLA-Permissive-2.0), `regex` and `chacha20poly1305`. The container image's
+base layer is Debian's `trixie-slim`, whose packages carry their own licences
+under `/usr/share/doc/` in the image.
+
 ## Trademarks
 
 Fedora and the Fedora logo are trademarks of Red Hat, Inc. TUR is not provided,

@@ -15,9 +15,14 @@
 //! * [`bundle`] builds, writes and verifies the archive.
 //! * [`identity`] reads what the machine is running, for `tur-diag status`.
 //! * [`error`] is the registry of stable `TUR-DIAG-*` error codes.
+//! * [`report`] prepares problem reports (ADR-0024), keeps the local list of
+//!   sent ones, and sends one when `tur-diag report send` asks it to.
 //!
-//! Nothing here uploads anything. A bundle is a local file, created only when
-//! a person asks for one.
+//! A bundle is a local file, created only when a person asks for one. The one
+//! thing that sends anything is [`report::send_prepared`], which only the
+//! `report send` command calls, in the foreground, after the person has
+//! confirmed, and only to the receiver configured for TUR. Nothing is sent
+//! in the background or retried on its own.
 
 #![forbid(unsafe_code)]
 
@@ -28,9 +33,11 @@ pub mod host;
 pub mod identity;
 pub mod manifest;
 pub mod redact;
+pub mod report;
 
 pub use bundle::{
-    BuiltBundle, CollectRequest, Verified, build_bundle, verify_archive, verify_file, write_bundle,
+    BuiltBundle, CollectRequest, ExtraDocument, Verified, build_bundle, build_bundle_with,
+    verify_archive, verify_file, verify_members, write_bundle,
 };
 pub use collectors::{COLLECTORS, Collector, DEFAULT_MAX_BYTES};
 pub use error::{DiagError, ErrorKind};
