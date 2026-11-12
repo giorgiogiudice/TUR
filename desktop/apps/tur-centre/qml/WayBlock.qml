@@ -116,6 +116,10 @@ ColumnLayout {
         Kit.Label {
             objectName: "waySource"
             Layout.fillWidth: true
+            // On a way that cannot be used, "Nobody has reported on this way
+            // of running it. It may still work." would end with something
+            // untrue. "No reports" stands alone there.
+            visible: !(block.blocked && block.option.rating_source.kind === "unrated")
             text: Words.sourceSentence(block.option.rating_source)
             tone: Kit.Label.Secondary
             paragraph: true

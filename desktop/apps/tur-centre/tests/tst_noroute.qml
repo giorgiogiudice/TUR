@@ -164,6 +164,8 @@ Item {
             // Nobody has reported on it, and that is what is said: a route
             // that is blocked is not thereby rated.
             compare(textOf(android, "ratingWords"), "No reports")
+            // And not "It may still work": on this way it will not.
+            compare(textsOf(android, "waySource"), [])
             compare(textsOf(android, "caveatText"),
                     ["Needs a phone certified by Google (Play Integrity): it will refuse to run here. "
                      + "No container or virtual machine passes that check."])
