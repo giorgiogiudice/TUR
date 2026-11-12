@@ -8,4 +8,4 @@
 #
 # unit-name.service  reason
 
-mcelog.service  Known base-distribution defect, not a virtual-machine effect. mcelog exits with "does not support this processor" on AMD CPUs; hosted runners with AMD EPYC CPUs pass the CPU through to the guest. Observed on AMD family 25; it would fail the same way on AMD hardware. Not observed on an Intel runner. Open item in docs/reports/UOS-003.md.
+mcelog.service  Known base-distribution defect, not a virtual-machine effect. mcelog exits with "does not support this processor" on AMD CPUs; hosted runners with AMD EPYC CPUs pass the CPU through to the guest. Seen on both AMD runners (family 25) and not on the Intel runner; it would fail the same way on AMD hardware. Open item in docs/reports/UOS-003.md.

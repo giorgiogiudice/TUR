@@ -83,9 +83,15 @@ jobs:
       - name: Verify KVM
         run: python3 tests/boot/check-kvm.py "$OUT/host/kvm.json"
 
-      - name: Free disk space
+      # The image, the boot-test layer and the disk need about 15 GB. Removing the
+      # preinstalled toolchains takes two minutes, so do it only when space is short.
+      - name: Free disk space if needed
         run: |
-          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache/CodeQL
+          free=$(df --output=avail -B1G / | tail -1 | tr -d ' G')
+          echo "free on /: ${free} GiB"
+          if [ "$free" -lt 40 ]; then
+            sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache/CodeQL
+          fi
           df -h / /mnt 2>/dev/null || df -h /
 
       - name: Choose a work directory
