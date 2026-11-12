@@ -361,7 +361,7 @@ impl Planner<'_> {
         let archive = self.app.backup_archive(name);
         let archive_text = text(&archive)?;
         let directory = text(&self.app.app_dir)?;
-        let command = self.tar(&[
+        let mut arguments = vec![
             "--create",
             "--gzip",
             "--file",
@@ -372,7 +372,19 @@ impl Planner<'_> {
             "metadata.json",
             "prefix",
             "home",
-        ])?;
+        ];
+        // An installed application also has a record and a profile. They
+        // go into the archive when they are there, so that a restore brings
+        // back the application and not only its prefix.
+        for (file, member) in [
+            (&self.app.record, "application.json"),
+            (&self.app.profile, "profile.json"),
+        ] {
+            if fs::symlink_metadata(file).is_ok_and(|metadata| metadata.is_file()) {
+                arguments.push(member);
+            }
+        }
+        let command = self.tar(&arguments)?;
         Ok(vec![
             Step::CreateDir {
                 path: self.app.backups.clone(),
@@ -511,10 +523,15 @@ impl Planner<'_> {
         if !exists {
             return Err(PlanError::PrefixMissing);
         }
-        let steps = [&self.app.app_dir, &self.app.staging, &self.app.logs]
-            .into_iter()
-            .map(|path| Step::RemoveTree { path: path.clone() })
-            .collect();
+        let steps = [
+            &self.app.app_dir,
+            &self.app.staging,
+            &self.app.logs,
+            &self.app.launchers,
+        ]
+        .into_iter()
+        .map(|path| Step::RemoveTree { path: path.clone() })
+        .collect();
         let mut plan = self.plan(Operation::Remove, steps);
         plan.notes.push(format!(
             "Backups in {} are kept.",
@@ -758,9 +775,11 @@ pub(crate) mod tests {
             .map(|step| match step {
                 Step::CreateDir { .. } => "create-dir",
                 Step::WriteFile { .. } => "write-file",
+                Step::WriteBytes { .. } => "write-bytes",
                 Step::RemoveTree { .. } => "remove-tree",
                 Step::Rename { .. } => "rename",
                 Step::Run { .. } => "run",
+                Step::RunBounded { .. } => "run-bounded",
                 Step::Launch { .. } => "launch",
                 Step::Check { .. } => "check",
                 Step::Require { .. } => "require",
@@ -1217,6 +1236,10 @@ pub(crate) mod tests {
                 },
                 Step::RemoveTree {
                     path: setup.app.logs.clone()
+                },
+                // The launcher entry of an installed application goes too.
+                Step::RemoveTree {
+                    path: setup.app.launchers.clone()
                 },
             ]
         );

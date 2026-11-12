@@ -19,9 +19,12 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::time::{Duration, Instant};
 
 use crate::launch_host::current_effective_uid;
-use crate::limits::{MAX_CHECK_BYTES, MAX_ERROR_OUTPUT_BYTES, MAX_LOG_BYTES};
+use crate::limits::{
+    MAX_CHECK_BYTES, MAX_COMMAND_OUTPUT_BYTES, MAX_ERROR_OUTPUT_BYTES, MAX_LOG_BYTES,
+};
 use crate::paths::{RuntimeDirs, plain_text};
 use crate::plan::{Check, CommandSpec, Executor, Step, StepError, StepOutcome};
 use crate::timefmt::Timestamp;
@@ -145,6 +148,77 @@ impl SystemExecutor {
         Ok(StepOutcome::Exited { status })
     }
 
+    /// Runs a command for at most `limit_seconds`. When the time is up the
+    /// command is killed. The command is the sandbox, which takes everything
+    /// inside it down with it.
+    fn run_bounded(
+        &mut self,
+        label: &str,
+        spec: &CommandSpec,
+        limit_seconds: u64,
+    ) -> Result<StepOutcome, StepError> {
+        let mut command = Self::command(spec);
+        command.stdout(Stdio::piped()).stderr(Stdio::piped());
+        let mut child = command
+            .spawn()
+            .map_err(|error| StepError::new(format!("cannot start {}: {error}", spec.program)))?;
+        let captured = Arc::new(Mutex::new(Vec::new()));
+        let readers = [
+            child.stdout.take().map(|stream| {
+                let captured = Arc::clone(&captured);
+                thread::spawn(move || capture_output(stream, &captured))
+            }),
+            child.stderr.take().map(|stream| {
+                let captured = Arc::clone(&captured);
+                thread::spawn(move || capture_output(stream, &captured))
+            }),
+        ];
+        let deadline = Instant::now() + Duration::from_secs(limit_seconds);
+        let status = loop {
+            match child.try_wait() {
+                Ok(Some(status)) => break Some(status),
+                Ok(None) => {}
+                Err(error) => {
+                    return Err(StepError::new(format!(
+                        "cannot wait for {}: {error}",
+                        spec.program
+                    )));
+                }
+            }
+            if Instant::now() >= deadline {
+                let _ = child.kill();
+                let _ = child.wait();
+                break None;
+            }
+            thread::sleep(Duration::from_millis(100));
+        };
+        for reader in readers.into_iter().flatten() {
+            let _ = reader.join();
+        }
+        let combined: Vec<u8> = captured
+            .lock()
+            .map(|buffer| buffer.clone())
+            .unwrap_or_default();
+        let ended = match status {
+            Some(status) => format!("exit status {}", exit_code(status)),
+            None => format!("stopped after {limit_seconds} seconds"),
+        };
+        self.append_to_command_log(
+            &format!("{label}: {} ({ended})", spec.display_line()),
+            &combined,
+        );
+        let tail_from = combined.len().saturating_sub(MAX_ERROR_OUTPUT_BYTES);
+        self.last_output = printable(combined.get(tail_from..).unwrap_or_default());
+        Ok(match status {
+            Some(status) => StepOutcome::Exited {
+                status: exit_code(status),
+            },
+            None => StepOutcome::TimedOut {
+                seconds: limit_seconds,
+            },
+        })
+    }
+
     fn launch(&mut self, spec: &CommandSpec, log: &Path) -> Result<StepOutcome, StepError> {
         let failed =
             |what: &str, error: io::Error| StepError::new(format!("cannot {what}: {error}"));
@@ -222,6 +296,23 @@ impl LogSink {
     }
 }
 
+/// Collects a command's output, up to a budget. The stream is read to its
+/// end either way, so that the command never blocks on a full pipe.
+fn capture_output(mut stream: impl Read, captured: &Mutex<Vec<u8>>) {
+    let mut buffer = [0u8; 8192];
+    loop {
+        let read = match stream.read(&mut buffer) {
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+            Ok(0) | Err(_) => break,
+            Ok(read) => read,
+        };
+        if let Ok(mut captured) = captured.lock() {
+            let room = MAX_COMMAND_OUTPUT_BYTES.saturating_sub(captured.len());
+            captured.extend_from_slice(buffer.get(..read.min(room)).unwrap_or_default());
+        }
+    }
+}
+
 fn copy_output(mut stream: impl Read, sink: &Mutex<LogSink>, forward: Forward, is_error: bool) {
     let mut buffer = [0u8; 8192];
     loop {
@@ -282,10 +373,18 @@ fn check(check: &Check) -> StepOutcome {
         passed: true,
         detail: String::new(),
     };
+    if let Check::Absent { path } = check {
+        // A link counts as something: it is looked at, not through.
+        return match fs::symlink_metadata(path) {
+            Err(error) if error.kind() == io::ErrorKind::NotFound => passed,
+            Err(error) => found(format!("{} cannot be examined: {error}", path.display())),
+            Ok(_) => found(format!("{} is still there", path.display())),
+        };
+    }
     let (path, wanted) = match check {
         Check::Directory { path } => (path, "a directory"),
         Check::File { path } | Check::FileContains { path, .. } => (path, "a regular file"),
-        Check::OwnedByUser { path } => (path, "there"),
+        Check::OwnedByUser { path } | Check::Absent { path } => (path, "there"),
     };
     // Links are not followed: a link where a file or directory should be is
     // a finding.
@@ -296,13 +395,13 @@ fn check(check: &Check) -> StepOutcome {
     let right_kind = match check {
         Check::Directory { .. } => metadata.is_dir(),
         Check::File { .. } | Check::FileContains { .. } => metadata.is_file(),
-        Check::OwnedByUser { .. } => true,
+        Check::OwnedByUser { .. } | Check::Absent { .. } => true,
     };
     if !right_kind {
         return found(format!("{} is not {wanted}", path.display()));
     }
     match check {
-        Check::Directory { .. } | Check::File { .. } => passed,
+        Check::Directory { .. } | Check::File { .. } | Check::Absent { .. } => passed,
         Check::OwnedByUser { .. } => {
             if Some(metadata.uid()) == current_effective_uid() {
                 passed
@@ -327,7 +426,7 @@ fn check(check: &Check) -> StepOutcome {
     }
 }
 
-fn write_file(path: &Path, contents: &str) -> io::Result<()> {
+fn write_file(path: &Path, contents: &[u8]) -> io::Result<()> {
     let name = path
         .file_name()
         .ok_or_else(|| io::Error::other("the path has no file name"))?;
@@ -343,7 +442,7 @@ fn write_file(path: &Path, contents: &str) -> io::Result<()> {
         .mode(0o600)
         .open(&temporary)?;
     let written = file
-        .write_all(contents.as_bytes())
+        .write_all(contents)
         .and_then(|()| file.sync_all())
         .and_then(|()| fs::rename(&temporary, path));
     if written.is_err() {
@@ -374,7 +473,10 @@ impl Executor for SystemExecutor {
                 .create(path)
                 .map(|()| StepOutcome::Done)
                 .map_err(|error| io_error("create", path, error)),
-            Step::WriteFile { path, contents } => write_file(path, contents)
+            Step::WriteFile { path, contents } => write_file(path, contents.as_bytes())
+                .map(|()| StepOutcome::Done)
+                .map_err(|error| io_error("write", path, error)),
+            Step::WriteBytes { path, bytes } => write_file(path, bytes)
                 .map(|()| StepOutcome::Done)
                 .map_err(|error| io_error("write", path, error)),
             Step::RemoveTree { path } => {
@@ -391,6 +493,11 @@ impl Executor for SystemExecutor {
                     .map_err(|error| io_error("rename", from, error))
             }
             Step::Run { label, command } => self.run(label, command),
+            Step::RunBounded {
+                label,
+                command,
+                limit_seconds,
+            } => self.run_bounded(label, command, *limit_seconds),
             Step::Launch { command, log } => self.launch(command, log),
             Step::Check { check: wanted } | Step::Require { check: wanted } => Ok(check(wanted)),
         }
@@ -654,6 +761,108 @@ mod tests {
                 .message
                 .starts_with("cannot start /nonexistent/program")
         );
+    }
+
+    #[test]
+    fn a_time_limited_command_is_stopped_when_its_time_is_up() {
+        let scratch = scratch("exec-bounded");
+        let log = scratch.dirs.state_root().join("operations.log");
+        fs::create_dir_all(scratch.dirs.state_root()).unwrap();
+        let mut executor = SystemExecutor::new(&scratch.dirs).with_command_log(log.clone());
+        let bounded = |label: &str, script: &str, limit_seconds: u64| Step::RunBounded {
+            label: label.to_owned(),
+            command: shell(script),
+            limit_seconds,
+        };
+
+        // In time: the status and the output, as for any command.
+        let outcome = executor
+            .execute(&bounded("quick", "echo \"[$TUR_TEST]\"; echo oops >&2; exit 4", 60))
+            .unwrap();
+        assert_eq!(outcome, StepOutcome::Exited { status: 4 });
+        let output = executor.last_output().to_owned();
+        assert!(output.contains("[from the plan]"), "{output}");
+        assert!(output.contains("oops"), "{output}");
+
+        // Out of time: stopped, and reported as such. The shell is replaced
+        // by the sleeper, so that stopping the command stops everything.
+        let started = Instant::now();
+        let outcome = executor
+            .execute(&bounded("slow", "echo before; exec sleep 600", 1))
+            .unwrap();
+        assert_eq!(outcome, StepOutcome::TimedOut { seconds: 1 });
+        assert!(started.elapsed() < Duration::from_secs(60));
+        assert!(executor.last_output().contains("before"));
+
+        let logged = fs::read_to_string(&log).unwrap();
+        assert!(logged.contains("quick: /bin/sh -c "));
+        assert!(logged.contains("(exit status 4)"));
+        assert!(logged.contains("(stopped after 1 seconds)"));
+
+        let error = executor
+            .execute(&Step::RunBounded {
+                label: "missing".to_owned(),
+                command: CommandSpec {
+                    program: "/nonexistent/program".to_owned(),
+                    ..shell("")
+                },
+                limit_seconds: 5,
+            })
+            .unwrap_err();
+        assert!(
+            error
+                .message
+                .starts_with("cannot start /nonexistent/program")
+        );
+    }
+
+    #[test]
+    fn binary_files_are_written_and_absence_is_checked() {
+        let scratch = scratch("exec-bytes");
+        let mut executor = SystemExecutor::new(&scratch.dirs);
+        let directory = scratch.app.join("launcher");
+        done(
+            &mut executor,
+            Step::CreateDir {
+                path: directory.clone(),
+            },
+        );
+        let icon = directory.join("icon.png");
+        let bytes = vec![0x89, b'P', b'N', b'G', 0, 0xff, 0x80];
+        done(
+            &mut executor,
+            Step::WriteBytes {
+                path: icon.clone(),
+                bytes: bytes.clone(),
+            },
+        );
+        assert_eq!(fs::read(&icon).unwrap(), bytes);
+        assert_eq!(
+            fs::metadata(&icon).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+
+        let absent = |path: &Path| {
+            executor_check(&Check::Absent {
+                path: path.to_path_buf(),
+            })
+        };
+        assert_eq!(absent(&directory.join("nothing")), (true, String::new()));
+        let (passed, detail) = absent(&icon);
+        assert!(!passed);
+        assert!(detail.contains("is still there"), "{detail}");
+        // A dangling link is still something.
+        let dangling = directory.join("dangling");
+        symlink(directory.join("nothing"), &dangling).unwrap();
+        assert!(!absent(&dangling).0);
+        assert!(!absent(&directory).0);
+    }
+
+    fn executor_check(wanted: &Check) -> (bool, String) {
+        match check(wanted) {
+            StepOutcome::Checked { passed, detail } => (passed, detail),
+            other => panic!("{other:?}"),
+        }
     }
 
     #[test]

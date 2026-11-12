@@ -107,11 +107,33 @@ pub enum Code {
     EnvironmentRefused,
     /// The profile's binary is not a regular file, or lies in a protected location.
     BinaryRefused,
+    /// The file is not a Windows installer, program or archive of programs.
+    InstallerUnrecognised,
+    /// The file's kind has no known unattended mode, so it is not run.
+    InstallerNoUnattendedMode,
+    /// The installer ran and exited with a failure status.
+    InstallerFailed,
+    /// The installer did not finish in the time it was given and was stopped.
+    InstallerTimedOut,
+    /// The installer finished and no new program was found in the prefix.
+    InstallNothingFound,
+    /// Programs were installed and none could be chosen as the main one.
+    InstallMainProgramUnclear,
+    /// No application with this identifier is installed.
+    AppNotInstalled,
+    /// The application record is unreadable, not valid, or not this application's.
+    AppRecordInvalid,
+    /// Something of the application was still there after it was removed.
+    UninstallIncomplete,
+    /// A value given for an installation is not allowed.
+    InstallRequestInvalid,
+    /// The application's own uninstaller failed or ran out of time.
+    UninstallerFailed,
 }
 
 impl Code {
     /// Every code this component can report.
-    pub const ALL: [Code; 42] = [
+    pub const ALL: [Code; 53] = [
         Code::Unreadable,
         Code::Damaged,
         Code::LimitExceeded,
@@ -154,6 +176,17 @@ impl Code {
         Code::GrantChanged,
         Code::EnvironmentRefused,
         Code::BinaryRefused,
+        Code::InstallerUnrecognised,
+        Code::InstallerNoUnattendedMode,
+        Code::InstallerFailed,
+        Code::InstallerTimedOut,
+        Code::InstallNothingFound,
+        Code::InstallMainProgramUnclear,
+        Code::AppNotInstalled,
+        Code::AppRecordInvalid,
+        Code::UninstallIncomplete,
+        Code::InstallRequestInvalid,
+        Code::UninstallerFailed,
     ];
 
     /// The code as text, for example `TUR-WINDOWS-RUNTIME-001`.
@@ -201,6 +234,17 @@ impl Code {
             Code::GrantChanged => "TUR-SECURITY-SANDBOX-004",
             Code::EnvironmentRefused => "TUR-SECURITY-SANDBOX-005",
             Code::BinaryRefused => "TUR-SECURITY-SANDBOX-006",
+            Code::InstallerUnrecognised => "TUR-WINDOWS-APP-001",
+            Code::InstallerNoUnattendedMode => "TUR-WINDOWS-APP-002",
+            Code::InstallerFailed => "TUR-WINDOWS-APP-003",
+            Code::InstallerTimedOut => "TUR-WINDOWS-APP-004",
+            Code::InstallNothingFound => "TUR-WINDOWS-APP-005",
+            Code::InstallMainProgramUnclear => "TUR-WINDOWS-APP-006",
+            Code::AppNotInstalled => "TUR-WINDOWS-APP-007",
+            Code::AppRecordInvalid => "TUR-WINDOWS-APP-008",
+            Code::UninstallIncomplete => "TUR-WINDOWS-APP-009",
+            Code::InstallRequestInvalid => "TUR-WINDOWS-APP-010",
+            Code::UninstallerFailed => "TUR-WINDOWS-APP-011",
         }
     }
 
@@ -249,6 +293,17 @@ impl Code {
             Code::GrantChanged => "A granted directory is no longer what was granted",
             Code::EnvironmentRefused => "The environment variable cannot be set for an application",
             Code::BinaryRefused => "The application's program file cannot be used",
+            Code::InstallerUnrecognised => "The file is not something that can be installed",
+            Code::InstallerNoUnattendedMode => "The installer has no known unattended mode",
+            Code::InstallerFailed => "The installer failed",
+            Code::InstallerTimedOut => "The installer did not finish in time",
+            Code::InstallNothingFound => "The installer installed no program",
+            Code::InstallMainProgramUnclear => "The application's main program could not be chosen",
+            Code::AppNotInstalled => "The application is not installed",
+            Code::AppRecordInvalid => "The application record is unreadable or not valid",
+            Code::UninstallIncomplete => "Something was left behind by the removal",
+            Code::InstallRequestInvalid => "A value given for the installation is not allowed",
+            Code::UninstallerFailed => "The application's own uninstaller failed",
         }
     }
 
@@ -313,6 +368,30 @@ mod tests {
         assert_eq!(Code::RunningAsRoot.error_code().family(), Family::Security);
         assert_eq!(Code::GrantRefused.error_code().family(), Family::Security);
         assert_eq!(Code::StorageUnusable.error_code().family(), Family::Runtime);
+        assert_eq!(
+            Code::InstallerUnrecognised.error_code().family(),
+            Family::Windows
+        );
+        assert_eq!(
+            Code::UninstallerFailed.error_code().family(),
+            Family::Windows
+        );
+    }
+
+    #[test]
+    fn the_application_codes_are_numbered_in_order() {
+        // Installing, recording and removing an application: one topic, so
+        // that the conditions are not mistaken for the operating system
+        // installer's `TUR-INSTALL-*`.
+        let application: Vec<&str> = Code::ALL
+            .iter()
+            .map(|code| code.as_str())
+            .filter(|code| code.starts_with("TUR-WINDOWS-APP-"))
+            .collect();
+        let expected: Vec<String> = (1..=11)
+            .map(|number| format!("TUR-WINDOWS-APP-{number:03}"))
+            .collect();
+        assert_eq!(application, expected);
     }
 
     #[test]

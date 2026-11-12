@@ -8,11 +8,17 @@
 //! tur-runtime prefix <operation> <app-id> ...    manage an application's prefix
 //! tur-runtime launch <profile> [-- args...]      start a Windows application
 //! tur-runtime desktop-entry <profile>            print a desktop entry for it
+//! tur-runtime installer identify <file>          say what kind of installer a file is
+//! tur-runtime app install <installer> ...        install an application into a prefix of its own
+//! tur-runtime app list | show <app-id>           what is installed
+//! tur-runtime app launch <app-id> [-- args...]   start an installed application
+//! tur-runtime app uninstall <app-id>             remove it, and everything kept for it
 //! ```
 //!
-//! `inspect`, `profile validate` and `desktop-entry` never run, load or modify
-//! the file they are given. `prefix` and `launch` accept `--dry-run`, which
-//! prints the plan and carries none of it out.
+//! `inspect`, `profile validate`, `desktop-entry`, `installer identify`,
+//! `app list` and `app show` never run, load or modify the file they are
+//! given. `prefix`, `launch`, `app install` and `app uninstall` accept
+//! `--dry-run`, which prints the plan and carries none of it out.
 //!
 //! Exit status:
 //!
@@ -35,14 +41,23 @@ use std::fs::File;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use std::time::Instant;
 
 use clap::{Args, Parser, Subcommand};
 use serde::Serialize;
 use serde_json::{Value, json};
 
+use tur_runtime::app_record::{AppRecord, SourceRecord, load_record};
 use tur_runtime::desktop::desktop_entry;
+use tur_runtime::discover::{discover, snapshot};
 use tur_runtime::exec::{Forward, SystemExecutor, supervise};
 use tur_runtime::grant::GrantContext;
+use tur_runtime::install::{
+    InstallRequest, RecordOptions, application_paths, describe_installation,
+    installed_applications, launcher_destinations, plan_installer_run, plan_record, plan_removal,
+    plan_removal_check, plan_rollback, plan_uninstaller, survey_leftovers,
+};
+use tur_runtime::installer::{IdentifyError, InstallerInfo, identify};
 use tur_runtime::launch::{LaunchPlan, LaunchRequest, plan_launch};
 use tur_runtime::launch_host::{LaunchHost, RuntimeVersion, WineInstall, probe_wine_version};
 use tur_runtime::limits::MAX_PROFILE_BYTES;
@@ -55,6 +70,7 @@ use tur_runtime::prefix::{
 use tur_runtime::profile::{AppProfile, GraphicsBackend, ProfileRuntime, parse_profile};
 use tur_runtime::report::render_text;
 use tur_runtime::runtime_cmd::DEFAULT_WINE_DEBUG;
+use tur_runtime::sha256::sha256_file;
 use tur_runtime::timefmt::Timestamp;
 use tur_runtime::{
     Arch, Code, Component, HostFacts, Inspection, PlanError, Recommendation, Runtime, inspect,
@@ -80,6 +96,9 @@ struct Cli {
     command: Command,
 }
 
+// The command line is parsed once; the size of its largest variant does not
+// matter.
+#[allow(clippy::large_enum_variant)]
 #[derive(Subcommand)]
 enum Command {
     /// Identify a file or application bundle from its content and recommend a
@@ -139,6 +158,16 @@ enum Command {
         #[arg(long, default_value = "tur-runtime")]
         launcher: String,
     },
+    /// Look at installer files.
+    Installer {
+        #[command(subcommand)]
+        command: InstallerCommand,
+    },
+    /// Install, list, start and remove Windows applications.
+    App {
+        #[command(subcommand)]
+        command: AppCommand,
+    },
     /// Internal: run a program inside the sandbox and wait for the Wine
     /// server before exiting.
     #[command(hide = true)]
@@ -158,6 +187,121 @@ enum ProfileCommand {
     Validate {
         /// The profile, a JSON file.
         file: PathBuf,
+    },
+}
+
+#[derive(Subcommand)]
+enum InstallerCommand {
+    /// Say what kind of installer a file is, from its content, and how it
+    /// is run unattended. The file is never executed.
+    Identify {
+        /// The installer, program or archive.
+        file: PathBuf,
+        /// Print JSON instead of text.
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+// The command line is parsed once; the size of its largest variant does not
+// matter.
+#[allow(clippy::large_enum_variant)]
+#[derive(Subcommand)]
+enum AppCommand {
+    /// Install an application into a fresh prefix of its own: run its
+    /// installer unattended inside the sandbox, record what was installed
+    /// and generate a launcher entry.
+    Install {
+        /// The installer: a Windows Installer package, an NSIS or Inno
+        /// Setup installer, a zip archive of a portable application, or a
+        /// program.
+        installer: PathBuf,
+        /// The application identifier, such as org.example.app. By default,
+        /// one made from the file's name under "local.".
+        #[arg(long, value_name = "ID")]
+        app_id: Option<String>,
+        /// The application's name, instead of the one its installer
+        /// registers.
+        #[arg(long, value_name = "NAME")]
+        name: Option<String>,
+        /// The program the launcher entry starts, by file name or by the
+        /// end of its path, when the installer installs several and none
+        /// stands out.
+        #[arg(long = "main-exe", value_name = "PROGRAM")]
+        main_exe: Option<String>,
+        /// The file is the application itself, not an installer: copy it
+        /// into the prefix instead of running it.
+        #[arg(long)]
+        portable: bool,
+        /// Do not share the host's network with the installer or the
+        /// application.
+        #[arg(long)]
+        no_network: bool,
+        /// How long the installer may take, in seconds.
+        #[arg(long, value_name = "SECONDS", default_value_t = 900)]
+        timeout: u64,
+        /// Keep the prefix when the installation fails, for a look at what
+        /// went wrong. By default a failed installation leaves only its log.
+        #[arg(long)]
+        keep_failed: bool,
+        /// The tur-runtime program the launcher entry starts, by name or
+        /// absolute path.
+        #[arg(long, default_value = "tur-runtime")]
+        launcher: String,
+        #[command(flatten)]
+        common: Common,
+    },
+    /// List the installed applications.
+    List {
+        /// Print JSON instead of text.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Show the record of an installed application.
+    Show {
+        /// The application identifier.
+        app_id: String,
+        /// Print JSON instead of text.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Start an installed application, inside the sandbox.
+    Launch {
+        /// The application identifier.
+        app_id: String,
+        /// If the prefix is on another runtime version than the one
+        /// installed, back it up and migrate it instead of refusing.
+        #[arg(long)]
+        migrate: bool,
+        /// Set an environment variable for the application.
+        #[arg(long = "env", value_name = "NAME=VALUE")]
+        environment: Vec<String>,
+        /// The value of WINEDEBUG.
+        #[arg(long, value_name = "CHANNELS", default_value = DEFAULT_WINE_DEBUG)]
+        wine_debug: String,
+        #[command(flatten)]
+        common: Common,
+        /// Arguments passed on to the application.
+        #[arg(last = true)]
+        arguments: Vec<String>,
+    },
+    /// Remove an installed application: run its own uninstaller, then
+    /// delete its prefix, its private home, its record, its launcher entry
+    /// and its logs, and check that nothing is left.
+    Uninstall {
+        /// The application identifier.
+        app_id: String,
+        /// Do not run the application's own uninstaller; only delete.
+        #[arg(long)]
+        skip_uninstaller: bool,
+        /// Delete the backups of the prefix too. By default they are kept.
+        #[arg(long)]
+        remove_backups: bool,
+        /// How long the application's uninstaller may take, in seconds.
+        #[arg(long, value_name = "SECONDS", default_value_t = 900)]
+        timeout: u64,
+        #[command(flatten)]
+        common: Common,
     },
 }
 
@@ -345,6 +489,10 @@ fn main() -> ExitCode {
             &arguments,
         ),
         Command::DesktopEntry { profile, launcher } => run_desktop_entry(&profile, &launcher),
+        Command::Installer {
+            command: InstallerCommand::Identify { file, json },
+        } => run_installer_identify(&file, json),
+        Command::App { command } => run_app(command),
         Command::Supervise { settle, command } => run_supervise(settle.as_deref(), &command),
     };
     ExitCode::from(status)
@@ -1037,6 +1185,546 @@ fn run_desktop_entry(profile_path: &Path, launcher: &str) -> u8 {
         }
         Err(error) => refuse(false, &error),
     }
+}
+
+/// The installer's identification as text.
+fn render_installer(path: &Path, info: &InstallerInfo) -> String {
+    let mut text = format!(
+        "File: {}\nKind: {} ({})\n",
+        path.display(),
+        info.label,
+        info.kind.as_str()
+    );
+    if let Some(architecture) = info.architecture {
+        text.push_str(&format!("Installer program: {architecture}\n"));
+    }
+    text.push_str(&format!("Identified by: {}\n", info.evidence));
+    match &info.unattended {
+        Some(unattended) => text.push_str(&format!(
+            "Unattended mode: {} (documented at {})\n",
+            unattended.arguments.join(" "),
+            unattended.documented_at
+        )),
+        None => text.push_str("Unattended mode: none; the file is not run as an installer\n"),
+    }
+    for note in &info.notes {
+        text.push_str(&format!("Note: {note}\n"));
+    }
+    text
+}
+
+/// Reports why a file cannot be installed and returns the exit status.
+fn fail_identify(json: bool, error: &IdentifyError) -> u8 {
+    let status = match error {
+        IdentifyError::Inspect(_) => EXIT_INPUT,
+        IdentifyError::NotInstallable { .. } => EXIT_UNSUPPORTED,
+    };
+    fail(json, error.code(), &error.to_string(), status)
+}
+
+fn run_installer_identify(file: &Path, json: bool) -> u8 {
+    match identify(file) {
+        Ok(info) => {
+            if json {
+                print_json(&json!({ "path": file.display().to_string(), "installer": info }));
+            } else {
+                print_line(render_installer(file, &info).trim_end());
+            }
+            EXIT_OK
+        }
+        Err(error) => fail_identify(json, &error),
+    }
+}
+
+fn run_app(command: AppCommand) -> u8 {
+    match command {
+        AppCommand::Install {
+            installer,
+            app_id,
+            name,
+            main_exe,
+            portable,
+            no_network,
+            timeout,
+            keep_failed,
+            launcher,
+            common,
+        } => run_app_install(&InstallArguments {
+            installer: &installer,
+            app_id: app_id.as_deref(),
+            name: name.as_deref(),
+            main_exe: main_exe.as_deref(),
+            portable,
+            no_network,
+            timeout,
+            keep_failed,
+            launcher: &launcher,
+            common: &common,
+        }),
+        AppCommand::List { json } => run_app_list(json),
+        AppCommand::Show { app_id, json } => run_app_show(&app_id, json),
+        AppCommand::Launch {
+            app_id,
+            migrate,
+            environment,
+            wine_debug,
+            common,
+            arguments,
+        } => match installed_record(&app_id) {
+            Ok(record) => run_launch(
+                Path::new(&record.profile),
+                migrate,
+                &environment,
+                &wine_debug,
+                &common,
+                &arguments,
+            ),
+            Err(error) => refuse(common.json, &error),
+        },
+        AppCommand::Uninstall {
+            app_id,
+            skip_uninstaller,
+            remove_backups,
+            timeout,
+            common,
+        } => run_app_uninstall(&app_id, skip_uninstaller, remove_backups, timeout, &common),
+    }
+}
+
+/// What `app install` was asked to do.
+struct InstallArguments<'a> {
+    installer: &'a Path,
+    app_id: Option<&'a str>,
+    name: Option<&'a str>,
+    main_exe: Option<&'a str>,
+    portable: bool,
+    no_network: bool,
+    timeout: u64,
+    keep_failed: bool,
+    launcher: &'a str,
+    common: &'a Common,
+}
+
+/// The record of an installed application, or the reason there is none.
+fn installed_record(app_id: &str) -> Result<AppRecord, PlanError> {
+    let dirs = RuntimeDirs::from_env(|name| std::env::var(name).ok())?;
+    let app = dirs.app(app_id)?;
+    load_record(&app)?.ok_or_else(|| PlanError::AppNotInstalled {
+        has_prefix: std::fs::symlink_metadata(&app.app_dir).is_ok(),
+    })
+}
+
+fn run_app_install(arguments: &InstallArguments<'_>) -> u8 {
+    let common = arguments.common;
+    let json = common.json;
+    let info = match identify(arguments.installer) {
+        Ok(info) => info,
+        Err(error) => return fail_identify(json, &error),
+    };
+    // The installer by its real, absolute path: that is the file shown to
+    // the sandbox.
+    let installer = match std::fs::canonicalize(arguments.installer) {
+        Ok(path) => path,
+        Err(error) => {
+            let message = format!("cannot resolve {}: {error}", arguments.installer.display());
+            return fail(json, Code::Unreadable, &message, EXIT_INPUT);
+        }
+    };
+    let Some(installer_text) = installer.to_str() else {
+        let message = "the installer's path is not valid UTF-8";
+        return fail(json, Code::Unreadable, message, EXIT_INPUT);
+    };
+    let file_name = installer
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("installer")
+        .to_owned();
+    let app_id = match arguments.app_id {
+        Some(app_id) => app_id.to_owned(),
+        None => {
+            let stem = installer
+                .file_stem()
+                .and_then(|stem| stem.to_str())
+                .unwrap_or("");
+            format!("local.{}", default_prefix_id(stem))
+        }
+    };
+
+    let planned = Session::open(&app_id, common).and_then(|mut session| {
+        session.use_runtime_program(RuntimeKind::Wine, common);
+        let version = session.runtime_version(RuntimeKind::Wine, common, None)?;
+        let exists = std::fs::symlink_metadata(&session.app.app_dir).is_ok();
+        let settings = PrefixSettings {
+            prefix_id: default_prefix_id(&session.app.app_id),
+            runtime: RuntimeKind::Wine,
+            version,
+            pinned: false,
+            graphics: GraphicsBackend::Auto,
+            network: !arguments.no_network,
+            grants: Vec::new(),
+        };
+        let (create, metadata) = session.planner().create(&settings, exists)?;
+        let run = plan_installer_run(
+            &session.planner(),
+            &metadata,
+            &InstallRequest {
+                installer: installer_text,
+                info: &info,
+                portable: arguments.portable,
+                limit_seconds: arguments.timeout,
+            },
+        )?;
+        Ok((session, create, metadata, run))
+    });
+    let (session, create, metadata, run) = match planned {
+        Ok(planned) => planned,
+        Err(error) => return refuse(json, &error),
+    };
+
+    if common.dry_run {
+        if json {
+            print_json(&json!({
+                "dry_run": true,
+                "app_id": app_id,
+                "installer": info,
+                "plans": [create, run.plan],
+            }));
+        } else {
+            print_line(render_installer(&installer, &info).trim_end());
+            print_line(create.render_text().trim_end());
+            print_line(run.plan.render_text().trim_end());
+        }
+        return EXIT_OK;
+    }
+
+    let (sha256, size) = match sha256_file(&installer) {
+        Ok(hashed) => hashed,
+        Err(error) => {
+            let message = format!("cannot read {}: {error}", installer.display());
+            return fail(json, Code::Unreadable, &message, EXIT_INPUT);
+        }
+    };
+
+    let planner = session.planner();
+    let mut executor = session.executor(Forward::LogOnly);
+    // A failed installation leaves its log and nothing else, unless the
+    // caller asked to keep the prefix for a look.
+    let roll_back = |executor: &mut SystemExecutor| {
+        if !arguments.keep_failed {
+            let _ = run_plan(&plan_rollback(&planner), executor);
+        }
+    };
+    let kept = if arguments.keep_failed {
+        "\nThe prefix was kept; `prefix remove` deletes it."
+    } else {
+        ""
+    };
+
+    // 1. The prefix.
+    let started = Instant::now();
+    let report = run_plan(&create, &mut executor);
+    if let Some(failure) = &report.failure {
+        let message = failure_message(failure, executor.last_output());
+        roll_back(&mut executor);
+        return fail(json, Code::StepFailed, &format!("{message}{kept}"), EXIT_STEP_FAILED);
+    }
+    let prefix_seconds = started.elapsed().as_secs_f64();
+    let before = snapshot(&session.app.prefix);
+
+    // 2. The installer.
+    let started = Instant::now();
+    let report = run_plan(&run.plan, &mut executor);
+    let installer_seconds = started.elapsed().as_secs_f64();
+    if let Some(failure) = &report.failure {
+        let code = if report.timed_out {
+            Code::InstallerTimedOut
+        } else if report.exit_status.is_some() {
+            Code::InstallerFailed
+        } else {
+            Code::StepFailed
+        };
+        let message = failure_message(failure, executor.last_output());
+        roll_back(&mut executor);
+        return fail(json, code, &format!("{message}{kept}"), EXIT_STEP_FAILED);
+    }
+
+    // 3. What was installed, and the record of it.
+    let discovery = discover(&session.app.prefix, &before);
+    let described = describe_installation(
+        &planner,
+        &metadata,
+        &info,
+        &discovery,
+        RecordOptions {
+            name: arguments.name,
+            main_executable: arguments.main_exe,
+            launcher: arguments.launcher,
+            source: SourceRecord {
+                file_name,
+                sha256,
+                size,
+            },
+            method: run.method,
+            arguments: run.arguments.clone(),
+        },
+    );
+    let installed = match described {
+        Ok(installed) => installed,
+        Err(error) => {
+            roll_back(&mut executor);
+            let message = format!("{error}{kept}");
+            return fail(json, error.code(), &message, EXIT_STEP_FAILED);
+        }
+    };
+    let report = run_plan(&plan_record(&planner, &installed), &mut executor);
+    if let Some(failure) = &report.failure {
+        let message = failure_message(failure, executor.last_output());
+        roll_back(&mut executor);
+        return fail(json, Code::StepFailed, &format!("{message}{kept}"), EXIT_STEP_FAILED);
+    }
+
+    let record = &installed.record;
+    let (entry_destination, icon_destination) = launcher_destinations(&installed);
+    let entry_destination = format!("$XDG_DATA_HOME/{entry_destination}");
+    let icon_destination = icon_destination.map(|icon| format!("$XDG_DATA_HOME/{icon}"));
+    if json {
+        let icon = installed.icon.as_ref().map(|icon| {
+            json!({
+                "width": icon.width,
+                "height": icon.height,
+                "source_bits": icon.source_bits,
+                "was_png": icon.was_png,
+            })
+        });
+        print_json(&json!({
+            "dry_run": false,
+            "installer": info,
+            "record": record,
+            "discovery": discovery,
+            "launcher": {
+                "staged_in": session.app.launchers,
+                "would_install_entry_to": entry_destination,
+                "would_install_icon_to": icon_destination,
+                "icon": icon,
+            },
+            "seconds": {
+                "prefix": prefix_seconds,
+                "installer": installer_seconds,
+            },
+        }));
+    } else {
+        print_line(&format!(
+            "installed: {} ({})",
+            record.name, record.app_id
+        ));
+        print_line(&format!(
+            "  version: {}",
+            record.version.as_deref().unwrap_or("not stated")
+        ));
+        print_line(&format!(
+            "  publisher: {}",
+            record.publisher.as_deref().unwrap_or("not stated")
+        ));
+        print_line(&format!("  installer: {}", info.label));
+        print_line(&format!(
+            "  main program: {} ({})",
+            record.main_executable_windows, record.main_executable_reason
+        ));
+        print_line(&format!("  record: {}", session.app.record.display()));
+        print_line(&format!(
+            "  launcher entry: {} (staged; installed it would be {entry_destination})",
+            record.launcher.desktop_entry
+        ));
+        print_line(&format!(
+            "  start it with: tur-runtime app launch {}",
+            record.app_id
+        ));
+    }
+    EXIT_OK
+}
+
+fn run_app_list(json: bool) -> u8 {
+    let dirs = match RuntimeDirs::from_env(|name| std::env::var(name).ok()) {
+        Ok(dirs) => dirs,
+        Err(error) => return refuse(json, &PlanError::from(error)),
+    };
+    let (records, problems) = installed_applications(&dirs);
+    if json {
+        print_json(&json!({ "applications": records, "problems": problems }));
+    } else {
+        for record in &records {
+            print_line(&format!(
+                "{}\t{}\t{}",
+                record.app_id,
+                record.name,
+                record.version.as_deref().unwrap_or("-")
+            ));
+        }
+        for problem in &problems {
+            print_error_line(&format!(
+                "warning[{}]: {problem}",
+                Code::AppRecordInvalid.error_code()
+            ));
+        }
+    }
+    EXIT_OK
+}
+
+fn run_app_show(app_id: &str, json: bool) -> u8 {
+    let record = match installed_record(app_id) {
+        Ok(record) => record,
+        Err(error) => return refuse(json, &error),
+    };
+    if json {
+        print_line(record.to_json().trim_end());
+    } else {
+        print_line(&format!("{} ({})", record.name, record.app_id));
+        let line = |label: &str, value: &str| print_line(&format!("  {label}: {value}"));
+        line("version", record.version.as_deref().unwrap_or("not stated"));
+        line(
+            "publisher",
+            record.publisher.as_deref().unwrap_or("not stated"),
+        );
+        line("main program", &record.main_executable_windows);
+        line("chosen because", &record.main_executable_reason);
+        line("prefix", &record.prefix);
+        line(
+            "runtime",
+            &format!("{} {}", record.runtime.as_str(), record.runtime_version),
+        );
+        line("installed", &record.installed_at.rfc3339());
+        line(
+            "installed from",
+            &format!(
+                "{} (SHA-256 {})",
+                record.install.source.file_name, record.install.source.sha256
+            ),
+        );
+        line("installer kind", record.install.kind.label());
+        line("launcher entry", &record.launcher.desktop_entry);
+    }
+    EXIT_OK
+}
+
+fn run_app_uninstall(
+    app_id: &str,
+    skip_uninstaller: bool,
+    remove_backups: bool,
+    timeout: u64,
+    common: &Common,
+) -> u8 {
+    let json = common.json;
+    let planned = Session::open(app_id, common).and_then(|mut session| {
+        let record = load_record(&session.app)?.ok_or_else(|| PlanError::AppNotInstalled {
+            has_prefix: std::fs::symlink_metadata(&session.app.app_dir).is_ok(),
+        })?;
+        let metadata = load_metadata(&session.app)?.ok_or(PlanError::PrefixMissing)?;
+        session.use_runtime_program(metadata.runtime, common);
+        let planner = session.planner();
+        let uninstaller = if skip_uninstaller {
+            None
+        } else {
+            plan_uninstaller(&planner, &metadata, &record, timeout)?
+        };
+        let removal = plan_removal(&planner, remove_backups)?;
+        let check = plan_removal_check(&planner, remove_backups);
+        Ok((session, record, uninstaller, removal, check))
+    });
+    let (session, record, uninstaller, removal, check) = match planned {
+        Ok(planned) => planned,
+        Err(error) => return refuse(json, &error),
+    };
+
+    if common.dry_run {
+        let plans: Vec<&Plan> = uninstaller.iter().chain([&removal, &check]).collect();
+        if json {
+            print_json(&json!({ "dry_run": true, "app_id": app_id, "plans": plans }));
+        } else {
+            for plan in plans {
+                print_line(plan.render_text().trim_end());
+            }
+        }
+        return EXIT_OK;
+    }
+
+    let mut executor = session.executor(Forward::LogOnly);
+
+    // 1. The application's own uninstaller. What it does is recorded; it
+    // does not decide whether the application is removed.
+    let mut uninstaller_report = json!({ "ran": false });
+    let mut uninstaller_problem: Option<String> = None;
+    if let Some(plan) = &uninstaller {
+        let started = Instant::now();
+        let report = run_plan(plan, &mut executor);
+        let seconds = started.elapsed().as_secs_f64();
+        if let Some(failure) = &report.failure {
+            uninstaller_problem = Some(failure_message(failure, executor.last_output()));
+        }
+        uninstaller_report = json!({
+            "ran": true,
+            "succeeded": report.failure.is_none(),
+            "exit_status": report.exit_status,
+            "timed_out": report.timed_out,
+            "seconds": seconds,
+            "left_in_prefix": survey_leftovers(&session.app, &record),
+            "code": report.failure.as_ref().map(|_| Code::UninstallerFailed),
+        });
+    }
+
+    // 2. Everything kept for the application.
+    let report = run_plan(&removal, &mut executor);
+    if let Some(failure) = &report.failure {
+        let message = failure_message(failure, executor.last_output());
+        return fail(json, Code::StepFailed, &message, EXIT_STEP_FAILED);
+    }
+
+    // 3. Nothing is left.
+    let checked = run_plan(&check, &mut executor);
+    let removed = application_paths(&session.app, remove_backups);
+    let kept: Vec<&Path> = if !remove_backups && session.app.backups.exists() {
+        vec![session.app.backups.as_path()]
+    } else {
+        Vec::new()
+    };
+    if json {
+        print_json(&json!({
+            "dry_run": false,
+            "app_id": app_id,
+            "uninstaller": uninstaller_report,
+            "removed": removed,
+            "kept": kept,
+            "left_behind": checked.findings,
+        }));
+    } else {
+        if let Some(problem) = &uninstaller_problem {
+            print_error_line(&format!(
+                "warning[{}]: the application's own uninstaller did not finish; the \
+                 application was removed all the same. {problem}",
+                Code::UninstallerFailed.error_code()
+            ));
+        }
+        for finding in &checked.findings {
+            print_line(&format!(
+                "finding: expected that {}; {}",
+                finding.expected, finding.found
+            ));
+        }
+    }
+    if !checked.findings.is_empty() {
+        let message = format!(
+            "{} of {} locations were not removed",
+            checked.findings.len(),
+            checked.total
+        );
+        return fail_after_report(json, Code::UninstallIncomplete, &message, EXIT_FINDINGS);
+    }
+    if !json {
+        print_line(&format!("removed: {} ({})", record.name, record.app_id));
+        for path in &kept {
+            print_line(&format!("kept: {}", path.display()));
+        }
+    }
+    EXIT_OK
 }
 
 fn run_supervise(settle: Option<&Path>, command: &[String]) -> u8 {

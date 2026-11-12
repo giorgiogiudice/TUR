@@ -145,6 +145,10 @@ pub struct LaunchHost {
     pub umu_run: Option<PathBuf>,
     /// The `tar` program, used for backups.
     pub tar: Option<PathBuf>,
+    /// The `unzip` program, used to unpack a portable application.
+    pub unzip: Option<PathBuf>,
+    /// The `install` program, used to copy a program file into a prefix.
+    pub install: Option<PathBuf>,
     /// What looking for the `ntsync` device found.
     pub ntsync: NtsyncDevice,
     /// How `/bin`, `/lib` and the like are laid out.
@@ -391,6 +395,8 @@ impl LaunchHost {
             wine,
             umu_run: find_program(&PROGRAM_DIRECTORIES, &["umu-run"]),
             tar: find_program(&PROGRAM_DIRECTORIES, &["tar"]),
+            unzip: find_program(&PROGRAM_DIRECTORIES, &["unzip"]),
+            install: find_program(&PROGRAM_DIRECTORIES, &["install"]),
             ntsync: probe_ntsync(Path::new(NTSYNC_DEVICE)),
             system: system_entries(),
             sockets,
@@ -424,6 +430,8 @@ pub(crate) mod tests {
             }),
             umu_run: Some(PathBuf::from("/usr/bin/umu-run")),
             tar: Some(PathBuf::from("/usr/bin/tar")),
+            unzip: Some(PathBuf::from("/usr/bin/unzip")),
+            install: Some(PathBuf::from("/usr/bin/install")),
             ntsync: NtsyncDevice::Absent,
             system: vec![
                 SystemEntry::Link {
