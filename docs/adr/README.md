@@ -22,6 +22,7 @@ the [specification](../architecture/specification.md).
 | [0003](0003-licence.md) | Licence: PolyForm Noncommercial 1.0.0 | Accepted; licence text superseded by 0010 |
 | [0004](0004-ai-provider-model.md) | AI layer: optional, provider-agnostic, user-supplied key | Accepted |
 | [0005](0005-languages-and-workspace.md) | Implementation languages and workspace layout | Accepted |
+| [0006](0006-android-runtime.md) | Android runtime: Waydroid as an opt-in OS container | Accepted |
 | [0007](0007-app-centric-routing.md) | App-centric routing with a seamless real-OS tier | Accepted |
 | [0008](0008-assistant-tool-protocol.md) | Assistant tools use the Model Context Protocol | Accepted |
 | [0009](0009-project-name.md) | The project is TUR, The Unified Realm; the assistant is P@x | Accepted |

@@ -7,11 +7,14 @@ tool lets a developer or agent push, wait for the result, read failures and
 pull back the fixes CI can compute (lockfiles, formatting).
 
     scripts/dev/ci.py wait [SHA] [--timeout SECONDS]   wait for all runs on a commit
-    scripts/dev/ci.py log JOB_ID [--tail N]            print the end of a job log
+    scripts/dev/ci.py log JOB_ID [--tail N]            print the lines before each error
+    scripts/dev/ci.py log JOB_ID --full                print the whole job log
+    scripts/dev/ci.py log JOB_ID --grep REGEX          print only matching lines
     scripts/dev/ci.py fixes RUN_ID COMPONENT_DIR       apply CI's Cargo.lock / rustfmt patch
     scripts/dev/ci.py artifact RUN_ID NAME DEST_DIR    download and unpack an artifact
     scripts/dev/ci.py pr --title T --body-file F       open a pull request for this branch
     scripts/dev/ci.py pr-status NUMBER                 show a pull request's state
+    scripts/dev/ci.py pr-edit NUMBER --body-file F     replace a pull request's description
 
 The token comes from UOS_GH_TOKEN or from git's configured credential helper.
 """
@@ -23,6 +26,7 @@ import io
 import json
 import os
 import pathlib
+import re
 import subprocess
 import sys
 import time
@@ -81,8 +85,13 @@ def request(method: str, path: str, body: dict | None = None, raw: bool = False)
                 payload = resp.read()
             return payload if raw else (json.loads(payload) if payload else None)
         except urllib.error.HTTPError as err:
-            if err.code in (301, 302, 307) and err.headers.get("Location"):
-                plain = urllib.request.Request(err.headers["Location"], headers={"User-Agent": "uos-ci-helper"})
+            if err.code in (301, 302, 307, 308) and err.headers.get("Location"):
+                location = err.headers["Location"]
+                if location.startswith(API + "/"):
+                    # The repository was renamed or moved: same API, keep the token.
+                    return request(method, location, body, raw)
+                # Logs and artifacts live on another host: follow without the token.
+                plain = urllib.request.Request(location, headers={"User-Agent": "uos-ci-helper"})
                 with urllib.request.urlopen(plain, timeout=120) as resp:
                     return resp.read()
             if err.code in (502, 503, 504) and attempt < 3:
@@ -155,6 +164,14 @@ def cmd_wait(args) -> int:
 
 
 def cmd_log(args) -> int:
+    if args.full or args.grep:
+        text = request("GET", f"/actions/jobs/{args.job_id}/logs", raw=True).decode(errors="replace")
+        lines = [line.split(" ", 1)[1] if line[:4].isdigit() and " " in line else line for line in text.splitlines()]
+        if args.grep:
+            pattern = re.compile(args.grep)
+            lines = [line for line in lines if pattern.search(line)]
+        print("\n".join(lines))
+        return 0
     print(job_log_tail(args.job_id, args.tail))
     return 0
 
@@ -207,6 +224,16 @@ def cmd_pr(args) -> int:
     return 0
 
 
+def cmd_pr_edit(args) -> int:
+    body = pathlib.Path(args.body_file).read_text()
+    fields = {"body": body}
+    if args.title:
+        fields["title"] = args.title
+    pr = request("PATCH", f"/pulls/{args.number}", fields)
+    print(f"#{pr['number']} updated")
+    return 0
+
+
 def cmd_pr_status(args) -> int:
     pr = request("GET", f"/pulls/{args.number}")
     print(f"#{pr['number']} {pr['state']} merged={pr['merged']} mergeable={pr['mergeable']} head={pr['head']['sha'][:12]}")
@@ -226,6 +253,8 @@ def main() -> int:
     p = sub.add_parser("log")
     p.add_argument("job_id", type=int)
     p.add_argument("--tail", type=int, default=150)
+    p.add_argument("--full", action="store_true")
+    p.add_argument("--grep")
     p.set_defaults(func=cmd_log)
 
     p = sub.add_parser("fixes")
@@ -244,6 +273,12 @@ def main() -> int:
     p.add_argument("--body-file", required=True)
     p.add_argument("--base", default="main")
     p.set_defaults(func=cmd_pr)
+
+    p = sub.add_parser("pr-edit")
+    p.add_argument("number", type=int)
+    p.add_argument("--body-file", required=True)
+    p.add_argument("--title")
+    p.set_defaults(func=cmd_pr_edit)
 
     p = sub.add_parser("pr-status")
     p.add_argument("number", type=int)

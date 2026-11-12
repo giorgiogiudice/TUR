@@ -1,6 +1,6 @@
 # AI control layer
 
-**Specification addendum A — Revision 3 (12 November 2026)**
+**Specification addendum A — Revision 4 (12 November 2026)**
 **Applies to:** specification revision 1.0
 **Related decision:** [ADR-0004](../adr/0004-ai-provider-model.md)
 
@@ -17,6 +17,10 @@ unchanged.
 
 Revision 3 names the assistant **P@x**, gives it its own pointer and a guide
 mode (section 16.6), and settles how spoken approval is handled (section 5.2).
+
+Revision 4 closes gaps found while implementing the policy engine
+([agent-policy.md](agent-policy.md)); they are listed with their resolutions in
+[section 17](#17-resolutions-from-implementing-the-policy-engine).
 
 Statements about what KWin, the desktop portals or a provider's API support are
 design assumptions. Each must be verified against current upstream state before
@@ -207,8 +211,10 @@ Every action belongs to one class. The class, not the model, decides what happen
 ### 5.3 User-adjustable policy
 
 The user may make the assistant stricter (ask before every action, observe only,
-exclude an application) at any time. The user may relax class 1 and class 2
-handling for a named application. Classes 3 and 4 cannot be relaxed.
+exclude an application) at any time. The user may relax class 2 handling of
+screen and accessibility actions for a named application. This is a setting the
+user makes in system settings, not an approval given to the assistant, and it is
+the only standing relaxation there is. Classes 3 and 4 cannot be relaxed.
 
 ### 5.4 Commands
 
@@ -224,8 +230,22 @@ the sandbox it runs in, never from reading its text.**
 | **Privileged** | Run as administrator, through a helper. | Only inside a repair session (section 5.5) |
 
 The assistant is never given a root shell, the user's password, or `sudo`. A
-privileged command is passed to a small helper that runs it, records it, and
+privileged request is passed to a small helper that runs it, records it, and
 refuses what the repair session does not cover.
+
+The helper accepts two kinds of request:
+
+- **Typed operations**: restart or enable a service, change a named
+  configuration file, install or remove a package layer, reset a network
+  profile, and similar. Each type is confined to what it needs (named units,
+  named paths), so the helper can check a request against its type. Inside a
+  repair session these run without further approval.
+- **A free-text command.** The helper cannot verify what arbitrary text will do.
+  Inside a repair session a free-text privileged command is still shown and
+  approved one at a time.
+
+Typing into a terminal window through the screen is not a way round this: see
+section 17, item 1.
 
 Most troubleshooting is reading: logs, service state, device and network status.
 All of that runs in the read-only sandbox without interrupting the user.
@@ -680,4 +700,29 @@ P@x's abilities will grow. The rule for growth is fixed: a new ability arrives a
 a tool or a way of acting with a declared class, added by a system update or
 enabled by the user in settings. P@x never grants itself an ability, and no
 ability removes the limits of classes 3 and 4.
+
+## 17. Resolutions from implementing the policy engine
+
+Building the policy engine exposed gaps in revisions 1 to 3. Each is resolved
+here; where an earlier section said otherwise, this section governs. The engine's
+own decision table and its tested invariants are in
+[agent-policy.md](agent-policy.md).
+
+| # | Gap | Resolution |
+|---|---|---|
+| 1 | Typing into a terminal window through screen control was class 1, yet it runs arbitrary commands. | Terminal emulators, run dialogs and other surfaces that execute what is typed are **sensitive by default**: acting in them through the screen or the accessibility tree is class 2. P@x uses the command tier instead, where the sandbox bounds what a command can do. |
+| 2 | "Screen control cannot exceed class 2" holds only if a privileged prompt appears. An already-authorised disk tool or a root window would let a click have class 3 effect. | Windows belonging to a process running with administrator rights are protected surfaces (section 6). Project services ask for authentication for each class 3 operation and never keep an authorisation for the session. Screen control of a third-party tool that holds its own elevated rights is refused. |
+| 3 | Class 0 still discloses: what a read-only command or a screen read returns is sent to the provider. | The read-only sandbox does not expose keys, keyrings, password stores, browser profiles, or the data of excluded applications. Output is scanned for credential-like strings before it leaves the machine. Class 0 means "changes nothing", not "may read everything". |
+| 4 | The engine checks a privileged request's declared type, not its text. | Typed operations are confined per type in the helper; free-text privileged commands are approved one at a time (section 5.4). |
+| 5 | Nothing said who owns the policy file, standing approvals and the repair-session record. | A separate small system component owns them. P@x reads them through it and cannot write them. They change only through system settings on the trusted path. The audit log is append-only from P@x's side. |
+| 6 | "There is no approve-everything" appeared to conflict with per-application relaxation. | No conflict once stated precisely (section 5.3): a relaxation is a user setting for one application's screen actions, made in settings. Nothing the assistant is told during a task can widen its rights. |
+| 7 | "Relax class 1" meant nothing; class 1 is already allowed. | Removed. |
+| 8 | "Tasks pause when the session locks" conflicted with scheduled tasks. | An attended task pauses when the session locks. An unattended task runs, without screen or accessibility actions. |
+| 9 | "Every privileged command is logged" conflicted with "arguments are never logged in full". | Privileged requests are logged in full, because they are shown to the user anyway and must be reviewable; values marked secret are replaced. Arguments of ordinary tool calls are summarised. |
+| 10 | Unspecified: repair-session length, the class of a privileged command, creating a schedule, whether ask-every-action covers observing. | A repair session lasts 15 minutes by default and at most 60. A privileged request is class 2 that additionally requires an open repair session. P@x proposes a schedule; creating it is the user's act. Ask-every-action covers class 0 too. |
+| 11 | The audit fields could not express a pending or deferred outcome, or a command. | `UOS_AI_DECISION` gains `confirmation_required`, `authentication_required` and `deferred`. `UOS_AI_TIER` is 1 for tools, 2 for the accessibility tree, 3 for the screen, 4 for commands and 0 for P@x's own operations such as memory. |
+| 12 | Spoken approval of class 2 sat outside the trusted path. | Settled in section 5.2: on screen by default; spoken approval only if the user enables it. |
+
+Where the design was silent, the engine takes the stricter reading. The full list
+of those choices is in [agent-policy.md](agent-policy.md), section 10.
 

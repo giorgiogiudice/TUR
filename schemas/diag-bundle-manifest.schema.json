@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/giorgiogiudice/UOS/schemas/diag-bundle-manifest.schema.json",
+  "title": "UOS diagnostic bundle manifest",
+  "description": "manifest.json inside a support bundle written by uos-diag collect. It records what the bundle is, which files it holds with their SHA-256 as stored, and what was wanted but is absent. null means the value could not be determined or does not apply.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "collector", "created_utc", "uos", "boot_id", "architecture",
+    "kernel_release", "installer_session_id", "redaction_profile", "since_boot",
+    "files", "missing"
+  ],
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "member_path": {
+      "description": "Relative path of a regular file inside the archive.",
+      "type": "string",
+      "pattern": "^[^/]+(/[^/]+)*$"
+    },
+    "string_or_absent": { "type": ["string", "null"], "minLength": 1 }
+  },
+  "properties": {
+    "schema_version": { "const": 1 },
+    "collector": {
+      "description": "The program that made the bundle.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version"],
+      "properties": {
+        "name": { "const": "uos-diag" },
+        "version": { "type": "string", "minLength": 1 }
+      }
+    },
+    "created_utc": {
+      "description": "Creation time in UTC.",
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "uos": {
+      "description": "The UOS build and deployment the machine was running. All null on a host that is not UOS.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["build_id", "version", "source_revision", "deployment_checksum", "image_digest"],
+      "properties": {
+        "build_id": { "$ref": "#/$defs/string_or_absent" },
+        "version": { "$ref": "#/$defs/string_or_absent" },
+        "source_revision": { "$ref": "#/$defs/string_or_absent" },
+        "deployment_checksum": { "$ref": "#/$defs/string_or_absent" },
+        "image_digest": { "$ref": "#/$defs/string_or_absent" }
+      }
+    },
+    "boot_id": { "$ref": "#/$defs/string_or_absent" },
+    "architecture": { "type": "string", "minLength": 1 },
+    "kernel_release": { "$ref": "#/$defs/string_or_absent" },
+    "installer_session_id": {
+      "description": "Reserved for bundles collected for an installer session. Always null in schema version 1 bundles written so far.",
+      "$ref": "#/$defs/string_or_absent"
+    },
+    "redaction_profile": {
+      "description": "default redacts every identifier category. technical keeps serial numbers, MAC addresses and disk UUIDs.",
+      "enum": ["default", "technical"]
+    },
+    "since_boot": {
+      "description": "true when collection was limited to the current boot.",
+      "type": "boolean"
+    },
+    "files": {
+      "description": "Every archive member except manifest.json and checksums.sha256, sorted by path.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "sha256", "size"],
+        "properties": {
+          "path": { "$ref": "#/$defs/member_path" },
+          "sha256": { "$ref": "#/$defs/sha256" },
+          "size": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "missing": {
+      "description": "Items that were wanted but are absent from the bundle, or present but incomplete (reason truncated), sorted by path.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "source", "reason", "detail"],
+        "properties": {
+          "path": { "$ref": "#/$defs/member_path" },
+          "source": {
+            "description": "The command line or file the item comes from.",
+            "type": "string",
+            "minLength": 1
+          },
+          "reason": {
+            "enum": [
+              "command_not_found", "non_zero_exit", "timed_out", "file_not_found",
+              "permission_denied", "io_error", "truncated", "excluded_by_option",
+              "forbidden_path"
+            ]
+          },
+          "detail": {
+            "description": "Further detail, redacted with the bundle's profile. May be empty.",
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/giorgiogiudice/UOS/schemas/agent-tool-manifest.schema.json",
+  "title": "UOS agent tool manifest",
+  "description": "The assistant-facing operations a UOS service offers (AI control layer, section 11). The loader in services/uos-agent is authoritative. It also enforces two rules this schema cannot express: tool names are unique within a manifest, and every entry of a \"required\" list names a declared property.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "service", "tools"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "service": {
+      "description": "The D-Bus well-known name of the service.",
+      "type": "string",
+      "maxLength": 255,
+      "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)+$"
+    },
+    "tools": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/tool" }
+    }
+  },
+  "$defs": {
+    "tool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "description", "class", "method", "input_schema"],
+      "properties": {
+        "name": {
+          "description": "The tool name given to the model. Unique within the manifest.",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "description": {
+          "description": "What the tool does, for the model. No control characters.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "pattern": "^(?=[\\s\\S]*\\S)[^\\u0000-\\u001f\\u007f-\\u009f]+$"
+        },
+        "class": {
+          "description": "The action class: 0 observe, 1 reversible, 2 consequential, 3 system-critical. Class 4 (prohibited) cannot be declared: a prohibited operation is not offered as a tool.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+        },
+        "method": {
+          "description": "The D-Bus method on the service that the tool calls.",
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,254}$"
+        },
+        "input_schema": {
+          "description": "The arguments of the tool: a closed object schema in the supported subset of JSON Schema. A keyword outside the subset is rejected, so that every stated constraint is enforced.",
+          "$ref": "#/$defs/object_schema"
+        }
+      }
+    },
+    "value_schema": {
+      "oneOf": [
+        { "$ref": "#/$defs/object_schema" },
+        { "$ref": "#/$defs/array_schema" },
+        { "$ref": "#/$defs/string_schema" },
+        { "$ref": "#/$defs/number_schema" },
+        { "$ref": "#/$defs/plain_schema" }
+      ]
+    },
+    "enum_keyword": { "type": "array", "minItems": 1 },
+    "object_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "additionalProperties"],
+      "properties": {
+        "type": { "const": "object" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "enum": { "$ref": "#/$defs/enum_keyword" },
+        "properties": {
+          "type": "object",
+          "propertyNames": { "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$" },
+          "additionalProperties": { "$ref": "#/$defs/value_schema" }
+        },
+        "required": { "type": "array", "items": { "type": "string" } },
+        "additionalProperties": { "const": false }
+      }
+    },
+    "array_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "items"],
+      "properties": {
+        "type": { "const": "array" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "enum": { "$ref": "#/$defs/enum_keyword" },
+        "items": { "$ref": "#/$defs/value_schema" }
+      }
+    },
+    "string_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": { "const": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "enum": { "$ref": "#/$defs/enum_keyword" },
+        "minLength": { "type": "integer", "minimum": 0 },
+        "maxLength": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "number_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": { "enum": ["integer", "number"] },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "enum": { "$ref": "#/$defs/enum_keyword" },
+        "minimum": { "type": "number" },
+        "maximum": { "type": "number" }
+      }
+    },
+    "plain_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": { "enum": ["boolean", "null"] },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "enum": { "$ref": "#/$defs/enum_keyword" }
+      }
+    }
+  }
+}

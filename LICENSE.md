@@ -1,6 +1,6 @@
-# PolyForm Noncommercial License 1.0.0
+# TUR Noncommercial License 1.0.0
 
-<https://polyformproject.org/licenses/noncommercial/1.0.0>
+<https://github.com/giorgiogiudice/TUR/blob/main/LICENSE.md>
 
 ## Acceptance
 
@@ -30,7 +30,7 @@ The licensor grants you a patent license for the software that covers patent cla
 
 ## Noncommercial Purposes
 
-Any noncommercial purpose is a permitted purpose.
+Any noncommercial purpose is a permitted purpose, except as [Government Use](#government-use) provides.
 
 ## Personal Uses
 
@@ -38,7 +38,11 @@ Personal use for research, experiment, and testing for the benefit of public kno
 
 ## Noncommercial Organizations
 
-Use by any charitable organization, educational institution, public research organization, public safety or health organization, environmental protection organization, or government institution is use for a permitted purpose regardless of the source of funding or obligations resulting from the funding.
+Use by any charitable organization or educational institution is use for a permitted purpose regardless of the source of funding or obligations resulting from the funding.
+
+## Government Use
+
+Use by or on behalf of any government institution is not use for a permitted purpose, whatever the nature of the use.  An educational institution is not a government institution under these terms, even if a government funds or operates it.
 
 ## Fair Use
 
@@ -67,6 +71,8 @@ The **licensor** is the individual or entity offering these terms, and the **sof
 **You** refers to the individual or entity agreeing to these terms.
 
 **Your company** is any legal entity, sole proprietorship, or other kind of organization that you work for, plus all organizations that have control over, are under the control of, or are under common control with that organization.  **Control** means ownership of substantially all the assets of an entity, or the power to direct its management and policies by vote, contract, or otherwise.  Control can be direct or indirect.
+
+A **government institution** is any national, regional or local government, any department, agency, armed force, police or security service of one, and any body that a government controls and that carries out its functions.
 
 **Your licenses** are all the licenses granted to you for the software under these terms.
 
