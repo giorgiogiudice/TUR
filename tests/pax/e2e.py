@@ -1056,14 +1056,18 @@ class Test:
             statuses,
             {"call_observe": "ok", "call_set": "ok", "call_format": "refused", "call_send": "refused"},
         )
+        # A refusal is P@x's own text and carries no notice; what a tool or a
+        # command returned does.
+        returned = [
+            result
+            for body in outcome.bodies
+            for result in tool_results(body)
+            if result["frame"].get("status") != "refused"
+        ]
         self.checks.check(
             name,
-            "every result is framed as untrusted data",
-            all(
-                "Untrusted data" in result["frame"].get("notice", "")
-                for body in outcome.bodies
-                for result in tool_results(body)
-            ),
+            "everything a tool or a command returned is framed as untrusted data",
+            len(returned) > 0 and all("Untrusted data" in result["frame"].get("notice", "") for result in returned),
         )
 
     def never_stops(self, outcome, expected_outcome, code, requests, performed):

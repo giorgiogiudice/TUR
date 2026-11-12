@@ -458,7 +458,10 @@ pub fn sse_google(turn: &Turn) -> String {
         index += 1;
     }
     let failed = match turn.stop {
-        "error" => Some(("service_unavailable", "The service is temporarily overloaded.")),
+        "error" => Some((
+            "service_unavailable",
+            "The service is temporarily overloaded.",
+        )),
         "refusal" => Some(("safety", "Safety violations blocked the request.")),
         _ => None,
     };

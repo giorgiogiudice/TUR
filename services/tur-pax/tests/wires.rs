@@ -257,7 +257,10 @@ fn a_repeated_key_discards_the_whole_response_through_every_adapter() {
         assert!(harness.history.is_empty(), "{case}");
         // Neither value reached the trail.
         let trail = harness.trail_text();
-        assert!(!trail.contains("harmless") && !trail.contains("harmful"), "{case}");
+        assert!(
+            !trail.contains("harmless") && !trail.contains("harmful"),
+            "{case}"
+        );
     }
 }
 

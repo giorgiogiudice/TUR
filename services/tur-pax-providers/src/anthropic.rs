@@ -307,9 +307,11 @@ impl AnthropicDecoder {
                 // arguments arrive in deltas. A block that starts with its
                 // input already has all of it. The event was parsed strictly,
                 // so writing the object out loses nothing.
-                if block["input"].as_object().is_some_and(|map| !map.is_empty()) {
-                    self.calls
-                        .set_arguments(index, &block["input"].to_string());
+                if block["input"]
+                    .as_object()
+                    .is_some_and(|map| !map.is_empty())
+                {
+                    self.calls.set_arguments(index, &block["input"].to_string());
                 }
             }
             "thinking" | "redacted_thinking" => {

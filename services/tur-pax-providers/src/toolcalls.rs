@@ -320,7 +320,10 @@ mod tests {
             .any(|event| matches!(event, StreamEvent::ToolCallEnd { .. }));
         assert_eq!(complete, calls.completed() == 1);
         // A call that was not delivered makes a normal end malformed.
-        assert_eq!(calls.settle(FinishReason::ToolUse).error().is_none(), complete);
+        assert_eq!(
+            calls.settle(FinishReason::ToolUse).error().is_none(),
+            complete
+        );
         complete
     }
 
@@ -336,7 +339,10 @@ mod tests {
         ] {
             // In fragments, cut anywhere.
             let middle = text.len() / 2;
-            assert!(!delivered(&[&text[..middle], &text[middle..]], None), "{text}");
+            assert!(
+                !delivered(&[&text[..middle], &text[middle..]], None),
+                "{text}"
+            );
             // In one piece.
             assert!(!delivered(&[], Some(text)), "{text}");
             // The fragments are fine and the complete text is not, and the
