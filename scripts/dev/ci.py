@@ -119,7 +119,7 @@ def job_log_tail(job_id: int, tail: int) -> str:
 
 
 def cmd_wait(args) -> int:
-    sha = args.sha or git("rev-parse", "HEAD")
+    sha = git("rev-parse", args.sha or "HEAD")
     deadline = time.time() + args.timeout
     appeared_by = time.time() + 120
     runs: list[dict] = []
