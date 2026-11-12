@@ -166,7 +166,7 @@ pub fn classify(action: &Action, context: &Context, policy: &UserPolicy) -> Acti
         Action::Agent(operation) => operation.class(),
     };
     if context.model_flags_consequential {
-        ActionClass::Consequential
+        base.max(ActionClass::Consequential)
     } else {
         base
     }

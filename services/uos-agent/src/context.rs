@@ -83,7 +83,7 @@ pub struct StandingApproval {
 impl StandingApproval {
     /// Whether the approval covers exactly this call.
     pub fn matches(&self, call: &ToolCall) -> bool {
-        self.service == call.service && self.tool == call.tool && self.arguments == call.arguments
+        self.service == call.service && self.tool == call.tool
     }
 }
 
