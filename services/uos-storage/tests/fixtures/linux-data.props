@@ -1,0 +1,21 @@
+# Members of one Btrfs filesystem and of one MD RAID array: each set shares a
+# UUID and its members differ in UUID_SUB.
+DEVNAME=/dev/sdb
+UUID=b0b0b0b0-0303-4bbb-8ccc-000000000103
+UUID_SUB=11110000-0303-4bbb-8ccc-00000000b001
+TYPE=btrfs
+
+DEVNAME=/dev/sdc
+UUID=b0b0b0b0-0303-4bbb-8ccc-000000000103
+UUID_SUB=22220000-0303-4bbb-8ccc-00000000c002
+TYPE=btrfs
+
+DEVNAME=/dev/sdd1
+UUID=d5d5d5d5-0505-4bbb-8ccc-000000000105
+UUID_SUB=33330000-0505-4bbb-8ccc-00000000d003
+TYPE=linux_raid_member
+
+DEVNAME=/dev/sde1
+UUID=d5d5d5d5-0505-4bbb-8ccc-000000000105
+UUID_SUB=44440000-0505-4bbb-8ccc-00000000e004
+TYPE=linux_raid_member

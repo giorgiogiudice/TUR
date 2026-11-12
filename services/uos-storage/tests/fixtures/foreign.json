@@ -1,0 +1,136 @@
+{
+  "blockdevices": [
+    {
+      "name": "sda", "path": "/dev/sda", "type": "disk", "size": 1000204886016, "rm": false,
+      "hotplug": true, "ro": false, "tran": "usb", "model": "Example Mac Disk",
+      "serial": "MAC0001", "fstype": null, "mountpoints": [null], "fsroots": [null],
+      "children": [
+        {
+          "name": "sda1", "path": "/dev/sda1", "type": "part", "size": 500000000000,
+          "start": 409640, "rm": false, "hotplug": true, "ro": false, "tran": null,
+          "fstype": "hfsplus", "fsver": null, "label": "Macintosh HD",
+          "uuid": "0a0a0a0a-1111-3bbb-8ccc-000000000a01",
+          "partuuid": "aaaa1111-0001-4000-8000-000000000a01",
+          "parttypename": "Apple HFS/HFS+", "mountpoints": [null], "fsroots": [null]
+        },
+        {
+          "name": "sda2", "path": "/dev/sda2", "type": "part", "size": 250000000000,
+          "start": 976972140, "rm": false, "hotplug": true, "ro": false, "tran": null,
+          "fstype": "hfsplus", "fsver": null, "label": "Photos",
+          "uuid": "0a0a0a0a-2222-3bbb-8ccc-000000000a02",
+          "partuuid": "aaaa1111-0002-4000-8000-000000000a01",
+          "parttypename": "Apple HFS/HFS+", "mountpoints": [null], "fsroots": [null]
+        },
+        {
+          "name": "sda3", "path": "/dev/sda3", "type": "part", "size": 250000000000,
+          "start": 1465253390, "rm": false, "hotplug": true, "ro": false, "tran": null,
+          "fstype": "apfs", "fsver": null, "label": null,
+          "uuid": "0a0a0a0a-3333-4bbb-8ccc-000000000a03",
+          "partuuid": "aaaa1111-0003-4000-8000-000000000a01",
+          "parttypename": "Apple APFS", "mountpoints": [null], "fsroots": [null]
+        }
+      ]
+    },
+    {
+      "name": "sdb", "path": "/dev/sdb", "type": "disk", "size": 2000398934016, "rm": false,
+      "hotplug": false, "ro": false, "tran": "sata", "model": "Example Windows Disk",
+      "serial": "WIN0002", "fstype": null, "mountpoints": [null], "fsroots": [null],
+      "children": [
+        {
+          "name": "sdb1", "path": "/dev/sdb1", "type": "part", "size": 1000000000000,
+          "start": 2048, "rm": false, "hotplug": false, "ro": false, "tran": null,
+          "fstype": "ReFS", "fsver": null, "label": "Archive", "uuid": "0B0B1111AAAA0B01",
+          "partuuid": "bbbb2222-0001-4000-8000-000000000b01",
+          "parttypename": "Microsoft basic data", "mountpoints": [null], "fsroots": [null]
+        },
+        {
+          "name": "sdb2", "path": "/dev/sdb2", "type": "part", "size": 500000000000,
+          "start": 1953127424, "rm": false, "hotplug": false, "ro": false, "tran": null,
+          "fstype": "BitLocker", "fsver": "2", "label": null, "uuid": null,
+          "partuuid": "bbbb2222-0002-4000-8000-000000000b01",
+          "parttypename": "Microsoft basic data", "mountpoints": [null], "fsroots": [null]
+        },
+        {
+          "name": "sdb3", "path": "/dev/sdb3", "type": "part", "size": 250000000000,
+          "start": 2929689924, "rm": false, "hotplug": false, "ro": false, "tran": null,
+          "fstype": "bcachefs", "fsver": "1.7", "label": "experiment",
+          "uuid": "0b0b0b0b-3333-4bbb-8ccc-000000000b03",
+          "partuuid": "bbbb2222-0003-4000-8000-000000000b01",
+          "parttypename": "Linux filesystem", "mountpoints": [null], "fsroots": [null]
+        },
+        {
+          "name": "sdb4", "path": "/dev/sdb4", "type": "part", "size": 250397886464,
+          "start": 3417971174, "rm": false, "hotplug": false, "ro": false, "tran": null,
+          "fstype": null, "fsver": null, "label": null, "uuid": null,
+          "partuuid": "bbbb2222-0004-4000-8000-000000000b01",
+          "parttypename": "Linux filesystem", "mountpoints": [null], "fsroots": [null]
+        }
+      ]
+    },
+    {
+      "name": "sdc", "path": "/dev/sdc", "type": "disk", "size": 4000787030016, "rm": false,
+      "hotplug": false, "ro": false, "tran": "sata", "model": "Example Pool Disk",
+      "serial": "ZFS0003", "fstype": null, "mountpoints": [null], "fsroots": [null],
+      "children": [
+        {
+          "name": "sdc1", "path": "/dev/sdc1", "type": "part", "size": 4000776544256,
+          "start": 2048, "rm": false, "hotplug": false, "ro": false, "tran": null,
+          "fstype": "zfs_member", "fsver": "5000", "label": "tank",
+          "uuid": "1234567890123456789", "partuuid": "cccc3333-0001-4000-8000-000000000c01",
+          "parttypename": "Solaris /usr & Apple ZFS", "mountpoints": [null], "fsroots": [null]
+        }
+      ]
+    },
+    {
+      "name": "sdd", "path": "/dev/sdd", "type": "disk", "size": 500107862016, "rm": false,
+      "hotplug": true, "ro": false, "tran": "usb", "model": "Example Clone A",
+      "serial": "CLONE0004", "fstype": null, "mountpoints": [null], "fsroots": [null],
+      "children": [
+        {
+          "name": "sdd1", "path": "/dev/sdd1", "type": "part", "size": 500106813440,
+          "start": 2048, "rm": false, "hotplug": true, "ro": false, "tran": null,
+          "fstype": "ext4", "fsver": "1.0", "label": "projects",
+          "uuid": "dddd4444-aaaa-4bbb-8ccc-000000000d01", "partuuid": "dddd4444-01",
+          "parttypename": "Linux", "mountpoints": [null], "fsroots": [null]
+        }
+      ]
+    },
+    {
+      "name": "sde", "path": "/dev/sde", "type": "disk", "size": 500107862016, "rm": false,
+      "hotplug": true, "ro": false, "tran": "usb", "model": "Example Clone B",
+      "serial": "CLONE0005", "fstype": null, "mountpoints": [null], "fsroots": [null],
+      "children": [
+        {
+          "name": "sde1", "path": "/dev/sde1", "type": "part", "size": 500106813440,
+          "start": 2048, "rm": false, "hotplug": true, "ro": false, "tran": null,
+          "fstype": "ext4", "fsver": "1.0", "label": "projects",
+          "uuid": "dddd4444-aaaa-4bbb-8ccc-000000000d01", "partuuid": "dddd4444-01",
+          "parttypename": "Linux", "mountpoints": [null], "fsroots": [null]
+        }
+      ]
+    },
+    {
+      "name": "sdf", "path": "/dev/sdf", "type": "disk", "size": 15931539456, "rm": true,
+      "hotplug": true, "ro": false, "tran": "usb", "model": "Example Live Stick",
+      "serial": "LIVE0006", "fstype": "iso9660", "fsver": "Joliet Extension",
+      "label": "Live-Installer", "uuid": "2026-09-01-10-00-00-00",
+      "mountpoints": [null], "fsroots": [null],
+      "children": [
+        {
+          "name": "sdf1", "path": "/dev/sdf1", "type": "part", "size": 2936012800, "start": 64,
+          "rm": true, "hotplug": true, "ro": false, "tran": null, "fstype": "iso9660",
+          "fsver": "Joliet Extension", "label": "Live-Installer",
+          "uuid": "2026-09-01-10-00-00-00", "partuuid": "eeee5555-01",
+          "parttypename": "Empty", "mountpoints": [null], "fsroots": [null]
+        },
+        {
+          "name": "sdf2", "path": "/dev/sdf2", "type": "part", "size": 13631488,
+          "start": 5734400, "rm": true, "hotplug": true, "ro": false, "tran": null,
+          "fstype": "vfat", "fsver": "FAT16", "label": "ANACONDA", "uuid": "F6F6-0602",
+          "partuuid": "eeee5555-02", "parttypename": "EFI (FAT-12/16/32)",
+          "mountpoints": [null], "fsroots": [null]
+        }
+      ]
+    }
+  ]
+}
