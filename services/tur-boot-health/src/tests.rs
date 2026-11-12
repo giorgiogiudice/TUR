@@ -94,15 +94,27 @@ fn assert_restored(host: &FakeHost) {
     assert_eq!(host.default_checksum(), "old", "and is the default");
     assert_eq!(host.counter(), None, "no counter is left");
     let env = host.env.as_ref().expect("a valid block");
-    assert!(!env.contains_key(VAR_TRIAL_ARGS), "no trial arguments are left");
-    assert!(host.read_state(TRIAL_FILE).is_none(), "no trial record is left");
+    assert!(
+        !env.contains_key(VAR_TRIAL_ARGS),
+        "no trial arguments are left"
+    );
+    assert!(
+        host.read_state(TRIAL_FILE).is_none(),
+        "no trial record is left"
+    );
     assert_eq!(rejected(host), vec!["sha256:new".to_owned()]);
     assert_eq!(notice(host).str_or_empty("kind"), "fallback");
 }
 
 // ---- the classification table, design section 5.6 ---------------------------------
 
-fn facts(arg: BootArg, record: Option<Phase>, default: bool, booted: Which, counter: bool) -> Facts {
+fn facts(
+    arg: BootArg,
+    record: Option<Phase>,
+    default: bool,
+    booted: Which,
+    counter: bool,
+) -> Facts {
     Facts {
         arg,
         record,
@@ -123,45 +135,132 @@ fn every_row_of_the_classification_table() {
         loader,
     };
     let rows: Vec<(&str, Facts, Decision, Classification)> = vec![
-        ("1", facts(A::None, None, true, W::Unknown, false), Decision::Normal, Classification::Normal),
-        ("2", facts(A::None, None, false, W::Unknown, false), Decision::Manual, Classification::Manual),
-        ("3", facts(A::Trial, trial, true, W::New, true), Decision::Trial, Classification::Trial),
-        ("4", facts(A::Trial, trial, true, W::Previous, true), Decision::Stale, Classification::Stale),
-        ("5", facts(A::Trial, trial, false, W::Previous, true), start(true), Classification::Fallback),
-        ("6", facts(A::Fallback, trial, false, W::Previous, true), start(false), Classification::Fallback),
-        ("6, record without identities", facts(A::Fallback, trial, false, W::Unknown, true), start(false), Classification::Fallback),
-        ("6, record missing", facts(A::Fallback, None, false, W::Unknown, true), start(false), Classification::Fallback),
+        (
+            "1",
+            facts(A::None, None, true, W::Unknown, false),
+            Decision::Normal,
+            Classification::Normal,
+        ),
+        (
+            "2",
+            facts(A::None, None, false, W::Unknown, false),
+            Decision::Manual,
+            Classification::Manual,
+        ),
+        (
+            "3",
+            facts(A::Trial, trial, true, W::New, true),
+            Decision::Trial,
+            Classification::Trial,
+        ),
+        (
+            "4",
+            facts(A::Trial, trial, true, W::Previous, true),
+            Decision::Stale,
+            Classification::Stale,
+        ),
+        (
+            "5",
+            facts(A::Trial, trial, false, W::Previous, true),
+            start(true),
+            Classification::Fallback,
+        ),
+        (
+            "6",
+            facts(A::Fallback, trial, false, W::Previous, true),
+            start(false),
+            Classification::Fallback,
+        ),
+        (
+            "6, record without identities",
+            facts(A::Fallback, trial, false, W::Unknown, true),
+            start(false),
+            Classification::Fallback,
+        ),
+        (
+            "6, record missing",
+            facts(A::Fallback, None, false, W::Unknown, true),
+            start(false),
+            Classification::Fallback,
+        ),
         (
             "7",
             facts(A::Fallback, reverting, false, W::Previous, true),
-            Decision::Fallback { from: FallbackFrom::Counter, loader: false },
+            Decision::Fallback {
+                from: FallbackFrom::Counter,
+                loader: false,
+            },
             Classification::Fallback,
         ),
         (
             "7, any argument",
             facts(A::Trial, reverting, false, W::Previous, true),
-            Decision::Fallback { from: FallbackFrom::Counter, loader: false },
+            Decision::Fallback {
+                from: FallbackFrom::Counter,
+                loader: false,
+            },
             Classification::Fallback,
         ),
         (
             "8",
             facts(A::Trial, reverting, true, W::Previous, true),
-            Decision::Fallback { from: FallbackFrom::Confirm, loader: false },
+            Decision::Fallback {
+                from: FallbackFrom::Confirm,
+                loader: false,
+            },
             Classification::Fallback,
         ),
         (
             "8, any argument",
             facts(A::None, reverting, true, W::Previous, false),
-            Decision::Fallback { from: FallbackFrom::Confirm, loader: false },
+            Decision::Fallback {
+                from: FallbackFrom::Confirm,
+                loader: false,
+            },
             Classification::Fallback,
         ),
-        ("9, default", facts(A::Trial, reverting, true, W::New, true), Decision::Rejected, Classification::Rejected),
-        ("9, not default", facts(A::Fallback, reverting, false, W::New, true), Decision::Rejected, Classification::Rejected),
-        ("10", facts(A::Trial, None, true, W::Unknown, true), Decision::TrialUnknown, Classification::Trial),
-        ("11", facts(A::None, trial, true, W::New, false), Decision::TrialRecovered, Classification::Trial),
-        ("12", facts(A::None, None, true, W::Unknown, true), Decision::Inconsistent, Classification::Inconsistent),
-        ("12, not default", facts(A::None, None, false, W::Unknown, true), Decision::Inconsistent, Classification::Inconsistent),
-        ("13", facts(A::Fallback, trial, true, W::New, true), Decision::ManualRetry, Classification::ManualRetry),
+        (
+            "9, default",
+            facts(A::Trial, reverting, true, W::New, true),
+            Decision::Rejected,
+            Classification::Rejected,
+        ),
+        (
+            "9, not default",
+            facts(A::Fallback, reverting, false, W::New, true),
+            Decision::Rejected,
+            Classification::Rejected,
+        ),
+        (
+            "10",
+            facts(A::Trial, None, true, W::Unknown, true),
+            Decision::TrialUnknown,
+            Classification::Trial,
+        ),
+        (
+            "11",
+            facts(A::None, trial, true, W::New, false),
+            Decision::TrialRecovered,
+            Classification::Trial,
+        ),
+        (
+            "12",
+            facts(A::None, None, true, W::Unknown, true),
+            Decision::Inconsistent,
+            Classification::Inconsistent,
+        ),
+        (
+            "12, not default",
+            facts(A::None, None, false, W::Unknown, true),
+            Decision::Inconsistent,
+            Classification::Inconsistent,
+        ),
+        (
+            "13",
+            facts(A::Fallback, trial, true, W::New, true),
+            Decision::ManualRetry,
+            Classification::ManualRetry,
+        ),
     ];
     for (row, facts, decision, classification) in rows {
         assert_eq!(decide(&facts), decision, "row {row}");
@@ -351,7 +450,10 @@ fn a_failing_gate_gets_three_attempts_and_then_the_previous_version() {
     assert_restored(&host);
     let event = last_event(&host, "fallback");
     assert_eq!(event.str_or_empty("reason"), "attempts");
-    assert_eq!(event.get("attempts_allowed").and_then(Value::as_i64), Some(3));
+    assert_eq!(
+        event.get("attempts_allowed").and_then(Value::as_i64),
+        Some(3)
+    );
     assert_eq!(
         event
             .get("attempts_that_reached_userspace")
@@ -359,25 +461,42 @@ fn a_failing_gate_gets_three_attempts_and_then_the_previous_version() {
         Some(3)
     );
     assert_eq!(event.str_or_empty("first_failed_check"), "R5");
-    assert_eq!(event.str_or_empty("first_failed_check_code"), "TUR-BOOT-HEALTH-005");
-    assert_eq!(event.path(&["restored", "checksum"]).and_then(Value::as_str), Some("old"));
-    assert_eq!(event.path(&["failed", "checksum"]).and_then(Value::as_str), Some("new"));
     assert_eq!(
-        event.get("attempt_boot_ids").and_then(Value::as_array).map(<[Value]>::len),
+        event.str_or_empty("first_failed_check_code"),
+        "TUR-BOOT-HEALTH-005"
+    );
+    assert_eq!(
+        event
+            .path(&["restored", "checksum"])
+            .and_then(Value::as_str),
+        Some("old")
+    );
+    assert_eq!(
+        event.path(&["failed", "checksum"]).and_then(Value::as_str),
+        Some("new")
+    );
+    assert_eq!(
+        event
+            .get("attempt_boot_ids")
+            .and_then(Value::as_array)
+            .map(<[Value]>::len),
         Some(3)
     );
     let notice = notice(&host);
     assert_eq!(notice.str_or_empty("error_code"), "TUR-BOOT-TRIAL-003");
     let text = notice.str_or_empty("text");
-    assert!(text.contains("The update to TUR 2.0 (build build-new) did not start correctly after 3 attempts."));
+    assert!(text.contains(
+        "The update to TUR 2.0 (build build-new) did not start correctly after 3 attempts."
+    ));
     assert!(text.contains("TUR has restored the previous version, 1.0 (build build-old)."));
     assert!(text.contains("Your files were not changed."));
     assert!(text.contains("The update will not be tried again automatically."));
     assert!(host.journal.iter().any(|entry| {
         entry.message_id == trial::MSG_FALLBACK
-            && entry
-                .fields
-                .contains(&("TUR_FAILED_IMAGE_DIGEST".to_owned(), "sha256:new".to_owned()))
+            && entry.fields.contains(&(
+                "TUR_FAILED_IMAGE_DIGEST".to_owned(),
+                "sha256:new".to_owned(),
+            ))
     }));
 }
 
@@ -411,13 +530,23 @@ fn an_update_that_never_reaches_userspace_is_abandoned_by_the_counter_alone() {
 fn a_kernel_grub_cannot_start_falls_back_in_the_same_boot() {
     let mut host = updated();
     host.loader_fell_back();
-    assert!(host.cmdline.contains("tur.boot=trial tur.boot_tries_left=2"));
+    assert!(
+        host.cmdline
+            .contains("tur.boot=trial tur.boot_tries_left=2")
+    );
     assert_eq!(classify(&mut host, &config()), Classification::Fallback);
     assert_restored(&host);
-    assert_eq!(last_event(&host, "fallback").str_or_empty("reason"), "loader");
+    assert_eq!(
+        last_event(&host, "fallback").str_or_empty("reason"),
+        "loader"
+    );
     let notice = notice(&host);
     assert_eq!(notice.str_or_empty("error_code"), "TUR-BOOT-TRIAL-004");
-    assert!(notice.str_or_empty("text").contains("could not be started by the boot loader"));
+    assert!(
+        notice
+            .str_or_empty("text")
+            .contains("could not be started by the boot loader")
+    );
 }
 
 #[test]
@@ -428,7 +557,10 @@ fn an_update_that_was_never_finalised_is_not_rolled_back() {
     arm(&mut host, &config());
     host.staged = None;
     host.grub();
-    assert!(host.cmdline.contains("tur.boot=trial tur.boot_tries_left=2"));
+    assert!(
+        host.cmdline
+            .contains("tur.boot=trial tur.boot_tries_left=2")
+    );
     assert_eq!(host.booted_checksum(), "old");
     host.ops.clear();
     assert_eq!(classify(&mut host, &config()), Classification::Stale);
@@ -439,7 +571,11 @@ fn an_update_that_was_never_finalised_is_not_rolled_back() {
     let notice = notice(&host);
     assert_eq!(notice.str_or_empty("kind"), "not-applied");
     assert_eq!(notice.str_or_empty("error_code"), "TUR-BOOT-TRIAL-001");
-    assert!(notice.str_or_empty("text").starts_with("The update was not applied. TUR is still on 1.0"));
+    assert!(
+        notice
+            .str_or_empty("text")
+            .starts_with("The update was not applied. TUR is still on 1.0")
+    );
     host.grub();
     assert_eq!(classify(&mut host, &config()), Classification::Normal);
 }
@@ -457,7 +593,12 @@ fn a_failing_gate_outside_a_trial_tells_the_user_and_restarts_nothing() {
         notice.str_or_empty("text"),
         "TUR started, but some checks failed. Diagnostics are available."
     );
-    assert_eq!(last_event(&host, "gate-failed").get("restart_follows").and_then(Value::as_bool), Some(false));
+    assert_eq!(
+        last_event(&host, "gate-failed")
+            .get("restart_follows")
+            .and_then(Value::as_bool),
+        Some(false)
+    );
     assert_eq!(host.counter(), None);
 }
 
@@ -468,8 +609,14 @@ fn a_gate_that_left_no_verdict_is_recorded_as_such() {
     record_failure(&mut host);
     let record = trial::load_record(&host).expect("a record");
     assert_eq!(record.attempts[0].verdict, "failed");
-    assert_eq!(record.attempts[0].error_code.as_deref(), Some("TUR-BOOT-HEALTH-030"));
-    assert!(host.read_state(NOTICE_FILE).is_none(), "a trial restarts; it leaves no notice");
+    assert_eq!(
+        record.attempts[0].error_code.as_deref(),
+        Some("TUR-BOOT-HEALTH-030")
+    );
+    assert!(
+        host.read_state(NOTICE_FILE).is_none(),
+        "a trial restarts; it leaves no notice"
+    );
 }
 
 // ---- the interruption table, design section 5.9 ------------------------------------------
@@ -522,7 +669,11 @@ fn power_lost_at_any_write_of_the_fallback_still_ends_on_the_previous_version() 
         assert!(host.dead, "the power was to fail after {cut} writes");
         let boots = converge(&mut host);
         assert_restored(&host);
-        assert!(boots <= 4, "cut after {cut} writes: {boots} boots, ops {:?}", host.ops);
+        assert!(
+            boots <= 4,
+            "cut after {cut} writes: {boots} boots, ops {:?}",
+            host.ops
+        );
         // No loop afterwards: two more restarts are ordinary boots.
         for _ in 0..2 {
             host.grub();
@@ -548,7 +699,11 @@ fn power_lost_after_step_3_costs_two_short_starts_of_the_failed_version() {
     assert_eq!(host.booted_checksum(), "new");
     assert_eq!(classify(&mut host, &config()), Classification::Rejected);
     assert!(host.reboot_requested, "row 9 restarts at once");
-    assert_eq!(host.counter().as_deref(), Some("1"), "the default version keeps its counter");
+    assert_eq!(
+        host.counter().as_deref(),
+        Some("1"),
+        "the default version keeps its counter"
+    );
     host.grub();
     assert_eq!(classify(&mut host, &config()), Classification::Rejected);
     // The counter is used up: GRUB selects the previous version again and
@@ -570,11 +725,17 @@ fn power_lost_after_step_4_resumes_at_step_5() {
     assert_eq!(host.counter().as_deref(), Some("2"));
     // GRUB counts and starts the first entry: now the previous version.
     host.grub();
-    assert!(host.cmdline.contains("tur.boot=trial tur.boot_tries_left=1"));
+    assert!(
+        host.cmdline
+            .contains("tur.boot=trial tur.boot_tries_left=1")
+    );
     assert_eq!(host.booted_checksum(), "old");
     host.ops.clear();
     assert_eq!(classify(&mut host, &config()), Classification::Fallback);
-    assert!(host.ops_matching("rollback").is_empty(), "row 8 does not roll back again");
+    assert!(
+        host.ops_matching("rollback").is_empty(),
+        "row 8 does not roll back again"
+    );
     assert!(host.ops_matching("env_set").is_empty(), "{:?}", host.ops);
     assert_restored(&host);
 }
@@ -600,7 +761,11 @@ fn power_lost_three_times_between_steps_4_and_6_still_converges() {
     assert_eq!(host.booted_checksum(), "new");
     assert_eq!(classify(&mut host, &config()), Classification::Rejected);
     assert!(host.reboot_requested);
-    assert_eq!(host.counter(), None, "row 9 removes the counter when it is not the default");
+    assert_eq!(
+        host.counter(),
+        None,
+        "row 9 removes the counter when it is not the default"
+    );
     // The previous version then finishes.
     host.grub();
     assert_eq!(host.booted_checksum(), "old");
@@ -613,7 +778,11 @@ fn a_failed_rollback_leaves_grub_on_the_previous_version() {
     let mut host = at_fallback();
     host.rollback_fails = true;
     assert_eq!(classify(&mut host, &config()), Classification::Fallback);
-    assert_eq!(host.counter().as_deref(), Some("-1"), "what GRUB left is put back");
+    assert_eq!(
+        host.counter().as_deref(),
+        Some("-1"),
+        "what GRUB left is put back"
+    );
     assert_eq!(host.default_checksum(), "new");
     assert!(
         host.journal
@@ -653,7 +822,11 @@ fn a_person_can_retry_the_failed_version_from_the_menu() {
     host.booted = 0;
     assert_eq!(host.booted_checksum(), "new");
     assert_eq!(classify(&mut host, &config()), Classification::ManualRetry);
-    assert_eq!(host.counter().as_deref(), Some("-1"), "classify changes nothing");
+    assert_eq!(
+        host.counter().as_deref(),
+        Some("-1"),
+        "classify changes nothing"
+    );
     // The gate fails: nothing restarts, and the next boot is a fallback again.
     host.set_verdict("failed", Some("R5"));
     record_failure(&mut host);
@@ -685,9 +858,11 @@ fn an_update_is_refused_where_attempts_cannot_be_counted() {
     let found = notice(&host);
     assert_eq!(found.str_or_empty("kind"), "refused");
     assert_eq!(found.str_or_empty("error_code"), "TUR-BOOT-TRIAL-002");
-    assert!(found.str_or_empty("text").starts_with(
-        "The update was not applied: this installation cannot count boot attempts."
-    ));
+    assert!(
+        found.str_or_empty("text").starts_with(
+            "The update was not applied: this installation cannot count boot attempts."
+        )
+    );
     host.finalize();
     host.grub();
     assert_eq!(host.booted_checksum(), "old");
@@ -706,7 +881,10 @@ fn an_update_is_refused_where_attempts_cannot_be_counted() {
     host.stage("new", "2.0");
     arm(&mut host, &config());
     assert!(host.finalization_locked);
-    assert!(host.read_state(TRIAL_FILE).is_none(), "no record without a counter");
+    assert!(
+        host.read_state(TRIAL_FILE).is_none(),
+        "no record without a counter"
+    );
     assert_eq!(notice(&host).str_or_empty("kind"), "refused");
 }
 
@@ -725,8 +903,15 @@ fn a_block_grub_could_not_read_is_recreated_and_the_trial_goes_on() {
     assert!(!host.cmdline.contains("tur.boot="));
     assert_eq!(host.booted_checksum(), "new");
     assert_eq!(classify(&mut host, &config()), Classification::Trial);
-    assert_eq!(host.counter().as_deref(), Some("2"), "three allowed, this boot is the first");
-    assert!(host.read_run(RUN_TRIAL_FLAG).is_some(), "the restart units need the flag");
+    assert_eq!(
+        host.counter().as_deref(),
+        Some("2"),
+        "three allowed, this boot is the first"
+    );
+    assert!(
+        host.read_run(RUN_TRIAL_FLAG).is_some(),
+        "the restart units need the flag"
+    );
     assert!(
         host.journal
             .iter()
@@ -735,7 +920,12 @@ fn a_block_grub_could_not_read_is_recreated_and_the_trial_goes_on() {
     // The gate fails: the remaining attempts are counted by GRUB as usual.
     host.set_verdict("failed", Some("R5"));
     record_failure(&mut host);
-    assert_eq!(last_event(&host, "gate-failed").get("restart_follows").and_then(Value::as_bool), Some(true));
+    assert_eq!(
+        last_event(&host, "gate-failed")
+            .get("restart_follows")
+            .and_then(Value::as_bool),
+        Some(true)
+    );
     for _ in 0..2 {
         host.grub();
         assert_eq!(failing_boot(&mut host), Classification::Trial);
@@ -774,9 +964,15 @@ fn power_lost_while_marking_good_costs_at_most_one_more_trial_boot() {
 fn a_counter_without_a_record_is_a_trial_with_unknown_identities() {
     // Row 10: armed by hand, or the record was lost.
     let mut host = FakeHost::new();
-    host.env.as_mut().unwrap().insert(VAR_COUNTER.to_owned(), "2".to_owned());
+    host.env
+        .as_mut()
+        .unwrap()
+        .insert(VAR_COUNTER.to_owned(), "2".to_owned());
     host.grub();
-    assert!(host.cmdline.contains("tur.boot=trial tur.boot_tries_left=1"));
+    assert!(
+        host.cmdline
+            .contains("tur.boot=trial tur.boot_tries_left=1")
+    );
     assert_eq!(good_boot(&mut host), Classification::Trial);
     assert_eq!(host.counter(), None);
     assert_eq!(events(&host), vec!["attempt", "marked-good"]);
@@ -786,7 +982,10 @@ fn a_counter_without_a_record_is_a_trial_with_unknown_identities() {
 fn a_stray_counter_is_removed() {
     // Row 12: a counter that GRUB did not act on and no record explains.
     let mut host = FakeHost::new();
-    host.env.as_mut().unwrap().insert(VAR_COUNTER.to_owned(), "3".to_owned());
+    host.env
+        .as_mut()
+        .unwrap()
+        .insert(VAR_COUNTER.to_owned(), "3".to_owned());
     assert_eq!(classify(&mut host, &config()), Classification::Inconsistent);
     assert_eq!(host.counter(), None);
     assert!(
@@ -820,7 +1019,10 @@ fn when_grub_cannot_save_the_counter_userspace_counts_and_ends_the_trial() {
     host.grub_cannot_save = true;
     for attempt in 1..=3 {
         host.grub();
-        assert!(host.cmdline.contains("tur.boot=trial tur.boot_tries_left=2"));
+        assert!(
+            host.cmdline
+                .contains("tur.boot=trial tur.boot_tries_left=2")
+        );
         assert_eq!(host.counter().as_deref(), Some("3"));
         assert_eq!(failing_boot(&mut host), Classification::Trial);
         let record = trial::load_record(&host).expect("a record");
@@ -839,7 +1041,11 @@ fn when_grub_cannot_save_the_counter_userspace_counts_and_ends_the_trial() {
     assert_eq!(host.booted_checksum(), "old");
     assert_eq!(classify(&mut host, &config()), Classification::Fallback);
     assert_restored(&host);
-    assert_eq!(host.ops_matching("rollback").len(), 1, "row 8 does not roll back again");
+    assert_eq!(
+        host.ops_matching("rollback").len(),
+        1,
+        "row 8 does not roll back again"
+    );
 }
 
 #[test]
@@ -875,7 +1081,11 @@ fn a_boot_that_cannot_be_classified_changes_nothing() {
     host.ops.clear();
     assert_eq!(classify(&mut host, &config()), Classification::Unlisted);
     assert!(host.ops.is_empty(), "{:?}", host.ops);
-    assert_eq!(host.counter().as_deref(), Some("2"), "the trial is still counted");
+    assert_eq!(
+        host.counter().as_deref(),
+        Some("2"),
+        "the trial is still counted"
+    );
 }
 
 // ---- the gate, design section 6.2 ----------------------------------------------------------------
@@ -907,7 +1117,10 @@ fn the_gate_passes_on_a_healthy_boot_to_the_greeter() {
         .filter(|(name, _)| name == "TUR_BOOT_STAGE")
         .map(|(_, value)| value.clone())
         .collect();
-    assert_eq!(stages, vec!["BOOT-080", "BOOT-130", "BOOT-110", "BOOT-120", "BOOT-140"]);
+    assert_eq!(
+        stages,
+        vec!["BOOT-080", "BOOT-130", "BOOT-110", "BOOT-120", "BOOT-140"]
+    );
 }
 
 #[test]
@@ -916,7 +1129,10 @@ fn the_gate_accepts_the_first_run_wizard_as_a_session() {
     // to a session of class "user".
     let mut host = FakeHost::new();
     host.session.as_mut().unwrap().class = "user".to_owned();
-    assert_eq!(gate::run_gate(&mut host, &config(), "normal").result, "passed");
+    assert_eq!(
+        gate::run_gate(&mut host, &config(), "normal").result,
+        "passed"
+    );
 }
 
 #[test]
@@ -946,7 +1162,10 @@ fn a_required_unit_that_fails_fails_the_gate_at_once() {
     assert_eq!(failure.state, CheckState::Failed);
     assert_eq!(failure.code.as_deref(), Some("TUR-BOOT-HEALTH-005"));
     assert!(failure.detail.contains("tur-storage.service is failed"));
-    assert!(failure.duration_ms < 2_000, "a failed unit is not waited for");
+    assert!(
+        failure.duration_ms < 2_000,
+        "a failed unit is not waited for"
+    );
     // The checks after it are not run.
     assert!(verdict.checks.iter().all(|check| check.id != "R6"));
 }
@@ -1091,7 +1310,8 @@ fn additional_checks_from_the_image_are_run_without_a_shell() {
         format!("{directory}/broken.toml"),
         "exec = \"/usr/libexec/broken\"\nrequired = true\n".to_owned(),
     );
-    host.check_status.insert("/usr/libexec/broken".to_owned(), Ok(1));
+    host.check_status
+        .insert("/usr/libexec/broken".to_owned(), Ok(1));
     let verdict = gate::run_gate(&mut host, &config(), "trial");
     let failure = verdict.first_failure().expect("a failure");
     assert_eq!(failure.id, "X:broken");
@@ -1106,7 +1326,8 @@ fn additional_checks_from_the_image_are_run_without_a_shell() {
         format!("{directory}/optional.toml"),
         "exec = \"/usr/libexec/optional\"\n".to_owned(),
     );
-    host.check_status.insert("/usr/libexec/optional".to_owned(), Ok(3));
+    host.check_status
+        .insert("/usr/libexec/optional".to_owned(), Ok(3));
     let verdict = gate::run_gate(&mut host, &config(), "trial");
     assert_eq!(verdict.result, "degraded");
 
@@ -1116,12 +1337,19 @@ fn additional_checks_from_the_image_are_run_without_a_shell() {
         format!("{directory}/fine.toml"),
         "exec = \"/usr/libexec/fine\"\nrequired = true\n".to_owned(),
     );
-    host.check_status.insert("/usr/libexec/fine".to_owned(), Ok(0));
-    assert_eq!(gate::run_gate(&mut host, &config(), "trial").result, "passed");
+    host.check_status
+        .insert("/usr/libexec/fine".to_owned(), Ok(0));
+    assert_eq!(
+        gate::run_gate(&mut host, &config(), "trial").result,
+        "passed"
+    );
 
     // A file that cannot be understood is a failure, not ignored.
     let mut host = FakeHost::new();
-    host.files.insert(format!("{directory}/typo.toml"), "exe = \"/bin/true\"\n".to_owned());
+    host.files.insert(
+        format!("{directory}/typo.toml"),
+        "exe = \"/bin/true\"\n".to_owned(),
+    );
     let verdict = gate::run_gate(&mut host, &config(), "trial");
     assert_eq!(verdict.first_failure().expect("a failure").id, "X:typo");
 
@@ -1155,7 +1383,10 @@ fn the_gate_writes_its_verdict_and_refuses_a_rejected_version() {
     // A configuration that cannot be read fails the gate.
     let mut host = FakeHost::new();
     classify(&mut host, &config());
-    assert!(!gate::gate(&mut host, Err("line 3: unknown key".to_owned())));
+    assert!(!gate::gate(
+        &mut host,
+        Err("line 3: unknown key".to_owned())
+    ));
 
     // Row 9: the version being replaced is never marked good.
     let mut host = at_fallback();
@@ -1189,10 +1420,26 @@ fn status_reports_the_trial_the_rejected_images_and_the_notice() {
     classify(&mut host, &config());
     let value = status::status_json(&mut host);
     assert_eq!(value.get("schema_version").and_then(Value::as_i64), Some(1));
-    assert_eq!(value.path(&["boot", "classification"]).and_then(Value::as_str), Some("trial"));
-    assert_eq!(value.path(&["counting", "usable"]).and_then(Value::as_bool), Some(true));
-    assert_eq!(value.path(&["counting", "boot_counter"]).and_then(Value::as_str), Some("2"));
-    assert_eq!(value.path(&["trial", "phase"]).and_then(Value::as_str), Some("trial"));
+    assert_eq!(
+        value
+            .path(&["boot", "classification"])
+            .and_then(Value::as_str),
+        Some("trial")
+    );
+    assert_eq!(
+        value.path(&["counting", "usable"]).and_then(Value::as_bool),
+        Some(true)
+    );
+    assert_eq!(
+        value
+            .path(&["counting", "boot_counter"])
+            .and_then(Value::as_str),
+        Some("2")
+    );
+    assert_eq!(
+        value.path(&["trial", "phase"]).and_then(Value::as_str),
+        Some("trial")
+    );
     assert!(status::status_text(&value).contains("yes, phase trial"));
 
     let mut host = at_fallback();
@@ -1200,10 +1447,16 @@ fn status_reports_the_trial_the_rejected_images_and_the_notice() {
     let value = status::status_json(&mut host);
     assert!(value.get("trial").unwrap().is_null());
     assert_eq!(
-        value.path(&["rejected", "images"]).and_then(Value::as_array).map(<[Value]>::len),
+        value
+            .path(&["rejected", "images"])
+            .and_then(Value::as_array)
+            .map(<[Value]>::len),
         Some(1)
     );
-    assert_eq!(value.path(&["notice", "kind"]).and_then(Value::as_str), Some("fallback"));
+    assert_eq!(
+        value.path(&["notice", "kind"]).and_then(Value::as_str),
+        Some("fallback")
+    );
     let text = status::status_text(&value);
     assert!(text.contains("Rejected images:"));
     assert!(text.contains("sha256:new"));
@@ -1215,7 +1468,10 @@ fn status_reports_the_trial_the_rejected_images_and_the_notice() {
     assert_eq!(status::acknowledge(&mut host), Ok(true));
     assert!(host.read_state(NOTICE_FILE).is_none());
     assert_eq!(status::acknowledge(&mut host), Ok(false));
-    assert_eq!(events(&host).last().map(String::as_str), Some("acknowledged"));
+    assert_eq!(
+        events(&host).last().map(String::as_str),
+        Some("acknowledged")
+    );
     // The rejected list is not cleared by acknowledging.
     assert_eq!(rejected(&host), vec!["sha256:new".to_owned()]);
 }
@@ -1244,8 +1500,17 @@ fn the_journals_of_the_failed_attempts_are_exported_once() {
             .expect("a summary"),
     )
     .unwrap();
-    assert_eq!(summary.get("journals").and_then(Value::as_array).map(<[Value]>::len), Some(3));
-    assert_eq!(summary.path(&["event", "reason"]).and_then(Value::as_str), Some("attempts"));
+    assert_eq!(
+        summary
+            .get("journals")
+            .and_then(Value::as_array)
+            .map(<[Value]>::len),
+        Some(3)
+    );
+    assert_eq!(
+        summary.path(&["event", "reason"]).and_then(Value::as_str),
+        Some("attempts")
+    );
     // A second run does nothing.
     let again = status::export_evidence(&mut host).expect("export");
     assert!(again.contains("already exists"), "{again}");
@@ -1253,7 +1518,11 @@ fn the_journals_of_the_failed_attempts_are_exported_once() {
 
     // Without a fallback there is nothing to export.
     let mut host = FakeHost::new();
-    assert!(status::export_evidence(&mut host).unwrap().contains("nothing to export"));
+    assert!(
+        status::export_evidence(&mut host)
+            .unwrap()
+            .contains("nothing to export")
+    );
 }
 
 #[test]

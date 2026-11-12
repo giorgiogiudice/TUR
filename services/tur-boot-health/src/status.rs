@@ -88,7 +88,10 @@ pub(crate) fn status_text(status: &Value) -> String {
     };
     line("This boot:", text_of(status, &["boot", "classification"]));
     line("Health gate:", text_of(status, &["verdict", "result"]));
-    if let Some(check) = status.path(&["verdict", "failed_check"]).and_then(Value::as_str) {
+    if let Some(check) = status
+        .path(&["verdict", "failed_check"])
+        .and_then(Value::as_str)
+    {
         line(
             "Failed check:",
             format!(
@@ -100,7 +103,11 @@ pub(crate) fn status_text(status: &Value) -> String {
     }
     line(
         "Attempt counting:",
-        if status.path(&["counting", "usable"]).and_then(Value::as_bool) == Some(true) {
+        if status
+            .path(&["counting", "usable"])
+            .and_then(Value::as_bool)
+            == Some(true)
+        {
             format!("usable ({})", text_of(status, &["counting", "layout"]))
         } else {
             format!(
@@ -110,7 +117,10 @@ pub(crate) fn status_text(status: &Value) -> String {
             )
         },
     );
-    line("Boot counter:", text_of(status, &["counting", "boot_counter"]));
+    line(
+        "Boot counter:",
+        text_of(status, &["counting", "boot_counter"]),
+    );
     line("Hardware watchdog:", text_of(status, &["watchdog"]));
     line(
         "Trial in progress:",
@@ -151,7 +161,10 @@ pub(crate) fn status_text(status: &Value) -> String {
                 ),
             );
             line("", notice.str_or_empty("text"));
-            line("", "Run `tur-boot-health acknowledge` to dismiss it.".to_owned());
+            line(
+                "",
+                "Run `tur-boot-health acknowledge` to dismiss it.".to_owned(),
+            );
         }
     }
     out
@@ -253,7 +266,10 @@ pub(crate) fn export_evidence(host: &mut dyn Host) -> Result<String, String> {
         ("event_id", Value::from(event_id.as_str())),
         ("event", event.clone()),
         ("journals", Value::Array(exported)),
-        ("boots_in_the_journal_during_the_trial", Value::Int(wanted.len() as i64)),
+        (
+            "boots_in_the_journal_during_the_trial",
+            Value::Int(wanted.len() as i64),
+        ),
         ("pstore_archive", Value::Array(pstore)),
         (
             "note",

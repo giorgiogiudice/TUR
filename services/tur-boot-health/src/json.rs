@@ -491,7 +491,14 @@ mod tests {
             ("flag", Value::Bool(true)),
             ("nothing", Value::Null),
             ("negative", Value::Int(-1)),
-            ("list", Value::Array(vec![Value::Int(1), Value::from("two"), Value::Array(vec![])])),
+            (
+                "list",
+                Value::Array(vec![
+                    Value::Int(1),
+                    Value::from("two"),
+                    Value::Array(vec![]),
+                ]),
+            ),
             ("empty", Value::Object(vec![])),
         ]);
         assert_eq!(parse(&value.to_compact()).unwrap(), value);

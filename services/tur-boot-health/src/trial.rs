@@ -14,7 +14,9 @@ use crate::codes;
 use crate::config::GateConfig;
 use crate::host::{Entry, Host};
 use crate::json::{self, Value};
-use crate::model::{BootArg, BootcStatus, Deployment, EnvBlock, KernelArgs, VAR_COUNTER, VAR_TRIAL_ARGS};
+use crate::model::{
+    BootArg, BootcStatus, Deployment, EnvBlock, KernelArgs, VAR_COUNTER, VAR_TRIAL_ARGS,
+};
 use crate::state::{
     self, Attempt, HISTORY_FILE, NOTICE_FILE, Notice, Phase, REJECTED_FILE, Rejected, TRIAL_FILE,
     TrialRecord,
@@ -410,7 +412,9 @@ pub(crate) fn arm(host: &mut dyn Host, config: &GateConfig) {
                 "GRUB cannot be relied on to write its environment block on {}",
                 layout.describe()
             )),
-            Err(error) => Some(format!("the filesystem under /boot/grub2 is unknown: {error}")),
+            Err(error) => Some(format!(
+                "the filesystem under /boot/grub2 is unknown: {error}"
+            )),
         }
     };
     if let Some(reason) = refusal {
@@ -434,7 +438,9 @@ pub(crate) fn arm(host: &mut dyn Host, config: &GateConfig) {
         reason: None,
     };
     if let Err(error) = save_record(host, &record) {
-        host.console(&format!("arm: the trial record could not be written: {error}"));
+        host.console(&format!(
+            "arm: the trial record could not be written: {error}"
+        ));
     }
     let attempts = config.attempts.to_string();
     let written = host.env_set(&[
@@ -502,7 +508,10 @@ fn refuse(
     let mut details = vec![
         ("reason".to_owned(), Value::from(reason)),
         ("refused".to_owned(), staged.to_json()),
-        ("finalization_locked".to_owned(), Value::Bool(locked.is_ok())),
+        (
+            "finalization_locked".to_owned(),
+            Value::Bool(locked.is_ok()),
+        ),
     ];
     if let Err(error) = &locked {
         details.push(("lock_error".to_owned(), Value::from(error.as_str())));
@@ -610,10 +619,7 @@ pub(crate) fn classify(host: &mut dyn Host, config: &GateConfig) -> Classificati
         "classify: tur.boot={} tries_left={:?} record={} default={} booted={:?} counter={:?} -> {}",
         args.boot.as_str(),
         args.tries_left,
-        facts
-            .record
-            .map(Phase::as_str)
-            .unwrap_or("none"),
+        facts.record.map(Phase::as_str).unwrap_or("none"),
         default,
         facts.booted,
         counter_value(&env),
@@ -728,7 +734,9 @@ fn finish(
 ) -> Classification {
     let info = boot_info(host, classification, args, booted, event_id);
     if let Err(error) = host.write_run(RUN_BOOT, &info.to_pretty()) {
-        host.console(&format!("classify: {RUN_BOOT} could not be written: {error}"));
+        host.console(&format!(
+            "classify: {RUN_BOOT} could not be written: {error}"
+        ));
     }
     log(
         host,
@@ -736,7 +744,10 @@ fn finish(
         6,
         format!("Boot classified as {}", classification.as_str()),
         vec![
-            ("TUR_BOOT_MODE".to_owned(), classification.as_str().to_owned()),
+            (
+                "TUR_BOOT_MODE".to_owned(),
+                classification.as_str().to_owned(),
+            ),
             (
                 "TUR_BOOT_TRIES_LEFT".to_owned(),
                 args.tries_left
@@ -798,7 +809,9 @@ fn note_attempt(
         );
     }
     if let Err(error) = save_record(host, record) {
-        host.console(&format!("classify: the trial record could not be written: {error}"));
+        host.console(&format!(
+            "classify: the trial record could not be written: {error}"
+        ));
     }
     history(
         host,
@@ -839,10 +852,14 @@ fn recover_block(host: &mut dyn Host, record: &mut TrialRecord, env: &Result<Env
         (VAR_COUNTER, remaining_text.as_str()),
     ]);
     if let Err(error) = written {
-        host.console(&format!("classify: the counter could not be restored: {error}"));
+        host.console(&format!(
+            "classify: the counter could not be restored: {error}"
+        ));
     }
     if let Err(error) = host.write_run(RUN_TRIAL_FLAG, "trial\n") {
-        host.console(&format!("classify: {RUN_TRIAL_FLAG} could not be written: {error}"));
+        host.console(&format!(
+            "classify: {RUN_TRIAL_FLAG} could not be written: {error}"
+        ));
     }
     let boot_id = host.boot_id();
     if record.attempt_mut(&boot_id).is_none() {
@@ -856,7 +873,9 @@ fn recover_block(host: &mut dyn Host, record: &mut TrialRecord, env: &Result<Env
         });
     }
     if let Err(error) = save_record(host, record) {
-        host.console(&format!("classify: the trial record could not be written: {error}"));
+        host.console(&format!(
+            "classify: the trial record could not be written: {error}"
+        ));
     }
     history(
         host,
@@ -873,7 +892,9 @@ fn recover_block(host: &mut dyn Host, record: &mut TrialRecord, env: &Result<Env
 /// Row 4: the trial was armed but the update was never finalised.
 fn stale(host: &mut dyn Host, record: &TrialRecord, status: &BootcStatus) {
     if let Err(error) = host.env_unset(&[VAR_COUNTER, VAR_TRIAL_ARGS]) {
-        host.console(&format!("classify: the counter could not be removed: {error}"));
+        host.console(&format!(
+            "classify: the counter could not be removed: {error}"
+        ));
     }
     let _ = host.remove_state(TRIAL_FILE);
     let text = format!(
@@ -890,8 +911,14 @@ fn stale(host: &mut dyn Host, record: &TrialRecord, status: &BootcStatus) {
             error_code: codes::TRIAL_NOT_APPLIED.to_string(),
             boot_id,
             details: vec![
-                ("running".to_owned(), deployment_json(status.booted.as_ref())),
-                ("not_applied".to_owned(), deployment_json(record.new.as_ref())),
+                (
+                    "running".to_owned(),
+                    deployment_json(status.booted.as_ref()),
+                ),
+                (
+                    "not_applied".to_owned(),
+                    deployment_json(record.new.as_ref()),
+                ),
             ],
         },
     );
@@ -953,7 +980,9 @@ fn fall_back(
         record.phase = Phase::Reverting;
         record.reason = Some(if loader { "loader" } else { "attempts" }.to_owned());
         if let Err(error) = save_record(host, &record) {
-            host.console(&format!("fallback: the trial record could not be written: {error}"));
+            host.console(&format!(
+                "fallback: the trial record could not be written: {error}"
+            ));
         }
         host.console("fallback: step 2 done, record says reverting");
         from = FallbackFrom::Counter;
@@ -965,7 +994,9 @@ fn fall_back(
             problem(
                 host,
                 &codes::STATE_ROLLBACK_FAILED,
-                format!("the counter could not be made positive: {error}; the boot order was not changed"),
+                format!(
+                    "the counter could not be made positive: {error}; the boot order was not changed"
+                ),
             );
             return;
         }
@@ -1042,7 +1073,9 @@ fn fall_back(
         if let Err(error) =
             host.write_state(REJECTED_FILE, &state::rejected_to_json(&list).to_pretty())
         {
-            host.console(&format!("fallback: the rejected list could not be written: {error}"));
+            host.console(&format!(
+                "fallback: the rejected list could not be written: {error}"
+            ));
         }
     }
     let how = if loader {
@@ -1060,17 +1093,42 @@ fn fall_back(
         label_of(record.new.as_ref()),
         label_of(record.previous.as_ref())
     );
-    let failed_check = failure.as_ref().and_then(|attempt| attempt.failed_check.clone());
-    let failed_code = failure.as_ref().and_then(|attempt| attempt.error_code.clone());
+    let failed_check = failure
+        .as_ref()
+        .and_then(|attempt| attempt.failed_check.clone());
+    let failed_code = failure
+        .as_ref()
+        .and_then(|attempt| attempt.error_code.clone());
     let failed_detail = failure.as_ref().and_then(|attempt| attempt.detail.clone());
     let details: Vec<(String, Value)> = vec![
-        ("reason".to_owned(), Value::opt_str(record.reason.as_deref())),
-        ("attempts_allowed".to_owned(), Value::Int(record.attempts_allowed)),
-        ("attempts_that_reached_userspace".to_owned(), Value::Int(reached)),
-        ("first_failed_check".to_owned(), Value::opt_str(failed_check.as_deref())),
-        ("first_failed_check_code".to_owned(), Value::opt_str(failed_code.as_deref())),
-        ("first_failed_check_detail".to_owned(), Value::opt_str(failed_detail.as_deref())),
-        ("restored".to_owned(), deployment_json(record.previous.as_ref())),
+        (
+            "reason".to_owned(),
+            Value::opt_str(record.reason.as_deref()),
+        ),
+        (
+            "attempts_allowed".to_owned(),
+            Value::Int(record.attempts_allowed),
+        ),
+        (
+            "attempts_that_reached_userspace".to_owned(),
+            Value::Int(reached),
+        ),
+        (
+            "first_failed_check".to_owned(),
+            Value::opt_str(failed_check.as_deref()),
+        ),
+        (
+            "first_failed_check_code".to_owned(),
+            Value::opt_str(failed_code.as_deref()),
+        ),
+        (
+            "first_failed_check_detail".to_owned(),
+            Value::opt_str(failed_detail.as_deref()),
+        ),
+        (
+            "restored".to_owned(),
+            deployment_json(record.previous.as_ref()),
+        ),
         ("failed".to_owned(), deployment_json(record.new.as_ref())),
         (
             "attempt_boot_ids".to_owned(),
@@ -1082,7 +1140,10 @@ fn fall_back(
                     .collect(),
             ),
         ),
-        ("armed_boot_id".to_owned(), Value::from(record.armed_boot_id.as_str())),
+        (
+            "armed_boot_id".to_owned(),
+            Value::from(record.armed_boot_id.as_str()),
+        ),
         (
             "evidence".to_owned(),
             Value::from(format!(
@@ -1139,15 +1200,30 @@ fn fall_back(
             ),
             (
                 "TUR_FAILED_DEPLOYMENT".to_owned(),
-                record.new.as_ref().map(Deployment::name).unwrap_or_default(),
+                record
+                    .new
+                    .as_ref()
+                    .map(Deployment::name)
+                    .unwrap_or_default(),
             ),
-            ("TUR_ATTEMPTS_REACHED_USERSPACE".to_owned(), reached.to_string()),
-            ("TUR_FALLBACK_REASON".to_owned(), record.reason.clone().unwrap_or_default()),
-            ("TUR_FAILED_CHECK".to_owned(), failed_check.unwrap_or_default()),
+            (
+                "TUR_ATTEMPTS_REACHED_USERSPACE".to_owned(),
+                reached.to_string(),
+            ),
+            (
+                "TUR_FALLBACK_REASON".to_owned(),
+                record.reason.clone().unwrap_or_default(),
+            ),
+            (
+                "TUR_FAILED_CHECK".to_owned(),
+                failed_check.unwrap_or_default(),
+            ),
         ],
     );
     if let Err(error) = host.remove_state(TRIAL_FILE) {
-        host.console(&format!("fallback: the trial record could not be removed: {error}"));
+        host.console(&format!(
+            "fallback: the trial record could not be removed: {error}"
+        ));
     }
     host.console(&format!(
         "fallback: step 7 done, {} restored (event {})",
@@ -1164,7 +1240,8 @@ fn verdict_passed(host: &dyn Host) -> Result<(), String> {
     let Some(text) = host.read_run(RUN_VERDICT) else {
         return Err("the gate has left no verdict for this boot".to_owned());
     };
-    let value = json::parse(&text).map_err(|error| format!("the verdict is unreadable: {error}"))?;
+    let value =
+        json::parse(&text).map_err(|error| format!("the verdict is unreadable: {error}"))?;
     if value.str_or_empty("boot_id") != host.boot_id() {
         return Err("the verdict is from another boot".to_owned());
     }
@@ -1204,7 +1281,12 @@ pub(crate) fn mark_good(host: &mut dyn Host) -> Result<(), String> {
             vec![
                 (
                     "attempts_used",
-                    Value::Int(record.as_ref().map(|r| r.attempts.len() as i64).unwrap_or(0)),
+                    Value::Int(
+                        record
+                            .as_ref()
+                            .map(|r| r.attempts.len() as i64)
+                            .unwrap_or(0),
+                    ),
                 ),
                 (
                     "kept",
@@ -1234,7 +1316,10 @@ pub(crate) fn mark_good(host: &mut dyn Host) -> Result<(), String> {
             ("TUR_BOOT_STAGE".to_owned(), "BOOT-150".to_owned()),
             ("TUR_BOOT_STAGE_STATE".to_owned(), "succeeded".to_owned()),
             ("TUR_BOOT_MODE".to_owned(), classification.clone()),
-            ("TUR_STAGE_MONOTONIC_USEC".to_owned(), uptime_usec.to_string()),
+            (
+                "TUR_STAGE_MONOTONIC_USEC".to_owned(),
+                uptime_usec.to_string(),
+            ),
         ],
     );
     host.console(&format!("mark-good: BOOT-150 recorded ({classification})"));
@@ -1340,13 +1425,15 @@ pub(crate) fn record_failure(host: &mut dyn Host) {
             &Notice {
                 event_id: event,
                 kind: "unhealthy".to_owned(),
-                text: "TUR started, but some checks failed. Diagnostics are available."
-                    .to_owned(),
+                text: "TUR started, but some checks failed. Diagnostics are available.".to_owned(),
                 error_code: code.clone(),
                 boot_id,
                 details: vec![
                     ("first_failed_check".to_owned(), Value::from(check.as_str())),
-                    ("first_failed_check_detail".to_owned(), Value::from(detail.as_str())),
+                    (
+                        "first_failed_check_detail".to_owned(),
+                        Value::from(detail.as_str()),
+                    ),
                 ],
             },
         );

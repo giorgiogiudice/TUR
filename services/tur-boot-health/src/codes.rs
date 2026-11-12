@@ -16,8 +16,7 @@ pub(crate) const HEALTH_CORE_UNITS: ErrorCode = ErrorCode::from_static("TUR-BOOT
 /// Required check R5 failed: a required TUR unit is not active.
 pub(crate) const HEALTH_TUR_UNITS: ErrorCode = ErrorCode::from_static("TUR-BOOT-HEALTH-005");
 /// Required check R6 failed: the display manager is not active.
-pub(crate) const HEALTH_DISPLAY_MANAGER: ErrorCode =
-    ErrorCode::from_static("TUR-BOOT-HEALTH-006");
+pub(crate) const HEALTH_DISPLAY_MANAGER: ErrorCode = ErrorCode::from_static("TUR-BOOT-HEALTH-006");
 /// Required check R7 failed: the seat has no graphical session.
 pub(crate) const HEALTH_SEAT_SESSION: ErrorCode = ErrorCode::from_static("TUR-BOOT-HEALTH-007");
 /// Required check R8 failed: the seat's session did not stay up.
@@ -51,26 +50,77 @@ pub(crate) const STATE_ROLLBACK_FAILED: ErrorCode = ErrorCode::from_static("TUR-
 /// Every code with its meaning, for `status --codes` and for the tests.
 pub(crate) fn registry() -> Vec<(ErrorCode, &'static str)> {
     vec![
-        (HEALTH_ROOT, "Required check R1 failed: the root filesystem is not the booted deployment"),
-        (HEALTH_PATHS, "Required check R2 failed: a critical path is not readable or writable"),
-        (HEALTH_DEFAULT_TARGET, "Required check R3 failed: the default target is not active"),
-        (HEALTH_CORE_UNITS, "Required check R4 failed: a core service is not active"),
-        (HEALTH_TUR_UNITS, "Required check R5 failed: a required TUR unit is not active"),
-        (HEALTH_DISPLAY_MANAGER, "Required check R6 failed: the display manager is not active"),
-        (HEALTH_SEAT_SESSION, "Required check R7 failed: the seat has no graphical session"),
-        (HEALTH_STABILITY, "Required check R8 failed: the seat's session did not stay up"),
+        (
+            HEALTH_ROOT,
+            "Required check R1 failed: the root filesystem is not the booted deployment",
+        ),
+        (
+            HEALTH_PATHS,
+            "Required check R2 failed: a critical path is not readable or writable",
+        ),
+        (
+            HEALTH_DEFAULT_TARGET,
+            "Required check R3 failed: the default target is not active",
+        ),
+        (
+            HEALTH_CORE_UNITS,
+            "Required check R4 failed: a core service is not active",
+        ),
+        (
+            HEALTH_TUR_UNITS,
+            "Required check R5 failed: a required TUR unit is not active",
+        ),
+        (
+            HEALTH_DISPLAY_MANAGER,
+            "Required check R6 failed: the display manager is not active",
+        ),
+        (
+            HEALTH_SEAT_SESSION,
+            "Required check R7 failed: the seat has no graphical session",
+        ),
+        (
+            HEALTH_STABILITY,
+            "Required check R8 failed: the seat's session did not stay up",
+        ),
         (HEALTH_TIMEOUT, "A required check exceeded its time limit"),
         (HEALTH_EXTRA_CHECK, "A required check from checks.d failed"),
         (HEALTH_GATE_DIED, "The gate itself did not finish"),
-        (TRIAL_NOT_APPLIED, "The update was not applied: finalisation did not happen"),
-        (TRIAL_REFUSED, "The update was refused: boot attempts cannot be counted on this installation"),
-        (TRIAL_FALLBACK, "Fallback: the new version failed all attempts"),
-        (TRIAL_FALLBACK_LOADER, "Fallback: the loader could not start the new version"),
-        (TRIAL_COUNTED_IN_USERSPACE, "GRUB could not save the counter; attempts counted in userspace"),
-        (STATE_MISMATCH, "The boot order does not match the trial record; nothing was changed"),
-        (STATE_STRAY_COUNTER, "A counter existed without a trial; removed"),
-        (STATE_BLOCK_RECREATED, "The environment block was invalid and was recreated"),
-        (STATE_ROLLBACK_FAILED, "bootc rollback failed during a fallback"),
+        (
+            TRIAL_NOT_APPLIED,
+            "The update was not applied: finalisation did not happen",
+        ),
+        (
+            TRIAL_REFUSED,
+            "The update was refused: boot attempts cannot be counted on this installation",
+        ),
+        (
+            TRIAL_FALLBACK,
+            "Fallback: the new version failed all attempts",
+        ),
+        (
+            TRIAL_FALLBACK_LOADER,
+            "Fallback: the loader could not start the new version",
+        ),
+        (
+            TRIAL_COUNTED_IN_USERSPACE,
+            "GRUB could not save the counter; attempts counted in userspace",
+        ),
+        (
+            STATE_MISMATCH,
+            "The boot order does not match the trial record; nothing was changed",
+        ),
+        (
+            STATE_STRAY_COUNTER,
+            "A counter existed without a trial; removed",
+        ),
+        (
+            STATE_BLOCK_RECREATED,
+            "The environment block was invalid and was recreated",
+        ),
+        (
+            STATE_ROLLBACK_FAILED,
+            "bootc rollback failed during a fallback",
+        ),
     ]
 }
 

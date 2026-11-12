@@ -319,7 +319,13 @@ impl Host for FakeHost {
             .timeline
             .iter()
             .filter(|at| at.uptime_ms <= now)
-            .map(|at| (at.unit.to_owned(), at.property.to_owned(), at.value.to_owned()))
+            .map(|at| {
+                (
+                    at.unit.to_owned(),
+                    at.property.to_owned(),
+                    at.value.to_owned(),
+                )
+            })
             .collect();
         for (unit, property, value) in due {
             self.set_unit(&unit, &property, &value);

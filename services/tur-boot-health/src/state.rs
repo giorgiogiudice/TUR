@@ -281,7 +281,7 @@ pub(crate) fn rejected_add(list: &mut Vec<Rejected>, entry: Rejected) {
 }
 
 /// What the user is told (design section 5.11).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Notice {
     pub(crate) event_id: String,
     /// `fallback`, `not-applied`, `refused` or `unhealthy`.
@@ -449,7 +449,10 @@ mod tests {
             details: vec![("attempts".to_owned(), Value::Int(3))],
         };
         let value = notice.to_json();
-        assert_eq!(value.get("acknowledged").and_then(Value::as_bool), Some(false));
+        assert_eq!(
+            value.get("acknowledged").and_then(Value::as_bool),
+            Some(false)
+        );
         assert_eq!(
             value.path(&["details", "attempts"]).and_then(Value::as_i64),
             Some(3)

@@ -223,7 +223,11 @@ fn probe_root(host: &mut dyn Host) -> Probe {
 }
 
 fn probe_paths(host: &mut dyn Host) -> Probe {
-    for path in ["/usr/lib/os-release", "/usr/lib/tur/release", "/boot/grub2/grubenv"] {
+    for path in [
+        "/usr/lib/os-release",
+        "/usr/lib/tur/release",
+        "/boot/grub2/grubenv",
+    ] {
         if !host.path_readable(path) {
             return Probe::Fail(format!("{path} is not readable"));
         }
@@ -318,12 +322,21 @@ fn stage(
         format!("Boot stage {word}: {what}"),
         vec![
             ("TUR_BOOT_STAGE".to_owned(), stage.to_owned()),
-            ("TUR_BOOT_STAGE_STATE".to_owned(), result.state.as_str().to_owned()),
+            (
+                "TUR_BOOT_STAGE_STATE".to_owned(),
+                result.state.as_str().to_owned(),
+            ),
             ("TUR_BOOT_MODE".to_owned(), classification.to_owned()),
             ("TUR_BOOT_TRIES_LEFT".to_owned(), tries),
-            ("TUR_STAGE_MONOTONIC_USEC".to_owned(), uptime_usec.to_string()),
+            (
+                "TUR_STAGE_MONOTONIC_USEC".to_owned(),
+                uptime_usec.to_string(),
+            ),
             ("TUR_DURATION_MS".to_owned(), result.duration_ms.to_string()),
-            ("TUR_ERROR_CODE".to_owned(), result.code.clone().unwrap_or_default()),
+            (
+                "TUR_ERROR_CODE".to_owned(),
+                result.code.clone().unwrap_or_default(),
+            ),
             ("TUR_CHECK".to_owned(), result.id.clone()),
             ("TUR_CHECK_DETAIL".to_owned(), result.detail.clone()),
         ],
@@ -463,7 +476,12 @@ pub(crate) fn run_gate(host: &mut dyn Host, config: &GateConfig, classification:
                 Probe::Wait(format!("{id} is {state}"))
             }
         });
-        let result = required("R3", "default target", &codes::HEALTH_DEFAULT_TARGET, outcome);
+        let result = required(
+            "R3",
+            "default target",
+            &codes::HEALTH_DEFAULT_TARGET,
+            outcome,
+        );
         failed |= result.state.bad();
         checks.push(result);
     }
@@ -475,7 +493,14 @@ pub(crate) fn run_gate(host: &mut dyn Host, config: &GateConfig, classification:
             units_active(host, &units)
         });
         let result = required("R4", "core units", &codes::HEALTH_CORE_UNITS, outcome);
-        stage(host, classification, "BOOT-080", "core system services", &result, sync);
+        stage(
+            host,
+            classification,
+            "BOOT-080",
+            "core system services",
+            &result,
+            sync,
+        );
         failed |= result.state.bad();
         checks.push(result);
     }
@@ -502,7 +527,14 @@ pub(crate) fn run_gate(host: &mut dyn Host, config: &GateConfig, classification:
             });
             required("R5", "TUR units", &codes::HEALTH_TUR_UNITS, outcome)
         };
-        stage(host, classification, "BOOT-130", "TUR session services", &result, sync);
+        stage(
+            host,
+            classification,
+            "BOOT-130",
+            "TUR session services",
+            &result,
+            sync,
+        );
         failed |= result.state.bad();
         checks.push(result);
     }
@@ -526,23 +558,45 @@ pub(crate) fn run_gate(host: &mut dyn Host, config: &GateConfig, classification:
                 Probe::Wait(format!("display-manager.service is {state}"))
             }
         });
-        let result = required("R6", "display manager", &codes::HEALTH_DISPLAY_MANAGER, outcome);
-        stage(host, classification, "BOOT-110", "display manager", &result, sync);
+        let result = required(
+            "R6",
+            "display manager",
+            &codes::HEALTH_DISPLAY_MANAGER,
+            outcome,
+        );
+        stage(
+            host,
+            classification,
+            "BOOT-110",
+            "display manager",
+            &result,
+            sync,
+        );
         failed |= result.state.bad();
         checks.push(result);
     }
     if !failed && !headless {
-        let outcome = wait_for(host, limits.seat_session, &mut |host: &mut dyn Host| {
-            match probe_seat(host) {
-                Ok((found, detail)) => {
-                    seat = Some(found);
-                    Probe::Pass(detail)
-                }
-                Err(detail) => Probe::Wait(detail),
-            }
-        });
+        let outcome =
+            wait_for(
+                host,
+                limits.seat_session,
+                &mut |host: &mut dyn Host| match probe_seat(host) {
+                    Ok((found, detail)) => {
+                        seat = Some(found);
+                        Probe::Pass(detail)
+                    }
+                    Err(detail) => Probe::Wait(detail),
+                },
+            );
         let result = required("R7", "seat session", &codes::HEALTH_SEAT_SESSION, outcome);
-        stage(host, classification, "BOOT-120", "Wayland compositor", &result, sync);
+        stage(
+            host,
+            classification,
+            "BOOT-120",
+            "Wayland compositor",
+            &result,
+            sync,
+        );
         failed |= result.state.bad();
         checks.push(result);
     }
@@ -583,7 +637,10 @@ pub(crate) fn run_gate(host: &mut dyn Host, config: &GateConfig, classification:
             ),
             Err(detail) => (
                 CheckState::Failed,
-                format!("the session did not stay up for {} s: {detail}", limits.hold),
+                format!(
+                    "the session did not stay up for {} s: {detail}",
+                    limits.hold
+                ),
             ),
         };
         let elapsed = host.uptime_ms().saturating_sub(start);
@@ -598,7 +655,14 @@ pub(crate) fn run_gate(host: &mut dyn Host, config: &GateConfig, classification:
             &codes::HEALTH_STABILITY,
             (state, detail, elapsed),
         );
-        stage(host, classification, "BOOT-140", "seat session healthy", &result, sync);
+        stage(
+            host,
+            classification,
+            "BOOT-140",
+            "seat session healthy",
+            &result,
+            sync,
+        );
         failed |= result.state.bad();
         checks.push(result);
     }
@@ -699,7 +763,8 @@ pub(crate) fn run_gate(host: &mut dyn Host, config: &GateConfig, classification:
             CheckState::Skipped
         },
         code: None,
-        detail: watchdog.unwrap_or_else(|| "this machine has no hardware watchdog device".to_owned()),
+        detail: watchdog
+            .unwrap_or_else(|| "this machine has no hardware watchdog device".to_owned()),
         duration_ms: 0,
     });
 

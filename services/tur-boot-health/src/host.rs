@@ -144,8 +144,11 @@ pub(crate) trait Host {
     // ---- what the gate looks at ----------------------------------------------------------
 
     /// Properties of a unit, from `systemctl show`.
-    fn unit_show(&mut self, unit: &str, properties: &[&str])
-    -> Result<BTreeMap<String, String>, String>;
+    fn unit_show(
+        &mut self,
+        unit: &str,
+        properties: &[&str],
+    ) -> Result<BTreeMap<String, String>, String>;
     /// The active session on `seat0`, if there is one.
     fn seat_session(&mut self) -> Result<Option<Session>, String>;
     /// The process ID of a compositor owned by a user, if one runs.

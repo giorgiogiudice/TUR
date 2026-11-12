@@ -198,9 +198,7 @@ impl SystemHost {
         let own = fs::read_link("/proc/self/ns/mnt").ok();
         let shared = fs::read_link("/proc/1/ns/mnt").ok();
         if own.is_none() || own == shared {
-            return Err(
-                "refusing to remount /boot outside a private mount namespace".to_owned(),
-            );
+            return Err("refusing to remount /boot outside a private mount namespace".to_owned());
         }
         let output = run("mount", &["-o", "remount,rw", "/boot"], seconds(20))?;
         if !output.ok() {
@@ -450,10 +448,7 @@ impl Host for SystemHost {
             ("MESSAGE".to_owned(), entry.message.clone()),
             ("MESSAGE_ID".to_owned(), entry.message_id.to_owned()),
             ("PRIORITY".to_owned(), entry.priority.to_string()),
-            (
-                "SYSLOG_IDENTIFIER".to_owned(),
-                "tur-boot-health".to_owned(),
-            ),
+            ("SYSLOG_IDENTIFIER".to_owned(), "tur-boot-health".to_owned()),
         ];
         fields.extend(entry.fields.iter().cloned());
         let mut datagram: Vec<u8> = Vec::new();
@@ -500,7 +495,8 @@ impl Host for SystemHost {
         unit: &str,
         names: &[&str],
     ) -> Result<BTreeMap<String, String>, String> {
-        let mut args: Vec<String> = vec!["show".to_owned(), "--no-pager".to_owned(), unit.to_owned()];
+        let mut args: Vec<String> =
+            vec!["show".to_owned(), "--no-pager".to_owned(), unit.to_owned()];
         for name in names {
             args.push("-p".to_owned());
             args.push((*name).to_owned());
@@ -635,7 +631,13 @@ impl Host for SystemHost {
     fn failed_units(&mut self) -> Vec<String> {
         let Ok(output) = run(
             "systemctl",
-            &["list-units", "--failed", "--plain", "--no-legend", "--no-pager"],
+            &[
+                "list-units",
+                "--failed",
+                "--plain",
+                "--no-legend",
+                "--no-pager",
+            ],
             seconds(20),
         ) else {
             return Vec::new();
@@ -741,7 +743,11 @@ mod tests {
     fn the_mount_behind_a_path_is_found() {
         assert_eq!(
             mount_of(MOUNTINFO, "/boot/grub2"),
-            Some(("/boot".to_owned(), "ext4".to_owned(), "/dev/vda3".to_owned()))
+            Some((
+                "/boot".to_owned(),
+                "ext4".to_owned(),
+                "/dev/vda3".to_owned()
+            ))
         );
         assert_eq!(
             mount_of(MOUNTINFO, "/"),
@@ -774,7 +780,10 @@ mod tests {
     fn properties_and_release_values_are_read() {
         let map = properties("ActiveState=active\nNRestarts=0\nnoise\nExecStart={ path=/x ; }\n");
         assert_eq!(map.get("ActiveState").map(String::as_str), Some("active"));
-        assert_eq!(map.get("ExecStart").map(String::as_str), Some("{ path=/x ; }"));
+        assert_eq!(
+            map.get("ExecStart").map(String::as_str),
+            Some("{ path=/x ; }")
+        );
         assert_eq!(map.len(), 3);
         let release = "TUR_VERSION=0.1.0\nTUR_BUILD_ID=20261112.gabc\nTUR_BUILD_ID_X=no\n";
         assert_eq!(

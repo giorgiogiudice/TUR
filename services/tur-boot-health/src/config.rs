@@ -383,10 +383,7 @@ mod tests {
 
     #[test]
     fn arrays_and_strings_are_strict() {
-        assert_eq!(
-            parse_item("[]").unwrap(),
-            Item::List(Vec::new())
-        );
+        assert_eq!(parse_item("[]").unwrap(), Item::List(Vec::new()));
         assert_eq!(
             parse_item("[\"a\", \"b\",]").unwrap(),
             Item::List(vec!["a".to_owned(), "b".to_owned()])
@@ -394,6 +391,9 @@ mod tests {
         assert!(parse_item("[1]").is_err());
         assert!(parse_item("[\"a\" \"b\"]").is_err());
         assert!(parse_item("\"a\" b").is_err());
-        assert_eq!(parse_item("\"a\\\"b\" # c").unwrap(), Item::Text("a\"b".to_owned()));
+        assert_eq!(
+            parse_item("\"a\\\"b\" # c").unwrap(),
+            Item::Text("a\"b".to_owned())
+        );
     }
 }
