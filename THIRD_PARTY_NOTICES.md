@@ -93,3 +93,9 @@ of their owners and are used only to identify the software concerned.
 TUR does not include Microsoft or Apple software or Google Mobile Services.
 Where TUR can run such software, you supply it yourself and are responsible for
 holding the right to use it.
+
+TUR does not include AI models. Its local AI service (`tur-ai-local`)
+downloads a model only when you ask, from the publisher's own repository, and
+shows the model's licence first; each model stays under its publisher's
+licence ([`services/tur-ai-local/catalogue/`](services/tur-ai-local/catalogue/)).
+TUR does not include vendor GPU compute libraries such as NVIDIA's CUDA.

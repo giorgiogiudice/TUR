@@ -225,13 +225,14 @@ fn import_verify_refuse_a_changed_file_and_remove() {
     let dir = scratch("lifecycle");
     let catalogue = tiny_catalogue(&dir);
     let models = dir.join("models");
+    let host = fixture_host("desktop-amd");
     let places = [
         "--catalogue",
         catalogue.to_str().expect("UTF-8"),
         "--models-dir",
         models.to_str().expect("UTF-8"),
         "--root",
-        fixture_host("desktop-amd").to_str().expect("UTF-8"),
+        host.to_str().expect("UTF-8"),
     ];
     let with = |command: &[&str]| -> Vec<String> {
         command
