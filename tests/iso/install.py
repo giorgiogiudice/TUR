@@ -299,7 +299,7 @@ def scenario_install(s: Session) -> None:
     facts["result"] = match.group(1)
     facts["result_line"] = match.group(0)
     s.step(f"installer result: {match.group(0)}")
-    s.wait_prompt("done" if facts["result"] == "success" else "failed", 60)
+    s.wait_prompt("finished" if facts["result"] == "success" else "failed", 60)
     s.shot("done" if facts["result"] == "success" else "failed")
     if facts["result"] != "success":
         raise Stop("the installer reported a failure")

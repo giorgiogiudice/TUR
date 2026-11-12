@@ -728,13 +728,13 @@ screen_install() {
             "the partitions an installed TUR has. Do not rely on this disk."
     fi
     install_seconds="${elapsed}"
-    state=done
+    state=finished
 }
 
 install_seconds=0
-screen_done() {
+screen_finished() {
     local i="${chosen}" line
-    screen done "TUR is installed"
+    screen finished "TUR is installed"
     say "TUR ${tur_version:-?} (build ${tur_build_id:-?}) was installed in ${install_seconds} s on:"
     say "  ${d_model[i]:-unnamed disk}, $(human "${d_size[i]}")"
     say "  ${d_byid[i]}"
@@ -780,7 +780,7 @@ while :; do
         disks) screen_disks ;;
         confirm) screen_confirm ;;
         install) screen_install ;;
-        done) screen_done ;;
+        finished) screen_finished ;;
         *) state=welcome ;;
     esac
 done
