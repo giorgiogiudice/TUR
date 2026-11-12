@@ -87,29 +87,40 @@ fn manifest_follows_the_addendum_format() {
             .strip_prefix("storage_")
             .expect("tool names start with storage_");
         assert!(!suffix.is_empty() && suffix.bytes().all(|b| b.is_ascii_lowercase() || b == b'_'));
-        assert!(
-            tool["description"]
-                .as_str()
-                .is_some_and(|text| text.ends_with('.')),
-            "{name}"
-        );
-        assert!(
-            tool["class"].as_u64().is_some_and(|class| class <= 4),
-            "{name}"
-        );
-        assert!(
-            tool["method"]
-                .as_str()
-                .is_some_and(|method| !method.is_empty()),
-            "{name}"
-        );
+        // The rules below are those of schemas/agent-tool-manifest.schema.json.
+        assert!(name.len() <= 64, "{name}");
+        let description = tool["description"].as_str().expect("a description");
+        assert!(description.ends_with('.'), "{name}");
+        assert!(description.chars().count() <= 1024, "{name}");
+        assert!(!description.chars().any(char::is_control), "{name}");
+        // Class 4 cannot be declared; this manifest stays within 0 and 1.
+        let class = tool["class"].as_u64().expect("class is a whole number");
+        assert!(class <= 1, "{name}: class {class}");
+        let method = tool["method"].as_str().expect("method is a string");
+        let first_ok = method.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_');
+        let rest_ok = method.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
+        assert!(first_ok && rest_ok, "{name}: {method}");
 
         let input = &tool["input_schema"];
+        assert!(keys(input).is_subset(&BTreeSet::from([
+            "type",
+            "properties",
+            "required",
+            "additionalProperties"
+        ])));
         assert_eq!(input["type"], "object", "{name}");
         assert_eq!(input["additionalProperties"], false, "{name}");
         let properties = input["properties"]
             .as_object()
             .expect("properties is an object");
+        for (property, schema) in properties {
+            assert!(keys(schema).is_subset(&BTreeSet::from(["type", "enum"])), "{name}");
+            assert_eq!(schema["type"], "string", "{name}: {property}");
+            if let Some(allowed) = schema.get("enum") {
+                let allowed = allowed.as_array().expect("enum is an array");
+                assert!(!allowed.is_empty() && allowed.iter().all(Value::is_string), "{name}");
+            }
+        }
         for required in input["required"].as_array().into_iter().flatten() {
             let required = required.as_str().expect("required names are strings");
             assert!(properties.contains_key(required), "{name}: {required}");

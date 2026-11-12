@@ -267,10 +267,12 @@ sees a view of that mount; no view mounts the filesystem again.
   applications store paths that contain them. With more than 22 volumes the
   rest get no letter.
 - A view of a read-only mount is read-only.
-- The Android mapping follows the Android runtime addendum (§7.2): nothing is
-  visible by default, and a grant is a bind of the canonical mount. That
-  addendum is not merged yet. The path inside Android and the ownership
-  mapping (bindfs or an ID-mapped mount) are proposals.
+- The Android mapping follows the Android runtime addendum
+  ([android-runtime.md](android-runtime.md) §7.2): nothing is visible by
+  default, and a grant is a bind of the canonical mount. The folder name
+  inside Android's shared storage (`Volumes/<name>`) is a proposal of this
+  component; the ownership mapping (bindfs or an ID-mapped mount) is an open
+  question of the addendum.
 - `MountPlan::verify` checks the invariants of a plan and the command line
   runs it before printing.
 
@@ -449,9 +451,12 @@ frozen**; it should be reviewed and frozen before other components depend on
 it.
 
 The service will orchestrate UDisks2 and libblockdev (§11.7) and will not
-replace them: block-device operations are requested from UDisks2, and
-`uos-storage` adds the policy decision, the canonical namespace and the
+replace them: block-device operations are requested from UDisks2 over D-Bus,
+and `uos-storage` adds the policy decision, the canonical namespace and the
 runtime views. It will be the only component that asks for mounts (§3.3).
+The licence review allows UDisks2 over D-Bus without constraint; linking
+`libudisks2` or `libblockdev` is an open licence question there, and a UDisks
+daemon module is ruled out.
 
 JSON results are documents of `schemas/storage-volume.schema.json`. A string
 of JSON is used instead of nested D-Bus dictionaries so that the D-Bus
@@ -493,7 +498,9 @@ identifier. Property: `SchemaVersion`.
 ## 11. Assistant tools, command line and schema
 
 `services/uos-storage/agent-tools.json` follows the manifest example in the AI
-control layer §11.
+control layer §11 and the rules of `schemas/agent-tool-manifest.schema.json`.
+The loader in `services/uos-agent` is the authority on manifests; this
+component's tests check the same rules by hand and do not run that loader.
 
 | Tool | Class | Method |
 |---|---|---|
@@ -563,13 +570,17 @@ binary prints for the fixtures against it.
 
 ## 14. Code that should move to a shared crate
 
-The installer also reads `lsblk` output. Nothing is shared in this change.
-Candidates for a shared crate once both exist: the `lsblk` JSON model and its
-tolerant number and flag parsing; the `blkid` export parser; the flattening of
-the device tree with de-duplication; the system-storage and removable rules;
-the stable device identity (`VolumeId` and its fallbacks); and safe printing
-of device-supplied text. `uos-core`'s `ErrorCode` would be easier to use with
-optional `serde` support.
+The installer core (`installer/uos-installer-core`, [installer.md](installer.md))
+also has a `Probe` trait over `lsblk --json --bytes --output-all` and its own
+tolerant parser. Nothing is shared in this change, so there are now two
+parsers of the same input. Candidates for one shared crate: the `lsblk` JSON
+model and its tolerant number and flag parsing; the `blkid` export parser; the
+flattening of the device tree with de-duplication; the rules for "in use",
+system storage and removable media, which the two components should not
+define differently; the stable device identity (`VolumeId` and its fallbacks,
+the installer's by-id paths); and safe printing of device-supplied text.
+`uos-core`'s `ErrorCode` would be easier to use with optional `serde`
+support.
 
 ## References
 
