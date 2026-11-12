@@ -1,6 +1,6 @@
 # ADR-0017: The update manager — TUR drives bootc in three steps, and stages nothing boot health cannot undo
 
-- **Status:** Proposed
+- **Status:** Accepted, with the amendment at the end
 - **Date:** 2026-11-12
 - **Specification sections:** §5.3, §15.1, §15.4, §16 (`org.tur.Update1`),
   §27.5; [ADR-0014](0014-boot-health-and-rollback.md). Design:
@@ -152,3 +152,25 @@ Not shown, and required before the decision is accepted as built:
   of `bootc status --format=json`, and the options named. The `update`
   workflow fails when bootc's version is no longer the one the fixtures were
   verified against.
+
+## Acceptance and amendment (12 November 2026)
+
+Accepted as the basis for the executing slice, with one change to the third
+point of the decision.
+
+"Nothing is staged that boot health could not undo" holds without exception
+for automatic work. For a person it holds while the running version is on
+trial. But where boot health's state is **unknown**, or attempts **cannot be
+counted**, refusing a person's request too would leave a machine with broken
+boot health unable to receive the update that repairs it. In those two cases a
+person may stage the update after a warning that says plainly that this
+update will not be undone automatically if it fails to start, and how to
+return to the previous version by hand from the boot menu. It is a class 3
+operation, never available to P@x on its own authority and never to a timer.
+The first slice refuses in these cases; the executing slice implements the
+warning and the override, with a scenario in the `rollback` workflow.
+
+Before anything executes, the proof named under Verification is required: a
+scenario that stages with `--download-only` and then `--from-downloaded`,
+including a moved tag and power cuts between the steps.
+

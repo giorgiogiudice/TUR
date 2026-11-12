@@ -11,7 +11,13 @@ Code in this repository that modifies an upstream project, or that is loaded
 into one whose licence requires it, is not under the TUR licence. It carries the
 upstream project's licence, lives in a marked directory with its own licence
 file, and is identified by the SPDX header of each file
-([ADR-0003](docs/adr/0003-licence.md)). No such code exists yet.
+([ADR-0003](docs/adr/0003-licence.md)). Such files today:
+
+- `image/third-party-licensed/grub/`: the GRUB configuration fragment that
+  counts boot attempts (BSD-3-Clause). It is in the image.
+- `services/tur-update/tests/fixtures/bootc-upstream/`: fourteen test samples
+  converted from bootc's source tree (MIT OR Apache-2.0). Test data only; not
+  in the image.
 
 ## Third-party software in the TUR image
 

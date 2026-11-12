@@ -2228,8 +2228,10 @@ Why this gives the guarantees without any change to KWin:
 ║     Go back to TUR 0.3.2                                                     ║
 ║                                                                              ║
 ║  What will happen                                                            ║
-║     The computer restarts into version 0.3.2. Your files, applications and   ║
-║     settings stay as they are. Version 0.4.0 is kept.                        ║
+║     The computer restarts into version 0.3.2. Your files and applications    ║
+║     stay as they are. System settings changed since the update (network      ║
+║     connections for all users, accounts, passwords) go back to what they     ║
+║     were. Version 0.4.0 is kept.                                             ║
 ║                                                                              ║
 ║  Asked by     P@x, in the task you started at 10:39                          ║
 ║  Service      TUR updates (org.tur.Update1 · Rollback)                       ║
@@ -3121,9 +3123,10 @@ Start-up
 prompt before authentication:
 
 > **Go back to TUR 0.3.2?**
-> The computer restarts into version 0.3.2. Your files, applications and
-> settings stay as they are. Version 0.4.0 is kept, and you can return to it
-> here.
+> The computer restarts into version 0.3.2. Your files and applications stay
+> as they are. System settings changed since the update (network connections
+> for all users, accounts, passwords) go back to what they were. Version 0.4.0
+> is kept, and you can return to it here.
 > [Cancel]   [Authenticate and restart]
 
 ### 11.2 Diagnostics and the support bundle
