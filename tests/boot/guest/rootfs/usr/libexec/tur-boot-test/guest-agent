@@ -30,9 +30,18 @@
 #                                  screenshot and power the guest off
 set -u
 
+# What the host passes through QEMU's fw_cfg appears under sysfs once the
+# driver is loaded. The files there report a size of zero, so test for
+# existence, not for content.
+modprobe qemu_fw_cfg 2> /dev/null
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+    if [ -d /sys/firmware/qemu_fw_cfg/by_name ]; then break; fi
+    sleep 1
+done
+
 # A scenario of the boot-health proof (tests/boot/rollback.py) names itself
 # through QEMU's fw_cfg. Those runs belong to the scenario agent.
-if [ -s /sys/firmware/qemu_fw_cfg/by_name/opt/org.tur/scenario/raw ]; then
+if [ -e /sys/firmware/qemu_fw_cfg/by_name/opt/org.tur/scenario/raw ]; then
     exec /usr/libexec/tur-boot-test/scenario-agent
 fi
 
@@ -40,7 +49,7 @@ fi
 # done. They ask for the run to end after the second boot (run-vm.py
 # --prepare-only), without the counted third boot.
 prepare_only=no
-if [ -s /sys/firmware/qemu_fw_cfg/by_name/opt/org.tur/prepare/raw ]; then prepare_only=yes; fi
+if [ -e /sys/firmware/qemu_fw_cfg/by_name/opt/org.tur/prepare/raw ]; then prepare_only=yes; fi
 
 port_name=org.tur.boottest
 port="/dev/virtio-ports/${port_name}"

@@ -82,7 +82,7 @@ PATTERNS = [
     ("fallback done", r"tur-boot-health: fallback: step 7 done"),
     ("stale", r"tur-boot-health: classify: .*-> stale"),
     ("rejected restart", r"tur-boot-health: classify: this version was rejected"),
-    ("finalize stopping", r"Stopping ostree-finalize-staged\.service"),
+    ("finalize stopping", r"Stopping ostree-finalize-staged"),
     ("retry unit", r"tur-boot-retry\.service|tur-boot-emergency-retry\.service"),
     ("watchdog", r"watchdog: watchdog0|Using hardware watchdog|iTCO_wdt"),
 ]
@@ -304,7 +304,7 @@ for _ms in (0, 200, 500, 1000, 2000):
         expect=[["trial/2", "none"]],
         final="either",
         outcome="either",
-        kills=[{"after": r"Stopping ostree-finalize-staged\.service", "delay": _ms / 1000.0, "what": f"{_ms} ms into finalisation"}],
+        kills=[{"after": r"Stopping ostree-finalize-staged", "delay": _ms / 1000.0, "what": f"{_ms} ms into finalisation"}],
         timeout=1200,
     )
 

@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/giorgiogiudice/TUR/schemas/boot-trial.schema.json",
+  "title": "TUR boot trial record",
+  "description": "/var/lib/tur/boot-health/trial.json: information about the trial of a new deployment that is in progress (boot-health-and-rollback.md, section 5.2). GRUB's environment block, not this file, is the authority for whether a trial is in progress. The file is written by one OS version and read by another, so a reader must ignore members it does not know. null means the value is not known.",
+  "type": "object",
+  "required": [
+    "schema_version", "event_id", "phase", "attempts_allowed", "armed_boot_id", "armed_at",
+    "trial_args", "previous", "new", "attempts", "grub_cannot_save", "reason"
+  ],
+  "$defs": {
+    "deployment": {
+      "description": "A deployment as bootc status describes it.",
+      "type": ["object", "null"],
+      "required": ["image", "transport", "digest", "version", "checksum", "serial", "stateroot", "build_id"],
+      "properties": {
+        "image": { "description": "Image reference.", "type": "string" },
+        "transport": { "description": "Transport of the reference, for example registry or oci.", "type": "string" },
+        "digest": { "description": "Manifest digest of the image.", "type": "string" },
+        "version": { "description": "The image's version label.", "type": "string" },
+        "checksum": { "description": "OSTree commit of the deployment.", "type": "string", "minLength": 1 },
+        "serial": { "description": "OSTree deployment serial.", "type": "integer", "minimum": 0 },
+        "stateroot": { "type": "string" },
+        "build_id": { "description": "TUR build ID read from the deployment.", "type": ["string", "null"] }
+      }
+    },
+    "attempt": {
+      "description": "One start of the new deployment that reached tur-boot-health classify.",
+      "type": "object",
+      "required": ["boot_id", "tries_left", "verdict", "failed_check", "error_code", "detail"],
+      "properties": {
+        "boot_id": { "description": "Boot ID as the journal writes it: 32 hexadecimal digits.", "type": "string" },
+        "tries_left": { "description": "tur.boot_tries_left of that boot.", "type": ["integer", "null"] },
+        "verdict": { "enum": ["pending", "passed", "failed"] },
+        "failed_check": { "description": "The first required check that failed, for example R5 or X:name.", "type": ["string", "null"] },
+        "error_code": { "type": ["string", "null"], "pattern": "^TUR-BOOT-[A-Z]+-[0-9]{3}$" },
+        "detail": { "type": ["string", "null"] }
+      }
+    }
+  },
+  "properties": {
+    "schema_version": { "const": 1 },
+    "event_id": { "description": "Identifies the trial in the history, the notice and the evidence directory.", "type": "string" },
+    "phase": {
+      "description": "trial from arming; reverting once the previous deployment has begun to make a fallback permanent (section 5.9).",
+      "enum": ["trial", "reverting"]
+    },
+    "attempts_allowed": { "type": "integer", "minimum": 1, "maximum": 9 },
+    "armed_boot_id": { "description": "The boot that armed the trial. Empty if the record was made after the fact.", "type": "string" },
+    "armed_at": { "description": "Seconds since the epoch when the trial was armed. For people; no decision depends on it.", "type": "integer" },
+    "trial_args": { "description": "Kernel arguments added to every trial boot.", "type": "string" },
+    "previous": { "$ref": "#/$defs/deployment" },
+    "new": { "$ref": "#/$defs/deployment" },
+    "attempts": { "type": "array", "items": { "$ref": "#/$defs/attempt" } },
+    "grub_cannot_save": {
+      "description": "GRUB announced a number of tries left that the environment block does not hold: attempts are counted in this record instead (section 5.6).",
+      "type": "boolean"
+    },
+    "reason": { "description": "Why the fallback began, once it has.", "enum": ["attempts", "loader", null] }
+  }
+}
