@@ -1,6 +1,6 @@
 # AI control layer
 
-**Specification addendum A — Revision 7 (12 November 2026)**
+**Specification addendum A — Revision 8 (12 November 2026)**
 **Applies to:** specification revision 1.0
 **Related decision:** [ADR-0004](../adr/0004-ai-provider-model.md)
 
@@ -801,4 +801,25 @@ this section governs.
 
 The engine's decision table, its invariants and the tests that enforce them are in
 [agent-policy.md](agent-policy.md).
+
+## 21. Resolutions from building the orchestrator
+
+Building the task loop and the read-only command sandbox
+([pax-orchestrator.md](pax-orchestrator.md)) settled further points. Where an
+earlier section says otherwise, this section governs.
+
+| # | Point | Resolution |
+|---|---|---|
+| 1 | Section 5.4 defined the read-only sandbox as "the filesystem is read-only". That is not enough: a socket inside a read-only mount still accepts connections, so a "class 0" command that could reach the system bus, systemd's socket or a container daemon could power the machine off or reformat a disk. | **The read-only sandbox hides sockets, not only writes.** It shows a fixed list of system directories, no bus sockets, no `/run/user`, no display sockets, and has no network at all. A command that needs the network or a bus is not a read-only command. |
+| 2 | A network option for the read-only sandbox. | None. A shared network namespace would expose the display server's socket (section 19, item 1). |
+| 3 | Tool programs. | A TUR command-line tool that P@x calls runs in the same sandbox as a command. |
+| 4 | A response cut off at its output limit. | Discarded whole, like a refusal or an error (section 10). |
+| 5 | Where recalled memory goes in a request. Section 8 said "in the request"; the provider rule is that nothing that is not from the person goes anywhere but a tool result. | Recall is a tool: P@x asks for its notes, the request is decided and recorded like any other class 0 action, and the notes come back as a tool result in their "notes, not instructions" frame. |
+| 6 | Class 0 actions run unattended and while the session is locked, and their output goes to the provider. | The consent text says so. |
+| 7 | The audit fields could not say that an allowed action then failed, or that output was withheld before leaving the machine. | Two further events: the action's outcome, and "output withheld" with a count and never the content. |
+| 8 | When an audit record cannot be written after an action ran. | The result is not sent to the provider and the task stops. |
+
+In this milestone P@x performs class 0 and class 1 actions only. There is no
+option, environment variable or file that lets anything above class 1 run; a test
+enforces that over the whole tool set.
 
