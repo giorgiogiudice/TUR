@@ -56,13 +56,13 @@ jobs:
     name: Fedora 45 llama-server, driven by tur-ai-local
     runs-on: ubuntu-24.04
     timeout-minutes: 170
-    env:
-      WORK: ${{ runner.temp }}/local-ai
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Room on the disk
         run: |
+          WORK="$RUNNER_TEMP/local-ai"
+          echo "WORK=$WORK" >> "$GITHUB_ENV"
           sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache/CodeQL
           df -h / | tail -1
           mkdir -p "$WORK/bin" "$WORK/data" "$WORK/run" "$WORK/evidence"
@@ -137,7 +137,8 @@ jobs:
             ls -la /usr/lib64/libggml* /usr/bin/llama-server
             llama-server --version 2>&1 | tail -n 3 || true
             cat /etc/os-release | head -n 3' | tee "$WORK/evidence/fedora-llama-cpp.txt"
-          docker exec fedora cp /tmp/added "$WORK/evidence/fedora-llama-cpp-added-packages.tsv"
+          docker exec fedora bash -c 'rpm -q --qf "%{NAME}\t%{VERSION}-%{RELEASE}\t%{SIZE}\t%{LICENSE}\n" $(cut -f1 /tmp/added)' \
+            > "$WORK/evidence/fedora-llama-cpp-added-packages.tsv"
 
       - name: The proof, with the smallest model
         run: |
@@ -175,13 +176,13 @@ jobs:
     name: Engine comparison — llama.cpp's own build and Fedora's Ollama
     runs-on: ubuntu-24.04
     timeout-minutes: 120
-    env:
-      WORK: ${{ runner.temp }}/local-ai
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Room on the disk
         run: |
+          WORK="$RUNNER_TEMP/local-ai"
+          echo "WORK=$WORK" >> "$GITHUB_ENV"
           sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache/CodeQL
           mkdir -p "$WORK/bin" "$WORK/data" "$WORK/run" "$WORK/evidence"
 
@@ -242,6 +243,8 @@ jobs:
             awk -F"\t" "{s+=\$2} END {printf \"installed size of the added packages: %.0f MB\n\", s/1e6}" /tmp/added
             cat /tmp/added; rpm -q --qf "%{LICENSE}\n" ollama-base; ls -la /usr/lib/ollama; ollama --version 2>&1 | tail -n 2' \
             | tee "$WORK/evidence/fedora-ollama.txt"
+          docker exec fedora bash -c 'rpm -q --qf "%{NAME}\t%{VERSION}-%{RELEASE}\t%{SIZE}\t%{LICENSE}\n" $(cut -f1 /tmp/added)' \
+            > "$WORK/evidence/fedora-ollama-added-packages.tsv"
           docker exec -d -e OLLAMA_HOST=127.0.0.1:11434 -e OLLAMA_MODELS=/tmp/ollama-models -e OLLAMA_NO_CLOUD=1 \
             -e OLLAMA_KEEP_ALIVE=10m fedora bash -c 'ollama serve > /tmp/ollama.log 2>&1'
           for _ in $(seq 1 60); do curl -fsS http://127.0.0.1:11434/api/version && break; sleep 1; done
@@ -282,13 +285,14 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 150
     env:
-      WORK: ${{ runner.temp }}/local-ai
       DEBIAN_FRONTEND: noninteractive
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Room on the disk
         run: |
+          WORK="$RUNNER_TEMP/local-ai"
+          echo "WORK=$WORK" >> "$GITHUB_ENV"
           sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache/CodeQL
           mkdir -p "$WORK/bin" "$WORK/data" "$WORK/run" "$WORK/evidence" "$WORK/pax"
 

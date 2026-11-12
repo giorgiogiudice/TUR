@@ -336,6 +336,7 @@ fn start_serving(
             let _ = stderr.read_to_string(&mut errors);
         }
         let _ = child.kill();
+        let _ = child.wait();
         panic!("serve printed no ready event: {errors}");
     }
     // Keep reading the rest in the child's own pipe after the test reads

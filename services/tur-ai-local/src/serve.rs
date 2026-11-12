@@ -554,7 +554,7 @@ pub enum StopOutcome {
     /// Nothing was running.
     NotRunning,
     /// The served model stopped.
-    Stopped(State),
+    Stopped(Box<State>),
 }
 
 /// Ask the supervisor to stop and wait for it, up to `timeout`.
@@ -574,7 +574,7 @@ pub fn request_stop(runtime: &Path, timeout: Duration) -> Result<StopOutcome, Se
     let started = Instant::now();
     while started.elapsed() < timeout {
         if !runtime.join(STATE_FILE).exists() || !supervisor_running(&state) {
-            return Ok(StopOutcome::Stopped(state));
+            return Ok(StopOutcome::Stopped(Box::new(state)));
         }
         std::thread::sleep(Duration::from_millis(200));
     }
