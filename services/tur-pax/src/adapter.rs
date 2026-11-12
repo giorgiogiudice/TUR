@@ -119,6 +119,8 @@ struct RawArgument {
     flag: Option<String>,
     #[serde(default)]
     when: Option<String>,
+    #[serde(default)]
+    each: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -155,7 +157,21 @@ pub enum ArgumentTemplate {
         /// The true-or-false input that switches it on.
         when: String,
     },
+    /// An option given once for each item of a list input, each as the one
+    /// argument `--option=item`: `{ "option": "--category", "each":
+    /// "categories" }`. The items are text or whole numbers. Left out when
+    /// the input is absent or the list is empty. At most
+    /// [`EACH_ITEMS_MAX`] items.
+    Each {
+        /// The option, such as `--category`.
+        option: String,
+        /// The list input whose items follow the `=`, one argument each.
+        each: String,
+    },
 }
+
+/// The most items a list input may place on a command line.
+pub const EACH_ITEMS_MAX: usize = 64;
 
 /// A fixed command whose standard output becomes the standard input of an
 /// adapter's program. It takes nothing from the tool's input.
@@ -303,16 +319,20 @@ fn convert(raw: RawAdapter, at: &str) -> Result<Adapter, Vec<Fault>> {
             argument.option,
             argument.flag,
             argument.when,
+            argument.each,
         ) {
-            (Some(literal), None, None, None, None) if is_literal(&literal) => {
+            (Some(literal), None, None, None, None, None) if is_literal(&literal) => {
                 Some(ArgumentTemplate::Literal(literal))
             }
-            (None, Some(input), None, None, None) => Some(ArgumentTemplate::Input(input)),
-            (None, Some(input), Some(option), None, None) if is_option_name(&option) => {
+            (None, Some(input), None, None, None, None) => Some(ArgumentTemplate::Input(input)),
+            (None, Some(input), Some(option), None, None, None) if is_option_name(&option) => {
                 Some(ArgumentTemplate::Option { option, input })
             }
-            (None, None, None, Some(flag), Some(when)) if is_option_name(&flag) => {
+            (None, None, None, Some(flag), Some(when), None) if is_option_name(&flag) => {
                 Some(ArgumentTemplate::Flag { flag, when })
+            }
+            (None, None, Some(option), None, None, Some(each)) if is_option_name(&option) => {
+                Some(ArgumentTemplate::Each { option, each })
             }
             _ => None,
         };
@@ -322,8 +342,8 @@ fn convert(raw: RawAdapter, at: &str) -> Result<Adapter, Vec<Fault>> {
                 TaskCode::AdapterArgument,
                 format!(
                     "{place} must be one of {{\"literal\"}}, {{\"input\"}}, \
-                     {{\"option\", \"input\"}} or {{\"flag\", \"when\"}}, with an option of the \
-                     form --name"
+                     {{\"option\", \"input\"}}, {{\"option\", \"each\"}} or \
+                     {{\"flag\", \"when\"}}, with an option of the form --name"
                 ),
             )),
         }
@@ -456,6 +476,19 @@ impl Adapter {
                     matches!(kind_of(properties, input), Some("string" | "integer"))
                 }
                 ArgumentTemplate::Flag { when, .. } => kind_of(properties, when) == Some("boolean"),
+                ArgumentTemplate::Each { each, .. } => {
+                    // A list whose items are declared as text or whole
+                    // numbers.
+                    kind_of(properties, each) == Some("array")
+                        && matches!(
+                            properties
+                                .and_then(|known| known.get(each))
+                                .and_then(|schema| schema.get("items"))
+                                .and_then(|items| items.get("type"))
+                                .and_then(Value::as_str),
+                            Some("string" | "integer")
+                        )
+                }
             };
             if !fits {
                 problems.push(fault(
@@ -505,6 +538,26 @@ impl Adapter {
                         argv.push(flag.clone());
                     }
                 }
+                ArgumentTemplate::Each { option, each } => match input.get(each) {
+                    None => {}
+                    Some(Value::Array(items)) => {
+                        if items.len() > EACH_ITEMS_MAX {
+                            return Err(refused("a list with too many items was refused"));
+                        }
+                        for item in items {
+                            // An item is attached to the option, so it can
+                            // never be read as an option of its own.
+                            if let Some(value) = text_of(Some(item))? {
+                                argv.push(format!("{option}={value}"));
+                            }
+                        }
+                    }
+                    Some(_) => {
+                        return Err(refused(
+                            "a value of a kind that cannot be passed to a program was refused",
+                        ));
+                    }
+                },
             }
         }
         Ok(argv)
@@ -613,6 +666,96 @@ mod tests {
 
     fn input(value: Value) -> Map<String, Value> {
         value.as_object().cloned().expect("an object")
+    }
+
+    #[test]
+    fn an_option_is_given_once_for_each_item_of_a_list() {
+        let with = |arguments: &str| {
+            AdapterFile::from_json(&format!(
+                r#"{{"schema_version":1,"service":"org.tur.Example1","adapters":[
+                    {{"tool":"example_show","kind":"command","program":"/usr/bin/tur-example",
+                      "arguments":{arguments}}}]}}"#
+            ))
+        };
+        let file = with(
+            r#"[{"literal":"list"},{"option":"--tag","each":"tags"},{"literal":"--json"}]"#,
+        )
+        .expect("a valid adapter file");
+        let adapter = &file.adapters()[0];
+        assert_eq!(
+            adapter.arguments()[1],
+            ArgumentTemplate::Each {
+                option: "--tag".to_owned(),
+                each: "tags".to_owned()
+            }
+        );
+        // It fits a tool that declares the input as a list of text.
+        let manifest = ToolManifest::from_json(MANIFEST).expect("a valid manifest");
+        let tool = &manifest.tools()[0];
+        assert!(adapter.check_against(tool).is_empty());
+
+        let argv = |value: Value| adapter.argv(&input(value));
+        // One argument for each item, each attached to the option, so that
+        // an item can never be read as an option of its own.
+        assert_eq!(
+            argv(json!({ "tags": ["a", "b c", "--json", "-x"] })).expect("a command line"),
+            [
+                "/usr/bin/tur-example",
+                "list",
+                "--tag=a",
+                "--tag=b c",
+                "--tag=--json",
+                "--tag=-x",
+                "--json"
+            ]
+        );
+        // Absent or empty: the option is left out.
+        for value in [json!({}), json!({ "tags": [] })] {
+            assert_eq!(
+                argv(value).expect("a command line"),
+                ["/usr/bin/tur-example", "list", "--json"]
+            );
+        }
+        // Whole numbers are items too.
+        assert_eq!(
+            argv(json!({ "tags": [1, 2] })).expect("a command line")[2..4],
+            ["--tag=1", "--tag=2"]
+        );
+        // Refused: an item with a control character, an item that is not
+        // text or a whole number, a value that is not a list, too many.
+        for value in [
+            json!({ "tags": ["a\nb"] }),
+            json!({ "tags": [["a"]] }),
+            json!({ "tags": [true] }),
+            json!({ "tags": [1.5] }),
+            json!({ "tags": "a" }),
+            json!({ "tags": vec!["a"; EACH_ITEMS_MAX + 1] }),
+        ] {
+            let refused = argv(value.clone()).expect_err("the value is refused");
+            assert_eq!(refused.code.as_str(), "TUR-AI-TOOL-002", "{value}");
+        }
+        assert!(argv(json!({ "tags": vec!["a"; EACH_ITEMS_MAX] })).is_ok());
+
+        // It does not fit an input that is not a list, or one the tool does
+        // not declare.
+        for arguments in [
+            r#"[{"option":"--tag","each":"id"}]"#,
+            r#"[{"option":"--tag","each":"redact"}]"#,
+            r#"[{"option":"--tag","each":"missing"}]"#,
+        ] {
+            let file = with(arguments).expect("a valid adapter file");
+            assert_eq!(file.adapters()[0].check_against(tool).len(), 1, "{arguments}");
+        }
+        // And it is one form of its own: with an option, and nothing else.
+        for arguments in [
+            r#"[{"each":"tags"}]"#,
+            r#"[{"option":"--tag","each":"tags","input":"id"}]"#,
+            r#"[{"flag":"--tag","each":"tags"}]"#,
+            r#"[{"option":"tag","each":"tags"}]"#,
+            r#"[{"literal":"x","each":"tags"}]"#,
+        ] {
+            assert!(with(arguments).is_err(), "{arguments}");
+        }
     }
 
     #[test]

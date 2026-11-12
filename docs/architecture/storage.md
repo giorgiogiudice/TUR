@@ -499,8 +499,23 @@ identifier. Property: `SchemaVersion`.
 
 `services/tur-storage/agent-tools.json` follows the manifest example in the AI
 control layer §11 and the rules of `schemas/agent-tool-manifest.schema.json`.
-The loader in `services/tur-pax` is the authority on manifests; this
-component's tests check the same rules by hand and do not run that loader.
+The loader in `services/tur-pax` is the authority on manifests.
+`tests/interfaces.rs` checks the same rules by hand; `tests/agent_tools.rs`
+runs that loader on the manifest and on the adapters beside it.
+
+The adapters, `services/tur-storage/agent-tools.adapter.json`, say how P@x
+performs a tool today, while no D-Bus service exists: by running this
+component's program in P@x's read-only sandbox
+([pax-orchestrator.md](pax-orchestrator.md), section 4).
+
+| Tool | Performed by |
+|---|---|
+| `storage_list_volumes` | `tur-storage volumes --live --json` |
+| `storage_preview_mount` | `tur-storage decide --live --json --access=<access> --volume=<volume_id>` |
+| `storage_mount`, `storage_unmount`, `storage_unlock` | Nothing: no adapter. They wait for the service that mounts, so P@x is not offered them. |
+
+`tests/agent_tools.rs` holds each command line against the help of the
+program it has just built, and runs both tools against a recorded machine.
 
 | Tool | Class | Method |
 |---|---|---|
@@ -515,13 +530,33 @@ this service as tools or as D-Bus methods. Enabling APFS writing is class 4
 and cannot be expressed. The assistant passes a volume identifier and an
 access level, never a device path, an option or a secret.
 
-Command line (input from files only; see `tur-storage --help`):
+Command line (see `tur-storage --help`):
 
 ```sh
-tur-storage volumes --from lsblk.json [--props blkid.export] [--user NAME] [--json]
-tur-storage decide --from lsblk.json --volume ID [--access ro|rw] [--json]
+tur-storage volumes (--from lsblk.json | --live) [--props blkid.export] [--user NAME] [--json]
+tur-storage decide (--from lsblk.json | --live) --volume ID [--access read-only|read-write] [--json]
 tur-storage capabilities --from-fs ntfs --to-fs exfat [--json]
 ```
+
+The block devices come from a file captured earlier (`--from`) or from this
+machine (`--live`); exactly one of the two is given. With `--from` the program
+looks at no device and runs no other program. With `--live` it runs one
+program, `/usr/bin/lsblk --json --bytes --output-all`, with no standard input
+and an environment of one fixed variable, and reads what it prints
+(`LiveProbe`, behind the same `Probe` trait as the snapshot). `lsblk` with
+those arguments lists block devices and changes nothing. The program runs
+nothing else, opens no device itself and never mounts, unlocks or writes. A
+`lsblk` that cannot be run, does not exit with 0 or prints something else than
+the document is `TUR-STORAGE-PROBE-001`, and nothing is listed.
+
+The live probe has no `blkid` properties. On a live system the state of an
+NTFS volume and the journal of an HFS+ volume are therefore unknown, which the
+decision treats as unsafe: such a volume is previewed as read-only or refused,
+never as read/write. `--props` can still name a file of properties.
+
+Access has one spelling, the one of the manifest and of the JSON output:
+`read-only` and `read-write`. The former `ro` and `rw` are still accepted and
+no longer shown in the help.
 
 Exit status 0 on success (whatever the decision), 1 for unusable input or an
 unknown volume, 2 for a usage error. JSON output conforms to
@@ -534,7 +569,7 @@ binary prints for the fixtures against it.
 |---|---|
 | Any real mount, unmount or bind | Not implemented |
 | The D-Bus service, polkit actions, UDisks2 integration | Not implemented; contract proposed above |
-| A live probe (udev, libblkid, UDisks2) | Not implemented; only the snapshot probe exists |
+| A live probe through udev, libblkid or UDisks2 | Not implemented. The live probe that exists runs `lsblk` and nothing else; it has not been run on real hardware, only on the CI runner, and its unit tests use a stand-in for `lsblk` |
 | Detection of NTFS state and HFS+ journal | Not implemented; proposal in section 8 |
 | LUKS unlocking, BitLocker | Not implemented |
 | APFS beyond the policy entry (no `apfs-fuse` packaging or invocation) | Not implemented; deferred by ADR-0007 |

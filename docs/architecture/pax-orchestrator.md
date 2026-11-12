@@ -233,9 +233,12 @@ event.
 | Tool | Class | Performed by | Manifest |
 |---|---|---|---|
 | `diag_get_status` | 0 | `tur-diag status --json` | `services/tur-diagnostics` |
-| `device_get_inventory` | 0 | `tur-device inventory --json --redact` | `services/tur-device-manager` |
+| `device_list` | 0 | `tur-device list --json [--category=<c>]…` | `services/tur-device-manager` |
+| `device_get` | 0 | `tur-device get --json -- <id>` | the same |
+| `device_get_inventory` | 0 | `tur-device inventory --json --redact` | the same |
 | `device_list_problems` | 0 | `tur-device problems --json` | the same |
-| `storage_list_volumes` | 0 | `lsblk --json --bytes --output-all`, fed to `tur-storage volumes --from /dev/stdin --json` | `services/tur-storage` |
+| `storage_list_volumes` | 0 | `tur-storage volumes --live --json`, which itself runs `lsblk --json --bytes --output-all` | `services/tur-storage` |
+| `storage_preview_mount` | 0 | `tur-storage decide --live --json --access=<access> --volume=<id>` | the same |
 | `catalogue_search` | 0 | `tur-catalogue --catalogue /usr/share/tur/catalogue search --json -- <query>` | `services/tur-catalogue` |
 | `catalogue_show` | 0 | `tur-catalogue … show --json -- <id>` | the same |
 | `catalogue_route` | 0 | `tur-catalogue … route --json -- <id>` | the same |
@@ -274,9 +277,9 @@ services. Nothing installs the tool sets on the image yet; the `pax` workflow
 installs them on its runner and lets `tur-pax` find them by default.
 
 Declared by a component but not offered, because no program performs them yet:
-`device_list`, `device_get`, `storage_preview_mount`, `storage_mount`,
-`storage_unmount`, `storage_unlock`. Among them is every shipped tool above
-class 0. See [section 12](#12-what-other-components-need).
+`storage_mount`, `storage_unmount`, `storage_unlock`. They are every shipped
+tool above class 0, and they wait for the service that mounts: `tur-storage`
+the program never mounts, unlocks or writes.
 
 ### 4.3 The adapter format
 
@@ -324,6 +327,7 @@ The loader (`adapter.rs`, `registry.rs`) is authoritative.
 | `{ "literal": "text" }` | `text` |
 | `{ "input": "name" }` | The value of a string or integer input, as one argument. Left out if the input is absent. **Refused if the value begins with `-`.** |
 | `{ "option": "--opt", "input": "name" }` | The one argument `--opt=value`. Left out if the input is absent. |
+| `{ "option": "--opt", "each": "name" }` | `--opt=item` once for each item of an array input of strings or integers. Left out if the input is absent or empty. At most 64 items. |
 | `{ "flag": "--opt", "when": "name" }` | `--opt`, if the boolean input is true. |
 
 What makes this safe to drive from a model's output: the command line is an
@@ -666,7 +670,7 @@ change: they were accepted when the two components were added.
 |---|---|---|
 | `tur-pax-providers` | Done: tool-call arguments are parsed strictly and the argument text comes with the call (`ToolCallEnd.arguments_text`). | – |
 | `tur-diagnostics`, `tur-catalogue`, `tur-runtime` | Done: each ships `agent-tools.json` and `agent-tools.adapter.json`, as `tur-storage` and `tur-device-manager` do. | – |
-| `tur-storage` | A way to list volumes of the live system (`volumes` takes only a captured `lsblk` file), and an access spelling shared by the manifest (`read-only`) and the command line (`ro`). | The adapter feeds `lsblk` to `volumes --from /dev/stdin`. `storage_preview_mount` has no adapter. |
+| `tur-storage` | Done: `volumes --live` and `decide --live` ask `lsblk` about this machine; access is spelled `read-only` and `read-write` on the command line as in the manifest; `storage_preview_mount` has an adapter. | – |
 | `tur-device-manager` | Command-line forms for `device_list` (with categories) and `device_get`. | Not offered. |
 | The image | Install each component's two tool files to `/usr/share/tur/pax/tools/<component>/`, the catalogue to `/usr/share/tur/catalogue`; make sure `bubblewrap` and `prlimit` are present. | `tur-pax run --tools DIR`. |
 | `agent-policy.md` | Done: section 9 points here for `run` and `chat`. | – |

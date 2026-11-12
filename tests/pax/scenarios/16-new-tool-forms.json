@@ -1,0 +1,50 @@
+{
+  "name": "new-tool-forms",
+  "what": "The command-line forms that were missing, performed by their components' own adapters on the machine the test runs on: tur-device list, with and without categories the model names; tur-device get for an identifier no device has; tur-storage decide for a volume the machine does not have; and tur-storage volumes, which now asks lsblk itself.",
+  "request": "Which devices and volumes does this computer have?",
+  "turns": [
+    {
+      "text": "I will list the devices and the volumes.",
+      "calls": [
+        {
+          "id": "call_list",
+          "name": "device_list",
+          "arguments": {}
+        },
+        {
+          "id": "call_filtered",
+          "name": "device_list",
+          "arguments": {
+            "categories": [
+              "pci",
+              "usb"
+            ]
+          }
+        },
+        {
+          "id": "call_missing",
+          "name": "device_get",
+          "arguments": {
+            "id": "pci-not-on-this-machine"
+          }
+        },
+        {
+          "id": "call_preview",
+          "name": "storage_preview_mount",
+          "arguments": {
+            "volume_id": "fs-not-on-this-machine",
+            "access": "read-only"
+          }
+        },
+        {
+          "id": "call_volumes",
+          "name": "storage_list_volumes",
+          "arguments": {}
+        }
+      ]
+    },
+    {
+      "text": "The devices and the volumes are listed above. One device and one volume I asked about do not exist."
+    }
+  ]
+}

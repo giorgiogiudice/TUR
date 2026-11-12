@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/giorgiogiudice/TUR/schemas/pax-tool-adapter.schema.json",
   "title": "P@x tool adapters",
-  "description": "How P@x performs the tools of one service. A tool manifest (agent-tool-manifest.schema.json) says what a tool is: its name, its class and the shape of its input. An adapter says how the tool is performed today, while the D-Bus services the manifests name do not exist: by running a TUR command-line program in the read-only sandbox and returning what it prints. An adapter never adds a tool and never states a class. The loader in services/tur-pax (src/adapter.rs, src/registry.rs) is authoritative. It also enforces rules this schema cannot express: the service and every tool must be declared by a loaded manifest; a tool has at most one adapter; every input an argument refers to must be declared by the tool's input schema, with type string or integer for 'input' and boolean for 'when'; and a path may have no empty, '.' or '..' component and no control character.",
+  "description": "How P@x performs the tools of one service. A tool manifest (agent-tool-manifest.schema.json) says what a tool is: its name, its class and the shape of its input. An adapter says how the tool is performed today, while the D-Bus services the manifests name do not exist: by running a TUR command-line program in the read-only sandbox and returning what it prints. An adapter never adds a tool and never states a class. The loader in services/tur-pax (src/adapter.rs, src/registry.rs) is authoritative. It also enforces rules this schema cannot express: the service and every tool must be declared by a loaded manifest; a tool has at most one adapter; every input an argument refers to must be declared by the tool's input schema, with type string or integer for 'input', boolean for 'when' and array of string or integer for 'each'; and a path may have no empty, '.' or '..' component and no control character.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "service", "adapters"],
@@ -19,7 +19,7 @@
       "pattern": "^--[a-z][a-z0-9-]{0,63}$"
     },
     "argument": {
-      "description": "One argument of the command line. Exactly one of four forms. {literal}: a fixed argument. {input}: the value of a string or integer input of the tool, as one argument; left out when the input is absent; refused when the value begins with '-'. {option, input}: the value attached to an option, as the one argument --option=value; left out when the input is absent. {flag, when}: a fixed option that is present when a boolean input is true. A value taken from an input is refused when it holds a control character or is longer than 4096 bytes. No form joins values into one string, and nothing is ever given to a shell.",
+      "description": "One argument of the command line. Exactly one of five forms. {literal}: a fixed argument. {input}: the value of a string or integer input of the tool, as one argument; left out when the input is absent; refused when the value begins with '-'. {option, input}: the value attached to an option, as the one argument --option=value; left out when the input is absent. {option, each}: the option given once for each item of an array input of strings or integers, each as the one argument --option=item; left out when the input is absent or empty; at most 64 items. {flag, when}: a fixed option that is present when a boolean input is true. A value taken from an input is refused when it holds a control character or is longer than 4096 bytes. No form joins values into one string, and nothing is ever given to a shell.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -37,12 +37,17 @@
         "when": {
           "description": "The name of a boolean input property of the tool.",
           "type": "string"
+        },
+        "each": {
+          "description": "The name of an array input property of the tool, whose items are strings or integers.",
+          "type": "string"
         }
       },
       "oneOf": [
         { "required": ["literal"], "maxProperties": 1 },
         { "required": ["input"], "maxProperties": 1 },
         { "required": ["option", "input"], "maxProperties": 2 },
+        { "required": ["option", "each"], "maxProperties": 2 },
         { "required": ["flag", "when"], "maxProperties": 2 }
       ]
     },

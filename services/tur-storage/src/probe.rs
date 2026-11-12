@@ -6,8 +6,12 @@
 //! things: the block-device tree in the shape of
 //! `lsblk --json --bytes --output-all`, and `blkid`-style `KEY=value`
 //! properties for a device. [`SnapshotProbe`] answers from text captured
-//! earlier, which is what the tests and the command line use. A later change
-//! adds a live probe behind the same trait.
+//! earlier, which is what the tests use. [`LiveProbe`] answers for the
+//! machine it runs on, and does so by running exactly one program, `lsblk`,
+//! with exactly those arguments: a program that reads. It runs nothing else,
+//! opens no device itself and never writes. It has no `blkid` properties, so
+//! on a live system an NTFS volume's state and an HFS+ volume's journal are
+//! unknown, which the decision treats as unsafe.
 //!
 //! Facts that neither tool reports are passed as extra properties with a
 //! `TUR_` prefix:
@@ -42,6 +46,9 @@ pub trait Probe {
 /// Why probe input could not be used.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProbeError {
+    /// The program the live probe runs could not be run, failed, or printed
+    /// something that cannot be used.
+    Command(String),
     /// The lsblk document is not valid JSON or does not have the expected shape.
     Lsblk(String),
     /// The property text is malformed.
@@ -56,6 +63,7 @@ pub enum ProbeError {
 impl fmt::Display for ProbeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            ProbeError::Command(message) => write!(f, "live probe: {message}"),
             ProbeError::Lsblk(message) => write!(f, "lsblk JSON: {message}"),
             ProbeError::Properties { line, message } => {
                 write!(f, "property file line {line}: {message}")
@@ -310,9 +318,289 @@ impl Probe for SnapshotProbe {
     }
 }
 
+/// What a program printed and how it ended.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CommandOutput {
+    /// The exit status; `None` if a signal ended the program.
+    pub status: Option<i32>,
+    /// What it wrote to standard output.
+    pub stdout: Vec<u8>,
+    /// What it wrote to standard error.
+    pub stderr: Vec<u8>,
+}
+
+/// Runs a program and waits for it. The live probe is handed one, so that a
+/// test can stand in for the machine and can see exactly what would be run.
+pub trait CommandRunner {
+    /// Run `program` with `arguments`. No shell is involved.
+    ///
+    /// # Errors
+    ///
+    /// The program could not be started.
+    fn run(&self, program: &str, arguments: &[&str]) -> Result<CommandOutput, String>;
+}
+
+/// The runner for the real machine. It passes nothing of its own
+/// surroundings on: the program gets no standard input and an environment
+/// of one fixed variable.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct SystemRunner;
+
+impl CommandRunner for SystemRunner {
+    fn run(&self, program: &str, arguments: &[&str]) -> Result<CommandOutput, String> {
+        let output = std::process::Command::new(program)
+            .args(arguments)
+            .stdin(std::process::Stdio::null())
+            .env_clear()
+            .env("LC_ALL", "C.UTF-8")
+            .output()
+            .map_err(|error| error.to_string())?;
+        Ok(CommandOutput {
+            status: output.status.code(),
+            stdout: output.stdout,
+            stderr: output.stderr,
+        })
+    }
+}
+
+/// The one program the live probe runs: a full path, never looked up.
+pub const LSBLK_PROGRAM: &str = "/usr/bin/lsblk";
+
+/// Its arguments. `lsblk` with these lists block devices and changes
+/// nothing.
+pub const LSBLK_ARGUMENTS: [&str; 3] = ["--json", "--bytes", "--output-all"];
+
+/// The most output the live probe accepts, in bytes.
+pub const LSBLK_OUTPUT_MAX: usize = 16 * 1024 * 1024;
+
+/// A probe of the machine it runs on.
+///
+/// The block-device tree is captured once, when the probe is made, by
+/// running [`LSBLK_PROGRAM`] with [`LSBLK_ARGUMENTS`]. Nothing else is run
+/// and nothing is written.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LiveProbe {
+    captured: SnapshotProbe,
+}
+
+impl LiveProbe {
+    /// Capture the block devices of this machine through `runner`.
+    ///
+    /// # Errors
+    ///
+    /// `lsblk` could not be run, did not exit with 0, printed more than
+    /// [`LSBLK_OUTPUT_MAX`] bytes, or printed something that is not the
+    /// document it is asked for.
+    pub fn capture(runner: &dyn CommandRunner) -> Result<LiveProbe, ProbeError> {
+        let output = runner
+            .run(LSBLK_PROGRAM, &LSBLK_ARGUMENTS)
+            .map_err(|error| {
+                ProbeError::Command(format!(
+                    "{LSBLK_PROGRAM} could not be run: {}",
+                    one_line(&error)
+                ))
+            })?;
+        if output.status != Some(0) {
+            let status = output
+                .status
+                .map_or_else(|| "a signal".to_owned(), |code| format!("status {code}"));
+            let said = one_line(&String::from_utf8_lossy(&output.stderr));
+            return Err(ProbeError::Command(format!(
+                "{LSBLK_PROGRAM} ended with {status}: {said}"
+            )));
+        }
+        if output.stdout.len() > LSBLK_OUTPUT_MAX {
+            return Err(ProbeError::Command(format!(
+                "{LSBLK_PROGRAM} printed more than {LSBLK_OUTPUT_MAX} bytes"
+            )));
+        }
+        let text = String::from_utf8(output.stdout).map_err(|_| {
+            ProbeError::Command(format!("{LSBLK_PROGRAM} printed text that is not UTF-8"))
+        })?;
+        Ok(LiveProbe {
+            captured: SnapshotProbe::from_lsblk_json(&text)?,
+        })
+    }
+
+    /// Adds `blkid --output export` style properties from a file the caller
+    /// has, as [`SnapshotProbe::with_properties`] does. The live probe
+    /// collects none itself.
+    pub fn with_properties(self, text: &str) -> Result<LiveProbe, ProbeError> {
+        Ok(LiveProbe {
+            captured: self.captured.with_properties(text)?,
+        })
+    }
+}
+
+impl Probe for LiveProbe {
+    fn block_devices(&self) -> Result<Vec<LsblkDevice>, ProbeError> {
+        self.captured.block_devices()
+    }
+
+    fn properties(&self, device: &str) -> BTreeMap<String, String> {
+        self.captured.properties(device)
+    }
+}
+
+/// The first line of a message, without control characters and at most 200
+/// characters long: what a program said, made safe to repeat.
+fn one_line(text: &str) -> String {
+    text.lines()
+        .next()
+        .unwrap_or("")
+        .chars()
+        .filter(|character| !character.is_control())
+        .take(200)
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
+    use std::cell::RefCell;
+
     use super::*;
+
+    /// A runner that runs nothing: it records what it was asked to run and
+    /// answers with a prepared result.
+    struct FakeRunner {
+        asked: RefCell<Vec<(String, Vec<String>)>>,
+        answer: Result<CommandOutput, String>,
+    }
+
+    impl FakeRunner {
+        fn printing(stdout: &str) -> FakeRunner {
+            FakeRunner::ending(Some(0), stdout.as_bytes(), b"")
+        }
+
+        fn ending(status: Option<i32>, stdout: &[u8], stderr: &[u8]) -> FakeRunner {
+            FakeRunner {
+                asked: RefCell::new(Vec::new()),
+                answer: Ok(CommandOutput {
+                    status,
+                    stdout: stdout.to_vec(),
+                    stderr: stderr.to_vec(),
+                }),
+            }
+        }
+
+        fn failing(message: &str) -> FakeRunner {
+            FakeRunner {
+                asked: RefCell::new(Vec::new()),
+                answer: Err(message.to_owned()),
+            }
+        }
+    }
+
+    impl CommandRunner for FakeRunner {
+        fn run(&self, program: &str, arguments: &[&str]) -> Result<CommandOutput, String> {
+            self.asked.borrow_mut().push((
+                program.to_owned(),
+                arguments.iter().map(|argument| (*argument).to_owned()).collect(),
+            ));
+            self.answer.clone()
+        }
+    }
+
+    const ONE_DISK: &str = r#"{"blockdevices":[
+        {"name":"sda","path":"/dev/sda","type":"disk","size":1000,"rm":false,
+         "children":[{"name":"sda1","path":"/dev/sda1","type":"part","size":900,
+                      "fstype":"ext4","uuid":"0a0a0a0a-1111-4bbb-8ccc-000000000a01"}]}
+    ]}"#;
+
+    #[test]
+    fn the_live_probe_runs_lsblk_and_nothing_else() {
+        let runner = FakeRunner::printing(ONE_DISK);
+        let probe = LiveProbe::capture(&runner).expect("a usable document");
+        // One program was run, once: the one that lists block devices, by
+        // its full path, with the arguments that make it print the document
+        // and nothing that makes it change anything.
+        let asked = runner.asked.borrow();
+        assert_eq!(asked.len(), 1);
+        assert_eq!(asked[0].0, "/usr/bin/lsblk");
+        assert_eq!(asked[0].1, ["--json", "--bytes", "--output-all"]);
+        // Reading the probe again runs nothing more.
+        let devices = probe.block_devices().expect("devices");
+        assert_eq!(devices.len(), 1);
+        assert_eq!(devices[0].children[0].fstype.as_deref(), Some("ext4"));
+        let _ = probe.block_devices();
+        let _ = probe.properties("/dev/sda1");
+        assert_eq!(asked.len(), 1);
+        // It is the document a snapshot of the same text gives.
+        let snapshot = SnapshotProbe::from_lsblk_json(ONE_DISK).expect("a snapshot");
+        assert_eq!(probe.block_devices(), snapshot.block_devices());
+        // The live probe has no properties of its own.
+        assert!(probe.properties("/dev/sda1").is_empty());
+        // The constants are the whole command line: nothing in them writes.
+        assert_eq!(LSBLK_PROGRAM, "/usr/bin/lsblk");
+        for argument in LSBLK_ARGUMENTS {
+            assert!(argument.starts_with("--"), "{argument}");
+            assert!(!argument.contains('='), "{argument}");
+        }
+    }
+
+    #[test]
+    fn properties_from_a_file_can_be_added_to_the_live_probe() {
+        let runner = FakeRunner::printing(ONE_DISK);
+        let probe = LiveProbe::capture(&runner)
+            .expect("a usable document")
+            .with_properties("DEVNAME=/dev/sda1\nTUR_NTFS_STATE=clean\n")
+            .expect("valid properties");
+        assert_eq!(
+            probe.properties("/dev/sda1").get(PROP_NTFS_STATE).map(String::as_str),
+            Some("clean")
+        );
+        assert!(
+            LiveProbe::capture(&runner)
+                .expect("a usable document")
+                .with_properties("no equals sign")
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn a_live_probe_that_cannot_be_trusted_is_an_error() {
+        let command = |runner: &FakeRunner| match LiveProbe::capture(runner) {
+            Err(ProbeError::Command(message)) => message,
+            other => panic!("not a command error: {other:?}"),
+        };
+        // The program is not there.
+        let message = command(&FakeRunner::failing("No such file or directory"));
+        assert!(message.contains("/usr/bin/lsblk could not be run"), "{message}");
+        // It failed, and what it said is repeated on one line without
+        // control characters.
+        let message = command(&FakeRunner::ending(
+            Some(32),
+            b"",
+            b"lsblk: \x1b[31mfailed\x07 to access sysfs\nsecond line\n",
+        ));
+        assert!(message.contains("status 32"), "{message}");
+        assert!(message.contains("[31mfailed to access sysfs"), "{message}");
+        assert!(!message.contains('\u{1b}') && !message.contains("second line"));
+        // A signal ended it.
+        let message = command(&FakeRunner::ending(None, b"", b""));
+        assert!(message.contains("a signal"), "{message}");
+        // It printed something that is not text.
+        let message = command(&FakeRunner::ending(Some(0), b"\xff\xfe", b""));
+        assert!(message.contains("not UTF-8"), "{message}");
+        // Output from a failed run is not used, however good it looks.
+        let message = command(&FakeRunner::ending(Some(1), ONE_DISK.as_bytes(), b""));
+        assert!(message.contains("status 1"), "{message}");
+
+        // It succeeded and printed something that is not the document.
+        for text in ["", "not json", "{}", r#"{"blockdevices": 3}"#] {
+            assert!(
+                matches!(
+                    LiveProbe::capture(&FakeRunner::printing(text)),
+                    Err(ProbeError::Lsblk(_))
+                ),
+                "{text:?}"
+            );
+        }
+        assert_eq!(
+            ProbeError::Command("x".to_owned()).to_string(),
+            "live probe: x"
+        );
+    }
 
     #[test]
     fn parses_numbers_flags_and_null_lists() {

@@ -3,6 +3,31 @@
   "service": "org.tur.Device1",
   "adapters": [
     {
+      "tool": "device_list",
+      "kind": "command",
+      "program": "/usr/bin/tur-device",
+      "arguments": [
+        { "literal": "list" },
+        { "literal": "--json" },
+        { "option": "--category", "each": "categories" }
+      ],
+      "timeout_seconds": 30,
+      "max_output_bytes": 262144
+    },
+    {
+      "tool": "device_get",
+      "kind": "command",
+      "program": "/usr/bin/tur-device",
+      "arguments": [
+        { "literal": "get" },
+        { "literal": "--json" },
+        { "literal": "--" },
+        { "input": "id" }
+      ],
+      "timeout_seconds": 30,
+      "max_output_bytes": 262144
+    },
+    {
       "tool": "device_get_inventory",
       "kind": "command",
       "program": "/usr/bin/tur-device",

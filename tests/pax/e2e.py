@@ -657,6 +657,71 @@ class Test:
                 json.dumps(frame.get("output"))[:400],
             )
 
+    def check_new_tool_forms(self, outcome):
+        """device_list, device_get and storage_preview_mount, on this machine."""
+        name = outcome.name
+        self.all_allowed_observations(outcome, 5, tier="1")
+        self.checks.equal(
+            name,
+            "each was decided as the tool its component's manifest declares",
+            outcome.decisions("TUR_AI_ACTION"),
+            [
+                "org.tur.Device1:device_list",
+                "org.tur.Device1:device_list",
+                "org.tur.Device1:device_get",
+                "org.tur.Storage1:storage_preview_mount",
+                "org.tur.Storage1:storage_list_volumes",
+            ],
+        )
+        self.checks.equal(
+            name,
+            "the listings ran; asking for a device and a volume this machine does not have failed",
+            outcome.executed("TUR_AI_RESULT"),
+            ["ok", "ok", "failed", "failed", "ok"],
+        )
+        listed = outcome.output("call_list")
+        self.checks.check(
+            name,
+            "tur-device list returned its listing, redacted",
+            isinstance(listed, dict) and listed.get("redacted") is True and isinstance(listed.get("devices"), list),
+            json.dumps(listed)[:400],
+        )
+        filtered = outcome.output("call_filtered")
+        every = listed.get("devices", []) if isinstance(listed, dict) else []
+        self.checks.check(
+            name,
+            "the categories the model named reached the program as options: only those devices are listed",
+            isinstance(filtered, dict)
+            and filtered.get("devices") == [device for device in every if device.get("category") in ("pci", "usb")],
+            json.dumps(filtered)[:400],
+        )
+        missing = (outcome.result("call_missing") or {}).get("frame", {})
+        self.checks.check(
+            name,
+            "tur-device get said that no device has that identifier, with its code",
+            missing.get("status") == "failed"
+            and missing.get("exit_code") == 3
+            and "TUR-DEVICE-INPUT-002" in json.dumps(missing),
+            json.dumps(missing)[:400],
+        )
+        preview = (outcome.result("call_preview") or {}).get("frame", {})
+        self.checks.check(
+            name,
+            "tur-storage decide asked lsblk about this machine and said the volume is not on it, with its code",
+            preview.get("status") == "failed"
+            and preview.get("exit_code") == 1
+            and "TUR-STORAGE-VOLUME-001" in json.dumps(preview)
+            and "this machine" in json.dumps(preview),
+            json.dumps(preview)[:400],
+        )
+        volumes = outcome.output("call_volumes")
+        self.checks.check(
+            name,
+            "tur-storage volumes --live listed the volumes of this machine",
+            isinstance(volumes, dict) and volumes.get("kind") == "inventory" and isinstance(volumes.get("volumes"), list),
+            json.dumps(volumes)[:400],
+        )
+
     def check_readonly_command(self, outcome):
         name = outcome.name
         self.all_allowed_observations(outcome, 2, action="command:read_only", tier="4")
@@ -1212,7 +1277,10 @@ class Test:
             "org.tur.Diagnostics1:diag_get_status",
             "org.tur.Device1:device_get_inventory",
             "org.tur.Device1:device_list_problems",
+            "org.tur.Device1:device_list",
+            "org.tur.Device1:device_get",
             "org.tur.Storage1:storage_list_volumes",
+            "org.tur.Storage1:storage_preview_mount",
             "org.tur.Runtime1:runtime_inspect_file",
         }
         self.checks.equal(

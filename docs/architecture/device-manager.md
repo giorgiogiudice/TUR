@@ -176,6 +176,7 @@ title, the device identifier, a user message, a next step and technical detail
 | `TUR-DEVICE-INACTIVE-001` | Driver attached but the device is not usable | A PCI network controller (class 0200 or 0280) has a driver, at least one interface exists on the system, and none belongs to it | Warning | Restart; install updates; report |
 | `TUR-DEVICE-THUNDERBOLT-001` | Thunderbolt device not authorised | `authorized` is 0 on a device that is not the host router | Information | Authorise it in settings if trusted; otherwise unplug it |
 | `TUR-DEVICE-INPUT-001` | Fixture directory cannot be read | `tur-device --from` names something that is not a directory | Command fails, exit status 1 | Correct the path |
+| `TUR-DEVICE-INPUT-002` | No device has that identifier | `tur-device get` was given an identifier that is not in the inventory | Command fails, exit status 3; nothing is printed on standard output | List the devices with `tur-device list` and use an identifier it prints |
 | `TUR-DEVICE-OUTPUT-001` | Output cannot be written | Encoding or writing the result failed | Command fails, exit status 1 | None |
 
 What the findings can and cannot see: a driver that failed to bind is reported
@@ -219,7 +220,22 @@ between host and guest.
 ```text
 tur-device inventory [--from <dir>] [--json] [--redact]
 tur-device problems  [--from <dir>] [--json]
+tur-device list      [--from <dir>] [--json] [--category <category>]...
+tur-device get       [--from <dir>] [--json] <id>
 ```
+
+`list` and `get` are the command-line forms of the assistant tools
+`device_list` and `device_get`. `list` prints one summary for each device: an
+identifier, a category, a name and the bound kernel driver; `--category`, which
+may be repeated, keeps only the categories named, spelled as the inventory
+spells them (`pci`, `usb`, `network`, `audio`, `storage_controller`, `block`,
+`input`, `bluetooth`, `camera`, `thunderbolt`). `get` prints everything known
+about the one device with the identifier `list` printed, as
+`{"category": …, "device": {…}}`. Both always give the redacted view: they are
+answers to the assistant, and there is no option that turns redaction off. An
+identifier no device has is `TUR-DEVICE-INPUT-002` on standard error, with
+nothing on standard output and exit status 3; the identifier is repeated in
+printable ASCII only.
 
 With `--from`, a directory laid out like the root of a small system is read
 instead of the live system, and no command is run: `sys/`, `proc/`,
@@ -277,6 +293,22 @@ class 0 (observe): `device_list`, `device_get`, `device_get_inventory`,
 the assistant is always given the redacted view (class 0 is "allowed, subject to
 privacy exclusions"). There is no tool for hand-off: that is class 3 and is not
 part of this interface.
+
+`agent-tools.adapter.json`, beside it, says how P@x performs each tool today,
+while no D-Bus service exists: by running `tur-device` in P@x's read-only
+sandbox ([pax-orchestrator.md](pax-orchestrator.md), section 4).
+
+| Tool | Performed by |
+|---|---|
+| `device_list` | `tur-device list --json`, with `--category=<c>` for each category the call names |
+| `device_get` | `tur-device get --json -- <id>` |
+| `device_get_inventory` | `tur-device inventory --json --redact` |
+| `device_list_problems` | `tur-device problems --json` |
+
+`tests/agent_tools.rs` loads both files with P@x's loader, holds each command
+line against the help of the program it has just built, checks that every
+category the manifest allows is one the program takes, and runs all four tools
+against the recorded laptop.
 
 ## What is not done
 

@@ -8,7 +8,8 @@
 //! dependency of this test only), and every command line an adapter builds
 //! is held against the program this component has just built: the
 //! subcommand has to be one the program lists, and every option on the line
-//! one its help describes.
+//! one its help describes. The tools are also run for real, against a
+//! recorded machine.
 //!
 //! No tool is run by P@x here and no model is involved. That the installed
 //! program runs in P@x's sandbox is checked by the `pax` workflow.
@@ -104,11 +105,29 @@ fn check_against_the_program(tool: &str, line: &[String], subcommand: &str) {
     }
 }
 
+/// Run the built program with the arguments of a command line.
+fn run(arguments: &[String]) -> (Option<i32>, String, String) {
+    let output = Command::new(PROGRAM)
+        .args(arguments)
+        .output()
+        .expect("the built program runs");
+    (
+        output.status.code(),
+        String::from_utf8_lossy(&output.stdout).into_owned(),
+        String::from_utf8_lossy(&output.stderr).into_owned(),
+    )
+}
+
 /// The tools P@x is offered, in the order of the manifest.
-const OFFERED: [&str; 2] = ["device_get_inventory", "device_list_problems"];
+const OFFERED: [&str; 4] = [
+    "device_list",
+    "device_get",
+    "device_get_inventory",
+    "device_list_problems",
+];
 
 /// The tools the manifest declares that no program performs yet.
-const NOT_OFFERED: [&str; 2] = ["device_list", "device_get"];
+const NOT_OFFERED: [&str; 0] = [];
 
 /// Every tool with the class the manifest declares. All of them read.
 const CLASSES: [(&str, u64); 4] = [
@@ -123,6 +142,36 @@ const CLASSES: [(&str, u64); 4] = [
 fn cases() -> Vec<(&'static str, Value, &'static str, Vec<&'static str>)> {
     vec![
         (
+            "device_list",
+            json!({}),
+            "list",
+            vec!["/usr/bin/tur-device", "list", "--json"],
+        ),
+        (
+            "device_list",
+            json!({ "categories": ["usb", "storage_controller"] }),
+            "list",
+            vec![
+                "/usr/bin/tur-device",
+                "list",
+                "--json",
+                "--category=usb",
+                "--category=storage_controller",
+            ],
+        ),
+        (
+            "device_get",
+            json!({ "id": "pci-0000:00:1f.3" }),
+            "get",
+            vec![
+                "/usr/bin/tur-device",
+                "get",
+                "--json",
+                "--",
+                "pci-0000:00:1f.3",
+            ],
+        ),
+        (
             "device_get_inventory",
             json!({}),
             "inventory",
@@ -135,6 +184,98 @@ fn cases() -> Vec<(&'static str, Value, &'static str, Vec<&'static str>)> {
             vec!["/usr/bin/tur-device", "problems", "--json"],
         ),
     ]
+}
+
+#[test]
+fn every_category_the_manifest_allows_is_one_the_program_takes() {
+    // The manifest and the command line have one spelling for a category.
+    let manifest: Value = serde_json::from_str(MANIFEST).expect("the manifest is JSON");
+    let allowed = manifest["tools"][0]["input_schema"]["properties"]["categories"]["items"]["enum"]
+        .as_array()
+        .expect("the categories of device_list")
+        .clone();
+    assert_eq!(manifest["tools"][0]["name"], "device_list");
+    assert_eq!(allowed.len(), 10);
+    let text = help(&["list"]);
+    let registry = registry();
+    let fixture = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/laptop");
+    for category in &allowed {
+        let name = category.as_str().expect("text");
+        assert!(text.contains(name), "{name} is not in the help:\n{text}");
+        // And the program accepts it, from the adapter's own command line.
+        let line = command_line(&registry, "device_list", json!({ "categories": [name] }));
+        assert_eq!(line[3], format!("--category={name}"));
+        let mut arguments: Vec<String> = line[1..].to_vec();
+        arguments.extend(["--from".to_owned(), fixture.to_owned()]);
+        let (status, stdout, stderr) = run(&arguments);
+        assert_eq!(status, Some(0), "{name}: {stderr}");
+        let listed: Value = serde_json::from_str(&stdout).expect("JSON");
+        for device in listed["devices"].as_array().expect("devices") {
+            assert_eq!(device["category"], *category, "{name}");
+        }
+    }
+    // A value the manifest does not allow never reaches the program.
+    assert!(
+        registry
+            .propose(
+                "device_list",
+                json!({ "categories": ["--from=/etc"] })
+                    .as_object()
+                    .cloned()
+                    .expect("an object"),
+            )
+            .is_err()
+    );
+}
+
+#[test]
+fn the_tools_run_against_a_recorded_machine() {
+    // The adapters read this machine. The same command lines, reading a
+    // recorded laptop instead (`--from`), show that they are ones the
+    // program accepts and answers in JSON.
+    let fixture = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/laptop");
+    // `--from` goes right after the subcommand, before any `--`.
+    let recorded = |line: Vec<String>| -> Vec<String> {
+        let mut arguments = vec![line[1].clone(), "--from".to_owned(), fixture.to_owned()];
+        arguments.extend(line.into_iter().skip(2));
+        arguments
+    };
+    let registry = registry();
+
+    let line = command_line(&registry, "device_list", json!({}));
+    let (status, stdout, stderr) = run(&recorded(line));
+    assert_eq!(status, Some(0), "{stderr}");
+    let listed: Value = serde_json::from_str(&stdout).expect("the listing is JSON");
+    let devices = listed["devices"].as_array().expect("devices");
+    assert!(devices.len() >= 26, "{}", devices.len());
+
+    // Every device it listed can be shown by the identifier it printed.
+    for device in devices {
+        let id = device["id"].as_str().expect("an identifier");
+        let line = command_line(&registry, "device_get", json!({ "id": id }));
+        let (status, stdout, stderr) = run(&recorded(line));
+        assert_eq!(status, Some(0), "{id}: {stderr}");
+        let shown: Value = serde_json::from_str(&stdout).expect("the device is JSON");
+        assert_eq!(shown["device"]["id"], id);
+        assert_eq!(shown["redacted"], true, "{id}");
+    }
+
+    // The other two tools, the same way.
+    for tool in ["device_get_inventory", "device_list_problems"] {
+        let line = command_line(&registry, tool, json!({}));
+        let (status, stdout, stderr) = run(&recorded(line));
+        assert_eq!(status, Some(0), "{tool}: {stderr}");
+        let document: Value = serde_json::from_str(&stdout).expect("JSON");
+        assert!(document.is_object(), "{tool}");
+    }
+
+    // An identifier no device has is the program's own failure, with its
+    // code and its own exit status.
+    let line = command_line(&registry, "device_get", json!({ "id": "pci-nowhere" }));
+    let (status, stdout, stderr) = run(&recorded(line));
+    assert_eq!(status, Some(3), "{stderr}");
+    assert!(stdout.is_empty(), "{stdout}");
+    assert!(stderr.starts_with("error: TUR-DEVICE-INPUT-002"), "{stderr}");
 }
 
 #[test]

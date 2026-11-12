@@ -8,7 +8,8 @@
 //! dependency of this test only), and every command line an adapter builds
 //! is held against the program this component has just built: the
 //! subcommand has to be one the program lists, and every option on the line
-//! one its help describes.
+//! one its help describes. The tools are also run for real, against a
+//! recorded machine.
 //!
 //! No tool is run by P@x here and no model is involved. That the installed
 //! program runs in P@x's sandbox is checked by the `pax` workflow.
@@ -104,17 +105,26 @@ fn check_against_the_program(tool: &str, line: &[String], subcommand: &str) {
     }
 }
 
-/// The tools P@x is offered, in the order of the manifest.
-const OFFERED: [&str; 1] = ["storage_list_volumes"];
+/// Run the built program with the arguments of a command line.
+fn run(arguments: &[String]) -> (Option<i32>, String, String) {
+    let output = Command::new(PROGRAM)
+        .args(arguments)
+        .output()
+        .expect("the built program runs");
+    (
+        output.status.code(),
+        String::from_utf8_lossy(&output.stdout).into_owned(),
+        String::from_utf8_lossy(&output.stderr).into_owned(),
+    )
+}
 
-/// The tools the manifest declares that no program performs yet. Among them
-/// is every tool of this component above class 0.
-const NOT_OFFERED: [&str; 4] = [
-    "storage_preview_mount",
-    "storage_mount",
-    "storage_unmount",
-    "storage_unlock",
-];
+/// The tools P@x is offered, in the order of the manifest.
+const OFFERED: [&str; 2] = ["storage_list_volumes", "storage_preview_mount"];
+
+/// The tools the manifest declares that no program performs yet: every tool
+/// of this component above class 0. They need the service that mounts, which
+/// does not exist; this program never mounts, unlocks or writes.
+const NOT_OFFERED: [&str; 3] = ["storage_mount", "storage_unmount", "storage_unlock"];
 
 /// Every tool with the class the manifest declares. Listing and previewing
 /// read state: class 0. Mounting, unmounting and unlocking change session
@@ -133,18 +143,132 @@ const CLASSES: [(&str, u64); 5] = [
 /// A call of each offered tool: its arguments, the subcommand that performs
 /// it, and the whole command line.
 fn cases() -> Vec<(&'static str, Value, &'static str, Vec<&'static str>)> {
-    vec![(
-        "storage_list_volumes",
-        json!({}),
-        "volumes",
-        vec![
-            "/usr/bin/tur-storage",
+    vec![
+        (
+            "storage_list_volumes",
+            json!({}),
             "volumes",
-            "--from",
-            "/dev/stdin",
-            "--json",
-        ],
-    )]
+            vec!["/usr/bin/tur-storage", "volumes", "--live", "--json"],
+        ),
+        (
+            "storage_preview_mount",
+            json!({ "volume_id": "fs-01d9a7c2e4f6b801", "access": "read-only" }),
+            "decide",
+            vec![
+                "/usr/bin/tur-storage",
+                "decide",
+                "--live",
+                "--json",
+                "--access=read-only",
+                "--volume=fs-01d9a7c2e4f6b801",
+            ],
+        ),
+        (
+            "storage_preview_mount",
+            json!({ "volume_id": "fs-01d9a7c2e4f6b801", "access": "read-write" }),
+            "decide",
+            vec![
+                "/usr/bin/tur-storage",
+                "decide",
+                "--live",
+                "--json",
+                "--access=read-write",
+                "--volume=fs-01d9a7c2e4f6b801",
+            ],
+        ),
+    ]
+}
+
+#[test]
+fn access_is_spelled_the_same_in_the_manifest_and_on_the_command_line() {
+    // Every value the manifest allows for `access` is a value the program's
+    // help lists, and the program reports it back in the same spelling.
+    let manifest: Value = serde_json::from_str(MANIFEST).expect("the manifest is JSON");
+    let text = help(&["decide"]);
+    let mut seen = 0;
+    for tool in manifest["tools"].as_array().expect("tools") {
+        let access = &tool["input_schema"]["properties"]["access"];
+        if access.is_null() {
+            continue;
+        }
+        seen += 1;
+        assert_eq!(
+            access["enum"],
+            json!(["read-only", "read-write"]),
+            "{}",
+            tool["name"]
+        );
+        for value in access["enum"].as_array().expect("values") {
+            let value = value.as_str().expect("text");
+            assert!(text.contains(value), "{value} is not in the help:\n{text}");
+        }
+    }
+    assert_eq!(seen, 2);
+}
+
+#[test]
+fn the_tools_run_against_a_recorded_machine() {
+    // The adapters ask about this machine (`--live`). The same command
+    // lines, reading a recorded `lsblk` instead, show that they are ones
+    // the program accepts and answers in JSON. The live path itself is
+    // exercised with a stand-in for `lsblk` in the unit tests of the
+    // program.
+    let fixture = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/dual-boot.json");
+    let recorded = |line: Vec<String>| -> Vec<String> {
+        line.into_iter()
+            .skip(1)
+            .flat_map(|argument| {
+                if argument == "--live" {
+                    vec!["--from".to_owned(), fixture.to_owned()]
+                } else {
+                    vec![argument]
+                }
+            })
+            .collect()
+    };
+    let registry = registry();
+
+    let line = command_line(&registry, "storage_list_volumes", json!({}));
+    let (status, stdout, stderr) = run(&recorded(line));
+    assert_eq!(status, Some(0), "{stderr}");
+    let inventory: Value = serde_json::from_str(&stdout).expect("the inventory is JSON");
+    assert_eq!(inventory["kind"], "inventory");
+    let volumes = inventory["volumes"].as_array().expect("volumes");
+    assert!(!volumes.is_empty());
+
+    // Every volume it listed can be previewed, with either access, by the
+    // identifier it printed.
+    for volume in volumes {
+        let id = volume["id"].as_str().expect("an identifier");
+        for access in ["read-only", "read-write"] {
+            let line = command_line(
+                &registry,
+                "storage_preview_mount",
+                json!({ "volume_id": id, "access": access }),
+            );
+            let (status, stdout, stderr) = run(&recorded(line));
+            assert_eq!(status, Some(0), "{id} {access}: {stderr}");
+            let decision: Value = serde_json::from_str(&stdout).expect("the decision is JSON");
+            assert_eq!(decision["kind"], "decision", "{id} {access}");
+            assert_eq!(decision["volume"]["id"], id, "{id} {access}");
+            assert_eq!(
+                decision["volume"]["decision"]["requested_access"], access,
+                "{id} {access}"
+            );
+        }
+    }
+
+    // A volume the machine does not have is the program's own failure, with
+    // its code, and nothing on standard output.
+    let line = command_line(
+        &registry,
+        "storage_preview_mount",
+        json!({ "volume_id": "fs-nowhere", "access": "read-only" }),
+    );
+    let (status, stdout, stderr) = run(&recorded(line));
+    assert_eq!(status, Some(1), "{stderr}");
+    assert!(stdout.is_empty(), "{stdout}");
+    assert!(stderr.starts_with("TUR-STORAGE-VOLUME-001"), "{stderr}");
 }
 
 #[test]

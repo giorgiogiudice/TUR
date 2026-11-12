@@ -144,7 +144,7 @@ fn a_directory_of_tool_sets_is_read_component_by_component() {
         .into_iter()
         .map(|tool| tool.name)
         .collect();
-    assert_eq!(offered, ["storage_list_volumes"]);
+    assert_eq!(offered, ["storage_list_volumes", "storage_preview_mount"]);
     assert!(
         registry
             .unavailable()
@@ -177,11 +177,14 @@ fn the_shipped_tool_set_loads_and_every_offered_tool_only_observes() {
             "catalogue_search",
             "catalogue_show",
             "catalogue_route",
+            "device_list",
+            "device_get",
             "device_get_inventory",
             "device_list_problems",
             "diag_get_status",
             "runtime_inspect_file",
             "storage_list_volumes",
+            "storage_preview_mount",
             "run_readonly_command"
         ]
     );
@@ -189,17 +192,10 @@ fn the_shipped_tool_set_loads_and_every_offered_tool_only_observes() {
         assert_eq!(tool.class, ActionClass::Observe, "{}", tool.name);
     }
     // Declared by a component, with no program to perform them yet: not
-    // offered. Among them every tool above class 0.
+    // offered. They are every shipped tool above class 0, and nothing else.
     assert_eq!(
         registry.unavailable(),
-        [
-            "device_list",
-            "device_get",
-            "storage_preview_mount",
-            "storage_mount",
-            "storage_unmount",
-            "storage_unlock"
-        ]
+        ["storage_mount", "storage_unmount", "storage_unlock"]
     );
     let definitions = registry.definitions().expect("definitions");
     assert_eq!(definitions.len(), offered.len());
@@ -225,14 +221,36 @@ fn every_shipped_adapter_builds_the_command_line_of_its_program() {
             vec!["/usr/bin/tur-device", "problems", "--json"],
         ),
         (
+            "device_list",
+            json!({ "categories": ["usb", "network"] }),
+            vec![
+                "/usr/bin/tur-device",
+                "list",
+                "--json",
+                "--category=usb",
+                "--category=network",
+            ],
+        ),
+        (
+            "device_get",
+            json!({ "id": "usb-1-4" }),
+            vec!["/usr/bin/tur-device", "get", "--json", "--", "usb-1-4"],
+        ),
+        (
             "storage_list_volumes",
             json!({}),
+            vec!["/usr/bin/tur-storage", "volumes", "--live", "--json"],
+        ),
+        (
+            "storage_preview_mount",
+            json!({ "volume_id": "fs-1", "access": "read-only" }),
             vec![
                 "/usr/bin/tur-storage",
-                "volumes",
-                "--from",
-                "/dev/stdin",
+                "decide",
+                "--live",
                 "--json",
+                "--access=read-only",
+                "--volume=fs-1",
             ],
         ),
         (
@@ -303,6 +321,11 @@ fn a_value_from_the_model_cannot_become_an_option_of_a_shipped_program() {
             json!({ "path": "--available=wine" }),
         ),
         ("runtime_inspect_file", json!({ "path": "/tmp/a\nb" })),
+        ("device_get", json!({ "id": "--from=/etc" })),
+        (
+            "storage_preview_mount",
+            json!({ "volume_id": "fs-1\n--live", "access": "read-only" }),
+        ),
     ] {
         let proposal = registry
             .propose(tool, object(arguments.clone()))
