@@ -1,65 +1,76 @@
 # SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
 #
-# One check that always runs on a pull request and passes only when every
-# other workflow started for the same commit has finished successfully.
-# The other workflows run only when their paths change, so they cannot be
-# required one by one: a required check that never starts blocks a merge
-# forever. This one can be required instead.
+# One commit status, "gate", that is success only when every workflow started
+# for a pull request's head commit has finished successfully. The other
+# workflows run only when their paths change, so none of them can be a required
+# check on its own; this status can.
+#
+# The gate does not wait on a runner. It is evaluated briefly when the pull
+# request changes and again each time one of the workflows below finishes. A
+# workflow missing from the list below is still counted, but its completion
+# does not trigger a re-evaluation; the gate then stays "pending", never a
+# false "success". Add new workflows to the list.
+#
+# It never checks out or runs code from the pull request.
 name: gate
 
 on:
   pull_request:
+  workflow_run:
+    workflows: [rust, image, boot, rollback, pax, desktop, windows-runtime, update, apps, iso, local-ai, reports]
+    types: [completed]
 
 permissions:
   actions: read
-  contents: read
-
-concurrency:
-  group: gate-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  statuses: write
+  pull-requests: read
 
 jobs:
-  all-checks-passed:
+  evaluate:
     runs-on: ubuntu-24.04
-    timeout-minutes: 150
+    timeout-minutes: 5
     steps:
-      - name: Wait for every workflow on this commit
+      - name: Evaluate every workflow on the commit and set the gate status
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          SHA: ${{ github.event.pull_request.head.sha }}
-          SELF_RUN: ${{ github.run_id }}
+          SHA: ${{ github.event.pull_request.head.sha || github.event.workflow_run.head_sha }}
+          EVENT: ${{ github.event_name }}
+          SELF: ${{ github.workflow }}
         run: |
           python3 - <<'PY'
-          import json, os, sys, time, urllib.request
-          repo, sha, me = os.environ["REPO"], os.environ["SHA"], int(os.environ["SELF_RUN"])
-          def runs():
-              req = urllib.request.Request(
-                  f"https://api.github.com/repos/{repo}/actions/runs?head_sha={sha}&per_page=100",
-                  headers={"Authorization": f"Bearer {os.environ['GH_TOKEN']}",
-                           "Accept": "application/vnd.github+json"})
+          import json, os, time, urllib.request
+          repo, sha = os.environ["REPO"], os.environ["SHA"]
+          H = {"Authorization": f"Bearer {os.environ['GH_TOKEN']}",
+               "Accept": "application/vnd.github+json"}
+          def call(method, path, body=None):
+              data = json.dumps(body).encode() if body is not None else None
+              req = urllib.request.Request(f"https://api.github.com/repos/{repo}{path}",
+                                           data=data, headers=H, method=method)
               with urllib.request.urlopen(req, timeout=30) as r:
-                  return [x for x in json.load(r)["workflow_runs"]
-                          if x["id"] != me and x["name"] != "gate"]
-          # Give the other workflows a moment to be created.
-          time.sleep(30)
-          deadline = time.time() + 140 * 60
-          while True:
-              rs = runs()
-              # Keep the latest attempt of each workflow only.
-              latest = {}
-              for r in rs:
-                  if r["name"] not in latest or r["id"] > latest[r["name"]]["id"]:
-                      latest[r["name"]] = r
-              pending = [n for n, r in latest.items() if r["status"] != "completed"]
-              failed = [f"{n}: {r['conclusion']}" for n, r in latest.items()
-                        if r["status"] == "completed" and r["conclusion"] not in ("success", "skipped", "neutral")]
-              if failed:
-                  print("Not passed:", *failed, sep="\n  "); sys.exit(1)
-              if not pending:
-                  print("All passed:", ", ".join(sorted(latest)) or "(no other workflow ran)"); sys.exit(0)
-              if time.time() > deadline:
-                  print("Timed out waiting for:", ", ".join(pending)); sys.exit(1)
-              print("Waiting for:", ", ".join(sorted(pending)), flush=True)
-              time.sleep(60)
+                  return json.load(r)
+          if os.environ["EVENT"] == "pull_request":
+              time.sleep(20)  # let the other workflows be created
+          runs = call("GET", f"/actions/runs?head_sha={sha}&per_page=100")["workflow_runs"]
+          latest = {}
+          for r in runs:
+              if r["name"] in (os.environ["SELF"], "pax-live"):
+                  continue
+              if r["event"] not in ("pull_request", "push"):
+                  continue
+              if r["name"] not in latest or r["id"] > latest[r["name"]]["id"]:
+                  latest[r["name"]] = r
+          pending = sorted(n for n, r in latest.items() if r["status"] != "completed")
+          failed = sorted(f"{n} ({r['conclusion']})" for n, r in latest.items()
+                          if r["status"] == "completed"
+                          and r["conclusion"] not in ("success", "skipped", "neutral"))
+          if failed:
+              state, text = "failure", "Not passed: " + ", ".join(failed)
+          elif pending:
+              state, text = "pending", "Waiting for: " + ", ".join(pending)
+          else:
+              state, text = "success", "All passed: " + (", ".join(sorted(latest)) or "no other workflow")
+          print(state, "-", text)
+          call("POST", f"/statuses/{sha}", {"state": state, "context": "gate",
+                                             "description": text[:140]})
           PY
