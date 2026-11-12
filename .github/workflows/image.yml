@@ -1,0 +1,99 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+name: image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "image/**"
+      - "scripts/*.sh"
+      - "scripts/*.py"
+      - "schemas/build-manifest.schema.json"
+      - "tests/image/**"
+      - "VERSION"
+      - ".containerignore"
+      - ".github/workflows/image.yml"
+  pull_request:
+    paths:
+      - "image/**"
+      - "scripts/*.sh"
+      - "scripts/*.py"
+      - "schemas/build-manifest.schema.json"
+      - "tests/image/**"
+      - "VERSION"
+      - ".containerignore"
+      - ".github/workflows/image.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: image-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PODMAN: sudo podman
+  IMAGE: localhost/uos:ci
+
+jobs:
+  build:
+    name: Build, test and describe the image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Lint scripts
+        run: |
+          shellcheck scripts/*.sh tests/image/*.sh
+          python3 -m py_compile scripts/*.py
+
+      - name: Runner environment
+        run: |
+          echo "podman: $(podman --version)"
+          echo "kernel: $(uname -r)"
+          nproc; free -g | sed -n 2p
+          if [ -e /dev/kvm ]; then echo "kvm: present ($(stat -c '%A %U:%G' /dev/kvm))"; else echo "kvm: ABSENT"; fi
+          df -h / | tail -1
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache/CodeQL
+          df -h / | tail -1
+
+      - name: Build image
+        run: |
+          UOS_BUILD_ID_FILE="$RUNNER_TEMP/build-id" scripts/build-image.sh "$IMAGE"
+          echo "BUILD_ID=$(cat "$RUNNER_TEMP/build-id")" >> "$GITHUB_ENV"
+
+      - name: Image smoke tests
+        run: tests/image/smoke.sh "$IMAGE" "$BUILD_ID"
+
+      - name: Reproducibility check
+        run: |
+          scripts/build-image.sh localhost/uos:repro --no-cache
+          a=$($PODMAN image inspect -f '{{.Id}}' "$IMAGE")
+          b=$($PODMAN image inspect -f '{{.Id}}' localhost/uos:repro)
+          echo "first:  $a"; echo "second: $b"
+          test "$a" = "$b"
+
+      - name: SBOM and licence summary
+        run: scripts/sbom.sh "$IMAGE" out
+
+      - name: Build manifest
+        run: |
+          sudo apt-get install -y --no-install-recommends python3-jsonschema >/dev/null
+          scripts/gen-manifest.py "$IMAGE" out/build-manifest.json --sbom sbom.spdx.json >/dev/null
+          scripts/validate-manifest.py out/build-manifest.json
+
+      - name: Summary
+        if: always()
+        run: scripts/manifest-summary.py out/build-manifest.json >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: uos-image-metadata
+          path: out/
+          if-no-files-found: warn

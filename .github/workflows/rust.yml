@@ -1,0 +1,121 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+name: rust
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "crates/**"
+      - "services/**"
+      - "installer/**"
+      - "rust-toolchain.toml"
+      - "rustfmt.toml"
+      - ".github/workflows/rust.yml"
+  pull_request:
+    paths:
+      - "crates/**"
+      - "services/**"
+      - "installer/**"
+      - "rust-toolchain.toml"
+      - "rustfmt.toml"
+      - ".github/workflows/rust.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rust-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  discover:
+    name: Find components
+    runs-on: ubuntu-24.04
+    outputs:
+      components: ${{ steps.find.outputs.components }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - id: find
+        # A component is a directory whose Cargo.toml declares its own workspace.
+        run: |
+          list=$(git ls-files '*Cargo.toml' | xargs grep -l '^\[workspace\]' | xargs -n1 dirname | sort \
+                 | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read().split()))')
+          echo "components=${list}" >> "$GITHUB_OUTPUT"
+          echo "components: ${list}"
+
+  component:
+    name: ${{ matrix.dir }}
+    needs: discover
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        dir: ${{ fromJson(needs.discover.outputs.components) }}
+    defaults:
+      run:
+        working-directory: ${{ matrix.dir }}
+    env:
+      CARGO_TERM_COLOR: never
+      CARGO_INCREMENTAL: "0"
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Toolchain
+        run: |
+          rustup show active-toolchain || rustup toolchain install
+          rustc --version; cargo --version
+
+      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            ${{ matrix.dir }}/target
+          key: rust-${{ matrix.dir }}-${{ hashFiles('rust-toolchain.toml', format('{0}/Cargo.toml', matrix.dir), format('{0}/Cargo.lock', matrix.dir)) }}
+          restore-keys: rust-${{ matrix.dir }}-
+
+      - name: Lockfile and formatting
+        id: fix
+        # Development machines have no Rust toolchain (ADR-0005), so CI computes
+        # what a developer normally would: the lockfile and rustfmt's output.
+        # Anything that had to change is uploaded as an artifact, the checks
+        # below run on the corrected tree, and the job fails at the end.
+        run: |
+          fixes="$RUNNER_TEMP/fixes"; mkdir -p "$fixes"
+          if ! cargo metadata --locked --format-version 1 >/dev/null 2>&1; then
+            cargo metadata --format-version 1 >/dev/null
+            cp Cargo.lock "$fixes/Cargo.lock"
+            echo "::warning::Cargo.lock in ${{ matrix.dir }} was missing or stale"
+          fi
+          cargo fmt --all
+          if ! git diff --quiet -- . ':!Cargo.lock'; then
+            git diff -- . ':!Cargo.lock' > "$fixes/rustfmt.patch"
+            echo "::warning::${{ matrix.dir }} was not formatted with rustfmt"
+          fi
+          if [ -n "$(ls -A "$fixes")" ]; then echo "needed=true" >> "$GITHUB_OUTPUT"; else echo "needed=false" >> "$GITHUB_OUTPUT"; fi
+          echo "artifact=ci-fixes-$(echo '${{ matrix.dir }}' | tr '/' '-')" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: steps.fix.outputs.needed == 'true'
+        with:
+          name: ${{ steps.fix.outputs.artifact }}
+          path: ${{ runner.temp }}/fixes/
+
+      - name: Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Test
+        run: cargo test --all-targets --all-features
+
+      - name: Doc tests
+        run: cargo test --doc --all-features
+
+      - name: Fail if fixes were needed
+        if: steps.fix.outputs.needed == 'true'
+        run: |
+          echo "The lockfile or formatting had to be corrected. Apply CI's fixes with:"
+          echo "  scripts/dev/ci.py fixes ${{ github.run_id }} ${{ matrix.dir }}"
+          exit 1
