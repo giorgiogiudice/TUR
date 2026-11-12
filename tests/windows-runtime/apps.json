@@ -216,6 +216,7 @@
       "id": "vlc-nsis",
       "app_id": "tur.test.vlc-nsis",
       "catalogue_id": "org.videolan.vlc",
+      "core_function_untested": "playing sound or video; the runner has no audio device and no GPU",
       "name": "VLC media player",
       "version": "3.0.24",
       "publisher": "VideoLAN",

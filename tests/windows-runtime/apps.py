@@ -947,7 +947,12 @@ def catalogue_evidence(world: World, apps: list[dict], results: list[dict], envi
         if "catalogue_id" not in app:
             continue
         statuses = [result[name]["status"] for name in STAGES]
+        untested = app.get("core_function_untested")
         if "not-run" in statuses:
+            rating = "unknown"
+        elif all(status == "pass" for status in statuses) and untested:
+            # What the application is mainly for could not be tried here.
+            # The steps are recorded; the rating stays unknown.
             rating = "unknown"
         elif all(status == "pass" for status in statuses):
             rating = "good"
@@ -959,6 +964,8 @@ def catalogue_evidence(world: World, apps: list[dict], results: list[dict], envi
         notes = (f"Automated test of {result.get('installer_kind')} installer {app['url'].rsplit('/', 1)[1]}: "
                  f"{summary}. {environment['wine']} from Ubuntu on a hosted runner, software rendering; "
                  "not the TUR image. One window and one function were looked at.")
+        if untested:
+            notes += f" Not tested: {untested}."
         text = "\n".join([
             "# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
             f"# Proposed record for catalogue/{app['catalogue_id']}.toml, under its Windows edition.",
