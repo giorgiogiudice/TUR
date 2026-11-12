@@ -38,7 +38,7 @@ recovery story:
 | **Linux** | Natively | Full support; no regression against the base distribution |
 | **Windows** | Wine and Proton, with DXVK and VKD3D-Proton for graphics | Application-specific; measured and published |
 | **macOS** | Darling | Experimental; command-line tools first, a narrow GUI set later |
-| **Android** | Waydroid: an Android system in a container on the host kernel, off by default ([proposed](docs/architecture/android-runtime.md)) | Application-specific; measured and published. Apps that need Google certification (banking, payment, DRM video), phone hardware or ARM-only code are not expected to run |
+| **Android** | Waydroid: an Android system in a container on the host kernel, off by default ([design](docs/architecture/android-runtime.md)) | Application-specific; measured and published. Apps that need Google certification (banking, payment, DRM video), phone hardware or ARM-only code are not expected to run |
 | **Windows, in full** | A genuine Windows guest under QEMU/KVM, or dual boot | Optional fallback for drivers, anti-cheat and kernel-level software |
 
 Windows and macOS programs run in userspace through compatibility layers. UOS does
@@ -116,7 +116,7 @@ flowchart TB
         L["Linux<br/>native ELF"]
         W["Windows<br/>Wine · Proton"]
         M["macOS<br/>Darling<br/>experimental"]
-        AN["Android<br/>Waydroid<br/>proposed"]
+        AN["Android<br/>Waydroid<br/>opt-in"]
         V["Full Windows<br/>QEMU/KVM<br/>optional"]
     end
 
@@ -226,7 +226,7 @@ each service ships its assistant-facing tools as it lands, screen control arrive
 with the desktop, and voice follows. Full detail is in the
 [specification](docs/architecture/specification.md#20-development-roadmap-with-concrete-deliverables).
 
-Android support is proposed in
+Android support is designed in
 [addendum B](docs/architecture/android-runtime.md) and is likewise interleaved:
 package inspection and the kernel check in phases 0 and 1, the Android container
 in CI with phase 2, desktop integration with phase 3, installation, storage and

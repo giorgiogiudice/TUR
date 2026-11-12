@@ -1,6 +1,6 @@
 # Android runtime
 
-**Specification addendum B — Draft for review**
+**Specification addendum B — Accepted 12 November 2026 (ADR-0006)**
 **Applies to:** specification revision 1.0
 **Related decision:** [ADR-0006](../adr/0006-android-runtime.md) (Proposed)
 
