@@ -1,0 +1,70 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+ "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<!-- SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0 -->
+<!--
+  org.tur.Addressable1: what every TUR program with addressable content offers
+  (docs/architecture/desktop-experience.md, sections 9.5 and 10.3;
+  docs/architecture/tur-settings.md, section 4).
+
+  Session bus. Object path /org/tur/Addressable1. The program owns the
+  well-known name that its settings registry gives as "program":
+  org.tur.Settings for tur-settings.
+
+  Errors are D-Bus errors named org.tur.Settings1.Error.*, whose message begins
+  with a code TUR-DESKTOP-SETTINGS-NNN and a colon.
+
+  Proposed; not frozen. The adaptor in src/busadaptors.h is written by hand and
+  a test (tests/unit/tst_bus.cpp) holds what the program really offers to this
+  file.
+-->
+<node>
+  <interface name="org.tur.Addressable1">
+    <!--
+      Shows the page, scrolls the row into view, gives it keyboard focus and
+      draws a highlight round it. For an address that names a page, shows the
+      page.
+
+      options:
+        highlight  b  draw the highlight. Default true.
+        duration   d  seconds until the highlight goes away by itself; 0, the
+                      default, keeps it until ClearHighlight, until another
+                      address is shown or until the person goes elsewhere.
+        dim        b  dim the rest of the window. Default false.
+        pax        b  the caller is the assistant: the highlight is drawn in
+                      P@x's gold. Default false: the system's blue.
+
+      result:
+        address       s       the address, as given
+        page, row     s       its two parts; row is empty for a page
+        program       s       the application identifier of the owner
+        located       b       whether the rectangle is known
+        rect          (dddd)  x, y, width and height of the row, relative to the
+                              top left corner of the program's window, in the
+                              window's own (logical) pixels. For a page, of the
+                              area the page is shown in.
+        scale         d       device pixels to one logical pixel
+        highlighted   b       whether the highlight was drawn
+        focused       b       whether keyboard focus is on the row
+        pid           u       the program's process
+        app_id        s       the window's application identifier
+        window_title  s       the window's title
+    -->
+    <method name="Reveal">
+      <arg name="address" type="s" direction="in"/>
+      <arg name="options" type="a{sv}" direction="in"/>
+      <arg name="result" type="a{sv}" direction="out"/>
+    </method>
+    <!-- Removes the highlight, if there is one. -->
+    <method name="ClearHighlight"/>
+    <!-- This program's settings registry, as JSON
+         (schemas/settings-registry.schema.json). -->
+    <method name="List">
+      <arg name="registry" type="s" direction="out"/>
+    </method>
+    <!-- The value or the state of a row of the page on screen changed. How
+         guide mode knows that the person did the step. -->
+    <signal name="RowChanged">
+      <arg name="address" type="s"/>
+    </signal>
+  </interface>
+</node>

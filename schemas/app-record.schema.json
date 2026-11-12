@@ -1,0 +1,233 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/giorgiogiudice/TUR/schemas/app-record.schema.json",
+  "$comment": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+  "title": "TUR application record",
+  "description": "What tur-runtime records about one installed Windows application (specification section 7.2): what it is, which file it was installed from, how it was installed, which program its launcher entry starts and how it is removed. The file is written by tur-runtime only, as application.json beside the application's prefix, and is never visible to the application. It must never hold a secret.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "app_id", "name", "main_executable", "main_executable_windows",
+    "main_executable_reason", "prefix", "prefix_id", "runtime", "runtime_version",
+    "installed_at", "install", "uninstall", "launcher", "profile"
+  ],
+  "$defs": {
+    "timestamp": {
+      "description": "A time in UTC, to the second, as RFC 3339 with the Z suffix.",
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "path": {
+      "description": "An absolute path on this system, without control characters.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "pattern": "^/[^\\u0000-\\u001f\\u007f-\\u009f]*$"
+    },
+    "text": {
+      "description": "Free text without control characters.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$"
+    },
+    "source": {
+      "description": "The file the application was installed from. The digest lets the record be matched to a published checksum; where the file came from is not recorded.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["file_name", "sha256", "size"],
+      "properties": {
+        "file_name": {
+          "description": "The file's name, without its directory.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "pattern": "^[^/\\u0000-\\u001f\\u007f-\\u009f]+$"
+        },
+        "sha256": {
+          "description": "The SHA-256 digest of the file.",
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "size": {
+          "description": "The file's size in bytes.",
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "install": {
+      "description": "How the application was installed.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "method", "arguments", "source"],
+      "properties": {
+        "kind": {
+          "description": "The kind of installer, identified from the file's content and never from its name.",
+          "enum": ["msi", "nsis", "inno-setup", "seven-zip-installer", "portable-zip", "plain-exe"]
+        },
+        "method": {
+          "description": "What was done with the file: its installer was run in its documented unattended mode, an archive was unpacked into the prefix, or the program file was copied into the prefix.",
+          "enum": ["unattended-installer", "unpacked", "copied"]
+        },
+        "arguments": {
+          "description": "The arguments the installer was run with.",
+          "type": "array",
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/text" }
+        },
+        "source": { "$ref": "#/$defs/source" }
+      }
+    },
+    "uninstall": {
+      "description": "How the application is removed. Whatever the method, the prefix is deleted afterwards.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["method"],
+      "properties": {
+        "method": {
+          "description": "uninstaller: the application's own uninstaller is run first. msi-product: Windows Installer removes the product first. remove-prefix: there is nothing to run.",
+          "enum": ["uninstaller", "msi-product", "remove-prefix"]
+        },
+        "program": {
+          "description": "The uninstaller as a Windows path, or the product code of a Windows Installer package. Present exactly when the method is not remove-prefix.",
+          "$ref": "#/$defs/text"
+        },
+        "arguments": {
+          "description": "The arguments the uninstaller is run with.",
+          "type": "array",
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/text" }
+        },
+        "registry_key": {
+          "description": "The uninstall entry in the prefix's registry that the program and arguments came from.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        }
+      }
+    },
+    "launcher": {
+      "description": "The launcher entry generated for the application.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["desktop_entry", "installed"],
+      "properties": {
+        "desktop_entry": {
+          "description": "The desktop entry file.",
+          "$ref": "#/$defs/path"
+        },
+        "icon": {
+          "description": "The icon file, a PNG taken from the main program. Absent when the program has no icon that could be read.",
+          "$ref": "#/$defs/path"
+        },
+        "installed": {
+          "description": "Whether the entry is installed where the desktop looks for entries. false: it is staged in the runtime manager's own directory.",
+          "type": "boolean"
+        }
+      }
+    },
+    "shortcut": {
+      "description": "A shortcut the installer created in the Start menu or on the desktop.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "target"],
+      "properties": {
+        "name": {
+          "description": "The shortcut's name.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        },
+        "target": {
+          "description": "What it points to, as a Windows path.",
+          "$ref": "#/$defs/text"
+        },
+        "arguments": {
+          "description": "The arguments it passes.",
+          "$ref": "#/$defs/text"
+        }
+      }
+    }
+  },
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "app_id": {
+      "description": "The application's identifier, lower-case segments joined by dots. It also names the application's directory.",
+      "type": "string",
+      "maxLength": 255,
+      "pattern": "^[a-z0-9][a-z0-9_-]*(\\.[a-z0-9][a-z0-9_-]*)+$"
+    },
+    "name": {
+      "description": "The application's name: the name its installer registered, or its program's product name, or the name the user gave.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "version": {
+      "description": "The application's version as its installer or its program states it. Free text: applications do not agree on a form.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100
+    },
+    "publisher": {
+      "description": "The application's publisher, as its installer or its program states it.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "main_executable": {
+      "description": "The program the launcher entry starts, as a path on this system. It lies inside the prefix.",
+      "$ref": "#/$defs/path"
+    },
+    "main_executable_windows": {
+      "description": "The same program as the application sees it, a Windows path.",
+      "$ref": "#/$defs/text"
+    },
+    "main_executable_reason": {
+      "description": "The rule by which the main program was chosen among what was installed.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "prefix": {
+      "description": "The application's prefix (WINEPREFIX).",
+      "$ref": "#/$defs/path"
+    },
+    "prefix_id": {
+      "description": "The prefix name used by the application's profile.",
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+    },
+    "runtime": {
+      "enum": ["wine", "proton"]
+    },
+    "runtime_version": {
+      "description": "The runtime version the application was installed with, such as wine-9.0.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,99}$"
+    },
+    "installed_at": { "$ref": "#/$defs/timestamp" },
+    "install": { "$ref": "#/$defs/install" },
+    "uninstall": { "$ref": "#/$defs/uninstall" },
+    "launcher": { "$ref": "#/$defs/launcher" },
+    "profile": {
+      "description": "The application profile the launcher entry launches from (schemas/app-profile.schema.json).",
+      "$ref": "#/$defs/path"
+    },
+    "executables": {
+      "description": "The programs the installer added, as Windows paths. At most 64 are kept.",
+      "type": "array",
+      "maxItems": 64,
+      "items": { "$ref": "#/$defs/text" }
+    },
+    "shortcuts": {
+      "description": "The shortcuts the installer created. At most 64 are kept.",
+      "type": "array",
+      "maxItems": 64,
+      "items": { "$ref": "#/$defs/shortcut" }
+    }
+  }
+}

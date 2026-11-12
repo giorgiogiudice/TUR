@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# os-release once Fedora's marks are replaced (task D-03), as section 12.1 of
+# docs/architecture/desktop-experience.md gives it. See ../README.md.
+NAME="TUR"
+PRETTY_NAME="TUR 0.4.0"
+ID=tur
+ID_LIKE=fedora
+VERSION_ID=0.4.0
+IMAGE_ID=tur
+IMAGE_VERSION=0.4.0
+BUILD_ID=20270301.g0123456789ab
+LOGO=tur-logo-icon
+DEFAULT_HOSTNAME=tur

@@ -14,6 +14,11 @@
 #
 # Package names are those of docs/architecture/desktop-experience.md, section
 # 15.3, checked against Fedora 45 on 12 November 2026.
+#
+# dbus-daemon is there for the tests that need a session bus of their own
+# (desktop/apps/tur-settings/tests/unit/tst_bus.cpp): Fedora's default bus,
+# dbus-broker, cannot be started without systemd. desktop-file-utils gives
+# desktop-file-validate, for the desktop files the programs ship.
 
 ARG BASE
 FROM ${BASE}
@@ -28,6 +33,7 @@ RUN dnf -y --setopt=install_weak_deps=False --setopt=tsflags=nodocs install \
         rsms-inter-fonts jetbrains-mono-fonts \
         google-noto-sans-vf-fonts google-noto-sans-hebrew-vf-fonts \
         python3 python3-pillow \
+        dbus-daemon desktop-file-utils \
     && dnf clean all \
     && rm -rf /var/cache/dnf /var/cache/libdnf5 /var/log/dnf* \
     && fc-cache -f \

@@ -30,6 +30,17 @@
 //! * [`plan`] is what all of these produce, and [`exec`] carries a plan out.
 //! * [`desktop`] writes the text of a desktop entry.
 //!
+//! Installing a Windows application:
+//!
+//! * [`installer`] tells what kind of installer a file is, from its content.
+//! * [`install`] plans the installation into a fresh prefix, the record of
+//!   what was installed, the launcher entry, and the removal.
+//! * [`discover`] finds what an installer added to a prefix, reading the
+//!   shortcuts ([`shortcut`]) and uninstall entries ([`winreg`]) it left.
+//! * [`app_record`] is the record kept for an installed application;
+//!   [`icon`] and [`pe_res`] read a program's icon and version information;
+//!   [`sha256`] names the file an application was installed from.
+//!
 //! Every operation is a plan first. A plan can be printed, compared and
 //! tested without starting anything; only [`exec::SystemExecutor`] touches
 //! the system.
@@ -48,16 +59,21 @@
 #![forbid(unsafe_code)]
 
 pub mod android;
+pub mod app_record;
 pub mod arch;
 pub mod bundle;
 pub mod codes;
 pub mod desktop;
+pub mod discover;
 pub mod elf;
 pub mod error;
 pub mod exec;
 pub mod grant;
 pub mod host;
+pub mod icon;
 pub mod inspect;
+pub mod install;
+pub mod installer;
 pub mod launch;
 pub mod launch_host;
 pub mod limits;
@@ -66,6 +82,7 @@ pub mod metadata;
 pub mod ole;
 pub mod paths;
 pub mod pe;
+pub mod pe_res;
 pub mod plan;
 pub mod prefix;
 pub mod profile;
@@ -74,7 +91,10 @@ pub mod report;
 pub mod runtime_cmd;
 pub mod sandbox;
 pub mod script;
+pub mod sha256;
+pub mod shortcut;
 pub mod timefmt;
+pub mod winreg;
 
 mod plist;
 mod reader;

@@ -1,0 +1,259 @@
+{
+  "licence": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+  "schema_version": 1,
+  "program": "org.tur.Settings",
+  "pages": [
+    {
+      "page": "tur.overview",
+      "title": "Overview",
+      "path": ["Overview"],
+      "keywords": ["status", "summary", "state of the system", "home"],
+      "sections": [
+        { "id": "system", "title": "This system" },
+        { "id": "state", "title": "State of the system" }
+      ],
+      "rows": [
+        {
+          "id": "version",
+          "title": "Version",
+          "keywords": ["release", "which version", "version number"],
+          "kind": "information",
+          "section": "system",
+          "source": { "type": "file", "available": true, "path": "/usr/lib/tur/release", "key": "TUR_VERSION" }
+        },
+        {
+          "id": "build",
+          "title": "Build",
+          "keywords": ["build number", "image", "build identifier"],
+          "kind": "information",
+          "section": "system",
+          "source": { "type": "file", "available": true, "path": "/usr/lib/tur/release", "key": "TUR_BUILD_ID" }
+        },
+        {
+          "id": "update-state",
+          "title": "Updates",
+          "keywords": ["up to date", "new version", "upgrade"],
+          "kind": "information",
+          "section": "state",
+          "source": {
+            "type": "dbus",
+            "available": false,
+            "waits_for": "The update service, org.tur.Update1 (task D-09)",
+            "bus": "system",
+            "service": "org.tur.Update1"
+          }
+        },
+        {
+          "id": "last-start",
+          "title": "The last start",
+          "keywords": ["boot", "startup", "health", "rollback", "went back"],
+          "kind": "information",
+          "section": "state",
+          "source": {
+            "type": "command",
+            "available": false,
+            "waits_for": "A reader in tur-settings of what tur-boot-health reports (tasks D-08 and D-09)",
+            "program": "/usr/bin/tur-boot-health",
+            "arguments": ["status", "--json"]
+          }
+        },
+        {
+          "id": "attention",
+          "title": "Needs attention",
+          "keywords": ["problems", "warnings", "something wrong", "alerts"],
+          "kind": "information",
+          "section": "state",
+          "source": {
+            "type": "program",
+            "available": false,
+            "waits_for": "The services that report problems: updates, boot health, storage and devices",
+            "what": "attention-list"
+          }
+        }
+      ]
+    },
+    { "page": "tur.updates", "title": "Updates", "path": ["Updates"], "status": "planned" },
+    { "page": "tur.recovery", "title": "Recovery", "path": ["Recovery"], "status": "planned" },
+    { "page": "tur.apps", "title": "Applications", "path": ["Applications"], "status": "planned" },
+    { "page": "tur.windows", "title": "Windows applications", "path": ["Windows applications"], "status": "planned" },
+    { "page": "tur.android", "title": "Android", "path": ["Android"], "status": "planned" },
+    { "page": "tur.macos", "title": "macOS (experimental)", "path": ["macOS (experimental)"], "status": "planned", "listed": false },
+    { "page": "tur.storage", "title": "Storage", "path": ["Storage"], "status": "planned" },
+    { "page": "tur.devices", "title": "Devices", "path": ["Devices"], "status": "planned" },
+    { "page": "tur.pax.general", "title": "General", "path": ["P@x", "General"], "status": "planned" },
+    { "page": "tur.pax.voice", "title": "Voice", "path": ["P@x", "Voice"], "status": "planned" },
+    { "page": "tur.pax.privacy", "title": "Privacy", "path": ["P@x", "Privacy"], "status": "planned" },
+    { "page": "tur.pax.approvals", "title": "Approvals", "path": ["P@x", "Approvals"], "status": "planned" },
+    { "page": "tur.pax.memory", "title": "Memory", "path": ["P@x", "Memory"], "status": "planned" },
+    { "page": "tur.pax.schedules", "title": "Schedules", "path": ["P@x", "Schedules"], "status": "planned" },
+    { "page": "tur.pax.spending", "title": "Spending", "path": ["P@x", "Spending"], "status": "planned" },
+    { "page": "tur.pax.activity", "title": "Activity", "path": ["P@x", "Activity"], "status": "planned" },
+    { "page": "tur.diagnostics", "title": "Diagnostics", "path": ["Diagnostics"], "status": "planned" },
+    {
+      "page": "tur.appearance",
+      "title": "Appearance",
+      "path": ["Appearance"],
+      "keywords": ["look", "theme", "colours", "colors", "style"],
+      "sections": [
+        { "id": "variant", "title": "Light or dark" },
+        { "id": "kde", "title": "Everything else" }
+      ],
+      "rows": [
+        {
+          "id": "current",
+          "title": "The desktop is set to",
+          "keywords": ["current theme", "dark or light", "which mode"],
+          "kind": "information",
+          "section": "variant",
+          "source": { "type": "platform", "available": true, "hint": "colour-scheme" }
+        },
+        {
+          "id": "variant",
+          "title": "Dark, light, or light by day and dark at night",
+          "keywords": ["dark mode", "light mode", "night mode", "dark theme", "light theme", "automatic", "day and night"],
+          "kind": "choice",
+          "section": "variant",
+          "source": {
+            "type": "kde-config",
+            "available": false,
+            "waits_for": "TUR's two global themes (task D-04)",
+            "file": "kdeglobals",
+            "group": "KDE",
+            "key": "LookAndFeelPackage"
+          },
+          "change": { "class": 1 }
+        },
+        {
+          "id": "global-theme",
+          "title": "Global theme",
+          "keywords": ["theme", "look and feel", "skin"],
+          "kind": "action",
+          "section": "kde",
+          "source": { "type": "address", "available": true, "opens": "kde.kcm_lookandfeel" },
+          "change": { "class": 1 }
+        },
+        {
+          "id": "colours",
+          "title": "Colours",
+          "keywords": ["colors", "colour scheme", "color scheme", "accent colour", "accent color", "contrast"],
+          "kind": "action",
+          "section": "kde",
+          "source": { "type": "address", "available": true, "opens": "kde.kcm_colors" },
+          "change": { "class": 1 }
+        },
+        {
+          "id": "fonts",
+          "title": "Fonts",
+          "keywords": ["font size", "text size", "typeface", "bigger text"],
+          "kind": "action",
+          "section": "kde",
+          "source": { "type": "address", "available": true, "opens": "kde.kcm_fonts" },
+          "change": { "class": 1 }
+        },
+        {
+          "id": "night-light",
+          "title": "Night Light",
+          "keywords": ["blue light", "warm colours", "warm colors", "evening", "colour temperature", "color temperature"],
+          "kind": "action",
+          "section": "kde",
+          "source": { "type": "address", "available": true, "opens": "kde.kcm_nightlight" },
+          "change": { "class": 1 }
+        }
+      ]
+    },
+    {
+      "page": "tur.about",
+      "title": "About",
+      "path": ["About"],
+      "keywords": ["about this computer", "about tur", "information"],
+      "sections": [
+        { "id": "system", "title": "This system" },
+        { "id": "origin", "title": "Where TUR comes from" },
+        { "id": "licences", "title": "Licences" },
+        { "id": "technical", "title": "Technical detail" }
+      ],
+      "rows": [
+        {
+          "id": "version",
+          "title": "Version",
+          "keywords": ["release", "which version", "version number"],
+          "kind": "information",
+          "section": "system",
+          "source": { "type": "file", "available": true, "path": "/usr/lib/tur/release", "key": "TUR_VERSION" }
+        },
+        {
+          "id": "build",
+          "title": "Build",
+          "keywords": ["build number", "image", "build identifier"],
+          "kind": "information",
+          "section": "system",
+          "source": { "type": "file", "available": true, "path": "/usr/lib/tur/release", "key": "TUR_BUILD_ID" }
+        },
+        {
+          "id": "base",
+          "title": "Base",
+          "keywords": ["built on", "based on", "distribution", "underlying system"],
+          "kind": "information",
+          "section": "system",
+          "source": { "type": "file", "available": true, "path": "/usr/lib/tur/release", "key": "TUR_BASE_VERSION" }
+        },
+        {
+          "id": "origin",
+          "title": "TUR and the Fedora Project",
+          "keywords": ["fedora", "red hat", "remix", "origin", "where it comes from"],
+          "kind": "information",
+          "section": "origin",
+          "source": { "type": "program", "available": true, "what": "statement-of-origin" }
+        },
+        {
+          "id": "licence",
+          "title": "TUR's licence",
+          "keywords": ["license", "terms", "noncommercial", "copyright", "legal"],
+          "kind": "information",
+          "section": "licences",
+          "source": { "type": "program", "available": true, "what": "licence-text" }
+        },
+        {
+          "id": "third-party",
+          "title": "Software from other projects",
+          "keywords": ["third party", "third-party notices", "open source", "licenses", "gpl", "credits"],
+          "kind": "information",
+          "section": "licences",
+          "source": { "type": "program", "available": true, "what": "third-party-notices" }
+        },
+        {
+          "id": "source-revision",
+          "title": "Source revision",
+          "keywords": ["commit", "git", "revision"],
+          "kind": "information",
+          "section": "technical",
+          "source": { "type": "file", "available": true, "path": "/usr/lib/tur/release", "key": "TUR_SOURCE_REVISION" }
+        },
+        {
+          "id": "base-image",
+          "title": "Base image",
+          "keywords": ["container image", "digest", "bootc"],
+          "kind": "information",
+          "section": "technical",
+          "source": { "type": "file", "available": true, "path": "/usr/lib/tur/release", "key": "TUR_BASE_IMAGE" }
+        },
+        {
+          "id": "system-name",
+          "title": "What the system calls itself",
+          "keywords": ["os-release", "operating system name", "pretty name"],
+          "kind": "information",
+          "section": "technical",
+          "source": { "type": "file", "available": true, "path": "/usr/lib/os-release", "key": "PRETTY_NAME" }
+        },
+        {
+          "id": "settings-version",
+          "title": "This program",
+          "keywords": ["tur-settings", "qt version", "program version"],
+          "kind": "information",
+          "section": "technical",
+          "source": { "type": "program", "available": true, "what": "program-version" }
+        }
+      ]
+    }
+  ]
+}

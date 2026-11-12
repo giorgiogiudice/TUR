@@ -2,8 +2,10 @@
 
 //! The text of a desktop entry for an installed Windows application.
 //!
-//! Only the text is produced. Installing it, file associations and icons
-//! taken from the program are not built yet.
+//! Only the text is produced. `tur-runtime app install` stages the entry in
+//! the runtime manager's own directory, with the icon taken from the
+//! program ([`crate::icon`]); installing it where the desktop looks for
+//! entries, and file associations, are not built yet.
 //!
 //! The entry starts the application through `tur-runtime launch`, so the
 //! sandbox and the prefix rules apply to a click in the launcher exactly as
@@ -84,6 +86,18 @@ fn is_plain_launcher(launcher: &str) -> bool {
         })
 }
 
+/// What an entry can say beyond what the profile holds.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct EntryExtras<'a> {
+    /// The application's icon, as the absolute path of an image file.
+    /// Without one the entry names a generic icon of the icon theme.
+    pub icon: Option<&'a str>,
+    /// The window class of the application's windows, which lets the
+    /// desktop tell that a window belongs to this entry. Wine's X11 driver
+    /// sets it to the program's file name in lower case.
+    pub window_class: Option<&'a str>,
+}
+
 /// Writes the desktop entry for `profile`.
 ///
 /// * `profile_path`: where the profile is stored; the entry passes it to
@@ -99,6 +113,21 @@ pub fn desktop_entry(
     profile: &AppProfile,
     profile_path: &str,
     launcher: &str,
+) -> Result<DesktopEntry, PlanError> {
+    desktop_entry_with(profile, profile_path, launcher, &EntryExtras::default())
+}
+
+/// Writes the desktop entry for `profile`, with an icon file and a window
+/// class when they are known.
+///
+/// # Errors
+///
+/// As for [`desktop_entry`], and when the icon is not a plain absolute path.
+pub fn desktop_entry_with(
+    profile: &AppProfile,
+    profile_path: &str,
+    launcher: &str,
+    extras: &EntryExtras<'_>,
 ) -> Result<DesktopEntry, PlanError> {
     let runtime = match profile.runtime {
         ProfileRuntime::Wine => RuntimeKind::Wine,
@@ -119,6 +148,11 @@ pub fn desktop_entry(
             "the launcher must be a program name or a plain absolute path",
         ));
     }
+    if extras.icon.is_some_and(|icon| !is_plain_absolute(icon)) {
+        return Err(unsupported(
+            "the icon must be an absolute path, without \"..\" or control characters",
+        ));
+    }
 
     let exec = format!("{launcher} launch {}", quote_argument(profile_path));
     let mut lines = vec![
@@ -131,12 +165,20 @@ pub fn desktop_entry(
             escape_value(&format!("Windows application ({})", runtime.label()))
         ),
         format!("Exec={}", escape_value(&exec)),
-        "Icon=application-x-ms-dos-executable".to_owned(),
+        format!(
+            "Icon={}",
+            escape_value(extras.icon.unwrap_or("application-x-ms-dos-executable"))
+        ),
         "Terminal=false".to_owned(),
         "StartupNotify=true".to_owned(),
+    ];
+    if let Some(window_class) = extras.window_class {
+        lines.push(format!("StartupWMClass={}", escape_value(window_class)));
+    }
+    lines.extend([
         format!("X-TUR-App-Id={}", escape_value(&profile.app_id)),
         format!("X-TUR-Runtime={}", runtime.as_str()),
-    ];
+    ]);
     if let Some(prefix_id) = &profile.prefix_id {
         lines.push(format!("X-TUR-Prefix-Id={}", escape_value(prefix_id)));
     }
@@ -232,6 +274,58 @@ mod tests {
         let first = found.next().unwrap_or_else(|| panic!("{key} is missing"));
         assert!(found.next().is_none(), "{key} appears more than once");
         &first.1
+    }
+
+    #[test]
+    fn an_entry_with_an_icon_and_a_window_class() {
+        let entry = desktop_entry_with(
+            &profile(),
+            "/d/tur/runtime/prefixes/com.example.app/profile.json",
+            "tur-runtime",
+            &EntryExtras {
+                icon: Some("/d/tur/runtime/launchers/com.example.app/tur-wine-com.example.app.png"),
+                window_class: Some("notepad++.exe"),
+            },
+        )
+        .unwrap();
+        let read = read_back(&entry.contents);
+        assert_eq!(
+            value(&read, "Icon"),
+            "/d/tur/runtime/launchers/com.example.app/tur-wine-com.example.app.png"
+        );
+        assert_eq!(value(&read, "StartupWMClass"), "notepad++.exe");
+        assert_eq!(value(&read, "X-TUR-App-Id"), "com.example.app");
+        // Neither value can add a line or a key.
+        let hostile = desktop_entry_with(
+            &profile(),
+            "/d/profile.json",
+            "tur-runtime",
+            &EntryExtras {
+                icon: None,
+                window_class: Some("app.exe\nExec=rm -rf ~"),
+            },
+        )
+        .unwrap();
+        let read = read_back(&hostile.contents);
+        assert_eq!(value(&read, "StartupWMClass"), "app.exe\nExec=rm -rf ~");
+        assert_eq!(
+            split_exec(value(&read, "Exec")),
+            ["tur-runtime", "launch", "/d/profile.json"]
+        );
+        assert_eq!(value(&read, "Icon"), "application-x-ms-dos-executable");
+        for icon in ["icon.png", "/a/../b.png", "/a/b\n.png"] {
+            let error = desktop_entry_with(
+                &profile(),
+                "/d/profile.json",
+                "tur-runtime",
+                &EntryExtras {
+                    icon: Some(icon),
+                    window_class: None,
+                },
+            )
+            .unwrap_err();
+            assert_eq!(error.code(), Code::LaunchUnsupported, "{icon:?}");
+        }
     }
 
     #[test]

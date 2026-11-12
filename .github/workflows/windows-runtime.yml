@@ -4,6 +4,10 @@
 # built on the runner, the distribution's Wine, and the real bubblewrap
 # sandbox. See tests/windows-runtime/e2e.py for what is and is not proved.
 #
+# A second job installs, starts, uses and removes real applications through
+# tur-runtime and publishes a compatibility table. See
+# tests/windows-runtime/apps.py and apps.json.
+#
 # This runs on Ubuntu with Ubuntu's Wine, not on the TUR image.
 name: windows-runtime
 
@@ -136,4 +140,109 @@ jobs:
         with:
           name: windows-runtime-evidence
           path: ${{ runner.temp }}/tur-e2e/evidence/
+          if-no-files-found: warn
+
+  real-applications:
+    # Real, freely redistributable Windows applications, installed, started,
+    # used once and removed through tur-runtime. The applications, their
+    # licences, their publishers' download locations and their pinned
+    # hashes are in tests/windows-runtime/apps.json. Nothing downloaded is
+    # committed or redistributed.
+    #
+    # This is Ubuntu's Wine on a hosted runner: not the TUR image (which
+    # ships no Wine yet), no GPU, software rendering on an X server without
+    # a screen. No Microsoft component, redistributable runtime or
+    # winetricks verb is installed.
+    name: Install and run real applications under Wine
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      CARGO_TERM_COLOR: never
+      CARGO_INCREMENTAL: "0"
+      DEBIAN_FRONTEND: noninteractive
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Scratch directory
+        run: |
+          mkdir -p "$RUNNER_TEMP/tur-apps/evidence"
+          echo "WORK=$RUNNER_TEMP/tur-apps" >> "$GITHUB_ENV"
+
+      - name: Install Wine with its 32-bit support, bubblewrap and a display
+        # Distribution packages only. Most installers are 32-bit programs
+        # whatever they install, so Wine's 32-bit half is needed here; the
+        # launch-path job above runs without it.
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y wine wine64 wine32:i386 bubblewrap unzip \
+            xvfb x11-utils openbox wmctrl imagemagick
+
+      - name: Versions
+        run: |
+          {
+            echo "runner image: ${ImageOS:-?} ${ImageVersion:-?}"
+            . /etc/os-release; echo "os: $PRETTY_NAME"
+            echo "kernel: $(uname -r)"
+            echo "wine: $(wine --version 2>/dev/null | head -n 1)"
+            echo "bubblewrap: $(bwrap --version)"
+            echo "unzip: $(unzip -v | head -n 1)"
+            echo "python: $(python3 --version)"
+            echo "packages:"
+            dpkg-query -W -f '  ${Package}:${Architecture} ${Version}\n' wine wine64 wine32 libwine \
+              bubblewrap unzip xvfb openbox wmctrl imagemagick 2>&1 || true
+            echo "wine programs:"
+            ls -l /usr/bin/wine /usr/bin/wineserver /usr/lib/wine/ 2>&1 | sed 's/^/  /' || true
+            echo "ntsync device: $(ls -l /dev/ntsync 2>&1)"
+          } | tee "$WORK/evidence/versions.txt"
+          { echo '### Versions (real applications)'; echo '```'; cat "$WORK/evidence/versions.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Sandbox preflight
+        run: tests/windows-runtime/sandbox-preflight.sh "$WORK/evidence/sandbox-preflight.txt"
+
+      - name: Toolchain
+        working-directory: services/tur-runtime
+        run: |
+          rustup show active-toolchain || rustup toolchain install
+          rustc --version; cargo --version
+
+      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            services/tur-runtime/target
+          key: windows-runtime-${{ hashFiles('rust-toolchain.toml', 'services/tur-runtime/Cargo.toml', 'services/tur-runtime/Cargo.lock') }}
+          restore-keys: windows-runtime-
+
+      - name: Build tur-runtime
+        working-directory: services/tur-runtime
+        run: cargo build --locked
+
+      - name: Install, start, use and remove each application
+        # The exit status is 1 when a result differs from the one recorded
+        # in apps.json. The table is written either way.
+        run: |
+          python3 tests/windows-runtime/apps.py \
+            --tur-runtime services/tur-runtime/target/debug/tur-runtime \
+            --apps tests/windows-runtime/apps.json \
+            --work-dir "$WORK/run" \
+            --evidence "$WORK/evidence"
+
+      - name: Compatibility table
+        if: always()
+        run: |
+          if [ -f "$WORK/evidence/compatibility.md" ]; then
+            cat "$WORK/evidence/compatibility.md" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No compatibility table was written." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          ls -laR "$WORK/evidence" | head -n 300
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: windows-runtime-applications
+          path: ${{ runner.temp }}/tur-apps/evidence/
           if-no-files-found: warn
