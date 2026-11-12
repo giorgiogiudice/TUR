@@ -1,0 +1,213 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/giorgiogiudice/TUR/schemas/pax-schedule.schema.json",
+  "title": "P@x schedule",
+  "description": "One reminder or scheduled task (AI control layer, sections 5.6 and 16.2), with the standing approvals it owns, as stored in <store>/schedules/definitions/<id>.json. A schedule exists only because the user created it from a proposal; the assistant can propose one and cannot write this file. The loader in services/tur-pax-memory is authoritative. It also enforces what this schema cannot express: sizes are counted in bytes, not characters; text fields hold no control characters (a message or request may hold line breaks and tabs); the zone is a name in the IANA time-zone database; an interval is at least 300 seconds and at most 3660 days; a weekly trigger names no weekday twice; the arguments of a standing approval are at most 16384 bytes as JSON; confirmed_at is not before created_at; and the identifier equals the file name.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "name",
+    "action",
+    "trigger",
+    "missed_runs",
+    "created_at",
+    "confirmed_at"
+  ],
+  "$defs": {
+    "timestamp": {
+      "description": "Whole seconds since the Unix epoch, UTC. At most the last second of the year 9999.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 253402300799
+    },
+    "local_time": {
+      "description": "A wall-clock time of day, HH:MM, from 00:00 to 23:59.",
+      "type": "string",
+      "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+    },
+    "zone": {
+      "description": "The IANA time zone a wall-clock time is in, for example Europe/Rome.",
+      "type": "string",
+      "minLength": 1
+    },
+    "standing_approval": {
+      "description": "An approval the user gave when creating the schedule, for one exact tool call. A call matches only if the service, the tool and every argument are identical; numbers compare as written, so 1 and 1.0 differ. The same three properties as the policy engine's StandingApproval.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["service", "tool", "arguments"],
+      "properties": {
+        "service": {
+          "description": "The D-Bus name of the service that owns the tool.",
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 255,
+          "pattern": "^[A-Za-z0-9_-]+(\\.[A-Za-z0-9_-]+)+$"
+        },
+        "tool": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "arguments": {
+          "description": "The complete arguments of the approved call.",
+          "type": "object"
+        }
+      }
+    },
+    "reminder": {
+      "description": "Notify the user. A reminder performs no action and cannot carry a standing approval.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "message"],
+      "properties": {
+        "type": { "const": "reminder" },
+        "message": { "type": "string", "minLength": 1, "maxLength": 2000 }
+      }
+    },
+    "task": {
+      "description": "Run a request, unattended. A class 2 action runs only if it matches one of the standing approvals; otherwise it is deferred and offered to the user on return.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "request"],
+      "properties": {
+        "type": { "const": "task" },
+        "request": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "standing_approvals": {
+          "type": "array",
+          "maxItems": 16,
+          "items": { "$ref": "#/$defs/standing_approval" }
+        }
+      }
+    },
+    "trigger_once": {
+      "description": "Once, at an instant.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "at"],
+      "properties": {
+        "type": { "const": "once" },
+        "at": { "$ref": "#/$defs/timestamp" }
+      }
+    },
+    "trigger_every": {
+      "description": "At anchor + k * interval for k = 0, 1, 2, ... The interval is elapsed time: a day is 86400 seconds.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "every", "unit", "anchor"],
+      "properties": {
+        "type": { "const": "every" },
+        "every": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
+        "unit": { "enum": ["minutes", "hours", "days"] },
+        "anchor": { "$ref": "#/$defs/timestamp" }
+      }
+    },
+    "trigger_daily": {
+      "description": "Every day at a wall-clock time. A time that does not exist on a day (clocks go forward) fires when the gap ends; a time that occurs twice (clocks go back) fires the first time only.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "time", "zone"],
+      "properties": {
+        "type": { "const": "daily" },
+        "time": { "$ref": "#/$defs/local_time" },
+        "zone": { "$ref": "#/$defs/zone" }
+      }
+    },
+    "trigger_weekly": {
+      "description": "On the given weekdays at a wall-clock time.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "weekdays", "time", "zone"],
+      "properties": {
+        "type": { "const": "weekly" },
+        "weekdays": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 7,
+          "items": {
+            "enum": ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+          }
+        },
+        "time": { "$ref": "#/$defs/local_time" },
+        "zone": { "$ref": "#/$defs/zone" }
+      }
+    },
+    "trigger_monthly": {
+      "description": "On a day of the month at a wall-clock time. In a month that lacks the day: last_day (the default) fires on the month's last day, skip does not fire that month.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "day", "time", "zone"],
+      "properties": {
+        "type": { "const": "monthly" },
+        "day": { "type": "integer", "minimum": 1, "maximum": 31 },
+        "time": { "$ref": "#/$defs/local_time" },
+        "zone": { "$ref": "#/$defs/zone" },
+        "if_day_missing": { "enum": ["last_day", "skip"] }
+      }
+    },
+    "trigger_event": {
+      "description": "When a named system event happens. It does not fire again within 300 seconds of its last run.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "event"],
+      "properties": {
+        "type": { "const": "event" },
+        "event": {
+          "enum": [
+            "update_available",
+            "device_connected",
+            "device_disconnected",
+            "network_online",
+            "session_unlocked",
+            "storage_low"
+          ]
+        }
+      }
+    }
+  },
+  "properties": {
+    "schema_version": { "const": 1 },
+    "id": {
+      "description": "The schedule identifier: s- and 8 to 16 lower-case hexadecimal digits.",
+      "type": "string",
+      "pattern": "^s-[0-9a-f]{8,16}$"
+    },
+    "name": {
+      "description": "A short name, shown in settings and, reduced to safe characters, in the timer's description.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "action": {
+      "oneOf": [{ "$ref": "#/$defs/reminder" }, { "$ref": "#/$defs/task" }]
+    },
+    "trigger": {
+      "oneOf": [
+        { "$ref": "#/$defs/trigger_once" },
+        { "$ref": "#/$defs/trigger_every" },
+        { "$ref": "#/$defs/trigger_daily" },
+        { "$ref": "#/$defs/trigger_weekly" },
+        { "$ref": "#/$defs/trigger_monthly" },
+        { "$ref": "#/$defs/trigger_event" }
+      ]
+    },
+    "missed_runs": {
+      "description": "What happens to occurrences that passed while the machine was off. run_once: one run on return, however many were missed. skip: none; wait for the next occurrence.",
+      "enum": ["run_once", "skip"]
+    },
+    "created_at": {
+      "description": "When the user first created the schedule.",
+      "$ref": "#/$defs/timestamp"
+    },
+    "confirmed_at": {
+      "description": "When the user created or last changed the schedule. Occurrences are counted from here.",
+      "$ref": "#/$defs/timestamp"
+    },
+    "proposed_by_task": {
+      "description": "The task during which the assistant proposed the schedule.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    }
+  }
+}
