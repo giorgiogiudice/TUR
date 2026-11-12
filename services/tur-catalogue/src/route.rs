@@ -294,7 +294,11 @@ pub fn requirement_severity(requirement: Requirement, route: Route, host: &HostF
 }
 
 /// The severity and the wording of a requirement on a route.
-fn requirement_caveat(requirement: Requirement, route: Route, host: &HostFacts) -> (Severity, String) {
+fn requirement_caveat(
+    requirement: Requirement,
+    route: Route,
+    host: &HostFacts,
+) -> (Severity, String) {
     let (severity, text): (Severity, &str) = match requirement {
         Requirement::KernelAntiCheat => match route {
             Route::Proton | Route::Wine => (
@@ -323,11 +327,19 @@ fn requirement_caveat(requirement: Requirement, route: Route, host: &HostFacts) 
             ),
         },
         Requirement::HardwareAttestedDrm => match route {
-            Route::Flatpak | Route::Native | Route::DistroContainer | Route::Web | Route::NoRoute => (
+            Route::Flatpak
+            | Route::Native
+            | Route::DistroContainer
+            | Route::Web
+            | Route::NoRoute => (
                 Severity::Warning,
                 "Its copy protection asks for hardware attestation: on Linux, protected content may be limited to a lower quality or refused.",
             ),
-            Route::Proton | Route::Wine | Route::WindowsGuest | Route::AndroidRuntime | Route::Darling => (
+            Route::Proton
+            | Route::Wine
+            | Route::WindowsGuest
+            | Route::AndroidRuntime
+            | Route::Darling => (
                 Severity::Obstacle,
                 "Its copy protection needs hardware attestation, which this route cannot provide: protected content is limited to low quality or refused.",
             ),
@@ -400,10 +412,9 @@ fn requirement_caveat(requirement: Requirement, route: Route, host: &HostFacts) 
                 Severity::Warning,
                 "Needs its hardware dongle, which must be passed through to the Windows guest.",
             ),
-            Route::Flatpak | Route::Native | Route::DistroContainer => (
-                Severity::Note,
-                "Needs its hardware dongle connected.",
-            ),
+            Route::Flatpak | Route::Native | Route::DistroContainer => {
+                (Severity::Note, "Needs its hardware dongle connected.")
+            }
             Route::Web | Route::NoRoute => (
                 Severity::Note,
                 "Other editions need a hardware dongle; check whether the web edition does.",
@@ -452,7 +463,11 @@ fn requirement_caveat(requirement: Requirement, route: Route, host: &HostFacts) 
 /// before an external report, then the most recent, then the first written.
 fn best_record(edition: &Edition, route: Route) -> Option<&Record> {
     let mut best: Option<&Record> = None;
-    for record in edition.records.iter().filter(|record| record.route == route) {
+    for record in edition
+        .records
+        .iter()
+        .filter(|record| record.route == route)
+    {
         let better = match best {
             None => true,
             Some(current) => {
@@ -511,7 +526,13 @@ fn prerequisite(code: PrerequisiteCode, text: &str) -> Prerequisite {
 
 /// Builds the option for one route of one edition: its rating, caveats,
 /// prerequisites and outlook.
-fn evaluate(route: Route, index: usize, edition: &Edition, host: &HostFacts, reason: String) -> RouteOption {
+fn evaluate(
+    route: Route,
+    index: usize,
+    edition: &Edition,
+    host: &HostFacts,
+    reason: String,
+) -> RouteOption {
     let (rating, rating_source) = rating_of(edition, route);
     let mut caveats = Vec::new();
     // An obstacle that a good rating from elsewhere cannot outweigh, because
@@ -639,7 +660,11 @@ fn evaluate(route: Route, index: usize, edition: &Edition, host: &HostFacts, rea
             ),
             RatingSource::Unrated => format!("Rated {}.", rating.as_str()),
         };
-        caveats.push(caveat(CaveatCode::ReportedInadequate, Severity::Warning, text));
+        caveats.push(caveat(
+            CaveatCode::ReportedInadequate,
+            Severity::Warning,
+            text,
+        ));
     }
 
     let blocked = caveats
@@ -824,13 +849,19 @@ fn windows_options(
         index,
         edition,
         host,
-        format!("{why} It runs in real Windows, in a virtual machine, and its windows appear on the desktop."),
+        format!(
+            "{why} It runs in real Windows, in a virtual machine, and its windows appear on the desktop."
+        ),
     );
     vec![layer, guest]
 }
 
 /// The position of an option on the ladder: lower comes first.
-fn ladder_key(option: &RouteOption, entry: &Entry, preferences: &Preferences) -> (u8, u8, u8, u8, usize, u8) {
+fn ladder_key(
+    option: &RouteOption,
+    entry: &Entry,
+    preferences: &Preferences,
+) -> (u8, u8, u8, u8, usize, u8) {
     let edition = option
         .edition_index
         .and_then(|index| entry.editions.get(index));
@@ -868,8 +899,9 @@ fn demote_clearly_worse(options: &mut Vec<RouteOption>) {
     while position > 0 {
         position -= 1;
         let option = &options[position];
-        let candidate =
-            option.route.is_linux() && option.rating.is_adverse() && option.outlook != Outlook::Blocked;
+        let candidate = option.route.is_linux()
+            && option.rating.is_adverse()
+            && option.outlook != Outlook::Blocked;
         if !candidate {
             continue;
         }
@@ -1009,7 +1041,11 @@ fn no_route(entry: &Entry, host: &HostFacts, blocked: &[RouteOption]) -> RouteOp
 /// A Windows guest is never listed before the compatibility layer of the
 /// same edition, pinned or not: the pin changes which option is
 /// recommended, not the order.
-pub fn route(request: &RouteRequest<'_>, host: &HostFacts, preferences: &Preferences) -> Vec<RouteOption> {
+pub fn route(
+    request: &RouteRequest<'_>,
+    host: &HostFacts,
+    preferences: &Preferences,
+) -> Vec<RouteOption> {
     let entry = request.entry;
     let pin = preferences.pinned_route(&entry.id);
     let mut options: Vec<RouteOption> = Vec::new();
@@ -1021,7 +1057,8 @@ pub fn route(request: &RouteRequest<'_>, host: &HostFacts, preferences: &Prefere
                 index,
                 edition,
                 host,
-                "A Linux edition exists as a Flatpak: a native Linux edition comes first.".to_owned(),
+                "A Linux edition exists as a Flatpak: a native Linux edition comes first."
+                    .to_owned(),
             )),
             EditionKind::LinuxNative => {
                 if edition.obtain == Some(Obtain::OtherDistributionPackage) {
@@ -1038,7 +1075,8 @@ pub fn route(request: &RouteRequest<'_>, host: &HostFacts, preferences: &Prefere
                         index,
                         edition,
                         host,
-                        "A native Linux edition exists: a native Linux edition comes first.".to_owned(),
+                        "A native Linux edition exists: a native Linux edition comes first."
+                            .to_owned(),
                     ));
                 }
             }
@@ -1060,7 +1098,13 @@ pub fn route(request: &RouteRequest<'_>, host: &HostFacts, preferences: &Prefere
                 } else {
                     "A web edition exists, and no better route is free of known obstacles."
                 };
-                options.push(evaluate(Route::Web, index, edition, host, reason.to_owned()));
+                options.push(evaluate(
+                    Route::Web,
+                    index,
+                    edition,
+                    host,
+                    reason.to_owned(),
+                ));
             }
             EditionKind::Macos => {
                 if host.darling_enabled {
@@ -1113,13 +1157,14 @@ pub fn route(request: &RouteRequest<'_>, host: &HostFacts, preferences: &Prefere
         match pinned_position {
             Some(position) => options[position].pinned = true,
             None => {
-                let why = if pinned_route.is_virtual_machine() && preferences.never_use_virtual_machine {
-                    "you have also chosen never to use a virtual machine"
-                } else if options.iter().any(|option| option.route == pinned_route) {
-                    "it cannot run this application on this machine"
-                } else {
-                    "the rules do not offer it for this application on this machine"
-                };
+                let why =
+                    if pinned_route.is_virtual_machine() && preferences.never_use_virtual_machine {
+                        "you have also chosen never to use a virtual machine"
+                    } else if options.iter().any(|option| option.route == pinned_route) {
+                        "it cannot run this application on this machine"
+                    } else {
+                        "the rules do not offer it for this application on this machine"
+                    };
                 options[0].caveats.push(caveat(
                     CaveatCode::PinUnavailable,
                     Severity::Note,
@@ -1447,7 +1492,11 @@ mod tests {
     fn entry_with_rating(requirement: Requirement, rating: Rating) -> Entry {
         entry(
             Category::Productivity,
-            vec![rated(requiring(windows(), &[requirement]), Route::Wine, rating)],
+            vec![rated(
+                requiring(windows(), &[requirement]),
+                Route::Wine,
+                rating,
+            )],
         )
     }
 
@@ -1640,7 +1689,11 @@ mod tests {
             assert!(!proton.recommended && !proton.pinned);
             let blocker = proton.caveat_for(Requirement::KernelAntiCheat).unwrap();
             assert_eq!(blocker.severity, Severity::Blocker);
-            assert!(blocker.text.starts_with("This game's anti-cheat will not work"));
+            assert!(
+                blocker
+                    .text
+                    .starts_with("This game's anti-cheat will not work")
+            );
         }
     }
 
@@ -1676,14 +1729,18 @@ mod tests {
         );
         let options = run(&arm, &full_host(), &Preferences::default());
         assert_eq!(routes(&options), [Route::NoRoute, Route::AndroidRuntime]);
-        let caveat = options[1].caveat_for(Requirement::ArmOnlyNativeCode).unwrap();
+        let caveat = options[1]
+            .caveat_for(Requirement::ArmOnlyNativeCode)
+            .unwrap();
         assert_eq!(caveat.severity, Severity::Blocker);
 
         let mut host = full_host();
         host.arm_translation = true;
         let options = run(&arm, &host, &Preferences::default());
         assert_eq!(routes(&options), [Route::AndroidRuntime]);
-        let caveat = options[0].caveat_for(Requirement::ArmOnlyNativeCode).unwrap();
+        let caveat = options[0]
+            .caveat_for(Requirement::ArmOnlyNativeCode)
+            .unwrap();
         assert_eq!(caveat.severity, Severity::Warning);
         assert_eq!(options[0].outlook, Outlook::Clear);
 
@@ -1691,7 +1748,9 @@ mod tests {
         host.arch = Arch::Aarch64;
         let options = run(&arm, &host, &Preferences::default());
         assert_eq!(routes(&options), [Route::AndroidRuntime]);
-        let caveat = options[0].caveat_for(Requirement::ArmOnlyNativeCode).unwrap();
+        let caveat = options[0]
+            .caveat_for(Requirement::ArmOnlyNativeCode)
+            .unwrap();
         assert_eq!(caveat.severity, Severity::Note);
     }
 
@@ -1873,10 +1932,7 @@ mod tests {
             AlternativeKind::AnotherComputer
         );
         assert!(!options[0].reason.is_empty());
-        assert_eq!(
-            options[1].worst_severity(),
-            Some(Severity::Blocker)
-        );
+        assert_eq!(options[1].worst_severity(), Some(Severity::Blocker));
     }
 
     #[test]
@@ -1934,7 +1990,12 @@ mod tests {
             vec![flatpak(), fedora(), windows(), android()],
         );
         let unpinned = run(&entry, &full_host(), &Preferences::default());
-        for pin in [Route::Flatpak, Route::Native, Route::Wine, Route::AndroidRuntime] {
+        for pin in [
+            Route::Flatpak,
+            Route::Native,
+            Route::Wine,
+            Route::AndroidRuntime,
+        ] {
             let options = run(&entry, &full_host(), &pinned(pin));
             assert_eq!(routes(&options), routes(&unpinned));
             let chosen = recommended(&options);
@@ -1995,7 +2056,11 @@ mod tests {
             options[0].prerequisites[0].code,
             PrerequisiteCode::InstallProton
         );
-        assert!(options[0].prerequisites[0].text.contains("does not ship Proton"));
+        assert!(
+            options[0].prerequisites[0]
+                .text
+                .contains("does not ship Proton")
+        );
         let options = run(&entry, &full_host(), &Preferences::default());
         assert!(options.iter().all(|option| option.prerequisites.is_empty()));
     }
@@ -2105,7 +2170,10 @@ mod tests {
             // No guest: it has no usable GPU acceleration either.
             assert_eq!(routes(&options), [Route::Wine]);
             assert_eq!(
-                options[0].caveat_for(Requirement::HeavyGpu).unwrap().severity,
+                options[0]
+                    .caveat_for(Requirement::HeavyGpu)
+                    .unwrap()
+                    .severity,
                 severity
             );
             assert_eq!(options[0].outlook, outlook);

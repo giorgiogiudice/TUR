@@ -156,7 +156,10 @@ pub fn validate_catalogue(entries: &[(String, Entry)], today: Date) -> Vec<Probl
             problems.push(Problem::in_file(
                 Code::EntryInvalid,
                 file,
-                format!("the file of application {} must be named {expected}", entry.id),
+                format!(
+                    "the file of application {} must be named {expected}",
+                    entry.id
+                ),
             ));
         }
         match ids.get(entry.id.as_str()) {
@@ -241,9 +244,17 @@ fn check_edition(
         ("remote", edition.remote.is_some(), FLATPAK_ONLY),
         ("obtain", edition.obtain.is_some(), OBTAINED),
         ("package", edition.package.is_some(), WITH_PACKAGE),
-        ("distribution", edition.distribution.is_some(), LINUX_NATIVE_ONLY),
+        (
+            "distribution",
+            edition.distribution.is_some(),
+            LINUX_NATIVE_ONLY,
+        ),
         ("store_id", edition.store_id.is_some(), OBTAINED),
-        ("download_page", edition.download_page.is_some(), WITH_DOWNLOAD_PAGE),
+        (
+            "download_page",
+            edition.download_page.is_some(),
+            WITH_DOWNLOAD_PAGE,
+        ),
         ("stores", !edition.stores.is_empty(), ANDROID_ONLY),
         ("url", edition.url.is_some(), WEB_ONLY),
         ("primary", edition.primary, WEB_ONLY),
@@ -478,7 +489,11 @@ fn check_record(
     today: Date,
 ) {
     if !edition.routes().contains(&record.route) {
-        let possible: Vec<&str> = edition.routes().iter().map(|route| route.as_str()).collect();
+        let possible: Vec<&str> = edition
+            .routes()
+            .iter()
+            .map(|route| route.as_str())
+            .collect();
         findings.add(
             Code::RouteMismatch,
             format!(
@@ -490,23 +505,39 @@ fn check_record(
     }
     check_date(findings, &format!("{what}: date"), &record.date, today);
     if let Some(version) = &record.version_tested {
-        check_text(findings, &format!("{what}: version_tested"), version, MAX_SHORT_CHARS);
+        check_text(
+            findings,
+            &format!("{what}: version_tested"),
+            version,
+            MAX_SHORT_CHARS,
+        );
     }
     if let Some(notes) = &record.notes {
         check_text(findings, &format!("{what}: notes"), notes, MAX_NOTES_CHARS);
     }
     if let Some(rating) = &record.source_rating {
-        check_text(findings, &format!("{what}: source_rating"), rating, MAX_SHORT_CHARS);
+        check_text(
+            findings,
+            &format!("{what}: source_rating"),
+            rating,
+            MAX_SHORT_CHARS,
+        );
     }
     if let Some(name) = &record.source_name {
-        check_text(findings, &format!("{what}: source_name"), name, MAX_NAME_CHARS);
+        check_text(
+            findings,
+            &format!("{what}: source_name"),
+            name,
+            MAX_NAME_CHARS,
+        );
     }
     if let Some(url) = &record.source_url {
         check_url(findings, &format!("{what}: source_url"), url);
     }
 
-    let has_source =
-        record.source_name.is_some() || record.source_url.is_some() || record.source_rating.is_some();
+    let has_source = record.source_name.is_some()
+        || record.source_url.is_some()
+        || record.source_rating.is_some();
     match record.reported_by {
         Reporter::Nobody => {
             if record.rating != Rating::Unknown {
@@ -584,9 +615,19 @@ fn check_record(
 
 /// Checks one reference.
 fn check_reference(findings: &mut Findings, what: &str, reference: &Reference, today: Date) {
-    check_text(findings, &format!("{what}: title"), &reference.title, MAX_NAME_CHARS);
+    check_text(
+        findings,
+        &format!("{what}: title"),
+        &reference.title,
+        MAX_NAME_CHARS,
+    );
     check_url(findings, &format!("{what}: url"), &reference.url);
-    check_date(findings, &format!("{what}: checked"), &reference.checked, today);
+    check_date(
+        findings,
+        &format!("{what}: checked"),
+        &reference.checked,
+        today,
+    );
 }
 
 /// What makes two editions of one entry the same edition, or `None` when the
@@ -947,7 +988,11 @@ mod tests {
         ] {
             let mut record = tur_test(Route::Wine, Rating::Good);
             record.test_report = Some(path.to_owned());
-            assert_eq!(codes(&with_record(record)), [Code::UnsourcedRating], "{path}");
+            assert_eq!(
+                codes(&with_record(record)),
+                [Code::UnsourcedRating],
+                "{path}"
+            );
         }
         for path in ["docs/reports/x.md", "tests/compat/2026/elden-ring.json"] {
             let mut record = tur_test(Route::Wine, Rating::Good);
@@ -992,10 +1037,21 @@ mod tests {
 
     #[test]
     fn tur_cannot_be_entered_as_an_external_source() {
-        for name in ["TUR", "tur", "T.U.R.", "TUR test", "UOS", "The Unified Realm"] {
+        for name in [
+            "TUR",
+            "tur",
+            "T.U.R.",
+            "TUR test",
+            "UOS",
+            "The Unified Realm",
+        ] {
             let mut record = external(Route::Proton, Rating::Good);
             record.source_name = Some(name.to_owned());
-            assert_eq!(codes(&with_record(record)), [Code::UnsourcedRating], "{name}");
+            assert_eq!(
+                codes(&with_record(record)),
+                [Code::UnsourcedRating],
+                "{name}"
+            );
         }
     }
 
@@ -1020,7 +1076,13 @@ mod tests {
 
     #[test]
     fn a_record_must_name_a_route_its_edition_can_use() {
-        for route in [Route::Flatpak, Route::AndroidRuntime, Route::Web, Route::Darling, Route::NoRoute] {
+        for route in [
+            Route::Flatpak,
+            Route::AndroidRuntime,
+            Route::Web,
+            Route::Darling,
+            Route::NoRoute,
+        ] {
             assert_eq!(
                 codes(&with_record(unknown(route))),
                 [Code::RouteMismatch],
@@ -1099,12 +1161,25 @@ mod tests {
 
     #[test]
     fn identifiers_are_checked() {
-        for id in ["Example", "org.Example.app", "single", "org..app", "org.example.", ".org", "org.exa mple", ""] {
+        for id in [
+            "Example",
+            "org.Example.app",
+            "single",
+            "org..app",
+            "org.example.",
+            ".org",
+            "org.exa mple",
+            "",
+        ] {
             let mut bad = entry(vec![flatpak()]);
             bad.id = id.to_owned();
             assert_eq!(codes(&bad), [Code::EntryInvalid], "{id}");
         }
-        for id in ["org.example.app", "tur.class.android-banking", "io.7zip.app_2"] {
+        for id in [
+            "org.example.app",
+            "tur.class.android-banking",
+            "io.7zip.app_2",
+        ] {
             let mut good = entry(vec![flatpak()]);
             good.id = id.to_owned();
             assert_eq!(codes(&good), NONE, "{id}");
@@ -1152,13 +1227,14 @@ mod tests {
 
         let mut edition = windows();
         edition.package = Some("example".to_owned());
-        assert!(
-            messages(&entry(vec![edition])).contains("field package is not used by a windows")
-        );
+        assert!(messages(&entry(vec![edition])).contains("field package is not used by a windows"));
 
         let mut edition = windows();
         edition.download_page = Some("https://example.org/download".to_owned());
-        assert!(messages(&entry(vec![edition])).contains("not used when the edition is obtained from Steam"));
+        assert!(
+            messages(&entry(vec![edition]))
+                .contains("not used when the edition is obtained from Steam")
+        );
 
         let mut edition = Edition::new(EditionKind::Web);
         edition.url = Some("https://example.org/".to_owned());
@@ -1215,7 +1291,10 @@ mod tests {
         ];
         for (edition, expected) in cases {
             let text = messages(&entry(vec![edition]));
-            assert!(text.contains(expected), "expected \"{expected}\" in: {text}");
+            assert!(
+                text.contains(expected),
+                "expected \"{expected}\" in: {text}"
+            );
         }
     }
 
@@ -1265,7 +1344,10 @@ mod tests {
 
         assert_eq!(codes(&entry(Vec::new())), [Code::EntryInvalid]);
 
-        assert_eq!(codes(&entry(vec![flatpak(), flatpak()])), [Code::EntryInvalid]);
+        assert_eq!(
+            codes(&entry(vec![flatpak(), flatpak()])),
+            [Code::EntryInvalid]
+        );
 
         let mut edition = flatpak();
         edition.requirements = vec![Requirement::HeavyGpu, Requirement::HeavyGpu];
@@ -1313,9 +1395,18 @@ mod tests {
         // Alias against name, name against name, alias against alias; each
         // compared through the normalised key.
         let cases = [
-            (named("org.example.one", "One", &[]), named("org.example.two", "Two", &["ONE"])),
-            (named("org.example.one", "One App", &[]), named("org.example.two", "one-app", &[])),
-            (named("org.example.one", "One", &["Uno"]), named("org.example.two", "Two", &["U.N.O."])),
+            (
+                named("org.example.one", "One", &[]),
+                named("org.example.two", "Two", &["ONE"]),
+            ),
+            (
+                named("org.example.one", "One App", &[]),
+                named("org.example.two", "one-app", &[]),
+            ),
+            (
+                named("org.example.one", "One", &["Uno"]),
+                named("org.example.two", "Two", &["U.N.O."]),
+            ),
         ];
         for (first, second) in cases {
             assert_eq!(catalogue_codes(&[first, second]), [Code::AliasCollision]);

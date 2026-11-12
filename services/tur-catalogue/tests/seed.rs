@@ -116,7 +116,11 @@ fn no_seed_record_claims_tur_s_own_test_without_a_test_report() {
     assert!(missing.is_empty(), "{missing:?}");
 
     for entry in catalogue.entries() {
-        for record in entry.editions.iter().flat_map(|edition| edition.records.iter()) {
+        for record in entry
+            .editions
+            .iter()
+            .flat_map(|edition| edition.records.iter())
+        {
             match record.reported_by {
                 Reporter::Nobody => assert_eq!(
                     record.rating,
@@ -130,7 +134,10 @@ fn no_seed_record_claims_tur_s_own_test_without_a_test_report() {
                     assert!(record.test_report.is_none(), "{}", entry.id);
                 }
                 Reporter::TurTest => {
-                    let report = record.test_report.as_ref().expect("checked by the validator");
+                    let report = record
+                        .test_report
+                        .as_ref()
+                        .expect("checked by the validator");
                     assert!(
                         repository_root().join(report).is_file(),
                         "{}: test report {report} does not exist",
@@ -152,7 +159,11 @@ fn every_seed_rating_names_a_documented_external_source() {
     .unwrap();
     let mut used = BTreeSet::new();
     for entry in catalogue.entries() {
-        for record in entry.editions.iter().flat_map(|edition| edition.records.iter()) {
+        for record in entry
+            .editions
+            .iter()
+            .flat_map(|edition| edition.records.iter())
+        {
             if record.reported_by != Reporter::External {
                 continue;
             }
@@ -173,7 +184,10 @@ fn every_seed_rating_names_a_documented_external_source() {
     assert!(!used.is_empty(), "the seed holds no sourced rating at all");
     for name in used {
         let short = name.replace(" AppDB", "");
-        assert!(readme.contains(&short), "README.md does not describe {name}");
+        assert!(
+            readme.contains(&short),
+            "README.md does not describe {name}"
+        );
         assert!(
             document.contains(&short),
             "catalogue-and-routing.md does not list {name}"
@@ -196,7 +210,10 @@ fn the_seed_covers_the_applications_with_no_good_route() {
             assert!(options[0].recommended);
             let alternative = options[0].alternative.as_ref().unwrap();
             assert_eq!(alternative.kind, AlternativeKind::DualBoot, "{id}");
-            assert!(options[0].reason.contains("Dual boot is the only way"), "{id}");
+            assert!(
+                options[0].reason.contains("Dual boot is the only way"),
+                "{id}"
+            );
             assert_eq!(options[1].outlook, Outlook::Blocked, "{id}");
         }
     }
@@ -204,9 +221,17 @@ fn the_seed_covers_the_applications_with_no_good_route() {
     // The banking class and a wallet: Play Integrity, so no route.
     for id in ["tur.class.android-banking", "com.google.wallet"] {
         let options = run(entry(&catalogue, id), &full_host(), &nothing_pinned);
-        assert_eq!(routes(&options), [Route::NoRoute, Route::AndroidRuntime], "{id}");
+        assert_eq!(
+            routes(&options),
+            [Route::NoRoute, Route::AndroidRuntime],
+            "{id}"
+        );
         let alternative = options[0].alternative.as_ref().unwrap();
-        assert_eq!(alternative.kind, AlternativeKind::CertifiedAndroidDevice, "{id}");
+        assert_eq!(
+            alternative.kind,
+            AlternativeKind::CertifiedAndroidDevice,
+            "{id}"
+        );
         let caveat = options[1].caveat_for(Requirement::PlayIntegrity).unwrap();
         assert!(caveat.text.contains("will refuse to run"), "{id}");
     }
@@ -218,7 +243,12 @@ fn the_seed_covers_the_applications_with_no_good_route() {
     // A Mac-only creative application: no route on a stock machine; with
     // Darling enabled, one experimental and doubtful route.
     let final_cut = entry(&catalogue, "com.apple.finalcutpro");
-    assert!(final_cut.editions.iter().all(|edition| edition.kind == EditionKind::Macos));
+    assert!(
+        final_cut
+            .editions
+            .iter()
+            .all(|edition| edition.kind == EditionKind::Macos)
+    );
     let options = run(final_cut, &stock, &nothing_pinned);
     assert_eq!(routes(&options), [Route::NoRoute]);
     assert_eq!(
@@ -247,7 +277,11 @@ fn seed_applications_route_as_the_ladder_says() {
     };
 
     // A native Linux edition wins.
-    for id in ["org.mozilla.firefox", "org.libreoffice.libreoffice", "org.gimp.gimp"] {
+    for id in [
+        "org.mozilla.firefox",
+        "org.libreoffice.libreoffice",
+        "org.gimp.gimp",
+    ] {
         let options = run(entry(&catalogue, id), &full_host(), &nothing_pinned);
         assert_eq!(options[0].route, Route::Flatpak, "{id}");
         assert!(options[0].recommended, "{id}");
@@ -255,12 +289,18 @@ fn seed_applications_route_as_the_ladder_says() {
     }
 
     // A Windows game: Proton, with the rating and who reported it.
-    let options = run(entry(&catalogue, "com.bandainamco.eldenring"), &stock, &nothing_pinned);
+    let options = run(
+        entry(&catalogue, "com.bandainamco.eldenring"),
+        &stock,
+        &nothing_pinned,
+    );
     assert_eq!(routes(&options), [Route::Proton]);
     assert_eq!(options[0].rating, Rating::Usable);
     match &options[0].rating_source {
         RatingSource::External {
-            name, source_rating, ..
+            name,
+            source_rating,
+            ..
         } => {
             assert_eq!(name, "ProtonDB");
             assert_eq!(source_rating.as_deref(), Some("gold"));
@@ -291,13 +331,21 @@ fn seed_applications_route_as_the_ladder_says() {
     );
 
     // A Windows application that Wine is reported to run: no guest.
-    let options = run(entry(&catalogue, "com.adobe.photoshop"), &stock, &nothing_pinned);
+    let options = run(
+        entry(&catalogue, "com.adobe.photoshop"),
+        &stock,
+        &nothing_pinned,
+    );
     assert_eq!(routes(&options), [Route::Wine]);
     assert_eq!(options[0].rating, Rating::Usable);
 
     // The web edition is the publisher's primary form: listed first, the
     // Android edition after it with its copy-protection caveat.
-    let options = run(entry(&catalogue, "com.netflix.netflix"), &full_host(), &nothing_pinned);
+    let options = run(
+        entry(&catalogue, "com.netflix.netflix"),
+        &full_host(),
+        &nothing_pinned,
+    );
     assert_eq!(routes(&options), [Route::Web, Route::AndroidRuntime]);
     assert!(options[0].recommended);
     assert!(
@@ -308,7 +356,11 @@ fn seed_applications_route_as_the_ladder_says() {
 
     // A package of another distribution runs in a container, after the
     // Flatpak and the publisher's own build.
-    let options = run(entry(&catalogue, "org.signal.signal"), &full_host(), &nothing_pinned);
+    let options = run(
+        entry(&catalogue, "org.signal.signal"),
+        &full_host(),
+        &nothing_pinned,
+    );
     assert_eq!(
         routes(&options)[..3],
         [Route::Flatpak, Route::Native, Route::DistroContainer]
@@ -464,7 +516,10 @@ fn the_schema_and_the_rust_types_name_the_same_fields() {
 
     assert_eq!(keys(&written), keys(&schema["properties"]));
     let edition = &written["editions"][0];
-    assert_eq!(keys(edition), keys(&schema["$defs"]["edition"]["properties"]));
+    assert_eq!(
+        keys(edition),
+        keys(&schema["$defs"]["edition"]["properties"])
+    );
     assert_eq!(
         keys(&edition["records"][0]),
         keys(&schema["$defs"]["record"]["properties"])
@@ -483,12 +538,25 @@ fn the_schema_and_the_rust_types_name_the_same_fields() {
     ] {
         assert_eq!(object["additionalProperties"], Value::Bool(false));
     }
-    assert_eq!(schema["properties"]["schema_version"]["const"], SCHEMA_VERSION);
+    assert_eq!(
+        schema["properties"]["schema_version"]["const"],
+        SCHEMA_VERSION
+    );
     assert_eq!(
         names(&schema["required"]),
-        sorted(&["schema_version", "id", "name", "publisher", "category", "editions"])
+        sorted(&[
+            "schema_version",
+            "id",
+            "name",
+            "publisher",
+            "category",
+            "editions"
+        ])
     );
-    assert_eq!(names(&schema["$defs"]["edition"]["required"]), sorted(&["kind"]));
+    assert_eq!(
+        names(&schema["$defs"]["edition"]["required"]),
+        sorted(&["kind"])
+    );
     assert_eq!(
         names(&schema["$defs"]["record"]["required"]),
         sorted(&["route", "rating", "reported_by", "date"])

@@ -60,7 +60,10 @@ impl Catalogue {
         let listing = std::fs::read_dir(directory).map_err(|error| {
             vec![Problem::general(
                 Code::Unreadable,
-                format!("cannot read the catalogue directory {}: {error}", directory.display()),
+                format!(
+                    "cannot read the catalogue directory {}: {error}",
+                    directory.display()
+                ),
             )]
         })?;
 
@@ -145,7 +148,10 @@ impl Catalogue {
     /// Builds a catalogue from entries already in memory, validating them
     /// as [`Catalogue::load`] does. Each element is the file name the entry
     /// would have and the entry.
-    pub fn from_entries(entries: Vec<(String, Entry)>, today: Date) -> Result<Catalogue, Vec<Problem>> {
+    pub fn from_entries(
+        entries: Vec<(String, Entry)>,
+        today: Date,
+    ) -> Result<Catalogue, Vec<Problem>> {
         let problems = validate_catalogue(&entries, today);
         if !problems.is_empty() {
             return Err(problems);
@@ -246,7 +252,8 @@ impl Catalogue {
 /// reading all of it.
 fn read_entry_file(path: &Path) -> Result<String, (Code, String)> {
     let limit = u64::try_from(MAX_ENTRY_BYTES).unwrap_or(u64::MAX);
-    let file = File::open(path).map_err(|error| (Code::Unreadable, format!("cannot be read: {error}")))?;
+    let file =
+        File::open(path).map_err(|error| (Code::Unreadable, format!("cannot be read: {error}")))?;
     let mut bytes = Vec::new();
     file.take(limit.saturating_add(1))
         .read_to_end(&mut bytes)
@@ -276,7 +283,8 @@ mod tests {
             static COUNTER: AtomicU32 = AtomicU32::new(0);
             let unique = COUNTER.fetch_add(1, Ordering::Relaxed);
             let process = std::process::id();
-            let path = std::env::temp_dir().join(format!("tur-catalogue-{process}-{unique}-{label}"));
+            let path =
+                std::env::temp_dir().join(format!("tur-catalogue-{process}-{unique}-{label}"));
             std::fs::create_dir_all(&path).unwrap();
             Scratch { path }
         }
@@ -318,7 +326,11 @@ mod tests {
         scratch.write("README.md", "How entries are written.");
         scratch.write(".hidden", "ignored");
         let catalogue = Catalogue::load(&scratch.path, today()).unwrap();
-        let ids: Vec<&str> = catalogue.entries().iter().map(|entry| entry.id.as_str()).collect();
+        let ids: Vec<&str> = catalogue
+            .entries()
+            .iter()
+            .map(|entry| entry.id.as_str())
+            .collect();
         assert_eq!(ids, ["org.example.a", "org.example.b"]);
         assert_eq!(catalogue.len(), 2);
         assert!(!catalogue.is_empty());
@@ -374,13 +386,23 @@ mod tests {
             "org.example.field.toml",
             &entry_text("org.example.field", "Field").replace("publisher", "colour = 1\npublisher"),
         );
-        scratch.write("org.example.other.toml", &entry_text("org.example.renamed", "Renamed"));
+        scratch.write(
+            "org.example.other.toml",
+            &entry_text("org.example.renamed", "Renamed"),
+        );
         scratch.write(
             "org.example.url.toml",
             &entry_text("org.example.url", "Url").replace("https://", "http://"),
         );
-        scratch.write("org.example.twin.toml", &entry_text("org.example.twin", "ALPHA"));
-        std::fs::write(scratch.path.join("org.example.bytes.toml"), [0xffu8, 0xfe, 0x00]).unwrap();
+        scratch.write(
+            "org.example.twin.toml",
+            &entry_text("org.example.twin", "ALPHA"),
+        );
+        std::fs::write(
+            scratch.path.join("org.example.bytes.toml"),
+            [0xffu8, 0xfe, 0x00],
+        )
+        .unwrap();
         std::fs::write(
             scratch.path.join("org.example.big.toml"),
             vec![b'#'; MAX_ENTRY_BYTES + 1],
@@ -435,9 +457,11 @@ mod tests {
     #[test]
     fn from_entries_validates_like_load() {
         let good = parse_entry(&entry_text("org.example.a", "Alpha")).unwrap();
-        let catalogue =
-            Catalogue::from_entries(vec![("org.example.a.toml".to_owned(), good.clone())], today())
-                .unwrap();
+        let catalogue = Catalogue::from_entries(
+            vec![("org.example.a.toml".to_owned(), good.clone())],
+            today(),
+        )
+        .unwrap();
         assert_eq!(catalogue.len(), 1);
 
         let mut bad = good;

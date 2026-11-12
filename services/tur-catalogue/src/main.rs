@@ -346,7 +346,8 @@ fn read_parsed<T: Default>(
     };
     let text = read_input(path)
         .map_err(|reason| format!("cannot read the {what} file {}: {reason}", path.display()))?;
-    parse(&text).map_err(|reason| format!("the {what} file {} is not valid: {reason}", path.display()))
+    parse(&text)
+        .map_err(|reason| format!("the {what} file {} is not valid: {reason}", path.display()))
 }
 
 fn run_route(
@@ -410,7 +411,11 @@ fn run_route(
 
     if chosen.route == Route::NoRoute {
         if !json {
-            print_error_line(&format!("error[{}]: {}", Code::NoRoute, Code::NoRoute.title()));
+            print_error_line(&format!(
+                "error[{}]: {}",
+                Code::NoRoute,
+                Code::NoRoute.title()
+            ));
         }
         EXIT_NO_ROUTE
     } else if chosen.prerequisites.is_empty() {

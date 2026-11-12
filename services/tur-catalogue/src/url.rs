@@ -90,9 +90,13 @@ pub fn check_https_url(text: &str) -> Result<(), &'static str> {
             return Err("its host name is not a lower-case DNS name");
         }
     }
-    let tail_valid = tail
-        .bytes()
-        .all(|b| b.is_ascii_graphic() && !matches!(b, b'"' | b'<' | b'>' | b'\\' | b'`' | b'^' | b'{' | b'|' | b'}'));
+    let tail_valid = tail.bytes().all(|b| {
+        b.is_ascii_graphic()
+            && !matches!(
+                b,
+                b'"' | b'<' | b'>' | b'\\' | b'`' | b'^' | b'{' | b'|' | b'}'
+            )
+    });
     if !tail_valid {
         return Err("it holds a space, a quote or a character outside printable ASCII");
     }

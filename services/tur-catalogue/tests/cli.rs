@@ -30,7 +30,8 @@ impl Scratch {
         static COUNTER: AtomicU32 = AtomicU32::new(0);
         let unique = COUNTER.fetch_add(1, Ordering::Relaxed);
         let process = std::process::id();
-        let path = std::env::temp_dir().join(format!("tur-catalogue-cli-{process}-{unique}-{label}"));
+        let path =
+            std::env::temp_dir().join(format!("tur-catalogue-cli-{process}-{unique}-{label}"));
         std::fs::create_dir_all(&path).unwrap();
         Scratch { path }
     }
@@ -128,7 +129,11 @@ fn validate_accepts_the_seed_catalogue() {
         .parse()
         .unwrap();
     assert!(applications >= 25, "{}", outcome.stdout);
-    assert!(outcome.stdout.contains("0 rated by TUR tests"), "{}", outcome.stdout);
+    assert!(
+        outcome.stdout.contains("0 rated by TUR tests"),
+        "{}",
+        outcome.stdout
+    );
     assert!(outcome.stderr.is_empty(), "{}", outcome.stderr);
 
     // The directory can also be given with --catalogue, and the report
@@ -142,7 +147,10 @@ fn validate_accepts_the_seed_catalogue() {
 fn validate_refuses_a_tur_test_claim_without_a_report() {
     let scratch = Scratch::new("claim");
     let record = "\n[[editions.records]]\nroute = \"wine\"\nrating = \"good\"\nreported_by = \"tur-test\"\nversion_tested = \"1.0\"\ndate = \"2026-11-12\"\n";
-    scratch.file("org.example.app.toml", &entry_text("org.example.app", "Example", record));
+    scratch.file(
+        "org.example.app.toml",
+        &entry_text("org.example.app", "Example", record),
+    );
     let outcome = run(&["validate", &scratch.path()]);
     assert_eq!(outcome.status, EXIT_INVALID);
     assert!(
@@ -170,8 +178,16 @@ fn validate_checks_that_a_named_test_report_exists() {
     // Without the repository the file is not checked, and the report says so.
     let outcome = run(&["validate", &catalogue]);
     assert_eq!(outcome.status, EXIT_OK, "{}", outcome.stderr);
-    assert!(outcome.stdout.contains("1 rated by TUR tests"), "{}", outcome.stdout);
-    assert!(outcome.stdout.contains("were not checked"), "{}", outcome.stdout);
+    assert!(
+        outcome.stdout.contains("1 rated by TUR tests"),
+        "{}",
+        outcome.stdout
+    );
+    assert!(
+        outcome.stdout.contains("were not checked"),
+        "{}",
+        outcome.stdout
+    );
 
     let outcome = run(&["validate", &catalogue, "--repository", &scratch.path()]);
     assert_eq!(outcome.status, EXIT_INVALID);
@@ -180,7 +196,11 @@ fn validate_checks_that_a_named_test_report_exists() {
         "{}",
         outcome.stderr
     );
-    assert!(outcome.stderr.contains("does not exist"), "{}", outcome.stderr);
+    assert!(
+        outcome.stderr.contains("does not exist"),
+        "{}",
+        outcome.stderr
+    );
 
     std::fs::create_dir_all(scratch.path.join("docs/reports/compat")).unwrap();
     scratch.file("docs/reports/compat/example.md", "# Test report\n");
@@ -191,8 +211,14 @@ fn validate_checks_that_a_named_test_report_exists() {
 #[test]
 fn validate_reports_every_problem_with_its_code() {
     let scratch = Scratch::new("bad");
-    scratch.file("org.example.one.toml", &entry_text("org.example.one", "Same Name", ""));
-    scratch.file("org.example.two.toml", &entry_text("org.example.two", "same-name", ""));
+    scratch.file(
+        "org.example.one.toml",
+        &entry_text("org.example.one", "Same Name", ""),
+    );
+    scratch.file(
+        "org.example.two.toml",
+        &entry_text("org.example.two", "same-name", ""),
+    );
     scratch.file(
         "org.example.three.toml",
         &entry_text("org.example.three", "Three", "colour = \"red\"\n"),
@@ -211,7 +237,11 @@ fn validate_reports_every_problem_with_its_code() {
         "error[UOS-DESKTOP-CATALOGUE-007]: org.example.four.toml:",
         "4 problems found",
     ] {
-        assert!(outcome.stderr.contains(expected), "missing {expected} in:\n{}", outcome.stderr);
+        assert!(
+            outcome.stderr.contains(expected),
+            "missing {expected} in:\n{}",
+            outcome.stderr
+        );
     }
 }
 
@@ -242,8 +272,16 @@ fn search_finds_applications_and_tolerates_typos() {
 
     let outcome = on_seed(&["search", "FOTOSHOP"]);
     assert_eq!(outcome.status, EXIT_OK, "{}", outcome.stderr);
-    assert!(outcome.stdout.starts_with("com.adobe.photoshop  "), "{}", outcome.stdout);
-    assert!(outcome.stdout.contains("[matched \"Photoshop\"]"), "{}", outcome.stdout);
+    assert!(
+        outcome.stdout.starts_with("com.adobe.photoshop  "),
+        "{}",
+        outcome.stdout
+    );
+    assert!(
+        outcome.stdout.contains("[matched \"Photoshop\"]"),
+        "{}",
+        outcome.stdout
+    );
 
     let outcome = on_seed(&["search", "vs code", "--json"]);
     assert_eq!(outcome.status, EXIT_OK, "{}", outcome.stderr);
@@ -282,7 +320,11 @@ fn show_prints_an_entry() {
         "Native Linux edition: Fedora package firefox",
         "Compatibility: no record; every route is unknown.",
     ] {
-        assert!(outcome.stdout.contains(expected), "missing {expected} in:\n{}", outcome.stdout);
+        assert!(
+            outcome.stdout.contains(expected),
+            "missing {expected} in:\n{}",
+            outcome.stdout
+        );
     }
 
     // A rating is shown with the source that reported it.
@@ -295,7 +337,11 @@ fn show_prints_an_entry() {
         "{}",
         outcome.stdout
     );
-    assert!(outcome.stdout.contains("not tested by TUR"), "{}", outcome.stdout);
+    assert!(
+        outcome.stdout.contains("not tested by TUR"),
+        "{}",
+        outcome.stdout
+    );
 
     let outcome = on_seed(&["show", "com.riotgames.valorant", "--json"]);
     assert_eq!(outcome.status, EXIT_OK, "{}", outcome.stderr);
@@ -330,8 +376,16 @@ fn route_prefers_the_native_linux_edition() {
         "{}",
         outcome.stdout
     );
-    assert!(outcome.stdout.contains("Host: assumed, not detected"), "{}", outcome.stdout);
-    assert!(!outcome.stdout.contains("Windows guest"), "{}", outcome.stdout);
+    assert!(
+        outcome.stdout.contains("Host: assumed, not detected"),
+        "{}",
+        outcome.stdout
+    );
+    assert!(
+        !outcome.stdout.contains("Windows guest"),
+        "{}",
+        outcome.stdout
+    );
 }
 
 #[test]
@@ -346,7 +400,11 @@ fn route_states_no_route_and_dual_boot_for_a_game_with_kernel_anti_cheat() {
         "Outlook: cannot work on this machine",
         "Rating: broken, reported by AreWeAntiCheatYet as \"Denied\"",
     ] {
-        assert!(outcome.stdout.contains(expected), "missing {expected} in:\n{}", outcome.stdout);
+        assert!(
+            outcome.stdout.contains(expected),
+            "missing {expected} in:\n{}",
+            outcome.stdout
+        );
     }
     assert!(
         outcome.stderr.contains("error[UOS-DESKTOP-CATALOGUE-011]"),
@@ -379,7 +437,13 @@ fn route_reads_host_facts_and_reports_the_rating_with_its_source() {
         "install-proton"
     );
 
-    let outcome = on_seed(&["route", "com.bandainamco.eldenring", "--host", &host, "--json"]);
+    let outcome = on_seed(&[
+        "route",
+        "com.bandainamco.eldenring",
+        "--host",
+        &host,
+        "--json",
+    ]);
     assert_eq!(outcome.status, EXIT_OK, "{}", outcome.stderr);
     let report = json(&outcome);
     assert_eq!(report["application"]["id"], "com.bandainamco.eldenring");
@@ -486,7 +550,13 @@ fn route_refuses_bad_host_facts_and_preferences() {
     );
 
     let bad_pin = scratch.file("prefs.json", r#"{"pinned_routes": {"a.b": "no-route"}}"#);
-    let outcome = on_seed(&["route", "org.mozilla.firefox", "--prefs", &bad_pin, "--json"]);
+    let outcome = on_seed(&[
+        "route",
+        "org.mozilla.firefox",
+        "--prefs",
+        &bad_pin,
+        "--json",
+    ]);
     assert_eq!(outcome.status, EXIT_UNREADABLE);
     assert_eq!(json(&outcome)["error"]["code"], "UOS-DESKTOP-CATALOGUE-012");
 
@@ -500,6 +570,12 @@ fn a_wrong_command_line_is_a_usage_error() {
     assert_eq!(run(&[]).status, EXIT_USAGE);
     assert_eq!(on_seed(&["search"]).status, EXIT_USAGE);
     assert_eq!(on_seed(&["route"]).status, EXIT_USAGE);
-    assert_eq!(on_seed(&["install", "org.mozilla.firefox"]).status, EXIT_USAGE);
-    assert_eq!(on_seed(&["launch", "org.mozilla.firefox"]).status, EXIT_USAGE);
+    assert_eq!(
+        on_seed(&["install", "org.mozilla.firefox"]).status,
+        EXIT_USAGE
+    );
+    assert_eq!(
+        on_seed(&["launch", "org.mozilla.firefox"]).status,
+        EXIT_USAGE
+    );
 }

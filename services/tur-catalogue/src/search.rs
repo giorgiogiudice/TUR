@@ -131,7 +131,11 @@ fn words_cost(query_words: &[Vec<char>], candidate_words: &[Vec<char>]) -> Optio
 }
 
 /// Scores one name or alias against the query.
-fn score(query_key: &[char], query_words: &[Vec<char>], candidate: &str) -> Option<(u32, MatchKind)> {
+fn score(
+    query_key: &[char],
+    query_words: &[Vec<char>],
+    candidate: &str,
+) -> Option<(u32, MatchKind)> {
     let candidate_key: Vec<char> = normalise(candidate).chars().collect();
     if candidate_key.is_empty() || query_key.is_empty() {
         return None;
@@ -246,11 +250,19 @@ mod tests {
     fn sample() -> Vec<Entry> {
         vec![
             entry("org.mozilla.firefox", "Firefox", &["Mozilla Firefox"]),
-            entry("com.microsoft.vscode", "Visual Studio Code", &["VS Code", "vscode"]),
+            entry(
+                "com.microsoft.vscode",
+                "Visual Studio Code",
+                &["VS Code", "vscode"],
+            ),
             entry("com.microsoft.visualstudio", "Visual Studio", &["VS"]),
             entry("com.adobe.photoshop", "Adobe Photoshop", &["Photoshop"]),
             entry("com.valvesoftware.cs2", "Counter-Strike 2", &["CS2"]),
-            entry("org.libreoffice.libreoffice", "LibreOffice", &["Libre Office"]),
+            entry(
+                "org.libreoffice.libreoffice",
+                "LibreOffice",
+                &["Libre Office"],
+            ),
             entry("org.sevenzip.sevenzip", "7-Zip", &["7zip"]),
             entry("com.cdprojektred.cyberpunk2077", "Cyberpunk 2077", &[]),
         ]
@@ -296,12 +308,21 @@ mod tests {
             assert_eq!(hits[0].entry.id, "org.mozilla.firefox", "{query}");
             assert_eq!(hits[0].kind, MatchKind::Exact, "{query}");
         }
-        for query in ["counter strike 2", "counterstrike2", "Counter-Strike  2", "cs2", "CS 2"] {
+        for query in [
+            "counter strike 2",
+            "counterstrike2",
+            "Counter-Strike  2",
+            "cs2",
+            "CS 2",
+        ] {
             let hits = search(&entries, query);
             assert_eq!(hits[0].entry.id, "com.valvesoftware.cs2", "{query}");
             assert_eq!(hits[0].kind, MatchKind::Exact, "{query}");
         }
-        assert_eq!(search(&entries, "7 zip")[0].entry.id, "org.sevenzip.sevenzip");
+        assert_eq!(
+            search(&entries, "7 zip")[0].entry.id,
+            "org.sevenzip.sevenzip"
+        );
     }
 
     #[test]
@@ -415,7 +436,13 @@ mod tests {
     #[test]
     fn returns_at_most_the_limit() {
         let entries: Vec<Entry> = (0..50)
-            .map(|number| entry(&format!("org.example.app{number}"), &format!("App {number}"), &[]))
+            .map(|number| {
+                entry(
+                    &format!("org.example.app{number}"),
+                    &format!("App {number}"),
+                    &[],
+                )
+            })
             .collect();
         assert_eq!(search(&entries, "app").len(), MAX_HITS);
     }

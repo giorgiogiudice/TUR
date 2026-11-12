@@ -201,10 +201,19 @@ mod tests {
     #[test]
     fn converts_to_and_from_days_since_1970() {
         assert_eq!(Date::from_days_since_epoch(0).to_string(), "1970-01-01");
-        assert_eq!(Date::from_days_since_epoch(19_358).to_string(), "2023-01-01");
-        assert_eq!(Date::from_days_since_epoch(20_769).to_string(), "2026-11-12");
+        assert_eq!(
+            Date::from_days_since_epoch(19_358).to_string(),
+            "2023-01-01"
+        );
+        assert_eq!(
+            Date::from_days_since_epoch(20_769).to_string(),
+            "2026-11-12"
+        );
         assert_eq!(Date::from_days_since_epoch(-1).to_string(), "1969-12-31");
-        assert_eq!(Date::parse("2026-11-12").unwrap().days_since_epoch(), 20_769);
+        assert_eq!(
+            Date::parse("2026-11-12").unwrap().days_since_epoch(),
+            20_769
+        );
         // Every day over more than a century round-trips, and consecutive
         // days are consecutive dates.
         let mut previous = Date::from_days_since_epoch(-1);

@@ -325,10 +325,8 @@ fn requirements_carry_their_caveats(case: &Case<'_>, options: &[RouteOption]) {
 }
 
 fn one_sound_recommendation(case: &Case<'_>, options: &[RouteOption]) {
-    let recommended: Vec<&RouteOption> = options
-        .iter()
-        .filter(|option| option.recommended)
-        .collect();
+    let recommended: Vec<&RouteOption> =
+        options.iter().filter(|option| option.recommended).collect();
     assert_eq!(recommended.len(), 1, "{}", case.describe());
     let chosen = recommended[0];
     assert!(
@@ -683,7 +681,8 @@ fn android_edition_space() {
                         // ARM-only code blocks exactly on a non-ARM machine
                         // without a translation layer.
                         if entry.editions[0].requires(Requirement::ArmOnlyNativeCode) {
-                            let caveat = runtime.caveat_for(Requirement::ArmOnlyNativeCode).unwrap();
+                            let caveat =
+                                runtime.caveat_for(Requirement::ArmOnlyNativeCode).unwrap();
                             let blocks = host.arch != Arch::Aarch64 && !host.arm_translation;
                             assert_eq!(caveat.severity == Severity::Blocker, blocks);
                         }
@@ -735,7 +734,12 @@ fn macos_edition_space() {
                         let options = check(&case);
                         cases += 1;
                         let darling = options.iter().find(|option| option.route == Route::Darling);
-                        assert_eq!(darling.is_some(), host.darling_enabled, "{}", case.describe());
+                        assert_eq!(
+                            darling.is_some(),
+                            host.darling_enabled,
+                            "{}",
+                            case.describe()
+                        );
                         if let Some(darling) = darling {
                             // Always labelled experimental.
                             assert!(
@@ -890,7 +894,9 @@ fn mixed_edition_space() {
     for subset in 1..128u32 {
         for primary in [false, true] {
             for category in [Category::Game, Category::Productivity] {
-                for requirement in std::iter::once(None).chain(Requirement::ALL.into_iter().map(Some)) {
+                for requirement in
+                    std::iter::once(None).chain(Requirement::ALL.into_iter().map(Some))
+                {
                     for (linux_rating, other_rating) in patterns {
                         let mut editions = Vec::new();
                         let mut templates = vec![
@@ -944,9 +950,8 @@ fn mixed_edition_space() {
                                 }
                                 // A secondary web edition appears only when
                                 // nothing better is clear, or when pinned.
-                                let secondary_web = options
-                                    .iter()
-                                    .any(|option| is_secondary_web(&case, option));
+                                let secondary_web =
+                                    options.iter().any(|option| is_secondary_web(&case, option));
                                 let better = options.iter().any(|option| {
                                     option.outlook == Outlook::Clear
                                         && !matches!(
@@ -1124,7 +1129,11 @@ fn the_blocking_cells_of_the_requirement_table() {
     };
     let blockers: Vec<(Requirement, Route)> = Requirement::ALL
         .into_iter()
-        .flat_map(|requirement| Route::RUNNABLE.into_iter().map(move |route| (requirement, route)))
+        .flat_map(|requirement| {
+            Route::RUNNABLE
+                .into_iter()
+                .map(move |route| (requirement, route))
+        })
         .filter(|(requirement, route)| {
             requirement_severity(*requirement, *route, &x86) == Severity::Blocker
         })
@@ -1179,7 +1188,10 @@ fn the_blocking_cells_of_the_requirement_table() {
     );
     // A kernel driver and a dongle are obstacles for a layer, not for the guest.
     for layer in [Route::Proton, Route::Wine] {
-        assert_eq!(requirement_severity(KernelDriver, layer, &x86), Severity::Obstacle);
+        assert_eq!(
+            requirement_severity(KernelDriver, layer, &x86),
+            Severity::Obstacle
+        );
         assert_eq!(
             requirement_severity(Requirement::HardwareDongle, layer, &x86),
             Severity::Obstacle

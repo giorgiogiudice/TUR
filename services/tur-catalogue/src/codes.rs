@@ -177,7 +177,10 @@ mod tests {
             let parsed: ErrorCode = code.as_str().parse().unwrap();
             assert_eq!(parsed, code.error_code());
             assert!(seen.insert(code.as_str()), "duplicate code {code}");
-            assert!(numbers.insert(parsed.number()), "duplicate number in {code}");
+            assert!(
+                numbers.insert(parsed.number()),
+                "duplicate number in {code}"
+            );
             assert!(!code.title().is_empty());
         }
         assert_eq!(seen.len(), Code::ALL.len());
@@ -228,6 +231,9 @@ mod tests {
             "error[UOS-DESKTOP-CATALOGUE-003]: a.toml: bad"
         );
         let general = Problem::general(Code::Unreadable, "gone");
-        assert_eq!(general.to_string(), "error[UOS-DESKTOP-CATALOGUE-001]: gone");
+        assert_eq!(
+            general.to_string(),
+            "error[UOS-DESKTOP-CATALOGUE-001]: gone"
+        );
     }
 }

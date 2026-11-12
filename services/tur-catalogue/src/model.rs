@@ -261,7 +261,9 @@ impl Edition {
             }
             Obtain::OtherDistributionPackage => format!(
                 "{} package {}",
-                self.distribution.as_deref().unwrap_or("another distribution's"),
+                self.distribution
+                    .as_deref()
+                    .unwrap_or("another distribution's"),
                 self.package.as_deref().unwrap_or("?")
             ),
             Obtain::PublisherPage => format!(
@@ -407,7 +409,11 @@ impl Obtain {
     pub const fn uses_store_id(self) -> bool {
         matches!(
             self,
-            Obtain::Steam | Obtain::Epic | Obtain::Gog | Obtain::MicrosoftStore | Obtain::MacAppStore
+            Obtain::Steam
+                | Obtain::Epic
+                | Obtain::Gog
+                | Obtain::MicrosoftStore
+                | Obtain::MacAppStore
         )
     }
 }
@@ -668,7 +674,10 @@ impl Route {
 
     /// Whether the route runs a Linux edition.
     pub const fn is_linux(self) -> bool {
-        matches!(self, Route::Flatpak | Route::Native | Route::DistroContainer)
+        matches!(
+            self,
+            Route::Flatpak | Route::Native | Route::DistroContainer
+        )
     }
 }
 
@@ -1008,7 +1017,10 @@ checked = "2026-11-12"
         debian.obtain = Some(Obtain::OtherDistributionPackage);
         debian.distribution = Some("debian".to_owned());
         debian.package = Some("example".to_owned());
-        assert_eq!(debian.describe(), "Native Linux edition: debian package example");
+        assert_eq!(
+            debian.describe(),
+            "Native Linux edition: debian package example"
+        );
 
         let class = Edition::new(EditionKind::Macos);
         assert_eq!(class.describe(), "macOS edition: source not recorded");

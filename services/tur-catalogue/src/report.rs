@@ -331,7 +331,10 @@ url = "https://app.example.org/"
             "2. Web edition: https://app.example.org/",
             "Compatibility: no record; every route is unknown.",
         ] {
-            assert!(text.contains(expected), "missing \"{expected}\" in:\n{text}");
+            assert!(
+                text.contains(expected),
+                "missing \"{expected}\" in:\n{text}"
+            );
         }
     }
 
@@ -358,7 +361,10 @@ url = "https://app.example.org/"
             "3. Web application\n",
             "     - [note] Needs an online account with its publisher.",
         ] {
-            assert!(text.contains(expected), "missing \"{expected}\" in:\n{text}");
+            assert!(
+                text.contains(expected),
+                "missing \"{expected}\" in:\n{text}"
+            );
         }
     }
 

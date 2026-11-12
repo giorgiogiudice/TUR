@@ -8,6 +8,7 @@
 
 use std::collections::BTreeMap;
 
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
 use crate::model::Route;
@@ -141,15 +142,27 @@ impl Preferences {
     }
 }
 
-/// Parses host facts from JSON. Unknown fields are refused.
-pub fn parse_host_facts(json: &str) -> Result<HostFacts, String> {
-    serde_json::from_str(json).map_err(|error| error.to_string())
+/// Parses a JSON object into `T`. Anything that is not an object is
+/// refused: left to itself, a derived reader would also accept a list of
+/// values in field order.
+fn parse_object<T: DeserializeOwned>(json: &str) -> Result<T, String> {
+    let value: serde_json::Value =
+        serde_json::from_str(json).map_err(|error| error.to_string())?;
+    if !value.is_object() {
+        return Err("expected a JSON object".to_owned());
+    }
+    serde_json::from_value(value).map_err(|error| error.to_string())
 }
 
-/// Parses preferences from JSON. Unknown fields are refused, and so is a pin
-/// to `no-route`, which is a result and not a route.
+/// Parses host facts from a JSON object. Unknown fields are refused.
+pub fn parse_host_facts(json: &str) -> Result<HostFacts, String> {
+    parse_object(json)
+}
+
+/// Parses preferences from a JSON object. Unknown fields are refused, and
+/// so is a pin to `no-route`, which is a result and not a route.
 pub fn parse_preferences(json: &str) -> Result<Preferences, String> {
-    let preferences: Preferences = serde_json::from_str(json).map_err(|error| error.to_string())?;
+    let preferences: Preferences = parse_object(json)?;
     for (id, route) in &preferences.pinned_routes {
         if *route == Route::NoRoute {
             return Err(format!(
@@ -212,9 +225,16 @@ mod tests {
         assert!(parse_host_facts(r#"{"gpu": "fast"}"#).is_err());
         assert!(parse_host_facts(r#"{"wine": "yes"}"#).is_err());
         assert!(parse_host_facts("[]").is_err());
+        assert!(parse_host_facts("[\"x86_64\", true]").is_err());
+        assert!(parse_host_facts("null").is_err());
+        assert!(parse_host_facts("{").is_err());
+        assert!(parse_preferences("[]").is_err());
+        assert!(parse_preferences("[true, false, {}]").is_err());
         assert!(parse_preferences(r#"{"never_use_vm": true}"#).is_err());
         assert!(parse_preferences(r#"{"pinned_routes": {"org.example.app": "vm"}}"#).is_err());
-        assert!(parse_preferences(r#"{"pinned_routes": {"org.example.app": "no-route"}}"#).is_err());
+        assert!(
+            parse_preferences(r#"{"pinned_routes": {"org.example.app": "no-route"}}"#).is_err()
+        );
     }
 
     #[test]
