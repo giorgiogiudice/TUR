@@ -110,10 +110,27 @@ bool OverlayState::active() const
 
 void OverlayState::updateActive()
 {
-    const bool active = m_activity != QLatin1String("idle") || m_pointerVisible || !m_highlights.isEmpty();
+    const bool active = m_on || m_activity != QLatin1String("idle") || m_pointerVisible || !m_highlights.isEmpty();
     if (active != m_active) {
         m_active = active;
         Q_EMIT activeChanged();
+    }
+}
+
+void OverlayState::setOn(bool on)
+{
+    if (on != m_on) {
+        m_on = on;
+        Q_EMIT onChanged();
+        updateActive();
+    }
+}
+
+void OverlayState::setCommandsShown(bool shown)
+{
+    if (shown != m_commandsShown) {
+        m_commandsShown = shown;
+        Q_EMIT commandsShownChanged();
     }
 }
 

@@ -10,7 +10,8 @@
 qt_add_executable(tst_pax_overlay tst_main.cpp)
 target_compile_definitions(tst_pax_overlay PRIVATE
     QUICK_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
-    TUR_QML_IMPORT_DIR="${QT_QML_OUTPUT_DIRECTORY}")
+    TUR_QML_IMPORT_DIR="${QT_QML_OUTPUT_DIRECTORY}"
+    TUR_PAX_COMMANDS="${CMAKE_SOURCE_DIR}/kit/pax/commands.json")
 target_link_libraries(tst_pax_overlay PRIVATE Qt6::Core Qt6::Gui Qt6::Qml Qt6::QuickTest)
 tur_link_qml_modules(tst_pax_overlay turkit turkitpax turkittesting turpaxoverlay)
 add_test(NAME pax-overlay-qml COMMAND tst_pax_overlay)

@@ -84,6 +84,9 @@ public:
     Outcome clear(const QString &caller, const QString &lease, uint id);
     // Hide(): every lease ends, nothing is left on screen.
     void hide();
+    // ShowCommands(shown): the full list of P@x's keys under the pill.
+    void showCommands(bool shown);
+    bool commandsShown() const;
 
     // Limits, so that one caller cannot fill the screen or the memory.
     static constexpr int maxLeases = 8;

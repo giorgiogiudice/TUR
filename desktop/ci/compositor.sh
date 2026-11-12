@@ -26,8 +26,17 @@ program=$build/tests/compositor/tst_compositor
 rm -rf "$out"
 mkdir -p "$out"
 
+# Fedora's kwin_wayland carries a file capability (CAP_SYS_NICE, for its
+# real-time thread). A container does not let an unprivileged user run a
+# program with a capability outside its bounding set: exec fails with
+# "Operation not permitted". A copy of the program carries no capability;
+# KWin runs without real-time scheduling, which it allows for.
+kwin=$(mktemp -d)/kwin_wayland
+cp /usr/bin/kwin_wayland "$kwin"
+getcap /usr/bin/kwin_wayland 2>/dev/null || true
+
 echo "== the compositor"
-kwin_wayland --version || true
+"$kwin" --version || true
 rpm -q kwin kwin-wayland kwin-common kwayland layer-shell-qt mesa-libEGL mesa-dri-drivers 2>/dev/null || true
 ls -l /dev/udmabuf /dev/dri 2>&1 || true
 
@@ -56,13 +65,13 @@ run() {
     # Nothing of the machine's or the runner's configuration: an empty
     # configuration directory, and only what is set here.
     XDG_RUNTIME_DIR=$runtime XDG_CONFIG_HOME=$runtime/config DBUS_SESSION_BUS_ADDRESS=$bus \
-        kwin_wayland --virtual --width 1280 --height 800 --scale "$scale" --output-count "$outputs" \
+        "$kwin" --virtual --width 1280 --height 800 --scale "$scale" --output-count "$outputs" \
         --socket wayland-tur --no-lockscreen --no-global-shortcuts --no-kactivities \
         > "$out/$label-kwin.log" 2>&1 &
-    kwin=$!
+    compositor=$!
     tries=0
     while [ ! -S "$runtime/wayland-tur" ] && [ "$tries" -lt 300 ]; do
-        if ! kill -0 "$kwin" 2>/dev/null; then
+        if ! kill -0 "$compositor" 2>/dev/null; then
             break
         fi
         sleep 0.1
@@ -71,7 +80,7 @@ run() {
     if [ ! -S "$runtime/wayland-tur" ]; then
         echo "::error::$label: kwin_wayland did not open its socket"
         tail -n 80 "$out/$label-kwin.log"
-        kill "$kwin" "$daemon" 2>/dev/null || true
+        kill "$compositor" "$daemon" 2>/dev/null || true
         status=1
         return
     fi
@@ -91,8 +100,8 @@ run() {
     grep -a -E -A 6 '^FAIL!' "$out/$label-test.log" | head -n 80 || true
     grep -a 'TUR-KWIN' "$out/$label-test.log" | sed "s/^/$label: /" >> "$out/observations.txt" || true
 
-    kill "$kwin" 2>/dev/null || true
-    wait "$kwin" 2>/dev/null || true
+    kill "$compositor" 2>/dev/null || true
+    wait "$compositor" 2>/dev/null || true
     kill "$daemon" 2>/dev/null || true
     wait "$daemon" 2>/dev/null || true
     # KWin's own warnings, for the record.

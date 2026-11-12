@@ -84,6 +84,7 @@ OverlayService::OverlayService(OverlayState *state, WindowLocator *locator, QObj
     });
     connect(m_state, &OverlayState::activeChanged, this, &OverlayService::updateShown);
     connect(m_state, &OverlayState::activityChanged, this, &OverlayService::updateShown);
+    connect(m_state, &OverlayState::onChanged, this, &OverlayService::updateShown);
     connect(m_locator, &WindowLocator::changed, this, &OverlayService::windowChanged);
     connect(m_locator, &WindowLocator::removed, this, &OverlayService::windowRemoved);
 }
@@ -200,6 +201,7 @@ OverlayService::Outcome OverlayService::acquire(const QString &caller, const QSt
     lease.owner = caller;
     lease.purpose = purpose.left(100);
     m_leases.insert(lease.token, lease);
+    m_state->setOn(true);
     if (m_watcher && !m_watcher->watchedServices().contains(caller))
         m_watcher->addWatchedService(caller);
     // The caller may already have left: then the watcher never hears of it.
@@ -470,6 +472,16 @@ OverlayService::Outcome OverlayService::clear(const QString &caller, const QStri
     return {};
 }
 
+void OverlayService::showCommands(bool shown)
+{
+    m_state->setCommandsShown(shown);
+}
+
+bool OverlayService::commandsShown() const
+{
+    return m_state->commandsShown();
+}
+
 void OverlayService::hide()
 {
     const QStringList tokens = m_leases.keys();
@@ -479,6 +491,8 @@ void OverlayService::hide()
     m_pointerHolder.clear();
     m_tracked.clear();
     m_state->clear();
+    m_state->setOn(false);
+    m_state->setCommandsShown(false);
     updateShown();
 }
 
@@ -500,8 +514,11 @@ void OverlayService::endLease(const QString &token, const QString &reason)
         m_pointerHolder.clear();
         m_state->hidePointer();
     }
-    if (m_leases.isEmpty())
+    if (m_leases.isEmpty()) {
         m_state->clear();
+        m_state->setOn(false);
+        m_state->setCommandsShown(false);
+    }
     showLoudest();
 
     bool stillOwns = false;
@@ -619,7 +636,9 @@ void OverlayService::updateShown()
     bool everywhere = !m_outputs.isEmpty();
     for (auto it = m_outputs.cbegin(); it != m_outputs.cend(); ++it)
         everywhere = everywhere && m_drawn.contains(it.key());
-    const bool shown = m_state->activity() != QLatin1String("idle") && everywhere;
+    // Shown while P@x is on (a lease is held), idle included: the pill with
+    // the stop combination is drawn then too.
+    const bool shown = (m_state->on() || m_state->activity() != QLatin1String("idle")) && everywhere;
     if (shown == m_shown)
         return;
     m_shown = shown;

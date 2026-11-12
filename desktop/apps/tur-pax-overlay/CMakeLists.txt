@@ -14,6 +14,7 @@ find_package(Qt6 6.8 REQUIRED COMPONENTS DBus)
 set(overlay_qml
     qml/OverlaySurface.qml
     qml/ActivityPill.qml
+    qml/CommandsCard.qml
     qml/StateGlyph.qml
     qml/PaxPointer.qml
     qml/PointerRing.qml

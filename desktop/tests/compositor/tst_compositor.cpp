@@ -527,6 +527,29 @@ private Q_SLOTS:
                  shapeOf(QString::fromUtf8(file.readAll())).value(overlayService));
     }
 
+    // P@x on and idle: the pill is drawn with the stop combination (the
+    // owner's answer, desktop-experience.md 17.1.2); the list of P@x's keys
+    // under it when asked for.
+    void on_and_idle_the_stop_keys_are_shown()
+    {
+        QCOMPARE(overlay(QStringLiteral("SetActivity"), { m_lease, QStringLiteral("idle"), QVariantMap() }).type(),
+                 QDBusMessage::ReplyMessage);
+        QVERIFY2(shownBecomes(true), "P@x is on: the indicator is shown while idle");
+        QTest::qWait(300);
+        QScreen *screen = QGuiApplication::primaryScreen();
+        const QRectF area(screen->geometry());
+        const QImage idle = capture(screen);
+        keep(idle, QStringLiteral("on-idle"));
+        // The quiet pill: a dark pill with a gold outline at the top centre.
+        QVERIFY2(goldShare(screen, idle, QRectF(area.center().x() - 200, area.top() + 8, 400, 44)) > 0.01,
+                 "the pill is drawn while P@x is idle");
+        QCOMPARE(overlay(QStringLiteral("ShowCommands"), { true }).type(), QDBusMessage::ReplyMessage);
+        QCOMPARE(overlayProperty(QStringLiteral("CommandsShown")).toBool(), true);
+        QTest::qWait(300);
+        keep(capture(screen), QStringLiteral("on-idle-keys"));
+        QCOMPARE(overlay(QStringLiteral("ShowCommands"), { false }).type(), QDBusMessage::ReplyMessage);
+    }
+
     // A surface on every output; the frame at every output's edge and the
     // pill at the top centre of each.
     void the_overlay_covers_every_output()
@@ -618,7 +641,7 @@ private Q_SLOTS:
         QTest::qWait(300);
         const QImage before = capture(screen);
         keep(before, QStringLiteral("e2e-1-revealed"));
-        QVERIFY(!isGold(colourAt(screen, before, row.center() + QPointF(21, 23))));
+        QVERIFY(!isGold(colourAt(screen, before, row.center() + QPointF(18, 18))));
 
         // 3. The pointer travels to the row; the highlight appears when it
         // gets there.
@@ -638,10 +661,10 @@ private Q_SLOTS:
         const QImage arrived = capture(screen);
         keep(arrived, QStringLiteral("e2e-3-arrived"));
 
-        // Where the pointer is: its tip is the row's centre, and its body
-        // (the flame's round end, 21 by 23 px from the tip at 1.5 times a
-        // 24 px cursor) is gold.
-        QVERIFY2(isGold(colourAt(screen, arrived, row.center() + QPointF(21, 23))),
+        // Where the pointer is: its tip is the row's centre, and the core of
+        // the flame (18 px right and 18 px down from the tip, for a flame 36
+        // px long, 1.5 times a 24 px cursor) is gold.
+        QVERIFY2(isGold(colourAt(screen, arrived, row.center() + QPointF(18, 18))),
                  "P@x's pointer is at the row's centre");
         // Where the highlight is: its gold line's outer edge is 7 px outside
         // the row (4 px clear, 3 px of gold). Found by scanning towards the
@@ -686,7 +709,9 @@ private Q_SLOTS:
         keep(pointing, QStringLiteral("e2e-4-at-the-button"));
         // The click goes where P@x's pointer is drawn: on the flame's body,
         // which lies over the button.
-        const QPointF target = button.center() + QPointF(8, 6);
+        // 8.5 px from the tip along the flame's axis: gold, short of the
+        // inner flame.
+        const QPointF target = button.center() + QPointF(6, 6);
         QVERIFY2(button.contains(target), "the point clicked is on the button");
         QVERIFY2(isGold(colourAt(screen, pointing, target)) || isGold(colourAt(screen, pointing, target + QPointF(1, 1))),
                  "the point clicked is covered by P@x's pointer");
@@ -758,7 +783,7 @@ private Q_SLOTS:
         const QImage shown = capture(screen);
         keep(shown, QStringLiteral("focus-probe"));
         const QPointF tip = client.topLeft() + QPointF(190, 70);
-        QVERIFY2(isGold(colourAt(screen, shown, tip + QPointF(21, 23))), "P@x's pointer is over the probe");
+        QVERIFY2(isGold(colourAt(screen, shown, tip + QPointF(18, 18))), "P@x's pointer is over the probe");
 
         typeKeys({ KEY_T, KEY_U, KEY_R });
         QCOMPARE(probe.typed, QStringLiteral("tur"));
@@ -766,7 +791,7 @@ private Q_SLOTS:
         QCOMPARE(probe.deactivations, 0);
 
         // A click on P@x's pointer lands on the probe, at that point.
-        const QPointF target = tip + QPointF(12, 12);
+        const QPointF target = tip + QPointF(6, 6);
         QVERIFY(isGold(colourAt(screen, shown, target)) || isGold(colourAt(screen, shown, target + QPointF(1, 1))));
         click(target);
         QCOMPARE(probe.clicks.size(), 1);
@@ -876,6 +901,9 @@ private Q_SLOTS:
     // Its owner dies: it goes.
     void it_vanishes_when_its_owner_dies()
     {
+        // The test's own lease would keep P@x on, and the pill shown.
+        QCOMPARE(overlay(QStringLiteral("Release"), { m_lease }).type(), QDBusMessage::ReplyMessage);
+        QVERIFY(shownBecomes(false));
         QProcess owner;
         owner.start(QCoreApplication::applicationFilePath(), { QStringLiteral("--owner") });
         QVERIFY(owner.waitForStarted(15000));
@@ -892,6 +920,10 @@ private Q_SLOTS:
         const QImage picture = capture(screens.constFirst());
         keep(picture, QStringLiteral("after-owner-died"));
         QCOMPARE(goldCount(picture), 0);
+
+        const QDBusMessage lease = overlay(QStringLiteral("Acquire"), { QStringLiteral("compositor test, last") });
+        QCOMPARE(lease.type(), QDBusMessage::ReplyMessage);
+        m_lease = lease.arguments().value(0).toString();
     }
 
     // The overlay itself exits: its surfaces go with it.

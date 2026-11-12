@@ -4,8 +4,8 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Shapes
 
-// The icon of a state of the pill (design, 9.3): a microphone, the flame, an
-// eye, the pointer's flame, a hand, a pause sign. Drawn on a 16 by 16 grid.
+// The icon of a state of the pill (design, 9.3): the flame (on, working,
+// acting), a microphone, an eye, a hand, a pause sign. Drawn on a 16 by 16 grid.
 // Decoration: the pill's words carry the meaning.
 Item {
     id: glyph
@@ -24,11 +24,11 @@ Item {
         switch (glyph.kind) {
         case "listening":
             return "M 8 1 A 3 3 0 0 1 11 4 V 8 A 3 3 0 0 1 5 8 V 4 A 3 3 0 0 1 8 1 Z"
+        case "idle":
         case "working":
         case "acting":
-            // The flame of PaxMark, fitted to the grid; its tip at the top
-            // left.
-            return "M 1 1 L 12.2 6 A 5.6 5.6 0 1 1 4.9 12.6 Z"
+            // P@x's flame (Tur.Kit.Pax's PaxFlame), at half its grid.
+            return "M 8 0 C 9.5 3.5 13.5 6.5 13.5 10.5 A 5.5 5.5 0 0 1 2.5 10.5 C 2.5 6.5 6.5 3.5 8 0 Z"
         case "observing":
             return "M 8 5.6 A 2.4 2.4 0 1 1 7.99 5.6 Z"
         case "waiting":

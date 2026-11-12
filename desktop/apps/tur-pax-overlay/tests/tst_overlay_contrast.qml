@@ -51,6 +51,10 @@ Item {
         id: bubble
     }
 
+    CommandsCard {
+        id: card
+    }
+
     TestCase {
         name: "OverlayContrast"
         when: windowShown
@@ -123,14 +127,15 @@ Item {
         function test_shapes() {
             judge("shape", "pointer", pointer.layers)
             judge("shape", "caption", bubble.layers)
-            for (const state of ["listening", "working", "observing", "acting", "waiting", "paused"]) {
+            judge("shape", "list of keys", card.layers)
+            for (const state of ["idle", "listening", "working", "observing", "acting", "waiting", "paused"]) {
                 pill.activity = state
                 judge("shape", "pill (" + state + ")", pill.layers)
             }
         }
 
         function test_words() {
-            for (const state of ["listening", "working", "observing", "acting", "waiting", "paused"]) {
+            for (const state of ["idle", "listening", "working", "observing", "acting", "waiting", "paused"]) {
                 pill.activity = state
                 const r = ratio(pill.textColour, pill.textBackground)
                 console.info("TUR-CONTRAST overlay pill words (" + state + "): " + r.toFixed(2) + ":1")
@@ -140,6 +145,7 @@ Item {
             verify(ratio(Pax.PaxTheme.overlayQuietText, Pax.PaxTheme.overlayOutline) >= words, "the caption's sentence")
             verify(ratio(Pax.PaxTheme.overlayPaused, Pax.PaxTheme.overlayOutline) >= words, "the caption's step")
             verify(ratio(Pax.PaxTheme.overlayText, Pax.PaxTheme.overlayFill) >= words, "the pointer's tag")
+            verify(ratio(Pax.PaxTheme.overlayFill, Pax.PaxTheme.overlayOutline) >= words, "the keys in the list")
         }
 
         // Gold alone would not do: the dark line is what carries the

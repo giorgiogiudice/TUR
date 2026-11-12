@@ -3,6 +3,7 @@ import QtQuick
 import QtTest
 import Tur.PaxOverlay
 import Tur.Kit as Kit
+import Tur.Kit.Pax as Pax
 import Tur.Kit.Testing as Testing
 
 // What one screen's surface draws, under the offscreen platform: the pill's
@@ -52,6 +53,9 @@ Item {
 
         function cleanup() {
             overlay.clear()
+            overlay.on = false
+            overlay.commandsShown = false
+            Kit.Theme.textScale = 1
             wait(0)
         }
 
@@ -88,8 +92,73 @@ Item {
             compare(pill.text, "P@x can see this screen")
             overlay.setActivity("idle", "window", Qt.rect(0, 0, 0, 0))
             wait(0)
-            verify(!pill.visible, "idle: no pill")
-            verify(!overlay.active, "idle with nothing else: nothing to draw")
+            verify(!pill.visible, "P@x off: no pill")
+            verify(!overlay.active, "P@x off: nothing to draw")
+
+            // P@x on and idle: the pill is there, with the stop combination.
+            overlay.on = true
+            wait(0)
+            verify(overlay.active)
+            verify(pill.visible, "P@x on and idle: the pill is shown")
+            verify(pill.text.startsWith("P@x is on"), pill.text)
+            verify(seen[pill.text] === undefined, "idle has words of its own")
+        }
+
+        // The keys the indicator shows are the keys of the one source,
+        // desktop/kit/pax/commands.json, read here as it is: the stop
+        // combination in the pill in every state, and every command, with its
+        // keys and words, in the list under it (owner's answer 17.1.2).
+        function test_the_keys_shown_are_the_keys_of_the_one_source() {
+            const source = Testing.Harness.readJson(paxCommandsFile)
+            verify(source !== undefined, "commands.json can be read: " + paxCommandsFile)
+            const stop = source.commands.find(command => command.id === "stop")
+            const list = source.commands.find(command => command.id === "keys")
+            compare(Pax.PaxCommands.stopKeys, stop.keys, "the generated keys are the source's (gen_commands.py --check)")
+            compare(Pax.PaxCommands.listKeys, list.keys)
+
+            overlay.on = true
+            const pill = findChild(left, "pill")
+            for (const state of ["idle", "listening", "working", "observing", "acting", "waiting", "paused"]) {
+                overlay.setActivity(state, "window", Qt.rect(0, 0, 0, 0))
+                wait(0)
+                verify(pill.text.indexOf("Stop: " + stop.keys) >= 0, state + ": the pill shows the stop keys: " + pill.text)
+                verify(pill.text.indexOf("Keys: " + list.keys) >= 0, state + ": the pill shows the key of the list")
+            }
+
+            const card = findChild(left, "commands")
+            verify(!card.visible, "the list is not shown until asked for")
+            overlay.commandsShown = true
+            wait(0)
+            verify(card.visible)
+            compare(card.y >= pill.y + pill.height, true, "the list is under the pill")
+            for (const command of source.commands) {
+                const row = findChild(card, "command-" + command.id)
+                verify(row !== null, "the list has " + command.id)
+                compare(findChild(row, "commandKeys").text, command.keys)
+                compare(findChild(row, "commandAction").text, command.action)
+            }
+            overlay.on = false
+            wait(0)
+            verify(!card.visible && !pill.visible, "P@x off: neither")
+        }
+
+        // At 200 % text the pill and the list stay on the screen and lose no
+        // words (desktop-experience.md, 13.1, X8).
+        function test_200_percent_text() {
+            Kit.Theme.textScale = 2
+            overlay.on = true
+            overlay.commandsShown = true
+            for (const state of ["idle", "observing", "acting", "paused"]) {
+                overlay.setActivity(state, "window", Qt.rect(0, 0, 0, 0))
+                wait(50)
+                const pill = findChild(left, "pill")
+                const card = findChild(left, "commands")
+                verify(pill.width <= left.width - 2 * Kit.Theme.spaceMargin + 0.5, state + ": the pill fits the screen")
+                verify(card.width <= left.width - 2 * Kit.Theme.spaceMargin + 0.5, "the list fits the screen")
+                verify(pill.x >= 0 && card.x >= 0)
+                const clipped = Testing.Harness.clippedText(left)
+                compare(clipped.length, 0, state + ": no words are cut: " + clipped.join("; "))
+            }
         }
 
         function test_the_frame_by_state() {
@@ -197,6 +266,9 @@ Item {
             overlay.setActivity("acting", "screen", Qt.rect(0, 0, 0, 0))
             overlay.addHighlight(Qt.rect(100, 120, 300, 40), { dim: true, caption: "Here", step: "Step 1 of 1" })
             overlay.movePointer(Qt.point(250, 140), false)
+            wait(0)
+            overlay.on = true
+            overlay.commandsShown = true
             wait(0)
             compare(Testing.Harness.tabStops(left).length, 0, "nothing on the surface is a tab stop")
             for (const item of items(left)) {

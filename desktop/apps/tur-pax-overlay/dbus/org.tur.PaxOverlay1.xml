@@ -149,6 +149,13 @@
          nothing is left on screen. Needs no lease: anyone may turn P@x's
          presence off. A program that later takes a new lease draws again. -->
     <method name="Hide"/>
+    <!-- Shows (true) or takes away (false) the full list of P@x's keyboard
+         commands under the pill, while P@x is on. Needs no lease: anyone may
+         ask to see P@x's keys. The keys come from one source,
+         desktop/kit/pax/commands.json, as the ones the pill shows. -->
+    <method name="ShowCommands">
+      <arg name="shown" type="b" direction="in"/>
+    </method>
 
     <!-- Sent only to the connection that holds the lease. -->
     <signal name="PointerArrived">
@@ -177,10 +184,13 @@
       <arg name="control" type="s"/>
     </signal>
 
-    <!-- True while the state is not idle and the overlay's surface has been
-         drawn on every screen. False otherwise, and at once after Hide. -->
+    <!-- True while P@x is on (a lease is held; the pill then always shows
+         the stop combination, idle included) and the overlay's surface has
+         been drawn on every screen. False otherwise, and at once after Hide. -->
     <property name="Shown" type="b" access="read"/>
     <!-- The outputs the overlay has a drawn surface on, by name. -->
     <property name="Screens" type="as" access="read"/>
+    <!-- Whether the list of P@x's keys is asked for. -->
+    <property name="CommandsShown" type="b" access="read"/>
   </interface>
 </node>

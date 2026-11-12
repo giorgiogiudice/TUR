@@ -7,7 +7,8 @@ import Tur.Kit.Testing as Testing
 
 // Renders the overlay's states to PNG files in TUR_SCREENSHOT_DIR, for the
 // screenshot job to compare with the references in desktop/tests/screenshots
-// (desktop-experience.md, 15.4): the pill and frame of every state, a guided
+// (desktop-experience.md, 15.4): the pill and frame of every state (idle
+// included: P@x on, with its stop keys), the list of P@x's keys, a guided
 // step (highlight, dimming, caption and pointer at rest) and a click, each
 // over a stand-in window drawn in TUR's dark and light variants. The overlay
 // itself does not change with the variant (its palette is fixed); what is
@@ -124,6 +125,8 @@ Item {
 
         function cleanup() {
             overlay.clear()
+            overlay.on = false
+            overlay.commandsShown = false
             Kit.Theme.light = false
             wait(0)
         }
@@ -135,8 +138,9 @@ Item {
 
         function scenes() {
             const out = []
-            for (const state of ["listening", "working", "observing", "acting", "waiting", "paused"])
+            for (const state of ["idle", "listening", "working", "observing", "acting", "waiting", "paused"])
                 out.push({ name: "state-" + state, state: state })
+            out.push({ name: "keys", state: "idle" })
             out.push({ name: "guide", state: "acting" })
             out.push({ name: "click", state: "acting" })
             return out
@@ -160,6 +164,9 @@ Item {
         function test_render(data) {
             Kit.Theme.light = data.light
             const scene = data.scene
+            // P@x is on in every picture: the pill shows its stop keys.
+            overlay.on = true
+            overlay.commandsShown = scene.name === "keys"
             if (scene.name === "guide") {
                 overlay.setActivity("acting", "window", Qt.rect(window.x, window.y, window.width, window.height))
                 const target = row(0)

@@ -113,11 +113,24 @@ Item {
     }
 
     ActivityPill {
+        id: pill
+
         objectName: "pill"
         anchors.horizontalCenter: parent.horizontalCenter
         y: 12
         activity: surface.overlay.activity
         scope: surface.overlay.scope
+        on: surface.overlay.on
+        maxWidth: surface.width - 2 * Kit.Theme.spaceMargin
+    }
+
+    // P@x's keys, under the pill, when asked for.
+    CommandsCard {
+        objectName: "commands"
+        anchors.horizontalCenter: parent.horizontalCenter
+        y: pill.y + pill.height + Kit.Theme.spaceRelated
+        visible: surface.overlay.on && surface.overlay.commandsShown
+        maxWidth: surface.width - 2 * Kit.Theme.spaceMargin
     }
 
     PointerRing {

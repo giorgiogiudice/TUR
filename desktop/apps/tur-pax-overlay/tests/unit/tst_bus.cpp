@@ -193,7 +193,7 @@ private Q_SLOTS:
         QFile file(QStringLiteral(TUR_PAX_OVERLAY_SOURCE "/dbus/org.tur.PaxOverlay1.xml"));
         QVERIFY(file.open(QIODevice::ReadOnly));
         const QStringList stated = shapeOf(QString::fromUtf8(file.readAll())).value(interface);
-        QCOMPARE(stated.size(), 22);
+        QCOMPARE(stated.size(), 24);
         QCOMPARE(offered, stated);
     }
 
@@ -207,9 +207,28 @@ private Q_SLOTS:
         QVERIFY2(shownBecomes(true), "Shown is true once the surface has been drawn on every screen");
         QVERIFY(!property(QStringLiteral("Screens")).toStringList().isEmpty());
 
+        // Idle, P@x is still on: the pill with the stop combination stays.
         QCOMPARE(call(*m_a, QStringLiteral("SetActivity"), { lease, QStringLiteral("idle"), QVariantMap() }).type(),
                  QDBusMessage::ReplyMessage);
-        QVERIFY2(shownBecomes(false), "idle is not shown");
+        QTest::qWait(300);
+        QCOMPARE(property(QStringLiteral("Shown")).toBool(), true);
+        QCOMPARE(call(*m_a, QStringLiteral("Release"), { lease }).type(), QDBusMessage::ReplyMessage);
+        QVERIFY2(shownBecomes(false), "with no lease P@x is off and nothing is shown");
+    }
+
+    // The list of P@x's keys: anyone may ask for it, and the command line
+    // turns it on and off.
+    void the_list_of_keys()
+    {
+        QCOMPARE(property(QStringLiteral("CommandsShown")).toBool(), false);
+        QCOMPARE(call(*m_b, QStringLiteral("ShowCommands"), { true }).type(), QDBusMessage::ReplyMessage);
+        QCOMPARE(property(QStringLiteral("CommandsShown")).toBool(), true);
+        QProcess toggle;
+        toggle.setProcessEnvironment(m_environment);
+        toggle.start(QStringLiteral(TUR_PAX_OVERLAY_PROGRAM), { QStringLiteral("--commands") });
+        QVERIFY(toggle.waitForFinished(20000));
+        QCOMPARE(toggle.exitCode(), 0);
+        QCOMPARE(property(QStringLiteral("CommandsShown")).toBool(), false);
     }
 
     void a_lease_is_only_its_holders()

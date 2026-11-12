@@ -134,8 +134,14 @@ private Q_SLOTS:
     void a_lease_is_answered_only_for_its_holder()
     {
         Rig rig;
+        QVERIFY(!rig.state.on());
         const QString lease = rig.lease(me);
         QCOMPARE(lease.size(), 32);
+        // A lease is held: P@x is on, and there is something to draw (the
+        // pill with the stop combination) although it is idle.
+        QVERIFY(rig.state.on());
+        QCOMPARE(rig.state.activity(), QStringLiteral("idle"));
+        QVERIFY(rig.state.active());
         QVERIFY(rig.service.setActivity(me, lease, QStringLiteral("working"), {}).ok);
 
         const auto stolen = rig.service.setActivity(other, lease, QStringLiteral("acting"), {});
@@ -151,6 +157,7 @@ private Q_SLOTS:
         QVERIFY(rig.service.release(me, lease).ok);
         QVERIFY(!rig.service.release(me, lease).ok);
         QCOMPARE(rig.state.activity(), QStringLiteral("idle"));
+        QVERIFY(!rig.state.on());
         QVERIFY(!rig.state.active());
     }
 

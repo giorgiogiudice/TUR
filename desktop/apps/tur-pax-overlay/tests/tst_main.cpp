@@ -8,6 +8,7 @@
 
 #include <QGuiApplication>
 #include <QObject>
+#include <QQmlContext>
 #include <QQmlEngine>
 #include <QStyleHints>
 #include <QtQuickTest/quicktest.h>
@@ -25,7 +26,13 @@ public Q_SLOTS:
         QGuiApplication::styleHints()->setCursorFlashTime(0);
     }
 
-    void qmlEngineAvailable(QQmlEngine *engine) { engine->addImportPath(QStringLiteral(TUR_QML_IMPORT_DIR)); }
+    void qmlEngineAvailable(QQmlEngine *engine)
+    {
+        engine->addImportPath(QStringLiteral(TUR_QML_IMPORT_DIR));
+        // The one source of P@x's keys, which the tests read as it is.
+        engine->rootContext()->setContextProperty(QStringLiteral("paxCommandsFile"),
+                                                  QStringLiteral(TUR_PAX_COMMANDS));
+    }
 };
 
 QUICK_TEST_MAIN_WITH_SETUP(turpaxoverlay, Setup)

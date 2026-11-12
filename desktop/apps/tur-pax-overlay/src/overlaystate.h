@@ -38,6 +38,8 @@ class OverlayState : public QObject
     Q_PROPERTY(QPointF pulsePoint READ pulsePoint NOTIFY pulsed FINAL)
     Q_PROPERTY(QVariantList highlights READ highlights NOTIFY highlightsChanged FINAL)
     Q_PROPERTY(bool active READ active NOTIFY activeChanged FINAL)
+    Q_PROPERTY(bool on READ on WRITE setOn NOTIFY onChanged FINAL)
+    Q_PROPERTY(bool commandsShown READ commandsShown WRITE setCommandsShown NOTIFY commandsShownChanged FINAL)
     Q_PROPERTY(int cursorSize READ cursorSize WRITE setCursorSize NOTIFY cursorSizeChanged FINAL)
     Q_PROPERTY(qreal motionFactor READ motionFactor WRITE setMotionFactor NOTIFY motionChanged FINAL)
     Q_PROPERTY(bool frozen READ frozen WRITE setFrozen NOTIFY motionChanged FINAL)
@@ -62,6 +64,14 @@ public:
     QPointF pulsePoint() const { return m_pulsePoint; }
     QVariantList highlights() const;
     bool active() const;
+    // P@x is switched on: somebody holds a lease. While it is, the pill is
+    // drawn even when P@x is idle, with the stop combination (the owner's
+    // answer of 12 November 2026, desktop-experience.md 17.1, answer 2).
+    bool on() const { return m_on; }
+    void setOn(bool on);
+    // The full list of P@x's keyboard commands is shown under the pill.
+    bool commandsShown() const { return m_commandsShown; }
+    void setCommandsShown(bool shown);
     int cursorSize() const { return m_cursorSize; }
     void setCursorSize(int size);
     qreal motionFactor() const { return m_motionFactor; }
@@ -108,6 +118,8 @@ Q_SIGNALS:
     void pulsed();
     void highlightsChanged();
     void activeChanged();
+    void onChanged();
+    void commandsShownChanged();
     void cursorSizeChanged();
     void motionChanged();
     // The pointer finished a journey.
@@ -153,6 +165,8 @@ private:
     QList<Highlight> m_highlights;
     uint m_nextId = 1;
     bool m_active = false;
+    bool m_on = false;
+    bool m_commandsShown = false;
 
     QList<QRectF> m_screens;
     int m_cursorSize = 24;

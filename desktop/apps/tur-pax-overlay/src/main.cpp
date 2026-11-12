@@ -23,6 +23,7 @@
 #include <QCoreApplication>
 #include <QDBusConnection>
 #include <QDBusMessage>
+#include <QDBusVariant>
 #include <QGuiApplication>
 #include <QList>
 #include <QQmlEngine>
@@ -57,10 +58,41 @@ int hideRunning()
     return 0;
 }
 
-bool asksToHide(int argc, char *argv[])
+// --commands: shows the list of P@x's keys on the running overlay, or takes
+// it away if it is shown; a binding can run it until tur-pax-ui calls
+// ShowCommands itself.
+int toggleCommands()
+{
+    QDBusConnection bus = QDBusConnection::sessionBus();
+    if (!bus.isConnected()) {
+        QTextStream(stderr) << "tur-pax-overlay: there is no session bus\n";
+        return 1;
+    }
+    QDBusMessage get = QDBusMessage::createMethodCall(PaxOverlay::Bus::service(), PaxOverlay::Bus::path(),
+                                                      QStringLiteral("org.freedesktop.DBus.Properties"),
+                                                      QStringLiteral("Get"));
+    get << PaxOverlay::Bus::interface() << QStringLiteral("CommandsShown");
+    const QDBusMessage now = bus.call(get, QDBus::Block, 10000);
+    if (now.type() == QDBusMessage::ErrorMessage) {
+        QTextStream(stderr) << "tur-pax-overlay: " << now.errorMessage() << '\n';
+        return 1;
+    }
+    const bool shown = now.arguments().value(0).value<QDBusVariant>().variant().toBool();
+    QDBusMessage call = QDBusMessage::createMethodCall(PaxOverlay::Bus::service(), PaxOverlay::Bus::path(),
+                                                       PaxOverlay::Bus::interface(), QStringLiteral("ShowCommands"));
+    call << !shown;
+    const QDBusMessage reply = bus.call(call, QDBus::Block, 10000);
+    if (reply.type() == QDBusMessage::ErrorMessage) {
+        QTextStream(stderr) << "tur-pax-overlay: " << reply.errorMessage() << '\n';
+        return 1;
+    }
+    return 0;
+}
+
+bool asks(int argc, char *argv[], const char *option)
 {
     for (int i = 1; i < argc; ++i) {
-        if (std::strcmp(argv[i], "--hide") == 0)
+        if (std::strcmp(argv[i], option) == 0)
             return true;
     }
     return false;
@@ -70,9 +102,13 @@ bool asksToHide(int argc, char *argv[])
 
 int main(int argc, char *argv[])
 {
-    if (asksToHide(argc, argv)) {
+    if (asks(argc, argv, "--hide")) {
         QCoreApplication app(argc, argv);
         return hideRunning();
+    }
+    if (asks(argc, argv, "--commands")) {
+        QCoreApplication app(argc, argv);
+        return toggleCommands();
     }
 
     // A QGuiApplication, never a QApplication: that would load the GPL
@@ -93,10 +129,13 @@ int main(int argc, char *argv[])
     parser.addVersionOption();
     const QCommandLineOption hide(QStringLiteral("hide"),
                                   QStringLiteral("Switch the running overlay off at once, and exit."));
+    const QCommandLineOption commands(QStringLiteral("commands"),
+                                      QStringLiteral("Show the list of P@x's keys on the running overlay, or take it "
+                                                     "away, and exit."));
     const QCommandLineOption noDBus(QStringLiteral("no-dbus"), QStringLiteral("Do not use the session bus."));
     const QCommandLineOption check(QStringLiteral("check"),
                                    QStringLiteral("Load the surfaces, report any QML warning, and exit. For tests."));
-    parser.addOptions({ hide, noDBus, check });
+    parser.addOptions({ hide, commands, noDBus, check });
     parser.process(app);
 
     // The look of TUR's programs outside the session's theme: the overlay

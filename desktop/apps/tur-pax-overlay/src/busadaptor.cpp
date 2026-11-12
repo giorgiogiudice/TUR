@@ -37,6 +37,16 @@ QStringList PaxOverlay1Adaptor::screens() const
     return m_service->screens();
 }
 
+bool PaxOverlay1Adaptor::commandsShown() const
+{
+    return m_service->commandsShown();
+}
+
+void PaxOverlay1Adaptor::ShowCommands(bool shown)
+{
+    m_service->showCommands(shown);
+}
+
 QString PaxOverlay1Adaptor::Acquire(const QString &purpose, const QDBusMessage &message)
 {
     const auto outcome = m_service->acquire(message.service(), purpose);
