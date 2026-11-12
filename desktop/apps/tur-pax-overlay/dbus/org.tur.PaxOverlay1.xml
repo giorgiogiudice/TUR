@@ -1,0 +1,186 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+ "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<!-- SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0 -->
+<!--
+  org.tur.PaxOverlay1: P@x's presence on the screen. Its activity indicator,
+  its own pointer and its highlights (docs/architecture/desktop-experience.md,
+  sections 9.3 to 9.6 and 14.1; docs/architecture/tur-pax-overlay.md).
+  Implemented by tur-pax-overlay.
+
+  Session bus. Well-known name org.tur.PaxOverlay1. Object path
+  /org/tur/PaxOverlay1.
+
+  The overlay draws; it never acts. Every pixel it draws lets input through
+  to what is under it, and it never takes the keyboard. Drawing in gold is
+  the whole of what a caller can do with it.
+
+  Leases. A caller first takes a lease with Acquire. Every other call except
+  Hide names a lease, and is answered only for the bus connection that took
+  it. A lease ends with Release, when Hide is called, or when the connection
+  that took it leaves the bus; everything drawn under it is then removed at
+  once, and LeaseEnded is sent to that connection. When the last lease ends,
+  nothing of the overlay is left on screen.
+
+  In this version any program on the session bus can take a lease, and so
+  make gold appear (tur-pax-overlay.md, section 6).
+
+  Coordinates are logical pixels, as the compositor and Qt count them. A
+  "screen" argument is an output's name (as Screens lists them) and the
+  coordinates are relative to its top left corner; an empty screen means the
+  coordinates are global, in the compositor's layout of all outputs.
+
+  A window is named by what org.tur.Settings1.Reveal returns about it: the
+  process identifier, the application identifier and the window title (0 or
+  empty: any). The overlay asks the compositor where that window is, through
+  the Plasma window-management protocol. A rectangle "in a window" is relative
+  to the top left corner of the window's content, in its logical pixels.
+
+  Errors are D-Bus errors whose message begins with a code and a colon:
+    org.tur.PaxOverlay1.Error.NoLease           TUR-DESKTOP-PAXOVERLAY-001  (not a lease of this caller)
+    org.tur.PaxOverlay1.Error.InvalidArgument   TUR-DESKTOP-PAXOVERLAY-002
+    org.tur.PaxOverlay1.Error.WindowNotFound    TUR-DESKTOP-PAXOVERLAY-003
+    org.tur.PaxOverlay1.Error.UnknownHighlight  TUR-DESKTOP-PAXOVERLAY-004
+    org.tur.PaxOverlay1.Error.LimitReached      TUR-DESKTOP-PAXOVERLAY-005
+
+  Proposed; not frozen. The adaptor in src/busadaptor.h is written by hand and
+  tests hold what the running program offers on the bus to this file.
+-->
+<node>
+  <interface name="org.tur.PaxOverlay1">
+    <!-- Takes a lease. `purpose` is a few words for the log. -->
+    <method name="Acquire">
+      <arg name="purpose" type="s" direction="in"/>
+      <arg name="lease" type="s" direction="out"/>
+    </method>
+    <!-- Ends a lease and removes everything drawn under it. -->
+    <method name="Release">
+      <arg name="lease" type="s" direction="in"/>
+    </method>
+    <!-- What P@x is doing: idle, listening, working, observing, acting,
+         waiting or paused (design 9.3). Where several leases set a state, the
+         one that tells the person most is shown (acting, waiting, observing,
+         working, listening, paused, idle). `detail`: scope (s, "window" or
+         "screen", for observing and acting); pid (u), app_id (s), title (s):
+         the window the frame goes round when scope is "window". -->
+    <method name="SetActivity">
+      <arg name="lease" type="s" direction="in"/>
+      <arg name="state" type="s" direction="in"/>
+      <arg name="detail" type="a{sv}" direction="in"/>
+    </method>
+    <!-- Sends P@x's pointer to a point. Its tip is the point. It travels
+         there; PointerArrived says when it is there. `options`: slow (b,
+         default false: every duration doubled). -->
+    <method name="MovePointer">
+      <arg name="lease" type="s" direction="in"/>
+      <arg name="screen" type="s" direction="in"/>
+      <arg name="x" type="d" direction="in"/>
+      <arg name="y" type="d" direction="in"/>
+      <arg name="options" type="a{sv}" direction="in"/>
+    </method>
+    <!-- Sends the pointer to a rectangle: its tip goes to the anchor of the
+         rectangle. `options`: slow (b); anchor (s: center, the default,
+         start or end: the middle of the left or right edge, inset by a
+         quarter of the height). -->
+    <method name="PointAt">
+      <arg name="lease" type="s" direction="in"/>
+      <arg name="screen" type="s" direction="in"/>
+      <arg name="rect" type="(dddd)" direction="in"/>
+      <arg name="options" type="a{sv}" direction="in"/>
+    </method>
+    <!-- As PointAt, for a rectangle in a window. -->
+    <method name="PointInWindow">
+      <arg name="lease" type="s" direction="in"/>
+      <arg name="pid" type="u" direction="in"/>
+      <arg name="app_id" type="s" direction="in"/>
+      <arg name="title" type="s" direction="in"/>
+      <arg name="rect" type="(dddd)" direction="in"/>
+      <arg name="options" type="a{sv}" direction="in"/>
+    </method>
+    <!-- Shows a click at the pointer's tip, without clicking: kind "click". -->
+    <method name="PulsePointer">
+      <arg name="lease" type="s" direction="in"/>
+      <arg name="kind" type="s" direction="in"/>
+    </method>
+    <!-- Takes P@x's pointer off the screen. -->
+    <method name="HidePointer">
+      <arg name="lease" type="s" direction="in"/>
+    </method>
+    <!-- Marks a rectangle (design 9.5). Returns the highlight's number.
+         `options`: dim (b, default false: dims the rest of the screen, or of
+         the window, by a fifth); duration (d, seconds; 0, the default, keeps
+         it); caption (s) and step (s, such as "Step 2 of 3"): the bubble
+         beside it; point (b, default false: the pointer travels to it first,
+         and the highlight appears when it arrives); slow (b); anchor (s). -->
+    <method name="HighlightRect">
+      <arg name="lease" type="s" direction="in"/>
+      <arg name="screen" type="s" direction="in"/>
+      <arg name="rect" type="(dddd)" direction="in"/>
+      <arg name="options" type="a{sv}" direction="in"/>
+      <arg name="id" type="u" direction="out"/>
+    </method>
+    <!-- As HighlightRect, for a rectangle in a window. The highlight follows
+         the window when it moves, and is removed (HighlightLost) when the
+         window is resized, minimised, covered where the highlight is, or
+         closed. -->
+    <method name="HighlightInWindow">
+      <arg name="lease" type="s" direction="in"/>
+      <arg name="pid" type="u" direction="in"/>
+      <arg name="app_id" type="s" direction="in"/>
+      <arg name="title" type="s" direction="in"/>
+      <arg name="rect" type="(dddd)" direction="in"/>
+      <arg name="options" type="a{sv}" direction="in"/>
+      <arg name="id" type="u" direction="out"/>
+    </method>
+    <!-- Sets the caption beside a highlight. `controls` are accepted and not
+         shown in this version: the overlay takes no input, so a button on it
+         could not be pressed. -->
+    <method name="SetCaption">
+      <arg name="lease" type="s" direction="in"/>
+      <arg name="id" type="u" direction="in"/>
+      <arg name="text" type="s" direction="in"/>
+      <arg name="controls" type="as" direction="in"/>
+    </method>
+    <!-- Removes a highlight; 0 removes every highlight of the lease. -->
+    <method name="Clear">
+      <arg name="lease" type="s" direction="in"/>
+      <arg name="id" type="u" direction="in"/>
+    </method>
+    <!-- Switches the overlay off at once: every lease ends ("hidden") and
+         nothing is left on screen. Needs no lease: anyone may turn P@x's
+         presence off. A program that later takes a new lease draws again. -->
+    <method name="Hide"/>
+
+    <!-- Sent only to the connection that holds the lease. -->
+    <signal name="PointerArrived">
+      <arg name="lease" type="s"/>
+    </signal>
+    <!-- Sent only to the connection that holds the lease of the highlight.
+         reason: resized, minimized, covered, closed, expired. -->
+    <signal name="HighlightLost">
+      <arg name="id" type="u"/>
+      <arg name="reason" type="s"/>
+    </signal>
+    <!-- Sent only to the connection that held the lease. reason: released,
+         hidden, owner-gone. -->
+    <signal name="LeaseEnded">
+      <arg name="lease" type="s"/>
+      <arg name="reason" type="s"/>
+    </signal>
+    <!-- Reserved for the pill's buttons and the guide controls of the design
+         (9.3, 9.6). Never sent in this version: nothing on the overlay can be
+         pressed. -->
+    <signal name="StopRequested"/>
+    <signal name="PauseRequested"/>
+    <signal name="ResumeRequested"/>
+    <signal name="GuideControl">
+      <arg name="id" type="u"/>
+      <arg name="control" type="s"/>
+    </signal>
+
+    <!-- True while the state is not idle and the overlay's surface has been
+         drawn on every screen. False otherwise, and at once after Hide. -->
+    <property name="Shown" type="b" access="read"/>
+    <!-- The outputs the overlay has a drawn surface on, by name. -->
+    <property name="Screens" type="as" access="read"/>
+  </interface>
+</node>

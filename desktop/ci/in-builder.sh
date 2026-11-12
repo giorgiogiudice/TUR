@@ -4,6 +4,7 @@
 # Run a command in the desktop builder image:
 #
 #   in-builder.sh COMMAND [ARGUMENT...]
+#   TUR_DEVICE=/dev/udmabuf in-builder.sh COMMAND...   with that device passed in
 #
 # The repository is mounted at the path it has on the runner, so that paths in
 # logs and in the build directory mean the same inside and outside. The
@@ -36,7 +37,15 @@ identity=$(mktemp -d)
 chmod 755 "$identity"
 chmod 644 "$identity/passwd" "$identity/group"
 
-exec docker run --rm --network none \
+# TUR_DEVICE names one device of the runner to pass in, for the compositor
+# job's software renderer (/dev/udmabuf). Nothing else of the runner's is.
+device=
+if [ -n "${TUR_DEVICE:-}" ]; then
+    device="--device=$TUR_DEVICE"
+fi
+
+# shellcheck disable=SC2086 # $device is one word or none
+exec docker run --rm --network none $device --shm-size=1g \
     --user "$(id -u):$(id -g)" \
     --env HOME=/tmp \
     --env "OUT=${OUT:-out/desktop}" \
