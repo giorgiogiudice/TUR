@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Present only in the installer-medium test image (tests/iso/guest). The
+# kernel arguments tests/boot/build-disk.sh gives on the command line: the
+# serial port as the last console, so that it carries the systemd status
+# output and the boot-test agent's markers, and the switch that lets the
+# agent run.
+kargs = ["console=tty0", "console=ttyS0,115200n8", "tur.boot_test=1"]

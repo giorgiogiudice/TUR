@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# The licence is in the LICENSE file beside the source of this file
+# (installer/iso/third-party-licensed/grub in the TUR tree).
+#
+# Boot menu of the TUR installer medium (ADR-0018). GRUB interprets this file;
+# installer/iso/build-medium.sh fills in the three placeholders and puts the
+# result on the medium's EFI system partition.
+#
+# Only commands that are part of Fedora's signed GRUB binary are used, so the
+# menu works with Secure Boot, where GRUB may not load modules from disk.
+
+set default=0
+set timeout=5
+
+# The medium's ISO 9660 filesystem, found by its volume label. This works
+# whether the medium is a USB stick or an optical drive.
+search --no-floppy --set=root --label @LABEL@
+
+menuentry 'Install @TITLE@ (erases the disk you choose)' {
+    linux /boot/vmlinuz @KERNEL_ARGUMENTS@
+    initrd /boot/initrd.img
+}

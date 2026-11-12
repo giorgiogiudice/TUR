@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Payload of the installer medium that the proof installs (tests/iso): the
+# boot-test image (the TUR image plus the boot test's agent, tests/boot/guest)
+# plus one file of kernel arguments.
+#
+# tests/boot/build-disk.sh passes these arguments to `bootc install` on its
+# command line. The installer medium has no such option, and must not grow
+# one for a test: a person's installation and the proof run the same
+# installer. So the arguments travel in the image instead, where `bootc
+# install` reads them (/usr/lib/bootc/kargs.d), and the scenario images built
+# FROM this one keep them.
+
+ARG BASE=localhost/tur-boot-test:ci
+FROM ${BASE}
+
+COPY rootfs/ /
+
+RUN bootc container lint
+
+LABEL org.tur.test-image="installer-medium"

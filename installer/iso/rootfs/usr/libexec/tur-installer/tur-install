@@ -1,0 +1,913 @@
+#!/usr/bin/bash
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# The installer of TUR's first installer medium (ADR-0018). Present only in
+# the installer environment (installer/iso), where tur-installer.service runs
+# it on the first console.
+#
+# It does one thing: erase one whole disk and install the TUR image that is
+# on the medium onto it, with the installer the image carries:
+#
+#     bootc install to-disk --source-imgref oci:<medium>/payload:payload \
+#         --target-imgref <name> --generic-image --wipe [--filesystem ext4] <disk>
+#
+# What it deliberately does not do, and says so on its first screen: keep
+# another operating system (no dual boot), encrypt, partition by hand, keep
+# any data on the chosen disk, use a network.
+#
+# Safety rules it follows (AGENTS.md; specification 5.2 and 28.5):
+#   - a disk is chosen by its stable identity (a /dev/disk/by-id link that
+#     carries its serial number or WWN), never by a kernel name such as sda;
+#   - the medium itself, a disk in use, a read-only disk, a disk without a
+#     stable identity and a disk smaller than the tested minimum cannot be
+#     chosen;
+#   - nothing is written before the person has typed a phrase that names the
+#     chosen disk ("ERASE" and the end of its serial number), on a screen that
+#     shows the disk's model, capacity, serial number, stable path and what is
+#     on it now. The phrase follows installer/tur-installer-core
+#     (plan.rs, confirmation_phrase);
+#   - immediately before writing, the disk behind the stable path is looked
+#     at again and must be the same disk with the same content;
+#   - every disk is described in plain words before anything is chosen:
+#     Windows (an EFI system partition holding EFI/Microsoft/Boot), BitLocker,
+#     NTFS, Linux filesystems. This is read-only: signatures are read with
+#     lsblk and a few bytes with head, and an EFI system partition is mounted
+#     read-only in a private mount namespace only to look for that directory.
+#     A disk that holds Windows or BitLocker gets an explicit warning on the
+#     confirmation screen;
+#   - nothing is written to any disk but the chosen one, and no firmware boot
+#     variable is written: `--generic-image` makes bootc skip bootupd's
+#     firmware update (ADR-0018).
+#
+# Everything shown on the screen is also written, line by line, to the first
+# serial port when the machine has one, with state lines that start with
+# "TUR-INSTALLER: ". A person never needs them. tests/iso reads them, and
+# drives this same program through the keyboard as a person would.
+#
+# Error codes: where a condition already has a code in
+# installer/tur-installer-core/src/codes.rs, that code is used. Conditions
+# only this medium has use TUR-INSTALL-MEDIUM-NNN (ADR-0018 lists them).
+set -u
+
+readonly INSTALLER_DIR=/usr/lib/tur-installer
+readonly PAYLOAD_ENV="${INSTALLER_DIR}/payload.env"
+readonly RELEASE=/usr/lib/tur/release
+readonly LIVE_MOUNT=/run/initramfs/live
+readonly PAYLOAD_DIR="${LIVE_MOUNT}/payload"
+readonly SESSION=/run/tur-installer
+readonly LOG="${SESSION}/installer.log"
+readonly INSTALL_LOG="${SESSION}/install.log"
+# Below this much memory the installer refuses to continue: the rule of
+# installer/tur-installer-core (preflight.rs, MIN_RAM_BYTES).
+readonly MIN_RAM_BYTES=$((3 * 1024 * 1024 * 1024))
+readonly ESP_GUID=c12a7328-f81f-11d2-ba4b-00a0c93ec93b
+readonly ROOT_GUID=4f68bce3-e8cd-4db1-96e7-fbcaf984b709
+
+mkdir -p "${SESSION}"
+: >> "${LOG}"
+
+# ---- output -------------------------------------------------------------------
+
+# The first serial port, when there is one that can be written to.
+# (Named serial_port, not serial: functions use a local "serial" for a disk's
+# serial number, which would hide this flag from transcript().)
+serial_port=no
+if [ -c /dev/ttyS0 ] && { exec 3> /dev/ttyS0; } 2> /dev/null; then
+    serial_port=yes
+fi
+
+# transcript LINE: the log and the serial port, not the screen.
+transcript() {
+    printf '%s\n' "$1" >> "${LOG}"
+    if [ "${serial_port}" = yes ]; then printf '%s\r\n' "$1" >&3 2> /dev/null; fi
+}
+
+# say LINE: a line of the screen, and of the transcript.
+say() {
+    printf '%s\n' "${1-}"
+    transcript "TUR-INSTALLER| ${1-}"
+}
+
+# mark TEXT: a state line for the transcript only.
+mark() { transcript "TUR-INSTALLER: $1"; }
+
+# screen NAME TITLE: start a new screen.
+screen() {
+    printf '\033[2J\033[H'
+    transcript "TUR-INSTALLER| ----------------------------------------------------------------"
+    say "TUR installer: $2"
+    say "TUR ${tur_version:-?}, build ${tur_build_id:-?}"
+    say ""
+    current_screen="$1"
+}
+
+# ask PROMPT: print the prompt and read one line into `answer`. While it
+# waits it repeats a state line every few seconds, so that whoever follows the
+# serial port can tell which screen is waiting even if a line was lost.
+ask() {
+    local waited=0 status
+    printf '%s' "$1"
+    transcript "TUR-INSTALLER| $1"
+    mark "prompt screen=${current_screen}"
+    while :; do
+        IFS= read -r -t 5 answer
+        status=$?
+        if [ "${status}" -eq 0 ]; then
+            answer="${answer//$'\r'/}"
+            # Trim spaces at both ends; keep the ones inside.
+            answer="${answer#"${answer%%[![:space:]]*}"}"
+            answer="${answer%"${answer##*[![:space:]]}"}"
+            mark "input screen=${current_screen} text=\"${answer}\""
+            return 0
+        fi
+        if [ "${status}" -gt 128 ]; then
+            waited=$((waited + 5))
+            mark "waiting screen=${current_screen} seconds=${waited}"
+        else
+            # The console was taken away (hung up, or read refused). Say so,
+            # open it again and go on waiting.
+            mark "console-lost screen=${current_screen} status=${status}"
+            sleep 2
+            exec 0< /dev/tty1 1> /dev/tty1 2> /dev/null
+        fi
+    done
+}
+
+# para TEXT: a paragraph of the screen, wrapped to the width of any console.
+para() {
+    local line
+    while IFS= read -r line; do
+        say "  ${line}"
+    done < <(printf '%s\n' "$1" | fold -s -w 74)
+}
+
+human() {
+    awk -v b="$1" 'BEGIN {
+        split("B KiB MiB GiB TiB", unit, " ");
+        i = 1; while (b >= 1024 && i < 5) { b /= 1024; i++ }
+        if (i == 1) printf "%d %s", b, unit[i]; else printf "%.1f %s", b, unit[i]
+    }'
+}
+
+# ---- what is on the medium -----------------------------------------------------
+
+# value FILE KEY: the value of KEY=VALUE in a file, nothing if absent.
+value() { sed -n "s/^$2=//p" "$1" 2> /dev/null | head -n 1; }
+
+tur_version="$(value "${RELEASE}" TUR_VERSION)"
+tur_build_id="$(value "${RELEASE}" TUR_BUILD_ID)"
+tur_revision="$(value "${RELEASE}" TUR_SOURCE_REVISION)"
+payload_ref="$(value "${PAYLOAD_ENV}" PAYLOAD_OCI_REF)"
+payload_target="$(value "${PAYLOAD_ENV}" PAYLOAD_TARGET_IMGREF)"
+payload_image_id="$(value "${PAYLOAD_ENV}" PAYLOAD_IMAGE_ID)"
+payload_index_sha256="$(value "${PAYLOAD_ENV}" PAYLOAD_INDEX_SHA256)"
+payload_blob_count="$(value "${PAYLOAD_ENV}" PAYLOAD_BLOB_COUNT)"
+payload_blob_bytes="$(value "${PAYLOAD_ENV}" PAYLOAD_BLOB_BYTES)"
+payload_install_args="$(value "${PAYLOAD_ENV}" PAYLOAD_INSTALL_ARGS)"
+min_target_bytes="$(value "${PAYLOAD_ENV}" MIN_TARGET_BYTES)"
+
+current_screen=start
+answer=""
+payload_state=unknown
+payload_detail=""
+blocking=()
+
+# Check that the image on the medium is complete and is the one this
+# installer environment was built with. Every file of an OCI layout is named
+# by its SHA-256, and the index is fixed by a hash inside this environment.
+verify_payload() {
+    local index="${PAYLOAD_DIR}/index.json" sum count=0 bad=0 file name started="${SECONDS}"
+    if [ -z "${payload_index_sha256}" ] || [ -z "${payload_blob_count}" ]; then
+        payload_state=missing
+        payload_detail="this installer environment does not describe an installation image"
+        return 1
+    fi
+    if [ ! -f "${index}" ]; then
+        payload_state=missing
+        payload_detail="no installation image at ${PAYLOAD_DIR}"
+        return 1
+    fi
+    sum="$(sha256sum "${index}" | cut -d' ' -f1)"
+    if [ "${sum}" != "${payload_index_sha256}" ]; then
+        payload_state=different
+        payload_detail="the index of the installation image is not the one this installer was built with"
+        return 1
+    fi
+    for file in "${PAYLOAD_DIR}"/blobs/sha256/*; do
+        [ -f "${file}" ] || continue
+        count=$((count + 1))
+        printf '\r  Checking the installation image on this medium: file %s of %s ' "${count}" "${payload_blob_count}"
+        name="${file##*/}"
+        sum="$(sha256sum "${file}" | cut -d' ' -f1)"
+        if [ "${sum}" != "${name}" ]; then
+            bad=$((bad + 1))
+            mark "payload damaged file=${name}"
+        fi
+    done
+    printf '\r\033[K'
+    if [ "${bad}" -ne 0 ]; then
+        payload_state=damaged
+        payload_detail="${bad} of ${count} files of the installation image are damaged"
+        return 1
+    fi
+    if [ "${count}" != "${payload_blob_count}" ]; then
+        payload_state=incomplete
+        payload_detail="the installation image has ${count} files, ${payload_blob_count} are expected"
+        return 1
+    fi
+    payload_state=verified
+    payload_detail="${count} files, $(human "${payload_blob_bytes:-0}"), checked in $((SECONDS - started)) s"
+    return 0
+}
+
+# ---- checks on the computer ------------------------------------------------------
+
+check_lines=()
+
+secure_boot_state() {
+    local file byte
+    file=/sys/firmware/efi/efivars/SecureBoot-8be4df61-93ca-11d2-aa0d-00e098032b8c
+    if [ ! -d /sys/firmware/efi ]; then
+        echo unknown
+        return
+    fi
+    if [ ! -r "${file}" ]; then
+        # UEFI firmware without the variable has no Secure Boot.
+        echo unsupported
+        return
+    fi
+    byte="$(od -An -t u1 -j4 -N1 "${file}" 2> /dev/null | tr -d ' ')"
+    case "${byte}" in
+        1) echo enabled ;;
+        0) echo disabled ;;
+        *) echo unknown ;;
+    esac
+}
+
+run_checks() {
+    local arch ram_kib ram_bytes secure
+    check_lines=()
+    blocking=()
+    if [ -d /sys/firmware/efi ]; then
+        check_lines+=("[ok]    Started by UEFI firmware")
+        mark "check boot_mode=uefi"
+    else
+        check_lines+=("[STOP]  Not started by UEFI firmware")
+        blocking+=("TUR-INSTALL-PREFLIGHT-001|This computer was not started in UEFI mode. TUR starts only from UEFI. Enable UEFI boot (and turn off legacy or CSM boot) in the firmware settings, then start from this medium again.")
+        mark "check boot_mode=not-uefi code=TUR-INSTALL-PREFLIGHT-001"
+    fi
+    arch="$(uname -m)"
+    if [ "${arch}" = x86_64 ]; then
+        check_lines+=("[ok]    64-bit x86 processor")
+    else
+        check_lines+=("[STOP]  Processor architecture: ${arch}")
+        blocking+=("TUR-INSTALL-PREFLIGHT-003|TUR needs a 64-bit x86 processor. This one reports ${arch}.")
+    fi
+    mark "check architecture=${arch}"
+    ram_kib="$(sed -n 's/^MemTotal:[[:space:]]*\([0-9]*\) kB/\1/p' /proc/meminfo)"
+    ram_bytes=$((${ram_kib:-0} * 1024))
+    if [ "${ram_bytes}" -ge "${MIN_RAM_BYTES}" ]; then
+        check_lines+=("[ok]    Memory: $(human "${ram_bytes}") usable")
+    else
+        check_lines+=("[STOP]  Memory: $(human "${ram_bytes}") usable")
+        blocking+=("TUR-INSTALL-PREFLIGHT-005|This computer has $(human "${ram_bytes}") of usable memory. TUR needs at least $(human "${MIN_RAM_BYTES}").")
+    fi
+    mark "check memory_bytes=${ram_bytes}"
+    secure="$(secure_boot_state)"
+    check_lines+=("[note]  Secure Boot in the firmware: ${secure}")
+    mark "check secure_boot=${secure}"
+    if [ "${payload_state}" = verified ]; then
+        check_lines+=("[ok]    Installation image on this medium: ${payload_detail}")
+        mark "check payload=verified image_id=${payload_image_id}"
+    else
+        check_lines+=("[STOP]  Installation image on this medium: ${payload_state}")
+        blocking+=("TUR-INSTALL-MEDIUM-001|The installation image on this medium cannot be used: ${payload_detail}. Write the medium again, to another USB stick if you can, and compare its checksum before you do.")
+        mark "check payload=${payload_state} code=TUR-INSTALL-MEDIUM-001"
+    fi
+}
+
+# ---- disks ------------------------------------------------------------------------
+
+d_name=() d_model=() d_serial=() d_wwn=() d_size=() d_tran=() d_byid=() d_status=() d_code=() d_why=() d_index=()
+d_holds=() d_windows=() d_bitlocker=()
+selectable=0
+
+prop() {
+    lsblk -dn -b -o "$2" "/dev/$1" 2> /dev/null | head -n 1 | sed 's/^[[:space:]]*//; s/[[:space:]]*$//'
+}
+
+# The disks the installer environment itself runs from.
+live_disks() {
+    local mount source parent
+    for mount in "${LIVE_MOUNT}" /run/initramfs/isoscan /run/install/repo; do
+        source="$(findmnt -n -o SOURCE "${mount}" 2> /dev/null | head -n 1)"
+        [ -b "${source}" ] || continue
+        parent="$(lsblk -dn -o PKNAME "${source}" 2> /dev/null | head -n 1 | tr -d '[:space:]')"
+        echo "${parent:-${source##*/}}"
+    done
+    if [ -e /run/initramfs/livedev ]; then
+        source="$(readlink -f /run/initramfs/livedev)"
+        if [ -b "${source}" ]; then
+            parent="$(lsblk -dn -o PKNAME "${source}" 2> /dev/null | head -n 1 | tr -d '[:space:]')"
+            echo "${parent:-${source##*/}}"
+        fi
+    fi
+}
+
+# by_id NAME SERIAL: the /dev/disk/by-id link that names the disk best: one
+# that carries the serial number, else a WWN link.
+by_id() {
+    local name="$1" token link target fallback=""
+    token="$(printf '%s' "$2" | tr ' ' '_')"
+    for link in /dev/disk/by-id/*; do
+        [ -L "${link}" ] || continue
+        target="$(readlink -f "${link}")"
+        [ "${target}" = "/dev/${name}" ] || continue
+        if [ -n "${token}" ] && [ "${link#*"${token}"}" != "${link}" ]; then
+            echo "${link}"
+            return
+        fi
+        case "${link##*/}" in
+            wwn-* | nvme-eui.*) [ -n "${fallback}" ] || fallback="${link}" ;;
+        esac
+    done
+    echo "${fallback}"
+}
+
+in_use() {
+    lsblk -ln -o MOUNTPOINTS "/dev/$1" 2> /dev/null | grep -q '[^[:space:]]' && return 0
+    lsblk -ln -o TYPE "/dev/$1" 2> /dev/null | grep -qvE '^(disk|part)[[:space:]]*$' && return 0
+    return 1
+}
+
+# What is on a disk now, as text for the screen.
+contents() {
+    lsblk -ln -o NAME,SIZE,FSTYPE,LABEL,PARTTYPENAME "/dev/$1" 2> /dev/null | tail -n +2
+}
+
+# A value that changes when the partitions or filesystems on a disk change.
+fingerprint() {
+    lsblk -ln -b -o NAME,SIZE,FSTYPE,UUID,PARTUUID,PARTTYPE "/dev/$1" 2> /dev/null | sha256sum | cut -d' ' -f1
+}
+
+readonly ESP_PROBE="${SESSION}/esp-probe"
+
+# has_microsoft_boot PARTITION: does this EFI system partition hold
+# EFI/Microsoft/Boot? Read-only: mounted read-only, in a mount namespace of
+# its own that ends with the command, so nothing else sees the mount and it
+# cannot outlive the look. FAT lookups ignore case.
+has_microsoft_boot() {
+    mkdir -p "${ESP_PROBE}"
+    # shellcheck disable=SC2016  # expanded by the inner shell
+    unshare --mount --propagation private /bin/sh -c '
+        mount -t vfat -o ro,nodev,nosuid,noexec "$1" "$2" 2> /dev/null || exit 2
+        test -d "$2/EFI/Microsoft/Boot"
+        rc=$?
+        umount "$2" 2> /dev/null
+        exit "$rc"' _ "$1" "${ESP_PROBE}"
+}
+
+# classify NAME: what is on a disk, in plain words. Sets `holds` (for the
+# screen), `words` (for the transcript), `windows` and `bitlocker` (yes or
+# no). Reads only.
+classify() {
+    local name="$1" part ptype fstype magic ntfs=0 bitlocker_count=0 linux=0 esp=0 other=0
+    local -a found=()
+    windows=no bitlocker=no
+    while read -r part; do
+        [ -b "/dev/${part}" ] || continue
+        # One query per field: lsblk's list output leaves an empty column
+        # blank, which would shift the columns after it.
+        ptype="$(prop "${part}" PARTTYPE)"
+        ptype="${ptype,,}"
+        fstype="$(prop "${part}" FSTYPE)"
+        # BitLocker: lsblk's (blkid's) own detection, or the signature
+        # "-FVE-FS-" at byte 3 of the volume.
+        magic="$(head -c 11 "/dev/${part}" 2> /dev/null | tail -c 8 | tr -d '\000')"
+        if [ "${fstype}" = BitLocker ] || [ "${magic}" = "-FVE-FS-" ]; then
+            bitlocker_count=$((bitlocker_count + 1))
+            continue
+        fi
+        case "${fstype}" in
+            ntfs) ntfs=$((ntfs + 1)) ;;
+            ext2 | ext3 | ext4 | xfs | btrfs | f2fs | crypto_LUKS | LVM2_member | swap | linux_raid_member | squashfs | erofs)
+                linux=$((linux + 1))
+                ;;
+            vfat)
+                if [ "${ptype}" = "${ESP_GUID}" ]; then
+                    esp=$((esp + 1))
+                    if has_microsoft_boot "/dev/${part}"; then windows=yes; fi
+                else
+                    other=$((other + 1))
+                fi
+                ;;
+            "") ;;
+            *) other=$((other + 1)) ;;
+        esac
+    done < <(lsblk -ln -o NAME "/dev/${name}" 2> /dev/null)
+    if [ "${windows}" = yes ]; then found+=("Windows (EFI/Microsoft/Boot)"); fi
+    if [ "${bitlocker_count}" -gt 0 ]; then
+        bitlocker=yes
+        found+=("BitLocker-encrypted volumes: ${bitlocker_count}")
+    fi
+    if [ "${ntfs}" -gt 0 ]; then found+=("NTFS: ${ntfs}"); fi
+    if [ "${linux}" -gt 0 ]; then found+=("Linux filesystems: ${linux}"); fi
+    if [ "${esp}" -gt 0 ] && [ "${windows}" = no ]; then found+=("EFI system partitions: ${esp}"); fi
+    if [ "${other}" -gt 0 ]; then found+=("other filesystems: ${other}"); fi
+    if [ "${#found[@]}" -eq 0 ]; then
+        if [ "$(contents "${name}" | grep -c .)" -eq 0 ]; then
+            holds="nothing (no partitions)"
+        else
+            holds="partitions without a recognised filesystem"
+        fi
+    else
+        holds="$(printf '%s; ' "${found[@]}")"
+        holds="${holds%; }"
+    fi
+    words="windows=${windows},bitlocker=${bitlocker_count},ntfs=${ntfs},linux=${linux},esp=${esp},other=${other}"
+}
+
+# serial_end I: the end of a disk's serial number, for the screen.
+serial_end() {
+    local s="${d_serial[$1]:-${d_wwn[$1]}}"
+    if [ -z "${s}" ]; then
+        echo "none reported"
+    elif [ "${#s}" -gt 8 ]; then
+        echo "...${s: -8}"
+    else
+        echo "${s}"
+    fi
+}
+
+scan_disks() {
+    local name type live index=0 i size serial wwn link status code why parts holds words windows bitlocker
+    udevadm settle --timeout=15 > /dev/null 2>&1
+    d_name=() d_model=() d_serial=() d_wwn=() d_size=() d_tran=() d_byid=() d_status=() d_code=() d_why=() d_index=()
+    d_holds=() d_windows=() d_bitlocker=()
+    selectable=0
+    live=" $(live_disks | sort -u | tr '\n' ' ')"
+    while read -r name type; do
+        [ "${type}" = disk ] || continue
+        case "${name}" in
+            zram* | loop* | ram* | nbd* | fd* | sr*) continue ;;
+        esac
+        size="$(prop "${name}" SIZE)"
+        serial="$(prop "${name}" SERIAL)"
+        wwn="$(prop "${name}" WWN)"
+        link="$(by_id "${name}" "${serial}")"
+        status=ok code="" why=""
+        if [ "${live#* "${name}" }" != "${live}" ]; then
+            status=installer-medium code=TUR-INSTALL-PREFLIGHT-008
+            why="this is the medium the installer runs from"
+        elif [ "${size:-0}" -eq 0 ]; then
+            status=no-medium code=TUR-INSTALL-TARGET-006
+            why="the drive holds no medium"
+        elif [ "$(prop "${name}" RO)" = 1 ]; then
+            status=read-only code=TUR-INSTALL-PREFLIGHT-012
+            why="the disk is read-only"
+        elif in_use "${name}"; then
+            status=in-use code=TUR-INSTALL-PREFLIGHT-007
+            why="something on the disk is mounted or open"
+        elif [ -z "${link}" ] || { [ -z "${serial}" ] && [ -z "${wwn}" ]; }; then
+            status=no-stable-identity code=TUR-INSTALL-TARGET-007
+            why="the disk reports no serial number, so it cannot be told apart safely"
+        elif [ "${size}" -lt "${min_target_bytes:-0}" ]; then
+            status=too-small code=TUR-INSTALL-PREFLIGHT-006
+            why="too small: $(human "${size}"); TUR needs at least $(human "${min_target_bytes}")"
+        fi
+        i=${#d_name[@]}
+        d_name[i]="${name}"
+        d_model[i]="$(prop "${name}" MODEL)"
+        d_serial[i]="${serial}"
+        d_wwn[i]="${wwn}"
+        d_size[i]="${size:-0}"
+        d_tran[i]="$(prop "${name}" TRAN)"
+        d_byid[i]="${link}"
+        d_status[i]="${status}"
+        d_code[i]="${code}"
+        d_why[i]="${why}"
+        if [ "${status}" = ok ]; then
+            index=$((index + 1))
+            d_index[i]="${index}"
+        else
+            d_index[i]="-"
+        fi
+        parts="$(contents "${name}" | grep -c .)"
+        classify "${name}"
+        d_holds[i]="${holds}"
+        d_windows[i]="${windows}"
+        d_bitlocker[i]="${bitlocker}"
+        mark "disk index=${d_index[i]} name=${name} size=${d_size[i]} serial=\"${serial}\" transport=${d_tran[i]:-unknown} status=${status} code=${code:-none} by_id=${link:-none} partitions=${parts} holds=${words}"
+    done < <(lsblk -dn -o NAME,TYPE 2> /dev/null)
+    selectable="${index}"
+    mark "disks total=${#d_name[@]} selectable=${selectable}"
+}
+
+# The storage inventory in the form installer/tur-installer-core reads, for
+# the transcript only: real output from a real machine is what that library's
+# fixtures lack (issue 16).
+dump_inventory() {
+    local line
+    [ "${serial_port}" = yes ] || return 0
+    lsblk --json --bytes --output-all 2> /dev/null | while IFS= read -r line; do
+        printf 'TUR-INSTALLER-LSBLK| %s\r\n' "${line}" >&3
+    done
+    find /dev/disk/by-id /dev/disk/by-path -maxdepth 1 -type l -printf '%p -> %l\n' 2> /dev/null | sort \
+        | while IFS= read -r line; do
+            printf 'TUR-INSTALLER-LINKS| %s\r\n' "${line}" >&3
+        done
+}
+
+# The phrase that confirms erasing disk I: "ERASE" and the last eight letters
+# and digits of its serial number, or of its WWN when it has no serial number.
+phrase_for() {
+    local i="$1" source cleaned
+    for source in "${d_serial[i]}" "${d_wwn[i]}"; do
+        cleaned="$(printf '%s' "${source}" | tr -cd '[:alnum:]' | tr '[:lower:]' '[:upper:]')"
+        if [ -n "${cleaned}" ]; then
+            if [ "${#cleaned}" -gt 8 ]; then cleaned="${cleaned: -8}"; fi
+            echo "ERASE ${cleaned}"
+            return
+        fi
+    done
+    echo "ERASE ${d_size[i]}"
+}
+
+# ---- screens ----------------------------------------------------------------------
+
+power_off() {
+    mark "power-off"
+    say "Powering off."
+    sync
+    systemctl poweroff
+    sleep infinity
+}
+
+command_line() {
+    mark "shell=started"
+    printf '\033[2J\033[H'
+    echo 'Command line of the installer environment (root). Nothing here is needed to'
+    echo 'install. Type "exit" to return to the installer.'
+    echo
+    stty isig 2> /dev/null
+    # Interactive bash writes its prompt and what is typed to standard error,
+    # which this unit sends to the journal: give it the console instead.
+    PS1='tur-installer# ' /usr/bin/bash --norc --noprofile -i 2>&1
+    stty -isig 2> /dev/null
+    mark "shell=ended"
+}
+
+# common ANSWER: handle the answers every screen accepts. Returns 0 if handled.
+common() {
+    case "$1" in
+        off) power_off ;;
+        shell)
+            command_line
+            return 0
+            ;;
+    esac
+    return 1
+}
+
+screen_welcome() {
+    local item
+    screen welcome "install TUR on this computer"
+    say "This installs TUR on ONE WHOLE DISK of this computer and ERASES that disk."
+    say ""
+    say "What this installer does not do:"
+    say "  - keep another operating system on the same disk (no dual boot)"
+    say "  - encrypt the disk"
+    say "  - let you choose partitions, or keep any data that is on the chosen disk"
+    say "It needs no network and uses none. The keyboard layout here is US English."
+    say ""
+    if [ "${payload_state}" = unknown ]; then
+        verify_payload
+    fi
+    run_checks
+    say "Checks:"
+    for item in "${check_lines[@]}"; do say "  ${item}"; done
+    say ""
+    if [ "${#blocking[@]}" -gt 0 ]; then
+        say "TUR cannot be installed from here:"
+        for item in "${blocking[@]}"; do
+            say ""
+            say "  ${item%%|*}"
+            para "${item#*|}"
+        done
+        say ""
+        mark "blocked count=${#blocking[@]}"
+        while :; do
+            ask 'Type "shell" for a command line or "off" to power off: '
+            if common "${answer}"; then return 0; fi
+        done
+    fi
+    say "Nothing is changed until you have chosen a disk and typed a confirmation."
+    say ""
+    ask 'Press Enter to choose a disk. ("shell": a command line; "off": power off) '
+    if common "${answer}"; then return 0; fi
+    state=disks
+}
+
+dumped=no
+screen_disks() {
+    local i shown=0
+    screen disks "choose the disk to erase"
+    scan_disks
+    if [ "${dumped}" = no ]; then
+        dump_inventory
+        dumped=yes
+    fi
+    for i in "${!d_name[@]}"; do
+        shown=$((shown + 1))
+        if [ "${d_status[i]}" = ok ]; then
+            say "  [${d_index[i]}]  ${d_model[i]:-unnamed disk}, $(human "${d_size[i]}"), ${d_tran[i]:-unknown connection}, serial $(serial_end "${i}")"
+            say "       ${d_byid[i]}"
+        else
+            say "  [-]  ${d_model[i]:-unnamed disk}, $(human "${d_size[i]}"), ${d_tran[i]:-unknown connection}, serial $(serial_end "${i}")"
+        fi
+        say "       holds: ${d_holds[i]}"
+        if [ "${d_status[i]}" != ok ]; then
+            say "       cannot be chosen: ${d_why[i]} (${d_code[i]})"
+        fi
+    done
+    if [ "${shown}" -eq 0 ]; then
+        say "  No disk was found."
+    fi
+    say ""
+    if [ "${selectable}" -eq 0 ]; then
+        say "TUR-INSTALL-MEDIUM-003"
+        say "There is no disk TUR can be installed on. Nothing was changed."
+        say "If the disk you expect is missing, the installer has no driver for its"
+        say "controller, or the firmware hides it (look for a RAID or Intel RST setting"
+        say "and set the controller to AHCI or NVMe)."
+        say ""
+        mark "no-target code=TUR-INSTALL-MEDIUM-003"
+        ask 'Press Enter to look again. ("shell": a command line; "off": power off) '
+        if common "${answer}"; then return 0; fi
+        if [ -n "${answer}" ]; then
+            mark "choice result=invalid"
+            say "There is no disk to choose."
+            sleep 2
+        fi
+        return 0
+    fi
+    ask "Type the number of the disk to erase, then Enter. (Enter alone: look again; \"off\": power off) "
+    if common "${answer}"; then return 0; fi
+    if [ -z "${answer}" ]; then return 0; fi
+    for i in "${!d_name[@]}"; do
+        if [ "${d_index[i]}" = "${answer}" ]; then
+            chosen="${i}"
+            mark "choice result=ok index=${answer} name=${d_name[i]}"
+            state=confirm
+            return 0
+        fi
+    done
+    mark "choice result=invalid"
+    say "\"${answer}\" is not one of the numbers in brackets."
+    sleep 3
+}
+
+chosen=""
+confirmed_fingerprint=""
+screen_confirm() {
+    local i="${chosen}" phrase line
+    screen confirm "confirm erasing this disk"
+    phrase="$(phrase_for "${i}")"
+    confirmed_fingerprint="$(fingerprint "${d_name[i]}")"
+    say "  Disk:       ${d_model[i]:-unnamed disk}"
+    say "  Capacity:   $(human "${d_size[i]}") (${d_size[i]} bytes)"
+    say "  Connection: ${d_tran[i]:-unknown}"
+    say "  Serial:     ${d_serial[i]:-none reported}${d_wwn[i]:+   WWN: ${d_wwn[i]}}"
+    say "  Path:       ${d_byid[i]}"
+    say "  (A serial number identifies your hardware. Mind it if you share a photo.)"
+    say ""
+    if [ -z "$(contents "${d_name[i]}")" ]; then
+        say "  On this disk now: no partitions. Anything on it will still be erased."
+    else
+        say "  On this disk now, ALL OF WHICH WILL BE DESTROYED:"
+        while IFS= read -r line; do
+            say "     ${line}"
+        done < <(contents "${d_name[i]}")
+    fi
+    say ""
+    say "  What will be written: a new GPT partition table with a 1 MiB BIOS boot"
+    say "  partition, an EFI system partition, and one ext4 partition with TUR on"
+    say "  the rest of the disk. Not encrypted. No other operating system and no"
+    say "  data are kept."
+    say ""
+    if [ "${d_windows[i]}" = yes ] || [ "${d_bitlocker[i]}" = yes ]; then
+        say "  !!! WARNING !!!"
+        say "  This disk holds Windows. Erasing it removes Windows and everything on it."
+        if [ "${d_bitlocker[i]}" = yes ]; then
+            say "  It also holds a BitLocker-encrypted volume, which is lost with it."
+        fi
+        say "  To keep Windows, press Enter alone to go back, and choose another disk."
+        say ""
+        mark "confirm-warning kind=windows windows=${d_windows[i]} bitlocker=${d_bitlocker[i]}"
+    fi
+    mark "confirm name=${d_name[i]} by_id=${d_byid[i]} phrase=\"${phrase}\""
+    say "To erase this disk and install TUR, type exactly:  ${phrase}"
+    ask "(Enter alone goes back and changes nothing) > "
+    if [ -z "${answer}" ]; then
+        mark "confirm result=back"
+        state=disks
+        return 0
+    fi
+    if [ "${answer}" != "${phrase}" ]; then
+        mark "confirm result=mismatch code=TUR-INSTALL-CONFIRM-001"
+        say ""
+        say "TUR-INSTALL-CONFIRM-001"
+        say "That is not the phrase. Nothing was changed. The phrase has capital"
+        say "letters and one space, exactly as shown."
+        sleep 4
+        return 0
+    fi
+    mark "confirm result=accepted"
+    state=install
+}
+
+# fail CODE MESSAGE...: the last screen of a failed run.
+fail() {
+    local code="$1" line
+    shift
+    screen failed "the installation did not complete"
+    say "${code}"
+    for line in "$@"; do say "${line}"; done
+    say ""
+    if [ -s "${INSTALL_LOG}" ]; then
+        say "The last lines of the installation log (${INSTALL_LOG}):"
+        while IFS= read -r line; do
+            say "  ${line:0:76}"
+        done < <(tail -n 12 "${INSTALL_LOG}")
+        say ""
+    fi
+    say "Photograph this screen if you report the problem. To try again, power off"
+    say "and start from the medium again."
+    mark "result=failed code=${code}"
+    while :; do
+        ask 'Type "shell" for a command line or "off" to power off: '
+        common "${answer}"
+    done
+}
+
+# Look at the chosen disk again, immediately before writing. It must be the
+# same disk, behind the same stable path, with the same content.
+revalidate() {
+    local i="${chosen}" device name
+    udevadm settle --timeout=15 > /dev/null 2>&1
+    if [ ! -L "${d_byid[i]}" ]; then
+        fail TUR-INSTALL-IDENTITY-001 "The chosen disk is no longer there (${d_byid[i]})." "Nothing was changed."
+    fi
+    device="$(readlink -f "${d_byid[i]}")"
+    name="${device##*/}"
+    if [ ! -b "${device}" ]; then
+        fail TUR-INSTALL-IDENTITY-001 "The chosen disk is no longer there (${d_byid[i]})." "Nothing was changed."
+    fi
+    if [ "$(prop "${name}" SERIAL)" != "${d_serial[i]}" ] || [ "$(prop "${name}" WWN)" != "${d_wwn[i]}" ]; then
+        fail TUR-INSTALL-IDENTITY-003 "A different disk is now in the place of the chosen one." "Nothing was changed."
+    fi
+    if [ "$(prop "${name}" SIZE)" != "${d_size[i]}" ]; then
+        fail TUR-INSTALL-IDENTITY-002 "The chosen disk changed size." "Nothing was changed."
+    fi
+    if live_disks | grep -qx "${name}"; then
+        fail TUR-INSTALL-PREFLIGHT-008 "The chosen disk is the medium the installer runs from." "Nothing was changed."
+    fi
+    if [ "$(prop "${name}" RO)" = 1 ]; then
+        fail TUR-INSTALL-PREFLIGHT-012 "The chosen disk is read-only." "Nothing was changed."
+    fi
+    if in_use "${name}"; then
+        fail TUR-INSTALL-PREFLIGHT-007 "Something on the chosen disk is mounted or open." "Nothing was changed."
+    fi
+    if [ "$(fingerprint "${name}")" != "${confirmed_fingerprint}" ]; then
+        fail TUR-INSTALL-CONFIRM-004 "What is on the chosen disk changed after you confirmed." "Nothing was changed."
+    fi
+    target_device="${device}"
+    mark "revalidated name=${name} device=${device} by_id=${d_byid[i]}"
+}
+
+target_device=""
+screen_install() {
+    local i="${chosen}" pid status started shown=0 total line elapsed last_mark=0 types
+    local -a extra=()
+    revalidate
+    screen installing "installing TUR"
+    say "  Disk: ${d_model[i]:-unnamed disk}, $(human "${d_size[i]}")"
+    say "        ${d_byid[i]}"
+    say ""
+    say "Do not power off and do not remove the medium. This takes several minutes."
+    say ""
+    read -r -a extra <<< "${payload_install_args}"
+    : > "${INSTALL_LOG}"
+    mark "installing device=${target_device} command=\"bootc install to-disk --source-imgref oci:${PAYLOAD_DIR}:${payload_ref} --target-imgref ${payload_target} --generic-image --wipe ${payload_install_args} ${target_device}\""
+    started="${SECONDS}"
+    # A session of its own: no key pressed on the console can reach it.
+    setsid --wait bootc install to-disk \
+        --source-imgref "oci:${PAYLOAD_DIR}:${payload_ref}" \
+        --target-imgref "${payload_target}" \
+        --generic-image --wipe "${extra[@]}" \
+        "${target_device}" > "${INSTALL_LOG}" 2>&1 < /dev/null &
+    pid=$!
+    while :; do
+        total="$(wc -l < "${INSTALL_LOG}")"
+        if [ "${total}" -gt "${shown}" ]; then
+            while IFS= read -r line; do
+                line="${line//$'\r'/}"
+                [ -n "${line}" ] && say "  ${line:0:76}"
+            done < <(sed -n "$((shown + 1)),${total}p" "${INSTALL_LOG}")
+            shown="${total}"
+        fi
+        if ! kill -0 "${pid}" 2> /dev/null; then break; fi
+        elapsed=$((SECONDS - started))
+        if [ $((elapsed - last_mark)) -ge 20 ]; then
+            last_mark="${elapsed}"
+            mark "installing elapsed=${elapsed}"
+            printf '\r  ... %s s \r' "${elapsed}"
+        fi
+        sleep 2
+    done
+    wait "${pid}"
+    status=$?
+    elapsed=$((SECONDS - started))
+    total="$(wc -l < "${INSTALL_LOG}")"
+    if [ "${total}" -gt "${shown}" ]; then
+        while IFS= read -r line; do
+            line="${line//$'\r'/}"
+            [ -n "${line}" ] && say "  ${line:0:76}"
+        done < <(sed -n "$((shown + 1)),${total}p" "${INSTALL_LOG}")
+    fi
+    sync
+    udevadm settle --timeout=15 > /dev/null 2>&1
+    mark "install-finished status=${status} seconds=${elapsed}"
+    if [ "${status}" -ne 0 ]; then
+        fail TUR-INSTALL-MEDIUM-002 \
+            "The installation stopped with an error (status ${status}) after ${elapsed} s." \
+            "The chosen disk was erased and holds no complete system. It cannot start" \
+            "this computer until an installation completes."
+    fi
+    # The least a finished installation must have left: an EFI system
+    # partition and a root partition.
+    types="$(lsblk -ln -o PARTTYPE "${target_device}" 2> /dev/null | tr '[:upper:]' '[:lower:]')"
+    if ! printf '%s\n' "${types}" | grep -q "${ESP_GUID}" || ! printf '%s\n' "${types}" | grep -q "${ROOT_GUID}"; then
+        fail TUR-INSTALL-MEDIUM-002 \
+            "The installer reported success after ${elapsed} s, but the disk does not have" \
+            "the partitions an installed TUR has. Do not rely on this disk."
+    fi
+    install_seconds="${elapsed}"
+    state=finished
+}
+
+install_seconds=0
+screen_finished() {
+    local i="${chosen}" line
+    screen finished "TUR is installed"
+    say "TUR ${tur_version:-?} (build ${tur_build_id:-?}) was installed in ${install_seconds} s on:"
+    say "  ${d_model[i]:-unnamed disk}, $(human "${d_size[i]}")"
+    say "  ${d_byid[i]}"
+    say ""
+    while IFS= read -r line; do
+        say "     ${line}"
+    done < <(contents "${target_device##*/}")
+    say ""
+    say "Next:"
+    say "  1. Press Enter. The computer powers off."
+    say "  2. Remove the installer medium."
+    say "  3. Switch the computer on. The first start shows a setup screen that"
+    say "     creates your user account."
+    say ""
+    mark "result=success seconds=${install_seconds} device=${target_device}"
+    while :; do
+        ask 'Press Enter to power off. ("shell": a command line) '
+        if [ "${answer}" = shell ]; then
+            command_line
+            continue
+        fi
+        power_off
+    done
+}
+
+# ---- main -------------------------------------------------------------------------
+
+# No key may interrupt the installer, and systemd's and the kernel's own
+# messages must not be written across its screens.
+# Nor may it be stopped for reading or writing its own console (SIGTTIN,
+# SIGTTOU): a read then fails instead, and ask() opens the console again.
+trap '' INT QUIT TSTP HUP TTIN TTOU
+stty -isig 2> /dev/null
+kill -s RTMIN+21 1 2> /dev/null
+dmesg --console-level 4 > /dev/null 2>&1
+
+mark "start version=${tur_version:-unknown} build_id=${tur_build_id:-unknown} revision=${tur_revision:-unknown} serial_port=${serial_port} kernel=$(uname -r)"
+mark "cmdline $(cat /proc/cmdline)"
+mark "live-medium source=$(findmnt -n -o SOURCE,FSTYPE "${LIVE_MOUNT}" 2> /dev/null | tr -s ' ' | head -n 1) root=$(findmnt -n -o SOURCE,FSTYPE / | tr -s ' ' | head -n 1)"
+
+state=welcome
+while :; do
+    case "${state}" in
+        welcome) screen_welcome ;;
+        disks) screen_disks ;;
+        confirm) screen_confirm ;;
+        install) screen_install ;;
+        finished) screen_finished ;;
+        *) state=welcome ;;
+    esac
+done
