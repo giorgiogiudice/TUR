@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR application catalogue entry. Format: schemas/app-catalogue-entry.schema.json.
+# How entries are written and sourced: catalogue/README.md.
+# TUR has not tested this application. Every rating below is reported by the
+# named source, which was checked on the date given; no record means unknown.
+
+schema_version = 1
+id = "com.whatsapp.whatsapp"
+name = "WhatsApp"
+aliases = ["WhatsApp Messenger"]
+publisher = "WhatsApp LLC"
+category = "communication"
+summary = "Messenger."
+
+[[editions]]
+kind = "android"
+package = "com.whatsapp"
+stores = ["google-play"]
+licence = "proprietary"
+
+[[editions.references]]
+title = "Google Play listing"
+url = "https://play.google.com/store/apps/details?id=com.whatsapp&hl=en"
+checked = "2026-11-12"
+
+[[editions]]
+kind = "web"
+url = "https://web.whatsapp.com/"
+licence = "proprietary"
+
+[[editions.references]]
+title = "WhatsApp download page: use WhatsApp on your browser (WhatsApp Web)"
+url = "https://www.whatsapp.com/download"
+checked = "2026-11-12"

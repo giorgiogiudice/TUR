@@ -1,0 +1,57 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR application catalogue entry. Format: schemas/app-catalogue-entry.schema.json.
+# How entries are written and sourced: catalogue/README.md.
+# TUR has not tested this application. Every rating below is reported by the
+# named source, which was checked on the date given; no record means unknown.
+
+schema_version = 1
+id = "com.google.androidstudio"
+name = "Android Studio"
+publisher = "Google"
+category = "development"
+summary = "Integrated development environment for Android applications."
+
+[[editions]]
+kind = "flatpak"
+flatpak_id = "com.google.AndroidStudio"
+licence = "proprietary"
+packaging = "community"
+
+[[editions.references]]
+title = "Flathub listing; not verified by Flathub as coming from the publisher"
+url = "https://flathub.org/apps/com.google.AndroidStudio"
+checked = "2026-11-12"
+
+[[editions]]
+kind = "linux-native"
+obtain = "publisher-page"
+download_page = "https://developer.android.com/studio"
+licence = "proprietary"
+packaging = "publisher"
+
+[[editions.references]]
+title = "Android Studio page: can be installed on Windows, macOS, Linux and ChromeOS"
+url = "https://developer.android.com/studio"
+checked = "2026-11-12"
+
+[[editions]]
+kind = "windows"
+obtain = "publisher-page"
+download_page = "https://developer.android.com/studio"
+licence = "proprietary"
+
+[[editions.references]]
+title = "Android Studio page"
+url = "https://developer.android.com/studio"
+checked = "2026-11-12"
+
+[[editions]]
+kind = "macos"
+obtain = "publisher-page"
+download_page = "https://developer.android.com/studio"
+licence = "proprietary"
+
+[[editions.references]]
+title = "Android Studio page"
+url = "https://developer.android.com/studio"
+checked = "2026-11-12"

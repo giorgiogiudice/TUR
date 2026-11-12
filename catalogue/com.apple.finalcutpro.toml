@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR application catalogue entry. Format: schemas/app-catalogue-entry.schema.json.
+# How entries are written and sourced: catalogue/README.md.
+# TUR has not tested this application. Every rating below is reported by the
+# named source, which was checked on the date given; no record means unknown.
+
+schema_version = 1
+id = "com.apple.finalcutpro"
+name = "Final Cut Pro"
+aliases = ["FCP", "Final Cut"]
+publisher = "Apple"
+category = "creative"
+summary = "Video editor. Published for macOS and iPadOS only."
+homepage = "https://www.apple.com/final-cut-pro/"
+
+[[editions]]
+kind = "macos"
+obtain = "publisher-page"
+download_page = "https://www.apple.com/final-cut-pro/"
+licence = "proprietary"
+requirements = ["heavy-gpu"]
+notes = "No Windows, Linux, Android or web edition is listed by the publisher."
+
+[[editions.references]]
+title = "Apple, Final Cut Pro specifications: requires macOS 15.6 or later and a Metal-capable graphics card; some features require a Mac with Apple silicon"
+url = "https://www.apple.com/final-cut-pro/specs/"
+checked = "2026-11-12"

@@ -1,0 +1,79 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR application catalogue entry. Format: schemas/app-catalogue-entry.schema.json.
+# How entries are written and sourced: catalogue/README.md.
+# TUR has not tested this application. Every rating below is reported by the
+# named source, which was checked on the date given; no record means unknown.
+
+schema_version = 1
+id = "com.discord.discord"
+name = "Discord"
+publisher = "Discord Inc."
+category = "communication"
+summary = "Voice, video and text chat."
+homepage = "https://discord.com/"
+
+[[editions]]
+kind = "flatpak"
+flatpak_id = "com.discordapp.Discord"
+licence = "proprietary"
+packaging = "publisher"
+
+[[editions.references]]
+title = "Flathub listing; verified by Flathub as published by the application's own project (discordapp.com)"
+url = "https://flathub.org/apps/com.discordapp.Discord"
+checked = "2026-11-12"
+
+[[editions]]
+kind = "linux-native"
+obtain = "publisher-page"
+download_page = "https://discord.com/download"
+licence = "proprietary"
+packaging = "publisher"
+
+[[editions.references]]
+title = "Discord download page: Linux deb, tar.gz, rpm, pkg.tar.zst"
+url = "https://discord.com/download"
+checked = "2026-11-12"
+
+[[editions]]
+kind = "web"
+url = "https://discord.com/app"
+licence = "proprietary"
+
+[[editions.references]]
+title = "Discord in the browser"
+url = "https://discord.com/app"
+checked = "2026-11-12"
+
+[[editions]]
+kind = "windows"
+obtain = "publisher-page"
+download_page = "https://discord.com/download"
+licence = "proprietary"
+
+[[editions.references]]
+title = "Discord download page"
+url = "https://discord.com/download"
+checked = "2026-11-12"
+
+[[editions]]
+kind = "macos"
+obtain = "publisher-page"
+download_page = "https://discord.com/download"
+licence = "proprietary"
+
+[[editions.references]]
+title = "Discord download page"
+url = "https://discord.com/download"
+checked = "2026-11-12"
+
+[[editions]]
+kind = "android"
+package = "com.discord"
+stores = ["google-play"]
+licence = "proprietary"
+
+[[editions.references]]
+title = "Google Play listing"
+url = "https://play.google.com/store/apps/details?id=com.discord&hl=en"
+checked = "2026-11-12"

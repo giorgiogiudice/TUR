@@ -1,0 +1,45 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR application catalogue entry. Format: schemas/app-catalogue-entry.schema.json.
+# How entries are written and sourced: catalogue/README.md.
+# TUR has not tested this application. Every rating below is reported by the
+# named source, which was checked on the date given; no record means unknown.
+
+schema_version = 1
+id = "us.zoom.zoom"
+name = "Zoom"
+aliases = ["Zoom Workplace", "Zoom Meetings"]
+publisher = "Zoom"
+category = "communication"
+summary = "Video meetings."
+
+[[editions]]
+kind = "flatpak"
+flatpak_id = "us.zoom.Zoom"
+licence = "proprietary"
+packaging = "community"
+
+[[editions.references]]
+title = "Flathub listing; not verified by Flathub as coming from the publisher"
+url = "https://flathub.org/apps/us.zoom.Zoom"
+checked = "2026-11-12"
+
+[[editions]]
+kind = "web"
+url = "https://app.zoom.us/wc"
+licence = "proprietary"
+
+[[editions.references]]
+title = "Zoom web client"
+url = "https://app.zoom.us/wc"
+checked = "2026-11-12"
+
+[[editions]]
+kind = "android"
+package = "us.zoom.videomeetings"
+stores = ["google-play"]
+licence = "proprietary"
+
+[[editions.references]]
+title = "Google Play listing"
+url = "https://play.google.com/store/apps/details?id=us.zoom.videomeetings&hl=en"
+checked = "2026-11-12"

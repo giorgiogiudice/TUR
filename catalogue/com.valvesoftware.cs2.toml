@@ -1,0 +1,42 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR application catalogue entry. Format: schemas/app-catalogue-entry.schema.json.
+# How entries are written and sourced: catalogue/README.md.
+# TUR has not tested this application. Every rating below is reported by the
+# named source, which was checked on the date given; no record means unknown.
+
+schema_version = 1
+id = "com.valvesoftware.cs2"
+name = "Counter-Strike 2"
+aliases = ["CS2", "Counter Strike"]
+publisher = "Valve"
+category = "game"
+summary = "Competitive first-person shooter."
+
+[[editions]]
+kind = "linux-native"
+obtain = "steam"
+store_id = "730"
+licence = "proprietary"
+packaging = "publisher"
+notes = "No rating is entered: no source that rates the native Linux build on its own was checked."
+
+[[editions.references]]
+title = "Steam store listing; platforms listed by the store's public API: Windows and Linux"
+url = "https://store.steampowered.com/app/730/"
+checked = "2026-11-12"
+
+[[editions.references]]
+title = "AreWeAntiCheatYet lists it as Supported, native, with VAC"
+url = "https://areweanticheatyet.com/"
+checked = "2026-11-12"
+
+[[editions]]
+kind = "windows"
+obtain = "steam"
+store_id = "730"
+licence = "proprietary"
+
+[[editions.references]]
+title = "Steam store listing; platforms listed by the store's public API: Windows and Linux"
+url = "https://store.steampowered.com/app/730/"
+checked = "2026-11-12"

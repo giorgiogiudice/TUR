@@ -1,0 +1,373 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/giorgiogiudice/TUR/schemas/app-catalogue-entry.schema.json",
+  "title": "TUR application catalogue entry",
+  "description": "One application in the TUR application catalogue (ADR-0007, ADR-0011): its names, the editions it exists in, the known requirements of each edition that decide routing, and what is known about how well each route runs it. An entry is written as one TOML file named <id>.toml under catalogue/; this schema describes the same data model. Dates are written as strings. Honesty rule: a rating other than unknown must be attributed to a named external source with the URL that was checked, or to a TUR test with its report; the tur-catalogue validator enforces this and the further rules described in docs/architecture/catalogue-and-routing.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "name", "publisher", "category", "editions"],
+  "$defs": {
+    "text": {
+      "description": "Text shown to people: not empty, no control characters, no leading or trailing space. Each use states its own maximum length.",
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[^\\s\\u0000-\\u001f\\u007f-\\u009f]([^\\u0000-\\u001f\\u007f-\\u009f]*[^\\s\\u0000-\\u001f\\u007f-\\u009f])?$"
+    },
+    "httpsUrl": {
+      "description": "An https URL with a lower-case DNS host name, no user name or password, and printable ASCII only.",
+      "type": "string",
+      "maxLength": 2048,
+      "pattern": "^https://[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+(:[0-9]{1,5})?([/?#][!#-;=?-\\[\\]_a-z~]*)?$"
+    },
+    "date": {
+      "description": "A calendar date, YYYY-MM-DD, not before 2000 and not in the future.",
+      "type": "string",
+      "pattern": "^2[0-9]{3}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$"
+    },
+    "requirement": {
+      "description": "A known requirement of an edition that decides routing. kernel-anti-cheat: anti-cheat that works only on real Windows, because it loads a Windows kernel driver or because its publisher has refused to enable it for Proton. hardware-attested-drm: copy protection that needs hardware attestation, such as Widevine level 1. play-integrity: Google's Play Integrity device verdict. arm-only-native-code: native code built for ARM processors only. kernel-driver: a kernel driver of the edition's own operating system. hardware-dongle: a hardware licence dongle. heavy-gpu: heavy use of the graphics processor. online-account: an online account with the publisher.",
+      "enum": [
+        "kernel-anti-cheat", "hardware-attested-drm", "play-integrity", "arm-only-native-code",
+        "kernel-driver", "hardware-dongle", "heavy-gpu", "online-account"
+      ]
+    },
+    "route": {
+      "description": "A way of running an edition. flatpak: a Flatpak on the host. native: a native Linux program that is not a Flatpak. distro-container: a package of another distribution, in a container of it. proton: Proton through umu-launcher, for games. wine: Wine, for other Windows applications. windows-guest: the seamless Windows guest, a virtual machine. android-runtime: the Android runtime. darling: Darling, experimental. web: the web application in the host's browser.",
+      "enum": [
+        "flatpak", "native", "distro-container", "proton", "wine", "windows-guest",
+        "android-runtime", "darling", "web"
+      ]
+    },
+    "rating": {
+      "description": "How well a route runs an edition. good: runs as intended, with no workaround worth mentioning. usable: runs and is usable; needs tweaks or has minor problems. poor: runs, with problems that get in the way of normal use. broken: does not start, or cannot be used for its purpose. unknown: not known; the only rating that needs no source.",
+      "enum": ["good", "usable", "poor", "broken", "unknown"]
+    },
+    "record": {
+      "description": "What is known about how well one route runs one edition.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["route", "rating", "reported_by", "date"],
+      "properties": {
+        "route": {
+          "description": "The route the record is about. It must be a route that can run the edition.",
+          "$ref": "#/$defs/route"
+        },
+        "rating": { "$ref": "#/$defs/rating" },
+        "reported_by": {
+          "description": "Who the record comes from. nobody: the record only states that the rating is unknown. external: a named external source, with the URL that was checked; never TUR. tur-test: TUR's own test, with a reference to its test report.",
+          "enum": ["nobody", "external", "tur-test"]
+        },
+        "source_name": {
+          "description": "External: the name of the source, for example ProtonDB.",
+          "$ref": "#/$defs/text",
+          "maxLength": 200
+        },
+        "source_url": {
+          "description": "External: the page that was checked.",
+          "$ref": "#/$defs/httpsUrl"
+        },
+        "source_rating": {
+          "description": "External: the source's own rating, in its own words, for example Gold.",
+          "$ref": "#/$defs/text",
+          "maxLength": 100
+        },
+        "test_report": {
+          "description": "TUR test: the path of the test report in the repository, under docs/reports/ or tests/.",
+          "type": "string",
+          "maxLength": 255,
+          "pattern": "^(docs/reports|tests)(/[A-Za-z0-9._-]+)+\\.(md|json)$"
+        },
+        "version_tested": {
+          "description": "The version of the application that was tested, when the source says. Required for a TUR test.",
+          "$ref": "#/$defs/text",
+          "maxLength": 100
+        },
+        "date": {
+          "description": "The day the test was made or the source was checked.",
+          "$ref": "#/$defs/date"
+        },
+        "notes": {
+          "description": "Free-text notes.",
+          "$ref": "#/$defs/text",
+          "maxLength": 1000
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "reported_by": { "const": "nobody" } } },
+          "then": {
+            "properties": {
+              "rating": { "const": "unknown" },
+              "source_name": false,
+              "source_url": false,
+              "source_rating": false,
+              "test_report": false
+            }
+          }
+        },
+        {
+          "if": { "properties": { "reported_by": { "const": "external" } } },
+          "then": {
+            "required": ["source_name", "source_url"],
+            "properties": { "test_report": false }
+          }
+        },
+        {
+          "if": {
+            "properties": { "reported_by": { "const": "external" } },
+            "not": { "properties": { "rating": { "const": "unknown" } } }
+          },
+          "then": { "required": ["source_rating"] }
+        },
+        {
+          "if": { "properties": { "reported_by": { "const": "tur-test" } } },
+          "then": {
+            "required": ["test_report", "version_tested"],
+            "properties": {
+              "source_name": false,
+              "source_url": false,
+              "source_rating": false
+            }
+          }
+        }
+      ]
+    },
+    "reference": {
+      "description": "A public page that a fact of an edition was checked against.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "url", "checked"],
+      "properties": {
+        "title": {
+          "description": "What the page is and what it shows.",
+          "$ref": "#/$defs/text",
+          "maxLength": 200
+        },
+        "url": { "$ref": "#/$defs/httpsUrl" },
+        "checked": {
+          "description": "The day the page was checked.",
+          "$ref": "#/$defs/date"
+        }
+      }
+    },
+    "edition": {
+      "description": "One way an application exists. Which fields apply depends on kind. In an entry whose entry_kind is class the identifying fields may be left out.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": {
+          "description": "flatpak: a Linux edition packaged as a Flatpak. linux-native: a Linux edition that is not a Flatpak. windows: a Windows edition. android: an Android edition. web: a web application. macos: a macOS edition.",
+          "enum": ["flatpak", "linux-native", "windows", "android", "web", "macos"]
+        },
+        "flatpak_id": {
+          "description": "Flatpak: the Flatpak application ID.",
+          "type": "string",
+          "maxLength": 255,
+          "pattern": "^[A-Za-z_][A-Za-z0-9_-]*(\\.[A-Za-z_][A-Za-z0-9_-]*){2,}$"
+        },
+        "remote": {
+          "description": "Flatpak: the remote that carries it. flathub when absent.",
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+        },
+        "obtain": {
+          "description": "Native Linux, Windows, macOS: where the edition is obtained. fedora-package and other-distribution-package are for native Linux only; mac-app-store for macOS only; epic, gog and microsoft-store for Windows only. The Microsoft Store and Apple's App Store are recorded as facts; TUR cannot integrate them (ADR-0011, rule 5).",
+          "enum": [
+            "fedora-package", "other-distribution-package", "steam", "epic", "gog",
+            "publisher-page", "microsoft-store", "mac-app-store"
+          ]
+        },
+        "package": {
+          "description": "Native Linux from a distribution: the package name. Android: the package name.",
+          "type": "string",
+          "maxLength": 255,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9+._-]*$"
+        },
+        "distribution": {
+          "description": "Native Linux from another distribution: which distribution, for example debian.",
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+        },
+        "store_id": {
+          "description": "The identifier in the store named by obtain, such as a Steam application ID. Digits only for Steam.",
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._-]{1,128}$"
+        },
+        "download_page": {
+          "description": "The publisher's download page: a page for a person to read. Never a direct link to a program, package or archive that TUR would fetch without the user. The pattern here lists the refused file endings in lower case; the validator compares them in any case.",
+          "$ref": "#/$defs/httpsUrl",
+          "not": {
+            "pattern": "\\.(exe|msi|msix|msixbundle|appx|zip|7z|rar|dmg|pkg|apk|xapk|apks|aab|appimage|deb|rpm|flatpak|tar|gz|tgz|xz|bz2|zst|iso|bin|run)([?#].*)?$"
+          }
+        },
+        "stores": {
+          "description": "Android: the stores that carry the package. f-droid is an open-source store; google-play is proprietary and opt-in (ADR-0011); publisher-page means the publisher offers the package itself, and then download_page is required.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "enum": ["f-droid", "google-play", "publisher-page"] }
+        },
+        "url": {
+          "description": "Web: the address of the web application.",
+          "$ref": "#/$defs/httpsUrl"
+        },
+        "primary": {
+          "description": "Web: whether the web application is the publisher's primary form of the application.",
+          "type": "boolean"
+        },
+        "licence": {
+          "description": "Whether the edition is open source or proprietary, when known.",
+          "enum": ["open-source", "proprietary"]
+        },
+        "packaging": {
+          "description": "Flatpak and native Linux: who maintains the package, when known.",
+          "enum": ["publisher", "community"]
+        },
+        "requirements": {
+          "description": "The known requirements that decide routing.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/requirement" }
+        },
+        "records": {
+          "description": "What is known about how well each route runs this edition. No record for a route means unknown.",
+          "type": "array",
+          "maxItems": 32,
+          "items": { "$ref": "#/$defs/record" }
+        },
+        "references": {
+          "description": "The public pages the facts of this edition were checked against.",
+          "type": "array",
+          "maxItems": 32,
+          "items": { "$ref": "#/$defs/reference" }
+        },
+        "notes": {
+          "description": "Free-text notes about the edition.",
+          "$ref": "#/$defs/text",
+          "maxLength": 1000
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "kind": { "const": "flatpak" } } },
+          "then": {
+            "properties": {
+              "obtain": false, "package": false, "distribution": false, "store_id": false,
+              "download_page": false, "stores": false, "url": false, "primary": { "const": false },
+              "records": { "items": { "properties": { "route": { "const": "flatpak" } } } }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "linux-native" } } },
+          "then": {
+            "properties": {
+              "flatpak_id": false, "remote": false, "stores": false, "url": false,
+              "primary": { "const": false },
+              "obtain": { "enum": ["fedora-package", "other-distribution-package", "steam", "publisher-page"] },
+              "records": { "items": { "properties": { "route": { "enum": ["native", "distro-container"] } } } }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "windows" } } },
+          "then": {
+            "properties": {
+              "flatpak_id": false, "remote": false, "package": false, "distribution": false,
+              "stores": false, "url": false, "primary": { "const": false }, "packaging": false,
+              "obtain": { "enum": ["steam", "epic", "gog", "publisher-page", "microsoft-store"] },
+              "records": { "items": { "properties": { "route": { "enum": ["proton", "wine", "windows-guest"] } } } }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "android" } } },
+          "then": {
+            "properties": {
+              "flatpak_id": false, "remote": false, "obtain": false, "distribution": false,
+              "store_id": false, "url": false, "primary": { "const": false }, "packaging": false,
+              "records": { "items": { "properties": { "route": { "const": "android-runtime" } } } }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "web" } } },
+          "then": {
+            "properties": {
+              "flatpak_id": false, "remote": false, "obtain": false, "package": false,
+              "distribution": false, "store_id": false, "download_page": false, "stores": false,
+              "packaging": false,
+              "records": { "items": { "properties": { "route": { "const": "web" } } } }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "macos" } } },
+          "then": {
+            "properties": {
+              "flatpak_id": false, "remote": false, "package": false, "distribution": false,
+              "stores": false, "url": false, "primary": { "const": false }, "packaging": false,
+              "obtain": { "enum": ["mac-app-store", "publisher-page", "steam"] },
+              "records": { "items": { "properties": { "route": { "const": "darling" } } } }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "properties": {
+    "schema_version": {
+      "description": "The version of this schema. Readers refuse a version they do not know.",
+      "const": 1
+    },
+    "id": {
+      "description": "The stable application ID: lower case, reverse-DNS style, at least two segments. It never changes once published, and the entry's file is named after it.",
+      "type": "string",
+      "maxLength": 255,
+      "pattern": "^[a-z0-9][a-z0-9_-]*(\\.[a-z0-9][a-z0-9_-]*)+$"
+    },
+    "entry_kind": {
+      "description": "application: one application with its own identifiers (the default). class: a class of applications that share a routing answer, such as banking applications for Android; its editions may leave identifiers out.",
+      "enum": ["application", "class"]
+    },
+    "name": {
+      "description": "The name shown to the user. It must hold a letter or a digit, and must not read the same as a name or alias of another application.",
+      "$ref": "#/$defs/text",
+      "maxLength": 200
+    },
+    "aliases": {
+      "description": "Other names people search for. Compared ignoring case, punctuation and spacing; none may read the same as another name or alias in the catalogue.",
+      "type": "array",
+      "maxItems": 32,
+      "items": { "$ref": "#/$defs/text", "maxLength": 200 }
+    },
+    "publisher": {
+      "description": "Who publishes the application.",
+      "$ref": "#/$defs/text",
+      "maxLength": 200
+    },
+    "category": {
+      "description": "What kind of application it is. Games are routed through Proton and are never offered a Windows guest.",
+      "enum": [
+        "game", "productivity", "creative", "communication", "development", "utility", "media",
+        "internet", "finance", "education"
+      ]
+    },
+    "summary": {
+      "description": "One line saying what the application is.",
+      "$ref": "#/$defs/text",
+      "maxLength": 300
+    },
+    "homepage": {
+      "description": "The publisher's page about the application.",
+      "$ref": "#/$defs/httpsUrl"
+    },
+    "editions": {
+      "description": "The ways the application exists. At least one.",
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": { "$ref": "#/$defs/edition" }
+    }
+  }
+}

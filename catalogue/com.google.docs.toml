@@ -1,0 +1,35 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR application catalogue entry. Format: schemas/app-catalogue-entry.schema.json.
+# How entries are written and sourced: catalogue/README.md.
+# TUR has not tested this application. Every rating below is reported by the
+# named source, which was checked on the date given; no record means unknown.
+
+schema_version = 1
+id = "com.google.docs"
+name = "Google Docs"
+publisher = "Google"
+category = "productivity"
+summary = "Online document editor."
+
+[[editions]]
+kind = "web"
+url = "https://docs.google.com/document/"
+primary = true
+licence = "proprietary"
+requirements = ["online-account"]
+
+[[editions.references]]
+title = "Google Docs page: an online editor; anyone with a Google Account can create in Docs"
+url = "https://docs.google.com/document/"
+checked = "2026-11-12"
+
+[[editions]]
+kind = "android"
+package = "com.google.android.apps.docs.editors.docs"
+stores = ["google-play"]
+licence = "proprietary"
+
+[[editions.references]]
+title = "Google Play listing"
+url = "https://play.google.com/store/apps/details?id=com.google.android.apps.docs.editors.docs&hl=en"
+checked = "2026-11-12"
