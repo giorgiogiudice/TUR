@@ -10,10 +10,12 @@ import Tur.Kit as Kit
 // attention.
 //
 // Of these, the version and the build can be read today, from the file the
-// image build writes. The other three are reported by services that are not
-// part of the system yet. Each of those rows is there, says that it cannot
-// tell and why, and shows no value: "up to date" or "nothing needs
-// attention" would be a reassurance nothing backs (design, principle 1).
+// image build writes. The state of updates is reported by a service that is
+// not part of the system yet; the record of each start is kept
+// (tur-boot-health), and this program does not read it yet. Each of those
+// rows is there, says that it cannot tell and why, and shows no value: "up
+// to date" or "nothing needs attention" would be a reassurance nothing backs
+// (design, principle 1).
 SettingsPage {
     id: view
 
@@ -61,7 +63,7 @@ SettingsPage {
             address: "tur.overview#last-start"
             value: Words.notAvailable
             available: false
-            unavailableReason: qsTr("TUR cannot say here how the last start went: the record of each start is not part of the system yet.")
+            unavailableReason: qsTr("TUR does not show here yet how the last start went: this page cannot read the record of each start.")
         }
 
         SettingRow {

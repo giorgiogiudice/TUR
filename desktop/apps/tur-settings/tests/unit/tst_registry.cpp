@@ -14,8 +14,6 @@
 #include <QJsonObject>
 #include <QTest>
 
-#include <functional>
-
 using Settings::Address;
 using Settings::Hit;
 using Settings::Page;
@@ -35,84 +33,126 @@ QByteArray fileContent(const QString &path)
     return file.readAll();
 }
 
-// A registry that is right, for the tests to break one thing in.
-QJsonObject good()
+// JSON written with single quotes, so that it can stand in an ordinary string.
+QJsonObject object(const char *json)
 {
-    const char *text = R"({
-      "licence": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
-      "schema_version": 1,
-      "program": "org.tur.Example",
-      "pages": [
-        {
-          "page": "tur.example",
-          "title": "Example",
-          "path": ["Example"],
-          "keywords": ["sample"],
-          "sections": [{ "id": "main", "title": "Main" }],
-          "rows": [
-            { "id": "one", "title": "One", "keywords": ["first"], "kind": "switch", "section": "main",
-              "source": { "type": "dbus", "available": true, "bus": "session", "service": "org.tur.Example" },
-              "change": { "class": 1, "tool": "example_set_one" } },
-            { "id": "two", "title": "Two", "kind": "information", "section": "main",
-              "source": { "type": "file", "available": false, "waits_for": "The file", "path": "/etc/two" } },
-            { "id": "old", "title": "Old", "status": "removed", "replaced_by": "tur.example#one" }
-          ]
-        },
-        { "page": "tur.example.later", "title": "Later", "path": ["Example", "Later"], "status": "planned" },
-        { "page": "kde.kcm_example", "title": "Example module", "path": ["System Settings", "Example module"],
-          "open": { "module": "kcm_example" }, "verified_with": "plasma-6.8.2" }
-      ]
-    })";
-    const QJsonDocument document = QJsonDocument::fromJson(text);
+    const QJsonDocument document = QJsonDocument::fromJson(QByteArray(json).replace('\'', '"'));
     if (!document.isObject())
-        qFatal("the test's own registry is not JSON");
+        qFatal("the test's own JSON cannot be read: %s", json);
     return document.object();
 }
 
-using Edit = std::function<void(QJsonObject &)>;
-
-// Changes one page of a registry.
-Edit inPage(int index, const std::function<void(QJsonObject &)> &edit)
+// A registry that is right, for the tests to break one thing in.
+QJsonObject good()
 {
-    return [index, edit](QJsonObject &root) {
-        QJsonArray pages = root.value(QStringLiteral("pages")).toArray();
-        QJsonObject page = pages.at(index).toObject();
-        edit(page);
-        pages.replace(index, page);
-        root.insert(QStringLiteral("pages"), pages);
+    return object(
+        "{"
+        "  'licence': 'SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0',"
+        "  'schema_version': 1,"
+        "  'program': 'org.tur.Example',"
+        "  'pages': ["
+        "    {"
+        "      'page': 'tur.example',"
+        "      'title': 'Example',"
+        "      'path': ['Example'],"
+        "      'keywords': ['sample'],"
+        "      'sections': [{ 'id': 'main', 'title': 'Main' }],"
+        "      'rows': ["
+        "        { 'id': 'one', 'title': 'One', 'keywords': ['first'], 'kind': 'switch', 'section': 'main',"
+        "          'source': { 'type': 'dbus', 'available': true, 'bus': 'session', 'service': 'org.tur.Example' },"
+        "          'change': { 'class': 1, 'tool': 'example_set_one' } },"
+        "        { 'id': 'two', 'title': 'Two', 'kind': 'information', 'section': 'main',"
+        "          'source': { 'type': 'file', 'available': false, 'waits_for': 'The file', 'path': '/etc/two' } },"
+        "        { 'id': 'old', 'title': 'Old', 'status': 'removed', 'replaced_by': 'tur.example#one' }"
+        "      ]"
+        "    },"
+        "    { 'page': 'tur.example.later', 'title': 'Later', 'path': ['Example', 'Later'], 'status': 'planned' },"
+        "    { 'page': 'kde.kcm_example', 'title': 'Example module', 'path': ['System Settings', 'Example module'],"
+        "      'open': { 'module': 'kcm_example' }, 'verified_with': 'plasma-6.8.2' }"
+        "  ]"
+        "}");
+}
+
+// One change to a registry: where it is made, and what is set or dropped
+// there.
+struct Edit
+{
+    enum Where {
+        InRoot,
+        InPage,       // in page number `index`
+        InRow,        // in row number `index` of the first page
+        RepeatPage,   // page number `index` is listed a second time
+        RepeatSection // the first section of the first page is declared a second time
     };
-}
 
-// Changes one row of the first page.
-Edit inRow(int index, const std::function<void(QJsonObject &)> &edit)
-{
-    return inPage(0, [index, edit](QJsonObject &page) {
-        QJsonArray rows = page.value(QStringLiteral("rows")).toArray();
-        QJsonObject row = rows.at(index).toObject();
-        edit(row);
-        rows.replace(index, row);
-        page.insert(QStringLiteral("rows"), rows);
-    });
-}
+    Where where = InRoot;
+    int index = 0;
+    QString key;
+    QJsonValue value; // undefined: the key is dropped
+
+    void applyTo(QJsonObject &target) const
+    {
+        if (value.isUndefined())
+            target.remove(key);
+        else
+            target.insert(key, value);
+    }
+
+    void apply(QJsonObject &root) const
+    {
+        const QString pagesKey = QStringLiteral("pages");
+        QJsonArray pages = root.value(pagesKey).toArray();
+        if (where == InRoot) {
+            applyTo(root);
+            return;
+        }
+        if (where == RepeatPage) {
+            pages.append(pages.at(index));
+        } else {
+            const int pageIndex = where == InPage ? index : 0;
+            QJsonObject page = pages.at(pageIndex).toObject();
+            if (where == InPage) {
+                applyTo(page);
+            } else if (where == RepeatSection) {
+                QJsonArray sections = page.value(QStringLiteral("sections")).toArray();
+                sections.append(sections.at(0));
+                page.insert(QStringLiteral("sections"), sections);
+            } else {
+                QJsonArray rows = page.value(QStringLiteral("rows")).toArray();
+                QJsonObject row = rows.at(index).toObject();
+                applyTo(row);
+                rows.replace(index, row);
+                page.insert(QStringLiteral("rows"), rows);
+            }
+            pages.replace(pageIndex, page);
+        }
+        root.insert(pagesKey, pages);
+    }
+};
 
 Edit set(const QString &key, const QJsonValue &value)
 {
-    return [key, value](QJsonObject &object) { object.insert(key, value); };
+    return Edit { Edit::InRoot, 0, key, value };
 }
 
 Edit drop(const QString &key)
 {
-    return [key](QJsonObject &object) { object.remove(key); };
+    return Edit { Edit::InRoot, 0, key, QJsonValue(QJsonValue::Undefined) };
 }
 
-QJsonObject object(const char *json)
+// The same change, made in one page of the registry.
+Edit inPage(int index, const Edit &edit)
 {
-    return QJsonDocument::fromJson(json).object();
+    return Edit { Edit::InPage, index, edit.key, edit.value };
+}
+
+// The same change, made in one row of the first page.
+Edit inRow(int index, const Edit &edit)
+{
+    return Edit { Edit::InRow, index, edit.key, edit.value };
 }
 
 } // namespace
-
-Q_DECLARE_METATYPE(Edit)
 
 class TestRegistry : public QObject
 {
@@ -366,28 +406,20 @@ private Q_SLOTS:
             "only a removed page");
         row("listed that is not a boolean", inPage(0, set(QStringLiteral("listed"), QStringLiteral("no"))),
             "is not true or false");
-        row("a page twice", [](QJsonObject &root) {
-            QJsonArray pages = root.value(QStringLiteral("pages")).toArray();
-            pages.append(pages.at(1));
-            root.insert(QStringLiteral("pages"), pages);
-        }, "is in this file twice");
-        row("a section twice", inPage(0, [](QJsonObject &page) {
-            QJsonArray sections = page.value(QStringLiteral("sections")).toArray();
-            sections.append(sections.at(0));
-            page.insert(QStringLiteral("sections"), sections);
-        }), "is declared twice");
+        row("a page twice", Edit { Edit::RepeatPage, 1, QString(), QJsonValue() }, "is in this file twice");
+        row("a section twice", Edit { Edit::RepeatSection, 0, QString(), QJsonValue() }, "is declared twice");
         row("a KDE page that does not say how it is opened", inPage(2, drop(QStringLiteral("open"))),
             "says how it is opened");
-        row("a TUR page with open", inPage(0, set(QStringLiteral("open"), object(R"({"module": "kcm_x"})"))),
+        row("a TUR page with open", inPage(0, set(QStringLiteral("open"), object("{'module': 'kcm_x'}"))),
             "is opened by its address");
         row("a module that is not an identifier",
-            inPage(2, set(QStringLiteral("open"), object(R"({"module": "kcm example; rm -rf"})"))),
+            inPage(2, set(QStringLiteral("open"), object("{'module': 'kcm example; rm -rf'}"))),
             "is not the identifier of a module");
         row("an argument with a space",
-            inPage(2, set(QStringLiteral("open"), object(R"({"module": "kcm_example", "arguments": ["a b"]})"))),
+            inPage(2, set(QStringLiteral("open"), object("{'module': 'kcm_example', 'arguments': ['a b']}"))),
             "arguments without spaces");
         row("a planned page with a row", inPage(1, set(QStringLiteral("rows"), QJsonArray { object(
-                                                        R"({"id": "x", "title": "X", "kind": "information"})") })),
+                                                        "{'id': 'x', 'title': 'X', 'kind': 'information'}") })),
             "so the row cannot be there");
 
         row("a row with no identifier", inRow(0, drop(QStringLiteral("id"))), "\"id\" is missing");
@@ -403,40 +435,40 @@ private Q_SLOTS:
             "names no section of its page");
         row("a switch that does not say what changing it is", inRow(0, drop(QStringLiteral("change"))),
             "says what changing it is");
-        row("information with a change", inRow(1, set(QStringLiteral("change"), object(R"({"class": 0})"))),
+        row("information with a change", inRow(1, set(QStringLiteral("change"), object("{'class': 0}"))),
             "information is only read");
-        row("class 5", inRow(0, set(QStringLiteral("change"), object(R"({"class": 5})"))), "is not an action class");
-        row("a class that is not a whole number", inRow(0, set(QStringLiteral("change"), object(R"({"class": 1.5})"))),
+        row("class 5", inRow(0, set(QStringLiteral("change"), object("{'class': 5}"))), "is not an action class");
+        row("a class that is not a whole number", inRow(0, set(QStringLiteral("change"), object("{'class': 1.5}"))),
             "is not an action class");
-        row("a class as text", inRow(0, set(QStringLiteral("change"), object(R"({"class": "1"})"))),
+        row("a class as text", inRow(0, set(QStringLiteral("change"), object("{'class': '1'}"))),
             "is not an action class");
-        row("a tool that is not a name", inRow(0, set(QStringLiteral("change"), object(R"({"class": 1, "tool": "Set One"})"))),
+        row("a tool that is not a name", inRow(0, set(QStringLiteral("change"), object("{'class': 1, 'tool': 'Set One'}"))),
             "is not the name of a tool");
-        row("a source of an unknown type", inRow(0, set(QStringLiteral("source"), object(R"({"type": "magic", "available": true})"))),
+        row("a source of an unknown type", inRow(0, set(QStringLiteral("source"), object("{'type': 'magic', 'available': true}"))),
             "is not a kind of source");
         row("a source that does not say whether it is there",
-            inRow(0, set(QStringLiteral("source"), object(R"({"type": "dbus", "bus": "session", "service": "org.tur.Example"})"))),
+            inRow(0, set(QStringLiteral("source"), object("{'type': 'dbus', 'bus': 'session', 'service': 'org.tur.Example'}"))),
             "\"available\" is missing");
         row("a missing source that does not say what it waits for",
-            inRow(1, set(QStringLiteral("source"), object(R"({"type": "file", "available": false, "path": "/etc/two"})"))),
+            inRow(1, set(QStringLiteral("source"), object("{'type': 'file', 'available': false, 'path': '/etc/two'}"))),
             "says what it waits for");
         row("a source that is there and waits",
-            inRow(0, set(QStringLiteral("source"), object(R"({"type": "dbus", "available": true, "waits_for": "x", "bus": "session", "service": "org.tur.Example"})"))),
+            inRow(0, set(QStringLiteral("source"), object("{'type': 'dbus', 'available': true, 'waits_for': 'x', 'bus': 'session', 'service': 'org.tur.Example'}"))),
             "waits for nothing");
         row("a file that is not an absolute path",
-            inRow(1, set(QStringLiteral("source"), object(R"({"type": "file", "available": true, "path": "etc/two"})"))),
+            inRow(1, set(QStringLiteral("source"), object("{'type': 'file', 'available': true, 'path': 'etc/two'}"))),
             "is not an absolute path");
         row("a command given as one string",
-            inRow(1, set(QStringLiteral("source"), object(R"({"type": "command", "available": true, "program": "/bin/ls -l"})"))),
+            inRow(1, set(QStringLiteral("source"), object("{'type': 'command', 'available': true, 'program': '/bin/ls -l'}"))),
             "its arguments are a list");
         row("a bus that is neither",
-            inRow(0, set(QStringLiteral("source"), object(R"({"type": "dbus", "available": true, "bus": "private", "service": "org.tur.Example"})"))),
+            inRow(0, set(QStringLiteral("source"), object("{'type': 'dbus', 'available': true, 'bus': 'private', 'service': 'org.tur.Example'}"))),
             "is neither session nor system");
         row("a source with a key of another kind",
-            inRow(0, set(QStringLiteral("source"), object(R"({"type": "dbus", "available": true, "bus": "session", "service": "org.tur.Example", "path": "/x"})"))),
+            inRow(0, set(QStringLiteral("source"), object("{'type': 'dbus', 'available': true, 'bus': 'session', 'service': 'org.tur.Example', 'path': '/x'}"))),
             "is not a key of the format");
         row("a row that opens what is not an address",
-            inRow(0, set(QStringLiteral("source"), object(R"({"type": "address", "available": true, "opens": "Colours"})"))),
+            inRow(0, set(QStringLiteral("source"), object("{'type': 'address', 'available': true, 'opens': 'Colours'}"))),
             "is not an address");
         row("a removed row that still has a kind", inRow(2, set(QStringLiteral("kind"), QStringLiteral("switch"))),
             "a removed row has no \"kind\"");
@@ -450,7 +482,7 @@ private Q_SLOTS:
         QFETCH(Edit, edit);
         QFETCH(QString, says);
         QJsonObject registry = good();
-        edit(registry);
+        edit.apply(registry);
 
         RegistryData data;
         QStringList problems;
@@ -526,10 +558,10 @@ private Q_SLOTS:
             << inRow(2, set(QStringLiteral("replaced_by"), QStringLiteral("tur.example#old")))
             << "tur.example#old: replaced_by names the address itself";
         QTest::newRow("opens a page nobody has")
-            << inRow(0, set(QStringLiteral("source"), object(R"({"type": "address", "available": true, "opens": "kde.kcm_missing"})")))
+            << inRow(0, set(QStringLiteral("source"), object("{'type': 'address', 'available': true, 'opens': 'kde.kcm_missing'}")))
             << "tur.example#one: source.opens names kde.kcm_missing, which no registry has";
         QTest::newRow("opens what was removed")
-            << inRow(0, set(QStringLiteral("source"), object(R"({"type": "address", "available": true, "opens": "tur.example#old"})")))
+            << inRow(0, set(QStringLiteral("source"), object("{'type': 'address', 'available': true, 'opens': 'tur.example#old'}")))
             << "tur.example#one: source.opens names tur.example#old, which is itself removed";
     }
 
@@ -538,7 +570,7 @@ private Q_SLOTS:
         QFETCH(Edit, edit);
         QFETCH(QString, says);
         QJsonObject registry = good();
-        edit(registry);
+        edit.apply(registry);
         RegistryData data;
         QStringList problems;
         QVERIFY2(data.add(QJsonDocument(registry).toJson(), QStringLiteral("x.json"), &problems),

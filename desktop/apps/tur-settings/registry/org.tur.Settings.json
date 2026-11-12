@@ -52,7 +52,7 @@
           "source": {
             "type": "command",
             "available": false,
-            "waits_for": "tur-boot-health in the image (boot health and rollback)",
+            "waits_for": "A reader in tur-settings of what tur-boot-health reports (tasks D-08 and D-09)",
             "program": "/usr/bin/tur-boot-health",
             "arguments": ["status", "--json"]
           }

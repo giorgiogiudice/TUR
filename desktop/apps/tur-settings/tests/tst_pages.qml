@@ -82,7 +82,7 @@ Item {
                 { tag: "updates", address: "tur.overview#update-state", title: "Updates",
                   reason: "TUR cannot say here whether an update is waiting: its update service is not part of the system yet." },
                 { tag: "the last start", address: "tur.overview#last-start", title: "The last start",
-                  reason: "TUR cannot say here how the last start went: the record of each start is not part of the system yet." },
+                  reason: "TUR does not show here yet how the last start went: this page cannot read the record of each start." },
                 { tag: "needs attention", address: "tur.overview#attention", title: "Needs attention",
                   reason: "TUR cannot say here whether anything needs attention: the services that would report it are not part of the system yet. That nothing is listed does not mean that nothing is wrong." }
             ]
