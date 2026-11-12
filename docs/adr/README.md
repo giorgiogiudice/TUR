@@ -37,6 +37,8 @@ the [specification](../architecture/specification.md).
 | [0019](0019-app-install-backend.md) | Installing applications: one backend, two routes, pinned downloads through curl | Accepted |
 | [0020](0020-overlay-window-positions.md) | P@x's overlay finds other programs' windows through the Plasma window-management protocol, read with KWayland | Proposed |
 | [0021](0021-local-ai.md) | Local AI: models that run on the computer, for P@x and for every application | Accepted |
+| [0023](0023-publishing-signed-updates.md) | Publishing updates: signed images in a public registry, on channels | Accepted |
+| [0024](0024-problem-reports.md) | Problem reports: prepared by P@x, sent only with consent, to a private receiver | Accepted |
 
 ## Open questions from the specification
 
