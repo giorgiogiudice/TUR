@@ -386,9 +386,9 @@ impl fmt::Display for ProfileError {
                 "the value of {field:?} looks like a credential; profiles must never hold secrets"
             ),
             ProfileError::Invalid { field, problem } => write!(f, "field {field:?} {problem}"),
-            ProfileError::NotLaunchable => f.write_str(
-                "no profile can be drafted because the file has no supported runtime",
-            ),
+            ProfileError::NotLaunchable => {
+                f.write_str("no profile can be drafted because the file has no supported runtime")
+            }
         }
     }
 }
@@ -424,9 +424,7 @@ pub fn parse_profile(text: &str) -> Result<AppProfile, ProfileError> {
     let value: Value =
         serde_json::from_str(text).map_err(|error| ProfileError::Syntax(error.to_string()))?;
     if !value.is_object() {
-        return Err(ProfileError::Shape(
-            "a profile is a JSON object".to_owned(),
-        ));
+        return Err(ProfileError::Shape("a profile is a JSON object".to_owned()));
     }
     scan(&value, "profile")?;
     let profile: AppProfile =
@@ -439,10 +437,7 @@ pub fn parse_profile(text: &str) -> Result<AppProfile, ProfileError> {
 /// bounded by the JSON parser's own nesting limit.
 fn scan(value: &Value, field: &str) -> Result<(), ProfileError> {
     match value {
-        Value::Null => Err(invalid(
-            field,
-            "is null; leave an unused field out instead",
-        )),
+        Value::Null => Err(invalid(field, "is null; leave an unused field out instead")),
         Value::String(text) if looks_like_secret_value(text) => Err(ProfileError::SecretValue {
             field: field.to_owned(),
         }),
@@ -690,10 +685,7 @@ pub fn draft_profile(
                 .as_deref()
                 .map(str::to_ascii_lowercase)
                 .filter(|identifier| is_app_id(identifier));
-            display_name = bundle
-                .name
-                .clone()
-                .filter(|name| is_display_name(name));
+            display_name = bundle.name.clone().filter(|name| is_display_name(name));
             let program = bundle.executable.as_deref().map(|inner| &inner.detected);
             let Some(Detected::MachO(macho)) = program else {
                 return Err(ProfileError::NotLaunchable);
@@ -964,10 +956,7 @@ mod tests {
     #[test]
     fn syntax_errors_and_oversized_input_are_rejected() {
         for text in ["", "{", "{\"schema_version\": 1,}", "not json"] {
-            assert!(matches!(
-                parse_profile(text),
-                Err(ProfileError::Syntax(_))
-            ));
+            assert!(matches!(parse_profile(text), Err(ProfileError::Syntax(_))));
         }
         let huge = " ".repeat(MAX_PROFILE_BYTES + 1);
         assert_eq!(
@@ -1249,7 +1238,14 @@ mod tests {
     fn schema_uses_the_same_wire_names_as_the_validator_for_runtimes() {
         assert_eq!(
             wire_names(&ProfileRuntime::ALL),
-            ["native", "wine", "proton", "darling", "android", "windows-vm"]
+            [
+                "native",
+                "wine",
+                "proton",
+                "darling",
+                "android",
+                "windows-vm"
+            ]
         );
         assert_eq!(
             wire_names(&ProfileFormat::ALL),
@@ -1280,7 +1276,10 @@ mod tests {
         assert_eq!(profile.schema_version, PROFILE_SCHEMA_VERSION);
         assert_eq!(profile.app_id, "local.setup-wizard-x64");
         assert_eq!(profile.display_name, "Setup Wizard (x64)");
-        assert_eq!(profile.binary, "/home/user/Downloads/Setup Wizard (x64).exe");
+        assert_eq!(
+            profile.binary,
+            "/home/user/Downloads/Setup Wizard (x64).exe"
+        );
         assert_eq!(profile.format, ProfileFormat::Pe);
         assert_eq!(profile.architecture, ProfileArch::X86_64);
         assert_eq!(profile.runtime, ProfileRuntime::Wine);

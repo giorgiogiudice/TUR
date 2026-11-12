@@ -292,9 +292,8 @@ pub(crate) fn parse(reader: &mut Reader<'_>, head: &[u8]) -> Result<Parsed, Insp
     };
     let (subsystem_raw, is_dotnet) = match directories {
         Some((count_at, table_at)) => {
-            let subsystem = u16_at(&optional, 68, LITTLE).ok_or_else(|| {
-                malformed("the optional header is too small to hold a subsystem")
-            })?;
+            let subsystem = u16_at(&optional, 68, LITTLE)
+                .ok_or_else(|| malformed("the optional header is too small to hold a subsystem"))?;
             let count = u32_at(&optional, count_at, LITTLE).unwrap_or(0);
             let clr = count > CLR_DIRECTORY && directory_present(&optional, table_at + 14 * 8);
             (Some(subsystem), clr)
@@ -455,7 +454,13 @@ mod tests {
 
     #[test]
     fn header_pointer_near_u32_max_does_not_overflow() {
-        for lfanew in [u32::MAX, u32::MAX - 1, u32::MAX - 3, u32::MAX - 24, 0x8000_0000] {
+        for lfanew in [
+            u32::MAX,
+            u32::MAX - 1,
+            u32::MAX - 3,
+            u32::MAX - 24,
+            0x8000_0000,
+        ] {
             let mut bytes = PeSpec::windows_gui_x86_64().build();
             bytes[0x3c..0x40].copy_from_slice(&lfanew.to_le_bytes());
             assert_eq!(mz_header(&bytes), MzNewHeader::OutsideFile);

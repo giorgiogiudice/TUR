@@ -53,7 +53,11 @@ impl<'a> Reader<'a> {
     ///
     /// Returns `Ok(None)` when the range is not wholly inside the input, and
     /// an error when a limit is hit or the operating system fails the read.
-    pub(crate) fn read(&mut self, offset: u64, len: usize) -> Result<Option<Vec<u8>>, InspectError> {
+    pub(crate) fn read(
+        &mut self,
+        offset: u64,
+        len: usize,
+    ) -> Result<Option<Vec<u8>>, InspectError> {
         let wanted = u64::try_from(len).unwrap_or(u64::MAX);
         let Some(end) = offset.checked_add(wanted) else {
             return Ok(None);

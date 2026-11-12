@@ -127,12 +127,18 @@ mod tests {
     #[test]
     fn reads_top_level_strings_only() {
         let found = top_level_strings(SAMPLE);
-        assert_eq!(found.get("CFBundleExecutable").map(String::as_str), Some("Example"));
+        assert_eq!(
+            found.get("CFBundleExecutable").map(String::as_str),
+            Some("Example")
+        );
         assert_eq!(
             found.get("CFBundleIdentifier").map(String::as_str),
             Some("com.example.App")
         );
-        assert_eq!(found.get("CFBundleName").map(String::as_str), Some("Tom & Jerry <3"));
+        assert_eq!(
+            found.get("CFBundleName").map(String::as_str),
+            Some("Tom & Jerry <3")
+        );
         assert_eq!(
             found.get("CFBundleShortVersionString").map(String::as_str),
             Some("1.2.3")
@@ -143,7 +149,10 @@ mod tests {
     #[test]
     fn first_value_of_a_repeated_key_wins() {
         let text = "<plist><dict><key>A</key><string>one</string><key>A</key><string>two</string></dict></plist>";
-        assert_eq!(top_level_strings(text).get("A").map(String::as_str), Some("one"));
+        assert_eq!(
+            top_level_strings(text).get("A").map(String::as_str),
+            Some("one")
+        );
     }
 
     #[test]

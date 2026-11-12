@@ -150,7 +150,11 @@ fn host_facts(host_arch: Option<&str>, available: Option<&str>) -> Result<HostFa
     let components = match available {
         Some(list) => {
             let mut components = Vec::new();
-            for name in list.split(',').map(str::trim).filter(|name| !name.is_empty()) {
+            for name in list
+                .split(',')
+                .map(str::trim)
+                .filter(|name| !name.is_empty())
+            {
                 let component = Component::from_name(name)
                     .ok_or_else(|| format!("unknown component \"{name}\" for --available"))?;
                 components.push(component);
@@ -221,7 +225,12 @@ fn run_validate(file: &Path) -> u8 {
             ));
             EXIT_OK
         }
-        Err(error) => fail(false, error.code(), &error.to_string(), EXIT_INVALID_PROFILE),
+        Err(error) => fail(
+            false,
+            error.code(),
+            &error.to_string(),
+            EXIT_INVALID_PROFILE,
+        ),
     }
 }
 

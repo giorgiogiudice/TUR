@@ -220,7 +220,9 @@ impl ZipFacts {
                     .to_owned(),
             );
         } else if self.jar_manifest {
-            notes.push("The archive has a META-INF/MANIFEST.MF: it may be a Java archive.".to_owned());
+            notes.push(
+                "The archive has a META-INF/MANIFEST.MF: it may be a Java archive.".to_owned(),
+            );
         }
         Detected::Zip(ZipInfo { entries })
     }
@@ -374,11 +376,7 @@ mod tests {
             ["com.example.app.apk", "config.arm64_v8a.apk"]
         );
 
-        let apks = android(&[
-            "toc.pb",
-            "splits/base-master.apk",
-            "splits/base-x86_64.apk",
-        ]);
+        let apks = android(&["toc.pb", "splits/base-master.apk", "splits/base-x86_64.apk"]);
         assert_eq!(apks.kind, AndroidPackageKind::Apks);
         assert_eq!(apks.nested_package_count, 2);
 
@@ -390,7 +388,11 @@ mod tests {
     fn plain_archives_are_not_android_packages() {
         for names in [
             &["readme.txt", "src/main.c"][..],
-            &["AndroidManifest.xml", "classes.jar", "res/values/strings.xml"][..],
+            &[
+                "AndroidManifest.xml",
+                "classes.jar",
+                "res/values/strings.xml",
+            ][..],
             &["META-INF/MANIFEST.MF", "com/example/Main.class"][..],
             &[".apk", "dir/.apk"][..],
         ] {
@@ -406,7 +408,12 @@ mod tests {
     #[test]
     fn hostile_names_do_not_reach_the_report() {
         let long = format!("{}.apk", "a".repeat(MAX_LISTED_NAME_LEN));
-        let info = android(&["manifest.json", "evil\u{1b}[31m.apk", long.as_str(), "ok.apk"]);
+        let info = android(&[
+            "manifest.json",
+            "evil\u{1b}[31m.apk",
+            long.as_str(),
+            "ok.apk",
+        ]);
         assert_eq!(info.nested_package_count, 3);
         assert_eq!(info.nested_packages, ["ok.apk"]);
     }

@@ -325,7 +325,11 @@ mod tests {
     #[test]
     fn program_name_that_escapes_the_bundle_is_ignored() {
         let temp = TempDir::new("bundle-escape");
-        fs::write(temp.path().join("outside"), macho_thin(CPU_X86_64, 2, true, false)).unwrap();
+        fs::write(
+            temp.path().join("outside"),
+            macho_thin(CPU_X86_64, 2, true, false),
+        )
+        .unwrap();
         let plist = plist_xml("../../../outside");
         let path = make_bundle(&temp, "Evil.app", Some(plist.as_bytes()), &[]);
         let inspection = inspect(&path).unwrap();
@@ -379,7 +383,11 @@ mod tests {
         let plist = plist_xml("Cut");
         let path = make_bundle(&temp, "Cut.app", Some(plist.as_bytes()), &[]);
         let program = macho_thin(CPU_X86_64, 2, true, false);
-        fs::write(path.join("Contents").join("MacOS").join("Cut"), &program[..12]).unwrap();
+        fs::write(
+            path.join("Contents").join("MacOS").join("Cut"),
+            &program[..12],
+        )
+        .unwrap();
         assert!(matches!(
             inspect(&path),
             Err(InspectError::Truncated { .. })

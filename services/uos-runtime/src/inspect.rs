@@ -202,11 +202,7 @@ mod tests {
                 // acceptable for a truncated file. A panic is not.
                 let outcome = inspect_bytes(&bytes[..len]);
                 if let Ok(inspection) = outcome {
-                    assert_eq!(
-                        inspection.file_size,
-                        u64::try_from(len).unwrap(),
-                        "{name}"
-                    );
+                    assert_eq!(inspection.file_size, u64::try_from(len).unwrap(), "{name}");
                 }
             }
         }
@@ -331,7 +327,10 @@ mod tests {
         assert_eq!(json["detected"]["machine"], "x86_64");
         assert_eq!(json["detected"]["class"], "elf64");
         assert_eq!(json["detected"]["file_type"], "pie-executable");
-        assert_eq!(json["detected"]["interpreter"], "/lib64/ld-linux-x86-64.so.2");
+        assert_eq!(
+            json["detected"]["interpreter"],
+            "/lib64/ld-linux-x86-64.so.2"
+        );
 
         let unknown = inspect_bytes(b"nothing").unwrap();
         let json = serde_json::to_value(unknown).unwrap();

@@ -355,7 +355,13 @@ pub(crate) fn zip64_claiming(entries: u64, directory_size: u64, directory_offset
     let mut out = b"PK\x03\x04".to_vec();
     out.extend_from_slice(&[0u8; 26]);
     let record_at = u64::try_from(out.len()).unwrap();
-    zip64_records(&mut out, record_at, entries, directory_size, directory_offset);
+    zip64_records(
+        &mut out,
+        record_at,
+        entries,
+        directory_size,
+        directory_offset,
+    );
     end_record(&mut out, 0xffff, 0xffff_ffff, 0xffff_ffff);
     out
 }
@@ -481,7 +487,10 @@ pub(crate) fn samples() -> Vec<(&'static str, Vec<u8>)> {
                 "lib/armeabi-v7a/libapp.so",
             ]),
         ),
-        ("apk-no-native", zip(&["AndroidManifest.xml", "classes.dex"])),
+        (
+            "apk-no-native",
+            zip(&["AndroidManifest.xml", "classes.dex"]),
+        ),
         (
             "aab",
             zip(&[
@@ -489,7 +498,10 @@ pub(crate) fn samples() -> Vec<(&'static str, Vec<u8>)> {
                 "base/lib/x86_64/libapp.so",
             ]),
         ),
-        ("xapk", zip(&["manifest.json", "base.apk", "config.x86_64.apk"])),
+        (
+            "xapk",
+            zip(&["manifest.json", "base.apk", "config.x86_64.apk"]),
+        ),
         ("apks", zip(&["toc.pb", "splits/base-master.apk"])),
         ("zip", zip(&["readme.txt", "src/main.c"])),
         (

@@ -1047,7 +1047,10 @@ mod tests {
             Reason::MachONotAProgram,
             Code::DarwinUnsupported,
         );
-        let old = for_bytes(&macho_fat(&[(CPU_PPC, 2), (CPU_I386, 2)], false), &full_host());
+        let old = for_bytes(
+            &macho_fat(&[(CPU_PPC, 2), (CPU_I386, 2)], false),
+            &full_host(),
+        );
         assert_unsupported(&old, Reason::MachONoRunnableSlice, Code::DarwinUnsupported);
         assert!(old.explanation.contains("ppc, i386"));
 
@@ -1089,7 +1092,11 @@ mod tests {
                 Reason::DarlingExperimental
             ]
         );
-        assert!(recommendation.explanation.starts_with("This is a macOS application bundle."));
+        assert!(
+            recommendation
+                .explanation
+                .starts_with("This is a macOS application bundle.")
+        );
 
         let arm = macho_thin(CPU_ARM64, 2, true, false);
         let recommendation = recommend(&bundle_with(Some(arm.as_slice())), &full_host());
@@ -1121,7 +1128,10 @@ mod tests {
         ]);
         let recommendation = for_bytes(&with_x86, &full_host());
         assert_eq!(recommendation.runtime, Runtime::Android);
-        assert_eq!(recommendation.reasons, [Reason::AndroidNativeCodeMatchesHost]);
+        assert_eq!(
+            recommendation.reasons,
+            [Reason::AndroidNativeCodeMatchesHost]
+        );
         assert_eq!(recommendation.code, None);
         assert!(recommendation.is_ready());
         // ARM translation is not needed, so its absence does not matter.

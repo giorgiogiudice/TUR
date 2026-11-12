@@ -197,7 +197,11 @@ fn unsupported_files_exit_with_status_three() {
     let scratch = Scratch::new("unsupported");
 
     let arm_mac = scratch.file("tool", &macho_arm64());
-    let outcome = inspect(&arm_mac, "wine,darling,android,arm-translation,windows-vm", false);
+    let outcome = inspect(
+        &arm_mac,
+        "wine,darling,android,arm-translation,windows-vm",
+        false,
+    );
     assert_eq!(outcome.status, 3);
     assert!(outcome.stdout.contains("unsupported"));
     assert!(outcome.stdout.contains("mach-o-apple-silicon-only"));
@@ -246,7 +250,12 @@ fn unreadable_and_damaged_input_exits_with_status_one_and_a_code() {
     assert_eq!(outcome.status, 1);
     let report: Value = serde_json::from_str(&outcome.stdout).unwrap();
     assert_eq!(report["error"]["code"], "UOS-WINDOWS-INSPECT-001");
-    assert!(report["error"]["message"].as_str().unwrap().contains("truncated"));
+    assert!(
+        report["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("truncated")
+    );
 }
 
 #[test]

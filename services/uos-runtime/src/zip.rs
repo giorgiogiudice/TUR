@@ -112,7 +112,9 @@ pub(crate) fn for_each_name(
         let header = directory
             .get(at..)
             .filter(|rest| rest.len() >= ENTRY_LEN)
-            .ok_or_else(|| malformed("the central directory ends before its claimed entry count"))?;
+            .ok_or_else(|| {
+                malformed("the central directory ends before its claimed entry count")
+            })?;
         if !header.starts_with(b"PK\x01\x02") {
             return Err(malformed("a central directory entry has a bad signature"));
         }
@@ -274,10 +276,7 @@ mod tests {
     fn zip64_directory_range_is_checked() {
         // Offset and size that overflow when added.
         let bytes = zip64_claiming(1, u64::MAX, u64::MAX);
-        assert!(matches!(
-            names(&bytes),
-            Err(InspectError::Malformed { .. })
-        ));
+        assert!(matches!(names(&bytes), Err(InspectError::Malformed { .. })));
         // A directory that would lie far outside the file.
         let bytes = zip64_claiming(1, 46, 1 << 50);
         assert_eq!(names(&bytes), Err(truncated("the central directory")));
@@ -302,9 +301,6 @@ mod tests {
         let mut bytes = zip(&["a.txt"]);
         // The central directory starts after the one local header: 30 + 5.
         bytes[35..39].copy_from_slice(b"XXXX");
-        assert!(matches!(
-            names(&bytes),
-            Err(InspectError::Malformed { .. })
-        ));
+        assert!(matches!(names(&bytes), Err(InspectError::Malformed { .. })));
     }
 }
