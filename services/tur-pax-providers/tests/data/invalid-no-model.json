@@ -1,0 +1,5 @@
+{
+  "schema_version": 1,
+  "provider": "anthropic",
+  "max_output_tokens": 4096
+}
