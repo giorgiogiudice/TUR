@@ -27,8 +27,10 @@ parameters = "1B"
 context_length = 131072
 # Estimate: the file, the 16-bit context cache at 8192 tokens
 # (40 layers x 4 KV heads x 128 x 2 x 2 bytes = 81,920 bytes per token)
-# and 512 MiB for the engine's working memory.
-memory_bytes = 2250000000
+# and 512 MiB for the engine's working memory, was 2.25 GB. Raised to
+# 2.75 GB: llama.cpp's own build peaked at 2.46 GB in CI run 43277339192;
+# Fedora's at 1.84 GB. 10 % above the higher peak.
+memory_bytes = 2750000000
 memory_context = 8192
 kv_bytes_per_token = 81920
 capabilities = ["chat", "tools"]
@@ -55,3 +57,31 @@ summary = "Apache License 2.0. You may use, copy, change and share the model for
 restrictions = "none"
 evidence = "The GGUF repository's card header at the pinned revision declares apache-2.0. The base model's card says \"License: Apache 2.0\" and links the Apache licence at apache.org. Neither repository holds a licence file. The publisher's GitHub repository ibm-granite/granite-4.0-language-models is declared Apache-2.0."
 checked = "2026-11-12"
+
+[[tested]]
+date = "2026-11-12"
+report = "docs/reports/local-ai-1.md"
+run = "https://github.com/giorgiogiudice/TUR/actions/runs/43277339192"
+engine = "llama-server b9840 from Fedora 45's llama-cpp-b9840-2.fc45, in a Fedora 45 container (one baseline processor build, no AVX2 kernels)"
+hardware = "GitHub-hosted ubuntu-24.04 runner: AMD EPYC 7763, 4 logical processors (2 cores), AVX2 and FMA, 16.8 GB of memory, no graphics processor"
+context = 8192
+generation_tokens_per_second = 3.71
+peak_memory_bytes = 1839562752
+tool_call = "yes"
+image_input = "not-tested"
+embeddings = "not-tested"
+notes = "128 tokens generated in 34.72 s wall time; prompt speed not recorded: this run reused the prompt cache between the two measuring requests; answer after the tool result used it: yes; streamed tool call: yes."
+
+[[tested]]
+date = "2026-11-12"
+report = "docs/reports/local-ai-1.md"
+run = "https://github.com/giorgiogiudice/TUR/actions/runs/43277339192"
+engine = "llama-server b9840 from llama.cpp's own release llama-b9840-bin-ubuntu-x64 (processor variants, AVX2 kernels used)"
+hardware = "GitHub-hosted ubuntu-24.04 runner: AMD EPYC 7763, 4 logical processors (2 cores), AVX2 and FMA, 16.8 GB of memory, no graphics processor"
+context = 8192
+generation_tokens_per_second = 31.35
+peak_memory_bytes = 2462228480
+tool_call = "yes"
+image_input = "not-tested"
+embeddings = "not-tested"
+notes = "128 tokens generated in 4.12 s wall time; prompt speed not recorded: this run reused the prompt cache between the two measuring requests; answer after the tool result used it: yes; streamed tool call: yes."

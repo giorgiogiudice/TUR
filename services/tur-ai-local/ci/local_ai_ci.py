@@ -359,6 +359,10 @@ def measure_model(results, prefix, base_url, key, model_id, capabilities):
                 "model": model_id,
                 "messages": [{"role": "user", "content": STORY + "\n\nContinue this story."}],
                 "temperature": 0, "max_tokens": 128, "seed": 1,
+                # The whole prompt is processed each time; otherwise the
+                # second run would reuse the first one's cache and the
+                # prompt speed would mean nothing.
+                "cache_prompt": False,
             }, key)
             if status == 200 and isinstance(document, dict):
                 timings = document.get("timings")
@@ -735,7 +739,7 @@ def ollama(args):
     base, model = args.ollama_url, args.ollama_model
     row = {"model": model, "engine": "ollama"}
     # Native API: it reports evaluation counts and durations.
-    timings = None
+    timings, first = None, None
     for _ in range(2):
         status, document, elapsed = post(base, "/api/generate", {
             "model": model, "prompt": STORY + "\n\nContinue this story.", "stream": False, "think": False,
@@ -743,10 +747,14 @@ def ollama(args):
         })
         if status == 200 and isinstance(document, dict):
             timings = document
+            first = first or document
     if timings and timings.get("eval_duration"):
         row["generation_tokens_per_second"] = round(timings["eval_count"] / (timings["eval_duration"] / 1e9), 2)
-        if timings.get("prompt_eval_duration"):
-            row["prompt_tokens_per_second"] = round(timings.get("prompt_eval_count", 0) / (timings["prompt_eval_duration"] / 1e9), 2)
+        # The prompt speed of the first run: Ollama reuses the cache of an
+        # identical prompt in the second.
+        if first.get("prompt_eval_duration"):
+            row["prompt_tokens_per_second"] = round(first.get("prompt_eval_count", 0) / (first["prompt_eval_duration"] / 1e9), 2)
+            row["prompt_tokens"] = first.get("prompt_eval_count")
         row["generated_tokens"] = timings.get("eval_count")
     results.check("ollama: generation timings", bool(timings and timings.get("eval_duration")), str(timings)[:400], required=False)
     status, document, _ = post(base, "/v1/chat/completions", {
@@ -954,7 +962,7 @@ def pax(args):
         "TUR_PAX_API_KEY": Path(args.key_file).read_text().strip(),
     }
     command = [args.tur_pax, "run", args.request, "--json", "--provider-config", str(config_path), "--tools", args.tools,
-               "--audit-log", str(audit), "--task", name, "--max-seconds", str(args.max_seconds), "--max-steps", "8"]
+               "--audit-log", str(audit), "--task", name, "--max-seconds", str(args.max_seconds), "--max-steps", "8", "--no-commands"]
     if args.manifests:
         command += ["--manifests", args.manifests, "--adapters", args.adapters]
     started = time.time()

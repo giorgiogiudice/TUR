@@ -32,7 +32,7 @@
 
 use std::ffi::OsString;
 use std::fmt;
-use std::io::Write;
+use std::io::{IsTerminal, Write};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -803,7 +803,8 @@ fn recommend_command(
 ) -> Result<(), Failure> {
     let catalogue = load_catalogue(places)?;
     let hardware = read_hardware(places)?;
-    let recommendation = fit::recommend(&catalogue, &hardware, args.context);
+    let engine_cpu = fit::EngineCpu::from_backends(&engine::backends(&engine_program(places)));
+    let recommendation = fit::recommend(&catalogue, &hardware, args.context, engine_cpu);
     if args.json {
         return write_json(
             out,
@@ -962,7 +963,9 @@ fn pull_command(
             let destination = dir.join(&file.name);
             let total = file.size_bytes;
             let mut next_report = 0u64;
-            let quiet = args.json;
+            // Progress is for a person at a terminal: a program reading
+            // standard error finds the code of a failure on its first line.
+            let quiet = args.json || !std::io::stderr().is_terminal();
             let mut progress = |written: u64| {
                 if !quiet && written >= next_report {
                     let _ = writeln!(

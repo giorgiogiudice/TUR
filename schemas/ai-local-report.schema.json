@@ -218,13 +218,17 @@
     "recommendation": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["model", "code", "message", "reasons", "cpu_budget_bytes", "vision_model", "embeddings_model", "fits"],
+      "required": ["model", "code", "message", "reasons", "cpu_budget_bytes", "engine_cpu", "vision_model", "embeddings_model", "fits"],
       "properties": {
         "model": { "description": "The model recommended for conversation with P@x (chat and tools); null when none fits.", "$ref": "#/$defs/nullable_string" },
         "code": { "$ref": "#/$defs/code" },
         "message": { "type": "string" },
         "reasons": { "$ref": "#/$defs/string_list" },
         "cpu_budget_bytes": { "description": "The largest model file expected to answer at a usable speed on this processor.", "$ref": "#/$defs/bytes" },
+        "engine_cpu": {
+          "description": "The engine's processor build, from its libraries: variants (chosen at run time, fast kernels used), single (one library; Fedora 45's build has no AVX2 kernels and counts as slow), unknown (engine not found).",
+          "enum": ["variants", "single", "unknown"]
+        },
         "vision_model": { "$ref": "#/$defs/nullable_string" },
         "embeddings_model": { "$ref": "#/$defs/nullable_string" },
         "fits": { "type": "array", "items": { "$ref": "#/$defs/fit" } }

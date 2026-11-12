@@ -373,40 +373,70 @@ jobs:
           docker exec fedora dnf -y --setopt=install_weak_deps=False install "$LLAMA_CPP_RPM" util-linux >/dev/null
           docker exec fedora rpm -q llama-cpp
 
+      - name: llama.cpp's own release build, checked
+        # For the 4B model: with Fedora's build it processed prompts at
+        # 1.5 to 1.8 tokens per second in run 43277339192, so one P@x
+        # request of 1 000 to 3 000 tokens took 10 to 30 minutes.
+        run: |
+          curl -fsSL -o "$WORK/llama.tar.gz" "$UPSTREAM_URL"
+          echo "$UPSTREAM_SHA256  $WORK/llama.tar.gz" | sha256sum -c -
+          mkdir -p "$WORK/upstream" && tar -xzf "$WORK/llama.tar.gz" -C "$WORK/upstream"
+          echo "UPSTREAM_SERVER=$(find "$WORK/upstream" -name llama-server -type f | head -n 1)" >> "$GITHUB_ENV"
+
       - name: P@x and the harness, with each model
+        # qwen3-0.6b with Fedora's llama-server in the container; qwen3-4b
+        # with llama.cpp's own build on the runner. tur-pax runs with
+        # --no-commands: the read-only command tool's schema (argv items of
+        # up to 4 096 characters) makes llama-server's tool grammar fail
+        # ("number of repetitions exceeds sane defaults"), and every request
+        # that offers it is rejected (run 43277339192).
         run: |
           set +e
           status=0
           scenario=tests/pax/scenarios/01-two-tools.json
           local_request="Which AI model could run locally on this computer, and why?"
+          two_tools_request="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["request"])' "$scenario")"
+          ci=services/tur-ai-local/ci/local_ai_ci.py
+          base=http://127.0.0.1:39281
+          key="$WORK/run/tur-ai-local/api-key"
           for model in qwen3-0.6b qwen3-4b; do
             echo "::group::$model"
-            docker exec -d fedora setpriv --reuid="$(id -u)" --regid="$(id -g)" --clear-groups -- bash -c \
-              "$WORK/bin/tur-ai-local serve $model --json --port 39281 --idle-stop 3600 --catalogue /w/services/tur-ai-local/catalogue --models-dir $WORK/data/tur/models --runtime-dir $WORK/run > $WORK/run/serve-$model.log 2> $WORK/run/serve-$model.err"
-            for _ in $(seq 1 600); do grep -q '"event":"ready"' "$WORK/run/serve-$model.log" 2>/dev/null && break; sleep 1; done
-            if ! grep -q '"event":"ready"' "$WORK/run/serve-$model.log"; then
-              echo "::error::the engine did not become ready with $model"; cat "$WORK/run/serve-$model.err"; status=1; continue
+            log="$WORK/run/serve-$model.log"
+            if [ "$model" = qwen3-0.6b ]; then
+              engine=fedora-llama-cpp-b9840
+              docker exec -d fedora setpriv --reuid="$(id -u)" --regid="$(id -g)" --clear-groups -- bash -c \
+                "$WORK/bin/tur-ai-local serve $model --json --port 39281 --idle-stop 3600 --catalogue /w/services/tur-ai-local/catalogue --models-dir $WORK/data/tur/models --runtime-dir $WORK/run > $log 2> $log.err"
+            else
+              engine=upstream-llama-cpp-b9840-cpu
+              "$WORK/bin/tur-ai-local" serve "$model" --json --port 39281 --idle-stop 3600 --engine "$UPSTREAM_SERVER" \
+                --catalogue services/tur-ai-local/catalogue --models-dir "$WORK/data/tur/models" --runtime-dir "$WORK/run" \
+                > "$log" 2> "$log.err" &
             fi
-            key="$WORK/run/tur-ai-local/api-key"
-            base=http://127.0.0.1:39281
-            ci=services/tur-ai-local/ci/local_ai_ci.py
+            for _ in $(seq 1 600); do grep -q '"event":"ready"' "$log" 2>/dev/null && break; sleep 1; done
+            if ! grep -q '"event":"ready"' "$log"; then
+              echo "::error::the engine did not become ready with $model"; cat "$log.err"; status=1; continue
+            fi
             python3 "$ci" harness --base-url "$base" --key-file "$key" --model "$model" --scenario "$scenario" \
-              --tools "$WORK/pax/tools" "$WORK/pax/manifests" "$WORK/pax/adapters" --evidence "$WORK/evidence/pax"
+              --tools "$WORK/pax/tools" "$WORK/pax/manifests" "$WORK/pax/adapters" --evidence "$WORK/evidence/pax/$engine"
             python3 "$ci" harness --base-url "$base" --key-file "$key" --model "$model" --scenario "$scenario" \
               --name local-ai --request "$local_request" --expect ai_local_recommend \
-              --tools "$WORK/pax/tools" --evidence "$WORK/evidence/pax"
+              --tools "$WORK/pax/tools" --evidence "$WORK/evidence/pax/$engine"
             for wire in openai anthropic; do
               python3 "$ci" pax --tur-pax services/tur-pax/target/debug/tur-pax --wire "$wire" --base-url "$base" \
-                --key-file "$key" --model "$model" --name two-tools --request "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["request"])' "$scenario")" \
+                --key-file "$key" --model "$model" --name two-tools --request "$two_tools_request" \
                 --tools "$WORK/pax/tools" --manifests "$WORK/pax/manifests" --adapters "$WORK/pax/adapters" \
-                --work "$WORK/pax/work" --evidence "$WORK/evidence/pax"
+                --work "$WORK/pax/work" --evidence "$WORK/evidence/pax/$engine"
               python3 "$ci" pax --tur-pax services/tur-pax/target/debug/tur-pax --wire "$wire" --base-url "$base" \
                 --key-file "$key" --model "$model" --name local-ai --request "$local_request" \
-                --tools "$WORK/pax/tools" --work "$WORK/pax/work" --evidence "$WORK/evidence/pax"
+                --tools "$WORK/pax/tools" --work "$WORK/pax/work" --evidence "$WORK/evidence/pax/$engine"
             done
-            docker exec fedora setpriv --reuid="$(id -u)" --regid="$(id -g)" --clear-groups -- \
+            cp "$WORK/run/tur-ai-local/engine.log" "$WORK/evidence/pax/$engine/engine-$model.log" 2>/dev/null || true
+            if [ "$model" = qwen3-0.6b ]; then
+              docker exec fedora setpriv --reuid="$(id -u)" --regid="$(id -g)" --clear-groups -- \
+                "$WORK/bin/tur-ai-local" stop --runtime-dir "$WORK/run"
+            else
               "$WORK/bin/tur-ai-local" stop --runtime-dir "$WORK/run"
-            cp "$WORK/run/tur-ai-local/engine.log" "$WORK/evidence/pax/engine-$model.log" 2>/dev/null || true
+            fi
             echo "::endgroup::"
           done
           exit $status

@@ -15,14 +15,20 @@
 //! A model that does not fit now is never started.
 //!
 //! **Speed.** This slice runs models on the processor. How fast a model
-//! answers there depends mostly on the size of its file and on the
-//! processor. Until measurements from real computers replace it, the rule
-//! is: with the matrix instructions llama.cpp's fast kernels use (AVX2 and
-//! FMA, or Arm's dot-product instructions), a model file of up to 3 GB on
-//! four to seven logical processors and up to 5 GB on eight or more; without
-//! them, up to 1.5 GB, or 0.8 GB on fewer than four. A graphics processor
-//! is reported but not used for the recommendation: the engine TUR installs
-//! today has no Vulkan backend (see `docs/architecture/local-ai.md`).
+//! answers there depends mostly on the size of its file, on the processor
+//! and on the engine's build. The rule, set from the measurements of report
+//! local-ai-1 on a 4-processor runner (`docs/reports/local-ai-1.md`): when
+//! the processor has the matrix instructions llama.cpp's fast kernels use
+//! (AVX2 and FMA, or Arm's dot-product instructions) **and** the engine has
+//! processor variants that use them, a model file of up to 3 GB on four to
+//! seven logical processors and up to 5 GB on eight or more (1.5 GB on
+//! fewer); otherwise up to 1.5 GB on eight or more, 0.8 GB on four to
+//! seven, 0.5 GB on fewer. An engine with one processor library and no
+//! variants, like Fedora 45's `llama-cpp`, counts as without the fast
+//! kernels: it answered 6 to 9 times more slowly on the same runner. A
+//! graphics processor is reported but not used for the recommendation: the
+//! engine TUR installs today has no Vulkan backend (see
+//! `docs/architecture/local-ai.md`).
 //!
 //! **Recommendation.** Among the models that fit now, can converse and can
 //! call tools (so that P@x can act), and whose file is within the speed
@@ -139,11 +145,40 @@ pub fn judge(model: &Model, hardware: &Hardware, context: u32) -> Fit {
     }
 }
 
-/// The largest model file the processor is expected to run at a usable
-/// speed. See the module documentation.
-pub fn cpu_budget_bytes(hardware: &Hardware) -> u64 {
+string_enum! {
+    /// What the engine's processor backend is built for, from its libraries.
+    pub enum EngineCpu {
+        /// Processor variants chosen at run time (`libggml-cpu-haswell.so`
+        /// and the like): the fast kernels are used where the processor
+        /// has the instructions.
+        Variants => "variants",
+        /// One processor library and no variants. Fedora 45's build is of
+        /// this kind and has no AVX2 kernels.
+        Single => "single",
+        /// Not known: the engine was not found.
+        Unknown => "unknown",
+    }
+}
+
+impl EngineCpu {
+    /// The kind of build, from the backends `engine::backends` found.
+    pub fn from_backends(backends: &[String]) -> EngineCpu {
+        if backends.iter().any(|backend| backend.starts_with("cpu-")) {
+            EngineCpu::Variants
+        } else if backends.iter().any(|backend| backend == "cpu") {
+            EngineCpu::Single
+        } else {
+            EngineCpu::Unknown
+        }
+    }
+}
+
+/// The largest model file expected to answer at a usable speed. See the
+/// module documentation.
+pub fn cpu_budget_bytes(hardware: &Hardware, engine: EngineCpu) -> u64 {
     let cpus = hardware.cpu.logical_cpus;
-    if hardware.cpu.fast_matrix_instructions {
+    let fast = hardware.cpu.fast_matrix_instructions && engine != EngineCpu::Single;
+    if fast {
         if cpus >= 8 {
             5_000_000_000
         } else if cpus >= 4 {
@@ -151,10 +186,12 @@ pub fn cpu_budget_bytes(hardware: &Hardware) -> u64 {
         } else {
             1_500_000_000
         }
-    } else if cpus >= 4 {
+    } else if cpus >= 8 {
         1_500_000_000
-    } else {
+    } else if cpus >= 4 {
         800_000_000
+    } else {
+        500_000_000
     }
 }
 
@@ -171,6 +208,8 @@ pub struct Recommendation {
     pub reasons: Vec<String>,
     /// The largest model file considered usable on this processor.
     pub cpu_budget_bytes: u64,
+    /// The kind of the engine's processor build.
+    pub engine_cpu: EngineCpu,
     /// A model with image input that fits, if there is one.
     pub vision_model: Option<String>,
     /// An embeddings model that fits, if there is one.
@@ -180,8 +219,13 @@ pub struct Recommendation {
 }
 
 /// Recommend a model for this computer.
-pub fn recommend(catalogue: &Catalogue, hardware: &Hardware, context: u32) -> Recommendation {
-    let budget = cpu_budget_bytes(hardware);
+pub fn recommend(
+    catalogue: &Catalogue,
+    hardware: &Hardware,
+    context: u32,
+    engine: EngineCpu,
+) -> Recommendation {
+    let budget = cpu_budget_bytes(hardware, engine);
     let fits: Vec<Fit> = catalogue
         .models
         .iter()
@@ -263,6 +307,15 @@ pub fn recommend(catalogue: &Catalogue, hardware: &Hardware, context: u32) -> Re
             },
             crate::human_bytes(budget)
         ),
+        match engine {
+            EngineCpu::Variants => "Engine: processor variants that use these instructions.",
+            EngineCpu::Single => {
+                "Engine: one processor build without the fast kernels, which answers several \
+                 times more slowly; the budget is set as for a processor without them."
+            }
+            EngineCpu::Unknown => "Engine: not found; the budget assumes a build with the fast kernels.",
+        }
+        .to_owned(),
         "Graphics: not used yet; the engine TUR installs runs models on the processor.".to_owned(),
     ];
     let (code, message) = match (&chosen, slow) {
@@ -302,8 +355,68 @@ pub fn recommend(catalogue: &Catalogue, hardware: &Hardware, context: u32) -> Re
         message,
         reasons,
         cpu_budget_bytes: budget,
+        engine_cpu: engine,
         vision_model,
         embeddings_model,
         fits,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::hardware::{Vulkan, VulkanStatus, parse_cpuinfo, parse_meminfo};
+
+    fn machine(cpus: usize, flags: &str) -> Hardware {
+        let cpuinfo: Vec<String> = (0..cpus)
+            .map(|index| format!("processor : {index}\nflags : {flags}\n"))
+            .collect();
+        Hardware {
+            memory: parse_meminfo("MemTotal: 16000000 kB\nMemAvailable: 15000000 kB\n")
+                .expect("memory"),
+            cpu: parse_cpuinfo(&cpuinfo.join("\n")),
+            gpus: Vec::new(),
+            vulkan: Vulkan {
+                status: VulkanStatus::NotChecked,
+                devices: Vec::new(),
+            },
+            usable_open_backend: None,
+        }
+    }
+
+    #[test]
+    fn the_engine_build_is_read_from_its_libraries() {
+        let names = |list: &[&str]| {
+            list.iter()
+                .map(|name| (*name).to_owned())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            EngineCpu::from_backends(&names(&["cpu-haswell", "cpu-x64", "vulkan"])),
+            EngineCpu::Variants
+        );
+        assert_eq!(
+            EngineCpu::from_backends(&names(&["cpu", "hip"])),
+            EngineCpu::Single
+        );
+        assert_eq!(EngineCpu::from_backends(&[]), EngineCpu::Unknown);
+    }
+
+    #[test]
+    fn a_single_baseline_build_gets_the_budget_of_a_processor_without_the_kernels() {
+        let fast = machine(4, "avx avx2 fma f16c");
+        assert_eq!(cpu_budget_bytes(&fast, EngineCpu::Variants), 3_000_000_000);
+        assert_eq!(cpu_budget_bytes(&fast, EngineCpu::Unknown), 3_000_000_000);
+        assert_eq!(cpu_budget_bytes(&fast, EngineCpu::Single), 800_000_000);
+        let old = machine(4, "sse4_2");
+        assert_eq!(cpu_budget_bytes(&old, EngineCpu::Variants), 800_000_000);
+        assert_eq!(
+            cpu_budget_bytes(&machine(16, "avx2 fma"), EngineCpu::Variants),
+            5_000_000_000
+        );
+        assert_eq!(
+            cpu_budget_bytes(&machine(2, "sse2"), EngineCpu::Variants),
+            500_000_000
+        );
     }
 }

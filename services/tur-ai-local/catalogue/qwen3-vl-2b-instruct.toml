@@ -21,8 +21,10 @@ context_length = 262144
 # Estimate: the model and projector files, the 16-bit context cache at 8192
 # tokens (28 layers x 8 KV heads x 128 x 2 x 2 bytes = 114,688 bytes per
 # token), 512 MiB for the engine's working memory and about 300 MB for
-# encoding one image.
-memory_bytes = 3350000000
+# encoding one image, was 3.35 GB. Raised to 3.65 GB: llama.cpp's own
+# build peaked at 3.28 GB in CI run 43277339192 (Fedora's at 2.68 GB).
+# 10 % above the higher peak.
+memory_bytes = 3650000000
 memory_context = 8192
 kv_bytes_per_token = 114688
 capabilities = ["chat", "tools", "vision"]
@@ -54,3 +56,31 @@ summary = "Apache License 2.0. You may use, copy, change and share the model for
 restrictions = "none"
 evidence = "The GGUF repository's card header at the pinned revision declares apache-2.0, as does the base model Qwen/Qwen3-VL-2B-Instruct. Neither repository holds a licence file. The publisher's GitHub repository QwenLM/Qwen3-VL is declared Apache-2.0."
 checked = "2026-11-12"
+
+[[tested]]
+date = "2026-11-12"
+report = "docs/reports/local-ai-1.md"
+run = "https://github.com/giorgiogiudice/TUR/actions/runs/43277339192"
+engine = "llama-server b9840 from Fedora 45's llama-cpp-b9840-2.fc45, in a Fedora 45 container (one baseline processor build, no AVX2 kernels)"
+hardware = "GitHub-hosted ubuntu-24.04 runner: AMD EPYC 7763, 4 logical processors (2 cores), AVX2 and FMA, 16.8 GB of memory, no graphics processor"
+context = 8192
+generation_tokens_per_second = 3.72
+peak_memory_bytes = 2681372672
+tool_call = "yes"
+image_input = "yes"
+embeddings = "not-tested"
+notes = "128 tokens generated in 34.67 s wall time; prompt speed not recorded: this run reused the prompt cache between the two measuring requests; answer after the tool result used it: yes; streamed tool call: yes."
+
+[[tested]]
+date = "2026-11-12"
+report = "docs/reports/local-ai-1.md"
+run = "https://github.com/giorgiogiudice/TUR/actions/runs/43277339192"
+engine = "llama-server b9840 from llama.cpp's own release llama-b9840-bin-ubuntu-x64 (processor variants, AVX2 kernels used)"
+hardware = "GitHub-hosted ubuntu-24.04 runner: AMD EPYC 7763, 4 logical processors (2 cores), AVX2 and FMA, 16.8 GB of memory, no graphics processor"
+context = 8192
+generation_tokens_per_second = 32.87
+peak_memory_bytes = 3284996096
+tool_call = "yes"
+image_input = "yes"
+embeddings = "not-tested"
+notes = "128 tokens generated in 3.93 s wall time; prompt speed not recorded: this run reused the prompt cache between the two measuring requests; answer after the tool result used it: yes; streamed tool call: yes."

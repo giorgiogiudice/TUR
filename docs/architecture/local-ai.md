@@ -100,8 +100,12 @@ Fedora 45's package metadata, spec files and build logs (sources in
 | Memory | Fixed at start: the memory-mapped model, the context cache of `--ctx-size`, and a host prompt cache of up to 8 GiB by default (`--cache-ram`; TUR sets 0) | Managed by the server; several models may be resident |
 | Security defaults | Binds 127.0.0.1:8080; a Unix socket when the host ends in `.sock`; `--api-key` / `--api-key-file`; `--offline`; the web interface can be switched off | Binds 127.0.0.1:11434; **no authentication** on the local API; **cloud models and web search on by default**: a request to a cloud model through the local API is forwarded to ollama.com (`OLLAMA_NO_CLOUD=1` turns that off); Fedora's unit runs it as a system service under its own user with one shared model store |
 
-Size installed and speed on the runner were measured in CI: see the
-[report](../reports/local-ai-1.md), section 3.
+Measured in CI on the same runner (report [local-ai-1](../reports/local-ai-1.md),
+sections 3 and 4): Fedora's `llama-cpp` installs 21 packages and 5.3 GB with
+its ROCm dependencies, against 47 MB for `ollama-base`; with the smallest
+model it generated 8.75 tokens per second, llama.cpp's own build of the same
+version 52.70 and Fedora's Ollama 37.58; Ollama refused tools for the
+publisher's GGUF file it had imported, which also lost its chat template.
 
 ### 6.2 Decision
 
@@ -148,7 +152,7 @@ with `--json` in the format of `schemas/ai-local-report.schema.json`.
 |---|---|
 | `hardware` | Memory (MemTotal, MemAvailable), the processor and the features that decide inference speed (AVX2, FMA, AVX-512, AMX; Arm's dot product, SVE, i8mm), the DRM graphics cards with vendor, driver and own memory where the driver publishes it, the Vulkan devices from `vulkaninfo --summary` (a software device such as llvmpipe does not count), and the engine's backend libraries. Read-only: `/proc`, `/sys` and `vulkaninfo`. |
 | `models` | The catalogue, with download size, memory needed at the context, whether it fits, whether it is downloaded, and the licence in plain words. `--catalogue-only` says nothing about downloads, for P@x's sandbox, which cannot see the person's data folder. |
-| `recommend` | The model for conversation with P@x that fits best (rules in `src/fit.rs`): it fits in the memory free now plus a reserve (the larger of 1 GiB and a tenth of the memory), converses and calls tools, and its file is within a speed budget for the processor. Also a model for images and one for embeddings. |
+| `recommend` | The model for conversation with P@x that fits best (rules in `src/fit.rs`): it fits in the memory free now plus a reserve (the larger of 1 GiB and a tenth of the memory), converses and calls tools, and its file is within a speed budget set from the processor and the engine's build (an engine with one processor library and no variants, like Fedora 45's, gets the budget of a processor without the fast kernels: it answered 6 to 9 times more slowly in CI). Also a model for images and one for embeddings. |
 | `check MODEL` | Whether one model fits: `TUR-AI-LOCAL-004` fits, `-006` not in the memory free now, `-005` too large for this computer. |
 | `pull MODEL` | Downloads each file from the catalogue's URL (https only, redirects too) to `<name>.part`, counting and hashing; refuses a file whose announced or received size, or whose SHA-256, differs (`-009`, `-010`) and deletes it; writes `verified.json` only when every file matches. `--from-file` imports a file the person has, with the same checks. A model too large for this computer is not downloaded. A licence with use restrictions needs `--accept-licence`. |
 | `verify MODEL` | Hashes the downloaded files again. |
@@ -227,8 +231,9 @@ Nothing of this change is in the image (`image/` was not touched). To ship it:
   size in the report), or the same llama.cpp version built with
   `GGML_BACKEND_DL=ON`, `GGML_CPU_ALL_VARIANTS=ON`, `GGML_VULKAN=ON` and
   without HIP, preferably as a change to Fedora's spec;
-- `util-linux` for `setpriv` (in Kinoite already) and, optionally,
-  `vulkan-tools` for the hardware report;
+- nothing more for `setpriv` and `vulkaninfo`: the image already has
+  `util-linux` 2.42.4 and `vulkan-tools` 1.4.350.0
+  ([image-licences.csv](../dependencies/image-licences.csv));
 - a systemd user unit, started on request and not at login, once the D-Bus
   interface exists;
 - no model: models are downloaded at the person's request.

@@ -19,7 +19,8 @@ parameters = "0.6B"
 context_length = 32768
 # Estimate: the file, the 16-bit context cache at 8192 tokens
 # (28 layers x 8 KV heads x 128 x 2 x 2 bytes = 114,688 bytes per token)
-# and 512 MiB for the engine's working memory. Measured values are below.
+# and 512 MiB for the engine's working memory. The peaks measured in CI
+# run 43277339192 stayed below it: see [[tested]].
 memory_bytes = 2150000000
 memory_context = 8192
 kv_bytes_per_token = 114688
@@ -49,3 +50,31 @@ summary = "Apache License 2.0. You may use, copy, change and share the model for
 restrictions = "none"
 evidence = "The repository's LICENSE file at the pinned revision was read: it is the Apache License 2.0 text, word for word, with the appendix's copyright line filled in as \"Copyright 2025 Alibaba Cloud\". The model card header declares apache-2.0."
 checked = "2026-11-12"
+
+[[tested]]
+date = "2026-11-12"
+report = "docs/reports/local-ai-1.md"
+run = "https://github.com/giorgiogiudice/TUR/actions/runs/43277339192"
+engine = "llama-server b9840 from Fedora 45's llama-cpp-b9840-2.fc45, in a Fedora 45 container (one baseline processor build, no AVX2 kernels)"
+hardware = "GitHub-hosted ubuntu-24.04 runner: AMD EPYC 7763, 4 logical processors (2 cores), AVX2 and FMA, 16.8 GB of memory, no graphics processor"
+context = 8192
+generation_tokens_per_second = 8.75
+peak_memory_bytes = 1732685824
+tool_call = "yes"
+image_input = "not-tested"
+embeddings = "not-tested"
+notes = "128 tokens generated in 14.74 s wall time; prompt speed not recorded: this run reused the prompt cache between the two measuring requests; answer after the tool result used it: yes; streamed tool call: yes."
+
+[[tested]]
+date = "2026-11-12"
+report = "docs/reports/local-ai-1.md"
+run = "https://github.com/giorgiogiudice/TUR/actions/runs/43277339192"
+engine = "llama-server b9840 from llama.cpp's own release llama-b9840-bin-ubuntu-x64 (processor variants, AVX2 kernels used)"
+hardware = "GitHub-hosted ubuntu-24.04 runner: AMD EPYC 7763, 4 logical processors (2 cores), AVX2 and FMA, 16.8 GB of memory, no graphics processor"
+context = 8192
+generation_tokens_per_second = 52.7
+peak_memory_bytes = 1664659456
+tool_call = "yes"
+image_input = "not-tested"
+embeddings = "not-tested"
+notes = "128 tokens generated in 2.45 s wall time; prompt speed not recorded: this run reused the prompt cache between the two measuring requests; answer after the tool result used it: yes; streamed tool call: yes."

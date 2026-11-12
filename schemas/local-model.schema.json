@@ -106,8 +106,7 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "date", "report", "run", "engine", "hardware", "context", "generation_tokens_per_second",
-        "prompt_tokens_per_second", "peak_memory_bytes", "tool_call", "image_input", "embeddings", "notes"
+        "date", "report", "run", "engine", "hardware", "context", "tool_call", "image_input", "embeddings", "notes"
       ],
       "properties": {
         "date": { "$ref": "#/$defs/date" },
@@ -116,9 +115,9 @@
         "engine": { "description": "The engine and its build.", "type": "string", "minLength": 1 },
         "hardware": { "description": "The machine.", "type": "string", "minLength": 1 },
         "context": { "type": "integer", "minimum": 1 },
-        "generation_tokens_per_second": { "type": ["number", "null"] },
-        "prompt_tokens_per_second": { "type": ["number", "null"] },
-        "peak_memory_bytes": { "type": ["integer", "null"], "minimum": 0 },
+        "generation_tokens_per_second": { "description": "Left out when not measured.", "type": "number", "minimum": 0 },
+        "prompt_tokens_per_second": { "description": "Left out when not measured.", "type": "number", "minimum": 0 },
+        "peak_memory_bytes": { "description": "The engine's peak resident memory. Left out when not measured.", "type": "integer", "minimum": 0 },
         "tool_call": { "$ref": "#/$defs/outcome" },
         "image_input": { "$ref": "#/$defs/outcome" },
         "embeddings": { "$ref": "#/$defs/outcome" },
