@@ -30,7 +30,7 @@ image-based, recoverable by design, and optionally driven end to end by AI.**
 ## What UOS is
 
 UOS is a research operating system built on a single Linux kernel. It aims to give
-applications from three ecosystems one coherent desktop, one hardware stack and one
+applications from four ecosystems one coherent desktop, one hardware stack and one
 recovery story:
 
 | Ecosystem | How it runs | Expectation |
@@ -38,6 +38,7 @@ recovery story:
 | **Linux** | Natively | Full support; no regression against the base distribution |
 | **Windows** | Wine and Proton, with DXVK and VKD3D-Proton for graphics | Application-specific; measured and published |
 | **macOS** | Darling | Experimental; command-line tools first, a narrow GUI set later |
+| **Android** | Waydroid: an Android system in a container on the host kernel, off by default ([proposed](docs/architecture/android-runtime.md)) | Application-specific; measured and published. Apps that need Google certification (banking, payment, DRM video), phone hardware or ARM-only code are not expected to run |
 | **Windows, in full** | A genuine Windows guest under QEMU/KVM, or dual boot | Optional fallback for drivers, anti-cheat and kernel-level software |
 
 Windows and macOS programs run in userspace through compatibility layers. UOS does
@@ -115,6 +116,7 @@ flowchart TB
         L["Linux<br/>native ELF"]
         W["Windows<br/>Wine · Proton"]
         M["macOS<br/>Darling<br/>experimental"]
+        AN["Android<br/>Waydroid<br/>proposed"]
         V["Full Windows<br/>QEMU/KVM<br/>optional"]
     end
 
@@ -223,6 +225,13 @@ The AI control layer is developed alongside these phases rather than after them:
 each service ships its assistant-facing tools as it lands, screen control arrives
 with the desktop, and voice follows. Full detail is in the
 [specification](docs/architecture/specification.md#20-development-roadmap-with-concrete-deliverables).
+
+Android support is proposed in
+[addendum B](docs/architecture/android-runtime.md) and is likewise interleaved:
+package inspection and the kernel check in phases 0 and 1, the Android container
+in CI with phase 2, desktop integration with phase 3, installation, storage and
+device grants with phases 4 and 5, and the evaluation of a virtual-machine backend
+with phase 6. It never displaces a higher item in the order above.
 
 ## Repository layout
 
