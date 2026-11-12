@@ -9,7 +9,7 @@
     "schema_version", "tur_version", "build_id", "source_revision", "source_date_epoch",
     "architecture", "image", "base", "kernel_release", "kernel_config_sha256",
     "kernel_config", "bootloader", "desktop", "security", "packages", "rpm_count",
-    "runtime_versions", "sbom"
+    "programs", "catalogue", "third_party_crates", "runtime_versions", "sbom"
   ],
   "$defs": {
     "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
@@ -17,7 +17,10 @@
     "version_or_absent": { "type": ["string", "null"], "minLength": 1 }
   },
   "properties": {
-    "schema_version": { "const": 1 },
+    "schema_version": {
+      "const": 2,
+      "description": "2 added programs, catalogue, third_party_crates and image.size_bytes."
+    },
     "tur_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.-]+)?$" },
     "build_id": { "type": "string", "pattern": "^[0-9]{8}\\.g[0-9a-f]{12}(\\.dirty)?$" },
     "source_revision": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
@@ -29,7 +32,8 @@
       "required": ["id", "digest"],
       "properties": {
         "id": { "$ref": "#/$defs/sha256" },
-        "digest": { "oneOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }] }
+        "digest": { "oneOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }] },
+        "size_bytes": { "type": ["integer", "null"], "minimum": 1 }
       }
     },
     "base": {
@@ -88,6 +92,70 @@
       "additionalProperties": { "type": "string", "minLength": 1 }
     },
     "rpm_count": { "type": "integer", "minimum": 500 },
+    "programs": {
+      "description": "TUR's own programs compiled into the image, as found in the image: each was run for its version and hashed where it is installed.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "version", "path", "sha256", "size_bytes", "component", "assistant_tools"],
+        "properties": {
+          "name": { "type": "string", "pattern": "^tur-[a-z0-9-]+$" },
+          "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.-]+)?$" },
+          "path": { "type": "string", "pattern": "^/usr/(bin|libexec/tur)/tur-[a-z0-9-]+$" },
+          "sha256": { "$ref": "#/$defs/sha256" },
+          "size_bytes": { "type": "integer", "minimum": 1 },
+          "component": { "type": "string", "minLength": 1 },
+          "assistant_tools": {
+            "description": "Where the component's assistant tools are installed, or null when it has none there.",
+            "oneOf": [
+              { "type": "null" },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["directory", "manifest_sha256", "adapter_sha256"],
+                "properties": {
+                  "directory": { "type": "string", "pattern": "^/usr/share/tur/pax/tools/[a-z0-9-]+$" },
+                  "manifest_sha256": { "$ref": "#/$defs/sha256" },
+                  "adapter_sha256": { "$ref": "#/$defs/sha256" }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    "catalogue": {
+      "description": "The application catalogue installed in the image.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "entries", "sha256"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "entries": { "type": "integer", "minimum": 1 },
+        "sha256": {
+          "$ref": "#/$defs/sha256",
+          "description": "SHA-256 of the sha256sum listing of the entries, sorted by name."
+        }
+      }
+    },
+    "third_party_crates": {
+      "description": "The third-party crates compiled into the programs. The list in the image names each with its version, licence and checksum; the SBOM carries them as packages.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["count", "list", "list_sha256", "rust"],
+      "properties": {
+        "count": { "type": "integer", "minimum": 1 },
+        "list": { "type": "string", "minLength": 1 },
+        "list_sha256": { "$ref": "#/$defs/sha256" },
+        "rust": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+          "description": "The Rust toolchain the programs were compiled with."
+        }
+      }
+    },
     "runtime_versions": {
       "type": "object",
       "additionalProperties": false,

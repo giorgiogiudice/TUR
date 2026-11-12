@@ -34,6 +34,8 @@ PACKAGES = [
     "mesa-dri-drivers", "mesa-vulkan-drivers", "pipewire", "wireplumber",
     "NetworkManager", "bluez", "udisks2", "libblockdev", "fwupd", "flatpak",
     "bubblewrap",
+    # what TUR's own programs start
+    "util-linux", "pciutils", "usbutils", "vulkan-tools", "python3", "sudo",
 ]
 
 PROBE = r"""
@@ -63,6 +65,29 @@ echo "v:default_target=$(systemctl get-default 2>/dev/null)"
 echo "v:selinux=$(grep -E '^SELINUX=' /etc/selinux/config | cut -d= -f2)"
 dm=$(readlink /etc/systemd/system/display-manager.service 2>/dev/null || true)
 echo "v:display_manager=$(basename "${dm:-}" .service)"
+# TUR's own programs, from the list the build wrote. Each is run for its
+# version and measured as it is in the image.
+sum() { sha256sum "$1" | cut -d' ' -f1; }
+grep -v '^#' /usr/lib/tur/programs.tsv 2>/dev/null | while IFS=$'\t' read -r program path component tools; do
+    said=$("$path" --version 2>/dev/null </dev/null | head -n1)
+    manifest=; adapter=
+    if [ "$tools" != "-" ]; then
+        manifest=$(sum "$tools/agent-tools.json"); adapter=$(sum "$tools/agent-tools.adapter.json")
+    fi
+    printf 'g:%s=%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$program" "$path" "$component" "${said##* }" \
+        "$(sum "$path")" "$(stat -c %s "$path")" "$tools" "$manifest" "$adapter"
+done
+catalogue=/usr/share/tur/catalogue
+if [ -d "$catalogue" ]; then
+    echo "v:catalogue_entries=$(ls -1 "$catalogue"/*.toml | wc -l)"
+    echo "v:catalogue_sha256=$(cd "$catalogue" && LC_ALL=C ls -1 *.toml | xargs sha256sum | sha256sum | cut -d' ' -f1)"
+fi
+crates=/usr/share/licenses/tur-third-party/crates.tsv
+if [ -s "$crates" ]; then
+    echo "v:crates=$(grep -v '^#' "$crates" | awk -F'\t' '$2 != "rust-std"' | cut -f2,3 | sort -u | wc -l)"
+    echo "v:crates_sha256=$(sum "$crates")"
+    echo "v:rust=$(grep -v '^#' "$crates" | awk -F'\t' '$2 == "rust-std" { print $3; exit }')"
+fi
 """
 
 
@@ -90,13 +115,32 @@ def main() -> int:
     packages: dict[str, str] = {}
     osrel: dict[str, str] = {}
     turrel: dict[str, str] = {}
-    targets = {"v": values, "k": kconfig, "p": packages, "o": osrel, "u": turrel}
+    programs: dict[str, str] = {}
+    targets = {"v": values, "k": kconfig, "p": packages, "o": osrel, "u": turrel, "g": programs}
     for line in out.splitlines():
         kind, _, rest = line.partition(":")
         key, sep, value = rest.partition("=")
         if kind not in targets or not sep:
             continue
         targets[kind][key] = unquote(value) if kind in ("o", "u") else value
+
+    # TUR's own programs, in the order of the list in the image.
+    tur_programs = []
+    for name, fields in programs.items():
+        path, component, version, sha256, size, tools, tools_manifest, tools_adapter = fields.split("\t")
+        tur_programs.append(
+            {
+                "name": name,
+                "version": version or None,
+                "path": path,
+                "sha256": sha256,
+                "size_bytes": int(size),
+                "component": component,
+                "assistant_tools": None
+                if tools == "-"
+                else {"directory": tools, "manifest_sha256": tools_manifest, "adapter_sha256": tools_adapter},
+            }
+        )
 
     inspect = json.loads(run(PODMAN + ["image", "inspect", args.image]))[0]
     arch = {"amd64": "x86_64", "arm64": "aarch64"}.get(inspect.get("Architecture"), inspect.get("Architecture"))
@@ -111,7 +155,7 @@ def main() -> int:
         return packages.get(name)
 
     manifest = {
-        "schema_version": 1,
+        "schema_version": 2,
         "tur_version": turrel.get("TUR_VERSION"),
         "build_id": turrel.get("TUR_BUILD_ID"),
         "source_revision": turrel.get("TUR_SOURCE_REVISION"),
@@ -120,6 +164,7 @@ def main() -> int:
         "image": {
             "id": inspect.get("Id"),
             "digest": inspect.get("Digest") or None,
+            "size_bytes": inspect.get("Size"),
         },
         "base": {
             "image": turrel.get("TUR_BASE_IMAGE"),
@@ -150,6 +195,18 @@ def main() -> int:
         "security": {"selinux": values.get("selinux")},
         "packages": dict(sorted(packages.items())),
         "rpm_count": int(values["rpm_count"]),
+        "programs": tur_programs,
+        "catalogue": {
+            "path": "/usr/share/tur/catalogue",
+            "entries": int(values.get("catalogue_entries", 0)),
+            "sha256": values.get("catalogue_sha256"),
+        },
+        "third_party_crates": {
+            "count": int(values.get("crates", 0)),
+            "list": "/usr/share/licenses/tur-third-party/crates.tsv",
+            "list_sha256": values.get("crates_sha256"),
+            "rust": values.get("rust"),
+        },
         "runtime_versions": {
             "wine": None,
             "proton": None,

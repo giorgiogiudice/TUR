@@ -523,6 +523,426 @@ def check_boot(ev: Evidence, boot: str, checks: Checks, args, allowed: dict[str,
     }
 
 
+def check_components(ev: Evidence, checks: Checks, args) -> dict:
+    """TUR's own programs on the installed system: what component-checks recorded in the second boot.
+
+    The programs ran as an ordinary user in that user's session, under
+    SELinux in enforcing mode. A check here says what a program did on this
+    virtual machine; none says anything about real hardware.
+    """
+    guest = ev.boots["second-boot"]
+    base = guest.dir / "components"
+
+    def text(name: str) -> str:
+        try:
+            return (base / name).read_bytes().decode("utf-8", errors="replace")
+        except OSError:
+            return ""
+
+    def document(name: str):
+        value = load_json(base / name)
+        return value if isinstance(value, (dict, list)) else None
+
+    status = props(text("status"))
+    codes: dict[str, int] = {}
+    for line in text("exit-status.tsv").splitlines():
+        name, _, code = line.partition("\t")
+        if code.strip().lstrip("-").isdigit():
+            codes[name] = int(code)
+    ran = guest.status.get("components_finished") == "yes" and bool(status)
+
+    def add(ident: str, description: str, passed, detail: str, required: bool = True) -> None:
+        checks.add(f"components.{ident}", f"TUR programs: {description}", passed if ran else None, detail, required)
+
+    def first_line(name: str, limit: int = 300) -> str:
+        lines = [line for line in text(name).splitlines() if line.strip()]
+        return lines[0][:limit] if lines else ""
+
+    # ---- how they were run ---------------------------------------------------------------
+    context = status.get("selinux_context", "")
+    checks.add(
+        "components.session",
+        "TUR programs: they ran on the installed system as an ordinary user, in that user's own session, with "
+        "SELinux enforcing",
+        (
+            ran
+            and guest.status.get("components_run_as") == "user-session"
+            and status.get("selinux_mode") == "Enforcing"
+            and status.get("uid") not in ("", "0", None)
+            and bool(status.get("xdg_runtime_dir"))
+        )
+        if guest
+        else None,
+        f"finished: {guest.status.get('components_finished', 'no data')}; run as: "
+        f"{guest.status.get('components_run_as', 'no data')}; user {status.get('user')} (uid {status.get('uid')}); "
+        f"SELinux {status.get('selinux_mode')}, context {context or 'no data'}; home {status.get('home')} -> "
+        f"{status.get('home_resolved')}; runtime directory {status.get('xdg_runtime_dir')}; from "
+        f"{guest.status.get('components_started_uptime')} s to {guest.status.get('components_finished_uptime')} s "
+        f"after boot",
+    )
+    add(
+        "selinux_context",
+        "the user's processes run in the SELinux domain of a login (unconfined_t), not in a service's",
+        ":unconfined_r:unconfined_t:" in context,
+        f"id -Z: {context or 'no data'}; with sudo: {first_line('context-sudo-label.out') or 'no data'}",
+    )
+
+    # ---- every program is there and runs ---------------------------------------------------
+    versions = [line.split("\t") for line in text("versions.tsv").splitlines() if line.strip()]
+    bad = [row[0] for row in versions if len(row) < 4 or row[2] != "0" or not row[3].startswith(row[0] + " ")]
+    add(
+        "versions",
+        "every program of the image's list starts and prints its version",
+        len(versions) >= 11 and not bad,
+        f"{len(versions)} programs: {', '.join(row[3] for row in versions if len(row) >= 4) or 'no data'}"
+        + (f"; failed: {bad}" if bad else ""),
+    )
+
+    # ---- tur-diag ----------------------------------------------------------------------------
+    diag = document("diag-status-json.out") or {}
+    diag_root = document("diag-status-json-root.out") or {}
+    add(
+        "diag_status",
+        "tur-diag status reports the build that is running",
+        codes.get("diag-status") == 0
+        and codes.get("diag-status-json") == 0
+        and (diag.get("tur") or {}).get("build_id") == args.expected_build_id
+        and diag.get("kernel_release") == guest.status.get("kernel")
+        and isinstance(diag.get("failed_units"), int),
+        f"exit status {codes.get('diag-status-json')}; build {(diag.get('tur') or {}).get('build_id')}, kernel "
+        f"{diag.get('kernel_release')}, failed units {diag.get('failed_units')}, boot ID {diag.get('boot_id')}",
+    )
+    deployment = (diag_root.get("tur") or {}).get("deployment_checksum")
+    booted = ((((guest.json("bootc-status.json") or {}).get("status") or {}).get("booted") or {}).get("ostree") or {})
+    add(
+        "diag_status_deployment",
+        "as root, tur-diag status names the booted deployment as bootc does",
+        codes.get("diag-status-json-root") == 0 and bool(deployment) and deployment == booted.get("checksum"),
+        f"tur-diag: deployment {deployment}, image digest {(diag_root.get('tur') or {}).get('image_digest')}; bootc: "
+        f"{booted.get('checksum')}; as the user: {(diag.get('tur') or {}).get('deployment_checksum')}",
+    )
+    bundles = {}
+    for who in ("user", "root"):
+        manifest = document(f"bundle-{who}/manifest.json") or {}
+        listing = [line.split()[-1] for line in text(f"diag-bundle-{who}-listing.out").splitlines() if line.strip()]
+        missing = [f"{entry.get('path')}: {entry.get('reason')}" for entry in manifest.get("missing") or []]
+        bundles[who] = {
+            "collect_exit_status": codes.get(f"diag-collect-{who}"),
+            "verify_exit_status": codes.get(f"diag-verify-{who}"),
+            "bytes": status.get(f"bundle_{who}_bytes"),
+            "members": listing,
+            "files": len(manifest.get("files") or []),
+            "not_collected": missing,
+            "redaction_profile": manifest.get("redaction_profile"),
+            "boot_health_journal_records": status.get(f"bundle_{who}_boot_health_journal_records"),
+            "journal_lines": status.get(f"bundle_{who}_journal_lines"),
+        }
+        add(
+            f"diag_collect_{who}",
+            f"tur-diag collect, run {'as root' if who == 'root' else 'as the user'}, writes a bundle that "
+            "verify-bundle accepts",
+            codes.get(f"diag-collect-{who}") == 0
+            and codes.get(f"diag-verify-{who}") == 0
+            and "manifest.json" in listing
+            and "checksums.sha256" in listing,
+            f"collect exit status {codes.get(f'diag-collect-{who}')}, verify-bundle "
+            f"{codes.get(f'diag-verify-{who}')}; {status.get(f'bundle_{who}_bytes')} bytes, {len(listing)} members, "
+            f"{bundles[who]['journal_lines']} journal lines; not collected ({len(missing)}): "
+            f"{'; '.join(missing) or 'nothing'}",
+        )
+    add(
+        "diag_verify_rejects",
+        "verify-bundle refuses a bundle that was cut short",
+        codes.get("diag-verify-cut") not in (None, 0),
+        f"exit status {codes.get('diag-verify-cut')}: {first_line('diag-verify-cut.err') or first_line('diag-verify-cut.out')}",
+    )
+    health = document("bundle-root/boot/boot-health.json") or {}
+    records = bundles["root"]["boot_health_journal_records"] or ""
+    add(
+        "diag_boot_health",
+        "root's bundle holds the boot-health state: what tur-boot-health reports, and its journal records",
+        "boot/boot-health.json" in bundles["root"]["members"]
+        and "recent_events" in health
+        and "verdict" in health
+        and records.isdigit()
+        and int(records) > 0,
+        f"boot/boot-health.json in the bundle: {'boot/boot-health.json' in bundles['root']['members']}; its keys: "
+        f"{sorted(health)[:12]}; tur-boot-health records in the bundle's journal: {records or 'no data'}; in the "
+        f"user's bundle: {bundles['user']['boot_health_journal_records']}",
+    )
+
+    # ---- tur-device ----------------------------------------------------------------------------
+    inventory = document("device-inventory.out") or {}
+    redacted = document("device-inventory-redacted.out") or {}
+    counts = {key: len(value) for key, value in inventory.items() if isinstance(value, list)}
+    add(
+        "device_inventory",
+        "tur-device inventory describes the virtual machine's hardware",
+        codes.get("device-inventory") == 0
+        and inventory.get("redacted") is False
+        and redacted.get("redacted") is True
+        and counts.get("pci", 0) > 0
+        and counts.get("block", 0) > 0
+        and counts.get("network", 0) > 0,
+        f"exit status {codes.get('device-inventory')}; devices by category: {counts or 'no data'}",
+    )
+    problems = document("device-problems.out") or {}
+    problems_root = document("device-problems-root.out") or {}
+
+    def findings(report: dict) -> list[str]:
+        return [
+            f"{finding.get('code')}: {str(finding.get('message'))[:120]}"
+            for finding in report.get("findings") or []
+            if isinstance(finding, dict)
+        ]
+
+    add(
+        "device_problems",
+        "tur-device problems reports its findings, as the user and as root",
+        codes.get("device-problems") == 0
+        and codes.get("device-problems-root") == 0
+        and isinstance(problems.get("findings"), list)
+        and isinstance(problems_root.get("findings"), list),
+        f"as the user ({len(problems.get('findings') or [])}): {findings(problems) or 'none'}; as root "
+        f"({len(problems_root.get('findings') or [])}): {findings(problems_root) or 'none'}",
+    )
+    listed = document("device-list.out") or {}
+    one = document("device-get.out")
+    add(
+        "device_list_get",
+        "tur-device list names the devices and get shows one of them",
+        codes.get("device-list") == 0
+        and len(listed.get("devices") or []) > 0
+        and codes.get("device-get") == 0
+        and isinstance(one, dict),
+        f"{len(listed.get('devices') or [])} devices listed; get {status.get('first_device')}: exit status "
+        f"{codes.get('device-get')}",
+    )
+
+    # ---- tur-storage ---------------------------------------------------------------------------
+    volumes = document("storage-volumes.out") or {}
+    found = volumes.get("volumes") or []
+    filesystems = sorted({str(volume.get("filesystem")) for volume in found if isinstance(volume, dict)})
+    decision = document("storage-decide.out") or {}
+    add(
+        "storage_volumes",
+        "tur-storage volumes --live lists the volumes of this machine, and decide answers for one",
+        codes.get("storage-volumes") == 0
+        and volumes.get("kind") == "inventory"
+        and len(found) >= 2
+        and codes.get("storage-decide") == 0
+        and decision.get("kind") == "decision",
+        f"exit status {codes.get('storage-volumes')}; {len(found)} volumes, filesystems {filesystems}; decide "
+        f"{status.get('first_volume')} read-only: exit status {codes.get('storage-decide')}, decision "
+        f"{json.dumps((decision.get('volume') or {}).get('decision'))[:200]}",
+    )
+
+    # ---- tur-catalogue -------------------------------------------------------------------------
+    search = document("catalogue-search.out") or {}
+    route = document("catalogue-route.out") or {}
+    named = document("catalogue-route-named.out") or {}
+    hits = [hit.get("id") for hit in search.get("hits") or [] if isinstance(hit, dict)]
+    add(
+        "catalogue",
+        "tur-catalogue finds the installed catalogue by itself, validates it, searches it and routes an application",
+        codes.get("catalogue-validate") == 0
+        and codes.get("catalogue-search") == 0
+        and "com.discord.discord" in hits
+        and codes.get("catalogue-route") in (0, 3, 4)
+        and (route.get("application") or {}).get("id") == "com.discord.discord"
+        and "recommended" in route
+        and (named.get("application") or {}).get("id") == "org.libreoffice.libreoffice"
+        and codes.get("catalogue-missing") == 6,
+        f"validate: exit status {codes.get('catalogue-validate')} ({first_line('catalogue-validate.out')}); search "
+        f"discord: {hits}; route com.discord.discord: exit status {codes.get('catalogue-route')}, recommended "
+        f"{json.dumps(route.get('recommended'))[:160]}; an unknown application: exit status "
+        f"{codes.get('catalogue-missing')}",
+    )
+
+    # ---- tur-runtime ---------------------------------------------------------------------------
+    windows = document("runtime-inspect-windows.out") or {}
+    recommendation = windows.get("recommendation") or {}
+    native = (document("runtime-inspect-linux.out") or {}).get("recommendation") or {}
+    absent = [line for line in text("runtime-which.out").splitlines() if line.strip()]
+    add(
+        "runtime_windows",
+        "tur-runtime recognises a Windows program and says honestly that no runtime for it is installed",
+        codes.get("runtime-inspect-windows") == 4
+        and recommendation.get("runtime") == "wine"
+        and "wine" in (recommendation.get("missing") or [])
+        and "runtime-not-installed" in (recommendation.get("reasons") or [])
+        and "is not installed on this system" in str(recommendation.get("explanation"))
+        and len(absent) == 4
+        and all(line.endswith(": absent") for line in absent),
+        f"exit status {codes.get('runtime-inspect-windows')} (4: something is missing); runtime "
+        f"{recommendation.get('runtime')}, missing {recommendation.get('missing')}, code "
+        f"{recommendation.get('code')}: {str(recommendation.get('explanation'))[:200]}; in the image: "
+        f"{', '.join(absent) or 'no data'}",
+    )
+    add(
+        "runtime_linux",
+        "tur-runtime recognises a Linux program as one that runs directly",
+        codes.get("runtime-inspect-linux") == 0 and native.get("runtime") == "native-linux",
+        f"/usr/bin/true: exit status {codes.get('runtime-inspect-linux')}, runtime {native.get('runtime')}",
+    )
+
+    # ---- tur-update ----------------------------------------------------------------------------
+    update_root = document("update-status-root-json.out") or {}
+    update_user = text("update-status-user.out") + text("update-status-user.err")
+    system = update_root.get("system") or {}
+    add(
+        "update_status_root",
+        "as root, tur-update status --live reads the deployments from bootc and names the running one",
+        codes.get("update-status-root") == 0
+        and codes.get("update-status-root-json") == 0
+        and isinstance(system.get("booted"), dict)
+        and bool(booted.get("checksum"))
+        and str(booted.get("checksum")) in text("update-status-root-json.out"),
+        f"exit status {codes.get('update-status-root-json')}; state {update_root.get('state')}: "
+        f"{str(update_root.get('message'))[:160]}; versions: {len(update_root.get('versions') or [])}; boot health "
+        f"given: {update_root.get('boot_health') is not None}; text: {first_line('update-status-root.out')}",
+    )
+    add(
+        "update_status_user",
+        "as an ordinary user, tur-update status --live either answers or says with its error code why it cannot",
+        codes.get("update-status-user") == 0
+        or (codes.get("update-status-user") == 1 and "TUR-UPDATE-" in update_user),
+        f"exit status {codes.get('update-status-user')}: "
+        f"{' / '.join(line.strip() for line in update_user.splitlines() if line.strip())[:400] or 'no output'}",
+    )
+
+    # ---- the installer's core, the provider layer, the tool sets -------------------------------
+    disks = document("installer-inventory.out")
+    add(
+        "installer_inventory",
+        "tur-installer inventory reads this machine's block devices (a dry run: nothing is written)",
+        codes.get("installer-inventory") == 0 and disks is not None,
+        f"exit status {codes.get('installer-inventory')}: "
+        f"{first_line('installer-inventory.err') or (json.dumps(disks)[:200] if disks is not None else 'no output')}",
+    )
+    add(
+        "providers_check",
+        "tur-pax-providers check accepts a provider configuration (no network call is made)",
+        codes.get("providers-check") == 0,
+        f"exit status {codes.get('providers-check')}: "
+        f"{first_line('providers-check.out') or first_line('providers-check.err')}",
+    )
+    manifests = {name[len("pax-manifest-"):]: code for name, code in codes.items() if name.startswith("pax-manifest-")}
+    add(
+        "tool_manifests",
+        "tur-pax loads the assistant tools of each component, as installed",
+        len(manifests) == 5 and all(code == 0 for code in manifests.values()),
+        "; ".join(f"{name}: {first_line(f'pax-manifest-{name}.out') or 'exit status ' + str(code)}" for name, code in sorted(manifests.items()))
+        or "no data",
+    )
+
+    # ---- P@x end to end -------------------------------------------------------------------------
+    results = document("pax/results.json") or {}
+    pax_checks = results.get("checks") or []
+    scenarios: dict[str, list] = {}
+    for item in pax_checks:
+        scenarios.setdefault(item.get("scenario"), []).append(item)
+    failed = [f"{item.get('scenario')}: {item.get('check')}: {str(item.get('detail'))[:200]}" for item in pax_checks if not item.get("passed")]
+    scripted = sorted(name for name in scenarios if name not in ("tool sets", "controls", "everywhere"))
+    add(
+        "pax_e2e",
+        "the P@x end-to-end test (tests/pax/e2e.py: scripted provider, real tool programs, real sandbox) passes "
+        "on the installed system",
+        codes.get("pax-e2e") == 0
+        and results.get("failed") == 0
+        and results.get("passed", 0) >= 150
+        and len(scripted) >= 17
+        and results.get("real_model_called") is False,
+        f"exit status {codes.get('pax-e2e')}; {results.get('passed')} checks passed, {results.get('failed')} failed, "
+        f"in {len(scripted)} scenarios; no real model was called; "
+        + (f"failed: {' | '.join(failed[:8])}" if failed else f"last line: {first_line('pax-e2e.err') or (text('pax-e2e.out').strip().splitlines() or ['no output'])[-1][:200]}"),
+    )
+    controls = {item.get("check"): item.get("passed") for item in scenarios.get("controls", [])}
+    attacks = {item.get("check"): item.get("passed") for item in scenarios.get("sandbox-attacks", [])}
+    probe = {item.get("check"): item.get("passed") for item in scenarios.get("sandbox-probe", [])}
+    hidden = [
+        "no target was reached: network, abstract socket, session bus, display, system bus",
+        "no listener saw a connection from the sandbox",
+        "the probe ran inside the sandbox and reported on every target",
+    ]
+    add(
+        "pax_sandbox_sockets",
+        "in the read-only sandbox no socket is reached (network, abstract socket, session bus, display, system "
+        "bus), and outside it every one is: the canaries work",
+        all(attacks.get(name) is True for name in hidden)
+        and controls.get("outside the sandbox every canary listener is reached") is True
+        and controls.get("each listener counted the control connection") is True
+        and controls.get("the system bus socket exists on this machine") is True,
+        f"sandbox: {[(name[:40], attacks.get(name)) for name in hidden]}; controls: "
+        f"{[(name[:40], passed) for name, passed in controls.items() if 'listener' in name or 'bus' in name]}",
+    )
+    add(
+        "pax_sandbox_confinement",
+        "in the read-only sandbox nothing is written or deleted, no protected file is read, sudo gives nothing, "
+        "and the environment, privileges and limits are the fixed ones",
+        bool(attacks) and bool(probe) and all(attacks.values()) and all(probe.values()),
+        f"sandbox-attacks: {sum(1 for value in attacks.values() if value)}/{len(attacks)} checks; sandbox-probe: "
+        f"{sum(1 for value in probe.values() if value)}/{len(probe)} checks; bubblewrap and prlimit: "
+        f"{' / '.join(line.strip() for line in text('sandbox-tools.out').splitlines()[:3])}",
+    )
+    grant_named = document("pax-grant-as-named.out") or {}
+    grant_resolved = document("pax-grant-resolved.out") or {}
+    named_text = (text("pax-grant-as-named.out") + text("pax-grant-as-named.err")).strip()
+    add(
+        "pax_grant_through_home_link",
+        "a folder granted as the user would name it, below $HOME, is accepted although /home is a link on this system",
+        status.get("home_is_link") == "no" or "reached through a link" not in named_text,
+        f"$HOME is {status.get('home')}, which resolves to {status.get('home_resolved')}. --grant-read "
+        f"{status.get('home')}/Documents: exit status {codes.get('pax-grant-as-named')}, "
+        f"{grant_named.get('error_code') or grant_named.get('outcome')}: "
+        f"{' '.join(named_text.split())[:300]}. --grant-read {status.get('home_resolved')}/Documents: exit status "
+        f"{codes.get('pax-grant-resolved')}, {grant_resolved.get('error_code') or grant_resolved.get('outcome')}",
+        required=False,
+    )
+
+    # ---- what SELinux refused, and what failed, while they ran ----------------------------------
+    denials = [line for line in guest.text("components-avc.txt").splitlines() if "avc:" in line]
+    add(
+        "selinux_denials",
+        "SELinux refused nothing while the programs and the sandbox ran",
+        not denials,
+        f"{len(denials)} AVC denials: {' | '.join(' '.join(line.split())[:400] for line in denials[:10]) or 'none'}",
+        required=False,
+    )
+    before = {unit.get("unit") for unit in guest.json("failed-units.json") or [] if isinstance(unit, dict)}
+    after = {line.split()[0] for line in guest.text("components-failed-units.txt").splitlines() if line.strip()}
+    add(
+        "no_unit_failed",
+        "no systemd unit failed because of them",
+        after <= before,
+        f"failed before: {sorted(before) or 'none'}; after: {sorted(after) or 'none'}",
+    )
+
+    return {
+        "ran": ran,
+        "run_as": guest.status.get("components_run_as"),
+        "user": status.get("user"),
+        "selinux_context": context or None,
+        "selinux_mode": status.get("selinux_mode"),
+        "programs": [
+            {"name": row[0], "path": row[1], "exit_status": row[2], "version": row[3]} for row in versions if len(row) >= 4
+        ],
+        "exit_statuses": codes,
+        "diag_bundles": {who: {key: value for key, value in bundle.items() if key != "members"} for who, bundle in bundles.items()},
+        "device_inventory_counts": counts,
+        "device_findings": {"user": findings(problems), "root": findings(problems_root)},
+        "storage_volumes": len(found),
+        "pax_e2e": {
+            "exit_status": codes.get("pax-e2e"),
+            "passed": results.get("passed"),
+            "failed": results.get("failed"),
+            "scenarios": {name: [sum(1 for item in items if item.get("passed")), len(items)] for name, items in scenarios.items()},
+            "failed_checks": failed,
+        },
+        "avc_denials": denials,
+    }
+
+
 def counter_of(text: str) -> str | None:
     """boot_counter in the output of `grub2-editenv list`, or None."""
     return props(text).get("boot_counter")
@@ -905,6 +1325,7 @@ def main() -> int:
     boots = [check_boot(ev, boot, checks, args, allowed) for boot in BOOTS]
     boot_health = check_boot_health(ev, checks)
     boot_health["gate"] = check_gate(ev, checks)
+    components = check_components(ev, checks, args)
 
     checks.add(
         "clean_shutdown",
@@ -930,7 +1351,7 @@ def main() -> int:
     report = {
         "schema_version": 1,
         "task": "TUR-003",
-        "tasks": ["TUR-003", "TUR-005"],
+        "tasks": ["TUR-003", "TUR-005", "TUR-006"],
         "result": "pass" if checks.passed() else "fail",
         "build_id": boots[0]["build_id"] or boots[1]["build_id"] or boots[2]["build_id"],
         "expected_build_id": args.expected_build_id or None,
@@ -952,6 +1373,7 @@ def main() -> int:
         },
         "boots": boots,
         "boot_health": boot_health,
+        "components": components,
         "vm": {
             "outcome": vm.get("outcome"),
             "qemu": vm.get("qemu_version"),
@@ -1007,6 +1429,12 @@ def main() -> int:
         ("Timings (s)", ", ".join(f"{k}={v}" for k, v in timings.items())),
         ("Kind of each boot, read from the console", ", ".join(boot_health["console_sequence"]) or "no data"),
         ("GRUB boot counter", boot_health["counter_summary"]),
+        (
+            "TUR programs (second boot)",
+            f"run as {components['run_as']}, {components['selinux_context']}, SELinux {components['selinux_mode']}; "
+            f"{len(components['programs'])} programs; P@x end to end: {components['pax_e2e']['passed']} passed, "
+            f"{components['pax_e2e']['failed']} failed; AVC denials while they ran: {len(components['avc_denials'])}",
+        ),
     ]
     lines += ["", "| | |", "|---|---|"]
     lines += [f"| {key} | `{str(value).replace('|', '/')}` |" for key, value in facts]

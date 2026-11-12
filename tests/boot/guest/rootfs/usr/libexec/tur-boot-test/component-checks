@@ -1,0 +1,202 @@
+#!/usr/bin/bash
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Runs TUR's own programs on the installed, booted system. Present only in
+# the boot-test image.
+#
+#   component-checks OUT_DIR
+#
+# guest-agent starts this in the second boot, as the ordinary user it
+# created, inside that user's own session (the user's service manager), so
+# that the programs run with what a person at a terminal has: no privilege,
+# the SELinux context of a login, a runtime directory. Where a program needs
+# root to see anything, it is run a second time through sudo, which the agent
+# allowed for this user for the length of the test.
+#
+# It records and decides nothing: every command's output goes to
+# OUT_DIR/<name>.out and <name>.err and its exit status to
+# OUT_DIR/exit-status.tsv. tests/boot/report.py on the host turns that into
+# checks. The P@x end-to-end test (tests/pax/e2e.py, unchanged) does decide;
+# its own results are in OUT_DIR/pax/.
+set -u
+
+out="${1:?output directory required}"
+mkdir -p "${out}" || exit 1
+cd "${out}" || exit 1
+status="${out}/status"
+: > "${status}"
+: > "${out}/exit-status.tsv"
+
+put() { printf '%s=%s\n' "$1" "$2" >> "${status}"; }
+
+# run NAME COMMAND...: keep what a command prints; note its exit status.
+run() {
+    local name="$1" rc
+    shift
+    timeout 300 "$@" > "${out}/${name}.out" 2> "${out}/${name}.err" < /dev/null
+    rc=$?
+    printf '%s\t%s\n' "${name}" "${rc}" >> "${out}/exit-status.tsv"
+    return "${rc}"
+}
+
+# ---- who runs this, and as what ------------------------------------------------
+real_home="$(readlink -f "${HOME:-/nonexistent}")"
+put started_utc "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+put user "$(id -un)"
+put uid "$(id -u)"
+put selinux_context "$(id -Z 2>&1)"
+put selinux_mode "$(getenforce 2>&1)"
+put home "${HOME:-}"
+put home_resolved "${real_home}"
+put xdg_runtime_dir "${XDG_RUNTIME_DIR:-}"
+put search_path "${PATH:-}"
+run context-id id
+run context-cgroup cat /proc/self/cgroup
+run context-user loginctl show-user "$(id -un)"
+run context-sudo sudo -n /usr/bin/id -u
+run context-sudo-label sudo -n /usr/bin/id -Z
+run labels /bin/bash -c 'ls -Z /usr/bin/tur-* /usr/libexec/tur /usr/bin/bwrap /usr/bin/prlimit; ls -dZ /usr/share/tur /usr/share/tur/catalogue /usr/share/tur/pax/tools /usr/share/tur/pax/tools/*/*'
+# shellcheck disable=SC2016  # expanded by the shell that runs the snippet
+run sandbox-tools /bin/bash -c 'bwrap --version; prlimit --version; stat -c "%A %U:%G %n" /usr/bin/bwrap; for key in user.max_user_namespaces kernel.unprivileged_userns_clone; do printf "%s = " "${key}"; sysctl -n "${key}" 2>&1; done'
+
+# ---- every program: is it there, and does it run ----------------------------------
+: > "${out}/versions.tsv"
+while IFS=$'\t' read -r program path component tools; do
+    case "${program}" in "#"* | "") continue ;; esac
+    said="$("${path}" --version 2>&1 < /dev/null)"
+    rc=$?
+    printf '%s\t%s\t%s\t%s\t%s\t%s\n' "${program}" "${path}" "${rc}" "$(printf '%s' "${said}" | head -n1)" \
+        "${component}" "${tools}" >> "${out}/versions.tsv"
+done < /usr/lib/tur/programs.tsv
+
+# ---- tur-diag ----------------------------------------------------------------------
+# bundle_facts WHO FILE: what a bundle holds, without unpacking the journals.
+bundle_facts() {
+    local who="$1" file="$2"
+    put "bundle_${who}_bytes" "$(stat -c %s "${file}" 2> /dev/null)"
+    run "diag-bundle-${who}-listing" tar --zstd -tvf "${file}"
+    mkdir -p "${out}/bundle-${who}"
+    tar --zstd -xf "${file}" -C "${out}/bundle-${who}" manifest.json README.txt redaction-report.json \
+        checksums.sha256 services/tur-service-status.txt system/kernel-cmdline.txt system/tur-release.txt \
+        system/failed-units.txt system/deployment.json storage/mounts.txt hardware/pci.txt \
+        boot/boot-health.json 2> "${out}/bundle-${who}-extract.err"
+    # The boot-health material a bundle can hold today: the records
+    # tur-boot-health wrote to the journal.
+    put "bundle_${who}_boot_health_journal_records" \
+        "$(tar --zstd -xOf "${file}" boot/current-journal.jsonl 2> /dev/null | grep -c '"SYSLOG_IDENTIFIER":"tur-boot-health"')"
+    put "bundle_${who}_journal_lines" "$(tar --zstd -xOf "${file}" boot/current-journal.jsonl 2> /dev/null | wc -l)"
+}
+
+run diag-status tur-diag status
+run diag-status-json tur-diag status --json
+run diag-status-json-root sudo -n tur-diag status --json
+rm -f "${out}/bundle-user.tar.zst" "${out}/bundle-root.tar.zst"
+run diag-collect-user tur-diag collect --output "${out}/bundle-user.tar.zst"
+run diag-verify-user tur-diag verify-bundle "${out}/bundle-user.tar.zst"
+bundle_facts user "${out}/bundle-user.tar.zst"
+run diag-collect-root sudo -n tur-diag collect --output "${out}/bundle-root.tar.zst"
+run diag-verify-root sudo -n tur-diag verify-bundle "${out}/bundle-root.tar.zst"
+sudo -n chown "$(id -u):$(id -g)" "${out}/bundle-root.tar.zst" 2> /dev/null
+bundle_facts root "${out}/bundle-root.tar.zst"
+# A bundle that was altered must not verify.
+if [ -s "${out}/bundle-user.tar.zst" ]; then
+    head -c 4096 "${out}/bundle-user.tar.zst" > "${out}/bundle-cut.tar.zst"
+    run diag-verify-cut tur-diag verify-bundle "${out}/bundle-cut.tar.zst"
+    rm -f "${out}/bundle-cut.tar.zst"
+fi
+# The user's bundle is kept as numbers only; root's is kept whole.
+rm -f "${out}/bundle-user.tar.zst"
+
+# ---- tur-device: the virtual machine's real hardware -----------------------------------
+run device-inventory tur-device inventory --json
+run device-inventory-redacted tur-device inventory --json --redact
+run device-inventory-text tur-device inventory
+run device-problems tur-device problems --json
+run device-problems-text tur-device problems
+run device-problems-root sudo -n tur-device problems --json
+run device-list tur-device list --json
+device="$(jq -r '.devices[0].id // empty' "${out}/device-list.out" 2> /dev/null)"
+put first_device "${device}"
+if [ -n "${device}" ]; then run device-get tur-device get --json -- "${device}"; fi
+
+# ---- tur-storage: the volumes of this machine -------------------------------------------
+run storage-volumes tur-storage volumes --live --json
+run storage-volumes-text tur-storage volumes --live
+volume="$(jq -r '.volumes[0].id // empty' "${out}/storage-volumes.out" 2> /dev/null)"
+put first_volume "${volume}"
+if [ -n "${volume}" ]; then
+    run storage-decide tur-storage decide --live --json --volume "${volume}" --access read-only
+fi
+
+# ---- tur-catalogue: the installed catalogue ----------------------------------------------
+# From a directory that has no "catalogue" in it, so that the program has to
+# find the installed one by itself.
+cd / || exit 1
+run catalogue-validate tur-catalogue validate
+run catalogue-search tur-catalogue search discord --json
+run catalogue-search-text tur-catalogue search office
+run catalogue-show tur-catalogue show com.discord.discord --json
+run catalogue-route tur-catalogue route com.discord.discord --json
+run catalogue-route-text tur-catalogue route com.microsoft.office
+run catalogue-route-named tur-catalogue --catalogue /usr/share/tur/catalogue route org.libreoffice.libreoffice --json
+run catalogue-missing tur-catalogue show org.example.missing --json
+cd "${out}" || exit 1
+
+# ---- tur-runtime: a Windows program, on a system with no Windows runtime ---------------
+run runtime-fixture /usr/libexec/tur-boot-test/make-pe-fixture "${out}/fixture-gui.exe"
+run runtime-inspect-windows tur-runtime inspect --json "${out}/fixture-gui.exe"
+run runtime-inspect-windows-text tur-runtime inspect "${out}/fixture-gui.exe"
+run runtime-inspect-linux tur-runtime inspect --json /usr/bin/true
+# shellcheck disable=SC2016  # expanded by the shell that runs the snippet
+run runtime-which /bin/bash -c 'for name in wine wine64 wineserver umu-run; do printf "%s: " "${name}"; command -v "${name}" || echo absent; done'
+
+# ---- tur-update: the deployments of this machine ---------------------------------------------
+run boot-health-status tur-boot-health status --json
+run update-status-user tur-update status --live
+run update-status-user-json tur-update status --live --json
+run update-status-root sudo -n tur-update status --live --boot-health "${out}/boot-health-status.out"
+run update-status-root-json sudo -n tur-update status --live --json --boot-health "${out}/boot-health-status.out"
+run update-check-root-json sudo -n tur-update check --live --json --boot-health "${out}/boot-health-status.out"
+run update-commands tur-update commands
+
+# ---- the installer's core and the provider layer: they run, on real input ---------------
+run installer-lsblk lsblk --json --bytes --output-all
+run installer-inventory /usr/libexec/tur/tur-installer inventory --from "${out}/installer-lsblk.out" --json
+printf '%s\n' '{"schema_version": 1, "provider": "anthropic", "model": "none", "max_output_tokens": 64}' \
+    > "${out}/provider.json"
+run providers-check /usr/libexec/tur/tur-pax-providers check --config "${out}/provider.json"
+
+# ---- tur-pax: the tool sets as installed -----------------------------------------------------
+for manifest in /usr/share/tur/pax/tools/*/agent-tools.json; do
+    run "pax-manifest-$(basename "$(dirname "${manifest}")")" tur-pax manifest validate "${manifest}"
+done
+
+# ---- tur-pax: a grant named through /home, which is a link on this system -----------------
+# No provider is reached: the address is a closed port on this machine.
+mkdir -p "${real_home}/Documents"
+printf '%s\n' '{"schema_version": 1, "provider": "anthropic", "base_url": "http://127.0.0.1:9", "model": "none", "max_output_tokens": 64, "timeouts": {"connect_ms": 2000, "response_ms": 2000, "idle_ms": 2000}, "retry": {"max_attempts": 1, "initial_delay_ms": 10, "max_delay_ms": 100}}' \
+    > "${out}/provider-closed.json"
+export TUR_PAX_API_KEY="sk-test-KEY-boot-0123456789abcdef"
+if [ "${HOME:-}" != "${real_home}" ]; then put home_is_link yes; else put home_is_link no; fi
+run pax-grant-as-named tur-pax run "Say hello." --json --provider-config "${out}/provider-closed.json" \
+    --audit-log "${out}/pax-grant-as-named.audit.jsonl" --grant-read "${HOME:-}/Documents"
+run pax-grant-resolved tur-pax run "Say hello." --json --provider-config "${out}/provider-closed.json" \
+    --audit-log "${out}/pax-grant-resolved.audit.jsonl" --grant-read "${real_home}/Documents"
+unset TUR_PAX_API_KEY
+
+# ---- P@x end to end: tests/pax/e2e.py, as the pax workflow runs it ----------------------------
+e2e=/usr/share/tur-pax-e2e/repo/tests/pax/e2e.py
+mkdir -p "${out}/pax"
+put pax_e2e_started_uptime "$(cut -d' ' -f1 /proc/uptime)"
+timeout 1200 python3 -B "${e2e}" \
+    --tur-pax /usr/bin/tur-pax \
+    --tur-pax-memory /usr/bin/tur-pax-memory \
+    --work-dir "${real_home}/tur-pax-e2e/work" \
+    --evidence "${out}/pax" > "${out}/pax-e2e.out" 2> "${out}/pax-e2e.err" < /dev/null
+rc=$?
+printf '%s\t%s\n' "pax-e2e" "${rc}" >> "${out}/exit-status.tsv"
+put pax_e2e_exit_status "${rc}"
+put pax_e2e_finished_uptime "$(cut -d' ' -f1 /proc/uptime)"
+
+put finished_utc "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+touch "${out}/finished"

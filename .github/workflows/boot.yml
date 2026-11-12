@@ -10,8 +10,22 @@ on:
     branches: [main]
     paths:
       - "image/**"
-      # Programs compiled into the image, and what they are compiled with.
+      # Programs compiled into the image (image/programs.tsv), what they are
+      # compiled with, and what is installed beside them. Each is run on the
+      # booted system, the P@x end-to-end test among them.
       - "services/tur-boot-health/**"
+      - "services/tur-catalogue/**"
+      - "services/tur-device-manager/**"
+      - "services/tur-diagnostics/**"
+      - "services/tur-pax/**"
+      - "services/tur-pax-memory/**"
+      - "services/tur-pax-providers/**"
+      - "services/tur-runtime/**"
+      - "services/tur-storage/**"
+      - "services/tur-update/**"
+      - "installer/tur-installer-core/**"
+      - "catalogue/**"
+      - "tests/pax/**"
       - "crates/**"
       - "rust-toolchain.toml"
       - "tests/boot/**"
@@ -21,8 +35,22 @@ on:
   pull_request:
     paths:
       - "image/**"
-      # Programs compiled into the image, and what they are compiled with.
+      # Programs compiled into the image (image/programs.tsv), what they are
+      # compiled with, and what is installed beside them. Each is run on the
+      # booted system, the P@x end-to-end test among them.
       - "services/tur-boot-health/**"
+      - "services/tur-catalogue/**"
+      - "services/tur-device-manager/**"
+      - "services/tur-diagnostics/**"
+      - "services/tur-pax/**"
+      - "services/tur-pax-memory/**"
+      - "services/tur-pax-providers/**"
+      - "services/tur-runtime/**"
+      - "services/tur-storage/**"
+      - "services/tur-update/**"
+      - "installer/tur-installer-core/**"
+      - "catalogue/**"
+      - "tests/pax/**"
       - "crates/**"
       - "rust-toolchain.toml"
       - "tests/boot/**"
@@ -55,13 +83,19 @@ jobs:
         run: |
           shellcheck --version | sed -n 2p
           shellcheck -x tests/boot/*.sh tests/boot/guest/rootfs/usr/libexec/tur-boot-test/guest-agent \
-            tests/boot/guest/rootfs/usr/libexec/tur-boot-test/scenario-agent
+            tests/boot/guest/rootfs/usr/libexec/tur-boot-test/scenario-agent \
+            tests/boot/guest/rootfs/usr/libexec/tur-boot-test/component-checks
           python3 -m py_compile tests/boot/*.py
+          python3 - <<'EOF'
+          import ast
+          path = "tests/boot/guest/rootfs/usr/libexec/tur-boot-test/make-pe-fixture"
+          ast.parse(open(path).read(), path)
+          EOF
 
   boot:
     name: Install to disk and boot under UEFI in QEMU/KVM
     runs-on: ubuntu-24.04
-    timeout-minutes: 75
+    timeout-minutes: 100
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
@@ -152,7 +186,9 @@ jobs:
         # Three boots: as installed, after first-run setup, and one with GRUB's
         # boot counter set by hand (ADR-0014, step 2 of the design's brief). The
         # third waits about three minutes for the automount behind /boot to expire.
-        run: python3 tests/boot/run-vm.py --disk "$WORK/disk.raw" --work "$WORK" --out "$OUT" --timeout 1500
+        # In the second, TUR's own programs are run as an ordinary user, the
+        # P@x end-to-end test among them (docs/reports/TUR-006.md).
+        run: python3 tests/boot/run-vm.py --disk "$WORK/disk.raw" --work "$WORK" --out "$OUT" --timeout 3000
 
       - name: Recover the journal from the disk
         if: always()
@@ -196,6 +232,12 @@ jobs:
             show "$OUT/guest/$boot/prepare-second-boot.txt"
             show "$OUT/guest/$boot/exit-status.tsv"
           done
+          show "$OUT/guest/second-boot/components-session.txt"
+          show "$OUT/guest/second-boot/components/status"
+          show "$OUT/guest/second-boot/components/exit-status.tsv"
+          show "$OUT/guest/second-boot/components/pax-e2e.out" 120
+          show "$OUT/guest/second-boot/components/pax-e2e.err" 40
+          show "$OUT/guest/second-boot/components-avc.txt" 60
           show "$OUT/host/qemu.log"
           echo "::group::serial console, last 150 lines"
           if [ -f "$OUT/serial.log" ]; then

@@ -17,6 +17,8 @@ on:
     paths:
       - "image/**"
       - "services/tur-boot-health/**"
+      # The scenarios end with a support bundle from the surviving system.
+      - "services/tur-diagnostics/**"
       - "crates/**"
       - "rust-toolchain.toml"
       - "tests/boot/**"
@@ -27,6 +29,8 @@ on:
     paths:
       - "image/**"
       - "services/tur-boot-health/**"
+      # The scenarios end with a support bundle from the surviving system.
+      - "services/tur-diagnostics/**"
       - "crates/**"
       - "rust-toolchain.toml"
       - "tests/boot/**"
