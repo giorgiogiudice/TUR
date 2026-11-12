@@ -184,3 +184,33 @@ jobs:
           name: tur-image-metadata
           path: out/
           if-no-files-found: warn
+
+      # The image every step above tested, kept for the release workflow,
+      # which publishes it without building it again (ADR-0023;
+      # docs/architecture/publishing.md). Only when every step passed. The
+      # image ID is the digest of the image's configuration, which names
+      # every layer by the digest of its content: the release workflow
+      # checks it before it uses the archive.
+      - name: Export the tested image for the release workflow
+        if: success()
+        run: |
+          dir="$RUNNER_TEMP/tur-image"
+          mkdir -p "$dir"
+          $PODMAN image inspect -f '{{.Id}}' "$IMAGE" > "$dir/image-id"
+          echo "$BUILD_ID" > "$dir/build-id"
+          git rev-parse HEAD > "$dir/source-revision"
+          start=$(date +%s)
+          sudo skopeo copy --quiet --dest-compress-format zstd \
+            "containers-storage:$IMAGE" "oci-archive:$dir/tur-image.oci.tar"
+          sudo chown "$(id -u):$(id -g)" "$dir/tur-image.oci.tar"
+          echo "export: $(( $(date +%s) - start )) s"
+          ls -la "$dir"; cat "$dir/image-id" "$dir/build-id" "$dir/source-revision"
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: success()
+        with:
+          name: tur-image-oci
+          path: ${{ runner.temp }}/tur-image/
+          compression-level: 0
+          retention-days: 5
+          if-no-files-found: error

@@ -277,6 +277,54 @@ find "${third}" -type f -printf '%s %P\n' | sort -rn | head -n 12 | sed 's/^/   
 check "what TUR adds is readable by every user" bash -c \
     '[ -z "$(find /usr/share/tur /usr/share/licenses/tur /usr/share/licenses/tur-third-party /usr/share/licenses/tur-grub-boot-count /usr/lib/tur /usr/libexec/tur \( -type d ! -perm -0555 \) -o \( -type f ! -perm -0444 \) | head -n 5)" ]'
 
+# Signed updates (ADR-0023; docs/architecture/publishing.md). The rule for
+# TUR's registry path is in the vendor policy, nothing in /etc hides it, and
+# the rest of the base's policy is as it was.
+policy=/usr/share/containers/policy.json
+signing=/usr/share/tur/signing
+check "no /etc/containers/policy.json hides the vendor policy" test ! -e /etc/containers/policy.json
+check "the vendor policy requires TUR's signature for ghcr.io/giorgiogiudice/tur, and only there" python3 -I -c '
+import json, sys
+p = json.load(open(sys.argv[1]))
+rule = p["transports"]["docker"]["ghcr.io/giorgiogiudice/tur"]
+assert rule == [{"type": "sigstoreSigned", "keyPath": sys.argv[2] + "/release.pub",
+                 "rekorPublicKeyPath": sys.argv[2] + "/rekor.pub",
+                 "signedIdentity": {"type": "matchRepository"}}], rule
+assert p["default"] == [{"type": "insecureAcceptAnything"}], p["default"]
+others = [s for t in p["transports"].values() for s in t if "giorgiogiudice" in s and s != "ghcr.io/giorgiogiudice/tur"]
+assert not others, others
+' "${policy}" "${signing}"
+check "Rekor's key and Fulcio's chain are in the image" bash -c \
+    'grep -q "BEGIN PUBLIC KEY" "$1/rekor.pub" && [ "$(grep -c "BEGIN CERTIFICATE" "$1/fulcio.crt")" = 2 ]' _ "${signing}"
+check "registries.d says where TUR's signatures are" bash -c \
+    'grep -A1 -x "  ghcr.io/giorgiogiudice/tur:" /usr/share/containers/registries.d/tur.yaml | grep -q "use-sigstore-attachments: true"'
+if [ -e "${signing}/release.pub" ]; then
+    check "TUR's release key is a public key" grep -q "BEGIN PUBLIC KEY" "${signing}/release.pub"
+else
+    echo "NOTE  ${signing}/release.pub is absent: every image from ghcr.io/giorgiogiudice/tur is refused until the owner adds it"
+fi
+# The container libraries read the whole policy before any copy: a copy
+# between two OCI layouts proves that the file parses and that the oci:
+# transport, which the boot-health scenarios update from, is still accepted.
+cat > /tmp/tur-oci.py <<'PY'
+import hashlib, json, os, sys
+d = sys.argv[1]
+os.makedirs(d + "/blobs/sha256", exist_ok=True)
+def put(data):
+    digest = hashlib.sha256(data).hexdigest()
+    open(f"{d}/blobs/sha256/{digest}", "wb").write(data)
+    return {"digest": "sha256:" + digest, "size": len(data)}
+config = put(json.dumps({"architecture": "amd64", "os": "linux", "rootfs": {"type": "layers", "diff_ids": []}}).encode())
+manifest = put(json.dumps({"schemaVersion": 2, "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                           "config": dict(config, mediaType="application/vnd.oci.image.config.v1+json"), "layers": []}).encode())
+open(d + "/oci-layout", "w").write('{"imageLayoutVersion": "1.0.0"}')
+open(d + "/index.json", "w").write(json.dumps({"schemaVersion": 2, "manifests": [dict(
+    manifest, mediaType="application/vnd.oci.image.manifest.v1+json",
+    annotations={"org.opencontainers.image.ref.name": "probe"})]}))
+PY
+check "the policy parses, and oci: images are still accepted" bash -c \
+    'python3 -I /tmp/tur-oci.py /tmp/tur-oci && skopeo copy --quiet oci:/tmp/tur-oci:probe oci:/tmp/tur-oci-copy:probe'
+
 # The unit graph (design section 6.1). Printed in full: a warning here is
 # worth reading even when the check passes.
 echo "--- systemd-analyze verify"

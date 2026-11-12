@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# TUR's images are signed with sigstore signatures stored beside the image in
+# the registry, as cosign stores them (the tag sha256-<digest>.sig). The
+# container policy (/usr/share/containers/policy.json, image/signing/policy.py)
+# requires such a signature for this repository; this entry tells the
+# container libraries to look for it. See containers-registries.d(5) and
+# docs/architecture/publishing.md.
+#
+# The entry is looked up by the registry an image is actually fetched from: a
+# mirror of this repository needs an entry of its own.
+docker:
+  ghcr.io/giorgiogiudice/tur:
+    use-sigstore-attachments: true

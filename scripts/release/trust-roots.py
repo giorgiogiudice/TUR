@@ -14,7 +14,7 @@ distributes it (cosign keeps the verified copy under ~/.sigstore/root after
   containers/image can check offline (`rekorPublicKeyPath` in
   containers-policy.json(5)). Rekor v2 logs (`log20xx-N.rekor.sigstore.dev`)
   give no signed entry timestamp and are left out.
-- `fulcio.pem`: the certificate chain of the Fulcio instance at
+- `fulcio.crt`: the certificate chain of the Fulcio instance at
   https://fulcio.sigstore.dev that is valid now (no end date), intermediate
   first, then root (`caPath` of a `fulcio` requirement).
 
@@ -55,7 +55,7 @@ def render(root: dict) -> dict[str, str]:
     chain = cas[0]["certChain"]["certificates"]
     return {
         "rekor.pub": pem("PUBLIC KEY", key["rawBytes"]),
-        "fulcio.pem": "".join(pem("CERTIFICATE", c["rawBytes"]) for c in chain),
+        "fulcio.crt": "".join(pem("CERTIFICATE", c["rawBytes"]) for c in chain),
     }
 
 

@@ -132,6 +132,15 @@ RUN set -eu; \
     ln -sf /dev/null /usr/lib/systemd/system/bootc-fetch-apply-updates.timer; \
     ln -sf /dev/null /usr/lib/systemd/user/grub-boot-success.timer
 
+# Signed updates (ADR-0023; image/README.md, "Signed updates"): the vendor
+# container policy gains one rule, for TUR's registry path only. An image
+# named ghcr.io/giorgiogiudice/tur is accepted only with a signature by TUR's
+# release key that is in Sigstore's public log; every other source and
+# transport keeps the base's policy. The keys and the registries.d entry come
+# with rootfs/ above.
+RUN --mount=type=bind,source=image/signing,target=/run/tur-signing \
+    python3 -I -B /run/tur-signing/policy.py /usr/share/containers/policy.json
+
 # Fedora's marks replaced (desktop-experience.md, section 12; image/README.md,
 # "Fedora's marks"): Fedora's release and logo packages swapped for Fedora's
 # mark-free generic ones (pinned in image/branding/packages.lock); TUR's

@@ -1,0 +1,293 @@
+#!/usr/bin/bash
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# TUR signed-update test agent (ADR-0023; docs/architecture/publishing.md,
+# section 7). Present only in the boot-test image.
+#
+# tests/boot/signed-update.py starts the prepared disk with opt/org.tur/signed-update
+# in QEMU's fw_cfg; guest-agent hands over to this script. The host runs a
+# registry that holds the image under release, signed, and three images that
+# must be refused, at the same repository. The computer is asked, with plain
+# `bootc switch` and the container policy the image ships, to follow
+# ghcr.io/giorgiogiudice/tur:
+#
+#   unsigned    no signature at all
+#   other-key   signed with another key, entered in Rekor
+#   no-log      signed with the right key, not entered in Rekor
+#   signed      the image under release: accepted, staged, then started
+#
+# After each refusal it records that nothing was staged: no staged
+# deployment, no new deployment, no image reference added to OSTree's
+# repository. Then it switches to the signed image, records what was staged,
+# leaves a reporter for the new version (below) and restarts. It decides
+# nothing: the host turns the facts into checks.
+#
+# What is test plumbing, and what is the product:
+#
+# - registries.conf.d (in /etc): ghcr.io/giorgiogiudice/tur is fetched from
+#   the host's registry (http://10.0.2.2:5000/tur). The name the policy
+#   matches is still ghcr.io/giorgiogiudice/tur: containers/image applies
+#   the policy to the name asked for, not to where it is fetched from.
+# - registries.d (in /etc): the same lookaside setting the image ships for
+#   ghcr.io/giorgiogiudice/tur, for the host's registry. containers/image
+#   looks signatures up at the registry it fetches from.
+# - only when the host passes a test key (publishing is off and the release
+#   key does not exist): a tmpfs over /usr/share/tur/signing with the files
+#   the image ships there plus that key as release.pub. With publishing on,
+#   nothing is put over the image's own key.
+# - the policy file itself, /usr/share/containers/policy.json, is never
+#   touched.
+#
+# The new version carries no test agent (it is the product image). The
+# reporter is a unit written to /etc and a script in /var: OSTree carries
+# /etc into the new deployment when it finalises it, and /var is shared. It
+# waits for boot health to mark the boot good, sends a report and powers off.
+#
+# Markers (all start with "TUR-BOOT-TEST: "):
+#   SIGNED-START, SIGNED-CASE name=… rc=… staged=…, SIGNED-STAGED …,
+#   SIGNED-RESTARTING, SIGNED-BOOTED …, SIGNED-REPORT …, SIGNED-COMPLETE …,
+#   SIGNED-PROBLEM …
+set -u
+
+port="/dev/virtio-ports/org.tur.boottest"
+state=/var/lib/tur-signed-test
+signing=/usr/share/tur/signing
+
+fw() {
+    local file="/sys/firmware/qemu_fw_cfg/by_name/opt/org.tur/$1/raw"
+    if [ -r "${file}" ]; then tr -d '\000\n' < "${file}"; fi
+}
+say() { printf 'TUR-BOOT-TEST: %s\n' "$*"; }
+uptime_s() { cut -d' ' -f1 /proc/uptime; }
+
+logical="$(fw logical)"
+physical="$(fw physical)"
+digest="$(fw digest)"
+signed="$(fw signed)"
+cases="$(fw cases)"
+key="$(fw key)"
+
+mkdir -p "${state}"
+if [ -e "${state}/staged" ]; then
+    # The previous version again: the new one was not kept, or never started.
+    name="back-$(date +%s)"
+else
+    name=stage
+fi
+out="${state}/report/${name}"
+rm -rf "${out}"
+mkdir -p "${out}"
+status="${out}/status"
+: > "${status}"
+put() { printf '%s=%s\n' "$1" "$2" >> "${status}"; }
+cap() {
+    local file="$1" rc
+    shift
+    timeout 120 "$@" > "${out}/${file}" 2>&1
+    rc=$?
+    printf '%s\t%s\n' "${file}" "${rc}" >> "${out}/exit-status.tsv"
+    return 0
+}
+send() {
+    local start="${SECONDS}"
+    until [ -e "${port}" ] || [ $((SECONDS - start)) -ge 20 ]; do sleep 1; done
+    if [ -e "${port}" ] && tar -C "${state}/report" -cf - "${name}" > "${port}"; then
+        say "SIGNED-REPORT report=${name}"
+    else
+        say "SIGNED-PROBLEM the report ${name} could not be sent"
+    fi
+    sync
+}
+finish() {
+    for _ in 1 2 3; do
+        sleep 1
+        say "SIGNED-COMPLETE $*"
+    done
+    sleep 600
+    systemctl poweroff
+    exit 0
+}
+staged_digest() {
+    bootc status --format=json 2> /dev/null | python3 -c '
+import json, sys
+s = (json.load(sys.stdin).get("status") or {}).get("staged") or {}
+print(((s.get("image") or {}).get("imageDigest")) or "")'
+}
+deployments() { find /ostree/deploy/*/deploy -mindepth 1 -maxdepth 1 -type d -printf '%f\n' 2> /dev/null | sort | tr '\n' ' '; }
+image_refs() { ostree refs --repo=/sysroot/ostree/repo 2> /dev/null | grep -c '^ostree/container/'; }
+objects() { find /sysroot/ostree/repo/objects -type f 2> /dev/null | wc -l; }
+
+say "SIGNED-START report=${name} uptime=$(uptime_s)"
+put report "${name}"
+put build_id "$(sed -n 's/^BUILD_ID=//p' /usr/lib/os-release | tr -d '"')"
+
+# Let this boot be judged first, as the scenarios do.
+start="${SECONDS}"
+until [ "$(systemctl show -p ActiveState --value tur-boot-mark-good.service)" = active ] \
+    || [ $((SECONDS - start)) -ge 480 ]; do
+    sleep 2
+done
+put mark_good_before "$(systemctl show -p ActiveState --value tur-boot-mark-good.service)"
+
+cap bootc-status-before.json bootc status --format=json
+cap policy.json cat /usr/share/containers/policy.json
+cap etc-policy.txt ls -la /etc/containers/policy.json
+cap registries-d.txt bash -c 'for f in /usr/share/containers/registries.d/*.yaml /etc/containers/registries.d/*.yaml; do echo "### $f"; cat "$f"; done'
+cap signing-shipped.txt bash -c "ls -la ${signing}; sha256sum ${signing}/*"
+cap versions.txt bash -c 'bootc --version; skopeo --version; rpm -q containers-common skopeo bootc ostree'
+
+if [ "${name}" != stage ]; then
+    cap bootc-status.json bootc status --format=json
+    put running_digest "$(bootc status --format=json | python3 -c 'import json,sys; print(((json.load(sys.stdin)["status"].get("booted") or {}).get("image") or {}).get("imageDigest") or "")')"
+    send
+    finish "report=${name} outcome=previous-version"
+fi
+
+# --- test plumbing ----------------------------------------------------------------
+mkdir -p /etc/containers/registries.conf.d /etc/containers/registries.d
+cat > /etc/containers/registries.conf.d/99-tur-signed-test.conf <<EOF
+[[registry]]
+prefix = "${logical}"
+location = "${physical}"
+insecure = true
+EOF
+cat > /etc/containers/registries.d/99-tur-signed-test.yaml <<EOF
+docker:
+  ${physical}:
+    use-sigstore-attachments: true
+EOF
+if [ -n "${key}" ]; then
+    tmp="$(mktemp -d)"
+    cp -a "${signing}/." "${tmp}/"
+    printf '%s' "${key}" | base64 -d > "${tmp}/release.pub"
+    mount -t tmpfs -o mode=0755 tur-signing-test "${signing}"
+    cp -a "${tmp}/." "${signing}/"
+    chmod 0644 "${signing}"/*
+    put test_key "a test key over ${signing}/release.pub (publishing is off)"
+else
+    put test_key "none: the image's own release key"
+fi
+cap signing-used.txt bash -c "findmnt ${signing}; ls -la ${signing}; sha256sum ${signing}/*"
+cap plumbing.txt bash -c 'cat /etc/containers/registries.conf.d/99-tur-signed-test.conf /etc/containers/registries.d/99-tur-signed-test.yaml'
+
+# --- the refusals -------------------------------------------------------------------
+for pair in ${cases}; do
+    case_name="${pair%%=*}"
+    tag="${pair#*=}"
+    before_dep="$(deployments)" before_refs="$(image_refs)" before_objects="$(objects)"
+    say "SIGNED-CASE-SWITCHING name=${case_name} image=${logical}:${tag}"
+    timeout 600 bootc switch "${logical}:${tag}" > "${out}/switch-${case_name}.txt" 2>&1
+    rc=$?
+    staged="$(staged_digest)"
+    after_dep="$(deployments)" after_refs="$(image_refs)" after_objects="$(objects)"
+    put "case_${case_name}_rc" "${rc}"
+    put "case_${case_name}_staged" "${staged:-none}"
+    put "case_${case_name}_deployments_before" "${before_dep}"
+    put "case_${case_name}_deployments_after" "${after_dep}"
+    put "case_${case_name}_image_refs" "${before_refs}->${after_refs}"
+    put "case_${case_name}_objects" "${before_objects}->${after_objects}"
+    put "case_${case_name}_message" "$(grep -m1 -o 'Source image rejected.*' "${out}/switch-${case_name}.txt" | cut -c1-300)"
+    say "SIGNED-CASE name=${case_name} rc=${rc} staged=${staged:-none} refs=${before_refs}->${after_refs}"
+    tail -n 3 "${out}/switch-${case_name}.txt" | while read -r line; do say "bootc switch (${case_name}): ${line}"; done
+done
+
+# For the update manager: bootc's own flag refuses any policy whose default
+# accepts anything, and the base's default does (publishing.md, section 5).
+timeout 300 bootc switch --enforce-container-sigpolicy "${logical}:${signed}" > "${out}/switch-enforce-flag.txt" 2>&1
+put enforce_flag_rc "$?"
+put enforce_flag_staged "$(staged_digest)"
+if [ -n "$(staged_digest)" ]; then
+    # Not expected; whatever was staged is replaced by the switch below.
+    say "SIGNED-NOTE --enforce-container-sigpolicy staged $(staged_digest)"
+fi
+
+# --- the signed image ---------------------------------------------------------------
+say "SIGNED-SWITCHING image=${logical}:${signed} expect=${digest} uptime=$(uptime_s)"
+start_ns="$(date +%s%N)"
+timeout 1500 bootc switch "${logical}:${signed}" > "${out}/switch-signed.txt" 2>&1
+rc=$?
+put signed_rc "${rc}"
+put signed_milliseconds "$((($(date +%s%N) - start_ns) / 1000000))"
+put signed_staged "$(staged_digest)"
+cap bootc-status-staged.json bootc status --format=json
+cap bootc-status-staged.txt bootc status
+say "SIGNED-STAGED rc=${rc} staged=$(staged_digest) uptime=$(uptime_s)"
+tail -n 3 "${out}/switch-signed.txt" | while read -r line; do say "bootc switch (signed): ${line}"; done
+if [ "${rc}" -ne 0 ] || [ "$(staged_digest)" != "${digest}" ]; then
+    journalctl -b --no-pager -o short-monotonic > "${out}/journal.txt" 2>&1
+    send
+    say "SIGNED-PROBLEM the signed image was not staged as ${digest}"
+    finish "report=${name} outcome=not-staged"
+fi
+
+# --- the reporter for the new version ------------------------------------------------
+cat > "${state}/observe" <<'OBSERVE'
+#!/usr/bin/bash
+# Written by the signed-update test agent; runs once in the new version.
+set -u
+state=/var/lib/tur-signed-test
+name="new-version"
+out="${state}/report/${name}"
+port=/dev/virtio-ports/org.tur.boottest
+rm -rf "${out}"; mkdir -p "${out}"
+say() { printf 'TUR-BOOT-TEST: %s\n' "$*"; }
+if [ -e /usr/libexec/tur-boot-test/guest-agent ]; then
+    # The previous version, which has its own agent: it reports.
+    exit 0
+fi
+start="${SECONDS}"
+until [ "$(systemctl show -p ActiveState --value tur-boot-mark-good.service)" = active ] \
+    || [ "$(systemctl show -p ActiveState --value tur-boot-health.service)" = failed ] \
+    || [ $((SECONDS - start)) -ge 600 ]; do
+    sleep 2
+done
+{
+    echo "mark_good=$(systemctl show -p ActiveState --value tur-boot-mark-good.service)"
+    echo "gate=$(systemctl show -p ActiveState --value tur-boot-health.service)"
+    echo "build_id=$(sed -n 's/^BUILD_ID=//p' /usr/lib/os-release | tr -d '"')"
+    echo "booted_digest=$(bootc status --format=json | python3 -c 'import json,sys; print(((json.load(sys.stdin)["status"].get("booted") or {}).get("image") or {}).get("imageDigest") or "")')"
+    echo "test_agent_present=$([ -e /usr/libexec/tur-boot-test/guest-agent ] && echo yes || echo no)"
+} > "${out}/status"
+bootc status --format=json > "${out}/bootc-status.json" 2>&1
+bootc status > "${out}/bootc-status.txt" 2>&1
+tur-boot-health status > "${out}/tur-status.txt" 2>&1
+cat /usr/lib/os-release > "${out}/os-release" 2>&1
+cat /proc/cmdline > "${out}/cmdline.txt"
+sha256sum /usr/share/containers/policy.json /usr/share/tur/signing/* > "${out}/policy-sha256.txt" 2>&1
+journalctl -b --no-pager -o short-monotonic > "${out}/journal.txt" 2>&1
+. "${out}/status"
+say "SIGNED-BOOTED digest=${booted_digest} build_id=${build_id} mark_good=${mark_good} gate=${gate}"
+until [ -e "${port}" ] || [ $((SECONDS - start)) -ge 660 ]; do sleep 1; done
+tar -C "${state}/report" -cf - "${name}" > "${port}" && say "SIGNED-REPORT report=${name}"
+sync
+for _ in 1 2 3; do sleep 1; say "SIGNED-COMPLETE report=${name} outcome=new-version"; done
+sleep 600
+systemctl poweroff
+OBSERVE
+chmod 0755 "${state}/observe"
+cat > /etc/systemd/system/tur-signed-test-observe.service <<'UNIT'
+# Written by the signed-update test agent (tests/boot); never part of TUR.
+[Unit]
+Description=TUR signed-update test: report from the new version
+ConditionKernelCommandLine=tur.boot_test
+ConditionVirtualization=vm
+ConditionPathExists=/var/lib/tur-signed-test/staged
+After=basic.target
+
+[Service]
+Type=exec
+ExecStart=/usr/bin/bash /var/lib/tur-signed-test/observe
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+mkdir -p /etc/systemd/system/multi-user.target.wants
+ln -sf ../tur-signed-test-observe.service /etc/systemd/system/multi-user.target.wants/tur-signed-test-observe.service
+touch "${state}/staged"
+journalctl -b --no-pager -o short-monotonic > "${out}/journal.txt" 2>&1
+send
+sync
+say "SIGNED-RESTARTING uptime=$(uptime_s)"
+systemctl reboot

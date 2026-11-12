@@ -45,6 +45,10 @@ done
 if [ -e /sys/firmware/qemu_fw_cfg/by_name/opt/org.tur/scenario/raw ]; then
     exec /usr/libexec/tur-boot-test/scenario-agent
 fi
+# The signed-update test of the release workflow (tests/boot/signed-update.py).
+if [ -e /sys/firmware/qemu_fw_cfg/by_name/opt/org.tur/signed-update/raw ]; then
+    exec /usr/libexec/tur-boot-test/signed-update-agent
+fi
 
 # The scenario jobs only need the disk prepared: a user, first-run setup
 # done. They ask for the run to end after the second boot (run-vm.py
