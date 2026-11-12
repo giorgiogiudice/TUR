@@ -123,6 +123,7 @@ Item {
         function init() {
             spy.clear()
             Kit.Theme.light = false
+            Kit.Theme.textScale = 1
         }
 
         function watch(target, signalName) {
@@ -237,6 +238,20 @@ Item {
             verify(field.height > before, "the reason is shown under the field")
             seen = Testing.Harness.accessible(field)
             compare(seen.description, "That name is already in use.")
+        }
+
+        function test_a_placeholder_in_a_taller_font_is_not_cut() {
+            // In a script the interface font lacks, the placeholder is drawn
+            // in a fallback font, whose lines are taller. The field makes
+            // room for it, at 200 % text too (13.1, X8).
+            Kit.Theme.textScale = 2
+            const field = createTemporaryObject(fieldComponent, root, {
+                label: "", placeholderText: "\u05d7\u05d9\u05e4\u05d5\u05e9 \u05d9\u05d9\u05e9\u05d5\u05de\u05d9\u05dd"
+            })
+            wait(50)
+            grabImage(field)
+            compare(Testing.Harness.clippedText(field).join("\n"), "", "the placeholder is not cut off")
+            Kit.Theme.textScale = 1
         }
 
         function test_list_row() {

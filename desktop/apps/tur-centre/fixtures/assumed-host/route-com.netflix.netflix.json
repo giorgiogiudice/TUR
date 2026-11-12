@@ -1,0 +1,96 @@
+{
+  "licence": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+  "generated_by": "services/tur-catalogue/tests/desktop_fixtures.rs writes this from the output of tur-catalogue for the seed catalogue; do not edit",
+  "invocations": [
+    {
+      "command": "route",
+      "subject": "com.netflix.netflix",
+      "host": "assumed",
+      "arguments": ["route", "--json", "--", "com.netflix.netflix"],
+      "exit_status": 0,
+      "stderr": "",
+      "stdout": {
+        "application": {
+          "id": "com.netflix.netflix",
+          "name": "Netflix",
+          "category": "media"
+        },
+        "host": {
+          "arch": "x86_64",
+          "flatpak": true,
+          "distro_containers": false,
+          "wine": false,
+          "proton": false,
+          "android_runtime": false,
+          "arm_translation": false,
+          "google_play": false,
+          "windows_guest": false,
+          "windows_licence": false,
+          "darling_enabled": false,
+          "gpu": "unknown",
+          "memory_mib": null
+        },
+        "host_assumed": true,
+        "preferences": {
+          "never_use_virtual_machine": false,
+          "prefer_open_source": false,
+          "pinned_routes": {}
+        },
+        "offer_windows_guest": false,
+        "recommended": "web",
+        "options": [
+          {
+            "route": "web",
+            "edition_index": 0,
+            "edition_kind": "web",
+            "edition": "Web edition: https://www.netflix.com/",
+            "rating": "unknown",
+            "rating_source": {
+              "kind": "unrated"
+            },
+            "outlook": "clear",
+            "recommended": true,
+            "pinned": false,
+            "reason": "The web application is the publisher's primary form of this application.",
+            "caveats": [],
+            "prerequisites": [],
+            "alternative": null
+          },
+          {
+            "route": "android-runtime",
+            "edition_index": 1,
+            "edition_kind": "android",
+            "edition": "Android edition: com.netflix.mediaclient from Google Play",
+            "rating": "unknown",
+            "rating_source": {
+              "kind": "unrated"
+            },
+            "outlook": "doubtful",
+            "recommended": false,
+            "pinned": false,
+            "reason": "An Android edition exists: it runs in the Android runtime.",
+            "caveats": [
+              {
+                "code": "requirement",
+                "severity": "obstacle",
+                "requirement": "hardware-attested-drm",
+                "text": "Its copy protection needs hardware attestation, which this route cannot provide: protected content is limited to low quality or refused."
+              }
+            ],
+            "prerequisites": [
+              {
+                "code": "enable-android-runtime",
+                "text": "The Android runtime must be enabled: it is off by default."
+              },
+              {
+                "code": "opt-into-google-play",
+                "text": "The catalogue lists this package on Google Play only: Google Play must be opted into, under Google's terms."
+              }
+            ],
+            "alternative": null
+          }
+        ]
+      }
+    }
+  ]
+}

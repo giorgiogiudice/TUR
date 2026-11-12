@@ -3,14 +3,14 @@
 
 One directory for each of TUR's desktop programs
 ([desktop-experience.md](../../docs/architecture/desktop-experience.md),
-sections 14.1 and 15.1). Each arrives with the task that builds it; none
-exists yet.
+sections 14.1 and 15.1). Each arrives with the task that builds it. So far:
+`tur-centre/`, part 1 ([tur-centre.md](../../docs/architecture/tur-centre.md)).
 
 | Directory | Program | Task |
 |---|---|---|
 | `setup/` | `tur-setup`, first-run setup | D-06 |
 | `welcome/` | `tur-welcome` | D-14 |
-| `centre/` | `tur-centre`, the application centre | D-10 to D-12 |
+| `tur-centre/` | `tur-centre`, the application centre | D-10 (built), D-11, D-12 |
 | `settings/` | `tur-settings` | D-07 |
 | `diagnostics/` | `tur-diagnostics` | D-08 |
 | `pax-ui/` | `tur-pax-ui` | D-17 |

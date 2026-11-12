@@ -11,6 +11,9 @@ on:
       - "catalogue/**"
       - "schemas/**"
       - "docs/architecture/**"
+      # The application centre's fixtures are the router's recorded output;
+      # services/tur-catalogue/tests/desktop_fixtures.rs checks them.
+      - "desktop/apps/tur-centre/fixtures/**"
       - "rust-toolchain.toml"
       - "rustfmt.toml"
       - ".github/workflows/rust.yml"
@@ -22,6 +25,9 @@ on:
       - "catalogue/**"
       - "schemas/**"
       - "docs/architecture/**"
+      # The application centre's fixtures are the router's recorded output;
+      # services/tur-catalogue/tests/desktop_fixtures.rs checks them.
+      - "desktop/apps/tur-centre/fixtures/**"
       - "rust-toolchain.toml"
       - "rustfmt.toml"
       - ".github/workflows/rust.yml"

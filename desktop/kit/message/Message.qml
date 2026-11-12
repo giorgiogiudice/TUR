@@ -62,8 +62,15 @@ T.Control {
     // Whether the technical detail is open.
     property alias expanded: disclosure.checked
 
-    // "Create a support bundle" is offered whenever the message is an error.
-    readonly property bool offersSupportBundle: control.severity === Message.Error
+    // Whether this program can make a support bundle. A program that cannot
+    // (the tool that makes one is not there, or the program runs where there
+    // is none) sets this to false, so that no button is shown that would do
+    // nothing.
+    property bool supportBundleAvailable: true
+
+    // "Create a support bundle" is offered whenever the message is an error
+    // and a bundle can be made.
+    readonly property bool offersSupportBundle: control.severity === Message.Error && control.supportBundleAvailable
 
     signal actionTriggered(int index)
     signal supportBundleRequested()

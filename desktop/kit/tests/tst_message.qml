@@ -126,6 +126,18 @@ Item {
             verify(!bundle.visible)
         }
 
+        function test_no_support_bundle_button_where_none_can_be_made() {
+            const message = createTemporaryObject(messageComponent, root)
+            const bundle = findChild(message, "messageSupportBundle")
+            verify(bundle.visible, "an error offers a support bundle unless the program says it cannot make one")
+            message.supportBundleAvailable = false
+            verify(!bundle.visible, "a button that would do nothing is not shown")
+            verify(!message.offersSupportBundle)
+            verify(findChild(message, "messageAction0").visible, "the message's own actions stay")
+            message.supportBundleAvailable = true
+            verify(bundle.visible)
+        }
+
         function test_pax_only_when_pax_is_on() {
             const message = createTemporaryObject(messageComponent, root)
             const ask = findChild(message, "messageAskPax")

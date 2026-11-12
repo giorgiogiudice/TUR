@@ -1,0 +1,59 @@
+{
+  "licence": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+  "generated_by": "services/tur-catalogue/tests/desktop_fixtures.rs writes this from the output of tur-catalogue for the seed catalogue; do not edit",
+  "invocations": [
+    {
+      "command": "show",
+      "subject": "tur.class.android-banking",
+      "host": "not used",
+      "arguments": ["show", "--json", "--", "tur.class.android-banking"],
+      "exit_status": 0,
+      "stderr": "",
+      "stdout": {
+        "schema_version": 1,
+        "id": "tur.class.android-banking",
+        "entry_kind": "class",
+        "name": "Banking and payment applications for Android",
+        "aliases": [
+          "banking app",
+          "bank app",
+          "mobile banking",
+          "payment app"
+        ],
+        "publisher": "Banks and payment providers",
+        "category": "finance",
+        "summary": "A class entry: Android applications of banks and payment providers that enforce Google's device check.",
+        "homepage": null,
+        "editions": [
+          {
+            "kind": "android",
+            "flatpak_id": null,
+            "remote": null,
+            "obtain": null,
+            "package": null,
+            "distribution": null,
+            "store_id": null,
+            "download_page": null,
+            "stores": [],
+            "url": null,
+            "primary": false,
+            "licence": null,
+            "packaging": null,
+            "requirements": [
+              "play-integrity"
+            ],
+            "records": [],
+            "references": [
+              {
+                "title": "Android Developers, Play Integrity API overview: the device verdict needs a genuine and certified Android device and detects emulated environments",
+                "url": "https://developer.android.com/google/play/integrity/overview",
+                "checked": "2026-11-12"
+              }
+            ],
+            "notes": "A class, not one application: it stands for Android applications that refuse to run without a Play Integrity device verdict. TUR's Android runtime design (docs/architecture/android-runtime.md, section 11) lists banking, payment, wallet and many government identity applications in this class. One application may differ; an entry of its own then takes precedence."
+          }
+        ]
+      }
+    }
+  ]
+}

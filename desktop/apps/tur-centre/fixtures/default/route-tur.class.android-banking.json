@@ -1,0 +1,102 @@
+{
+  "licence": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+  "generated_by": "services/tur-catalogue/tests/desktop_fixtures.rs writes this from the output of tur-catalogue for the seed catalogue; do not edit",
+  "invocations": [
+    {
+      "command": "route",
+      "subject": "tur.class.android-banking",
+      "host": "stated",
+      "arguments": ["route", "--json", "--host", "<host-facts>", "--", "tur.class.android-banking"],
+      "exit_status": 3,
+      "stderr": "",
+      "stdout": {
+        "application": {
+          "id": "tur.class.android-banking",
+          "name": "Banking and payment applications for Android",
+          "category": "finance"
+        },
+        "host": {
+          "arch": "x86_64",
+          "flatpak": true,
+          "distro_containers": true,
+          "wine": true,
+          "proton": true,
+          "android_runtime": false,
+          "arm_translation": false,
+          "google_play": false,
+          "windows_guest": false,
+          "windows_licence": false,
+          "darling_enabled": false,
+          "gpu": "integrated",
+          "memory_mib": 32768
+        },
+        "host_assumed": false,
+        "preferences": {
+          "never_use_virtual_machine": false,
+          "prefer_open_source": false,
+          "pinned_routes": {}
+        },
+        "offer_windows_guest": false,
+        "recommended": "no-route",
+        "options": [
+          {
+            "route": "no-route",
+            "edition_index": null,
+            "edition_kind": null,
+            "edition": null,
+            "rating": "unknown",
+            "rating_source": {
+              "kind": "unrated"
+            },
+            "outlook": "blocked",
+            "recommended": true,
+            "pinned": false,
+            "reason": "No route on TUR runs Banking and payment applications for Android on this machine. Android runtime: Needs a phone certified by Google (Play Integrity): it will refuse to run here. No container or virtual machine passes that check.",
+            "caveats": [
+              {
+                "code": "requirement",
+                "severity": "blocker",
+                "requirement": "play-integrity",
+                "text": "Needs a phone certified by Google (Play Integrity): it will refuse to run here. No container or virtual machine passes that check."
+              }
+            ],
+            "prerequisites": [],
+            "alternative": {
+              "kind": "certified-android-device",
+              "text": "Use it on a phone or tablet certified by Google."
+            }
+          },
+          {
+            "route": "android-runtime",
+            "edition_index": 0,
+            "edition_kind": "android",
+            "edition": "Android edition: no package name",
+            "rating": "unknown",
+            "rating_source": {
+              "kind": "unrated"
+            },
+            "outlook": "blocked",
+            "recommended": false,
+            "pinned": false,
+            "reason": "An Android edition exists: it runs in the Android runtime.",
+            "caveats": [
+              {
+                "code": "requirement",
+                "severity": "blocker",
+                "requirement": "play-integrity",
+                "text": "Needs a phone certified by Google (Play Integrity): it will refuse to run here. No container or virtual machine passes that check."
+              }
+            ],
+            "prerequisites": [
+              {
+                "code": "enable-android-runtime",
+                "text": "The Android runtime must be enabled: it is off by default."
+              }
+            ],
+            "alternative": null
+          }
+        ]
+      }
+    }
+  ]
+}

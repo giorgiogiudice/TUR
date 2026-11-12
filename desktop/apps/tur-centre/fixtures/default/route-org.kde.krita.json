@@ -1,0 +1,87 @@
+{
+  "licence": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+  "generated_by": "services/tur-catalogue/tests/desktop_fixtures.rs writes this from the output of tur-catalogue for the seed catalogue; do not edit",
+  "invocations": [
+    {
+      "command": "route",
+      "subject": "org.kde.krita",
+      "host": "stated",
+      "arguments": ["route", "--json", "--host", "<host-facts>", "--", "org.kde.krita"],
+      "exit_status": 0,
+      "stderr": "",
+      "stdout": {
+        "application": {
+          "id": "org.kde.krita",
+          "name": "Krita",
+          "category": "creative"
+        },
+        "host": {
+          "arch": "x86_64",
+          "flatpak": true,
+          "distro_containers": true,
+          "wine": true,
+          "proton": true,
+          "android_runtime": false,
+          "arm_translation": false,
+          "google_play": false,
+          "windows_guest": false,
+          "windows_licence": false,
+          "darling_enabled": false,
+          "gpu": "integrated",
+          "memory_mib": 32768
+        },
+        "host_assumed": false,
+        "preferences": {
+          "never_use_virtual_machine": false,
+          "prefer_open_source": false,
+          "pinned_routes": {}
+        },
+        "offer_windows_guest": false,
+        "recommended": "flatpak",
+        "options": [
+          {
+            "route": "flatpak",
+            "edition_index": 0,
+            "edition_kind": "flatpak",
+            "edition": "Flatpak edition: org.kde.krita from flathub",
+            "rating": "unknown",
+            "rating_source": {
+              "kind": "unrated"
+            },
+            "outlook": "clear",
+            "recommended": true,
+            "pinned": false,
+            "reason": "A Linux edition exists as a Flatpak: a native Linux edition comes first.",
+            "caveats": [],
+            "prerequisites": [],
+            "alternative": null
+          },
+          {
+            "route": "native",
+            "edition_index": 1,
+            "edition_kind": "linux-native",
+            "edition": "Native Linux edition: Fedora package krita",
+            "rating": "unknown",
+            "rating_source": {
+              "kind": "unrated"
+            },
+            "outlook": "clear",
+            "recommended": false,
+            "pinned": false,
+            "reason": "A native Linux edition exists: a native Linux edition comes first.",
+            "caveats": [
+              {
+                "code": "community-package",
+                "severity": "note",
+                "requirement": null,
+                "text": "This package is maintained by its packagers, not by the application's publisher."
+              }
+            ],
+            "prerequisites": [],
+            "alternative": null
+          }
+        ]
+      }
+    }
+  ]
+}

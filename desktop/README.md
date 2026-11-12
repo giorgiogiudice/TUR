@@ -56,6 +56,9 @@ kit/                                tur-kit: QML module Tur.Kit and libturkit
   gallery/                          tur-kit-gallery: every component, every state
   tests/                            QML tests, unit tests, the screenshot renderer
   settings/ fixtures/               later tasks (D-07 and the fixture backend)
+apps/tur-centre/                    tur-centre, the application centre, part 1 (D-10)
+  src/ qml/ tests/                  the program; its unit and QML tests; shots/
+  fixtures/                         recorded answers of tur-catalogue; see below
 apps/ dbus/ data/ packaging/        later tasks; see the README in each
 upstream-licensed/                  side C: empty but for a README
 ci/                                 the builder image, the scripts CI runs, the toolchain proof
@@ -73,7 +76,7 @@ and the `desktop` workflow does it:
 | `boundary` | The licence boundary; the tokens and their contrast table |
 | `builder` | Builds the builder image if it is not in the cache |
 | `build-test` | Configure, build (warnings are errors), what the binaries link, unit and QML tests headless, `qmllint` (a warning fails), the toolchain probe, then the tests again under AddressSanitizer and UndefinedBehaviorSanitizer |
-| `screenshots` | Renders every gallery page twice, compares with the references, uploads everything |
+| `screenshots` | Renders every gallery page and every state of the application centre twice, compares with the references, uploads everything |
 
 ```sh
 git push -u origin HEAD
@@ -129,6 +132,30 @@ locally, so CI makes them and a person or an agent accepts them:
    must now pass, and the reviewer sees the new pictures in the pull request.
 
 A change that should not alter any picture and does is a regression.
+
+## Fixtures
+
+A program is built, tested and photographed before the services it talks to
+exist, and without them in the builder: it answers from recorded answers
+instead (design, 15.2). `apps/tur-centre/fixtures/` is the first set: the
+output of `tur-catalogue ... --json` for seed entries of the catalogue.
+
+**Nobody writes a fixture by hand.** A test in the `rust` workflow,
+`services/tur-catalogue/tests/desktop_fixtures.rs`, runs the catalogue program
+for every recorded question and fails when a file differs from what it
+prints. A picture made from the fixtures therefore shows what the router
+really says. Nobody can run the router on a development machine either, so
+when the fixtures must change, CI makes them:
+
+```sh
+git push                                   # the test fails, and prints the files as they should be
+desktop/apps/tur-centre/fixtures/update.py JOB_ID   # the job `services/tur-catalogue` of the rust workflow
+git diff desktop/apps/tur-centre/fixtures  # look at what changed, and why
+```
+
+Then accept the pictures that changed with them, as above. How the files are
+shaped, and what the application centre does with them, is in
+[tur-centre.md](../docs/architecture/tur-centre.md), section 4.
 
 ## The builder image
 

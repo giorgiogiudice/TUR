@@ -59,3 +59,4 @@ enable_testing()
 
 add_subdirectory(kit)
 add_subdirectory(ci/probe)
+add_subdirectory(apps/tur-centre)
