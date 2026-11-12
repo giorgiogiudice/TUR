@@ -9,11 +9,12 @@ Read these three points before anything else.
 
 - **The installer erases one whole disk.** Everything on the disk you choose
   is destroyed: every partition, every operating system, every file. It
-  cannot install TUR beside Windows or another system, and it cannot keep
-  data. Use a computer, or at least a disk, with nothing on it that you need.
+  cannot keep data, and it cannot put TUR on the same disk as Windows or
+  another system. Use a computer, or at least a disk, with nothing on it that
+  you need. To keep Windows, install TUR on a second disk (section 7).
 - **Everything below was tested in a virtual machine only.** No real
   computer, no real USB stick and no real disk has been used yet. You are the
-  first. Section 8 says what to report back.
+  first. Section 9 says what to report back.
 - **Do not pass the medium on.** The system on it still contains Fedora's
   logos and release packages, which Fedora's terms do not allow in a derived
   system (issue 11). It is for the project's own test machines.
@@ -30,9 +31,10 @@ Read these three points before anything else.
 | Keyboard and screen | Attached directly. The installer is text on the screen and assumes a **US English keyboard layout** | A virtual keyboard |
 | Network | Not needed and not used by the installer | No network device at all |
 
-Not tested at all: NVMe and SATA disks (the virtual disk is of another kind),
-Wi-Fi-only computers, NVIDIA graphics, laptops' special keys, touch screens,
-more than one disk in the computer.
+Not tested at all: NVMe and SATA disks (the virtual disks are of another
+kind), Wi-Fi-only computers, NVIDIA graphics, laptops' special keys, touch
+screens, real Windows and BitLocker. Two disks were tested only as in
+section 7.
 
 ## 2. Get the medium
 
@@ -161,10 +163,13 @@ If it says TUR cannot be installed from here, it gives an error code and a
 reason: for example the computer was started in legacy mode, or the stick was
 not written correctly. Photograph the screen.
 
-**2. Choose the disk.** Every disk is listed with its name, size and
-connection. The disks you can choose have a number in brackets. A disk you
-cannot choose says why: the stick itself, a disk that is too small, a disk
-that is in use. Type the number and press Enter.
+**2. Choose the disk.** Every disk is listed with its name, size,
+connection, the end of its serial number, and what it holds, in plain words:
+Windows, BitLocker-encrypted volumes, NTFS, Linux filesystems, or nothing.
+The installer only reads disks to find this out. The disks you can choose
+have a number in brackets. A disk you cannot choose says why: the stick
+itself, a disk that is too small, a disk that is in use. Type the number and
+press Enter.
 
 ![The list of disks](../reports/assets/TUR-007/installer-2-disks.png)
 
@@ -175,7 +180,9 @@ in section 4.
 and everything that is on it now, and what will be written. To go on you must
 type the phrase it shows, exactly: the word `ERASE`, a space, and the end of
 that disk's serial number, in capital letters. Pressing Enter alone goes back
-and changes nothing. A wrong phrase changes nothing.
+and changes nothing. A wrong phrase changes nothing. If the disk holds Windows
+or BitLocker, the screen adds a warning before the phrase: "This disk holds
+Windows. Erasing it removes Windows and everything on it."
 
 ![The confirmation screen](../reports/assets/TUR-007/installer-3-confirm.png)
 
@@ -223,14 +230,78 @@ to power off without installing.
    button. In CI a short press of the power button was received and did
    nothing on that screen.
 
-## 7. What this build cannot do
+## 7. Beside an existing Windows: on a second disk
+
+TUR can live on the same computer as Windows **only on a disk of its own**: a
+second internal disk, or an external USB SSD. The Windows disk is left as it
+is. Installing TUR on the **same** disk as Windows, by making the Windows
+partition smaller, is **not supported** by this installer, and nothing in it
+offers to.
+
+What was tested, in a virtual machine only: a disk laid out like a Windows
+disk (an EFI system partition with `EFI\Microsoft\Boot`, an NTFS partition,
+a volume carrying the BitLocker signature) and a firmware entry named
+"Windows Boot Manager" for it, with a second, blank disk. The installer
+described the first disk as Windows, showed the Windows warning when that
+disk was chosen, installed TUR onto the second disk, and afterwards the
+Windows disk was byte-for-byte unchanged and its firmware entry was still
+there. No real Windows, no real BitLocker and no real firmware were involved.
+
+1. **Back up first.** Copy everything on the Windows computer you cannot lose
+   to somewhere else. Nothing below is meant to touch the Windows disk, but a
+   wrong choice on the confirmation screen would erase it.
+2. **Have the BitLocker recovery key ready.** If Windows uses BitLocker
+   (device encryption is on by default on many laptops), changing firmware
+   settings, such as Secure Boot or the boot order, can make Windows ask for
+   the 48-digit recovery key at its next start. Find it before you change
+   anything, and keep it somewhere other than this computer:
+   - on the Microsoft account page for the account used on this PC, under
+     Devices, "Manage recovery keys" (account.microsoft.com/devices/recoverykey);
+   - or in Windows: open a Command Prompt as administrator and run
+     `manage-bde -protectors -get C:`. The "Numerical Password" is the key.
+3. **Connect the second disk.** For an internal disk, fit it with the computer
+   off. For a USB SSD, plug it in. It must be at least 20 GiB, and everything
+   on it is erased.
+4. **Start from the installer stick** with the firmware's one-time boot menu
+   (section 4) and go through section 5. On the disk screen every disk is
+   described. The Windows disk says `holds: Windows (EFI/Microsoft/Boot)`,
+   usually with `NTFS` and, if it is encrypted, `BitLocker-encrypted volumes`.
+   **Choose the other disk**: check its size, model and the end of its serial
+   number.
+5. If you see the warning **"This disk holds Windows. Erasing it removes
+   Windows and everything on it."**, you chose the Windows disk. Press Enter
+   alone to go back. Nothing has been changed at that point.
+6. On the second disk, type the phrase, install, and power off.
+7. **Choosing the system at start-up.** TUR's boot menu does not list Windows.
+   Choose with the firmware's one-time boot menu key, which depends on the
+   maker: commonly F12 (Dell, Lenovo, Acer), F11 (MSI, ASRock), F8 (ASUS),
+   Esc then F9 (HP). "Windows Boot Manager" starts Windows; the entry for
+   the second disk ("Fedora", or the disk's name) starts TUR.
+   **After TUR's first start, the computer starts TUR by default.** On that
+   start, shim (the first program of TUR's boot chain) adds a firmware entry
+   named "Fedora" and puts it first; "Windows Boot Manager" stays, unchanged,
+   further down. This was measured in the virtual machine. To make Windows
+   the default again, move "Windows Boot Manager" to the top of the boot
+   order in the firmware setup. The installer itself changes no firmware
+   entry.
+8. **Secure Boot**: as in section 4. The Windows-disk test above ran without
+   Secure Boot; the Secure Boot test ran on a single disk.
+
+**Removing TUR again.** Erase the second disk, or unplug it for good: from
+Windows, Disk Management can delete its partitions; any partitioning tool
+can. Windows is not affected. If the firmware still lists an entry for the
+removed disk, it skips it; the entry can be deleted in the firmware setup.
+If TUR was first in the boot order, make "Windows Boot Manager" first again
+in the firmware setup.
+
+## 8. What this build cannot do
 
 - **Update itself.** There is no published TUR image to update from. To get a
   newer build, make a new medium and install again, which erases the disk
   again.
 - Anything in the list of untested things in section 1.
 
-## 8. What to report back
+## 9. What to report back
 
 Whatever happens, these are worth having:
 

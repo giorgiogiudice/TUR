@@ -141,14 +141,22 @@ described for its user in
    image's index against a hash fixed inside the installer environment.
 2. Checks the computer: started by UEFI, x86-64, at least 3 GiB of memory
    (the rule in `tur-installer-core`). Reports the Secure Boot state.
-3. Lists whole disks. A disk can be chosen only if it is not the medium, not
-   in use, not read-only, has a `/dev/disk/by-id` link that carries its
-   serial number or WWN, and is at least 20 GiB (the size the boot test
-   installs to). A disk that cannot be chosen is shown with the reason and
-   its error code.
+3. Lists whole disks, each with its size, model, connection, the end of its
+   serial number and what it holds in plain words: Windows (an EFI system
+   partition holding `EFI/Microsoft/Boot`), BitLocker (detected by blkid, or
+   the signature `-FVE-FS-` at byte 3 of a volume), NTFS, Linux
+   filesystems. Finding this out only reads: signatures through `lsblk`, a
+   few bytes with `head`, and an EFI system partition mounted read-only in
+   a private mount namespace to look for that directory. A disk can be
+   chosen only if it is not the medium, not in use, not read-only, has a
+   `/dev/disk/by-id` link that carries its serial number or WWN, and is at
+   least 20 GiB (the size the boot test installs to). A disk that cannot be
+   chosen is shown with the reason and its error code.
 4. Shows the chosen disk's model, capacity, connection, serial number, stable
-   path and every partition on it, and what will be written. Requires the
-   phrase `ERASE` followed by the last eight letters and digits of the serial
+   path and every partition on it, and what will be written. If the disk
+   holds Windows or BitLocker, a separate warning: "This disk holds Windows.
+   Erasing it removes Windows and everything on it." Requires the phrase
+   `ERASE` followed by the last eight letters and digits of the serial
    number: the rule of `tur-installer-core`.
 5. Looks at the disk again immediately before writing: same stable path,
    serial number, size and content, still not in use.
@@ -157,9 +165,38 @@ described for its user in
 7. Powers off when asked.
 
 **What it does not do**, stated on its first screen and in the guide:
-installation beside another operating system, encryption, manual
-partitioning, keeping any data on the chosen disk, any use of a network,
-languages other than English, keyboard layouts other than US, BIOS boot.
+installation on the same disk as another operating system (shrinking it),
+encryption, manual partitioning, keeping any data on the chosen disk, any
+use of a network, languages other than English, keyboard layouts other than
+US, BIOS boot.
+
+**Beside Windows, on a second disk.** The supported way to keep Windows is to
+install TUR on another disk (internal, or an external USB SSD). What the
+medium does to the rest of the computer:
+
+- **Other disks.** It writes only to the chosen disk. `bootc install
+  to-disk` partitions and formats the device it is given, and bootupd
+  installs the boot loader into the EFI system partition it finds on that
+  device. Proven in CI by hashing the whole Windows-like disk before and
+  after the installation and after TUR's first start.
+- **Firmware boot entries, during the installation: none written.** bootc
+  1.17.1 passes `--update-firmware` to `bootupctl backend install` only
+  without `--generic-image` (`crates/lib/src/bootloader.rs`: `bootupd_opts =
+  (!configopts.generic_image).then_some(["--update-firmware", "--auto"])`),
+  and its documentation for `--generic-image` says "Changes to the system
+  firmware will be skipped". bootupd runs `efibootmgr` only in its
+  `update_firmware` path (`src/efi.rs`). The medium always passes
+  `--generic-image`. Checked in CI by reading the firmware's variable file
+  after the installation.
+- **Firmware boot entries, at TUR's first start: shim's fallback adds one.**
+  The installed disk is first started through the removable-media path
+  (`EFI/BOOT/BOOTX64.EFI`, which is shim), whose fallback program creates a
+  boot entry for TUR (named "Fedora", ADR-0013) and puts it first in the
+  boot order. It does not change or delete other entries. TUR-007 records
+  what CI measured. So after the first start the computer starts TUR by
+  default, until the owner changes the order in the firmware setup.
+- **TUR's boot menu does not list Windows.** The firmware's one-time boot
+  menu chooses the system.
 
 **Not implemented from the specification**, and not claimed: the phase model
 and session directory (§6.2, §28.3), the diagnostics drawer and bundle export
@@ -221,6 +258,10 @@ They are not yet in the registry crate.
 - The installed system records `localhost/tur:<build id>` as its image
   origin. There is nothing to update from; a newer build is installed by
   installing again.
+- **Beside Windows**, TUR becomes the firmware's first boot entry at its
+  first start (shim's fallback). Removing that behaviour means changing what
+  bootupd puts on the ESP, which ADR-0013 left as installed; it is recorded
+  as a decision the owner may want to reverse, not changed here.
 
 ## Verification
 
@@ -233,6 +274,10 @@ Shown by the `iso` workflow on every change (results in
   disk and onto a disk that holds data;
 - a disk that holds data is bit-for-bit unchanged when the confirmation is
   wrong or not given, and a disk that is too small is refused with a message;
+- beside a Windows-like disk (no Microsoft file in it) and a "Windows Boot
+  Manager" firmware entry: the disk is described as Windows, choosing it
+  shows the warning, TUR is installed on the second disk, the Windows-like
+  disk is byte-identical afterwards and its firmware entry is unchanged;
 - the installed disk has the layout of the boot test's disk, compared
   item by item with a reference installation made in the same run;
 - the boot test's own checks, and a boot-health scenario in which a failing
@@ -252,6 +297,8 @@ Shown by the `iso` workflow on every change (results in
 - The failure screen after a failed `bootc install`: no failure was induced.
 - A disk without a serial number, a read-only disk, a disk in use: the
   refusals exist and were not exercised.
+- Real Windows, real BitLocker, a real "Windows Boot Manager", and how a
+  vendor's firmware orders and shows boot entries.
 
 **To revisit:**
 
