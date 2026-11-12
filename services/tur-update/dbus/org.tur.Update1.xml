@@ -1,0 +1,156 @@
+<!-- SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0 -->
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+ "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<!--
+  org.tur.Update1: the versions on this computer, updates, going back.
+
+  Status: proposed, not frozen, and not implemented. No service exports this
+  interface yet. The contract for every method (authorisation, return type,
+  error names, timeout and cancellation) is in
+  docs/architecture/update-manager.md, section 8.
+
+  Bus: system bus. Well-known name: org.tur.Update1. Object: /org/tur/Update1.
+
+  JSON results conform to schemas/update-report.schema.json. The service runs
+  bootc and reads tur-boot-health; it does not replace either.
+
+  There is deliberately no method that restarts the computer. A restart is
+  asked of the session or of logind by whoever needs one, after the user chose
+  it.
+-->
+<node name="/org/tur/Update1">
+  <interface name="org.tur.Update1">
+
+    <!-- Version of the JSON documents returned by this interface. -->
+    <property name="SchemaVersion" type="u" access="read"/>
+
+    <!--
+      The one state the Updates page shows: up-to-date, not-checked,
+      checking, available, downloading, verifying, ready, held, not-applied
+      or offline.
+    -->
+    <property name="State" type="s" access="read"/>
+
+    <!--
+      GetStatus: the versions on this computer and the state of updates.
+      options: reserved; pass an empty dictionary.
+      status: JSON document of kind "status".
+    -->
+    <method name="GetStatus">
+      <arg name="options" type="a{sv}" direction="in"/>
+      <arg name="status" type="s" direction="out"/>
+    </method>
+
+    <!--
+      PreviewCheck: may a check run now, and what the update manager would do
+      next by itself and for a person who asked. Runs no check.
+      options: reserved; pass an empty dictionary.
+      preview: JSON document of kind "check".
+    -->
+    <method name="PreviewCheck">
+      <arg name="options" type="a{sv}" direction="in"/>
+      <arg name="preview" type="s" direction="out"/>
+    </method>
+
+    <!--
+      Plan: the decision for an operation, the commands it would run and
+      their effects, without running them. This is what a confirmation
+      prompt shows before the operation is asked for.
+      operation: "stage", "rollback", "pin" or "unpin".
+      options: "deployment" (s): "booted" or "rollback", for pin and unpin.
+      plan: JSON document of kind "plan".
+    -->
+    <method name="Plan">
+      <arg name="operation" type="s" direction="in"/>
+      <arg name="options" type="a{sv}" direction="in"/>
+      <arg name="plan" type="s" direction="out"/>
+    </method>
+
+    <!--
+      Check: check for updates now. Returns when the check has been decided,
+      not when it has finished; StateChanged reports the result.
+      options: reserved; pass an empty dictionary.
+      decision: JSON document: the decision for the check.
+    -->
+    <method name="Check">
+      <arg name="options" type="a{sv}" direction="in"/>
+      <arg name="decision" type="s" direction="out"/>
+    </method>
+
+    <!--
+      Download: download the known update, stage it and release it, as a
+      person's request. Returns when the request has been decided; Progress
+      and StateChanged report the rest.
+      options: reserved; pass an empty dictionary.
+      plan: JSON document of kind "plan": what is being carried out, or why
+      nothing is.
+    -->
+    <method name="Download">
+      <arg name="options" type="a{sv}" direction="in"/>
+      <arg name="plan" type="s" direction="out"/>
+    </method>
+
+    <!--
+      Rollback: make the previous version the one started at the next
+      restart. Does not restart.
+      options: reserved; pass an empty dictionary.
+      plan: JSON document of kind "plan": what was carried out, or why
+      nothing was.
+    -->
+    <method name="Rollback">
+      <arg name="options" type="a{sv}" direction="in"/>
+      <arg name="plan" type="s" direction="out"/>
+    </method>
+
+    <!--
+      Keep: keep a version, so that it is never removed when updates are
+      installed.
+      deployment: "booted" or "rollback".
+      options: reserved; pass an empty dictionary.
+      plan: JSON document of kind "plan".
+    -->
+    <method name="Keep">
+      <arg name="deployment" type="s" direction="in"/>
+      <arg name="options" type="a{sv}" direction="in"/>
+      <arg name="plan" type="s" direction="out"/>
+    </method>
+
+    <!--
+      Release: stop keeping a version.
+      deployment: "booted" or "rollback".
+      options: reserved; pass an empty dictionary.
+      plan: JSON document of kind "plan".
+    -->
+    <method name="Release">
+      <arg name="deployment" type="s" direction="in"/>
+      <arg name="options" type="a{sv}" direction="in"/>
+      <arg name="plan" type="s" direction="out"/>
+    </method>
+
+    <!--
+      Cancel: stop the check or download in progress. A download that is
+      stopped leaves nothing staged; what was fetched stays in the store.
+      options: reserved; pass an empty dictionary.
+    -->
+    <method name="Cancel">
+      <arg name="options" type="a{sv}" direction="in"/>
+    </method>
+
+    <!-- The state changed. status: JSON document of kind "status". -->
+    <signal name="StateChanged">
+      <arg name="status" type="s"/>
+    </signal>
+
+    <!--
+      A download is progressing.
+      phase: "downloading" or "verifying".
+      done, total: bytes; total is 0 when it is not known.
+    -->
+    <signal name="Progress">
+      <arg name="phase" type="s"/>
+      <arg name="done" type="t"/>
+      <arg name="total" type="t"/>
+    </signal>
+
+  </interface>
+</node>

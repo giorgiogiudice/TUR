@@ -1,14 +1,20 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
-"""Check, or write, the test fixtures that come from bootc's own source tree.
+"""Check that every test fixture is what the provenance file says it is.
+
+    check_fixtures.py PROVENANCE            check every fixture
+    check_fixtures.py PROVENANCE --write    write the ones from bootc's source
+
+Three checks. Every JSON file under the fixtures directory is listed in the
+provenance file, and every listed file is there. A fixture of kind
+`ci-capture` has the recorded SHA-256: it is, byte for byte, the file in the
+artifact of the CI run it names. A fixture of kind `upstream-fixture` is
+compared with its source, as follows.
 
 bootc keeps samples of `bootc status` output beside its code, as YAML
 (`crates/lib/src/fixtures/spec-*.yaml`). `tur-update` reads JSON only, so the
 samples are kept here as JSON. This script is the conversion, and the proof
-that the JSON files are those samples and nothing else:
-
-    upstream_fixtures.py PROVENANCE            check every upstream fixture
-    upstream_fixtures.py PROVENANCE --write    write them
+that the JSON files are those samples and nothing else.
 
 For each entry of kind `upstream-fixture` in the provenance file it fetches the
 named file at the named tag, checks that the bytes have the recorded git blob
@@ -90,7 +96,27 @@ def main() -> int:
     directory = provenance_path.parent
     failures = 0
     checked = 0
+    # Every fixture is listed, and every listed fixture is there.
+    listed = {entry["file"] for entry in provenance["fixtures"]}
+    present = {
+        path.relative_to(directory).as_posix()
+        for path in directory.rglob("*.json")
+        if path != provenance_path
+    }
+    for name in sorted(listed ^ present):
+        where = "is not listed in the provenance file" if name in present else "is listed but missing"
+        print(f"FAIL {name} {where}")
+        failures += 1
     for entry in provenance["fixtures"]:
+        if entry["kind"] == "ci-capture" and (directory / entry["file"]).is_file():
+            # The file is the bytes of the run's artifact.
+            found = hashlib.sha256((directory / entry["file"]).read_bytes()).hexdigest()
+            if found != entry["sha256"]:
+                print(f"FAIL {entry['file']}: sha256 is {found}, recorded {entry['sha256']}")
+                failures += 1
+            else:
+                source = entry["source"]
+                print(f"ok   {entry['file']} is {source['path']} of run {source['run_id']} ({found[:12]})")
         if entry["kind"] != "upstream-fixture":
             continue
         source = entry["source"]

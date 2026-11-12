@@ -617,7 +617,8 @@ pub fn registry() -> Vec<CodeEntry> {
 
 /// Wording that must never appear in a registry entry: it would steer a user
 /// towards bypassing a check instead of fixing its cause.
-pub const FORBIDDEN_WORDING: &[&str] = &["force", "override", "ignore", "skip", "disable", "anyway"];
+pub const FORBIDDEN_WORDING: &[&str] =
+    &["force", "override", "ignore", "skip", "disable", "anyway"];
 
 #[cfg(test)]
 mod tests {
@@ -657,7 +658,11 @@ mod tests {
                 entry.recovery_action,
             ] {
                 assert!(!text.trim().is_empty(), "{}", entry.code);
-                assert!(!text.contains("  "), "{}: double space in {text:?}", entry.code);
+                assert!(
+                    !text.contains("  "),
+                    "{}: double space in {text:?}",
+                    entry.code
+                );
                 assert!(!text.chars().any(char::is_control), "{}", entry.code);
             }
             assert!(entry.user_message.ends_with('.'), "{}", entry.code);
@@ -700,7 +705,9 @@ mod tests {
         ] {
             let entry = code.entry();
             assert!(
-                entry.user_message.starts_with("The update was not applied. "),
+                entry
+                    .user_message
+                    .starts_with("The update was not applied. "),
                 "{code}"
             );
             assert_eq!(entry.severity, Severity::Error, "{code}");

@@ -526,11 +526,12 @@ mod tests {
                 "status":{"booted":null,"staged":null,"rollback":null}}"#,
         )
         .unwrap();
-        assert_eq!(
-            SystemState::from_host(&host),
-            Err(StateError::NotBootcHost)
+        assert_eq!(SystemState::from_host(&host), Err(StateError::NotBootcHost));
+        assert!(
+            StateError::NotBootcHost
+                .to_string()
+                .contains("status.booted")
         );
-        assert!(StateError::NotBootcHost.to_string().contains("status.booted"));
     }
 
     #[test]
@@ -572,7 +573,10 @@ mod tests {
             entry(B, Some("0.4.0"), "")
         ));
         assert_eq!(ready.update_state(), UpdateState::Ready);
-        assert_eq!(ready.update_message(), "TUR 0.4.0 is ready. Restart to use it.");
+        assert_eq!(
+            ready.update_message(),
+            "TUR 0.4.0 is ready. Restart to use it."
+        );
         // Staged with nothing known about a check: still ready.
         let unchecked = state(&format!(
             r#"{{"booted":{},"staged":{}}}"#,
@@ -622,8 +626,14 @@ mod tests {
         assert!(all.deployment(Slot::Other).is_none());
         // An image without a version label is named by its digest.
         assert_eq!(all.others[0].label(), "TUR (sha256:aaaaaaaaaaaa…)");
-        assert_eq!(all.follows.as_ref().unwrap().reference, "example.org/tur:stable");
-        assert_eq!(all.follows.as_ref().unwrap().signature.kind, SignatureKind::None);
+        assert_eq!(
+            all.follows.as_ref().unwrap().reference,
+            "example.org/tur:stable"
+        );
+        assert_eq!(
+            all.follows.as_ref().unwrap().signature.kind,
+            SignatureKind::None
+        );
         assert!(!all.follows.as_ref().unwrap().signature.verifies());
     }
 
@@ -668,7 +678,10 @@ mod tests {
     fn text_from_the_document_is_made_printable() {
         assert_eq!(printable("0.4.0\u{1b}[31m\n"), "0.4.0\u{fffd}[31m\u{fffd}");
         assert_eq!(printable(&"x".repeat(500)).chars().count(), 200);
-        assert_eq!(short_digest("sha256:0123456789abcdef"), "sha256:0123456789ab…");
+        assert_eq!(
+            short_digest("sha256:0123456789abcdef"),
+            "sha256:0123456789ab…"
+        );
         assert_eq!(short_digest("sha256:aaa"), "sha256:aaa");
         assert_eq!(short_digest("nodigest"), "nodigest");
     }

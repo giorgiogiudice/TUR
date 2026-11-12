@@ -65,7 +65,7 @@ jobs:
         # identifier, converts it and compares it with the committed file.
         run: |
           python3 -c 'import yaml' 2>/dev/null || sudo apt-get install -y --no-install-recommends python3-yaml >/dev/null
-          python3 services/tur-update/ci/upstream_fixtures.py services/tur-update/tests/fixtures/provenance.json
+          python3 services/tur-update/ci/check_fixtures.py services/tur-update/tests/fixtures/provenance.json
 
       - name: Pull the pinned base image
         run: |

@@ -1,0 +1,426 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/giorgiogiudice/TUR/schemas/update-report.schema.json",
+  "title": "TUR update manager documents",
+  "description": "JSON documents emitted by tur-update: the versions on this computer and the state of updates (status --json), a preview of what a check and the update manager would do next (check --json), the plan for an operation (plan <operation> --json), the commands of other programs it names (commands --json) and the TUR-UPDATE-* registry (codes --json). The same documents are the string results of the proposed org.tur.Update1 D-Bus interface. No document describes something that was done: tur-update changes nothing. null means the value is absent or is not known.",
+  "oneOf": [
+    { "$ref": "#/$defs/status_report" },
+    { "$ref": "#/$defs/check_report" },
+    { "$ref": "#/$defs/plan_report" },
+    { "$ref": "#/$defs/command_report" },
+    { "$ref": "#/$defs/code_report" }
+  ],
+  "$defs": {
+    "error_code": {
+      "description": "A stable TUR update error code.",
+      "type": "string",
+      "pattern": "^TUR-UPDATE-[A-Z0-9]+-[0-9]{3}$"
+    },
+    "nullable_string": { "type": ["string", "null"] },
+    "nullable_bytes": { "type": ["integer", "null"], "minimum": 0 },
+    "string_list": { "type": "array", "items": { "type": "string" } },
+    "severity": { "enum": ["info", "notice", "warning", "error"] },
+    "outcome": {
+      "description": "proceed: the operation may run. nothing: there is nothing for it to do. wait: not now; it will be possible without anything being repaired. refuse: not until something is put right.",
+      "enum": ["proceed", "nothing", "wait", "refuse"]
+    },
+    "slot": {
+      "description": "staged: queued for the next restart. booted: running. rollback: the previous version, which bootc rollback would make the default. other: any further deployment, a kept one as a rule.",
+      "enum": ["staged", "booted", "rollback", "other"]
+    },
+    "source": {
+      "description": "Where the deployments came from: a file given with --from, or this machine with --live.",
+      "enum": ["file", "live"]
+    },
+    "update_state": {
+      "description": "The one state the Updates page shows, as far as the deployments tell it. Checking, downloading and verifying are states of an operation in progress and are not in this document.",
+      "enum": ["ready", "held", "available", "up-to-date", "not-checked"]
+    },
+    "changes": {
+      "description": "What a command changes. nothing: it only reads. update-metadata: only the cached result of a check. system: deployments, the start-up order, or what is kept.",
+      "enum": ["nothing", "update-metadata", "system"]
+    },
+    "signature": {
+      "description": "How an image is verified when it is fetched, as bootc reports it.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "remote"],
+      "properties": {
+        "kind": { "enum": ["none", "container-policy", "ostree-remote", "insecure"] },
+        "remote": { "$ref": "#/$defs/nullable_string" }
+      }
+    },
+    "image_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reference", "transport", "signature"],
+      "properties": {
+        "reference": { "type": "string" },
+        "transport": { "type": "string" },
+        "signature": { "$ref": "#/$defs/signature" }
+      }
+    },
+    "image": {
+      "description": "An image as it was fetched: one version of the system. The digest is its identity.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reference", "transport", "signature", "digest", "version", "timestamp", "architecture"],
+      "properties": {
+        "reference": { "type": "string" },
+        "transport": { "type": "string" },
+        "signature": { "$ref": "#/$defs/signature" },
+        "digest": { "type": "string", "minLength": 1 },
+        "version": { "$ref": "#/$defs/nullable_string" },
+        "timestamp": { "$ref": "#/$defs/nullable_string" },
+        "architecture": { "type": "string" }
+      }
+    },
+    "nullable_image": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/image" }] },
+    "ostree": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["checksum", "deploy_serial", "stateroot"],
+      "properties": {
+        "checksum": { "type": "string" },
+        "deploy_serial": { "type": "integer", "minimum": 0 },
+        "stateroot": { "type": "string" }
+      }
+    },
+    "deployment": {
+      "description": "One deployment, as bootc reports it. soft_reboot_capable is reported and plays no part in any decision.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "slot", "image", "incompatible", "pinned", "soft_reboot_capable", "download_only", "store",
+        "ostree", "composefs"
+      ],
+      "properties": {
+        "slot": { "$ref": "#/$defs/slot" },
+        "image": { "$ref": "#/$defs/nullable_image" },
+        "incompatible": { "type": "boolean" },
+        "pinned": { "type": "boolean" },
+        "soft_reboot_capable": { "type": "boolean" },
+        "download_only": { "type": "boolean" },
+        "store": { "$ref": "#/$defs/nullable_string" },
+        "ostree": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/ostree" }] },
+        "composefs": { "type": "boolean" }
+      }
+    },
+    "nullable_deployment": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/deployment" }] },
+    "update_knowledge": {
+      "description": "What the last check found. not-checked: bootc holds no result of a check. up-to-date: it found the image that is running. available: it found another image.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "image"],
+      "properties": {
+        "status": { "enum": ["not-checked", "up-to-date", "available"] },
+        "image": { "$ref": "#/$defs/nullable_image" }
+      }
+    },
+    "usr_overlay": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["access_mode", "persistence"],
+      "properties": {
+        "access_mode": { "type": "string" },
+        "persistence": { "type": "string" }
+      }
+    },
+    "system": {
+      "description": "The state of the system, read from bootc status.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "follows", "booted", "staged", "rollback", "others", "rollback_queued", "read_only",
+        "usr_overlay", "update"
+      ],
+      "properties": {
+        "follows": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/image_ref" }] },
+        "booted": { "$ref": "#/$defs/deployment" },
+        "staged": { "$ref": "#/$defs/nullable_deployment" },
+        "rollback": { "$ref": "#/$defs/nullable_deployment" },
+        "others": { "type": "array", "items": { "$ref": "#/$defs/deployment" } },
+        "rollback_queued": { "type": "boolean" },
+        "read_only": { "type": "boolean" },
+        "usr_overlay": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/usr_overlay" }] },
+        "update": { "$ref": "#/$defs/update_knowledge" }
+      }
+    },
+    "rejected_image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["digest", "image", "version", "event_id"],
+      "properties": {
+        "digest": { "type": "string", "minLength": 1 },
+        "image": { "type": "string" },
+        "version": { "type": "string" },
+        "event_id": { "type": "string" }
+      }
+    },
+    "notice": {
+      "description": "What tur-boot-health has to tell the user, not yet acknowledged. The text belongs to its TUR-BOOT-* code.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "text", "error_code", "acknowledged"],
+      "properties": {
+        "kind": { "type": "string" },
+        "text": { "type": "string" },
+        "error_code": { "type": "string" },
+        "acknowledged": { "type": "boolean" }
+      }
+    },
+    "boot_health": {
+      "description": "The boot-health facts a decision uses, read from tur-boot-health status --json.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["counting_usable", "trial_in_progress", "verdict", "rejected", "notice"],
+      "properties": {
+        "counting_usable": { "type": "boolean" },
+        "trial_in_progress": { "type": "boolean" },
+        "verdict": { "enum": ["passed", "degraded", "failed", null] },
+        "rejected": { "type": "array", "items": { "$ref": "#/$defs/rejected_image" } },
+        "notice": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/notice" }] }
+      }
+    },
+    "nullable_boot_health": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/boot_health" }] },
+    "version": {
+      "description": "One line of \"Versions on this computer\". failed_to_start is null when the boot-health state is not known.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["slot", "name", "digest", "built", "kept", "held", "failed_to_start"],
+      "properties": {
+        "slot": { "$ref": "#/$defs/slot" },
+        "name": { "type": "string", "minLength": 1 },
+        "digest": { "$ref": "#/$defs/nullable_string" },
+        "built": { "$ref": "#/$defs/nullable_string" },
+        "kept": { "type": "boolean" },
+        "held": { "type": "boolean" },
+        "failed_to_start": { "type": ["boolean", "null"] }
+      }
+    },
+    "decision": {
+      "description": "A decision of the policy. title, user_message and recovery_action are the registry's text for the code, unchanged. reason holds the facts of this case. also lists the other rules that hold the operation back, refusals first.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "outcome", "code", "severity", "title", "user_message", "reason", "recovery_action", "also",
+        "notes"
+      ],
+      "properties": {
+        "outcome": { "$ref": "#/$defs/outcome" },
+        "code": { "$ref": "#/$defs/error_code" },
+        "severity": { "$ref": "#/$defs/severity" },
+        "title": { "type": "string", "minLength": 1 },
+        "user_message": { "type": "string", "minLength": 1 },
+        "reason": { "type": "string" },
+        "recovery_action": { "type": "string", "minLength": 1 },
+        "also": { "type": "array", "items": { "$ref": "#/$defs/error_code" } },
+        "notes": { "$ref": "#/$defs/string_list" }
+      }
+    },
+    "conditions": {
+      "description": "What a decision was made under. Nothing in it was measured by tur-update: it is what the command line was given. unknown and null mean not given.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "power", "network", "free_bytes", "update_bytes", "boot_health", "repair_session", "settings",
+        "limits"
+      ],
+      "properties": {
+        "power": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source", "battery_percent"],
+          "properties": {
+            "source": { "enum": ["unknown", "mains", "battery"] },
+            "battery_percent": { "type": ["integer", "null"], "minimum": 0 }
+          }
+        },
+        "network": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["state", "metered"],
+          "properties": {
+            "state": { "enum": ["unknown", "offline", "online"] },
+            "metered": { "enum": ["unknown", "no", "yes"] }
+          }
+        },
+        "free_bytes": { "$ref": "#/$defs/nullable_bytes" },
+        "update_bytes": { "$ref": "#/$defs/nullable_bytes" },
+        "boot_health": { "$ref": "#/$defs/nullable_boot_health" },
+        "repair_session": { "type": "boolean" },
+        "settings": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["automatic_download", "download_on_metered"],
+          "properties": {
+            "automatic_download": { "type": "boolean" },
+            "download_on_metered": { "type": "boolean" }
+          }
+        },
+        "limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "automatic_battery_percent", "requested_battery_percent", "assumed_update_bytes",
+            "reserve_bytes"
+          ],
+          "properties": {
+            "automatic_battery_percent": { "type": "integer", "minimum": 0 },
+            "requested_battery_percent": { "type": "integer", "minimum": 0 },
+            "assumed_update_bytes": { "type": "integer", "minimum": 0 },
+            "reserve_bytes": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    },
+    "argv": {
+      "description": "An argument vector, with the program first, by its full path.",
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "step": {
+      "description": "One command of a plan. It has not been run.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "command", "changes", "effect"],
+      "properties": {
+        "id": { "enum": ["read-status", "stage-held", "release", "rollback", "pin", "unpin"] },
+        "command": { "$ref": "#/$defs/argv" },
+        "changes": { "$ref": "#/$defs/changes" },
+        "effect": { "type": "string", "minLength": 1 }
+      }
+    },
+    "plan": {
+      "description": "What an operation would do. steps is empty unless the decision is to proceed. executed is always false: tur-update runs no step of any plan.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operation", "decision", "steps", "effects", "restart_required", "executed"],
+      "properties": {
+        "operation": { "enum": ["stage", "rollback", "pin", "unpin"] },
+        "decision": { "$ref": "#/$defs/decision" },
+        "steps": { "type": "array", "items": { "$ref": "#/$defs/step" } },
+        "effects": { "$ref": "#/$defs/string_list" },
+        "restart_required": { "type": "boolean" },
+        "executed": { "const": false }
+      }
+    },
+    "external_command": {
+      "description": "A command of another program that tur-update names. run_by_this_program is true for one: bootc status --format=json.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id", "program", "subcommand", "options", "operands", "changes", "run_by_this_program",
+        "purpose"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "program": { "type": "string", "minLength": 1 },
+        "subcommand": { "$ref": "#/$defs/string_list" },
+        "options": { "$ref": "#/$defs/string_list" },
+        "operands": { "$ref": "#/$defs/string_list" },
+        "changes": { "$ref": "#/$defs/changes" },
+        "run_by_this_program": { "type": "boolean" },
+        "purpose": { "type": "string", "minLength": 1 }
+      }
+    },
+    "code_entry": {
+      "description": "A registry entry: everything specification section 29.3 requires for a code.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code", "title", "severity", "detection", "user_message", "technical_explanation",
+        "recovery_action"
+      ],
+      "properties": {
+        "code": { "$ref": "#/$defs/error_code" },
+        "title": { "type": "string", "minLength": 1 },
+        "severity": { "$ref": "#/$defs/severity" },
+        "detection": { "type": "string", "minLength": 1 },
+        "user_message": { "type": "string", "minLength": 1 },
+        "technical_explanation": { "type": "string", "minLength": 1 },
+        "recovery_action": { "type": "string", "minLength": 1 }
+      }
+    },
+    "status_report": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version", "kind", "source", "state", "message", "versions", "system", "boot_health"
+      ],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "kind": { "const": "status" },
+        "source": { "$ref": "#/$defs/source" },
+        "state": { "$ref": "#/$defs/update_state" },
+        "message": {
+          "description": "The sentence the Updates page shows for the state.",
+          "type": "string",
+          "minLength": 1
+        },
+        "versions": { "type": "array", "items": { "$ref": "#/$defs/version" } },
+        "system": { "$ref": "#/$defs/system" },
+        "boot_health": { "$ref": "#/$defs/nullable_boot_health" }
+      }
+    },
+    "check_report": {
+      "description": "A preview. check: may a check for updates run now. check_command: what a check would run; it is not run. automatic_action: what the update manager would do next by itself. automatic_stage: the decision for a download by itself. requested_stage: the decision for a download a person asked for.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version", "kind", "source", "state", "message", "update", "conditions", "check",
+        "check_command", "automatic_action", "automatic_stage", "requested_stage"
+      ],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "kind": { "const": "check" },
+        "source": { "$ref": "#/$defs/source" },
+        "state": { "$ref": "#/$defs/update_state" },
+        "message": { "type": "string", "minLength": 1 },
+        "update": { "$ref": "#/$defs/update_knowledge" },
+        "conditions": { "$ref": "#/$defs/conditions" },
+        "check": { "$ref": "#/$defs/decision" },
+        "check_command": { "$ref": "#/$defs/argv" },
+        "automatic_action": { "enum": ["check", "stage", "nothing", "wait", "refuse"] },
+        "automatic_stage": { "$ref": "#/$defs/decision" },
+        "requested_stage": { "$ref": "#/$defs/decision" }
+      }
+    },
+    "plan_report": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "kind", "source", "requester", "conditions", "plan"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "kind": { "const": "plan" },
+        "source": { "$ref": "#/$defs/source" },
+        "requester": {
+          "description": "Who the decision was made for. Going back, keeping and releasing are always a person's request.",
+          "enum": ["automatic", "person"]
+        },
+        "conditions": { "$ref": "#/$defs/conditions" },
+        "plan": { "$ref": "#/$defs/plan" }
+      }
+    },
+    "command_report": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "kind", "commands"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "kind": { "const": "commands" },
+        "commands": { "type": "array", "items": { "$ref": "#/$defs/external_command" } }
+      }
+    },
+    "code_report": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "kind", "codes"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "kind": { "const": "codes" },
+        "codes": { "type": "array", "items": { "$ref": "#/$defs/code_entry" } }
+      }
+    }
+  }
+}

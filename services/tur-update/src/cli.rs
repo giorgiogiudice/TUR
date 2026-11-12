@@ -52,9 +52,7 @@ use crate::plan::{
 };
 use crate::policy::{Action, Decision, Outcome, Requester, decide_stage, next_step};
 use crate::probe::{CommandRunner, ProbeError, SystemRunner, live_status};
-use crate::state::{
-    Slot, SystemState, UpdateKnowledge, UpdateState, printable, short_digest,
-};
+use crate::state::{Slot, SystemState, UpdateKnowledge, UpdateState, printable, short_digest};
 
 /// The parsed command line.
 #[derive(Debug, Parser)]
@@ -647,7 +645,11 @@ fn describe_health(health: Option<&BootHealth>) -> String {
     ));
     text.push_str(&format!(
         "  Trial in progress:  {}\n",
-        if health.trial_in_progress { "yes" } else { "no" }
+        if health.trial_in_progress {
+            "yes"
+        } else {
+            "no"
+        }
     ));
     text.push_str(&format!(
         "  This start:         {}\n",
@@ -748,11 +750,7 @@ fn status(
     emit(out, &text)
 }
 
-fn check(
-    args: &CheckArgs,
-    runner: &dyn CommandRunner,
-    out: &mut dyn Write,
-) -> Result<(), Failure> {
+fn check(args: &CheckArgs, runner: &dyn CommandRunner, out: &mut dyn Write) -> Result<(), Failure> {
     let health = load_health(&args.source)?;
     let conditions = conditions_from(&args.conditions, health)?;
     let (state, source) = load_state(&args.source, runner)?;

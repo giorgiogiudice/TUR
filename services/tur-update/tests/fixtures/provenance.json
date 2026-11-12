@@ -1,8 +1,26 @@
 {
   "schema_version": 1,
-  "description": "Where every fixture in this directory comes from. Fixtures of kind ci-capture are the unchanged output of a program in a CI run of this repository; sha256 is the hash of the file as it is in the run's artifact. Fixtures of kind upstream-fixture are samples from bootc's source tree, converted from YAML to JSON by services/tur-update/ci/upstream_fixtures.py, which the update workflow runs to check them; they are under bootc's licence (bootc-upstream/LICENSE-MIT). Fixtures of kind written are written by hand for a state no capture or upstream sample shows; each says what it was derived from.",
+  "description": "Where every fixture in this directory comes from. Fixtures of kind ci-capture are the unchanged output of a program in a CI run of this repository; sha256 is the hash of the file as it is in the run's artifact. Fixtures of kind upstream-fixture are samples from bootc's source tree, converted from YAML to JSON by services/tur-update/ci/check_fixtures.py, which the update workflow runs to check them; they are under bootc's licence (bootc-upstream/LICENSE-MIT). Fixtures of kind written are written by hand for a state no capture or upstream sample shows; each says what it was derived from.",
   "bootc_version": "1.17.1",
   "fixtures": [
+    {
+      "file": "bootc/container-base-image.json",
+      "kind": "ci-capture",
+      "content": "bootc-status",
+      "state": "The pinned base image run as a container with podman: bootc reports a host that is not a bootc host. An ordinary user in the container got the same document.",
+      "source": {
+        "repository": "giorgiogiudice/TUR",
+        "workflow": "update",
+        "run_id": 43224766510,
+        "commit": "20acc2e9819c8810e707b60e5c9d995b952381ea",
+        "branch": "feat/tur-update (pull request 44)",
+        "artifact": "tur-update-bootc",
+        "image": "quay.io/fedora/fedora-kinoite@sha256:f857f6c5da48a7c39721e40de51d9c0fef446a25e0360be4fb8964cbdf48f537",
+        "path": "status-json.out",
+        "command": "bootc status --format=json"
+      },
+      "sha256": "4a7d60eaebc7793d14f9464682ea1d6edc9a71845e75ee5374c4bcfdf7a4fcee"
+    },
     {
       "file": "bootc/tur-booted.json",
       "kind": "ci-capture",

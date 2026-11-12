@@ -12,15 +12,13 @@
 //! there, and each option must be one its `--help` describes.
 //!
 //! The commands and their meaning were read from the documentation and
-//! source of bootc 1.17.1 and OSTree 2026.6
+//! source of bootc 1.17.1 and OSTree 2026.4
 //! (`docs/architecture/update-manager.md`, section 3).
 
 use serde::Serialize;
 
 use crate::conditions::Conditions;
-use crate::policy::{
-    Decision, Requester, decide_pin, decide_rollback, decide_stage, decide_unpin,
-};
+use crate::policy::{Decision, Requester, decide_pin, decide_rollback, decide_stage, decide_unpin};
 use crate::probe::STATUS_PROGRAM;
 use crate::state::{Slot, SystemState, UpdateKnowledge};
 
@@ -179,8 +177,15 @@ pub const UNPIN: ExternalCommand = ExternalCommand {
 };
 
 /// Every command of another program this component names, anywhere.
-pub const COMMANDS: [ExternalCommand; 7] =
-    [READ_STATUS, CHECK, STAGE_HELD, RELEASE, ROLLBACK, PIN, UNPIN];
+pub const COMMANDS: [ExternalCommand; 7] = [
+    READ_STATUS,
+    CHECK,
+    STAGE_HELD,
+    RELEASE,
+    ROLLBACK,
+    PIN,
+    UNPIN,
+];
 
 /// How many attempts a new version gets (ADR-0014).
 pub const TRIAL_ATTEMPTS: u8 = 3;
@@ -239,10 +244,7 @@ impl Plan {
 
 /// The plan for downloading and staging the known update.
 pub fn plan_stage(state: &SystemState, conditions: &Conditions, requester: Requester) -> Plan {
-    let mut plan = Plan::new(
-        Operation::Stage,
-        decide_stage(state, conditions, requester),
-    );
+    let mut plan = Plan::new(Operation::Stage, decide_stage(state, conditions, requester));
     if !plan.decision.proceeds() {
         return plan;
     }
@@ -296,8 +298,9 @@ pub fn plan_stage(state: &SystemState, conditions: &Conditions, requester: Reque
              and is not changed."
         ));
     } else {
-        plan.effects
-            .push(format!("{new} is already on this computer. Nothing is downloaded."));
+        plan.effects.push(format!(
+            "{new} is already on this computer. Nothing is downloaded."
+        ));
     }
     plan.effects.push(format!(
         "At the next restart the computer starts {new}. It gets {TRIAL_ATTEMPTS} attempts to \
@@ -358,9 +361,8 @@ pub fn plan_rollback(state: &SystemState, conditions: &Conditions) -> Plan {
     plan.effects.push(format!(
         "{current} stays on this computer as the previous version, and you can return to it."
     ));
-    plan.effects.push(
-        "Files in home folders and installed applications are not changed.".to_owned(),
-    );
+    plan.effects
+        .push("Files in home folders and installed applications are not changed.".to_owned());
     plan.effects.push(format!(
         "System settings changed since {previous} was last in use go back to what they were \
          then: each version has its own /etc, and going back does not merge it."
@@ -407,8 +409,7 @@ pub fn plan_pin(state: &SystemState, slot: Slot) -> Plan {
     ));
     plan.effects
         .push("It uses disk space for as long as it is kept.".to_owned());
-    plan.effects
-        .push("Updates continue as before.".to_owned());
+    plan.effects.push("Updates continue as before.".to_owned());
     plan
 }
 
@@ -428,8 +429,9 @@ pub fn plan_unpin(state: &SystemState, slot: Slot) -> Plan {
         Some(operand),
         format!("Unpins {version}, the {slot} deployment."),
     ));
-    plan.effects
-        .push(format!("{version} is treated like any other version again."));
+    plan.effects.push(format!(
+        "{version} is treated like any other version again."
+    ));
     plan.effects.push(match slot {
         Slot::Rollback => "It is removed when the next update is applied.".to_owned(),
         _ => "It becomes the previous version at the next update, and is removed by the one \
@@ -479,20 +481,30 @@ mod tests {
             .collect();
         assert_eq!(run.len(), 1);
         assert_eq!(run[0].changes, Changes::Nothing);
-        assert_eq!(run[0].argv(None), ["/usr/bin/bootc", "status", "--format=json"]);
+        assert_eq!(
+            run[0].argv(None),
+            ["/usr/bin/bootc", "status", "--format=json"]
+        );
         assert_eq!(run[0].program, STATUS_PROGRAM);
         assert_eq!(
             [run[0].subcommand, run[0].options].concat(),
             STATUS_ARGUMENTS
         );
         // Nothing else reads only.
-        for command in COMMANDS.iter().filter(|command| !command.run_by_this_program) {
+        for command in COMMANDS
+            .iter()
+            .filter(|command| !command.run_by_this_program)
+        {
             assert_ne!(command.changes, Changes::Nothing, "{}", command.id);
         }
         // No command restarts the machine: `--apply` is never named.
         for command in COMMANDS {
             assert!(!command.options.contains(&"--apply"), "{}", command.id);
-            assert!(!command.options.contains(&"--soft-reboot"), "{}", command.id);
+            assert!(
+                !command.options.contains(&"--soft-reboot"),
+                "{}",
+                command.id
+            );
         }
     }
 

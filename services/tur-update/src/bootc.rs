@@ -349,7 +349,13 @@ mod tests {
 
     #[test]
     fn text_that_is_not_the_document_is_refused() {
-        for text in ["", "not json", "{}", "[]", r#"{"apiVersion":1,"kind":"BootcHost"}"#] {
+        for text in [
+            "",
+            "not json",
+            "{}",
+            "[]",
+            r#"{"apiVersion":1,"kind":"BootcHost"}"#,
+        ] {
             assert!(
                 matches!(parse_status(text), Err(ParseError::Shape(_))),
                 "{text:?}"

@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "service": "org.tur.Update1",
+  "adapters": [
+    {
+      "tool": "update_status",
+      "kind": "command",
+      "program": "/usr/bin/tur-update",
+      "arguments": [
+        { "literal": "status" },
+        { "literal": "--live" },
+        { "literal": "--json" }
+      ],
+      "max_output_bytes": 262144
+    },
+    {
+      "tool": "update_preview_check",
+      "kind": "command",
+      "program": "/usr/bin/tur-update",
+      "arguments": [
+        { "literal": "check" },
+        { "literal": "--live" },
+        { "literal": "--json" }
+      ],
+      "max_output_bytes": 262144
+    }
+  ]
+}
