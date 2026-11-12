@@ -156,7 +156,7 @@ becomes.
 |---|---|
 | Architecture and decisions | Published: [specification](docs/architecture/specification.md), [decision records](docs/adr/README.md) |
 | Operating-system image | Builds reproducibly ([report](docs/reports/TUR-002.md)), installs to a disk and **boots to a graphical login in a virtual machine** on every change ([report and screenshots](docs/reports/TUR-003.md)). Not yet tested on real hardware |
-| P@x | [Design](docs/architecture/ai-control-layer.md) published. A text assistant runs end to end in continuous integration against a scripted stand-in for the AI: it uses real system tools, runs read-only commands in a sandbox, and refuses everything that would need the user's approval ([report](docs/reports/pax-1.md)). Never yet run with a real AI model; no voice, screen control or approvals |
+| P@x | [Design](docs/architecture/ai-control-layer.md) published. A text assistant runs end to end in continuous integration against a scripted stand-in for the AI: it uses real system tools, runs read-only commands in a sandbox, and refuses everything that would need the user's approval. It runs the same way through its Claude, OpenAI and Gemini connections ([first report](docs/reports/pax-1.md), [second report](docs/reports/pax-2.md)). Never yet run with a real AI model; no voice, screen control or approvals |
 | Android | [Design](docs/architecture/android-runtime.md) published; not yet built |
 | Diagnostics, application detection, installer planning, storage safety | First versions written and tested as libraries and command-line tools; not yet part of the image |
 | Devices, P@x's connections to AI providers, P@x's memory and schedules, application catalogue and router | First versions written and tested; not yet part of the image |
