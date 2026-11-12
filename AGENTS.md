@@ -48,6 +48,32 @@ Never trade a higher item for a lower one.
 - Verify current upstream documentation and project health before pinning a
   dependency. Do not rely on what the specification says an upstream supports.
 
+## Licence boundary rules
+
+From the [licence review](docs/dependencies/licence-review.md) and
+[ADR-0003](docs/adr/0003-licence.md). These decide where code may live.
+
+- The project's noncommercial licence covers only the project's own separate
+  programs. Build a new component as a **standalone program** that talks to
+  others over D-Bus, a socket or the command line.
+- Code that runs inside a GPL program cannot carry the project licence. That
+  includes Plasma applets, look-and-feel packages, System Settings pages, KWin
+  scripts and effects, Calamares modules and kernel modules. If such code is
+  unavoidable it goes in a clearly marked directory under the upstream licence,
+  with an ADR.
+- Project-licensed code must not link GPL-only libraries. Known cases: the Qt
+  modules that are GPL-only (Virtual Keyboard, Wayland Compositor, Quick 3D,
+  Quick Timeline, Graphs) and `libbluetooth`. Check a library's licence before
+  depending on it.
+- **Never ship or redistribute:** Microsoft or Apple binaries; Google Mobile
+  Services or an Android image that contains them; ARM translation libraries
+  (`libhoudini`, `libndk_translation`); Proton builds (they bundle a proprietary
+  Steam component: the user's machine fetches them); codecs from outside Fedora.
+- Do not adapt or copy code from WinApps (its licence status is unclear). FreeRDP
+  and WinBoat are usable.
+- **No image may be published** until Fedora's logos and release packages have
+  been replaced: Fedora's terms forbid distributing them in a derived system.
+
 ## AI control layer rules
 
 - The AI layer is optional and off by default. Nothing in boot, install, update or

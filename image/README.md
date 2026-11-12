@@ -34,6 +34,10 @@ and fails if the two image IDs differ.
 | `sbom.spdx.json` | SPDX software bill of materials |
 | `licences.txt` | Every licence expression in the image, with a count |
 
+`scripts/sbom-licences.py sbom.spdx.json` turns the SBOM into the package and
+licence list kept in
+[`docs/dependencies/image-licences.csv`](../docs/dependencies/image-licences.csv).
+
 ## Identity
 
 The image keeps Fedora's distribution `ID` so that image and update tooling keep

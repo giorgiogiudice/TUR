@@ -1,6 +1,6 @@
 # ADR-0006: Android runtime — Waydroid as an opt-in OS container
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-12
 - **Specification sections:** §3.1 to §3.4, §7, §12.1, §15.2, §17.2; none of them
   covers Android in revision 1.0. See the
@@ -144,3 +144,19 @@ Before or while implementing, and recorded in the task reports:
 - The decision is shown to hold when the acceptance criteria of addendum B,
   section 13.1, pass in CI, and when a first compatibility matrix is published
   from real hardware.
+
+## Owner's decision (12 November 2026)
+
+Accepted, including the conditional exception to the "no runtime as root" rule
+for Waydroid's daemon and container. The micro-VM route stays the planned way to
+remove that exception.
+
+The owner also asked for Google Play to be integrated.
+[ADR-0011](0011-application-centre-and-stores.md) records how: Google Play is a
+guided, one-step opt-in in the application centre and through P@x. The image
+containing Google's services is never shipped; it is fetched from its publisher
+when the user opts in and accepts Google's terms, and the user registers the
+device with Google. The limits set out in this record and in addendum B still
+apply after opting in: applications that require Google's certified-device check
+will refuse to run.
+

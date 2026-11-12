@@ -253,6 +253,7 @@ added as each phase begins; the planned structure is in
 
 - [Architecture specification](docs/architecture/specification.md) — the project baseline
 - [Architecture Decision Records](docs/adr/README.md) — what was decided, and why
+- [Dependency and licence inventory](docs/dependencies/upstream-projects.md) — upstream projects, their licences, and the [licence review](docs/dependencies/licence-review.md)
 - [AGENTS.md](AGENTS.md) — constraints for automated contributors
 - [CONTRIBUTING.md](CONTRIBUTING.md) — workflow and completion reports
 - [SECURITY.md](SECURITY.md) — vulnerability reporting
@@ -290,6 +291,9 @@ The third-party projects that UOS integrates are separate works and remain under
 their own licences, which this licence does not change. Contributions that modify
 or link into such a project are made under that project's licence; see
 [ADR-0003](docs/adr/0003-licence.md).
+
+The software in the UOS image and its licences are listed in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ---
 
