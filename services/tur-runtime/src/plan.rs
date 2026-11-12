@@ -11,7 +11,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::path::PathBuf;
 
-use serde::Serialize;
+use serde::{Serialize, Serializer};
 
 /// The operation a plan carries out.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
@@ -37,6 +37,10 @@ pub enum Operation {
     Configure,
     /// Start the application.
     Launch,
+    /// Install an application into a fresh prefix.
+    Install,
+    /// Remove an installed application and everything kept for it.
+    Uninstall,
 }
 
 impl Operation {
@@ -53,6 +57,8 @@ impl Operation {
             Operation::Migrate => "migrate",
             Operation::Configure => "configure",
             Operation::Launch => "launch",
+            Operation::Install => "install",
+            Operation::Uninstall => "uninstall",
         }
     }
 }
@@ -138,6 +144,11 @@ pub enum Check {
         /// The path.
         path: PathBuf,
     },
+    /// Nothing is at the path: no file, no directory, no link.
+    Absent {
+        /// The path.
+        path: PathBuf,
+    },
 }
 
 impl Check {
@@ -152,6 +163,7 @@ impl Check {
             Check::OwnedByUser { path } => {
                 format!("{} belongs to the current user", path.display())
             }
+            Check::Absent { path } => format!("{} is gone", path.display()),
         }
     }
 }
@@ -178,6 +190,15 @@ pub enum Step {
         /// The directory.
         path: PathBuf,
     },
+    /// Write a file that is not text, replacing it atomically if it exists.
+    /// A plan shows the size of the contents, not the contents.
+    WriteBytes {
+        /// The file.
+        path: PathBuf,
+        /// Its whole contents.
+        #[serde(rename = "size", serialize_with = "byte_count")]
+        bytes: Vec<u8>,
+    },
     /// Rename a file or directory.
     Rename {
         /// The existing path.
@@ -191,6 +212,17 @@ pub enum Step {
         label: String,
         /// The command.
         command: CommandSpec,
+    },
+    /// Run a command to completion, for at most `limit_seconds`. Any exit
+    /// status but zero fails the plan, and so does running out of time: the
+    /// command is then stopped, with everything it started.
+    RunBounded {
+        /// What the command is for.
+        label: String,
+        /// The command.
+        command: CommandSpec,
+        /// How long it may take, in seconds.
+        limit_seconds: u64,
     },
     /// Start the application and wait for it. Its output goes to `log`; its
     /// exit status is the result of the plan.
@@ -214,6 +246,12 @@ pub enum Step {
     },
 }
 
+/// Serialises the contents of a binary file as their length.
+#[allow(clippy::ptr_arg)]
+fn byte_count<S: Serializer>(bytes: &Vec<u8>, serializer: S) -> Result<S::Ok, S::Error> {
+    serializer.serialize_u64(u64::try_from(bytes.len()).unwrap_or(u64::MAX))
+}
+
 impl Step {
     /// One line that says what the step does.
     pub fn describe(&self) -> String {
@@ -222,11 +260,22 @@ impl Step {
             Step::WriteFile { path, contents } => {
                 format!("write {} ({} bytes)", path.display(), contents.len())
             }
+            Step::WriteBytes { path, bytes } => {
+                format!("write {} ({} bytes)", path.display(), bytes.len())
+            }
             Step::RemoveTree { path } => format!("delete {}", path.display()),
             Step::Rename { from, to } => {
                 format!("rename {} to {}", from.display(), to.display())
             }
             Step::Run { label, command } => format!("{label}: {}", command.display_line()),
+            Step::RunBounded {
+                label,
+                command,
+                limit_seconds,
+            } => format!(
+                "{label}, within {limit_seconds} seconds: {}",
+                command.display_line()
+            ),
             Step::Launch { command, log } => format!(
                 "launch, logging to {}: {}",
                 log.display(),
@@ -300,6 +349,11 @@ pub enum StepOutcome {
         /// What was found when it does not.
         detail: String,
     },
+    /// A command was stopped because it ran out of time.
+    TimedOut {
+        /// How long it was given, in seconds.
+        seconds: u64,
+    },
 }
 
 /// A step that could not be carried out.
@@ -369,8 +423,11 @@ pub struct PlanReport {
     pub failure: Option<Failure>,
     /// The checks that did not hold.
     pub findings: Vec<Finding>,
-    /// The exit status of the application, when the plan launched one.
+    /// The exit status of the application, when the plan launched one, or
+    /// of the last time-limited command the plan ran.
     pub exit_status: Option<i32>,
+    /// Whether the plan stopped because a command ran out of time.
+    pub timed_out: bool,
 }
 
 impl PlanReport {
@@ -390,6 +447,7 @@ pub fn run_plan(plan: &Plan, executor: &mut dyn Executor) -> PlanReport {
         failure: None,
         findings: Vec::new(),
         exit_status: None,
+        timed_out: false,
     };
     for (index, step) in plan.steps.iter().enumerate() {
         let problem = match executor.execute(step) {
@@ -399,9 +457,19 @@ pub fn run_plan(plan: &Plan, executor: &mut dyn Executor) -> PlanReport {
                     report.exit_status = Some(status);
                     None
                 }
+                Step::RunBounded { .. } => {
+                    report.exit_status = Some(status);
+                    (status != 0).then(|| format!("the command exited with status {status}"))
+                }
                 _ if status == 0 => None,
                 _ => Some(format!("the command exited with status {status}")),
             },
+            Ok(StepOutcome::TimedOut { seconds }) => {
+                report.timed_out = true;
+                Some(format!(
+                    "the command did not finish within {seconds} seconds and was stopped"
+                ))
+            }
             Ok(StepOutcome::Checked { passed, detail }) => match step {
                 _ if passed => None,
                 Step::Check { check } => {
@@ -446,6 +514,8 @@ pub(crate) mod fake {
         /// Text which, when a check's description contains it, fails the
         /// check.
         pub(crate) failing_checks: Vec<String>,
+        /// The index of a time-limited command that runs out of time.
+        pub(crate) time_out_at: Option<usize>,
     }
 
     impl Executor for FakeExecutor {
@@ -456,13 +526,18 @@ pub(crate) mod fake {
                 return Err(StepError::new("scripted failure"));
             }
             Ok(match step {
-                Step::Run { .. } | Step::Launch { .. } => StepOutcome::Exited {
-                    status: if self.statuses.is_empty() {
-                        0
-                    } else {
-                        self.statuses.remove(0)
-                    },
-                },
+                Step::RunBounded { .. } if self.time_out_at == Some(index) => {
+                    StepOutcome::TimedOut { seconds: 1 }
+                }
+                Step::Run { .. } | Step::RunBounded { .. } | Step::Launch { .. } => {
+                    StepOutcome::Exited {
+                        status: if self.statuses.is_empty() {
+                            0
+                        } else {
+                            self.statuses.remove(0)
+                        },
+                    }
+                }
                 Step::Check { check } | Step::Require { check } => {
                     let description = check.describe();
                     let failed = self
@@ -678,6 +753,68 @@ mod tests {
     }
 
     #[test]
+    fn a_time_limited_command_reports_its_status_and_running_out_of_time() {
+        let step = |label: &str| Step::RunBounded {
+            label: label.to_owned(),
+            command: command("/usr/bin/bwrap", &["--", "wine", "setup.exe", "/S"]),
+            limit_seconds: 900,
+        };
+        let mut plan = Plan::new(Operation::Install, "com.example.app");
+        plan.steps = vec![
+            step("run the installer"),
+            Step::WriteBytes {
+                path: PathBuf::from("/d/icon.png"),
+                bytes: vec![1, 2, 3],
+            },
+        ];
+        // It succeeds: the plan goes on, and the status is reported.
+        let report = run_plan(&plan, &mut FakeExecutor::default());
+        assert!(report.succeeded());
+        assert_eq!(report.exit_status, Some(0));
+        assert!(!report.timed_out);
+        // It fails: the plan stops, and the status is still reported.
+        let mut executor = FakeExecutor {
+            statuses: vec![2],
+            ..FakeExecutor::default()
+        };
+        let report = run_plan(&plan, &mut executor);
+        assert_eq!(report.completed, 0);
+        assert_eq!(report.exit_status, Some(2));
+        assert!(!report.timed_out);
+        assert!(report.failure.unwrap().message.contains("status 2"));
+        // It runs out of time: the plan stops and says so.
+        let mut executor = FakeExecutor {
+            time_out_at: Some(0),
+            ..FakeExecutor::default()
+        };
+        let report = run_plan(&plan, &mut executor);
+        assert_eq!(report.completed, 0);
+        assert!(report.timed_out);
+        assert_eq!(report.exit_status, None);
+        assert!(report.failure.unwrap().message.contains("did not finish"));
+
+        let text = plan.render_text();
+        assert!(text.contains(
+            "  1. run the installer, within 900 seconds: /usr/bin/bwrap -- wine setup.exe /S\n"
+        ));
+        assert!(text.contains("  2. write /d/icon.png (3 bytes)\n"));
+        // A plan shows the size of a binary file, never its bytes.
+        let json = serde_json::to_value(&plan).unwrap();
+        assert_eq!(json["steps"][0]["step"], "run-bounded");
+        assert_eq!(json["steps"][0]["limit_seconds"], 900);
+        assert_eq!(json["steps"][1]["step"], "write-bytes");
+        assert_eq!(json["steps"][1]["size"], 3);
+        assert!(json["steps"][1].get("bytes").is_none());
+        assert_eq!(
+            Check::Absent {
+                path: PathBuf::from("/d/prefix")
+            }
+            .describe(),
+            "/d/prefix is gone"
+        );
+    }
+
+    #[test]
     fn operation_names() {
         for (operation, name) in [
             (Operation::Create, "create"),
@@ -690,6 +827,8 @@ mod tests {
             (Operation::Migrate, "migrate"),
             (Operation::Configure, "configure"),
             (Operation::Launch, "launch"),
+            (Operation::Install, "install"),
+            (Operation::Uninstall, "uninstall"),
         ] {
             assert_eq!(operation.as_str(), name);
             assert_eq!(serde_json::to_value(operation).unwrap(), name);

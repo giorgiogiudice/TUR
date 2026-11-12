@@ -94,3 +94,10 @@ pub const MAX_LOG_BYTES: usize = 64 * 1024 * 1024;
 
 /// Bytes of a failed command's output kept in the error message.
 pub const MAX_ERROR_OUTPUT_BYTES: usize = 2000;
+
+/// Bytes of a time-limited command's output kept in memory, for the
+/// operations log. Later output is read and dropped.
+pub const MAX_COMMAND_OUTPUT_BYTES: usize = 1024 * 1024;
+
+/// The longest an installer or uninstaller may be given, in seconds.
+pub const MAX_INSTALLER_SECONDS: u64 = 24 * 60 * 60;

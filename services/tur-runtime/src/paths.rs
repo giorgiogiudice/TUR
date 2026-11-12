@@ -7,16 +7,20 @@
 //!     prefixes/<app-id>/metadata.json     written by tur-runtime only
 //!     prefixes/<app-id>/prefix/           the Wine prefix (WINEPREFIX)
 //!     prefixes/<app-id>/home/             the application's private HOME
+//!     prefixes/<app-id>/application.json  the record of an installed application
+//!     prefixes/<app-id>/profile.json      the profile it is launched from
 //!     backups/<app-id>/<time>-<reason>.tar.gz
 //!     staging/<app-id>/                   scratch space for restore
+//!     launchers/<app-id>/                 the staged launcher entry and its icon
 //! $XDG_STATE_HOME/tur/runtime/
 //!     logs/<app-id>/<time>-<pid>.log      one file per launch
 //!     logs/<app-id>/operations.log        output of prefix operations
 //! ```
 //!
 //! Only `prefix/` and `home/` are ever made visible to the application. The
-//! metadata file sits beside them, outside the sandbox, so an application
-//! cannot change its own grants.
+//! metadata file, the application record and the profile sit beside them,
+//! outside the sandbox, so an application cannot change its own grants, what
+//! is recorded about it or what is started in its name.
 
 use std::fmt;
 use std::path::{Path, PathBuf};
@@ -154,9 +158,12 @@ impl RuntimeDirs {
             metadata: app_dir.join("metadata.json"),
             prefix: app_dir.join("prefix"),
             home: app_dir.join("home"),
+            record: app_dir.join("application.json"),
+            profile: app_dir.join("profile.json"),
             app_dir,
             backups: self.data_root.join("backups").join(app_id),
             staging: self.data_root.join("staging").join(app_id),
+            launchers: self.data_root.join("launchers").join(app_id),
             logs: self.state_root.join("logs").join(app_id),
         })
     }
@@ -176,10 +183,18 @@ pub struct AppPaths {
     pub prefix: PathBuf,
     /// The private home directory the application sees as `HOME`.
     pub home: PathBuf,
+    /// The record of the installed application. Never visible to the
+    /// application.
+    pub record: PathBuf,
+    /// The profile an installed application is launched from. Never visible
+    /// to the application.
+    pub profile: PathBuf,
     /// Where backups of this application are kept.
     pub backups: PathBuf,
     /// Scratch space used while restoring a backup.
     pub staging: PathBuf,
+    /// Where the application's launcher entry and icon are staged.
+    pub launchers: PathBuf,
     /// The application's log directory.
     pub logs: PathBuf,
 }
@@ -283,9 +298,19 @@ mod tests {
         );
         assert_eq!(app.operations_log(), app.logs.join("operations.log"));
 
-        // The metadata is not inside either directory the application sees.
-        assert!(!app.metadata.starts_with(&app.prefix));
-        assert!(!app.metadata.starts_with(&app.home));
+        assert_eq!(app.record, app.app_dir.join("application.json"));
+        assert_eq!(app.profile, app.app_dir.join("profile.json"));
+        assert_eq!(
+            app.launchers,
+            Path::new("/d/tur/runtime/launchers/com.example.app")
+        );
+
+        // The metadata, the application record and the profile are not
+        // inside either directory the application sees.
+        for hidden in [&app.metadata, &app.record, &app.profile, &app.launchers] {
+            assert!(!hidden.starts_with(&app.prefix));
+            assert!(!hidden.starts_with(&app.home));
+        }
 
         let other = dirs.app("com.example.other").unwrap();
         assert!(!other.prefix.starts_with(&app.app_dir));
