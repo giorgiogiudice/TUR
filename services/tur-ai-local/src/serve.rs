@@ -330,7 +330,10 @@ fn stop_child(child: &mut Child) {
 /// Serve until the model is idle, a stop is requested or the engine fails.
 /// `on_ready` is called once, when the engine answers and the state file is
 /// written.
-pub fn serve(options: &ServeOptions, on_ready: &mut dyn FnMut(&State)) -> Result<Stopped, ServeError> {
+pub fn serve(
+    options: &ServeOptions,
+    on_ready: &mut dyn FnMut(&State),
+) -> Result<Stopped, ServeError> {
     let runtime = &options.runtime;
     let launch = &options.launch;
     create_private_dir(runtime).map_err(|error| {
@@ -367,7 +370,10 @@ pub fn serve(options: &ServeOptions, on_ready: &mut dyn FnMut(&State)) -> Result
                 } else {
                     AiLocalCode::EngineFailed
                 };
-                return Err(ServeError::new(code, format!("{address} port {port}: {error}")));
+                return Err(ServeError::new(
+                    code,
+                    format!("{address} port {port}: {error}"),
+                ));
             }
         }
         Listen::Socket(path) => {
@@ -376,8 +382,9 @@ pub fn serve(options: &ServeOptions, on_ready: &mut dyn FnMut(&State)) -> Result
         }
     }
 
-    let key = random_key()
-        .map_err(|error| ServeError::new(AiLocalCode::EngineFailed, format!("/dev/urandom: {error}")))?;
+    let key = random_key().map_err(|error| {
+        ServeError::new(AiLocalCode::EngineFailed, format!("/dev/urandom: {error}"))
+    })?;
     write_private(&launch.api_key_file, &key).map_err(|error| {
         ServeError::new(
             AiLocalCode::RuntimeDirMissing,
@@ -386,15 +393,23 @@ pub fn serve(options: &ServeOptions, on_ready: &mut dyn FnMut(&State)) -> Result
     })?;
     let log_path = runtime.join(LOG_FILE);
     let log = File::create(&log_path).map_err(|error| {
-        ServeError::new(AiLocalCode::RuntimeDirMissing, format!("{}: {error}", log_path.display()))
+        ServeError::new(
+            AiLocalCode::RuntimeDirMissing,
+            format!("{}: {error}", log_path.display()),
+        )
     })?;
     let log_for_errors = log.try_clone().map_err(|error| {
-        ServeError::new(AiLocalCode::RuntimeDirMissing, format!("{}: {error}", log_path.display()))
+        ServeError::new(
+            AiLocalCode::RuntimeDirMissing,
+            format!("{}: {error}", log_path.display()),
+        )
     })?;
 
     let mut command = if Path::new(SETPRIV).is_file() {
         let mut command = Command::new(SETPRIV);
-        command.args(["--pdeathsig", "TERM", "--"]).arg(&launch.program);
+        command
+            .args(["--pdeathsig", "TERM", "--"])
+            .arg(&launch.program);
         command
     } else {
         Command::new(&launch.program)
@@ -513,10 +528,15 @@ pub fn serve(options: &ServeOptions, on_ready: &mut dyn FnMut(&State)) -> Result
             continue;
         }
         last_poll = Instant::now();
-        let current = local_get(&launch.listen, "/metrics", Some(&key), Duration::from_secs(10))
-            .ok()
-            .filter(|(status, _)| *status == 200)
-            .and_then(|(_, body)| parse_metrics(&body));
+        let current = local_get(
+            &launch.listen,
+            "/metrics",
+            Some(&key),
+            Duration::from_secs(10),
+        )
+        .ok()
+        .filter(|(status, _)| *status == 200)
+        .and_then(|(_, body)| parse_metrics(&body));
         let active = match (current, previous) {
             // Counters that cannot be read count as activity: a busy
             // engine is never stopped for being slow to answer.

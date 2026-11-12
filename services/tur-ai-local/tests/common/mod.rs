@@ -38,7 +38,8 @@ pub fn fake_engine() -> PathBuf {
 
 pub fn schema(name: &str) -> Value {
     let path = repository().join("schemas").join(name);
-    let text = fs::read_to_string(&path).unwrap_or_else(|error| panic!("{}: {error}", path.display()));
+    let text =
+        fs::read_to_string(&path).unwrap_or_else(|error| panic!("{}: {error}", path.display()));
     serde_json::from_str(&text).expect("the schema is JSON")
 }
 
@@ -140,7 +141,9 @@ fn validate(root: &Value, schema: &Value, value: &Value, path: &str, errors: &mu
             })
             .count();
         if matching != 1 {
-            errors.push(format!("{path}: matches {matching} oneOf alternatives, expected 1"));
+            errors.push(format!(
+                "{path}: matches {matching} oneOf alternatives, expected 1"
+            ));
         }
     }
     if let Some(expected) = schema.get("const")
@@ -175,7 +178,13 @@ fn validate(root: &Value, schema: &Value, value: &Value, path: &str, errors: &mu
         for (name, member) in object {
             match properties.and_then(|properties| properties.get(name)) {
                 Some(member_schema) => {
-                    validate(root, member_schema, member, &format!("{path}/{name}"), errors);
+                    validate(
+                        root,
+                        member_schema,
+                        member,
+                        &format!("{path}/{name}"),
+                        errors,
+                    );
                 }
                 None if closed => errors.push(format!("{path}: unexpected property {name}")),
                 None => {}
@@ -313,9 +322,8 @@ pub fn stdout_json(output: &Output) -> Value {
         output.status.code(),
         String::from_utf8_lossy(&output.stderr)
     );
-    serde_json::from_slice(&output.stdout).unwrap_or_else(|error| {
-        panic!("{error}: {}", String::from_utf8_lossy(&output.stdout))
-    })
+    serde_json::from_slice(&output.stdout)
+        .unwrap_or_else(|error| panic!("{error}: {}", String::from_utf8_lossy(&output.stdout)))
 }
 
 pub fn stderr_text(output: &Output) -> String {

@@ -486,7 +486,10 @@ mod tests {
 
     #[test]
     fn codes_are_unique_and_numbered_in_order() {
-        let texts: BTreeSet<&str> = AiLocalCode::all().iter().map(|code| code.as_str()).collect();
+        let texts: BTreeSet<&str> = AiLocalCode::all()
+            .iter()
+            .map(|code| code.as_str())
+            .collect();
         assert_eq!(texts.len(), AiLocalCode::all().len());
         for (index, code) in AiLocalCode::all().iter().enumerate() {
             let parsed = code.error_code().expect("a valid code");
@@ -508,7 +511,11 @@ mod tests {
                 entry.recovery_action,
             ] {
                 assert!(!text.trim().is_empty(), "{}", entry.code);
-                assert!(!text.contains("  "), "{}: double space in {text:?}", entry.code);
+                assert!(
+                    !text.contains("  "),
+                    "{}: double space in {text:?}",
+                    entry.code
+                );
                 assert!(!text.chars().any(char::is_control), "{}", entry.code);
             }
             assert!(entry.user_message.ends_with('.'), "{}", entry.code);
@@ -531,7 +538,11 @@ mod tests {
             ] {
                 let lower = text.to_lowercase();
                 for word in FORBIDDEN_WORDING {
-                    assert!(!lower.contains(word), "{}: {word:?} in {text:?}", entry.code);
+                    assert!(
+                        !lower.contains(word),
+                        "{}: {word:?} in {text:?}",
+                        entry.code
+                    );
                 }
             }
         }

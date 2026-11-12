@@ -263,12 +263,13 @@ pub fn recommend(catalogue: &Catalogue, hardware: &Hardware, context: u32) -> Re
             },
             crate::human_bytes(budget)
         ),
-        "Graphics: not used yet; the engine TUR installs runs models on the processor."
-            .to_owned(),
+        "Graphics: not used yet; the engine TUR installs runs models on the processor.".to_owned(),
     ];
     let (code, message) = match (&chosen, slow) {
         (Some(id), false) => {
-            let name = catalogue.get(id).map_or(id.as_str(), |model| model.name.as_str());
+            let name = catalogue
+                .get(id)
+                .map_or(id.as_str(), |model| model.name.as_str());
             reasons.push(format!(
                 "{name} is the largest model that fits, can call tools and is within the speed \
                  budget."
@@ -279,7 +280,9 @@ pub fn recommend(catalogue: &Catalogue, hardware: &Hardware, context: u32) -> Re
             )
         }
         (Some(id), true) => {
-            let name = catalogue.get(id).map_or(id.as_str(), |model| model.name.as_str());
+            let name = catalogue
+                .get(id)
+                .map_or(id.as_str(), |model| model.name.as_str());
             reasons.push(format!(
                 "No model is within the speed budget; {name} is the smallest that fits."
             ));

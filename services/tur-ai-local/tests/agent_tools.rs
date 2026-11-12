@@ -133,7 +133,12 @@ fn cases() -> Vec<(&'static str, &'static str, Vec<&'static str>)> {
         (
             "ai_local_models",
             "models",
-            vec!["/usr/bin/tur-ai-local", "models", "--json", "--catalogue-only"],
+            vec![
+                "/usr/bin/tur-ai-local",
+                "models",
+                "--json",
+                "--catalogue-only",
+            ],
         ),
         (
             "ai_local_recommend",
@@ -195,7 +200,10 @@ fn every_tool_only_observes() {
     ];
     for tool in tools {
         assert_eq!(tool["input_schema"]["properties"], json!({}), "{tool}");
-        assert_eq!(tool["input_schema"]["additionalProperties"], false, "{tool}");
+        assert_eq!(
+            tool["input_schema"]["additionalProperties"], false,
+            "{tool}"
+        );
         let name = tool["name"].as_str().expect("a name");
         assert!(name.starts_with("ai_local_"), "{name}");
         for field in ["name", "method"] {
@@ -267,7 +275,11 @@ fn the_tools_run_as_in_the_sandbox() {
         arguments
     };
 
-    let (status, stdout, stderr) = run(&recorded(command_line(&registry, "ai_local_status", json!({}))));
+    let (status, stdout, stderr) = run(&recorded(command_line(
+        &registry,
+        "ai_local_status",
+        json!({}),
+    )));
     assert_eq!(status, Some(0), "{stderr}");
     let report: Value = serde_json::from_str(&stdout).expect("the status is JSON");
     assert_eq!(report["kind"], "status");
@@ -277,7 +289,11 @@ fn the_tools_run_as_in_the_sandbox() {
     assert_eq!(report["code"], "TUR-AI-LOCAL-027");
     assert_eq!(report["engine"]["present"], false);
 
-    let (status, stdout, stderr) = run(&recorded(command_line(&registry, "ai_local_models", json!({}))));
+    let (status, stdout, stderr) = run(&recorded(command_line(
+        &registry,
+        "ai_local_models",
+        json!({}),
+    )));
     assert_eq!(status, Some(0), "{stderr}");
     let report: Value = serde_json::from_str(&stdout).expect("the list is JSON");
     assert_eq!(report["kind"], "models");
@@ -290,7 +306,11 @@ fn the_tools_run_as_in_the_sandbox() {
         assert!(model["fit"]["verdict"].as_str().is_some(), "{model}");
     }
 
-    let (status, stdout, stderr) = run(&recorded(command_line(&registry, "ai_local_recommend", json!({}))));
+    let (status, stdout, stderr) = run(&recorded(command_line(
+        &registry,
+        "ai_local_recommend",
+        json!({}),
+    )));
     assert_eq!(status, Some(0), "{stderr}");
     let report: Value = serde_json::from_str(&stdout).expect("the recommendation is JSON");
     assert_eq!(report["kind"], "recommend");

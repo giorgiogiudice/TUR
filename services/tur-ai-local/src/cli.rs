@@ -40,9 +40,7 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 use serde::Serialize;
 
 use crate::SCHEMA_VERSION;
-use crate::catalogue::{
-    Capability, Catalogue, INSTALLED_CATALOGUE, Model, Tested, Thinking,
-};
+use crate::catalogue::{Capability, Catalogue, INSTALLED_CATALOGUE, Model, Tested, Thinking};
 use crate::codes::{AiLocalCode, CodeEntry, registry};
 use crate::download::{self, DownloadError};
 use crate::engine::{self, DEFAULT_ENGINE, DEFAULT_PORT, Launch, Listen, Reasoning};
@@ -229,7 +227,12 @@ pub struct ServeArgs {
     pub json: bool,
     /// The address to listen on. Only loopback addresses without
     /// --allow-network
-    #[arg(long, value_name = "ADDRESS", default_value = "127.0.0.1", conflicts_with = "socket")]
+    #[arg(
+        long,
+        value_name = "ADDRESS",
+        default_value = "127.0.0.1",
+        conflicts_with = "socket"
+    )]
     pub host: String,
     /// The port to listen on
     #[arg(long, value_name = "PORT", default_value_t = DEFAULT_PORT,
@@ -631,7 +634,12 @@ pub struct ModelView {
     pub tested: Vec<Tested>,
 }
 
-fn model_view(model: &Model, store: Option<&Store>, hardware: Option<&Hardware>, context: u32) -> ModelView {
+fn model_view(
+    model: &Model,
+    store: Option<&Store>,
+    hardware: Option<&Hardware>,
+    context: u32,
+) -> ModelView {
     let (installed, install_problem) = match store {
         Some(store) => {
             let (state, problem) = store.state(model);
@@ -757,7 +765,10 @@ fn models_command(places: &Places, args: &ModelsArgs, out: &mut dyn Write) -> Re
             human_bytes(view.download_bytes),
             human_bytes(view.memory_bytes)
         ));
-        text.push_str(&format!("  Can do: {}.\n", capability_words(&view.capabilities)));
+        text.push_str(&format!(
+            "  Can do: {}.\n",
+            capability_words(&view.capabilities)
+        ));
         text.push_str(&format!("  Good for: {}\n", view.good_for.join(" ")));
         text.push_str(&format!(
             "  Licence: {}. {} Restrictions: {}\n",
@@ -768,7 +779,9 @@ fn models_command(places: &Places, args: &ModelsArgs, out: &mut dyn Write) -> Re
         }
     }
     for name in &other_folders {
-        text.push_str(&format!("{name} — not in the catalogue, not reviewed by TUR.\n"));
+        text.push_str(&format!(
+            "{name} — not in the catalogue, not reviewed by TUR.\n"
+        ));
     }
     write_text(out, &text)
 }
@@ -783,7 +796,11 @@ struct RecommendReport<'a> {
     recommendation: &'a Recommendation,
 }
 
-fn recommend_command(places: &Places, args: &ContextArgs, out: &mut dyn Write) -> Result<(), Failure> {
+fn recommend_command(
+    places: &Places,
+    args: &ContextArgs,
+    out: &mut dyn Write,
+) -> Result<(), Failure> {
     let catalogue = load_catalogue(places)?;
     let hardware = read_hardware(places)?;
     let recommendation = fit::recommend(&catalogue, &hardware, args.context);
@@ -877,7 +894,10 @@ fn licence_view(model: &Model) -> LicenceView {
 }
 
 fn storage_failure(path: &Path, error: &std::io::Error) -> Failure {
-    Failure::coded(AiLocalCode::StorageFailed, format!("{}: {error}", path.display()))
+    Failure::coded(
+        AiLocalCode::StorageFailed,
+        format!("{}: {error}", path.display()),
+    )
 }
 
 fn download_failure(name: &str, error: &DownloadError) -> Failure {
@@ -1034,7 +1054,11 @@ fn verify_command(places: &Places, args: &ModelArgs, out: &mut dyn Write) -> Res
         InstallState::Absent => {
             return Err(Failure::coded(
                 AiLocalCode::NotDownloaded,
-                format!("{} has no verified files in {}", model.id, store.root.display()),
+                format!(
+                    "{} has no verified files in {}",
+                    model.id,
+                    store.root.display()
+                ),
             ));
         }
         InstallState::Damaged => {
@@ -1099,7 +1123,10 @@ struct RemoveReport {
 
 fn remove_command(places: &Places, args: &ModelArgs, out: &mut dyn Write) -> Result<(), Failure> {
     if !crate::catalogue::is_model_id(&args.model) {
-        return Err(Failure::Usage(format!("{:?} is not a model id", args.model)));
+        return Err(Failure::Usage(format!(
+            "{:?} is not a model id",
+            args.model
+        )));
     }
     if let Some(runtime) = serve::runtime_dir(places.runtime_dir.as_deref())
         && let Some(state) = serve::read_state(&runtime)
@@ -1197,7 +1224,11 @@ fn serve_command(places: &Places, args: &ServeArgs, out: &mut dyn Write) -> Resu
         InstallState::Absent => {
             return Err(Failure::coded(
                 AiLocalCode::NotDownloaded,
-                format!("{} has no verified files in {}", model.id, store.root.display()),
+                format!(
+                    "{} has no verified files in {}",
+                    model.id,
+                    store.root.display()
+                ),
             ));
         }
         InstallState::Damaged => {
@@ -1381,9 +1412,9 @@ fn status_command(places: &Places, args: &JsonArgs, out: &mut dyn Write) -> Resu
                     (_, _, Some(socket)) => Some(Listen::Socket(PathBuf::from(socket))),
                     _ => None,
                 };
-                report.health = match listen
-                    .map(|listen| serve::local_get(&listen, "/health", None, Duration::from_secs(2)))
-                {
+                report.health = match listen.map(|listen| {
+                    serve::local_get(&listen, "/health", None, Duration::from_secs(2))
+                }) {
                     Some(Ok((200, _))) => Health::Ok,
                     Some(Ok((503, _))) => Health::Loading,
                     _ => Health::Unreachable,
@@ -1399,7 +1430,8 @@ fn status_command(places: &Places, args: &JsonArgs, out: &mut dyn Write) -> Resu
                         .or_else(|| state.socket.clone())
                         .unwrap_or_default()
                 );
-                report.idle_seconds = Some(store::now_seconds().saturating_sub(state.last_activity));
+                report.idle_seconds =
+                    Some(store::now_seconds().saturating_sub(state.last_activity));
                 report.memory = Some(ProcessMemory {
                     rss_bytes: rss,
                     peak_rss_bytes: peak,
@@ -1429,7 +1461,10 @@ fn status_command(places: &Places, args: &JsonArgs, out: &mut dyn Write) -> Resu
         if let Some(memory) = report.memory {
             text.push_str(&format!(
                 "Memory: {} now, at most {}.\n",
-                memory.rss_bytes.map(human_bytes).unwrap_or_else(|| "?".to_owned()),
+                memory
+                    .rss_bytes
+                    .map(human_bytes)
+                    .unwrap_or_else(|| "?".to_owned()),
                 memory
                     .peak_rss_bytes
                     .map(human_bytes)

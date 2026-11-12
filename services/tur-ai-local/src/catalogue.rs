@@ -429,13 +429,18 @@ fn is_plain_file_name(text: &str) -> bool {
 
 fn check_file(id: &str, what: &str, file: &ModelFile, revision: &str, problems: &mut Vec<String>) {
     if !is_plain_file_name(&file.name) || !file.name.ends_with(".gguf") {
-        problems.push(format!("{id}: {what} name {:?} is not a plain .gguf file name", file.name));
+        problems.push(format!(
+            "{id}: {what} name {:?} is not a plain .gguf file name",
+            file.name
+        ));
     }
     if !file.url.starts_with("https://") {
         problems.push(format!("{id}: {what} URL is not https"));
     }
     if !file.url.contains(&format!("/{revision}/")) {
-        problems.push(format!("{id}: {what} URL is not pinned to revision {revision}"));
+        problems.push(format!(
+            "{id}: {what} URL is not pinned to revision {revision}"
+        ));
     }
     if !file.url.ends_with(&format!("/{}", file.name)) {
         problems.push(format!("{id}: {what} URL does not end with the file name"));
@@ -444,7 +449,9 @@ fn check_file(id: &str, what: &str, file: &ModelFile, revision: &str, problems: 
         problems.push(format!("{id}: {what} size is 0"));
     }
     if !is_lower_hex(&file.sha256, 64) {
-        problems.push(format!("{id}: {what} sha256 is not 64 lower-case hexadecimal digits"));
+        problems.push(format!(
+            "{id}: {what} sha256 is not 64 lower-case hexadecimal digits"
+        ));
     }
 }
 
@@ -462,7 +469,9 @@ pub fn check(file_name: &str, model: &Model) -> Vec<String> {
     let mut problems = Vec::new();
     let id = model.id.as_str();
     if model.schema_version != ENTRY_SCHEMA_VERSION {
-        problems.push(format!("{id}: schema_version must be {ENTRY_SCHEMA_VERSION}"));
+        problems.push(format!(
+            "{id}: schema_version must be {ENTRY_SCHEMA_VERSION}"
+        ));
     }
     if !is_model_id(id) {
         problems.push(format!("{file_name}: {id:?} is not a valid model id"));
@@ -499,12 +508,17 @@ pub fn check(file_name: &str, model: &Model) -> Vec<String> {
         }
     }
     if !is_lower_hex(&model.revision, 40) {
-        problems.push(format!("{id}: revision is not a 40-digit commit identifier"));
+        problems.push(format!(
+            "{id}: revision is not a 40-digit commit identifier"
+        ));
     }
     if model.format != "gguf" {
         problems.push(format!("{id}: format must be gguf"));
     }
-    for (what, date) in [("checked", &model.checked), ("licence checked", &model.licence.checked)] {
+    for (what, date) in [
+        ("checked", &model.checked),
+        ("licence checked", &model.licence.checked),
+    ] {
         if !is_date(date) {
             problems.push(format!("{id}: {what} is not a YYYY-MM-DD date"));
         }
@@ -526,7 +540,9 @@ pub fn check(file_name: &str, model: &Model) -> Vec<String> {
         problems.push(format!("{id}: an embeddings model has no other capability"));
     }
     if embeddings != model.pooling.is_some() {
-        problems.push(format!("{id}: pooling is given for embeddings models and only for them"));
+        problems.push(format!(
+            "{id}: pooling is given for embeddings models and only for them"
+        ));
     }
     if (capabilities.contains(&Capability::Tools) || capabilities.contains(&Capability::Vision))
         && !capabilities.contains(&Capability::Chat)
@@ -534,7 +550,9 @@ pub fn check(file_name: &str, model: &Model) -> Vec<String> {
         problems.push(format!("{id}: tools and vision need chat"));
     }
     if capabilities.contains(&Capability::Vision) != model.projector.is_some() {
-        problems.push(format!("{id}: a projector is given for vision models and only for them"));
+        problems.push(format!(
+            "{id}: a projector is given for vision models and only for them"
+        ));
     }
     if embeddings && model.thinking != Thinking::None {
         problems.push(format!("{id}: an embeddings model does not think"));
@@ -544,11 +562,15 @@ pub fn check(file_name: &str, model: &Model) -> Vec<String> {
         problems.push(format!("{id}: context sizes must be positive"));
     }
     if model.memory_context > model.context_length {
-        problems.push(format!("{id}: memory_context is longer than the model's context"));
+        problems.push(format!(
+            "{id}: memory_context is longer than the model's context"
+        ));
     }
-    let floor = model
-        .download_bytes()
-        .saturating_add(model.kv_bytes_per_token.saturating_mul(u64::from(model.memory_context)));
+    let floor = model.download_bytes().saturating_add(
+        model
+            .kv_bytes_per_token
+            .saturating_mul(u64::from(model.memory_context)),
+    );
     if model.memory_bytes < floor {
         problems.push(format!(
             "{id}: memory_bytes {} is less than the files and the context cache, {floor}",
@@ -587,10 +609,14 @@ pub fn check(file_name: &str, model: &Model) -> Vec<String> {
         check_text(id, "tested engine", &tested.engine, &mut problems);
         check_text(id, "tested hardware", &tested.hardware, &mut problems);
         if !model.can(Capability::Tools) && tested.tool_call != Outcome::NotTested {
-            problems.push(format!("{id}: a tool call was tested on a model without tools"));
+            problems.push(format!(
+                "{id}: a tool call was tested on a model without tools"
+            ));
         }
         if !model.can(Capability::Vision) && tested.image_input != Outcome::NotTested {
-            problems.push(format!("{id}: image input was tested on a model without vision"));
+            problems.push(format!(
+                "{id}: image input was tested on a model without vision"
+            ));
         }
     }
     problems
@@ -643,15 +669,27 @@ checked = "2026-11-12"
         assert!(!model.licence.restricts_use());
         assert_eq!(model.download_bytes(), 1_000_000);
         assert_eq!(model.memory_for_context(8192), 2_000_000_000);
-        assert_eq!(model.memory_for_context(4096), 2_000_000_000 - 4096 * 100_000);
-        assert_eq!(model.memory_for_context(16384), 2_000_000_000 + 8192 * 100_000);
+        assert_eq!(
+            model.memory_for_context(4096),
+            2_000_000_000 - 4096 * 100_000
+        );
+        assert_eq!(
+            model.memory_for_context(16384),
+            2_000_000_000 + 8192 * 100_000
+        );
     }
 
     #[test]
     fn broken_rules_are_all_reported() {
         let broken = ENTRY
-            .replace("capabilities = [\"chat\", \"tools\"]", "capabilities = [\"tools\", \"vision\"]")
-            .replace("/resolve/0123456789abcdef0123456789abcdef01234567/", "/resolve/main/")
+            .replace(
+                "capabilities = [\"chat\", \"tools\"]",
+                "capabilities = [\"tools\", \"vision\"]",
+            )
+            .replace(
+                "/resolve/0123456789abcdef0123456789abcdef01234567/",
+                "/resolve/main/",
+            )
             .replace("memory_bytes = 2000000000", "memory_bytes = 10");
         let problems = parse_entry("other-name.toml", &broken).expect_err("invalid");
         let text = problems.join("\n");

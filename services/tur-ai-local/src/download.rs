@@ -160,7 +160,8 @@ fn copy_and_hash(
     let file = writer
         .into_inner()
         .map_err(|error| storage(temporary, error.error()))?;
-    file.sync_all().map_err(|error| storage(temporary, &error))?;
+    file.sync_all()
+        .map_err(|error| storage(temporary, &error))?;
     if written != expected.size_bytes {
         return Err(DownloadError::Size {
             expected: expected.size_bytes,
@@ -314,8 +315,13 @@ mod tests {
         let data = b"GGUF the model".to_vec();
         let destination = dir.join("test.gguf");
         let mut seen = 0;
-        write_checked(&mut data.as_slice(), &expected(&data), &destination, &mut |n| seen = n)
-            .expect("kept");
+        write_checked(
+            &mut data.as_slice(),
+            &expected(&data),
+            &destination,
+            &mut |n| seen = n,
+        )
+        .expect("kept");
         assert_eq!(fs::read(&destination).expect("written"), data);
         assert_eq!(seen, data.len() as u64);
         assert!(!part_path(&destination).exists());
@@ -330,8 +336,13 @@ mod tests {
         let mut changed = data.clone();
         changed[5] ^= 0x01;
         let destination = dir.join("test.gguf");
-        let error = write_checked(&mut changed.as_slice(), &expected(&data), &destination, &mut |_| {})
-            .expect_err("refused");
+        let error = write_checked(
+            &mut changed.as_slice(),
+            &expected(&data),
+            &destination,
+            &mut |_| {},
+        )
+        .expect_err("refused");
         assert_eq!(error.code(), AiLocalCode::DigestMismatch);
         assert!(!destination.exists());
         assert!(!part_path(&destination).exists());
@@ -355,17 +366,26 @@ mod tests {
         );
         let mut long = data.clone();
         long.extend_from_slice(b"more");
-        let error = write_checked(&mut long.as_slice(), &expected(&data), &destination, &mut |_| {})
-            .expect_err("refused");
+        let error = write_checked(
+            &mut long.as_slice(),
+            &expected(&data),
+            &destination,
+            &mut |_| {},
+        )
+        .expect_err("refused");
         assert_eq!(error.code(), AiLocalCode::SizeMismatch);
         assert!(!destination.exists());
         assert!(!part_path(&destination).exists());
 
         let source = dir.join("by-hand.gguf");
         fs::write(&source, short).expect("source");
-        let error = import(&source, &expected(&data), &destination, &mut |_| {}).expect_err("refused");
+        let error =
+            import(&source, &expected(&data), &destination, &mut |_| {}).expect_err("refused");
         assert_eq!(error.code(), AiLocalCode::SizeMismatch);
-        assert!(source.exists(), "an import never moves or deletes the source");
+        assert!(
+            source.exists(),
+            "an import never moves or deletes the source"
+        );
         let _ = fs::remove_dir_all(dir);
     }
 }

@@ -28,7 +28,10 @@ fn the_seed_catalogue_loads_and_follows_the_schema() {
         .expect("the catalogue directory")
         .filter_map(Result::ok)
         .map(|entry| entry.path())
-        .filter(|path| path.extension().is_some_and(|extension| extension == "toml"))
+        .filter(|path| {
+            path.extension()
+                .is_some_and(|extension| extension == "toml")
+        })
         .collect();
     files.sort();
     assert_eq!(files.len(), catalogue.models.len());
@@ -49,8 +52,18 @@ fn three_to_five_small_permissive_models_with_tools_and_vision() {
     let catalogue = seed();
     let count = catalogue.models.len();
     assert!((3..=5).contains(&count), "{count} models");
-    assert!(catalogue.models.iter().any(|model| model.can(Capability::Tools)));
-    assert!(catalogue.models.iter().any(|model| model.can(Capability::Vision)));
+    assert!(
+        catalogue
+            .models
+            .iter()
+            .any(|model| model.can(Capability::Tools))
+    );
+    assert!(
+        catalogue
+            .models
+            .iter()
+            .any(|model| model.can(Capability::Vision))
+    );
     for model in &catalogue.models {
         // Small enough for a processor: no file of the first list is larger
         // than 3 GB.
@@ -79,7 +92,10 @@ fn every_file_comes_from_its_publisher_pinned_to_a_revision() {
             model.id
         );
         for file in model.files() {
-            let expected = format!("{}/resolve/{}/{}", model.repository, model.revision, file.name);
+            let expected = format!(
+                "{}/resolve/{}/{}",
+                model.repository, model.revision, file.name
+            );
             assert_eq!(file.url, expected, "{}", model.id);
             assert!(names.insert(file.name.clone()), "{} named twice", file.name);
         }
@@ -99,7 +115,12 @@ fn a_measured_result_has_its_report() {
     for model in &catalogue.models {
         for tested in &model.tested {
             let report = repository().join(&tested.report);
-            assert!(report.is_file(), "{}: {} does not exist", model.id, tested.report);
+            assert!(
+                report.is_file(),
+                "{}: {} does not exist",
+                model.id,
+                tested.report
+            );
             let text = fs::read_to_string(&report).expect("readable");
             assert!(
                 text.contains(&model.id),
@@ -108,7 +129,9 @@ fn a_measured_result_has_its_report() {
                 tested.report
             );
             assert!(
-                tested.run.starts_with("https://github.com/giorgiogiudice/TUR/actions/runs/"),
+                tested
+                    .run
+                    .starts_with("https://github.com/giorgiogiudice/TUR/actions/runs/"),
                 "{}",
                 model.id
             );

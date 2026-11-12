@@ -141,7 +141,12 @@ fn the_recommendation_follows_memory_and_processor() {
         .as_array()
         .expect("fits")
         .iter()
-        .map(|fit| (fit["model"].as_str().unwrap_or(""), fit["verdict"].as_str().unwrap_or("")))
+        .map(|fit| {
+            (
+                fit["model"].as_str().unwrap_or(""),
+                fit["verdict"].as_str().unwrap_or(""),
+            )
+        })
         .collect();
     assert!(fits.contains(&("qwen3-0.6b", "not-now")), "{fits:?}");
     assert!(fits.contains(&("qwen3-4b", "too-large")), "{fits:?}");
@@ -165,11 +170,29 @@ fn unknown_models_and_bad_addresses_are_refused_with_codes() {
     // Listening where other devices can connect is refused before anything
     // else is looked at.
     for host in ["0.0.0.0", "::", "192.168.1.20"] {
-        let output = run(&["serve", "qwen3-0.6b", "--host", host, "--catalogue", catalogue]);
+        let output = run(&[
+            "serve",
+            "qwen3-0.6b",
+            "--host",
+            host,
+            "--catalogue",
+            catalogue,
+        ]);
         assert_eq!(output.status.code(), Some(1), "{host}");
-        assert!(stderr_text(&output).starts_with("TUR-AI-LOCAL-016"), "{host}: {}", stderr_text(&output));
+        assert!(
+            stderr_text(&output).starts_with("TUR-AI-LOCAL-016"),
+            "{host}: {}",
+            stderr_text(&output)
+        );
     }
-    let output = run(&["serve", "qwen3-0.6b", "--host", "not-an-address", "--catalogue", catalogue]);
+    let output = run(&[
+        "serve",
+        "qwen3-0.6b",
+        "--host",
+        "not-an-address",
+        "--catalogue",
+        catalogue,
+    ]);
     assert_eq!(output.status.code(), Some(2));
 
     // Not downloaded.
@@ -228,23 +251,47 @@ fn import_verify_refuse_a_changed_file_and_remove() {
     changed[10] ^= 0x20;
     let changed_path = dir.join("changed.gguf");
     fs::write(&changed_path, &changed).expect("file");
-    let output = run_with(&["pull", "tiny-test", "--from-file", changed_path.to_str().expect("UTF-8")]);
+    let output = run_with(&[
+        "pull",
+        "tiny-test",
+        "--from-file",
+        changed_path.to_str().expect("UTF-8"),
+    ]);
     assert_eq!(output.status.code(), Some(1));
-    assert!(stderr_text(&output).starts_with("TUR-AI-LOCAL-010"), "{}", stderr_text(&output));
+    assert!(
+        stderr_text(&output).starts_with("TUR-AI-LOCAL-010"),
+        "{}",
+        stderr_text(&output)
+    );
     assert!(!models.join("tiny-test/tiny.gguf").exists());
     assert!(!models.join("tiny-test/tiny.gguf.part").exists());
 
     // A short file: refused before it is copied.
     let short_path = dir.join("short.gguf");
     fs::write(&short_path, &TINY[..TINY.len() - 3]).expect("file");
-    let output = run_with(&["pull", "tiny-test", "--from-file", short_path.to_str().expect("UTF-8")]);
+    let output = run_with(&[
+        "pull",
+        "tiny-test",
+        "--from-file",
+        short_path.to_str().expect("UTF-8"),
+    ]);
     assert_eq!(output.status.code(), Some(1));
-    assert!(stderr_text(&output).starts_with("TUR-AI-LOCAL-009"), "{}", stderr_text(&output));
+    assert!(
+        stderr_text(&output).starts_with("TUR-AI-LOCAL-009"),
+        "{}",
+        stderr_text(&output)
+    );
 
     // The right file: imported and recorded.
     let good_path = dir.join("good.gguf");
     fs::write(&good_path, TINY).expect("file");
-    let output = run_with(&["pull", "tiny-test", "--json", "--from-file", good_path.to_str().expect("UTF-8")]);
+    let output = run_with(&[
+        "pull",
+        "tiny-test",
+        "--json",
+        "--from-file",
+        good_path.to_str().expect("UTF-8"),
+    ]);
     let report = stdout_json(&output);
     assert_valid(&schema, &report, "pull");
     assert_eq!(report["code"], "TUR-AI-LOCAL-023");
@@ -269,11 +316,19 @@ fn import_verify_refuse_a_changed_file_and_remove() {
     fs::write(models.join("tiny-test/tiny.gguf"), &changed).expect("file");
     let output = run_with(&["verify", "tiny-test"]);
     assert_eq!(output.status.code(), Some(1));
-    assert!(stderr_text(&output).starts_with("TUR-AI-LOCAL-025"), "{}", stderr_text(&output));
+    assert!(
+        stderr_text(&output).starts_with("TUR-AI-LOCAL-025"),
+        "{}",
+        stderr_text(&output)
+    );
     fs::write(models.join("tiny-test/tiny.gguf"), &changed[..5]).expect("file");
     let output = run_with(&["serve", "tiny-test", "--context", "512"]);
     assert_eq!(output.status.code(), Some(1));
-    assert!(stderr_text(&output).starts_with("TUR-AI-LOCAL-025"), "{}", stderr_text(&output));
+    assert!(
+        stderr_text(&output).starts_with("TUR-AI-LOCAL-025"),
+        "{}",
+        stderr_text(&output)
+    );
 
     let output = run_with(&["remove", "tiny-test", "--json"]);
     let report = stdout_json(&output);
@@ -401,10 +456,17 @@ fn serve_status_and_stop_with_a_stand_in_engine() {
     let key_file = runtime.join("tur-ai-local/api-key");
     let mode = {
         use std::os::unix::fs::PermissionsExt;
-        fs::metadata(&key_file).expect("key file").permissions().mode() & 0o777
+        fs::metadata(&key_file)
+            .expect("key file")
+            .permissions()
+            .mode()
+            & 0o777
     };
     assert_eq!(mode, 0o600);
-    let key = fs::read_to_string(&key_file).expect("key").trim().to_owned();
+    let key = fs::read_to_string(&key_file)
+        .expect("key")
+        .trim()
+        .to_owned();
     assert_eq!(key.len(), 64);
     // The key is never printed.
     assert!(!ready.to_string().contains(&key));
@@ -416,8 +478,18 @@ fn serve_status_and_stop_with_a_stand_in_engine() {
     )
     .expect("JSON");
     let joined = arguments.join(" ");
-    assert!(joined.contains(&format!("--host 127.0.0.1 --port {port}")), "{joined}");
-    for expected in ["--offline", "--no-webui", "--metrics", "--api-key-file", "--parallel 1", "--reasoning off"] {
+    assert!(
+        joined.contains(&format!("--host 127.0.0.1 --port {port}")),
+        "{joined}"
+    );
+    for expected in [
+        "--offline",
+        "--no-webui",
+        "--metrics",
+        "--api-key-file",
+        "--parallel 1",
+        "--reasoning off",
+    ] {
         assert!(joined.contains(expected), "{expected}: {joined}");
     }
 
@@ -432,7 +504,11 @@ fn serve_status_and_stop_with_a_stand_in_engine() {
     assert_eq!(status["running"], true);
     assert_eq!(status["code"], "TUR-AI-LOCAL-026");
     assert_eq!(status["health"], "ok");
-    assert!(status["memory"]["rss_bytes"].as_u64().is_some_and(|bytes| bytes > 0));
+    assert!(
+        status["memory"]["rss_bytes"]
+            .as_u64()
+            .is_some_and(|bytes| bytes > 0)
+    );
     assert!(!status.to_string().contains(&key));
 
     // A second serve is refused.
@@ -455,7 +531,11 @@ fn serve_status_and_stop_with_a_stand_in_engine() {
         fixture_host("desktop-amd").to_str().expect("UTF-8"),
     ]);
     assert_eq!(output.status.code(), Some(1));
-    assert!(stderr_text(&output).starts_with("TUR-AI-LOCAL-018"), "{}", stderr_text(&output));
+    assert!(
+        stderr_text(&output).starts_with("TUR-AI-LOCAL-018"),
+        "{}",
+        stderr_text(&output)
+    );
 
     // Removing the model being served is refused.
     let output = run(&[
@@ -473,7 +553,12 @@ fn serve_status_and_stop_with_a_stand_in_engine() {
     assert!(chat(port, &key).starts_with("HTTP/1.0 200"));
     assert!(chat(port, "wrong").starts_with("HTTP/1.0 401"));
 
-    let stop = stdout_json(&run(&["stop", "--json", "--runtime-dir", runtime.to_str().expect("UTF-8")]));
+    let stop = stdout_json(&run(&[
+        "stop",
+        "--json",
+        "--runtime-dir",
+        runtime.to_str().expect("UTF-8"),
+    ]));
     assert_valid(&schema, &stop, "stop");
     assert_eq!(stop["code"], "TUR-AI-LOCAL-021");
     assert_eq!(stop["model"], "tiny-test");
@@ -496,7 +581,12 @@ fn serve_status_and_stop_with_a_stand_in_engine() {
     let status = stdout_json(&run(&status_args));
     assert_eq!(status["running"], false);
     assert_eq!(status["code"], "TUR-AI-LOCAL-019");
-    let stop = stdout_json(&run(&["stop", "--json", "--runtime-dir", runtime.to_str().expect("UTF-8")]));
+    let stop = stdout_json(&run(&[
+        "stop",
+        "--json",
+        "--runtime-dir",
+        runtime.to_str().expect("UTF-8"),
+    ]));
     assert_eq!(stop["code"], "TUR-AI-LOCAL-019");
     let _ = fs::remove_dir_all(dir);
 }

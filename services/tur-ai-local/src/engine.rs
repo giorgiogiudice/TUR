@@ -309,7 +309,10 @@ mod tests {
         }
         assert!(!joined.contains("--embedding"));
         assert_eq!(line.iter().filter(|a| *a == "--host").count(), 1);
-        assert_eq!(launch.listen.base_url().as_deref(), Some("http://127.0.0.1:39281"));
+        assert_eq!(
+            launch.listen.base_url().as_deref(),
+            Some("http://127.0.0.1:39281")
+        );
         assert!(launch.listen.is_local());
     }
 }

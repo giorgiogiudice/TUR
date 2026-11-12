@@ -109,7 +109,10 @@ impl Store {
             return (InstallState::Absent, None);
         }
         let Some(verified) = self.read_verified(&model.id) else {
-            let has_files = model.files().iter().any(|file| dir.join(&file.name).exists());
+            let has_files = model
+                .files()
+                .iter()
+                .any(|file| dir.join(&file.name).exists());
             return if has_files {
                 (
                     InstallState::Damaged,
@@ -122,17 +125,24 @@ impl Store {
         for file in model.files() {
             let recorded = verified.files.iter().find(|entry| entry.name == file.name);
             match recorded {
-                Some(entry) if entry.sha256 == file.sha256 && entry.size_bytes == file.size_bytes => {}
+                Some(entry)
+                    if entry.sha256 == file.sha256 && entry.size_bytes == file.size_bytes => {}
                 Some(_) => {
                     return (
                         InstallState::Damaged,
-                        Some(format!("{} was verified as another file than the catalogue names", file.name)),
+                        Some(format!(
+                            "{} was verified as another file than the catalogue names",
+                            file.name
+                        )),
                     );
                 }
                 None => {
                     return (
                         InstallState::Damaged,
-                        Some(format!("{} is not in the record of verification", file.name)),
+                        Some(format!(
+                            "{} is not in the record of verification",
+                            file.name
+                        )),
                     );
                 }
             }
@@ -150,7 +160,10 @@ impl Store {
                     );
                 }
                 Err(error) => {
-                    return (InstallState::Damaged, Some(format!("{}: {error}", file.name)));
+                    return (
+                        InstallState::Damaged,
+                        Some(format!("{}: {error}", file.name)),
+                    );
                 }
             }
         }
@@ -220,7 +233,10 @@ impl Store {
     /// folder does not exist.
     pub fn remove(&self, id: &str) -> io::Result<Option<u64>> {
         let Some(dir) = self.model_dir(id) else {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, "not a model id"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "not a model id",
+            ));
         };
         if !dir.is_dir() {
             return Ok(None);
