@@ -1,0 +1,161 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/giorgiogiudice/UOS/schemas/prefix-metadata.schema.json",
+  "title": "UOS prefix metadata",
+  "description": "What uos-runtime records about one application's Wine or Proton prefix (specification sections 12.2 and 15.2): the application it belongs to, the runtime and exact runtime version it is on, and the settings needed to reproduce a launch. The file is written by uos-runtime only, lives beside the prefix and is never visible to the application. It must never hold a secret.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "app_id", "prefix_id", "runtime", "runtime_version", "runtime_build",
+    "pinned", "architecture", "created_at", "launch_count", "graphics_backend", "sync",
+    "network", "grants"
+  ],
+  "$defs": {
+    "timestamp": {
+      "description": "A time in UTC, to the second, as RFC 3339 with the Z suffix.",
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "version": {
+      "description": "A runtime version token, such as wine-9.0 or GE-Proton10-4.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,99}$"
+    },
+    "grant": {
+      "description": "A host directory the user has made visible to the application. Whether a grant is honoured is decided again at every launch: a path that is, contains or lies inside a protected location is refused.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "access"],
+      "properties": {
+        "path": {
+          "description": "The directory, as an absolute path with every symbolic link resolved.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "pattern": "^/[^\\u0000-\\u001f\\u007f-\\u009f]*$"
+        },
+        "access": {
+          "enum": ["read-only", "read-write"]
+        }
+      }
+    },
+    "sync": {
+      "description": "The synchronisation decision of the most recent launch (specification section 8.2).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requested", "selected", "ntsync_device", "reason"],
+      "properties": {
+        "requested": {
+          "description": "What the application profile asked for.",
+          "enum": ["auto", "ntsync", "esync", "fsync"]
+        },
+        "selected": {
+          "description": "What the launch was set up to use. server is synchronisation through the Wine server; runtime-default means the choice was left to the runtime.",
+          "enum": ["ntsync", "esync", "fsync", "server", "runtime-default"]
+        },
+        "ntsync_device": {
+          "description": "What was found when /dev/ntsync was last looked for.",
+          "enum": ["present", "absent", "inaccessible", "not-checked"]
+        },
+        "checked_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "reason": {
+          "description": "Why the selection was made, in plain language.",
+          "type": "string",
+          "maxLength": 500
+        }
+      }
+    },
+    "migration": {
+      "description": "One explicit move of the prefix from one runtime version to another. A backup is always taken first.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["at", "from_version", "to_version", "backup"],
+      "properties": {
+        "at": { "$ref": "#/$defs/timestamp" },
+        "from_version": { "$ref": "#/$defs/version" },
+        "to_version": { "$ref": "#/$defs/version" },
+        "backup": {
+          "description": "The name of the backup taken before the migration.",
+          "type": "string",
+          "pattern": "^[0-9]{8}T[0-9]{6}Z-[a-z0-9][a-z0-9-]{0,63}$"
+        }
+      }
+    }
+  },
+  "properties": {
+    "schema_version": {
+      "description": "The version of this schema. Readers refuse a version they do not know.",
+      "const": 1
+    },
+    "app_id": {
+      "description": "The application the prefix belongs to. A prefix is never shared between unrelated applications.",
+      "type": "string",
+      "maxLength": 255,
+      "pattern": "^[a-z0-9][a-z0-9_-]*(\\.[a-z0-9][a-z0-9_-]*)+$"
+    },
+    "prefix_id": {
+      "description": "The prefix name used by the application's profile.",
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+    },
+    "runtime": {
+      "description": "The runtime the prefix belongs to. proton is Proton started through umu-run.",
+      "enum": ["wine", "proton"]
+    },
+    "runtime_version": {
+      "description": "The runtime version the prefix is on. A launch with any other version is refused unless an explicit, backed-up migration is requested.",
+      "$ref": "#/$defs/version"
+    },
+    "runtime_build": {
+      "description": "Everything the runtime reported about its build when the version was recorded, such as the distribution's package revision.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$"
+    },
+    "pinned": {
+      "description": "Whether the prefix is pinned to runtime_version. A pinned prefix is never migrated.",
+      "type": "boolean"
+    },
+    "architecture": {
+      "description": "The Windows architecture of the prefix.",
+      "enum": ["win64"]
+    },
+    "created_at": {
+      "$ref": "#/$defs/timestamp"
+    },
+    "last_run_at": {
+      "$ref": "#/$defs/timestamp"
+    },
+    "launch_count": {
+      "description": "How many times the application has been launched from this prefix.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "graphics_backend": {
+      "description": "The Direct3D translation setting used for launches.",
+      "enum": ["auto", "dxvk", "vkd3d-proton", "wined3d", "native"]
+    },
+    "sync": {
+      "$ref": "#/$defs/sync"
+    },
+    "network": {
+      "description": "Whether the application shares the host's network.",
+      "type": "boolean"
+    },
+    "grants": {
+      "description": "The host directories the application may see. Nothing else of the user's files is visible to it.",
+      "type": "array",
+      "maxItems": 64,
+      "items": { "$ref": "#/$defs/grant" }
+    },
+    "migrations": {
+      "description": "Earlier runtime versions of this prefix, oldest first.",
+      "type": "array",
+      "maxItems": 32,
+      "items": { "$ref": "#/$defs/migration" }
+    }
+  }
+}

@@ -1,0 +1,136 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+#
+# End-to-end proof that uos-runtime runs a Windows program: real binaries
+# built on the runner, the distribution's Wine, and the real bubblewrap
+# sandbox. See tests/windows-runtime/e2e.py for what is and is not proved.
+#
+# This runs on Ubuntu with Ubuntu's Wine, not on the TUR image.
+name: windows-runtime
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "services/uos-runtime/**"
+      - "tests/windows-runtime/**"
+      - ".github/workflows/windows-runtime.yml"
+  pull_request:
+    paths:
+      - "services/uos-runtime/**"
+      - "tests/windows-runtime/**"
+      - ".github/workflows/windows-runtime.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-runtime-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  end-to-end:
+    name: Run a Windows program under Wine
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      CARGO_TERM_COLOR: never
+      CARGO_INCREMENTAL: "0"
+      DEBIAN_FRONTEND: noninteractive
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Scratch directory
+        # Outside the checkout, so that nothing the test writes can be
+        # mistaken for source. Later steps read it as $WORK.
+        run: |
+          mkdir -p "$RUNNER_TEMP/uos-e2e/evidence"
+          echo "WORK=$RUNNER_TEMP/uos-e2e" >> "$GITHUB_ENV"
+
+      - name: Install Wine, mingw-w64, bubblewrap and an X server
+        # Distribution packages only. Their versions are whatever the runner
+        # image's Ubuntu release carries; they are printed by the next step.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wine wine64 bubblewrap \
+            gcc-mingw-w64-x86-64 gcc-mingw-w64-i686 binutils file xvfb x11-utils
+
+      - name: Versions
+        run: |
+          mkdir -p "$WORK/evidence"
+          {
+            echo "runner image: ${ImageOS:-?} ${ImageVersion:-?}"
+            . /etc/os-release; echo "os: $PRETTY_NAME"
+            echo "kernel: $(uname -r)"
+            echo "wine: $(wine --version 2>&1 | head -n 1)"
+            echo "bubblewrap: $(bwrap --version)"
+            echo "mingw x86_64: $(x86_64-w64-mingw32-gcc --version | head -n 1)"
+            echo "mingw i686: $(i686-w64-mingw32-gcc --version | head -n 1)"
+            echo "gcc: $(gcc --version | head -n 1)"
+            echo "binutils: $(readelf --version | head -n 1)"
+            echo "python: $(python3 --version)"
+            echo "packages:"
+            dpkg-query -W -f '  ${Package} ${Version}\n' wine wine64 libwine bubblewrap \
+              gcc-mingw-w64-x86-64-win32 gcc-mingw-w64-i686-win32 mingw-w64-common xvfb 2>&1 || true
+            echo "wine programs:"
+            ls -l /usr/bin/wine /usr/bin/wine64 /usr/bin/wineserver /usr/bin/wineboot 2>&1 | sed 's/^/  /' || true
+            echo "ntsync device: $(ls -l /dev/ntsync 2>&1)"
+          } | tee "$WORK/evidence/versions.txt"
+          { echo '### Versions'; echo '```'; cat "$WORK/evidence/versions.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Sandbox preflight
+        run: |
+          tests/windows-runtime/sandbox-preflight.sh "$WORK/evidence/sandbox-preflight.txt"
+          { echo '### Sandbox preflight'; echo '```'; cat "$WORK/evidence/sandbox-preflight.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Build the test programs
+        run: tests/windows-runtime/build.sh "$WORK/build"
+
+      - name: Toolchain
+        working-directory: services/uos-runtime
+        run: |
+          rustup show active-toolchain || rustup toolchain install
+          rustc --version; cargo --version
+
+      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            services/uos-runtime/target
+          key: windows-runtime-${{ hashFiles('rust-toolchain.toml', 'services/uos-runtime/Cargo.toml', 'services/uos-runtime/Cargo.lock') }}
+          restore-keys: windows-runtime-
+
+      - name: Build uos-runtime
+        working-directory: services/uos-runtime
+        run: cargo build --locked
+
+      - name: End-to-end test
+        run: |
+          python3 tests/windows-runtime/e2e.py \
+            --uos-runtime services/uos-runtime/target/debug/uos-runtime \
+            --build-dir "$WORK/build" \
+            --work-dir "$WORK/run" \
+            --results "$WORK/evidence/results.json"
+
+      - name: Collect logs
+        if: always()
+        run: |
+          mkdir -p "$WORK/evidence"
+          cp -r "$WORK/run/xdg-state/uos/runtime/logs" "$WORK/evidence/logs" 2>/dev/null || true
+          mkdir -p "$WORK/evidence/metadata"
+          for file in "$WORK"/run/xdg-data/uos/runtime/prefixes/*/metadata.json; do
+            if [ -f "$file" ]; then
+              cp "$file" "$WORK/evidence/metadata/$(basename "$(dirname "$file")").json"
+            fi
+          done
+          cp "$WORK"/run/*.json "$WORK/evidence/" 2>/dev/null || true
+          ls -laR "$WORK/evidence" | head -n 200
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: windows-runtime-evidence
+          path: ${{ runner.temp }}/uos-e2e/evidence/
+          if-no-files-found: warn

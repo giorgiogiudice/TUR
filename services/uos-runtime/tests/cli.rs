@@ -272,7 +272,10 @@ fn wrong_command_lines_exit_with_status_two() {
     assert!(outcome.stderr.contains("pdp11"));
 
     assert_eq!(run(&["inspect"]).status, 2);
-    assert_eq!(run(&["launch", path.as_str()]).status, 2);
+    assert_eq!(run(&["execute", path.as_str()]).status, 2);
+    assert_eq!(run(&["launch"]).status, 2);
+    assert_eq!(run(&["prefix", "create"]).status, 2);
+    assert_eq!(run(&["prefix", "explode", "com.example.app"]).status, 2);
     assert_eq!(run(&[]).status, 2);
 }
 
