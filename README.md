@@ -105,12 +105,12 @@ flowchart TB
         direction LR
         L["Linux<br/>native ELF"]
         W["Windows<br/>Wine · Proton"]
-        M["macOS<br/>Darling · experimental"]
-        V["Full Windows<br/>QEMU/KVM · optional"]
+        M["macOS<br/>Darling<br/>experimental"]
+        V["Full Windows<br/>QEMU/KVM<br/>optional"]
     end
 
     subgraph AI["AI control layer · optional"]
-        AG["uos-agent<br/>voice · system tools · screen and input"]
+        AG["uos-agent<br/>voice · system tools<br/>screen and input"]
     end
 
     subgraph UOS["UOS integration layer"]
@@ -124,13 +124,13 @@ flowchart TB
     end
 
     subgraph DESK["Desktop"]
-        K["KDE Plasma 6 · KWin on Wayland · XDG Desktop Portals"]
+        K["KDE Plasma 6<br/>KWin on Wayland<br/>XDG Desktop Portals"]
     end
 
     subgraph HOST["Host platform"]
         direction LR
-        S["systemd · PipeWire<br/>NetworkManager · UDisks2 · fwupd"]
-        I["Image-based OS<br/>bootc · OSTree · rollback"]
+        S["systemd · PipeWire<br/>NetworkManager<br/>UDisks2 · fwupd"]
+        I["Image-based OS<br/>bootc · OSTree<br/>atomic rollback"]
         KN["Linux kernel<br/>sole hardware authority"]
     end
 
@@ -223,6 +223,7 @@ docs/
 AGENTS.md         Binding rules for automated development agents
 CONTRIBUTING.md   How changes are proposed, tested and reported
 SECURITY.md       How to report a vulnerability
+LICENSE.md        PolyForm Noncommercial License 1.0.0
 ```
 
 Source directories (`image/`, `services/`, `desktop/`, `runtimes/`, `tests/`) are
