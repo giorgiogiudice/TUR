@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Started when the boot health gate fails (OnFailure= of tur-boot-health.service).
+
+[Unit]
+Description=TUR boot health gate failed
+Documentation=https://github.com/giorgiogiudice/TUR/blob/main/docs/architecture/boot-health-and-rollback.md
+Wants=tur-boot-record-failure.service tur-boot-retry.service

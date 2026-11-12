@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# The boot health gate's configuration (design section 6.5). Part of the
+# image: read-only, and it belongs to the deployment it came with. There is
+# no /etc override.
+#
+# Changing `attempts` or `trial_args` takes effect for the next update this
+# image arms: the version that arms decides.
+
+schema_version = 1
+
+# How many times GRUB starts a new deployment before it starts the previous one.
+attempts = 3
+
+# Kernel arguments added to every trial boot (design section 5.4): a kernel
+# panic restarts after 30 s, the initramfs restarts instead of opening a
+# shell, and PID 1 arms the hardware watchdog.
+trial_args = "panic=30 rd.shell=0 rd.emergency=reboot systemd.watchdog_sec=180"
+
+# Time limits of the required checks, in seconds (design section 6.2).
+[limits]
+root = 20
+paths = 5
+default_target = 240
+core_units = 60
+tur_units = 60
+display_manager = 60
+seat_session = 90
+stability = 20
+# How long the seat's session must stay unchanged.
+hold = 15

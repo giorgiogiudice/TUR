@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Boot-health scenario image "pid1-stops" (H1 of the design's test plan).
+# A unit sends SIGSEGV to PID 1 twelve seconds into the boot. systemd
+# then freezes, and only the hardware watchdog can restart the machine.
+#
+# Built FROM the boot-test image, so every other layer is identical and only
+# this change is under test. Never part of TUR.
+
+ARG BASE=localhost/tur-boot-test:ci
+FROM ${BASE}
+
+RUN set -eu; \
+    printf '%s\n' '[Unit]' 'Description=Stop PID 1 (boot-health test)' 'After=basic.target' \
+        '[Service]' 'Type=oneshot' 'ExecStartPre=/usr/bin/sleep 12' 'ExecStart=/usr/bin/kill -SEGV 1' \
+        > /usr/lib/systemd/system/tur-test-stop-pid1.service; \
+    ln -s ../tur-test-stop-pid1.service \
+        /usr/lib/systemd/system/multi-user.target.wants/tur-test-stop-pid1.service; \
+    mkdir -p /usr/lib/tur-boot-test; \
+    echo pid1-stops > /usr/lib/tur-boot-test/scenario
+
+LABEL org.tur.test-image="boot-health-scenario" org.tur.test-scenario="pid1-stops"

@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Boot-health scenario image "dm-crash" (F3 of the design's test plan).
+# The display manager's command is replaced by one that exits after two
+# seconds, restarted for ever.
+#
+# Built FROM the boot-test image, so every other layer is identical and only
+# this change is under test. Never part of TUR.
+
+ARG BASE=localhost/tur-boot-test:ci
+FROM ${BASE}
+
+RUN set -eu; \
+    unit="$(basename "$(readlink -f /etc/systemd/system/display-manager.service)")"; \
+    test -n "${unit}"; test "${unit}" != display-manager.service; \
+    mkdir -p "/usr/lib/systemd/system/${unit}.d"; \
+    printf '%s\n' '[Unit]' 'StartLimitIntervalSec=0' \
+        '[Service]' 'Type=simple' 'ExecStartPre=' 'ExecStart=' 'ExecStart=/usr/bin/sleep 2' \
+        'Restart=always' 'RestartSec=1' \
+        > "/usr/lib/systemd/system/${unit}.d/90-tur-test-crash.conf"; \
+    echo "display manager unit: ${unit}"; \
+    mkdir -p /usr/lib/tur-boot-test; \
+    echo dm-crash > /usr/lib/tur-boot-test/scenario
+
+LABEL org.tur.test-image="boot-health-scenario" org.tur.test-scenario="dm-crash"

@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Every boot, once local filesystems are mounted and the journal is on disk:
+# decide what kind of boot this is (design section 5.6). In the previous
+# version, after GRUB fell back to it, this is what makes the fallback
+# permanent (section 5.9).
+
+[Unit]
+Description=TUR boot health: classify this boot
+Documentation=https://github.com/giorgiogiudice/TUR/blob/main/docs/architecture/boot-health-and-rollback.md
+DefaultDependencies=no
+ConditionPathExists=/run/ostree-booted
+RequiresMountsFor=/var/lib/tur
+# Ordering only, no requirement, on the mount behind /boot: /boot is an
+# automount that systemd unmounts when idle, and a unit that requires the
+# mount is stopped with it (measured; see docs/reports/TUR-005.md).
+After=local-fs.target boot.automount systemd-journal-flush.service systemd-tmpfiles-setup.service
+Conflicts=shutdown.target
+Before=shutdown.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/tur/tur-boot-health classify
+TimeoutStartSec=120
+# /boot is mounted read-only. The environment block is written in a private
+# mount namespace with /boot remounted read-write, as OSTree's units do.
+PrivateMounts=yes
+StandardOutput=journal+console
+StandardError=journal+console

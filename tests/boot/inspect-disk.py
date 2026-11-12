@@ -213,6 +213,17 @@ def inspect_root(disk: Disk, host: pathlib.Path, layout: dict) -> None:
             grub.append(f"### /boot/{name}\n{read_text(boot / name)}\n")
     (host / "boot-grub-config.txt").write_text("\n".join(grub))
     layout["grub_config_mentions_boot_counter"] = any("boot_counter" in text for text in grub)
+    # Boot-attempt counting (ADR-0014): the fragment bootupd wrote into grub.cfg,
+    # and the GRUB variable OSTree copied into the loader entries.
+    cfg = read_text(boot / "grub2" / "grub.cfg") if (boot / "grub2" / "grub.cfg").is_file() else ""
+    counting, menu = cfg.find("### BEGIN 08_tur_boot_count.cfg ###"), cfg.find("### BEGIN 10_blscfg.cfg ###")
+    layout["grub_cfg_fragments"] = re.findall(r"^### BEGIN (\S+) ###$", cfg, re.M)
+    layout["grub_cfg_counting_fragment_before_menu"] = 0 <= counting < menu
+    layout["boot_entry_options"] = [
+        line.split(None, 1)[1] for text in entries for line in text.splitlines() if line.startswith("options ")
+    ]
+    block = boot / "grub2" / "grubenv"
+    layout["grubenv_bytes"] = block.stat().st_size if block.is_file() else None
     listed = []
     for name in ("", "boot", "boot/grub2", "boot/loader", "ostree", "ostree/deploy"):
         listed.append(f"### /{name}\n" + run("ls", "-la", str(mnt / name), check=False))
@@ -246,6 +257,32 @@ def installed(disk_path: str, out: pathlib.Path) -> int:
     return 0
 
 
+def boot_state(mnt: pathlib.Path, out: pathlib.Path) -> None:
+    """What the bootloader will see next: the environment block, the loader
+    entries and the deployments, as they are on the disk right now."""
+    boot = mnt / "boot"
+    parts = []
+    block = boot / "grub2" / "grubenv"
+    if block.is_file():
+        data = block.read_bytes()
+        text = data.decode("utf-8", errors="replace").rstrip("#\n")
+        valid = len(data) == 1024 and data.startswith(b"# GRUB Environment Block")
+        parts.append(f"### /boot/grub2/grubenv ({len(data)} bytes, valid block: {valid})\n{text}\n")
+    else:
+        parts.append("### /boot/grub2/grubenv is absent\n")
+    loader = boot / "loader"
+    parts.append(f"### /boot/loader -> {os.readlink(loader) if loader.is_symlink() else '(not a link)'}\n")
+    for entry in sorted(boot.glob("loader*/entries/*.conf")):
+        parts.append(f"### /boot/{entry.relative_to(boot)}\n{read_text(entry)}\n")
+    parts.append("### /boot/ostree\n" + run("ls", "-la", str(boot / "ostree"), check=False))
+    for deploy in sorted(mnt.glob("ostree/deploy/*/deploy")):
+        parts.append(f"### /{deploy.relative_to(mnt)}\n" + run("ls", "-la", str(deploy), check=False))
+    text = "\n".join(parts)
+    (out / "boot-state-disk.txt").write_text(text)
+    print("postmortem: boot state on the disk:")
+    print(text)
+
+
 def postmortem(disk_path: str, out: pathlib.Path) -> int:
     try:
         with Disk(disk_path) as disk:
@@ -254,7 +291,13 @@ def postmortem(disk_path: str, out: pathlib.Path) -> int:
                 print("postmortem: no root partition found")
                 return 0
             mnt = disk.mount(root)
+            boot_state(mnt, out)
             for state in sorted(mnt.glob("ostree/deploy/*/var")):
+                health = state / "lib" / "tur" / "boot-health"
+                if health.is_dir():
+                    target = out / "boot-health-disk"
+                    shutil.copytree(health, target, dirs_exist_ok=True, ignore=shutil.ignore_patterns("*.zst"))
+                    print(f"postmortem: copied {health.relative_to(mnt)}")
                 journal = state / "log" / "journal"
                 if journal.is_dir():
                     target = out / "journal-disk"
@@ -274,6 +317,10 @@ def postmortem(disk_path: str, out: pathlib.Path) -> int:
                         print(f"postmortem: the host journalctl could not render it: {text.stderr.strip()[:300]}")
                 else:
                     print(f"postmortem: no persistent journal under {state.relative_to(mnt)}")
+                for scenario in sorted((state / "lib" / "tur-boot-test" / "scenario").glob("*/report")):
+                    target = out / "scenario-reports" / scenario.parent.name
+                    shutil.copytree(scenario, target, dirs_exist_ok=True)
+                    print(f"postmortem: copied the scenario agent's on-disk reports for {scenario.parent.name}")
                 report = state / "lib" / "tur-boot-test" / "report"
                 if report.is_dir():
                     shutil.copytree(report, out / "guest-from-disk", dirs_exist_ok=True)

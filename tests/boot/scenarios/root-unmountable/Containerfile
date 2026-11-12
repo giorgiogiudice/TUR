@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Boot-health scenario image "root-unmountable" (F4 of the design's test plan).
+# A kernel argument gives the root filesystem a mount option ext4 does not
+# know, so the initramfs cannot mount it.
+#
+# Built FROM the boot-test image, so every other layer is identical and only
+# this change is under test. Never part of TUR.
+
+ARG BASE=localhost/tur-boot-test:ci
+FROM ${BASE}
+
+RUN set -eu; \
+    printf '%s\n' 'kargs = ["rootflags=tur_no_such_option"]' \
+        > /usr/lib/bootc/kargs.d/90-tur-test-root.toml; \
+    mkdir -p /usr/lib/tur-boot-test; \
+    echo root-unmountable > /usr/lib/tur-boot-test/scenario
+
+LABEL org.tur.test-image="boot-health-scenario" org.tur.test-scenario="root-unmountable"

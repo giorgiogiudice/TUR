@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/giorgiogiudice/TUR/schemas/boot-health-status.schema.json",
+  "title": "TUR boot health status",
+  "description": "What `tur-boot-health status --json` prints (boot-health-and-rollback.md, sections 5.10 and 5.11). The updater reads the rejected list from it; tur-diag and the installer's validation read the rest. A reader must ignore members it does not know. null means there is nothing to report or the value is not known.",
+  "type": "object",
+  "required": [
+    "schema_version", "boot_id", "build_id", "boot", "verdict", "counting", "watchdog",
+    "trial", "rejected", "notice", "recent_events"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "boot_id": { "type": "string" },
+    "build_id": { "description": "TUR build ID of the running image.", "type": "string" },
+    "boot": {
+      "description": "How this boot was classified (section 5.6). null if classify has not run.",
+      "type": ["object", "null"],
+      "required": ["schema_version", "boot_id", "classification", "boot_argument", "tries_left", "contract", "deployment", "image_digest", "build_id", "event_id"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "boot_id": { "type": "string" },
+        "classification": {
+          "enum": ["normal", "manual", "trial", "stale", "fallback", "rejected", "inconsistent", "manual-retry", "unlisted"]
+        },
+        "boot_argument": { "description": "tur.boot on the kernel command line.", "enum": ["none", "trial", "fallback"] },
+        "tries_left": { "type": ["integer", "null"] },
+        "contract": { "description": "tur.boot_contract on the kernel command line.", "type": ["string", "null"] },
+        "deployment": { "description": "checksum.serial of the booted deployment.", "type": ["string", "null"] },
+        "image_digest": { "type": ["string", "null"] },
+        "build_id": { "type": "string" },
+        "event_id": { "description": "The trial this boot belongs to.", "type": ["string", "null"] }
+      }
+    },
+    "verdict": {
+      "description": "The health gate's verdict for this boot (section 6). null while the gate has not finished.",
+      "type": ["object", "null"],
+      "required": ["schema_version", "boot_id", "classification", "result", "failed_check", "error_code", "failed_detail", "finished_uptime_ms", "checks"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "boot_id": { "type": "string" },
+        "classification": { "type": "string" },
+        "result": { "enum": ["passed", "degraded", "failed"] },
+        "failed_check": { "description": "The first required check that failed.", "type": ["string", "null"] },
+        "error_code": { "type": ["string", "null"] },
+        "failed_detail": { "type": ["string", "null"] },
+        "finished_uptime_ms": { "type": "integer" },
+        "checks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "name", "required", "state", "error_code", "detail", "duration_ms"],
+            "properties": {
+              "id": { "description": "R1 to R8, W1 to W12, or X:name for a check from checks.d.", "type": "string" },
+              "name": { "type": "string" },
+              "required": { "type": "boolean" },
+              "state": { "enum": ["succeeded", "failed", "timeout", "skipped"] },
+              "error_code": { "type": ["string", "null"] },
+              "detail": { "type": "string" },
+              "duration_ms": { "type": "integer", "minimum": 0 }
+            }
+          }
+        }
+      }
+    },
+    "counting": {
+      "description": "Whether boot attempts can be counted on this installation (section 5.5).",
+      "type": "object",
+      "required": ["usable", "contract", "layout", "environment_block", "boot_counter"],
+      "properties": {
+        "usable": { "type": "boolean" },
+        "contract": { "type": ["string", "null"] },
+        "layout": { "description": "The filesystem under /boot/grub2.", "type": "string" },
+        "environment_block": { "description": "valid, or why it could not be read.", "type": "string" },
+        "boot_counter": { "description": "GRUB's counter. Present only during a trial.", "type": ["string", "null"] }
+      }
+    },
+    "watchdog": { "description": "Identity of the first hardware watchdog device, if the kernel has one.", "type": ["string", "null"] },
+    "trial": { "description": "The trial record, if a trial is in progress. See boot-trial.schema.json.", "type": ["object", "null"] },
+    "rejected": {
+      "description": "Images that failed their trial. The updater must not stage one of these unless a person asks for it.",
+      "type": "object",
+      "required": ["schema_version", "images"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "images": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["digest", "image", "version", "event_id"],
+            "properties": {
+              "digest": { "type": "string", "minLength": 1 },
+              "image": { "type": "string" },
+              "version": { "type": "string" },
+              "event_id": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "notice": {
+      "description": "What the user is to be told, until it is acknowledged (section 5.11).",
+      "type": ["object", "null"],
+      "required": ["schema_version", "event_id", "kind", "text", "error_code", "boot_id", "acknowledged", "details"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "event_id": { "type": "string" },
+        "kind": { "enum": ["fallback", "not-applied", "refused", "unhealthy"] },
+        "text": { "type": "string" },
+        "error_code": { "type": "string" },
+        "boot_id": { "type": "string" },
+        "acknowledged": { "type": "boolean" },
+        "details": { "type": "object" }
+      }
+    },
+    "recent_events": {
+      "description": "The newest ten events of the history, oldest first.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["schema_version", "event", "event_id", "boot_id", "build_id", "at"],
+        "properties": {
+          "schema_version": { "const": 1 },
+          "event": {
+            "enum": ["armed", "refused", "attempt", "marked-good", "gate-failed", "stale", "fallback", "acknowledged"]
+          },
+          "event_id": { "type": "string" },
+          "boot_id": { "type": "string" },
+          "build_id": { "type": "string" },
+          "at": { "type": "integer" }
+        }
+      }
+    }
+  }
+}

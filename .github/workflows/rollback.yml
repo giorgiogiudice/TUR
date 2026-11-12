@@ -1,0 +1,195 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Boot-health scenarios (TUR-005, ADR-0014): deliberately break a second
+# deployment in a virtual machine and prove that the machine returns to the
+# previous version, or keeps a good update. See tests/boot/rollback.py and
+# docs/architecture/boot-health-and-rollback.md, section 11.
+#
+# Each group builds the image, installs it to a disk and prepares that disk
+# with the boot test's first two boots (about ten minutes), then runs its
+# scenarios one after another, each on a copy-on-write overlay of the disk.
+# The groups run in parallel.
+name: rollback
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "image/**"
+      - "services/tur-boot-health/**"
+      - "crates/**"
+      - "rust-toolchain.toml"
+      - "tests/boot/**"
+      - "scripts/build-image.sh"
+      - "VERSION"
+      - ".github/workflows/rollback.yml"
+  pull_request:
+    paths:
+      - "image/**"
+      - "services/tur-boot-health/**"
+      - "crates/**"
+      - "rust-toolchain.toml"
+      - "tests/boot/**"
+      - "scripts/build-image.sh"
+      - "VERSION"
+      - ".github/workflows/rollback.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rollback-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PODMAN: sudo podman
+  SKOPEO: sudo skopeo
+  IMAGE: localhost/tur:ci
+  TEST_IMAGE: localhost/tur-boot-test:ci
+
+jobs:
+  scenarios:
+    name: ${{ matrix.group }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 110
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - group: kept-or-not-applied
+            images: good
+            scenarios: good finalize-fails silent-hang cut-staging cut-mark-good stale-block
+          - group: failing-gate
+            images: check-fails unit-fails stall
+            scenarios: check-fails unit-fails stall
+          - group: early-failures
+            images: panic root-unmountable emergency kernel-missing kernel-truncated
+            scenarios: panic-counter-only panic root-unmountable emergency kernel-missing kernel-truncated
+          - group: display-and-watchdog
+            images: dm-crash pid1-stops
+            scenarios: dm-crash pid1-stops
+          - group: power-cut-finalisation
+            images: good
+            scenarios: >-
+              cut-finalize-0 cut-finalize-200 cut-finalize-500 cut-finalize-1000
+              cut-finalize-2000 cut-finalize-2400 cut-finalize-2800
+          - group: power-cut-fallback
+            images: unit-fails
+            scenarios: cut-fallback-step3 cut-fallback-step4
+    env:
+      OUT: out/rollback
+      PREPARE: out/rollback/prepare
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Runner environment
+        run: |
+          echo "podman: $(podman --version)"
+          echo "skopeo: $(skopeo --version)"
+          echo "kernel: $(uname -r)"
+          echo "cpus:   $(nproc) ($(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2 | xargs))"
+          free -g | sed -n 2p
+          df -h / /mnt 2>/dev/null || df -h /
+          mkdir -p "$PREPARE/host"
+
+      # Hosted runners expose /dev/kvm but not to the runner user. The udev rule
+      # is the method GitHub documents (see .github/workflows/boot.yml).
+      - name: Enable KVM for the runner user
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          sudo udevadm settle
+          ls -la /dev/kvm
+
+      # No software-emulation fallback (ADR-0002): without KVM the job stops here.
+      - name: Verify KVM
+        run: python3 tests/boot/check-kvm.py "$PREPARE/host/kvm.json"
+
+      # The image, the scenario images, their disk, the installed disk and one
+      # overlay need about 45 GB.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache/CodeQL
+          df -h / /mnt 2>/dev/null || df -h /
+
+      - name: Choose a work directory
+        run: |
+          work="$RUNNER_TEMP/tur-boot"
+          here=$(df --output=avail -B1G "$RUNNER_TEMP" | tail -1 | tr -d ' G')
+          if [ -d /mnt ]; then
+            there=$(df --output=avail -B1G /mnt | tail -1 | tr -d ' G')
+            if [ "$there" -gt "$here" ]; then
+              sudo mkdir -p /mnt/tur-boot
+              sudo chown "$(id -u):$(id -g)" /mnt/tur-boot
+              work=/mnt/tur-boot
+            fi
+          fi
+          mkdir -p "$work"
+          echo "work directory: $work ($(df --output=avail -h "$work" | tail -1 | xargs) free)"
+          echo "WORK=$work" >> "$GITHUB_ENV"
+
+      - name: Install QEMU and UEFI firmware
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils ovmf
+          qemu-system-x86_64 --version | head -1
+          qemu-img --version | head -1
+
+      - name: Build image
+        run: |
+          start=$(date +%s)
+          scripts/build-image.sh "$IMAGE" --ignorefile image/Containerfile.containerignore
+          echo "image build: $(( $(date +%s) - start )) s"
+
+      - name: Build the boot-test image and install it to a disk
+        run: tests/boot/build-disk.sh "$IMAGE" "$WORK" "$PREPARE"
+
+      - name: Build the scenario images and their disk
+        run: tests/boot/build-scenarios.sh "$TEST_IMAGE" "$WORK" "$PREPARE" ${{ matrix.images }}
+
+      - name: Inspect the installed disk
+        run: sudo python3 tests/boot/inspect-disk.py installed "$WORK/disk.raw" "$PREPARE"
+
+      # The boot test's first two boots: as installed, then with a user and
+      # first-run setup done. The scenarios start from the disk this leaves.
+      - name: Prepare the disk (two boots)
+        run: python3 tests/boot/run-vm.py --disk "$WORK/disk.raw" --work "$WORK" --out "$PREPARE" --timeout 900 --prepare-only
+
+      - name: Scenarios
+        run: |
+          python3 tests/boot/rollback.py --disk "$WORK/disk.raw" --images "$WORK/images.img" \
+            --work "$WORK" --out "$OUT" ${{ matrix.scenarios }}
+
+      - name: Summary
+        if: always()
+        run: |
+          if [ -f "$OUT/summary.md" ]; then cat "$OUT/summary.md" >> "$GITHUB_STEP_SUMMARY"; fi
+
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          show() { echo "::group::$1"; if [ -f "$1" ]; then tail -n "${2:-200}" "$1"; else echo "(absent)"; fi; echo "::endgroup::"; }
+          show "$PREPARE/host/vm-result.json"
+          show "$PREPARE/host/scenario-images.txt"
+          show "$PREPARE/host/qemu.log"
+          for dir in "$OUT"/*/; do
+            show "${dir}summary.md"
+            show "${dir}disk/boot-state-disk.txt"
+            show "${dir}host/qemu.log" 40
+            for report in "${dir}"guest/*/; do
+              show "${report}status"
+              show "${report}bootc-switch.txt" 60
+              show "${report}tur-status.txt"
+            done
+          done
+          df -h / "$WORK"
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: tur-rollback-${{ matrix.group }}
+          path: out/rollback/
+          if-no-files-found: warn

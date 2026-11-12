@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# The moment a boot is marked good (design section 6.4): after
+# boot-complete.target, remove GRUB's boot counter. This unit is what pulls
+# boot-complete.target, and with it the gate, into the boot.
+
+[Unit]
+Description=TUR boot health: mark this boot good
+Documentation=https://github.com/giorgiogiudice/TUR/blob/main/docs/architecture/boot-health-and-rollback.md
+DefaultDependencies=no
+ConditionPathExists=/run/ostree-booted
+Requires=boot-complete.target
+After=boot-complete.target boot.automount
+RequiresMountsFor=/var/lib/tur
+Conflicts=shutdown.target
+Before=shutdown.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/tur/tur-boot-health mark-good
+TimeoutStartSec=60
+PrivateMounts=yes
+StandardOutput=journal+console
+StandardError=journal+console

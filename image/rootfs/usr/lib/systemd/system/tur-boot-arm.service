@@ -1,0 +1,35 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Arms boot-attempt counting at shutdown, when a staged deployment is about
+# to be finalised (design section 5.5). Started on every boot; it does
+# nothing until it is stopped.
+#
+# - Conflicts=final.target is what makes the stop action run at shutdown.
+# - After=ostree-finalize-staged.service makes this unit stop *before*
+#   OSTree's, because stop order is the reverse of start order: the counter
+#   is on disk before the boot configuration changes.
+# - /boot is ordered after, not required. The design had
+#   RequiresMountsFor=/boot. Measured on this image: /boot is an automount
+#   with a two-minute idle timeout, and systemd stops a unit that requires
+#   the mount when it unmounts it. This unit would then run its stop action
+#   two minutes after boot and no longer exist at shutdown. While a
+#   deployment is staged, OSTree's own hold service keeps /boot mounted.
+
+[Unit]
+Description=Arm boot-attempt counting for a staged deployment
+Documentation=https://github.com/giorgiogiudice/TUR/blob/main/docs/architecture/boot-health-and-rollback.md
+DefaultDependencies=no
+ConditionPathExists=/run/ostree-booted
+RequiresMountsFor=/var/lib/tur
+After=ostree-finalize-staged.service boot.mount boot.automount local-fs.target
+Before=final.target
+Conflicts=final.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStop=/usr/libexec/tur/tur-boot-health arm
+TimeoutStopSec=60
+PrivateMounts=yes
+StandardOutput=journal+console
+StandardError=journal+console

@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Record why the gate failed, flushed to disk, before anything restarts.
+
+[Unit]
+Description=TUR boot health: record the failed gate
+Documentation=https://github.com/giorgiogiudice/TUR/blob/main/docs/architecture/boot-health-and-rollback.md
+ConditionPathExists=/run/ostree-booted
+RequiresMountsFor=/var/lib/tur
+After=boot.automount
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/tur/tur-boot-health record-failure
+TimeoutStartSec=60
+PrivateMounts=yes
+StandardOutput=journal+console
+StandardError=journal+console

@@ -4,9 +4,43 @@
 #
 # The base is pinned by digest in image/base.lock and passed in by
 # scripts/build-image.sh. Do not build this file directly with an unpinned base.
+#
+# The build context is the repository root. What is sent to the build is
+# listed in image/Containerfile.containerignore.
 
 ARG BASE_IMAGE
 ARG BASE_DIGEST
+
+# The toolchain that compiles TUR's own programs for the image: the official
+# Rust image, pinned by digest (the tag is for people). Its version must be
+# the one in rust-toolchain.toml; the build stage checks that. See
+# image/README.md, "Programs built into the image".
+ARG RUST_IMAGE=docker.io/library/rust
+ARG RUST_TAG=1.99.1-slim-trixie
+ARG RUST_DIGEST=sha256:f6c4a35d21dbb3c89d7a8d056c193e94fc09037f2b58dd858b09c39a47dd02d7
+
+# ---- build stage: TUR programs ------------------------------------------------
+FROM ${RUST_IMAGE}@${RUST_DIGEST} AS programs
+
+COPY rust-toolchain.toml /pin/rust-toolchain.toml
+COPY crates/ /src/crates/
+COPY services/tur-boot-health/ /src/services/tur-boot-health/
+
+# No network: a program built into the image depends only on what is in this
+# repository and on the pinned toolchain. --locked refuses a lockfile that
+# does not match; --offline refuses to fetch anything.
+RUN --network=none set -eu; \
+    want="$(sed -n 's/^channel = "\(.*\)"$/\1/p' /pin/rust-toolchain.toml)"; \
+    have="$(rustc --version | cut -d' ' -f2)"; \
+    if [ "${want}" != "${have}" ]; then \
+        echo "rust-toolchain.toml pins Rust ${want}, the build stage has ${have}" >&2; exit 1; \
+    fi; \
+    cd /src/services/tur-boot-health; \
+    cargo build --release --locked --offline; \
+    install -D -m 0755 target/release/tur-boot-health /out/usr/libexec/tur/tur-boot-health; \
+    sha256sum /out/usr/libexec/tur/tur-boot-health
+
+# ---- the image ------------------------------------------------------------------
 FROM ${BASE_IMAGE}@${BASE_DIGEST}
 
 ARG BASE_IMAGE
@@ -19,6 +53,18 @@ ARG TUR_SOURCE_REVISION
 # Files owned by TUR. Everything here lives under /usr: the image is immutable
 # and /etc and /var belong to the installed system.
 COPY image/rootfs/ /
+
+# TUR programs, compiled above.
+COPY --from=programs /out/ /
+
+# Boot-attempt counting (ADR-0014). bootupd concatenates every *.cfg in
+# configs.d, sorted by name, into /boot/grub2/grub.cfg at installation. The
+# fragment is BSD-3-Clause, not under the TUR licence: see
+# image/third-party-licensed/grub/README.md.
+COPY --chmod=0644 image/third-party-licensed/grub/08_tur_boot_count.cfg \
+     /usr/lib/bootupd/grub2-static/configs.d/08_tur_boot_count.cfg
+COPY --chmod=0644 image/third-party-licensed/grub/LICENSE \
+     /usr/share/licenses/tur-grub-boot-count/LICENSE
 
 # Identify the image as TUR without changing the distribution ID, which image
 # and update tooling still key on. Full rebranding is a Phase 3 task.
@@ -36,6 +82,19 @@ RUN set -eu; \
         "TUR_BASE_DIGEST=${BASE_DIGEST}" \
         "TUR_BASE_VERSION=${BASE_VERSION}" \
         > /usr/lib/tur/release; \
+    # The counting fragment sets variables that the menu entries use, so it
+    # must be read before the fragment that builds the menu. Fail the build
+    # if the base ever renames that fragment.
+    test -f /usr/lib/bootupd/grub2-static/configs.d/10_blscfg.cfg; \
+    # Boot health (ADR-0014; design section 10). The program is also on the
+    # PATH, for `status` and `acknowledge`.
+    /usr/libexec/tur/tur-boot-health --version; \
+    ln -s ../libexec/tur/tur-boot-health /usr/bin/tur-boot-health; \
+    # An automatic update agent would undo a rollback: bootc's own timer is
+    # masked whether or not the base enables it. GRUB's boot-success timer
+    # sets a variable that means nothing with bootupd's static configuration.
+    ln -sf /dev/null /usr/lib/systemd/system/bootc-fetch-apply-updates.timer; \
+    ln -sf /dev/null /usr/lib/systemd/user/grub-boot-success.timer; \
     bootc container lint
 
 LABEL org.opencontainers.image.title="TUR" \

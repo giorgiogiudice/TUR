@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Boot-health scenario image "panic" (F5 of the design's test plan).
+# The initramfs is replaced by four mebibytes that are not an initramfs,
+# so the kernel cannot mount a root filesystem and panics.
+#
+# Built FROM the boot-test image, so every other layer is identical and only
+# this change is under test. Never part of TUR.
+
+ARG BASE=localhost/tur-boot-test:ci
+FROM ${BASE}
+
+RUN set -eu; \
+    kernel="$(ls -1 /usr/lib/modules | head -n1)"; \
+    test -s "/usr/lib/modules/${kernel}/initramfs.img"; \
+    yes 'this is not an initramfs' | head -c 4194304 > "/usr/lib/modules/${kernel}/initramfs.img"; \
+    mkdir -p /usr/lib/tur-boot-test; \
+    echo panic > /usr/lib/tur-boot-test/scenario
+
+LABEL org.tur.test-image="boot-health-scenario" org.tur.test-scenario="panic"

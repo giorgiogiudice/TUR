@@ -1,0 +1,42 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+[package]
+name = "tur-boot-health"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+license = "LicenseRef-TUR-Noncommercial-1.0.0"
+description = "tur-boot-health: decides whether a boot was good, and makes a fallback to the previous OS version permanent (ADR-0014)."
+repository = "https://github.com/giorgiogiudice/TUR"
+publish = false
+
+# Each component is its own workspace with its own lockfile. See ADR-0005.
+[workspace]
+
+[lib]
+name = "tur_boot_health"
+path = "src/lib.rs"
+
+[[bin]]
+name = "tur-boot-health"
+path = "src/main.rs"
+
+# No third-party crates, on purpose. This program decides whether a machine
+# keeps an update or returns to the previous version. It is compiled inside the
+# image build with no network access, and everything it links is in this
+# repository or in the Rust standard library. Adding a dependency here needs a
+# reason that outweighs that.
+[dependencies]
+tur-core = { path = "../../crates/tur-core" }
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+# The image build must produce the same bytes twice (the image workflow
+# compares two builds), so the release profile leaves nothing to chance.
+[profile.release]
+codegen-units = 1
+incremental = false
+debug = false
+strip = true
+panic = "abort"

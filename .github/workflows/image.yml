@@ -6,6 +6,10 @@ on:
     branches: [main]
     paths:
       - "image/**"
+      # Programs compiled into the image, and what they are compiled with.
+      - "services/tur-boot-health/**"
+      - "crates/**"
+      - "rust-toolchain.toml"
       - "scripts/*.sh"
       - "scripts/*.py"
       - "schemas/build-manifest.schema.json"
@@ -16,6 +20,10 @@ on:
   pull_request:
     paths:
       - "image/**"
+      # Programs compiled into the image, and what they are compiled with.
+      - "services/tur-boot-health/**"
+      - "crates/**"
+      - "rust-toolchain.toml"
       - "scripts/*.sh"
       - "scripts/*.py"
       - "schemas/build-manifest.schema.json"

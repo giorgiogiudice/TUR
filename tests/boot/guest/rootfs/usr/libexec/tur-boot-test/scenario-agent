@@ -1,0 +1,424 @@
+#!/usr/bin/bash
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# TUR boot-health scenario agent. Present only in the boot-test image.
+#
+# tests/boot/rollback.py starts the prepared disk with a scenario named in
+# QEMU's fw_cfg (opt/org.tur/scenario). guest-agent then hands over to this
+# script. It does what the scenario's plan says, reports what it sees and
+# decides nothing: the driver on the host turns the facts into checks.
+#
+#   stage     the first boot of a scenario. Waits for the boot to settle,
+#             stages the scenario's image beside the running system with
+#             `bootc switch --transport oci` from the read-only image disk,
+#             and restarts cleanly. Arming the boot counter is the product's
+#             job at shutdown; with arm=hand the agent masks TUR's units and
+#             arms by hand, to show the GRUB half alone.
+#   observe   every later boot that reaches this script, in whichever
+#             deployment. Reports, and once the trial is over restarts as many
+#             more times as the plan asks, then says it is done.
+#
+# /var is shared by every deployment, so the state in /var/lib/tur-boot-test
+# is seen by the previous version and by the new one alike.
+#
+# Plan, from fw_cfg (opt/org.tur/<key>):
+#   scenario        name of the scenario
+#   image           reference inside the OCI layout (default: the scenario name)
+#   arm             "unit" (default) or "hand"
+#   finalize        "ok" (default) or "fail": make OSTree's finalisation fail
+#   extra_reboots   clean restarts to do once the trial is over (default 0)
+#   probe           "stale-block": no update at all. Rewrite GRUB's environment
+#                   block the way the product does, say so, and wait for the
+#                   host to cut the power; in the next boot report what GRUB
+#                   acted on and what the block holds.
+#
+# Markers (all start with "TUR-BOOT-TEST: "):
+#   SCENARIO-START name=... phase=stage|observe boot=N
+#   SCENARIO-SWITCHING ...         bootc switch is about to run
+#   SCENARIO-STAGED rc=... ...     bootc switch has returned
+#   SCENARIO-RESTARTING ...        the agent asks for a clean restart
+#   SCENARIO-REPORT boot=N ...     a report was sent
+#   SCENARIO-COMPLETE ...          nothing more to do; the host may power off
+#   SCENARIO-PROBLEM ...           something the plan needs did not work
+set -u
+
+port_name=org.tur.boottest
+port="/dev/virtio-ports/${port_name}"
+grubenv=/boot/grub2/grubenv
+images_device=/dev/disk/by-id/virtio-tur-test-images
+images=/run/tur-test/images
+trial_args="panic=30 rd.shell=0 rd.emergency=reboot systemd.watchdog_sec=180"
+tur_units="tur-boot-state.service tur-boot-health.service tur-boot-mark-good.service tur-boot-arm.service tur-boot-evidence.service tur-boot-record-failure.service tur-boot-retry.service tur-boot-emergency-retry.service"
+
+fw() {
+    local file="/sys/firmware/qemu_fw_cfg/by_name/opt/org.tur/$1/raw"
+    if [ -r "${file}" ]; then tr -d '\000\n' < "${file}"; fi
+}
+say() { printf 'TUR-BOOT-TEST: %s\n' "$*"; }
+uptime_s() { cut -d' ' -f1 /proc/uptime; }
+
+scenario="$(fw scenario)"
+image="$(fw image)"
+arm="$(fw arm)"
+finalize="$(fw finalize)"
+extra_reboots="$(fw extra_reboots)"
+probe="$(fw probe)"
+image="${image:-${scenario}}"
+arm="${arm:-unit}"
+finalize="${finalize:-ok}"
+extra_reboots="${extra_reboots:-0}"
+
+state="/var/lib/tur-boot-test/scenario/${scenario}"
+mkdir -p "${state}/report"
+if [ -e "${state}/staged" ]; then
+    phase=observe
+    boot=$(($(cat "${state}/boots" 2> /dev/null || echo 0) + 1))
+    echo "${boot}" > "${state}/boots"
+    name="boot-${boot}"
+else
+    phase=stage
+    boot=0
+    attempt=$(($(cat "${state}/stage-attempts" 2> /dev/null || echo 0) + 1))
+    echo "${attempt}" > "${state}/stage-attempts"
+    name="stage-${attempt}"
+fi
+sync
+out="${state}/report/${name}"
+status="${out}/status"
+rm -rf "${out}"
+mkdir -p "${out}"
+: > "${status}"
+
+put() { printf '%s=%s\n' "$1" "$2" >> "${status}"; }
+
+# cap NAME COMMAND...: keep the output of a command; note its exit status.
+cap() {
+    local file="$1" rc
+    shift
+    timeout 90 "$@" > "${out}/${file}" 2>&1
+    rc=$?
+    printf '%s\t%s\n' "${file}" "${rc}" >> "${out}/exit-status.tsv"
+    return 0
+}
+
+# capsh NAME SCRIPT: the same for a shell snippet.
+capsh() {
+    local file="$1"
+    shift
+    cap "${file}" /bin/bash -c "$1"
+}
+
+# editenv ARGS...: grub2-editenv on GRUB's environment block with /boot
+# writable in a private mount namespace (see guest-agent).
+editenv() {
+    ls "${grubenv}" > /dev/null 2>&1
+    # shellcheck disable=SC2016  # expanded by the inner shell
+    unshare --mount --propagation slave -- /bin/bash -c '
+        block="$1"
+        shift
+        mount -o remount,rw /boot || exit 70
+        grub2-editenv "${block}" "$@"
+        rc=$?
+        sync -f "${block}"
+        exit "${rc}"' _ "${grubenv}" "$@"
+}
+
+counter() { grub2-editenv "${grubenv}" list 2> /dev/null | sed -n 's/^boot_counter=//p'; }
+tur_arguments() { tr ' ' '\n' < /proc/cmdline | grep -E '^tur\.boot' | tr '\n' ' '; }
+unit_state() { systemctl show -p ActiveState --value "$1" 2> /dev/null; }
+
+# wait_gate SECONDS: until the boot health gate has finished, one way or the
+# other. Prints active (passed), failed, masked, absent or timeout-<state>.
+wait_gate() {
+    local limit="$1" start="${SECONDS}" state_now
+    case "$(systemctl show -p LoadState --value tur-boot-health.service 2> /dev/null)" in
+        masked)
+            echo masked
+            return
+            ;;
+        not-found | "")
+            echo absent
+            return
+            ;;
+    esac
+    while :; do
+        state_now="$(unit_state tur-boot-health.service)"
+        case "${state_now}" in
+            active | failed) break ;;
+        esac
+        if [ $((SECONDS - start)) -ge "${limit}" ]; then
+            state_now="timeout-${state_now}"
+            break
+        fi
+        sleep 1
+    done
+    echo "${state_now}"
+}
+
+# wait_unit_done UNIT SECONDS: until a oneshot unit is no longer starting.
+wait_unit_done() {
+    local start="${SECONDS}"
+    while [ "$(unit_state "$1")" = activating ] && [ $((SECONDS - start)) -lt "$2" ]; do
+        sleep 1
+    done
+}
+
+# The facts every report carries: what GRUB said, what the bootloader will
+# see next, which deployment runs, and what tur-boot-health decided.
+# shellcheck disable=SC2016  # the snippets are expanded by the shell that runs them
+facts() {
+    local unit entry
+    cap cmdline.txt cat /proc/cmdline
+    cap grubenv.txt grub2-editenv "${grubenv}" list
+    capsh grubenv-sha256.txt "sha256sum '${grubenv}'; stat -c 'mtime=%y size=%s' '${grubenv}'; filefrag -v '${grubenv}' | sed -n 4p"
+    {
+        echo "/boot/loader -> $(readlink /boot/loader)"
+        for entry in /boot/loader/entries/*.conf; do
+            printf '### %s\n' "${entry}"
+            cat "${entry}"
+            printf '\n'
+        done
+    } > "${out}/boot-entries.txt" 2>&1
+    cap bootc-status.json bootc status --format=json
+    cap bootc-status.txt bootc status
+    cap ostree-status.txt ostree admin status
+    cap is-default.txt ostree admin status --is-default
+    cap os-release cat /usr/lib/os-release
+    cap tur-release cat /usr/lib/tur/release
+    capsh scenario-marker.txt 'cat /usr/lib/tur-boot-test/scenario 2> /dev/null || echo prepared'
+    cap kargs-d.txt /bin/bash -c 'for f in /usr/lib/bootc/kargs.d/*; do echo "### $f"; cat "$f"; done'
+    cap tur-status.json tur-boot-health status --json
+    cap tur-status.txt tur-boot-health status
+    : > "${out}/tur-units.txt"
+    for unit in ${tur_units} boot-complete.target graphical.target display-manager.service \
+        ostree-finalize-staged.service bootloader-update.service; do
+        {
+            printf '### %s\n' "${unit}"
+            systemctl show --no-pager "${unit}" -p LoadState -p ActiveState -p SubState -p Result \
+                -p ConditionResult -p NRestarts -p ExecMainStartTimestampMonotonic \
+                -p ExecMainExitTimestampMonotonic -p ActiveEnterTimestampMonotonic
+        } >> "${out}/tur-units.txt" 2>&1
+    done
+    cap failed-units.txt systemctl list-units --failed --no-pager --plain --no-legend
+    cap default-target.txt systemctl show --no-pager default.target -p Id -p ActiveState
+    cap sessions.txt loginctl list-sessions --no-pager
+    cap watchdog.txt /bin/bash -c 'wdctl 2>&1; systemctl show -p RuntimeWatchdogUSec -p RebootWatchdogUSec -p WatchdogDevice -p WatchdogLastPingTimestampMonotonic'
+    cap pstore.txt /bin/bash -c 'echo "backend: $(cat /sys/module/pstore/parameters/backend 2>&1)"; ls -laR /sys/fs/pstore /var/lib/systemd/pstore 2>&1'
+    capsh tur-state.txt 'ls -laR /var/lib/tur /run/tur 2>&1'
+    mkdir -p "${out}/boot-health/run"
+    tar -C /var/lib/tur/boot-health --exclude="*.zst" --exclude="*.export" -cf - . 2> /dev/null \
+        | tar -C "${out}/boot-health" -xf - 2> /dev/null
+    cp /run/tur/boot-health/*.json "${out}/boot-health/run/" 2> /dev/null
+    cap evidence-files.txt find /var/lib/tur/boot-health/evidence -type f -printf '%s %p\n'
+}
+
+# The journal: this boot in full, and what the journal still holds of the
+# boots before it. A failed attempt's journal is read here by the version
+# that survived it.
+journals() {
+    local offset
+    cap list-boots.txt journalctl --list-boots --no-pager
+    cap list-boots.json journalctl --list-boots --no-pager --output=json
+    journalctl -b --no-pager -o short-monotonic > "${out}/journal.txt" 2>&1
+    for offset in 1 2 3 4 5 6; do
+        if journalctl -b "-${offset}" -n 1 --no-pager > /dev/null 2>&1; then
+            journalctl -b "-${offset}" --no-pager -o short-monotonic 2>&1 \
+                | gzip -c > "${out}/journal-minus-${offset}.txt.gz"
+        fi
+    done
+    # Everything tur-boot-health ever wrote, with its fields; and bootc's own
+    # record of a rollback.
+    journalctl --no-pager -o json -t tur-boot-health 2> /dev/null | head -c 8000000 > "${out}/tur-journal-all.json"
+    journalctl --no-pager -o json MESSAGE_ID=26f3b1eb24464d12aa5e7b544a6b5468 2> /dev/null \
+        | head -c 2000000 > "${out}/bootc-rollback-messages.json"
+    # Everything bootc itself logged, with its fields: which message IDs it uses.
+    journalctl --no-pager -o json -t bootc 2> /dev/null | head -c 4000000 > "${out}/bootc-journal.json"
+    journalctl --no-pager -o short-monotonic -g 'emergency.target|Emergency Mode|Freezing execution|Kernel panic|watchdog' 2> /dev/null \
+        | tail -n 200 > "${out}/journal-notable.txt"
+}
+
+send() {
+    local start="${SECONDS}"
+    until [ -e "${port}" ] || [ $((SECONDS - start)) -ge 20 ]; do sleep 1; done
+    if [ -e "${port}" ] && tar -C "${state}/report" -cf - "${name}" > "${port}"; then
+        say "SCENARIO-REPORT name=${scenario} report=${name} boot=${boot} $1"
+    else
+        say "SCENARIO-PROBLEM report ${name} could not be sent over ${port_name}"
+    fi
+    sync
+}
+
+build_id="$(sed -n 's/^BUILD_ID=//p' /usr/lib/os-release | tr -d '"')"
+marker="$(cat /usr/lib/tur-boot-test/scenario 2> /dev/null || echo prepared)"
+put scenario "${scenario}"
+put phase "${phase}"
+put boot "${boot}"
+put image "${image}"
+put arm "${arm}"
+put finalize "${finalize}"
+put extra_reboots "${extra_reboots}"
+put build_id "${build_id}"
+put running "${marker}"
+put boot_id "$(tr -d '-' < /proc/sys/kernel/random/boot_id)"
+put kernel_arguments "$(tur_arguments)"
+put counter_at_start "$(counter)"
+say "SCENARIO-START name=${scenario} phase=${phase} boot=${boot} running=${marker} $(tur_arguments)boot_counter=$(counter) uptime=$(uptime_s)"
+
+# Whatever the phase: let this boot be judged first. In a trial whose gate
+# fails, systemd restarts the machine and this script ends here.
+gate="$(wait_gate 480)"
+put gate_unit_state "${gate}"
+put gate_finished_uptime "$(uptime_s)"
+wait_unit_done tur-boot-mark-good.service 90
+wait_unit_done tur-boot-evidence.service 300
+put mark_good_unit_state "$(unit_state tur-boot-mark-good.service)"
+put evidence_unit_state "$(unit_state tur-boot-evidence.service)"
+put counter_after_gate "$(counter)"
+classification="$(sed -n 's/.*"classification": *"\([^"]*\)".*/\1/p' /run/tur/boot-health/boot.json 2> /dev/null | head -n1)"
+verdict="$(sed -n 's/.*"result": *"\([^"]*\)".*/\1/p' /run/tur/boot-health/verdict.json 2> /dev/null | head -n1)"
+put classification "${classification}"
+put verdict "${verdict}"
+say "SCENARIO-JUDGED name=${scenario} boot=${boot} gate=${gate} classification=${classification:-none} verdict=${verdict:-none} boot_counter=$(counter) uptime=$(uptime_s)"
+
+if [ "${phase}" = stage ] && [ "${probe}" = stale-block ]; then
+    facts
+    put probe_attempt "${attempt}"
+    if [ "${attempt}" -eq 1 ]; then
+        # Rewrite the block as tur-boot-health does (grub2-editenv, then fsync
+        # of the file), and tell the host. The host cuts the power.
+        {
+            echo "--- before"
+            grub2-editenv "${grubenv}" list
+            filefrag -v "${grubenv}"
+            echo "--- set boot_counter=2"
+            editenv set boot_counter=2
+            echo "exit status: $?"
+            echo "--- after"
+            grub2-editenv "${grubenv}" list
+            filefrag -v "${grubenv}"
+        } > "${out}/probe-write.txt" 2>&1
+        put probe_counter_written "$(counter)"
+        for _ in 1 2 3; do
+            say "SCENARIO-PROBE-WRITTEN name=${scenario} boot_counter=$(counter)"
+        done
+        sleep 900
+        exit 0
+    fi
+    journals
+    send "probe=observed grub_said=$(tur_arguments)counter_at_start=$(sed -n 's/^counter_at_start=//p' "${status}")"
+    for _ in 1 2 3; do
+        sleep 1
+        say "SCENARIO-COMPLETE name=${scenario} outcome=probe boot_counter=$(counter)"
+    done
+    sleep 900
+    systemctl poweroff
+    exit 0
+fi
+
+if [ "${phase}" = stage ]; then
+    facts
+    # --- the update source: an OCI layout on a read-only disk ------------------
+    mkdir -p "${images}"
+    start="${SECONDS}"
+    until [ -e "${images_device}" ] || [ $((SECONDS - start)) -ge 30 ]; do sleep 1; done
+    if ! mountpoint -q "${images}"; then
+        mount -o ro,context=system_u:object_r:usr_t:s0 "${images_device}" "${images}" > "${out}/mount-images.txt" 2>&1 \
+            || mount -o ro "${images_device}" "${images}" >> "${out}/mount-images.txt" 2>&1
+    fi
+    cap images-listing.txt /bin/bash -c "findmnt '${images}'; ls -la '${images}'; cat '${images}/index.json'"
+    if [ ! -s "${images}/index.json" ]; then
+        say "SCENARIO-PROBLEM the image disk is not mounted at ${images}"
+    fi
+
+    # --- arm=hand: the GRUB half alone, with no TUR program taking part -------------
+    if [ "${arm}" = hand ]; then
+        {
+            # shellcheck disable=SC2086  # a list of unit names
+            systemctl mask ${tur_units}
+            echo "mask exit status: $?"
+            editenv set boot_counter=3 "tur_trial_args=${trial_args}"
+            echo "editenv exit status: $?"
+            grub2-editenv "${grubenv}" list
+        } > "${out}/arm-by-hand.txt" 2>&1
+        put armed_by hand
+        put counter_after_arming "$(counter)"
+    else
+        put armed_by "tur-boot-arm.service at shutdown"
+    fi
+
+    # --- stage the scenario's image beside the running system -------------------------
+    say "SCENARIO-SWITCHING name=${scenario} image=${image} uptime=$(uptime_s)"
+    start_ns="$(date +%s%N)"
+    timeout 900 bootc switch --transport oci "${images}:${image}" > "${out}/bootc-switch.txt" 2>&1
+    rc=$?
+    seconds="$((($(date +%s%N) - start_ns) / 1000000))"
+    put switch_exit_status "${rc}"
+    put switch_milliseconds "${seconds}"
+    say "SCENARIO-STAGED name=${scenario} rc=${rc} milliseconds=${seconds} uptime=$(uptime_s)"
+    tail -n 5 "${out}/bootc-switch.txt" | while read -r line; do say "bootc switch: ${line}"; done
+    cap bootc-status-staged.json bootc status --format=json
+    cap bootc-status-staged.txt bootc status
+    cap finalize-units.txt systemctl status --no-pager ostree-finalize-staged.service ostree-finalize-staged-hold.service tur-boot-arm.service
+    cap staged-marker.txt ls -la /run/ostree
+
+    # --- finalize=fail: OSTree's finalisation fails at shutdown --------------------------
+    if [ "${finalize}" = fail ]; then
+        mkdir -p /run/systemd/system/ostree-finalize-staged.service.d
+        printf '[Service]\nExecStop=\nExecStop=/usr/bin/false\n' \
+            > /run/systemd/system/ostree-finalize-staged.service.d/90-tur-test-fail.conf
+        systemctl daemon-reload
+        cap finalize-drop-in.txt systemctl cat --no-pager ostree-finalize-staged.service
+    fi
+
+    journals
+    send "staged_rc=${rc}"
+    if [ "${rc}" -ne 0 ]; then
+        say "SCENARIO-PROBLEM bootc switch failed with status ${rc}; see bootc-switch.txt"
+        for _ in 1 2 3; do
+            sleep 1
+            say "SCENARIO-COMPLETE name=${scenario} outcome=stage-failed"
+        done
+        sleep 600
+        exit 1
+    fi
+    touch "${state}/staged"
+    sync
+    say "SCENARIO-RESTARTING name=${scenario} reason=staged boot_counter=$(counter)"
+    systemctl reboot
+    exit 0
+fi
+
+# --- observe ---------------------------------------------------------------------------
+facts
+journals
+left="$(counter)"
+if [ -z "${left}" ] || grep -qw 'tur.boot=fallback' /proc/cmdline; then settled=yes; else settled=no; fi
+put settled "${settled}"
+done_reboots="$(cat "${state}/extra-reboots-done" 2> /dev/null || echo 0)"
+put extra_reboots_done "${done_reboots}"
+send "running=${marker} classification=${classification:-none} verdict=${verdict:-none} boot_counter=${left} settled=${settled}"
+
+if [ "${settled}" = yes ] && [ "${done_reboots}" -lt "${extra_reboots}" ]; then
+    echo "$((done_reboots + 1))" > "${state}/extra-reboots-done"
+    sync
+    say "SCENARIO-RESTARTING name=${scenario} reason=extra-reboot-$((done_reboots + 1))-of-${extra_reboots}"
+    systemctl reboot
+    exit 0
+fi
+
+if [ "${settled}" = yes ]; then
+    for _ in 1 2 3; do
+        sleep 1
+        say "SCENARIO-COMPLETE name=${scenario} boot=${boot} running=${marker} boot_counter=${left}"
+    done
+else
+    # A trial boot that nothing ended: the gate is masked or absent. The host
+    # decides what happens next.
+    for _ in 1 2 3; do
+        sleep 1
+        say "SCENARIO-IDLE name=${scenario} boot=${boot} running=${marker} boot_counter=${left}"
+    done
+fi
+sleep 900
+say "the host did not stop the guest; powering off"
+systemctl poweroff

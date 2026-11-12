@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Emergency mode during a trial: sync the journal and restart. Plain systemd,
+# no TUR code. Outside a trial the emergency shell stays, as it should.
+
+[Unit]
+Description=Restart out of emergency mode during a trial boot
+Documentation=https://github.com/giorgiogiudice/TUR/blob/main/docs/architecture/boot-health-and-rollback.md
+DefaultDependencies=no
+ConditionKernelCommandLine=|tur.boot=trial
+ConditionPathExists=|/run/tur/boot-trial
+Conflicts=shutdown.target
+Before=shutdown.target
+
+[Service]
+Type=oneshot
+ExecStart=-/usr/bin/journalctl --sync
+ExecStart=/usr/bin/systemctl --force reboot
+TimeoutStartSec=60
+StandardOutput=journal+console
+StandardError=journal+console

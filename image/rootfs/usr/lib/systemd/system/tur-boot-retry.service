@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# The restart after a failed gate. Plain systemd, no TUR code: a new
+# deployment in which every TUR program is broken still restarts, is still
+# counted by GRUB, and still ends on the previous version.
+#
+# Only during a trial, which is bounded. Outside a trial nothing restarts the
+# machine automatically.
+
+[Unit]
+Description=Restart after a failed boot health gate during a trial
+Documentation=https://github.com/giorgiogiudice/TUR/blob/main/docs/architecture/boot-health-and-rollback.md
+After=tur-boot-record-failure.service
+ConditionKernelCommandLine=|tur.boot=trial
+ConditionPathExists=|/run/tur/boot-trial
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemctl --no-block reboot

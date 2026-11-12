@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# One kernel argument, written as a GRUB variable. GRUB's Boot Loader
+# Specification support replaces it, when it builds the menu, with what
+# 08_tur_boot_count.cfg computed for this boot: the contract version, and on a
+# trial or fallback boot what kind of boot this is (ADR-0014; design section 5.4).
+kargs = ["$tur_boot_args"]
