@@ -220,7 +220,7 @@ mod tests {
                 "text",
                 null,
                 {
-                  "Name": "Evil\u001b[31m\u0000Dock‮",
+                  "Name": "Evil\u001b[31m\u0000Dock\u202e",
                   "DeviceId": "../../etc/passwd",
                   "Vendor": 7,
                   "Version": ["1"],
