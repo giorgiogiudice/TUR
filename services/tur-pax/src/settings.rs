@@ -40,7 +40,7 @@ use serde::{Deserialize, Serialize};
 use tur_pax_memory::default_store_dir;
 use tur_pax_providers::{Prices, ProviderConfig, ProviderId, RetryPolicy, TaskLimit, Timeouts};
 
-use crate::consent::CONSENT_TEXT_VERSION;
+use crate::consent::{CONSENT_TEXT_VERSION, family_name};
 use crate::faults::{Fault, TaskCode};
 
 /// The settings schema version this build reads and writes.
@@ -84,8 +84,8 @@ const MODEL_NAME_MAX: usize = 200;
 pub struct ConsentRecord {
     /// The version of the text that was accepted.
     pub text_version: String,
-    /// The provider the text named.
-    pub provider: ProviderId,
+    /// The identifier of the provider the text named.
+    pub provider: String,
     /// When it was accepted, in seconds since the Unix epoch.
     pub accepted_at: u64,
 }
@@ -151,6 +151,219 @@ pub struct DayLimit {
     pub tokens: Option<u64>,
 }
 
+/// What a provider entry declares the service can do. Recorded and
+/// reported; whether it is true is the adapter's to find out.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DeclaredCapabilities {
+    /// Tool calling: without it a model can converse and not act.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_calling: Option<bool>,
+    /// Tool calls streamed in fragments.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub streaming_tool_calls: Option<bool>,
+    /// Image input: without it a model cannot control applications by sight.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image_input: Option<bool>,
+    /// The context size, in tokens.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_tokens: Option<u64>,
+}
+
+/// One model of a provider entry.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ModelEntry {
+    /// The model name, as the provider spells it.
+    pub model: String,
+    /// A name for a person to read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    /// The output limit of one response to use with this model.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_output_tokens: Option<u32>,
+    /// Whether the project has run its conformance tests against this model.
+    #[serde(default)]
+    pub tested_with_tur: bool,
+    /// The prices, if they are known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prices: Option<Prices>,
+}
+
+/// One provider: a service P@x can talk to, by an identifier of its own.
+///
+/// A provider is configuration (ADR-0004, amendment of 12 November 2026):
+/// which adapter family speaks its interface, where it is, which item of
+/// the password store holds its key, what it declares it can do, and its
+/// models and prices. The three companies the adapter families are named
+/// after are providers like any other; when no list names them, they exist
+/// with their family's public address and no prices.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProviderEntry {
+    /// The identifier: 1 to 32 lower-case letters, digits, `-` and `_`,
+    /// starting with a letter.
+    pub id: String,
+    /// The adapter family that speaks its interface.
+    pub adapter: ProviderId,
+    /// The provider's name, for a person to read.
+    pub name: String,
+    /// Its address, if it is not the public address of its adapter family.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_url: Option<String>,
+    /// The name of the password store item that holds its key; the
+    /// identifier when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub keyring_item: Option<String>,
+    /// What it declares it can do.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capabilities: Option<DeclaredCapabilities>,
+    /// Where the provider says how it handles data sent to its interface.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub data_terms_url: Option<String>,
+    /// Where a person gets a key.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key_url: Option<String>,
+    /// Where the prices below were read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prices_url: Option<String>,
+    /// The models.
+    #[serde(default)]
+    pub models: Vec<ModelEntry>,
+}
+
+/// Where a provider entry came from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Origin {
+    /// The model list, shipped or put in place by the administrator.
+    Listed,
+    /// The person's own entry, in the settings file.
+    ByHand,
+    /// No entry: one of the adapter families' own companies, at its public
+    /// address.
+    Implicit,
+}
+
+impl Origin {
+    /// The origin as the interface writes it.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Origin::Listed => "listed",
+            Origin::ByHand => "by_hand",
+            Origin::Implicit => "implicit",
+        }
+    }
+}
+
+/// Whether `id` can be the identifier of a provider or the name of a
+/// password store item: 1 to 32 lower-case ASCII letters, digits, `-` and
+/// `_`, starting with a letter.
+pub fn is_provider_id(id: &str) -> bool {
+    (1..=32).contains(&id.len())
+        && id.as_bytes()[0].is_ascii_lowercase()
+        && id
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'-' | b'_'))
+}
+
+impl ProviderEntry {
+    /// The entry of an adapter family's own company, when no list names it.
+    pub fn implicit(adapter: ProviderId) -> Self {
+        ProviderEntry {
+            id: adapter.as_str().to_owned(),
+            adapter,
+            name: family_name(adapter).to_owned(),
+            base_url: None,
+            keyring_item: None,
+            capabilities: None,
+            data_terms_url: None,
+            key_url: None,
+            prices_url: None,
+            models: Vec::new(),
+        }
+    }
+
+    /// The name of the password store item that holds the key.
+    pub fn keyring_item(&self) -> &str {
+        self.keyring_item.as_deref().unwrap_or(&self.id)
+    }
+
+    /// Whether this is the adapter family's own company at its public
+    /// address, the interface the adapter was written for.
+    pub fn is_native(&self) -> bool {
+        self.base_url.is_none() && self.id == self.adapter.as_str()
+    }
+
+    /// The model of this provider with that name.
+    pub fn model(&self, model: &str) -> Option<&ModelEntry> {
+        self.models.iter().find(|entry| entry.model == model)
+    }
+
+    /// A configuration of the provider layer for this provider: what its own
+    /// rules accept is what an entry may say.
+    fn probe(&self, model: &str, prices: Option<Prices>) -> ProviderConfig {
+        ProviderConfig {
+            schema_version: tur_pax_providers::config::CONFIG_SCHEMA_VERSION,
+            provider: self.adapter,
+            base_url: self.base_url.clone(),
+            model: model.to_owned(),
+            max_output_tokens: 1,
+            timeouts: Timeouts::default(),
+            retry: RetryPolicy::default(),
+            prices,
+            task_limit: None,
+        }
+    }
+
+    /// Check the entry. The reason names what is wrong and quotes nothing.
+    fn check(&self) -> Result<(), String> {
+        if !is_provider_id(&self.id) {
+            return Err("the identifier of a provider is not valid".to_owned());
+        }
+        if self.keyring_item.as_deref().is_some_and(|item| !is_provider_id(item)) {
+            return Err(format!("the keyring item of {} is not valid", self.id));
+        }
+        let name_ok = !self.name.trim().is_empty()
+            && self.name.len() <= 80
+            && !self.name.chars().any(char::is_control);
+        if !name_ok {
+            return Err(format!("the name of {} is not valid", self.id));
+        }
+        for url in [&self.data_terms_url, &self.key_url, &self.prices_url]
+            .into_iter()
+            .flatten()
+        {
+            if !is_https_url(url) {
+                return Err(format!("an address of {} is not an https address", self.id));
+            }
+        }
+        // The address, by the provider layer's rules: https, or http for a
+        // loopback host only.
+        if self.probe("probe", None).validate().is_err() {
+            return Err(format!("the address of {} is not valid", self.id));
+        }
+        let mut names: Vec<&str> = Vec::new();
+        for model in &self.models {
+            if !is_model_name(&model.model) || names.contains(&model.model.as_str()) {
+                return Err(format!(
+                    "a model name of {} is not valid or is there twice",
+                    self.id
+                ));
+            }
+            names.push(&model.model);
+            if model.max_output_tokens == Some(0) {
+                return Err(format!("an output limit of {} is zero", self.id));
+            }
+            if let Some(prices) = &model.prices
+                && self.probe(&model.model, Some(prices.clone())).validate().is_err()
+            {
+                return Err(format!("the prices of a model of {} are not valid", self.id));
+            }
+        }
+        Ok(())
+    }
+}
+
 /// The settings of P@x.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -163,15 +376,16 @@ pub struct Settings {
     /// The acceptance of the consent text, if it was given.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub consent: Option<ConsentRecord>,
-    /// The provider.
+    /// The identifier of the provider in use.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub provider: Option<ProviderId>,
+    pub provider: Option<String>,
     /// The model name, as the provider spells it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
-    /// The base URL of a compatible gateway. It cannot be set through the
-    /// service's interface, only by editing the file, because whoever sets
-    /// it is sent the key. It is cleared when the provider changes.
+    /// An address that replaces the provider's, for a gateway. It cannot be
+    /// set through the service's interface, only by editing the file,
+    /// because whoever it names is sent the key. It is cleared when the
+    /// provider changes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub base_url: Option<String>,
     /// The output limit of one response, if the person set one.
@@ -180,6 +394,10 @@ pub struct Settings {
     /// The spending limits.
     #[serde(default)]
     pub limits: Limits,
+    /// Providers the person added by hand. An identifier the model list also
+    /// has is the list's.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub providers: Vec<ProviderEntry>,
 }
 
 impl Default for Settings {
@@ -193,6 +411,7 @@ impl Default for Settings {
             base_url: None,
             max_output_tokens: None,
             limits: Limits::default(),
+            providers: Vec::new(),
         }
     }
 }
@@ -205,6 +424,13 @@ fn storage(detail: impl Into<String>) -> Fault {
     Fault::new(TaskCode::ServiceStorage, detail)
 }
 
+fn not_configured() -> Fault {
+    Fault::new(
+        TaskCode::ServiceNotConfigured,
+        TaskCode::ServiceNotConfigured.user_message(),
+    )
+}
+
 /// Whether `name` can be a model name: 1 to 200 characters, no control
 /// character, no surrounding whitespace.
 pub fn is_model_name(name: &str) -> bool {
@@ -214,11 +440,44 @@ pub fn is_model_name(name: &str) -> bool {
         && name.trim() == name
 }
 
-/// The provider a name stands for, as it appears in configuration.
-pub fn provider_from_name(name: &str) -> Option<ProviderId> {
-    ProviderId::ALL
+/// The adapter families that are one company's own interface, with a public
+/// address of their own. Each of them is a provider even when no list names
+/// it. A family for a kind of interface many services offer (the
+/// OpenAI-compatible Chat Completions of ADR-0004's amendment) has no such
+/// company and does not belong here.
+pub const COMPANY_FAMILIES: [ProviderId; 3] =
+    [ProviderId::Anthropic, ProviderId::OpenAi, ProviderId::Google];
+
+/// Every provider there is, by identifier: the model list's, then the
+/// person's own, then the adapter families' companies no list names.
+pub fn providers(models: &ModelList, settings: &Settings) -> Vec<(ProviderEntry, Origin)> {
+    let mut all: Vec<(ProviderEntry, Origin)> = models
+        .providers
+        .iter()
+        .map(|entry| (entry.clone(), Origin::Listed))
+        .collect();
+    for entry in &settings.providers {
+        if !all.iter().any(|(known, _)| known.id == entry.id) {
+            all.push((entry.clone(), Origin::ByHand));
+        }
+    }
+    for adapter in COMPANY_FAMILIES {
+        if !all.iter().any(|(known, _)| known.id == adapter.as_str()) {
+            all.push((ProviderEntry::implicit(adapter), Origin::Implicit));
+        }
+    }
+    all
+}
+
+/// The provider with that identifier, and where its entry came from.
+pub fn find_provider(
+    models: &ModelList,
+    settings: &Settings,
+    id: &str,
+) -> Option<(ProviderEntry, Origin)> {
+    providers(models, settings)
         .into_iter()
-        .find(|provider| provider.as_str() == name)
+        .find(|(entry, _)| entry.id == id)
 }
 
 impl Settings {
@@ -248,8 +507,25 @@ impl Settings {
         {
             return Err(storage("the model name in the settings is not valid"));
         }
+        if settings
+            .provider
+            .as_deref()
+            .is_some_and(|provider| !is_provider_id(provider))
+        {
+            return Err(storage("the provider in the settings is not an identifier"));
+        }
         if settings.max_output_tokens == Some(0) {
             return Err(storage("the output limit in the settings is zero"));
+        }
+        let mut seen: Vec<&str> = Vec::new();
+        for entry in &settings.providers {
+            entry
+                .check()
+                .map_err(|reason| storage(format!("a provider in the settings: {reason}")))?;
+            if seen.contains(&entry.id.as_str()) {
+                return Err(storage("a provider is in the settings twice"));
+            }
+            seen.push(&entry.id);
         }
         settings
             .limits
@@ -288,9 +564,9 @@ impl Settings {
     /// Whether the consent that was given is for the current text and the
     /// provider in use.
     pub fn consent_is_current(&self) -> bool {
-        match (&self.consent, self.provider) {
+        match (&self.consent, &self.provider) {
             (Some(consent), Some(provider)) => {
-                consent.text_version == CONSENT_TEXT_VERSION && consent.provider == provider
+                consent.text_version == CONSENT_TEXT_VERSION && consent.provider == *provider
             }
             _ => false,
         }
@@ -306,10 +582,7 @@ impl Settings {
             ));
         }
         if self.provider.is_none() || self.model.is_none() {
-            return Some(Fault::new(
-                TaskCode::ServiceNotConfigured,
-                TaskCode::ServiceNotConfigured.user_message(),
-            ));
+            return Some(not_configured());
         }
         if !self.consent_is_current() {
             return Some(Fault::new(
@@ -320,7 +593,7 @@ impl Settings {
         None
     }
 
-    /// Choose the provider and the model.
+    /// Choose the provider, by its identifier, and the model.
     ///
     /// Changing the provider withdraws what was agreed for the other one:
     /// the consent names a provider, so P@x is switched off until the text
@@ -329,23 +602,29 @@ impl Settings {
     ///
     /// # Errors
     ///
-    /// `TUR-AI-SERVICE-006` if the provider is not one of the three or the
-    /// model name is not valid.
-    pub fn set_provider(&mut self, provider: &str, model: &str) -> Result<(), Fault> {
-        let provider = provider_from_name(provider)
-            .ok_or_else(|| invalid("the provider is not one of anthropic, openai and google"))?;
+    /// `TUR-AI-SERVICE-006` if no provider has that identifier or the model
+    /// name is not valid.
+    pub fn set_provider(
+        &mut self,
+        provider: &str,
+        model: &str,
+        models: &ModelList,
+    ) -> Result<(), Fault> {
+        if find_provider(models, self, provider).is_none() {
+            return Err(invalid("no provider has that identifier"));
+        }
         if !is_model_name(model) {
             return Err(invalid(
                 "the model name must be 1 to 200 characters with no control characters and no \
                  surrounding whitespace",
             ));
         }
-        if self.provider != Some(provider) {
+        if self.provider.as_deref() != Some(provider) {
             self.enabled = false;
             self.consent = None;
             self.base_url = None;
         }
-        self.provider = Some(provider);
+        self.provider = Some(provider.to_owned());
         self.model = Some(model.to_owned());
         Ok(())
     }
@@ -358,11 +637,8 @@ impl Settings {
     /// `TUR-AI-SERVICE-003` if no provider and model are chosen;
     /// `TUR-AI-SERVICE-002` if the version named is not the current one.
     pub fn enable(&mut self, consent_version: &str, now: u64) -> Result<(), Fault> {
-        let (Some(provider), Some(_)) = (self.provider, &self.model) else {
-            return Err(Fault::new(
-                TaskCode::ServiceNotConfigured,
-                TaskCode::ServiceNotConfigured.user_message(),
-            ));
+        let (Some(provider), Some(_)) = (&self.provider, &self.model) else {
+            return Err(not_configured());
         };
         if consent_version != CONSENT_TEXT_VERSION {
             return Err(Fault::new(
@@ -372,7 +648,7 @@ impl Settings {
         }
         self.consent = Some(ConsentRecord {
             text_version: CONSENT_TEXT_VERSION.to_owned(),
-            provider,
+            provider: provider.clone(),
             accepted_at: now,
         });
         self.enabled = true;
@@ -385,22 +661,28 @@ impl Settings {
         self.enabled = false;
     }
 
-    /// The provider configuration of a task: the provider and the model of
-    /// the settings, the prices of the model list, the limit of one task.
+    /// The provider in use, its entry and where the entry came from.
+    pub fn current_provider(&self, models: &ModelList) -> Option<(ProviderEntry, Origin)> {
+        find_provider(models, self, self.provider.as_deref()?)
+    }
+
+    /// The provider configuration of a task: the adapter family and address
+    /// of the provider in use, its model, the model's prices, the limit of
+    /// one task.
     ///
     /// # Errors
     ///
-    /// `TUR-AI-SERVICE-003` if no provider and model are chosen; the
-    /// provider layer's `TUR-AI-PROVIDER-011` if the values do not make a
-    /// valid configuration.
+    /// `TUR-AI-SERVICE-003` if no provider and model are chosen, or the
+    /// provider is no longer known; the provider layer's
+    /// `TUR-AI-PROVIDER-011` if the values do not make a valid configuration.
     pub fn provider_config(&self, models: &ModelList) -> Result<ProviderConfig, Fault> {
-        let (Some(provider), Some(model)) = (self.provider, &self.model) else {
-            return Err(Fault::new(
-                TaskCode::ServiceNotConfigured,
-                TaskCode::ServiceNotConfigured.user_message(),
-            ));
+        let Some(model) = &self.model else {
+            return Err(not_configured());
         };
-        let listed = models.find(provider, model);
+        let Some((entry, _)) = self.current_provider(models) else {
+            return Err(not_configured());
+        };
+        let listed = entry.model(model);
         let prices = listed.and_then(|entry| entry.prices.clone());
         let task_limit = if prices.is_some() {
             TaskLimit {
@@ -415,8 +697,8 @@ impl Settings {
         };
         let config = ProviderConfig {
             schema_version: tur_pax_providers::config::CONFIG_SCHEMA_VERSION,
-            provider,
-            base_url: self.base_url.clone(),
+            provider: entry.adapter,
+            base_url: self.base_url.clone().or_else(|| entry.base_url.clone()),
             model: model.clone(),
             max_output_tokens: self
                 .max_output_tokens
@@ -490,47 +772,6 @@ pub fn write_private(path: &Path, bytes: &[u8]) -> Result<(), Fault> {
     Ok(())
 }
 
-/// One model of the model list.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct ModelEntry {
-    /// The model name, as the provider spells it.
-    pub model: String,
-    /// A name for a person to read.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub label: Option<String>,
-    /// The output limit of one response to use with this model.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub max_output_tokens: Option<u32>,
-    /// Whether the project has run its conformance tests against this model.
-    #[serde(default)]
-    pub tested_with_tur: bool,
-    /// The prices, if they are known.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub prices: Option<Prices>,
-}
-
-/// One provider of the model list.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct ProviderEntry {
-    /// The provider.
-    pub provider: ProviderId,
-    /// The provider's name, for a person to read.
-    pub name: String,
-    /// Where the provider says how it handles data sent to its interface.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub data_terms_url: Option<String>,
-    /// Where a person gets a key.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub key_url: Option<String>,
-    /// Where the prices below were read.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub prices_url: Option<String>,
-    /// The models.
-    pub models: Vec<ModelEntry>,
-}
-
 /// The model list: the providers, their models and what they cost.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -602,61 +843,15 @@ impl ModelList {
         if !dated {
             return Err(storage("the date of the prices is not written YYYY-MM-DD"));
         }
-        let mut seen = Vec::new();
+        let mut seen: Vec<&str> = Vec::new();
         for entry in &list.providers {
-            if seen.contains(&entry.provider) {
+            entry
+                .check()
+                .map_err(|reason| storage(format!("the model list: {reason}")))?;
+            if seen.contains(&entry.id.as_str()) {
                 return Err(storage("a provider is in the model list twice"));
             }
-            seen.push(entry.provider);
-            let name_ok = !entry.name.trim().is_empty()
-                && entry.name.len() <= 80
-                && !entry.name.chars().any(char::is_control);
-            if !name_ok {
-                return Err(storage(
-                    "the name of a provider in the model list is not valid",
-                ));
-            }
-            for url in [&entry.data_terms_url, &entry.key_url, &entry.prices_url]
-                .into_iter()
-                .flatten()
-            {
-                if !is_https_url(url) {
-                    return Err(storage(
-                        "an address in the model list is not an https address",
-                    ));
-                }
-            }
-            let mut names: Vec<&str> = Vec::new();
-            for model in &entry.models {
-                if !is_model_name(&model.model) || names.contains(&model.model.as_str()) {
-                    return Err(storage(
-                        "a model name in the model list is not valid or is there twice",
-                    ));
-                }
-                names.push(&model.model);
-                if model.max_output_tokens == Some(0) {
-                    return Err(storage("an output limit in the model list is zero"));
-                }
-                if let Some(prices) = &model.prices {
-                    // The provider layer's own rules decide what prices are.
-                    let probe = ProviderConfig {
-                        schema_version: tur_pax_providers::config::CONFIG_SCHEMA_VERSION,
-                        provider: entry.provider,
-                        base_url: None,
-                        model: model.model.clone(),
-                        max_output_tokens: 1,
-                        timeouts: Timeouts::default(),
-                        retry: RetryPolicy::default(),
-                        prices: Some(prices.clone()),
-                        task_limit: None,
-                    };
-                    if probe.validate().is_err() {
-                        return Err(storage(
-                            "the prices of a model in the model list are not valid",
-                        ));
-                    }
-                }
-            }
+            seen.push(&entry.id);
         }
         Ok(list)
     }
@@ -681,19 +876,14 @@ impl ModelList {
         Ok(ModelList::empty())
     }
 
-    /// The entry of a provider.
-    pub fn provider(&self, provider: ProviderId) -> Option<&ProviderEntry> {
-        self.providers
-            .iter()
-            .find(|entry| entry.provider == provider)
+    /// The entry of a provider the list names.
+    pub fn provider(&self, id: &str) -> Option<&ProviderEntry> {
+        self.providers.iter().find(|entry| entry.id == id)
     }
 
-    /// The entry of a model of a provider.
-    pub fn find(&self, provider: ProviderId, model: &str) -> Option<&ModelEntry> {
-        self.provider(provider)?
-            .models
-            .iter()
-            .find(|entry| entry.model == model)
+    /// The entry of a model of a provider the list names.
+    pub fn find(&self, id: &str, model: &str) -> Option<&ModelEntry> {
+        self.provider(id)?.model(model)
     }
 }
 
@@ -813,7 +1003,8 @@ mod tests {
         "status": "example",
         "prices_as_of": "2026-11-12",
         "providers": [{
-            "provider": "anthropic",
+            "id": "anthropic",
+            "adapter": "anthropic",
             "name": "Anthropic",
             "data_terms_url": "https://example.org/terms",
             "models": [
@@ -852,7 +1043,7 @@ mod tests {
             "TUR-AI-SERVICE-003"
         );
         settings
-            .set_provider("anthropic", "priced-model")
+            .set_provider("anthropic", "priced-model", &ModelList::empty())
             .expect("a provider");
         // Nor with another version of the text.
         assert_eq!(
@@ -870,7 +1061,7 @@ mod tests {
         assert_eq!(settings.refusal(), None);
         let consent = settings.consent.clone().expect("recorded");
         assert_eq!(consent.text_version, CONSENT_TEXT_VERSION);
-        assert_eq!(consent.provider, ProviderId::Anthropic);
+        assert_eq!(consent.provider, "anthropic");
         assert_eq!(consent.accepted_at, 100);
 
         // Switched off, the record of what was agreed stays.
@@ -888,17 +1079,17 @@ mod tests {
     #[test]
     fn consent_for_one_provider_or_one_text_does_not_cover_another() {
         let mut settings = Settings::default();
-        settings.set_provider("anthropic", "m").expect("a provider");
+        settings.set_provider("anthropic", "m", &ModelList::empty()).expect("a provider");
         settings.base_url = Some("https://gateway.example.org".to_owned());
         settings.enable(CONSENT_TEXT_VERSION, 5).expect("enabled");
 
         // Another model of the same provider: nothing is withdrawn.
-        settings.set_provider("anthropic", "m2").expect("a model");
+        settings.set_provider("anthropic", "m2", &ModelList::empty()).expect("a model");
         assert!(settings.enabled);
         assert!(settings.base_url.is_some());
 
         // Another provider: off, no consent, and the gateway address gone.
-        settings.set_provider("openai", "m3").expect("a provider");
+        settings.set_provider("openai", "m3", &ModelList::empty()).expect("a provider");
         assert!(!settings.enabled);
         assert_eq!(settings.consent, None);
         assert_eq!(settings.base_url, None);
@@ -925,7 +1116,7 @@ mod tests {
         ] {
             assert_eq!(
                 settings
-                    .set_provider(provider, model)
+                    .set_provider(provider, model, &ModelList::empty())
                     .expect_err("refused")
                     .code
                     .as_str(),
@@ -947,7 +1138,7 @@ mod tests {
 
         let mut settings = Settings::default();
         settings
-            .set_provider("google", "some-model")
+            .set_provider("google", "some-model", &ModelList::empty())
             .expect("a provider");
         settings.enable(CONSENT_TEXT_VERSION, 77).expect("enabled");
         settings.limits.day_cost = Some(2.5);
@@ -1012,7 +1203,7 @@ mod tests {
         let models = ModelList::from_json(MODELS).expect("a model list");
         let mut settings = Settings::default();
         settings
-            .set_provider("anthropic", "priced-model")
+            .set_provider("anthropic", "priced-model", &ModelList::empty())
             .expect("a provider");
 
         // A model with a known price: limits in its currency, with the
@@ -1064,7 +1255,7 @@ mod tests {
         settings.limits = Limits::default();
         settings.max_output_tokens = None;
         for model in ["unpriced-model", "typed-by-hand"] {
-            settings.set_provider("anthropic", model).expect("a model");
+            settings.set_provider("anthropic", model, &ModelList::empty()).expect("a model");
             let config = settings.provider_config(&models).expect("a configuration");
             assert_eq!(config.prices, None, "{model}");
             assert_eq!(config.max_output_tokens, DEFAULT_MAX_OUTPUT_TOKENS);
@@ -1126,14 +1317,112 @@ mod tests {
     }
 
     #[test]
+    fn a_provider_is_an_identifier_and_any_identifier_can_be_configured() {
+        // A compatible service in the model list, spoken to with the OpenAI
+        // family at its own address, its key under an item of its own.
+        let listed = r#"{
+            "schema_version": 1, "status": "example", "prices_as_of": "2026-11-12",
+            "providers": [{
+                "id": "deepseek", "adapter": "openai", "name": "DeepSeek",
+                "base_url": "https://api.example.org", "keyring_item": "deepseek-key",
+                "capabilities": { "tool_calling": true, "image_input": false, "context_tokens": 64000 },
+                "models": [{ "model": "chat-model",
+                    "prices": { "currency": "USD", "input_per_million": 0.5, "output_per_million": 1.0 } }]
+            }]
+        }"#;
+        let models = ModelList::from_json(listed).expect("a model list");
+        let mut settings = Settings::default();
+        settings
+            .set_provider("deepseek", "chat-model", &models)
+            .expect("a provider");
+        let (entry, origin) = settings.current_provider(&models).expect("known");
+        assert_eq!(origin, Origin::Listed);
+        assert_eq!(entry.keyring_item(), "deepseek-key");
+        assert!(!entry.is_native());
+        let config = settings.provider_config(&models).expect("a configuration");
+        assert_eq!(config.provider, ProviderId::OpenAi);
+        assert_eq!(config.base_url.as_deref(), Some("https://api.example.org"));
+        assert_eq!(config.prices.map(|prices| prices.output_per_million), Some(1.0));
+
+        // The adapter families' own companies exist without any list.
+        for adapter in COMPANY_FAMILIES {
+            let (entry, origin) =
+                find_provider(&ModelList::empty(), &Settings::default(), adapter.as_str())
+                    .expect("implicit");
+            assert_eq!(origin, Origin::Implicit);
+            assert!(entry.is_native());
+            assert_eq!(entry.keyring_item(), adapter.as_str());
+            assert_eq!(entry.name, family_name(adapter));
+        }
+
+        // A provider the person added by hand, in the settings file.
+        let mut settings = Settings::from_json(
+            r#"{ "schema_version": 1, "providers": [{
+                "id": "local", "adapter": "openai", "name": "My local server",
+                "base_url": "http://127.0.0.1:8080" }] }"#,
+        )
+        .expect("settings");
+        settings
+            .set_provider("local", "any-model", &ModelList::empty())
+            .expect("a provider");
+        let (entry, origin) = settings
+            .current_provider(&ModelList::empty())
+            .expect("known");
+        assert_eq!(origin, Origin::ByHand);
+        assert_eq!(entry.keyring_item(), "local");
+        let config = settings
+            .provider_config(&ModelList::empty())
+            .expect("a configuration");
+        assert_eq!(config.base_url.as_deref(), Some("http://127.0.0.1:8080"));
+        assert_eq!(config.prices, None);
+        // An identifier the list has is the list's.
+        let mut shadow = Settings::from_json(
+            r#"{ "schema_version": 1, "providers": [{
+                "id": "deepseek", "adapter": "google", "name": "Not it" }] }"#,
+        )
+        .expect("settings");
+        shadow
+            .set_provider("deepseek", "chat-model", &models)
+            .expect("a provider");
+        assert_eq!(
+            shadow.current_provider(&models).map(|(entry, origin)| (entry.name, origin)),
+            Some(("DeepSeek".to_owned(), Origin::Listed))
+        );
+        // Unknown identifiers cannot be chosen; bad entries are refused.
+        assert!(
+            Settings::default()
+                .set_provider("nobody", "m", &models)
+                .is_err()
+        );
+        for text in [
+            r#"{ "schema_version": 1, "providers": [{ "id": "x", "adapter": "openai", "name": "X", "base_url": "http://example.org" }] }"#,
+            r#"{ "schema_version": 1, "providers": [{ "id": "X", "adapter": "openai", "name": "X" }] }"#,
+            r#"{ "schema_version": 1, "providers": [{ "id": "x", "adapter": "openai", "name": "X" }, { "id": "x", "adapter": "google", "name": "Y" }] }"#,
+            r#"{ "schema_version": 1, "provider": "Not An Id" }"#,
+        ] {
+            assert_eq!(
+                Settings::from_json(text).expect_err(text).code.as_str(),
+                "TUR-AI-SERVICE-009",
+                "{text}"
+            );
+        }
+        assert!(is_provider_id("deepseek"));
+        assert!(is_provider_id("open-router_2"));
+        let long = "x".repeat(33);
+        for bad in ["", "Deep", "1st", "a b", "a.b", long.as_str()] {
+            assert!(!is_provider_id(bad), "{bad:?}");
+        }
+    }
+
+    #[test]
     fn the_model_list_is_checked() {
         let models = ModelList::from_json(MODELS).expect("a model list");
         assert_eq!(models.status, "example");
         assert_eq!(models.prices_as_of, "2026-11-12");
-        assert!(models.find(ProviderId::Anthropic, "priced-model").is_some());
-        assert!(models.find(ProviderId::Anthropic, "nothing").is_none());
-        assert!(models.find(ProviderId::OpenAi, "priced-model").is_none());
-        assert!(models.provider(ProviderId::Google).is_none());
+        assert!(models.find("anthropic", "priced-model").is_some());
+        assert!(models.find("anthropic", "nothing").is_none());
+        assert!(models.find("openai", "priced-model").is_none());
+        assert!(models.provider("google").is_none());
         assert!(ModelList::empty().providers.is_empty());
 
         let with = |change: &dyn Fn(&mut serde_json::Value)| {
@@ -1169,6 +1458,18 @@ mod tests {
             }),
             Box::new(|value: &mut serde_json::Value| {
                 value["providers"][0]["models"][0]["api_key"] = "x".into()
+            }),
+            Box::new(|value: &mut serde_json::Value| value["providers"][0]["id"] = "Anthropic".into()),
+            Box::new(|value: &mut serde_json::Value| value["providers"][0]["id"] = "".into()),
+            Box::new(|value: &mut serde_json::Value| value["providers"][0]["adapter"] = "claude".into()),
+            Box::new(|value: &mut serde_json::Value| {
+                value["providers"][0]["keyring_item"] = "a b".into()
+            }),
+            Box::new(|value: &mut serde_json::Value| {
+                value["providers"][0]["base_url"] = "http://example.org".into()
+            }),
+            Box::new(|value: &mut serde_json::Value| {
+                value["providers"][0]["capabilities"] = serde_json::json!({ "telepathy": true })
             }),
             Box::new(|value: &mut serde_json::Value| {
                 let first = value["providers"][0].clone();

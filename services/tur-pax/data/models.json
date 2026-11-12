@@ -2,10 +2,11 @@
   "schema_version": 1,
   "status": "example",
   "prices_as_of": "2026-11-12",
-  "note": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0. An EXAMPLE, not a maintained price list. Model names and prices were read on 2026-11-12 from each provider's own pricing page (prices_url) and are the standard, pay-as-you-go prices in USD per million tokens. Each provider changes them without notice. Where a provider charges by prompt length, the price for the shortest prompts is given, which is what a task of P@x normally sends: Anthropic none; OpenAI up to 272K input tokens; Google none for the models listed. A model listed without prices has a price this format cannot state truthfully: tiered by prompt length (claude-haiku-5-5), or announced to change within weeks (gemini-4-carbon, from 2026-12-01). P@x then limits it in tokens. max_output_tokens is P@x's own limit for one response, chosen to bound what one response can cost; it is not the provider's maximum. No model here has been run with TUR: tested_with_tur is false everywhere.",
+  "note": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0. An EXAMPLE, not a maintained price list. Model names and prices were read on 2026-11-12 from each provider's own pricing page (prices_url) and are the standard, pay-as-you-go prices in USD per million tokens. Each provider changes them without notice. Where a provider charges by prompt length, the price for the shortest prompts is given, which is what a task of P@x normally sends: Anthropic none; OpenAI up to 272K input tokens; Google none for the models listed. A model listed without prices has a price this format cannot state truthfully: tiered by prompt length (claude-haiku-5-5), or announced to change within weeks (gemini-4-carbon, from 2026-12-01). P@x then limits it in tokens. max_output_tokens is P@x's own limit for one response, chosen to bound what one response can cost; it is not the provider's maximum. No model here has been run with TUR: tested_with_tur is false everywhere. Each provider is an identifier with an adapter family (ADR-0004, amended 2026-11-12); a compatible service such as DeepSeek is an entry with its own id, the family that speaks its interface, its base_url and keyring_item. None is listed here: the compatible adapter family is not built yet.",
   "providers": [
     {
-      "provider": "anthropic",
+      "id": "anthropic",
+      "adapter": "anthropic",
       "name": "Anthropic",
       "data_terms_url": "https://www.anthropic.com/legal/commercial-terms",
       "key_url": "https://platform.claude.com/settings/keys",
@@ -44,7 +45,8 @@
       ]
     },
     {
-      "provider": "google",
+      "id": "google",
+      "adapter": "google",
       "name": "Google",
       "data_terms_url": "https://aistudio.google.com/docs/terms",
       "key_url": "https://aistudio.google.com/apikey",
@@ -71,7 +73,8 @@
       ]
     },
     {
-      "provider": "openai",
+      "id": "openai",
+      "adapter": "openai",
       "name": "OpenAI",
       "data_terms_url": "https://developers.openai.com/api/docs/guides/your-data",
       "prices_url": "https://developers.openai.com/api/docs/pricing",

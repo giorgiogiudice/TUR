@@ -31,13 +31,13 @@ use tur_pax::notify::{Notification, Notifier};
 use tur_pax::registry::{ASSISTANT_TOOLS, AssistantTools, COMMAND_TOOL, ToolRegistry};
 use tur_pax::sandbox::SandboxPlan;
 use tur_pax::service::{Core, Event, Events, Parts};
-use tur_pax::settings::{Paths, Settings};
+use tur_pax::settings::{ModelList, Paths, ProviderEntry, Settings};
 use tur_pax::wake::Waker;
 use tur_pax::{ActionClass, Presence};
 use tur_pax_memory::{Clock, Timestamp};
 use tur_pax_providers::ProviderId;
 
-use common::{FakeServer, TEST_ADAPTERS, TEST_MANIFEST, Turn, call, calls, says};
+use common::{FakeServer, TEST_ADAPTERS, TEST_MANIFEST, Turn, Wire, call, calls, says};
 
 /// The key of these tests. Not a real key.
 const KEY: &str = "sk-test-KEY-service-5d1c0a7e9b3f2468";
@@ -264,15 +264,14 @@ impl World {
     fn ready(name: &str, server: &FakeServer) -> World {
         let base_url = server.base_url();
         let world = World::new(name, |settings| {
-            settings
-                .set_provider("anthropic", "test-model")
+            settings.set_provider("anthropic", "test-model", &ModelList::empty())
                 .expect("a provider");
             settings.base_url = Some(base_url);
             settings
                 .enable(CONSENT_TEXT_VERSION, NOW)
                 .expect("switched on");
         });
-        world.keys.set(ProviderId::Anthropic, KEY).expect("a key");
+        world.keys.set("anthropic", KEY).expect("a key");
         world
     }
 
@@ -424,7 +423,7 @@ fn p_a_x_refuses_tasks_until_it_is_switched_on_with_the_current_consent() {
     assert!(saved.enabled);
     assert_eq!(
         saved.consent.expect("recorded").provider,
-        ProviderId::Anthropic
+        "anthropic"
     );
 
     // Switched on, with no key.
@@ -1047,7 +1046,7 @@ fn a_reminder_proposed_in_conversation_fires_only_once_the_person_confirmed_it()
 #[test]
 fn a_reminder_that_came_due_while_the_computer_was_off_says_when_it_was_due() {
     let world = World::new("late", |settings| {
-        settings.set_provider("anthropic", "m").expect("a provider");
+        settings.set_provider("anthropic", "m", &ModelList::empty()).expect("a provider");
         settings.enable(CONSENT_TEXT_VERSION, NOW).expect("on");
     });
     let definition = json!({
@@ -1169,6 +1168,78 @@ fn text_planted_in_a_tool_result_creates_no_schedule_and_no_memory() {
         .map(|step| step["tool"].as_str().unwrap_or_default().to_owned())
         .collect();
     assert_eq!(rejected, ["create_schedule", "remember"]);
+}
+
+// ------------------------------------------------------- any provider
+
+#[test]
+fn a_provider_added_by_hand_is_used_by_its_identifier_and_keyring_item() {
+    // A service that speaks the OpenAI interface at an address of its own,
+    // as DeepSeek or a local server would, added by the person.
+    let server = FakeServer::start_on(Wire::OpenAi, vec![says("Hello from elsewhere.")]);
+    let base_url = server.base_url();
+    let world = World::new("by-hand", |settings| {
+        settings.providers.push(ProviderEntry {
+            id: "compat".to_owned(),
+            adapter: ProviderId::OpenAi,
+            name: "A compatible service".to_owned(),
+            base_url: Some(base_url),
+            keyring_item: Some("compat-key".to_owned()),
+            capabilities: None,
+            data_terms_url: None,
+            key_url: None,
+            prices_url: None,
+            models: Vec::new(),
+        });
+        settings
+            .set_provider("compat", "their-model", &ModelList::empty())
+            .expect("a provider");
+    });
+    // The consent text names it and says TUR has reviewed nothing of it.
+    let (version, text) = world.core.consent("compat").expect("the text");
+    assert!(text.starts_with("What P@x sends to A compatible service"));
+    assert!(text.contains("You added A compatible service yourself."));
+    assert!(text.contains("Whether A compatible service honours that is not known to TUR."));
+    world.core.enable(&version).expect("switched on");
+    // The key goes under the entry's item.
+    world.core.set_key("compat", KEY).expect("stored");
+    assert!(world.keys.is_set("compat-key").expect("asked"));
+    assert!(!world.keys.is_set("compat").expect("asked"));
+    let status = world.core.status();
+    assert_eq!(status["provider"], "compat");
+    assert_eq!(status["adapter"], "openai");
+    assert_eq!(status["provider_origin"], "by_hand");
+    assert_eq!(status["key"], "set");
+    assert_eq!(status["price_known"], false);
+    // The task goes to its address through the family's adapter.
+    let result = world.run("Hello.");
+    assert_eq!(result["outcome"], "completed");
+    assert_eq!(result["answer"], "Hello from elsewhere.");
+    assert_eq!(
+        server.requests().iter().map(|request| request.path.clone()).collect::<Vec<_>>(),
+        ["/v1/responses"]
+    );
+    // It is listed beside the families' own companies.
+    let listed = world.core.models();
+    let ids: Vec<&str> = listed["providers"]
+        .as_array()
+        .expect("providers")
+        .iter()
+        .filter_map(|entry| entry["id"].as_str())
+        .collect();
+    assert_eq!(ids, ["compat", "anthropic", "openai", "google"]);
+    // A key can be kept for an identifier no entry has yet, and nothing
+    // that is not an identifier is accepted.
+    world.core.set_key("later", KEY).expect("stored");
+    assert!(world.keys.is_set("later").expect("asked"));
+    assert_eq!(
+        code(world.core.set_key("Not An Id", KEY).expect_err("refused")),
+        "TUR-AI-SERVICE-006"
+    );
+    assert_eq!(
+        code(world.core.consent("later").expect_err("unknown")),
+        "TUR-AI-SERVICE-006"
+    );
 }
 
 // ------------------------------------------------------------- the key

@@ -86,13 +86,13 @@ model wrote.
 | `GetTask` | `s task` | `s details` | One of the last 20 tasks: request, steps, texts, outcome, usage, cost | `SERVICE-007` |
 | `ListActivity` | `u limit` | `s activity` | The audit trail as a list of tasks, newest first, each with every entry: event, time, action, class, tier, decision, sandbox, result, code | `SERVICE-009` |
 | `GetStatus` | | `s status` | Everything a panel header or a settings page shows ([2.4](#24-the-json-documents)) | never |
-| `GetConsentText` | `s provider` | `s version`, `s text` | The text a person reads before switching P@x on, for that provider | `SERVICE-006` |
+| `GetConsentText` | `s provider` | `s version`, `s text` | The text a person reads before switching P@x on, for the provider with that identifier | `SERVICE-006` |
 | `Enable` | `s consent_version` | | Switches P@x on and records the acceptance of that version of the text, for the provider in use | `-003`; another version `-002`; `-009` |
 | `Disable` | | | Switches P@x off: a running task is cancelled and no timer is left set | `-009` |
-| `SetProvider` | `s provider`, `s model` | | Chooses `anthropic`, `openai` or `google` and a model name. Another provider withdraws the consent and switches P@x off | `-006`, `-009` |
+| `SetProvider` | `s provider`, `s model` | | Chooses a provider by its identifier ([section 9](#9-consent-provider-model-and-the-limit-of-a-day)) and a model name. Another provider withdraws the consent and switches P@x off | `-006`, `-009` |
 | `SetLimits` | `s limits` | | JSON with any of `task_cost`, `day_cost`, `task_tokens`, `day_tokens`; `null` restores a default | `-006`, `-009` |
-| `ListModels` | | `s models` | The model list: providers, models, prices, its date and status | never |
-| `SetKey` | `s provider`, `s key` | | Stores the key in the password store, in place of any key there | `KEY-001`, `-003`, `-004`, `-005` |
+| `ListModels` | | `s models` | Every provider by identifier: its adapter family, name, origin (`listed`, `by_hand`, `implicit`), address, keyring item, declared capabilities, terms and key pages, models and prices; the list's date and status | never |
+| `SetKey` | `s provider`, `s key` | | Stores the key under the provider's keyring item (its identifier unless its entry names another), in place of any key there. An identifier no entry has yet is accepted | `SERVICE-006`, `KEY-001`, `-003`, `-004`, `-005` |
 | `RemoveKey` | `s provider` | `b removed` | Removes it | as above |
 | `HasKey` | `s provider` | `b set` | Whether one is stored. Never makes the store prompt | as above |
 | `ListProposals` | | `s proposals` | Reminders and scheduled tasks P@x proposed, waiting for the person | never |
@@ -159,8 +159,8 @@ decided).
 **The status** (`GetStatus`): `interface_version`, `enabled`, `state`,
 `ready` (switched on, consent current, a key set), `problem` (`error_code`,
 `message`: why a task cannot start, if it cannot), `consent` (`current`,
-`text_version`, `accepted_version`, `accepted_for`, `accepted_at`), `provider`,
-`provider_name`, `model`, `model_listed`, `model_tested`, `price_known`, `key`
+`text_version`, `accepted_version`, `accepted_for`, `accepted_at`), `provider`
+(the identifier), `provider_name`, `adapter`, `provider_origin`, `model`, `model_listed`, `model_tested`, `price_known`, `key`
 (`set`, `not_set`, `unknown`), `session_locked`, `running`, `spending`
 (`currency`, `today` and `month` each with `cost`, `input_tokens`,
 `output_tokens`, `responses`; `day`; `day_limit` and `task_limit` each with
@@ -255,7 +255,7 @@ a reply or a signal of `org.tur.Agent1`.
 
 | | |
 |---|---|
-| The item | In the collection the alias `default` names (or `login` if `default` is not set); label `P@x: key for <provider>`; attributes `xdg:schema=org.tur.Pax.ProviderKey`, `application=org.tur.Pax`, `provider=<id>` |
+| The item | In the collection the alias `default` names (or `login` if `default` is not set); label `P@x: key for <item>`; attributes `xdg:schema=org.tur.Pax.ProviderKey`, `application=org.tur.Pax`, `provider=<item>`, where the item is the provider's keyring item: its identifier unless its entry names another |
 | Set, replace | `SetKey`, or `tur-pax key set <provider>` with the key on standard input (never on the command line, where every program of the person could read it in the process list). `CreateItem` with `replace` |
 | Remove | `RemoveKey`, `tur-pax key remove <provider>` |
 | Is one set | `HasKey`, `tur-pax key status <provider>`, `GetStatus` (`key`). Asked of the store as a whole, which lists locked items too, so the question never makes the store prompt |
@@ -315,7 +315,7 @@ the test in its place where needed).
 
 | File | Holds | Written by | Mode |
 |---|---|---|---|
-| `$XDG_CONFIG_HOME/tur/pax/settings.json` | Switch, consent, provider, model, gateway, output limit, limits. Schema `schemas/pax-settings.schema.json`. Never a key | The service, on a call; whole or not at all (written beside, flushed, renamed) | 0600, directory 0700 |
+| `$XDG_CONFIG_HOME/tur/pax/settings.json` | Switch, consent, provider identifier, model, gateway, output limit, limits, providers the person added. Schema `schemas/pax-settings.schema.json`. Never a key | The service, on a call; whole or not at all (written beside, flushed, renamed) | 0600, directory 0700 |
 | `$XDG_CONFIG_HOME/tur/pax/policy.json` | The person's policy (agent-policy.md). Read, never written. Unusable: observe only | Not the service | |
 | `$XDG_STATE_HOME/tur/pax/spending.json` | Per day: responses, tokens, cost, currency. 62 days. No words, no key | The service, after every response | 0600 |
 | `$XDG_STATE_HOME/tur/pax/audit.jsonl` | The audit trail of pax-orchestrator.md section 7, plus three events ([section 8](#8-audit)); each line now says when it was written (`__REALTIME_TIMESTAMP`, microseconds, the journal's name for it) | The service | as created |
@@ -355,11 +355,25 @@ sentence left out because there is no stop key. The providers' terms have not
 been reviewed by the project (ADR-0004); the text points at them and says
 nothing of what they say.
 
-**Provider and model.** Chosen with `SetProvider`. No model name is compiled
-in. The model list gives the names, labels and prices the setup screen
-offers; a name typed by hand is accepted, with no known price. A compatible
-gateway (`base_url`) can be set only by editing the settings file, because
-whoever it names is sent the key; it is removed when the provider changes.
+**Provider and model.** A provider is an identifier with an entry
+(ADR-0004, amended 12 November 2026): the adapter family that speaks its
+interface (today `anthropic`, `openai`, `google`), its name, its address if it
+is not the family's public one, the password store item of its key (its
+identifier unless named), declared capabilities (tool calling, streamed tool
+calls, image input, context size: recorded and reported, not yet checked),
+its terms and key pages, and its models with their prices. Entries come from
+the model list, or from the person's own `providers` in the settings file
+(added by editing the file in this build; the consent text then says TUR has
+reviewed nothing of the service). The three companies the families are
+named after are providers even when no list names them (`implicit`), at their
+public addresses with no prices. The settings, the consent record, the key,
+the status and the limits are all keyed by identifier, so a fourth adapter
+family adds entries, not code here ([pax-3](../reports/pax-3.md) lists what
+it would still touch). Chosen with `SetProvider`. No model name is compiled
+in; a name typed by hand is accepted, with no known price. A gateway address
+for the provider in use (`base_url` at the top of the settings file) can be
+set only by editing the file, because whoever it names is sent the key; it is
+removed when the provider changes.
 
 **Prices** are configuration, from the model list. The example file was
 written from the providers' own pricing pages on 2026-11-12 and says so in its

@@ -35,46 +35,77 @@ use tur_pax_providers::ProviderId;
 /// changes in a way a person should read again.
 pub const CONSENT_TEXT_VERSION: &str = "1";
 
-/// The name of a provider, as a person reads it.
-pub const fn provider_name(provider: ProviderId) -> &'static str {
-    match provider {
+/// The name of the company behind an adapter family, as a person reads it.
+/// Used for a provider of that family that the model list does not name.
+pub const fn family_name(adapter: ProviderId) -> &'static str {
+    match adapter {
         ProviderId::Anthropic => "Anthropic",
         ProviderId::OpenAi => "OpenAI",
         ProviderId::Google => "Google",
     }
 }
 
-/// What P@x asks of this provider about storing conversations. A statement
+/// The provider a consent text is for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Subject<'a> {
+    /// Its name, as a person reads it.
+    pub name: &'a str,
+    /// The adapter family P@x talks to it with.
+    pub adapter: ProviderId,
+    /// Whether it is the family's own company at its own public address,
+    /// whose interface P@x's adapter was written for.
+    pub native: bool,
+    /// Where it says how it handles data sent to its interface.
+    pub terms_url: Option<&'a str>,
+    /// Whether the person added it by hand, so that TUR has said nothing
+    /// about it at all.
+    pub by_hand: bool,
+}
+
+/// What P@x asks of a provider about storing conversations. A statement
 /// about what the adapter sends (`docs/architecture/pax-providers.md`,
 /// section 9), not about the provider's terms.
-const fn storing(provider: ProviderId) -> &'static str {
-    match provider {
-        ProviderId::Anthropic => {
-            "P@x sends Anthropic the whole conversation with each request. The interface P@x \
+fn storing(subject: &Subject<'_>) -> String {
+    let name = subject.name;
+    match (subject.adapter, subject.native) {
+        (ProviderId::Anthropic, true) => format!(
+            "P@x sends {name} the whole conversation with each request. The interface P@x \
              uses has no setting for storing a conversation, so there is nothing for P@x to \
              switch off."
-        }
-        ProviderId::OpenAi => {
-            "OpenAI's interface stores what it is sent unless it is asked not to. P@x asks it \
+        ),
+        (_, true) => format!(
+            "{name}'s interface stores what it is sent unless it is asked not to. P@x asks it \
              not to, with every request."
-        }
-        ProviderId::Google => {
-            "Google's interface stores what it is sent unless it is asked not to. P@x asks it \
-             not to, with every request."
-        }
+        ),
+        (ProviderId::Anthropic, false) => format!(
+            "P@x sends {name} the whole conversation with each request. The interface P@x \
+             uses has no setting for storing a conversation. Whether {name} keeps it is not \
+             known to TUR."
+        ),
+        (_, false) => format!(
+            "P@x asks {name} not to store the conversation, with every request, in the way \
+             the interface it uses allows. Whether {name} honours that is not known to TUR."
+        ),
     }
 }
 
 /// The consent text for a provider.
 ///
-/// `terms_url` is where the provider says how it handles data sent to its
-/// interface, from the model list. The address is configuration; none is
-/// compiled in.
-pub fn consent_text(provider: ProviderId, terms_url: Option<&str>) -> String {
-    let name = provider_name(provider);
-    let terms = match terms_url {
+/// The address of its terms is configuration, from the model list or the
+/// person's own entry; none is compiled in.
+pub fn consent_text(subject: &Subject<'_>) -> String {
+    let name = subject.name;
+    let terms = match subject.terms_url {
         Some(url) => format!("{name}'s data terms: {url}"),
         None => format!("{name}'s data terms are on its website."),
+    };
+    let terms = if subject.by_hand {
+        format!(
+            "{terms}\nYou added {name} yourself. TUR has not reviewed its terms and knows \
+             nothing of how it handles what it is sent."
+        )
+    } else {
+        terms
     };
     format!(
         "What P@x sends to {name}\n\
@@ -121,7 +152,7 @@ pub fn consent_text(provider: ProviderId, terms_url: Option<&str>) -> String {
          \n\
          You can see everything P@x did in Settings \u{25b8} P@x \u{25b8} Activity, and stop \
          P@x at any time.\n",
-        storing = storing(provider),
+        storing = storing(subject),
     )
 }
 
@@ -129,11 +160,22 @@ pub fn consent_text(provider: ProviderId, terms_url: Option<&str>) -> String {
 mod tests {
     use super::*;
 
+    fn native(adapter: ProviderId) -> Subject<'static> {
+        Subject {
+            name: family_name(adapter),
+            adapter,
+            native: true,
+            terms_url: Some("https://example.org/data-terms"),
+            by_hand: false,
+        }
+    }
+
     #[test]
     fn the_text_names_the_provider_and_says_what_the_design_requires() {
-        for provider in ProviderId::ALL {
-            let name = provider_name(provider);
-            let text = consent_text(provider, Some("https://example.org/data-terms"));
+        for adapter in ProviderId::ALL {
+            let subject = native(adapter);
+            let name = subject.name;
+            let text = consent_text(&subject);
             assert!(
                 text.starts_with(&format!("What P@x sends to {name}\n")),
                 "{name}"
@@ -165,12 +207,16 @@ mod tests {
             );
             // No other provider is named in a text.
             for other in ProviderId::ALL {
-                if other != provider {
-                    assert!(!text.contains(provider_name(other)), "{name}");
+                if other != adapter {
+                    assert!(!text.contains(family_name(other)), "{name}");
                 }
             }
+            assert!(!text.contains("not reviewed"), "{name}");
             // Without an address the text still says where the terms are.
-            let without = consent_text(provider, None);
+            let without = consent_text(&Subject {
+                terms_url: None,
+                ..subject
+            });
             assert!(without.contains(&format!("{name}'s data terms are on its website.")));
             assert!(!without.contains("https://"));
         }
@@ -178,9 +224,9 @@ mod tests {
 
     #[test]
     fn the_paragraph_on_storing_differs_by_provider() {
-        let anthropic = consent_text(ProviderId::Anthropic, None);
-        let openai = consent_text(ProviderId::OpenAi, None);
-        let google = consent_text(ProviderId::Google, None);
+        let anthropic = consent_text(&native(ProviderId::Anthropic));
+        let openai = consent_text(&native(ProviderId::OpenAi));
+        let google = consent_text(&native(ProviderId::Google));
         assert!(anthropic.contains("has no setting for storing a conversation"));
         assert!(openai.contains("P@x asks it not to, with every request"));
         assert!(google.contains("P@x asks it not to, with every request"));
@@ -192,5 +238,36 @@ mod tests {
                 .bytes()
                 .all(|byte| byte.is_ascii_graphic())
         );
+    }
+
+    #[test]
+    fn a_provider_reached_through_another_family_or_added_by_hand_is_said_to_be_unknown() {
+        // A compatible service, reached with the OpenAI family at its own
+        // address, named as its entry names it.
+        let compatible = Subject {
+            name: "DeepSeek",
+            adapter: ProviderId::OpenAi,
+            native: false,
+            terms_url: Some("https://example.org/deepseek-terms"),
+            by_hand: false,
+        };
+        let text = consent_text(&compatible);
+        assert!(text.starts_with("What P@x sends to DeepSeek\n"));
+        assert!(text.contains("Whether DeepSeek honours that is not known to TUR."));
+        assert!(!text.contains("OpenAI"));
+        assert!(!text.contains("not reviewed"));
+        // Added by hand: TUR says it has not reviewed anything.
+        let by_hand = consent_text(&Subject {
+            name: "my-gateway",
+            by_hand: true,
+            terms_url: None,
+            ..compatible
+        });
+        assert!(by_hand.contains("You added my-gateway yourself. TUR has not reviewed its terms"));
+        let anthropic_family = consent_text(&Subject {
+            adapter: ProviderId::Anthropic,
+            ..compatible
+        });
+        assert!(anthropic_family.contains("Whether DeepSeek keeps it is not known to TUR."));
     }
 }

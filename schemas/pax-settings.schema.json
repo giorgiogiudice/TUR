@@ -6,9 +6,13 @@
   "description": "What the session service of P@x keeps about P@x itself, in $XDG_CONFIG_HOME/tur/pax/settings.json: whether the person switched it on, which consent text they accepted, the provider and model, and the spending limits. Written only by tur-pax serve, on a request through org.tur.Agent1. It never holds a key: the key is in the password store of the session. The loader in services/tur-pax (settings.rs) is authoritative and also enforces: the model name has no control characters and no surrounding whitespace; a limit in money is above 0 and at most 100000; a limit in tokens is at least 1 and at most 100000000000. A file that cannot be read leaves P@x switched off.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version"],
+  "required": [
+    "schema_version"
+  ],
   "properties": {
-    "schema_version": { "const": 1 },
+    "schema_version": {
+      "const": 1
+    },
     "enabled": {
       "description": "Whether the person switched P@x on. False when absent.",
       "type": "boolean"
@@ -17,14 +21,33 @@
       "description": "The acceptance of the text that says what is sent to the provider.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["text_version", "provider", "accepted_at"],
+      "required": [
+        "text_version",
+        "provider",
+        "accepted_at"
+      ],
       "properties": {
-        "text_version": { "description": "The version of the text that was accepted.", "type": "string" },
-        "provider": { "description": "The provider the text named.", "enum": ["anthropic", "openai", "google"] },
-        "accepted_at": { "description": "When, in seconds since the Unix epoch.", "type": "integer", "minimum": 0 }
+        "text_version": {
+          "description": "The version of the text that was accepted.",
+          "type": "string"
+        },
+        "provider": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]{0,31}$",
+          "description": "The identifier of the provider the text named."
+        },
+        "accepted_at": {
+          "description": "When, in seconds since the Unix epoch.",
+          "type": "integer",
+          "minimum": 0
+        }
       }
     },
-    "provider": { "enum": ["anthropic", "openai", "google"] },
+    "provider": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{0,31}$",
+      "description": "The identifier of the provider in use: an entry of the model list, an entry of `providers` below, or anthropic, openai or google."
+    },
     "model": {
       "description": "The model name as the provider spells it. Configuration: no name is compiled in.",
       "type": "string",
@@ -32,7 +55,7 @@
       "maxLength": 200
     },
     "base_url": {
-      "description": "A compatible gateway. Set only by editing this file, never through the interface, because whoever it names is sent the key. Removed when the provider changes. The provider layer's rules apply: https, or http for a loopback host only.",
+      "description": "An address that replaces the provider's, for a gateway. Set only by editing this file, never through the interface, because whoever it names is sent the key. Removed when the provider changes. The provider layer's rules apply: https, or http for a loopback host only.",
       "type": "string"
     },
     "max_output_tokens": {
@@ -46,10 +69,33 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "task_cost": { "type": "number", "exclusiveMinimum": 0, "maximum": 100000 },
-        "day_cost": { "type": "number", "exclusiveMinimum": 0, "maximum": 100000 },
-        "task_tokens": { "type": "integer", "minimum": 1, "maximum": 100000000000 },
-        "day_tokens": { "type": "integer", "minimum": 1, "maximum": 100000000000 }
+        "task_cost": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 100000
+        },
+        "day_cost": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 100000
+        },
+        "task_tokens": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100000000000
+        },
+        "day_tokens": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100000000000
+        }
+      }
+    },
+    "providers": {
+      "description": "Providers the person added by hand, in the form of the model list's entries (schemas/pax-models.schema.json). An identifier the model list also has is the list's. The consent text says TUR has not reviewed their terms.",
+      "type": "array",
+      "items": {
+        "$ref": "pax-models.schema.json#/$defs/provider"
       }
     }
   }

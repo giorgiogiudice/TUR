@@ -58,11 +58,11 @@ use tur_pax_memory::{
     ScheduleEdit, ScheduleId, ScheduledAction, ShortMonth, StdFs, Timestamp, Trigger,
     UserConfirmation, is_known_zone, weekday_and_day_of,
 };
-use tur_pax_providers::{Message, ProviderConfig, ProviderId, SpendMeter, Usage, connect};
+use tur_pax_providers::{Message, ProviderConfig, SpendMeter, Usage, connect};
 
 use crate::audit::{AuditRecord, AuditWriteError};
 use crate::codes::{Code, Problem};
-use crate::consent::{CONSENT_TEXT_VERSION, consent_text, provider_name};
+use crate::consent::{CONSENT_TEXT_VERSION, Subject, consent_text};
 use crate::exec::Executor;
 use crate::faults::{Fault, TaskCode};
 use crate::keyring::KeyStore;
@@ -75,7 +75,10 @@ use crate::policy::UserPolicy;
 use crate::registry::{ASSISTANT_TOOLS, AssistantCall, AssistantTools, COMMAND_TOOL, ToolRegistry};
 use crate::sandbox::{Grant, GrantRules};
 use crate::scheduler::{Runner, TaskRun, TickReport, outcome_name, run_due};
-use crate::settings::{Limits, ModelList, Paths, Settings, provider_from_name};
+use crate::settings::{
+    Limits, ModelList, Origin, Paths, ProviderEntry, Settings, find_provider, is_provider_id,
+    providers,
+};
 use crate::spending::{Ledger, TaskBudget, Zone, day_of};
 use crate::textui::{DEFAULT_TOOLS_DIR, read_json_dir, read_tools};
 use crate::trail::{EventKind, FileTrail, TIME_FIELD, Trail, TrailEvent};
@@ -910,19 +913,35 @@ impl Core {
     ///
     /// # Errors
     ///
-    /// `TUR-AI-SERVICE-006` if the provider is not one of the three.
+    /// `TUR-AI-SERVICE-006` if no provider has that identifier.
     pub fn consent(&self, provider: &str) -> Result<(String, String), Fault> {
-        let provider = provider_from_name(provider)
-            .ok_or_else(|| invalid("the provider is not one of anthropic, openai and google"))?;
+        let (entry, origin) = self.provider_entry(provider)?;
+        let subject = Subject {
+            name: &entry.name,
+            adapter: entry.adapter,
+            native: entry.is_native(),
+            terms_url: entry.data_terms_url.as_deref(),
+            by_hand: origin == Origin::ByHand,
+        };
+        Ok((CONSENT_TEXT_VERSION.to_owned(), consent_text(&subject)))
+    }
+
+    /// The entry of a provider, by its identifier.
+    fn provider_entry(&self, provider: &str) -> Result<(ProviderEntry, Origin), Fault> {
         let state = self.state();
-        let terms = state
-            .models
-            .provider(provider)
-            .and_then(|entry| entry.data_terms_url.as_deref());
-        Ok((
-            CONSENT_TEXT_VERSION.to_owned(),
-            consent_text(provider, terms),
-        ))
+        find_provider(&state.models, &state.settings, provider)
+            .ok_or_else(|| invalid("no provider has that identifier"))
+    }
+
+    /// The name of the password store item that holds a provider's key: its
+    /// entry's, or for an identifier no entry has yet, the identifier, so
+    /// that a key can be stored before the provider is added.
+    fn keyring_item(&self, provider: &str) -> Result<String, Fault> {
+        match self.provider_entry(provider) {
+            Ok((entry, _)) => Ok(entry.keyring_item().to_owned()),
+            Err(_) if is_provider_id(provider) => Ok(provider.to_owned()),
+            Err(fault) => Err(fault),
+        }
     }
 
     /// Switch P@x on. The caller names the version of the consent text the
@@ -964,7 +983,8 @@ impl Core {
     ///
     /// See [`Settings::set_provider`].
     pub fn set_provider(&self, provider: &str, model: &str) -> Result<(), Fault> {
-        self.change_settings(|settings| settings.set_provider(provider, model))?;
+        let models = self.state().models.clone();
+        self.change_settings(|settings| settings.set_provider(provider, model, &models))?;
         self.state().key_set = None;
         self.record_change("provider", provider);
         self.emit(Event::StateChanged);
@@ -1019,14 +1039,13 @@ impl Core {
         Ok(())
     }
 
-    /// The providers and models of the model list.
+    /// Every provider, by identifier, with its models: the model list's,
+    /// the person's own, and the adapter families' companies no list names.
     pub fn models(&self) -> Value {
         let state = self.state();
-        let providers: Vec<Value> = state
-            .models
-            .providers
+        let providers: Vec<Value> = providers(&state.models, &state.settings)
             .iter()
-            .map(|entry| {
+            .map(|(entry, origin)| {
                 let models: Vec<Value> = entry
                     .models
                     .iter()
@@ -1041,8 +1060,13 @@ impl Core {
                     })
                     .collect();
                 json!({
-                    "provider": entry.provider.as_str(),
+                    "id": entry.id,
+                    "adapter": entry.adapter.as_str(),
                     "name": entry.name,
+                    "origin": origin.as_str(),
+                    "base_url": entry.base_url,
+                    "keyring_item": entry.keyring_item(),
+                    "capabilities": entry.capabilities,
                     "data_terms_url": entry.data_terms_url,
                     "key_url": entry.key_url,
                     "prices_url": entry.prices_url,
@@ -1064,11 +1088,6 @@ impl Core {
 
     // --------------------------------------------------------------- the key
 
-    fn provider_named(provider: &str) -> Result<ProviderId, Fault> {
-        provider_from_name(provider)
-            .ok_or_else(|| invalid("the provider is not one of anthropic, openai and google"))
-    }
-
     /// Store the key of a provider in the password store, in place of any
     /// key already there.
     ///
@@ -1076,8 +1095,8 @@ impl Core {
     ///
     /// See [`KeyStore::set`].
     pub fn set_key(&self, provider: &str, key: &str) -> Result<(), Fault> {
-        let provider = Core::provider_named(provider)?;
-        self.parts.keys.set(provider, key)?;
+        let item = self.keyring_item(provider)?;
+        self.parts.keys.set(&item, key)?;
         self.state().key_set = None;
         self.record_change("key", "set");
         self.emit(Event::StateChanged);
@@ -1090,8 +1109,8 @@ impl Core {
     ///
     /// See [`KeyStore::remove`].
     pub fn remove_key(&self, provider: &str) -> Result<bool, Fault> {
-        let provider = Core::provider_named(provider)?;
-        let removed = self.parts.keys.remove(provider)?;
+        let item = self.keyring_item(provider)?;
+        let removed = self.parts.keys.remove(&item)?;
         self.state().key_set = None;
         self.record_change("key", "removed");
         self.emit(Event::StateChanged);
@@ -1104,10 +1123,10 @@ impl Core {
     ///
     /// See [`KeyStore::is_set`].
     pub fn has_key(&self, provider: &str) -> Result<bool, Fault> {
-        let provider = Core::provider_named(provider)?;
-        let set = self.parts.keys.is_set(provider)?;
+        let item = self.keyring_item(provider)?;
+        let set = self.parts.keys.is_set(&item)?;
         let mut state = self.state();
-        if state.settings.provider == Some(provider) {
+        if state.settings.provider.as_deref() == Some(provider) {
             state.key_set = Some(set);
         }
         Ok(set)
@@ -1138,17 +1157,21 @@ impl Core {
         // Whether a key is set is asked of the password store each time: a
         // key can be set or removed by another program. Asking never makes
         // the store prompt the person.
-        let provider = self.state().settings.provider;
+        let provider = self.state().settings.provider.clone();
         if let Some(provider) = provider {
-            let found = self.parts.keys.is_set(provider).ok();
+            let found = self
+                .keyring_item(&provider)
+                .and_then(|item| self.parts.keys.is_set(&item))
+                .ok();
             self.state().key_set = found;
         }
 
         let state_name = self.state_name();
         let state = self.state();
         let settings = &state.settings;
-        let listed = match (settings.provider, &settings.model) {
-            (Some(provider), Some(model)) => state.models.find(provider, model),
+        let current = settings.current_provider(&state.models);
+        let listed = match (&current, &settings.model) {
+            (Some((entry, _)), Some(model)) => entry.model(model),
             _ => None,
         };
         let prices = listed.and_then(|entry| entry.prices.as_ref());
@@ -1202,8 +1225,10 @@ impl Core {
                 "accepted_for": settings.consent.as_ref().map(|consent| consent.provider.as_str()),
                 "accepted_at": settings.consent.as_ref().map(|consent| consent.accepted_at),
             },
-            "provider": settings.provider.map(ProviderId::as_str),
-            "provider_name": settings.provider.map(provider_name),
+            "provider": settings.provider,
+            "provider_name": current.as_ref().map(|(entry, _)| entry.name.clone()),
+            "adapter": current.as_ref().map(|(entry, _)| entry.adapter.as_str()),
+            "provider_origin": current.as_ref().map(|(_, origin)| origin.as_str()),
             "model": settings.model,
             "model_listed": listed.is_some(),
             "model_tested": listed.is_some_and(|entry| entry.tested_with_tur),
@@ -1307,7 +1332,7 @@ impl Core {
             if state.running.is_some() {
                 return Err(coded(TaskCode::ServiceBusy));
             }
-            state.settings.provider
+            state.settings.provider.clone()
         };
         if let Err(problem) = &self.ledger {
             return Err(problem.clone());
@@ -1317,7 +1342,8 @@ impl Core {
         };
         // The key is looked for before anything starts, so that a missing
         // key is an answer to the call and not the end of a task.
-        let key_set = self.parts.keys.is_set(provider)?;
+        let item = self.keyring_item(&provider)?;
+        let key_set = self.parts.keys.is_set(&item)?;
         self.state().key_set = Some(key_set);
         if !key_set {
             return Err(coded(TaskCode::KeyNotSet));
@@ -1514,7 +1540,11 @@ impl Core {
             Ok(config) => config,
             Err(problem) => return not_started(problem),
         };
-        let key = match self.parts.keys.key(config.provider) {
+        let item = match settings.current_provider(&models) {
+            Some((entry, _)) => entry.keyring_item().to_owned(),
+            None => return not_started(coded(TaskCode::ServiceNotConfigured)),
+        };
+        let key = match self.parts.keys.key(&item) {
             Ok(key) => key,
             Err(problem) => return not_started(problem),
         };

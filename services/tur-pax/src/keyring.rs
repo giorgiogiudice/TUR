@@ -42,10 +42,9 @@ use std::sync::Mutex;
 use std::sync::mpsc::Receiver;
 use std::time::{Duration, Instant};
 
-use tur_pax_providers::{ApiKey, ProviderId, Zeroizing, is_usable_key};
+use tur_pax_providers::{ApiKey, Zeroizing, is_usable_key};
 
 use crate::bus::{BusError, Connection, Kind, Message, Value};
-use crate::consent::provider_name;
 use crate::faults::{Fault, TaskCode};
 
 /// The bus name of the password store.
@@ -74,7 +73,8 @@ const CALL_TIMEOUT: Duration = Duration::from_secs(25);
 /// How long the person has to answer a prompt of the password store.
 const PROMPT_TIMEOUT: Duration = Duration::from_secs(120);
 
-/// The key of each provider, kept where keys are kept.
+/// The key of each provider, kept where keys are kept, under the name of
+/// the provider's keyring item (its identifier unless its entry names one).
 pub trait KeyStore: Send + Sync {
     /// Whether a key is stored for the provider. The key is not read.
     ///
@@ -82,7 +82,7 @@ pub trait KeyStore: Send + Sync {
     ///
     /// `TUR-AI-KEY-001` if no password store is available; `TUR-AI-KEY-003`
     /// or `TUR-AI-KEY-005` if it is locked or failed.
-    fn is_set(&self, provider: ProviderId) -> Result<bool, Fault>;
+    fn is_set(&self, item: &str) -> Result<bool, Fault>;
 
     /// Store the key for the provider, in place of any key already there.
     ///
@@ -90,14 +90,14 @@ pub trait KeyStore: Send + Sync {
     ///
     /// `TUR-AI-KEY-004` if the text cannot be a key, and then nothing is
     /// stored; otherwise as for [`KeyStore::is_set`].
-    fn set(&self, provider: ProviderId, key: &str) -> Result<(), Fault>;
+    fn set(&self, item: &str, key: &str) -> Result<(), Fault>;
 
     /// Remove the key of the provider. `Ok(false)` if there was none.
     ///
     /// # Errors
     ///
     /// As for [`KeyStore::is_set`].
-    fn remove(&self, provider: ProviderId) -> Result<bool, Fault>;
+    fn remove(&self, item: &str) -> Result<bool, Fault>;
 
     /// The key of the provider, to send requests with.
     ///
@@ -105,19 +105,19 @@ pub trait KeyStore: Send + Sync {
     ///
     /// `TUR-AI-KEY-002` if none is stored; otherwise as for
     /// [`KeyStore::is_set`].
-    fn key(&self, provider: ProviderId) -> Result<ApiKey, Fault>;
+    fn key(&self, item: &str) -> Result<ApiKey, Fault>;
 }
 
 fn fault(code: TaskCode, detail: impl Into<String>) -> Fault {
     Fault::new(code, detail)
 }
 
-/// The attributes that identify the item of a provider.
-fn attributes(provider: ProviderId) -> Value {
+/// The attributes that identify the item that holds a provider's key.
+fn attributes(item: &str) -> Value {
     Value::string_map(&[
         ("xdg:schema", ITEM_SCHEMA),
         ("application", "org.tur.Pax"),
-        ("provider", provider.as_str()),
+        ("provider", item),
     ])
 }
 
@@ -254,13 +254,13 @@ impl Session<'_> {
     }
 
     /// The items that hold the key of a provider.
-    fn items(&self, operation: &str, provider: ProviderId) -> Result<Vec<String>, Fault> {
+    fn items(&self, operation: &str, item: &str) -> Result<Vec<String>, Fault> {
         let reply = self.call(
             operation,
             &self.collection,
             COLLECTION,
             "SearchItems",
-            vec![attributes(provider)],
+            vec![attributes(item)],
         )?;
         Ok(reply
             .body
@@ -396,7 +396,7 @@ impl SecretService {
 }
 
 impl KeyStore for SecretService {
-    fn is_set(&self, provider: ProviderId) -> Result<bool, Fault> {
+    fn is_set(&self, item: &str) -> Result<bool, Fault> {
         // Asked of the store as a whole, which lists locked items too: the
         // question never makes the store ask the person to unlock it.
         let operation = "looking for the key";
@@ -412,7 +412,7 @@ impl KeyStore for SecretService {
                     SECRETS_PATH,
                     SERVICE,
                     "SearchItems",
-                    vec![attributes(provider)],
+                    vec![attributes(item)],
                 ),
                 CALL_TIMEOUT,
             )
@@ -424,7 +424,7 @@ impl KeyStore for SecretService {
             .any(|found| found.as_array().is_some_and(|items| !items.is_empty())))
     }
 
-    fn set(&self, provider: ProviderId, key: &str) -> Result<(), Fault> {
+    fn set(&self, item: &str, key: &str) -> Result<(), Fault> {
         if !is_usable_key(key) {
             return Err(fault(
                 TaskCode::KeyInvalid,
@@ -436,11 +436,11 @@ impl KeyStore for SecretService {
             let properties = Value::variant_map(vec![
                 (
                     "org.freedesktop.Secret.Item.Label",
-                    Value::string(format!("P@x: key for {}", provider_name(provider))),
+                    Value::string(format!("P@x: key for {item}")),
                 ),
                 (
                     "org.freedesktop.Secret.Item.Attributes",
-                    attributes(provider),
+                    attributes(item),
                 ),
             ]);
             let secret = Value::Struct(vec![
@@ -461,10 +461,10 @@ impl KeyStore for SecretService {
         })
     }
 
-    fn remove(&self, provider: ProviderId) -> Result<bool, Fault> {
+    fn remove(&self, item: &str) -> Result<bool, Fault> {
         let operation = "removing the key";
         self.with(operation, |session| {
-            let items = session.items(operation, provider)?;
+            let items = session.items(operation, item)?;
             for item in &items {
                 let reply = session.call(operation, item, ITEM, "Delete", Vec::new())?;
                 let prompt = reply.first_string().unwrap_or("/");
@@ -474,14 +474,14 @@ impl KeyStore for SecretService {
         })
     }
 
-    fn key(&self, provider: ProviderId) -> Result<ApiKey, Fault> {
+    fn key(&self, item: &str) -> Result<ApiKey, Fault> {
         let operation = "reading the key";
         self.with(operation, |session| {
-            let items = session.items(operation, provider)?;
+            let items = session.items(operation, item)?;
             let Some(item) = items.first() else {
                 return Err(fault(
                     TaskCode::KeyNotSet,
-                    format!("no key is stored for {}", provider_name(provider)),
+                    format!("no key is stored under {item}"),
                 ));
             };
             session.unlock(operation, item, ITEM)?;
@@ -516,7 +516,7 @@ impl KeyStore for SecretService {
 /// A key store kept in memory, for tests. Nothing is written anywhere.
 #[derive(Debug, Default)]
 pub struct MemoryKeyStore {
-    keys: Mutex<HashMap<ProviderId, String>>,
+    keys: Mutex<HashMap<String, String>>,
     unavailable: std::sync::atomic::AtomicBool,
 }
 
@@ -532,7 +532,7 @@ impl MemoryKeyStore {
             .store(unavailable, std::sync::atomic::Ordering::SeqCst);
     }
 
-    fn keys(&self) -> Result<std::sync::MutexGuard<'_, HashMap<ProviderId, String>>, Fault> {
+    fn keys(&self) -> Result<std::sync::MutexGuard<'_, HashMap<String, String>>, Fault> {
         if self.unavailable.load(std::sync::atomic::Ordering::SeqCst) {
             return Err(fault(
                 TaskCode::KeyStoreUnavailable,
@@ -547,30 +547,30 @@ impl MemoryKeyStore {
 }
 
 impl KeyStore for MemoryKeyStore {
-    fn is_set(&self, provider: ProviderId) -> Result<bool, Fault> {
-        Ok(self.keys()?.contains_key(&provider))
+    fn is_set(&self, item: &str) -> Result<bool, Fault> {
+        Ok(self.keys()?.contains_key(item))
     }
 
-    fn set(&self, provider: ProviderId, key: &str) -> Result<(), Fault> {
+    fn set(&self, item: &str, key: &str) -> Result<(), Fault> {
         if !is_usable_key(key) {
             return Err(fault(
                 TaskCode::KeyInvalid,
                 "the text is empty, too long, or holds a space or a character a key cannot have",
             ));
         }
-        self.keys()?.insert(provider, key.trim().to_owned());
+        self.keys()?.insert(item.to_owned(), key.trim().to_owned());
         Ok(())
     }
 
-    fn remove(&self, provider: ProviderId) -> Result<bool, Fault> {
-        Ok(self.keys()?.remove(&provider).is_some())
+    fn remove(&self, item: &str) -> Result<bool, Fault> {
+        Ok(self.keys()?.remove(item).is_some())
     }
 
-    fn key(&self, provider: ProviderId) -> Result<ApiKey, Fault> {
-        let text = self.keys()?.get(&provider).cloned().ok_or_else(|| {
+    fn key(&self, item: &str) -> Result<ApiKey, Fault> {
+        let text = self.keys()?.get(item).cloned().ok_or_else(|| {
             fault(
                 TaskCode::KeyNotSet,
-                format!("no key is stored for {}", provider_name(provider)),
+                format!("no key is stored under {item}"),
             )
         })?;
         ApiKey::new(text).map_err(|_| fault(TaskCode::KeyInvalid, "the stored key is not usable"))
@@ -586,48 +586,48 @@ mod tests {
     #[test]
     fn a_key_is_set_replaced_and_removed() {
         let store = MemoryKeyStore::new();
-        assert!(!store.is_set(ProviderId::Anthropic).expect("answered"));
+        assert!(!store.is_set("anthropic").expect("answered"));
         assert_eq!(
             store
-                .key(ProviderId::Anthropic)
+                .key("anthropic")
                 .expect_err("no key")
                 .code
                 .as_str(),
             "TUR-AI-KEY-002"
         );
-        store.set(ProviderId::Anthropic, KEY).expect("stored");
-        assert!(store.is_set(ProviderId::Anthropic).expect("answered"));
+        store.set("anthropic", KEY).expect("stored");
+        assert!(store.is_set("anthropic").expect("answered"));
         // A key is kept per provider.
-        assert!(!store.is_set(ProviderId::OpenAi).expect("answered"));
+        assert!(!store.is_set("openai").expect("answered"));
         // The key comes back as the type that cannot be printed.
-        let key = store.key(ProviderId::Anthropic).expect("a key");
+        let key = store.key("anthropic").expect("a key");
         assert!(!format!("{key:?}{key}").contains(KEY));
         // Replaced, then removed.
         store
-            .set(ProviderId::Anthropic, "  another-key-0123\n")
+            .set("anthropic", "  another-key-0123\n")
             .expect("replaced");
-        assert!(store.is_set(ProviderId::Anthropic).expect("answered"));
-        assert!(store.remove(ProviderId::Anthropic).expect("removed"));
-        assert!(!store.remove(ProviderId::Anthropic).expect("nothing left"));
-        assert!(!store.is_set(ProviderId::Anthropic).expect("answered"));
+        assert!(store.is_set("anthropic").expect("answered"));
+        assert!(store.remove("anthropic").expect("removed"));
+        assert!(!store.remove("anthropic").expect("nothing left"));
+        assert!(!store.is_set("anthropic").expect("answered"));
     }
 
     #[test]
     fn what_cannot_be_a_key_is_not_stored_and_not_repeated() {
         let store = MemoryKeyStore::new();
         for text in ["", "   ", "two words", "line\nbreak", "k\u{e9}y"] {
-            let refused = store.set(ProviderId::Google, text).expect_err("refused");
+            let refused = store.set("google", text).expect_err("refused");
             assert_eq!(refused.code.as_str(), "TUR-AI-KEY-004", "{text:?}");
             if !text.trim().is_empty() {
                 assert!(!refused.to_string().contains(text.trim()), "{text:?}");
             }
         }
-        assert!(!store.is_set(ProviderId::Google).expect("answered"));
+        assert!(!store.is_set("google").expect("answered"));
         // The real store refuses the same text before it opens anything: the
         // address below leads nowhere, and the refusal is about the key.
         let real = SecretService::new("unix:path=/nonexistent/tur-pax-test/bus");
         assert_eq!(
-            real.set(ProviderId::Google, "two words")
+            real.set("google", "two words")
                 .expect_err("refused")
                 .code
                 .as_str(),
@@ -638,13 +638,13 @@ mod tests {
     #[test]
     fn without_a_password_store_there_is_a_clear_error_and_no_other_place() {
         let store = MemoryKeyStore::new();
-        store.set(ProviderId::Anthropic, KEY).expect("stored");
+        store.set("anthropic", KEY).expect("stored");
         store.set_unavailable(true);
         for code in [
-            store.is_set(ProviderId::Anthropic).map(|_| ()),
-            store.set(ProviderId::Anthropic, KEY),
-            store.remove(ProviderId::Anthropic).map(|_| ()),
-            store.key(ProviderId::Anthropic).map(|_| ()),
+            store.is_set("anthropic").map(|_| ()),
+            store.set("anthropic", KEY),
+            store.remove("anthropic").map(|_| ()),
+            store.key("anthropic").map(|_| ()),
         ] {
             assert_eq!(
                 code.expect_err("unavailable").code.as_str(),
@@ -656,10 +656,10 @@ mod tests {
         // password store is available, and none of them invents one.
         let real = SecretService::new("unix:path=/nonexistent/tur-pax-test/bus");
         for code in [
-            real.is_set(ProviderId::Anthropic).map(|_| ()),
-            real.set(ProviderId::Anthropic, KEY),
-            real.remove(ProviderId::Anthropic).map(|_| ()),
-            real.key(ProviderId::Anthropic).map(|_| ()),
+            real.is_set("anthropic").map(|_| ()),
+            real.set("anthropic", KEY),
+            real.remove("anthropic").map(|_| ()),
+            real.key("anthropic").map(|_| ()),
         ] {
             let refused = code.expect_err("unavailable");
             assert_eq!(refused.code.as_str(), "TUR-AI-KEY-001");
@@ -705,7 +705,7 @@ mod tests {
 
     #[test]
     fn the_item_of_a_provider_is_found_by_its_attributes() {
-        let anthropic = attributes(ProviderId::Anthropic);
+        let anthropic = attributes("anthropic");
         assert_eq!(anthropic.signature(), "a{ss}");
         let pairs: Vec<(String, String)> = anthropic
             .as_array()
@@ -720,6 +720,6 @@ mod tests {
             .collect();
         assert!(pairs.contains(&("provider".to_owned(), "anthropic".to_owned())));
         assert!(pairs.contains(&("xdg:schema".to_owned(), ITEM_SCHEMA.to_owned())));
-        assert_ne!(anthropic, attributes(ProviderId::OpenAi));
+        assert_ne!(anthropic, attributes("openai"));
     }
 }

@@ -196,6 +196,71 @@ this change did not start it.
 | Woken by a timer, not polling | `wake.rs`, `tur-pax-catchup.timer` | `wake::tests`; `pax` `reminder` and `scheduled-task`: the service's own transient timer fired both (the workflow started a user service manager); `pax` `idle` |
 | Planted text creates no schedule, no recalled memory | `keep_note` records pending content; proposals wait | `tests/service.rs::text_planted_in_a_tool_result_creates_no_schedule_and_no_memory`; `pax` `planted` |
 
+## Providers by identifier (ADR-0004, amended)
+
+After the amendment of 12 November 2026, everything the service keeps about a
+provider is keyed by an identifier, not by the three adapter families:
+
+- **Entries.** A provider is an entry: identifier, adapter family, name,
+  address (if not the family's public one), keyring item, declared
+  capabilities, terms and key pages, models and prices
+  (`settings::ProviderEntry`, `schemas/pax-models.schema.json`). Entries come
+  from the model list or from the person's `providers` in the settings file;
+  the families' own companies exist without an entry.
+- **Settings and consent** hold the identifier. The consent text is built
+  from the entry: its name; whether it is the family's own company at its
+  own address; and, for an entry added by hand, that TUR has reviewed
+  nothing of it.
+- **The key** is kept under the entry's keyring item (its identifier unless
+  named). The password store and `tur-pax key` take any identifier.
+- **Prices and limits** come from the entry's model; the day's limit is per
+  person, not per provider, and works for any identifier.
+- **The interface** reports `provider` (the identifier), `adapter`,
+  `provider_origin`; `ListModels` lists every provider by identifier.
+- Tested: `settings::tests::a_provider_is_an_identifier_and_any_identifier_can_be_configured`,
+  `consent::tests::a_provider_reached_through_another_family_or_added_by_hand_is_said_to_be_unknown`,
+  `tests/service.rs::a_provider_added_by_hand_is_used_by_its_identifier_and_keyring_item`
+  (an entry using the OpenAI family at a loopback address, its key under its
+  own item, a task run through it).
+- `tur-pax-providers` is unchanged in shape: no change to `Provider`, the
+  neutral model or `ProviderId`.
+
+**What would make a fourth adapter family (OpenAI-compatible Chat
+Completions) hard, or easy to get wrong:**
+
+1. `ProviderId` is the family. Adding a variant makes every exhaustive match
+   fail to compile until it is decided, which is wanted: in the provider
+   layer `capabilities_of`, `endpoint_path`, `connect`, `default_base_url`;
+   here `consent::family_name`. A compatible family has **no public address
+   of its own**: `default_base_url` would need an answer (an entry without
+   `base_url` should be refused for that family), and it must **not** be
+   added to `settings::COMPANY_FAMILIES`, which makes a provider of each
+   company family exist without an entry.
+2. **The day's limit relies on reported usage.** Chat Completions streams
+   report usage only when asked (`stream_options.include_usage`), and some
+   compatible services ignore it. An adapter that delivers no `Usage` event
+   makes every response cost nothing to the meter and to the day: neither
+   limit would ever be reached. The adapter must ask for usage, and a
+   response without it should be counted at a pessimistic figure (the
+   request's size and `max_output_tokens`) rather than at zero.
+3. **Storing.** The consent text says, for any service that is not the
+   family's own company, that whether it keeps requests is not known to TUR.
+   The amendment wants per-provider data terms (kept, how long, trained on,
+   where) with the date they were read: the entry has a terms address only.
+   Fields for those statements, and the text built from them, are still to
+   be added.
+4. **Capabilities are declared, not checked.** The amendment wants them
+   checked cheaply against the service and shown before the person chooses;
+   the entry records them and the status reports them, and nothing acts on
+   them. A model without tool calling would still be offered tools.
+5. **Schemas and lists** name the families: the `adapter` enum of
+   `schemas/pax-models.schema.json`, and the consent tests that iterate
+   `ProviderId::ALL`.
+6. **Keyring items** use the identifier's character set (lower-case letters,
+   digits, `-`, `_`, at most 32). Presets with other names need mapping.
+7. The model list of this change has no DeepSeek entry: there is no family
+   to give it yet.
+
 ## Dependencies
 
 None added. `zbus` was considered and not used; the reason is

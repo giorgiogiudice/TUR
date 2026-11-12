@@ -48,7 +48,7 @@ use crate::faults::{Fault, TaskCode};
 use crate::keyring::{KeyStore, SecretService};
 use crate::notify::BusNotifier;
 use crate::service::{Core, Parts};
-use crate::settings::{Paths, Settings, host_zone, provider_from_name};
+use crate::settings::{ModelList, Paths, Settings, find_provider, host_zone, is_provider_id};
 use crate::wake::SystemdWaker;
 
 /// Exit status: done.
@@ -100,7 +100,7 @@ pub enum KeyCommand {
     /// Store the key of a provider, read from standard input, in place of
     /// any key already stored.
     Set {
-        /// anthropic, openai or google.
+        /// The identifier of the provider, such as anthropic.
         provider: String,
         /// The bus.
         #[command(flatten)]
@@ -108,7 +108,7 @@ pub enum KeyCommand {
     },
     /// Remove the key of a provider.
     Remove {
-        /// anthropic, openai or google.
+        /// The identifier of the provider, such as anthropic.
         provider: String,
         /// The bus.
         #[command(flatten)]
@@ -116,7 +116,7 @@ pub enum KeyCommand {
     },
     /// Say whether a key is stored for a provider. The key is not read.
     Status {
-        /// anthropic, openai or google.
+        /// The identifier of the provider, such as anthropic.
         provider: String,
         /// The bus.
         #[command(flatten)]
@@ -261,13 +261,25 @@ pub fn run_key(command: &KeyCommand, out: &mut dyn Write, err: &mut dyn Write) -
         | KeyCommand::Remove { provider, bus }
         | KeyCommand::Status { provider, bus } => (provider, bus),
     };
-    let Some(provider) = provider_from_name(provider) else {
-        let fault = Fault::new(
-            TaskCode::ServiceInvalidRequest,
-            "the provider is not one of anthropic, openai and google",
-        );
-        return failed(&fault, err);
+    // The item of the provider's entry, from the model list and the
+    // person's own entries; for an identifier no entry has, the identifier.
+    let entry = paths().ok().and_then(|paths| {
+        let settings = Settings::load(&paths.settings).ok()?;
+        let models = ModelList::load(&paths.models).ok()?;
+        find_provider(&models, &settings, provider)
+    });
+    let item = match entry {
+        Some((entry, _)) => entry.keyring_item().to_owned(),
+        None if is_provider_id(provider) => provider.clone(),
+        None => {
+            let fault = Fault::new(
+                TaskCode::ServiceInvalidRequest,
+                "that is not the identifier of a provider",
+            );
+            return failed(&fault, err);
+        }
     };
+    let item = item.as_str();
     let address = match bus_address(bus) {
         Ok(address) => address,
         Err(fault) => return failed(&fault, err),
@@ -278,17 +290,17 @@ pub fn run_key(command: &KeyCommand, out: &mut dyn Write, err: &mut dyn Write) -
             let mut line = Zeroizing::new(String::new());
             io::stdin().lock().read_line(&mut line)?;
             store
-                .set(provider, line.as_str())
+                .set(item, line.as_str())
                 .map(|()| "The key is stored.".to_owned())
         }
-        KeyCommand::Remove { .. } => store.remove(provider).map(|removed| {
+        KeyCommand::Remove { .. } => store.remove(item).map(|removed| {
             if removed {
                 "The key is removed.".to_owned()
             } else {
                 "No key was stored.".to_owned()
             }
         }),
-        KeyCommand::Status { .. } => store.is_set(provider).map(|set| {
+        KeyCommand::Status { .. } => store.is_set(item).map(|set| {
             if set {
                 "set".to_owned()
             } else {
