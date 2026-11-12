@@ -25,7 +25,7 @@ old prefix until the mechanical rename.
 | **Memory** | Entries with provenance and a trust level; a secret detector at the point of writing; quarantine of entries taken from content; recall for a task within a budget; saved procedures |
 | **Schedules** | Reminders and scheduled tasks; triggers and next-run computation; standing approvals; run records and deferred actions; systemd units as text |
 | **Store** | One file per record, replaced atomically; an in-memory implementation; fault injection for tests |
-| **Command line** | The user's view: list, show, forget, export, pending, confirm; schedules list, next, show |
+| **Command line** | The user's view: list, show, forget, export, pending, confirm, switch, add (a stated entry only); schedules list, next, show |
 
 Two rules from the design shape the whole component:
 
@@ -434,11 +434,24 @@ implementation holds what it displayed and compares, so a confirmation of one
 proposal does not cover another
 (`a_confirmation_covers_one_proposal_and_no_other`).
 
-In this change the only implementation is in the command-line program's `main.rs`:
-the person who types `tur-pax-memory confirm <id>` is the user, and the
-confirmation covers that one identifier. If the assistant ran that command itself
-it would be a class 2 command, shown and approved first (section 5.4). The command
-line has no way to turn memory on, or to create, change or approve a schedule.
+The only implementation is in the command-line program's `main.rs`: the person
+who types `tur-pax-memory confirm <id>` is the user, and the confirmation covers
+that one identifier; the person who types `tur-pax-memory switch on` (or `off`)
+is the user turning memory on (or off), and that confirmation covers that state
+of the switch and not the other. If the assistant ran one of these commands
+itself it would be a class 2 command, shown and approved first (section 5.4).
+
+`tur-pax-memory add --stated <text>` records what the person at the terminal
+states, as a stated entry. It needs no confirmation type: `Memory::add` is the
+operation the orchestrator will call too, and the library's rules apply to both
+callers alike: refused while memory is off, refused for a text that looks like a
+secret. What makes the entry "stated by the user" is who ran the program, which
+is the same assumption `confirm` rests on. The command has no option for any
+other kind: an observed entry, a procedure and an entry taken from content are
+the assistant's to record. It exists so that the user has a way to state
+something without the assistant, and so that the end-to-end test can prepare a
+store the way a user would (`pax` scenario `injection-memory`). The command
+line still has no way to create, change or approve a schedule.
 
 **What the trait does not do.** It does not stop a caller from writing an
 implementation that always agrees. It makes that a visible act in the caller's code
@@ -618,6 +631,8 @@ tur-pax-memory [--store <dir>] list [--kind K] [--state S] [--tag T] [--applicat
 tur-pax-memory [--store <dir>] show <id> [--json]
 tur-pax-memory [--store <dir>] pending [--json]
 tur-pax-memory [--store <dir>] confirm <id>
+tur-pax-memory [--store <dir>] switch on|off
+tur-pax-memory [--store <dir>] add --stated <text> [--tag T]...
 tur-pax-memory [--store <dir>] forget <id>
 tur-pax-memory [--store <dir>] export
 tur-pax-memory [--store <dir>] schedules list [--json]

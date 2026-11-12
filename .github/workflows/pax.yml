@@ -108,17 +108,18 @@ jobs:
             ~/.cargo/registry/cache
             ~/.cargo/git/db
             services/tur-pax/target
+            services/tur-pax-memory/target
             services/tur-device-manager/target
             services/tur-storage/target
             services/tur-catalogue/target
             services/tur-diagnostics/target
             services/tur-runtime/target
-          key: pax-${{ hashFiles('rust-toolchain.toml', 'services/tur-pax/Cargo.lock', 'services/tur-device-manager/Cargo.lock', 'services/tur-storage/Cargo.lock', 'services/tur-catalogue/Cargo.lock', 'services/tur-diagnostics/Cargo.lock', 'services/tur-runtime/Cargo.lock') }}
+          key: pax-${{ hashFiles('rust-toolchain.toml', 'services/tur-pax/Cargo.lock', 'services/tur-pax-memory/Cargo.lock', 'services/tur-device-manager/Cargo.lock', 'services/tur-storage/Cargo.lock', 'services/tur-catalogue/Cargo.lock', 'services/tur-diagnostics/Cargo.lock', 'services/tur-runtime/Cargo.lock') }}
           restore-keys: pax-
 
       - name: Build tur-pax and the tool programs it adapts
         run: |
-          for component in tur-pax tur-device-manager tur-storage tur-catalogue tur-diagnostics tur-runtime; do
+          for component in tur-pax tur-pax-memory tur-device-manager tur-storage tur-catalogue tur-diagnostics tur-runtime; do
             echo "::group::cargo build: $component"
             (cd "services/$component" && cargo build --locked)
             echo "::endgroup::"
@@ -161,6 +162,7 @@ jobs:
         run: |
           python3 tests/pax/e2e.py \
             --tur-pax services/tur-pax/target/debug/tur-pax \
+            --tur-pax-memory services/tur-pax-memory/target/debug/tur-pax-memory \
             --work-dir "$WORK/work" \
             --evidence "$WORK/evidence"
 

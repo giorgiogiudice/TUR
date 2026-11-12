@@ -580,7 +580,7 @@ The injection scenarios, as the task names them:
 | b | A false class, an invented tool, arguments outside the schema | `injection::a_false_class_an_invented_tool_and_bad_arguments…` | `injection-lies` |
 | b | A repeated key | `injection::a_repeated_key_never_reaches_the_loop_as_a_call`; `wires::a_repeated_key_discards…` | `repeated-key`, `openai-repeated-key`, `google-repeated-key` |
 | c | Commands that write, delete, reach the network or read a protected path | `injection::hostile_commands…` (the plan only) | `sandbox-attacks` (real bubblewrap, canaries) |
-| d | An instruction recalled from memory | `injection::an_instruction_recalled_from_memory…`; through the built program, `run_cli::an_instruction_in_the_memory_store_changes_no_decision` | not run: no program can put an entry into a memory store, so the `pax` workflow has no way to prepare one |
+| d | An instruction recalled from memory | `injection::an_instruction_recalled_from_memory…`; through the built program, `run_cli::an_instruction_in_the_memory_store_changes_no_decision` | `injection-memory`: the store is filled the way the user fills it, with `tur-pax-memory switch on` and `tur-pax-memory add --stated` |
 | e | A model that never stops | `injection::a_model_told_to_loop…` | `never-stops-steps`, `never-stops-spend` |
 
 ## 9. Known gaps

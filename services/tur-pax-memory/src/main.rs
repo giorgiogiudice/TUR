@@ -7,7 +7,7 @@
 //! environment, and the one place that implements
 //! `tur_pax_memory::UserConfirmation`: the library cannot confirm anything on
 //! the user's behalf, so the program that the user runs does it, for the one
-//! entry named on its command line.
+//! entry or the one state of the memory switch named on its command line.
 
 use std::env;
 use std::io;
@@ -17,7 +17,7 @@ use std::process::ExitCode;
 use clap::Parser;
 use tur_pax_memory::cli::{Cli, EXIT_ERROR, Environment, run};
 use tur_pax_memory::{
-    Clock, MemoryEntry, SystemClock, Timestamp, UserConfirmation, default_store_dir,
+    Clock, MemoryEntry, MemorySwitch, SystemClock, Timestamp, UserConfirmation, default_store_dir,
 };
 
 /// The person who typed the command.
@@ -28,7 +28,22 @@ use tur_pax_memory::{
 /// running a class 2 command, which the policy engine shows to the user first.
 struct PersonAtTerminal {
     confirms: Option<String>,
+    /// The state `tur-pax-memory switch` names, if that is the command.
+    switches: Option<bool>,
     at: Timestamp,
+}
+
+/// Running `tur-pax-memory switch on` is the user turning memory on, and
+/// `switch off` the user turning it off. It covers that state and not the
+/// other, and no other command covers either.
+impl UserConfirmation<MemorySwitch> for PersonAtTerminal {
+    fn covers(&self, switch: &MemorySwitch) -> bool {
+        self.switches == Some(switch.enabled)
+    }
+
+    fn confirmed_at(&self) -> Timestamp {
+        self.at
+    }
 }
 
 impl UserConfirmation<MemoryEntry> for PersonAtTerminal {
@@ -46,6 +61,7 @@ fn main() -> ExitCode {
     let clock = SystemClock;
     let user = PersonAtTerminal {
         confirms: cli.confirm_target().map(str::to_owned),
+        switches: cli.switch_target(),
         at: clock.now(),
     };
     let xdg_data_home = env::var_os("XDG_DATA_HOME").map(PathBuf::from);
@@ -53,6 +69,7 @@ fn main() -> ExitCode {
     let environment = Environment {
         clock: &clock,
         user: &user,
+        switch: &user,
         default_store: default_store_dir(xdg_data_home.as_deref(), home.as_deref()),
     };
     let stdout = io::stdout();
