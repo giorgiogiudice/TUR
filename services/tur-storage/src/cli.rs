@@ -2,20 +2,30 @@
 
 //! The `tur-storage` command line.
 //!
-//! Three read-only commands over captured data:
+//! Three read-only commands:
 //!
-//! * `volumes --from <lsblk.json>`: the inventory, with the decision and the
-//!   runtime views for each volume.
-//! * `decide --from <lsblk.json> --volume <id> [--access ro|rw]`: the decision
-//!   for one volume.
+//! * `volumes (--from <lsblk.json> | --live)`: the inventory, with the
+//!   decision and the runtime views for each volume.
+//! * `decide (--from <lsblk.json> | --live) --volume <id>
+//!   [--access read-only|read-write]`: the decision for one volume.
 //! * `capabilities --from-fs <fs> --to-fs <fs>`: what a copy between two
 //!   filesystems would lose.
 //!
-//! Input comes from files named on the command line and from nowhere else:
-//! the tool does not look at devices, does not run other programs and takes
-//! no setting from the process surroundings. Exit status: 0 on success, 1
-//! when the input is unusable or the volume is unknown, 2 for a usage error.
-//! `decide` exits 0 whatever the decision is; the decision is the output.
+//! The block devices come from one of two places, and the command line says
+//! which. `--from` names a file captured earlier; then the tool looks at no
+//! device and runs no other program. `--live` asks about this machine: the
+//! tool runs `lsblk --json --bytes --output-all`, a program that lists block
+//! devices and changes nothing, and reads what it prints
+//! ([`crate::probe::LiveProbe`]). It runs nothing else, opens no device
+//! itself and never mounts, unlocks or writes. Either way it takes no
+//! setting from the process surroundings.
+//!
+//! Access is spelled `read-only` and `read-write`, as the assistant tool
+//! manifest and the JSON output spell it. `ro` and `rw` are still accepted.
+//!
+//! Exit status: 0 on success, 1 when the input is unusable or the volume is
+//! unknown, 2 for a usage error. `decide` exits 0 whatever the decision is;
+//! the decision is the output.
 
 use std::ffi::OsString;
 use std::fmt;
@@ -33,7 +43,7 @@ use crate::decision::{Access, MountRequest, printable};
 use crate::filesystem::Filesystem;
 use crate::namespace::{MountPlan, NamespaceContext, PlannedVolume, UserName, plan};
 use crate::policy::{PolicyOverrides, UnsafeNtfsPolicy, policy_for};
-use crate::probe::SnapshotProbe;
+use crate::probe::{CommandRunner, LiveProbe, Probe, SnapshotProbe, SystemRunner};
 use crate::volume::Inventory;
 
 /// The parsed command line.
@@ -41,8 +51,8 @@ use crate::volume::Inventory;
 #[command(
     name = "tur-storage",
     version,
-    about = "TUR storage policy core: lists volumes and previews mount decisions from captured \
-             data. It never touches a device."
+    about = "TUR storage policy core: lists volumes and previews mount decisions, from captured \
+             data or for this machine. It never mounts, unlocks or writes."
 )]
 pub struct Cli {
     /// The command to run.
@@ -53,7 +63,8 @@ pub struct Cli {
 /// The commands.
 #[derive(Debug, Subcommand)]
 pub enum Command {
-    /// List the volumes in an lsblk snapshot, with the decision for each
+    /// List the volumes of an lsblk snapshot or of this machine, with the
+    /// decision for each
     Volumes(VolumesArgs),
     /// Show the mount decision for one volume
     Decide(DecideArgs),
@@ -62,12 +73,18 @@ pub enum Command {
 }
 
 /// Access requested on the command line.
+///
+/// Spelled as [`Access`] is spelled in the JSON output and in the assistant
+/// tool manifest: `read-only`, `read-write`. The short forms `ro` and `rw`
+/// are accepted as well and are not shown in the help.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum AccessArg {
     /// Read-only
-    Ro,
+    #[value(name = "read-only", alias = "ro")]
+    ReadOnly,
     /// Read and write
-    Rw,
+    #[value(name = "read-write", alias = "rw")]
+    ReadWrite,
 }
 
 /// Handling of NTFS volumes that are not known to be clean.
@@ -83,8 +100,17 @@ pub enum UnsafeNtfsArg {
 #[derive(Debug, Args)]
 pub struct InputArgs {
     /// File holding the output of `lsblk --json --bytes --output-all`
-    #[arg(long, value_name = "FILE")]
-    pub from: PathBuf,
+    #[arg(
+        long,
+        value_name = "FILE",
+        required_unless_present = "live",
+        conflicts_with = "live"
+    )]
+    pub from: Option<PathBuf>,
+    /// Ask about this machine: run `lsblk --json --bytes --output-all` and
+    /// read what it prints. Nothing else is run and nothing is changed
+    #[arg(long)]
+    pub live: bool,
     /// File holding `blkid --output export` style properties, including the
     /// TUR_NTFS_STATE and TUR_HFS_JOURNAL facts
     #[arg(long, value_name = "FILE")]
@@ -133,7 +159,7 @@ pub struct DecideArgs {
     #[arg(long, value_name = "ID")]
     pub volume: String,
     /// Access to ask for
-    #[arg(long, value_enum, value_name = "ACCESS", default_value = "rw")]
+    #[arg(long, value_enum, value_name = "ACCESS", default_value = "read-write")]
     pub access: AccessArg,
 }
 
@@ -226,8 +252,24 @@ struct CapabilityReport {
 /// Runs the command line and returns the process exit status.
 ///
 /// `args` includes the program name. Results go to `stdout`; usage errors
-/// and failures go to `stderr`.
+/// and failures go to `stderr`. With `--live`, `lsblk` is run on this
+/// machine.
 pub fn run<I, T>(args: I, stdout: &mut dyn Write, stderr: &mut dyn Write) -> u8
+where
+    I: IntoIterator<Item = T>,
+    T: Into<OsString> + Clone,
+{
+    run_with_runner(args, &SystemRunner, stdout, stderr)
+}
+
+/// As [`run`], with the runner the live probe uses given by the caller. A
+/// test passes one that runs nothing.
+pub fn run_with_runner<I, T>(
+    args: I,
+    runner: &dyn CommandRunner,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> u8
 where
     I: IntoIterator<Item = T>,
     T: Into<OsString> + Clone,
@@ -247,8 +289,8 @@ where
         }
     };
     let result = match &cli.command {
-        Command::Volumes(args) => volumes(args, stdout),
-        Command::Decide(args) => decide_one(args, stdout),
+        Command::Volumes(args) => volumes(args, runner, stdout),
+        Command::Decide(args) => decide_one(args, runner, stdout),
         Command::Capabilities(args) => capabilities(args, stdout),
     };
     match result {
@@ -279,20 +321,63 @@ fn policy_from(input: &InputArgs) -> PolicyOverrides {
     }
 }
 
-/// Reads the input files and plans the whole inventory for one request.
-fn load_plan(input: &InputArgs, access: Access) -> Result<(MountPlan, PolicyOverrides), Failure> {
-    let invalid = |path: &Path, error: &dyn fmt::Display| Failure::Coded {
-        code: StorageCode::ProbeInputInvalid,
-        detail: format!("{}: {error}", path.display()),
-    };
-    let mut probe = SnapshotProbe::from_lsblk_json(&read(&input.from)?)
-        .map_err(|error| invalid(&input.from, &error))?;
-    if let Some(path) = &input.props {
-        probe = probe
-            .with_properties(&read(path)?)
-            .map_err(|error| invalid(path, &error))?;
+/// Where the block devices of a request come from, for messages.
+fn source_name(input: &InputArgs) -> String {
+    match &input.from {
+        Some(path) => path.display().to_string(),
+        None => "this machine".to_owned(),
     }
-    let inventory = Inventory::from_probe(&probe).map_err(|error| invalid(&input.from, &error))?;
+}
+
+/// The probe a request asks for: a file captured earlier, or this machine.
+fn probe_for(input: &InputArgs, runner: &dyn CommandRunner) -> Result<Box<dyn Probe>, Failure> {
+    let invalid = |source: &str, error: &dyn fmt::Display| Failure::Coded {
+        code: StorageCode::ProbeInputInvalid,
+        detail: format!("{source}: {error}"),
+    };
+    let source = source_name(input);
+    // The properties file is read after the block devices, as it always was.
+    let properties = || -> Result<Option<(String, String)>, Failure> {
+        match &input.props {
+            Some(path) => Ok(Some((path.display().to_string(), read(path)?))),
+            None => Ok(None),
+        }
+    };
+    match &input.from {
+        Some(path) => {
+            let mut probe = SnapshotProbe::from_lsblk_json(&read(path)?)
+                .map_err(|error| invalid(&source, &error))?;
+            if let Some((name, text)) = properties()? {
+                probe = probe
+                    .with_properties(&text)
+                    .map_err(|error| invalid(&name, &error))?;
+            }
+            Ok(Box::new(probe))
+        }
+        None => {
+            // `--live`: the command line requires one of the two.
+            let mut probe = LiveProbe::capture(runner).map_err(|error| invalid(&source, &error))?;
+            if let Some((name, text)) = properties()? {
+                probe = probe
+                    .with_properties(&text)
+                    .map_err(|error| invalid(&name, &error))?;
+            }
+            Ok(Box::new(probe))
+        }
+    }
+}
+
+/// Reads the input and plans the whole inventory for one request.
+fn load_plan(
+    input: &InputArgs,
+    access: Access,
+    runner: &dyn CommandRunner,
+) -> Result<(MountPlan, PolicyOverrides), Failure> {
+    let probe = probe_for(input, runner)?;
+    let inventory = Inventory::from_probe(probe.as_ref()).map_err(|error| Failure::Coded {
+        code: StorageCode::ProbeInputInvalid,
+        detail: format!("{}: {error}", source_name(input)),
+    })?;
 
     let user = match &input.user {
         Some(name) => Some(UserName::parse(name).ok_or_else(|| {
@@ -403,8 +488,12 @@ fn describe(planned: &PlannedVolume) -> String {
     text
 }
 
-fn volumes(args: &VolumesArgs, out: &mut dyn Write) -> Result<(), Failure> {
-    let (plan, policy) = load_plan(&args.input, Access::ReadWrite)?;
+fn volumes(
+    args: &VolumesArgs,
+    runner: &dyn CommandRunner,
+    out: &mut dyn Write,
+) -> Result<(), Failure> {
+    let (plan, policy) = load_plan(&args.input, Access::ReadWrite, runner)?;
     if args.input.json {
         return emit_json(
             out,
@@ -423,18 +512,22 @@ fn volumes(args: &VolumesArgs, out: &mut dyn Write) -> Result<(), Failure> {
     emit(out, &blocks.join("\n"))
 }
 
-fn decide_one(args: &DecideArgs, out: &mut dyn Write) -> Result<(), Failure> {
+fn decide_one(
+    args: &DecideArgs,
+    runner: &dyn CommandRunner,
+    out: &mut dyn Write,
+) -> Result<(), Failure> {
     let access = match args.access {
-        AccessArg::Ro => Access::ReadOnly,
-        AccessArg::Rw => Access::ReadWrite,
+        AccessArg::ReadOnly => Access::ReadOnly,
+        AccessArg::ReadWrite => Access::ReadWrite,
     };
-    let (plan, policy) = load_plan(&args.input, access)?;
+    let (plan, policy) = load_plan(&args.input, access, runner)?;
     let planned = plan.find(&args.volume).ok_or_else(|| Failure::Coded {
         code: StorageCode::NoSuchVolume,
         detail: format!(
             "volume \"{}\" is not in {}",
             printable(&args.volume),
-            args.input.from.display()
+            source_name(&args.input)
         ),
     })?;
     if args.input.json {
@@ -566,6 +659,188 @@ mod tests {
             assert_eq!(status, 2, "{args:?}");
             assert!(stdout.is_empty(), "{args:?}");
             assert!(!stderr.is_empty(), "{args:?}");
+        }
+    }
+
+    /// A runner that runs nothing: it records what it was asked to run and
+    /// answers as `lsblk` would for one disk with one ext4 partition.
+    struct FakeLsblk {
+        asked: std::cell::RefCell<Vec<String>>,
+        status: Option<i32>,
+    }
+
+    impl FakeLsblk {
+        fn new() -> FakeLsblk {
+            FakeLsblk {
+                asked: std::cell::RefCell::new(Vec::new()),
+                status: Some(0),
+            }
+        }
+    }
+
+    const LIVE_DOCUMENT: &str = r#"{"blockdevices":[
+        {"name":"sdb","path":"/dev/sdb","type":"disk","size":8000000000,"rm":true,
+         "tran":"usb",
+         "children":[{"name":"sdb1","path":"/dev/sdb1","type":"part","size":7999000000,
+                      "fstype":"ext4","label":"Backup",
+                      "uuid":"0a0a0a0a-1111-4bbb-8ccc-000000000b01","rm":true}]}
+    ]}"#;
+
+    impl CommandRunner for FakeLsblk {
+        fn run(
+            &self,
+            program: &str,
+            arguments: &[&str],
+        ) -> Result<crate::probe::CommandOutput, String> {
+            self.asked
+                .borrow_mut()
+                .push(format!("{program} {}", arguments.join(" ")));
+            Ok(crate::probe::CommandOutput {
+                status: self.status,
+                stdout: LIVE_DOCUMENT.as_bytes().to_vec(),
+                stderr: b"lsblk: failed".to_vec(),
+            })
+        }
+    }
+
+    fn run_live(runner: &FakeLsblk, args: &[&str]) -> (u8, String, String) {
+        let mut stdout: Vec<u8> = Vec::new();
+        let mut stderr: Vec<u8> = Vec::new();
+        let mut full = vec!["tur-storage"];
+        full.extend_from_slice(args);
+        let status = run_with_runner(full, runner, &mut stdout, &mut stderr);
+        (
+            status,
+            String::from_utf8(stdout).unwrap(),
+            String::from_utf8(stderr).unwrap(),
+        )
+    }
+
+    #[test]
+    fn live_mode_lists_the_volumes_of_this_machine_by_running_lsblk_only() {
+        let runner = FakeLsblk::new();
+        let (status, stdout, stderr) = run_live(&runner, &["volumes", "--live", "--json"]);
+        assert_eq!(status, 0, "{stderr}");
+        // Exactly one program was run, the one that lists block devices.
+        assert_eq!(
+            *runner.asked.borrow(),
+            ["/usr/bin/lsblk --json --bytes --output-all"]
+        );
+        let value: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+        assert_eq!(value["kind"], "inventory");
+        let volumes = value["volumes"].as_array().unwrap();
+        let volume = volumes
+            .iter()
+            .find(|volume| volume["filesystem"] == "ext4")
+            .unwrap_or_else(|| panic!("the partition is not listed: {stdout}"));
+        let id = volume["id"].as_str().unwrap().to_owned();
+
+        // The same volume, previewed: one more run of the same program.
+        let (status, stdout, stderr) = run_live(
+            &runner,
+            &[
+                "decide",
+                "--live",
+                "--json",
+                "--access=read-only",
+                &format!("--volume={id}"),
+            ],
+        );
+        assert_eq!(status, 0, "{stderr}");
+        let value: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+        assert_eq!(value["kind"], "decision");
+        assert_eq!(value["volume"]["id"], id.as_str());
+        assert_eq!(value["volume"]["decision"]["requested_access"], "read-only");
+        assert_eq!(
+            *runner.asked.borrow(),
+            [
+                "/usr/bin/lsblk --json --bytes --output-all",
+                "/usr/bin/lsblk --json --bytes --output-all"
+            ]
+        );
+
+        // A volume this machine does not have is said to be missing from
+        // this machine, not from a file.
+        let (status, _, stderr) =
+            run_live(&runner, &["decide", "--live", "--volume", "fs-nowhere"]);
+        assert_eq!(status, 1);
+        assert!(stderr.starts_with("TUR-STORAGE-VOLUME-001\n"), "{stderr}");
+        assert!(stderr.contains("is not in this machine"), "{stderr}");
+    }
+
+    #[test]
+    fn a_file_and_this_machine_are_two_sources_and_one_is_required() {
+        // With a file, nothing is run.
+        let runner = FakeLsblk::new();
+        let (status, _, _) = run_live(&runner, &["volumes", "--from", "/nonexistent.json"]);
+        assert_eq!(status, 1);
+        assert!(runner.asked.borrow().is_empty());
+        // Both, or neither, is a usage error, and nothing is run.
+        for args in [
+            vec!["volumes", "--live", "--from", "x.json"],
+            vec!["volumes"],
+            vec!["decide", "--volume", "fs-1"],
+            vec!["volumes", "--live=yes"],
+        ] {
+            let (status, stdout, stderr) = run_live(&runner, &args);
+            assert_eq!(status, 2, "{args:?}");
+            assert!(stdout.is_empty() && !stderr.is_empty(), "{args:?}");
+            assert!(runner.asked.borrow().is_empty(), "{args:?}");
+        }
+    }
+
+    #[test]
+    fn a_live_probe_that_fails_is_reported_with_a_code_and_nothing_is_listed() {
+        let runner = FakeLsblk {
+            status: Some(32),
+            ..FakeLsblk::new()
+        };
+        let (status, stdout, stderr) = run_live(&runner, &["volumes", "--live", "--json"]);
+        assert_eq!(status, 1);
+        assert!(stdout.is_empty());
+        assert!(stderr.starts_with("TUR-STORAGE-PROBE-001\n"), "{stderr}");
+        assert!(stderr.contains("this machine: live probe: /usr/bin/lsblk ended with status 32"));
+    }
+
+    #[test]
+    fn access_has_one_spelling_and_the_short_forms_are_still_read() {
+        let runner = FakeLsblk::new();
+        let (_, listed, _) = run_live(&runner, &["volumes", "--live", "--json"]);
+        let listed: serde_json::Value = serde_json::from_str(&listed).unwrap();
+        let id = listed["volumes"][0]["id"].as_str().unwrap().to_owned();
+        let requested = |access: &[&str]| {
+            let mut args = vec!["decide", "--live", "--json", "--volume", id.as_str()];
+            args.extend_from_slice(access);
+            let (status, stdout, stderr) = run_live(&runner, &args);
+            assert_eq!(status, 0, "{access:?}: {stderr}");
+            let value: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+            value["volume"]["decision"]["requested_access"]
+                .as_str()
+                .unwrap()
+                .to_owned()
+        };
+        // The spelling of the manifest and of the JSON output.
+        assert_eq!(requested(&["--access", "read-only"]), "read-only");
+        assert_eq!(requested(&["--access=read-write"]), "read-write");
+        // The former spelling means the same.
+        assert_eq!(requested(&["--access", "ro"]), "read-only");
+        assert_eq!(requested(&["--access", "rw"]), "read-write");
+        // Without the option, read and write is asked for, as before.
+        assert_eq!(requested(&[]), "read-write");
+        // The help names the one spelling.
+        let (status, help, _) = run_with(&["decide", "--help"]);
+        assert_eq!(status, 0);
+        assert!(
+            help.contains("read-only") && help.contains("read-write"),
+            "{help}"
+        );
+        assert!(help.contains("--live"), "{help}");
+        // Anything else is refused.
+        for access in ["write", "readonly", "read_only", "RO", ""] {
+            let (status, _, _) = run_with(&[
+                "decide", "--from", "x.json", "--volume", "fs-1", "--access", access,
+            ]);
+            assert_eq!(status, 2, "{access:?}");
         }
     }
 

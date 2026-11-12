@@ -5,12 +5,15 @@
 //! puts a task loop together.
 //!
 //! The scripted provider is a small in-process HTTP server that replays
-//! responses in the Anthropic Messages streaming format, the same approach
-//! as the conformance suite of `tur-pax-providers`. The loop under test talks
-//! to it through the real Anthropic adapter, over a real local connection.
-//! A script says what the model "does": the text it writes, the tool calls
-//! it makes with the exact text of their arguments, and how the response
-//! ends. No test talks to a real provider and none needs an API key.
+//! responses in the streaming format of one of the three providers ([`Wire`]),
+//! the same approach as the conformance suite of `tur-pax-providers`. The
+//! loop under test talks to it through the real adapter for that provider,
+//! over a real local connection. A script says what the model "does": the
+//! text it writes, the tool calls it makes with the exact text of their
+//! arguments, whether those arguments are streamed in fragments or arrive in
+//! one piece, and how the response ends. The formats are written by hand
+//! from the same documentation as the conformance scripts; they are not
+//! recordings. No test talks to a real provider and none needs an API key.
 
 #![allow(dead_code)]
 #![allow(clippy::new_without_default)]
@@ -78,6 +81,9 @@ pub struct Turn {
     pub stop: &'static str,
     pub input_tokens: u64,
     pub output_tokens: u64,
+    /// Whether the arguments of each call arrive in one piece, with no
+    /// fragment, instead of being streamed.
+    pub whole: bool,
 }
 
 /// The model writes an answer and ends its turn.
@@ -88,6 +94,7 @@ pub fn says(text: &str) -> Turn {
         stop: "end_turn",
         input_tokens: 40,
         output_tokens: 30,
+        whole: false,
     }
 }
 
@@ -99,6 +106,7 @@ pub fn calls(text: &str, calls: Vec<Call>) -> Turn {
         stop: "tool_use",
         input_tokens: 40,
         output_tokens: 30,
+        whole: false,
     }
 }
 
@@ -108,10 +116,68 @@ impl Turn {
         self.stop = stop;
         self
     }
+
+    /// The same response, with the arguments of every call delivered in one
+    /// piece: no fragment is streamed.
+    pub fn whole(mut self) -> Turn {
+        self.whole = true;
+        self
+    }
+}
+
+/// The wire format the scripted provider speaks, which decides the adapter
+/// the loop talks to it through.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Wire {
+    /// The Anthropic Messages API.
+    Anthropic,
+    /// The OpenAI Responses API.
+    OpenAi,
+    /// The Google Interactions API.
+    Google,
+}
+
+impl Wire {
+    /// Every format an adapter exists for.
+    pub const ALL: [Wire; 3] = [Wire::Anthropic, Wire::OpenAi, Wire::Google];
+
+    /// The provider name of a configuration file.
+    pub fn provider(self) -> &'static str {
+        match self {
+            Wire::Anthropic => "anthropic",
+            Wire::OpenAi => "openai",
+            Wire::Google => "google",
+        }
+    }
+
+    /// A scripted response as an event stream in this format.
+    pub fn render(self, turn: &Turn) -> String {
+        match self {
+            Wire::Anthropic => sse(turn),
+            Wire::OpenAi => sse_openai(turn),
+            Wire::Google => sse_google(turn),
+        }
+    }
 }
 
 fn event(name: &str, data: &Value) -> String {
     format!("event: {name}\ndata: {data}\n\n")
+}
+
+/// An event whose data is written by hand, so that it can hold what a JSON
+/// value cannot: an object that repeats a key.
+fn raw_event(name: &str, data: &str) -> String {
+    format!("event: {name}\ndata: {data}\n\n")
+}
+
+/// A text cut in two at a character.
+fn halves(text: &str) -> (&str, &str) {
+    let middle = text
+        .char_indices()
+        .map(|(at, _)| at)
+        .nth(text.chars().count() / 2)
+        .unwrap_or(0);
+    text.split_at(middle)
 }
 
 /// The response as an event stream of the Messages API.
@@ -146,6 +212,25 @@ pub fn sse(turn: &Turn) -> String {
         index += 1;
     }
     for call in &turn.calls {
+        if turn.whole {
+            // The block starts with its whole input, written as the script
+            // has it, and has no delta.
+            stream.push_str(&raw_event(
+                "content_block_start",
+                &format!(
+                    r#"{{"type":"content_block_start","index":{index},"content_block":{{"type":"tool_use","id":{id},"name":{name},"input":{input}}}}}"#,
+                    id = json!(call.id),
+                    name = json!(call.name),
+                    input = call.arguments,
+                ),
+            ));
+            stream.push_str(&event(
+                "content_block_stop",
+                &json!({ "type": "content_block_stop", "index": index }),
+            ));
+            index += 1;
+            continue;
+        }
         stream.push_str(&event(
             "content_block_start",
             &json!({ "type": "content_block_start", "index": index,
@@ -195,6 +280,219 @@ pub fn sse(turn: &Turn) -> String {
     stream
 }
 
+/// The response as an event stream of the OpenAI Responses API.
+///
+/// A streamed call is announced, its argument text arrives in two deltas, and
+/// the finished item repeats it. A call delivered whole is only the finished
+/// item.
+pub fn sse_openai(turn: &Turn) -> String {
+    let response = |status: &str| {
+        json!({ "id": "resp_scripted", "object": "response", "status": status,
+                "model": "test-model", "output": [] })
+    };
+    let mut stream = event(
+        "response.created",
+        &json!({ "type": "response.created", "response": response("in_progress") }),
+    );
+    let mut index = 0;
+    if !turn.text.is_empty() {
+        stream.push_str(&event(
+            "response.output_item.added",
+            &json!({ "type": "response.output_item.added", "output_index": index,
+                     "item": { "id": "msg_scripted", "type": "message", "status": "in_progress",
+                               "role": "assistant", "content": [] } }),
+        ));
+        stream.push_str(&event(
+            "response.output_text.delta",
+            &json!({ "type": "response.output_text.delta", "item_id": "msg_scripted",
+                     "output_index": index, "content_index": 0, "delta": turn.text }),
+        ));
+        stream.push_str(&event(
+            "response.output_item.done",
+            &json!({ "type": "response.output_item.done", "output_index": index,
+                     "item": { "id": "msg_scripted", "type": "message", "status": "completed",
+                               "role": "assistant",
+                               "content": [{ "type": "output_text", "text": turn.text,
+                                             "annotations": [] }] } }),
+        ));
+        index += 1;
+    }
+    for call in &turn.calls {
+        let item_id = format!("fc_{index}");
+        if !turn.whole {
+            stream.push_str(&event(
+                "response.output_item.added",
+                &json!({ "type": "response.output_item.added", "output_index": index,
+                         "item": { "type": "function_call", "id": item_id, "call_id": call.id,
+                                   "name": call.name, "arguments": "" } }),
+            ));
+            let (first, second) = halves(&call.arguments);
+            for fragment in [first, second] {
+                stream.push_str(&event(
+                    "response.function_call_arguments.delta",
+                    &json!({ "type": "response.function_call_arguments.delta",
+                             "item_id": item_id, "output_index": index, "delta": fragment }),
+                ));
+            }
+            stream.push_str(&event(
+                "response.function_call_arguments.done",
+                &json!({ "type": "response.function_call_arguments.done", "item_id": item_id,
+                         "output_index": index, "arguments": call.arguments }),
+            ));
+        }
+        stream.push_str(&event(
+            "response.output_item.done",
+            &json!({ "type": "response.output_item.done", "output_index": index,
+                     "item": { "type": "function_call", "id": item_id, "call_id": call.id,
+                               "name": call.name, "arguments": call.arguments,
+                               "status": "completed" } }),
+        ));
+        index += 1;
+    }
+    let usage = json!({
+        "input_tokens": turn.input_tokens,
+        "input_tokens_details": { "cached_tokens": 0 },
+        "output_tokens": turn.output_tokens,
+        "output_tokens_details": { "reasoning_tokens": 0 },
+        "total_tokens": turn.input_tokens + turn.output_tokens
+    });
+    match turn.stop {
+        "error" => {
+            stream.push_str(&event(
+                "error",
+                &json!({ "type": "error", "code": "server_is_overloaded",
+                         "message": "The model is temporarily overloaded.", "param": null }),
+            ));
+            return stream;
+        }
+        "max_tokens" => {
+            let mut ended = response("incomplete");
+            ended["incomplete_details"] = json!({ "reason": "max_output_tokens" });
+            ended["usage"] = usage;
+            stream.push_str(&event(
+                "response.incomplete",
+                &json!({ "type": "response.incomplete", "response": ended }),
+            ));
+            return stream;
+        }
+        "refusal" => stream.push_str(&event(
+            "response.refusal.done",
+            &json!({ "type": "response.refusal.done", "item_id": "msg_refusal",
+                     "output_index": index, "content_index": 0,
+                     "refusal": "The scripted model declined." }),
+        )),
+        _ => {}
+    }
+    let mut ended = response("completed");
+    ended["usage"] = usage;
+    stream.push_str(&event(
+        "response.completed",
+        &json!({ "type": "response.completed", "response": ended }),
+    ));
+    stream
+}
+
+/// The response as an event stream of the Google Interactions API.
+///
+/// A streamed call starts with empty arguments and its argument text arrives
+/// in two deltas. A call delivered whole starts with its arguments complete,
+/// as a JSON object written as the script has it, and has no delta.
+pub fn sse_google(turn: &Turn) -> String {
+    let mut stream = event(
+        "interaction.created",
+        &json!({ "interaction": { "id": "v1_scripted", "status": "in_progress",
+                                  "object": "interaction", "model": "test-model" },
+                 "event_type": "interaction.created" }),
+    );
+    let stop = |index: u64| {
+        event(
+            "step.stop",
+            &json!({ "index": index, "event_type": "step.stop" }),
+        )
+    };
+    let mut index = 0u64;
+    if !turn.text.is_empty() {
+        stream.push_str(&event(
+            "step.start",
+            &json!({ "index": index, "step": { "type": "model_output" },
+                     "event_type": "step.start" }),
+        ));
+        stream.push_str(&event(
+            "step.delta",
+            &json!({ "index": index, "delta": { "text": turn.text, "type": "text" },
+                     "event_type": "step.delta" }),
+        ));
+        stream.push_str(&stop(index));
+        index += 1;
+    }
+    for call in &turn.calls {
+        if turn.whole {
+            stream.push_str(&raw_event(
+                "step.start",
+                &format!(
+                    r#"{{"index":{index},"step":{{"id":{id},"type":"function_call","name":{name},"arguments":{arguments}}},"event_type":"step.start"}}"#,
+                    id = json!(call.id),
+                    name = json!(call.name),
+                    arguments = call.arguments,
+                ),
+            ));
+        } else {
+            stream.push_str(&event(
+                "step.start",
+                &json!({ "index": index,
+                         "step": { "id": call.id, "type": "function_call", "name": call.name,
+                                   "arguments": {} },
+                         "event_type": "step.start" }),
+            ));
+            let (first, second) = halves(&call.arguments);
+            for fragment in [first, second] {
+                stream.push_str(&event(
+                    "step.delta",
+                    &json!({ "index": index,
+                             "delta": { "arguments": fragment, "type": "arguments_delta" },
+                             "event_type": "step.delta" }),
+                ));
+            }
+        }
+        stream.push_str(&stop(index));
+        index += 1;
+    }
+    let failed = match turn.stop {
+        "error" => Some((
+            "service_unavailable",
+            "The service is temporarily overloaded.",
+        )),
+        "refusal" => Some(("safety", "Safety violations blocked the request.")),
+        _ => None,
+    };
+    if let Some((code, message)) = failed {
+        stream.push_str(&event(
+            "error",
+            &json!({ "error": { "message": message, "code": code }, "event_type": "error" }),
+        ));
+        return stream;
+    }
+    let status = match turn.stop {
+        "max_tokens" => "incomplete",
+        "tool_use" => "requires_action",
+        _ => "completed",
+    };
+    stream.push_str(&event(
+        "interaction.completed",
+        &json!({ "interaction": { "id": "v1_scripted", "status": status,
+                                  "usage": { "total_tokens": turn.input_tokens + turn.output_tokens,
+                                             "total_input_tokens": turn.input_tokens,
+                                             "total_cached_tokens": 0,
+                                             "total_output_tokens": turn.output_tokens,
+                                             "total_tool_use_tokens": 0,
+                                             "total_thought_tokens": 0 },
+                                  "object": "interaction", "model": "test-model" },
+                 "event_type": "interaction.completed" }),
+    ));
+    stream.push_str("event: done\ndata: [DONE]\n\n");
+    stream
+}
+
 // ------------------------------------------------------------- the server
 
 /// One request the server received.
@@ -213,6 +511,7 @@ impl Recorded {
 
 /// The scripted provider.
 pub struct FakeServer {
+    wire: Wire,
     address: SocketAddr,
     requests: Arc<Mutex<Vec<Recorded>>>,
     stop: Arc<AtomicBool>,
@@ -223,16 +522,22 @@ impl FakeServer {
     /// A provider that answers one request with each response, in order, and
     /// then answers nothing more.
     pub fn start(turns: Vec<Turn>) -> FakeServer {
-        FakeServer::serve(turns, false)
+        FakeServer::serve(Wire::Anthropic, turns, false)
+    }
+
+    /// As [`FakeServer::start`], speaking the given wire format. The loop
+    /// then reaches it through that provider's adapter.
+    pub fn start_on(wire: Wire, turns: Vec<Turn>) -> FakeServer {
+        FakeServer::serve(wire, turns, false)
     }
 
     /// A provider that goes on giving its last response for ever: a model
     /// that never stops.
     pub fn repeating(turns: Vec<Turn>) -> FakeServer {
-        FakeServer::serve(turns, true)
+        FakeServer::serve(Wire::Anthropic, turns, true)
     }
 
-    fn serve(turns: Vec<Turn>, repeat_last: bool) -> FakeServer {
+    fn serve(wire: Wire, turns: Vec<Turn>, repeat_last: bool) -> FakeServer {
         let listener = TcpListener::bind("127.0.0.1:0").expect("a free local port");
         let address = listener.local_addr().expect("the local address");
         listener
@@ -240,7 +545,7 @@ impl FakeServer {
             .expect("a non-blocking listener");
         let requests = Arc::new(Mutex::new(Vec::new()));
         let stop = Arc::new(AtomicBool::new(false));
-        let bodies: Vec<String> = turns.iter().map(sse).collect();
+        let bodies: Vec<String> = turns.iter().map(|turn| wire.render(turn)).collect();
         let worker = {
             let requests = Arc::clone(&requests);
             let stop = Arc::clone(&stop);
@@ -269,11 +574,17 @@ impl FakeServer {
             })
         };
         FakeServer {
+            wire,
             address,
             requests,
             stop,
             worker: Some(worker),
         }
+    }
+
+    /// The wire format this server speaks.
+    pub fn wire(&self) -> Wire {
+        self.wire
     }
 
     /// The base URL to configure a provider with.
@@ -300,7 +611,7 @@ impl FakeServer {
     pub fn config_with(&self, change: impl FnOnce(&mut Value)) -> ProviderConfig {
         let mut value = json!({
             "schema_version": 1,
-            "provider": "anthropic",
+            "provider": self.wire.provider(),
             "base_url": self.base_url(),
             "model": "test-model",
             "max_output_tokens": 256,
@@ -420,6 +731,59 @@ pub fn first_user_texts(body: &Value) -> Vec<String> {
         .flatten()
         .filter(|block| block["type"] == "text")
         .filter_map(|block| block["text"].as_str().map(str::to_owned))
+        .collect()
+}
+
+/// The frames P@x put around the tool results of a request body, in order,
+/// wherever the wire format puts a tool result: a `tool_result` block
+/// (Anthropic), a `function_call_output` item (OpenAI) or a `function_result`
+/// step (Google).
+pub fn result_frames(wire: Wire, body: &Value) -> Vec<Value> {
+    let texts: Vec<String> = match wire {
+        Wire::Anthropic => tool_results(body)
+            .iter()
+            .filter_map(|block| block["content"][0]["text"].as_str().map(str::to_owned))
+            .collect(),
+        Wire::OpenAi => body["input"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|item| item["type"] == "function_call_output")
+            .filter_map(|item| item["output"].as_str().map(str::to_owned))
+            .collect(),
+        Wire::Google => body["input"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|step| step["type"] == "function_result")
+            .filter_map(|step| step["result"][0]["text"].as_str().map(str::to_owned))
+            .collect(),
+    };
+    texts
+        .iter()
+        .map(|text| {
+            let value: Value = serde_json::from_str(text).expect("the result text is JSON");
+            value["tur_pax_tool_result"].clone()
+        })
+        .collect()
+}
+
+/// The system text of a request body, where the wire format puts it.
+pub fn system_of(wire: Wire, body: &Value) -> Value {
+    match wire {
+        Wire::Anthropic => body["system"].clone(),
+        Wire::OpenAi => body["instructions"].clone(),
+        Wire::Google => body["system_instruction"].clone(),
+    }
+}
+
+/// The names of the tools a request body offers.
+pub fn offered_tools(body: &Value) -> Vec<String> {
+    body["tools"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|tool| tool["name"].as_str().map(str::to_owned))
         .collect()
 }
 

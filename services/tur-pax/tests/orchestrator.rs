@@ -929,13 +929,48 @@ fn credential_like_output_is_withheld_and_the_trail_says_so_without_saying_what(
         harness.events(EventKind::Executed, "TUR_AI_WITHHELD"),
         ["1", "1"]
     );
+    // The outcome of each action is that it ran; that output was withheld
+    // is an event of its own, with the count and the kinds.
     assert_eq!(
-        harness.events(EventKind::Executed, "TUR_AI_WITHHELD_KINDS"),
-        ["password", "known_token"]
+        harness.events(EventKind::Executed, "TUR_AI_RESULT"),
+        ["ok", "ok"]
     );
     assert_eq!(
         harness.events(EventKind::Executed, "TUR_ERROR_CODE"),
+        ["", ""]
+    );
+    assert_eq!(
+        harness.events(EventKind::OutputWithheld, "TUR_AI_WITHHELD"),
+        ["1", "1"]
+    );
+    assert_eq!(
+        harness.events(EventKind::OutputWithheld, "TUR_AI_WITHHELD_KINDS"),
+        ["password", "known_token"]
+    );
+    assert_eq!(
+        harness.events(EventKind::OutputWithheld, "TUR_ERROR_CODE"),
         ["TUR-AI-OUTPUT-001", "TUR-AI-OUTPUT-001"]
+    );
+    // Each withheld event follows the outcome of its action, before the
+    // next decision.
+    let order: Vec<String> = harness
+        .trail
+        .entries()
+        .iter()
+        .map(|entry| entry.field("TUR_AI_EVENT").unwrap_or_default())
+        .collect();
+    assert_eq!(
+        order,
+        [
+            "task_started",
+            "decision",
+            "executed",
+            "output_withheld",
+            "decision",
+            "executed",
+            "output_withheld",
+            "task_finished"
+        ]
     );
     // It never records what.
     let trail = harness.trail_text();
@@ -1220,8 +1255,8 @@ fn the_orchestrator_has_no_switch_for_the_trusted_path() {
         // Nothing sets the trusted path, a repair session or a standing
         // approval.
         for forbidden in [
-            "trusted_path_available: true",
-            "trusted_path_available = true",
+            "trusted_session_proven: true",
+            "trusted_session_proven = true",
             "RepairSession {",
             "RepairSession::open",
             "StandingApproval {",
@@ -1253,7 +1288,7 @@ fn the_orchestrator_has_no_switch_for_the_trusted_path() {
                 session_locked,
             }
             .context();
-            assert!(!context.trusted_path_available);
+            assert!(!context.trusted_session_proven);
             assert!(context.repair_session.is_none());
             assert!(context.standing_approvals.is_empty());
         }

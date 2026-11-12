@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "service": "org.tur.Storage1",
+  "adapters": [
+    {
+      "tool": "storage_list_volumes",
+      "kind": "command",
+      "program": "/usr/bin/tur-storage",
+      "arguments": [
+        { "literal": "volumes" },
+        { "literal": "--live" },
+        { "literal": "--json" }
+      ],
+      "max_output_bytes": 262144
+    },
+    {
+      "tool": "storage_preview_mount",
+      "kind": "command",
+      "program": "/usr/bin/tur-storage",
+      "arguments": [
+        { "literal": "decide" },
+        { "literal": "--live" },
+        { "literal": "--json" },
+        { "option": "--access", "input": "access" },
+        { "option": "--volume", "input": "volume_id" }
+      ],
+      "max_output_bytes": 262144
+    }
+  ]
+}

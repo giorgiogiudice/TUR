@@ -1,6 +1,6 @@
 {
   "name": "shipped-tools",
-  "what": "Every tool that ships with an adapter, performed by its shipped adapter against the machine the test runs on: system status, hardware inventory and problems, volumes (lsblk fed to tur-storage), catalogue search and show, and the inspection of a file.",
+  "what": "Every tool that ships with an adapter, performed by its shipped adapter against the machine the test runs on: system status, hardware inventory and problems, volumes (tur-storage asks lsblk itself, in the sandbox), catalogue search and show, and the inspection of a file.",
   "request": "Tell me about this computer.",
   "turns": [
     {

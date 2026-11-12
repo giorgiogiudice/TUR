@@ -187,17 +187,6 @@ fn a_false_class_an_invented_tool_and_bad_arguments_never_become_an_action() {
                     COMMAND_TOOL,
                     r#"{"argv": ["/usr/bin/id"], "sandbox": "privileged"}"#,
                 ),
-                // A repeated key: one value to show, another to act on.
-                call(
-                    "toolu_7",
-                    "test_reversible",
-                    r#"{"value": "harmless", "value": "harmful"}"#,
-                ),
-                call(
-                    "toolu_8",
-                    COMMAND_TOOL,
-                    r#"{"argv": ["/usr/bin/true"], "argv": ["/usr/bin/rm", "-rf", "/"]}"#,
-                ),
             ],
         ),
         // Asked properly, the class 3 tool is still class 3.
@@ -219,7 +208,7 @@ fn a_false_class_an_invented_tool_and_bad_arguments_never_become_an_action() {
     assert!(harness.executor.plans.is_empty());
     assert!(harness.trail.events(EventKind::Executed).is_empty());
 
-    // The eight calls of the first response never became actions: there is
+    // The six calls of the first response never became actions: there is
     // no decision for them, and a record of each rejection.
     assert_eq!(
         harness.events(EventKind::ProposalRejected, "TUR_ERROR_CODE"),
@@ -228,8 +217,6 @@ fn a_false_class_an_invented_tool_and_bad_arguments_never_become_an_action() {
             "TUR-AI-TOOL-002",
             "TUR-AI-TOOL-001",
             "TUR-AI-TOOL-001",
-            "TUR-AI-TOOL-002",
-            "TUR-AI-TOOL-002",
             "TUR-AI-TOOL-002",
             "TUR-AI-TOOL-002"
         ]
@@ -242,14 +229,12 @@ fn a_false_class_an_invented_tool_and_bad_arguments_never_become_an_action() {
             "tool_unknown",
             "tool_unknown",
             "arguments_invalid",
-            "arguments_invalid",
-            "arguments_ambiguous",
-            "arguments_ambiguous"
+            "arguments_invalid"
         ]
     );
     let bodies = server.bodies();
     let results = tool_results(&bodies[1]);
-    assert_eq!(results.len(), 8);
+    assert_eq!(results.len(), 6);
     for block in &results {
         assert_eq!(block["is_error"], true);
         assert_eq!(frame(block)["status"], "refused");
@@ -263,6 +248,40 @@ fn a_false_class_an_invented_tool_and_bad_arguments_never_become_an_action() {
     );
     assert_eq!(harness.decisions("TUR_AI_CLASS"), ["3"]);
     assert_eq!(harness.decisions("TUR_AI_DECISION"), ["refused"]);
+}
+
+#[test]
+fn a_repeated_key_never_reaches_the_loop_as_a_call() {
+    // A repeated key: one value to show, another to act on. The provider
+    // layer reads arguments strictly, so a response that holds such a call
+    // is malformed and is discarded whole: the harmless reading is not
+    // performed either. `tests/wires.rs` repeats this through all three
+    // adapters.
+    for arguments in [
+        r#"{"argv": ["/usr/bin/true"], "argv": ["/usr/bin/rm", "-rf", "/"]}"#,
+        r#"{"argv": ["/usr/bin/true"], "extra": {"a": 1, "a": 2}}"#,
+    ] {
+        let server = FakeServer::start(vec![
+            calls("", vec![call("toolu_1", COMMAND_TOOL, arguments)]),
+            says("Never asked for."),
+        ]);
+        let mut harness = Harness::new();
+        let report = harness.run(&server, "Tidy up.");
+        assert_eq!(report.outcome, TaskOutcome::ProviderError, "{arguments}");
+        assert_eq!(
+            report.error_code.as_deref(),
+            Some("TUR-AI-PROVIDER-007"),
+            "{arguments}"
+        );
+        assert!(harness.executor.plans.is_empty(), "{arguments}");
+        assert!(harness.trail.decisions().is_empty(), "{arguments}");
+        assert_eq!(
+            harness.events(EventKind::ResponseDiscarded, "TUR_ERROR_CODE"),
+            ["TUR-AI-PROVIDER-007"],
+            "{arguments}"
+        );
+        assert_eq!(server.requests().len(), 1, "{arguments}");
+    }
 }
 
 // --------------------------- (c) commands that try to change or reach something

@@ -8,6 +8,8 @@
 //! tur-pax-memory [--store <dir>] show <id> [--json]
 //! tur-pax-memory [--store <dir>] pending [--json]
 //! tur-pax-memory [--store <dir>] confirm <id>
+//! tur-pax-memory [--store <dir>] switch on|off
+//! tur-pax-memory [--store <dir>] add --stated <text> [--tag T]...
 //! tur-pax-memory [--store <dir>] forget <id>
 //! tur-pax-memory [--store <dir>] export
 //! tur-pax-memory [--store <dir>] schedules list [--json]
@@ -15,9 +17,15 @@
 //! tur-pax-memory [--store <dir>] schedules show <id> [--units] [--now SECONDS] [--json]
 //! ```
 //!
-//! The program reads, and it can forget and confirm. It cannot add an entry,
-//! turn memory on, or create, change or approve a schedule: those belong to
-//! the orchestrator and to the settings interface.
+//! The program reads, and it does what is the user's to do with memory: it
+//! can forget an entry, confirm a pending one, turn memory on or off, and
+//! record something the user states. Those four are acts of the person who
+//! runs the program, for the one thing named on its command line; in the
+//! finished system the same decisions are taken in the settings interface.
+//! `add` records a *stated* entry and nothing else: an observed entry, a
+//! procedure and an entry taken from content are the assistant's to record,
+//! and this program is not the assistant. The program cannot create, change
+//! or approve a schedule.
 //!
 //! Exit status: 0 on success; 1 when the command failed, with the error code
 //! and a sentence on standard error; 2 for a usage error; 3 when the command
@@ -35,10 +43,10 @@ use serde_json::{Value, json};
 
 use crate::codes::{Code, Problem};
 use crate::confirm::UserConfirmation;
-use crate::entry::{EntryKind, EntryState, MemoryEntry};
+use crate::entry::{EntryKind, EntryState, MemoryEntry, NewEntry};
 use crate::fs::StdFs;
 use crate::ids::{EntryId, ScheduleId};
-use crate::memory::{DamagedFile, Filter, Memory};
+use crate::memory::{DamagedFile, Filter, Memory, MemorySwitch};
 use crate::schedule::{Schedule, ScheduleBook, ScheduledAction};
 use crate::store::FileStore;
 use crate::systemd::{UnitOptions, render_units};
@@ -52,6 +60,9 @@ pub const EXIT_OK: u8 = 0;
 pub const EXIT_ERROR: u8 = 1;
 /// Exit status: the command completed, and damaged files were found.
 pub const EXIT_DAMAGED: u8 = 3;
+
+/// The origin recorded for an entry the user stated on the command line.
+pub const STATED_ORIGIN: &str = "stated by the user with tur-pax-memory add";
 
 /// P@x memory, reminders and scheduled tasks: read, review and forget.
 #[derive(Debug, Parser)]
@@ -72,6 +83,15 @@ impl Cli {
     pub fn confirm_target(&self) -> Option<&str> {
         match &self.command {
             TopCommand::Confirm { id } => Some(id.as_str()),
+            _ => None,
+        }
+    }
+
+    /// The state the command line asks the memory switch to be put in, if
+    /// it is a `switch` command that names one.
+    pub fn switch_target(&self) -> Option<bool> {
+        match &self.command {
+            TopCommand::Switch { state } => parse_switch(state).ok(),
             _ => None,
         }
     }
@@ -126,6 +146,22 @@ pub enum TopCommand {
     Confirm {
         /// The entry identifier.
         id: String,
+    },
+    /// Turn memory on or off. It is off until the user turns it on. Turning
+    /// it off deletes nothing.
+    Switch {
+        /// `on` or `off`.
+        state: String,
+    },
+    /// Remember something the user states. Refused while memory is off, and
+    /// for a text that looks like a secret.
+    Add {
+        /// The text to remember, as the user states it.
+        #[arg(long, value_name = "TEXT")]
+        stated: String,
+        /// A tag for the entry. May be given more than once.
+        #[arg(long = "tag", value_name = "TAG")]
+        tags: Vec<String>,
     },
     /// Reminders and scheduled tasks.
     Schedules {
@@ -182,6 +218,10 @@ pub struct Environment<'a> {
     /// The confirmation of the person running the command, used by `confirm`.
     /// The library cannot make one; `main` does.
     pub user: &'a dyn UserConfirmation<MemoryEntry>,
+    /// The same person's confirmation of the memory switch, used by
+    /// `switch`. Also made by `main`, for the state named on the command
+    /// line and no other.
+    pub switch: &'a dyn UserConfirmation<MemorySwitch>,
     /// The store directory to use when `--store` is not given.
     pub default_store: Option<PathBuf>,
 }
@@ -287,6 +327,22 @@ fn execute(
             let id = entry_id(id)?;
             memory.confirm(&id, environment.user)?;
             writeln!(out, "confirmed {id}")?;
+            Ok(EXIT_OK)
+        }
+        TopCommand::Switch { state } => {
+            let enabled = parse_switch(state)?;
+            memory.set_enabled(MemorySwitch { enabled }, environment.switch)?;
+            writeln!(out, "memory is {}", if enabled { "on" } else { "off" })?;
+            Ok(EXIT_OK)
+        }
+        TopCommand::Add { stated, tags } => {
+            // The person running the program states it: that is what a
+            // stated entry is. The library refuses it while memory is off
+            // and when the text looks like a secret.
+            let mut new = NewEntry::stated(stated, STATED_ORIGIN);
+            new.tags.clone_from(tags);
+            let entry = memory.add(new, environment.clock.now())?;
+            writeln!(out, "added {}", entry.id())?;
             Ok(EXIT_OK)
         }
         TopCommand::Export => {
@@ -451,6 +507,18 @@ fn list_entries(
     } else {
         EXIT_DAMAGED
     })
+}
+
+// The state a `switch` command names.
+fn parse_switch(state: &str) -> Result<bool, Problem> {
+    match state {
+        "on" => Ok(true),
+        "off" => Ok(false),
+        _ => Err(Problem::new(
+            Code::InputInvalid,
+            "the memory switch is \"on\" or \"off\"",
+        )),
+    }
 }
 
 fn show_entry(entry: &MemoryEntry, out: &mut dyn Write) -> io::Result<()> {

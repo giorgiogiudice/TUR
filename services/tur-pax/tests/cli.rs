@@ -267,11 +267,35 @@ fn unattended_class_2_needs_an_exactly_matching_standing_approval() {
     );
     assert_eq!(document["audit"]["TUR_AI_DECISION"], "deferred");
 
+    assert_eq!(document["standing_approvals_ignored"], 0);
+
+    // An exactly matching approval typed on the command line is checked and
+    // then ignored: only the policy store can hand the engine an approval,
+    // and it does not exist yet (addendum A section 18, item 1). The action
+    // is deferred all the same.
     let mut exact = unattended.to_vec();
     exact.extend(["--standing-approval", EXACT_APPROVAL]);
     let (status, document) = check(CONSEQUENTIAL, &exact);
-    assert_eq!(status, EXIT_ALLOW);
-    assert_eq!(text(&document, "reason"), "standing_approval_matched");
+    assert_eq!(status, EXIT_DEFER);
+    assert_eq!(
+        text(&document, "reason"),
+        "unattended_without_standing_approval"
+    );
+    assert_eq!(document["audit"]["TUR_AI_DECISION"], "deferred");
+    assert_eq!(document["standing_approvals_ignored"], 1);
+
+    // The new name of the flag and its former name mean the same.
+    let (status, renamed) = check(
+        CONSEQUENTIAL,
+        &[
+            "--trusted-session-proven",
+            "--unattended",
+            "--standing-approval",
+            EXACT_APPROVAL,
+        ],
+    );
+    assert_eq!(status, EXIT_DEFER);
+    assert_eq!(renamed, document);
 
     let near_misses = [
         // One argument different.

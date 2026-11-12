@@ -2,9 +2,16 @@
 
 //! The stable error codes this component reports (specification §29.3).
 //!
-//! `tur-core` has no family for the catalogue yet, so every code uses the
-//! `DESKTOP` family with a `CATALOGUE` topic. A dedicated family is planned;
-//! when it exists these codes move in one change, here.
+//! Every code uses the `DESKTOP` family with a `CATALOGUE` topic. `tur-core`
+//! now has a `CATALOGUE` family, registered for these codes, and they have
+//! **not** moved to it. The strings are part of what this program prints:
+//! `tur-catalogue show` and `route` put a code into their JSON output, the
+//! application centre shows `TUR-DESKTOP-CATALOGUE-011` to the user, and its
+//! recorded fixtures (`desktop/apps/tur-centre/fixtures`), which
+//! `tests/desktop_fixtures.rs` compares with this program's output byte for
+//! byte, hold them. Renaming them here alone would break that agreement.
+//! They move in one change that covers this table, the fixtures and the
+//! application centre together.
 
 use std::fmt;
 
@@ -184,6 +191,28 @@ mod tests {
             assert!(!code.title().is_empty());
         }
         assert_eq!(seen.len(), Code::ALL.len());
+    }
+
+    #[test]
+    fn the_catalogue_family_exists_and_the_codes_have_not_moved_to_it() {
+        // The family is registered, so a later change can move the codes.
+        let future: ErrorCode = "TUR-CATALOGUE-011".parse().unwrap();
+        assert_eq!(future.family(), Family::Catalogue);
+        // Until that change, which has to cover the application centre and
+        // its fixtures as well, no code of this table uses it, and the code
+        // the application centre displays is what it was.
+        for code in Code::ALL {
+            assert_ne!(code.error_code().family(), Family::Catalogue, "{code}");
+            assert!(
+                code.as_str().starts_with("TUR-DESKTOP-CATALOGUE-"),
+                "{code}"
+            );
+        }
+        assert!(
+            Code::ALL
+                .iter()
+                .any(|code| code.as_str() == "TUR-DESKTOP-CATALOGUE-011")
+        );
     }
 
     #[test]

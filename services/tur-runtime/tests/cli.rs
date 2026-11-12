@@ -218,7 +218,7 @@ fn unsupported_files_exit_with_status_three() {
     let report: Value = serde_json::from_str(&outcome.stdout).unwrap();
     assert_eq!(report["inspection"]["detected"]["format"], "unknown");
     assert_eq!(report["recommendation"]["runtime"], "unsupported");
-    assert_eq!(report["recommendation"]["code"], "TUR-DESKTOP-RUNTIME-004");
+    assert_eq!(report["recommendation"]["code"], "TUR-RUNTIME-MANAGER-004");
 }
 
 #[test]
@@ -232,7 +232,7 @@ fn unreadable_and_damaged_input_exits_with_status_one_and_a_code() {
     assert!(
         outcome
             .stderr
-            .starts_with("error[TUR-DESKTOP-RUNTIME-001]: ")
+            .starts_with("error[TUR-RUNTIME-MANAGER-001]: ")
     );
 
     let image = pe(0x8664, 2);
@@ -332,7 +332,7 @@ fn invalid_profiles_exit_with_status_five_and_a_code() {
     assert!(
         outcome
             .stderr
-            .starts_with("error[TUR-DESKTOP-PROFILE-004]: ")
+            .starts_with("error[TUR-RUNTIME-PROFILE-004]: ")
     );
     assert!(outcome.stderr.contains("wine_password"));
     assert!(!outcome.stderr.contains("hunter2"));
@@ -348,7 +348,7 @@ fn invalid_profiles_exit_with_status_five_and_a_code() {
     assert!(
         outcome
             .stderr
-            .starts_with("error[TUR-DESKTOP-PROFILE-002]: ")
+            .starts_with("error[TUR-RUNTIME-PROFILE-002]: ")
     );
 
     let bad_runtime = VALID_PROFILE.replace("\"runtime\": \"wine\"", "\"runtime\": \"darling\"");
@@ -358,7 +358,7 @@ fn invalid_profiles_exit_with_status_five_and_a_code() {
     assert!(
         outcome
             .stderr
-            .starts_with("error[TUR-DESKTOP-PROFILE-003]: ")
+            .starts_with("error[TUR-RUNTIME-PROFILE-003]: ")
     );
 }
 
@@ -371,6 +371,6 @@ fn unreadable_profile_exits_with_status_one() {
     assert!(
         outcome
             .stderr
-            .starts_with("error[TUR-DESKTOP-PROFILE-001]: ")
+            .starts_with("error[TUR-RUNTIME-PROFILE-001]: ")
     );
 }

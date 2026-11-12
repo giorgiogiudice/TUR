@@ -488,10 +488,15 @@ an error is a JSON object on standard output.
 
 ## Error codes
 
-`tur-core` has no family for the catalogue. Every code uses `DESKTOP` with a
-`CATALOGUE` topic until a dedicated family exists. The codes are one table in
-`services/tur-catalogue/src/codes.rs`, with a test that they are valid and
-unique.
+Every code uses `DESKTOP` with a `CATALOGUE` topic. `tur-core` now has a
+`CATALOGUE` family, registered for these codes, and they have not moved to it:
+`tur-catalogue show` and `route` print a code in their JSON output, the
+application centre displays `TUR-DESKTOP-CATALOGUE-011`, and its recorded
+fixtures, which `tests/desktop_fixtures.rs` compares with this program's
+output byte for byte, contain the strings. They move in one change that covers
+this table, the fixtures and the application centre together. The codes are
+one table in `services/tur-catalogue/src/codes.rs`, with tests that they are
+valid and unique and that none has moved.
 
 | Code | Condition |
 |---|---|

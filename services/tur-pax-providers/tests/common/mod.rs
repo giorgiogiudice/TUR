@@ -312,6 +312,15 @@ pub struct Wire {
     pub overloaded_mid_stream: &'static str,
     /// The text "Hello, " and then the end at the output limit.
     pub output_limit: &'static str,
+    /// A call of `storage_unmount` whose argument text names `volume_id`
+    /// twice, streamed in fragments. The response then ends normally.
+    pub repeated_key: &'static str,
+    /// A call of `storage_unmount` with
+    /// `{"volume_id": "vol-1", "options": {"force": false}}` whose arguments
+    /// arrive in one piece, with no fragment. 40 input and 30 output tokens.
+    pub whole_arguments: &'static str,
+    /// As `whole_arguments`, with `force` named twice inside `options`.
+    pub whole_repeated_key: &'static str,
     pub rate_limited: ErrorReply,
     pub auth_failed: ErrorReply,
     pub rejected: ErrorReply,

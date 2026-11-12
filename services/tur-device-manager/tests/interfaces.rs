@@ -166,7 +166,11 @@ fn the_design_note_records_every_code_and_every_interface_member() {
         );
         assert!(DESIGN_NOTE.contains(kind.title()), "{}", kind.title());
     }
-    for code in ["TUR-DEVICE-INPUT-001", "TUR-DEVICE-OUTPUT-001"] {
+    for code in [
+        "TUR-DEVICE-INPUT-001",
+        "TUR-DEVICE-INPUT-002",
+        "TUR-DEVICE-OUTPUT-001",
+    ] {
         assert!(DESIGN_NOTE.contains(code), "{code}");
     }
     for member in names_of("method")

@@ -322,7 +322,7 @@ fn refusals_have_codes_and_exit_status_six() {
     // An identifier that is not one.
     for bad in ["../escape", "app", "Com.Example.App"] {
         let outcome = home.run_named(&["prefix", "create", bad, "--dry-run"]);
-        assert_refused(&outcome, "TUR-DESKTOP-PROFILE-003");
+        assert_refused(&outcome, "TUR-RUNTIME-PROFILE-003");
     }
 
     // With --json a refusal is a JSON document on standard output.
@@ -576,7 +576,7 @@ fn launch_refuses_bad_environment_profiles_and_programs() {
     assert!(
         outcome
             .stderr
-            .starts_with("error[TUR-DESKTOP-PROFILE-002]: ")
+            .starts_with("error[TUR-RUNTIME-PROFILE-002]: ")
     );
     let missing = home.root.join("missing.json");
     let outcome = home.run_named(&["launch", missing.to_str().unwrap(), "--dry-run"]);
@@ -584,7 +584,7 @@ fn launch_refuses_bad_environment_profiles_and_programs() {
     assert!(
         outcome
             .stderr
-            .starts_with("error[TUR-DESKTOP-PROFILE-001]: ")
+            .starts_with("error[TUR-RUNTIME-PROFILE-001]: ")
     );
 
     // A program file in a protected directory.

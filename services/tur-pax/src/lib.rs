@@ -45,7 +45,7 @@
 //! let call = manifest.tool_call("storage_format", serde_json::Map::new()).unwrap();
 //!
 //! let mut context = Context::attended();
-//! context.trusted_path_available = true;
+//! context.trusted_session_proven = true;
 //! let decision = decide(&Action::Tool(call), &context, &UserPolicy::default(), Timestamp(0));
 //!
 //! assert_eq!(decision.class(), ActionClass::SystemCritical);
@@ -72,6 +72,7 @@ pub mod policy;
 pub mod redact;
 pub mod registry;
 pub mod sandbox;
+pub mod store;
 pub mod strict;
 pub mod textui;
 pub mod trail;
@@ -82,7 +83,8 @@ pub use action::{
     TypedOperationKind, TypedOperationSpec, UiAction, UiActionKind, WorkingContext,
 };
 pub use audit::{
-    AuditMeta, AuditOutcome, AuditRecord, AuditSink, AuditWriteError, MemorySink, decide_and_record,
+    ActionOutcome, ActionResult, AuditMeta, AuditOutcome, AuditRecord, AuditSink, AuditWriteError,
+    MemorySink, OutputWithheld, decide_and_record,
 };
 pub use class::ActionClass;
 pub use codes::{Code, Problem, RegistryEntry, Severity};
@@ -90,7 +92,8 @@ pub use context::{Context, Presence, RepairSession, StandingApproval, Timestamp,
 pub use decision::{Decision, Reason, Refusal, Verdict};
 pub use engine::decide;
 pub use manifest::{ToolManifest, ToolSpec};
-pub use policy::{Mode, Relaxation, RelaxationLevel, UserPolicy};
+pub use policy::{Evidence, KnownApplication, Mode, Relaxation, RelaxationLevel, UserPolicy};
+pub use store::{HeldApprovals, PolicyStore};
 
 pub use exec::{BwrapExecutor, ExecOutput, ExecStatus, Executor};
 pub use faults::{Fault, TaskCode};
@@ -99,6 +102,6 @@ pub use orchestrator::{
     SharedControl, Signal, Situation, SystemTaskClock, TaskClock, TaskLimits, TaskOutcome,
     TaskReport, TaskRequest,
 };
-pub use registry::{COMMAND_TOOL, ToolRegistry};
+pub use registry::{COMMAND_TOOL, ToolFiles, ToolRegistry, read_tool_sets};
 pub use sandbox::{Grant, GrantRefusal, GrantRules, Limits, SandboxPlan};
 pub use trail::{EventKind, FileTrail, MemoryTrail, Trail, TrailEntry, TrailEvent};

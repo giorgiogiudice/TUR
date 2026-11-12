@@ -63,8 +63,10 @@ there is no `org.tur.Agent1`, no indicator and no stop key
 | `faults` | The orchestrator's `TUR-AI-*` codes |
 | `textui` | `tur-pax run` and `tur-pax chat` |
 
-The policy engine's own modules are unchanged; see
-[section 11](#11-changes-to-the-policy-engine).
+The policy engine's own modules were unchanged when the orchestrator was built
+([section 11](#11-changes-to-the-policy-engine)). What changed in them since,
+and in the other components, to close the gaps this document recorded is in
+[docs/reports/pax-2.md](../reports/pax-2.md).
 
 ## 2. The loop
 
@@ -120,10 +122,16 @@ In words, for one task:
 5. **A response with no tool call is the answer.**
 6. **Each tool call is handled on its own, in order.** Between two calls the stop
    control and the time limit are looked at again.
-   1. *One reading.* The text the arguments arrived as is parsed again, strictly,
-      and must give exactly the arguments the provider layer delivered. A
-      repeated key at any depth, or arguments that arrived without their text,
-      end here.
+   1. *One reading.* The provider layer reads a call's arguments strictly and
+      delivers the text it read them from with the call
+      ([pax-providers.md](pax-providers.md), section 4.3). A response in which
+      a call repeats a key at any depth never gets here: it is malformed, and
+      is discarded whole at step 4. As a second check, for a provider that is
+      not one of the shipped adapters, the text delivered with the call is
+      parsed again, strictly, and must give exactly the arguments that were
+      delivered. The text is the one of the finished call, not the streamed
+      fragments, so a call whose arguments arrive in one piece is checked like
+      any other.
    2. *The action.* The registry looks the name up among the offered tools and
       builds the engine's `Action` from the manifest that declares it: the
       service, the tool and the class are the manifest's; the arguments are
@@ -138,7 +146,8 @@ In words, for one task:
       written, and the model is told the action was refused for that reason.
    5. *Perform.* A sandbox plan is built and run ([section 5](#5-the-read-only-sandbox)).
       The output is bounded, filtered ([section 6](#6-the-output-filter)) and
-      framed. An `executed` event is written before the result is passed on.
+      framed. An `executed` event, and an `output_withheld` event if anything
+      was withheld, are written before the result is passed on.
 7. **The results go back** in one user message, each in the provider's
    tool-result position, and the loop returns to step 2.
 
@@ -171,7 +180,7 @@ other way leaves the history as it was.
 ## 3. The limit on authority
 
 The engine's `Context` decides how much the engine allows, and one field of it,
-`trusted_path_available`, lifts the limit to classes 0 and 1. The loop is built
+`trusted_session_proven`, lifts the limit to classes 0 and 1. The loop is built
 so that this field cannot be set:
 
 - **The context is not an input.** A caller gives a `Situation`: whether a person
@@ -190,7 +199,8 @@ so that this field cannot be set:
   variable. `tur-pax run` has no option for the trusted path, for approval or
   for running without the sandbox.
 
-The engine's command `tur-pax policy check --trusted-path` still exists. It
+The engine's command `tur-pax policy check --trusted-session-proven` (formerly
+`--trusted-path`) still exists. It
 answers "what would the engine decide if the trusted path existed" and prints
 the decision. It performs nothing.
 
@@ -224,25 +234,54 @@ event.
 
 | Tool | Class | Performed by | Manifest |
 |---|---|---|---|
-| `diag_get_status` | 0 | `tur-diag status --json` | `services/tur-pax/tools/manifests/diagnostics.json` |
-| `device_get_inventory` | 0 | `tur-device inventory --json --redact` | `services/tur-device-manager/agent-tools.json` |
+| `diag_get_status` | 0 | `tur-diag status --json` | `services/tur-diagnostics` |
+| `device_list` | 0 | `tur-device list --json [--category=<c>]…` | `services/tur-device-manager` |
+| `device_get` | 0 | `tur-device get --json -- <id>` | the same |
+| `device_get_inventory` | 0 | `tur-device inventory --json --redact` | the same |
 | `device_list_problems` | 0 | `tur-device problems --json` | the same |
-| `storage_list_volumes` | 0 | `lsblk --json --bytes --output-all`, fed to `tur-storage volumes --from /dev/stdin --json` | `services/tur-storage/agent-tools.json` |
-| `catalogue_search` | 0 | `tur-catalogue --catalogue /usr/share/tur/catalogue search --json -- <query>` | `services/tur-pax/tools/manifests/catalogue.json` |
+| `storage_list_volumes` | 0 | `tur-storage volumes --live --json`, which itself runs `lsblk --json --bytes --output-all` | `services/tur-storage` |
+| `storage_preview_mount` | 0 | `tur-storage decide --live --json --access=<access> --volume=<id>` | the same |
+| `catalogue_search` | 0 | `tur-catalogue --catalogue /usr/share/tur/catalogue search --json -- <query>` | `services/tur-catalogue` |
 | `catalogue_show` | 0 | `tur-catalogue … show --json -- <id>` | the same |
 | `catalogue_route` | 0 | `tur-catalogue … route --json -- <id>` | the same |
-| `runtime_inspect_file` | 0 | `tur-runtime inspect --json -- <path>` | `services/tur-pax/tools/manifests/runtime.json` |
+| `runtime_inspect_file` | 0 | `tur-runtime inspect --json -- <path>` | `services/tur-runtime` |
 | `run_readonly_command` | 0 | built in: any argument vector, in the read-only sandbox | built in |
 
-The adapters are in `services/tur-pax/tools/adapters`. `tur-pax run` reads
-manifests from `/usr/share/tur/pax/manifests` and adapters from
-`/usr/share/tur/pax/adapters` unless told otherwise; nothing installs them there
-yet.
+**Every component ships its own tools.** A component that has tools for P@x
+holds two files beside its code: the manifest, `agent-tools.json`, and the
+adapters that perform its tools with its own program,
+`agent-tools.adapter.json`. `services/tur-pax` holds neither for any other
+component. A component's own test (`tests/agent_tools.rs`) loads its two files
+with P@x's loader, checks every class, and holds every command line an adapter
+builds against the program the component has just built: the subcommand must
+be one the program lists and each option one its help describes. Where the
+tool can be run on a fixture, it is run.
+
+Installed, each component has a directory of its own under one directory of
+tool sets, and `tur-pax run` reads them all (`registry::read_tool_sets`):
+
+```text
+/usr/share/tur/pax/tools/
+    tur-catalogue/agent-tools.json
+    tur-catalogue/agent-tools.adapter.json
+    tur-storage/agent-tools.json
+    tur-storage/agent-tools.adapter.json
+    …
+```
+
+`--tools DIR` names another directory of tool sets; the source tree's
+`services/` has the same shape and can be named directly. A subdirectory with
+a manifest and no adapters is loaded and none of its tools is offered; one
+with adapters and no manifest is an error; one with neither is not a tool set.
+`--manifests DIR` and `--adapters DIR` still name flat directories of further
+files, one per service, read in addition; the tests use them for their own
+services. Nothing installs the tool sets on the image yet; the `pax` workflow
+installs them on its runner and lets `tur-pax` find them by default.
 
 Declared by a component but not offered, because no program performs them yet:
-`device_list`, `device_get`, `storage_preview_mount`, `storage_mount`,
-`storage_unmount`, `storage_unlock`. Among them is every shipped tool above
-class 0. See [section 12](#12-what-other-components-need).
+`storage_mount`, `storage_unmount`, `storage_unlock`. They are every shipped
+tool above class 0, and they wait for the service that mounts: `tur-storage`
+the program never mounts, unlocks or writes.
 
 ### 4.3 The adapter format
 
@@ -290,6 +329,7 @@ The loader (`adapter.rs`, `registry.rs`) is authoritative.
 | `{ "literal": "text" }` | `text` |
 | `{ "input": "name" }` | The value of a string or integer input, as one argument. Left out if the input is absent. **Refused if the value begins with `-`.** |
 | `{ "option": "--opt", "input": "name" }` | The one argument `--opt=value`. Left out if the input is absent. |
+| `{ "option": "--opt", "each": "name" }` | `--opt=item` once for each item of an array input of strings or integers. Left out if the input is absent or empty. At most 64 items. |
 | `{ "flag": "--opt", "when": "name" }` | `--opt`, if the boolean input is true. |
 
 What makes this safe to drive from a model's output: the command line is an
@@ -452,8 +492,9 @@ strings. `redact.rs` adds only the removal:
 - Standard error is filtered the same way, and so is the reason a sandbox could
   not start.
 
-The `executed` event records how many pieces were withheld and of which kinds
-(`TUR_AI_WITHHELD`, `TUR_AI_WITHHELD_KINDS`, `TUR-AI-OUTPUT-001`). It never
+The `executed` event records how many pieces were withheld
+(`TUR_AI_WITHHELD`), and an `output_withheld` event of its own records the
+count and the kinds (`TUR_AI_WITHHELD_KINDS`, `TUR-AI-OUTPUT-001`). It never
 records the text.
 
 The redactor of `tur-diagnostics` (identifiers: serial numbers, addresses, user
@@ -484,7 +525,8 @@ nothing is started.
 | `task_started` | A task begins | `TUR_AI_ATTENDED` |
 | `proposal_rejected` | A tool call did not become an action | `TUR_AI_ACTION` (the name, if it is an identifier; otherwise `<invalid>`), `TUR_AI_REASON`, `TUR_ERROR_CODE` |
 | `approval_unavailable` | The engine asked, wanted authentication or deferred | `TUR_AI_ACTION`, `TUR_AI_CLASS`, `TUR_AI_DECISION`, `TUR_ERROR_CODE` |
-| `executed` | An allowed action was performed, or tried | `TUR_AI_ACTION`, `TUR_AI_RESULT` (`ok`, `failed`, `timed_out`, `not_started`), `TUR_AI_EXIT`, `TUR_AI_OUTPUT_BYTES`, `TUR_AI_TRUNCATED`, `TUR_AI_WITHHELD`, `TUR_AI_WITHHELD_KINDS`, `TUR_ERROR_CODE` |
+| `executed` | An allowed action was performed, or tried: the action-outcome event (`audit::ActionOutcome`) | `TUR_AI_ACTION`, `TUR_AI_RESULT` (`ok`, `failed`, `timed_out`, `not_started`), `TUR_AI_EXIT`, `TUR_AI_OUTPUT_BYTES`, `TUR_AI_TRUNCATED`, `TUR_AI_WITHHELD` (a count), `TUR_ERROR_CODE` if it did not end well |
+| `output_withheld` | Part of what an action returned was withheld; follows the `executed` event of that action (`audit::OutputWithheld`) | `TUR_AI_ACTION`, `TUR_AI_WITHHELD`, `TUR_AI_WITHHELD_KINDS`, `TUR_ERROR_CODE` = `TUR-AI-OUTPUT-001` |
 | `response_discarded` | A response was discarded whole | `TUR_AI_REASON` (`refusal`, `error`, `output_limit`), `TUR_AI_DISCARDED_CALLS`, `TUR_ERROR_CODE` |
 | `task_finished` | A task ends | `TUR_AI_OUTCOME`, `TUR_AI_STEPS`, `TUR_AI_REQUESTS`, `TUR_AI_TOKENS`, `TUR_ERROR_CODE` |
 
@@ -527,7 +569,8 @@ Tests: `orchestrator` = `services/tur-pax/tests/orchestrator.rs`; `injection` =
 | Tool results are marked as untrusted data (§7) | `Performed::text`; the provider layer's tool-result position | `orchestrator::tool_calls_of_one_response…`; `injection::instructions_in_a_tool_result…`; `pax` `two-tools` |
 | No record, no action (§11) | `decide_and_record`; `handle`; `drive` | `orchestrator::no_record_no_action` |
 | Audit fields (§11, §17.11, §20.8) | The engine's `AuditRecord`, unchanged; `trail.rs` | unit `trail::tests`; `orchestrator::a_command_is…` (tier 4, `read-only`); `injection::an_instruction_recalled…` (tier 0); `orchestrator::the_trail_never_holds…` |
-| Arguments have one reading (agent-policy.md, `strict`) | `orchestrator::one_reading` | unit `orchestrator::tests::arguments_must_have_one_reading`; `injection::a_false_class…`; `pax` `injection-lies` |
+| Arguments have one reading (agent-policy.md, `strict`) | The provider layer: `ToolCalls::end`, `provider::parse_data`. Behind it, `orchestrator::one_reading` | `tur-pax-providers`: `toolcalls::tests`, conformance "a repeated key…" for each adapter. Here: unit `orchestrator::tests::arguments_must_have_one_reading`, `…the_text_of_a_call_is_the_one_delivered_with_it…`; `injection::a_repeated_key_never_reaches_the_loop_as_a_call`; `wires::a_repeated_key_discards_the_whole_response_through_every_adapter`, `…at_depth…`; `pax` `repeated-key`, `openai-repeated-key`, `google-repeated-key` |
+| The loop behaves the same through every adapter (§10) | The loop is written against the neutral interface only | `wires::*` (each of the three wire formats, arguments streamed and delivered whole); `pax` `openai-adapter`, `google-adapter` |
 | An adapter builds an argument vector; a value cannot become an option | `Adapter::argv` | unit `adapter::tests`; `tools::a_value_from_the_model_cannot_become_an_option…` |
 | The key is not printed or logged | The provider layer's `ApiKey`; the trail holds no request | `run_cli::run_prints_the_answer…`; `pax` "the key appears in no transcript, error output or trail" |
 
@@ -536,25 +579,27 @@ The injection scenarios, as the task names them:
 | | Scenario | Rust test | `pax` scenario |
 |---|---|---|---|
 | a | A tool result says "ignore your instructions"; the model then proposes a class 2 and a class 3 action | `injection::instructions_in_a_tool_result…`, `…the_claim_that_the_user_approved…` | `injection-tool-result` |
-| b | A false class, an invented tool, arguments outside the schema, a repeated key | `injection::a_false_class_an_invented_tool_and_bad_arguments…` | `injection-lies` |
+| b | A false class, an invented tool, arguments outside the schema | `injection::a_false_class_an_invented_tool_and_bad_arguments…` | `injection-lies` |
+| b | A repeated key | `injection::a_repeated_key_never_reaches_the_loop_as_a_call`; `wires::a_repeated_key_discards…` | `repeated-key`, `openai-repeated-key`, `google-repeated-key` |
 | c | Commands that write, delete, reach the network or read a protected path | `injection::hostile_commands…` (the plan only) | `sandbox-attacks` (real bubblewrap, canaries) |
-| d | An instruction recalled from memory | `injection::an_instruction_recalled_from_memory…`; through the built program, `run_cli::an_instruction_in_the_memory_store_changes_no_decision` | not run: no program can put an entry into a memory store, so the `pax` workflow has no way to prepare one |
+| d | An instruction recalled from memory | `injection::an_instruction_recalled_from_memory…`; through the built program, `run_cli::an_instruction_in_the_memory_store_changes_no_decision` | `injection-memory`: the store is filled the way the user fills it, with `tur-pax-memory switch on` and `tur-pax-memory add --stated` |
 | e | A model that never stops | `injection::a_model_told_to_loop…` | `never-stops-steps`, `never-stops-spend` |
 
 ## 9. Known gaps
 
 1. **No real model.** See the top of this document.
-2. **One wire format in the tests.** The scripted provider speaks the Anthropic
-   Messages format. The loop is written against the neutral interface, but it
-   has not been run through the OpenAI or the Google adapter.
-3. **The one-reading check depends on argument text the adapter streams.** The
-   provider layer parses a call's arguments leniently (a repeated key keeps the
-   last value) and gives the loop the parsed map. The loop reads the text again
-   from the stream's fragments. Where an adapter delivers arguments without
-   fragments (the Google adapter does when a call starts with its arguments
-   complete), the loop cannot check and refuses the call. Safe, but such calls
-   never run. The provider layer should parse strictly itself
-   ([section 12](#12-what-other-components-need)).
+2. **Three wire formats, all written by hand.** The scripted provider speaks
+   the Anthropic, the OpenAI and the Google format, and the loop is run
+   through each adapter (`tests/wires.rs`; `pax` scenarios `openai-adapter`
+   and `google-adapter`). The formats come from the providers' documentation,
+   not from recordings: a real provider may differ, and none has been called.
+   Most scenarios of the `pax` workflow still use the Anthropic format only.
+3. **A repeated key ends the task.** Closed as a defect: the provider layer now
+   reads arguments strictly, and a call whose arguments arrive in one piece
+   (the Google adapter) runs. What remains is a choice with a cost: a response
+   in which one call repeats a key is malformed and is discarded whole, so the
+   task ends with `TUR-AI-PROVIDER-007` instead of rejecting that call and
+   carrying on. A model that does this by accident loses the task.
 4. **The grant can change between the check and the start.** The executor checks
    that a granted path still resolves to itself immediately before it starts
    bubblewrap. A process of the same user can replace the folder with a link in
@@ -625,12 +670,12 @@ change: they were accepted when the two components were added.
 
 | Component | Change | Until then |
 |---|---|---|
-| `tur-pax-providers` | Parse tool-call arguments strictly (refuse a repeated key) in `ToolCalls::end`, or hand the orchestrator the argument text with the call. | The loop reads the text from the stream's fragments and refuses a call it cannot check. |
-| `tur-diagnostics`, `tur-catalogue`, `tur-runtime` | Ship an `agent-tools.json`. | The manifests are in `services/tur-pax/tools/manifests`. |
-| `tur-storage` | A way to list volumes of the live system (`volumes` takes only a captured `lsblk` file), and an access spelling shared by the manifest (`read-only`) and the command line (`ro`). | The adapter feeds `lsblk` to `volumes --from /dev/stdin`. `storage_preview_mount` has no adapter. |
-| `tur-device-manager` | Command-line forms for `device_list` (with categories) and `device_get`. | Not offered. |
-| The image | Install manifests to `/usr/share/tur/pax/manifests`, adapters to `/usr/share/tur/pax/adapters`, the catalogue to `/usr/share/tur/catalogue`; make sure `bubblewrap` and `prlimit` are present. | `tur-pax run --manifests DIR --adapters DIR`. |
-| `agent-policy.md` | Mention the two new subcommands. | This document. |
+| `tur-pax-providers` | Done: tool-call arguments are parsed strictly and the argument text comes with the call (`ToolCallEnd.arguments_text`). | – |
+| `tur-diagnostics`, `tur-catalogue`, `tur-runtime` | Done: each ships `agent-tools.json` and `agent-tools.adapter.json`, as `tur-storage` and `tur-device-manager` do. | – |
+| `tur-storage` | Done: `volumes --live` and `decide --live` ask `lsblk` about this machine; access is spelled `read-only` and `read-write` on the command line as in the manifest; `storage_preview_mount` has an adapter. | – |
+| `tur-device-manager` | Done: `tur-device list [--category C]...` and `tur-device get <id>`, with adapters for `device_list` and `device_get`. | – |
+| The image | Install each component's two tool files to `/usr/share/tur/pax/tools/<component>/`, the catalogue to `/usr/share/tur/catalogue`; make sure `bubblewrap` and `prlimit` are present. | `tur-pax run --tools DIR`. |
+| `agent-policy.md` | Done: section 9 points here for `run` and `chat`. | – |
 
 ## 13. Findings on the design
 
@@ -661,8 +706,10 @@ Reported, not changed: `ai-control-layer.md` is not edited by this change.
    in the memory layer's frame.
 6. **The audit fields have no way to say that an allowed action then failed, or
    that output was withheld.** `TUR_AI_DECISION` is about the decision. The
-   events of [section 7](#7-the-audit-trail) add what was needed; the design
-   should adopt or replace them.
+   events of [section 7](#7-the-audit-trail) add what was needed. Revision 8
+   of the design adopted them (section 21, item 7); they are now two typed
+   events of the audit module, `ActionOutcome` and `OutputWithheld`
+   ([agent-policy.md](agent-policy.md), section 8).
 
 ## 14. Interpretations
 
@@ -674,7 +721,8 @@ Where the design was silent, the stricter reading was taken:
 | 2 | Network in the read-only sandbox | None, with no option. |
 | 3 | Tool programs | Run in the same sandbox as commands, not as P@x's own process. |
 | 4 | A response cut at the output limit | Discarded whole; the task ends. |
-| 5 | Arguments whose text did not arrive | Refused. |
+| 5 | Arguments whose text did not arrive | Refused, unless there are none. The shipped adapters always deliver the text. |
+| 5a | A call that repeats a key | The whole response is malformed and discarded; the task ends. Not: reject the one call. |
 | 6 | Ask, authenticate, defer | Never resolved; refused to the model. Also for class 0 and 1 in ask-every-action mode. |
 | 7 | Time spent paused | Counts towards the time limit. |
 | 8 | A failed write to the audit trail after an action ran | The result is not sent to the provider; the task stops. |

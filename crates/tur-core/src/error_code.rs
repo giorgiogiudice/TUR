@@ -47,11 +47,20 @@ pub enum Family {
     Diag,
     /// AI control layer.
     Ai,
+    /// The runtime manager: file inspection, runtime selection and
+    /// application profiles, where a condition is not specific to one
+    /// ecosystem. Conditions specific to Windows, macOS or Android software
+    /// stay in their own families.
+    Runtime,
+    /// The application catalogue and the router. Registered for the
+    /// catalogue's codes; see `services/tur-catalogue/src/codes.rs` for why
+    /// they have not moved to it yet.
+    Catalogue,
 }
 
 impl Family {
     /// Every registered family, in registry order.
-    pub const ALL: [Family; 15] = [
+    pub const ALL: [Family; 17] = [
         Family::Boot,
         Family::Install,
         Family::Update,
@@ -67,6 +76,8 @@ impl Family {
         Family::Security,
         Family::Diag,
         Family::Ai,
+        Family::Runtime,
+        Family::Catalogue,
     ];
 
     /// The family's segment as it appears in a code, for example `STORAGE`.
@@ -87,6 +98,8 @@ impl Family {
             Family::Security => "SECURITY",
             Family::Diag => "DIAG",
             Family::Ai => "AI",
+            Family::Runtime => "RUNTIME",
+            Family::Catalogue => "CATALOGUE",
         }
     }
 
@@ -374,6 +387,49 @@ mod tests {
         let code: ErrorCode = "TUR-BOOT-150".parse().unwrap();
         assert_eq!(code.family(), Family::Boot);
         assert_eq!(code.number(), 150);
+    }
+
+    #[test]
+    fn the_runtime_and_catalogue_families_are_registered() {
+        let code: ErrorCode = "TUR-RUNTIME-PROFILE-004".parse().unwrap();
+        assert_eq!(code.family(), Family::Runtime);
+        assert_eq!(code.number(), 4);
+        let code: ErrorCode = "TUR-CATALOGUE-011".parse().unwrap();
+        assert_eq!(code.family(), Family::Catalogue);
+        assert_eq!(
+            ErrorCode::from_static("TUR-RUNTIME-MANAGER-001").family(),
+            Family::Runtime
+        );
+        assert_eq!(
+            ErrorCode::from_static("TUR-CATALOGUE-ENTRY-002").family(),
+            Family::Catalogue
+        );
+        assert_eq!(Family::Runtime.as_str(), "RUNTIME");
+        assert_eq!(Family::Catalogue.as_str(), "CATALOGUE");
+
+        // The same words as a topic of another family are still topics: the
+        // codes that existed before the families did keep their meaning.
+        let parked: ErrorCode = "TUR-DESKTOP-CATALOGUE-011".parse().unwrap();
+        assert_eq!(parked.family(), Family::Desktop);
+        let windows: ErrorCode = "TUR-WINDOWS-RUNTIME-001".parse().unwrap();
+        assert_eq!(windows.family(), Family::Windows);
+        let android: ErrorCode = "TUR-ANDROID-RUNTIME-003".parse().unwrap();
+        assert_eq!(android.family(), Family::Android);
+
+        // The registry grew at its end: no earlier family changed place.
+        assert_eq!(Family::ALL.len(), 17);
+        assert_eq!(Family::ALL[14], Family::Ai);
+        assert_eq!(Family::ALL[15], Family::Runtime);
+        assert_eq!(Family::ALL[16], Family::Catalogue);
+        // No family's segment is the beginning of another's, so the first
+        // segment of a code names one family only.
+        for family in Family::ALL {
+            for other in Family::ALL {
+                if family != other {
+                    assert_ne!(family.as_str(), other.as_str());
+                }
+            }
+        }
     }
 
     #[test]

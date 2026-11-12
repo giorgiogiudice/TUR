@@ -24,168 +24,292 @@ use crate::codes::{Code, Problem};
 /// The policy file schema version this build reads.
 pub const POLICY_SCHEMA_VERSION: u64 = 1;
 
-/// Applications that execute what is typed into them: terminal emulators, run
-/// dialogs and launchers (addendum section 17, item 1).
-///
-/// Acting in one of them through the accessibility tree or the screen would be
-/// a way to run any command with no sandbox and no approval. They are
-/// therefore sensitive whatever the user policy says: every accessibility or
-/// screen action in them is class 2. The assistant uses the command tier
-/// instead, where the sandbox bounds what a command can do.
-///
-/// The entries are the application identifiers the compositor reports: the
-/// desktop-file name on Wayland, the window class under XWayland. They are
-/// compared like the user's own entries, ignoring ASCII case. The list cannot
-/// be complete. An application that embeds a terminal, such as an editor with
-/// a terminal panel, is not on it; the pattern table catches the usual names
-/// of such panels, and the user can add the application.
-pub const DEFAULT_SENSITIVE_APPLICATIONS: &[&str] = &[
-    // KDE Plasma.
-    "org.kde.konsole",
-    "konsole",
-    "org.kde.yakuake",
-    "yakuake",
-    "org.kde.krunner",
-    "krunner",
-    // GNOME.
-    "org.gnome.Terminal",
-    "gnome-terminal",
-    "gnome-terminal-server",
-    "org.gnome.Console",
-    "kgx",
-    "org.gnome.Ptyxis",
-    "app.devsuite.Ptyxis",
-    "ptyxis",
-    // Other terminal emulators.
-    "xterm",
-    "uxterm",
-    "kitty",
-    "Alacritty",
-    "foot",
-    "footclient",
-    "org.codeberg.dnkl.foot",
-    "org.wezfurlong.wezterm",
-    "wezterm",
-    "com.mitchellh.ghostty",
-    "ghostty",
-    "com.gexperts.Tilix",
-    "tilix",
-    "terminator",
-    "xfce4-terminal",
-    "lxterminal",
-    "qterminal",
-    "mate-terminal",
-    "deepin-terminal",
-    "io.elementary.terminal",
-    "com.raggesilver.BlackBox",
-    "com.system76.CosmicTerm",
-    "cool-retro-term",
-    "urxvt",
-    "rxvt",
-    "st",
-    "st-256color",
-    "guake",
-    "tilda",
-    "terminology",
-    "contour",
-    "rio",
-    "sakura",
-    "termite",
-    "roxterm",
-    "mlterm",
-    "zutty",
-    "dev.warp.Warp",
-    "tabby",
-    "hyper",
-    // Run dialogs and launchers.
-    "rofi",
-    "wofi",
-    "dmenu",
-    "dmenu_run",
-    "bemenu",
-    "bemenu-run",
-    "fuzzel",
-    "tofi",
-    "io.ulauncher.Ulauncher",
-    "ulauncher",
-    "albert",
-    "kupfer",
-    "synapse",
-    "gmrun",
-    "xfce4-appfinder",
-    "lxqt-runner",
-    // Consoles of the Windows compatibility runtime.
-    "cmd.exe",
-    "powershell.exe",
-    "pwsh.exe",
-    "conhost.exe",
-    "wineconsole",
-    "wineconsole.exe",
-];
+/// What a built-in application identifier was checked against.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Evidence {
+    /// The name of a desktop file, in the upstream sources or in a
+    /// distribution package: the application identifier a Wayland compositor
+    /// reports.
+    DesktopFile,
+    /// An identifier the program sets for its windows itself: a
+    /// `StartupWMClass` line, or an application identifier set in its code.
+    WindowClass,
+    /// The name of the program file. It is what a program that sets nothing
+    /// reports as its window class under XWayland.
+    Program,
+    /// No source was found that shows the identifier. It is kept, because an
+    /// entry too many only makes the assistant ask or look away once more;
+    /// it protects nothing until it is confirmed.
+    Unverified,
+}
 
-/// Applications whose windows hold secrets: password managers, the keyring,
-/// authenticators, and the prompts that ask for a password (addendum
-/// section 8).
-///
-/// They are excluded whatever the user policy says: the assistant neither
-/// observes them nor acts in them. The prompts in the list are protected
-/// surfaces, which the compositor already keeps from the assistant; listing
-/// them here is a second layer. Private browser windows cannot be told from
-/// ordinary ones by an application identifier and are the compositor's to
-/// exclude.
-pub const DEFAULT_EXCLUDED_APPLICATIONS: &[&str] = &[
+/// One built-in application identifier, and where it was checked.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct KnownApplication {
+    /// The identifier, as the compositor reports it.
+    pub id: &'static str,
+    /// What kind of name it is.
+    pub evidence: Evidence,
+    /// Where it was seen. The abbreviations are explained at
+    /// [`SENSITIVE_APPLICATION_SOURCES`].
+    pub source: &'static str,
+}
+
+/// Defines a list of built-in identifiers and its table of sources from one
+/// set of rows, so that the two cannot differ.
+macro_rules! known_applications {
+    (
+        $(#[$list_doc:meta])* list $list:ident;
+        $(#[$table_doc:meta])* table $table:ident;
+        $( ($id:literal, $evidence:ident, $source:literal) ),+ $(,)?
+    ) => {
+        $(#[$list_doc])*
+        pub const $list: &[&str] = &[ $( $id ),+ ];
+
+        $(#[$table_doc])*
+        pub const $table: &[KnownApplication] = &[
+            $( KnownApplication { id: $id, evidence: Evidence::$evidence, source: $source } ),+
+        ];
+    };
+}
+
+known_applications! {
+    /// Applications that execute what is typed into them: terminal emulators, run
+    /// dialogs and launchers (addendum section 17, item 1).
+    ///
+    /// Acting in one of them through the accessibility tree or the screen would be
+    /// a way to run any command with no sandbox and no approval. They are
+    /// therefore sensitive whatever the user policy says: every accessibility or
+    /// screen action in them is class 2. The assistant uses the command tier
+    /// instead, where the sandbox bounds what a command can do.
+    ///
+    /// The entries are the application identifiers the compositor reports: the
+    /// desktop-file name on Wayland, the window class under XWayland. They are
+    /// compared like the user's own entries, ignoring ASCII case, and an entry
+    /// also matches its own form with `.desktop` appended. The list cannot
+    /// be complete. An application that embeds a terminal, such as an editor with
+    /// a terminal panel, is not on it; the pattern table catches the usual names
+    /// of such panels, and the user can add the application.
+    ///
+    /// A wrong identifier fails open: the application would be treated as an
+    /// ordinary one. Every entry was therefore checked against a published
+    /// source; [`SENSITIVE_APPLICATION_SOURCES`] says which.
+    list DEFAULT_SENSITIVE_APPLICATIONS;
+    /// Where each entry of [`DEFAULT_SENSITIVE_APPLICATIONS`] was checked, on
+    /// 2026-11-12. The same rows, in the same order.
+    ///
+    /// Abbreviations: `KDE:` a repository on invent.kde.org; `GNOME:` one on
+    /// gitlab.gnome.org; `GH:` one on github.com; `CB:` one on codeberg.org;
+    /// `XFCE:` one on gitlab.xfce.org; `FP44:` the file list of a Fedora 44
+    /// package on packages.fedoraproject.org (`FP43:` Fedora 43); `DEB:` the
+    /// file list of a Debian package on packages.debian.org (sid unless
+    /// stated); `FH` the application is published on Flathub under this
+    /// identifier (flathub.org/api/v2/appstream); `AUR:` a PKGBUILD on
+    /// aur.archlinux.org, a secondary source.
+    table SENSITIVE_APPLICATION_SOURCES;
+    // KDE Plasma.
+    ("org.kde.konsole", DesktopFile, "KDE:utilities/konsole desktop/org.kde.konsole.desktop; FP44:konsole; FH"),
+    ("konsole", Program, "FP44:konsole /usr/bin/konsole"),
+    ("org.kde.yakuake", DesktopFile, "KDE:utilities/yakuake data/org.kde.yakuake.desktop; FP44:yakuake; FH"),
+    ("yakuake", Program, "FP44:yakuake /usr/bin/yakuake"),
+    ("org.kde.krunner", DesktopFile, "KDE:plasma/plasma-workspace krunner/org.kde.krunner.desktop.cmake, installed under kglobalaccel"),
+    ("krunner", Program, "FP44:plasma-workspace /usr/bin/krunner"),
+    // GNOME.
+    ("org.gnome.Terminal", DesktopFile, "GNOME:GNOME/gnome-terminal data/; FP44:gnome-terminal"),
+    ("org.gnome.Terminal.Preferences", DesktopFile, "GNOME:GNOME/gnome-terminal data/; FP44:gnome-terminal"),
+    ("gnome-terminal", Program, "FP44:gnome-terminal /usr/bin/gnome-terminal"),
+    ("gnome-terminal-server", Program, "FP44:gnome-terminal /usr/libexec/gnome-terminal-server"),
+    ("org.gnome.Console", DesktopFile, "GNOME:GNOME/console meson.build; FP44:gnome-console"),
+    ("org.gnome.Console.Devel", DesktopFile, "GNOME:GNOME/console meson.build, development profile"),
+    ("kgx", Program, "FP44:gnome-console /usr/bin/kgx"),
+    ("kgx-devel", Program, "GNOME:GNOME/console meson.build, development profile"),
+    ("org.gnome.Ptyxis", DesktopFile, "GNOME:chergert/ptyxis meson.build; FP44:ptyxis"),
+    ("org.gnome.Ptyxis.Devel", DesktopFile, "GNOME:chergert/ptyxis meson.build, development builds"),
+    ("app.devsuite.Ptyxis", DesktopFile, "FH: the Flathub build of Ptyxis"),
+    ("ptyxis", Program, "FP44:ptyxis /usr/bin/ptyxis"),
+    // Other terminal emulators.
+    ("xterm", DesktopFile, "FP44:xterm xterm.desktop"),
+    ("uxterm", Program, "FP44:xterm /usr/bin/uxterm"),
+    ("debian-xterm", DesktopFile, "DEB:xterm"),
+    ("debian-uxterm", DesktopFile, "DEB:xterm"),
+    ("kitty", DesktopFile, "GH:kovidgoyal/kitty setup.py; FP44:kitty"),
+    ("Alacritty", DesktopFile, "GH:alacritty/alacritty extra/linux/Alacritty.desktop, also StartupWMClass; the program is alacritty, the same entry without regard to case"),
+    ("foot", DesktopFile, "CB:dnkl/foot foot.desktop, and the default app-id; FP44:foot"),
+    ("footclient", DesktopFile, "CB:dnkl/foot doc/foot.ini.5.scd, the default app-id in server mode; FP44:foot"),
+    ("foot-server", DesktopFile, "CB:dnkl/foot; FP44:foot"),
+    ("org.codeberg.dnkl.foot", Unverified, "CB:dnkl/foot: the AppStream identifier only; no desktop file or app-id has it"),
+    ("org.wezfurlong.wezterm", DesktopFile, "GH:wezterm/wezterm assets/wezterm.desktop installed under this name, also StartupWMClass; FH"),
+    ("wezterm", Program, "GH:wezterm/wezterm assets/wezterm.desktop Exec"),
+    ("com.mitchellh.ghostty", DesktopFile, "GH:ghostty-org/ghostty src/build/GhosttyResources.zig, dist/linux/app.desktop.in"),
+    ("com.mitchellh.ghostty-debug", DesktopFile, "GH:ghostty-org/ghostty src/build/GhosttyResources.zig: debug builds"),
+    ("ghostty", Program, "GH:ghostty-org/ghostty dist/linux/app.desktop.in Exec"),
+    ("com.gexperts.Tilix", DesktopFile, "GH:gnunn1/tilix; FP44:tilix"),
+    ("tilix", Program, "FP44:tilix /usr/bin/tilix"),
+    ("terminator", DesktopFile, "GH:gnome-terminator/terminator; FP44:terminator"),
+    ("xfce4-terminal", DesktopFile, "XFCE:apps/xfce4-terminal; FP44:xfce4-terminal"),
+    ("lxterminal", DesktopFile, "FP44:lxterminal"),
+    ("qterminal", DesktopFile, "FP44:qterminal"),
+    ("qterminal-drop", DesktopFile, "FP44:qterminal"),
+    ("mate-terminal", DesktopFile, "FP44:mate-terminal"),
+    ("deepin-terminal", DesktopFile, "FP44:deepin-terminal"),
+    ("io.elementary.terminal", DesktopFile, "GH:elementary/terminal data/io.elementary.terminal.desktop.in"),
+    ("com.raggesilver.BlackBox", DesktopFile, "GNOME:raggesilver/blackbox data/com.raggesilver.BlackBox.desktop.in; FH"),
+    ("blackbox-terminal", Program, "GNOME:raggesilver/blackbox data/com.raggesilver.BlackBox.desktop.in Exec"),
+    ("com.system76.CosmicTerm", DesktopFile, "GH:pop-os/cosmic-term res/com.system76.CosmicTerm.desktop; FP44:cosmic-term"),
+    ("cosmic-term", Program, "FP44:cosmic-term /usr/bin/cosmic-term"),
+    ("cool-retro-term", DesktopFile, "FP44:cool-retro-term"),
+    ("rxvt-unicode", DesktopFile, "FP44:rxvt-unicode; DEB:rxvt-unicode"),
+    ("urxvt", Program, "FP44:rxvt-unicode /usr/bin/urxvt"),
+    ("urxvtc", Program, "FP44:rxvt-unicode /usr/bin/urxvtc"),
+    ("urxvtd", Program, "FP44:rxvt-unicode /usr/bin/urxvtd"),
+    ("rxvt", Program, "FP44:rxvt-unicode"),
+    ("st", DesktopFile, "FP44:st st.desktop"),
+    ("st-256color", WindowClass, "git.suckless.org/st x.c, config.def.h: the window class is the terminal name"),
+    ("guake", DesktopFile, "FP44:guake"),
+    ("tilda", DesktopFile, "FP44:tilda"),
+    ("terminology", DesktopFile, "FP44:terminology"),
+    ("org.contourterminal.Contour", DesktopFile, "GH:contour-terminal/contour src/contour/CMakeLists.txt; FP44:contour-terminal; FH"),
+    ("contour", Program, "FP44:contour-terminal /usr/bin/contour; it is not the name of the desktop file"),
+    ("rio", DesktopFile, "GH:raphamorim/rio misc/rio.desktop; StartupWMClass is Rio, the same entry without regard to case"),
+    ("com.rioterm.Rio", DesktopFile, "FH: the Flathub build of Rio"),
+    ("sakura", DesktopFile, "FP44:sakura"),
+    ("termite", DesktopFile, "GH:thestinger/termite termite.desktop"),
+    ("roxterm", DesktopFile, "FP43:roxterm"),
+    ("mlterm", DesktopFile, "DEB:mlterm, DEB:mlterm-common"),
+    ("zutty", DesktopFile, "DEB:zutty"),
+    ("dev.warp.Warp", DesktopFile, "GH:warpdotdev/warp app/channels/stable, also StartupWMClass"),
+    ("dev.warp.WarpPreview", DesktopFile, "GH:warpdotdev/warp app/channels/preview"),
+    ("dev.warp.WarpOss", DesktopFile, "GH:warpdotdev/warp app/channels/oss"),
+    ("dev.warp.WarpDev", DesktopFile, "GH:warpdotdev/warp app/channels"),
+    ("dev.warp.WarpLocal", DesktopFile, "GH:warpdotdev/warp app/channels"),
+    ("warp-terminal", Program, "GH:warpdotdev/warp app/channels/stable Exec"),
+    ("tabby", WindowClass, "GH:Eugeny/tabby electron-builder.yml StartupWMClass; the desktop file name was not seen"),
+    ("hyper", Unverified, "GH:vercel/hyper electron-builder.json shows only the appId co.zeit.hyper"),
+    // Run dialogs and launchers.
+    ("rofi", DesktopFile, "FP44:rofi"),
+    ("wofi", Program, "FP44:wofi /usr/bin/wofi; the package has no desktop file"),
+    ("dmenu", Program, "FP44:dmenu"),
+    ("dmenu_run", Program, "FP44:dmenu"),
+    ("bemenu", Program, "FP44:bemenu"),
+    ("bemenu-run", Program, "FP44:bemenu"),
+    ("fuzzel", Program, "FP44:fuzzel; the package has no desktop file"),
+    ("tofi", Program, "DEB:tofi"),
+    ("tofi-run", Program, "DEB:tofi"),
+    ("tofi-drun", Program, "DEB:tofi"),
+    ("io.ulauncher.Ulauncher", DesktopFile, "GH:Ulauncher/Ulauncher: the current sources"),
+    ("ulauncher", DesktopFile, "GH:Ulauncher/Ulauncher v5 setup.py; FP44:ulauncher"),
+    ("albert", DesktopFile, "GH:albertlauncher/albert dist/xdg/albert.desktop"),
+    ("kupfer", DesktopFile, "GH:kupferlauncher/kupfer auxdata/kupfer.desktop.in"),
+    ("synapse", DesktopFile, "FP44:synapse"),
+    ("gmrun", DesktopFile, "DEB:gmrun"),
+    ("xfce4-appfinder", DesktopFile, "FP44:xfce4-appfinder"),
+    ("xfce4-run", DesktopFile, "FP44:xfce4-appfinder"),
+    ("xfrun4", Program, "FP44:xfce4-appfinder"),
+    ("lxqt-runner", DesktopFile, "FP44:lxqt-runner"),
+    // Consoles of the Windows compatibility runtime. These are the names of
+    // Windows programs as Wine reports them; no desktop file names them and
+    // none was looked for.
+    ("cmd.exe", Unverified, "a Windows program name; not checked against a Wine session"),
+    ("powershell.exe", Unverified, "a Windows program name; not checked against a Wine session"),
+    ("pwsh.exe", Unverified, "a Windows program name; not checked against a Wine session"),
+    ("conhost.exe", Unverified, "a Windows program name; not checked against a Wine session"),
+    ("wineconsole", Unverified, "a Wine program name; not checked against a Wine session"),
+    ("wineconsole.exe", Unverified, "a Wine program name; not checked against a Wine session"),
+}
+
+known_applications! {
+    /// Applications whose windows hold secrets: password managers, the keyring,
+    /// authenticators, and the prompts that ask for a password (addendum
+    /// section 8).
+    ///
+    /// They are excluded whatever the user policy says: the assistant neither
+    /// observes them nor acts in them. The prompts in the list are protected
+    /// surfaces, which the compositor already keeps from the assistant; listing
+    /// them here is a second layer. Private browser windows cannot be told from
+    /// ordinary ones by an application identifier and are the compositor's to
+    /// exclude.
+    ///
+    /// A wrong identifier fails open: the application would be observed. Every
+    /// entry was therefore checked against a published source;
+    /// [`EXCLUDED_APPLICATION_SOURCES`] says which.
+    list DEFAULT_EXCLUDED_APPLICATIONS;
+    /// Where each entry of [`DEFAULT_EXCLUDED_APPLICATIONS`] was checked, on
+    /// 2026-11-12. The same rows, in the same order. The abbreviations are
+    /// those of [`SENSITIVE_APPLICATION_SOURCES`].
+    table EXCLUDED_APPLICATION_SOURCES;
     // Password managers and keyrings.
-    "org.keepassxc.KeePassXC",
-    "keepassxc",
-    "org.keepass.KeePass",
-    "keepass2",
-    "org.kde.kwalletmanager",
-    "org.kde.kwalletmanager5",
-    "kwalletmanager",
-    "kwalletmanager5",
-    "org.kde.kwalletd5",
-    "org.kde.kwalletd6",
-    "kwalletd5",
-    "kwalletd6",
-    "org.kde.ksecretd",
-    "ksecretd",
-    "org.gnome.seahorse.Application",
-    "seahorse",
-    "org.gnome.World.Secrets",
-    "org.gnome.PasswordSafe",
-    "com.bitwarden.desktop",
-    "bitwarden",
-    "com.1password.1Password",
-    "1password",
-    "me.proton.Pass",
-    "proton-pass",
-    "com.enpass.Enpass",
-    "enpass",
-    "org.ijhack.QtPass",
-    "qtpass",
+    ("org.keepassxc.KeePassXC", DesktopFile, "GH:keepassxreboot/keepassxc share/linux/org.keepassxc.KeePassXC.desktop.in; FP44:keepassxc; FH"),
+    ("keepassxc", WindowClass, "GH:keepassxreboot/keepassxc share/linux/org.keepassxc.KeePassXC.desktop.in StartupWMClass"),
+    ("keepass", DesktopFile, "FP44:keepass keepass.desktop, /usr/bin/keepass"),
+    ("keepass2", DesktopFile, "DEB:keepass2"),
+    ("org.keepass.KeePass", Unverified, "found in no source; not on Flathub"),
+    ("org.kde.kwalletmanager", DesktopFile, "KDE:utilities/kwalletmanager from v25.04.0; FP44:kwalletmanager5; DEB:kwalletmanager"),
+    ("org.kde.kwalletmanager5", DesktopFile, "KDE:utilities/kwalletmanager v23.08.0 and v24.02.0; still the Flathub identifier"),
+    ("kwalletmanager5-kwalletd", DesktopFile, "KDE:utilities/kwalletmanager: the second desktop file, kwalletmanager5 --kwalletd"),
+    ("kwalletmanager", WindowClass, "KDE:utilities/kwalletmanager: the KAboutData name"),
+    ("kwalletmanager5", Program, "FP44:kwalletmanager5 /usr/bin/kwalletmanager5"),
+    ("org.kde.kwalletd", DesktopFile, "KDE:frameworks/kwallet from v6.30.0, and setDesktopFileName in src/runtime/kwalletd/main.cpp"),
+    ("org.kde.kwalletd5", DesktopFile, "KDE:frameworks/kwallet branch kf5"),
+    ("org.kde.kwalletd6", DesktopFile, "KDE:frameworks/kwallet v6.0.0 to v6.10.0"),
+    ("kwalletd", WindowClass, "KDE:frameworks/kwallet src/runtime/kwalletd/main.cpp: the KAboutData name"),
+    ("kwalletd5", Program, "KDE:frameworks/kwallet branch kf5"),
+    ("kwalletd6", Program, "FP44:kf6-kwallet /usr/bin/kwalletd6"),
+    ("org.kde.ksecretd", DesktopFile, "KDE:frameworks/kwallet src/runtime/ksecretd/org.kde.ksecretd.desktop; FP44:kf6-kwallet"),
+    ("ksecretd", Program, "FP44:kf6-kwallet /usr/bin/ksecretd"),
+    ("org.gnome.seahorse.Application", DesktopFile, "GNOME:GNOME/seahorse 47.0.1; FP44:seahorse; DEB:seahorse; FH"),
+    ("org.gnome.Seahorse", DesktopFile, "GNOME:GNOME/seahorse main meson.build: the new name, in no release seen"),
+    ("org.gnome.Seahorse.Devel", DesktopFile, "GNOME:GNOME/seahorse main meson.build: development builds"),
+    ("seahorse", Program, "FP44:seahorse /usr/bin/seahorse"),
+    ("org.gnome.World.Secrets", DesktopFile, "GNOME:World/secrets; DEB:secrets; FH"),
+    ("org.gnome.PasswordSafe", DesktopFile, "GNOME:World/secrets tags 3.99.2 and 5.1: the former name"),
+    ("secrets", Program, "DEB:secrets /usr/bin/secrets"),
+    ("com.bitwarden.desktop", DesktopFile, "GH:bitwarden/clients apps/desktop/electron-builder.json, resources/com.bitwarden.desktop.desktop, also StartupWMClass; FH"),
+    ("bitwarden", DesktopFile, "AUR:bitwarden-bin installs bitwarden.desktop; the program is bitwarden"),
+    ("com.onepassword.OnePassword", DesktopFile, "FH; AUR:1password: the 8.12 archive ships resources/com.onepassword.OnePassword.desktop"),
+    ("com.1password.1Password", Unverified, "found in no source; not on Flathub. The identifier this list had before 2026-11-12"),
+    ("1password", Unverified, "AUR:1password shows only an icon of this name"),
+    ("me.proton.Pass", DesktopFile, "FH"),
+    ("proton-pass", Unverified, "the name of the deb and rpm packages; the desktop file name was not seen"),
+    ("Proton Pass", Program, "GH:ProtonMail/WebClients applications/pass-desktop/forge.config.ts: the name of the program file"),
+    ("com.enpass.Enpass", Unverified, "found in no source; not on Flathub"),
+    ("enpass", DesktopFile, "GH:NixOS/nixpkgs pkgs/by-name/en/enpass/package.nix names share/applications/enpass.desktop; a secondary source"),
+    ("org.ijhack.QtPass", WindowClass, "GH:IJHack/QtPass qtpass.desktop StartupWMClass, written org.ijhack.qtpass: the same entry without regard to case"),
+    ("org.qtpass.QtPass", Unverified, "GH:IJHack/QtPass: the AppStream identifier only; main/main.cpp takes the desktop file name from FLATPAK_ID when it is set"),
+    ("qtpass", DesktopFile, "GH:IJHack/QtPass qtpass.desktop, main/main.cpp setDesktopFileName; FP44:qtpass"),
     // One-time-password authenticators.
-    "org.kde.keysmith",
-    "keysmith",
-    "com.belmoussaoui.Authenticator",
-    "com.yubico.authenticator",
-    "com.yubico.yubioath",
+    ("org.kde.keysmith", DesktopFile, "KDE:utilities/keysmith; FP44:keysmith; FH"),
+    ("keysmith", Program, "FP44:keysmith /usr/bin/keysmith"),
+    ("com.belmoussaoui.Authenticator", DesktopFile, "GNOME:World/Authenticator data/; FH"),
+    ("authenticator", Program, "GNOME:World/Authenticator and GH:Yubico/yubioath-flutter: both programs have this name"),
+    ("com.yubico.authenticator", DesktopFile, "GH:Yubico/yubioath-flutter linux/CMakeLists.txt at 6.0.0 and 7.0.0"),
+    ("com.yubico.yubioath", DesktopFile, "GH:Yubico/yubioath-flutter linux/CMakeLists.txt on main; FH"),
     // Prompts that ask for a password or a passphrase.
-    "org.kde.polkit-kde-authentication-agent-1",
-    "polkit-kde-authentication-agent-1",
-    "polkit-gnome-authentication-agent-1",
-    "org.kde.kscreenlocker_greet",
-    "kscreenlocker_greet",
-    "org.kde.ksshaskpass",
-    "ksshaskpass",
-    "ssh-askpass",
-    "gcr-prompter",
-    "org.gnome.keyring.SystemPrompter",
-    "pinentry",
-    "pinentry-qt",
-    "pinentry-qt5",
-    "pinentry-gnome3",
-    "pinentry-gtk-2",
-];
+    ("org.kde.polkit-kde-authentication-agent-1", DesktopFile, "KDE:plasma/polkit-kde-agent-1 CMakeLists.txt; FP44:polkit-kde"),
+    ("polkit-kde-authentication-agent-1", DesktopFile, "FP44:polkit-kde: the autostart file and the program"),
+    ("polkit-gnome-authentication-agent-1", DesktopFile, "DEB:policykit-1-gnome (bookworm): the autostart file and the program"),
+    ("polkit-mate-authentication-agent-1", Program, "FP44:mate-polkit"),
+    ("lxqt-policykit-agent", Program, "FP44:lxqt-policykit"),
+    ("org.kde.kscreenlocker_greet", WindowClass, "KDE:plasma/kscreenlocker greeter/main.cpp sets the organisation domain; GH:qt/qtbase qwaylandwindow.cpp builds the app-id from it"),
+    ("kscreenlocker_greet", Program, "FP44:kscreenlocker /usr/libexec/kscreenlocker_greet"),
+    ("org.kde.ksshaskpass", DesktopFile, "KDE:plasma/ksshaskpass; FP44:ksshaskpass"),
+    ("ksshaskpass", Program, "FP44:ksshaskpass /usr/bin/ksshaskpass"),
+    ("ssh-askpass", Program, "FP44:openssh-askpass /usr/libexec/openssh/ssh-askpass; DEB:ssh-askpass"),
+    ("gnome-ssh-askpass", Program, "FP44:openssh-askpass"),
+    ("x11-ssh-askpass", Program, "FP44:x11-ssh-askpass"),
+    ("gcr-ssh-askpass", Program, "FP44:gcr3"),
+    ("gcr4-ssh-askpass", Program, "FP44:gcr"),
+    ("gcr-prompter", DesktopFile, "GNOME:GNOME/gcr branch gcr-3-41 ui/gcr-prompter.desktop.in.in; FP44:gcr3"),
+    ("org.gnome.keyring.SystemPrompter", WindowClass, "FP44:gcr3: a D-Bus name of the prompter, not a desktop file"),
+    ("org.gnome.keyring.PrivatePrompter", WindowClass, "FP44:gcr3: a D-Bus name of the prompter, not a desktop file"),
+    ("org.gnupg.pinentry-qt", DesktopFile, "GH:gpg/pinentry qt/Makefile.am, qt/main.cpp setDesktopFileName; FP44:pinentry-qt; DEB:pinentry-qt"),
+    ("org.gnupg.pinentry-qt5", DesktopFile, "GH:gpg/pinentry qt5/Makefile.am, qt5/main.cpp"),
+    ("pinentry", Program, "FP44:pinentry"),
+    ("pinentry-qt", Program, "FP44:pinentry-qt"),
+    ("pinentry-qt4", Program, "FP44:pinentry-qt"),
+    ("pinentry-qt5", Program, "GH:gpg/pinentry qt5/Makefile.am"),
+    ("pinentry-gnome3", Program, "GH:gpg/pinentry gnome3/Makefile.am; FP44:pinentry-gnome3"),
+    ("pinentry-gtk-2", Program, "GH:gpg/pinentry gtk+-2/Makefile.am; in no Fedora 44 or Debian sid package"),
+}
 
 /// The global mode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
@@ -843,6 +967,117 @@ mod tests {
         // The surfaces named in the design.
         for application in ["org.kde.konsole", "org.kde.krunner", "org.gnome.Terminal"] {
             assert!(DEFAULT_SENSITIVE_APPLICATIONS.contains(&application));
+        }
+    }
+
+    #[test]
+    fn every_built_in_identifier_has_a_source() {
+        for (list, table) in [
+            (
+                DEFAULT_SENSITIVE_APPLICATIONS,
+                SENSITIVE_APPLICATION_SOURCES,
+            ),
+            (DEFAULT_EXCLUDED_APPLICATIONS, EXCLUDED_APPLICATION_SOURCES),
+        ] {
+            // The table is the list, row for row.
+            assert_eq!(list.len(), table.len());
+            for (id, row) in list.iter().zip(table) {
+                assert_eq!(*id, row.id);
+                assert!(!row.source.trim().is_empty(), "{id} has no source");
+            }
+        }
+        // What could not be confirmed is known by name. An entry added to a
+        // list without a source that shows it has to be added here too.
+        let unverified: Vec<&str> = SENSITIVE_APPLICATION_SOURCES
+            .iter()
+            .chain(EXCLUDED_APPLICATION_SOURCES)
+            .filter(|row| row.evidence == Evidence::Unverified)
+            .map(|row| row.id)
+            .collect();
+        assert_eq!(
+            unverified,
+            [
+                "org.codeberg.dnkl.foot",
+                "hyper",
+                "cmd.exe",
+                "powershell.exe",
+                "pwsh.exe",
+                "conhost.exe",
+                "wineconsole",
+                "wineconsole.exe",
+                "org.keepass.KeePass",
+                "com.1password.1Password",
+                "1password",
+                "proton-pass",
+                "com.enpass.Enpass",
+                "org.qtpass.QtPass",
+            ]
+        );
+    }
+
+    #[test]
+    fn the_identifiers_upstream_really_uses_are_covered() {
+        // Identifiers as the applications' own sources and packages have
+        // them, checked on 2026-11-12. Each of these was missing from the
+        // list, or the list had another spelling, before that check.
+        let policy = UserPolicy::default();
+        for application in [
+            "com.onepassword.OnePassword",
+            "com.onepassword.OnePassword.desktop",
+            "org.kde.kwalletd",
+            "kwalletmanager5-kwalletd",
+            "org.gnome.Seahorse",
+            "org.gnupg.pinentry-qt",
+            "org.gnupg.pinentry-qt5",
+            "org.gnome.keyring.PrivatePrompter",
+            "gcr4-ssh-askpass",
+            "gnome-ssh-askpass",
+            "keepass",
+            "org.ijhack.qtpass",
+            "Proton Pass",
+            "polkit-mate-authentication-agent-1",
+        ] {
+            assert!(policy.is_excluded(application), "{application}");
+        }
+        for application in [
+            "org.contourterminal.Contour",
+            "foot-server",
+            "dev.warp.WarpPreview",
+            "com.mitchellh.ghostty-debug",
+            "alacritty",
+            "Rio",
+            "com.rioterm.Rio",
+            "rxvt-unicode",
+            "org.gnome.Ptyxis.Devel",
+            "org.gnome.Console.Devel",
+            "debian-xterm",
+            "qterminal-drop",
+            "xfce4-run",
+        ] {
+            assert!(policy.is_sensitive(application), "{application}");
+            assert!(!policy.is_excluded(application), "{application}");
+        }
+        // The identifiers the design names, in the forms a compositor may
+        // report them.
+        for application in [
+            "org.kde.konsole",
+            "org.kde.konsole.desktop",
+            "org.kde.yakuake",
+            "org.gnome.Terminal",
+            "org.gnome.Ptyxis",
+            "app.devsuite.Ptyxis",
+            "org.kde.krunner",
+        ] {
+            assert!(policy.is_sensitive(application), "{application}");
+        }
+        for application in [
+            "org.keepassxc.KeePassXC",
+            "com.bitwarden.desktop",
+            "org.kde.kwalletmanager",
+            "org.kde.kwalletmanager5",
+            "org.gnome.seahorse.Application",
+        ] {
+            assert!(policy.is_excluded(application), "{application}");
         }
     }
 

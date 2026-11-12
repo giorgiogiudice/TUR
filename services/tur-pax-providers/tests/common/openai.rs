@@ -199,6 +199,56 @@ data: {"type":"response.incomplete","sequence_number":4,"response":{"id":"resp_0
 
 "#;
 
+/// A function call whose argument text names `volume_id` twice, in the deltas
+/// and in the finished item alike. The response then completes.
+const REPEATED_KEY: &str = r#"event: response.created
+data: {"type":"response.created","sequence_number":0,"response":{"id":"resp_08","object":"response","status":"in_progress","model":"test-model","output":[]}}
+
+event: response.output_item.added
+data: {"type":"response.output_item.added","sequence_number":1,"output_index":0,"item":{"type":"function_call","id":"fc_08","call_id":"call_08A","name":"storage_unmount","arguments":""}}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":2,"item_id":"fc_08","output_index":0,"delta":"{\"volume_id\": \"vol-1\","}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":3,"item_id":"fc_08","output_index":0,"delta":" \"volume_id\": \"vol-2\"}"}
+
+event: response.function_call_arguments.done
+data: {"type":"response.function_call_arguments.done","sequence_number":4,"item_id":"fc_08","output_index":0,"arguments":"{\"volume_id\": \"vol-1\", \"volume_id\": \"vol-2\"}"}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","sequence_number":5,"output_index":0,"item":{"type":"function_call","id":"fc_08","call_id":"call_08A","name":"storage_unmount","arguments":"{\"volume_id\": \"vol-1\", \"volume_id\": \"vol-2\"}","status":"completed"}}
+
+event: response.completed
+data: {"type":"response.completed","sequence_number":6,"response":{"id":"resp_08","object":"response","status":"completed","model":"test-model","output":[],"usage":{"input_tokens":40,"input_tokens_details":{"cached_tokens":0},"output_tokens":30,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":70}}}
+
+"#;
+
+/// A function call that arrives only as a finished item: no item was
+/// announced and no argument delta was streamed.
+const WHOLE_ARGUMENTS: &str = r#"event: response.created
+data: {"type":"response.created","sequence_number":0,"response":{"id":"resp_09","object":"response","status":"in_progress","model":"test-model","output":[]}}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","sequence_number":1,"output_index":0,"item":{"type":"function_call","id":"fc_09","call_id":"call_09A","name":"storage_unmount","arguments":"{\"volume_id\":\"vol-1\",\"options\":{\"force\":false}}","status":"completed"}}
+
+event: response.completed
+data: {"type":"response.completed","sequence_number":2,"response":{"id":"resp_09","object":"response","status":"completed","model":"test-model","output":[],"usage":{"input_tokens":40,"input_tokens_details":{"cached_tokens":0},"output_tokens":30,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":70}}}
+
+"#;
+
+/// As [`WHOLE_ARGUMENTS`], with `force` named twice inside `options`.
+const WHOLE_REPEATED_KEY: &str = r#"event: response.created
+data: {"type":"response.created","sequence_number":0,"response":{"id":"resp_10","object":"response","status":"in_progress","model":"test-model","output":[]}}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","sequence_number":1,"output_index":0,"item":{"type":"function_call","id":"fc_10","call_id":"call_10A","name":"storage_unmount","arguments":"{\"volume_id\":\"vol-1\",\"options\":{\"force\":false,\"force\":true}}","status":"completed"}}
+
+event: response.completed
+data: {"type":"response.completed","sequence_number":2,"response":{"id":"resp_10","object":"response","status":"completed","model":"test-model","output":[],"usage":{"input_tokens":40,"input_tokens_details":{"cached_tokens":0},"output_tokens":30,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":70}}}
+
+"#;
+
 const RATE_LIMITED: &str = r#"{"error":{"message":"Rate limit reached for requests. Please slow down.","type":"rate_limit_error","param":null,"code":"slow_down"}}"#;
 
 const AUTH_FAILED: &str = r#"{"error":{"message":"Incorrect API key provided.","type":"invalid_request_error","param":null,"code":"invalid_api_key"}}"#;
@@ -272,6 +322,9 @@ pub fn wire() -> Wire {
         cut_short: CUT_SHORT,
         overloaded_mid_stream: OVERLOADED_MID_STREAM,
         output_limit: OUTPUT_LIMIT,
+        repeated_key: REPEATED_KEY,
+        whole_arguments: WHOLE_ARGUMENTS,
+        whole_repeated_key: WHOLE_REPEATED_KEY,
         rate_limited: ErrorReply {
             status: 429,
             body: RATE_LIMITED,

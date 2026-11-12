@@ -29,7 +29,7 @@ const TEST_SERVICE_MANIFEST: &str = concat!(
 /// that is known to belong to the user.
 fn trusted() -> Context {
     Context {
-        trusted_path_available: true,
+        trusted_session_proven: true,
         target_window_owner: WindowOwner::User,
         ..Context::attended()
     }
@@ -299,7 +299,7 @@ fn f08_destructive_and_granting_words_are_asked() {
 fn f09_a_locked_unattended_task_runs_no_command_outside_the_read_only_sandbox() {
     let context = Context {
         session_locked: true,
-        trusted_path_available: true,
+        trusted_session_proven: true,
         ..Context::unattended()
     };
     let policy = UserPolicy::default();
@@ -321,7 +321,7 @@ fn f10_the_record_says_whether_the_task_was_attended_and_which_sandbox_was_used(
     assert_eq!(field(&fields, "TUR_AI_SANDBOX"), Some("user"));
 
     let unattended = Context {
-        trusted_path_available: true,
+        trusted_session_proven: true,
         ..Context::unattended()
     };
     let workspace = command(Sandbox::User, WorkingContext::UndoableWorkspace, &["make"]);

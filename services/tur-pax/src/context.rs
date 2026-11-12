@@ -3,10 +3,13 @@
 //! The circumstances in which an action is proposed.
 //!
 //! A [`Context`] is assembled by the orchestrator from trusted sources: the
-//! session manager, the compositor, the repair-session record and the schedule
+//! session manager, the compositor, the repair-session record and the policy
 //! store. The policy file, the standing approvals and the repair-session
 //! record are owned by a separate system component; the assistant reads them
-//! through it and cannot write them (addendum section 17, item 5). Nothing in
+//! through it and cannot write them (addendum section 17, item 5). Standing
+//! approvals reach a context only as that component holds them
+//! ([`crate::store::HeldApprovals`]); until it exists there are none
+//! (addendum section 18, item 1). Nothing in
 //! a context may come from the model or from the assistant's memory, with one
 //! exception: the model's "consequential" hint, which can only make a decision
 //! stricter.
@@ -15,6 +18,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 use crate::action::ToolCall;
+use crate::store::HeldApprovals;
 
 /// A point in time, in whole seconds.
 ///
@@ -185,14 +189,35 @@ pub struct Context {
     pub presence: Presence,
     /// Whether the session is locked.
     pub session_locked: bool,
-    /// Whether all five compositor guarantees of the trusted confirmation path
-    /// hold (addendum section 6). Until they do, only classes 0 and 1 are
+    /// Whether a separate trusted session exists **and has been proven**
+    /// (addendum section 19, item 2). Until it is, only classes 0 and 1 are
     /// available.
-    pub trusted_path_available: bool,
+    ///
+    /// This is not "a confirmation prompt can be shown". The compositor in
+    /// the image has no surface that ignores emulated input or is kept out
+    /// of screen capture, so a prompt on the user's desktop, however it is
+    /// drawn, is one the assistant could read and operate. It never makes
+    /// this field true. The field is true only when all of these hold:
+    ///
+    /// 1. class 3 confirmation, opening a repair session and loosening
+    ///    policy take place in a session of their own, outside the user's
+    ///    desktop, which the assistant's processes cannot reach;
+    /// 2. that session shows the user's personal phrase and picture, so that
+    ///    it cannot be imitated;
+    /// 3. a prototype of it has passed the trusted-path tests (addendum
+    ///    section 12) on the image the assistant runs on.
+    ///
+    /// No shipped code sets it. The task loop builds its context with it
+    /// false ([`crate::orchestrator::Situation::context`]); `tur-pax policy
+    /// check --trusted-session-proven` sets it to answer a what-if question
+    /// and performs nothing.
+    pub trusted_session_proven: bool,
     /// The repair session, if the user opened one.
     pub repair_session: Option<RepairSession>,
-    /// The standing approvals attached to the schedule that started the task.
-    pub standing_approvals: Vec<StandingApproval>,
+    /// The standing approvals of the schedule that started the task, as the
+    /// policy store holds them. Empty unless read from a
+    /// [`crate::store::PolicyStore`], and no store exists yet.
+    pub standing_approvals: HeldApprovals,
     /// The model flagged the action as consequential. This can raise the class
     /// to 2 and add a confirmation; it can never lower anything.
     pub model_flags_consequential: bool,
@@ -202,16 +227,16 @@ pub struct Context {
 }
 
 impl Context {
-    /// An attended, unlocked context with nothing granted: no trusted path, no
-    /// repair session, no standing approvals, no model hint, and a target
-    /// window whose owner is not known.
+    /// An attended, unlocked context with nothing granted: no proven trusted
+    /// session, no repair session, no standing approvals, no model hint, and
+    /// a target window whose owner is not known.
     pub fn attended() -> Self {
         Context {
             presence: Presence::Attended,
             session_locked: false,
-            trusted_path_available: false,
+            trusted_session_proven: false,
             repair_session: None,
-            standing_approvals: Vec::new(),
+            standing_approvals: HeldApprovals::none(),
             model_flags_consequential: false,
             target_window_owner: WindowOwner::Unknown,
         }
@@ -509,7 +534,7 @@ mod tests {
     fn a_context_grants_nothing_unless_stated() {
         for context in [Context::attended(), Context::unattended()] {
             assert!(!context.session_locked);
-            assert!(!context.trusted_path_available);
+            assert!(!context.trusted_session_proven);
             assert_eq!(context.repair_session, None);
             assert!(context.standing_approvals.is_empty());
             assert!(!context.model_flags_consequential);

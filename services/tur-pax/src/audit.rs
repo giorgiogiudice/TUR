@@ -7,6 +7,19 @@
 //! through an [`AuditSink`]. This crate has no journald dependency; the sink
 //! for the journal belongs to the service.
 //!
+//! A decision is not all there is to say about an action. Two further events
+//! belong to the audit vocabulary (addendum section 21, item 7), and are
+//! defined here beside the record:
+//!
+//! * [`ActionOutcome`]: an action the engine allowed then ran, failed, timed
+//!   out or could not be started. `TUR_AI_DECISION` cannot say that; it is
+//!   about the decision.
+//! * [`OutputWithheld`]: part of what an action returned was withheld before
+//!   it left the machine. It states how many pieces and of which kinds, and
+//!   it has no field that could hold the content.
+//!
+//! The orchestrator writes them to the trail of a task ([`crate::trail`]).
+//!
 //! What a record contains is restricted by construction:
 //!
 //! * The argument values of a tool call are never written. Tool arguments are
@@ -148,6 +161,178 @@ impl AuditOutcome {
             Verdict::Defer => AuditOutcome::Deferred,
             Verdict::Refuse => AuditOutcome::Refused,
         }
+    }
+}
+
+/// The value of `TUR_AI_EVENT` for an [`ActionOutcome`].
+pub const ACTION_OUTCOME_EVENT: &str = "executed";
+
+/// The value of `TUR_AI_EVENT` for an [`OutputWithheld`].
+pub const OUTPUT_WITHHELD_EVENT: &str = "output_withheld";
+
+/// The error code of an [`OutputWithheld`] event.
+pub const OUTPUT_WITHHELD_CODE: &str = "TUR-AI-OUTPUT-001";
+
+/// How an action the engine allowed ended: the values of `TUR_AI_RESULT`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ActionResult {
+    /// It ran and reported success.
+    Ok,
+    /// It ran and reported failure.
+    Failed,
+    /// It was stopped at its time limit.
+    TimedOut,
+    /// It could not be started: nothing ran.
+    NotStarted,
+}
+
+impl ActionResult {
+    /// Every result.
+    pub const ALL: [ActionResult; 4] = [
+        ActionResult::Ok,
+        ActionResult::Failed,
+        ActionResult::TimedOut,
+        ActionResult::NotStarted,
+    ];
+
+    /// The value of the `TUR_AI_RESULT` field.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            ActionResult::Ok => "ok",
+            ActionResult::Failed => "failed",
+            ActionResult::TimedOut => "timed_out",
+            ActionResult::NotStarted => "not_started",
+        }
+    }
+
+    /// The result with this name, if there is one.
+    pub fn from_name(name: &str) -> Option<ActionResult> {
+        ActionResult::ALL
+            .into_iter()
+            .find(|result| result.as_str() == name)
+    }
+
+    /// Whether a process was started for the action.
+    pub const fn started(self) -> bool {
+        !matches!(self, ActionResult::NotStarted)
+    }
+}
+
+/// What became of an action the engine allowed (addendum section 21,
+/// item 7). Written after the action was performed or attempted, and before
+/// its result is passed on.
+///
+/// It holds an action name, a result, an exit status, two facts about the
+/// size of the output and a code. It has no field for the output.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ActionOutcome {
+    /// The action, as its decision record names it.
+    pub action: String,
+    /// How it ended.
+    pub result: ActionResult,
+    /// The exit status, if a process exited.
+    pub exit_code: Option<i32>,
+    /// The bytes of output that were kept.
+    pub output_bytes: usize,
+    /// Whether output was dropped at the size bound.
+    pub truncated: bool,
+    /// How many pieces of the output were withheld from the provider. The
+    /// kinds are in the [`OutputWithheld`] event that follows when this is
+    /// not zero.
+    pub withheld: usize,
+    /// The `TUR-AI-*` code, if the action did not end well.
+    pub error_code: Option<String>,
+}
+
+impl ActionOutcome {
+    /// The fields of the event after `MESSAGE`, `TUR_AI_EVENT`, `TUR_AI_TASK`
+    /// and `TUR_AI_PROVIDER`, in a fixed order.
+    pub fn fields(&self) -> Vec<(&'static str, String)> {
+        let mut fields = vec![
+            ("TUR_AI_ACTION", action_label(&self.action)),
+            ("TUR_AI_RESULT", self.result.as_str().to_owned()),
+            (
+                "TUR_AI_EXIT",
+                self.exit_code
+                    .map_or_else(|| "none".to_owned(), |code| code.to_string()),
+            ),
+            ("TUR_AI_OUTPUT_BYTES", self.output_bytes.to_string()),
+            (
+                "TUR_AI_TRUNCATED",
+                if self.truncated { "yes" } else { "no" }.to_owned(),
+            ),
+            ("TUR_AI_WITHHELD", self.withheld.to_string()),
+        ];
+        if let Some(code) = &self.error_code {
+            fields.push(("TUR_ERROR_CODE", action_label(code)));
+        }
+        fields
+    }
+}
+
+/// An action name as the decision records write it (`service:tool`,
+/// `command:read_only`, `agent:memory_read`), or a placeholder if it is
+/// anything else. The name of a tool comes from a manifest; this keeps a
+/// name that did not from being written.
+fn action_label(text: &str) -> String {
+    crate::trail::identifier(text)
+}
+
+/// Part of what an action returned was withheld before it left the machine
+/// (addendum section 17, item 3, and section 21, item 7).
+///
+/// The event states a count and the kinds of what was withheld. A kind is a
+/// name fixed in the program (`&'static str`), so nothing read from the
+/// output can be put into the event: it never holds the content.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OutputWithheld {
+    action: String,
+    count: usize,
+    kinds: Vec<&'static str>,
+}
+
+impl OutputWithheld {
+    /// The event for an action from which pieces were withheld, given the
+    /// kind of each piece. `None` if nothing was withheld: then there is
+    /// nothing to record.
+    pub fn new(action: &str, kind_of_each_piece: &[&'static str]) -> Option<OutputWithheld> {
+        if kind_of_each_piece.is_empty() {
+            return None;
+        }
+        let mut kinds = kind_of_each_piece.to_vec();
+        kinds.sort_unstable();
+        kinds.dedup();
+        Some(OutputWithheld {
+            action: action.to_owned(),
+            count: kind_of_each_piece.len(),
+            kinds,
+        })
+    }
+
+    /// The action, as its decision record names it.
+    pub fn action(&self) -> &str {
+        &self.action
+    }
+
+    /// How many pieces were withheld. Never zero.
+    pub fn count(&self) -> usize {
+        self.count
+    }
+
+    /// The kinds of what was withheld, sorted, each once.
+    pub fn kinds(&self) -> &[&'static str] {
+        &self.kinds
+    }
+
+    /// The fields of the event after `MESSAGE`, `TUR_AI_EVENT`, `TUR_AI_TASK`
+    /// and `TUR_AI_PROVIDER`, in a fixed order.
+    pub fn fields(&self) -> Vec<(&'static str, String)> {
+        vec![
+            ("TUR_AI_ACTION", action_label(&self.action)),
+            ("TUR_AI_WITHHELD", self.count.to_string()),
+            ("TUR_AI_WITHHELD_KINDS", self.kinds.join(",")),
+            ("TUR_ERROR_CODE", OUTPUT_WITHHELD_CODE.to_owned()),
+        ]
     }
 }
 
@@ -513,7 +698,7 @@ mod tests {
 
     fn trusted() -> Context {
         Context {
-            trusted_path_available: true,
+            trusted_session_proven: true,
             target_window_owner: WindowOwner::User,
             ..Context::attended()
         }
@@ -557,6 +742,102 @@ mod tests {
             .iter()
             .find(|(key, _)| *key == name)
             .map(|(_, value)| value.as_str())
+    }
+
+    #[test]
+    fn an_action_outcome_says_how_the_action_ended_and_nothing_it_returned() {
+        let outcome = ActionOutcome {
+            action: "org.tur.Test1:test_observe".to_owned(),
+            result: ActionResult::Failed,
+            exit_code: Some(3),
+            output_bytes: 120,
+            truncated: true,
+            withheld: 2,
+            error_code: Some("TUR-AI-TASK-006".to_owned()),
+        };
+        assert_eq!(
+            outcome.fields(),
+            vec![
+                ("TUR_AI_ACTION", "org.tur.Test1:test_observe".to_owned()),
+                ("TUR_AI_RESULT", "failed".to_owned()),
+                ("TUR_AI_EXIT", "3".to_owned()),
+                ("TUR_AI_OUTPUT_BYTES", "120".to_owned()),
+                ("TUR_AI_TRUNCATED", "yes".to_owned()),
+                ("TUR_AI_WITHHELD", "2".to_owned()),
+                ("TUR_ERROR_CODE", "TUR-AI-TASK-006".to_owned()),
+            ]
+        );
+
+        // An action that ended well has no code, and one that never started
+        // has no exit status.
+        let fine = ActionOutcome {
+            result: ActionResult::Ok,
+            exit_code: Some(0),
+            truncated: false,
+            withheld: 0,
+            error_code: None,
+            ..outcome.clone()
+        };
+        let fields = fine.fields();
+        assert_eq!(field(&fields, "TUR_AI_RESULT"), Some("ok"));
+        assert_eq!(field(&fields, "TUR_AI_TRUNCATED"), Some("no"));
+        assert_eq!(field(&fields, "TUR_ERROR_CODE"), None);
+        let never = ActionOutcome {
+            result: ActionResult::NotStarted,
+            exit_code: None,
+            ..fine
+        };
+        assert_eq!(field(&never.fields(), "TUR_AI_EXIT"), Some("none"));
+
+        // A name that is not an identifier is not written.
+        let odd = ActionOutcome {
+            action: "rm -rf / \u{202e}".to_owned(),
+            error_code: Some("not a code".to_owned()),
+            ..outcome
+        };
+        let fields = odd.fields();
+        assert_eq!(field(&fields, "TUR_AI_ACTION"), Some(INVALID));
+        assert_eq!(field(&fields, "TUR_ERROR_CODE"), Some(INVALID));
+
+        // The names of the results are distinct, and only one of them means
+        // that nothing ran.
+        for result in ActionResult::ALL {
+            assert_eq!(ActionResult::from_name(result.as_str()), Some(result));
+            assert_eq!(result.started(), result != ActionResult::NotStarted);
+        }
+        assert_eq!(ActionResult::from_name("OK"), None);
+        assert_eq!(ACTION_OUTCOME_EVENT, "executed");
+    }
+
+    #[test]
+    fn output_withheld_states_a_count_and_kinds_and_never_the_content() {
+        // Nothing withheld: nothing to record.
+        assert_eq!(OutputWithheld::new("command:read_only", &[]), None);
+
+        let event = OutputWithheld::new(
+            "command:read_only",
+            &["password", "known_token", "password", "private_key"],
+        )
+        .expect("something was withheld");
+        assert_eq!(event.action(), "command:read_only");
+        // Four pieces of three kinds.
+        assert_eq!(event.count(), 4);
+        assert_eq!(event.kinds(), ["known_token", "password", "private_key"]);
+        assert_eq!(
+            event.fields(),
+            vec![
+                ("TUR_AI_ACTION", "command:read_only".to_owned()),
+                ("TUR_AI_WITHHELD", "4".to_owned()),
+                (
+                    "TUR_AI_WITHHELD_KINDS",
+                    "known_token,password,private_key".to_owned()
+                ),
+                ("TUR_ERROR_CODE", "TUR-AI-OUTPUT-001".to_owned()),
+            ]
+        );
+        // The event has four fields, and none of them can hold output.
+        assert_eq!(event.fields().len(), 4);
+        assert_eq!(OUTPUT_WITHHELD_EVENT, "output_withheld");
     }
 
     #[test]
@@ -644,9 +925,9 @@ mod tests {
                 "operation:service_restart",
             ),
             (
-                Action::Agent(AgentOperation::MemoryWrite),
+                Action::Agent(AgentOperation::MemoryRecordObserved),
                 "0",
-                "agent:memory_write",
+                "agent:memory_record_observed",
             ),
         ];
         for (action, tier, name) in cases {
@@ -870,7 +1151,7 @@ mod tests {
                 argv: vec!["mail".to_owned(), "a@example.org".to_owned()],
                 working_context: WorkingContext::Session,
             }),
-            Action::Agent(AgentOperation::ScheduleWrite),
+            Action::Agent(AgentOperation::MemoryChangeStated),
         ] {
             let record = record(&action, &trusted());
             assert_eq!(record.request(), None);

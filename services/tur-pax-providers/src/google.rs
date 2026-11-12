@@ -275,7 +275,9 @@ impl GoogleDecoder {
                     out,
                 );
                 // The arguments normally arrive in deltas. A step that starts
-                // with them already has them all.
+                // with them already has them all. The event was parsed
+                // strictly, so writing the object out loses nothing: a key
+                // repeated anywhere in it would have refused the event.
                 if step["arguments"]
                     .as_object()
                     .is_some_and(|map| !map.is_empty())

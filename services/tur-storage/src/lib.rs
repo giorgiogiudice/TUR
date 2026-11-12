@@ -102,7 +102,10 @@ pub use policy::{
     DefaultAccess, EXCLUDED_IMPLEMENTATIONS, FsPolicy, ImplementationKind, POLICY_TABLE,
     PolicyOverrides, UnsafeNtfsPolicy, policy_for,
 };
-pub use probe::{LsblkDevice, Probe, ProbeError, SnapshotProbe};
+pub use probe::{
+    CommandOutput, CommandRunner, LiveProbe, LsblkDevice, Probe, ProbeError, SnapshotProbe,
+    SystemRunner,
+};
 pub use volume::{Encryption, HfsJournal, IdSource, Inventory, NtfsState, Volume, VolumeId};
 
 /// Version of the JSON documents this crate emits

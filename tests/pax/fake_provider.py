@@ -3,9 +3,13 @@
 """A scripted model provider for the P@x end-to-end test.
 
 It is a local HTTP server that answers each request with the next response of
-a script, in the streaming format of the Anthropic Messages API, and records
-every request it receives. It is not a model and it calls none: a script says
-what the model "does", turn by turn.
+a script, in the streaming format of one of the three providers P@x has an
+adapter for (the Anthropic Messages API, the OpenAI Responses API or the
+Google Interactions API), and records every request it receives. It is not a
+model and it calls none: a script says what the model "does", turn by turn.
+The three formats are written by hand from the providers' documentation, the
+same way as the conformance scripts of services/tur-pax-providers; they are
+not recordings of a real provider.
 
 A script is a list of turns. A turn is an object:
 
@@ -14,6 +18,8 @@ A script is a list of turns. A turn is an object:
         { "id": "toolu_1",
           "name": "tool_name",
           "arguments": {...} | "raw JSON text" } ],
+      "whole": true,                       the arguments of each call arrive
+                                           in one piece, not in fragments
       "stop": "end_turn" | "tool_use" | "refusal" | "max_tokens",
       "input_tokens": 40, "output_tokens": 30 }
 
@@ -22,7 +28,7 @@ is how a script repeats a key or sends something that is not valid.
 
 Used as a module by e2e.py. Run on its own it serves one script file:
 
-    fake_provider.py SCRIPT.json [--port N] [--repeat-last]
+    fake_provider.py SCRIPT.json [--port N] [--repeat-last] [--wire NAME]
 """
 
 import argparse
@@ -36,7 +42,240 @@ def _event(name, data):
     return f"event: {name}\ndata: {json.dumps(data, separators=(',', ':'))}\n\n"
 
 
-def render(turn):
+WIRES = ("anthropic", "openai", "google")
+
+
+def _raw_event(name, data):
+    """An event whose data is written by hand: it can repeat a key."""
+    return f"event: {name}\ndata: {data}\n\n"
+
+
+def _argument_text(call):
+    arguments = call.get("arguments", {})
+    if not isinstance(arguments, str):
+        arguments = json.dumps(arguments)
+    return arguments
+
+
+def render(turn, wire="anthropic"):
+    """The turn as an event stream in the given wire format."""
+    if wire == "openai":
+        return render_openai(turn)
+    if wire == "google":
+        return render_google(turn)
+    return render_anthropic(turn)
+
+
+def render_openai(turn):
+    """The turn as an event stream of the OpenAI Responses API."""
+
+    def response(status):
+        return {"id": "resp_scripted", "object": "response", "status": status, "model": "scripted-model", "output": []}
+
+    stream = _event("response.created", {"type": "response.created", "response": response("in_progress")})
+    index = 0
+    text = turn.get("text", "")
+    if text:
+        stream += _event(
+            "response.output_item.added",
+            {
+                "type": "response.output_item.added",
+                "output_index": index,
+                "item": {"id": "msg_scripted", "type": "message", "status": "in_progress", "role": "assistant", "content": []},
+            },
+        )
+        stream += _event(
+            "response.output_text.delta",
+            {
+                "type": "response.output_text.delta",
+                "item_id": "msg_scripted",
+                "output_index": index,
+                "content_index": 0,
+                "delta": text,
+            },
+        )
+        stream += _event(
+            "response.output_item.done",
+            {
+                "type": "response.output_item.done",
+                "output_index": index,
+                "item": {
+                    "id": "msg_scripted",
+                    "type": "message",
+                    "status": "completed",
+                    "role": "assistant",
+                    "content": [{"type": "output_text", "text": text, "annotations": []}],
+                },
+            },
+        )
+        index += 1
+    for call in turn.get("calls", []):
+        arguments = _argument_text(call)
+        item_id = f"fc_{index}"
+        if not turn.get("whole"):
+            stream += _event(
+                "response.output_item.added",
+                {
+                    "type": "response.output_item.added",
+                    "output_index": index,
+                    "item": {
+                        "type": "function_call",
+                        "id": item_id,
+                        "call_id": call["id"],
+                        "name": call["name"],
+                        "arguments": "",
+                    },
+                },
+            )
+            middle = len(arguments) // 2
+            for fragment in (arguments[:middle], arguments[middle:]):
+                stream += _event(
+                    "response.function_call_arguments.delta",
+                    {
+                        "type": "response.function_call_arguments.delta",
+                        "item_id": item_id,
+                        "output_index": index,
+                        "delta": fragment,
+                    },
+                )
+            stream += _event(
+                "response.function_call_arguments.done",
+                {
+                    "type": "response.function_call_arguments.done",
+                    "item_id": item_id,
+                    "output_index": index,
+                    "arguments": arguments,
+                },
+            )
+        stream += _event(
+            "response.output_item.done",
+            {
+                "type": "response.output_item.done",
+                "output_index": index,
+                "item": {
+                    "type": "function_call",
+                    "id": item_id,
+                    "call_id": call["id"],
+                    "name": call["name"],
+                    "arguments": arguments,
+                    "status": "completed",
+                },
+            },
+        )
+        index += 1
+    input_tokens = turn.get("input_tokens", 40)
+    output_tokens = turn.get("output_tokens", 30)
+    usage = {
+        "input_tokens": input_tokens,
+        "input_tokens_details": {"cached_tokens": 0},
+        "output_tokens": output_tokens,
+        "output_tokens_details": {"reasoning_tokens": 0},
+        "total_tokens": input_tokens + output_tokens,
+    }
+    stop = turn.get("stop")
+    if stop == "max_tokens":
+        ended = response("incomplete")
+        ended["incomplete_details"] = {"reason": "max_output_tokens"}
+        ended["usage"] = usage
+        return stream + _event("response.incomplete", {"type": "response.incomplete", "response": ended})
+    if stop == "refusal":
+        stream += _event(
+            "response.refusal.done",
+            {
+                "type": "response.refusal.done",
+                "item_id": "msg_refusal",
+                "output_index": index,
+                "content_index": 0,
+                "refusal": "The scripted model declined.",
+            },
+        )
+    ended = response("completed")
+    ended["usage"] = usage
+    return stream + _event("response.completed", {"type": "response.completed", "response": ended})
+
+
+def render_google(turn):
+    """The turn as an event stream of the Google Interactions API."""
+    stream = _event(
+        "interaction.created",
+        {
+            "interaction": {"id": "v1_scripted", "status": "in_progress", "object": "interaction", "model": "scripted-model"},
+            "event_type": "interaction.created",
+        },
+    )
+    index = 0
+    text = turn.get("text", "")
+    if text:
+        stream += _event("step.start", {"index": index, "step": {"type": "model_output"}, "event_type": "step.start"})
+        stream += _event(
+            "step.delta", {"index": index, "delta": {"text": text, "type": "text"}, "event_type": "step.delta"}
+        )
+        stream += _event("step.stop", {"index": index, "event_type": "step.stop"})
+        index += 1
+    for call in turn.get("calls", []):
+        arguments = _argument_text(call)
+        if turn.get("whole"):
+            # The step starts with its arguments complete, as a JSON object
+            # written exactly as the script has it, and has no delta.
+            stream += _raw_event(
+                "step.start",
+                '{"index":%d,"step":{"id":%s,"type":"function_call","name":%s,"arguments":%s},"event_type":"step.start"}'
+                % (index, json.dumps(call["id"]), json.dumps(call["name"]), arguments),
+            )
+        else:
+            stream += _event(
+                "step.start",
+                {
+                    "index": index,
+                    "step": {"id": call["id"], "type": "function_call", "name": call["name"], "arguments": {}},
+                    "event_type": "step.start",
+                },
+            )
+            middle = len(arguments) // 2
+            for fragment in (arguments[:middle], arguments[middle:]):
+                stream += _event(
+                    "step.delta",
+                    {
+                        "index": index,
+                        "delta": {"arguments": fragment, "type": "arguments_delta"},
+                        "event_type": "step.delta",
+                    },
+                )
+        stream += _event("step.stop", {"index": index, "event_type": "step.stop"})
+        index += 1
+    stop = turn.get("stop") or ("tool_use" if turn.get("calls") else "end_turn")
+    if stop == "refusal":
+        return stream + _event(
+            "error",
+            {"error": {"message": "Safety violations blocked the request.", "code": "safety"}, "event_type": "error"},
+        )
+    status = {"max_tokens": "incomplete", "tool_use": "requires_action"}.get(stop, "completed")
+    input_tokens = turn.get("input_tokens", 40)
+    output_tokens = turn.get("output_tokens", 30)
+    stream += _event(
+        "interaction.completed",
+        {
+            "interaction": {
+                "id": "v1_scripted",
+                "status": status,
+                "usage": {
+                    "total_tokens": input_tokens + output_tokens,
+                    "total_input_tokens": input_tokens,
+                    "total_cached_tokens": 0,
+                    "total_output_tokens": output_tokens,
+                    "total_tool_use_tokens": 0,
+                    "total_thought_tokens": 0,
+                },
+                "object": "interaction",
+                "model": "scripted-model",
+            },
+            "event_type": "interaction.completed",
+        },
+    )
+    return stream + "event: done\ndata: [DONE]\n\n"
+
+
+def render_anthropic(turn):
     """The turn as an event stream of the Messages API."""
     stream = _event(
         "message_start",
@@ -68,9 +307,18 @@ def render(turn):
         stream += _event("content_block_stop", {"type": "content_block_stop", "index": index})
         index += 1
     for call in turn.get("calls", []):
-        arguments = call.get("arguments", {})
-        if not isinstance(arguments, str):
-            arguments = json.dumps(arguments)
+        arguments = _argument_text(call)
+        if turn.get("whole"):
+            # The block starts with its whole input, written exactly as the
+            # script has it, and has no delta.
+            stream += _raw_event(
+                "content_block_start",
+                '{"type":"content_block_start","index":%d,"content_block":{"type":"tool_use","id":%s,"name":%s,"input":%s}}'
+                % (index, json.dumps(call["id"]), json.dumps(call["name"]), arguments),
+            )
+            stream += _event("content_block_stop", {"type": "content_block_stop", "index": index})
+            index += 1
+            continue
         stream += _event(
             "content_block_start",
             {
@@ -111,9 +359,12 @@ def render(turn):
 class ScriptedProvider:
     """Serves a script on a local port and records what it is sent."""
 
-    def __init__(self, turns, repeat_last=False, port=0):
+    def __init__(self, turns, repeat_last=False, port=0, wire="anthropic"):
+        if wire not in WIRES:
+            raise ValueError(f"unknown wire format: {wire}")
         self.turns = list(turns)
         self.repeat_last = repeat_last
+        self.wire = wire
         self.requests = []
         self._lock = threading.Lock()
         self._served = 0
@@ -154,7 +405,7 @@ class ScriptedProvider:
                     self.send_response(400)
                     self.send_header("content-type", "application/json")
                 else:
-                    payload = render(turn).encode()
+                    payload = render(turn, provider.wire).encode()
                     self.send_response(200)
                     self.send_header("content-type", "text/event-stream")
                     self.send_header("cache-control", "no-cache")
@@ -197,11 +448,13 @@ def main():
     parser.add_argument("script")
     parser.add_argument("--port", type=int, default=0)
     parser.add_argument("--repeat-last", action="store_true")
+    parser.add_argument("--wire", choices=WIRES, default=None)
     arguments = parser.parse_args()
     with open(arguments.script, encoding="utf-8") as handle:
         script = json.load(handle)
     turns = script["turns"] if isinstance(script, dict) else script
-    provider = ScriptedProvider(turns, arguments.repeat_last, arguments.port).start()
+    wire = arguments.wire or (script.get("wire") if isinstance(script, dict) else None) or "anthropic"
+    provider = ScriptedProvider(turns, arguments.repeat_last, arguments.port, wire).start()
     print(provider.base_url, flush=True)
     try:
         threading.Event().wait()

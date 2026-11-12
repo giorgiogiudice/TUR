@@ -274,7 +274,7 @@ fn problems_text_has_a_message_an_action_and_detail_for_each_finding() {
 fn an_unreadable_fixture_directory_is_reported_with_a_code() {
     let file = concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml");
     for path in ["/nonexistent/tur-device/fixture", file] {
-        for command in ["inventory", "problems"] {
+        for command in ["inventory", "problems", "list"] {
             let run = tur_device(&[command, "--from", path, "--json"]);
             assert_eq!(run.status, EXIT_FAILURE, "{command} {path}");
             assert!(run.stdout.is_empty(), "{command} {path}");
@@ -284,6 +284,146 @@ fn an_unreadable_fixture_directory_is_reported_with_a_code() {
                 run.stderr
             );
         }
+    }
+}
+
+/// The serial number of the USB stick in the laptop fixture.
+const STICK_SERIAL: &str = "4C530001230915112345";
+
+#[test]
+fn list_prints_a_summary_of_every_device_and_no_sensitive_value() {
+    let run = tur_device(&["list", "--from", support::LAPTOP, "--json"]);
+    assert_eq!(run.status, EXIT_OK, "{}", run.stderr);
+    assert!(run.stderr.is_empty(), "{}", run.stderr);
+    let document = run.json();
+    assert_eq!(document["schema_version"], 1);
+    assert_eq!(document["redacted"], Value::Bool(true));
+
+    // The listing is the library's summaries of the redacted inventory.
+    let inventory = collect(&FsProbe::fixture(support::LAPTOP)).redacted();
+    let expected = serde_json::to_value(inventory.summaries()).unwrap();
+    assert_eq!(document["devices"], expected);
+    let devices = document["devices"].as_array().expect("devices");
+    // At least the 18 PCI functions and the 8 USB devices of the fixture.
+    assert!(devices.len() >= 26, "{}", devices.len());
+    for device in devices {
+        let keys: Vec<&str> = device
+            .as_object()
+            .expect("an object")
+            .keys()
+            .map(String::as_str)
+            .collect();
+        assert_eq!(keys, ["category", "driver", "id", "name"]);
+        assert!(!device["id"].as_str().expect("an identifier").is_empty());
+    }
+    // The fixture's inventory holds a serial number; the listing does not.
+    let full = tur_device(&["inventory", "--from", support::LAPTOP, "--json"]);
+    assert!(full.text().contains(STICK_SERIAL));
+    assert!(!run.text().contains(STICK_SERIAL));
+
+    // Only the categories asked for, and all of those.
+    let filtered = tur_device(&[
+        "list",
+        "--from",
+        support::LAPTOP,
+        "--json",
+        "--category=usb",
+        "--category=network",
+    ]);
+    assert_eq!(filtered.status, EXIT_OK, "{}", filtered.stderr);
+    let wanted: Vec<&Value> = devices
+        .iter()
+        .filter(|device| device["category"] == "usb" || device["category"] == "network")
+        .collect();
+    assert!(wanted.len() >= 8);
+    let listed = filtered.json();
+    let listed: Vec<&Value> = listed["devices"]
+        .as_array()
+        .expect("devices")
+        .iter()
+        .collect();
+    assert_eq!(listed, wanted);
+
+    // A category is spelled as the inventory spells it, and nothing else is
+    // one.
+    let run = tur_device(&[
+        "list",
+        "--from",
+        support::LAPTOP,
+        "--json",
+        "--category=storage_controller",
+    ]);
+    assert_eq!(run.status, EXIT_OK, "{}", run.stderr);
+    for category in ["printer", "storage-controller", "USB", ""] {
+        let option = format!("--category={category}");
+        let run = tur_device(&["list", "--from", support::LAPTOP, &option]);
+        assert_eq!(run.status, EXIT_USAGE, "{category}");
+        assert!(run.stdout.is_empty(), "{category}");
+    }
+
+    // As text: one line for each device, beginning with its identifier.
+    let text = tur_device(&["list", "--from", support::LAPTOP]);
+    assert_eq!(text.status, EXIT_OK, "{}", text.stderr);
+    let lines: Vec<&str> = text.text().lines().collect();
+    assert_eq!(lines.len(), devices.len());
+    for (line, device) in lines.iter().zip(devices) {
+        let id = device["id"].as_str().expect("an identifier");
+        assert!(line.starts_with(id), "{line}");
+    }
+    assert!(!text.text().contains(STICK_SERIAL));
+}
+
+#[test]
+fn get_prints_one_device_redacted_by_the_identifier_list_printed() {
+    let listed = tur_device(&["list", "--from", support::LAPTOP, "--json"]).json();
+    let devices = listed["devices"].as_array().expect("devices");
+    let mut redacted_values = 0;
+    for summary in devices {
+        let id = summary["id"].as_str().expect("an identifier");
+        let run = tur_device(&["get", "--from", support::LAPTOP, "--json", "--", id]);
+        assert_eq!(run.status, EXIT_OK, "{id}: {}", run.stderr);
+        let document = run.json();
+        assert_eq!(document["schema_version"], 1, "{id}");
+        assert_eq!(document["redacted"], Value::Bool(true), "{id}");
+        // The device `list` named, in the category it named.
+        assert_eq!(document["category"], summary["category"], "{id}");
+        assert_eq!(document["device"]["id"], summary["id"], "{id}");
+        assert_eq!(document["device"]["driver"], summary["driver"], "{id}");
+        // Never a serial number.
+        assert!(!run.text().contains(STICK_SERIAL), "{id}");
+        redacted_values += run.text().matches("\"redacted\": true").count() - 1;
+        // Without --json the same document is printed.
+        let plain = tur_device(&["get", "--from", support::LAPTOP, "--", id]);
+        assert_eq!(plain.stdout, run.stdout, "{id}");
+    }
+    // Some devices of the fixture do have sensitive values, and they were
+    // marked as removed rather than left out.
+    assert!(redacted_values > 0);
+
+    // An identifier no device has: its own exit status and code, nothing on
+    // standard output.
+    for id in ["pci-does-not-exist", "--from", "", "x\u{1b}[31m\n"] {
+        let run = tur_device(&["get", "--from", support::LAPTOP, "--json", "--", id]);
+        assert_eq!(run.status, 3, "{id:?}: {}", run.stderr);
+        assert!(run.stdout.is_empty(), "{id:?}");
+        assert!(
+            run.stderr.starts_with("error: TUR-DEVICE-INPUT-002: "),
+            "{id:?}: {}",
+            run.stderr
+        );
+        // What was asked for is repeated in printable form only.
+        assert!(!run.stderr.contains('\u{1b}'), "{id:?}");
+        assert_eq!(run.stderr.lines().count(), 1, "{id:?}");
+    }
+
+    // No identifier at all, or two, is a usage error.
+    for args in [
+        &["get", "--from", support::LAPTOP][..],
+        &["get", "--from", support::LAPTOP, "--", "a", "b"][..],
+    ] {
+        let run = tur_device(args);
+        assert_eq!(run.status, EXIT_USAGE, "{args:?}");
+        assert!(run.stdout.is_empty(), "{args:?}");
     }
 }
 
@@ -312,6 +452,14 @@ fn help_and_version_are_printed() {
     assert_eq!(run.status, EXIT_OK);
     assert!(run.text().contains("inventory"));
     assert!(run.text().contains("problems"));
+    assert!(run.text().contains("list"));
+    assert!(run.text().contains("get"));
+
+    let run = tur_device(&["list", "--help"]);
+    assert_eq!(run.status, EXIT_OK);
+    for option in ["--from", "--json", "--category", "storage_controller"] {
+        assert!(run.text().contains(option), "{option}");
+    }
 
     let run = tur_device(&["inventory", "--help"]);
     assert_eq!(run.status, EXIT_OK);

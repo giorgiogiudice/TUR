@@ -224,6 +224,7 @@ fn there_is_no_option_that_grants_authority() {
     let files = Files::new("options", &server);
     for option in [
         "--trusted-path",
+        "--trusted-session-proven",
         "--allow-class=3",
         "--yes",
         "--approve",

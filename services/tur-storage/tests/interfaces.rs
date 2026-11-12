@@ -317,21 +317,21 @@ fn every_rust_file_starts_with_the_licence_identifier() {
 }
 
 /// The library reads its arguments and the files they name. It reads nothing
-/// from the process environment, starts no program and writes no file.
+/// from the process environment and writes no file. It starts a program in
+/// one place only, the live probe (`src/probe.rs`), and that program is
+/// `lsblk` with its fixed, read-only arguments: asked for with `--live`,
+/// and never otherwise.
 #[test]
-fn the_sources_read_no_environment_start_no_program_and_write_no_file() {
+fn the_sources_read_no_environment_write_no_file_and_start_only_lsblk() {
     let files = rust_files("src");
     assert!(files.len() >= 10);
+    let mut probes = 0;
     for file in files {
         let text = read(&file);
         let name = file.display();
-        // The only use of the environment module is the argument list.
-        let environment = text.matches("env").count();
-        let arguments = text.matches("env::args_os").count();
-        assert_eq!(environment, arguments, "{name} refers to the environment");
+        let is_probe = file.file_name().is_some_and(|base| base == "probe.rs");
+        // Nothing is written, by any file.
         for forbidden in [
-            "process::Command",
-            "Command::new",
             "fs::write",
             "File::create",
             "OpenOptions",
@@ -342,5 +342,48 @@ fn the_sources_read_no_environment_start_no_program_and_write_no_file() {
         ] {
             assert!(!text.contains(forbidden), "{name} contains {forbidden}");
         }
+        // Nothing is read from the environment, by any file.
+        for forbidden in ["env::var", "env::vars", "env!(", "option_env!("] {
+            assert!(!text.contains(forbidden), "{name} contains {forbidden}");
+        }
+        if !is_probe {
+            // The only use of the environment module is the argument list,
+            // and no program is started.
+            let environment = text.matches("env").count();
+            let arguments = text.matches("env::args_os").count();
+            assert_eq!(environment, arguments, "{name} refers to the environment");
+            for forbidden in ["process::Command", "Command::new", "Stdio"] {
+                assert!(!text.contains(forbidden), "{name} contains {forbidden}");
+            }
+            continue;
+        }
+        probes += 1;
+        // The live probe: one place starts a program, and it hands the
+        // program an emptied environment and no standard input.
+        assert_eq!(text.matches("Command::new").count(), 1, "{name}");
+        assert_eq!(text.matches(".env_clear()").count(), 1, "{name}");
+        assert_eq!(
+            text.matches(".stdin(std::process::Stdio::null())").count(),
+            1
+        );
+        // One caller hands that place a program: the capture, with the
+        // fixed command line. The other calls of `run` in the file are the
+        // stand-in of its unit tests.
+        let shipped = text.split("#[cfg(test)]").next().unwrap_or_default();
+        assert_eq!(shipped.matches(".run(").count(), 1, "{name}");
+        assert_eq!(
+            shipped
+                .matches(".run(LSBLK_PROGRAM, &LSBLK_ARGUMENTS)")
+                .count(),
+            1,
+            "{name}"
+        );
+        // And the command line is the one that lists block devices: no
+        // option of `lsblk` among them changes anything.
+        assert!(shipped.contains("pub const LSBLK_PROGRAM: &str = \"/usr/bin/lsblk\";"));
+        assert!(shipped.contains(
+            "pub const LSBLK_ARGUMENTS: [&str; 3] = [\"--json\", \"--bytes\", \"--output-all\"];"
+        ));
     }
+    assert_eq!(probes, 1);
 }

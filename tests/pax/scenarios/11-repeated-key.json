@@ -1,0 +1,32 @@
+{
+  "name": "repeated-key",
+  "what": "Injection (b), the repeated key. One response makes an unremarkable call and two calls whose arguments name a key twice, so that one value could be shown and another acted on. The provider layer reads arguments strictly: the response is malformed and is discarded whole. Nothing of it is decided or run, the unremarkable call included.",
+  "check": "repeated-key",
+  "outcome": "provider_error",
+  "request": "Read the test value, then set it.",
+  "turns": [
+    {
+      "text": "I will read the value and then set it.",
+      "calls": [
+        {
+          "id": "toolu_1",
+          "name": "test_observe",
+          "arguments": {}
+        },
+        {
+          "id": "toolu_2",
+          "name": "test_reversible",
+          "arguments": "{\"value\": \"harmless\", \"value\": \"harmful\"}"
+        },
+        {
+          "id": "toolu_3",
+          "name": "run_readonly_command",
+          "arguments": "{\"argv\": [\"/usr/bin/true\"], \"argv\": [\"/usr/bin/touch\", \"/tmp/tur-pax-duplicate-key\"]}"
+        }
+      ]
+    },
+    {
+      "text": "This answer is never asked for."
+    }
+  ]
+}

@@ -25,7 +25,7 @@ old prefix until the mechanical rename.
 | **Memory** | Entries with provenance and a trust level; a secret detector at the point of writing; quarantine of entries taken from content; recall for a task within a budget; saved procedures |
 | **Schedules** | Reminders and scheduled tasks; triggers and next-run computation; standing approvals; run records and deferred actions; systemd units as text |
 | **Store** | One file per record, replaced atomically; an in-memory implementation; fault injection for tests |
-| **Command line** | The user's view: list, show, forget, export, pending, confirm; schedules list, next, show |
+| **Command line** | The user's view: list, show, forget, export, pending, confirm, switch, add (a stated entry only); schedules list, next, show |
 
 Two rules from the design shape the whole component:
 
@@ -434,11 +434,24 @@ implementation holds what it displayed and compares, so a confirmation of one
 proposal does not cover another
 (`a_confirmation_covers_one_proposal_and_no_other`).
 
-In this change the only implementation is in the command-line program's `main.rs`:
-the person who types `tur-pax-memory confirm <id>` is the user, and the
-confirmation covers that one identifier. If the assistant ran that command itself
-it would be a class 2 command, shown and approved first (section 5.4). The command
-line has no way to turn memory on, or to create, change or approve a schedule.
+The only implementation is in the command-line program's `main.rs`: the person
+who types `tur-pax-memory confirm <id>` is the user, and the confirmation covers
+that one identifier; the person who types `tur-pax-memory switch on` (or `off`)
+is the user turning memory on (or off), and that confirmation covers that state
+of the switch and not the other. If the assistant ran one of these commands
+itself it would be a class 2 command, shown and approved first (section 5.4).
+
+`tur-pax-memory add --stated <text>` records what the person at the terminal
+states, as a stated entry. It needs no confirmation type: `Memory::add` is the
+operation the orchestrator will call too, and the library's rules apply to both
+callers alike: refused while memory is off, refused for a text that looks like a
+secret. What makes the entry "stated by the user" is who ran the program, which
+is the same assumption `confirm` rests on. The command has no option for any
+other kind: an observed entry, a procedure and an entry taken from content are
+the assistant's to record. It exists so that the user has a way to state
+something without the assistant, and so that the end-to-end test can prepare a
+store the way a user would (`pax` scenario `injection-memory`). The command
+line still has no way to create, change or approve a schedule.
 
 **What the trait does not do.** It does not stop a caller from writing an
 implementation that always agrees. It makes that a visible act in the caller's code
@@ -618,6 +631,8 @@ tur-pax-memory [--store <dir>] list [--kind K] [--state S] [--tag T] [--applicat
 tur-pax-memory [--store <dir>] show <id> [--json]
 tur-pax-memory [--store <dir>] pending [--json]
 tur-pax-memory [--store <dir>] confirm <id>
+tur-pax-memory [--store <dir>] switch on|off
+tur-pax-memory [--store <dir>] add --stated <text> [--tag T]...
 tur-pax-memory [--store <dir>] forget <id>
 tur-pax-memory [--store <dir>] export
 tur-pax-memory [--store <dir>] schedules list [--json]
@@ -637,7 +652,7 @@ Where a choice had to be made, the stricter reading was taken.
 | 1 | Is memory on by default? (open question 10) | Off. The user turns it on |
 | 2 | What trust does a confirmed entry from content have? | Still `untrusted`. Confirmation allows recall; it does not vouch |
 | 3 | Who may confirm, correct, or switch memory? | The user only; each takes a confirmation the library cannot produce |
-| 4 | Who may forget? | Anyone. Removing a memory entry is class 1 in the policy engine, and forgetting never adds authority |
+| 4 | Who may forget? | Anyone, as far as this library goes: forgetting never adds authority. In the policy engine, removing or changing an observed entry is class 1, and removing or changing an entry the user stated or confirmed is class 2, so P@x asks first ([agent-policy.md](agent-policy.md), interpretation 27) |
 | 5 | Does forgetting or reading work while memory is off? | Yes. Only writing and recall stop |
 | 6 | What is recalled when the state file is damaged? | Nothing, and nothing is written, until the user sets the switch |
 | 7 | What trust does a procedure have? | `assistant_observed`: it is a record of what the assistant did |
@@ -692,10 +707,16 @@ is resolved here.
    could create a schedule with no approvals, and only the trusted path can attach
    one. The design should say so, and say which of the two produces the
    confirmation this crate asks for.
+   *Settled by addendum A section 18, item 3, and implemented in the engine:*
+   proposing a schedule is a class 1 operation of its own, and creating,
+   changing or removing one is class 4 for P@x: the user's act.
 4. **Memory writes are class 1 and unattended.** An unattended task may write
    memory (class 1 runs). Content it reads becomes pending and is harmless; but the
    orchestrator decides the kind, and nothing in the design says that an unattended
    task must never record `stated`. It should: nobody is there to state anything.
+   *Settled by addendum A section 18, item 4, and implemented in the engine:*
+   recording on the user's word is an operation of its own, which the engine
+   defers in an unattended task.
 5. **Recalled memory is sent to the provider** (section 8). Entries taken from
    content, once confirmed, are sent with every relevant task for as long as they
    exist. The consent text of section 8 should say that memory persists what was

@@ -1,0 +1,34 @@
+{
+  "name": "google-repeated-key",
+  "what": "The repeated key through the Google adapter, with the arguments delivered whole: the key is repeated inside the JSON object of the step itself, where no argument text exists to parse again. The event is read strictly, so it is refused.",
+  "check": "repeated-key",
+  "outcome": "provider_error",
+  "request": "Read the test value, then set it.",
+  "wire": "google",
+  "turns": [
+    {
+      "text": "I will read the value and then set it.",
+      "calls": [
+        {
+          "id": "toolu_1",
+          "name": "test_observe",
+          "arguments": {}
+        },
+        {
+          "id": "toolu_2",
+          "name": "test_reversible",
+          "arguments": "{\"value\": \"harmless\", \"value\": \"harmful\"}"
+        },
+        {
+          "id": "toolu_3",
+          "name": "run_readonly_command",
+          "arguments": "{\"argv\": [\"/usr/bin/true\"], \"argv\": [\"/usr/bin/touch\", \"/tmp/tur-pax-duplicate-key\"]}"
+        }
+      ],
+      "whole": true
+    },
+    {
+      "text": "This answer is never asked for."
+    }
+  ]
+}

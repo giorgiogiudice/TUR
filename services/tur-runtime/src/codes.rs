@@ -2,11 +2,18 @@
 
 //! The stable error codes this component reports (specification §29.3).
 //!
-//! `tur-core` has no family for the runtime manager itself, so conditions that
-//! are not specific to one ecosystem use the `DESKTOP` family with a `RUNTIME`
-//! or `PROFILE` topic. Conditions specific to Windows, macOS or Android
-//! software use the `WINDOWS`, `DARWIN` and `ANDROID` families, and refusals
-//! made to keep an application inside its sandbox use `SECURITY`.
+//! Conditions that are not specific to one ecosystem use the runtime
+//! manager's own family, `RUNTIME`, with a `MANAGER` or `PROFILE` topic.
+//! Conditions specific to Windows, macOS or Android software use the
+//! `WINDOWS`, `DARWIN` and `ANDROID` families, and refusals made to keep an
+//! application inside its sandbox use `SECURITY`.
+//!
+//! Until `tur-core` had a `RUNTIME` family the first group was parked under
+//! `DESKTOP`: `TUR-DESKTOP-RUNTIME-00N` is now `TUR-RUNTIME-MANAGER-00N` and
+//! `TUR-DESKTOP-PROFILE-00N` is now `TUR-RUNTIME-PROFILE-00N`, with the
+//! numbers unchanged. Nothing outside this component used those ten strings.
+//! The `WINDOWS` and `SECURITY` codes are where they belong and did not
+//! move; the Windows end-to-end test (`tests/windows-runtime`) reads them.
 
 use std::fmt;
 
@@ -152,10 +159,10 @@ impl Code {
     /// The code as text, for example `TUR-WINDOWS-RUNTIME-001`.
     pub const fn as_str(self) -> &'static str {
         match self {
-            Code::Unreadable => "TUR-DESKTOP-RUNTIME-001",
-            Code::Damaged => "TUR-DESKTOP-RUNTIME-002",
-            Code::LimitExceeded => "TUR-DESKTOP-RUNTIME-003",
-            Code::NoRoute => "TUR-DESKTOP-RUNTIME-004",
+            Code::Unreadable => "TUR-RUNTIME-MANAGER-001",
+            Code::Damaged => "TUR-RUNTIME-MANAGER-002",
+            Code::LimitExceeded => "TUR-RUNTIME-MANAGER-003",
+            Code::NoRoute => "TUR-RUNTIME-MANAGER-004",
             Code::WindowsDamaged => "TUR-WINDOWS-INSPECT-001",
             Code::WineMissing => "TUR-WINDOWS-RUNTIME-001",
             Code::WindowsKernelRequired => "TUR-WINDOWS-RUNTIME-002",
@@ -168,12 +175,12 @@ impl Code {
             Code::AndroidRuntimeMissing => "TUR-ANDROID-RUNTIME-001",
             Code::AndroidTranslationMissing => "TUR-ANDROID-RUNTIME-002",
             Code::AndroidUnsupported => "TUR-ANDROID-RUNTIME-003",
-            Code::ProfileUnreadable => "TUR-DESKTOP-PROFILE-001",
-            Code::ProfileSyntax => "TUR-DESKTOP-PROFILE-002",
-            Code::ProfileInvalid => "TUR-DESKTOP-PROFILE-003",
-            Code::ProfileSecret => "TUR-DESKTOP-PROFILE-004",
-            Code::StorageUnusable => "TUR-DESKTOP-RUNTIME-005",
-            Code::ToolMissing => "TUR-DESKTOP-RUNTIME-006",
+            Code::ProfileUnreadable => "TUR-RUNTIME-PROFILE-001",
+            Code::ProfileSyntax => "TUR-RUNTIME-PROFILE-002",
+            Code::ProfileInvalid => "TUR-RUNTIME-PROFILE-003",
+            Code::ProfileSecret => "TUR-RUNTIME-PROFILE-004",
+            Code::StorageUnusable => "TUR-RUNTIME-MANAGER-005",
+            Code::ToolMissing => "TUR-RUNTIME-MANAGER-006",
             Code::RuntimePinMismatch => "TUR-WINDOWS-RUNTIME-005",
             Code::RuntimeVersionUnknown => "TUR-WINDOWS-RUNTIME-006",
             Code::ProtonLauncherMissing => "TUR-WINDOWS-RUNTIME-007",
@@ -299,13 +306,67 @@ mod tests {
             Code::AndroidTranslationMissing.error_code().family(),
             Family::Android
         );
-        assert_eq!(Code::NoRoute.error_code().family(), Family::Desktop);
-        assert_eq!(Code::ProfileSecret.error_code().family(), Family::Desktop);
+        assert_eq!(Code::NoRoute.error_code().family(), Family::Runtime);
+        assert_eq!(Code::ProfileSecret.error_code().family(), Family::Runtime);
         assert_eq!(Code::PrefixPinned.error_code().family(), Family::Windows);
         assert_eq!(Code::StepFailed.error_code().family(), Family::Windows);
         assert_eq!(Code::RunningAsRoot.error_code().family(), Family::Security);
         assert_eq!(Code::GrantRefused.error_code().family(), Family::Security);
-        assert_eq!(Code::StorageUnusable.error_code().family(), Family::Desktop);
+        assert_eq!(Code::StorageUnusable.error_code().family(), Family::Runtime);
+    }
+
+    #[test]
+    fn no_code_is_parked_under_the_desktop_family() {
+        // The ten conditions that are the runtime manager's own are in its
+        // family, under two topics, with the numbers they always had.
+        let own: Vec<&str> = Code::ALL
+            .iter()
+            .filter(|code| code.error_code().family() == Family::Runtime)
+            .map(|code| code.as_str())
+            .collect();
+        let mut sorted = own.clone();
+        sorted.sort_unstable();
+        assert_eq!(
+            sorted,
+            [
+                "TUR-RUNTIME-MANAGER-001",
+                "TUR-RUNTIME-MANAGER-002",
+                "TUR-RUNTIME-MANAGER-003",
+                "TUR-RUNTIME-MANAGER-004",
+                "TUR-RUNTIME-MANAGER-005",
+                "TUR-RUNTIME-MANAGER-006",
+                "TUR-RUNTIME-PROFILE-001",
+                "TUR-RUNTIME-PROFILE-002",
+                "TUR-RUNTIME-PROFILE-003",
+                "TUR-RUNTIME-PROFILE-004",
+            ]
+        );
+        assert_eq!(Code::Unreadable.as_str(), "TUR-RUNTIME-MANAGER-001");
+        assert_eq!(Code::NoRoute.as_str(), "TUR-RUNTIME-MANAGER-004");
+        assert_eq!(Code::ToolMissing.as_str(), "TUR-RUNTIME-MANAGER-006");
+        assert_eq!(Code::ProfileUnreadable.as_str(), "TUR-RUNTIME-PROFILE-001");
+        assert_eq!(Code::ProfileSecret.as_str(), "TUR-RUNTIME-PROFILE-004");
+        // Every other code is in the family of its ecosystem or in
+        // `SECURITY`, and none is left in `DESKTOP`.
+        for code in Code::ALL {
+            let family = code.error_code().family();
+            assert!(
+                matches!(
+                    family,
+                    Family::Runtime
+                        | Family::Windows
+                        | Family::Darwin
+                        | Family::Android
+                        | Family::Security
+                ),
+                "{code} is in {family}"
+            );
+            assert!(!code.as_str().contains("-DESKTOP-"), "{code}");
+        }
+        // The codes other programs read did not move.
+        assert_eq!(Code::RunningAsRoot.as_str(), "TUR-SECURITY-SANDBOX-001");
+        assert_eq!(Code::PrefixPinned.as_str(), "TUR-WINDOWS-PREFIX-007");
+        assert_eq!(Code::RuntimePinMismatch.as_str(), "TUR-WINDOWS-RUNTIME-005");
     }
 
     #[test]

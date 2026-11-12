@@ -65,7 +65,7 @@ pub fn decide(action: &Action, context: &Context, policy: &UserPolicy, now: Time
 
     // 5. Without the trusted path, nothing above class 1, and no request to
     //    authenticate, because it could not be answered safely.
-    if !context.trusted_path_available && class >= ActionClass::Consequential {
+    if !context.trusted_session_proven && class >= ActionClass::Consequential {
         return Decision::refuse(class, Refusal::TrustedPathUnavailable);
     }
 
@@ -140,6 +140,13 @@ pub fn decide(action: &Action, context: &Context, policy: &UserPolicy, now: Time
         if policy.mode == Mode::AskEveryAction {
             return Decision::defer(class, Reason::UnattendedAskEveryActionMode);
         }
+        // An unattended task records only what it observed. An entry on the
+        // user's word waits for the user (addendum section 18, item 4).
+        if let Action::Agent(operation) = action
+            && operation.needs_the_user_present()
+        {
+            return Decision::defer(class, Reason::UnattendedMemoryNotObserved);
+        }
         // While the session is locked: tools and read-only commands only.
         if context.session_locked
             && let Action::Command(command) = action
@@ -150,11 +157,11 @@ pub fn decide(action: &Action, context: &Context, policy: &UserPolicy, now: Time
         if class <= ActionClass::Reversible {
             return Decision::allow(class, permitted(class));
         }
+        // A standing approval is honoured only as the policy store holds it
+        // (`HeldApprovals`). No store exists yet, so outside tests nothing
+        // is held and the action is deferred (addendum section 18, item 1).
         if let Action::Tool(call) = action
-            && context
-                .standing_approvals
-                .iter()
-                .any(|approval| approval.matches(call))
+            && context.standing_approvals.covers(call)
         {
             return Decision::allow(class, Reason::StandingApprovalMatched);
         }
@@ -390,6 +397,16 @@ mod tests {
     use super::*;
     use crate::action::{OperationContent, ToolCall, TypedOperationKind};
     use crate::context::{RepairSession, StandingApproval};
+    use crate::store::{HeldApprovals, PolicyStore};
+
+    /// A stand-in for the policy store, which does not exist yet.
+    struct TestStore(Vec<StandingApproval>);
+
+    impl PolicyStore for TestStore {
+        fn standing_approvals(&self, _schedule: &str) -> Vec<StandingApproval> {
+            self.0.clone()
+        }
+    }
 
     const NOW: Timestamp = Timestamp(1_000);
 
@@ -426,7 +443,7 @@ mod tests {
 
     fn trusted() -> Context {
         Context {
-            trusted_path_available: true,
+            trusted_session_proven: true,
             target_window_owner: WindowOwner::User,
             ..Context::attended()
         }
@@ -687,20 +704,23 @@ mod tests {
         for class in [ActionClass::SystemCritical, ActionClass::Prohibited] {
             for presence in Presence::ALL {
                 for session_locked in [false, true] {
-                    for trusted_path_available in [false, true] {
+                    for trusted_session_proven in [false, true] {
                         for model_flags_consequential in [false, true] {
                             for target_window_owner in WindowOwner::ALL {
                                 for mode in Mode::ALL {
                                     let context = Context {
                                         presence,
                                         session_locked,
-                                        trusted_path_available,
+                                        trusted_session_proven,
                                         repair_session: open_session(),
-                                        standing_approvals: vec![StandingApproval {
-                                            service: "org.tur.Test1".to_owned(),
-                                            tool: "test_tool".to_owned(),
-                                            arguments: arguments.clone(),
-                                        }],
+                                        standing_approvals: HeldApprovals::read(
+                                            &TestStore(vec![StandingApproval {
+                                                service: "org.tur.Test1".to_owned(),
+                                                tool: "test_tool".to_owned(),
+                                                arguments: arguments.clone(),
+                                            }]),
+                                            "test",
+                                        ),
                                         model_flags_consequential,
                                         target_window_owner,
                                     };

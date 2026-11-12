@@ -1,0 +1,33 @@
+{
+  "name": "openai-repeated-key",
+  "what": "The repeated key through the OpenAI adapter: the argument text repeats a key in the streamed deltas and in the finished item alike.",
+  "check": "repeated-key",
+  "outcome": "provider_error",
+  "request": "Read the test value, then set it.",
+  "wire": "openai",
+  "turns": [
+    {
+      "text": "I will read the value and then set it.",
+      "calls": [
+        {
+          "id": "toolu_1",
+          "name": "test_observe",
+          "arguments": {}
+        },
+        {
+          "id": "toolu_2",
+          "name": "test_reversible",
+          "arguments": "{\"value\": \"harmless\", \"value\": \"harmful\"}"
+        },
+        {
+          "id": "toolu_3",
+          "name": "run_readonly_command",
+          "arguments": "{\"argv\": [\"/usr/bin/true\"], \"argv\": [\"/usr/bin/touch\", \"/tmp/tur-pax-duplicate-key\"]}"
+        }
+      ]
+    },
+    {
+      "text": "This answer is never asked for."
+    }
+  ]
+}

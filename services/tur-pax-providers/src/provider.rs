@@ -25,7 +25,7 @@ use crate::http::{Auth, BodyReader, Call, Classifier, Transport, read_error};
 use crate::model::{FinishReason, ProviderId, Request, StreamEvent};
 use crate::secret::{ApiKey, REDACTED};
 use crate::sse::{SseError, SseEvent, SseReader};
-use crate::{anthropic, google, openai};
+use crate::{anthropic, google, openai, strict};
 
 /// What an adapter can do. The orchestrator adapts to this instead of assuming
 /// that providers are alike (AI control layer design, section 10).
@@ -313,15 +313,22 @@ impl fmt::Debug for EventStream {
     }
 }
 
-/// Parse the data of an event as JSON. On failure the stream is ended with a
+/// Parse the data of an event as JSON, strictly: an event in which an object
+/// repeats a key, at any depth, has no single reading and is refused like
+/// one that is not JSON. On failure the stream is ended with a
 /// malformed-response error and `None` is returned.
+///
+/// This is what makes a tool call whose arguments arrive as a JSON object
+/// inside an event (and not as text of their own) safe to take from the
+/// parsed event: nothing was dropped on the way.
 pub(crate) fn parse_data(event: &SseEvent, out: &mut VecDeque<StreamEvent>) -> Option<Value> {
-    match serde_json::from_str::<Value>(&event.data) {
+    match strict::value_from_str(&event.data) {
         Ok(value) if value.is_object() => Some(value),
         _ => {
             out.push_back(StreamEvent::Finish(FinishReason::Error(
-                ProviderError::new(ErrorKind::MalformedResponse)
-                    .with_detail("an event of the response was not a JSON object"),
+                ProviderError::new(ErrorKind::MalformedResponse).with_detail(
+                    "an event of the response was not a JSON object, or repeated a key",
+                ),
             )));
             None
         }
