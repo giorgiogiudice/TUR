@@ -457,7 +457,7 @@ pub fn parse_record(text: &str) -> Result<AppRecord, RecordError> {
 /// # Errors
 ///
 /// A [`RecordError`] when the record exists and is unreadable, not valid, or
-/// names another application or another prefix.
+/// names another application, another prefix or another profile.
 pub fn load_record(app: &AppPaths) -> Result<Option<AppRecord>, RecordError> {
     if fs::symlink_metadata(&app.record).is_err() {
         return Ok(None);
@@ -483,6 +483,13 @@ pub fn load_record(app: &AppPaths) -> Result<Option<AppRecord>, RecordError> {
         app.prefix.to_str() == Some(record.prefix.as_str()),
         "prefix",
         "is not this application's prefix",
+    )?;
+    // The profile is what `app launch` starts from. A record that names
+    // another one would start something else in this application's name.
+    check(
+        app.profile.to_str() == Some(record.profile.as_str()),
+        "profile",
+        "is not this application's profile",
     )?;
     Ok(Some(record))
 }
@@ -736,10 +743,24 @@ pub(crate) mod tests {
         let record = AppRecord {
             main_executable: format!("{prefix}/drive_c/App/app.exe"),
             prefix,
+            profile: app.profile.to_str().unwrap().to_owned(),
             ..minimal()
         };
         std::fs::write(&app.record, record.to_json()).unwrap();
         assert_eq!(load_record(&app), Ok(Some(record.clone())));
+        // A record that would launch from a profile kept somewhere else.
+        let elsewhere = AppRecord {
+            profile: root.join("other-profile.json").to_str().unwrap().to_owned(),
+            ..record.clone()
+        };
+        std::fs::write(&app.record, elsewhere.to_json()).unwrap();
+        assert!(matches!(
+            load_record(&app),
+            Err(RecordError::Invalid {
+                field: "profile",
+                ..
+            })
+        ));
 
         // The same file under another application's directory.
         let other = dirs.app("com.example.other").unwrap();

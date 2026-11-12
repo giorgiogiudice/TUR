@@ -2028,6 +2028,7 @@ mod tests {
                 app_id: app.app_id.clone(),
                 main_executable: format!("{prefix}/drive_c/App/app.exe"),
                 prefix,
+                profile: app.profile.to_str().unwrap().to_owned(),
                 ..crate::app_record::tests::minimal()
             }
         };
