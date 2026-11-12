@@ -1104,7 +1104,7 @@ impl Plan {
                 reason: "the confirmation phrase does not belong to the target identity".to_owned(),
             }));
         }
-        if preflight.target.as_ref() != Some(&self.target.identity) {
+        if preflight.target() != Some(&self.target.identity) {
             return Err(ConfirmError::PreflightMismatch);
         }
         let blocking: Vec<InstallCode> = preflight

@@ -463,7 +463,7 @@ fn render_anomaly(anomaly: &Anomaly) -> String {
 
 fn render_preflight(report: &PreflightReport) -> Vec<String> {
     let mut lines = vec!["Preflight checks".to_owned()];
-    for result in &report.results {
+    for result in report.results() {
         let status = match result.status {
             CheckStatus::Pass => "[pass]    ",
             CheckStatus::Warning => "[warning] ",

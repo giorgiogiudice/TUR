@@ -197,15 +197,27 @@ fn outcome(code: InstallCode, status: CheckStatus, message: &str, detail: String
 }
 
 /// The results of every check that could be run.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// Values are created only by [`run_preflight`], and a report cannot be read
+/// from a file. So a report that names a target always holds the result of
+/// every target check for that target.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct PreflightReport {
-    /// The identity of the target the target checks were run for, if any.
-    pub target: Option<Identity>,
-    /// One result per check, in a fixed order.
-    pub results: Vec<CheckResult>,
+    target: Option<Identity>,
+    results: Vec<CheckResult>,
 }
 
 impl PreflightReport {
+    /// The identity of the target the target checks were run for, if any.
+    pub fn target(&self) -> Option<&Identity> {
+        self.target.as_ref()
+    }
+
+    /// One result per check, in a fixed order.
+    pub fn results(&self) -> &[CheckResult] {
+        &self.results
+    }
+
     /// The checks that block installation.
     pub fn blocking(&self) -> Vec<&CheckResult> {
         self.with_status(CheckStatus::Blocking)

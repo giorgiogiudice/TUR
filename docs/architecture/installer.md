@@ -39,9 +39,9 @@ link directories; it is the only code that starts a process, it is read-only,
 and no test runs it.
 
 The parser accepts numbers and booleans in the forms different lsblk versions
-print them, and refuses an entry without a name or a size in bytes. The link
-map takes precedence for stable paths; lsblk's own `id-link` column is used as
-well, so an inventory without a link map still has by-id paths.
+print them, and refuses an entry without a name or a size in bytes. Stable
+paths come from the link map and from lsblk's own `id-link` column, so an
+inventory without a link map still has by-id paths.
 
 A disk counts as **in use** when anything on it is mounted, is active swap, or
 is held open by an unlocked encrypted volume, an active logical volume, a
@@ -187,9 +187,10 @@ from the one before it.
    use and a read-only disk.
 3. `Plan::confirm` is the only source of a `ConfirmedPlan`. It needs the exact
    typed phrase and a preflight report, for the same disk, with no blocking
-   check. It refuses a plan whose displayed phrase does not belong to its
-   target identity. A `ConfirmedPlan` cannot be serialised, so a confirmation
-   never survives in a file.
+   check. Only `run_preflight` can produce a report, so one that names a disk
+   holds every target check for it. `confirm` refuses a plan whose displayed
+   phrase does not belong to its target identity. A `ConfirmedPlan` cannot be
+   serialised, so a confirmation never survives in a file.
 4. `ConfirmedPlan::revalidate` is the only source of a `ValidatedTarget`. It
    needs a fresh inventory and fails if the identity no longer matches exactly
    one disk, if the disk became the live medium, read-only or in use, or if
