@@ -135,6 +135,12 @@ The rules are enforced, not only written down:
 
 An entry with every route unknown is acceptable. An invented rating is not.
 
+The same care applies to the other facts. In the seed, every edition carries a
+reference or a note that says what could not be confirmed, and no requirement
+is entered on an edition without a reference
+(`every_seed_edition_and_requirement_is_backed_by_a_reference`). A test cannot
+check that a reference really supports a fact; a reviewer has to.
+
 The seed catalogue holds 32 entries. Twelve records carry a rating, each from
 one of four sources; every other route is unknown. The sources, all checked on
 12 November 2026:
@@ -528,3 +534,9 @@ These are not yet registry entries in the sense of §29.3.
 - **Security policy** (§7.4) is not an input.
 - **JSON Schema validation in CI.** The schema is kept in step with the Rust
   types by tests; entries are not run through a schema validator.
+- **A CI trigger for changes to the data alone.** The seed tests run whenever
+  the Rust workflow runs. That workflow starts for changes under `crates/`,
+  `services/`, `installer/` and `schemas/`; it does not list `catalogue/`. A
+  change that touches only catalogue entries is therefore not validated by CI
+  until `catalogue/**` is added to the path filters of
+  `.github/workflows/rust.yml`.

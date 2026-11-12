@@ -150,6 +150,26 @@ fn no_seed_record_claims_tur_s_own_test_without_a_test_report() {
 }
 
 #[test]
+fn every_seed_edition_and_requirement_is_backed_by_a_reference() {
+    let catalogue = seed();
+    for entry in catalogue.entries() {
+        for (index, edition) in entry.editions.iter().enumerate() {
+            let what = format!("{}, edition {}", entry.id, index + 1);
+            // A requirement is entered only where a reference supports it.
+            assert!(
+                edition.requirements.is_empty() || !edition.references.is_empty(),
+                "{what}: a requirement without a reference"
+            );
+            // An edition is referenced, or says what could not be checked.
+            assert!(
+                !edition.references.is_empty() || edition.notes.is_some(),
+                "{what}: neither a reference nor a note"
+            );
+        }
+    }
+}
+
+#[test]
 fn every_seed_rating_names_a_documented_external_source() {
     let catalogue = seed();
     let readme = std::fs::read_to_string(repository_root().join("catalogue/README.md")).unwrap();
