@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/giorgiogiudice/TUR/schemas/app-installed.schema.json",
+  "$comment": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+  "title": "TUR installed-application record",
+  "description": "What tur-apps keeps about one application it installed: $XDG_DATA_HOME/tur/apps/installed/<id>.json. It ties the catalogue's identifier to what was installed by which route. Written by tur-apps only; read back with a 256 KiB cap; a record that names another application, or a route that does not match what it holds, is refused. See docs/architecture/app-install-backend.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "name", "route", "source", "installed_at"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "id": {
+      "description": "The catalogue identifier. Also the record's file name, and for a Windows application the identifier tur-runtime keeps it under.",
+      "type": "string",
+      "maxLength": 255,
+      "pattern": "^[a-z0-9][a-z0-9_-]*(\\.[a-z0-9][a-z0-9_-]*)+$"
+    },
+    "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "route": { "enum": ["flatpak", "wine"] },
+    "source": { "$ref": "#/$defs/source" },
+    "version": { "type": ["string", "null"], "maxLength": 200 },
+    "installed_at": {
+      "description": "When, in UTC, RFC 3339 to the second.",
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "flatpak": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/flatpak" }] },
+    "windows": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/windows" }] }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "route": { "const": "flatpak" } } },
+      "then": { "required": ["flatpak"], "properties": { "flatpak": { "$ref": "#/$defs/flatpak" }, "windows": { "type": "null" } } }
+    },
+    {
+      "if": { "properties": { "route": { "const": "wine" } } },
+      "then": { "required": ["windows"], "properties": { "windows": { "$ref": "#/$defs/windows" }, "flatpak": { "type": "null" } } }
+    }
+  ],
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "source": {
+      "description": "What the application was installed from.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": { "enum": ["flatpak-remote", "publisher-download", "user-file"] },
+        "remote": { "type": ["string", "null"] },
+        "url": { "type": ["string", "null"] },
+        "file_name": { "type": ["string", "null"] },
+        "sha256": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/sha256" }] },
+        "size": { "type": ["integer", "null"], "minimum": 0 },
+        "pinned": {
+          "description": "Whether the file's SHA-256 matched the one the catalogue pins. A user's file for an application with no pin is false.",
+          "type": "boolean"
+        }
+      }
+    },
+    "flatpak": {
+      "description": "What a Flatpak installation consists of.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["app_id", "reference", "remote", "added_refs"],
+      "properties": {
+        "app_id": { "type": "string" },
+        "reference": { "type": "string", "pattern": "^app/[^/]+/[^/]+/[^/]+$" },
+        "remote": { "type": "string" },
+        "commit": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
+        "added_refs": {
+          "description": "Every reference the installation added: the application, runtimes, extensions, translations. Removal takes away those no other application uses.",
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "windows": {
+      "description": "What a Windows installation consists of.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runtime_app_id"],
+      "properties": {
+        "runtime_app_id": { "type": "string" },
+        "main_executable": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

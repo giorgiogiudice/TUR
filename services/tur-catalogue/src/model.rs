@@ -148,6 +148,12 @@ pub struct Edition {
     /// direct link to a program or archive.
     #[serde(default)]
     pub download_page: Option<String>,
+    /// Windows, from the publisher's page: the publisher's own installer of
+    /// a freely redistributable application, pinned by its SHA-256, which
+    /// the application centre may download when the user asks for the
+    /// application (ADR-0019). Never present for proprietary software.
+    #[serde(default)]
+    pub installer: Option<Installer>,
     /// Android: the stores that carry the package.
     #[serde(default)]
     pub stores: Vec<AndroidStore>,
@@ -189,6 +195,7 @@ impl Edition {
             distribution: None,
             store_id: None,
             download_page: None,
+            installer: None,
             stores: Vec::new(),
             url: None,
             primary: false,
@@ -279,6 +286,68 @@ impl Edition {
                 None => obtain.label().to_owned(),
             },
         }
+    }
+}
+
+/// The publisher's own installer of a freely redistributable Windows
+/// application: where it is, and what it must be.
+///
+/// This is the one place the catalogue names a file to download. It exists
+/// so that "Install" can work for free software without the user fetching a
+/// file by hand. The file is still fetched only when the user asks for the
+/// application, and nothing in it runs before its SHA-256 has been checked
+/// against [`Installer::sha256`] (ADR-0019). An edition that is not open
+/// source may not carry one: the validator refuses it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Installer {
+    /// The publisher's own download location of the file: an `https` URL
+    /// that ends in the file's name.
+    pub url: String,
+    /// The SHA-256 of the file, as 64 lower-case hexadecimal digits.
+    pub sha256: String,
+    /// The size of the file in bytes.
+    pub size: u64,
+    /// The version of the application the file installs.
+    pub version: String,
+    /// The licence the application is published under, as its publisher
+    /// states it, for example `MIT` or `GPL-3.0-or-later`.
+    pub licence: String,
+    /// The page the licence was read on.
+    pub licence_url: String,
+    /// Where the SHA-256 was taken from: the publisher's checksum file, or
+    /// the digest its release page publishes.
+    pub hash_source: String,
+    /// The day the location, the digest and the licence were checked,
+    /// `YYYY-MM-DD`.
+    pub checked: String,
+    /// The file is the application itself, a single program, and not an
+    /// installer: it is copied into place and never run to install.
+    #[serde(default)]
+    pub portable: bool,
+}
+
+impl Installer {
+    /// The name of the file: the last segment of the URL's path, without
+    /// its query or fragment. Empty when the URL has no such segment.
+    pub fn file_name(&self) -> &str {
+        let without_scheme = self.url.strip_prefix("https://").unwrap_or(&self.url);
+        let path_start = without_scheme.find('/').unwrap_or(without_scheme.len());
+        let path = &without_scheme[path_start..];
+        let path_end = path.find(['?', '#']).unwrap_or(path.len());
+        let path = &path[..path_end];
+        path.rsplit('/').next().unwrap_or("")
+    }
+
+    /// The host the file is downloaded from, without a port. Empty when
+    /// the URL is not an `https` URL.
+    pub fn host(&self) -> &str {
+        let Some(rest) = self.url.strip_prefix("https://") else {
+            return "";
+        };
+        let authority_end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
+        let authority = &rest[..authority_end];
+        authority.split(':').next().unwrap_or("")
     }
 }
 
@@ -977,6 +1046,52 @@ checked = "2026-11-12"
         let text = MINIMAL.replace("kind = \"flatpak\"", "kind = \"snap\"");
         let error = parse_entry(&text).unwrap_err();
         assert!(error.starts_with("line "), "{error}");
+    }
+
+    const WITH_INSTALLER: &str = r#"
+schema_version = 1
+id = "org.example.app"
+name = "Example"
+publisher = "Example Project"
+category = "utility"
+
+[[editions]]
+kind = "windows"
+obtain = "publisher-page"
+download_page = "https://example.org/download"
+licence = "open-source"
+
+[editions.installer]
+url = "https://downloads.example.org:8443/releases/1.2/example-1.2-setup.exe?mirror=1#top"
+sha256 = "9b697f65ecc2d9b0152f5ee96d72dde522a7827690349d9307935dacf40f42ec"
+size = 1659704
+version = "1.2"
+licence = "MIT"
+licence_url = "https://example.org/licence"
+hash_source = "The publisher's sha256sums file"
+checked = "2026-11-12"
+"#;
+
+    #[test]
+    fn parses_a_pinned_installer_and_names_its_file_and_host() {
+        let entry = parse_entry(WITH_INSTALLER).unwrap();
+        let installer = entry.editions[0].installer.as_ref().unwrap();
+        assert_eq!(installer.file_name(), "example-1.2-setup.exe");
+        assert_eq!(installer.host(), "downloads.example.org");
+        assert_eq!(installer.size, 1_659_704);
+        assert!(!installer.portable);
+
+        let unknown = WITH_INSTALLER.replace("checked =", "colour = \"red\"\nchecked =");
+        assert!(parse_entry(&unknown).unwrap_err().contains("colour"));
+        let missing = WITH_INSTALLER.replace("version = \"1.2\"\n", "");
+        assert!(parse_entry(&missing).unwrap_err().contains("version"));
+
+        let mut bare = installer.clone();
+        bare.url = "https://example.org".to_owned();
+        assert_eq!(bare.file_name(), "");
+        assert_eq!(bare.host(), "example.org");
+        bare.url = "http://example.org/a.exe".to_owned();
+        assert_eq!(bare.host(), "");
     }
 
     #[test]

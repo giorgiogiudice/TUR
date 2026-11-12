@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
 # TUR application catalogue entry. Format: schemas/app-catalogue-entry.schema.json.
 # How entries are written and sourced: catalogue/README.md.
-# TUR has not tested this application. Every rating below is reported by the
-# named source, which was checked on the date given; no record means unknown.
+# TUR's automated test of the Windows edition is recorded below, with its
+# report, and carries no rating yet (docs/reports/apps-1.md). No other record
+# exists; no record means unknown.
 
 schema_version = 1
 id = "org.7-zip.7zip"
@@ -31,6 +32,25 @@ kind = "windows"
 obtain = "publisher-page"
 download_page = "https://www.7-zip.org/download.html"
 licence = "open-source"
+
+[editions.installer]
+url = "https://github.com/ip7z/7zip/releases/download/26.06/7z2606-x64.exe"
+sha256 = "9b697f65ecc2d9b0152f5ee96d72dde522a7827690349d9307935dacf40f42ec"
+size = 1659704
+version = "26.06"
+licence = "LGPL-2.1-or-later; parts of 7z.dll carry the unRAR restriction, BSD-3-Clause and BSD-2-Clause"
+licence_url = "https://www.7-zip.org/license.txt"
+hash_source = "The digest GitHub publishes for the release asset of ip7z/7zip 26.06, which the download page links to (tests/windows-runtime/apps.json)"
+checked = "2026-11-12"
+
+[[editions.records]]
+route = "wine"
+rating = "unknown"
+reported_by = "tur-test"
+test_report = "docs/reports/windows-runtime-2.md"
+version_tested = "26.06"
+date = "2026-11-12"
+notes = "Automated test of 7-Zip's own installer 7z2606-x64.exe and of its Windows Installer package: install, launch, writing and reading back zip and 7z archives, and uninstall all passed. Wine 9.0 from Ubuntu on a hosted runner, software rendering; not the TUR image. No rating is entered yet: see docs/reports/apps-1.md."
 
 [[editions.references]]
 title = "7-Zip download page: installers for Windows; console versions for Linux and macOS"

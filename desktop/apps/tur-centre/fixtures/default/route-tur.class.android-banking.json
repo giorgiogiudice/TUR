@@ -57,14 +57,33 @@
                 "code": "requirement",
                 "severity": "blocker",
                 "requirement": "play-integrity",
-                "text": "Needs a phone certified by Google (Play Integrity): it will refuse to run here. No container or virtual machine passes that check."
+                "text": "Needs a phone certified by Google (Play Integrity): it will refuse to run here. No container or virtual machine passes that check.",
+                "text_id": "requirement.play-integrity.android-runtime",
+                "params": {}
               }
             ],
             "prerequisites": [],
             "alternative": {
               "kind": "certified-android-device",
-              "text": "Use it on a phone or tablet certified by Google."
-            }
+              "text": "Use it on a phone or tablet certified by Google.",
+              "text_id": "certified-android-device"
+            },
+            "reason_code": "no-route",
+            "reason_parts": [
+              {
+                "code": "no-route",
+                "params": {
+                  "name": "Banking and payment applications for Android"
+                }
+              },
+              {
+                "code": "route-blocked",
+                "params": {
+                  "caveat": "requirement.play-integrity.android-runtime",
+                  "route": "android-runtime"
+                }
+              }
+            ]
           },
           {
             "route": "android-runtime",
@@ -84,7 +103,9 @@
                 "code": "requirement",
                 "severity": "blocker",
                 "requirement": "play-integrity",
-                "text": "Needs a phone certified by Google (Play Integrity): it will refuse to run here. No container or virtual machine passes that check."
+                "text": "Needs a phone certified by Google (Play Integrity): it will refuse to run here. No container or virtual machine passes that check.",
+                "text_id": "requirement.play-integrity.android-runtime",
+                "params": {}
               }
             ],
             "prerequisites": [
@@ -93,7 +114,14 @@
                 "text": "The Android runtime must be enabled: it is off by default."
               }
             ],
-            "alternative": null
+            "alternative": null,
+            "reason_code": "android",
+            "reason_parts": [
+              {
+                "code": "android",
+                "params": {}
+              }
+            ]
           }
         ]
       }

@@ -143,7 +143,7 @@ pub use schedule::{
 };
 pub use secret::SecretKind;
 pub use store::{Collection, FileStore, MemoryStore, Store, StoreError, default_store_dir};
-pub use time::{Clock, ManualClock, SystemClock, Timestamp};
+pub use time::{Clock, ManualClock, SystemClock, Timestamp, is_known_zone, weekday_and_day_of};
 pub use trigger::{
     IntervalUnit, LocalTime, MissedRunPolicy, NextRun, ShortMonth, SystemEvent, Trigger, Weekday,
     event_may_fire, next_run,

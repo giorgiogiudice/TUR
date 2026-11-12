@@ -4,6 +4,10 @@
 # programs it adapts, the real bubblewrap sandbox and a scripted provider.
 # See tests/pax/e2e.py for what is and is not proved.
 #
+# Then the session service, org.tur.Agent1, on a private session bus with a
+# real Secret Service (gnome-keyring) and a stand-in notification service.
+# See tests/pax/service_e2e.py.
+#
 # No real model is called and no API key exists: the provider is a script
 # that runs on the runner. This runs on Ubuntu, not on the TUR image.
 name: pax
@@ -23,6 +27,7 @@ on:
       - "crates/tur-core/**"
       - "catalogue/**"
       - "tests/pax/**"
+      - "schemas/pax-*.json"
       - "rust-toolchain.toml"
       - ".github/workflows/pax.yml"
   pull_request:
@@ -38,6 +43,7 @@ on:
       - "crates/tur-core/**"
       - "catalogue/**"
       - "tests/pax/**"
+      - "schemas/pax-*.json"
       - "rust-toolchain.toml"
       - ".github/workflows/pax.yml"
   workflow_dispatch:
@@ -68,11 +74,15 @@ jobs:
           mkdir -p "$RUNNER_TEMP/pax-e2e/evidence"
           echo "WORK=$RUNNER_TEMP/pax-e2e" >> "$GITHUB_ENV"
 
-      - name: Install bubblewrap
-        # A distribution package. Its version is printed by the next step.
+      - name: Install bubblewrap, a message bus and a Secret Service
+        # Distribution packages. Their versions are printed by the next step.
+        # dbus-daemon runs the private session bus of the service test;
+        # gnome-keyring is the real Secret Service the key is kept in;
+        # python3-dbus and python3-gi are the test's own D-Bus client, an
+        # implementation independent of the one in tur-pax.
         run: |
           sudo apt-get update
-          sudo apt-get install -y bubblewrap util-linux
+          sudo apt-get install -y bubblewrap util-linux dbus-daemon gnome-keyring python3-dbus python3-gi
 
       - name: Versions
         run: |
@@ -84,7 +94,7 @@ jobs:
             echo "util-linux: $(prlimit --version)"
             echo "python: $(python3 --version)"
             echo "packages:"
-            dpkg-query -W -f '  ${Package} ${Version}\n' bubblewrap util-linux 2>&1 || true
+            dpkg-query -W -f '  ${Package} ${Version}\n' bubblewrap util-linux dbus-daemon gnome-keyring python3-dbus python3-gi 2>&1 || true
           } | tee "$WORK/evidence/versions.txt"
           { echo '### Versions'; echo '```'; cat "$WORK/evidence/versions.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 
@@ -166,6 +176,38 @@ jobs:
             --work-dir "$WORK/work" \
             --evidence "$WORK/evidence"
 
+      - name: A user service manager, for the wake timer
+        # Optional. With it, the session service sets its own transient
+        # timer (systemd-run --user) and the test waits for it to fire.
+        # Without it, the test runs what the timer would run, and its
+        # summary says so.
+        if: success() || failure()
+        continue-on-error: true
+        run: |
+          sudo loginctl enable-linger "$(id -un)"
+          uid="$(id -u)"
+          for _ in $(seq 1 60); do
+            [ -S "/run/user/$uid/systemd/private" ] && break
+            sleep 0.5
+          done
+          if XDG_RUNTIME_DIR="/run/user/$uid" systemctl --user show-environment >/dev/null; then
+            echo "user service manager: running" | tee "$WORK/evidence/user-manager.txt"
+          else
+            echo "user service manager: not available" | tee "$WORK/evidence/user-manager.txt"
+          fi
+
+      - name: Session service test
+        if: success() || failure()
+        run: |
+          uid="$(id -u)"
+          sudo mkdir -p "/run/user/$uid"
+          sudo chown "$uid" "/run/user/$uid"
+          sudo chmod 0700 "/run/user/$uid"
+          python3 tests/pax/service_e2e.py \
+            --tur-pax services/tur-pax/target/debug/tur-pax \
+            --work-dir "$WORK/service" \
+            --evidence "$WORK/evidence"
+
       - name: Summary
         if: always()
         run: |
@@ -173,6 +215,11 @@ jobs:
             cat "$WORK/evidence/summary.md" >> "$GITHUB_STEP_SUMMARY"
           else
             echo "The end-to-end test did not write a summary." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ -f "$WORK/evidence/service-summary.md" ]; then
+            cat "$WORK/evidence/service-summary.md" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "The session service test did not write a summary." >> "$GITHUB_STEP_SUMMARY"
           fi
           ls -la "$WORK/evidence" || true
 

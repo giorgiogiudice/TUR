@@ -19,12 +19,16 @@
 //!   every process inside, because they share one process namespace that
 //!   dies with its first process;
 //! * the output bound: at most `output_bytes` of each stream are kept, and
-//!   the rest is read and dropped so that the command does not block.
+//!   the rest is read and dropped so that the command does not block;
+//! * for [`StoppableExecutor`], a stop flag: when another thread sets it,
+//!   the sandbox is killed at once, the same way as at its time limit.
 
 use std::fs;
 use std::io::{Read, Write};
 use std::path::Path;
 use std::process::{Command, Stdio};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -107,6 +111,43 @@ const POLL: Duration = Duration::from_millis(5);
 
 impl Executor for BwrapExecutor {
     fn run(&mut self, plan: &SandboxPlan) -> ExecOutput {
+        run_plan(plan, None)
+    }
+}
+
+/// Runs a plan under bubblewrap, and kills the sandbox when it is told to
+/// stop.
+///
+/// It is the same sandbox as [`BwrapExecutor`]'s. The flag is what lets a
+/// cancelled task end at once instead of at the time limit of whatever it
+/// was running. A plan that is started after the flag was set is not
+/// started at all.
+#[derive(Debug, Clone, Default)]
+pub struct StoppableExecutor {
+    stop: Arc<AtomicBool>,
+}
+
+impl StoppableExecutor {
+    /// An executor that stops when `stop` is set.
+    pub fn new(stop: Arc<AtomicBool>) -> Self {
+        StoppableExecutor { stop }
+    }
+}
+
+impl Executor for StoppableExecutor {
+    fn run(&mut self, plan: &SandboxPlan) -> ExecOutput {
+        run_plan(plan, Some(&self.stop))
+    }
+}
+
+/// Run one plan under bubblewrap. `stop`, if given, is looked at as often as
+/// the process is.
+fn run_plan(plan: &SandboxPlan, stop: Option<&AtomicBool>) -> ExecOutput {
+    let stopped = || stop.is_some_and(|flag| flag.load(Ordering::SeqCst));
+    if stopped() {
+        return ExecOutput::not_started("the task was stopped");
+    }
+    {
         if !Path::new(&plan.program).is_file() {
             return ExecOutput::not_started("bubblewrap is not installed");
         }
@@ -172,6 +213,11 @@ impl Executor for BwrapExecutor {
                     };
                 }
                 Ok(None) => {
+                    if stopped() {
+                        let _ = child.kill();
+                        let _ = child.wait();
+                        break ExecStatus::Killed;
+                    }
                     if Instant::now() >= deadline {
                         let _ = child.kill();
                         let _ = child.wait();
@@ -288,6 +334,34 @@ mod tests {
         );
         assert_eq!(output.status.name(), "not_started");
         assert!(output.stdout.is_empty());
+    }
+
+    #[test]
+    fn nothing_is_started_once_the_task_was_stopped() {
+        let argv = vec!["/usr/bin/true".to_owned()];
+        let plan = SandboxPlan::read_only(
+            &GrantRules::for_home("/home/ada"),
+            &[],
+            &argv,
+            Limits::default(),
+        )
+        .expect("a plan");
+        let stop = Arc::new(AtomicBool::new(true));
+        let output = StoppableExecutor::new(Arc::clone(&stop)).run(&plan);
+        assert_eq!(
+            output.status,
+            ExecStatus::NotStarted("the task was stopped".to_owned())
+        );
+        // Not stopped, the executor is the ordinary one: here the sandbox
+        // program is missing, which is reported as such.
+        stop.store(false, Ordering::SeqCst);
+        let mut missing = plan.clone();
+        missing.program = "/nonexistent/tur-pax-test/bwrap".to_owned();
+        let output = StoppableExecutor::new(stop).run(&missing);
+        assert_eq!(
+            output.status,
+            ExecStatus::NotStarted("bubblewrap is not installed".to_owned())
+        );
     }
 
     #[test]

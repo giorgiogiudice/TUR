@@ -59,7 +59,14 @@
             "reason": "A Windows edition exists and this is a game: Proton, through umu-launcher, is the first route for games.",
             "caveats": [],
             "prerequisites": [],
-            "alternative": null
+            "alternative": null,
+            "reason_code": "windows-game-proton",
+            "reason_parts": [
+              {
+                "code": "windows-game-proton",
+                "params": {}
+              }
+            ]
           }
         ]
       }

@@ -7,10 +7,12 @@
 //! One step of the loop:
 //!
 //! 1. Between steps the loop looks at the stop control, the time limit, the
-//!    step limit and the spend limit.
+//!    step limit, the spend limit of the task and the spending limit of the
+//!    day.
 //! 2. The conversation is sent to the provider and the response is read to
-//!    its end. A response that ends in a refusal or an error is discarded
-//!    whole: its text is not shown and nothing it proposed is looked at.
+//!    its end. A response that ends in a refusal or an error, or that
+//!    arrives after the task was cancelled, is discarded whole: its text is
+//!    not shown and nothing it proposed is looked at.
 //! 3. Each tool call of an accepted response is handled on its own, in
 //!    order: it must have one reading (the provider layer delivers no call
 //!    that has two, and the text that comes with the call is read again
@@ -36,6 +38,16 @@
 //! yet, and the model is told the action was refused.
 //!
 //! Nothing in the loop reads an environment variable or a file.
+//!
+//! # What a caller may add
+//!
+//! Three things a caller supplies cannot widen that. A [`Budget`] can only
+//! stop a task: it is asked before every request to the provider whether the
+//! day's spending limit has been reached. An [`Assistant`] performs P@x's own
+//! class 1 operations, which change nothing by themselves: a schedule it
+//! records is a proposal the person has to confirm, and a note it keeps waits
+//! for the person in settings. An [`Observer`] is told what happens and
+//! decides nothing.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, Ordering};
@@ -60,7 +72,7 @@ use crate::exec::{ExecStatus, Executor};
 use crate::faults::TaskCode;
 use crate::policy::UserPolicy;
 use crate::redact::{filter_json, filter_text, kind_name};
-use crate::registry::{Performer, ToolRegistry};
+use crate::registry::{AssistantCall, BUILT_IN_SERVICE, COMMAND_TOOL, Performer, ToolRegistry};
 use crate::sandbox::{Grant, GrantRules, Limits, SandboxPlan, is_system_visible};
 use crate::store::HeldApprovals;
 use crate::strict;
@@ -359,6 +371,9 @@ impl TaskOutcome {
 pub struct ProposalReport {
     /// The tool name the model used, as an identifier.
     pub tool: String,
+    /// The service that declares the tool: the manifest's, or the service of
+    /// P@x's own tools. `None` if the call never became an action.
+    pub service: Option<String>,
     /// The exact action, escaped for display; empty if the call never became
     /// an action.
     pub description: String,
@@ -435,10 +450,107 @@ impl ReportItem {
     }
 }
 
+/// An action an unattended task proposed and may not take with nobody
+/// there. It is kept for the person's return (design sections 5.6 and 16.2).
+#[derive(Debug, Clone, PartialEq)]
+pub struct HeldAction {
+    /// The service that declares the tool, or the service of P@x's own tools.
+    pub service: String,
+    /// The tool name, as an identifier.
+    pub tool: String,
+    /// The arguments of the call. They go to the record the person reads on
+    /// return, never to the audit trail.
+    pub arguments: Map<String, Value>,
+    /// The class the action was treated as.
+    pub class: u8,
+    /// The engine's machine-readable reason.
+    pub reason: String,
+}
+
 /// Receives what a task does as it does it.
 pub trait Observer {
     /// One more item of the report.
     fn item(&mut self, item: &ReportItem);
+
+    /// A proposed action has been decided, and the decision is in the trail.
+    /// Nothing has been performed yet; the same proposal arrives again
+    /// through [`Observer::item`] with what became of it.
+    fn decided(&mut self, _proposal: &ProposalReport) {}
+
+    /// An unattended task proposed an action that is held for the person's
+    /// return.
+    fn held(&mut self, _action: &HeldAction) {}
+}
+
+/// The day's spending limit, as far as the loop needs it.
+///
+/// The spend limit of one task is the meter's. This is the limit across
+/// tasks, which the loop cannot keep itself because it has no state between
+/// them (design sections 7 and 10).
+pub trait Budget {
+    /// Whether the day's limit has been reached. Looked at before every
+    /// request to the provider; if it has, nothing is sent and the task stops.
+    fn exhausted(&mut self) -> bool;
+
+    /// What the task has used so far, from the provider's reported usage.
+    /// Called after every response, whatever became of it.
+    fn used(&mut self, usage: Usage, cost: Option<f64>);
+}
+
+/// No limit across tasks.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct NoBudget;
+
+impl Budget for NoBudget {
+    fn exhausted(&mut self) -> bool {
+        false
+    }
+
+    fn used(&mut self, _usage: Usage, _cost: Option<f64>) {}
+}
+
+/// What one of P@x's own operations produced.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AssistantOutcome {
+    /// Whether the operation did what it is for.
+    pub ok: bool,
+    /// What the model is told, as data.
+    pub output: Value,
+    /// Why it did not, in a sentence that repeats nothing the model wrote.
+    pub detail: Option<String>,
+}
+
+impl AssistantOutcome {
+    /// An operation that was not carried out.
+    pub fn failed(detail: impl Into<String>) -> Self {
+        AssistantOutcome {
+            ok: false,
+            output: Value::Null,
+            detail: Some(detail.into()),
+        }
+    }
+}
+
+/// Performs P@x's own operations: recording a proposal for a reminder or a
+/// scheduled task, and keeping a note.
+///
+/// These are class 1 operations of the engine's `AgentOperation`. The loop
+/// calls this only for an operation the engine allowed. Nothing an
+/// implementation does may take effect without the person: a proposal is not
+/// a schedule, and a note from a task is not an active memory entry.
+pub trait Assistant {
+    /// Carry out one operation for the task `task`.
+    fn perform(&mut self, task: &str, attended: bool, call: &AssistantCall) -> AssistantOutcome;
+}
+
+/// No operations of P@x's own: each one fails.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct NoAssistant;
+
+impl Assistant for NoAssistant {
+    fn perform(&mut self, _task: &str, _attended: bool, _call: &AssistantCall) -> AssistantOutcome {
+        AssistantOutcome::failed("this operation is not available here")
+    }
 }
 
 /// An observer that ignores everything.
@@ -689,6 +801,10 @@ const fn verdict_name(verdict: &Verdict) -> &'static str {
 fn decided(tool: &str, action: &Action, decision: &Decision) -> ProposalReport {
     ProposalReport {
         tool: tool.to_owned(),
+        service: Some(match action {
+            Action::Tool(call) => call.service().to_owned(),
+            _ => BUILT_IN_SERVICE.to_owned(),
+        }),
         description: describe(action),
         class: Some(decision.class().as_u8()),
         decision: verdict_name(decision.verdict()),
@@ -817,6 +933,10 @@ pub struct Orchestrator<'a> {
     pub control: &'a dyn Control,
     /// Who is told what the task does.
     pub observer: &'a mut dyn Observer,
+    /// The day's spending limit.
+    pub budget: &'a mut dyn Budget,
+    /// What performs P@x's own operations.
+    pub assistant: &'a mut dyn Assistant,
 }
 
 impl Orchestrator<'_> {
@@ -964,6 +1084,9 @@ impl Orchestrator<'_> {
                     &ProviderError::new(ErrorKind::SpendLimitReached),
                 );
             }
+            if self.budget.exhausted() {
+                return Stop::with_code(TaskOutcome::SpendLimit, TaskCode::DayLimitReached);
+            }
             session.steps += 1;
 
             let request = self.config.request(
@@ -972,9 +1095,18 @@ impl Orchestrator<'_> {
                 definitions.clone(),
             );
             let response = collect_response(meter.meter(self.provider.stream(&request)));
+            // The provider has reported what the response used, whatever
+            // becomes of the response.
+            self.budget.used(meter.usage(), meter.cost());
 
-            // A response that did not end well is discarded whole.
+            // A response that arrives after the task was cancelled, or that
+            // did not end well, is discarded whole.
+            let cancelled = self.control.signal() == Signal::Cancel;
             let discarded = match &response.finish {
+                _ if cancelled => Some((
+                    "cancelled",
+                    Stop::with_code(TaskOutcome::Cancelled, TaskCode::TaskCancelled),
+                )),
                 FinishReason::EndTurn | FinishReason::ToolUse => None,
                 FinishReason::Refusal(error) => Some((
                     "refusal",
@@ -1116,6 +1248,7 @@ impl Orchestrator<'_> {
             session,
             ReportItem::Proposal(ProposalReport {
                 tool,
+                service: None,
                 description: String::new(),
                 class: None,
                 decision: "rejected",
@@ -1200,11 +1333,46 @@ impl Orchestrator<'_> {
             return Err(Stop::audit());
         }
         let mut report = decided(&identifier(&call.name), &proposal.action, &decision);
+        self.observer.decided(&report);
+
+        // An unattended task that proposes what it may not do alone: the
+        // action is kept for the person's return. This changes nothing about
+        // what happens to it below.
+        let runs = decision.is_allow() && decision.class() <= ActionClass::Reversible;
+        if self.situation.presence == Presence::Unattended
+            && !runs
+            && (decision.class() == ActionClass::Consequential
+                || matches!(decision.verdict(), Verdict::Defer))
+        {
+            let (service, arguments) = match &proposal.action {
+                Action::Tool(tool) => (tool.service().to_owned(), tool.arguments().clone()),
+                _ => (BUILT_IN_SERVICE.to_owned(), call.arguments.clone()),
+            };
+            let tool = match &proposal.action {
+                Action::Tool(tool) => tool.tool().to_owned(),
+                Action::Command(_) => COMMAND_TOOL.to_owned(),
+                _ => identifier(&call.name),
+            };
+            let event = TrailEvent::new(EventKind::HeldForReturn, session.task, session.provider)
+                .with("TUR_AI_ACTION", identifier(&action_label(&proposal.action)))
+                .with("TUR_AI_CLASS", decision.class().to_string())
+                .with("TUR_AI_REASON", decision.reason().as_str());
+            if self.trail.event(&event).is_err() {
+                return Err(Stop::audit());
+            }
+            self.observer.held(&HeldAction {
+                service,
+                tool,
+                arguments,
+                class: decision.class().as_u8(),
+                reason: decision.reason().as_str().to_owned(),
+            });
+        }
 
         // 4. What the decision means here.
         let result = match decision.verdict() {
             Verdict::Allow if decision.class() <= ActionClass::Reversible => {
-                let performed = self.perform(&proposal.performer);
+                let performed = self.perform(session.task, &proposal.performer);
                 let label = action_label(&proposal.action);
                 // The two events of the audit vocabulary: what became of the
                 // action, and, if anything was withheld from its output, how
@@ -1303,11 +1471,33 @@ impl Orchestrator<'_> {
         Ok(result)
     }
 
-    /// Perform an allowed action in the read-only sandbox.
-    fn perform(&mut self, performer: &Performer<'_>) -> Performed {
+    /// Perform one of P@x's own operations. What it returns passes the
+    /// output filter like anything else that goes back to the provider.
+    fn assist(&mut self, task: &str, call: &AssistantCall) -> Performed {
+        let attended = self.situation.presence == Presence::Attended;
+        let outcome = self.assistant.perform(task, attended, call);
+        let filtered = filter_json(&outcome.output);
+        let detail = outcome.detail.map(|detail| filter_text(&detail).text);
+        Performed {
+            state: if outcome.ok { "ok" } else { "failed" },
+            ok: outcome.ok,
+            exit: None,
+            bytes: filtered.value.to_string().len(),
+            output: filtered.value,
+            stderr: String::new(),
+            detail,
+            truncated: false,
+            withheld: filtered.withheld,
+        }
+    }
+
+    /// Perform an allowed action: one of P@x's own operations, or a tool
+    /// program or a command in the read-only sandbox.
+    fn perform(&mut self, task: &str, performer: &Performer<'_>) -> Performed {
         let rules = self.rules;
         let mut grants = self.grants.to_vec();
         let (argv, limits, success, structured, feed) = match performer {
+            Performer::Assistant(call) => return self.assist(task, call),
             Performer::Command { argv } => (argv.clone(), Limits::default(), vec![0], false, None),
             Performer::Adapter { adapter, arguments } => {
                 let argv = match adapter.argv(arguments) {

@@ -1,0 +1,158 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# P@x against the real Anthropic API. Started by hand only, never by a pull
+# request or a push (ai-control-layer.md section 23, item 4).
+#
+# It sends the requests of three existing scenarios to a real model through
+# the real Anthropic adapter, with the real tool programs in the real
+# sandbox, and checks what must hold whatever the model does: nothing above
+# class 1 allowed or performed, the key in no output or file. The cap on
+# requests and tokens of one run is in tests/pax/live.py, enforced in code:
+# at most 5 requests and 16 000 tokens (plus one response), 400 output
+# tokens a response. Worst case at the prices of 2026-11-12: under 0.005 USD
+# with claude-haiku-5-5, under 0.07 USD with claude-sonnet-5-5.
+#
+# The key is the repository secret CLAUDE_KEY. It reaches the
+# test only in its environment, never on a command line, and is never
+# printed. Without the secret the job says so and ends without calling
+# anything. The first step sends one minimal request; if the API rejects the
+# key, it reports the HTTP status and error type and the job stops.
+#
+# Start it from the Actions tab ("pax-live", "Run workflow"), or with
+#   gh workflow run pax-live.yml -f model=claude-haiku-5-5
+name: pax-live
+
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: "The Anthropic model (current API identifiers, read 2026-11-12)"
+        type: choice
+        options:
+          - claude-haiku-5-5
+          - claude-sonnet-5-5
+        default: claude-haiku-5-5
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pax-live
+  cancel-in-progress: false
+
+jobs:
+  live:
+    name: Three scenarios against the real Anthropic API, capped
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      CARGO_TERM_COLOR: never
+      CARGO_INCREMENTAL: "0"
+      DEBIAN_FRONTEND: noninteractive
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Is there a key, and does the API accept it?
+        # One minimal request: one short message, at most 8 output tokens.
+        # No key: a notice, and the job ends without calling anything.
+        # Rejected: the HTTP status and the error type, and the job stops.
+        id: key
+        env:
+          TUR_PAX_API_KEY: ${{ secrets.CLAUDE_KEY }}
+          MODEL: ${{ inputs.model }}
+        run: python3 tests/pax/live_ping.py "$MODEL"
+
+      - name: Scratch directory, bubblewrap
+        if: steps.key.outputs.present == 'true'
+        run: |
+          mkdir -p "$RUNNER_TEMP/pax-live/evidence"
+          echo "WORK=$RUNNER_TEMP/pax-live" >> "$GITHUB_ENV"
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap util-linux
+
+      - name: Toolchain
+        if: steps.key.outputs.present == 'true'
+        working-directory: services/tur-pax
+        run: |
+          rustup show active-toolchain || rustup toolchain install
+          rustc --version; cargo --version
+
+      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        if: steps.key.outputs.present == 'true'
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            services/tur-pax/target
+          key: pax-live-${{ hashFiles('rust-toolchain.toml', 'services/tur-pax/Cargo.lock') }}
+          restore-keys: pax-live-
+
+      - name: Build tur-pax
+        if: steps.key.outputs.present == 'true'
+        working-directory: services/tur-pax
+        run: cargo build --locked
+
+      - name: Put the test tool in place
+        if: steps.key.outputs.present == 'true'
+        run: |
+          sudo install -m 0755 tests/pax/tur-pax-test-tool /usr/bin/tur-pax-test-tool
+          uid="$(id -u)"
+          sudo mkdir -p "/run/user/$uid"
+          sudo chown "$uid" "/run/user/$uid"
+          sudo chmod 0700 "/run/user/$uid"
+
+      - name: Run against the real provider
+        if: steps.key.outputs.present == 'true'
+        env:
+          TUR_PAX_API_KEY: ${{ secrets.CLAUDE_KEY }}
+          MODEL: ${{ inputs.model }}
+        shell: bash
+        run: |
+          python3 tests/pax/live.py \
+            --tur-pax services/tur-pax/target/debug/tur-pax \
+            --model "$MODEL" \
+            --work-dir "$WORK/work" \
+            --evidence "$WORK/evidence" 2>&1 | tee "$WORK/live-log.txt"
+
+      - name: The key is in no output and no file
+        # The same scan as the end-to-end test's, over everything this job
+        # wrote, its own log included. The evidence is uploaded only if it
+        # passes.
+        id: scan
+        if: always() && steps.key.outputs.present == 'true'
+        env:
+          TUR_PAX_API_KEY: ${{ secrets.CLAUDE_KEY }}
+        shell: bash
+        run: |
+          python3 - "$WORK" <<'PYTHON'
+          import os, sys
+          from pathlib import Path
+          key = os.environ["TUR_PAX_API_KEY"].strip().encode()
+          found, scanned = [], 0
+          for path in Path(sys.argv[1]).rglob("*"):
+              if path.is_file() and not path.is_symlink():
+                  scanned += 1
+                  if key in path.read_bytes():
+                      found.append(str(path))
+          print(f"scanned {scanned} files; the key was found in {len(found)}")
+          for path in found:
+              print(f"  {path}")
+          sys.exit(1 if found or scanned == 0 else 0)
+          PYTHON
+
+      - name: Summary
+        if: always() && steps.key.outputs.present == 'true'
+        run: |
+          if [ -f "$WORK/evidence/live-summary.md" ]; then
+            cat "$WORK/evidence/live-summary.md" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "The live test did not write a summary." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always() && steps.scan.outcome == 'success'
+        with:
+          name: pax-live-evidence
+          path: ${{ runner.temp }}/pax-live/evidence/
+          if-no-files-found: warn

@@ -31,6 +31,15 @@ pub struct ApiKey {
     text: Zeroizing<String>,
 }
 
+/// Whether `text`, with surrounding whitespace removed, has the form of a
+/// key: 1 to [`KEY_MAX`] printable ASCII characters with no spaces, which is
+/// what can be sent in an HTTP header. It says nothing about whether a
+/// provider accepts the key.
+pub fn is_usable_key(text: &str) -> bool {
+    let trimmed = text.trim();
+    !trimmed.is_empty() && trimmed.len() <= KEY_MAX && trimmed.bytes().all(|b| b.is_ascii_graphic())
+}
+
 impl ApiKey {
     /// Take ownership of a key.
     ///
@@ -40,9 +49,7 @@ impl ApiKey {
     pub fn new(text: String) -> Result<Self, ProviderError> {
         let given = Zeroizing::new(text);
         let trimmed = given.trim();
-        let acceptable = !trimmed.is_empty()
-            && trimmed.len() <= KEY_MAX
-            && trimmed.bytes().all(|b| b.is_ascii_graphic());
+        let acceptable = is_usable_key(trimmed);
         if !acceptable {
             return Err(ProviderError::new(ErrorKind::KeyUnavailable).with_detail(
                 "the key is empty, too long, or has characters that cannot be sent in a header",
@@ -124,6 +131,19 @@ mod tests {
     use super::*;
 
     const KEY: &str = "sk-test-0123456789abcdef";
+
+    #[test]
+    fn the_form_of_a_key_is_checked_without_keeping_it() {
+        assert!(is_usable_key(KEY));
+        assert!(is_usable_key("  sk-test-0123456789abcdef\n"));
+        assert!(!is_usable_key(""));
+        assert!(!is_usable_key("   "));
+        assert!(!is_usable_key("two words"));
+        assert!(!is_usable_key("line\nbreak"));
+        assert!(!is_usable_key("k\u{e9}y"));
+        assert!(!is_usable_key(&"k".repeat(KEY_MAX + 1)));
+        assert!(is_usable_key(&"k".repeat(KEY_MAX)));
+    }
 
     #[test]
     fn a_key_cannot_be_printed() {

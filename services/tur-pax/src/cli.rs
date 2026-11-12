@@ -8,7 +8,13 @@
 //!                        [--policy <file>] [context flags] [--json]
 //! tur-pax run "<request>" [options] [--json]
 //! tur-pax chat [options]
+//! tur-pax serve [--bus <address>] [--tools <dir>] [--manifests <dir>]
+//!               [--adapters <dir>] [--models <file>]
+//! tur-pax schedule wake [--bus <address>]
+//! tur-pax key set|remove|status <provider> [--bus <address>]
 //! ```
+//!
+//! `serve`, `schedule` and `key` are described in [`crate::daemon`].
 //!
 //! `run` and `chat` are the text interface of the orchestrator; their options
 //! and exit statuses are described in [`crate::textui`].
@@ -84,6 +90,21 @@ pub enum TopCommand {
     Run(crate::textui::RunArgs),
     /// Talk to P@x on a terminal, one request per line.
     Chat(crate::textui::ChatArgs),
+    /// Serve org.tur.Agent1 on the session bus: the session service the
+    /// desktop talks to. Started by the user unit tur-pax.service.
+    Serve(crate::daemon::ServeArgs),
+    /// Reminders and scheduled tasks.
+    Schedule {
+        /// What to do.
+        #[command(subcommand)]
+        command: crate::daemon::ScheduleCommand,
+    },
+    /// The provider key, in the password store of the session.
+    Key {
+        /// What to do with the key.
+        #[command(subcommand)]
+        command: crate::daemon::KeyCommand,
+    },
 }
 
 /// The `manifest` subcommands.
@@ -177,6 +198,9 @@ pub fn run(cli: &Cli, out: &mut dyn Write, err: &mut dyn Write) -> io::Result<u8
         } => policy_check(args, out, err),
         TopCommand::Run(args) => crate::textui::run_task(args, out, err),
         TopCommand::Chat(args) => crate::textui::run_chat(args, out, err),
+        TopCommand::Serve(args) => crate::daemon::run_serve(args, err),
+        TopCommand::Schedule { command } => crate::daemon::run_schedule(command, out, err),
+        TopCommand::Key { command } => crate::daemon::run_key(command, out, err),
     }
 }
 

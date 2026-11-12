@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Look at the reminders and scheduled tasks of P@x that came due while the
+# person was not signed in, or before the clock or the time zone changed.
+# Started by tur-pax-catchup.timer. If P@x is switched off, the command reads
+# the settings file and ends without starting anything.
+
+[Unit]
+Description=P@x: look at reminders and scheduled tasks that came due
+Documentation=https://github.com/giorgiogiudice/TUR/blob/main/docs/architecture/pax-service.md
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/tur-pax schedule wake
+NoNewPrivileges=yes

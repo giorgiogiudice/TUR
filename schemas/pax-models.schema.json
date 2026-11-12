@@ -1,0 +1,174 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/giorgiogiudice/TUR/schemas/pax-models.schema.json",
+  "$comment": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+  "title": "P@x model list",
+  "description": "The providers P@x can use, each by an identifier with an adapter family (ADR-0004, amended 12 November 2026), the models offered for each, and their prices. Read from /etc/tur/pax/models.json if it exists, else /usr/share/tur/pax/models.json; never written by P@x. Model names and prices are configuration, never compiled in (ADR-0004). A model the person types that is not listed is accepted; its price is then not known and P@x limits it in tokens. The loader in services/tur-pax (settings.rs) is authoritative and also enforces: a provider is listed once; a model name is listed once per provider, with no control characters and no surrounding whitespace; prices follow the rules of the provider configuration (finite, not negative, a currency of 1 to 8 letters). The adapter families' own companies (anthropic, openai, google) exist without an entry, at their public addresses and with no prices.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "status",
+    "prices_as_of",
+    "providers"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "status": {
+      "description": "example: figures read on one day to show the format, not kept up to date. maintained: a list its publisher keeps up to date.",
+      "enum": [
+        "example",
+        "maintained"
+      ]
+    },
+    "prices_as_of": {
+      "description": "The day the prices were read.",
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+    },
+    "note": {
+      "type": "string"
+    },
+    "providers": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/provider"
+      }
+    }
+  },
+  "$defs": {
+    "provider": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "adapter",
+        "name"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]{0,31}$",
+          "description": "The provider's identifier, by which settings, the interface and the keyring name it."
+        },
+        "adapter": {
+          "description": "The adapter family that speaks its interface. The loader accepts the families the provider layer has: anthropic (Messages), openai (Responses), google (Interactions).",
+          "enum": [
+            "anthropic",
+            "openai",
+            "google"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "data_terms_url": {
+          "description": "Where the provider says how it handles data sent to its interface. Shown with the consent text.",
+          "type": "string",
+          "pattern": "^https://"
+        },
+        "key_url": {
+          "description": "Where a person gets a key.",
+          "type": "string",
+          "pattern": "^https://"
+        },
+        "prices_url": {
+          "description": "Where the prices were read.",
+          "type": "string",
+          "pattern": "^https://"
+        },
+        "models": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "model"
+            ],
+            "properties": {
+              "model": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "label": {
+                "type": "string"
+              },
+              "max_output_tokens": {
+                "description": "P@x's own limit for one response with this model.",
+                "type": "integer",
+                "minimum": 1
+              },
+              "tested_with_tur": {
+                "description": "Whether the project ran its conformance tests against this model.",
+                "type": "boolean"
+              },
+              "prices": {
+                "description": "Per million tokens. Absent when the price is not known or cannot be stated in this form.",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "currency",
+                  "input_per_million",
+                  "output_per_million"
+                ],
+                "properties": {
+                  "currency": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z]{1,8}$"
+                  },
+                  "input_per_million": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "output_per_million": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "cached_input_per_million": {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                }
+              }
+            }
+          }
+        },
+        "base_url": {
+          "description": "Its address, if it is not the public address of its adapter family: https, or http for a loopback host only.",
+          "type": "string",
+          "pattern": "^https?://[^\\s?#@\\\\]+$"
+        },
+        "keyring_item": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]{0,31}$",
+          "description": "The name of the password store item that holds its key. Its identifier when absent."
+        },
+        "capabilities": {
+          "description": "What it declares it can do. Recorded and reported; the adapter finds out whether it is true.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "tool_calling": {
+              "type": "boolean"
+            },
+            "streaming_tool_calls": {
+              "type": "boolean"
+            },
+            "image_input": {
+              "type": "boolean"
+            },
+            "context_tokens": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        }
+      }
+    }
+  }
+}

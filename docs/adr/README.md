@@ -35,8 +35,11 @@ the [specification](../architecture/specification.md).
 | [0016](0016-desktop-and-user-interface.md) | Desktop and user interface: standalone programs, Plasma by configuration, one identity | Accepted |
 | [0017](0017-update-manager.md) | The update manager: TUR drives bootc in three steps, and stages nothing boot health cannot undo | Accepted, amended |
 | [0018](0018-first-installer-medium.md) | The first installer medium: a small live environment that runs the image's own installer | Proposed |
+| [0019](0019-app-install-backend.md) | Installing applications: one backend, two routes, pinned downloads through curl | Accepted |
 | [0020](0020-overlay-window-positions.md) | P@x's overlay finds other programs' windows through the Plasma window-management protocol, read with KWayland | Proposed |
 | [0021](0021-local-ai.md) | Local AI: models that run on the computer, for P@x and for every application | Accepted |
+| [0023](0023-publishing-signed-updates.md) | Publishing updates: signed images in a public registry, on channels | Accepted |
+| [0024](0024-problem-reports.md) | Problem reports: prepared by P@x, sent only with consent, to a private receiver | Accepted |
 
 ## Open questions from the specification
 
