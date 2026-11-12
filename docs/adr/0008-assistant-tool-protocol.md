@@ -1,6 +1,6 @@
 # ADR-0008: Assistant tools use the Model Context Protocol
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-12
 - **Specification sections:** AI control layer (addendum A) §3, §10, §11
 

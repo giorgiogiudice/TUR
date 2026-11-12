@@ -1,6 +1,6 @@
 # ADR-0007: App-centric routing with a seamless real-OS tier
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-12
 - **Specification sections:** §1, §2, §3.4, §7, §13, §20, §32
 
@@ -55,7 +55,11 @@ Adopt option 3.
    software.
 
 2. **Routing ladder.** The first route that is known to work is used; the user can
-   override it.
+   override it. A compatibility layer always comes before a guest: it is faster and
+   lighter, and the owner's stated preference is to avoid virtualisation wherever
+   an application runs well without it. The guest is used only where the layer is
+   known to be inadequate, and making Windows applications run smoothly is the
+   measure of success for both routes.
 
    | Wanted | First choice | Then |
    |---|---|---|
@@ -73,11 +77,12 @@ Adopt option 3.
    applications. GPU passthrough and Looking Glass become an expert option, not
    the default display path.
 
-4. **macOS is an experiment, not a pillar.** Darling stays in the tree as a
-   research track for command-line tools. UOS does not present macOS application
-   support as a feature until there is a published list of applications that work.
-   A macOS guest is not an option: Apple's licence allows macOS virtual machines
-   only on Apple hardware.
+4. **macOS is an optional, experimental feature, not a pillar.** Darling is
+   shipped as a feature the user can enable. It is off by default, labelled
+   experimental, and comes with no promise that a given application works; a
+   published list says what does. It is not a main line of effort. A macOS guest
+   is not an option: Apple's licence allows macOS virtual machines only on Apple
+   hardware.
 
 5. **UOS builds the router and the experience, not the engines.** The engines are
    upstream: Proton and `umu-launcher`, Wine, Waydroid, Flatpak, a container tool
@@ -102,7 +107,7 @@ Adopt option 3.
   attestation; macOS and iOS applications in general.
 - Roadmap changes: the "full Windows backend" (Phase 6) moves forward to sit
   beside the Windows runtime (Phase 4) and is rescoped around seamless windows;
-  the macOS runtime (Phase 5) is reduced to a research track; an application
+  the macOS runtime (Phase 5) is reduced to an optional experimental feature; an application
   catalogue and application centre are added to Phase 3–4.
 - Deferred or dropped from revision 1.0: GPU passthrough with Looking Glass as the
   default guest display; two of the three visual modes; most of
