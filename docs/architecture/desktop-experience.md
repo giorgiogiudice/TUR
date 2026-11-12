@@ -4081,6 +4081,38 @@ already on the main branch.
    P@x's flame and the tray item need a simplified vector version of the lotus
    and of the flame, in few colours. This design assumes yes.
 
+### 17.1 The owner's answers (12 November 2026)
+
+These answers govern where the sections above say otherwise.
+
+1. **Class 2 is approved on the desktop**, in the approval sheet of 9.7. The
+   trusted screen is for class 3, for opening a repair session and for
+   anything that loosens P@x's limits. Section 6 of the AI control layer and
+   interpretation 29 of the policy engine are to be amended to recognise the
+   two levels.
+2. **The physical input witness is allowed**, with an ADR and a review before
+   it ships. The owner added a condition: **the stop combination and P@x's
+   other keyboard commands are visible at all times** while P@x is switched
+   on, not only while it acts. The P@x indicator (D-15) always carries the
+   stop combination, and the full list of P@x's commands is one action away
+   from it. The visible list and the bindings come from one source, so they
+   cannot disagree.
+3. **No Fedora mark.** TUR describes its origin with a factual credit line
+   only ("TUR is built from software packaged by the Fedora Project and many
+   other projects. TUR is not provided, endorsed or supported by the Fedora
+   Project or by Red Hat."), which the lawyer is to review. "Fedora Remix" is
+   not used. D-03 proceeds on that basis.
+4. **Firefox is the default browser.** The owner also asked for **Chrome for
+   people coming from Windows**. Google Chrome's terms do not allow TUR to
+   ship it in the image, so it is offered, not preinstalled: the first-run
+   welcome and the application centre offer it with one action, installed
+   from Google's own source and updated by it, and the welcome says plainly
+   that it comes from Google. (This reading of the answer "firefox and chrome
+   for windows" is the designer's; the owner may correct it.)
+5. **The logo may be redrawn as a flat mark** (lotus and flame) for small
+   icons, the boot screen and P@x's pointer. The full logo stays for the
+   README and About.
+
 ## 18. Amendments to specification revision 1.0
 
 | Document and section | Amendment |
