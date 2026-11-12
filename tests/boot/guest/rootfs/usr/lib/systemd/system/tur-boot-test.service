@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Present only in the boot-test image (tests/boot/guest). Never part of TUR.
+
+[Unit]
+Description=TUR boot test agent (test image only)
+Documentation=https://github.com/giorgiogiudice/TUR/tree/main/tests/boot
+# Inert unless the disk was installed by the boot test, and never on hardware.
+ConditionKernelCommandLine=tur.boot_test
+ConditionVirtualization=vm
+After=basic.target
+
+[Service]
+# "exec" so the unit counts as started once the agent runs: the agent observes
+# the rest of the boot and must not be a job the boot waits for.
+Type=exec
+ExecStart=/usr/libexec/tur-boot-test/guest-agent
+StandardOutput=journal+console
+StandardError=journal+console
+TimeoutStopSec=20
+
+[Install]
+WantedBy=multi-user.target

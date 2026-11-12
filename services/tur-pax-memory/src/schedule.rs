@@ -1189,7 +1189,7 @@ mod tests {
             action: ProposedAction::Task {
                 request: "Send the weekly report to my manager.".to_owned(),
                 approvals: vec![ApprovalRequest {
-                    service: "org.uos.Mail1".to_owned(),
+                    service: "org.tur.Mail1".to_owned(),
                     tool: "mail_send".to_owned(),
                     arguments: report_arguments(),
                 }],
@@ -1210,7 +1210,7 @@ mod tests {
 
     fn call(arguments: Value) -> ActionRecord {
         ActionRecord {
-            service: "org.uos.Mail1".to_owned(),
+            service: "org.tur.Mail1".to_owned(),
             tool: "mail_send".to_owned(),
             arguments: object(arguments),
             arguments_withheld: false,
@@ -1257,7 +1257,7 @@ mod tests {
         assert!(schedule.is_reminder());
         assert!(schedule.standing_approvals().is_empty());
         assert_eq!(
-            schedule.approval_for("org.uos.Mail1", "mail_send", &report_arguments()),
+            schedule.approval_for("org.tur.Mail1", "mail_send", &report_arguments()),
             None
         );
         // Neither a proposal nor a stored file can attach one to a reminder.
@@ -1266,7 +1266,7 @@ mod tests {
         let stored = serde_json::to_value(&schedule).expect("serialises");
         let mut tampered = stored.clone();
         tampered["action"]["standing_approvals"] = json!([
-            { "service": "org.uos.Mail1", "tool": "mail_send", "arguments": {} }
+            { "service": "org.tur.Mail1", "tool": "mail_send", "arguments": {} }
         ]);
         let bytes = serde_json::to_vec(&tampered).expect("serialises");
         assert!(Schedule::from_json(&bytes).is_err());
@@ -1285,7 +1285,7 @@ mod tests {
         assert_eq!(loaded, created);
         assert!(
             loaded
-                .approval_for("org.uos.Mail1", "mail_send", &report_arguments())
+                .approval_for("org.tur.Mail1", "mail_send", &report_arguments())
                 .is_some()
         );
         // Near misses after the round trip: one argument different, one
@@ -1298,21 +1298,21 @@ mod tests {
         ];
         for arguments in near_misses {
             assert_eq!(
-                loaded.approval_for("org.uos.Mail1", "mail_send", &object(arguments.clone())),
+                loaded.approval_for("org.tur.Mail1", "mail_send", &object(arguments.clone())),
                 None,
                 "{arguments}"
             );
         }
         assert_eq!(
-            loaded.approval_for("org.uos.Mail1", "mail_delete", &report_arguments()),
+            loaded.approval_for("org.tur.Mail1", "mail_delete", &report_arguments()),
             None
         );
         assert_eq!(
-            loaded.why_deferred("org.uos.Mail1", "mail_send"),
+            loaded.why_deferred("org.tur.Mail1", "mail_send"),
             DeferReason::ArgumentsDiffer
         );
         assert_eq!(
-            loaded.why_deferred("org.uos.Mail1", "mail_delete"),
+            loaded.why_deferred("org.tur.Mail1", "mail_delete"),
             DeferReason::NoStandingApproval
         );
     }
@@ -1436,7 +1436,7 @@ mod tests {
 
         let revoke = ScheduleEdit::RevokeApproval {
             id: id.clone(),
-            service: "org.uos.Mail1".to_owned(),
+            service: "org.tur.Mail1".to_owned(),
             tool: "mail_send".to_owned(),
             arguments: report_arguments(),
         };
@@ -1494,7 +1494,7 @@ mod tests {
         run.performed = vec![call(Value::Object(report_arguments()))];
         run.deferred = vec![DeferredAction {
             action: call(other.clone()),
-            reason: schedule.why_deferred("org.uos.Mail1", "mail_send"),
+            reason: schedule.why_deferred("org.tur.Mail1", "mail_send"),
             detail: "The recipient is not the one that was approved.".to_owned(),
         }];
         let record = book.record_run(run, Timestamp(2_030)).expect("records");

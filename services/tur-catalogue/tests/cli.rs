@@ -156,7 +156,7 @@ fn validate_refuses_a_tur_test_claim_without_a_report() {
     assert!(
         outcome
             .stderr
-            .contains("error[UOS-DESKTOP-CATALOGUE-006]: org.example.app.toml:"),
+            .contains("error[TUR-DESKTOP-CATALOGUE-006]: org.example.app.toml:"),
         "{}",
         outcome.stderr
     );
@@ -192,7 +192,7 @@ fn validate_checks_that_a_named_test_report_exists() {
     let outcome = run(&["validate", &catalogue, "--repository", &scratch.path()]);
     assert_eq!(outcome.status, EXIT_INVALID);
     assert!(
-        outcome.stderr.contains("UOS-DESKTOP-CATALOGUE-006"),
+        outcome.stderr.contains("TUR-DESKTOP-CATALOGUE-006"),
         "{}",
         outcome.stderr
     );
@@ -231,10 +231,10 @@ fn validate_reports_every_problem_with_its_code() {
     let outcome = run(&["validate", &scratch.path()]);
     assert_eq!(outcome.status, EXIT_INVALID);
     for expected in [
-        "error[UOS-DESKTOP-CATALOGUE-005]: org.example.two.toml:",
-        "error[UOS-DESKTOP-CATALOGUE-002]: org.example.three.toml:",
-        "error[UOS-DESKTOP-CATALOGUE-006]: org.example.four.toml:",
-        "error[UOS-DESKTOP-CATALOGUE-007]: org.example.four.toml:",
+        "error[TUR-DESKTOP-CATALOGUE-005]: org.example.two.toml:",
+        "error[TUR-DESKTOP-CATALOGUE-002]: org.example.three.toml:",
+        "error[TUR-DESKTOP-CATALOGUE-006]: org.example.four.toml:",
+        "error[TUR-DESKTOP-CATALOGUE-007]: org.example.four.toml:",
         "4 problems found",
     ] {
         assert!(
@@ -252,7 +252,7 @@ fn validate_fails_on_a_missing_directory() {
     let outcome = run(&["validate", &absent]);
     assert_eq!(outcome.status, EXIT_UNREADABLE);
     assert!(
-        outcome.stderr.contains("error[UOS-DESKTOP-CATALOGUE-001]"),
+        outcome.stderr.contains("error[TUR-DESKTOP-CATALOGUE-001]"),
         "{}",
         outcome.stderr
     );
@@ -308,7 +308,7 @@ fn search_says_when_nothing_matches() {
     let outcome = on_seed(&["search", "qqqqzzzzqqqq"]);
     assert_eq!(outcome.status, EXIT_NOT_FOUND);
     assert!(
-        outcome.stderr.contains("error[UOS-DESKTOP-CATALOGUE-010]"),
+        outcome.stderr.contains("error[TUR-DESKTOP-CATALOGUE-010]"),
         "{}",
         outcome.stderr
     );
@@ -368,13 +368,13 @@ fn show_and_route_fail_for_an_unknown_application() {
         let outcome = on_seed(&[command, "org.example.absent"]);
         assert_eq!(outcome.status, EXIT_NOT_FOUND);
         assert!(
-            outcome.stderr.contains("error[UOS-DESKTOP-CATALOGUE-009]"),
+            outcome.stderr.contains("error[TUR-DESKTOP-CATALOGUE-009]"),
             "{}",
             outcome.stderr
         );
         let outcome = on_seed(&[command, "org.example.absent", "--json"]);
         assert_eq!(outcome.status, EXIT_NOT_FOUND);
-        assert_eq!(json(&outcome)["error"]["code"], "UOS-DESKTOP-CATALOGUE-009");
+        assert_eq!(json(&outcome)["error"]["code"], "TUR-DESKTOP-CATALOGUE-009");
     }
 }
 
@@ -418,7 +418,7 @@ fn route_states_no_route_and_dual_boot_for_a_game_with_kernel_anti_cheat() {
         );
     }
     assert!(
-        outcome.stderr.contains("error[UOS-DESKTOP-CATALOGUE-011]"),
+        outcome.stderr.contains("error[TUR-DESKTOP-CATALOGUE-011]"),
         "{}",
         outcome.stderr
     );
@@ -555,7 +555,7 @@ fn route_refuses_bad_host_facts_and_preferences() {
     let outcome = on_seed(&["route", "org.mozilla.firefox", "--host", &unknown_field]);
     assert_eq!(outcome.status, EXIT_UNREADABLE);
     assert!(
-        outcome.stderr.contains("error[UOS-DESKTOP-CATALOGUE-012]"),
+        outcome.stderr.contains("error[TUR-DESKTOP-CATALOGUE-012]"),
         "{}",
         outcome.stderr
     );
@@ -569,7 +569,7 @@ fn route_refuses_bad_host_facts_and_preferences() {
         "--json",
     ]);
     assert_eq!(outcome.status, EXIT_UNREADABLE);
-    assert_eq!(json(&outcome)["error"]["code"], "UOS-DESKTOP-CATALOGUE-012");
+    assert_eq!(json(&outcome)["error"]["code"], "TUR-DESKTOP-CATALOGUE-012");
 
     let absent = format!("{}/absent.json", scratch.path());
     let outcome = on_seed(&["route", "org.mozilla.firefox", "--host", &absent]);

@@ -1,0 +1,6 @@
+# The Windows volume has its dirty flag set. No state fact is supplied for the
+# second NTFS volume, so its state is unknown.
+DEVNAME=/dev/nvme0n1p3
+UUID=01D9A7C2E4F6B801
+TYPE=ntfs
+TUR_NTFS_STATE=dirty

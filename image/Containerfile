@@ -1,6 +1,6 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
 #
-# UOS operating-system image.
+# TUR operating-system image.
 #
 # The base is pinned by digest in image/base.lock and passed in by
 # scripts/build-image.sh. Do not build this file directly with an unpinned base.
@@ -12,37 +12,37 @@ FROM ${BASE_IMAGE}@${BASE_DIGEST}
 ARG BASE_IMAGE
 ARG BASE_DIGEST
 ARG BASE_VERSION
-ARG UOS_VERSION
-ARG UOS_BUILD_ID
-ARG UOS_SOURCE_REVISION
+ARG TUR_VERSION
+ARG TUR_BUILD_ID
+ARG TUR_SOURCE_REVISION
 
-# Files owned by UOS. Everything here lives under /usr: the image is immutable
+# Files owned by TUR. Everything here lives under /usr: the image is immutable
 # and /etc and /var belong to the installed system.
 COPY image/rootfs/ /
 
-# Identify the image as UOS without changing the distribution ID, which image
+# Identify the image as TUR without changing the distribution ID, which image
 # and update tooling still key on. Full rebranding is a Phase 3 task.
 RUN set -eu; \
     f=/usr/lib/os-release; \
     base_pretty="$(. "$f"; printf '%s' "$PRETTY_NAME")"; \
     sed -i --follow-symlinks -E '/^(IMAGE_ID|IMAGE_VERSION|BUILD_ID)=/d' "$f"; \
-    sed -i --follow-symlinks -E "s|^PRETTY_NAME=.*|PRETTY_NAME=\"UOS ${UOS_VERSION} (based on ${base_pretty})\"|" "$f"; \
-    printf 'IMAGE_ID=uos\nIMAGE_VERSION=%s\nBUILD_ID=%s\n' "${UOS_VERSION}" "${UOS_BUILD_ID}" >> "$f"; \
+    sed -i --follow-symlinks -E "s|^PRETTY_NAME=.*|PRETTY_NAME=\"TUR ${TUR_VERSION} (based on ${base_pretty})\"|" "$f"; \
+    printf 'IMAGE_ID=tur\nIMAGE_VERSION=%s\nBUILD_ID=%s\n' "${TUR_VERSION}" "${TUR_BUILD_ID}" >> "$f"; \
     printf '%s\n' \
-        "UOS_VERSION=${UOS_VERSION}" \
-        "UOS_BUILD_ID=${UOS_BUILD_ID}" \
-        "UOS_SOURCE_REVISION=${UOS_SOURCE_REVISION}" \
-        "UOS_BASE_IMAGE=${BASE_IMAGE}" \
-        "UOS_BASE_DIGEST=${BASE_DIGEST}" \
-        "UOS_BASE_VERSION=${BASE_VERSION}" \
-        > /usr/lib/uos/release; \
+        "TUR_VERSION=${TUR_VERSION}" \
+        "TUR_BUILD_ID=${TUR_BUILD_ID}" \
+        "TUR_SOURCE_REVISION=${TUR_SOURCE_REVISION}" \
+        "TUR_BASE_IMAGE=${BASE_IMAGE}" \
+        "TUR_BASE_DIGEST=${BASE_DIGEST}" \
+        "TUR_BASE_VERSION=${BASE_VERSION}" \
+        > /usr/lib/tur/release; \
     bootc container lint
 
-LABEL org.opencontainers.image.title="UOS" \
-      org.opencontainers.image.description="UOS operating-system image (pre-alpha)" \
-      org.opencontainers.image.source="https://github.com/giorgiogiudice/UOS" \
-      org.opencontainers.image.version="${UOS_VERSION}" \
-      org.opencontainers.image.revision="${UOS_SOURCE_REVISION}" \
-      org.uos.build-id="${UOS_BUILD_ID}" \
-      org.uos.base.image="${BASE_IMAGE}" \
-      org.uos.base.digest="${BASE_DIGEST}"
+LABEL org.opencontainers.image.title="TUR" \
+      org.opencontainers.image.description="TUR operating-system image (pre-alpha)" \
+      org.opencontainers.image.source="https://github.com/giorgiogiudice/TUR" \
+      org.opencontainers.image.version="${TUR_VERSION}" \
+      org.opencontainers.image.revision="${TUR_SOURCE_REVISION}" \
+      org.tur.build-id="${TUR_BUILD_ID}" \
+      org.tur.base.image="${BASE_IMAGE}" \
+      org.tur.base.digest="${BASE_DIGEST}"

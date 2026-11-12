@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
 
-//! Typed provider errors with stable `UOS-AI-PROVIDER-*` codes.
+//! Typed provider errors with stable `TUR-AI-PROVIDER-*` codes.
 //!
 //! Every failure of a provider call is a [`ProviderError`]. It carries an
 //! [`ErrorKind`], which fixes the stable code and the plain message shown to the
@@ -13,7 +13,7 @@
 use std::fmt;
 use std::time::Duration;
 
-use uos_core::ErrorCode;
+use tur_core::ErrorCode;
 
 use crate::model::ProviderId;
 
@@ -41,7 +41,7 @@ macro_rules! error_kinds {
         ];
 
         impl ErrorKind {
-            /// The stable code as text, for example `UOS-AI-PROVIDER-002`.
+            /// The stable code as text, for example `TUR-AI-PROVIDER-002`.
             pub const fn code(self) -> &'static str {
                 match self {
                     $( ErrorKind::$variant => $code, )+
@@ -59,18 +59,18 @@ macro_rules! error_kinds {
 }
 
 error_kinds! {
-    AuthenticationFailed => "UOS-AI-PROVIDER-001", "The provider did not accept the API key, or the key is not permitted to do this.";
-    RateLimited => "UOS-AI-PROVIDER-002", "The provider is limiting requests for this key. Try again in a moment.";
-    Overloaded => "UOS-AI-PROVIDER-003", "The provider is overloaded or temporarily unavailable.";
-    RequestRejected => "UOS-AI-PROVIDER-004", "The provider rejected the request.";
-    Refusal => "UOS-AI-PROVIDER-005", "The model declined to respond to this request.";
-    Network => "UOS-AI-PROVIDER-006", "The provider could not be reached, or the connection was lost.";
-    MalformedResponse => "UOS-AI-PROVIDER-007", "The provider sent a response that could not be understood.";
-    TimedOut => "UOS-AI-PROVIDER-008", "The provider did not respond in time.";
-    QuotaExhausted => "UOS-AI-PROVIDER-009", "The provider account has no remaining credit or quota.";
-    SpendLimitReached => "UOS-AI-PROVIDER-010", "The spending limit set for this task was reached.";
-    ConfigInvalid => "UOS-AI-PROVIDER-011", "The provider configuration is not valid.";
-    KeyUnavailable => "UOS-AI-PROVIDER-012", "No usable API key is available for this provider.";
+    AuthenticationFailed => "TUR-AI-PROVIDER-001", "The provider did not accept the API key, or the key is not permitted to do this.";
+    RateLimited => "TUR-AI-PROVIDER-002", "The provider is limiting requests for this key. Try again in a moment.";
+    Overloaded => "TUR-AI-PROVIDER-003", "The provider is overloaded or temporarily unavailable.";
+    RequestRejected => "TUR-AI-PROVIDER-004", "The provider rejected the request.";
+    Refusal => "TUR-AI-PROVIDER-005", "The model declined to respond to this request.";
+    Network => "TUR-AI-PROVIDER-006", "The provider could not be reached, or the connection was lost.";
+    MalformedResponse => "TUR-AI-PROVIDER-007", "The provider sent a response that could not be understood.";
+    TimedOut => "TUR-AI-PROVIDER-008", "The provider did not respond in time.";
+    QuotaExhausted => "TUR-AI-PROVIDER-009", "The provider account has no remaining credit or quota.";
+    SpendLimitReached => "TUR-AI-PROVIDER-010", "The spending limit set for this task was reached.";
+    ConfigInvalid => "TUR-AI-PROVIDER-011", "The provider configuration is not valid.";
+    KeyUnavailable => "TUR-AI-PROVIDER-012", "No usable API key is available for this provider.";
 }
 
 impl ErrorKind {
@@ -82,7 +82,7 @@ impl ErrorKind {
     pub fn error_code(self) -> ErrorCode {
         self.code()
             .parse()
-            .expect("every registry entry is a valid UOS error code")
+            .expect("every registry entry is a valid TUR error code")
     }
 
     /// Whether the same request may succeed if it is sent again later.
@@ -242,7 +242,7 @@ impl std::error::Error for ProviderError {}
 mod tests {
     use std::collections::BTreeSet;
 
-    use uos_core::Family;
+    use tur_core::Family;
 
     use super::*;
 
@@ -252,7 +252,7 @@ mod tests {
         for (kind, code, message) in REGISTRY {
             let parsed: ErrorCode = code.parse().unwrap_or_else(|err| panic!("{code}: {err}"));
             assert_eq!(parsed.family(), Family::Ai, "{code}");
-            assert!(code.starts_with("UOS-AI-PROVIDER-"), "{code}");
+            assert!(code.starts_with("TUR-AI-PROVIDER-"), "{code}");
             assert_eq!(kind.code(), *code);
             assert_eq!(kind.user_message(), *message);
             assert_eq!(kind.error_code(), parsed);
@@ -302,7 +302,7 @@ mod tests {
             .with_detail("slow down");
         assert_eq!(
             error.to_string(),
-            "UOS-AI-PROVIDER-002: The provider is limiting requests for this key. Try again in a \
+            "TUR-AI-PROVIDER-002: The provider is limiting requests for this key. Try again in a \
              moment. [anthropic] [HTTP 429] [retry after 7 s] (slow down)"
         );
     }

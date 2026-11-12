@@ -252,6 +252,6 @@ fn the_examples_load() {
     for invalid in [INVALID_NO_MODEL, INVALID_PLAIN_HTTP] {
         let error = ProviderConfig::from_json(invalid).expect_err("an invalid example");
         assert_eq!(error.kind(), ErrorKind::ConfigInvalid);
-        assert_eq!(error.code(), "UOS-AI-PROVIDER-011");
+        assert_eq!(error.code(), "TUR-AI-PROVIDER-011");
     }
 }

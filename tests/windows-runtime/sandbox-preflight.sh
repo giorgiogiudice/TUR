@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
 #
-# Finds out whether bubblewrap can build the sandbox uos-runtime uses on this
+# Finds out whether bubblewrap can build the sandbox tur-runtime uses on this
 # machine, and if it cannot, why, and applies the narrowest documented remedy.
 #
 #   tests/windows-runtime/sandbox-preflight.sh EVIDENCE_FILE
@@ -29,7 +29,7 @@ evidence="${1:?evidence file required}"
 : >"${evidence}"
 note() { echo "$*" | tee -a "${evidence}"; }
 
-# The same namespace options uos-runtime uses, around a command that does
+# The same namespace options tur-runtime uses, around a command that does
 # nothing.
 probe() {
     bwrap --unshare-user --unshare-ipc --unshare-pid --unshare-uts --unshare-cgroup-try \
@@ -55,13 +55,13 @@ fi
 note "first attempt failed: ${output}"
 
 note "remedy 1: an AppArmor profile that allows /usr/bin/bwrap to create user namespaces"
-profile=/etc/apparmor.d/uos-ci-bwrap
+profile=/etc/apparmor.d/tur-ci-bwrap
 sudo tee "${profile}" >/dev/null <<'PROFILE'
 # Installed by tests/windows-runtime/sandbox-preflight.sh on a CI runner.
 abi <abi/4.0>,
 include <tunables/global>
 
-profile uos-ci-bwrap /usr/bin/bwrap flags=(unconfined) {
+profile tur-ci-bwrap /usr/bin/bwrap flags=(unconfined) {
   userns,
 }
 PROFILE

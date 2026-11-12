@@ -14,8 +14,8 @@ The component is a library with a small command-line tool. It has no model, open
 no network connection and uses no D-Bus. Nothing in it runs a task, shows a
 notification or installs a timer.
 
-The project was renamed from UOS to TUR while this was written. New names here use
-`tur`; error codes, `uos-core` and service names such as `org.uos.Mail1` keep the
+The project was renamed from TUR to TUR while this was written. New names here use
+`tur`; error codes, `tur-core` and service names such as `org.tur.Mail1` keep the
 old prefix until the mechanical rename.
 
 ## 1. What it is for
@@ -152,12 +152,12 @@ the kind of secret and the field; it never repeats the text.
 
 | Code | Kind | Rule |
 |---|---|---|
-| `UOS-AI-MEMORY-SECRET-004` | Private key | `-----BEGIN ... PRIVATE KEY-----`, or a PuTTY key file header |
-| `UOS-AI-MEMORY-SECRET-002` | Known token | A word starting with a vendor prefix (`sk-ant-`, `sk-proj-`, `ghp_`, `github_pat_`, `glpat-`, `xoxb-`, `AIza`, `sk_live_`, and others) followed by enough token characters; an AWS access key identifier; a JSON Web Token; `Bearer` followed by a token |
-| `UOS-AI-MEMORY-SECRET-005` | Payment card | 13 to 19 digits, alone or in groups separated by single spaces or hyphens, with the prefix and length of a card scheme and a valid Luhn check digit; not glued to letters, not after `+` |
-| `UOS-AI-MEMORY-SECRET-006` | One-time code | A one-time-code word or phrase ("OTP", "2FA", "verification code", ...) with a 4 to 8 digit number within six words; an `otpauth://` address |
-| `UOS-AI-MEMORY-SECRET-001` | Password | A password word followed by `:`, `=`, "is" or "was" and a value; a name ending in a password word, as in `DB_PASSWORD=`; a PIN or card security code followed by digits; `--password value`; `scheme://user:password@host`; in JSON, a property whose name says it holds a secret and whose value is not a placeholder |
-| `UOS-AI-MEMORY-SECRET-003` | High entropy | A run of 32 or more letters, digits, `_`, `-`, `+` that has lower case, upper case and digits, and at least 4.5 bits of entropy per character |
+| `TUR-AI-MEMORY-SECRET-004` | Private key | `-----BEGIN ... PRIVATE KEY-----`, or a PuTTY key file header |
+| `TUR-AI-MEMORY-SECRET-002` | Known token | A word starting with a vendor prefix (`sk-ant-`, `sk-proj-`, `ghp_`, `github_pat_`, `glpat-`, `xoxb-`, `AIza`, `sk_live_`, and others) followed by enough token characters; an AWS access key identifier; a JSON Web Token; `Bearer` followed by a token |
+| `TUR-AI-MEMORY-SECRET-005` | Payment card | 13 to 19 digits, alone or in groups separated by single spaces or hyphens, with the prefix and length of a card scheme and a valid Luhn check digit; not glued to letters, not after `+` |
+| `TUR-AI-MEMORY-SECRET-006` | One-time code | A one-time-code word or phrase ("OTP", "2FA", "verification code", ...) with a 4 to 8 digit number within six words; an `otpauth://` address |
+| `TUR-AI-MEMORY-SECRET-001` | Password | A password word followed by `:`, `=`, "is" or "was" and a value; a name ending in a password word, as in `DB_PASSWORD=`; a PIN or card security code followed by digits; `--password value`; `scheme://user:password@host`; in JSON, a property whose name says it holds a secret and whose value is not a placeholder |
+| `TUR-AI-MEMORY-SECRET-003` | High entropy | A run of 32 or more letters, digits, `_`, `-`, `+` that has lower case, upper case and digits, and at least 4.5 bits of entropy per character |
 
 Placeholders are not secrets: `{{name}}`, `${NAME}`, `<name>`, `****`, and words such
 as "required". That is what lets a saved procedure keep `"password":
@@ -276,7 +276,7 @@ system that reorders writes or loses a flushed rename.
 
 | Operation | Who | While memory is off |
 |---|---|---|
-| `add` | The assistant, through the orchestrator | Refused (`UOS-AI-MEMORY-001`) |
+| `add` | The assistant, through the orchestrator | Refused (`TUR-AI-MEMORY-001`) |
 | `recall` | The assistant, through the orchestrator | Returns nothing |
 | `confirm` (pending to active) | The user | Refused |
 | `correct` | The user | Refused |
@@ -381,13 +381,13 @@ Every time returned as "next" is strictly after `now`. If the clock was set back
 that `since` is after `now`, nothing runs twice.
 
 **Limits.** At most 64 schedules. An `every` trigger of less than 300 seconds is
-refused (`UOS-AI-SCHEDULE-004`); an event trigger does not fire again within 300
+refused (`TUR-AI-SCHEDULE-004`); an event trigger does not fire again within 300
 seconds of its last run (`event_may_fire`). Wall-clock triggers fire at most once a
 day. So the store can produce at most 64 timers and 64 firings in any five minutes.
 A schedule keeps its 50 newest run records.
 
 The secret detector also runs over a proposal's name, message, request and approval
-arguments (`UOS-AI-SCHEDULE-010`).
+arguments (`TUR-AI-SCHEDULE-010`).
 
 **Tests.** `src/trigger.rs` for each trigger, the two daylight-saving cases in Rome,
 New York and Lord Howe Island (a half-hour change), months without the day, and the
@@ -460,8 +460,8 @@ Approvals are stored inside the schedule that owns them, so they are created,
 replaced and removed with it. `change` replaces all of them with those of the new
 proposal. `apply` can revoke one.
 
-**Mapping to the policy engine.** This crate does not depend on `uos-agent`. Its
-stored type corresponds one-to-one to `uos_agent::context::StandingApproval`:
+**Mapping to the policy engine.** This crate does not depend on `tur-pax`. Its
+stored type corresponds one-to-one to `tur_pax::context::StandingApproval`:
 
 | This crate | Policy engine | Content |
 |---|---|---|
@@ -580,35 +580,35 @@ documentation. No unit is loaded in any test. `the_units_of_a_reminder` and
 
 ## 13. Error codes
 
-All in the `UOS-AI-*` family (specification section 29.3), declared once in
+All in the `TUR-AI-*` family (specification section 29.3), declared once in
 `src/codes.rs`.
 
 | Code | Meaning |
 |---|---|
-| `UOS-AI-MEMORY-001` | Memory is turned off; nothing is written or recalled |
-| `UOS-AI-MEMORY-002` | No memory entry has that identifier |
-| `UOS-AI-MEMORY-003` | The entry is outside the limits on text, tags, application, provenance or procedure |
-| `UOS-AI-MEMORY-004` | The entry is not waiting for confirmation |
-| `UOS-AI-MEMORY-005` | The operation is the user's, and the confirmation given does not cover it |
-| `UOS-AI-MEMORY-006` | A file in the memory store is damaged; it was left in place |
-| `UOS-AI-MEMORY-007` | The memory store could not be read or written |
-| `UOS-AI-MEMORY-008` | The store holds the largest number of entries it accepts |
-| `UOS-AI-MEMORY-009` | The text is not a memory entry identifier |
-| `UOS-AI-MEMORY-SECRET-001` to `-006` | Refused: looks like a password, a known token, a high-entropy string, a private key, a payment card, a one-time code |
-| `UOS-AI-MEMORY-INPUT-001` | A command-line value is not valid |
-| `UOS-AI-SCHEDULE-001` | No schedule or run record has that identifier |
-| `UOS-AI-SCHEDULE-002` | The proposal is outside the limits on its name, message, request or approvals |
-| `UOS-AI-SCHEDULE-003` | The trigger is not valid |
-| `UOS-AI-SCHEDULE-004` | The schedule would fire more often than the limit allows |
-| `UOS-AI-SCHEDULE-005` | The largest number of schedules already exists |
-| `UOS-AI-SCHEDULE-006` | Creating or changing a schedule is the user's act, and the confirmation does not cover it |
-| `UOS-AI-SCHEDULE-007` | A file in the schedule store is damaged; it was left in place |
-| `UOS-AI-SCHEDULE-008` | The schedule store could not be read or written |
-| `UOS-AI-SCHEDULE-009` | A standing approval does not name one service, one tool and its arguments |
-| `UOS-AI-SCHEDULE-010` | Refused: the schedule text or an approval argument looks like a secret |
-| `UOS-AI-SCHEDULE-011` | The run record is not consistent |
-| `UOS-AI-SCHEDULE-012` | The systemd unit cannot be rendered from these values |
-| `UOS-AI-SCHEDULE-013` | The text is not a schedule or run identifier |
+| `TUR-AI-MEMORY-001` | Memory is turned off; nothing is written or recalled |
+| `TUR-AI-MEMORY-002` | No memory entry has that identifier |
+| `TUR-AI-MEMORY-003` | The entry is outside the limits on text, tags, application, provenance or procedure |
+| `TUR-AI-MEMORY-004` | The entry is not waiting for confirmation |
+| `TUR-AI-MEMORY-005` | The operation is the user's, and the confirmation given does not cover it |
+| `TUR-AI-MEMORY-006` | A file in the memory store is damaged; it was left in place |
+| `TUR-AI-MEMORY-007` | The memory store could not be read or written |
+| `TUR-AI-MEMORY-008` | The store holds the largest number of entries it accepts |
+| `TUR-AI-MEMORY-009` | The text is not a memory entry identifier |
+| `TUR-AI-MEMORY-SECRET-001` to `-006` | Refused: looks like a password, a known token, a high-entropy string, a private key, a payment card, a one-time code |
+| `TUR-AI-MEMORY-INPUT-001` | A command-line value is not valid |
+| `TUR-AI-SCHEDULE-001` | No schedule or run record has that identifier |
+| `TUR-AI-SCHEDULE-002` | The proposal is outside the limits on its name, message, request or approvals |
+| `TUR-AI-SCHEDULE-003` | The trigger is not valid |
+| `TUR-AI-SCHEDULE-004` | The schedule would fire more often than the limit allows |
+| `TUR-AI-SCHEDULE-005` | The largest number of schedules already exists |
+| `TUR-AI-SCHEDULE-006` | Creating or changing a schedule is the user's act, and the confirmation does not cover it |
+| `TUR-AI-SCHEDULE-007` | A file in the schedule store is damaged; it was left in place |
+| `TUR-AI-SCHEDULE-008` | The schedule store could not be read or written |
+| `TUR-AI-SCHEDULE-009` | A standing approval does not name one service, one tool and its arguments |
+| `TUR-AI-SCHEDULE-010` | Refused: the schedule text or an approval argument looks like a secret |
+| `TUR-AI-SCHEDULE-011` | The run record is not consistent |
+| `TUR-AI-SCHEDULE-012` | The systemd unit cannot be rendered from these values |
+| `TUR-AI-SCHEDULE-013` | The text is not a schedule or run identifier |
 
 The command-line tool exits with 0 on success, 1 on failure (code and a sentence on
 standard error), 2 on a usage error and 3 when it completed and found damaged files.
@@ -668,7 +668,7 @@ is resolved here.
 1. **Where the schedule store lives.** Section 17 item 5 says a separate component
    owns standing approvals and that P@x cannot write them; the policy document says
    the schedule store "must not be writable by the agent's own process". Section 3
-   says `uos-agent` runs as the logged-in user, and section 16.2 says scheduled
+   says `tur-pax` runs as the logged-in user, and section 16.2 says scheduled
    tasks are "timers owned by the user". A directory under the user's XDG data
    directory, and user timer units, are both writable by any process of that user,
    the agent included. As specified, a misled or compromised agent process can

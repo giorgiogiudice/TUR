@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-11-12
 - **Specification sections:** §3.5, §3.6, §5.3 to §5.6, §15.1, §19.5,
-  §22 (UOS-005), §27.1, §27.4, §27.5
+  §22 (TUR-005), §27.1, §27.4, §27.5
 
 ## Context
 
@@ -29,7 +29,7 @@ section 3, with sources. What decides the matter:
   boot counter is written in one place: after a health check has failed. A
   new deployment that panics, cannot mount its root, lands in emergency mode
   or hangs is never counted. The older shell implementation did arm the
-  counter when an update was staged; ADR-0013 and UOS-003 describe that
+  counter when an update was staged; ADR-0013 and TUR-003 describe that
   behaviour.
 - greenboot-rs runs its checks without any time limit, reports through a
   message of the day, and has open defects in the rollback path itself:
@@ -128,7 +128,7 @@ the test plan are in the addendum.
   programs under the project licence. The GRUB fragment is interpreted
   inside GRUB and follows greenboot's; it is kept in a marked directory
   under BSD-3-Clause with its own licence file.
-- **The installer** (UOS-006) must put `/boot/grub2` on a filesystem GRUB
+- **The installer** (TUR-006) must put `/boot/grub2` on a filesystem GRUB
   can write: ext4 on a plain partition until another layout is tested. TUR
   refuses to apply an update where it cannot count attempts.
 - **Every TUR service** must leave shared state under `/var` readable by the
@@ -158,7 +158,7 @@ implementation brief):
 - **Step 4** shows the GRUB half alone: three counted attempts of a
   deployment that panics, then the previous deployment, with no TUR program
   involved.
-- **Steps 6 to 11** are the proof required by UOS-005 and §19.5: a good
+- **Steps 6 to 11** are the proof required by TUR-005 and §19.5: a good
   update is kept and marked good; a failed health check, a failed required
   unit, a crash-looping display manager, an unmountable root, an early
   panic, a kernel GRUB cannot start, emergency mode, a stopped PID 1 and a

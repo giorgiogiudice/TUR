@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/giorgiogiudice/UOS/schemas/prefix-metadata.schema.json",
-  "title": "UOS prefix metadata",
-  "description": "What uos-runtime records about one application's Wine or Proton prefix (specification sections 12.2 and 15.2): the application it belongs to, the runtime and exact runtime version it is on, and the settings needed to reproduce a launch. The file is written by uos-runtime only, lives beside the prefix and is never visible to the application. It must never hold a secret.",
+  "$id": "https://github.com/giorgiogiudice/TUR/schemas/prefix-metadata.schema.json",
+  "title": "TUR prefix metadata",
+  "description": "What tur-runtime records about one application's Wine or Proton prefix (specification sections 12.2 and 15.2): the application it belongs to, the runtime and exact runtime version it is on, and the settings needed to reproduce a launch. The file is written by tur-runtime only, lives beside the prefix and is never visible to the application. It must never hold a secret.",
   "type": "object",
   "additionalProperties": false,
   "required": [

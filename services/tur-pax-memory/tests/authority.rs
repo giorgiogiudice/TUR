@@ -195,7 +195,7 @@ fn report(approvals: Vec<ApprovalRequest>) -> Proposal {
 
 fn mail_send(arguments: Map<String, Value>) -> ApprovalRequest {
     ApprovalRequest {
-        service: "org.uos.Mail1".to_owned(),
+        service: "org.tur.Mail1".to_owned(),
         tool: "mail_send".to_owned(),
         arguments,
     }
@@ -226,7 +226,7 @@ fn what_memory_says_does_not_approve_anything() {
         .expect("creates");
     assert!(schedule.standing_approvals().is_empty());
     assert_eq!(
-        schedule.approval_for("org.uos.Mail1", "mail_send", &arguments()),
+        schedule.approval_for("org.tur.Mail1", "mail_send", &arguments()),
         None
     );
     // The note is recalled for the task, as a note. The schedule is the same.
@@ -236,7 +236,7 @@ fn what_memory_says_does_not_approve_anything() {
     assert_eq!(notes.len(), 1);
     assert_eq!(book.get(schedule.id()), Ok(schedule.clone()));
     assert_eq!(
-        schedule.approval_for("org.uos.Mail1", "mail_send", &arguments()),
+        schedule.approval_for("org.tur.Mail1", "mail_send", &arguments()),
         None
     );
 }
@@ -270,7 +270,7 @@ fn a_confirmation_covers_one_proposal_and_no_other() {
     assert_eq!(schedule.standing_approvals().len(), 1);
     assert!(
         schedule
-            .approval_for("org.uos.Mail1", "mail_send", &arguments())
+            .approval_for("org.tur.Mail1", "mail_send", &arguments())
             .is_some()
     );
 }

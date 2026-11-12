@@ -567,7 +567,7 @@ impl Trigger {
     /// and none twice, a day from 1 to 31, and an interval within the limits.
     ///
     /// An interval shorter than [`MIN_INTERVAL_SECONDS`] is refused with
-    /// `UOS-AI-SCHEDULE-004`; everything else with `UOS-AI-SCHEDULE-003`.
+    /// `TUR-AI-SCHEDULE-004`; everything else with `TUR-AI-SCHEDULE-003`.
     pub fn validate(&self) -> Result<(), Problem> {
         match self {
             Trigger::Once { at } => {

@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/giorgiogiudice/UOS/schemas/installer-session.schema.json",
-  "title": "UOS installer session",
-  "description": "The session.json file of an installer session: the session's identity, its target, and a snapshot of the sixteen phase records. Each line of the session's phases.jsonl file is one object matching #/$defs/transition_record. The log is the authority; this file is rewritten atomically after every transition. Kept in agreement with the SessionMeta and TransitionRecord types in installer/uos-installer-core by that crate's tests.",
+  "$id": "https://github.com/giorgiogiudice/TUR/schemas/installer-session.schema.json",
+  "title": "TUR installer session",
+  "description": "The session.json file of an installer session: the session's identity, its target, and a snapshot of the sixteen phase records. Each line of the session's phases.jsonl file is one object matching #/$defs/transition_record. The log is the authority; this file is rewritten atomically after every transition. Kept in agreement with the SessionMeta and TransitionRecord types in installer/tur-installer-core by that crate's tests.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -100,7 +100,7 @@
         "duration_ms": { "type": ["integer", "null"], "minimum": 0 },
         "progress": { "oneOf": [{ "$ref": "#/$defs/progress" }, { "type": "null" }] },
         "error_code": {
-          "description": "A stable UOS error code such as UOS-INSTALL-SESSION-005, when the phase failed.",
+          "description": "A stable TUR error code such as TUR-INSTALL-SESSION-005, when the phase failed.",
           "$ref": "#/$defs/optional_string"
         },
         "summary": { "type": "string" },

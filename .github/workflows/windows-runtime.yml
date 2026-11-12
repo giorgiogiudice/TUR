@@ -1,6 +1,6 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
 #
-# End-to-end proof that uos-runtime runs a Windows program: real binaries
+# End-to-end proof that tur-runtime runs a Windows program: real binaries
 # built on the runner, the distribution's Wine, and the real bubblewrap
 # sandbox. See tests/windows-runtime/e2e.py for what is and is not proved.
 #
@@ -11,12 +11,12 @@ on:
   push:
     branches: [main]
     paths:
-      - "services/uos-runtime/**"
+      - "services/tur-runtime/**"
       - "tests/windows-runtime/**"
       - ".github/workflows/windows-runtime.yml"
   pull_request:
     paths:
-      - "services/uos-runtime/**"
+      - "services/tur-runtime/**"
       - "tests/windows-runtime/**"
       - ".github/workflows/windows-runtime.yml"
   workflow_dispatch:
@@ -44,8 +44,8 @@ jobs:
         # Outside the checkout, so that nothing the test writes can be
         # mistaken for source. Later steps read it as $WORK.
         run: |
-          mkdir -p "$RUNNER_TEMP/uos-e2e/evidence"
-          echo "WORK=$RUNNER_TEMP/uos-e2e" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/tur-e2e/evidence"
+          echo "WORK=$RUNNER_TEMP/tur-e2e" >> "$GITHUB_ENV"
 
       - name: Install Wine, mingw-w64, bubblewrap and an X server
         # Distribution packages only. Their versions are whatever the runner
@@ -87,7 +87,7 @@ jobs:
         run: tests/windows-runtime/build.sh "$WORK/build"
 
       - name: Toolchain
-        working-directory: services/uos-runtime
+        working-directory: services/tur-runtime
         run: |
           rustup show active-toolchain || rustup toolchain install
           rustc --version; cargo --version
@@ -98,18 +98,18 @@ jobs:
             ~/.cargo/registry/index
             ~/.cargo/registry/cache
             ~/.cargo/git/db
-            services/uos-runtime/target
-          key: windows-runtime-${{ hashFiles('rust-toolchain.toml', 'services/uos-runtime/Cargo.toml', 'services/uos-runtime/Cargo.lock') }}
+            services/tur-runtime/target
+          key: windows-runtime-${{ hashFiles('rust-toolchain.toml', 'services/tur-runtime/Cargo.toml', 'services/tur-runtime/Cargo.lock') }}
           restore-keys: windows-runtime-
 
-      - name: Build uos-runtime
-        working-directory: services/uos-runtime
+      - name: Build tur-runtime
+        working-directory: services/tur-runtime
         run: cargo build --locked
 
       - name: End-to-end test
         run: |
           python3 tests/windows-runtime/e2e.py \
-            --uos-runtime services/uos-runtime/target/debug/uos-runtime \
+            --tur-runtime services/tur-runtime/target/debug/tur-runtime \
             --build-dir "$WORK/build" \
             --work-dir "$WORK/run" \
             --results "$WORK/evidence/results.json"
@@ -118,12 +118,12 @@ jobs:
         if: always()
         run: |
           mkdir -p "$WORK/evidence"
-          cp -r "$WORK/run/xdg-state/uos/runtime/logs" "$WORK/evidence/logs" 2>/dev/null || true
+          cp -r "$WORK/run/xdg-state/tur/runtime/logs" "$WORK/evidence/logs" 2>/dev/null || true
           # What the driver set aside: the control run's output, and the logs
           # and metadata of the application it removed at the end.
           cp -r "$WORK/run/kept" "$WORK/evidence/kept" 2>/dev/null || true
           mkdir -p "$WORK/evidence/metadata"
-          for file in "$WORK"/run/xdg-data/uos/runtime/prefixes/*/metadata.json; do
+          for file in "$WORK"/run/xdg-data/tur/runtime/prefixes/*/metadata.json; do
             if [ -f "$file" ]; then
               cp "$file" "$WORK/evidence/metadata/$(basename "$(dirname "$file")").json"
             fi
@@ -135,5 +135,5 @@ jobs:
         if: always()
         with:
           name: windows-runtime-evidence
-          path: ${{ runner.temp }}/uos-e2e/evidence/
+          path: ${{ runner.temp }}/tur-e2e/evidence/
           if-no-files-found: warn

@@ -1,7 +1,7 @@
 # Universal Runtime Manager
 
-Design note for `uos-runtime` (specification §2.3, §7, §8.2, §12.1, §12.2, §13.1,
-§15.2, §19.2, §19.3). Code: `services/uos-runtime/`. Schemas:
+Design note for `tur-runtime` (specification §2.3, §7, §8.2, §12.1, §12.2, §13.1,
+§15.2, §19.2, §19.3). Code: `services/tur-runtime/`. Schemas:
 `schemas/app-profile.schema.json`, `schemas/prefix-metadata.schema.json`.
 
 ## Scope
@@ -9,7 +9,7 @@ Design note for `uos-runtime` (specification §2.3, §7, §8.2, §12.1, §12.2, 
 The first slice answers two questions about a file the user points at: what is
 it, and which runtime is the route for it. It also defines the application
 profile. That part only reads: the specification forbids executing a file because
-of its type (§7.2), and `uos-runtime inspect` never runs anything.
+of its type (§7.2), and `tur-runtime inspect` never runs anything.
 
 The second slice runs a Windows program the user asks to run: a prefix per
 application, a launch plan, and a sandbox around every runtime command. It is
@@ -91,7 +91,7 @@ Inputs are untrusted downloads. The rules the code follows:
 | `Info.plist` | 1 MiB |
 | Application profile | 1 MiB |
 
-The limits are constants in `services/uos-runtime/src/limits.rs`.
+The limits are constants in `services/tur-runtime/src/limits.rs`.
 
 ## Recommendation
 
@@ -142,7 +142,7 @@ design is settled. ARM translation is never detected. `--host-arch` and
 
 ### Error codes
 
-`uos-core` has no family for the runtime manager itself. Ecosystem-specific
+`tur-core` has no family for the runtime manager itself. Ecosystem-specific
 conditions use `WINDOWS`, `DARWIN` and `ANDROID`; refusals that keep an
 application inside its sandbox use `SECURITY`; the rest use `DESKTOP` with a
 `RUNTIME` or `PROFILE` topic until a family is agreed. A test checks that every
@@ -150,48 +150,48 @@ code parses and that no two conditions share one.
 
 | Code | Condition |
 |---|---|
-| `UOS-DESKTOP-RUNTIME-001` | The path could not be read |
-| `UOS-DESKTOP-RUNTIME-002` | An ELF, zip, OLE or script file is truncated or malformed |
-| `UOS-DESKTOP-RUNTIME-003` | The file exceeds an inspection limit |
-| `UOS-DESKTOP-RUNTIME-004` | No supported runtime exists for the file |
-| `UOS-DESKTOP-RUNTIME-005` | The runtime manager's data or state directory cannot be found or used |
-| `UOS-DESKTOP-RUNTIME-006` | A program the operation needs (`tar`) is not installed |
-| `UOS-WINDOWS-INSPECT-001` | A PE file is truncated or malformed |
-| `UOS-WINDOWS-RUNTIME-001` | Wine is not installed |
-| `UOS-WINDOWS-RUNTIME-002` | The file requires a Windows kernel |
-| `UOS-WINDOWS-RUNTIME-003` | The Windows VM backend is not installed |
-| `UOS-WINDOWS-RUNTIME-004` | A Windows file no runtime handles |
-| `UOS-WINDOWS-RUNTIME-005` | The profile pins a runtime version and another one is installed |
-| `UOS-WINDOWS-RUNTIME-006` | The runtime's version could not be determined |
-| `UOS-WINDOWS-RUNTIME-007` | `umu-run` is not installed |
-| `UOS-WINDOWS-RUNTIME-008` | A Proton profile does not pin a Proton version |
-| `UOS-WINDOWS-RUNTIME-009` | The profile is not one this build launches |
-| `UOS-WINDOWS-RUNTIME-010` | A step of an operation failed while it was carried out |
-| `UOS-WINDOWS-PREFIX-001` | The application has no prefix |
-| `UOS-WINDOWS-PREFIX-002` | The application already has a prefix |
-| `UOS-WINDOWS-PREFIX-003` | The prefix metadata is unreadable or not valid |
-| `UOS-WINDOWS-PREFIX-004` | Verification found problems in the prefix |
-| `UOS-WINDOWS-PREFIX-005` | The prefix belongs to another application, prefix name or runtime |
-| `UOS-WINDOWS-PREFIX-006` | The prefix is on another runtime version than the one installed |
-| `UOS-WINDOWS-PREFIX-007` | The prefix is pinned and a migration was asked for |
-| `UOS-WINDOWS-PREFIX-008` | The named backup does not exist |
-| `UOS-SECURITY-SANDBOX-001` | The effective user is root |
-| `UOS-SECURITY-SANDBOX-002` | bubblewrap is not installed |
-| `UOS-SECURITY-SANDBOX-003` | A directory cannot be granted to an application |
-| `UOS-SECURITY-SANDBOX-004` | A recorded grant no longer resolves to itself, or no longer passes the rules |
-| `UOS-SECURITY-SANDBOX-005` | An extra environment variable is not allowed |
-| `UOS-SECURITY-SANDBOX-006` | The profile's program file cannot be used |
-| `UOS-DARWIN-INSPECT-001` | A Mach-O file or bundle is truncated or malformed |
-| `UOS-DARWIN-RUNTIME-001` | Darling is not installed |
-| `UOS-DARWIN-RUNTIME-002` | A macOS kernel extension |
-| `UOS-DARWIN-RUNTIME-003` | A macOS file no runtime handles |
-| `UOS-ANDROID-RUNTIME-001` | The Android runtime is not installed |
-| `UOS-ANDROID-RUNTIME-002` | ARM translation is not installed |
-| `UOS-ANDROID-RUNTIME-003` | An Android package no runtime handles |
-| `UOS-DESKTOP-PROFILE-001` | The profile could not be read |
-| `UOS-DESKTOP-PROFILE-002` | The profile is not JSON or does not match the schema |
-| `UOS-DESKTOP-PROFILE-003` | A profile field holds a value that is not allowed |
-| `UOS-DESKTOP-PROFILE-004` | The profile appears to hold a credential |
+| `TUR-DESKTOP-RUNTIME-001` | The path could not be read |
+| `TUR-DESKTOP-RUNTIME-002` | An ELF, zip, OLE or script file is truncated or malformed |
+| `TUR-DESKTOP-RUNTIME-003` | The file exceeds an inspection limit |
+| `TUR-DESKTOP-RUNTIME-004` | No supported runtime exists for the file |
+| `TUR-DESKTOP-RUNTIME-005` | The runtime manager's data or state directory cannot be found or used |
+| `TUR-DESKTOP-RUNTIME-006` | A program the operation needs (`tar`) is not installed |
+| `TUR-WINDOWS-INSPECT-001` | A PE file is truncated or malformed |
+| `TUR-WINDOWS-RUNTIME-001` | Wine is not installed |
+| `TUR-WINDOWS-RUNTIME-002` | The file requires a Windows kernel |
+| `TUR-WINDOWS-RUNTIME-003` | The Windows VM backend is not installed |
+| `TUR-WINDOWS-RUNTIME-004` | A Windows file no runtime handles |
+| `TUR-WINDOWS-RUNTIME-005` | The profile pins a runtime version and another one is installed |
+| `TUR-WINDOWS-RUNTIME-006` | The runtime's version could not be determined |
+| `TUR-WINDOWS-RUNTIME-007` | `umu-run` is not installed |
+| `TUR-WINDOWS-RUNTIME-008` | A Proton profile does not pin a Proton version |
+| `TUR-WINDOWS-RUNTIME-009` | The profile is not one this build launches |
+| `TUR-WINDOWS-RUNTIME-010` | A step of an operation failed while it was carried out |
+| `TUR-WINDOWS-PREFIX-001` | The application has no prefix |
+| `TUR-WINDOWS-PREFIX-002` | The application already has a prefix |
+| `TUR-WINDOWS-PREFIX-003` | The prefix metadata is unreadable or not valid |
+| `TUR-WINDOWS-PREFIX-004` | Verification found problems in the prefix |
+| `TUR-WINDOWS-PREFIX-005` | The prefix belongs to another application, prefix name or runtime |
+| `TUR-WINDOWS-PREFIX-006` | The prefix is on another runtime version than the one installed |
+| `TUR-WINDOWS-PREFIX-007` | The prefix is pinned and a migration was asked for |
+| `TUR-WINDOWS-PREFIX-008` | The named backup does not exist |
+| `TUR-SECURITY-SANDBOX-001` | The effective user is root |
+| `TUR-SECURITY-SANDBOX-002` | bubblewrap is not installed |
+| `TUR-SECURITY-SANDBOX-003` | A directory cannot be granted to an application |
+| `TUR-SECURITY-SANDBOX-004` | A recorded grant no longer resolves to itself, or no longer passes the rules |
+| `TUR-SECURITY-SANDBOX-005` | An extra environment variable is not allowed |
+| `TUR-SECURITY-SANDBOX-006` | The profile's program file cannot be used |
+| `TUR-DARWIN-INSPECT-001` | A Mach-O file or bundle is truncated or malformed |
+| `TUR-DARWIN-RUNTIME-001` | Darling is not installed |
+| `TUR-DARWIN-RUNTIME-002` | A macOS kernel extension |
+| `TUR-DARWIN-RUNTIME-003` | A macOS file no runtime handles |
+| `TUR-ANDROID-RUNTIME-001` | The Android runtime is not installed |
+| `TUR-ANDROID-RUNTIME-002` | ARM translation is not installed |
+| `TUR-ANDROID-RUNTIME-003` | An Android package no runtime handles |
+| `TUR-DESKTOP-PROFILE-001` | The profile could not be read |
+| `TUR-DESKTOP-PROFILE-002` | The profile is not JSON or does not match the schema |
+| `TUR-DESKTOP-PROFILE-003` | A profile field holds a value that is not allowed |
+| `TUR-DESKTOP-PROFILE-004` | The profile appears to hold a credential |
 
 These are not yet registry entries in the sense of §29.3 (severity, detection
 criteria, recovery action); that registry does not exist yet.
@@ -286,13 +286,13 @@ too. `--dry-run` therefore runs no step and changes nothing.
 ### Prefix layout
 
 ```
-$XDG_DATA_HOME/uos/runtime/
-    prefixes/<app-id>/metadata.json     written by uos-runtime only
+$XDG_DATA_HOME/tur/runtime/
+    prefixes/<app-id>/metadata.json     written by tur-runtime only
     prefixes/<app-id>/prefix/           the Wine prefix (WINEPREFIX)
     prefixes/<app-id>/home/             the application's private HOME
     backups/<app-id>/<time>-<reason>.tar.gz
     staging/<app-id>/                   scratch space while restoring
-$XDG_STATE_HOME/uos/runtime/
+$XDG_STATE_HOME/tur/runtime/
     logs/<app-id>/<time>-<pid>.log      one file per launch
     logs/<app-id>/operations.log        output of prefix operations
 ```
@@ -363,20 +363,20 @@ true:
    `wineboot --update` still works.
 2. **The launch plan compares versions.** The metadata records the version the
    prefix is on. When the installed runtime reports another, the launch is
-   refused (`UOS-WINDOWS-PREFIX-006`) and nothing is started.
+   refused (`TUR-WINDOWS-PREFIX-006`) and nothing is started.
 3. **Migration is explicit and backed up.** `launch --migrate` or `prefix
    migrate` plans: a backup, then `wineboot --update` with the installed
    runtime, then the new record with the move appended to `migrations`. A
-   pinned prefix refuses it (`UOS-WINDOWS-PREFIX-007`).
+   pinned prefix refuses it (`TUR-WINDOWS-PREFIX-007`).
 
 A profile's `runtime_version` pins the runtime itself: when it is set and
-another version is installed, the launch is refused (`UOS-WINDOWS-RUNTIME-005`),
+another version is installed, the launch is refused (`TUR-WINDOWS-RUNTIME-005`),
 with or without `--migrate`. There is one system Wine; keeping several versions
 side by side is not built.
 
 For Proton, `umu-run` fetches the build named by `PROTONPATH`, and without one
 it follows the latest build. A Proton profile must therefore pin a version
-(`UOS-WINDOWS-RUNTIME-008`), and that version is what the prefix records.
+(`TUR-WINDOWS-RUNTIME-008`), and that version is what the prefix records.
 
 Versions are compared as tokens (`wine-9.0`). A distribution rebuild of the same
 upstream version is not a mismatch; the full build string is recorded for the
@@ -395,7 +395,7 @@ its working directory, the sandbox they run in, and the steps.
 The working directory is the program's directory. Only Windows programs (`pe`)
 are launched; an installer package (`msi`) is refused.
 
-For Wine, the first process in the sandbox is not Wine but `uos-runtime
+For Wine, the first process in the sandbox is not Wine but `tur-runtime
 supervise`, mounted read-only into the sandbox: it starts Wine, waits for it,
 then runs `wineserver --wait`. The Wine server outlives the program by a few
 seconds and writes the registry when it exits, and the sandbox is torn down when
@@ -438,7 +438,7 @@ layer when it is there, Wine's own implementation when it is not. The same form
 is used for VKD3D-Proton's `d3d12.dll` and `d3d12core.dll`; its README names
 the two DLLs but gives no prefix instructions, so that override is by analogy
 and was not verified. `winemenubuilder.exe` is disabled because desktop entries
-come from `uos-runtime`. While a prefix is created, `mscoree` and `mshtml` are
+come from `tur-runtime`. While a prefix is created, `mscoree` and `mshtml` are
 disabled too, so that Wine does not offer to download Mono and Gecko.
 
 **Graphics (Proton).** Proton uses DXVK and VKD3D-Proton by default; nothing is
@@ -467,8 +467,8 @@ before the application starts.
 
 Every runtime command, including prefix creation, runs inside bubblewrap. There
 is no option to start an application without it; when `bwrap` is missing the
-operation is refused (`UOS-SECURITY-SANDBOX-002`). Root is refused before
-anything else is looked at (`UOS-SECURITY-SANDBOX-001`, §12.1).
+operation is refused (`TUR-SECURITY-SANDBOX-002`). Root is refused before
+anything else is looked at (`TUR-SECURITY-SANDBOX-001`, §12.1).
 
 What the application sees:
 
@@ -497,7 +497,7 @@ Namespaces: user, IPC, PID, UTS and, where possible, cgroup. The network
 namespace is shared unless the prefix was created with `--no-network`. For Wine,
 the sandbox may not create further user namespaces (`--disable-userns`); for
 Proton it may, because `umu-run` starts Proton in the Steam Linux Runtime
-container. The sandbox dies with `uos-runtime` (`--die-with-parent`) and has no
+container. The sandbox dies with `tur-runtime` (`--die-with-parent`) and has no
 controlling terminal (`--new-session`); the application's standard input is
 `/dev/null`.
 
@@ -526,7 +526,7 @@ Every recorded grant is checked again when a launch is planned, against the file
 system as it then is, and must still resolve to itself. An application with
 write access to one granted directory therefore cannot turn a second grant
 nested in it into a link to somewhere else: the next launch is refused
-(`UOS-SECURITY-SANDBOX-004`). Metadata edited by hand to name a protected
+(`TUR-SECURITY-SANDBOX-004`). Metadata edited by hand to name a protected
 directory is refused the same way. A symbolic link *inside* a granted directory
 needs no rule: its target is resolved inside the sandbox, where the rest of the
 home directory does not exist.
@@ -584,12 +584,12 @@ One file per launch, `logs/<app-id>/<UTC time>-<pid>.log`, mode 0600: a header
 with the command and the names of the environment variables, the application's
 standard output and standard error as they came, and the exit status. A launch
 log is capped at 64 MiB; later output is dropped and the log says so. In text
-mode the application's output is also `uos-runtime`'s own output; with `--json`
+mode the application's output is also `tur-runtime`'s own output; with `--json`
 it goes to the log only and standard output carries the report.
 
 ### Desktop entries
 
-`uos-runtime desktop-entry <profile>` prints the text of a `.desktop` file and
+`tur-runtime desktop-entry <profile>` prints the text of a `.desktop` file and
 installs nothing:
 
 ```
@@ -598,18 +598,18 @@ Version=1.5
 Type=Application
 Name=Example Application
 Comment=Windows application (Wine)
-Exec=uos-runtime launch "/path/to/profile.json"
+Exec=tur-runtime launch "/path/to/profile.json"
 Icon=application-x-ms-dos-executable
 Terminal=false
 StartupNotify=true
-X-UOS-App-Id=com.example.app
-X-UOS-Runtime=wine
-X-UOS-Prefix-Id=example-app
+X-TUR-App-Id=com.example.app
+X-TUR-Runtime=wine
+X-TUR-Prefix-Id=example-app
 ```
 
-`X-UOS-Runtime` and `X-UOS-App-Id` tell the desktop which runtime an entry
-belongs to (§3.4); the file is named `uos-<runtime>-<app-id>.desktop`. The entry
-goes through `uos-runtime launch`, so a click gets the same sandbox and the same
+`X-TUR-Runtime` and `X-TUR-App-Id` tell the desktop which runtime an entry
+belongs to (§3.4); the file is named `tur-<runtime>-<app-id>.desktop`. The entry
+goes through `tur-runtime launch`, so a click gets the same sandbox and the same
 refusals as the command line. Values are escaped by the Desktop Entry
 Specification's rules: the name cannot add a line or a key, and the profile path
 is always one quoted argument. Window matching (`StartupWMClass`), icons taken
@@ -661,20 +661,20 @@ Not verified, or verified only at second hand:
 ## Command line
 
 ```
-uos-runtime inspect <path> [--json] [--host-arch ARCH] [--available LIST]
-uos-runtime profile validate <file>
+tur-runtime inspect <path> [--json] [--host-arch ARCH] [--available LIST]
+tur-runtime profile validate <file>
 
-uos-runtime prefix create <app-id> [--runtime wine|proton] [--prefix-id NAME]
+tur-runtime prefix create <app-id> [--runtime wine|proton] [--prefix-id NAME]
         [--graphics SETTING] [--pin] [--no-network] [--grant DIR]... [--grant-rw DIR]...
-uos-runtime prefix verify|repair|backup|remove|migrate|pin|unpin <app-id>
-uos-runtime prefix reset <app-id> [--no-backup]
-uos-runtime prefix restore <app-id> <backup-name>
-uos-runtime prefix grant <app-id> <dir> [--read-write]
-uos-runtime prefix revoke <app-id> <dir>
+tur-runtime prefix verify|repair|backup|remove|migrate|pin|unpin <app-id>
+tur-runtime prefix reset <app-id> [--no-backup]
+tur-runtime prefix restore <app-id> <backup-name>
+tur-runtime prefix grant <app-id> <dir> [--read-write]
+tur-runtime prefix revoke <app-id> <dir>
 
-uos-runtime launch <profile> [--migrate] [--env NAME=VALUE]... [--wine-debug CHANNELS]
+tur-runtime launch <profile> [--migrate] [--env NAME=VALUE]... [--wine-debug CHANNELS]
         [-- arguments for the application]
-uos-runtime desktop-entry <profile> [--launcher PROGRAM]
+tur-runtime desktop-entry <profile> [--launcher PROGRAM]
 ```
 
 Every `prefix` and `launch` command also takes:
@@ -737,7 +737,7 @@ the report, or the error, is JSON on standard output.
   only. The `isolation_profile` field of a profile is not interpreted: there is
   one isolation profile, the one described above.
 - **Stop.** There is no way to stop a running application other than ending
-  `uos-runtime`, which kills the sandbox without letting the Wine server write
+  `tur-runtime`, which kills the sandbox without letting the Wine server write
   the registry. Rollback of a failed migration is a manual `prefix restore`.
 - **32-bit programs.** Not run. On the CI runner Wine had no 32-bit support
   installed.

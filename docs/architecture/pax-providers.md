@@ -35,7 +35,7 @@ orchestrator ── Request ──▶ Provider::stream ──▶ EventStream (an
 
 The layer sends a conversation and streams back what the model said and which
 tools it wants to call. It does not decide whether a tool call may run: that is
-the policy engine (`services/uos-agent`), and every tool call this layer
+the policy engine (`services/tur-pax`), and every tool call this layer
 reports is a proposal with no authority. It does not run tools, keep
 conversation history, or store keys.
 
@@ -47,7 +47,7 @@ call on a thread of its own. There is no async runtime.
 | `model` | The neutral conversation model and the stream events |
 | `provider` | The `Provider` trait, `Capabilities`, `EventStream`, `connect` |
 | `anthropic`, `openai`, `google` | The adapters |
-| `error` | `ProviderError` and the `UOS-AI-PROVIDER-*` registry |
+| `error` | `ProviderError` and the `TUR-AI-PROVIDER-*` registry |
 | `secret` | `ApiKey`, `KeySource`, `EnvKeySource` |
 | `config` | The configuration file format |
 | `spend` | `SpendMeter`: usage per task, cost, the task limit |
@@ -128,11 +128,11 @@ refusal that arrives mid-stream; the same rule is applied to all three.
 ### 3.4 Tool definitions and the tool manifest
 
 A `ToolDefinition` is a name, a description and a JSON Schema: the three fields
-a tool has in the reviewed manifest of `services/uos-agent`. It is built with
+a tool has in the reviewed manifest of `services/tur-pax`. It is built with
 `ToolDefinition::new(tool.name(), tool.description(), tool.input_schema().clone())`.
 
-This crate does not depend on `uos-agent`. The dependency will run the other
-way: `uos-agent` owns all communication with providers (ADR-0004) and will
+This crate does not depend on `tur-pax`. The dependency will run the other
+way: `tur-pax` owns all communication with providers (ADR-0004) and will
 depend on this crate, so a dependency from here to there would be circular. The
 constructor takes the three plain values instead.
 
@@ -178,7 +178,7 @@ Adapter behaviour that follows from the providers' rules:
   result, followed by one `user_input` step.
 - **All three.** A part in the wrong role (a tool call in a user message, an
   image in an assistant message) is rejected locally with
-  `UOS-AI-PROVIDER-004` before anything is sent. An opaque part from another
+  `TUR-AI-PROVIDER-004` before anything is sent. An opaque part from another
   provider is left out.
 
 No sampling parameter (`temperature`, `top_p`, `top_k`), no thinking or
@@ -268,18 +268,18 @@ which is the provider's own message cut to 300 characters.
 
 | Code | Kind | Message | Retried |
 |---|---|---|---|
-| `UOS-AI-PROVIDER-001` | Authentication failed | The provider did not accept the API key, or the key is not permitted to do this. | No |
-| `UOS-AI-PROVIDER-002` | Rate limited | The provider is limiting requests for this key. Try again in a moment. | Yes |
-| `UOS-AI-PROVIDER-003` | Overloaded | The provider is overloaded or temporarily unavailable. | Yes |
-| `UOS-AI-PROVIDER-004` | Request rejected | The provider rejected the request. | No |
-| `UOS-AI-PROVIDER-005` | Refusal | The model declined to respond to this request. | No |
-| `UOS-AI-PROVIDER-006` | Network | The provider could not be reached, or the connection was lost. | Yes |
-| `UOS-AI-PROVIDER-007` | Malformed response | The provider sent a response that could not be understood. | No |
-| `UOS-AI-PROVIDER-008` | Timed out | The provider did not respond in time. | Yes |
-| `UOS-AI-PROVIDER-009` | Quota exhausted | The provider account has no remaining credit or quota. | No |
-| `UOS-AI-PROVIDER-010` | Spend limit reached | The spending limit set for this task was reached. | No |
-| `UOS-AI-PROVIDER-011` | Configuration invalid | The provider configuration is not valid. | No |
-| `UOS-AI-PROVIDER-012` | Key unavailable | No usable API key is available for this provider. | No |
+| `TUR-AI-PROVIDER-001` | Authentication failed | The provider did not accept the API key, or the key is not permitted to do this. | No |
+| `TUR-AI-PROVIDER-002` | Rate limited | The provider is limiting requests for this key. Try again in a moment. | Yes |
+| `TUR-AI-PROVIDER-003` | Overloaded | The provider is overloaded or temporarily unavailable. | Yes |
+| `TUR-AI-PROVIDER-004` | Request rejected | The provider rejected the request. | No |
+| `TUR-AI-PROVIDER-005` | Refusal | The model declined to respond to this request. | No |
+| `TUR-AI-PROVIDER-006` | Network | The provider could not be reached, or the connection was lost. | Yes |
+| `TUR-AI-PROVIDER-007` | Malformed response | The provider sent a response that could not be understood. | No |
+| `TUR-AI-PROVIDER-008` | Timed out | The provider did not respond in time. | Yes |
+| `TUR-AI-PROVIDER-009` | Quota exhausted | The provider account has no remaining credit or quota. | No |
+| `TUR-AI-PROVIDER-010` | Spend limit reached | The spending limit set for this task was reached. | No |
+| `TUR-AI-PROVIDER-011` | Configuration invalid | The provider configuration is not valid. | No |
+| `TUR-AI-PROVIDER-012` | Key unavailable | No usable API key is available for this provider. | No |
 
 How the providers' errors map:
 
@@ -401,7 +401,7 @@ compatible gateway can be used.
 
 **Spend.** A `SpendMeter` adds up the usage of every request of a task and, if
 prices are configured, converts it to a cost. A stream read through
-`SpendMeter::meter` is cut, and finishes with `UOS-AI-PROVIDER-010`, when the
+`SpendMeter::meter` is cut, and finishes with `TUR-AI-PROVIDER-010`, when the
 task passes its limit; a task already over its limit sends nothing more.
 
 What this can and cannot do: the meter acts on the usage the provider reports.
@@ -436,7 +436,7 @@ status: 0 valid (and ping succeeded), 1 invalid configuration, 2 usage error,
 - **Server-side tools** (web search, code execution, provider-side MCP) are not
   requested, and their blocks and items are ignored if they appear.
 - **Provider-side MCP is deliberately not used.** ADR-0008 makes MCP the tool
-  protocol with `uos-agent` as the gateway. All three providers also offer a
+  protocol with `tur-pax` as the gateway. All three providers also offer a
   connector that lets the provider call an MCP server itself. That would bypass
   the policy engine, so the adapters send tools as plain function definitions
   built from the manifest. The translation is three field names per provider.
@@ -572,12 +572,12 @@ provider, written by hand from the documentation listed above.
 | Plain answer | The text, the usage and a normal finish; the request goes to the documented path with the key in the documented header and only the documented fields; a keep-alive comment and an unknown event type in the stream are ignored |
 | Tool call with split arguments | Start, at least two argument fragments that add up to the arguments, end; the reasoning content comes first, unchanged; the tools were offered |
 | Two tool calls in one turn | Both calls, in order, with distinct identifiers; one has no arguments |
-| Refusal | A `Refusal` finish with `UOS-AI-PROVIDER-005`; not retried |
+| Refusal | A `Refusal` finish with `TUR-AI-PROVIDER-005`; not retried |
 | Rate limit, then success | The second attempt succeeds; the same body was sent twice |
 | Rate limit beyond the ceiling | Not retried; the error carries the provider's delay |
 | Overload | Retried up to the configured number of attempts, then reported |
-| Authentication failure | `UOS-AI-PROVIDER-001`; sent once |
-| Rejected request | `UOS-AI-PROVIDER-004`; sent once |
+| Authentication failure | `TUR-AI-PROVIDER-001`; sent once |
+| Rejected request | `TUR-AI-PROVIDER-004`; sent once |
 | Stream cut mid-way | The text so far, then a `Network` error; not sent again |
 | Garbage bytes | Five kinds of garbage, each a `MalformedResponse` |
 | Error event mid-stream | The text so far, then an `Overloaded` error |
@@ -585,6 +585,6 @@ provider, written by hand from the documentation listed above.
 | Silence | A `TimedOut` error |
 | Unreachable provider | A `Network` error |
 | Tool result goes back as tool output | The follow-up request has the reasoning content unchanged, the tool result in the provider's tool-output position, the untrusted text exactly once, and the system field unchanged |
-| Spend limit | The stream is cut with `UOS-AI-PROVIDER-010`; the next request is not sent |
+| Spend limit | The stream is cut with `TUR-AI-PROVIDER-010`; the next request is not sent |
 | Spend under the limit | Usage and cost add up over two requests |
 | Capabilities | The adapter declares the required rows; nothing is sent |

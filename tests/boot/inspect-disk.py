@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
-"""Look inside a UOS disk image from the host, read-only.
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+"""Look inside a TUR disk image from the host, read-only.
 
     sudo tests/boot/inspect-disk.py installed  DISK OUT_DIR
     sudo tests/boot/inspect-disk.py postmortem DISK OUT_DIR
@@ -55,7 +55,7 @@ class Disk:
         self.path = path
         self.loop = ""
         self.mounted: list[str] = []
-        self.tmp = tempfile.mkdtemp(prefix="uos-inspect-")
+        self.tmp = tempfile.mkdtemp(prefix="tur-inspect-")
         self.partitions: list[dict] = []
         self.table: dict = {}
         self.lsblk: dict = {}
@@ -274,7 +274,7 @@ def postmortem(disk_path: str, out: pathlib.Path) -> int:
                         print(f"postmortem: the host journalctl could not render it: {text.stderr.strip()[:300]}")
                 else:
                     print(f"postmortem: no persistent journal under {state.relative_to(mnt)}")
-                report = state / "lib" / "uos-boot-test" / "report"
+                report = state / "lib" / "tur-boot-test" / "report"
                 if report.is_dir():
                     shutil.copytree(report, out / "guest-from-disk", dirs_exist_ok=True)
                     print("postmortem: copied the agent's on-disk report")

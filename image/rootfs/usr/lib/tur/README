@@ -1,0 +1,4 @@
+This directory holds files owned by TUR.
+
+release   Build identity of this image, written at build time.
+          Shell-sourceable KEY=VALUE lines.

@@ -1,0 +1,5 @@
+# The external NTFS drive was removed safely from Windows.
+DEVNAME=/dev/sdh1
+UUID=5A5A5A5A0B0B0801
+TYPE=ntfs
+TUR_NTFS_STATE=clean

@@ -11,9 +11,9 @@ wrote its update and rollback design around systemd-boot boot counting (§5.3).
 ADR-0001 chose Fedora Kinoite on bootc and required this question to be answered
 with evidence, not assumed.
 
-The evidence now exists. UOS-003 installed the image to a disk with the installer
+The evidence now exists. TUR-003 installed the image to a disk with the installer
 the image carries and booted it under UEFI in CI (run 43153380759, report
-[UOS-003](../reports/UOS-003.md)). What was measured:
+[TUR-003](../reports/TUR-003.md)). What was measured:
 
 - `bootc install to-disk` (bootc 1.17.1) reported `Bootloader: grub` and
   `Installing bootloader via bootupd`. Nothing was passed to choose a bootloader.
@@ -31,7 +31,7 @@ the image carries and booted it under UEFI in CI (run 43153380759, report
   boot went through that entry.
 - In the booted system `bootctl` names the running loader as `GRUB 2.12` and
   lists its features: **boot counting is not among them**.
-- The image contains no systemd-boot (UOS-002).
+- The image contains no systemd-boot (TUR-002).
 - The GRUB configuration bootupd installs has no boot counter. GRUB's environment
   block exists and GRUB can read and write it.
 
@@ -56,8 +56,8 @@ What upstream documents for this version:
 ## Options considered
 
 1. **GRUB 2 loaded by shim, installed by bootupd.** What the installer does
-   today, with no UOS code. These are the binaries Fedora ships for Secure
-   Boot, so its chain should keep working as long as UOS ships them unmodified
+   today, with no TUR code. These are the binaries Fedora ships for Secure
+   Boot, so its chain should keep working as long as TUR ships them unmodified
    (ADR-0001); that is still to be shown. BIOS boot is available from the same disk. Cost: no systemd-boot
    boot counting, so rollback on a bad boot must be built on GRUB's environment
    block; and the ESP directory and firmware entry are named "fedora"/"Fedora"
@@ -67,33 +67,33 @@ What upstream documents for this version:
    the image.
 3. **systemd-boot with bootc's composefs backend and unified kernel images.**
    The direction upstream is moving in, and the one that fits "signed UKI where
-   practical" (§4.1). It changes the storage backend, needs UOS to own a signing
-   chain (Fedora does not sign these for UOS), and the composefs backend does
-   not configure boot counting yet either. Too much to take on before UOS has
+   practical" (§4.1). It changes the storage backend, needs TUR to own a signing
+   chain (Fedora does not sign these for TUR), and the composefs backend does
+   not configure boot counting yet either. Too much to take on before TUR has
    update, rollback and recovery working at all.
 
 ## Decision
 
-UOS boots through Fedora's shim and GRUB 2, installed and updated by bootupd, as
+TUR boots through Fedora's shim and GRUB 2, installed and updated by bootupd, as
 `bootc install` sets it up for this base. systemd-boot is not adopted now.
 
-Boot health checking and automatic rollback (UOS-005, §5.4) are designed around
+Boot health checking and automatic rollback (TUR-005, §5.4) are designed around
 this stack: a boot-attempt counter in GRUB's environment block, cleared by the
 health gate when the boot is good. greenboot is evaluated first as the existing
-mechanism to wrap, before UOS writes its own.
+mechanism to wrap, before TUR writes its own.
 
 ## Consequences
 
 - Specification question 1 is answered for the current base: GRUB. The
   systemd-boot boot counting in §5.3 does not apply; the "attempt counter" of
   stage BOOT-010 (§27.1) comes from the GRUB environment block.
-- UOS writes no bootloader code. Kernel arguments are machine-local state set at
+- TUR writes no bootloader code. Kernel arguments are machine-local state set at
   install time (`bootc install --karg`) or image state in
   `/usr/lib/bootc/kargs.d`.
 - The installed layout is the installer's default: a GPT with a 1 MiB BIOS boot
   partition, a 512 MiB FAT EFI system partition and one root partition typed as
   "Linux root (x86-64)". There is no separate `/boot`; one would appear with
-  LUKS. The UOS installer (UOS-006) will drive `bootc install to-filesystem` and
+  LUKS. The TUR installer (TUR-006) will drive `bootc install to-filesystem` and
   decide the layout itself, including whether to keep BIOS boot at all (§4.1
   targets UEFI).
 - The base image sets no default root filesystem. The installer must choose one;
@@ -101,7 +101,7 @@ mechanism to wrap, before UOS writes its own.
   boot.
 - **Branding.** The firmware boot menu will say "Fedora" and the ESP will carry
   `EFI/fedora`, because those names are part of Fedora's signed shim and GRUB
-  packages. Changing them means building and signing UOS's own shim and GRUB.
+  packages. Changing them means building and signing TUR's own shim and GRUB.
   This bears on the rule that no image may be published before Fedora's marks
   are replaced, and needs a decision of its own before a public image.
 - bootc does not update the bootloader after installation; bootupd does, when
@@ -118,7 +118,7 @@ mechanism to wrap, before UOS writes its own.
   (`disabled (unsupported)`). A boot with Secure Boot enforced and Microsoft's
   keys enrolled must pass before this ADR's claim about Fedora's signed chain is
   relied on.
-- **Not yet shown:** anything about rollback. UOS-005 must demonstrate, in a VM,
+- **Not yet shown:** anything about rollback. TUR-005 must demonstrate, in a VM,
   a deployment that fails its health gate being replaced by the previous one
   within a bounded number of attempts, and must confirm at that point which
   greenboot version Fedora 45 ships and that it works with this image.

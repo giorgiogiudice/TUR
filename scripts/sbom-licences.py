@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
-"""List the packages in a UOS image SBOM with their declared licences.
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+"""List the packages in a TUR image SBOM with their declared licences.
 
     scripts/sbom-licences.py SBOM.spdx.json > docs/dependencies/image-licences.csv
 

@@ -34,7 +34,7 @@ fn tools() -> Vec<ToolDefinition> {
         .expect("a valid tool"),
         ToolDefinition::new(
             "storage_unmount",
-            "Unmount a volume by its UOS volume identifier.",
+            "Unmount a volume by its TUR volume identifier.",
             json!({
                 "type": "object",
                 "properties": { "volume_id": { "type": "string" } },
@@ -244,7 +244,7 @@ fn refusal_is_a_normal_result(wire: &Wire) {
     match finish(&events) {
         FinishReason::Refusal(error) => {
             assert_eq!(error.kind(), ErrorKind::Refusal);
-            assert_eq!(error.code(), "UOS-AI-PROVIDER-005");
+            assert_eq!(error.code(), "TUR-AI-PROVIDER-005");
             assert_eq!(
                 error.user_message(),
                 "The model declined to respond to this request."
@@ -285,7 +285,7 @@ fn rate_limit_reports_the_delay_the_provider_gave(wire: &Wire) {
     match finish(&events) {
         FinishReason::Error(error) => {
             assert_eq!(error.kind(), ErrorKind::RateLimited);
-            assert_eq!(error.code(), "UOS-AI-PROVIDER-002");
+            assert_eq!(error.code(), "TUR-AI-PROVIDER-002");
             assert_eq!(error.retry_after(), Some(Duration::from_secs(7)));
             assert_eq!(error.http_status(), Some(429));
             assert_eq!(error.provider(), Some(wire.provider));
@@ -317,7 +317,7 @@ fn authentication_failure_is_not_retried(wire: &Wire) {
     match finish(&events) {
         FinishReason::Error(error) => {
             assert_eq!(error.kind(), ErrorKind::AuthenticationFailed);
-            assert_eq!(error.code(), "UOS-AI-PROVIDER-001");
+            assert_eq!(error.code(), "TUR-AI-PROVIDER-001");
             assert_eq!(error.http_status(), Some(401));
         }
         other => panic!("not an error: {other:?}"),
@@ -404,7 +404,7 @@ fn silence_times_out(wire: &Wire) {
     match finish(&events) {
         FinishReason::Error(error) => {
             assert_eq!(error.kind(), ErrorKind::TimedOut);
-            assert_eq!(error.code(), "UOS-AI-PROVIDER-008");
+            assert_eq!(error.code(), "TUR-AI-PROVIDER-008");
         }
         other => panic!("not an error: {other:?}"),
     }
@@ -488,7 +488,7 @@ fn spend_limit_stops_a_stream(wire: &Wire) {
     match finish(&events) {
         FinishReason::Error(error) => {
             assert_eq!(error.kind(), ErrorKind::SpendLimitReached);
-            assert_eq!(error.code(), "UOS-AI-PROVIDER-010");
+            assert_eq!(error.code(), "TUR-AI-PROVIDER-010");
         }
         other => panic!("not stopped: {other:?}"),
     }

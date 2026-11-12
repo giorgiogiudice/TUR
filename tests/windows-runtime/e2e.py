@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
-"""End-to-end test of uos-runtime with real binaries, a real Wine and a real sandbox.
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+"""End-to-end test of tur-runtime with real binaries, a real Wine and a real sandbox.
 
 Run by .github/workflows/windows-runtime.yml on a hosted Ubuntu runner, after
 build.sh has compiled the test programs. It is never run on a development
 machine (AGENTS.md).
 
-    e2e.py --uos-runtime BINARY --build-dir DIR --work-dir DIR --results FILE
+    e2e.py --tur-runtime BINARY --build-dir DIR --work-dir DIR --results FILE
 
 What it proves, when it passes:
 
-  * `uos-runtime inspect` agrees with binutils about real ELF and PE files
+  * `tur-runtime inspect` agrees with binutils about real ELF and PE files
     and with Python's zip writer about real archives (issue #12, item 1);
-  * a Windows program really ran under Wine through `uos-runtime launch`,
+  * a Windows program really ran under Wine through `tur-runtime launch`,
     with its output, exit status and arguments intact;
   * the sandbox held: the program wrote where it was granted, and could not
     read files outside its grants that the same program does read when it
@@ -40,9 +40,9 @@ import sys
 import time
 import zipfile
 
-TAG = "uos-windows-test: "
-APP = "local.uos-test"
-GUI_APP = "local.uos-gui-test"
+TAG = "tur-windows-test: "
+APP = "local.tur-test"
+GUI_APP = "local.tur-gui-test"
 HOST_CANARY = "leaked-from-the-host-environment"
 
 
@@ -102,8 +102,8 @@ def tagged(output: str) -> list[str]:
 # --------------------------------------------------------------------------- inspection
 
 
-def inspect(uos: str, path: pathlib.Path) -> tuple[int, dict]:
-    done = run([uos, "inspect", str(path), "--json", "--host-arch", "x86_64", "--available", "wine"])
+def inspect(tur: str, path: pathlib.Path) -> tuple[int, dict]:
+    done = run([tur, "inspect", str(path), "--json", "--host-arch", "x86_64", "--available", "wine"])
     try:
         return done.returncode, json.loads(done.stdout)
     except json.JSONDecodeError:
@@ -154,7 +154,7 @@ def objdump_pe(path: pathlib.Path) -> dict:
     }
 
 
-def check_inspection(uos: str, build: pathlib.Path, work: pathlib.Path) -> None:
+def check_inspection(tur: str, build: pathlib.Path, work: pathlib.Path) -> None:
     section("Inspection of real binaries (issue #12, item 1)")
 
     # ELF, against readelf. (name, expected exit status, expected runtime)
@@ -169,7 +169,7 @@ def check_inspection(uos: str, build: pathlib.Path, work: pathlib.Path) -> None:
     for name, status, runtime in elf_cases:
         path = build / name
         truth = readelf(path)
-        code, report = inspect(uos, path)
+        code, report = inspect(tur, path)
         detected = report.get("inspection", {}).get("detected", {})
         label = f"inspect {name}"
         R.equal(f"{label}: identified as ELF", detected.get("format"), "elf")
@@ -204,7 +204,7 @@ def check_inspection(uos: str, build: pathlib.Path, work: pathlib.Path) -> None:
     for name, machine, status, runtime, reason in pe_cases:
         path = build / name
         truth = objdump_pe(path)
-        code, report = inspect(uos, path)
+        code, report = inspect(tur, path)
         detected = report.get("inspection", {}).get("detected", {})
         label = f"inspect {name}"
         R.equal(f"{label}: identified as PE", detected.get("format"), "pe")
@@ -236,7 +236,7 @@ def check_inspection(uos: str, build: pathlib.Path, work: pathlib.Path) -> None:
         archive.writestr("lib/arm64-v8a/libnative.so", (build / "libnative.so").read_bytes())
         archive.writestr("lib/x86_64/libnative.so", (build / "libnative.so").read_bytes())
         archive.writestr("res/layout/main.xml", b"<x/>")
-    code, report = inspect(uos, apk)
+    code, report = inspect(tur, apk)
     detected = report.get("inspection", {}).get("detected", {})
     R.equal("inspect APK-shaped zip: format", detected.get("format"), "android")
     R.equal("inspect APK-shaped zip: kind", detected.get("kind"), "apk")
@@ -249,7 +249,7 @@ def check_inspection(uos: str, build: pathlib.Path, work: pathlib.Path) -> None:
         archive.writestr("readme.txt", "hello")
         archive.writestr("src/main.c", "int main(void){return 0;}")
         archive.comment = b"an archive comment, which moves the end record"
-    code, report = inspect(uos, plain)
+    code, report = inspect(tur, plain)
     detected = report.get("inspection", {}).get("detected", {})
     R.equal("inspect plain zip: format", detected.get("format"), "zip")
     R.equal("inspect plain zip: entry count", detected.get("entries"), 2)
@@ -260,7 +260,7 @@ def check_inspection(uos: str, build: pathlib.Path, work: pathlib.Path) -> None:
     with zipfile.ZipFile(many, "w", zipfile.ZIP_STORED) as archive:
         for index in range(70000):
             archive.writestr(f"f{index}", b"")
-    code, report = inspect(uos, many)
+    code, report = inspect(tur, many)
     detected = report.get("inspection", {}).get("detected", {})
     R.equal("inspect zip64 archive with 70000 members: format", detected.get("format"), "zip")
     R.equal("inspect zip64 archive with 70000 members: entry count", detected.get("entries"), 70000)
@@ -272,8 +272,8 @@ def check_inspection(uos: str, build: pathlib.Path, work: pathlib.Path) -> None:
 class Bench:
     """The scratch world the launches run in."""
 
-    def __init__(self, uos: str, build: pathlib.Path, work: pathlib.Path) -> None:
-        self.uos = uos
+    def __init__(self, tur: str, build: pathlib.Path, work: pathlib.Path) -> None:
+        self.tur = tur
         self.build = build
         self.work = work
         self.data = work / "xdg-data"
@@ -289,16 +289,16 @@ class Bench:
         # A stand-in for the user's keys, in the real home of the runner user.
         ssh = self.home / ".ssh"
         ssh.mkdir(mode=0o700, exist_ok=True)
-        self.key = ssh / "uos-test-canary"
+        self.key = ssh / "tur-test-canary"
         self.key.write_text("home-key-canary\n")
         # Another application's prefix.
-        other = self.data / "uos/runtime/prefixes/local.other-app/prefix"
+        other = self.data / "tur/runtime/prefixes/local.other-app/prefix"
         other.mkdir(parents=True, exist_ok=True)
         self.other_file = other / "other-apps-file.txt"
         self.other_file.write_text("another-applications-data\n")
 
     def app_dir(self, app: str = APP) -> pathlib.Path:
-        return self.data / "uos/runtime/prefixes" / app
+        return self.data / "tur/runtime/prefixes" / app
 
     def metadata_path(self, app: str = APP) -> pathlib.Path:
         return self.app_dir(app) / "metadata.json"
@@ -310,20 +310,20 @@ class Bench:
         return [self.outside / "secret.txt", self.key, self.other_file, self.metadata_path()]
 
     def env(self, **extra: str) -> dict[str, str]:
-        """The environment uos-runtime is started in: the runner's own, plus
+        """The environment tur-runtime is started in: the runner's own, plus
         scratch XDG directories and a canary that must not reach the program."""
         env = dict(os.environ)
         env.pop("DISPLAY", None)
         env.pop("WAYLAND_DISPLAY", None)
         env["XDG_DATA_HOME"] = str(self.data)
         env["XDG_STATE_HOME"] = str(self.state)
-        env["UOS_TEST_HOST_CANARY"] = HOST_CANARY
+        env["TUR_TEST_HOST_CANARY"] = HOST_CANARY
         env.update(extra)
         return env
 
-    def uos_run(self, arguments: list[str], timeout: int = 900, **extra_env: str) -> subprocess.CompletedProcess:
-        done = run([self.uos, *arguments], env=self.env(**extra_env), timeout=timeout)
-        print(f"$ uos-runtime {' '.join(arguments)}\n  -> exit status {done.returncode}", flush=True)
+    def tur_run(self, arguments: list[str], timeout: int = 900, **extra_env: str) -> subprocess.CompletedProcess:
+        done = run([self.tur, *arguments], env=self.env(**extra_env), timeout=timeout)
+        print(f"$ tur-runtime {' '.join(arguments)}\n  -> exit status {done.returncode}", flush=True)
         if done.returncode != 0 and done.stderr.strip():
             print("  stderr: " + tail(done.stderr, 12), flush=True)
         return done
@@ -332,7 +332,7 @@ class Bench:
         profile = {
             "schema_version": 1,
             "app_id": app,
-            "display_name": "UOS runtime test program",
+            "display_name": "TUR runtime test program",
             "binary": str(self.build / exe),
             "format": "pe",
             "architecture": "x86_64",
@@ -353,10 +353,10 @@ class Bench:
         outside = ";".join(str(path) for path in (*self.outside_files(), *also_outside))
         return [
             "launch", profile, *options,
-            "--env", "UOS_TEST_VALUE=passed by the launch",
-            "--env", f"UOS_TEST_GRANT_DIR={self.grant}",
-            "--env", f"UOS_TEST_READONLY_DIR={self.readonly}",
-            "--env", f"UOS_TEST_OUTSIDE_FILES={outside}",
+            "--env", "TUR_TEST_VALUE=passed by the launch",
+            "--env", f"TUR_TEST_GRANT_DIR={self.grant}",
+            "--env", f"TUR_TEST_READONLY_DIR={self.readonly}",
+            "--env", f"TUR_TEST_OUTSIDE_FILES={outside}",
             "--", *program_arguments,
         ]
 
@@ -371,20 +371,20 @@ def control_run(bench: Bench) -> None:
     """The same program, started by Wine directly with no sandbox. It must be
     able to read the files the sandboxed run must not, or the sandbox checks
     below would prove nothing."""
-    section("Control: the test program under Wine without uos-runtime")
+    section("Control: the test program under Wine without tur-runtime")
     env = dict(os.environ)
     env.pop("DISPLAY", None)
     env["WINEPREFIX"] = str(bench.work / "control-prefix")
-    # The same Wine settings uos-runtime uses when it creates a prefix, so
+    # The same Wine settings tur-runtime uses when it creates a prefix, so
     # that what Wine prints here can be compared with what it prints inside
     # the sandbox.
     env["WINEDEBUG"] = "fixme-all"
     env["WINEDLLOVERRIDES"] = "mscoree,mshtml=;winemenubuilder.exe="
-    env["UOS_TEST_HOST_CANARY"] = HOST_CANARY
-    # The file inside the uos-runtime prefix does not exist yet; use the
+    env["TUR_TEST_HOST_CANARY"] = HOST_CANARY
+    # The file inside the tur-runtime prefix does not exist yet; use the
     # others.
     outside = [path for path in bench.outside_files() if path.exists()]
-    env["UOS_TEST_OUTSIDE_FILES"] = ";".join(str(path) for path in outside)
+    env["TUR_TEST_OUTSIDE_FILES"] = ";".join(str(path) for path in outside)
     started = time.time()
     done = run(["wine", str(bench.build / "console64.exe"), "0"], env=env, timeout=600)
     run(["wineserver", "--wait"], env=env, timeout=120)
@@ -400,8 +400,8 @@ def control_run(bench: Bench) -> None:
     for path in outside:
         R.check(f"control: without the sandbox the program reads {path}",
                 any(line.startswith(f"outside-read: LEAKED {path}:") for line in lines), tail(done.stdout))
-    R.check("control: without uos-runtime the caller's environment reaches the program",
-            f"env UOS_TEST_HOST_CANARY={HOST_CANARY}" in lines, tail(done.stdout))
+    R.check("control: without tur-runtime the caller's environment reaches the program",
+            f"env TUR_TEST_HOST_CANARY={HOST_CANARY}" in lines, tail(done.stdout))
 
 
 def check_prefix_and_launch(bench: Bench) -> None:
@@ -409,17 +409,17 @@ def check_prefix_and_launch(bench: Bench) -> None:
     R.fact("wine --version", build)
 
     section("Create a prefix")
-    done = bench.uos_run([
-        "prefix", "create", APP, "--prefix-id", "uos-test",
+    done = bench.tur_run([
+        "prefix", "create", APP, "--prefix-id", "tur-test",
         "--grant-rw", str(bench.grant), "--grant", str(bench.readonly), "--json",
     ])
     R.equal("prefix create: exit status", done.returncode, 0)
     if done.returncode != 0:
         print(tail(done.stdout + done.stderr, 60))
-        operations = bench.state / "uos/runtime/logs" / APP / "operations.log"
+        operations = bench.state / "tur/runtime/logs" / APP / "operations.log"
         if operations.exists():
             print("--- operations.log ---\n" + tail(operations.read_text(errors="replace"), 60))
-    operations = bench.state / "uos/runtime/logs" / APP / "operations.log"
+    operations = bench.state / "tur/runtime/logs" / APP / "operations.log"
     if operations.exists():
         R.fact("Wine error lines while creating a prefix inside the sandbox",
                str(sum(1 for line in operations.read_text(errors="replace").splitlines() if ":err:" in line)))
@@ -443,18 +443,18 @@ def check_prefix_and_launch(bench: Bench) -> None:
     R.check("prefix create: the metadata is outside the prefix",
             not str(bench.metadata_path()).startswith(str(prefix) + "/"))
 
-    done = bench.uos_run(["prefix", "verify", APP])
+    done = bench.tur_run(["prefix", "verify", APP])
     R.equal("prefix verify: the created prefix passes", done.returncode, 0)
     if done.returncode != 0:
         print(tail(done.stdout + done.stderr))
 
-    done = bench.uos_run(["prefix", "create", APP])
+    done = bench.tur_run(["prefix", "create", APP])
     R.equal("prefix create again: refused", done.returncode, 6)
-    R.check("prefix create again: code", "UOS-WINDOWS-PREFIX-002" in done.stderr, done.stderr)
+    R.check("prefix create again: code", "TUR-WINDOWS-PREFIX-002" in done.stderr, done.stderr)
 
     section("Launch the console program")
     profile = bench.profile("profile.json", APP, "console64.exe")
-    dry = bench.uos_run(bench.launch_arguments(profile, ["42"], "--dry-run", "--json"))
+    dry = bench.tur_run(bench.launch_arguments(profile, ["42"], "--dry-run", "--json"))
     R.equal("launch --dry-run: exit status", dry.returncode, 0)
     plan = json.loads(dry.stdout).get("launch", {}) if dry.returncode == 0 else {}
     R.equal("launch --dry-run: the prefix is reused, not created", plan.get("creates_prefix"), False)
@@ -462,21 +462,21 @@ def check_prefix_and_launch(bench: Bench) -> None:
     R.fact("ntsync device", str(plan.get("sync", {}).get("ntsync_device")))
     R.fact("synchronisation selected", f"{plan.get('sync', {}).get('selected')}: {plan.get('sync', {}).get('reason')}")
 
-    first = bench.uos_run(bench.launch_arguments(profile, ["42", "two words", "C:\\path with\\back slashes"]))
+    first = bench.tur_run(bench.launch_arguments(profile, ["42", "two words", "C:\\path with\\back slashes"]))
     lines = tagged(first.stdout)
     print("  " + "\n  ".join(lines))
     if "hello from a Windows process" not in lines:
         print(tail(first.stdout + first.stderr, 60))
-    R.check("launch: a Windows program ran under Wine through uos-runtime",
+    R.check("launch: a Windows program ran under Wine through tur-runtime",
             "hello from a Windows process" in lines, tail(first.stdout + first.stderr))
     R.check("launch: it is a 64-bit Windows process", "pointer-bits=64" in lines)
     R.equal("launch: the exit status is the program's", first.returncode, 42)
     R.check("launch: the program reports the status it was asked for", "exiting with 42" in lines)
     R.check("launch: arguments arrive intact",
             {"arg[1]=42", "arg[2]=two words", "arg[3]=C:\\path with\\back slashes"} <= set(lines), str(lines))
-    R.check("launch: a variable given with --env arrives", "env UOS_TEST_VALUE=passed by the launch" in lines)
+    R.check("launch: a variable given with --env arrives", "env TUR_TEST_VALUE=passed by the launch" in lines)
     R.check("launch: the caller's environment does not reach the program",
-            "env UOS_TEST_HOST_CANARY=(unset)" in lines, str(lines))
+            "env TUR_TEST_HOST_CANARY=(unset)" in lines, str(lines))
 
     written = bench.grant / "written-by-windows.txt"
     R.check("sandbox: the program wrote into the read-write grant", "grant-write: ok" in lines, str(lines))
@@ -507,7 +507,7 @@ def check_prefix_and_launch(bench: Bench) -> None:
     if major and int(major.group(1)) < 11:
         R.equal("metadata: a Wine older than 11.0 falls back to the Wine server", sync.get("selected"), "server")
 
-    logs = sorted((bench.state / "uos/runtime/logs" / APP).glob("*Z-*.log"))
+    logs = sorted((bench.state / "tur/runtime/logs" / APP).glob("*Z-*.log"))
     R.equal("log: one log file for the launch", len(logs), 1)
     if logs:
         log = logs[-1].read_text(errors="replace")
@@ -517,7 +517,7 @@ def check_prefix_and_launch(bench: Bench) -> None:
                 "passed by the launch" not in log.split("\n# environment:")[0] and HOST_CANARY not in log)
 
     section("Launch again: the prefix is reused")
-    second = bench.uos_run(bench.launch_arguments(profile, ["0"]))
+    second = bench.tur_run(bench.launch_arguments(profile, ["0"]))
     lines = tagged(second.stdout)
     R.equal("second launch: exit status", second.returncode, 0)
     R.check("second launch: the same prefix, run a second time", "prefix-runs=2" in lines, str(lines))
@@ -529,28 +529,28 @@ def check_prefix_and_launch(bench: Bench) -> None:
             f"{after_first.get('last_run_at')} -> {after_second.get('last_run_at')}")
     R.check("second launch: Wine's own updating is still switched off",
             (prefix / ".update-timestamp").read_text() == "disable\n")
-    R.equal("second launch: two log files", len(list((bench.state / "uos/runtime/logs" / APP).glob("*Z-*.log"))), 2)
+    R.equal("second launch: two log files", len(list((bench.state / "tur/runtime/logs" / APP).glob("*Z-*.log"))), 2)
 
     section("Runtime version mismatches are refused")
     pinned = bench.profile("profile-pinned.json", APP, "console64.exe", runtime_version="wine-0.0.1")
-    done = bench.uos_run(bench.launch_arguments(pinned, ["0"]))
+    done = bench.tur_run(bench.launch_arguments(pinned, ["0"]))
     R.equal("pinned profile, other Wine installed: refused", done.returncode, 6)
-    R.check("pinned profile: code UOS-WINDOWS-RUNTIME-005", "error[UOS-WINDOWS-RUNTIME-005]" in done.stderr, done.stderr)
+    R.check("pinned profile: code TUR-WINDOWS-RUNTIME-005", "error[TUR-WINDOWS-RUNTIME-005]" in done.stderr, done.stderr)
     R.check("pinned profile: the program did not run", not tagged(done.stdout))
     exact = bench.profile("profile-exact.json", APP, "console64.exe", runtime_version=version)
-    done = bench.uos_run(bench.launch_arguments(exact, ["0"]))
+    done = bench.tur_run(bench.launch_arguments(exact, ["0"]))
     R.equal("profile pinned to the installed Wine: launched", done.returncode, 0)
     R.check("profile pinned to the installed Wine: third run", "prefix-runs=3" in tagged(done.stdout))
 
-    done = bench.uos_run(bench.launch_arguments(profile, ["0"], "--runtime-version", "wine-99.0"))
+    done = bench.tur_run(bench.launch_arguments(profile, ["0"], "--runtime-version", "wine-99.0"))
     R.equal("prefix on another runtime version: refused", done.returncode, 6)
-    R.check("prefix on another runtime version: code UOS-WINDOWS-PREFIX-006",
-            "error[UOS-WINDOWS-PREFIX-006]" in done.stderr, done.stderr)
+    R.check("prefix on another runtime version: code TUR-WINDOWS-PREFIX-006",
+            "error[TUR-WINDOWS-PREFIX-006]" in done.stderr, done.stderr)
     R.check("prefix on another runtime version: the program did not run", not tagged(done.stdout))
     R.equal("refusals changed nothing", bench.metadata().get("launch_count"), 3)
 
     section("Migration mechanics (the Wine version is faked; the steps are real)")
-    done = bench.uos_run(bench.launch_arguments(profile, ["0"], "--runtime-version", "wine-99.0", "--migrate"))
+    done = bench.tur_run(bench.launch_arguments(profile, ["0"], "--runtime-version", "wine-99.0", "--migrate"))
     R.equal("launch --migrate: exit status", done.returncode, 0)
     if done.returncode != 0:
         print(tail(done.stdout + done.stderr, 40))
@@ -560,40 +560,40 @@ def check_prefix_and_launch(bench: Bench) -> None:
     history = migrated.get("migrations", [])
     R.equal("launch --migrate: the move is recorded", [(m.get("from_version"), m.get("to_version")) for m in history],
             [(version, "wine-99.0")])
-    backups = bench.data / "uos/runtime/backups" / APP
+    backups = bench.data / "tur/runtime/backups" / APP
     archive = backups / f"{history[0]['backup']}.tar.gz" if history else backups / "missing"
     R.check("launch --migrate: a backup was taken first", archive.is_file(), str(archive))
     if archive.is_file():
         listing = run(["tar", "-tzf", str(archive)]).stdout
         R.check("backup: holds the registry, the private home and the metadata",
                 "prefix/system.reg" in listing and "metadata.json" in listing and "home/" in listing, tail(listing, 5))
-    done = bench.uos_run(["prefix", "migrate", APP])
+    done = bench.tur_run(["prefix", "migrate", APP])
     R.equal("prefix migrate back to the installed Wine: exit status", done.returncode, 0)
     R.equal("prefix migrate: the record names the installed version", bench.metadata().get("runtime_version"), version)
     R.equal("prefix migrate: both moves are recorded", len(bench.metadata().get("migrations", [])), 2)
 
     section("Pinned prefix")
-    R.equal("prefix pin", bench.uos_run(["prefix", "pin", APP]).returncode, 0)
-    done = bench.uos_run(bench.launch_arguments(profile, ["0"], "--runtime-version", "wine-99.0", "--migrate"))
+    R.equal("prefix pin", bench.tur_run(["prefix", "pin", APP]).returncode, 0)
+    done = bench.tur_run(bench.launch_arguments(profile, ["0"], "--runtime-version", "wine-99.0", "--migrate"))
     R.equal("pinned prefix: migration refused", done.returncode, 6)
-    R.check("pinned prefix: code UOS-WINDOWS-PREFIX-007", "error[UOS-WINDOWS-PREFIX-007]" in done.stderr, done.stderr)
-    R.equal("prefix unpin", bench.uos_run(["prefix", "unpin", APP]).returncode, 0)
+    R.check("pinned prefix: code TUR-WINDOWS-PREFIX-007", "error[TUR-WINDOWS-PREFIX-007]" in done.stderr, done.stderr)
+    R.equal("prefix unpin", bench.tur_run(["prefix", "unpin", APP]).returncode, 0)
 
     section("Backup and restore")
-    done = bench.uos_run(["prefix", "backup", APP, "--json"])
+    done = bench.tur_run(["prefix", "backup", APP, "--json"])
     R.equal("prefix backup: exit status", done.returncode, 0)
     name = json.loads(done.stdout).get("backup", "") if done.returncode == 0 else ""
-    marker = prefix / "drive_c/uos-test-runs.txt"
+    marker = prefix / "drive_c/tur-test-runs.txt"
     R.check("the run marker is in the prefix", marker.is_file())
     marker.unlink(missing_ok=True)
     (prefix / "user.reg").unlink(missing_ok=True)
-    done = bench.uos_run(["prefix", "verify", APP])
+    done = bench.tur_run(["prefix", "verify", APP])
     R.equal("prefix verify: a damaged prefix is reported", done.returncode, 8)
-    R.check("prefix verify: code UOS-WINDOWS-PREFIX-004", "error[UOS-WINDOWS-PREFIX-004]" in done.stderr, done.stderr)
-    done = bench.uos_run(["prefix", "restore", APP, name])
+    R.check("prefix verify: code TUR-WINDOWS-PREFIX-004", "error[TUR-WINDOWS-PREFIX-004]" in done.stderr, done.stderr)
+    done = bench.tur_run(["prefix", "restore", APP, name])
     R.equal("prefix restore: exit status", done.returncode, 0)
     R.check("prefix restore: the prefix is as it was backed up", marker.is_file() and (prefix / "user.reg").is_file())
-    done = bench.uos_run(bench.launch_arguments(profile, ["0"]))
+    done = bench.tur_run(bench.launch_arguments(profile, ["0"]))
     R.check("launch after restore: the run count continues", "prefix-runs=5" in tagged(done.stdout),
             str(tagged(done.stdout)))
 
@@ -604,28 +604,28 @@ def check_prefix_and_launch(bench: Bench) -> None:
     victim = prefix / "drive_c/windows/system32/d3d11.dll"
     R.check("the system file to delete is there", victim.is_file())
     victim.unlink(missing_ok=True)
-    done = bench.uos_run(["prefix", "repair", APP])
+    done = bench.tur_run(["prefix", "repair", APP])
     R.equal("prefix repair: exit status", done.returncode, 0)
     R.check("prefix repair: Wine restored a deleted system file", victim.is_file())
     R.check("prefix repair: user files are kept", marker.is_file())
     R.check("prefix repair: Wine's own updating is still switched off",
             (prefix / ".update-timestamp").read_text() == "disable\n")
-    done = bench.uos_run(bench.launch_arguments(profile, ["0"]))
+    done = bench.tur_run(bench.launch_arguments(profile, ["0"]))
     R.check("launch after repair: the run count continues", "prefix-runs=6" in tagged(done.stdout),
             str(tagged(done.stdout)))
 
     section("Hostile grants and metadata")
     for hostile in ["/", str(bench.home), str(bench.home / ".ssh"), str(bench.grant / ".." / "outside"),
                     "/proc/self/root", str(bench.data), str(bench.app_dir("local.other-app"))]:
-        done = bench.uos_run(["prefix", "grant", APP, hostile, "--read-write"])
-        R.check(f"grant of {hostile}: refused with UOS-SECURITY-SANDBOX-003",
-                done.returncode == 6 and "error[UOS-SECURITY-SANDBOX-003]" in done.stderr, done.stderr)
+        done = bench.tur_run(["prefix", "grant", APP, hostile, "--read-write"])
+        R.check(f"grant of {hostile}: refused with TUR-SECURITY-SANDBOX-003",
+                done.returncode == 6 and "error[TUR-SECURITY-SANDBOX-003]" in done.stderr, done.stderr)
     link = bench.grant / "link-to-outside"
     if not link.is_symlink():
         link.symlink_to(bench.outside)
     through_link = link / "secret.txt"
     R.check("the planted link leads to the secret on the host", through_link.read_text() == "outside-secret\n")
-    done = bench.uos_run(bench.launch_arguments(profile, ["0"], also_outside=(through_link,)))
+    done = bench.tur_run(bench.launch_arguments(profile, ["0"], also_outside=(through_link,)))
     lines = tagged(done.stdout)
     R.check("a link planted inside a grant does not lead out of the sandbox",
             f"outside-read: denied {through_link}" in lines and not any("LEAKED" in line for line in lines),
@@ -635,22 +635,22 @@ def check_prefix_and_launch(bench: Bench) -> None:
     edited = json.loads(good)
     edited["grants"].append({"path": str(bench.home / ".ssh"), "access": "read-only"})
     bench.metadata_path().write_text(json.dumps(edited, indent=2) + "\n")
-    done = bench.uos_run(bench.launch_arguments(profile, ["0"]))
+    done = bench.tur_run(bench.launch_arguments(profile, ["0"]))
     R.equal("metadata edited to grant ~/.ssh: launch refused", done.returncode, 6)
-    R.check("metadata edited to grant ~/.ssh: code UOS-SECURITY-SANDBOX-004",
-            "error[UOS-SECURITY-SANDBOX-004]" in done.stderr, done.stderr)
+    R.check("metadata edited to grant ~/.ssh: code TUR-SECURITY-SANDBOX-004",
+            "error[TUR-SECURITY-SANDBOX-004]" in done.stderr, done.stderr)
     R.check("metadata edited to grant ~/.ssh: the program did not run", not tagged(done.stdout))
     bench.metadata_path().write_text(good)
 
     section("Root is refused")
     as_root = run(["sudo", "env", f"XDG_DATA_HOME={bench.work / 'root-data'}", f"XDG_STATE_HOME={bench.work / 'root-state'}",
-                   bench.uos, "launch", profile, "--", "0"])
+                   bench.tur, "launch", profile, "--", "0"])
     R.equal("launch as root: refused", as_root.returncode, 6)
-    R.check("launch as root: code UOS-SECURITY-SANDBOX-001", "error[UOS-SECURITY-SANDBOX-001]" in as_root.stderr,
+    R.check("launch as root: code TUR-SECURITY-SANDBOX-001", "error[TUR-SECURITY-SANDBOX-001]" in as_root.stderr,
             as_root.stderr)
     R.check("launch as root: the program did not run", not tagged(as_root.stdout))
     as_root = run(["sudo", "env", f"XDG_DATA_HOME={bench.work / 'root-data'}", f"XDG_STATE_HOME={bench.work / 'root-state'}",
-                   bench.uos, "prefix", "create", "local.root-test"])
+                   bench.tur, "prefix", "create", "local.root-test"])
     R.equal("prefix create as root: refused", as_root.returncode, 6)
     R.check("as root: nothing was created", not (bench.work / "root-data").exists())
 
@@ -671,7 +671,7 @@ def check_gui(bench: Bench) -> None:
             time.sleep(0.2)
         R.check("GUI: the X server is up", socket.exists())
         profile = bench.profile("profile-gui.json", GUI_APP, "gui64.exe")
-        command = [bench.uos, "launch", profile, "--env", f"UOS_TEST_GRANT_DIR={bench.grant}"]
+        command = [bench.tur, "launch", profile, "--env", f"TUR_TEST_GRANT_DIR={bench.grant}"]
         R.check("GUI: the application has no prefix yet", not bench.app_dir(GUI_APP).exists())
         # This first launch creates the prefix. Nothing is granted yet, so
         # the program cannot leave its report; the window is looked for on
@@ -682,7 +682,7 @@ def check_gui(bench: Bench) -> None:
         deadline = time.time() + 120
         while time.time() < deadline and process.poll() is None:
             tree = run(["xwininfo", "-display", display, "-root", "-tree"], timeout=20).stdout
-            if "UOS test window" in tree:
+            if "TUR test window" in tree:
                 seen = True
                 break
             time.sleep(0.25)
@@ -701,7 +701,7 @@ def check_gui(bench: Bench) -> None:
         marker = bench.grant / "gui-ran.txt"
         R.check("GUI: without a grant the program could not write to the directory", not marker.exists())
         # Granted, the same program leaves its report.
-        done = bench.uos_run(["prefix", "grant", GUI_APP, str(bench.grant), "--read-write"])
+        done = bench.tur_run(["prefix", "grant", GUI_APP, str(bench.grant), "--read-write"])
         R.equal("GUI: prefix grant", done.returncode, 0)
         done = run(command, env=bench.env(DISPLAY=display), timeout=300)
         R.equal("GUI: second launch exit status", done.returncode, 7)
@@ -724,25 +724,25 @@ def check_reset_and_remove(bench: Bench) -> None:
     section("Reset and remove")
     prefix = bench.app_dir() / "prefix"
     before = bench.metadata()
-    done = bench.uos_run(["prefix", "reset", APP])
+    done = bench.tur_run(["prefix", "reset", APP])
     R.equal("prefix reset: exit status", done.returncode, 0)
     after = bench.metadata() if bench.metadata_path().exists() else {}
     R.check("prefix reset: a fresh prefix", (prefix / "system.reg").is_file()
-            and not (prefix / "drive_c/uos-test-runs.txt").exists())
+            and not (prefix / "drive_c/tur-test-runs.txt").exists())
     R.equal("prefix reset: the grants are kept", after.get("grants"), before.get("grants"))
     R.equal("prefix reset: the launch count starts again", after.get("launch_count"), 0)
-    backups = sorted((bench.data / "uos/runtime/backups" / APP).glob("*-before-reset.tar.gz"))
+    backups = sorted((bench.data / "tur/runtime/backups" / APP).glob("*-before-reset.tar.gz"))
     R.equal("prefix reset: the old prefix was archived first", len(backups), 1)
 
     # Removal deletes the application's logs and metadata; keep a copy as
     # evidence of what ran.
     kept = bench.work / "kept" / APP
-    shutil.copytree(bench.state / "uos/runtime/logs" / APP, kept / "logs", dirs_exist_ok=True)
+    shutil.copytree(bench.state / "tur/runtime/logs" / APP, kept / "logs", dirs_exist_ok=True)
     shutil.copy(bench.metadata_path(), kept / "metadata.json")
 
-    done = bench.uos_run(["prefix", "remove", APP])
+    done = bench.tur_run(["prefix", "remove", APP])
     R.equal("prefix remove: exit status", done.returncode, 0)
-    R.check("prefix remove: the application's logs are gone", not (bench.state / "uos/runtime/logs" / APP).exists())
+    R.check("prefix remove: the application's logs are gone", not (bench.state / "tur/runtime/logs" / APP).exists())
     R.check("prefix remove: the application's directory is gone", not bench.app_dir().exists())
     R.check("prefix remove: backups are kept", bool(backups) and backups[0].is_file())
     R.check("prefix remove: the other applications are untouched",
@@ -754,21 +754,21 @@ def check_reset_and_remove(bench: Bench) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--uos-runtime", required=True)
+    parser.add_argument("--tur-runtime", required=True)
     parser.add_argument("--build-dir", required=True, type=pathlib.Path)
     parser.add_argument("--work-dir", required=True, type=pathlib.Path)
     parser.add_argument("--results", required=True, type=pathlib.Path)
     parser.add_argument("--only-inspect", action="store_true", help="skip everything that needs Wine")
     args = parser.parse_args()
 
-    uos = str(pathlib.Path(args.uos_runtime).resolve())
+    tur = str(pathlib.Path(args.tur_runtime).resolve())
     build = args.build_dir.resolve()
     work = args.work_dir.resolve()
     work.mkdir(parents=True, exist_ok=True)
 
-    stages = [lambda: check_inspection(uos, build, work)]
+    stages = [lambda: check_inspection(tur, build, work)]
     if not args.only_inspect:
-        bench = Bench(uos, build, work)
+        bench = Bench(tur, build, work)
         stages += [
             lambda: control_run(bench),
             lambda: check_prefix_and_launch(bench),

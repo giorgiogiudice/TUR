@@ -6,12 +6,12 @@
 
 ## Context
 
-The project owner requires that UOS be available to private individuals and not
+The project owner requires that TUR be available to private individuals and not
 usable by businesses. The repository is public, so the source is visible to
 everyone; the licence decides what they may do with it.
 
-UOS is mostly an integration of third-party projects, many under copyleft licences
-(GPL and LGPL). Those licences cannot be restricted by UOS, and code that forms a
+TUR is mostly an integration of third-party projects, many under copyleft licences
+(GPL and LGPL). Those licences cannot be restricted by TUR, and code that forms a
 single work with GPL code cannot carry a noncommercial restriction.
 
 ## Options considered
@@ -28,18 +28,18 @@ single work with GPL code cannot carry a noncommercial restriction.
 
 ## Decision
 
-UOS's own code and documentation are licensed under the PolyForm Noncommercial
+TUR's own code and documentation are licensed under the PolyForm Noncommercial
 License 1.0.0.
 
 ## Consequences
 
-- UOS is **source-available**, not open source in the Open Source Initiative's
+- TUR is **source-available**, not open source in the Open Source Initiative's
   sense. It must be described that way.
 - Business use is prohibited. Note one difference from "private users only": the
   licence also permits use by charities, educational institutions, public research
   bodies and government institutions. Narrowing that would require a custom
   licence (option 2).
-- **Licence boundary.** The noncommercial terms apply only to code that is UOS's
+- **Licence boundary.** The noncommercial terms apply only to code that is TUR's
   own separate work: standalone services, tools, image definitions and
   documentation that talk to other components over D-Bus, sockets or the command
   line. They do **not** and cannot apply to:
@@ -50,7 +50,7 @@ License 1.0.0.
     module, which must be licensed compatibly with it.
 
   Such code lives in clearly marked directories with its own licence file.
-- A new UOS component should be designed as a separate process with a defined
+- A new TUR component should be designed as a separate process with a defined
   interface, not as a plugin to a copyleft project, unless there is a reason
   recorded in an ADR.
 - Some distributions and package repositories do not accept noncommercial software.

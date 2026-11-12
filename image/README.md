@@ -1,6 +1,6 @@
-# UOS image
+# TUR image
 
-The UOS operating system is one bootc container image, defined by
+The TUR operating system is one bootc container image, defined by
 [`Containerfile`](Containerfile) on a base pinned in [`base.lock`](base.lock)
 ([ADR-0001](../docs/adr/0001-base-distribution.md)).
 
@@ -15,8 +15,8 @@ The UOS operating system is one bootc container image, defined by
 Images are built in CI (the `image` workflow), or on a dedicated build machine:
 
 ```sh
-scripts/build-image.sh localhost/uos:dev
-tests/image/smoke.sh localhost/uos:dev "$(. <(podman run --rm localhost/uos:dev cat /usr/lib/uos/release); echo "$UOS_BUILD_ID")"
+scripts/build-image.sh localhost/tur:dev
+tests/image/smoke.sh localhost/tur:dev "$(. <(podman run --rm localhost/tur:dev cat /usr/lib/tur/release); echo "$TUR_BUILD_ID")"
 ```
 
 Do not build on a shared or production server: the base image alone is several
@@ -41,14 +41,14 @@ licence list kept in
 ## Identity
 
 The image keeps Fedora's distribution `ID` so that image and update tooling keep
-working, and identifies itself as UOS through `IMAGE_ID`, `IMAGE_VERSION` and
-`BUILD_ID` in `/usr/lib/os-release` and through `/usr/lib/uos/release`. Full
+working, and identifies itself as TUR through `IMAGE_ID`, `IMAGE_VERSION` and
+`BUILD_ID` in `/usr/lib/os-release` and through `/usr/lib/tur/release`. Full
 rebranding is a Phase 3 task.
 
 ## Updating the base pin
 
 The base is pinned by digest. The upstream registry publishes only a rolling tag,
-so an old digest can eventually be removed upstream; until UOS mirrors its base,
+so an old digest can eventually be removed upstream; until TUR mirrors its base,
 the pin must be refreshed regularly.
 
 Change `base.lock` in a pull request of its own, so that CI proves the new base

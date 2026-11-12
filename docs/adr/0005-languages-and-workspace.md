@@ -6,7 +6,7 @@
 
 ## Context
 
-UOS's own components are system services, command-line tools and desktop UI. The
+TUR's own components are system services, command-line tools and desktop UI. The
 specification names Qt 6 and QML for UI and leaves the service language open.
 
 Development is done largely by several agents working in parallel, on machines
@@ -28,7 +28,7 @@ constant conflicts.
 
 ## Decision
 
-- **Rust** for UOS services, libraries and command-line tools.
+- **Rust** for TUR services, libraries and command-line tools.
 - **Qt 6 / QML**, with C++ only where QML needs it, for graphical UI.
 - **POSIX shell and Python** only for build, test and CI scripts, never in a
   shipped service.

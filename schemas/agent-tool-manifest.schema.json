@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/giorgiogiudice/UOS/schemas/agent-tool-manifest.schema.json",
-  "title": "UOS agent tool manifest",
-  "description": "The assistant-facing operations a UOS service offers (AI control layer, section 11). The loader in services/uos-agent is authoritative. It also enforces rules this schema cannot express: tool names are unique within a manifest; a method is declared with one class, however many tools call it; every entry of a \"required\" list names a declared property; an integer is written without a fraction or an exponent; and no field, and no key inside an input schema, is given twice.",
+  "$id": "https://github.com/giorgiogiudice/TUR/schemas/agent-tool-manifest.schema.json",
+  "title": "TUR agent tool manifest",
+  "description": "The assistant-facing operations a TUR service offers (AI control layer, section 11). The loader in services/tur-pax is authoritative. It also enforces rules this schema cannot express: tool names are unique within a manifest; a method is declared with one class, however many tools call it; every entry of a \"required\" list names a declared property; an integer is written without a fraction or an exponent; and no field, and no key inside an input schema, is given twice.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "service", "tools"],

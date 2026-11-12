@@ -397,7 +397,7 @@ mod tests {
             "/nonexistent/tur-pax-providers/provider.json",
         ]));
         assert_eq!(outcome.status, EXIT_INVALID);
-        assert!(outcome.stderr.starts_with("UOS-AI-PROVIDER-011"));
+        assert!(outcome.stderr.starts_with("TUR-AI-PROVIDER-011"));
     }
 
     #[test]

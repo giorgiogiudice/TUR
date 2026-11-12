@@ -233,12 +233,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "tur-core"
+version = "0.1.0"
+
+[[package]]
 name = "tur-pax-providers"
 version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
- "uos-core",
+ "tur-core",
  "ureq",
  "zeroize",
 ]
@@ -254,10 +258,6 @@ name = "untrusted"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
-
-[[package]]
-name = "uos-core"
-version = "0.1.0"
 
 [[package]]
 name = "ureq"

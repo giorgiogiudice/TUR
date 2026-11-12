@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
 #
 # Builds the test programs of the windows-runtime end-to-end test from the C
 # sources beside this script. Nothing that is built is committed.

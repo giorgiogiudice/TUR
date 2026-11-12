@@ -18,11 +18,11 @@ specification and lists every other amendment in
 
 Nothing here is implemented. No code accompanies this document.
 
-**The project's name.** The project was called UOS until 12 November 2026
+**The project's name.** The project was called TUR until 12 November 2026
 ([ADR-0009](../adr/0009-project-name.md)). This document uses the new names
 throughout: `tur-…` programs, `org.tur.*` D-Bus names, `TUR-…` error codes,
-`tur-pax` for the assistant's service. Other documents still say `uos-…` until
-the mechanical rename; `tur-diag` here is `uos-diag` there.
+`tur-pax` for the assistant's service. Other documents still say `tur-…` until
+the mechanical rename; `tur-diag` here is `tur-diag` there.
 
 **How to read the claims in this document.** Four kinds of statement appear.
 
@@ -560,7 +560,7 @@ style ([section 4](#4-the-licence-boundary-on-the-desktop)).
 
 Today the image shows KDE's setup wizard on Fedora's wallpaper with "Welcome
 to Plasma Desktop" and "Powered by Fedora Linux", and then the Plasma login
-screen ([UOS-003 report](../reports/UOS-003.md)). This section replaces that
+screen ([TUR-003 report](../reports/TUR-003.md)). This section replaces that
 sequence, screen by screen.
 
 ### 6.1 Starting
@@ -2182,7 +2182,7 @@ that belongs to a dedicated system account, on its own virtual terminal, with
 its own compositor instance. It is the mechanism of "Switch user": the display
 leaves the user's session, shows another, and comes back. The login screen is
 itself such a session: on this image it runs as its own account with its own
-`kwin_wayland` ([UOS-003 report](../reports/UOS-003.md)).
+`kwin_wayland` ([TUR-003 report](../reports/TUR-003.md)).
 
 Why this gives the guarantees without any change to KWin:
 
@@ -3592,7 +3592,7 @@ that nobody removes it by reflex or is surprised to find it.
 | # | Item | Why it stays |
 |---|---|---|
 | C1 | The directory `EFI/fedora` on the system partition | Fedora's signed GRUB is built to look there; renaming it needs a re-signed boot chain ([ADR-0013](../adr/0013-bootloader.md)) [F7] |
-| C2 | Fedora's signed shim and GRUB, and the label "Fedora" inside shim's fallback file | Unmodified, and needed for Secure Boot. The firmware entry that the fallback path creates on a machine with no entry may therefore still read "Fedora" (seen in the [UOS-003 report](../reports/UOS-003.md)); the entry bootupd creates reads "TUR" |
+| C2 | Fedora's signed shim and GRUB, and the label "Fedora" inside shim's fallback file | Unmodified, and needed for Secure Boot. The firmware entry that the fallback path creates on a machine with no entry may therefore still read "Fedora" (seen in the [TUR-003 report](../reports/TUR-003.md)); the entry bootupd creates reads "TUR" |
 | C3 | `fedora-repos`, `fedora-gpg-keys` | Fedora's own mark-free release package requires them [F3]; they say truthfully where packages come from |
 | C4 | The `.fc45` tag in package and kernel versions; RPM vendor fields | Factual provenance (no statement from Fedora was found either way: an **assumption**) |
 | C5 | Package, unit and policy *file names* containing "fedora" | Not shown to users. Fedora's own packager's note says file names are not the concern; that is a packager's remark, not a legal statement [F3] |
@@ -4092,7 +4092,7 @@ already on the main branch.
 | §16 | Add `org.tur.Settings1`, `org.tur.Addressable1`, `org.tur.PaxOverlay1`. Add the requirement that every settings row has a registered address ([10.3](#103-the-addressing-scheme)). |
 | §18.1 | Add the layout of [15.1](#151-repository-layout). |
 | §18.3 | Add the `desktop` workflow and the desktop stage of the boot test. |
-| §20, Phase 3 | Replace "UOS branding and visual modes" with tasks D-01 to D-14; add D-15 to D-20 beside milestones A2 to A4b. |
+| §20, Phase 3 | Replace "TUR branding and visual modes" with tasks D-01 to D-14; add D-15 to D-20 beside milestones A2 to A4b. |
 | §24 | Add the risks of section 16, items 1 to 6 and 13. |
 | §27.1 | Add the words shown for each stage ([6.1](#61-starting)). |
 | §27.5 | Replace the user-visible response for a failed new deployment with the text of [11.1](#111-updates-and-rollback). |

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
 """Turn the evidence of a boot test into boot-report.json and a summary.
 
     tests/boot/report.py --work WORK_DIR --out OUT_DIR --expected-build-id ID
@@ -35,7 +35,7 @@ import shutil
 import sys
 import tarfile
 
-MARK = "UOS-BOOT-TEST: "
+MARK = "TUR-BOOT-TEST: "
 ESP_GUID = "c12a7328-f81f-11d2-ba4b-00a0c93ec93b"
 BOOTS = ["first-boot", "second-boot"]
 SOFTWARE_RENDERERS = ("llvmpipe", "softpipe", "swrast", "lavapipe")
@@ -616,7 +616,7 @@ def main() -> int:
     )
 
     # ---- report ------------------------------------------------------------------------
-    uos_release = props(first.text("uos-release") or second.text("uos-release"))
+    tur_release = props(first.text("tur-release") or second.text("tur-release"))
     timings = {}
     for item in args.timing:
         name, _, value = item.partition("=")
@@ -630,11 +630,11 @@ def main() -> int:
     failed_all = sorted({unit for boot in boots for unit in boot["failed_units"]})
     report = {
         "schema_version": 1,
-        "task": "UOS-003",
+        "task": "TUR-003",
         "result": "pass" if checks.passed() else "fail",
         "build_id": boots[0]["build_id"] or boots[1]["build_id"],
         "expected_build_id": args.expected_build_id or None,
-        "source_revision": uos_release.get("UOS_SOURCE_REVISION"),
+        "source_revision": tur_release.get("TUR_SOURCE_REVISION"),
         "kernel": boots[0]["kernel"] or boots[1]["kernel"],
         "boot_time_to_graphical_target_seconds": {
             boot["name"]: boot["time_to_graphical_target_seconds"] for boot in boots
@@ -672,7 +672,7 @@ def main() -> int:
     # ---- summary ----------------------------------------------------------------------
     icon = {"pass": "pass", "fail": "**FAIL**", "not-run": "**NOT RUN**"}
     lines = [
-        f"### UOS boot test: {report['result'].upper()}",
+        f"### TUR boot test: {report['result'].upper()}",
         "",
         "| Check | Result | Evidence |",
         "|---|---|---|",

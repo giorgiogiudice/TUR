@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+[package]
+name = "tur-core"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+license = "LicenseRef-TUR-Noncommercial-1.0.0"
+description = "Types shared by every TUR component: stable error codes and schema versions."
+repository = "https://github.com/giorgiogiudice/TUR"
+publish = false
+
+# Each component is its own workspace with its own lockfile. See ADR-0005.
+[workspace]
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"

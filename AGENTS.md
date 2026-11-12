@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Binding rules for automated development agents working on UOS. Human contributors
+Binding rules for automated development agents working on TUR. Human contributors
 follow the same rules. The full baseline is the
 [specification](docs/architecture/specification.md); where this file and the
 specification disagree, the specification wins and the disagreement is a bug to
@@ -95,7 +95,7 @@ From the [licence review](docs/dependencies/licence-review.md) and
   disks, boot, firmware and encryption require confirmation through a path the
   assistant cannot operate.
 - Provider-specific code stays behind the provider interface. No service other than
-  `uos-agent` talks to a model provider.
+  `tur-pax` talks to a model provider.
 - API keys live in the system keyring. They never appear in profiles, logs or
   diagnostic bundles.
 
@@ -147,7 +147,7 @@ image is built or a VM is started
 |---|---|---|
 | `image/` | OS image definition | Containerfile, shell |
 | `crates/` | Shared Rust libraries | Rust |
-| `services/` | UOS services and their command-line tools | Rust |
+| `services/` | TUR services and their command-line tools | Rust |
 | `installer/` | Installer | Rust, QML |
 | `desktop/` | Desktop programs, themes and defaults | QML, C++, data |
 | `schemas/` | Versioned JSON schemas for every interchange format | JSON Schema |

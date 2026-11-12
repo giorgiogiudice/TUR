@@ -120,7 +120,7 @@ A record states who it comes from in `reported_by`:
 The rules are enforced, not only written down:
 
 - A rating other than `unknown` without a source is refused
-  (`UOS-DESKTOP-CATALOGUE-006`).
+  (`TUR-DESKTOP-CATALOGUE-006`).
 - A record that claims TUR's own test without a test-report reference is
   refused with the same code. Unit test:
   `a_tur_test_claim_without_a_report_reference_is_refused`; through the
@@ -413,9 +413,9 @@ Each routing rule also has a named unit test in
 | Architectures other than x86-64 | Proton, Wine, the guest and Darling are blocked. Linux, Android and web editions are not checked for the architecture |
 | The Android "then" column is empty | Where an Android edition is blocked, the alternative is a certified phone or tablet |
 
-## Relation to `uos-runtime`
+## Relation to `tur-runtime`
 
-| | `tur-catalogue` | `uos-runtime` |
+| | `tur-catalogue` | `tur-runtime` |
 |---|---|---|
 | The user has | The name of an application | A file |
 | Input | A catalogue entry | The file's bytes |
@@ -425,7 +425,7 @@ Each routing rule also has a named unit test in
 
 ADR-0007 makes the catalogue the first source and inspection the fallback for
 software the catalogue does not know. The two do not call each other yet.
-`tur-catalogue` does **not** depend on `uos-runtime`: none of its types fits
+`tur-catalogue` does **not** depend on `tur-runtime`: none of its types fits
 without loss (its `Runtime` has no Proton, Flatpak, web or container route,
 and its `HostFacts` has no GPU, memory, licence or Flatpak fact), and a
 dependency would tie the two lockfiles together for no shared code.
@@ -444,7 +444,7 @@ profile from a chosen route:
 | `darling` | `darling` |
 | `distro-container`, `web` | None yet |
 
-`uos-runtime` never recommends Proton, because that needs the application
+`tur-runtime` never recommends Proton, because that needs the application
 database. This crate is that database.
 
 ## Command line
@@ -488,25 +488,25 @@ an error is a JSON object on standard output.
 
 ## Error codes
 
-`uos-core` has no family for the catalogue. Every code uses `DESKTOP` with a
+`tur-core` has no family for the catalogue. Every code uses `DESKTOP` with a
 `CATALOGUE` topic until a dedicated family exists. The codes are one table in
 `services/tur-catalogue/src/codes.rs`, with a test that they are valid and
 unique.
 
 | Code | Condition |
 |---|---|
-| `UOS-DESKTOP-CATALOGUE-001` | The catalogue directory, or a file in it, could not be read |
-| `UOS-DESKTOP-CATALOGUE-002` | An entry is not valid TOML, has an unknown field or a value of the wrong type |
-| `UOS-DESKTOP-CATALOGUE-003` | A field holds a value that is not allowed |
-| `UOS-DESKTOP-CATALOGUE-004` | Two entries share an application ID |
-| `UOS-DESKTOP-CATALOGUE-005` | A name or alias is used more than once |
-| `UOS-DESKTOP-CATALOGUE-006` | A rating has no admissible source |
-| `UOS-DESKTOP-CATALOGUE-007` | A record names a route its edition cannot use |
-| `UOS-DESKTOP-CATALOGUE-008` | A size limit is exceeded |
-| `UOS-DESKTOP-CATALOGUE-009` | No application has this ID |
-| `UOS-DESKTOP-CATALOGUE-010` | Nothing matches the search |
-| `UOS-DESKTOP-CATALOGUE-011` | No route runs the application on this machine |
-| `UOS-DESKTOP-CATALOGUE-012` | A host-facts or preferences file is not valid |
+| `TUR-DESKTOP-CATALOGUE-001` | The catalogue directory, or a file in it, could not be read |
+| `TUR-DESKTOP-CATALOGUE-002` | An entry is not valid TOML, has an unknown field or a value of the wrong type |
+| `TUR-DESKTOP-CATALOGUE-003` | A field holds a value that is not allowed |
+| `TUR-DESKTOP-CATALOGUE-004` | Two entries share an application ID |
+| `TUR-DESKTOP-CATALOGUE-005` | A name or alias is used more than once |
+| `TUR-DESKTOP-CATALOGUE-006` | A rating has no admissible source |
+| `TUR-DESKTOP-CATALOGUE-007` | A record names a route its edition cannot use |
+| `TUR-DESKTOP-CATALOGUE-008` | A size limit is exceeded |
+| `TUR-DESKTOP-CATALOGUE-009` | No application has this ID |
+| `TUR-DESKTOP-CATALOGUE-010` | Nothing matches the search |
+| `TUR-DESKTOP-CATALOGUE-011` | No route runs the application on this machine |
+| `TUR-DESKTOP-CATALOGUE-012` | A host-facts or preferences file is not valid |
 
 These are not yet registry entries in the sense of §29.3.
 
@@ -525,9 +525,9 @@ These are not yet registry entries in the sense of §29.3.
 - **TUR's own compatibility testing.** No test harness, no test report and no
   rating from TUR. Every seed rating is an external report.
 - **Host detection.** Host facts are stated by the caller. The detection in
-  `uos-runtime` is not used.
+  `tur-runtime` is not used.
 - **Fallback to inspection.** An application that is not in the catalogue is
-  reported as unknown; the hand-off to `uos-runtime` is not written.
+  reported as unknown; the hand-off to `tur-runtime` is not written.
 - **Per-architecture editions.** An entry does not say which processor
   architectures a Linux, Android or web edition supports, beyond
   `arm-only-native-code`.

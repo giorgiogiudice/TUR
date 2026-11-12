@@ -188,7 +188,7 @@ fn a_failed_ping_reports_a_stable_code_and_never_the_key() {
         assert!(run.stdout.contains("config: valid"));
         assert!(run.stdout.contains("ping: failed"));
         assert!(
-            run.stderr.starts_with("UOS-AI-PROVIDER-001"),
+            run.stderr.starts_with("TUR-AI-PROVIDER-001"),
             "{}",
             run.stderr
         );
@@ -215,7 +215,7 @@ fn ping_without_a_key_fails_before_any_network_call() {
     );
     assert_eq!(run.status, EXIT_PING_FAILED);
     assert!(
-        run.stderr.starts_with("UOS-AI-PROVIDER-012"),
+        run.stderr.starts_with("TUR-AI-PROVIDER-012"),
         "{}",
         run.stderr
     );
@@ -249,7 +249,7 @@ fn the_example_configurations_are_checked() {
         assert_eq!(run.status, EXIT_INVALID, "{invalid}");
         assert!(run.stdout.is_empty(), "{invalid}");
         assert!(
-            run.stderr.starts_with("UOS-AI-PROVIDER-011"),
+            run.stderr.starts_with("TUR-AI-PROVIDER-011"),
             "{invalid}: {}",
             run.stderr
         );

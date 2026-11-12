@@ -6,11 +6,11 @@
 
 ## Context
 
-A core requirement added after revision 1.0 of the specification: UOS can be driven
+A core requirement added after revision 1.0 of the specification: TUR can be driven
 entirely by AI. A user adds an API key, speaks to the system, and an assistant
 carries out tasks, seeing and controlling applications from every runtime.
 
-This decision fixes how UOS relates to model providers. How the assistant controls
+This decision fixes how TUR relates to model providers. How the assistant controls
 the system, and what it is permitted to do, is specified in the AI control layer
 design.
 
@@ -31,8 +31,8 @@ and Google (Gemini)**.
 
 ## Consequences
 
-- One service, `uos-agent`, owns all communication with model providers. No other
-  UOS component contacts a provider.
+- One service, `tur-pax`, owns all communication with model providers. No other
+  TUR component contacts a provider.
 - A provider adapter implements a common interface: streaming conversation, tool
   calling, image input, and a declared set of capabilities. The agent uses a
   provider's native computer-control tooling where it has one, and falls back to a
@@ -48,7 +48,7 @@ and Google (Gemini)**.
   between providers. The compatibility of each provider is published, like
   application compatibility.
 - A local-model adapter is not required now. The interface must not prevent one.
-- UOS without a key is a complete product. No boot, install, update or recovery
+- TUR without a key is a complete product. No boot, install, update or recovery
   path may depend on the AI layer.
 
 ## Verification

@@ -1,8 +1,8 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
 #
-# Boot test (UOS-003): install the image to a disk with the installer it
+# Boot test (TUR-003): install the image to a disk with the installer it
 # carries, boot that disk under UEFI in QEMU/KVM, and prove from outside that
-# it reaches a graphical session. See tests/boot and docs/reports/UOS-003.md.
+# it reaches a graphical session. See tests/boot and docs/reports/TUR-003.md.
 name: boot
 
 on:
@@ -32,7 +32,7 @@ concurrency:
 
 env:
   PODMAN: sudo podman
-  IMAGE: localhost/uos:ci
+  IMAGE: localhost/tur:ci
   OUT: out/boot
 
 jobs:
@@ -46,7 +46,7 @@ jobs:
       - name: Lint
         run: |
           shellcheck --version | sed -n 2p
-          shellcheck -x tests/boot/*.sh tests/boot/guest/rootfs/usr/libexec/uos-boot-test/guest-agent
+          shellcheck -x tests/boot/*.sh tests/boot/guest/rootfs/usr/libexec/tur-boot-test/guest-agent
           python3 -m py_compile tests/boot/*.py
 
   boot:
@@ -96,14 +96,14 @@ jobs:
 
       - name: Choose a work directory
         run: |
-          work="$RUNNER_TEMP/uos-boot"
+          work="$RUNNER_TEMP/tur-boot"
           here=$(df --output=avail -B1G "$RUNNER_TEMP" | tail -1 | tr -d ' G')
           if [ -d /mnt ]; then
             there=$(df --output=avail -B1G /mnt | tail -1 | tr -d ' G')
             if [ "$there" -gt "$here" ]; then
-              sudo mkdir -p /mnt/uos-boot
-              sudo chown "$(id -u):$(id -g)" /mnt/uos-boot
-              work=/mnt/uos-boot
+              sudo mkdir -p /mnt/tur-boot
+              sudo chown "$(id -u):$(id -g)" /mnt/tur-boot
+              work=/mnt/tur-boot
             fi
           fi
           mkdir -p "$work"
@@ -121,7 +121,7 @@ jobs:
       - name: Build image
         run: |
           start=$(date +%s)
-          UOS_BUILD_ID_FILE="$RUNNER_TEMP/build-id" scripts/build-image.sh "$IMAGE"
+          TUR_BUILD_ID_FILE="$RUNNER_TEMP/build-id" scripts/build-image.sh "$IMAGE"
           echo "BUILD_ID=$(cat "$RUNNER_TEMP/build-id")" >> "$GITHUB_ENV"
           echo "IMAGE_BUILD_SECONDS=$(( $(date +%s) - start ))" >> "$GITHUB_ENV"
           df -h / | tail -1
@@ -188,6 +188,6 @@ jobs:
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         if: always()
         with:
-          name: uos-boot-test
+          name: tur-boot-test
           path: out/boot/
           if-no-files-found: warn

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
 #
-# Generate an SPDX SBOM and a licence summary for a built UOS image.
+# Generate an SPDX SBOM and a licence summary for a built TUR image.
 #
 #   scripts/sbom.sh IMAGE OUTPUT_DIR
 #
-# The image content is RPM packages plus a few UOS files, so the SBOM is built
+# The image content is RPM packages plus a few TUR files, so the SBOM is built
 # from the image's package database rather than by unpacking every layer.
 set -euo pipefail
 
@@ -39,7 +39,7 @@ mkdir -p "${work}/root/etc"
 cp "${work}/root/usr/lib/os-release" "${work}/root/etc/os-release"
 
 "${work}/syft" scan "dir:${work}/root" \
-    --source-name uos --source-version "$(cat "$(dirname "$0")/../VERSION")" \
+    --source-name tur --source-version "$(cat "$(dirname "$0")/../VERSION")" \
     -o "spdx-json=${out}/sbom.spdx.json" -q
 
 # Licence summary: one line per distinct licence expression, with a count.

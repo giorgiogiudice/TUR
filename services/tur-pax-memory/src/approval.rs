@@ -17,8 +17,8 @@
 //!
 //! # Mapping to the policy engine
 //!
-//! This crate does not depend on `uos-agent`. A [`StandingApproval`]
-//! corresponds one-to-one to `uos_agent::context::StandingApproval`:
+//! This crate does not depend on `tur-pax`. A [`StandingApproval`]
+//! corresponds one-to-one to `tur_pax::context::StandingApproval`:
 //!
 //! | This crate | Policy engine | |
 //! |---|---|---|
@@ -196,7 +196,7 @@ mod tests {
 
     fn approval(arguments: Value) -> StandingApproval {
         StandingApproval::granted(ApprovalRequest {
-            service: "org.uos.Mail1".to_owned(),
+            service: "org.tur.Mail1".to_owned(),
             tool: "mail_send".to_owned(),
             arguments: object(arguments),
         })
@@ -225,12 +225,12 @@ mod tests {
             "tags": ["x", "y"],
             "options": { "urgent": false, "note": null }
         }));
-        assert!(approved.matches("org.uos.Mail1", "mail_send", &same));
+        assert!(approved.matches("org.tur.Mail1", "mail_send", &same));
         // The order of properties does not matter, at any depth.
         let reordered = parsed(
             r#"{"options":{"note":null,"urgent":false},"tags":["x","y"],"ratio":0.5,"count":1,"to":"a@example.org"}"#,
         );
-        assert!(approved.matches("org.uos.Mail1", "mail_send", &reordered));
+        assert!(approved.matches("org.tur.Mail1", "mail_send", &reordered));
     }
 
     #[test]
@@ -266,13 +266,13 @@ mod tests {
         ];
         for text in near_misses {
             assert!(
-                !approved.matches("org.uos.Mail1", "mail_send", &parsed(text)),
+                !approved.matches("org.tur.Mail1", "mail_send", &parsed(text)),
                 "{text}"
             );
         }
         // The exact call, parsed from text, does match.
         assert!(approved.matches(
-            "org.uos.Mail1",
+            "org.tur.Mail1",
             "mail_send",
             &parsed(r#"{"to":"a@example.org","count":1,"tags":["x"]}"#)
         ));
@@ -300,7 +300,7 @@ mod tests {
             };
             let called = parsed(&format!("{{\"n\":{called_text}}}"));
             assert!(
-                !approved.matches("org.uos.Mail1", "mail_send", &called),
+                !approved.matches("org.tur.Mail1", "mail_send", &called),
                 "{approved_text} matched {called_text}"
             );
             // And the other way round.
@@ -310,7 +310,7 @@ mod tests {
             };
             let called = parsed(&format!("{{\"n\":{approved_text}}}"));
             assert!(
-                !approved.matches("org.uos.Mail1", "mail_send", &called),
+                !approved.matches("org.tur.Mail1", "mail_send", &called),
                 "{called_text} matched {approved_text}"
             );
         }
@@ -322,7 +322,7 @@ mod tests {
                 ..approval(json!({}))
             };
             assert!(
-                approved.matches("org.uos.Mail1", "mail_send", &arguments),
+                approved.matches("org.tur.Mail1", "mail_send", &arguments),
                 "{text}"
             );
         }
@@ -332,14 +332,14 @@ mod tests {
     fn an_approval_is_bound_to_its_service_and_tool() {
         let arguments = object(json!({ "to": "a@example.org" }));
         let approved = approval(json!({ "to": "a@example.org" }));
-        assert!(approved.matches("org.uos.Mail1", "mail_send", &arguments));
-        assert!(!approved.matches("org.uos.Mail1", "mail_send_all", &arguments));
-        assert!(!approved.matches("org.uos.Mail1", "mail_sen", &arguments));
-        assert!(!approved.matches("org.uos.Mail2", "mail_send", &arguments));
-        assert!(!approved.matches("org.uos.mail1", "mail_send", &arguments));
+        assert!(approved.matches("org.tur.Mail1", "mail_send", &arguments));
+        assert!(!approved.matches("org.tur.Mail1", "mail_send_all", &arguments));
+        assert!(!approved.matches("org.tur.Mail1", "mail_sen", &arguments));
+        assert!(!approved.matches("org.tur.Mail2", "mail_send", &arguments));
+        assert!(!approved.matches("org.tur.mail1", "mail_send", &arguments));
         assert!(!approved.matches("", "", &arguments));
-        assert!(approved.names("org.uos.Mail1", "mail_send"));
-        assert!(!approved.names("org.uos.Mail1", "mail_delete"));
+        assert!(approved.names("org.tur.Mail1", "mail_send"));
+        assert!(!approved.names("org.tur.Mail1", "mail_delete"));
     }
 
     #[test]
@@ -349,12 +349,12 @@ mod tests {
         assert_eq!(
             value,
             json!({
-                "service": "org.uos.Mail1",
+                "service": "org.tur.Mail1",
                 "tool": "mail_send",
                 "arguments": { "to": "a@example.org" }
             })
         );
-        assert_eq!(approved.service(), "org.uos.Mail1");
+        assert_eq!(approved.service(), "org.tur.Mail1");
         assert_eq!(approved.tool(), "mail_send");
         assert_eq!(
             approved.arguments(),
@@ -370,15 +370,15 @@ mod tests {
             tool: tool.to_owned(),
             arguments: Map::new(),
         };
-        assert!(request("org.uos.Mail1", "mail_send").validate().is_ok());
+        assert!(request("org.tur.Mail1", "mail_send").validate().is_ok());
         for (service, tool) in [
             ("", "mail_send"),
             ("mail", "mail_send"),
-            ("org.uos.Mail1", ""),
-            ("org.uos.Mail1", "*"),
-            ("org.uos.Mail1", "Mail_Send"),
-            ("org.uos.*", "mail_send"),
-            ("org.uos.Mail1", "mail send"),
+            ("org.tur.Mail1", ""),
+            ("org.tur.Mail1", "*"),
+            ("org.tur.Mail1", "Mail_Send"),
+            ("org.tur.*", "mail_send"),
+            ("org.tur.Mail1", "mail send"),
         ] {
             let problem = request(service, tool).validate().expect_err("invalid");
             assert_eq!(
@@ -387,7 +387,7 @@ mod tests {
                 "{service} {tool}"
             );
         }
-        let mut large = request("org.uos.Mail1", "mail_send");
+        let mut large = request("org.tur.Mail1", "mail_send");
         large.arguments.insert(
             "body".to_owned(),
             Value::String("x".repeat(MAX_APPROVAL_ARGUMENT_BYTES)),

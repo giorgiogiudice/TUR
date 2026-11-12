@@ -13,7 +13,7 @@
 //! * [`provider`] is the interface: a [`Provider`] declares its
 //!   [`Capabilities`] and streams a response as an [`EventStream`].
 //! * [`anthropic`], [`openai`] and [`google`] are the adapters.
-//! * [`error`] is the typed error with its stable `UOS-AI-PROVIDER-*` code.
+//! * [`error`] is the typed error with its stable `TUR-AI-PROVIDER-*` code.
 //! * [`secret`] holds the API key, which cannot be printed.
 //! * [`config`] is the configuration file format.
 //! * [`spend`] adds up what a task used and enforces its limit.

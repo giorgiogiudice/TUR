@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/giorgiogiudice/UOS/schemas/device-inventory.schema.json",
-  "title": "UOS device inventory",
-  "description": "The read-only hardware inventory printed by `uos-device inventory --json` and returned by org.uos.Device1.GetInventory. Every field is always present; null means the value could not be read or does not exist. The other documents of the device manager are defined under $defs: problem_report, device_summary and device_document.",
+  "$id": "https://github.com/giorgiogiudice/TUR/schemas/device-inventory.schema.json",
+  "title": "TUR device inventory",
+  "description": "The read-only hardware inventory printed by `tur-device inventory --json` and returned by org.tur.Device1.GetInventory. Every field is always present; null means the value could not be read or does not exist. The other documents of the device manager are defined under $defs: problem_report, device_summary and device_document.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -1609,7 +1609,7 @@
         "code": {
           "description": "The stable error code.",
           "type": "string",
-          "pattern": "^UOS-DEVICE-[A-Z0-9]+-[0-9]{3}$"
+          "pattern": "^TUR-DEVICE-[A-Z0-9]+-[0-9]{3}$"
         },
         "severity": {
           "enum": [
@@ -1659,7 +1659,7 @@
       }
     },
     "problem_report": {
-      "description": "What `uos-device problems --json` prints and ListProblems returns.",
+      "description": "What `tur-device problems --json` prints and ListProblems returns.",
       "type": "object",
       "additionalProperties": false,
       "required": [

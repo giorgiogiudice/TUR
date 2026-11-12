@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
-"""Boot a UOS disk image under UEFI in QEMU/KVM and observe it from outside.
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+"""Boot a TUR disk image under UEFI in QEMU/KVM and observe it from outside.
 
     tests/boot/run-vm.py --disk disk.raw --work WORK_DIR --out OUT_DIR
 
@@ -39,7 +39,7 @@ import sys
 import time
 import zlib
 
-MARK = "UOS-BOOT-TEST: "
+MARK = "TUR-BOOT-TEST: "
 OVMF_CANDIDATES = [
     ("/usr/share/OVMF/OVMF_CODE_4M.fd", "/usr/share/OVMF/OVMF_VARS_4M.fd"),
     ("/usr/share/OVMF/OVMF_CODE.fd", "/usr/share/OVMF/OVMF_VARS.fd"),
@@ -165,7 +165,7 @@ def describe_image(width: int, height: int, rgb: bytes) -> dict:
     A black screen has no lit pixels. A text console lights a few percent of
     them in a handful of colours. A rendered greeter fills the screen with
     many colours. The thresholds are deliberately loose; a person still looks
-    at the screenshot (see docs/reports/UOS-003.md).
+    at the screenshot (see docs/reports/TUR-003.md).
     """
     total = width * height
     step = max(1, total // 150_000)
@@ -296,7 +296,7 @@ def main() -> int:
 
     command = [
         args.qemu,
-        "-name", "uos-boot-test",
+        "-name", "tur-boot-test",
         # KVM only: without it QEMU must fail, not fall back to emulation.
         "-machine", "q35,accel=kvm",
         "-cpu", "host",
@@ -305,7 +305,7 @@ def main() -> int:
         "-drive", f"if=pflash,format=raw,unit=0,readonly=on,file={code}",
         "-drive", f"if=pflash,format=raw,unit=1,file={variables}",
         "-drive", f"if=none,id=disk0,format=raw,cache=unsafe,file={args.disk}",
-        "-device", "virtio-blk-pci,drive=disk0,serial=uos-boot-test",
+        "-device", "virtio-blk-pci,drive=disk0,serial=tur-boot-test",
         "-netdev", "user,id=net0",
         "-device", "virtio-net-pci,netdev=net0",
         "-device", "virtio-rng-pci",
@@ -316,7 +316,7 @@ def main() -> int:
         "-serial", "chardev:serial0",
         "-device", "virtio-serial-pci",
         "-chardev", f"file,id=report,path={report_tar}",
-        "-device", "virtserialport,chardev=report,name=org.uos.boottest",
+        "-device", "virtserialport,chardev=report,name=org.tur.boottest",
         "-qmp", f"unix:{qmp_path},server=on,wait=off",
         "-monitor", "none",
         "-parallel", "none",
