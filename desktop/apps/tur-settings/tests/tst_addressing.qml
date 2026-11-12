@@ -188,9 +188,13 @@ Item {
             mouseClick(findChild(shell, "shellPage-tur.overview"))
             compare(shell.marked, null)
             compare(shell.address, "tur.overview")
-            // Coming back, the row is not marked again by itself.
-            mouseClick(findChild(shell, "shellPage-tur.appearance"))
+            // Coming back, the row is not marked again by itself. (In a
+            // window this low the page's place in the list is out of sight,
+            // so the page is gone to as the list does it.)
+            shell.go("tur.appearance")
+            compare(view(shell).address, "tur.appearance")
             verify(!host.service.findRow(view(shell), "tur.appearance#current").marked)
+            compare(shell.marked, null)
         }
 
         function test_without_a_highlight_the_row_is_still_brought_and_focused() {

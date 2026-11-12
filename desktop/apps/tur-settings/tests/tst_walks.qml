@@ -23,7 +23,7 @@ Item {
     id: root
 
     width: 1080
-    height: 9000
+    height: 12000
 
     SettingsStage {
         id: host

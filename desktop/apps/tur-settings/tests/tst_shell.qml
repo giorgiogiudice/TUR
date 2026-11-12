@@ -23,6 +23,12 @@ Item {
         height: root.height
     }
 
+    SignalSpy {
+        id: asked
+
+        signalName: "showRequested"
+    }
+
     TestCase {
         name: "Shell"
         when: windowShown
@@ -32,6 +38,8 @@ Item {
         }
 
         function cleanup() {
+            asked.clear()
+            asked.target = null
             host.stop()
             host.height = root.height
             settingsHelperRecord.forget()
@@ -282,7 +290,12 @@ Item {
             // The same title on Overview is another match, with its own place.
             compare(findChild(shell, "searchHit-tur.overview#version").subtitle, "Overview › This system")
 
+            asked.target = host.service
             mouseClick(hit)
+            // The window was asked once, for the match that was pressed.
+            compare(asked.count, 1)
+            compare(asked.signalArguments[0][0] + "#" + asked.signalArguments[0][1], "tur.about#version")
+            compare(shell.page, "tur.about")
             // The search is over; the page is shown and the row highlighted,
             // in the system's blue: it was a person who asked.
             compare(shell.searching, false)

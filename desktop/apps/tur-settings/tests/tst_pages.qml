@@ -246,7 +246,7 @@ Item {
             const name = row(view, "tur.about#system-name")
             compare(name.title, "What the system calls itself")
             compare(name.value, data.name)
-            verify(name.detail.indexOf(data.id) === 0)
+            compare(name.detail, data.id)
             const program = row(view, "tur.about#settings-version")
             verify(program.value.indexOf("tur-settings ") === 0)
             verify(program.detail.indexOf("Qt 6.") === 0)

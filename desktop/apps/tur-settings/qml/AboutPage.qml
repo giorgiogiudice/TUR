@@ -132,8 +132,7 @@ SettingsPage {
         SettingRow {
             address: "tur.about#system-name"
             value: view.facts.systemName.length > 0 ? view.facts.systemName : Words.notRecorded
-            detail: view.facts.systemId.length > 0 ? "ID=" + view.facts.systemId + " (" + view.facts.osReleasePath + ")"
-                                                   : view.facts.osReleasePath
+            detail: view.facts.systemId.length > 0 ? "ID=" + view.facts.systemId : ""
         }
 
         SettingRow {
