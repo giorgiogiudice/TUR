@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# The boot health gate (design section 6). It observes the boot and holds
+# nothing back: DefaultDependencies=no keeps it out of the chain that leads
+# to the default target, which it waits for.
+#
+# PID 1 enforces the deadline, not TUR: if the program hangs, is missing or
+# is broken in a new image, the unit fails or times out and the failure path
+# below still runs.
+
+[Unit]
+Description=TUR boot health gate
+Documentation=https://github.com/giorgiogiudice/TUR/blob/main/docs/architecture/boot-health-and-rollback.md
+DefaultDependencies=no
+ConditionPathExists=/run/ostree-booted
+After=basic.target tur-boot-state.service
+Conflicts=shutdown.target
+Before=shutdown.target
+OnFailure=tur-boot-failed.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/tur/tur-boot-health gate
+# Above the 555 s the limits of the required checks add up to.
+TimeoutStartSec=600
+StandardOutput=journal+console
+StandardError=journal+console

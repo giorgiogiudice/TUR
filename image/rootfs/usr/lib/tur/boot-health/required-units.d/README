@@ -1,0 +1,5 @@
+One file per unit that must be active for the system to be usable, named
+NAME.conf, holding the unit's name on its first line that is not a comment.
+A TUR service that must be up ships its own file here. Check R5 of the boot
+health gate fails if a listed unit is not active within its time limit, or is
+in the failed state. The list is empty today.

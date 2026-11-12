@@ -317,6 +317,10 @@ def postmortem(disk_path: str, out: pathlib.Path) -> int:
                         print(f"postmortem: the host journalctl could not render it: {text.stderr.strip()[:300]}")
                 else:
                     print(f"postmortem: no persistent journal under {state.relative_to(mnt)}")
+                for scenario in sorted((state / "lib" / "tur-boot-test" / "scenario").glob("*/report")):
+                    target = out / "scenario-reports" / scenario.parent.name
+                    shutil.copytree(scenario, target, dirs_exist_ok=True)
+                    print(f"postmortem: copied the scenario agent's on-disk reports for {scenario.parent.name}")
                 report = state / "lib" / "tur-boot-test" / "report"
                 if report.is_dir():
                     shutil.copytree(report, out / "guest-from-disk", dirs_exist_ok=True)

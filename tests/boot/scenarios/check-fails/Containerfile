@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Boot-health scenario image "check-fails" (F1 of the design's test plan).
+# A required additional health check that always exits 1.
+#
+# Built FROM the boot-test image, so every other layer is identical and only
+# this change is under test. Never part of TUR.
+
+ARG BASE=localhost/tur-boot-test:ci
+FROM ${BASE}
+
+RUN set -eu; \
+    printf '%s\n' 'exec = "/usr/bin/false"' 'required = true' 'timeout = 10' \
+        > /usr/lib/tur/boot-health/checks.d/always-fails.toml; \
+    mkdir -p /usr/lib/tur-boot-test; \
+    echo check-fails > /usr/lib/tur-boot-test/scenario
+
+LABEL org.tur.test-image="boot-health-scenario" org.tur.test-scenario="check-fails"

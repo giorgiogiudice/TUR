@@ -70,5 +70,47 @@ check "no other kernel-argument file"         bash -c '[ "$(ls -1 /usr/lib/bootc
 check "GRUB tools the design relies on"       bash -c 'command -v grub2-editenv && command -v bootupctl'
 check "greenboot is not installed"            bash -c '! rpm -q greenboot'
 
+# Boot health, userspace half (design sections 6.1 and 10).
+units=/usr/lib/systemd/system
+check "tur-boot-health runs in the image"     /usr/libexec/tur/tur-boot-health --version
+check "tur-boot-health is on the PATH"        bash -c '[ "$(readlink -f /usr/bin/tur-boot-health)" = /usr/libexec/tur/tur-boot-health ]'
+check "tur-boot-health lists its error codes" bash -c 'tur-boot-health status --codes | grep -q "^TUR-BOOT-TRIAL-003 "'
+for unit in tur-boot-state.service tur-boot-health.service tur-boot-mark-good.service \
+            tur-boot-record-failure.service tur-boot-retry.service \
+            tur-boot-emergency-retry.service tur-boot-arm.service \
+            tur-boot-evidence.service tur-boot-failed.target; do
+    check "unit ${unit} is in the image"      test -s "${units}/${unit}"
+done
+for unit in tur-boot-state tur-boot-health tur-boot-mark-good tur-boot-arm tur-boot-evidence; do
+    check "${unit} is started on every boot"  test -L "${units}/multi-user.target.wants/${unit}.service"
+done
+check "emergency mode restarts in a trial"    test -L "${units}/emergency.target.wants/tur-boot-emergency-retry.service"
+check "the gate is required by boot-complete.target" \
+    grep -qx 'Requires=tur-boot-health.service' "${units}/boot-complete.target.d/10-tur.conf"
+check "the restart after a failed gate runs no TUR code" bash -c \
+    '[ "$(grep -c "^ExecStart=" "$1")" = 1 ] && grep -qx "ExecStart=/usr/bin/systemctl --no-block reboot" "$1"' \
+    _ "${units}/tur-boot-retry.service"
+check "the restart is limited to a trial"     grep -qx 'ConditionKernelCommandLine=|tur.boot=trial' "${units}/tur-boot-retry.service"
+check "the arming unit does not require /boot" bash -c '! grep -q "^RequiresMountsFor=.*/boot" "$1"' _ "${units}/tur-boot-arm.service"
+check "no bootloader update during a trial"   grep -qx 'ConditionKernelCommandLine=!tur.boot=trial' "${units}/bootloader-update.service.d/10-tur.conf"
+check "the unit that drop-in applies to exists" test -e "${units}/bootloader-update.service"
+check "bootc's update timer is masked"        bash -c '[ "$(readlink /usr/lib/systemd/system/bootc-fetch-apply-updates.timer)" = /dev/null ]'
+check "GRUB's boot-success timer is masked"   bash -c '[ "$(readlink /usr/lib/systemd/user/grub-boot-success.timer)" = /dev/null ]'
+check "the journal is persistent by decision" grep -qx 'Storage=persistent' /usr/lib/systemd/journald.conf.d/10-tur.conf
+check "state directories are declared"        grep -q '^d /var/lib/tur/boot-health ' /usr/lib/tmpfiles.d/tur-boot-health.conf
+check "the gate's configuration is in the image" grep -qx 'attempts = 3' /usr/lib/tur/boot-health/gate.toml
+check "no TUR file under /etc"                bash -c '! ls -d /etc/tur* /usr/etc/tur* 2>/dev/null | grep -q .'
+
+# The unit graph (design section 6.1). Printed in full: a warning here is
+# worth reading even when the check passes.
+echo "--- systemd-analyze verify"
+if systemd-analyze verify --recursive-errors=no \
+    "${units}"/tur-boot-*.service "${units}/tur-boot-failed.target" 2>&1; then
+    echo "PASS  systemd-analyze verify accepts the boot-health units"
+else
+    echo "FAIL  systemd-analyze verify accepts the boot-health units"
+    fail=1
+fi
+
 exit "${fail}"
 INNER

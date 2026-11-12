@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# After a fallback: keep the journals of the failed version's attempts
+# (design section 8). Low priority; does nothing when there is nothing new.
+
+[Unit]
+Description=TUR boot health: keep the journals of a failed update
+Documentation=https://github.com/giorgiogiudice/TUR/blob/main/docs/architecture/boot-health-and-rollback.md
+DefaultDependencies=no
+ConditionPathExists=/run/ostree-booted
+RequiresMountsFor=/var/lib/tur
+After=boot-complete.target tur-boot-mark-good.service tur-boot-health.service
+Conflicts=shutdown.target
+Before=shutdown.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/tur/tur-boot-health export-evidence
+TimeoutStartSec=600
+Nice=19
+IOSchedulingClass=idle

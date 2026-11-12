@@ -1,0 +1,15 @@
+# What is sent to the build of image/Containerfile. podman and buildah prefer
+# <Containerfile>.containerignore over the .containerignore at the root of the
+# build context, so this file replaces that one for the OS image.
+#
+# The image definition, and the sources of the TUR programs that are compiled
+# into the image (image/README.md, "Programs built into the image"). A
+# component that joins the image adds its directory here.
+*
+!image/
+!rust-toolchain.toml
+!crates/
+!services/tur-boot-health/
+
+# Never build output, whatever a working tree holds.
+**/target/

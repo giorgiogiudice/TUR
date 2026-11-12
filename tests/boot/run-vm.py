@@ -67,6 +67,11 @@ def main() -> int:
     ap.add_argument("--cpus", type=int, default=2)
     ap.add_argument("--memory", type=int, default=4096, help="MiB")
     ap.add_argument("--qemu", default="qemu-system-x86_64")
+    ap.add_argument(
+        "--prepare-only",
+        action="store_true",
+        help="stop after the second boot: the disk is then ready for the boot-health scenarios",
+    )
     args = ap.parse_args()
 
     work, out = pathlib.Path(args.work).resolve(), pathlib.Path(args.out).resolve()
@@ -83,6 +88,7 @@ def main() -> int:
         cpus=args.cpus,
         memory=args.memory,
         qemu=args.qemu,
+        fw_cfg={"prepare": "1"} if args.prepare_only else None,
     )
     for stale in (serial_log, report_tar, machine.variables, host / "qemu.log"):
         stale.unlink(missing_ok=True)
@@ -235,8 +241,8 @@ def main() -> int:
         serial_tail()
         return finish(outcome)
 
-    # ---- screenshot of the third boot: the session has had its hold time --------
-    shoot("third-boot", attempts=5, pause=5)
+    # ---- screenshot of the last boot: the session has had its hold time ----------
+    shoot("second-boot" if args.prepare_only else "third-boot", attempts=5, pause=5)
 
     # ---- power off ----------------------------------------------------------------
     result["shutdown"] = "forced"

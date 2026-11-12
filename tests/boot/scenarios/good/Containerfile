@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Boot-health scenario image "good" (G1 of the design's test plan).
+# A marker file only: an update that is healthy.
+#
+# Built FROM the boot-test image, so every other layer is identical and only
+# this change is under test. Never part of TUR.
+
+ARG BASE=localhost/tur-boot-test:ci
+FROM ${BASE}
+
+RUN set -eu; \
+    mkdir -p /usr/lib/tur-boot-test; \
+    echo good > /usr/lib/tur-boot-test/scenario
+
+LABEL org.tur.test-image="boot-health-scenario" org.tur.test-scenario="good"

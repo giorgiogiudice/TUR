@@ -10,6 +10,10 @@ on:
     branches: [main]
     paths:
       - "image/**"
+      # Programs compiled into the image, and what they are compiled with.
+      - "services/tur-boot-health/**"
+      - "crates/**"
+      - "rust-toolchain.toml"
       - "tests/boot/**"
       - "scripts/build-image.sh"
       - "VERSION"
@@ -17,6 +21,10 @@ on:
   pull_request:
     paths:
       - "image/**"
+      # Programs compiled into the image, and what they are compiled with.
+      - "services/tur-boot-health/**"
+      - "crates/**"
+      - "rust-toolchain.toml"
       - "tests/boot/**"
       - "scripts/build-image.sh"
       - "VERSION"
@@ -46,7 +54,8 @@ jobs:
       - name: Lint
         run: |
           shellcheck --version | sed -n 2p
-          shellcheck -x tests/boot/*.sh tests/boot/guest/rootfs/usr/libexec/tur-boot-test/guest-agent
+          shellcheck -x tests/boot/*.sh tests/boot/guest/rootfs/usr/libexec/tur-boot-test/guest-agent \
+            tests/boot/guest/rootfs/usr/libexec/tur-boot-test/scenario-agent
           python3 -m py_compile tests/boot/*.py
 
   boot:
@@ -121,7 +130,10 @@ jobs:
       - name: Build image
         run: |
           start=$(date +%s)
-          TUR_BUILD_ID_FILE="$RUNNER_TEMP/build-id" scripts/build-image.sh "$IMAGE"
+          # The ignore file is named explicitly here; the image workflow builds
+          # without the flag and so shows whether podman finds it by itself.
+          TUR_BUILD_ID_FILE="$RUNNER_TEMP/build-id" scripts/build-image.sh "$IMAGE" \
+            --ignorefile image/Containerfile.containerignore
           echo "BUILD_ID=$(cat "$RUNNER_TEMP/build-id")" >> "$GITHUB_ENV"
           echo "IMAGE_BUILD_SECONDS=$(( $(date +%s) - start ))" >> "$GITHUB_ENV"
           df -h / | tail -1

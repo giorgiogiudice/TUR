@@ -712,6 +712,113 @@ def check_boot_health(ev: Evidence, checks: Checks) -> dict:
     }
 
 
+def unit_sections(text: str) -> dict[str, dict[str, str]]:
+    """`### unit` sections of KEY=VALUE lines, as the agent writes tur-units.txt."""
+    units: dict[str, dict[str, str]] = {}
+    current = None
+    for line in text.splitlines():
+        if line.startswith("### "):
+            current = units.setdefault(line[4:].strip(), {})
+        elif current is not None and "=" in line:
+            key, _, value = line.partition("=")
+            current[key.strip()] = value.strip()
+    return units
+
+
+def check_gate(ev: Evidence, checks: Checks) -> dict:
+    """The boot health gate on a healthy system (design section 6; steps 6 and 7).
+
+    Every boot of the boot test must pass the gate: the first-run wizard on
+    the first boot, the greeter on the second, and the third, which GRUB
+    counted, must be marked good by removing the counter.
+    """
+    gate: dict = {}
+    expected = {"first-boot": "normal", "second-boot": "normal", "third-boot": "trial"}
+    for boot in BOOTS:
+        guest = ev.boots[boot]
+        label = boot.replace("-", " ").capitalize()
+        status = guest.json("tur-status.json") or {}
+        verdict = status.get("verdict") or {}
+        results = {item.get("id"): item for item in verdict.get("checks") or []}
+        states = {ident: (results.get(ident) or {}).get("state") for ident in ("R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8")}
+        classification = (status.get("boot") or {}).get("classification")
+        required_ok = all(states[ident] == "succeeded" for ident in ("R1", "R2", "R3", "R4", "R6", "R7", "R8"))
+        checks.add(
+            f"gate.{boot}",
+            f"{label}: the boot health gate passed: R1 to R8 hold, with R5 skipped while no TUR unit is required",
+            (
+                verdict.get("result") in ("passed", "degraded")
+                and required_ok
+                and states["R5"] == "skipped"
+                and classification == expected[boot]
+                and guest.status.get("gate_unit_state") == "active"
+                and guest.status.get("mark_good_unit_state") == "active"
+            )
+            if guest
+            else None,
+            f"verdict {verdict.get('result')}; classification {classification} (expected {expected[boot]}); checks {states}; "
+            f"gate unit {guest.status.get('gate_unit_state', 'no data')}, mark-good unit "
+            f"{guest.status.get('mark_good_unit_state', 'no data')}; R7: {(results.get('R7') or {}).get('detail')}; "
+            f"degraded by: {[item.get('id') + ': ' + str(item.get('detail')) for item in verdict.get('checks') or [] if not item.get('required') and item.get('state') == 'failed']}",
+        )
+        units = unit_sections(guest.text("tur-units.txt"))
+        graphical = int((units.get("graphical.target") or {}).get("ActiveEnterTimestampMonotonic", "0") or 0)
+        finished = int((units.get("tur-boot-health.service") or {}).get("ExecMainExitTimestampMonotonic", "0") or 0)
+        started = int((units.get("tur-boot-health.service") or {}).get("ExecMainStartTimestampMonotonic", "0") or 0)
+        checks.add(
+            f"gate_observes.{boot}",
+            f"{label}: the gate observes and holds nothing back: graphical.target was reached while the gate was still running",
+            (0 < started < graphical < finished) if units else None,
+            f"gate started {started / 1e6:.1f} s, graphical.target {graphical / 1e6:.1f} s, gate finished {finished / 1e6:.1f} s "
+            "after kernel start",
+        )
+        gate[boot] = {
+            "verdict": verdict.get("result"),
+            "classification": classification,
+            "checks": {ident: {"state": item.get("state"), "detail": item.get("detail"), "duration_ms": item.get("duration_ms")} for ident, item in results.items()},
+            "gate_started_seconds": round(started / 1e6, 3) if started else None,
+            "gate_finished_seconds": round(finished / 1e6, 3) if finished else None,
+            "counting": status.get("counting"),
+            "watchdog": status.get("watchdog"),
+        }
+    third = ev.boots["third-boot"]
+    history = []
+    for line in third.text("boot-health/history.jsonl").splitlines():
+        try:
+            history.append(json.loads(line).get("event"))
+        except ValueError:
+            continue
+    after = counter_of(third.text("grubenv-after-gate.txt"))
+    checks.add(
+        "gate.marked_good",
+        "Third boot: the counted boot was marked good: tur-boot-health removed the counter after the gate passed",
+        (after is None and "marked-good" in history and bool(third.text("grubenv-after-gate.txt") or third.status.get("mark_good_unit_state")))
+        if third
+        else None,
+        f"boot_counter at the start of the boot: {counter_of(third.text('grubenv-early.txt'))}; after the gate: {after}; "
+        f"history: {history}",
+    )
+    checks.add(
+        "gate.arm_unit_survives_idle",
+        "Third boot: the unit that arms a trial at shutdown is still active after the automount behind /boot expired",
+        (third.status.get("arm_unit_after_idle") == "active" and third.status.get("canary_after_idle") in ("inactive", "failed"))
+        if third.status.get("arm_unit_after_idle")
+        else None,
+        f"tur-boot-arm.service: {third.status.get('arm_unit_after_idle', 'no data')}; a canary unit that requires /boot: "
+        f"{third.status.get('canary_after_idle', 'no data')} after boot.mount became "
+        f"{third.status.get('canary_boot_mount_after_idle', 'no data')}",
+    )
+    verify = " ".join((third or ev.boots["second-boot"]).text("systemd-analyze-verify.txt").split())
+    checks.add(
+        "gate.unit_graph",
+        "systemd-analyze verify on the boot-health units, in the booted system",
+        (not verify) if third else None,
+        verify[:900] or "no complaints",
+        required=False,
+    )
+    return gate
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--work", required=True)
@@ -797,6 +904,7 @@ def main() -> int:
 
     boots = [check_boot(ev, boot, checks, args, allowed) for boot in BOOTS]
     boot_health = check_boot_health(ev, checks)
+    boot_health["gate"] = check_gate(ev, checks)
 
     checks.add(
         "clean_shutdown",

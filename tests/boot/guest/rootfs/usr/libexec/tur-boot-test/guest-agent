@@ -30,6 +30,18 @@
 #                                  screenshot and power the guest off
 set -u
 
+# A scenario of the boot-health proof (tests/boot/rollback.py) names itself
+# through QEMU's fw_cfg. Those runs belong to the scenario agent.
+if [ -s /sys/firmware/qemu_fw_cfg/by_name/opt/org.tur/scenario/raw ]; then
+    exec /usr/libexec/tur-boot-test/scenario-agent
+fi
+
+# The scenario jobs only need the disk prepared: a user, first-run setup
+# done. They ask for the run to end after the second boot (run-vm.py
+# --prepare-only), without the counted third boot.
+prepare_only=no
+if [ -s /sys/firmware/qemu_fw_cfg/by_name/opt/org.tur/prepare/raw ]; then prepare_only=yes; fi
+
 port_name=org.tur.boottest
 port="/dev/virtio-ports/${port_name}"
 state=/var/lib/tur-boot-test
@@ -92,6 +104,58 @@ editenv() {
         rc=$?
         sync -f "${block}"
         exit "${rc}"' _ "${grubenv}" "$@"
+}
+
+# wait_gate SECONDS: wait until the boot health gate has finished, one way or
+# the other, and print how: active (passed), failed, absent, or timeout.
+wait_gate() {
+    local limit="$1" start="${SECONDS}" state
+    if ! systemctl cat tur-boot-health.service > /dev/null 2>&1; then
+        echo absent
+        return
+    fi
+    while :; do
+        state="$(systemctl show -p ActiveState --value tur-boot-health.service 2> /dev/null)"
+        case "${state}" in
+            active | failed) break ;;
+        esac
+        if [ $((SECONDS - start)) -ge "${limit}" ]; then
+            state="timeout-${state}"
+            break
+        fi
+        sleep 1
+    done
+    echo "${state}"
+}
+
+# What tur-boot-health decided and left behind in this boot.
+# shellcheck disable=SC2016  # the snippets are expanded by the shell that runs them
+health_facts() {
+    local unit
+    cap tur-status.json tur-boot-health status --json
+    cap tur-status.txt tur-boot-health status
+    : > "${out}/tur-units.txt"
+    for unit in tur-boot-state.service tur-boot-health.service tur-boot-mark-good.service \
+        tur-boot-arm.service tur-boot-evidence.service tur-boot-record-failure.service \
+        tur-boot-retry.service tur-boot-emergency-retry.service boot-complete.target graphical.target; do
+        {
+            printf '### %s\n' "${unit}"
+            systemctl show --no-pager "${unit}" -p LoadState -p ActiveState -p SubState -p Result \
+                -p ConditionResult -p ExecMainStartTimestampMonotonic -p ExecMainExitTimestampMonotonic \
+                -p ActiveEnterTimestampMonotonic -p InactiveExitTimestampMonotonic
+        } >> "${out}/tur-units.txt" 2>&1
+    done
+    cap tur-journal.txt journalctl -b --no-pager -o short-monotonic -t tur-boot-health
+    capsh tur-journal.json 'journalctl -b --no-pager -o json -t tur-boot-health | head -c 4000000'
+    capsh tur-state.txt 'ls -laR /var/lib/tur /run/tur 2>&1'
+    mkdir -p "${out}/boot-health/run"
+    tar -C /var/lib/tur/boot-health --exclude="*.zst" --exclude="*.export" -cf - . 2> /dev/null \
+        | tar -C "${out}/boot-health" -xf - 2> /dev/null
+    cp /run/tur/boot-health/*.json "${out}/boot-health/run/" 2> /dev/null
+    cap systemd-analyze-verify.txt systemd-analyze verify --recursive-errors=no \
+        tur-boot-state.service tur-boot-health.service tur-boot-mark-good.service tur-boot-arm.service \
+        tur-boot-evidence.service tur-boot-record-failure.service tur-boot-retry.service \
+        tur-boot-emergency-retry.service tur-boot-failed.target
 }
 
 # The session that owns the display: the active session on seat0.
@@ -279,6 +343,17 @@ sleep "${hold}"
 put session_id_after_hold "$(seat_session)"
 put compositor_pid_after_hold "$(compositor_pid)"
 if check dm > /dev/null 2>&1; then put display_manager_after_hold active; else put display_manager_after_hold inactive; fi
+put gate_unit_state "$(wait_gate 420)"
+put gate_wait_finished_uptime "$(uptime_s)"
+# mark-good runs right after the gate; give it a moment to finish.
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+    case "$(systemctl show -p ActiveState --value tur-boot-mark-good.service 2> /dev/null)" in
+        activating) sleep 1 ;;
+        *) break ;;
+    esac
+done
+put mark_good_unit_state "$(systemctl show -p ActiveState --value tur-boot-mark-good.service 2> /dev/null)"
+grub2-editenv "${grubenv}" list > "${out}/grubenv-after-gate.txt" 2>&1
 session="$(seat_session)"
 session_uid=""
 if [ -n "${session}" ]; then
@@ -444,8 +519,13 @@ cap avc-denials.txt journalctl -b --no-pager -o short-monotonic -g 'avc:  denied
 
 # --- what the boot-health design assumes ---------------------------------------
 measure
+health_facts
 if [ "${phase}" = third-boot ]; then
     canary
+    # The arming unit acts when it is stopped, at shutdown. It must still be
+    # there after the automount behind /boot has expired.
+    put arm_unit_after_idle "$(systemctl show -p ActiveState --value tur-boot-arm.service 2> /dev/null)"
+    put state_unit_after_idle "$(systemctl show -p ActiveState --value tur-boot-state.service 2> /dev/null)"
     cap grubenv-late.txt grub2-editenv "${grubenv}" list
     # Without tur-boot-health nothing removes the counter. Leave the disk as an
     # ordinary one: the scenarios start from it.
@@ -480,7 +560,7 @@ fi
 # Step 2 of the design's brief. The next boot must be counted by GRUB and the
 # kernel must be told so. Done before the report is sent so that the report
 # carries what was written.
-if [ "${phase}" = second-boot ]; then
+if [ "${phase}" = second-boot ] && [ "${prepare_only}" = no ]; then
     {
         echo "--- before"
         grub2-editenv "${grubenv}" list
@@ -525,7 +605,7 @@ if [ "${phase}" = first-boot ]; then
     exit 0
 fi
 
-if [ "${phase}" = second-boot ]; then
+if [ "${phase}" = second-boot ] && [ "${prepare_only}" = no ]; then
     touch "${state}/second-boot-done"
     sync
     for _ in 1 2 3; do

@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Boot-health scenario image "emergency" (F7 of the design's test plan).
+# A mount unit for a device that does not exist, required by
+# local-fs.target: systemd enters emergency mode in the real root. The
+# device's job gets 15 s instead of 90 so that an attempt is short.
+#
+# Built FROM the boot-test image, so every other layer is identical and only
+# this change is under test. Never part of TUR.
+
+ARG BASE=localhost/tur-boot-test:ci
+FROM ${BASE}
+
+RUN set -eu; \
+    printf '%s\n' '[Unit]' 'Description=A filesystem on a device that does not exist (boot-health test)' \
+        '[Mount]' 'What=/dev/disk/by-label/tur-test-missing' 'Where=/var/mnt/turmissing' 'Type=ext4' \
+        > /usr/lib/systemd/system/var-mnt-turmissing.mount; \
+    mkdir -p /usr/lib/systemd/system/local-fs.target.requires; \
+    ln -s ../var-mnt-turmissing.mount \
+        /usr/lib/systemd/system/local-fs.target.requires/var-mnt-turmissing.mount; \
+    device='dev-disk-by\x2dlabel-tur\x2dtest\x2dmissing.device'; \
+    mkdir -p "/usr/lib/systemd/system/${device}.d"; \
+    printf '%s\n' '[Unit]' 'JobRunningTimeoutSec=15' \
+        > "/usr/lib/systemd/system/${device}.d/90-tur-test.conf"; \
+    ls -la /usr/lib/systemd/system/ | grep tur.x2dtest; \
+    mkdir -p /usr/lib/tur-boot-test; \
+    echo emergency > /usr/lib/tur-boot-test/scenario
+
+LABEL org.tur.test-image="boot-health-scenario" org.tur.test-scenario="emergency"

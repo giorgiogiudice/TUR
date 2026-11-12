@@ -270,6 +270,9 @@ class SerialWatcher:
         self.milestones: dict[str, float] = {}
         self.printed: set[str] = set()
         self.agent_lines: list[dict] = []
+        # Every console line that matched one of `patterns`, with the boot it
+        # was printed in and when.
+        self.hits: list[dict] = []
         self.quiet = quiet
         self.before_first_kernel: dict[str, int] = {}
 
@@ -321,6 +324,8 @@ class SerialWatcher:
                 if name not in seen and not self.quiet:
                     print(f"[{self.elapsed():7.1f}s] boot {self.boot}: console shows {name}: {line.strip()[:160]}", flush=True)
                 seen[name] = seen.get(name, 0) + 1
+                if len(self.hits) < 5000:
+                    self.hits.append({"name": name, "boot": self.boot, "at": self.elapsed(), "line": line.strip()[:300]})
         if MARK in line:
             text = line[line.index(MARK):]
             if text not in self.printed:
@@ -430,14 +435,20 @@ class Machine:
         for key, value in self.fw_cfg.items():
             command += ["-fw_cfg", f"name=opt/org.tur/{key},string={value}"]
         if self.watchdog:
-            # An emulated hardware watchdog. Its expiry resets the machine and is
-            # reported as a QMP WATCHDOG event (design section 9).
-            command += ["-device", "i6300esb", "-action", "watchdog=reset"]
+            # A hardware watchdog whose expiry resets the machine and is reported
+            # as a QMP WATCHDOG event (design section 9). The q35 machine already
+            # has one, the chipset's TCO timer, and the guest sees it as
+            # /dev/watchdog0 (measured). QEMU ships it with its "no reboot" strap
+            # set, as some firmware does; clear the strap so that it resets.
+            # The design named the i6300esb device: a second watchdog would
+            # only make it uncertain which one is /dev/watchdog0.
+            command += ["-global", "ICH9-LPC.noreboot=false", "-action", "watchdog=reset"]
         if self.pvpanic:
             # Reports a guest panic as a QMP event once the guest has loaded the
-            # driver. The default action for a panic is to stop the machine;
-            # the test wants the guest's own panic= timeout to act.
-            command += ["-device", "pvpanic-pci", "-action", "panic=none"]
+            # driver (the ISA device: the guest kernel has no pvpanic-pci
+            # driver, measured). The default action for a panic is to stop the
+            # machine; the test wants the guest's own panic= timeout to act.
+            command += ["-device", "pvpanic", "-action", "panic=none"]
         return command
 
     def start(self) -> Qmp:

@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Boot-health scenario image "stall" (H2 of the design's test plan).
+# A unit ordered before the display manager never finishes starting, so
+# the default target is never reached while PID 1 stays alive. The gate's
+# limit for the default target is 40 s in this image instead of the
+# product's 240 s, as the design allows for pull requests.
+#
+# Built FROM the boot-test image, so every other layer is identical and only
+# this change is under test. Never part of TUR.
+
+ARG BASE=localhost/tur-boot-test:ci
+FROM ${BASE}
+
+RUN set -eu; \
+    printf '%s\n' '[Unit]' 'Description=A unit that never finishes starting (boot-health test)' \
+        'Before=display-manager.service' \
+        '[Service]' 'Type=oneshot' 'ExecStart=/usr/bin/sleep infinity' 'TimeoutStartSec=infinity' \
+        > /usr/lib/systemd/system/tur-test-stall.service; \
+    mkdir -p /usr/lib/systemd/system/graphical.target.wants; \
+    ln -s ../tur-test-stall.service \
+        /usr/lib/systemd/system/graphical.target.wants/tur-test-stall.service; \
+    sed -i 's/^default_target = 240$/default_target = 40/' /usr/lib/tur/boot-health/gate.toml; \
+    grep -qx 'default_target = 40' /usr/lib/tur/boot-health/gate.toml; \
+    mkdir -p /usr/lib/tur-boot-test; \
+    echo stall > /usr/lib/tur-boot-test/scenario
+
+LABEL org.tur.test-image="boot-health-scenario" org.tur.test-scenario="stall"

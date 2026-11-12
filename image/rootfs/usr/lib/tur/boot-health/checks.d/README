@@ -1,0 +1,9 @@
+Additional boot health checks, one NAME.toml per check:
+
+    exec = "/usr/libexec/..."     absolute path; run without a shell
+    args = ["--quick"]            optional
+    required = true               false (the default) only marks the boot degraded
+    timeout = 30                  seconds, 1 to 600
+
+A required check that exits non-zero, cannot be run or runs out of time
+fails the gate. None is shipped today.
