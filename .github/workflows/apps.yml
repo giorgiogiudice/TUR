@@ -1,0 +1,220 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# End-to-end proof of tur-apps, the backend that installs applications for
+# the application centre, with the real programs it drives. See
+# services/tur-apps/ci/e2e.py for every check and
+# docs/reports/apps-1.md for what the runs showed.
+#
+# Two jobs, on hosted Ubuntu runners (not the TUR image):
+#   flatpak  - a small free application from Flathub, per user: plan,
+#              install, start under a virtual display, update check, remove
+#              keeping and then deleting its data; nothing left.
+#   windows  - Notepad++ by its catalogue identifier through the whole chain
+#              (router, download, SHA-256, tur-runtime, launch, removal that
+#              keeps a document); a download that is not the pinned file is
+#              refused before anything runs.
+name: apps
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "services/tur-apps/**"
+      - "services/tur-catalogue/**"
+      - "services/tur-runtime/**"
+      - "catalogue/**"
+      - "schemas/app-install-*.schema.json"
+      - "schemas/app-installed.schema.json"
+      - ".github/workflows/apps.yml"
+  pull_request:
+    paths:
+      - "services/tur-apps/**"
+      - "services/tur-catalogue/**"
+      - "services/tur-runtime/**"
+      - "catalogue/**"
+      - "schemas/app-install-*.schema.json"
+      - "schemas/app-installed.schema.json"
+      - ".github/workflows/apps.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: apps-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  flatpak:
+    name: Install a Flatpak from Flathub, per user
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      CARGO_TERM_COLOR: never
+      CARGO_INCREMENTAL: "0"
+      DEBIAN_FRONTEND: noninteractive
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Scratch directory
+        run: |
+          mkdir -p "$RUNNER_TEMP/tur-apps/evidence"
+          echo "WORK=$RUNNER_TEMP/tur-apps" >> "$GITHUB_ENV"
+
+      - name: Install flatpak, an X server and a window manager
+        # Distribution packages only; versions are printed below.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flatpak xvfb x11-utils openbox wmctrl imagemagick dbus-daemon
+
+      - name: Let bubblewrap create user namespaces
+        # Ubuntu 24.04 restricts unprivileged user namespaces through
+        # AppArmor. flatpak's own CI on ubuntu-24.04 lifts the restriction
+        # the same way (.github/workflows/check.yml at flatpak 1.18.4). A
+        # throw-away runner only; never a user's system.
+        run: |
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          sudo systemctl reload apparmor || true
+
+      - name: Versions
+        run: |
+          {
+            echo "runner image: ${ImageOS:-?} ${ImageVersion:-?}"
+            . /etc/os-release; echo "os: $PRETTY_NAME"
+            echo "kernel: $(uname -r)"
+            echo "flatpak: $(flatpak --version)"
+            echo "bubblewrap: $(bwrap --version)"
+            echo "curl: $(curl --version | head -n 1)"
+            dpkg-query -W -f '  ${Package} ${Version}\n' flatpak bubblewrap xvfb curl 2>&1 || true
+          } | tee "$WORK/evidence/versions.txt"
+
+      - name: Toolchain
+        working-directory: services/tur-apps
+        run: |
+          rustup show active-toolchain || rustup toolchain install
+          rustc --version; cargo --version
+
+      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            services/tur-apps/target
+            services/tur-catalogue/target
+          key: apps-${{ hashFiles('rust-toolchain.toml', 'services/tur-apps/Cargo.lock', 'services/tur-catalogue/Cargo.lock') }}
+          restore-keys: apps-
+
+      - name: Build tur-apps and tur-catalogue
+        run: |
+          (cd services/tur-apps && cargo build --locked)
+          (cd services/tur-catalogue && cargo build --locked)
+
+      - name: End to end
+        run: |
+          dbus-run-session -- python3 services/tur-apps/ci/e2e.py flatpak \
+            --tur-apps services/tur-apps/target/debug/tur-apps \
+            --tur-catalogue services/tur-catalogue/target/debug/tur-catalogue \
+            --catalogue catalogue \
+            --work "$WORK/run" --evidence "$WORK/evidence"
+
+      - name: Summary
+        if: always()
+        run: |
+          cat "$WORK/evidence/summary.md" >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || echo "No summary was written." >> "$GITHUB_STEP_SUMMARY"
+          ls -la "$WORK/evidence"
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: apps-flatpak-evidence
+          path: ${{ runner.temp }}/tur-apps/evidence/
+          if-no-files-found: warn
+
+  windows:
+    name: Install a Windows application by catalogue identifier
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      CARGO_TERM_COLOR: never
+      CARGO_INCREMENTAL: "0"
+      DEBIAN_FRONTEND: noninteractive
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Scratch directory
+        run: |
+          mkdir -p "$RUNNER_TEMP/tur-apps/evidence"
+          echo "WORK=$RUNNER_TEMP/tur-apps" >> "$GITHUB_ENV"
+
+      - name: Install Wine with its 32-bit support, bubblewrap and a display
+        # The same packages as the windows-runtime workflow's
+        # real-applications job: the Notepad++ installer is a 32-bit
+        # program.
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y wine wine64 wine32:i386 bubblewrap unzip \
+            xvfb x11-utils openbox wmctrl imagemagick dbus-daemon
+
+      - name: Sandbox preflight
+        # tur-runtime's own preflight (tests/windows-runtime), used as it is.
+        run: tests/windows-runtime/sandbox-preflight.sh "$WORK/evidence/sandbox-preflight.txt"
+
+      - name: Versions
+        run: |
+          {
+            echo "runner image: ${ImageOS:-?} ${ImageVersion:-?}"
+            . /etc/os-release; echo "os: $PRETTY_NAME"
+            echo "kernel: $(uname -r)"
+            echo "wine: $(wine --version 2>/dev/null | head -n 1)"
+            echo "bubblewrap: $(bwrap --version)"
+            echo "curl: $(curl --version | head -n 1)"
+            dpkg-query -W -f '  ${Package}:${Architecture} ${Version}\n' wine wine64 wine32 bubblewrap curl 2>&1 || true
+          } | tee "$WORK/evidence/versions.txt"
+
+      - name: Toolchain
+        working-directory: services/tur-apps
+        run: |
+          rustup show active-toolchain || rustup toolchain install
+          rustc --version; cargo --version
+
+      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            services/tur-apps/target
+            services/tur-catalogue/target
+            services/tur-runtime/target
+          key: apps-windows-${{ hashFiles('rust-toolchain.toml', 'services/tur-apps/Cargo.lock', 'services/tur-catalogue/Cargo.lock', 'services/tur-runtime/Cargo.lock') }}
+          restore-keys: apps-windows-
+
+      - name: Build tur-apps, tur-catalogue and tur-runtime
+        run: |
+          (cd services/tur-apps && cargo build --locked)
+          (cd services/tur-catalogue && cargo build --locked)
+          (cd services/tur-runtime && cargo build --locked)
+
+      - name: End to end
+        run: |
+          dbus-run-session -- python3 services/tur-apps/ci/e2e.py windows \
+            --tur-apps services/tur-apps/target/debug/tur-apps \
+            --tur-catalogue services/tur-catalogue/target/debug/tur-catalogue \
+            --tur-runtime services/tur-runtime/target/debug/tur-runtime \
+            --catalogue catalogue \
+            --work "$WORK/run" --evidence "$WORK/evidence"
+
+      - name: Summary
+        if: always()
+        run: |
+          cat "$WORK/evidence/summary.md" >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || echo "No summary was written." >> "$GITHUB_STEP_SUMMARY"
+          ls -la "$WORK/evidence"
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: apps-windows-evidence
+          path: ${{ runner.temp }}/tur-apps/evidence/
+          if-no-files-found: warn

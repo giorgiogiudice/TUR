@@ -1,0 +1,192 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+ "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<!-- SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0 -->
+<!--
+  org.tur.Agent1: the session service of P@x, TUR's assistant.
+
+  Served by `tur-pax serve` on the session bus, at /org/tur/Agent1.
+  Described in docs/architecture/pax-service.md. Interface version 1.
+
+  Structured values are JSON text in a string argument; their members are
+  listed in the document. A method that fails replies with the error
+  org.tur.Agent1.Error.<CODE>, where <CODE> is a TUR-AI-* error code with
+  its hyphens written as underscores, and the message "<code>: <sentence>".
+
+  The service answers only callers that the bus reports as running under
+  the same Unix user as the service. It cannot tell one program of that
+  user from another.
+
+  This file is what Introspect returns, byte for byte.
+-->
+<node name="/org/tur/Agent1">
+  <interface name="org.tur.Agent1">
+    <!-- Tasks -->
+    <method name="StartTask">
+      <arg name="request" type="s" direction="in"/>
+      <arg name="options" type="s" direction="in"/>
+      <arg name="task" type="s" direction="out"/>
+    </method>
+    <method name="CancelTask">
+      <arg name="task" type="s" direction="in"/>
+    </method>
+    <method name="Pause"/>
+    <method name="Resume"/>
+    <method name="GetTask">
+      <arg name="task" type="s" direction="in"/>
+      <arg name="details" type="s" direction="out"/>
+    </method>
+    <method name="ListActivity">
+      <arg name="limit" type="u" direction="in"/>
+      <arg name="activity" type="s" direction="out"/>
+    </method>
+    <!-- State, setup and limits -->
+    <method name="GetStatus">
+      <arg name="status" type="s" direction="out"/>
+    </method>
+    <method name="GetConsentText">
+      <arg name="provider" type="s" direction="in"/>
+      <arg name="version" type="s" direction="out"/>
+      <arg name="text" type="s" direction="out"/>
+    </method>
+    <method name="Enable">
+      <arg name="consent_version" type="s" direction="in"/>
+    </method>
+    <method name="Disable"/>
+    <method name="SetProvider">
+      <arg name="provider" type="s" direction="in"/>
+      <arg name="model" type="s" direction="in"/>
+    </method>
+    <method name="SetLimits">
+      <arg name="limits" type="s" direction="in"/>
+    </method>
+    <method name="ListModels">
+      <arg name="models" type="s" direction="out"/>
+    </method>
+    <!-- The key. It is taken, never given back. -->
+    <method name="SetKey">
+      <arg name="provider" type="s" direction="in"/>
+      <arg name="key" type="s" direction="in"/>
+    </method>
+    <method name="RemoveKey">
+      <arg name="provider" type="s" direction="in"/>
+      <arg name="removed" type="b" direction="out"/>
+    </method>
+    <method name="HasKey">
+      <arg name="provider" type="s" direction="in"/>
+      <arg name="set" type="b" direction="out"/>
+    </method>
+    <!-- Reminders and scheduled tasks -->
+    <method name="ListProposals">
+      <arg name="proposals" type="s" direction="out"/>
+    </method>
+    <method name="ConfirmProposal">
+      <arg name="proposal" type="s" direction="in"/>
+      <arg name="schedule" type="s" direction="out"/>
+    </method>
+    <method name="DismissProposal">
+      <arg name="proposal" type="s" direction="in"/>
+    </method>
+    <method name="CreateSchedule">
+      <arg name="definition" type="s" direction="in"/>
+      <arg name="schedule" type="s" direction="out"/>
+    </method>
+    <method name="RemoveSchedule">
+      <arg name="schedule" type="s" direction="in"/>
+    </method>
+    <method name="ListSchedules">
+      <arg name="schedules" type="s" direction="out"/>
+    </method>
+    <method name="GetAway">
+      <arg name="runs" type="s" direction="out"/>
+    </method>
+    <method name="MarkAwaySeen">
+      <arg name="runs" type="as" direction="in"/>
+    </method>
+    <method name="Wake"/>
+    <!-- Memory -->
+    <method name="ListMemory">
+      <arg name="memory" type="s" direction="out"/>
+    </method>
+    <method name="SetMemoryEnabled">
+      <arg name="enabled" type="b" direction="in"/>
+    </method>
+    <method name="ConfirmMemory">
+      <arg name="entry" type="s" direction="in"/>
+    </method>
+    <method name="ForgetMemory">
+      <arg name="entry" type="s" direction="in"/>
+    </method>
+    <!-- What happens, as it happens -->
+    <signal name="TaskStarted">
+      <arg name="task" type="s"/>
+      <arg name="details" type="s"/>
+    </signal>
+    <signal name="TextAdded">
+      <arg name="task" type="s"/>
+      <arg name="kind" type="s"/>
+      <arg name="text" type="s"/>
+    </signal>
+    <signal name="ActionProposed">
+      <arg name="task" type="s"/>
+      <arg name="step" type="s"/>
+    </signal>
+    <signal name="ActionCompleted">
+      <arg name="task" type="s"/>
+      <arg name="step" type="s"/>
+    </signal>
+    <signal name="TaskFinished">
+      <arg name="task" type="s"/>
+      <arg name="result" type="s"/>
+    </signal>
+    <signal name="ScheduleProposed">
+      <arg name="proposal" type="s"/>
+      <arg name="details" type="s"/>
+    </signal>
+    <signal name="SchedulesChanged"/>
+    <signal name="MemoryChanged"/>
+    <signal name="StateChanged">
+      <arg name="state" type="s"/>
+    </signal>
+    <property name="State" type="s" access="read">
+      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="true"/>
+    </property>
+    <property name="Enabled" type="b" access="read">
+      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="true"/>
+    </property>
+    <property name="InterfaceVersion" type="u" access="read">
+      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="const"/>
+    </property>
+  </interface>
+  <interface name="org.freedesktop.DBus.Properties">
+    <method name="Get">
+      <arg name="interface_name" type="s" direction="in"/>
+      <arg name="property_name" type="s" direction="in"/>
+      <arg name="value" type="v" direction="out"/>
+    </method>
+    <method name="GetAll">
+      <arg name="interface_name" type="s" direction="in"/>
+      <arg name="properties" type="a{sv}" direction="out"/>
+    </method>
+    <method name="Set">
+      <arg name="interface_name" type="s" direction="in"/>
+      <arg name="property_name" type="s" direction="in"/>
+      <arg name="value" type="v" direction="in"/>
+    </method>
+    <signal name="PropertiesChanged">
+      <arg name="interface_name" type="s"/>
+      <arg name="changed_properties" type="a{sv}"/>
+      <arg name="invalidated_properties" type="as"/>
+    </signal>
+  </interface>
+  <interface name="org.freedesktop.DBus.Introspectable">
+    <method name="Introspect">
+      <arg name="xml_data" type="s" direction="out"/>
+    </method>
+  </interface>
+  <interface name="org.freedesktop.DBus.Peer">
+    <method name="Ping"/>
+    <method name="GetMachineId">
+      <arg name="machine_uuid" type="s" direction="out"/>
+    </method>
+  </interface>
+</node>

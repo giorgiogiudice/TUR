@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/giorgiogiudice/TUR/schemas/app-install-event.schema.json",
+  "$comment": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+  "title": "TUR application installation event",
+  "description": "One line of `tur-apps install|update|remove --events`, and the payload of the Event signal of the proposed org.tur.Apps1. A stream starts with a plan (install only), carries steps, activity and progress, and ends with exactly one result or error. A progress event carries a total only when the total is known; a user interface shows a bar with numbers only then (desktop-experience.md, section 8.5).",
+  "type": "object",
+  "required": ["schema_version", "event"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "event": {
+      "enum": ["plan", "step-started", "step-finished", "activity", "progress", "result", "error"]
+    }
+  },
+  "allOf": [
+    { "if": { "properties": { "event": { "const": "plan" } } }, "then": { "$ref": "#/$defs/plan" } },
+    { "if": { "properties": { "event": { "const": "step-started" } } }, "then": { "$ref": "#/$defs/step-started" } },
+    { "if": { "properties": { "event": { "const": "step-finished" } } }, "then": { "$ref": "#/$defs/step-finished" } },
+    { "if": { "properties": { "event": { "const": "activity" } } }, "then": { "$ref": "#/$defs/activity" } },
+    { "if": { "properties": { "event": { "const": "progress" } } }, "then": { "$ref": "#/$defs/progress" } },
+    { "if": { "properties": { "event": { "const": "result" } } }, "then": { "$ref": "#/$defs/result" } },
+    { "if": { "properties": { "event": { "const": "error" } } }, "then": { "$ref": "#/$defs/error" } }
+  ],
+  "$defs": {
+    "step": {
+      "description": "A step of the plan: download, verify, install, record; for removal keep, uninstall, unused; update; source.",
+      "type": "string",
+      "pattern": "^[a-z]+$"
+    },
+    "plan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "event", "plan"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "event": { "const": "plan" },
+        "plan": { "$ref": "app-install-plan.schema.json" }
+      }
+    },
+    "step-started": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "event", "step", "text"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "event": { "const": "step-started" },
+        "step": { "$ref": "#/$defs/step" },
+        "text": { "type": "string" }
+      }
+    },
+    "step-finished": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "event", "step", "ok"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "event": { "const": "step-finished" },
+        "step": { "$ref": "#/$defs/step" },
+        "ok": { "type": "boolean" }
+      }
+    },
+    "activity": {
+      "description": "Something happening within a step, such as a line flatpak printed (\"installing app/...\").",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "event", "step", "text"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "event": { "const": "activity" },
+        "step": { "$ref": "#/$defs/step" },
+        "text": { "type": "string" }
+      }
+    },
+    "progress": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "event", "step", "done"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "event": { "const": "progress" },
+        "step": { "$ref": "#/$defs/step" },
+        "done": { "type": "integer", "minimum": 0, "description": "Bytes done." },
+        "total": { "type": "integer", "minimum": 0, "description": "Bytes in all; present only when known." }
+      }
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "event", "operation", "result"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "event": { "const": "result" },
+        "operation": { "enum": ["install", "update", "remove"] },
+        "result": {
+          "description": "For install: the record's identifier, name, route, version, source, the record's path, and the Flatpak or Windows part. For remove: data (keep or delete), removed, kept and left_behind, each a list of paths or references. For update: updated, version_before, version.",
+          "type": "object"
+        }
+      }
+    },
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "event", "error"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "event": { "const": "error" },
+        "error": { "$ref": "#/$defs/failure" }
+      }
+    },
+    "failure": {
+      "description": "A refusal or a failure: a stable code (docs/architecture/app-install-backend.md, \"Error codes\"), its title and a plain sentence. detail, when present, is the router's option for a refusal by the router, or the removal's result when something was left behind.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "title", "message"],
+      "properties": {
+        "code": { "type": "string", "pattern": "^TUR-DESKTOP-APPS-[0-9]{3}$" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "detail": {}
+      }
+    }
+  }
+}

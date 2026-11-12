@@ -206,6 +206,16 @@ Kit.Page {
         result.y = origin.y
         result.width = item.width
         result.height = item.height
+        // The row's control, where it has one: what a person presses, and
+        // so what P@x's pointer points at (tur-pax-overlay.md, section 4).
+        const control = item.focusTarget
+        if (control !== null && control.visible) {
+            const at = control.mapToItem(null, 0, 0)
+            result.controlX = at.x
+            result.controlY = at.y
+            result.controlWidth = control.width
+            result.controlHeight = control.height
+        }
         result.highlighted = item.marked
         result.focused = item.activeFocus || (item.focusTarget !== null && item.focusTarget.activeFocus)
         return result

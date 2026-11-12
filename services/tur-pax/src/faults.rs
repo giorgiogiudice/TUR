@@ -5,7 +5,8 @@
 //!
 //! The policy engine's codes are in [`crate::codes`]. These are the codes of
 //! everything around it: the tool registry, the adapters, the read-only
-//! sandbox and the task loop. They are declared the same way, in one table,
+//! sandbox, the task loop, the session service, the key store and the
+//! schedule runner. They are declared the same way, in one table,
 //! with the fields specification section 29.3 requires. The two tables are
 //! kept apart so that the engine's registry, and the tests that pin it, are
 //! not touched by this layer.
@@ -214,6 +215,108 @@ task_code_registry! {
         user_message: "Part of what the assistant read looked like a password or a key, so it was not sent to the AI provider.",
         explanation: "The audit trail records that something was withheld and of what kind, never the text itself.",
         recovery: "None is needed.";
+    DayLimitReached => "TUR-AI-SPEND-001", Notice,
+        title: "The spending limit for one day was reached, so the task was stopped.",
+        detection: "Before a request to the provider, what every task used today, from the usage the provider reported and the configured prices, had reached the limit set for one day.",
+        user_message: "P@x stopped: today's spending limit was reached.",
+        explanation: "The limit acts between two responses, because a provider reports usage at the end of a response. A day is a calendar day in the time zone of the computer.",
+        recovery: "Wait until tomorrow, or raise the limit for one day in the settings of P@x.";
+    ServiceDisabled => "TUR-AI-SERVICE-001", Notice,
+        title: "The assistant is switched off.",
+        detection: "A task was asked for, or a schedule came due, while the switch in the settings of the assistant was off.",
+        user_message: "P@x is switched off. Switch it on in its settings first.",
+        explanation: "The assistant is off until a person switches it on after reading what will be sent to the provider. Nothing is sent and nothing runs while it is off.",
+        recovery: "Switch the assistant on in its settings.";
+    ServiceConsentRequired => "TUR-AI-SERVICE-002", Notice,
+        title: "The text that says what is sent to the provider has not been accepted in its current version.",
+        detection: "The recorded acceptance names another version of the text or another provider than the ones in use, or there is none.",
+        user_message: "P@x needs you to read and accept what will be sent to your AI provider before it can go on.",
+        explanation: "The acceptance is recorded with the version of the text and the provider it was given for. A new version of the text, or another provider, needs a new acceptance.",
+        recovery: "Open the settings of the assistant, read the text and accept it.";
+    ServiceNotConfigured => "TUR-AI-SERVICE-003", Notice,
+        title: "No provider and model have been chosen for the assistant.",
+        detection: "The settings of the assistant name no provider or no model.",
+        user_message: "P@x has no AI provider and model chosen yet.",
+        explanation: "No model name is built into the system. The provider and the model are chosen by the person.",
+        recovery: "Choose a provider and a model in the settings of the assistant.";
+    ServiceBusy => "TUR-AI-SERVICE-004", Notice,
+        title: "The assistant is already working on a task.",
+        detection: "A task was asked for while another task, started by a person or by a schedule, was still running.",
+        user_message: "P@x is still working on something else. Wait for it to finish, or stop it.",
+        explanation: "One task runs at a time. A scheduled task that comes due while a task runs waits for it to end.",
+        recovery: "Wait for the running task to end, or cancel it.";
+    ServiceCallerRefused => "TUR-AI-SERVICE-005", Warning,
+        title: "The caller is not the person the assistant is running for.",
+        detection: "The message bus reported another user than the one the service runs as for the caller, or could not say who the caller is.",
+        user_message: "P@x only answers to the person who is signed in.",
+        explanation: "The service serves processes of its own user only. It cannot tell one process of that user from another.",
+        recovery: "None is needed.";
+    ServiceInvalidRequest => "TUR-AI-SERVICE-006", Warning,
+        title: "A request to the assistant's service was not valid.",
+        detection: "An argument was empty, too long, not of the expected form, or named something that cannot be chosen.",
+        user_message: "P@x could not use what it was given. Nothing was changed.",
+        explanation: "The detail says which argument and why. It never repeats a key.",
+        recovery: "Correct the request and send it again.";
+    ServiceNotFound => "TUR-AI-SERVICE-007", Notice,
+        title: "The assistant's service knows no task, proposal, schedule or note with that identifier.",
+        detection: "An identifier in a request matched nothing the service holds.",
+        user_message: "P@x could not find that. It may already be gone.",
+        explanation: "Tasks are kept in memory for the life of the service. Proposals are kept until they are confirmed or dismissed, or until the service stops.",
+        recovery: "List what exists and try again.";
+    ServiceSessionLocked => "TUR-AI-SERVICE-008", Notice,
+        title: "The session is locked, so a task that needs a person cannot start.",
+        detection: "A task was asked for while the screen locker reported the session as locked.",
+        user_message: "P@x does not start a task for you while the screen is locked.",
+        explanation: "A task a person asks for needs the person there. A scheduled task runs while the session is locked, with tools and read-only commands only.",
+        recovery: "Unlock the session and ask again.";
+    ServiceStorage => "TUR-AI-SERVICE-009", Error,
+        title: "The assistant's settings or records could not be read or written.",
+        detection: "Reading or writing the settings file, the spending record or the model list failed, or a file is not of the expected form.",
+        user_message: "P@x could not read or save its settings. Nothing was changed.",
+        explanation: "A settings file that cannot be read leaves the assistant switched off. The detail names the file and never quotes it.",
+        recovery: "Check the files under the configuration and state folders of the assistant.";
+    KeyStoreUnavailable => "TUR-AI-KEY-001", Error,
+        title: "No password store is available to keep or read the provider key.",
+        detection: "No service on the session bus offered the Secret Service interface, or it did not answer.",
+        user_message: "This computer's password store is not available, so P@x cannot keep or read your key.",
+        explanation: "The key is kept only in the password store of the session. It is never written to a file, so without the store there is nowhere to keep it.",
+        recovery: "Make sure the password store of the desktop is running and unlocked, then try again.";
+    KeyNotSet => "TUR-AI-KEY-002", Notice,
+        title: "No key is stored for the chosen provider.",
+        detection: "The password store holds no item for the provider.",
+        user_message: "P@x has no key for your AI provider yet.",
+        explanation: "The assistant works with the person's own key. Without one no request can be sent.",
+        recovery: "Enter the key from your provider in the settings of the assistant.";
+    KeyStoreLocked => "TUR-AI-KEY-003", Notice,
+        title: "The password store is locked and was not unlocked.",
+        detection: "The store reported its collection as locked, and the prompt to unlock it was dismissed or did not complete in time.",
+        user_message: "The password store stayed locked, so P@x could not reach your key.",
+        explanation: "The store asks the person to unlock it. The assistant cannot answer that prompt.",
+        recovery: "Unlock the password store and try again.";
+    KeyInvalid => "TUR-AI-KEY-004", Warning,
+        title: "The text given as a key cannot be a key.",
+        detection: "The text was empty, longer than a key may be, or held a space or a character that cannot be sent to a provider.",
+        user_message: "That does not look like a key. Nothing was stored.",
+        explanation: "The check is on the form only. Whether the provider accepts the key is not known until a request is sent.",
+        recovery: "Copy the key again from your provider, without spaces or line breaks.";
+    KeyStoreFailed => "TUR-AI-KEY-005", Error,
+        title: "The password store refused or failed an operation on the provider key.",
+        detection: "A call to the password store returned an error, or returned something that is not of the form the Secret Service interface describes.",
+        user_message: "The password store reported a problem, so the key was not changed or read.",
+        explanation: "The detail names the operation and the error the store reported. It never holds the key.",
+        recovery: "Try again. If it keeps failing, check the password store of the desktop.";
+    RunnerNotification => "TUR-AI-RUNNER-001", Warning,
+        title: "A reminder came due and the notification service did not take it.",
+        detection: "The call that shows a desktop notification failed, or no notification service was on the session bus.",
+        user_message: "A reminder could not be shown. P@x will try again.",
+        explanation: "A reminder counts as delivered only when the notification service has accepted it. Until then it stays due.",
+        recovery: "None is needed. The reminder is shown the next time the runner is woken.";
+    RunnerWake => "TUR-AI-RUNNER-002", Warning,
+        title: "The timer that wakes the schedule runner could not be set.",
+        detection: "Starting the timer for the next occurrence failed, or the program that sets it is missing.",
+        user_message: "P@x could not set its timer. A reminder may be shown late.",
+        explanation: "Schedules that come due are still handled whenever the runner is woken: when the session starts, when a task ends and when a schedule changes.",
+        recovery: "Check that the user service manager is running.";
 }
 
 impl TaskCode {

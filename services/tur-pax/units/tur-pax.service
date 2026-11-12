@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# The session service of P@x: org.tur.Agent1 on the session bus.
+# A user unit. The bus starts it when the name is first called
+# (org.tur.Agent1.service, installed under /usr/share/dbus-1/services/).
+# It is not enabled and not wanted by anything: with P@x switched off,
+# nothing calls the name and the service does not run.
+# docs/architecture/pax-service.md, section 6.
+
+[Unit]
+Description=P@x, the assistant of TUR: session service
+Documentation=https://github.com/giorgiogiudice/TUR/blob/main/docs/architecture/pax-service.md
+
+[Service]
+Type=dbus
+BusName=org.tur.Agent1
+ExecStart=/usr/bin/tur-pax serve
+Restart=on-failure
+RestartSec=5s
+# The service starts its sandboxes with bubblewrap, which needs no extra
+# privilege; it must not gain any.
+NoNewPrivileges=yes

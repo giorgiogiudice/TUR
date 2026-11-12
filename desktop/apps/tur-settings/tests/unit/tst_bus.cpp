@@ -558,6 +558,23 @@ private Q_SLOTS:
                  qPrintable(QStringLiteral("reported %1; the row is at %2")
                                 .arg(describe(rect),
                                      describe(RectD { placed.x(), placed.y(), placed.width(), placed.height() }))));
+        // The row's control, where it has one: where the control is drawn,
+        // and inside the row (what P@x's pointer points at).
+        QQuickItem *control = row->property("focusTarget").value<QQuickItem *>();
+        if (control && control->isVisible()) {
+            QVERIFY2(result.contains(QStringLiteral("control")), "a row with a control says where it is");
+            const RectD reportedControl = qdbus_cast<RectD>(result.value(QStringLiteral("control")));
+            const QRectF drawnControl = control->mapRectToScene(QRectF(0, 0, control->width(), control->height()));
+            QVERIFY2(sameRect(reportedControl,
+                              RectD { drawnControl.x(), drawnControl.y(), drawnControl.width(), drawnControl.height() }),
+                     qPrintable(describe(reportedControl)));
+            QVERIFY(QRectF(rect.x, rect.y, rect.width, rect.height)
+                        .contains(QRectF(reportedControl.x, reportedControl.y, reportedControl.width,
+                                         reportedControl.height)));
+        } else {
+            QVERIFY2(!result.contains(QStringLiteral("control")), "a row without a control has no control rectangle");
+        }
+
         // In the window, and in sight.
         QVERIFY(rect.width > 100 && rect.height >= 36);
         QVERIFY(rect.x >= 0 && rect.y >= 0);

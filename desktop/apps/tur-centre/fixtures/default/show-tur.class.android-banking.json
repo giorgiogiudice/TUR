@@ -34,6 +34,7 @@
             "distribution": null,
             "store_id": null,
             "download_page": null,
+            "installer": null,
             "stores": [],
             "url": null,
             "primary": false,

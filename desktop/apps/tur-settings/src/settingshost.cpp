@@ -226,6 +226,15 @@ SettingsHost::Outcome SettingsHost::perform(const QString &text, const QVariantM
     out.result.insert(QStringLiteral("program"), Registry::ownProgram());
     out.result.insert(QStringLiteral("located"), true);
     out.result.insert(QStringLiteral("rect"), QVariant::fromValue(rect));
+    // The row's control, where it has one, in the same coordinates.
+    if (m_shown.contains(QStringLiteral("controlWidth"))) {
+        Settings::RectD control;
+        control.x = m_shown.value(QStringLiteral("controlX")).toDouble();
+        control.y = m_shown.value(QStringLiteral("controlY")).toDouble();
+        control.width = m_shown.value(QStringLiteral("controlWidth")).toDouble();
+        control.height = m_shown.value(QStringLiteral("controlHeight")).toDouble();
+        out.result.insert(QStringLiteral("control"), QVariant::fromValue(control));
+    }
     out.result.insert(QStringLiteral("highlighted"), m_shown.value(QStringLiteral("highlighted")).toBool());
     out.result.insert(QStringLiteral("focused"), m_shown.value(QStringLiteral("focused")).toBool());
     out.result.insert(QStringLiteral("pid"), uint(QCoreApplication::applicationPid()));
@@ -312,6 +321,8 @@ QVariantMap SettingsHost::reveal(const QString &address, const QVariantMap &opti
         out.insert(QStringLiteral("width"), rect.width);
         out.insert(QStringLiteral("height"), rect.height);
         out.remove(QStringLiteral("rect"));
+        // The control's rectangle is for callers on the bus.
+        out.remove(QStringLiteral("control"));
     }
     return out;
 }

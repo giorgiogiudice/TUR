@@ -29,6 +29,7 @@
             "distribution": null,
             "store_id": null,
             "download_page": null,
+            "installer": null,
             "stores": [],
             "url": "https://www.netflix.com/",
             "primary": true,
@@ -54,6 +55,7 @@
             "distribution": null,
             "store_id": null,
             "download_page": null,
+            "installer": null,
             "stores": [
               "google-play"
             ],

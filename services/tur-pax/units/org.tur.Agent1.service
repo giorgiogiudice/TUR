@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# D-Bus activation of the session service of P@x. Installed as
+# /usr/share/dbus-1/services/org.tur.Agent1.service. The bus hands the start
+# to the user unit tur-pax.service.
+
+[D-BUS Service]
+Name=org.tur.Agent1
+Exec=/usr/bin/tur-pax serve
+SystemdService=tur-pax.service

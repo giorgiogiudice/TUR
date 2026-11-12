@@ -23,6 +23,8 @@ It also provides search over the catalogue and a command-line tool.
 
 Nothing here installs, launches or fetches anything. The router is a function
 of its three inputs and returns values. See [Not built](#not-built).
+Installing by the router's answer is `tur-apps`
+([app-install-backend.md](app-install-backend.md)), which links this crate.
 
 A route is a way of running an application. It is never a statement that the
 application works: that needs a recorded test (§2.3). The catalogue keeps the
@@ -66,6 +68,29 @@ URL that ends in an installer or archive name (`.exe`, `.msi`, `.dmg`, `.apk`,
 not ask for. The Microsoft Store and Apple's App Store can be recorded as
 facts; TUR cannot integrate them (ADR-0011, rule 5), and the router says so.
 
+**The pinned installer** ([ADR-0019](../adr/0019-app-install-backend.md)). A
+Windows edition obtained from the publisher's page and marked `open-source`
+may carry `[editions.installer]`, the one place an entry names a file to
+download: `tur-apps` fetches it when the user asks for the application, and
+nothing in it runs before its size and digest match.
+
+| Field | Content |
+|---|---|
+| `url` | The publisher's own `https` location of the file; the path ends in the file's name, `.exe`, `.msi` or `.zip`, with no query or fragment |
+| `sha256`, `size` | 64 lower-case hexadecimal digits; bytes, at most 4 GiB |
+| `version` | The version the file installs |
+| `licence`, `licence_url` | The licence as the publisher states it, and where it was read |
+| `hash_source` | Where the digest was taken from: the publisher's checksum file or the digest its release page publishes |
+| `checked` | The day all of it was checked |
+| `portable` | The file is a single program, copied into place, never run to install |
+
+The validator refuses an installer on any other kind of edition, on an
+edition obtained elsewhere than the publisher's page, and on an edition that
+is not marked `open-source` (`TUR-DESKTOP-CATALOGUE-003`): an entry for a
+proprietary application only ever takes the user's own file. Pins are filled
+in for the four applications measured in `tests/windows-runtime/apps.json`,
+from those pins: 7-Zip, Notepad++, PuTTY and VLC.
+
 Every edition may also carry `licence` (`open-source` or `proprietary`),
 `packaging` (`publisher` or `community`, for Linux packages), `notes`, and
 three lists.
@@ -106,8 +131,10 @@ always kept beside the mapped rating.
 
 ## Sourcing and the honesty rule
 
-TUR has tested nothing yet. The catalogue therefore holds only what a public
+TUR has rated nothing yet. The catalogue therefore holds only what a public
 source reports, attributed to that source, and `unknown` everywhere else.
+TUR's own automated tests of four Windows applications are recorded, with
+their report, as `unknown` (see [Not built](#not-built)).
 
 A record states who it comes from in `reported_by`:
 
@@ -141,9 +168,11 @@ is entered on an edition without a reference
 (`every_seed_edition_and_requirement_is_backed_by_a_reference`). A test cannot
 check that a reference really supports a fact; a reviewer has to.
 
-The seed catalogue holds 32 entries. Twelve records carry a rating, each from
-one of four sources; every other route is unknown. The sources, all checked on
-12 November 2026:
+The seed catalogue holds 35 entries: the 32 of the first slice, and
+Notepad++, PuTTY and Chromium B.S.U., added with `tur-apps`. Twelve records carry a
+rating, each from one of four sources; every other route is unknown. Four
+further records are TUR's own tests, all `unknown` (see [Not
+built](#not-built)). The sources, all checked on 12 November 2026:
 
 | Source | Used for |
 |---|---|
@@ -246,6 +275,55 @@ edition and where it is obtained; the rating and its source; an outlook; a
 plain-language reason; the caveats the user must see before choosing; and
 what must be installed or enabled first. Exactly one option is marked
 `recommended`.
+
+### Reason codes, for translation
+
+Issue #41 asked for stable identifiers beside the English, so that the
+application centre can show the router's words in another language
+(desktop-experience.md, 8.10 and 13.2). The additions are additive: every
+English field is still there, unchanged.
+
+| Field | Content |
+|---|---|
+| `reason_code` (option) | What the first sentence of `reason` says: why the option is listed |
+| `reason_parts` (option) | `reason` sentence by sentence: `{code, params}` each. A demoted Linux edition adds `listed-after-better-route`; the no-route statement adds `route-blocked` per blocked route and `macos-no-darling`, `no-edition` |
+| `text_id`, `params` (caveat) | The identifier of the caveat's sentence, and the values it was written with |
+| `text_id` (alternative) | The identifier of the alternative's sentence |
+
+Reason codes: `linux-flatpak`, `linux-native`, `linux-other-distribution`,
+`windows-game-proton`, `windows-wine`, `guest-layer-rated` (`rating`),
+`guest-known-obstacle`, `guest-asked`, `android`, `web-primary`, `web-pinned`,
+`web-nothing-better`, `macos-darling`, `listed-after-better-route` (`route`,
+`rating`, `better_rating`), `no-route` (`name`), `route-blocked` (`route`,
+`caveat`: the blocking caveat's `text_id`, whose own `params` are on that
+caveat in the statement's list), `macos-no-darling`, `no-edition`.
+
+Caveat sentence identifiers are listed in `CAVEAT_TEXT_IDS`
+(`src/route.rs`): one per requirement, route group and machine fact for the
+requirement caveats (`requirement.kernel-anti-cheat.proton`,
+`requirement.heavy-gpu.integrated`, …, none with parameters), and
+`architecture.not-x86-64` (`arch`), `closed-store.windows-guest` and
+`closed-store.not-integrated` (`store`), `community-package`,
+`experimental.darling`, `guest-memory.too-little` (`needed_gb`,
+`available_gb`), `guest-memory.enough` and `guest-memory.unknown`
+(`needed_gb`), `reported-inadequate.external` (`rating`, `source`,
+`source_rating`, `date`), `reported-inadequate.external-unquoted`,
+`reported-inadequate.tur-test` (`rating`, `report`, `date`),
+`reported-inadequate.unsourced` (`rating`), `guest-unsuitable-for-games`,
+`guest-not-offered.no-virtual-machines`, `pin-unavailable` (`route`,
+`because`: `no-virtual-machines`, `blocked` or `not-offered`). Alternative
+identifiers: `ALTERNATIVE_TEXT_IDS`.
+
+A parameter's value is one of the catalogue's or router's own words (`wine`,
+`poor`, `microsoft-store`), a number, a date or a name: never English prose.
+The rule that makes the identifiers worth having is enforced over the whole
+input space of `tests/router_space.rs`: **one identifier with one set of
+parameters is always the same English sentence**
+(`sentences_carry_stable_identifiers`, applied to every case), every
+identifier is a listed one, and the unit test
+`every_requirement_sentence_has_one_listed_identifier` walks every
+requirement, route and machine fact. The application centre's fixtures are
+regenerated with the new fields; the centre ignores fields it does not read.
 
 The **outlook** of an option is `clear` (nothing known stands in the way),
 `doubtful` (a poor or broken rating, or a known obstacle that no rating
@@ -517,18 +595,27 @@ These are not yet registry entries in the sense of §29.3.
 
 ## Not built
 
-- **Store adapters.** Nothing talks to Flathub, Steam, Google Play or any
-  other store. An entry records where an edition is obtained; nothing obtains
-  it.
-- **Installation and launching.** No route is acted on. No prefix, container,
-  guest or Android image is created.
-- **The application centre.** No user interface, no D-Bus service. The
-  library is linked by the command-line tool only.
+- **Store adapters.** This crate talks to no store. `tur-apps` installs from
+  Flatpak remotes and from pinned publisher downloads
+  ([app-install-backend.md](app-install-backend.md)); Steam, Google Play
+  and the rest are not integrated.
+- **Installation and launching** in this crate. `tur-apps` acts on the
+  Flatpak and Wine routes; no container, guest or Android image is created
+  by anything.
+- **The application centre's service.** No D-Bus service. The library is
+  linked by this command-line tool and by `tur-apps`.
 - **Live updates of the catalogue.** The catalogue is the directory in this
   repository. There is no update channel, signature or merge of local
   additions.
-- **TUR's own compatibility testing.** No test harness, no test report and no
-  rating from TUR. Every seed rating is an external report.
+- **A rating from TUR's own tests.** Four records are TUR's own
+  (`reported_by = "tur-test"`, report `docs/reports/windows-runtime-2.md`):
+  the Wine route of 7-Zip, Notepad++, PuTTY and VLC. All four are `unknown`:
+  VLC because playback was not tried; the other three because the
+  application centre's Home view says, unconditionally, that TUR has tested
+  nothing and every rating is a named source's
+  (`the_home_view_s_standing_sentence_is_still_true` guards it). A rating
+  from TUR waits for that sentence to become conditional (a change to
+  `tur-centre`). Every rating in the catalogue is still an external report.
 - **Host detection.** Host facts are stated by the caller. The detection in
   `tur-runtime` is not used.
 - **Fallback to inspection.** An application that is not in the catalogue is
@@ -539,9 +626,10 @@ These are not yet registry entries in the sense of §29.3.
 - **Security policy** (§7.4) is not an input.
 - **JSON Schema validation in CI.** The schema is kept in step with the Rust
   types by tests; entries are not run through a schema validator.
-- **A CI trigger for changes to the data alone.** The seed tests run whenever
-  the Rust workflow runs. That workflow starts for changes under `crates/`,
-  `services/`, `installer/` and `schemas/`; it does not list `catalogue/`. A
-  change that touches only catalogue entries is therefore not validated by CI
-  until `catalogue/**` is added to the path filters of
-  `.github/workflows/rust.yml`.
+- **Translations of the router's sentences.** The identifiers and parameters
+  are there (see [Reason codes](#reason-codes-for-translation)); the
+  translated sentences belong to the application centre.
+
+The Rust workflow lists `catalogue/**` in its path filters, so a change to
+the entries alone is validated by CI. (An earlier version of this note said
+it did not; that was out of date.)

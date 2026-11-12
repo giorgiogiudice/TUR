@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "service": "org.tur.Apps1",
+  "tools": [
+    {
+      "name": "apps_list_installed",
+      "description": "List the applications installed for this user, whatever they run as (Linux applications from Flatpak, Windows applications through TUR's runtime manager): name, how it runs, where it came from, version and size. Nothing is installed, changed or started.",
+      "class": 0,
+      "method": "ListInstalled",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "apps_plan",
+      "description": "Show what installing one application would do, without doing it: how it would run and why, where it would come from, what would be downloaded and installed where, what it could reach on this computer, and how it would be removed. Says plainly when it cannot be installed and why. Takes an identifier from catalogue_search. Nothing is installed or downloaded.",
+      "class": 0,
+      "method": "Plan",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "An application identifier from catalogue_search, such as org.notepad-plus-plus.notepad-plus-plus.",
+            "minLength": 1,
+            "maxLength": 255
+          }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      }
+    }
+  ]
+}

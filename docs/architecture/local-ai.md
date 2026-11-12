@@ -82,7 +82,7 @@ proved in CI with P@x's existing adapters and a harness, without the preset
 Both candidates were read at their sources on 12 November 2026: the
 projects' repositories and documentation at the version Fedora ships, and
 Fedora 45's package metadata, spec files and build logs (sources in
-[upstream-projects.md](../dependencies/upstream-projects.md), S44 to S49).
+[upstream-projects.md](../dependencies/upstream-projects.md), S46 to S51).
 
 | | llama.cpp (`llama-server`) | Ollama |
 |---|---|---|

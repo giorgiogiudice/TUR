@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# When P@x's schedules are looked at without a timer of their own: shortly
+# after the person signs in (what came due while the computer was off or
+# nobody was signed in), and whenever the clock or the time zone is changed.
+# The time of the next reminder is set by the service itself, as a transient
+# timer (src/wake.rs). No timer here runs on a period.
+
+[Unit]
+Description=P@x: look at reminders after sign-in and after a clock change
+Documentation=https://github.com/giorgiogiudice/TUR/blob/main/docs/architecture/pax-service.md
+
+[Timer]
+OnStartupSec=30s
+OnClockChange=true
+OnTimezoneChange=true
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

@@ -23,6 +23,7 @@
 use std::fs::{File, OpenOptions};
 use std::io::{self, Write};
 use std::path::Path;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::{Map, Value};
 
@@ -56,11 +57,22 @@ pub enum EventKind {
     ResponseDiscarded,
     /// A task ended.
     TaskFinished,
+    /// An unattended task proposed an action it may not take with nobody
+    /// there. The action was not performed; it is kept for the person's
+    /// return (design sections 5.6 and 16.2).
+    HeldForReturn,
+    /// The schedule runner handled one schedule that was due: it showed a
+    /// reminder, ran a scheduled task, or passed over a missed occurrence.
+    ScheduleRun,
+    /// Something about the assistant was changed by the person: the switch,
+    /// the provider, the key, a limit, a schedule, a memory entry. The event
+    /// names what was changed, never a value.
+    SettingChanged,
 }
 
 impl EventKind {
     /// Every kind.
-    pub const ALL: [EventKind; 7] = [
+    pub const ALL: [EventKind; 10] = [
         EventKind::TaskStarted,
         EventKind::ProposalRejected,
         EventKind::ApprovalUnavailable,
@@ -68,6 +80,9 @@ impl EventKind {
         EventKind::OutputWithheld,
         EventKind::ResponseDiscarded,
         EventKind::TaskFinished,
+        EventKind::HeldForReturn,
+        EventKind::ScheduleRun,
+        EventKind::SettingChanged,
     ];
 
     /// The value of the `TUR_AI_EVENT` field.
@@ -80,6 +95,9 @@ impl EventKind {
             EventKind::OutputWithheld => OUTPUT_WITHHELD_EVENT,
             EventKind::ResponseDiscarded => "response_discarded",
             EventKind::TaskFinished => "task_finished",
+            EventKind::HeldForReturn => "held_for_return",
+            EventKind::ScheduleRun => "schedule_run",
+            EventKind::SettingChanged => "setting_changed",
         }
     }
 }
@@ -298,10 +316,17 @@ impl Trail for MemoryTrail {
     }
 }
 
+/// The name of the field that says when an entry was written, in
+/// microseconds since the Unix epoch. It is the name the journal gives the
+/// time it adds to every record itself; the file stands in for the journal,
+/// so [`FileTrail`] adds it.
+pub const TIME_FIELD: &str = "__REALTIME_TIMESTAMP";
+
 /// A trail appended to a file, one JSON object per line.
 ///
 /// Each line is written whole and synchronised to the disk before the write
-/// is reported as done. The file is only ever appended to by this type; it
+/// is reported as done. Each line also says when it was written
+/// ([`TIME_FIELD`]). The file is only ever appended to by this type; it
 /// is, however, a file of the user's, and nothing here stops another process
 /// of the same user from changing it. The journal sink of the design is not
 /// built yet.
@@ -324,7 +349,14 @@ impl FileTrail {
     }
 
     fn append(&mut self, entry: &TrailEntry) -> Result<(), AuditWriteError> {
-        let mut line = entry.to_json().to_string();
+        let mut document = entry.to_json();
+        let written = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_or(0, |elapsed| elapsed.as_micros());
+        if let Value::Object(fields) = &mut document {
+            fields.insert(TIME_FIELD.to_owned(), Value::String(written.to_string()));
+        }
+        let mut line = document.to_string();
         line.push('\n');
         self.file
             .write_all(line.as_bytes())

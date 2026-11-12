@@ -1,0 +1,61 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR application catalogue entry. Format: schemas/app-catalogue-entry.schema.json.
+# How entries are written and sourced: catalogue/README.md.
+# The one record below is TUR's own automated test, with its report. It
+# carries no rating: see the record's notes and docs/reports/apps-1.md.
+
+schema_version = 1
+id = "uk.org.greenend.chiark.putty"
+name = "PuTTY"
+aliases = ["plink", "pscp"]
+publisher = "Simon Tatham"
+category = "internet"
+summary = "SSH and Telnet client."
+homepage = "https://www.chiark.greenend.org.uk/~sgtatham/putty/"
+
+[[editions]]
+kind = "linux-native"
+obtain = "fedora-package"
+package = "putty"
+licence = "open-source"
+packaging = "community"
+
+[[editions.references]]
+title = "Fedora Packages: putty (0.84 in Fedora 45, 0.85 in Rawhide)"
+url = "https://packages.fedoraproject.org/pkgs/putty/putty/"
+checked = "2026-11-12"
+
+[[editions]]
+kind = "windows"
+obtain = "publisher-page"
+download_page = "https://www.chiark.greenend.org.uk/~sgtatham/putty/latest.html"
+licence = "open-source"
+
+[editions.installer]
+url = "https://the.earth.li/~sgtatham/putty/0.85/w64/putty-64bit-0.85-installer.msi"
+sha256 = "2213ebacf962b709411d654a40087508a694756bc4e41c5a1c24ad86596b2511"
+size = 3846144
+version = "0.85"
+licence = "MIT"
+licence_url = "https://www.chiark.greenend.org.uk/~sgtatham/putty/licence.html"
+hash_source = "The project's sha256sums file for 0.85, https://the.earth.li/~sgtatham/putty/0.85/sha256sums (tests/windows-runtime/apps.json)"
+checked = "2026-11-12"
+
+[[editions.records]]
+route = "wine"
+rating = "unknown"
+reported_by = "tur-test"
+test_report = "docs/reports/windows-runtime-2.md"
+version_tested = "0.85"
+date = "2026-11-12"
+notes = "Automated test of the Windows Installer package putty-64bit-0.85-installer.msi and of the single program putty.exe: install, launch, a raw TCP connection made by plink.exe and by putty.exe, and uninstall all passed. Wine 9.0 from Ubuntu on a hosted runner; not the TUR image. No rating is entered yet: see docs/reports/apps-1.md."
+
+[[editions.references]]
+title = "PuTTY download page: latest release 0.85, with installers for Windows and checksums"
+url = "https://www.chiark.greenend.org.uk/~sgtatham/putty/latest.html"
+checked = "2026-11-12"
+
+[[editions.references]]
+title = "PuTTY licence: MIT"
+url = "https://www.chiark.greenend.org.uk/~sgtatham/putty/licence.html"
+checked = "2026-11-12"

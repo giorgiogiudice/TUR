@@ -23,6 +23,14 @@
 //! option for, on purpose: the trusted confirmation path, and running
 //! anything outside the sandbox.
 //!
+//! `run` and `chat` are for a person at a terminal who names a provider
+//! configuration and supplies a key in the environment: a deliberate act
+//! each time. They do not look at the switch, the consent record or the
+//! limit of one day; those belong to the session service
+//! ([`crate::service`]), which is what the desktop talks to. They offer the
+//! model none of P@x's own operations, because nothing here could show a
+//! proposal to anybody.
+//!
 //! The audit trail is always written. Without `--audit-log` it goes to
 //! `$XDG_STATE_HOME/tur/pax/audit.jsonl`; if no file can be opened, nothing
 //! is started.
@@ -48,8 +56,8 @@ use crate::codes::{Code, Problem};
 use crate::exec::BwrapExecutor;
 use crate::faults::{Fault, TaskCode};
 use crate::orchestrator::{
-    NoControl, NoObserver, Observer, Orchestrator, ReportItem, Situation, SystemTaskClock,
-    TaskLimits, TaskOutcome, TaskReport, TaskRequest,
+    NoAssistant, NoBudget, NoControl, NoObserver, Observer, Orchestrator, ReportItem, Situation,
+    SystemTaskClock, TaskLimits, TaskOutcome, TaskReport, TaskRequest,
 };
 use crate::policy::UserPolicy;
 use crate::registry::{ToolFiles, ToolRegistry, read_tool_sets};
@@ -207,7 +215,7 @@ fn read_file(path: &Path) -> Result<String, Fault> {
 /// The tool sets of the components: what the directory of tool sets holds.
 ///
 /// A directory that was not named and does not exist holds nothing.
-fn read_tools(named: Option<&Path>, default: &str) -> Result<ToolFiles, Fault> {
+pub(crate) fn read_tools(named: Option<&Path>, default: &str) -> Result<ToolFiles, Fault> {
     let directory = match named {
         Some(directory) => directory,
         None if Path::new(default).is_dir() => Path::new(default),
@@ -219,7 +227,7 @@ fn read_tools(named: Option<&Path>, default: &str) -> Result<ToolFiles, Fault> {
 /// The texts of the `.json` files of a directory, in name order.
 ///
 /// A directory that was not named holds nothing.
-fn read_json_dir(named: Option<&Path>) -> Result<Vec<String>, Fault> {
+pub(crate) fn read_json_dir(named: Option<&Path>) -> Result<Vec<String>, Fault> {
     let Some(directory) = named else {
         return Ok(Vec::new());
     };
@@ -425,6 +433,11 @@ impl Setup {
         let clock = SystemTaskClock::new();
         let control = NoControl;
         let mut meter = SpendMeter::for_config(&self.config);
+        // The text interface keeps no record across tasks and shows no
+        // proposal to anybody: the limit of one day and P@x's own
+        // operations belong to the session service.
+        let mut budget = NoBudget;
+        let mut assistant = NoAssistant;
         let mut orchestrator = Orchestrator {
             provider: &*self.provider,
             config: &self.config,
@@ -439,6 +452,8 @@ impl Setup {
             clock: &clock,
             control: &control,
             observer,
+            budget: &mut budget,
+            assistant: &mut assistant,
         };
         let task = TaskRequest {
             task_id,
