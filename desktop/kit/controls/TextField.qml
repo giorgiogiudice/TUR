@@ -28,8 +28,12 @@ T.TextField {
     implicitWidth: Math.max(implicitBackgroundWidth + leftInset + rightInset,
                             placeholder.implicitWidth + leftPadding + rightPadding,
                             caption.implicitWidth)
+    // As tall as the typed text needs, and as the placeholder needs: in a
+    // script the interface font lacks, the placeholder is drawn in another
+    // font, whose lines can be taller.
     implicitHeight: Math.max(implicitBackgroundHeight + topInset + bottomInset,
-                             contentHeight + topPadding + bottomPadding)
+                             contentHeight + topPadding + bottomPadding,
+                             placeholder.implicitHeight + topPadding + bottomPadding)
 
     // Room for the focus ring between the field and the lines around it.
     readonly property real ringRoom: Theme.lineFocusGap + 2 * Theme.lineFocusWidth

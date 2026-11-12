@@ -20,7 +20,9 @@ T.Button {
                             implicitContentWidth + leftPadding + rightPadding)
     implicitHeight: Math.max(implicitBackgroundHeight + topInset + bottomInset,
                              implicitContentHeight + topPadding + bottomPadding)
-    horizontalPadding: Kit.Theme.spaceGrid
+    // No padding at the sides: the address stands in line with the text
+    // above it. The focus ring goes round it, outside.
+    horizontalPadding: 0
     verticalPadding: Kit.Theme.spaceGrid / 2
 
     Accessible.role: Accessible.Link
@@ -49,7 +51,6 @@ T.Button {
 
         Kit.FocusRing {
             shown: control.visualFocus
-            inside: true
         }
     }
 }

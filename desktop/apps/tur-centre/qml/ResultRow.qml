@@ -26,10 +26,15 @@ Item {
     required property var entry
     required property var recommended
 
-    readonly property string summary: row.detailed && row.entry.summary ? row.entry.summary : ""
-    readonly property bool noRoute: row.detailed && row.recommended.route === "no-route"
-    readonly property var edition: row.detailed ? Words.editionOf(row.recommended, row.entry) : null
-    readonly property var prerequisites: row.detailed && row.recommended.prerequisites
+    // The model hands the row its roles one after another, so `detailed`
+    // can be true a moment before the entry and the option are there.
+    readonly property bool ready: row.detailed && !!row.entry && row.entry.id !== undefined
+                                  && !!row.recommended && row.recommended.route !== undefined
+
+    readonly property string summary: row.ready && row.entry.summary ? row.entry.summary : ""
+    readonly property bool noRoute: row.ready && row.recommended.route === "no-route"
+    readonly property var edition: row.ready ? Words.editionOf(row.recommended, row.entry) : null
+    readonly property var prerequisites: row.ready && row.recommended.prerequisites
                                          ? row.recommended.prerequisites : []
 
     signal opened(string applicationId)
@@ -83,17 +88,17 @@ Item {
             Kit.Label {
                 objectName: "rowRoute"
                 Layout.fillWidth: true
-                visible: row.detailed && !row.noRoute
-                text: row.detailed ? Words.routeLabel(row.recommended.route,
-                                                      row.edition && row.edition.distribution
-                                                      ? row.edition.distribution : "") : ""
+                visible: row.ready && !row.noRoute
+                text: row.ready ? Words.routeLabel(row.recommended.route,
+                                                   row.edition && row.edition.distribution
+                                                   ? row.edition.distribution : "") : ""
             }
 
             RatingLine {
                 objectName: "rowRating"
                 Layout.fillWidth: true
-                visible: row.detailed && !row.noRoute
-                rating: row.detailed ? row.recommended.rating : "unknown"
+                visible: row.ready && !row.noRoute
+                rating: row.ready ? row.recommended.rating : "unknown"
                 strong: false
             }
 

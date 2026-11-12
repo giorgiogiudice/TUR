@@ -5,6 +5,7 @@
 
 #include <QHash>
 #include <QList>
+#include <QPointer>
 #include <QProcess>
 #include <QString>
 #include <QStringList>
@@ -80,4 +81,6 @@ private:
     Settings m_settings;
     QList<Job *> m_queue;
     QHash<quint64, Job *> m_running;
+    // Programs that were stopped and have not ended yet.
+    QList<QPointer<QProcess>> m_stopping;
 };

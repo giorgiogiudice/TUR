@@ -46,6 +46,12 @@ ProcessSource::~ProcessSource()
         }
         delete job;
     }
+    // And the ones stopped earlier: a program that was killed ends at once,
+    // and is waited for so that nothing of it is left behind.
+    for (const QPointer<QProcess> &process : std::as_const(m_stopping)) {
+        if (process && process->state() != QProcess::NotRunning)
+            process->waitForFinished(2000);
+    }
 }
 
 QStringList ProcessSource::arguments(const CatalogueRequest &request, const Settings &settings)
@@ -239,6 +245,8 @@ void ProcessSource::retire(Job *job)
             // to wait for it.
             connect(process, &QProcess::finished, process, &QObject::deleteLater);
             process->kill();
+            m_stopping.removeAll(QPointer<QProcess>());
+            m_stopping.append(process);
         } else {
             process->deleteLater();
         }

@@ -265,13 +265,29 @@ Kit.Page {
                     model: shell.sections
 
                     Kit.ListRow {
+                        id: section
+
                         required property var modelData
+
+                        // To the next or the previous view of the list that
+                        // is available; not out of the list.
+                        function step(forward: bool): void {
+                            const next = section.nextItemInFocusChain(forward)
+                            if (next !== null && next.parent === section.parent)
+                                next.forceActiveFocus(Qt.TabFocusReason)
+                        }
 
                         objectName: "shellSection-" + modelData.view
                         Layout.fillWidth: true
                         text: modelData.title
                         enabled: modelData.built
                         selected: shell.view === modelData.view
+                        // A row of a list does not take the keyboard by
+                        // itself. These are the window's navigation: Tab
+                        // reaches each, and the arrows move between them.
+                        focusPolicy: Qt.StrongFocus
+                        Keys.onDownPressed: section.step(true)
+                        Keys.onUpPressed: section.step(false)
                         onClicked: shell.view = modelData.view
                     }
                 }
