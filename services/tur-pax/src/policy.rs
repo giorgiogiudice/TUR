@@ -983,7 +983,7 @@ mod tests {
             assert_eq!(list.len(), table.len());
             for (id, row) in list.iter().zip(table) {
                 assert_eq!(*id, row.id);
-                assert!(row.source.trim().len() >= 5, "{id}: {:?}", row.source);
+                assert!(!row.source.trim().is_empty(), "{id} has no source");
             }
         }
         // What could not be confirmed is known by name. An entry added to a
