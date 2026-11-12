@@ -1,0 +1,212 @@
+{
+  "schema_version": 1,
+  "boot_id": "1b057bf68bf94c91a176443940e6d7b4",
+  "build_id": "20261112.g173effe13bec",
+  "boot": {
+    "schema_version": 1,
+    "boot_id": "1b057bf68bf94c91a176443940e6d7b4",
+    "classification": "trial",
+    "boot_argument": "trial",
+    "tries_left": 2,
+    "contract": "1",
+    "deployment": "a15b14918b888b8242d210ca83be2745c2c2dfb1f708b8c16ea27360a036aa5d.0",
+    "image_digest": "sha256:f4ba1065d9217ae3a89842c08e228cdac323c4c2b178f71656e71790d220b8ee",
+    "build_id": "20261112.g173effe13bec",
+    "event_id": "1794483141-7e91aa5c"
+  },
+  "verdict": {
+    "schema_version": 1,
+    "boot_id": "1b057bf68bf94c91a176443940e6d7b4",
+    "classification": "trial",
+    "result": "degraded",
+    "failed_check": null,
+    "error_code": null,
+    "failed_detail": null,
+    "finished_uptime_ms": 28590,
+    "checks": [
+      {
+        "id": "R1",
+        "name": "root filesystem",
+        "required": true,
+        "state": "succeeded",
+        "error_code": null,
+        "detail": "/ is the composefs mount of deployment a15b14918b888b8242d210ca83be2745c2c2dfb1f708b8c16ea27360a036aa5d.0",
+        "duration_ms": 710
+      },
+      {
+        "id": "R2",
+        "name": "critical paths",
+        "required": true,
+        "state": "succeeded",
+        "error_code": null,
+        "detail": "os-release, the TUR release file and the GRUB environment block are readable; /var/lib/tur is writable",
+        "duration_ms": 0
+      },
+      {
+        "id": "R3",
+        "name": "default target",
+        "required": true,
+        "state": "succeeded",
+        "error_code": null,
+        "detail": "graphical.target is active",
+        "duration_ms": 2180
+      },
+      {
+        "id": "R4",
+        "name": "core units",
+        "required": true,
+        "state": "succeeded",
+        "error_code": null,
+        "detail": "active: dbus.service, systemd-logind.service, systemd-journald.service, systemd-udevd.service",
+        "duration_ms": 130
+      },
+      {
+        "id": "R5",
+        "name": "TUR units",
+        "required": true,
+        "state": "skipped",
+        "error_code": null,
+        "detail": "no unit is listed in required-units.d",
+        "duration_ms": 0
+      },
+      {
+        "id": "R6",
+        "name": "display manager",
+        "required": true,
+        "state": "succeeded",
+        "error_code": null,
+        "detail": "display-manager.service is active",
+        "duration_ms": 40
+      },
+      {
+        "id": "R7",
+        "name": "seat session",
+        "required": true,
+        "state": "succeeded",
+        "error_code": null,
+        "detail": "session c1 type wayland class greeter state active, compositor process 1142",
+        "duration_ms": 100
+      },
+      {
+        "id": "R8",
+        "name": "stability",
+        "required": true,
+        "state": "succeeded",
+        "error_code": null,
+        "detail": "unchanged after 15 s: session c1 type wayland class greeter state active, compositor process 1142",
+        "duration_ms": 15080
+      },
+      {
+        "id": "W1",
+        "name": "failed units",
+        "required": false,
+        "state": "failed",
+        "error_code": null,
+        "detail": "mcelog.service",
+        "duration_ms": 0
+      },
+      {
+        "id": "W8",
+        "name": "finalisation of the previous update",
+        "required": false,
+        "state": "succeeded",
+        "error_code": null,
+        "detail": "ostree-boot-complete.service is inactive",
+        "duration_ms": 0
+      },
+      {
+        "id": "W10",
+        "name": "boot attempts can be counted",
+        "required": false,
+        "state": "succeeded",
+        "error_code": null,
+        "detail": "contract version on the kernel command line: 1; /boot/grub2 is on ext4 on /dev/vda3 (a plain partition)",
+        "duration_ms": 0
+      },
+      {
+        "id": "W12",
+        "name": "hardware watchdog",
+        "required": false,
+        "state": "succeeded",
+        "error_code": null,
+        "detail": "iTCO_wdt",
+        "duration_ms": 0
+      }
+    ]
+  },
+  "counting": {
+    "usable": true,
+    "contract": "1",
+    "layout": "ext4 on /dev/vda3 (a plain partition)",
+    "environment_block": "valid",
+    "boot_counter": null
+  },
+  "watchdog": "iTCO_wdt",
+  "trial": null,
+  "rejected": {
+    "schema_version": 1,
+    "images": []
+  },
+  "notice": null,
+  "recent_events": [
+    {
+      "schema_version": 1,
+      "event": "armed",
+      "event_id": "1794483141-7e91aa5c",
+      "boot_id": "7e91aa5c601d48de8cbf088cf192a9a6",
+      "build_id": "20261112.g173effe13bec",
+      "at": 1794483141,
+      "attempts_allowed": 3,
+      "previous": {
+        "image": "localhost/tur-boot-test:ci",
+        "transport": "registry",
+        "digest": "sha256:416297f5e373853bfe5071dd9a418e3fc0464d7c48fc8d6f9028ff773ab4f9bb",
+        "version": "0.1.0-dev",
+        "checksum": "26e652135bedd539d527d05ebbe7b4f3735297d5ff33b1a4a474a7b192ebaac1",
+        "serial": 0,
+        "stateroot": "default",
+        "build_id": "20261112.g173effe13bec"
+      },
+      "new": {
+        "image": "/run/tur-test/images:good",
+        "transport": "oci",
+        "digest": "sha256:f4ba1065d9217ae3a89842c08e228cdac323c4c2b178f71656e71790d220b8ee",
+        "version": "0.1.0-dev",
+        "checksum": "a15b14918b888b8242d210ca83be2745c2c2dfb1f708b8c16ea27360a036aa5d",
+        "serial": 0,
+        "stateroot": "default",
+        "build_id": "20261112.g173effe13bec"
+      }
+    },
+    {
+      "schema_version": 1,
+      "event": "attempt",
+      "event_id": "1794483141-7e91aa5c",
+      "boot_id": "1b057bf68bf94c91a176443940e6d7b4",
+      "build_id": "20261112.g173effe13bec",
+      "at": 1794483159,
+      "tries_left": 2,
+      "attempt": 1
+    },
+    {
+      "schema_version": 1,
+      "event": "marked-good",
+      "event_id": "1794483141-7e91aa5c",
+      "boot_id": "1b057bf68bf94c91a176443940e6d7b4",
+      "build_id": "20261112.g173effe13bec",
+      "at": 1794483178,
+      "attempts_used": 1,
+      "kept": {
+        "image": "/run/tur-test/images:good",
+        "transport": "oci",
+        "digest": "sha256:f4ba1065d9217ae3a89842c08e228cdac323c4c2b178f71656e71790d220b8ee",
+        "version": "0.1.0-dev",
+        "checksum": "a15b14918b888b8242d210ca83be2745c2c2dfb1f708b8c16ea27360a036aa5d",
+        "serial": 0,
+        "stateroot": "default",
+        "build_id": "20261112.g173effe13bec"
+      },
+      "classification": "trial"
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "images": [
+    {
+      "digest": "sha256:d726caf08260b02710b5c7d954b82465a40af81b5f79ccd0b69497906d7d4da4",
+      "image": "/run/tur-test/images:check-fails",
+      "version": "0.1.0-dev",
+      "event_id": "1794483294-ae5a5f67"
+    }
+  ]
+}
