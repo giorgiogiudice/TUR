@@ -43,6 +43,24 @@ def number(value: str | None) -> int | None:
         return None
 
 
+def dracut_modules(path: pathlib.Path) -> list[str] | None:
+    """The dracut modules `lsinitrd -m` lists: the lines after "dracut modules:"."""
+    if not path.exists():
+        return None
+    found, inside = [], False
+    for line in path.read_text().splitlines():
+        if line.strip().startswith("dracut modules:"):
+            inside = True
+            continue
+        if inside:
+            if line.startswith("====") or not line.strip():
+                if found:
+                    break
+                continue
+            found.append(line.strip())
+    return found
+
+
 def main() -> int:
     if len(sys.argv) != 3:
         print(__doc__, file=sys.stderr)
@@ -126,7 +144,7 @@ def main() -> int:
             "squashfs_bytes": number(medium.get("squashfs_bytes")),
             "squashfs_compression": f"zstd level {medium.get('squashfs_zstd_level')}",
             "initramfs_bytes": number(medium.get("initramfs_bytes")),
-            "initramfs_dracut_modules": modules.read_text().split() if modules.exists() else None,
+            "initramfs_dracut_modules": dracut_modules(modules),
             "packages_added": changes.get("added"),
             "packages_changed": changes.get("changed"),
             "packages_removed": changes.get("removed"),

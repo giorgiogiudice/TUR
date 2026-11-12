@@ -59,15 +59,17 @@ mkdir -p "${SESSION}"
 # ---- output -------------------------------------------------------------------
 
 # The first serial port, when there is one that can be written to.
-serial=no
+# (Named serial_port, not serial: functions use a local "serial" for a disk's
+# serial number, which would hide this flag from transcript().)
+serial_port=no
 if [ -c /dev/ttyS0 ] && { exec 3> /dev/ttyS0; } 2> /dev/null; then
-    serial=yes
+    serial_port=yes
 fi
 
 # transcript LINE: the log and the serial port, not the screen.
 transcript() {
     printf '%s\n' "$1" >> "${LOG}"
-    if [ "${serial}" = yes ]; then printf '%s\r\n' "$1" >&3 2> /dev/null; fi
+    if [ "${serial_port}" = yes ]; then printf '%s\r\n' "$1" >&3 2> /dev/null; fi
 }
 
 # say LINE: a line of the screen, and of the transcript.
@@ -401,7 +403,7 @@ scan_disks() {
 # fixtures lack (issue 16).
 dump_inventory() {
     local line
-    [ "${serial}" = yes ] || return 0
+    [ "${serial_port}" = yes ] || return 0
     lsblk --json --bytes --output-all 2> /dev/null | while IFS= read -r line; do
         printf 'TUR-INSTALLER-LSBLK| %s\r\n' "${line}" >&3
     done
@@ -779,7 +781,7 @@ stty -isig 2> /dev/null
 kill -s RTMIN+21 1 2> /dev/null
 dmesg --console-level 4 > /dev/null 2>&1
 
-mark "start version=${tur_version:-unknown} build_id=${tur_build_id:-unknown} revision=${tur_revision:-unknown} serial_port=${serial} kernel=$(uname -r)"
+mark "start version=${tur_version:-unknown} build_id=${tur_build_id:-unknown} revision=${tur_revision:-unknown} serial_port=${serial_port} kernel=$(uname -r)"
 mark "cmdline $(cat /proc/cmdline)"
 mark "live-medium source=$(findmnt -n -o SOURCE,FSTYPE "${LIVE_MOUNT}" 2> /dev/null | tr -s ' ' | head -n 1) root=$(findmnt -n -o SOURCE,FSTYPE / | tr -s ' ' | head -n 1)"
 
