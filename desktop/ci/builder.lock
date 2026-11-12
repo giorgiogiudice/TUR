@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# The pinned input of the desktop builder image (desktop/ci/builder/Containerfile).
+# The image is built from this base and kept in the Actions cache under a key
+# made from this file and the Containerfile. See desktop/README.md, "The
+# builder image", before changing anything here.
+#
+# The base is the Fedora 45 container, the same release as the OS image's base
+# (image/base.lock), so that the libraries the tests run against are those of
+# the system the programs will run on.
+BASE_IMAGE=quay.io/fedora/fedora
+BASE_TAG=45
+BASE_DIGEST=sha256:fa773d10382c082ff2cccaf7982a5c162f11f296f91274b994357f2d3d473770
+BASE_VERIFIED=2026-11-12
+
+# Raise this to rebuild the image with today's packages without changing
+# anything else. Expect to refresh builder.packages and, if Qt or a font
+# changed, the reference images, in the same pull request.
+BUILDER_REVISION=1

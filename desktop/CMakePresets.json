@@ -1,0 +1,45 @@
+{
+  "version": 6,
+  "vendor": { "tur": { "licence": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0" } },
+  "cmakeMinimumRequired": { "major": 3, "minor": 28, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "ci",
+      "displayName": "CI: warnings are errors",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/ci",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "TUR_WERROR": "ON"
+      }
+    },
+    {
+      "name": "ci-sanitize",
+      "displayName": "CI: AddressSanitizer and UndefinedBehaviorSanitizer",
+      "inherits": "ci",
+      "binaryDir": "${sourceDir}/build/ci-sanitize",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "TUR_SANITIZE": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "ci", "configurePreset": "ci" },
+    { "name": "ci-sanitize", "configurePreset": "ci-sanitize" }
+  ],
+  "testPresets": [
+    {
+      "name": "ci",
+      "configurePreset": "ci",
+      "output": { "outputOnFailure": true },
+      "execution": { "noTestsAction": "error", "timeout": 600 }
+    },
+    {
+      "name": "ci-sanitize",
+      "configurePreset": "ci-sanitize",
+      "output": { "outputOnFailure": true },
+      "execution": { "noTestsAction": "error", "timeout": 900 }
+    }
+  ]
+}

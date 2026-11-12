@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# The versions, in the builder image the reference images were made with, of
+# the packages a rendered picture depends on: Qt, the text stack and the
+# fonts. desktop/ci/versions.sh compares the image in use with this list and
+# warns on a difference. Format: package name, then version-release.
+#
+# Filled in from the first build of the image; see docs/reports/desktop-1.md.
