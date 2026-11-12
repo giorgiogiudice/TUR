@@ -396,8 +396,14 @@ mod tests {
         assert_eq!(code.number(), 4);
         let code: ErrorCode = "TUR-CATALOGUE-011".parse().unwrap();
         assert_eq!(code.family(), Family::Catalogue);
-        assert_eq!(ErrorCode::from_static("TUR-RUNTIME-MANAGER-001").family(), Family::Runtime);
-        assert_eq!(ErrorCode::from_static("TUR-CATALOGUE-ENTRY-002").family(), Family::Catalogue);
+        assert_eq!(
+            ErrorCode::from_static("TUR-RUNTIME-MANAGER-001").family(),
+            Family::Runtime
+        );
+        assert_eq!(
+            ErrorCode::from_static("TUR-CATALOGUE-ENTRY-002").family(),
+            Family::Catalogue
+        );
         assert_eq!(Family::Runtime.as_str(), "RUNTIME");
         assert_eq!(Family::Catalogue.as_str(), "CATALOGUE");
 

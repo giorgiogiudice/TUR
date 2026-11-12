@@ -203,7 +203,10 @@ mod tests {
         // the application centre displays is what it was.
         for code in Code::ALL {
             assert_ne!(code.error_code().family(), Family::Catalogue, "{code}");
-            assert!(code.as_str().starts_with("TUR-DESKTOP-CATALOGUE-"), "{code}");
+            assert!(
+                code.as_str().starts_with("TUR-DESKTOP-CATALOGUE-"),
+                "{code}"
+            );
         }
         assert!(
             Code::ALL
