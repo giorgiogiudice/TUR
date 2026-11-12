@@ -1569,7 +1569,9 @@ fn a_model_served_by_tur_ai_local_is_sent_the_key_from_its_file() {
     });
     // Nothing leaves this computer, and the consent text says so.
     let (version, text) = world.core.consent("local").expect("the text");
-    assert!(text.contains("P@x sends these to Local AI on this computer, which runs on this computer:"));
+    assert!(
+        text.contains("P@x sends these to Local AI on this computer, which runs on this computer:")
+    );
     assert!(text.contains("no company receives it"));
     world.core.enable(&version).expect("switched on");
 
@@ -1577,9 +1579,14 @@ fn a_model_served_by_tur_ai_local_is_sent_the_key_from_its_file() {
     let status = world.core.status();
     assert_eq!(status["key"], "file_missing");
     assert_eq!(status["ready"], false);
-    let refused = world.core.start_task("Hello.", "").expect_err("no key file");
+    let refused = world
+        .core
+        .start_task("Hello.", "")
+        .expect_err("no key file");
     assert!(
-        refused.detail.contains("tur-ai-local/api-key does not exist"),
+        refused
+            .detail
+            .contains("tur-ai-local/api-key does not exist"),
         "{}",
         refused.detail
     );
@@ -1596,7 +1603,10 @@ fn a_model_served_by_tur_ai_local_is_sent_the_key_from_its_file() {
     assert_eq!(status["ready"], true);
     let listed = world.core.models();
     assert_eq!(listed["providers"][0]["key_source"], "runtime_file");
-    assert_eq!(listed["providers"][0]["runtime_key_file"], "tur-ai-local/api-key");
+    assert_eq!(
+        listed["providers"][0]["runtime_key_file"],
+        "tur-ai-local/api-key"
+    );
 
     let result = world.run("Hello.");
     assert_eq!(result["outcome"], "completed");

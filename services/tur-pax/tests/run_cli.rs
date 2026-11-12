@@ -608,9 +608,8 @@ fn local_list(server: &FakeServer) -> String {
 
 /// The command line of a task for a provider named by its identifier.
 fn listed_options(files: &Files) -> Vec<String> {
-    let mut options = files.options();
     // Not a configuration file: the model list's entry.
-    options.drain(0..2);
+    let mut options: Vec<String> = files.options().into_iter().skip(2).collect();
     options.extend(
         [
             "--provider",

@@ -848,7 +848,7 @@ scenarios 18 and 19 through the family.
 
 ### 14.7 What is not verified or not built
 
-- **No compatible service has been called.** The DeepSeek preset can be run
+- **No compatible cloud service has been called.** llama.cpp's `llama-server` has, through the `local` preset (`docs/reports/pax-5.md`). The DeepSeek preset can be run
   by hand with `pax-live` once the secret `DEEPSEEK_KEY` exists.
 - **Streamed tool calls** are shown in documentation by OpenAI, DeepSeek,
   Groq and Together. Mistral's FAQ says the delta structure is the same but

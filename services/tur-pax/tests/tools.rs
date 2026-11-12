@@ -42,8 +42,7 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{Map, Value, json};
 use tur_pax::registry::{
-    ADAPTER_FILE, AssistantTools, MANIFEST_FILE, Performer, ToolFiles, ToolRegistry,
-    read_tool_sets,
+    ADAPTER_FILE, AssistantTools, MANIFEST_FILE, Performer, ToolFiles, ToolRegistry, read_tool_sets,
 };
 use tur_pax::sandbox::is_system_visible;
 use tur_pax::{Action, ActionClass};
@@ -78,7 +77,10 @@ fn discovered_components() -> Vec<String> {
         .filter_map(Result::ok)
         .map(|entry| entry.path())
         .filter(|path| path.join(MANIFEST_FILE).is_file())
-        .filter_map(|path| path.file_name().map(|name| name.to_string_lossy().into_owned()))
+        .filter_map(|path| {
+            path.file_name()
+                .map(|name| name.to_string_lossy().into_owned())
+        })
         .collect();
     found.sort();
     found
@@ -146,7 +148,8 @@ fn command_line(registry: &ToolRegistry, tool: &str, arguments: Value) -> Vec<St
 
 /// Every file under `directory` whose name starts with `agent-tools` and
 /// ends with `.json`, as a path relative to `services/`. Build output is not
-/// looked into.
+/// looked into, and links are not followed: the device fixtures are trees of
+/// `/sys` with links that lead in circles.
 fn tool_files_under(directory: &Path, found: &mut Vec<String>) {
     let Ok(entries) = fs::read_dir(directory) else {
         return;
@@ -154,7 +157,13 @@ fn tool_files_under(directory: &Path, found: &mut Vec<String>) {
     for entry in entries.filter_map(Result::ok) {
         let path = entry.path();
         let name = entry.file_name().to_string_lossy().into_owned();
-        if path.is_dir() {
+        let Ok(kind) = entry.file_type() else {
+            continue;
+        };
+        if kind.is_symlink() {
+            continue;
+        }
+        if kind.is_dir() {
             if name != "target" && !name.starts_with('.') {
                 tool_files_under(&path, found);
             }
@@ -202,7 +211,10 @@ fn the_source_tree_is_read_as_a_directory_of_tool_sets() {
         "tur-runtime",
         "tur-storage",
     ] {
-        assert!(components.iter().any(|found| found == component), "{component}");
+        assert!(
+            components.iter().any(|found| found == component),
+            "{component}"
+        );
     }
     // The assistant holds no tool set of its own.
     for component in ["tur-pax", "tur-pax-providers", "tur-pax-memory"] {
@@ -322,7 +334,11 @@ fn every_tool_has_a_class_and_every_offered_tool_only_observes() {
     for tool in &offered {
         assert_eq!(tool.class, ActionClass::Observe, "{}", tool.name);
     }
-    assert!(offered.iter().any(|tool| tool.name == "run_readonly_command"));
+    assert!(
+        offered
+            .iter()
+            .any(|tool| tool.name == "run_readonly_command")
+    );
     for tool in &offered {
         if tool.name != "run_readonly_command" {
             assert_eq!(classes.get(&tool.name), Some(&0), "{}", tool.name);
@@ -422,7 +438,10 @@ fn changing_words_of(adapter: &Value) -> Vec<String> {
 
 /// Every adapter of `adapters` that changes something below class 2, with
 /// the words it uses. `classes` holds the class each tool declares.
-fn changing_adapters(adapters: &str, classes: &BTreeMap<String, u64>) -> Vec<(String, Vec<String>)> {
+fn changing_adapters(
+    adapters: &str,
+    classes: &BTreeMap<String, u64>,
+) -> Vec<(String, Vec<String>)> {
     let file: Value = serde_json::from_str(adapters).expect("an adapter file is JSON");
     let mut found = Vec::new();
     for adapter in file["adapters"].as_array().expect("adapters") {
@@ -469,8 +488,14 @@ fn no_adapter_sends_or_changes_anything_unless_its_class_says_so() {
         .into_iter()
         .map(|(tool, _)| tool)
         .collect();
-    assert!(refused.contains(&"test_consequential".to_owned()), "{refused:?}");
-    assert!(refused.contains(&"test_system_critical".to_owned()), "{refused:?}");
+    assert!(
+        refused.contains(&"test_consequential".to_owned()),
+        "{refused:?}"
+    );
+    assert!(
+        refused.contains(&"test_system_critical".to_owned()),
+        "{refused:?}"
+    );
 }
 
 #[test]
@@ -715,7 +740,11 @@ fn quantifier_counts(pattern: &str) -> Vec<u64> {
         let end = rest.find('}').unwrap_or(rest.len());
         let inside = &rest[..end];
         if !inside.is_empty() && inside.chars().all(|c| c.is_ascii_digit() || c == ',') {
-            counts.extend(inside.split(',').filter_map(|count| count.parse::<u64>().ok()));
+            counts.extend(
+                inside
+                    .split(',')
+                    .filter_map(|count| count.parse::<u64>().ok()),
+            );
         }
     }
     counts
@@ -735,7 +764,9 @@ fn grammar_problems(path: &str, schema: &Value, problems: &mut Vec<String>) {
     }
     for key in ["minItems", "maxItems"] {
         if let Some(count) = object.get(key).and_then(Value::as_u64)
-            && count.saturating_sub(1).saturating_mul(SEPARATED_GROUP_RULES)
+            && count
+                .saturating_sub(1)
+                .saturating_mul(SEPARATED_GROUP_RULES)
                 >= LLAMA_REPETITION_THRESHOLD
         {
             problems.push(format!("{path}: {key} {count}"));
@@ -755,8 +786,14 @@ fn grammar_problems(path: &str, schema: &Value, problems: &mut Vec<String>) {
                     grammar_problems(&format!("{path}/{key}/{name}"), inner, problems);
                 }
             }
-            "items" | "prefixItems" | "additionalProperties" | "contains" | "not" | "anyOf"
-            | "oneOf" | "allOf" => {
+            "items"
+            | "prefixItems"
+            | "additionalProperties"
+            | "contains"
+            | "not"
+            | "anyOf"
+            | "oneOf"
+            | "allOf" => {
                 if let Some(list) = value.as_array() {
                     for (index, inner) in list.iter().enumerate() {
                         grammar_problems(&format!("{path}/{key}/{index}"), inner, problems);
@@ -791,10 +828,19 @@ fn the_grammar_check_knows_llama_cpp_s_limits() {
         found
     };
     assert!(problems(json!({ "type": "string", "maxLength": 1999 })).is_empty());
-    assert_eq!(problems(json!({ "type": "string", "maxLength": 2000 })).len(), 1);
-    assert_eq!(problems(json!({ "type": "string", "minLength": 2000 })).len(), 1);
+    assert_eq!(
+        problems(json!({ "type": "string", "maxLength": 2000 })).len(),
+        1
+    );
+    assert_eq!(
+        problems(json!({ "type": "string", "minLength": 2000 })).len(),
+        1
+    );
     assert!(problems(json!({ "type": "array", "maxItems": 667 })).is_empty());
-    assert_eq!(problems(json!({ "type": "array", "maxItems": 668 })).len(), 1);
+    assert_eq!(
+        problems(json!({ "type": "array", "maxItems": 668 })).len(),
+        1
+    );
     assert!(problems(json!({ "type": "string", "pattern": "^[a-z]{1,1999}$" })).is_empty());
     assert_eq!(
         problems(json!({ "type": "string", "pattern": "^[a-z]{2,2500}$" })).len(),
@@ -811,7 +857,9 @@ fn the_grammar_check_knows_llama_cpp_s_limits() {
         ["t/properties/argv/items: maxLength 4096"]
     );
     assert_eq!(
-        problems(json!({ "anyOf": [{ "type": "string" }, { "type": "string", "maxLength": 4000 }] })),
+        problems(
+            json!({ "anyOf": [{ "type": "string" }, { "type": "string", "maxLength": 4000 }] })
+        ),
         ["t/anyOf/1: maxLength 4000"]
     );
 }
@@ -840,7 +888,10 @@ fn every_shipped_tool_schema_fits_llama_cpp_s_tool_grammar() {
             notes: true,
         });
     let definitions = built_in.definitions().expect("definitions");
-    let names: Vec<&str> = definitions.iter().map(|definition| definition.name()).collect();
+    let names: Vec<&str> = definitions
+        .iter()
+        .map(|definition| definition.name())
+        .collect();
     assert_eq!(
         names,
         [
@@ -855,7 +906,10 @@ fn every_shipped_tool_schema_fits_llama_cpp_s_tool_grammar() {
     }
     // The test fixture the local-ai workflow offers a real model.
     let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/pax/manifests");
-    for entry in fs::read_dir(&fixtures).expect("the fixture manifests").filter_map(Result::ok) {
+    for entry in fs::read_dir(&fixtures)
+        .expect("the fixture manifests")
+        .filter_map(Result::ok)
+    {
         let path = entry.path();
         let text = fs::read_to_string(&path).expect("a manifest");
         manifest_grammar_problems(&path.display().to_string(), &text, &mut problems);

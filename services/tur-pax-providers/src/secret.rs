@@ -273,10 +273,8 @@ mod tests {
     fn the_file_source_reads_a_key_only_its_owner_can_read() {
         use std::os::unix::fs::PermissionsExt;
 
-        let directory = std::env::temp_dir().join(format!(
-            "tur-pax-providers-key-file-{}",
-            std::process::id()
-        ));
+        let directory =
+            std::env::temp_dir().join(format!("tur-pax-providers-key-file-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&directory);
         std::fs::create_dir_all(&directory).unwrap();
         let path = directory.join("api-key");
@@ -292,9 +290,21 @@ mod tests {
         assert_eq!(key.expose(), KEY);
 
         let refusals = [
-            (KEY.to_owned(), 0o640, "can be read by others than its owner"),
-            (KEY.to_owned(), 0o604, "can be read by others than its owner"),
-            ("bad key value".to_owned(), 0o600, "does not hold a usable key"),
+            (
+                KEY.to_owned(),
+                0o640,
+                "can be read by others than its owner",
+            ),
+            (
+                KEY.to_owned(),
+                0o604,
+                "can be read by others than its owner",
+            ),
+            (
+                "bad key value".to_owned(),
+                0o600,
+                "does not hold a usable key",
+            ),
             (String::new(), 0o600, "does not hold a usable key"),
             ("k".repeat(KEY_MAX + 3), 0o600, "is larger than a key"),
         ];

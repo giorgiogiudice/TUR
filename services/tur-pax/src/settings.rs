@@ -2135,10 +2135,7 @@ mod tests {
                     KeySourceKind::RuntimeFile("tur-ai-local/api-key")
                 );
                 assert!(!entry.needs_a_stored_key());
-                assert_eq!(
-                    entry.base_url.as_deref(),
-                    Some("http://127.0.0.1:39281/v1")
-                );
+                assert_eq!(entry.base_url.as_deref(), Some("http://127.0.0.1:39281/v1"));
                 assert_eq!(entry.declared("qwen3-4b").tool_calling, Some(true));
                 assert_eq!(entry.declared("qwen3-4b").context_tokens, Some(8192));
                 assert_eq!(entry.abilities("qwen3-vl-2b-instruct").see, Some(true));
@@ -2187,8 +2184,7 @@ mod tests {
     /// entries as they are written (`id = "…"` and `capabilities = […]`
     /// before the first table).
     fn local_catalogue() -> Vec<(String, Vec<String>)> {
-        let directory =
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("../tur-ai-local/catalogue");
+        let directory = Path::new(env!("CARGO_MANIFEST_DIR")).join("../tur-ai-local/catalogue");
         let mut entries = Vec::new();
         for entry in fs::read_dir(&directory).expect("tur-ai-local's catalogue") {
             let path = entry.expect("an entry").path();
@@ -2230,7 +2226,11 @@ mod tests {
             .map(|(id, _)| id.as_str())
             .collect();
         expected.sort_unstable();
-        let mut listed: Vec<&str> = local.models.iter().map(|model| model.model.as_str()).collect();
+        let mut listed: Vec<&str> = local
+            .models
+            .iter()
+            .map(|model| model.model.as_str())
+            .collect();
         listed.sort_unstable();
         assert_eq!(listed, expected);
         // What each says it can see is what the catalogue says.
@@ -2258,7 +2258,10 @@ mod tests {
             .expect("the local preset");
         let config = settings.provider_config(&shipped).expect("a configuration");
         assert_eq!(config.provider, ProviderId::OpenAiChat);
-        assert_eq!(config.base_url.as_deref(), Some("http://127.0.0.1:39281/v1"));
+        assert_eq!(
+            config.base_url.as_deref(),
+            Some("http://127.0.0.1:39281/v1")
+        );
         assert_eq!(config.max_output_tokens, 1024);
         // A model on this computer is given longer to begin answering.
         assert_eq!(config.timeouts.response_ms, LOCAL_RESPONSE_MS);
@@ -2266,8 +2269,12 @@ mod tests {
             timeouts_for(Some("https://api.example.org")),
             Timeouts::default()
         );
-        assert!(!shipped.providers.iter().any(|entry| entry.id != "local"
-            && entry.runtime_key_file.is_some()));
+        assert!(
+            !shipped
+                .providers
+                .iter()
+                .any(|entry| entry.id != "local" && entry.runtime_key_file.is_some())
+        );
 
         // The consent text says that nothing leaves this computer.
         let (entry, origin) = find_provider(&shipped, &settings, "local").expect("listed");

@@ -1215,7 +1215,8 @@ impl Core {
             let entry = self.provider_entry(&provider).ok().map(|(entry, _)| entry);
             let found = match entry.as_ref().map(ProviderEntry::key_source) {
                 Some(KeySourceKind::RuntimeFile(file)) => {
-                    let address = gateway.or_else(|| entry.as_ref().and_then(|e| e.base_url.clone()));
+                    let address =
+                        gateway.or_else(|| entry.as_ref().and_then(|e| e.base_url.clone()));
                     let adapter = entry.as_ref().map_or(ProviderId::OpenAiChat, |e| e.adapter);
                     Some(self.runtime_key(adapter, file, address.as_deref()).is_ok())
                 }

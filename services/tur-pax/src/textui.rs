@@ -373,9 +373,10 @@ fn build(args: &TaskArgs, err: &mut dyn Write) -> io::Result<Result<Setup, Vec<F
             Err(error) => return Ok(Err(vec![provider_fault(error)])),
         }
     };
-    let provider_id = entry
-        .as_ref()
-        .map_or_else(|| config.provider.as_str().to_owned(), |entry| entry.id.clone());
+    let provider_id = entry.as_ref().map_or_else(
+        || config.provider.as_str().to_owned(),
+        |entry| entry.id.clone(),
+    );
     // The key: none when none is to be sent; the file a model server on
     // this computer wrote, for an entry that names one; otherwise the
     // environment variable.
@@ -385,11 +386,9 @@ fn build(args: &TaskArgs, err: &mut dyn Write) -> io::Result<Result<Setup, Vec<F
     } else {
         let key = match (&args.key_env, source) {
             (None, Some(KeySourceKind::RuntimeFile(file))) => key_from_runtime_file(file, &config),
-            (variable, _) => {
-                EnvKeySource::new(variable.as_deref().unwrap_or(DEFAULT_KEY_VARIABLE))
-                    .api_key(config.provider)
-                    .map_err(provider_fault)
-            }
+            (variable, _) => EnvKeySource::new(variable.as_deref().unwrap_or(DEFAULT_KEY_VARIABLE))
+                .api_key(config.provider)
+                .map_err(provider_fault),
         };
         match key {
             Ok(key) => connect(&config, key),
