@@ -1,6 +1,6 @@
 # ADR-0015: Seamless Windows guest on QEMU/KVM, libvirt and FreeRDP RemoteApp
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-12
 - **Specification sections:** §3.4, §7.4, §10.4, §11.4, §12.4, §13, §16, §17.2,
   §20, §23 (question 9); [ADR-0007](0007-app-centric-routing.md). See the
@@ -183,3 +183,12 @@ Read on 12 November 2026. The full list, with what each was used for, is in
 - virtio-win 3D driver pull request:
   https://github.com/virtio-win/kvm-guest-drivers-windows/pull/943
 - libvirt QEMU driver: https://libvirt.org/drvqemu.html
+
+## Acceptance (12 November 2026)
+
+Accepted as the technical approach, under the owner's decision in ADR-0007 that a
+Windows guest is used only where a compatibility layer is not enough. Two
+conditions stand: nothing in this tier is released to users before the legal
+review of Microsoft's licence terms described above, and every budget in the
+design is a target until it has been measured.
+

@@ -29,6 +29,7 @@ the [specification](../architecture/specification.md).
 | [0010](0010-licence-excludes-government.md) | Licence: noncommercial, and not for government use | Accepted |
 | [0011](0011-application-centre-and-stores.md) | One application centre, integrating every store | Accepted |
 | [0013](0013-bootloader.md) | Bootloader: GRUB 2 through shim, installed by bootupd | Accepted |
+| [0015](0015-seamless-windows-guest.md) | Seamless Windows guest on QEMU/KVM, libvirt and FreeRDP RemoteApp | Accepted |
 
 ## Open questions from the specification
 
@@ -36,4 +37,5 @@ the [specification](../architecture/specification.md).
 lists the questions still to be settled. ADR-0001 answers questions 2, 3 and 4.
 ADR-0013 answers question 1 (bootloader), with evidence from the boot test.
 
-Number 0012 is reserved for the assistant policy model, under review.
+Numbers reserved for records under review: 0012 (assistant policy model), 0014
+(boot health and rollback), 0016 (desktop and user interface).
