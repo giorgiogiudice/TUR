@@ -40,9 +40,9 @@ For a program on side A:
   two generated token files. Blue is the system; gold is P@x and is reachable
   only through the module `Tur.Kit.Pax`, which only P@x's surfaces may import.
 
-`ci/boundary.py` enforces all of this on every change; `ci/boundary.py
---self-test` plants one violation of each kind and requires that each is
-caught.
+`ci/boundary.py` enforces all of this on every change, and with `--linked`
+checks what the built programs really link; `ci/boundary.py --self-test`
+plants one violation of each kind and requires that each is caught.
 
 ## Layout
 
@@ -103,7 +103,9 @@ twice and the two runs must be identical. Against the reference: the same
 size, and no pixel differing by more than 8 of 255 in any channel. That
 tolerance absorbs rounding at anti-aliased edges and nothing a person could
 see; zero pixels may exceed it. It is not to be loosened to make a change
-pass.
+pass. Before it compares anything the job runs `compare_screenshots.py
+--self-test`, which makes pictures that match and pictures that do not (a
+missing hairline, one wrong pixel) and requires each verdict.
 
 **How a reference is made or changed.** Nobody can render the pictures
 locally, so CI makes them and a person or an agent accepts them:
@@ -118,8 +120,8 @@ locally, so CI makes them and a person or an agent accepts them:
 
    This copies the run's `proposed/` pictures into `tests/screenshots/` and
    leaves the whole artifact in the directory: `actual/`, `reference/` (the
-   old ones), `diff/` (what changed, in magenta) and a contact sheet for each
-   combination.
+   old ones), `diff/` (what changed, in magenta) and a contact sheet
+   (`contact-*.png`) for each combination.
 3. **Look at every picture it lists**, in both variants. Clipped text, a
    missing glyph, text that cannot be read against its background, an empty
    area: any of these means the change is wrong, not the reference.
