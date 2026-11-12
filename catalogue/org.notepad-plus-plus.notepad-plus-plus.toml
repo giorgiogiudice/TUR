@@ -1,0 +1,50 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR application catalogue entry. Format: schemas/app-catalogue-entry.schema.json.
+# How entries are written and sourced: catalogue/README.md.
+# The one record below is TUR's own automated test, with its report. It
+# carries no rating: see the record's notes and docs/reports/apps-1.md.
+
+schema_version = 1
+id = "org.notepad-plus-plus.notepad-plus-plus"
+name = "Notepad++"
+aliases = ["Notepad Plus Plus", "npp"]
+publisher = "Notepad++ Team"
+category = "development"
+summary = "Text and source code editor for Windows."
+homepage = "https://notepad-plus-plus.org/"
+
+[[editions]]
+kind = "windows"
+obtain = "publisher-page"
+download_page = "https://notepad-plus-plus.org/downloads/"
+licence = "open-source"
+notes = "Windows only. The publisher's downloads page links to the project's GitHub releases, where the installer below is published with its digest."
+
+[editions.installer]
+url = "https://github.com/notepad-plus-plus/notepad-plus-plus/releases/download/v8.9.9.1/npp.8.9.9.1.Installer.x64.exe"
+sha256 = "ce3267f5c4e7e42f847e00f4b20234da6150647203033cdde34a69593efc3152"
+size = 7048536
+version = "8.9.9.1"
+licence = "GPL-3.0-or-later, with the clarifications in the project's LICENSE file"
+licence_url = "https://github.com/notepad-plus-plus/notepad-plus-plus/blob/v8.9.9.1/LICENSE"
+hash_source = "The digest GitHub publishes for the release asset of notepad-plus-plus v8.9.9.1 (tests/windows-runtime/apps.json)"
+checked = "2026-11-12"
+
+[[editions.records]]
+route = "wine"
+rating = "unknown"
+reported_by = "tur-test"
+test_report = "docs/reports/windows-runtime-2.md"
+version_tested = "8.9.9.1"
+date = "2026-11-12"
+notes = "Automated test of the NSIS installer npp.8.9.9.1.Installer.x64.exe and of the portable archive: install, launch, opening a file given on the command line, and uninstall all passed. Wine 9.0 from Ubuntu on a hosted runner, software rendering; not the TUR image. One window and one function were looked at. No rating is entered yet: see docs/reports/apps-1.md."
+
+[[editions.references]]
+title = "Notepad++ downloads page; links each release on GitHub"
+url = "https://notepad-plus-plus.org/downloads/"
+checked = "2026-11-12"
+
+[[editions.references]]
+title = "Notepad++ licence at tag v8.9.9.1: GPL-3.0-or-later"
+url = "https://github.com/notepad-plus-plus/notepad-plus-plus/blob/v8.9.9.1/LICENSE"
+checked = "2026-11-12"

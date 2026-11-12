@@ -66,6 +66,14 @@ const WITH_DOWNLOAD_PAGE: &[EditionKind] = &[
 ];
 const ANDROID_ONLY: &[EditionKind] = &[EditionKind::Android];
 const WEB_ONLY: &[EditionKind] = &[EditionKind::Web];
+const WINDOWS_ONLY: &[EditionKind] = &[EditionKind::Windows];
+
+/// The largest installer an entry may pin, in bytes: 4 GiB.
+pub const MAX_INSTALLER_BYTES: u64 = 4 * 1024 * 1024 * 1024;
+
+/// The file endings a pinned installer may have: a program, a Windows
+/// Installer package, or an archive of a portable application.
+const INSTALLER_ENDINGS: [&str; 3] = [".exe", ".msi", ".zip"];
 
 /// The findings of one entry: a code and a message each.
 struct Findings {
@@ -239,7 +247,8 @@ fn check_edition(
     today: Date,
 ) {
     let kind = edition.kind;
-    let fields: [(&str, bool, &[EditionKind]); 11] = [
+    let fields: [(&str, bool, &[EditionKind]); 12] = [
+        ("installer", edition.installer.is_some(), WINDOWS_ONLY),
         ("flatpak_id", edition.flatpak_id.is_some(), FLATPAK_ONLY),
         ("remote", edition.remote.is_some(), FLATPAK_ONLY),
         ("obtain", edition.obtain.is_some(), OBTAINED),
@@ -327,6 +336,11 @@ fn check_edition(
                 "{what} points at a file to download; it must be a page for a person to read"
             ));
         }
+    }
+    if let Some(installer) = &edition.installer
+        && kind == EditionKind::Windows
+    {
+        check_installer(findings, label, edition, installer, today);
     }
     if let Some(notes) = &edition.notes {
         check_text(findings, &format!("{label}: notes"), notes, MAX_NOTES_CHARS);
@@ -446,6 +460,107 @@ fn check_obtain(
             ));
         }
     }
+}
+
+/// Checks the pinned installer of a Windows edition (ADR-0019).
+///
+/// The catalogue names a file to download in this one place, so the rules
+/// are strict: only for an edition obtained from the publisher's page and
+/// marked open source; the location is an `https` URL that ends in the name
+/// of a program, a package or an archive; the digest is a whole SHA-256;
+/// and the licence, where it was read, where the digest comes from and the
+/// day all of it was checked are stated.
+fn check_installer(
+    findings: &mut Findings,
+    label: &str,
+    edition: &Edition,
+    installer: &crate::model::Installer,
+    today: Date,
+) {
+    let what = format!("{label}: installer");
+    if edition.obtain != Some(Obtain::PublisherPage) {
+        findings.invalid(format!(
+            "{what} is only possible when the edition is obtained from the publisher's page"
+        ));
+    }
+    if edition.licence != Some(crate::model::Licence::OpenSource) {
+        findings.invalid(format!(
+            "{what} needs licence = \"open-source\" on the edition: TUR downloads only software that may be freely redistributed, and never a proprietary application"
+        ));
+    }
+
+    let url_what = format!("{what}: url");
+    check_url(findings, &url_what, &installer.url);
+    let lower = installer.url.to_ascii_lowercase();
+    let plain = !installer.url.contains(['?', '#']);
+    let name = installer.file_name();
+    let name_valid = name
+        .bytes()
+        .next()
+        .is_some_and(|first| first.is_ascii_alphanumeric())
+        && name.len() <= 255
+        && name
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'+' | b'-'));
+    if !plain || !name_valid || !INSTALLER_ENDINGS.iter().any(|ending| lower.ends_with(ending)) {
+        findings.invalid(format!(
+            "{url_what} must end in the name of the file, a .exe, .msi or .zip, with no query or fragment"
+        ));
+    }
+    if installer.portable && !lower.ends_with(".exe") {
+        findings.invalid(format!(
+            "{what}: portable is for a single program, a .exe; an archive is unpacked without it"
+        ));
+    }
+
+    let digest_valid = installer.sha256.len() == 64
+        && installer
+            .sha256
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b));
+    if !digest_valid {
+        findings.invalid(format!(
+            "{what}: sha256 is not 64 lower-case hexadecimal digits"
+        ));
+    }
+    if installer.size == 0 {
+        findings.invalid(format!("{what}: size is zero"));
+    }
+    if installer.size > MAX_INSTALLER_BYTES {
+        findings.add(
+            Code::LimitExceeded,
+            format!("{what}: size is larger than {MAX_INSTALLER_BYTES} bytes"),
+        );
+    }
+    check_text(
+        findings,
+        &format!("{what}: version"),
+        &installer.version,
+        MAX_SHORT_CHARS,
+    );
+    check_text(
+        findings,
+        &format!("{what}: licence"),
+        &installer.licence,
+        MAX_NAME_CHARS,
+    );
+    check_url(
+        findings,
+        &format!("{what}: licence_url"),
+        &installer.licence_url,
+    );
+    check_text(
+        findings,
+        &format!("{what}: hash_source"),
+        &installer.hash_source,
+        MAX_NAME_CHARS,
+    );
+    check_date(
+        findings,
+        &format!("{what}: checked"),
+        &installer.checked,
+        today,
+    );
 }
 
 /// Checks the fields of an Android edition.
@@ -1417,6 +1532,153 @@ mod tests {
             named("org.example.two", "Two", &["Dos"]),
         ];
         assert_eq!(catalogue_codes(&fine), NONE);
+    }
+
+    fn pinned() -> crate::model::Installer {
+        crate::model::Installer {
+            url: "https://downloads.example.org/1.2/example-1.2-setup.exe".to_owned(),
+            sha256: "9b697f65ecc2d9b0152f5ee96d72dde522a7827690349d9307935dacf40f42ec".to_owned(),
+            size: 1_659_704,
+            version: "1.2".to_owned(),
+            licence: "MIT".to_owned(),
+            licence_url: "https://example.org/licence".to_owned(),
+            hash_source: "The publisher's sha256sums file".to_owned(),
+            checked: "2026-11-12".to_owned(),
+            portable: false,
+        }
+    }
+
+    fn from_the_publisher(installer: crate::model::Installer) -> Edition {
+        let mut edition = Edition::new(EditionKind::Windows);
+        edition.obtain = Some(Obtain::PublisherPage);
+        edition.download_page = Some("https://example.org/download".to_owned());
+        edition.licence = Some(Licence::OpenSource);
+        edition.installer = Some(installer);
+        edition
+    }
+
+    #[test]
+    fn a_pinned_installer_of_free_software_is_valid() {
+        let found = validate_entry(&entry(vec![from_the_publisher(pinned())]), today());
+        assert!(found.is_empty(), "{found:?}");
+
+        let mut msi = pinned();
+        msi.url = "https://downloads.example.org/1.2/Example-1.2.MSI".to_owned();
+        assert_eq!(codes(&entry(vec![from_the_publisher(msi)])), NONE);
+
+        let mut single = pinned();
+        single.portable = true;
+        assert_eq!(codes(&entry(vec![from_the_publisher(single)])), NONE);
+    }
+
+    #[test]
+    fn a_proprietary_application_never_carries_an_installer_to_download() {
+        // "Never download proprietary software": an edition that is marked
+        // proprietary, or not marked at all, may not name a file to fetch.
+        let mut proprietary = from_the_publisher(pinned());
+        proprietary.licence = Some(Licence::Proprietary);
+        let text = messages(&entry(vec![proprietary.clone()]));
+        assert_eq!(codes(&entry(vec![proprietary])), [Code::EntryInvalid]);
+        assert!(text.contains("never a proprietary application"), "{text}");
+
+        let mut unmarked = from_the_publisher(pinned());
+        unmarked.licence = None;
+        assert_eq!(codes(&entry(vec![unmarked])), [Code::EntryInvalid]);
+    }
+
+    #[test]
+    fn an_installer_belongs_to_a_windows_edition_from_the_publisher_s_page() {
+        let mut from_a_store = from_the_publisher(pinned());
+        from_a_store.obtain = Some(Obtain::Steam);
+        from_a_store.download_page = None;
+        from_a_store.store_id = Some("12345".to_owned());
+        let text = messages(&entry(vec![from_a_store]));
+        assert!(text.contains("obtained from the publisher's page"), "{text}");
+
+        let mut linux = flatpak();
+        linux.licence = Some(Licence::OpenSource);
+        linux.installer = Some(pinned());
+        let text = messages(&entry(vec![linux]));
+        assert!(
+            text.contains("field installer is not used by a flatpak"),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn an_installer_s_location_digest_and_size_are_checked() {
+        for url in [
+            "http://downloads.example.org/example-setup.exe",
+            "https://downloads.example.org/download",
+            "https://downloads.example.org/example-setup.exe?mirror=2",
+            "https://downloads.example.org/example-setup.exe#top",
+            "https://downloads.example.org/example.dmg",
+            "https://downloads.example.org/.exe",
+            "https://user@downloads.example.org/example-setup.exe",
+        ] {
+            let mut installer = pinned();
+            installer.url = url.to_owned();
+            let found = codes(&entry(vec![from_the_publisher(installer)]));
+            assert!(
+                !found.is_empty() && found.iter().all(|code| *code == Code::EntryInvalid),
+                "{url}: {found:?}"
+            );
+        }
+        for digest in [
+            "",
+            "9b697f65",
+            "9B697F65ECC2D9B0152F5EE96D72DDE522A7827690349D9307935DACF40F42EC",
+            "zb697f65ecc2d9b0152f5ee96d72dde522a7827690349d9307935dacf40f42ec",
+            "9b697f65ecc2d9b0152f5ee96d72dde522a7827690349d9307935dacf40f42ec0",
+        ] {
+            let mut installer = pinned();
+            installer.sha256 = digest.to_owned();
+            let text = messages(&entry(vec![from_the_publisher(installer)]));
+            assert!(text.contains("sha256 is not 64"), "{digest}: {text}");
+        }
+
+        let mut empty = pinned();
+        empty.size = 0;
+        assert!(messages(&entry(vec![from_the_publisher(empty)])).contains("size is zero"));
+        let mut huge = pinned();
+        huge.size = MAX_INSTALLER_BYTES + 1;
+        assert_eq!(
+            codes(&entry(vec![from_the_publisher(huge)])),
+            [Code::LimitExceeded]
+        );
+
+        let mut archive = pinned();
+        archive.url = "https://downloads.example.org/example-1.2.zip".to_owned();
+        assert_eq!(codes(&entry(vec![from_the_publisher(archive.clone())])), NONE);
+        archive.portable = true;
+        assert!(messages(&entry(vec![from_the_publisher(archive)])).contains("single program"));
+    }
+
+    #[test]
+    fn an_installer_states_its_licence_its_digest_s_source_and_the_day() {
+        let mut installer = pinned();
+        installer.licence = " ".to_owned();
+        assert!(messages(&entry(vec![from_the_publisher(installer)])).contains("licence is empty"));
+
+        let mut installer = pinned();
+        installer.licence_url = "ftp://example.org/licence".to_owned();
+        assert!(
+            messages(&entry(vec![from_the_publisher(installer)])).contains("licence_url is not")
+        );
+
+        let mut installer = pinned();
+        installer.hash_source = String::new();
+        assert!(
+            messages(&entry(vec![from_the_publisher(installer)])).contains("hash_source is empty")
+        );
+
+        let mut installer = pinned();
+        installer.checked = "2031-01-01".to_owned();
+        assert!(messages(&entry(vec![from_the_publisher(installer)])).contains("in the future"));
+
+        let mut installer = pinned();
+        installer.version = String::new();
+        assert!(messages(&entry(vec![from_the_publisher(installer)])).contains("version is empty"));
     }
 
     #[test]

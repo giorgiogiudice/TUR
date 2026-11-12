@@ -150,6 +150,57 @@
         }
       }
     },
+    "installer": {
+      "description": "The publisher's own installer of a freely redistributable Windows application: where it is and what it must be (ADR-0019). This is the one place an entry names a file to download.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url", "sha256", "size", "version", "licence", "licence_url", "hash_source", "checked"],
+      "properties": {
+        "url": {
+          "description": "The publisher's own download location of the file: an https URL whose path ends in the file's name. The pattern lists the accepted endings in lower case; the validator compares them in any case.",
+          "$ref": "#/$defs/httpsUrl",
+          "pattern": "/[A-Za-z0-9][A-Za-z0-9._+-]*\\.(exe|msi|zip)$"
+        },
+        "sha256": {
+          "description": "The SHA-256 of the file, as 64 lower-case hexadecimal digits.",
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "size": {
+          "description": "The size of the file in bytes. At most 4 GiB.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967296
+        },
+        "version": {
+          "description": "The version of the application the file installs.",
+          "$ref": "#/$defs/text",
+          "maxLength": 100
+        },
+        "licence": {
+          "description": "The licence the application is published under, as its publisher states it, for example MIT or GPL-3.0-or-later.",
+          "$ref": "#/$defs/text",
+          "maxLength": 200
+        },
+        "licence_url": {
+          "description": "The page the licence was read on.",
+          "$ref": "#/$defs/httpsUrl"
+        },
+        "hash_source": {
+          "description": "Where the SHA-256 was taken from: the publisher's checksum file, or the digest its release page publishes.",
+          "$ref": "#/$defs/text",
+          "maxLength": 200
+        },
+        "checked": {
+          "description": "The day the location, the digest and the licence were checked.",
+          "$ref": "#/$defs/date"
+        },
+        "portable": {
+          "description": "The file is the application itself, a single program, and not an installer: it is copied into place and never run to install.",
+          "type": "boolean"
+        }
+      }
+    },
     "edition": {
       "description": "One way an application exists. Which fields apply depends on kind. In an entry whose entry_kind is class the identifying fields may be left out.",
       "type": "object",
@@ -200,6 +251,10 @@
           "not": {
             "pattern": "\\.(exe|msi|msix|msixbundle|appx|zip|7z|rar|dmg|pkg|apk|xapk|apks|aab|appimage|deb|rpm|flatpak|tar|gz|tgz|xz|bz2|zst|iso|bin|run)([?#].*)?$"
           }
+        },
+        "installer": {
+          "description": "Windows, obtained from the publisher's page: the publisher's own installer of a freely redistributable application, pinned by its SHA-256 (ADR-0019). The application centre may download it when the user asks for the application, and runs nothing in it before the digest has been checked. Only an edition whose licence is open-source may carry one.",
+          "$ref": "#/$defs/installer"
         },
         "stores": {
           "description": "Android: the stores that carry the package. f-droid is an open-source store; google-play is proprietary and opt-in (ADR-0011); publisher-page means the publisher offers the package itself, and then download_page is required.",
@@ -253,7 +308,8 @@
           "then": {
             "properties": {
               "obtain": false, "package": false, "distribution": false, "store_id": false,
-              "download_page": false, "stores": false, "url": false, "primary": { "const": false },
+              "download_page": false, "installer": false, "stores": false, "url": false,
+              "primary": { "const": false },
               "records": { "items": { "properties": { "route": { "const": "flatpak" } } } }
             }
           }
@@ -263,7 +319,7 @@
           "then": {
             "properties": {
               "flatpak_id": false, "remote": false, "stores": false, "url": false,
-              "primary": { "const": false },
+              "primary": { "const": false }, "installer": false,
               "obtain": { "enum": ["fedora-package", "other-distribution-package", "steam", "publisher-page"] },
               "records": { "items": { "properties": { "route": { "enum": ["native", "distro-container"] } } } }
             }
@@ -286,6 +342,7 @@
             "properties": {
               "flatpak_id": false, "remote": false, "obtain": false, "distribution": false,
               "store_id": false, "url": false, "primary": { "const": false }, "packaging": false,
+              "installer": false,
               "records": { "items": { "properties": { "route": { "const": "android-runtime" } } } }
             }
           }
@@ -296,7 +353,7 @@
             "properties": {
               "flatpak_id": false, "remote": false, "obtain": false, "package": false,
               "distribution": false, "store_id": false, "download_page": false, "stores": false,
-              "packaging": false,
+              "packaging": false, "installer": false,
               "records": { "items": { "properties": { "route": { "const": "web" } } } }
             }
           }
@@ -307,8 +364,20 @@
             "properties": {
               "flatpak_id": false, "remote": false, "package": false, "distribution": false,
               "stores": false, "url": false, "primary": { "const": false }, "packaging": false,
+              "installer": false,
               "obtain": { "enum": ["mac-app-store", "publisher-page", "steam"] },
               "records": { "items": { "properties": { "route": { "const": "darling" } } } }
+            }
+          }
+        },
+        {
+          "if": { "required": ["installer"] },
+          "then": {
+            "required": ["obtain", "download_page", "licence"],
+            "properties": {
+              "kind": { "const": "windows" },
+              "obtain": { "const": "publisher-page" },
+              "licence": { "const": "open-source" }
             }
           }
         }

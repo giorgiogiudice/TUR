@@ -22,11 +22,14 @@
 //! specification names fails on a hand-made bad result, so a green run is
 //! not the result of a check that cannot fail.
 
+use std::collections::BTreeMap;
+use std::sync::Mutex;
+
 use tur_catalogue::{
-    AndroidStore, Arch, Category, CaveatCode, Edition, EditionKind, Entry, EntryKind, GpuClass,
-    HostFacts, Licence, Obtain, Outlook, Preferences, Rating, RatingSource, Record, Reporter,
-    Requirement, Route, RouteOption, RouteRequest, SCHEMA_VERSION, Severity, requirement_severity,
-    route,
+    ALTERNATIVE_TEXT_IDS, AndroidStore, Arch, CAVEAT_TEXT_IDS, Category, CaveatCode, Edition, EditionKind, Entry, EntryKind, GpuClass,
+    HostFacts, Licence, Obtain, Outlook, Preferences, Rating, RatingSource, ReasonCode, ReasonPart,
+    Record, Reporter, Requirement, Route, RouteOption, RouteRequest, SCHEMA_VERSION, Severity,
+    requirement_severity, route,
 };
 
 const APP_ID: &str = "org.example.app";
@@ -482,12 +485,92 @@ fn guest_only_for_a_reason(case: &Case<'_>, options: &[RouteOption]) {
 }
 
 /// Routes one case and applies every invariant to the answer.
+/// Every sentence seen anywhere in the space, by its identifier and its
+/// parameters: one identifier with one set of parameters must always be
+/// the same sentence, or a translation by identifier would say something
+/// the English does not.
+static SENTENCES: Mutex<BTreeMap<(String, String), String>> = Mutex::new(BTreeMap::new());
+
+fn same_sentence_every_time(kind: &str, id: &str, params: &str, text: &str) {
+    let mut seen = SENTENCES.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let key = (format!("{kind}:{id}"), params.to_owned());
+    match seen.get(&key) {
+        Some(known) => assert_eq!(
+            known, text,
+            "{kind} {id} with {params} was written as two different sentences"
+        ),
+        None => {
+            seen.insert(key, text.to_owned());
+        }
+    }
+}
+
+/// The reason, every caveat and the alternative carry stable identifiers
+/// (issue #41): every identifier is one the router lists, the reason's
+/// first part is its code, and an identifier with its parameters is always
+/// the same English sentence.
+fn sentences_carry_stable_identifiers(case: &Case<'_>, options: &[RouteOption]) {
+    for option in options {
+        assert!(!option.reason_parts.is_empty(), "{}", case.describe());
+        assert_eq!(
+            option.reason_code,
+            option.reason_parts[0].code,
+            "{}",
+            case.describe()
+        );
+        let codes: Vec<&str> = option
+            .reason_parts
+            .iter()
+            .map(|part| part.code.as_str())
+            .collect();
+        // The no-route reason repeats each blocking caveat's sentence, so
+        // the caveats' parameters are part of what decides its text.
+        let caveat_params: Vec<(&str, &tur_catalogue::Params)> = option
+            .caveats
+            .iter()
+            .map(|caveat| (caveat.text_id, &caveat.params))
+            .collect();
+        let params = format!(
+            "{}{}",
+            serde_json::to_string(&option.reason_parts).unwrap_or_default(),
+            serde_json::to_string(&caveat_params).unwrap_or_default()
+        );
+        same_sentence_every_time("reason", &codes.join("+"), &params, &option.reason);
+        for caveat in &option.caveats {
+            assert!(
+                CAVEAT_TEXT_IDS.contains(&caveat.text_id),
+                "{} is not a listed caveat identifier",
+                caveat.text_id
+            );
+            let params = serde_json::to_string(&caveat.params).unwrap_or_default();
+            same_sentence_every_time("caveat", caveat.text_id, &params, &caveat.text);
+        }
+        if let Some(alternative) = &option.alternative {
+            assert!(ALTERNATIVE_TEXT_IDS.contains(&alternative.text_id));
+            same_sentence_every_time("alternative", alternative.text_id, "", &alternative.text);
+        }
+        // A blocked route named in the no-route reason names its caveat,
+        // and that caveat is among the statement's.
+        for part in &option.reason_parts {
+            if part.code == ReasonCode::RouteBlocked {
+                let caveat = part.params.get("caveat").expect("a caveat parameter");
+                assert!(
+                    option.caveats.iter().any(|known| known.text_id == caveat),
+                    "{}",
+                    case.describe()
+                );
+            }
+        }
+    }
+}
+
 fn check(case: &Case<'_>) -> Vec<RouteOption> {
     let request = RouteRequest {
         entry: case.entry,
         offer_windows_guest: case.offer_windows_guest,
     };
     let options = route(&request, case.host, case.preferences);
+    sentences_carry_stable_identifiers(case, &options);
     never_empty_and_no_route_is_explicit(case, &options);
     guest_never_precedes_its_layer(case, &options);
     forbidden_routes_never_appear(case, &options);
@@ -1016,6 +1099,11 @@ fn option(route: Route, edition_index: usize, kind: EditionKind) -> RouteOption 
         caveats: Vec::new(),
         prerequisites: Vec::new(),
         alternative: None,
+        reason_code: ReasonCode::WindowsWine,
+        reason_parts: vec![ReasonPart {
+            code: ReasonCode::WindowsWine,
+            params: Default::default(),
+        }],
     }
 }
 

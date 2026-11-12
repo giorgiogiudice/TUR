@@ -1,0 +1,127 @@
+#!/bin/sh
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# A stand-in for flatpak in the tests of tur-apps (tests/cli.rs). It keeps its
+# state in $FAKE_STATE and prints what flatpak prints without a terminal:
+# tab-separated columns, no header, one line per operation. It installs
+# nothing real: an "installed" application is a directory and a line in a
+# file. The real flatpak is exercised by the apps workflow.
+set -eu
+state="${FAKE_STATE:?}"
+user_dir="${FLATPAK_USER_DIR:-${XDG_DATA_HOME:?}/flatpak}"
+tab="$(printf '\t')"
+runtime="org.example.Platform/x86_64/1"
+touch "$state/remotes" "$state/refs"
+echo "$*" >> "$state/flatpak.log"
+
+app_of() { echo "$1" | cut -d/ -f2; }
+
+command="$1"
+shift
+case "$command" in
+remotes)
+    cat "$state/remotes"
+    ;;
+remote-add)
+    while [ "${1#--}" != "$1" ]; do shift; done
+    if ! grep -q "^$1$tab" "$state/remotes"; then
+        printf '%s\t%s\t\n' "$1" "$2" >> "$state/remotes"
+    fi
+    ;;
+remote-modify)
+    switch="$2"
+    name="$3"
+    options=""
+    [ "$switch" = "--disable" ] && options="disabled"
+    awk -F "$tab" -v OFS="$tab" -v n="$name" -v o="$options" '$1 == n { $3 = o } { print }' \
+        "$state/remotes" > "$state/remotes.new"
+    mv "$state/remotes.new" "$state/remotes"
+    ;;
+remote-info)
+    show="$2"
+    remote="$3"
+    ref="$4"
+    id="$(app_of "$ref")"
+    if ! grep -q "^$remote$tab" "$state/remotes" || [ -e "$state/missing-$id" ]; then
+        echo "error: Nothing matches $ref in remote $remote" >&2
+        exit 1
+    fi
+    if [ "$show" = "--show-commit" ]; then
+        echo "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    else
+        printf '[Application]\nname=%s\nruntime=%s\ncommand=viewer\n\n[Context]\nshared=network;ipc;\nsockets=x11;wayland;\nfilesystems=xdg-pictures:ro;\n' "$id" "$runtime"
+    fi
+    ;;
+install)
+    remote="$3"
+    ref="$4"
+    id="$(app_of "$ref")"
+    if ! grep -qx "runtime/$runtime" "$state/refs"; then
+        echo "Installing runtime/$runtime"
+        echo "runtime/$runtime" >> "$state/refs"
+    fi
+    if [ -e "$state/fail-install" ]; then
+        echo "Error: Failed to install $id: the fake was told to fail" >&2
+        exit 1
+    fi
+    echo "Installing $ref"
+    echo "$ref" >> "$state/refs"
+    mkdir -p "$user_dir/app/$id" "$user_dir/exports/share/applications"
+    touch "$user_dir/exports/share/applications/$id.desktop"
+    ;;
+list)
+    case "$*" in
+    *--app*)
+        grep '^app/' "$state/refs" | while read -r ref; do
+            printf '%s\t1.0\tstable\tflathub\t%s\n' "$(app_of "$ref")" "$runtime"
+        done
+        ;;
+    *)
+        cat "$state/refs"
+        ;;
+    esac
+    ;;
+info)
+    if [ "$2" = "--show-size" ]; then
+        echo 12345
+    else
+        echo "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    fi
+    ;;
+uninstall)
+    delete=no
+    for argument in "$@"; do
+        case "$argument" in
+        --delete-data) delete=yes ;;
+        --*) ;;
+        *)
+            if grep -qx "$argument" "$state/refs"; then
+                echo "Uninstalling $argument"
+                grep -vx "$argument" "$state/refs" > "$state/refs.new" || true
+                mv "$state/refs.new" "$state/refs"
+            fi
+            case "$argument" in
+            app/*)
+                id="$(app_of "$argument")"
+                rm -rf "$user_dir/app/$id" "$user_dir/exports/share/applications/$id.desktop"
+                if [ "$delete" = yes ]; then rm -rf "$HOME/.var/app/$id"; fi
+                ;;
+            esac
+            ;;
+        esac
+    done
+    ;;
+update)
+    echo "Updating $3"
+    ;;
+remote-ls)
+    if [ -f "$state/updates" ]; then cat "$state/updates"; fi
+    ;;
+run)
+    exit 0
+    ;;
+*)
+    echo "fake flatpak: unknown command $command" >&2
+    exit 1
+    ;;
+esac

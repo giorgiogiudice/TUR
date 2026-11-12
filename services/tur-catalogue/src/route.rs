@@ -31,6 +31,8 @@
 //! When nothing else is left, the list starts with [`Route::NoRoute`], with
 //! the reason and the least-bad alternative.
 
+use std::collections::BTreeMap;
+
 use serde::Serialize;
 
 use crate::host::{Arch, GpuClass, HostFacts, Preferences};
@@ -124,6 +126,12 @@ pub enum CaveatCode {
     PinUnavailable,
 }
 
+/// The values a sentence was written with, by name, so that a user
+/// interface can put them into its own translation of the sentence. The
+/// values are the catalogue's and the router's own words (`wine`, `poor`,
+/// `microsoft-store`), numbers, dates and names: never English prose.
+pub type Params = BTreeMap<&'static str, String>;
+
 /// Something the user must see before choosing a route.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Caveat {
@@ -135,7 +143,67 @@ pub struct Caveat {
     pub requirement: Option<Requirement>,
     /// The caveat in plain language.
     pub text: String,
+    /// The stable identifier of the sentence in `text`: one of
+    /// [`CAVEAT_TEXT_IDS`]. The same identifier with the same parameters is
+    /// always the same sentence.
+    pub text_id: &'static str,
+    /// The values the sentence was written with.
+    pub params: Params,
 }
+
+/// Every identifier a caveat's sentence can have ([`Caveat::text_id`]).
+///
+/// An identifier names one English sentence, with its parameters left open.
+/// The identifiers are stable: a sentence may be reworded, and its
+/// identifier stays; a sentence that says something else gets a new one.
+pub const CAVEAT_TEXT_IDS: [&str; 46] = [
+    "requirement.kernel-anti-cheat.proton",
+    "requirement.kernel-anti-cheat.wine",
+    "requirement.kernel-anti-cheat.windows-guest",
+    "requirement.kernel-anti-cheat.android-runtime",
+    "requirement.kernel-anti-cheat.darling",
+    "requirement.kernel-anti-cheat.linux",
+    "requirement.kernel-anti-cheat.web",
+    "requirement.hardware-attested-drm.linux-or-web",
+    "requirement.hardware-attested-drm.not-provided",
+    "requirement.play-integrity.android-runtime",
+    "requirement.play-integrity.other-route",
+    "requirement.arm-only-native-code.arm-machine",
+    "requirement.arm-only-native-code.translated",
+    "requirement.arm-only-native-code.android-runtime",
+    "requirement.arm-only-native-code.web",
+    "requirement.arm-only-native-code.other-machine",
+    "requirement.kernel-driver.compatibility-layer",
+    "requirement.kernel-driver.windows-guest",
+    "requirement.kernel-driver.never-loaded",
+    "requirement.kernel-driver.linux",
+    "requirement.kernel-driver.web",
+    "requirement.hardware-dongle.not-expected",
+    "requirement.hardware-dongle.windows-guest",
+    "requirement.hardware-dongle.linux",
+    "requirement.hardware-dongle.web",
+    "requirement.heavy-gpu.windows-guest",
+    "requirement.heavy-gpu.no-gpu",
+    "requirement.heavy-gpu.integrated",
+    "requirement.heavy-gpu.discrete",
+    "requirement.heavy-gpu.unknown-gpu",
+    "requirement.online-account",
+    "architecture.not-x86-64",
+    "closed-store.windows-guest",
+    "closed-store.not-integrated",
+    "community-package",
+    "experimental.darling",
+    "guest-memory.too-little",
+    "guest-memory.enough",
+    "guest-memory.unknown",
+    "reported-inadequate.external",
+    "reported-inadequate.external-unquoted",
+    "reported-inadequate.tur-test",
+    "reported-inadequate.unsourced",
+    "guest-unsuitable-for-games",
+    "guest-not-offered.no-virtual-machines",
+    "pin-unavailable",
+];
 
 /// What a prerequisite asks for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
@@ -221,6 +289,143 @@ pub struct Alternative {
     pub kind: AlternativeKind,
     /// The alternative in plain language.
     pub text: String,
+    /// The stable identifier of the sentence in `text`: one of
+    /// [`ALTERNATIVE_TEXT_IDS`]. It has no parameters.
+    pub text_id: &'static str,
+}
+
+/// Every identifier an alternative's sentence can have
+/// ([`Alternative::text_id`]).
+pub const ALTERNATIVE_TEXT_IDS: [&str; 7] = [
+    "dual-boot.only-way",
+    "another-computer.x86-64",
+    "dual-boot.or-another-computer",
+    "certified-android-device",
+    "mac",
+    "another-computer.processor",
+    "none-known",
+];
+
+/// What one sentence of an option's reason says.
+///
+/// The reason of an option ([`RouteOption::reason`]) is one or more
+/// sentences. Each has a code here, so that a user interface can show the
+/// reason in another language: it translates each part by its code and
+/// puts the part's parameters in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ReasonCode {
+    /// A Linux edition exists as a Flatpak.
+    LinuxFlatpak,
+    /// A native Linux edition exists.
+    LinuxNative,
+    /// A Linux edition exists as a package of another distribution.
+    LinuxOtherDistribution,
+    /// A Windows edition exists and the application is a game: Proton.
+    WindowsGameProton,
+    /// A Windows edition exists: Wine comes before a virtual machine.
+    WindowsWine,
+    /// The Windows guest is offered because the compatibility layer is
+    /// rated poor or broken. Parameter: `rating`.
+    GuestLayerRated,
+    /// The Windows guest is offered because a known requirement stands in
+    /// the compatibility layer's way and no rating says otherwise.
+    GuestKnownObstacle,
+    /// The Windows guest is offered because the user asked for it.
+    GuestAsked,
+    /// An Android edition exists.
+    Android,
+    /// The web application is the publisher's primary form.
+    WebPrimary,
+    /// A web edition exists, and the user pinned it.
+    WebPinned,
+    /// A web edition exists, and no better route is free of obstacles.
+    WebNothingBetter,
+    /// A macOS edition exists and the user has enabled Darling.
+    MacosDarling,
+    /// Added to a Linux edition that was moved down the list. Parameters:
+    /// `route` (the route it is listed after), `rating` (this edition's)
+    /// and `better_rating` (that route's).
+    ListedAfterBetterRoute,
+    /// The statement that no route runs the application. Parameter: `name`.
+    NoRoute,
+    /// Added to the no-route statement for each route that is blocked.
+    /// Parameters: `route`, and `caveat`, the identifier of the blocking
+    /// caveat's sentence ([`Caveat::text_id`]); that caveat is among the
+    /// statement's caveats, with its own parameters.
+    RouteBlocked,
+    /// Added to the no-route statement: the macOS edition has no route
+    /// because Darling is not enabled.
+    MacosNoDarling,
+    /// Added to the no-route statement: the catalogue lists no edition.
+    NoEdition,
+}
+
+impl ReasonCode {
+    /// Every reason code.
+    pub const ALL: [ReasonCode; 18] = [
+        ReasonCode::LinuxFlatpak,
+        ReasonCode::LinuxNative,
+        ReasonCode::LinuxOtherDistribution,
+        ReasonCode::WindowsGameProton,
+        ReasonCode::WindowsWine,
+        ReasonCode::GuestLayerRated,
+        ReasonCode::GuestKnownObstacle,
+        ReasonCode::GuestAsked,
+        ReasonCode::Android,
+        ReasonCode::WebPrimary,
+        ReasonCode::WebPinned,
+        ReasonCode::WebNothingBetter,
+        ReasonCode::MacosDarling,
+        ReasonCode::ListedAfterBetterRoute,
+        ReasonCode::NoRoute,
+        ReasonCode::RouteBlocked,
+        ReasonCode::MacosNoDarling,
+        ReasonCode::NoEdition,
+    ];
+
+    /// The code as it is written in the router's output, for example
+    /// `windows-wine`.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            ReasonCode::LinuxFlatpak => "linux-flatpak",
+            ReasonCode::LinuxNative => "linux-native",
+            ReasonCode::LinuxOtherDistribution => "linux-other-distribution",
+            ReasonCode::WindowsGameProton => "windows-game-proton",
+            ReasonCode::WindowsWine => "windows-wine",
+            ReasonCode::GuestLayerRated => "guest-layer-rated",
+            ReasonCode::GuestKnownObstacle => "guest-known-obstacle",
+            ReasonCode::GuestAsked => "guest-asked",
+            ReasonCode::Android => "android",
+            ReasonCode::WebPrimary => "web-primary",
+            ReasonCode::WebPinned => "web-pinned",
+            ReasonCode::WebNothingBetter => "web-nothing-better",
+            ReasonCode::MacosDarling => "macos-darling",
+            ReasonCode::ListedAfterBetterRoute => "listed-after-better-route",
+            ReasonCode::NoRoute => "no-route",
+            ReasonCode::RouteBlocked => "route-blocked",
+            ReasonCode::MacosNoDarling => "macos-no-darling",
+            ReasonCode::NoEdition => "no-edition",
+        }
+    }
+}
+
+/// One sentence of an option's reason, as a code with its parameters.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ReasonPart {
+    /// What the sentence says.
+    pub code: ReasonCode,
+    /// The values the sentence was written with.
+    pub params: Params,
+}
+
+impl ReasonPart {
+    fn plain(code: ReasonCode) -> Self {
+        ReasonPart {
+            code,
+            params: Params::new(),
+        }
+    }
 }
 
 /// One way to run the application, or the statement that there is none.
@@ -253,6 +458,12 @@ pub struct RouteOption {
     pub prerequisites: Vec<Prerequisite>,
     /// For [`Route::NoRoute`]: the least-bad alternative.
     pub alternative: Option<Alternative>,
+    /// The code of the first sentence of `reason`: why the option is
+    /// listed at all. The same as the code of the first of `reason_parts`.
+    pub reason_code: ReasonCode,
+    /// `reason`, sentence by sentence, as codes with their parameters. The
+    /// same parts always give the same `reason`.
+    pub reason_parts: Vec<ReasonPart>,
 }
 
 impl RouteOption {
@@ -290,11 +501,104 @@ pub fn recommended(options: &[RouteOption]) -> &RouteOption {
 /// not meet the requirement and the application probably will not work
 /// fully.
 pub fn requirement_severity(requirement: Requirement, route: Route, host: &HostFacts) -> Severity {
-    requirement_caveat(requirement, route, host).0
+    requirement_caveat_text(requirement, route, host).0
+}
+
+/// The severity of a requirement on a route, the identifier of the
+/// sentence that says so, and the sentence.
+fn requirement_caveat(
+    requirement: Requirement,
+    route: Route,
+    host: &HostFacts,
+) -> (Severity, &'static str, String) {
+    let (severity, text) = requirement_caveat_text(requirement, route, host);
+    (severity, requirement_text_id(requirement, route, host), text)
+}
+
+/// The identifier of the sentence [`requirement_caveat_text`] writes for a
+/// requirement on a route: one of [`CAVEAT_TEXT_IDS`]. None of these
+/// sentences has a parameter, so an identifier is exactly one sentence; a
+/// test holds the two functions against each other.
+fn requirement_text_id(requirement: Requirement, route: Route, host: &HostFacts) -> &'static str {
+    match requirement {
+        Requirement::KernelAntiCheat => match route {
+            Route::Proton => "requirement.kernel-anti-cheat.proton",
+            Route::Wine => "requirement.kernel-anti-cheat.wine",
+            Route::WindowsGuest => "requirement.kernel-anti-cheat.windows-guest",
+            Route::AndroidRuntime => "requirement.kernel-anti-cheat.android-runtime",
+            Route::Darling => "requirement.kernel-anti-cheat.darling",
+            Route::Flatpak | Route::Native | Route::DistroContainer => {
+                "requirement.kernel-anti-cheat.linux"
+            }
+            Route::Web | Route::NoRoute => "requirement.kernel-anti-cheat.web",
+        },
+        Requirement::HardwareAttestedDrm => match route {
+            Route::Flatpak
+            | Route::Native
+            | Route::DistroContainer
+            | Route::Web
+            | Route::NoRoute => "requirement.hardware-attested-drm.linux-or-web",
+            Route::Proton
+            | Route::Wine
+            | Route::WindowsGuest
+            | Route::AndroidRuntime
+            | Route::Darling => "requirement.hardware-attested-drm.not-provided",
+        },
+        Requirement::PlayIntegrity => match route {
+            Route::AndroidRuntime => "requirement.play-integrity.android-runtime",
+            _ => "requirement.play-integrity.other-route",
+        },
+        Requirement::ArmOnlyNativeCode => {
+            if host.arch == Arch::Aarch64 {
+                "requirement.arm-only-native-code.arm-machine"
+            } else {
+                match route {
+                    Route::AndroidRuntime if host.arm_translation => {
+                        "requirement.arm-only-native-code.translated"
+                    }
+                    Route::AndroidRuntime => "requirement.arm-only-native-code.android-runtime",
+                    Route::Web | Route::NoRoute => "requirement.arm-only-native-code.web",
+                    _ => "requirement.arm-only-native-code.other-machine",
+                }
+            }
+        }
+        Requirement::KernelDriver => match route {
+            Route::Proton | Route::Wine => "requirement.kernel-driver.compatibility-layer",
+            Route::WindowsGuest => "requirement.kernel-driver.windows-guest",
+            Route::AndroidRuntime | Route::Darling => "requirement.kernel-driver.never-loaded",
+            Route::Flatpak | Route::Native | Route::DistroContainer => {
+                "requirement.kernel-driver.linux"
+            }
+            Route::Web | Route::NoRoute => "requirement.kernel-driver.web",
+        },
+        Requirement::HardwareDongle => match route {
+            Route::Proton | Route::Wine | Route::AndroidRuntime | Route::Darling => {
+                "requirement.hardware-dongle.not-expected"
+            }
+            Route::WindowsGuest => "requirement.hardware-dongle.windows-guest",
+            Route::Flatpak | Route::Native | Route::DistroContainer => {
+                "requirement.hardware-dongle.linux"
+            }
+            Route::Web | Route::NoRoute => "requirement.hardware-dongle.web",
+        },
+        Requirement::HeavyGpu => {
+            if route == Route::WindowsGuest {
+                "requirement.heavy-gpu.windows-guest"
+            } else {
+                match host.gpu {
+                    GpuClass::None => "requirement.heavy-gpu.no-gpu",
+                    GpuClass::Integrated => "requirement.heavy-gpu.integrated",
+                    GpuClass::Discrete => "requirement.heavy-gpu.discrete",
+                    GpuClass::Unknown => "requirement.heavy-gpu.unknown-gpu",
+                }
+            }
+        }
+        Requirement::OnlineAccount => "requirement.online-account",
+    }
 }
 
 /// The severity and the wording of a requirement on a route.
-fn requirement_caveat(
+fn requirement_caveat_text(
     requirement: Requirement,
     route: Route,
     host: &HostFacts,
@@ -508,12 +812,38 @@ fn rating_of(edition: &Edition, route: Route) -> (Rating, RatingSource) {
     (record.rating, source)
 }
 
-fn caveat(code: CaveatCode, severity: Severity, text: impl Into<String>) -> Caveat {
+fn caveat(
+    code: CaveatCode,
+    severity: Severity,
+    text_id: &'static str,
+    params: Params,
+    text: impl Into<String>,
+) -> Caveat {
     Caveat {
         code,
         severity,
         requirement: None,
         text: text.into(),
+        text_id,
+        params,
+    }
+}
+
+/// A sentence of a reason with its code and parameters, before it becomes
+/// part of an option.
+struct Why {
+    code: ReasonCode,
+    params: Params,
+    text: String,
+}
+
+impl Why {
+    fn plain(code: ReasonCode, text: &str) -> Self {
+        Why {
+            code,
+            params: Params::new(),
+            text: text.to_owned(),
+        }
     }
 }
 
@@ -531,7 +861,7 @@ fn evaluate(
     index: usize,
     edition: &Edition,
     host: &HostFacts,
-    reason: String,
+    why: Why,
 ) -> RouteOption {
     let (rating, rating_source) = rating_of(edition, route);
     let mut caveats = Vec::new();
@@ -547,6 +877,8 @@ fn evaluate(
         caveats.push(caveat(
             CaveatCode::Architecture,
             Severity::Blocker,
+            "architecture.not-x86-64",
+            Params::from([("arch", host.arch.as_str().to_owned())]),
             format!(
                 "This route runs software built for x86-64 processors, and this machine is {}.",
                 host.arch.as_str()
@@ -558,7 +890,7 @@ fn evaluate(
         if !edition.requires(requirement) {
             continue;
         }
-        let (severity, text) = requirement_caveat(requirement, route, host);
+        let (severity, text_id, text) = requirement_caveat(requirement, route, host);
         if severity == Severity::Obstacle && requirement == Requirement::HeavyGpu {
             firm_obstacle = true;
         }
@@ -567,6 +899,8 @@ fn evaluate(
             severity,
             requirement: Some(requirement),
             text,
+            text_id,
+            params: Params::new(),
         });
     }
 
@@ -577,6 +911,8 @@ fn evaluate(
             caveats.push(caveat(
                 CaveatCode::ClosedStore,
                 Severity::Note,
+                "closed-store.windows-guest",
+                Params::from([("store", obtain.as_str().to_owned())]),
                 format!(
                     "This edition comes from {}; inside the Windows guest you install it from there yourself.",
                     obtain.label()
@@ -587,6 +923,8 @@ fn evaluate(
             caveats.push(caveat(
                 CaveatCode::ClosedStore,
                 Severity::Obstacle,
+                "closed-store.not-integrated",
+                Params::from([("store", obtain.as_str().to_owned())]),
                 format!(
                     "This edition is distributed only through {}, which TUR cannot integrate, and store packages are not expected to install on this route.",
                     obtain.label()
@@ -599,6 +937,8 @@ fn evaluate(
         caveats.push(caveat(
             CaveatCode::CommunityPackage,
             Severity::Note,
+            "community-package",
+            Params::new(),
             "This package is maintained by its packagers, not by the application's publisher.",
         ));
     }
@@ -607,62 +947,99 @@ fn evaluate(
         caveats.push(caveat(
             CaveatCode::Experimental,
             Severity::Obstacle,
+            "experimental.darling",
+            Params::new(),
             "Experimental: Darling comes with no promise that this application works, and it does not run mainstream macOS graphical applications.",
         ));
     }
 
     if route == Route::WindowsGuest {
+        let needed = || Params::from([("needed_gb", (GUEST_MEMORY_MIB / 1024).to_string())]);
         match host.memory_mib {
             Some(memory) if memory < GUEST_MEMORY_FLOOR_MIB => {
                 firm_obstacle = true;
+                let available = (memory + 512) / 1024;
+                let mut params = needed();
+                params.insert("available_gb", available.to_string());
                 caveats.push(caveat(
                     CaveatCode::GuestMemory,
                     Severity::Obstacle,
+                    "guest-memory.too-little",
+                    params,
                     format!(
-                        "Needs about 16 GB of memory while the Windows guest runs; this machine has about {} GB.",
-                        (memory + 512) / 1024
+                        "Needs about 16 GB of memory while the Windows guest runs; this machine has about {available} GB."
                     ),
                 ));
             }
             Some(_) => caveats.push(caveat(
                 CaveatCode::GuestMemory,
                 Severity::Note,
+                "guest-memory.enough",
+                needed(),
                 "Needs about 16 GB of memory while the Windows guest runs; this machine has that much.",
             )),
             None => caveats.push(caveat(
                 CaveatCode::GuestMemory,
                 Severity::Warning,
+                "guest-memory.unknown",
+                needed(),
                 "Needs about 16 GB of memory while the Windows guest runs.",
             )),
         }
     }
 
     if rating.is_adverse() {
-        let text = match &rating_source {
+        let mut params = Params::from([("rating", rating.as_str().to_owned())]);
+        let (text_id, text) = match &rating_source {
             RatingSource::External {
                 name,
                 source_rating,
                 date,
                 ..
-            } => match source_rating {
-                Some(words) => format!(
-                    "Reported {} by {name} (\"{words}\"), checked {date}. Not tested by TUR.",
-                    rating.as_str()
-                ),
-                None => format!(
-                    "Reported {} by {name}, checked {date}. Not tested by TUR.",
-                    rating.as_str()
-                ),
-            },
-            RatingSource::TurTest { report, date, .. } => format!(
-                "Rated {} in TUR's own test of {date} ({report}).",
-                rating.as_str()
+            } => {
+                params.insert("source", name.clone());
+                params.insert("date", date.clone());
+                match source_rating {
+                    Some(words) => {
+                        params.insert("source_rating", words.clone());
+                        (
+                            "reported-inadequate.external",
+                            format!(
+                                "Reported {} by {name} (\"{words}\"), checked {date}. Not tested by TUR.",
+                                rating.as_str()
+                            ),
+                        )
+                    }
+                    None => (
+                        "reported-inadequate.external-unquoted",
+                        format!(
+                            "Reported {} by {name}, checked {date}. Not tested by TUR.",
+                            rating.as_str()
+                        ),
+                    ),
+                }
+            }
+            RatingSource::TurTest { report, date, .. } => {
+                params.insert("report", report.clone());
+                params.insert("date", date.clone());
+                (
+                    "reported-inadequate.tur-test",
+                    format!(
+                        "Rated {} in TUR's own test of {date} ({report}).",
+                        rating.as_str()
+                    ),
+                )
+            }
+            RatingSource::Unrated => (
+                "reported-inadequate.unsourced",
+                format!("Rated {}.", rating.as_str()),
             ),
-            RatingSource::Unrated => format!("Rated {}.", rating.as_str()),
         };
         caveats.push(caveat(
             CaveatCode::ReportedInadequate,
             Severity::Warning,
+            text_id,
+            params,
             text,
         ));
     }
@@ -691,10 +1068,15 @@ fn evaluate(
         outlook,
         recommended: false,
         pinned: false,
-        reason,
+        reason: why.text,
         caveats,
         prerequisites: prerequisites(route, edition, host),
         alternative: None,
+        reason_code: why.code,
+        reason_parts: vec![ReasonPart {
+            code: why.code,
+            params: why.params,
+        }],
     }
 }
 
@@ -786,21 +1168,29 @@ fn windows_options(
     let (layer_route, reason) = if game {
         (
             Route::Proton,
-            "A Windows edition exists and this is a game: Proton, through umu-launcher, is the first route for games.",
+            Why::plain(
+                ReasonCode::WindowsGameProton,
+                "A Windows edition exists and this is a game: Proton, through umu-launcher, is the first route for games.",
+            ),
         )
     } else {
         (
             Route::Wine,
-            "A Windows edition exists: Wine, a compatibility layer, comes before a virtual machine.",
+            Why::plain(
+                ReasonCode::WindowsWine,
+                "A Windows edition exists: Wine, a compatibility layer, comes before a virtual machine.",
+            ),
         )
     };
-    let mut layer = evaluate(layer_route, index, edition, host, reason.to_owned());
+    let mut layer = evaluate(layer_route, index, edition, host, reason);
 
     if game {
         if layer.outlook == Outlook::Doubtful {
             layer.caveats.push(caveat(
                 CaveatCode::GuestUnsuitableForGames,
                 Severity::Note,
+                "guest-unsuitable-for-games",
+                Params::new(),
                 "A Windows guest is not offered for games: it has no usable GPU acceleration.",
             ));
         }
@@ -818,21 +1208,31 @@ fn windows_options(
     let asked = request.offer_windows_guest
         || preferences.pinned_route(&entry.id) == Some(Route::WindowsGuest);
     let why = if layer.rating.is_adverse() {
-        Some(format!(
-            "Offered because Wine is rated {} for this application.",
-            layer.rating.as_str()
+        Some((
+            ReasonCode::GuestLayerRated,
+            Params::from([("rating", layer.rating.as_str().to_owned())]),
+            format!(
+                "Offered because Wine is rated {} for this application.",
+                layer.rating.as_str()
+            ),
         ))
     } else if layer.rating == Rating::Unknown && known_obstacle {
-        Some(
+        Some((
+            ReasonCode::GuestKnownObstacle,
+            Params::new(),
             "Offered because a known requirement stands in Wine's way and no rating says that Wine runs it all the same."
                 .to_owned(),
-        )
+        ))
     } else if asked {
-        Some("Offered because you asked for it.".to_owned())
+        Some((
+            ReasonCode::GuestAsked,
+            Params::new(),
+            "Offered because you asked for it.".to_owned(),
+        ))
     } else {
         None
     };
-    let Some(why) = why else {
+    let Some((code, params, why)) = why else {
         return vec![layer];
     };
 
@@ -840,6 +1240,8 @@ fn windows_options(
         layer.caveats.push(caveat(
             CaveatCode::GuestNotOffered,
             Severity::Warning,
+            "guest-not-offered.no-virtual-machines",
+            Params::new(),
             "A Windows guest would be offered for this application as well, and is not, because you have chosen never to use a virtual machine. What is lost: the route that runs it on real Windows, which is the one expected to work where Wine does not.",
         ));
         return vec![layer];
@@ -849,9 +1251,13 @@ fn windows_options(
         index,
         edition,
         host,
-        format!(
-            "{why} It runs in real Windows, in a virtual machine, and its windows appear on the desktop."
-        ),
+        Why {
+            code,
+            params,
+            text: format!(
+                "{why} It runs in real Windows, in a virtual machine, and its windows appear on the desktop."
+            ),
+        },
     );
     vec![layer, guest]
 }
@@ -916,7 +1322,8 @@ fn demote_clearly_worse(options: &mut Vec<RouteOption>) {
             continue;
         };
         let mut target = position + 1 + offset;
-        let better_label = options[target].route.label();
+        let better_route = options[target].route;
+        let better_label = better_route.label();
         let better_rating = options[target].rating.as_str();
         // Keep a compatibility layer and its guest together.
         let followed_by_its_guest = options.get(target + 1).is_some_and(|next| {
@@ -930,6 +1337,14 @@ fn demote_clearly_worse(options: &mut Vec<RouteOption>) {
             " Listed after {better_label} because this edition is rated {} and that route is rated {better_rating}.",
             moved.rating.as_str()
         ));
+        moved.reason_parts.push(ReasonPart {
+            code: ReasonCode::ListedAfterBetterRoute,
+            params: Params::from([
+                ("route", better_route.as_str().to_owned()),
+                ("rating", moved.rating.as_str().to_owned()),
+                ("better_rating", better_rating.to_owned()),
+            ]),
+        });
         options.insert(target, moved);
     }
 }
@@ -938,6 +1353,10 @@ fn demote_clearly_worse(options: &mut Vec<RouteOption>) {
 /// reason and the least-bad alternative.
 fn no_route(entry: &Entry, host: &HostFacts, blocked: &[RouteOption]) -> RouteOption {
     let mut reason = format!("No route on TUR runs {} on this machine.", entry.name);
+    let mut parts = vec![ReasonPart {
+        code: ReasonCode::NoRoute,
+        params: Params::from([("name", entry.name.clone())]),
+    }];
     let mut caveats: Vec<Caveat> = Vec::new();
     for option in blocked {
         let blocker = option
@@ -946,6 +1365,13 @@ fn no_route(entry: &Entry, host: &HostFacts, blocked: &[RouteOption]) -> RouteOp
             .find(|caveat| caveat.severity == Severity::Blocker);
         if let Some(blocker) = blocker {
             reason.push_str(&format!(" {}: {}", option.route.label(), blocker.text));
+            parts.push(ReasonPart {
+                code: ReasonCode::RouteBlocked,
+                params: Params::from([
+                    ("route", option.route.as_str().to_owned()),
+                    ("caveat", blocker.text_id.to_owned()),
+                ]),
+            });
             if !caveats.iter().any(|known| known.text == blocker.text) {
                 caveats.push(blocker.clone());
             }
@@ -957,9 +1383,11 @@ fn no_route(entry: &Entry, host: &HostFacts, blocked: &[RouteOption]) -> RouteOp
         reason.push_str(
             " The macOS edition has no route: Darling, TUR's experimental macOS layer, is not enabled, and a macOS virtual machine is not an option, because Apple's licence allows macOS guests only on Apple hardware.",
         );
+        parts.push(ReasonPart::plain(ReasonCode::MacosNoDarling));
     }
     if entry.editions.is_empty() {
         reason.push_str(" The catalogue lists no edition of it.");
+        parts.push(ReasonPart::plain(ReasonCode::NoEdition));
     }
 
     let blocked_kind = |kind: EditionKind| {
@@ -974,42 +1402,47 @@ fn no_route(entry: &Entry, host: &HostFacts, blocked: &[RouteOption]) -> RouteOp
                 .is_some_and(|caveat| caveat.severity == Severity::Blocker)
     });
     let alternative = if anti_cheat {
-        Alternative {
-            kind: AlternativeKind::DualBoot,
-            text: "Dual boot: install Windows beside TUR and run it there. That is the only way."
-                .to_owned(),
-        }
+        alternative(
+            AlternativeKind::DualBoot,
+            "dual-boot.only-way",
+            "Dual boot: install Windows beside TUR and run it there. That is the only way.",
+        )
     } else if blocked_kind(EditionKind::Windows) && host.arch != Arch::X86_64 {
-        Alternative {
-            kind: AlternativeKind::AnotherComputer,
-            text: "Use a computer with an x86-64 processor, or one that runs Windows.".to_owned(),
-        }
+        alternative(
+            AlternativeKind::AnotherComputer,
+            "another-computer.x86-64",
+            "Use a computer with an x86-64 processor, or one that runs Windows.",
+        )
     } else if blocked_kind(EditionKind::Windows) {
-        Alternative {
-            kind: AlternativeKind::DualBoot,
-            text: "Run it on Windows itself: dual boot, or another computer.".to_owned(),
-        }
+        alternative(
+            AlternativeKind::DualBoot,
+            "dual-boot.or-another-computer",
+            "Run it on Windows itself: dual boot, or another computer.",
+        )
     } else if blocked_kind(EditionKind::Android) {
-        Alternative {
-            kind: AlternativeKind::CertifiedAndroidDevice,
-            text: "Use it on a phone or tablet certified by Google.".to_owned(),
-        }
+        alternative(
+            AlternativeKind::CertifiedAndroidDevice,
+            "certified-android-device",
+            "Use it on a phone or tablet certified by Google.",
+        )
     } else if blocked_kind(EditionKind::Macos) || macos_without_darling {
-        Alternative {
-            kind: AlternativeKind::Mac,
-            text: "Use a Mac. Darling can be enabled as an experimental feature, with no promise that this application works."
-                .to_owned(),
-        }
+        alternative(
+            AlternativeKind::Mac,
+            "mac",
+            "Use a Mac. Darling can be enabled as an experimental feature, with no promise that this application works.",
+        )
     } else if !blocked.is_empty() {
-        Alternative {
-            kind: AlternativeKind::AnotherComputer,
-            text: "Use a computer whose processor the application is built for.".to_owned(),
-        }
+        alternative(
+            AlternativeKind::AnotherComputer,
+            "another-computer.processor",
+            "Use a computer whose processor the application is built for.",
+        )
     } else {
-        Alternative {
-            kind: AlternativeKind::NoneKnown,
-            text: "No alternative is known.".to_owned(),
-        }
+        alternative(
+            AlternativeKind::NoneKnown,
+            "none-known",
+            "No alternative is known.",
+        )
     };
 
     RouteOption {
@@ -1026,6 +1459,16 @@ fn no_route(entry: &Entry, host: &HostFacts, blocked: &[RouteOption]) -> RouteOp
         caveats,
         prerequisites: Vec::new(),
         alternative: Some(alternative),
+        reason_code: ReasonCode::NoRoute,
+        reason_parts: parts,
+    }
+}
+
+fn alternative(kind: AlternativeKind, text_id: &'static str, text: &str) -> Alternative {
+    Alternative {
+        kind,
+        text: text.to_owned(),
+        text_id,
     }
 }
 
@@ -1057,8 +1500,10 @@ pub fn route(
                 index,
                 edition,
                 host,
-                "A Linux edition exists as a Flatpak: a native Linux edition comes first."
-                    .to_owned(),
+                Why::plain(
+                    ReasonCode::LinuxFlatpak,
+                    "A Linux edition exists as a Flatpak: a native Linux edition comes first.",
+                ),
             )),
             EditionKind::LinuxNative => {
                 if edition.obtain == Some(Obtain::OtherDistributionPackage) {
@@ -1067,7 +1512,10 @@ pub fn route(
                         index,
                         edition,
                         host,
-                        "A Linux edition exists as a package of another distribution: it runs in a container of that distribution.".to_owned(),
+                        Why::plain(
+                            ReasonCode::LinuxOtherDistribution,
+                            "A Linux edition exists as a package of another distribution: it runs in a container of that distribution.",
+                        ),
                     ));
                 } else {
                     options.push(evaluate(
@@ -1075,8 +1523,10 @@ pub fn route(
                         index,
                         edition,
                         host,
-                        "A native Linux edition exists: a native Linux edition comes first."
-                            .to_owned(),
+                        Why::plain(
+                            ReasonCode::LinuxNative,
+                            "A native Linux edition exists: a native Linux edition comes first.",
+                        ),
                     ));
                 }
             }
@@ -1088,23 +1538,29 @@ pub fn route(
                 index,
                 edition,
                 host,
-                "An Android edition exists: it runs in the Android runtime.".to_owned(),
+                Why::plain(
+                    ReasonCode::Android,
+                    "An Android edition exists: it runs in the Android runtime.",
+                ),
             )),
             EditionKind::Web => {
                 let reason = if edition.primary {
-                    "The web application is the publisher's primary form of this application."
+                    Why::plain(
+                        ReasonCode::WebPrimary,
+                        "The web application is the publisher's primary form of this application.",
+                    )
                 } else if pin == Some(Route::Web) {
-                    "A web edition exists, and you pinned it."
+                    Why::plain(
+                        ReasonCode::WebPinned,
+                        "A web edition exists, and you pinned it.",
+                    )
                 } else {
-                    "A web edition exists, and no better route is free of known obstacles."
+                    Why::plain(
+                        ReasonCode::WebNothingBetter,
+                        "A web edition exists, and no better route is free of known obstacles.",
+                    )
                 };
-                options.push(evaluate(
-                    Route::Web,
-                    index,
-                    edition,
-                    host,
-                    reason.to_owned(),
-                ));
+                options.push(evaluate(Route::Web, index, edition, host, reason));
             }
             EditionKind::Macos => {
                 if host.darling_enabled {
@@ -1113,7 +1569,10 @@ pub fn route(
                         index,
                         edition,
                         host,
-                        "A macOS edition exists and you have enabled Darling. It is listed last: an edition for Windows, Linux or the web is preferred.".to_owned(),
+                        Why::plain(
+                            ReasonCode::MacosDarling,
+                            "A macOS edition exists and you have enabled Darling. It is listed last: an edition for Windows, Linux or the web is preferred.",
+                        ),
                     ));
                 }
             }
@@ -1157,17 +1616,31 @@ pub fn route(
         match pinned_position {
             Some(position) => options[position].pinned = true,
             None => {
-                let why =
+                let (because, why) =
                     if pinned_route.is_virtual_machine() && preferences.never_use_virtual_machine {
-                        "you have also chosen never to use a virtual machine"
+                        (
+                            "no-virtual-machines",
+                            "you have also chosen never to use a virtual machine",
+                        )
                     } else if options.iter().any(|option| option.route == pinned_route) {
-                        "it cannot run this application on this machine"
+                        (
+                            "blocked",
+                            "it cannot run this application on this machine",
+                        )
                     } else {
-                        "the rules do not offer it for this application on this machine"
+                        (
+                            "not-offered",
+                            "the rules do not offer it for this application on this machine",
+                        )
                     };
                 options[0].caveats.push(caveat(
                     CaveatCode::PinUnavailable,
                     Severity::Note,
+                    "pin-unavailable",
+                    Params::from([
+                        ("route", pinned_route.as_str().to_owned()),
+                        ("because", because.to_owned()),
+                    ]),
                     format!(
                         "You pinned {} for this application; it is not used because {why}.",
                         pinned_route.label()
@@ -2212,6 +2685,105 @@ mod tests {
                 "route.rs must not use {forbidden}"
             );
         }
+    }
+
+    #[test]
+    fn every_requirement_sentence_has_one_listed_identifier() {
+        // requirement_text_id and requirement_caveat_text are written side by
+        // side; this holds them together over every requirement, route and
+        // machine fact that changes the sentence.
+        let mut seen: BTreeMap<&str, String> = BTreeMap::new();
+        let mut used = std::collections::BTreeSet::new();
+        for arch in [Arch::X86_64, Arch::Aarch64, Arch::Other] {
+            for arm_translation in [false, true] {
+                for gpu in [
+                    GpuClass::None,
+                    GpuClass::Integrated,
+                    GpuClass::Discrete,
+                    GpuClass::Unknown,
+                ] {
+                    let host = HostFacts {
+                        arch,
+                        arm_translation,
+                        gpu,
+                        ..HostFacts::default()
+                    };
+                    for requirement in Requirement::ALL {
+                        for route in Route::ALL {
+                            let (_, id, text) = requirement_caveat(requirement, route, &host);
+                            assert!(CAVEAT_TEXT_IDS.contains(&id), "{id} is not listed");
+                            used.insert(id);
+                            if let Some(known) = seen.insert(id, text.clone()) {
+                                assert_eq!(known, text, "{id} names two sentences");
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // Every requirement identifier of the list is one the router uses.
+        for id in CAVEAT_TEXT_IDS {
+            if id.starts_with("requirement.") {
+                assert!(used.contains(id), "{id} is listed and never used");
+            }
+        }
+        let unique: std::collections::BTreeSet<&str> = CAVEAT_TEXT_IDS.into_iter().collect();
+        assert_eq!(unique.len(), CAVEAT_TEXT_IDS.len());
+        let unique: std::collections::BTreeSet<&str> = ALTERNATIVE_TEXT_IDS.into_iter().collect();
+        assert_eq!(unique.len(), ALTERNATIVE_TEXT_IDS.len());
+    }
+
+    #[test]
+    fn reason_codes_are_written_as_listed() {
+        for code in ReasonCode::ALL {
+            let written = serde_json::to_value(code).unwrap();
+            assert_eq!(written, serde_json::Value::String(code.as_str().to_owned()));
+        }
+        let unique: std::collections::BTreeSet<&str> =
+            ReasonCode::ALL.iter().map(|code| code.as_str()).collect();
+        assert_eq!(unique.len(), ReasonCode::ALL.len());
+    }
+
+    #[test]
+    fn a_demoted_edition_and_a_no_route_statement_carry_every_part_of_their_reason() {
+        let entry = entry(
+            Category::Productivity,
+            vec![
+                rated(flatpak(), Route::Flatpak, Rating::Broken),
+                rated(windows(), Route::Wine, Rating::Good),
+            ],
+        );
+        let options = run(&entry, &full_host(), &Preferences::default());
+        let demoted = options
+            .iter()
+            .find(|option| option.route == Route::Flatpak)
+            .unwrap();
+        assert_eq!(demoted.reason_code, ReasonCode::LinuxFlatpak);
+        let codes: Vec<ReasonCode> = demoted.reason_parts.iter().map(|part| part.code).collect();
+        assert_eq!(
+            codes,
+            [ReasonCode::LinuxFlatpak, ReasonCode::ListedAfterBetterRoute]
+        );
+        assert_eq!(demoted.reason_parts[1].params["route"], "wine");
+        assert_eq!(demoted.reason_parts[1].params["rating"], "broken");
+        assert_eq!(demoted.reason_parts[1].params["better_rating"], "good");
+
+        let game = entry(
+            Category::Game,
+            vec![requiring(windows(), &[Requirement::KernelAntiCheat])],
+        );
+        let options = run(&game, &full_host(), &Preferences::default());
+        assert_eq!(options[0].route, Route::NoRoute);
+        assert_eq!(options[0].reason_code, ReasonCode::NoRoute);
+        assert_eq!(options[0].reason_parts[0].params["name"], game.name);
+        assert_eq!(options[0].reason_parts[1].code, ReasonCode::RouteBlocked);
+        assert_eq!(options[0].reason_parts[1].params["route"], "proton");
+        assert_eq!(
+            options[0].reason_parts[1].params["caveat"],
+            "requirement.kernel-anti-cheat.proton"
+        );
+        let alternative = options[0].alternative.as_ref().unwrap();
+        assert_eq!(alternative.text_id, "dual-boot.only-way");
     }
 
     #[test]

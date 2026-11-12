@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR application catalogue entry. Format: schemas/app-catalogue-entry.schema.json.
+# How entries are written and sourced: catalogue/README.md.
+# TUR has not rated this application. It is the small free application the
+# apps workflow installs from Flathub to prove the Flatpak route
+# (docs/reports/apps-1.md); that proves the installation, not the program.
+
+schema_version = 1
+id = "net.sourceforge.klavaro"
+name = "Klavaro"
+publisher = "Felipe E. F. de Castro"
+category = "education"
+summary = "Touch typing tutor."
+homepage = "https://klavaro.sourceforge.net/"
+
+[[editions]]
+kind = "flatpak"
+flatpak_id = "net.sourceforge.Klavaro"
+licence = "open-source"
+notes = "Flathub lists it under GPL-3.0+ and GFDL-1.3, version 3.14, on the runtime org.freedesktop.Platform 26.08, asking for X11 only when there is no Wayland display, Wayland, sound and shared memory with the display server. Flathub does not mark it as verified by the publisher."
+
+[[editions.references]]
+title = "Flathub listing and API: version 3.14, licence GPL-3.0+ and GFDL-1.3, download 1.1 MB"
+url = "https://flathub.org/apps/net.sourceforge.Klavaro"
+checked = "2026-11-12"

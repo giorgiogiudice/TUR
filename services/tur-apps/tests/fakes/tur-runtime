@@ -1,0 +1,72 @@
+#!/bin/sh
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# A stand-in for tur-runtime in the tests of tur-apps (tests/cli.rs). It keeps
+# the directory layout of docs/architecture/runtime-manager.md and prints the
+# JSON tur-runtime prints, and runs nothing: an "installed" application is a
+# directory. Every call is logged to $FAKE_STATE/runtime.log, so a test can
+# see that it was never called. The real tur-runtime is exercised by the apps
+# workflow.
+set -eu
+state="${FAKE_STATE:?}"
+echo "$*" >> "$state/runtime.log"
+root="${XDG_DATA_HOME:?}/tur/runtime"
+[ "$1" = app ] || exit 2
+command="$2"
+shift 2
+case "$command" in
+install)
+    file="$1"
+    shift
+    id=""
+    name=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+        --app-id)
+            id="$2"
+            shift 2
+            ;;
+        --name)
+            name="$2"
+            shift 2
+            ;;
+        *) shift ;;
+        esac
+    done
+    if [ ! -f "$file" ]; then
+        echo '{"error":{"code":"TUR-RUNTIME-001","title":"t","message":"no such file"}}'
+        exit 1
+    fi
+    if [ -e "$state/fail-runtime" ]; then
+        echo '{"error":{"code":"TUR-WINDOWS-APP-003","title":"t","message":"the installer failed"}}'
+        exit 7
+    fi
+    cp "$file" "$state/installed-file"
+    mkdir -p "$root/prefixes/$id/home" "$root/prefixes/$id/prefix/drive_c/users/user/AppData" "$root/launchers/$id"
+    echo "settings" > "$root/prefixes/$id/prefix/drive_c/users/user/AppData/settings.ini"
+    printf '{"app_id":"%s","name":"%s","version":"1.0"}\n' "$id" "$name" > "$root/prefixes/$id/application.json"
+    printf '{"dry_run":false,"record":{"app_id":"%s","name":"%s","version":"1.0","main_executable_windows":"C:\\\\Program Files\\\\x.exe"}}\n' "$id" "$name"
+    ;;
+uninstall)
+    id="$1"
+    rm -rf "${root:?}/prefixes/$id" "${root:?}/launchers/$id"
+    printf '{"dry_run":false,"app_id":"%s","removed":["%s"],"kept":[],"left_behind":[]}\n' "$id" "$root/prefixes/$id"
+    ;;
+list)
+    printf '{"applications":['
+    first=1
+    for record in "$root"/prefixes/*/application.json; do
+        [ -f "$record" ] || continue
+        [ "$first" = 1 ] || printf ','
+        first=0
+        tr -d '\n' < "$record"
+    done
+    printf '],"problems":[]}\n'
+    ;;
+launch)
+    exit 0
+    ;;
+*)
+    exit 2
+    ;;
+esac
