@@ -1521,6 +1521,7 @@ fn run_app_install(arguments: &InstallArguments<'_>) -> u8 {
                 "prefix": prefix_seconds,
                 "installer": installer_seconds,
             },
+            "notes": installed.notes,
         }));
     } else {
         print_line(&format!("installed: {} ({})", record.name, record.app_id));
@@ -1546,6 +1547,9 @@ fn run_app_install(arguments: &InstallArguments<'_>) -> u8 {
             "  start it with: tur-runtime app launch {}",
             record.app_id
         ));
+        for note in &installed.notes {
+            print_line(&format!("  note: {note}"));
+        }
     }
     EXIT_OK
 }

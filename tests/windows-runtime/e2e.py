@@ -18,10 +18,14 @@ What it proves, when it passes:
     read files outside its grants that the same program does read when it
     is started by Wine directly (the control run);
   * a prefix is reused, its record updated, and a runtime version mismatch
-    is refused.
+    is refused;
+  * an installation that fails, runs out of time or installs nothing is
+    reported with its code and leaves only its log, and a program that is
+    the application itself is installed, started and removed.
 
-What it does not prove: anything about real applications, about Proton (plan
-tests only), or about the TUR image, whose Wine is not the one used here.
+What it does not prove: anything about real applications (apps.py is for
+those), about Proton (plan tests only), or about the TUR image, whose Wine is
+not the one used here.
 
 Every check is printed as PASS or FAIL as it happens. The exit status is 1 if
 any check failed.
@@ -30,6 +34,7 @@ any check failed.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import pathlib
@@ -720,6 +725,115 @@ def check_gui(bench: Bench) -> None:
             server.kill()
 
 
+def check_install_flow(bench: Bench) -> None:
+    """Installations that go wrong, and one that goes right without an
+    installer. Real installers are the business of apps.py."""
+    section("Installing: failures, time limits and a portable program")
+    data = bench.data / "tur/runtime"
+    logs = bench.state / "tur/runtime/logs"
+
+    def install(app: str, exe: str, *options: str) -> tuple[int, dict, str]:
+        done = bench.tur_run(["app", "install", str(bench.build / exe), "--app-id", app, "--json", *options])
+        try:
+            return done.returncode, json.loads(done.stdout), done.stderr
+        except json.JSONDecodeError:
+            return done.returncode, {}, done.stderr
+
+    def nothing_left(name: str, app: str) -> None:
+        for kind in ("prefixes", "launchers", "staging"):
+            R.check(f"{name}: no {kind} directory is left", not (data / kind / app).exists())
+
+    identified = bench.tur_run(["installer", "identify", str(bench.build / "installer-fails.exe"), "--json"])
+    try:
+        kind = json.loads(identified.stdout)["installer"]["kind"]
+    except (json.JSONDecodeError, KeyError):
+        kind = None
+    R.equal("install: the stand-in is taken for an NSIS installer", kind, "nsis")
+
+    # An installer that exits with a failure status.
+    app = "local.tur-install-fails"
+    status, report, _ = install(app, "installer-fails.exe")
+    R.equal("failing installer: exit status", status, 7)
+    R.equal("failing installer: code", report.get("error", {}).get("code"), "TUR-WINDOWS-APP-003")
+    R.check("failing installer: the message names the status",
+            "status 3" in report.get("error", {}).get("message", ""), str(report)[:300])
+    nothing_left("failing installer", app)
+    log = logs / app / "operations.log"
+    logged = log.read_text(errors="replace") if log.is_file() else ""
+    R.check("failing installer: the log is kept and holds the installer's output",
+            "run the installer" in logged and "failing on purpose" in logged, tail(logged, 6))
+    R.check("failing installer: `app show` says it is not installed",
+            "TUR-WINDOWS-APP-007" in bench.tur_run(["app", "show", app]).stderr)
+
+    # The same, kept for a look.
+    status, report, _ = install(app, "installer-fails.exe", "--keep-failed")
+    R.equal("failing installer, kept: exit status", status, 7)
+    R.check("failing installer, kept: the prefix is still there", (data / "prefixes" / app / "prefix").is_dir())
+    R.check("failing installer, kept: it is not an installed application",
+            not (data / "prefixes" / app / "application.json").exists())
+    R.equal("failing installer, kept: a second installation is refused",
+            install(app, "installer-fails.exe")[1].get("error", {}).get("code"), "TUR-WINDOWS-PREFIX-002")
+    R.equal("failing installer, kept: prefix remove deletes it", bench.tur_run(["prefix", "remove", app]).returncode, 0)
+    nothing_left("failing installer, removed", app)
+
+    # An installer that never finishes: stopped when its time is up, with
+    # everything it started.
+    app = "local.tur-install-hangs"
+    started = time.monotonic()
+    status, report, _ = install(app, "installer-hangs.exe", "--timeout", "8")
+    elapsed = time.monotonic() - started
+    R.equal("hanging installer: exit status", status, 7)
+    R.equal("hanging installer: code", report.get("error", {}).get("code"), "TUR-WINDOWS-APP-004")
+    R.check("hanging installer: stopped soon after its 8 seconds", elapsed < 120, f"{elapsed:.0f} s")
+    R.fact("hanging installer stopped after", f"{elapsed:.1f} s (limit 8 s, plus prefix creation)")
+    time.sleep(2)
+    survivors = run(["pgrep", "-a", "-f", "wineserver|installer-hangs"]).stdout.strip()
+    R.check("hanging installer: no process of it is left", survivors == "", survivors)
+    nothing_left("hanging installer", app)
+
+    # An installer that succeeds and installs nothing.
+    app = "local.tur-install-nothing"
+    status, report, _ = install(app, "installer-nothing.exe")
+    R.equal("empty installer: exit status", status, 7)
+    R.equal("empty installer: code", report.get("error", {}).get("code"), "TUR-WINDOWS-APP-005")
+    nothing_left("empty installer", app)
+
+    # A program of no installer kind: not run; copied when the caller says
+    # it is the application itself; started; removed.
+    app = "local.tur-portable"
+    status, report, _ = install(app, "console64.exe")
+    R.equal("plain program: refused without --portable", status, 6)
+    R.equal("plain program: code", report.get("error", {}).get("code"), "TUR-WINDOWS-APP-002")
+    nothing_left("plain program, refused", app)
+    status, report, stderr = install(app, "console64.exe", "--portable", "--name", "TUR portable test")
+    R.equal("portable program: installed", status, 0)
+    record = report.get("record", {})
+    R.equal("portable program: the name given is recorded", record.get("name"), "TUR portable test")
+    R.equal("portable program: recorded as copied", record.get("install", {}).get("method"), "copied")
+    R.equal("portable program: its main program",
+            record.get("main_executable_windows"), "C:\\Program Files\\local-tur-portable\\console64.exe")
+    R.equal("portable program: the source digest is the file's", record.get("install", {}).get("source", {}).get("sha256"),
+            hashlib.sha256((bench.build / "console64.exe").read_bytes()).hexdigest())
+    R.equal("portable program: nothing to run on removal", record.get("uninstall", {}).get("method"), "remove-prefix")
+    listed = bench.tur_run(["app", "list"]).stdout
+    R.check("portable program: listed", listed.startswith(f"{app}\tTUR portable test\t"), listed)
+    done = bench.tur_run(["app", "launch", app, "--", "5", "installed"])
+    R.equal("portable program: `app launch` returns the program's status", done.returncode, 5)
+    R.check("portable program: it ran, with its argument",
+            "hello from a Windows process" in done.stdout and "installed" in done.stdout, tail(done.stdout, 6))
+    removed = bench.tur_run(["app", "uninstall", app, "--json"])
+    R.equal("portable program: uninstall", removed.returncode, 0)
+    try:
+        outcome = json.loads(removed.stdout)
+    except json.JSONDecodeError:
+        outcome = {}
+    R.equal("portable program: nothing was left behind", outcome.get("left_behind"), [])
+    R.equal("portable program: no uninstaller was run", outcome.get("uninstaller", {}).get("ran"), False)
+    nothing_left("portable program, removed", app)
+    R.check("portable program: its logs are gone", not (logs / app).exists())
+    R.check("portable program: no longer listed", app not in bench.tur_run(["app", "list"]).stdout)
+
+
 def check_reset_and_remove(bench: Bench) -> None:
     section("Reset and remove")
     prefix = bench.app_dir() / "prefix"
@@ -773,6 +887,7 @@ def main() -> int:
             lambda: control_run(bench),
             lambda: check_prefix_and_launch(bench),
             lambda: check_gui(bench),
+            lambda: check_install_flow(bench),
             lambda: check_reset_and_remove(bench),
         ]
     for stage in stages:

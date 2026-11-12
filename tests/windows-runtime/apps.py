@@ -646,6 +646,28 @@ def leftovers(world: World, app_id: str, windows_before: set[str]) -> list[str]:
     return sorted(set(found))
 
 
+# Where Wine, or an installer run without a sandbox, leaves things in a home
+# directory: its default prefix, menu entries, icons, file associations,
+# desktop shortcuts.
+HOST_PLACES = (".wine", ".local/share/applications", ".local/share/icons", ".local/share/mime",
+               ".local/share/desktop-directories", ".config/menus", ".cache/wine", "Desktop")
+
+
+def host_traces() -> dict[str, list[str]]:
+    """What is in those places in the home directory of the user running
+    the test, which no application was granted."""
+    home = pathlib.Path(os.environ["HOME"])
+    traces = {}
+    for place in HOST_PLACES:
+        names = []
+        for directory, directories, files in os.walk(home / place):
+            names += [str(pathlib.Path(directory) / name) for name in directories + files]
+            if len(names) > 5000:
+                break
+        traces[place] = sorted(names)
+    return traces
+
+
 def test_application(world: World, app: dict) -> dict:
     app_id = app["app_id"]
     evidence = world.evidence / "apps" / app["id"]
@@ -754,15 +776,29 @@ def test_application(world: World, app: dict) -> dict:
                       detail=f"no window of class {klass!r} within 120 s (exit status so far: {exited}); "
                              f"windows seen: {seen}; output: {tail(launch.log_path.read_text(errors='replace'), 4)}")
             else:
+                # Let it finish drawing, then look at every window it has
+                # open: the one with the expected title, or the largest.
                 time.sleep(3)
-                current = [found for found in launch.new_windows() if found.id == window.id]
-                shown = current[0] if current else window
+                own = [found for found in launch.new_windows()
+                       if klass.lower() in (found.instance.lower(), found.klass.lower())
+                       and found.width >= 120 and found.height >= 60 and is_viewable(found)]
+                wanted = app.get("window_title")
+                titled = [found for found in own if wanted and re.search(wanted, found.title)]
+                largest = sorted(own, key=lambda found: found.width * found.height, reverse=True)
+                shown = (titled or largest or [window])[0]
+                others = [found.describe() for found in own if found.id != shown.id]
                 screenshot(evidence / "launch.png")
-                others = [found.describe() for found in launch.new_windows() if found.id != window.id
-                          and found.width >= 120 and found.height >= 60]
                 ended = launch.close(klass)
-                stage(result, "launch", "pass", seconds_to_window=round(seconds, 1), window=shown.describe(),
-                      other_windows=others, closed=ended)
+                if wanted and not titled:
+                    stage(result, "launch", "fail", seconds_to_window=round(seconds, 1), window=shown.describe(),
+                          other_windows=others, closed=ended,
+                          detail=f"a window of class {klass!r} appeared, and none is titled like {wanted!r}: "
+                                 f"{[found.title for found in own]}")
+                else:
+                    stage(result, "launch", "pass", seconds_to_window=round(seconds, 1), window=shown.describe(),
+                          other_windows=others, closed=ended)
+                if others:
+                    result["notes"].append("It also opened: " + ", ".join(repr(found["title"]) for found in others))
                 if ended == "killed":
                     result["notes"].append("Its window did not close when asked; the application was stopped.")
         except Exception as error:  # noqa: BLE001 - a harness error is a result
@@ -876,6 +912,14 @@ def write_report(world: World, apps: list[dict], results: list[dict], environmen
             wanted = app.get("expected", {}).get(name)
             if wanted and result[name]["status"] != wanted:
                 differences.append(f"{result['id']}: {name} is {result[name]['status']!r}, expected {wanted!r}")
+    escaped = environment.get("outside_the_sandbox", [])
+    if escaped:
+        differences.append(f"files appeared in the home directory, outside every sandbox: {escaped[:20]}")
+    lines += ["", "Outside the sandbox: " + (
+        "**files appeared in the home directory of the user running the test**: " + ", ".join(escaped[:20])
+        if escaped else
+        "nothing appeared in the home directory of the user running the test, in any of the places Wine or "
+        "an installer would use without one (" + ", ".join("~/" + place for place in HOST_PLACES) + ").")]
     lines += ["", "pass: the step worked. fail: it did not; the note says what happened. partial: the "
                   "application was removed, and its own uninstaller did not succeed. Times are wall-clock on "
                   "the runner. A pass is a measurement of these steps for this version, not a statement that "
@@ -962,6 +1006,7 @@ def main() -> int:
         apps = [app for app in apps if app["id"] in arguments.only.split(",")]
     world = World(arguments.tur_runtime, arguments.work_dir.resolve(), arguments.evidence.resolve())
     environment = describe_environment()
+    traces_before = host_traces()
     log(json.dumps(environment, indent=2))
     processes = start_display(world.evidence)
     results = []
@@ -978,6 +1023,11 @@ def main() -> int:
     finally:
         for process in processes:
             process.terminate()
+    # Nothing may have appeared in the home directory: every application ran
+    # in a sandbox that does not contain it.
+    traces_after = host_traces()
+    environment["outside_the_sandbox"] = sorted(
+        name for place in HOST_PLACES for name in set(traces_after[place]) - set(traces_before[place]))
     differences = write_report(world, apps, results, environment)
     catalogue_evidence(world, apps, results, environment)
     log("\n" + (world.evidence / "compatibility.md").read_text())

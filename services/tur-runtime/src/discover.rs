@@ -434,9 +434,13 @@ pub fn choose_main(
 
     let linked_programs: Vec<&String> = linked.iter().map(|(_, executable)| *executable).collect();
     if let Some(executable) = only(linked_programs.clone()) {
+        // Several shortcuts can point to one program; the one without
+        // arguments and with the shortest name is the application's own.
         let name = linked
-            .first()
-            .map_or("", |(shortcut, _)| shortcut.name.as_str());
+            .iter()
+            .map(|(shortcut, _)| *shortcut)
+            .min_by_key(|shortcut| (shortcut.arguments.is_some(), shortcut.name.chars().count()))
+            .map_or("", |shortcut| shortcut.name.as_str());
         return Ok(chosen(
             executable,
             format!("it is the only program a shortcut points to (\"{name}\")"),
@@ -748,8 +752,17 @@ pub(crate) mod tests {
                 "Program Files/Notepad++/uninstall.exe",
             ],
             vec![
+                // A second shortcut to the same program, with arguments.
+                FoundShortcut {
+                    arguments: Some("-safe".to_owned()),
+                    ..shortcut(
+                        "A safe mode",
+                        ShortcutPlace::StartMenu,
+                        Some("Program Files/Notepad++/notepad++.exe"),
+                    )
+                },
                 shortcut(
-                    "Notepad++",
+                    "Notepad++ editor",
                     ShortcutPlace::StartMenu,
                     Some("Program Files/Notepad++/notepad++.exe"),
                 ),
@@ -775,6 +788,12 @@ pub(crate) mod tests {
         );
         let main = choose_main(&discovery, None).unwrap();
         assert_eq!(main.executable, "Program Files/Notepad++/notepad++.exe");
+        // The reason names the application's own shortcut: the one without
+        // arguments and with the shortest name.
+        assert_eq!(
+            main.reason,
+            "it is the only program a shortcut points to (\"Notepad++\")"
+        );
     }
 
     #[test]

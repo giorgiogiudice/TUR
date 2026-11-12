@@ -371,6 +371,8 @@ pub struct Installed {
     pub entry: DesktopEntry,
     /// The icon taken from the main program, when it has one.
     pub icon: Option<ExtractedIcon>,
+    /// Things the user should know about what was installed.
+    pub notes: Vec<String>,
 }
 
 /// Whether `text` is a Windows Installer product code: a GUID in braces.
@@ -569,14 +571,27 @@ pub fn describe_installation(
         Err(refusal) => return Err(not_a_program(refusal)),
     };
     let program_text = text(&program, "the application's main program")?;
-    let architecture = match inspect(&program).map(|inspection| inspection.detected) {
+    let (architecture, needs_dotnet) = match inspect(&program).map(|inspection| inspection.detected)
+    {
         Ok(Detected::Pe(pe)) if !pe.is_dll => match pe.machine {
-            Arch::X86_64 => ProfileArch::X86_64,
-            Arch::I386 => ProfileArch::I386,
+            Arch::X86_64 => (ProfileArch::X86_64, pe.is_dotnet),
+            Arch::I386 => (ProfileArch::I386, pe.is_dotnet),
             _ => return Err(not_a_program(GrantRefusal::WrongKind)),
         },
         _ => return Err(not_a_program(GrantRefusal::WrongKind)),
     };
+    // Nothing is installed for an application. One that needs a runtime of
+    // its own is recorded as needing it, and the user is told.
+    let mut notes = Vec::new();
+    let mut known_requirements = Vec::new();
+    if needs_dotnet {
+        known_requirements.push("dotnet".to_owned());
+        notes.push(
+            "The main program is a .NET program. It needs a .NET runtime in its prefix, and \
+             none is installed for it: it will most likely not start."
+                .to_owned(),
+        );
+    }
 
     // What the application is called: the caller's word, then the
     // installer's, then the program's own.
@@ -637,7 +652,7 @@ pub fn describe_installation(
         graphics_backend: Some(metadata.graphics_backend),
         sync_backend: Some(SyncBackend::Auto),
         isolation_profile: "desktop-standard".to_owned(),
-        known_requirements: Vec::new(),
+        known_requirements,
         fallback: Fallback::WindowsVmOffer,
         // Installed is not tested: nothing here says that it works.
         test_status: TestStatus::Untested,
@@ -735,6 +750,7 @@ pub fn describe_installation(
         profile,
         entry: desktop_entry,
         icon,
+        notes,
     })
 }
 
@@ -1432,6 +1448,8 @@ mod tests {
         assert_eq!(profile.runtime_version, None);
         assert_eq!(profile.prefix_id.as_deref(), Some("example-app"));
         assert_eq!(profile.test_status, TestStatus::Untested);
+        assert!(profile.known_requirements.is_empty());
+        assert!(installed.notes.is_empty());
 
         // The launcher entry and the icon, both staged under the runtime
         // manager's own directory.
@@ -1634,6 +1652,16 @@ mod tests {
         put(prefix, "Program Files/App/app.exe", b"not a program");
         let error = describe(&discover(prefix, &before)).unwrap_err();
         assert_eq!(error.code(), Code::BinaryRefused);
+        // A .NET program is installed, and said to need what it needs.
+        let managed = testdata::PeSpec {
+            clr: true,
+            ..testdata::PeSpec::windows_gui_x86_64()
+        }
+        .build();
+        put(prefix, "Program Files/App/app.exe", &managed);
+        let installed = describe(&discover(prefix, &before)).unwrap();
+        assert_eq!(installed.profile.known_requirements, ["dotnet"]);
+        assert!(installed.notes[0].contains(".NET"), "{:?}", installed.notes);
         // A library named like a program.
         let library = testdata::PeSpec {
             characteristics: 0x2022,

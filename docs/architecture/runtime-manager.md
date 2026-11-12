@@ -2,7 +2,8 @@
 
 Design note for `tur-runtime` (specification §2.3, §7, §8.2, §12.1, §12.2, §13.1,
 §15.2, §19.2, §19.3). Code: `services/tur-runtime/`. Schemas:
-`schemas/app-profile.schema.json`, `schemas/prefix-metadata.schema.json`.
+`schemas/app-profile.schema.json`, `schemas/prefix-metadata.schema.json`,
+`schemas/app-record.schema.json`.
 
 ## Scope
 
@@ -15,9 +16,17 @@ The second slice runs a Windows program the user asks to run: a prefix per
 application, a launch plan, and a sandbox around every runtime command. It is
 described from [Running a Windows program](#running-a-windows-program) on.
 
+The third slice installs a Windows application from its installer: it tells
+what kind of installer a file is, runs it unattended in a fresh prefix inside
+the sandbox, finds out what it installed, records that, generates a launcher
+entry, and removes the application again. It is described from
+[Installing a Windows application](#installing-a-windows-application) on.
+
 A recommendation names a route. It is never a statement that a particular
 application works: that needs a recorded test (§2.3). The same holds for
-launching: the test programs prove the launch path, not compatibility.
+launching and installing: an application that installs and opens a window has
+been measured to do that, in one version, on one machine. The measurements so
+far are in the [second report](../reports/windows-runtime-2.md).
 See [Not done yet](#not-done-yet).
 
 ## Inspection
@@ -163,7 +172,7 @@ families they belong to, and the Windows end-to-end test
 | `TUR-RUNTIME-MANAGER-003` | The file exceeds an inspection limit |
 | `TUR-RUNTIME-MANAGER-004` | No supported runtime exists for the file |
 | `TUR-RUNTIME-MANAGER-005` | The runtime manager's data or state directory cannot be found or used |
-| `TUR-RUNTIME-MANAGER-006` | A program the operation needs (`tar`) is not installed |
+| `TUR-RUNTIME-MANAGER-006` | A program the operation needs (`tar`, `unzip`, `install`) is not installed |
 | `TUR-WINDOWS-INSPECT-001` | A PE file is truncated or malformed |
 | `TUR-WINDOWS-RUNTIME-001` | Wine is not installed |
 | `TUR-WINDOWS-RUNTIME-002` | The file requires a Windows kernel |
@@ -183,6 +192,17 @@ families they belong to, and the Windows end-to-end test
 | `TUR-WINDOWS-PREFIX-006` | The prefix is on another runtime version than the one installed |
 | `TUR-WINDOWS-PREFIX-007` | The prefix is pinned and a migration was asked for |
 | `TUR-WINDOWS-PREFIX-008` | The named backup does not exist |
+| `TUR-WINDOWS-APP-001` | The file is not a Windows installer, program or archive of programs |
+| `TUR-WINDOWS-APP-002` | The file's kind has no known unattended mode, so it is not run |
+| `TUR-WINDOWS-APP-003` | The installer exited with a failure status |
+| `TUR-WINDOWS-APP-004` | The installer did not finish in the time it was given and was stopped |
+| `TUR-WINDOWS-APP-005` | The installer finished and no new program was found in the prefix |
+| `TUR-WINDOWS-APP-006` | No program could be chosen as the application's main program |
+| `TUR-WINDOWS-APP-007` | No application with this identifier is installed |
+| `TUR-WINDOWS-APP-008` | The application record is unreadable, not valid, or another application's |
+| `TUR-WINDOWS-APP-009` | Something of the application was still there after it was removed |
+| `TUR-WINDOWS-APP-010` | A value given for an installation (name, time limit) is not allowed |
+| `TUR-WINDOWS-APP-011` | The application's own uninstaller failed or ran out of time (reported with the result; the application is removed all the same) |
 | `TUR-SECURITY-SANDBOX-001` | The effective user is root |
 | `TUR-SECURITY-SANDBOX-002` | bubblewrap is not installed |
 | `TUR-SECURITY-SANDBOX-003` | A directory cannot be granted to an application |
@@ -200,6 +220,11 @@ families they belong to, and the Windows end-to-end test
 | `TUR-RUNTIME-PROFILE-002` | The profile is not JSON or does not match the schema |
 | `TUR-RUNTIME-PROFILE-003` | A profile field holds a value that is not allowed |
 | `TUR-RUNTIME-PROFILE-004` | The profile appears to hold a credential |
+
+The application codes have the topic `APP` in the `WINDOWS` family, not
+`INSTALL`: `TUR-INSTALL-*` is the family of the operating system's own
+installer, and a code about installing 7-Zip should not read like one about
+installing TUR.
 
 These are not yet registry entries in the sense of §29.3 (severity, detection
 criteria, recovery action); that registry does not exist yet.
@@ -278,12 +303,18 @@ that creates, writes, deletes or starts anything.
 |---|---|
 | `create-dir` | Creates a directory and its parents, mode 0700 |
 | `write-file` | Writes a file through a temporary file and a rename, mode 0600 |
+| `write-bytes` | The same for a file that is not text (an icon). A printed plan shows its size, not its bytes |
 | `remove-tree` | Deletes a tree. Refused unless the path lies inside an application's own directory under the runtime manager's roots. A symbolic link is removed, never followed |
 | `rename` | Renames; both paths are held to the same rule as `remove-tree` |
 | `run` | Runs a command to completion with exactly the planned environment. Any exit status but 0 stops the plan |
+| `run-bounded` | As `run`, with a time limit. When the time is up the command is killed, which takes the sandbox and everything in it down, and the plan stops. At most 1 MiB of its output is kept |
 | `launch` | Starts the application, copies its output to the log, and returns its exit status as the plan's result |
 | `check` | A read-only test. A failed check is a finding; the plan continues |
 | `require` | A read-only test the rest of the plan depends on. A failed requirement stops the plan |
+
+The tests a `check` or `require` can make: a path is a directory, is a file,
+is a file that contains a text, belongs to the user, or is absent. None follows
+a symbolic link.
 
 Planning is a function of the profile, the prefix metadata, the facts about the
 host (`LaunchHost`) and the time. It reads the file system to resolve granted
@@ -298,8 +329,11 @@ $XDG_DATA_HOME/tur/runtime/
     prefixes/<app-id>/metadata.json     written by tur-runtime only
     prefixes/<app-id>/prefix/           the Wine prefix (WINEPREFIX)
     prefixes/<app-id>/home/             the application's private HOME
+    prefixes/<app-id>/application.json  the record of an installed application
+    prefixes/<app-id>/profile.json      the profile it is launched from
     backups/<app-id>/<time>-<reason>.tar.gz
     staging/<app-id>/                   scratch space while restoring
+    launchers/<app-id>/                 the staged launcher entry and its icon
 $XDG_STATE_HOME/tur/runtime/
     logs/<app-id>/<time>-<pid>.log      one file per launch
     logs/<app-id>/operations.log        output of prefix operations
@@ -310,9 +344,11 @@ identifier, which is validated before it becomes a path. A profile's `prefix_id`
 is recorded in the metadata and must match at launch; so must the application
 identifier and the runtime. A prefix is never reused for another application.
 
-Only `prefix/` and `home/` are shown to the application. The metadata sits
-beside them, outside the sandbox, so an application cannot change its own
-grants; backups and logs are in other trees for the same reason.
+Only `prefix/` and `home/` are shown to the application. The metadata, the
+application record and the profile sit beside them, outside the sandbox, so an
+application cannot change its own grants, what is recorded about it, or which
+program is started in its name; backups, logs and launcher entries are in
+other trees for the same reason.
 
 ### Prefix metadata
 
@@ -351,10 +387,10 @@ launch takes at most 1024 arguments and 64 extra variables.
 | create | Create the directories; run `wine wineboot --init` (or `umu-run ""`) in the sandbox; require `system.reg`; switch off Wine's own prefix updating; write the metadata. The metadata is written last, so a failed creation leaves no valid prefix behind |
 | verify | Checks only: the directories exist and are not links, the prefix belongs to the user, `system.reg` and `user.reg` exist, `drive_c/windows` exists, the registry's `#arch` line matches, Wine's own updating is still off. Exit status 8 when a check fails |
 | repair | `wine wineboot --update` with the runtime the prefix is on. Refused when another version is installed: that would be a migration. It restores system files Wine can start without; when Wine cannot start in the prefix at all (a missing `kernel32.dll`, measured in CI), only a restore or a reset helps |
-| back up | `tar --create --gzip` of `metadata.json`, `prefix/` and `home/` into `backups/<app-id>/` |
+| back up | `tar --create --gzip` of `metadata.json`, `prefix/` and `home/` into `backups/<app-id>/`; and of `application.json` and `profile.json` when the application was installed, so that a restore brings back the application and not only its prefix |
 | restore | Unpack into `staging/`; require that the archive's metadata names this application and that it holds a prefix; only then move the current prefix aside and the unpacked one into place |
 | reset | Back up (unless `--no-backup`), delete `prefix/` and `home/`, create again with the same settings and grants |
-| remove | Delete the application's directory, staging and logs. Backups are kept |
+| remove | Delete the application's directory, staging, logs and staged launcher entry. Backups are kept |
 | migrate | See below |
 | grant, revoke, pin, unpin | Rewrite the metadata |
 
@@ -493,7 +529,7 @@ What the application sees:
 | The X authority file | Read-only, at a fixed path, only when it is `$HOME/.Xauthority` or a session file directly in the runtime directory |
 | `/run/systemd/resolve` | Read-only, when the network is shared |
 | The prefix and the private home | Read-write |
-| The program file, when it is outside the prefix | That one file, read-only. Never its directory |
+| The program file, when it is outside the prefix; an installer file while it is installed | That one file, read-only. Never its directory |
 | Granted directories | Read-only or read-write, as granted |
 | `/` | An in-memory file system, sealed read-only once everything is mounted |
 
@@ -620,8 +656,273 @@ belongs to (§3.4); the file is named `tur-<runtime>-<app-id>.desktop`. The entr
 goes through `tur-runtime launch`, so a click gets the same sandbox and the same
 refusals as the command line. Values are escaped by the Desktop Entry
 Specification's rules: the name cannot add a line or a key, and the profile path
-is always one quoted argument. Window matching (`StartupWMClass`), icons taken
-from the program, categories and file associations are not built.
+is always one quoted argument.
+
+For an installed application the entry also carries `Icon=<file>`, the
+absolute path of a PNG taken from the program, and `StartupWMClass=<name>`, the
+program's file name in lower case, which is what Wine's X11 driver sets as the
+class of the application's windows. See [the launcher
+entry](#the-launcher-entry). Categories and file associations are not built.
+
+## Installing a Windows application
+
+`tur-runtime app install <file>` puts an application into a prefix of its own
+and makes it startable; `app uninstall <app-id>` removes it. Like everything
+else here, each part is a plan first and runs inside the sandbox.
+
+Nothing is fetched. The file is one the user already has. No dependency is
+installed for an application: no Microsoft component, no redistributable
+runtime, no winetricks verb, no Mono, no Gecko. An application that needs one
+fails to install or to start, and that is what is reported.
+
+### What kind of installer a file is
+
+`tur-runtime installer identify <file>` and the first step of `app install`
+decide the kind from the file's content. The name and extension are not looked
+at: a file called `notes.txt` that is an NSIS installer is an NSIS installer.
+
+| Kind | Recognised by | Unattended mode | Where that is documented |
+|---|---|---|---|
+| `msi`, a Windows Installer package | The OLE compound-file magic and the root storage class of a package | `msiexec /i <package> /qn` | Microsoft's `msiexec` reference; Wine's `msiexec.c` for what Wine implements |
+| `nsis` | The NSIS first header, `0xDEADBEEF` then `NullsoftInst`, in the first 64 KiB of the data appended to the program | `/S` | NSIS manual, section 3.2 |
+| `inno-setup` | The Inno Setup loader's offset table, `rDlPtS`, inside the program image | `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-` | Inno Setup help, "Setup Command Line Parameters" |
+| `seven-zip-installer`, the installer 7-Zip ships for itself | A 7z archive appended to a program whose version resource calls it `7-Zip Installer` | `/S` | 7-Zip FAQ |
+| `portable-zip` | A zip archive with at least one member named `*.exe` | None: it is unpacked, not run | |
+| `plain-exe` | A Windows program for x86-64 or i386 with none of the above | None | |
+
+"Appended data" is what follows the last section of a PE image: the layout is
+read from the section table, so a signature in the program's own code or
+resources is not mistaken for a payload. A 7z archive appended to any other
+program (a self-extracting archive) is a `plain-exe` with a note: no unattended
+mode is documented for those in general.
+
+Not installable (`TUR-WINDOWS-APP-001`): a Windows Installer patch or
+transform, a DLL, a kernel-mode image, a program for another processor
+architecture, MS-DOS and 16-bit programs, a zip archive without a program, and
+everything that is not Windows software.
+
+The identification also says which architecture the installer program itself
+is. Most installers are 32-bit programs whatever they install: Notepad++ and
+VLC ship 64-bit applications in 32-bit NSIS installers. Wine must have its
+32-bit half to run those.
+
+A `plain-exe` is not run as an installer: nothing is known about what it would
+ask. `--portable` is the user's statement that the file is the application
+itself; it is then copied into the prefix. Without it the installation is
+refused (`TUR-WINDOWS-APP-002`). Running an installer of an unknown kind with
+its windows shown, for the user to click through, is not built.
+
+### The three plans
+
+An installation is three plans carried out in order. The third cannot be made
+before the second has run, because what an installer installs is only known
+afterwards. `--dry-run` therefore prints the first two and says so.
+
+1. **Create a fresh prefix** for the application, exactly as `prefix create`
+   does. An application that already has a prefix is refused
+   (`TUR-WINDOWS-PREFIX-002`): nothing is installed over anything.
+2. **Put the application into the prefix**, as one `run-bounded` step inside
+   the sandbox:
+
+   | Kind | Command inside the sandbox |
+   |---|---|
+   | `msi` | `wine msiexec /i Z:\<path of the package> /qn` |
+   | `nsis`, `seven-zip-installer` | `wine <installer> /S` |
+   | `inno-setup` | `wine <installer> /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-` |
+   | `portable-zip` | `unzip -q -o <archive> -d <prefix>/drive_c/Program Files/<prefix-id>` |
+   | `plain-exe` with `--portable` | `install -D -m 0644 -- <file> <prefix>/drive_c/Program Files/<prefix-id>/<name>.exe` |
+
+   The sandbox is the one every launch gets, with no granted directory and
+   one addition: the installer file itself, read-only, at its own path. Its
+   directory is not shown. `unzip` and `install` run inside the sandbox too,
+   without Wine: an archive is untrusted, and whatever a hostile one tries
+   (paths that climb out, links that point elsewhere) lands in a file system
+   where only the prefix is writable. Nothing in a portable archive or a
+   copied program is run during installation.
+
+   The time limit is 15 minutes unless `--timeout` says otherwise, at most a
+   day. An unattended installer that stops to ask something would otherwise
+   wait for ever on a display nobody is watching. A non-zero exit status is
+   `TUR-WINDOWS-APP-003`, running out of time `TUR-WINDOWS-APP-004`.
+3. **Record what was installed**: the profile, the icon, the launcher entry
+   and, last, the application record. An application has a record only when
+   everything else is in place.
+
+A failed installation is rolled back: the prefix and anything staged are
+deleted, and the log in `logs/<app-id>/operations.log` is kept, because it says
+what went wrong. `--keep-failed` keeps the prefix for a look; `prefix remove`
+then deletes it.
+
+### Finding what was installed
+
+The installer is not asked what it did. The prefix is looked at before and
+after it runs, and three things are compared:
+
+- **Programs**: every `*.exe` under the prefix's `drive_c`.
+- **Shortcuts**: every `*.lnk` there. With Wine's own menu builder switched off
+  (see the DLL overrides), an installer's Start-menu and desktop shortcuts
+  still exist as shortcut files inside the prefix. Each new one is parsed (the
+  Shell Link format: target path, arguments, description) and its target is
+  matched, without regard to case, against the new programs.
+- **Uninstall entries**: the keys under
+  `Software\Microsoft\Windows\CurrentVersion\Uninstall`, and the same under
+  `Wow6432Node`, in `system.reg` and `user.reg`: name, version, publisher,
+  uninstall command, install location, icon.
+
+The walk follows no symbolic link and lists none, so nothing outside the
+prefix is read whatever the installer left there; a `drive_c` that is itself a
+link is not walked at all. It stops at 200 000 entries or 24 levels. Registry
+files are read up to 64 MiB, shortcut files up to 64 KiB. Every string that is
+kept is stripped of control characters and bounded.
+
+### Choosing the main program
+
+The launcher entry starts one program. Programs under `windows/`, programs in
+a `Temp` directory and uninstallers (`unins*`, `*uninstall*`, `Au_.exe`) are
+never candidates. Among the rest, the first rule that singles out one program
+decides, and the record says which rule it was:
+
+1. The program the user named with `--main-exe`, by file name or by the end of
+   its path. It must name exactly one new program.
+2. The one program that Start-menu and desktop shortcuts point to.
+3. Among several such programs: the one that is also the icon of an uninstall
+   entry; failing that, the one whose shortcut is named after the application
+   as its uninstall entry names it ("PuTTY" for "PuTTY release 0.85", and not
+   "PuTTYgen").
+4. With no shortcut to a program: the icon of an uninstall entry.
+5. The only new program.
+6. The only new program nearest the top of the drive (an unpacked archive's
+   program, not the updater in its subdirectory).
+
+When no rule does, the installation fails with `TUR-WINDOWS-APP-006` and lists
+the candidates; the user names one. Nothing is guessed. An installer that
+installs no program at all is `TUR-WINDOWS-APP-005`. The chosen file must be a
+regular file that resolves to itself inside the prefix and a Windows program
+for x86-64 or i386.
+
+### The application record
+
+`prefixes/<app-id>/application.json`, schema version 1,
+`schemas/app-record.schema.json`. Unknown fields are refused, and a unit test
+keeps the schema and the Rust types in step. It is read back with a 256 KiB
+cap and must name the application and the prefix of the directory it is in.
+
+| Field | Meaning |
+|---|---|
+| `schema_version` | `1` |
+| `app_id` | The application identifier: `--app-id`, or `local.<name of the file>` |
+| `name`, `version`, `publisher` | In this order of preference: what the user gave (`--name`); what the installer registered in its uninstall entry; what the main program's version resource says; the shortcut's name; the program's file name. Free text, as the application states it |
+| `main_executable` | The program the launcher entry starts, as a path on this system, inside the prefix |
+| `main_executable_windows` | The same program as a Windows path |
+| `main_executable_reason` | The rule that chose it |
+| `prefix`, `prefix_id` | The prefix and the name the profile uses for it |
+| `runtime`, `runtime_version` | What the application was installed with |
+| `installed_at` | When, in UTC |
+| `install` | The installer's `kind`; the `method` (`unattended-installer`, `unpacked`, `copied`); the `arguments` the installer was given; and the `source`: the file's name, size and SHA-256 |
+| `uninstall` | The `method` (`uninstaller`, `msi-product`, `remove-prefix`), the `program` (a Windows path on `C:`, or a product code), its `arguments`, and the `registry_key` they came from |
+| `launcher` | The staged `desktop_entry` and `icon` files, and `installed: false` |
+| `profile` | The application profile the launcher entry launches from |
+| `executables`, `shortcuts` | What the installer added: programs as Windows paths, and Start-menu and desktop shortcuts with their targets. At most 64 of each |
+
+Where the installer file came from is not recorded: `tur-runtime` is given a
+file, not a URL. The digest is what lets a record be matched to a publisher's
+checksum.
+
+The profile written beside the record is an ordinary application profile:
+format `pe`, runtime `wine`, the prefix name, `test_status: untested`. Its
+runtime version is not pinned: the prefix records the version it is on and a
+launch refuses another one until the prefix is migrated.
+
+### The launcher entry
+
+Staged in this slice, not installed:
+
+```
+$XDG_DATA_HOME/tur/runtime/launchers/<app-id>/tur-wine-<app-id>.desktop
+$XDG_DATA_HOME/tur/runtime/launchers/<app-id>/tur-wine-<app-id>.png
+```
+
+On a system whose desktop this is integrated with, the entry would be
+`$XDG_DATA_HOME/applications/tur-wine-<app-id>.desktop` and the icon
+`$XDG_DATA_HOME/icons/hicolor/<size>x<size>/apps/tur-wine-<app-id>.png`, named
+in the entry as `Icon=tur-wine-<app-id>`. That step is not taken here because
+it belongs to the desktop bridge (§9.3), which also has to refresh the
+desktop's own caches and to remove the entry reliably; `app install` prints
+both destinations and the record says `installed: false`.
+
+The icon is taken from the main program: the first icon group of its
+resources, and of that the largest image and, among equals, the deepest. An
+image that is already a PNG is copied as it is. Any other is a
+device-independent bitmap with a transparency mask (1, 4, 8, 24 or 32 bits per
+pixel) and is written out as a PNG with eight bits per channel and alpha. The
+PNG stores its pixels uncompressed: an icon is at most 256 by 256 pixels, and
+no compressor is a dependency this way. A program without an icon that can be
+read gets the icon theme's generic one. The program file is untrusted input:
+sizes are capped (2 MiB per image), every index is checked, and a PNG taken
+from a program is copied, never decoded.
+
+`tur-runtime app launch <app-id>` is `tur-runtime launch` with the
+application's profile.
+
+### Removing an application
+
+`tur-runtime app uninstall <app-id>` is three plans:
+
+1. **The application's own uninstaller**, inside the sandbox, with the same
+   time limit as an installer:
+
+   | How it was installed | Command inside the sandbox |
+   |---|---|
+   | Windows Installer product (the uninstall entry is flagged as one, or its command is `MsiExec.exe`, and its key is a product code) | `wine msiexec /x {product code} /qn` |
+   | NSIS, 7-Zip's installer | `wine <UninstallString's program> <its arguments> /S` |
+   | Inno Setup | `wine <UninstallString's program> <its arguments> /VERYSILENT /SUPPRESSMSGBOXES /NORESTART` |
+   | Unpacked or copied | Nothing to run |
+
+   The program must be on the prefix's `C:` drive, without `..`; a record
+   edited to run something else is refused (`TUR-WINDOWS-APP-008`).
+2. **Delete everything kept for the application**: its directory (prefix,
+   private home, metadata, record, profile), staging, logs and launcher
+   entry.
+3. **Check that each of those paths is gone.** Anything still there is a
+   finding and exit status 8 (`TUR-WINDOWS-APP-009`).
+
+The uninstaller is a courtesy, not the mechanism. An application lives
+entirely in its own directory, because the sandbox gave it nowhere else to
+write; deleting that directory is what removes it. So a failing uninstaller
+does not stop the removal: it is reported (`TUR-WINDOWS-APP-011`, with its exit
+status and what it left in the prefix) and the removal goes on.
+`--skip-uninstaller` leaves it out.
+
+Two things the owner may see differently:
+
+- **Documents go with the application.** Whatever the application saved in its
+  private home (its "My Documents") is inside its directory and is deleted
+  with it. Files in granted directories are the user's own and are untouched.
+- **Backups are kept**, as `prefix remove` keeps them, and the result names
+  them. `--remove-backups` deletes them too.
+
+### Decisions where the specification is silent
+
+The specification names what the runtime manager must do (§7.2: "detect
+bundle/package/install formats", "register application desktop entries", "track
+runtime version and app version") and not how. Decided here:
+
+| Question | Decision |
+|---|---|
+| Which installer kinds, and how identified | Six, above, by content only |
+| What "unattended" means | Each kind's own documented switch. No kind is run with its windows |
+| A program of no known installer kind | Refused unless the user says it is the application itself |
+| Where the record lives, and its name | `application.json` beside the prefix, outside the sandbox |
+| The application identifier | Given, or `local.<file name>`; it names the prefix directory before anything is installed, so it cannot come from what the installer registers |
+| Name, version, publisher | The installer's own registration first, then the program's version resource |
+| The main program | Six rules; no guess when they do not decide |
+| Error codes | `TUR-WINDOWS-APP-*`, not `TUR-INSTALL-*` |
+| The launcher entry | Staged; destinations stated |
+| The icon | PNG, from the main program's first icon group |
+| A failed installation | Rolled back; the log is kept |
+| Removal when the uninstaller fails | Goes on; the failure is reported |
+| Backups at removal | Kept |
+| An installer's exit status | Only 0 is success. `msiexec` returns 3010 when a restart is wanted; that is treated as a failure, and was not met |
 
 ## Verified upstream
 
@@ -644,6 +945,14 @@ said.
 | bubblewrap | Every option used: `--unshare-user`, `--unshare-ipc`, `--unshare-pid`, `--unshare-uts`, `--unshare-cgroup-try`, `--unshare-net`, `--disable-userns` ("requires --unshare-user"), `--die-with-parent`, `--new-session`, `--ro-bind[-try]`, `--bind`, `--dev-bind[-try]`, `--proc`, `--dev`, `--tmpfs`, `--perms`, `--symlink`, `--remount-ro`, `--chdir`; file-system options "are applied in the order they are given" | `bwrap(1)` source, https://raw.githubusercontent.com/containers/bubblewrap/main/bwrap.xml |
 | Desktop entries | String escapes `\s`, `\n`, `\t`, `\r`, `\\`; `Exec` arguments quoted with double quotes, with `"`, `` ` ``, `$` and `\` escaped; a literal backslash is four in the file; `%` is `%%` | https://specifications.freedesktop.org/desktop-entry/latest/exec-variables.html and `value-types.html` |
 | Ubuntu and user namespaces | Ubuntu 23.10 and 24.04 restrict unprivileged user namespaces through AppArmor; what bubblewrap needed on the CI runner is in the [report](../reports/windows-runtime-1.md) | https://discourse.ubuntu.com/t/understanding-apparmor-user-namespace-restriction/58007 |
+| NSIS installers | "/S runs the installer or uninstaller silently"; `/D` sets the directory and must be last; the examples `installer.exe /S`, `uninstaller.exe /S _?=...` | NSIS manual, section 3.2, https://nsis.sourceforge.io/Docs/Chapter3.html |
+| Inno Setup installers | `/SP-`, `/SILENT`, `/VERYSILENT` ("this installation progress window is not displayed"), `/SUPPRESSMSGBOXES` ("only has an effect when combined with /SILENT or /VERYSILENT"), `/NORESTART`; the uninstaller takes `/SILENT`, `/VERYSILENT`, `/SUPPRESSMSGBOXES`, `/NORESTART` | https://jrsoftware.org/ishelp/topic_setupcmdline.htm and `topic_uninstcmdline.htm` |
+| 7-Zip's installer | "For exe installer: Use the "/S" parameter to do a silent installation"; "For msi installer: Use the /q INSTALLDIR=... parameters"; the options are case-sensitive | https://www.7-zip.org/faq.html |
+| `msiexec` in Wine | `/i` and `/package`, `/x` and `/uninstall` (the package or product code follows, attached or as the next argument), `/q`, `/qn`, `/quiet` set the user interface level to none; an argument that is not an option becomes a property, so nothing else is passed | Wine 9.0, `programs/msiexec/msiexec.c`, https://raw.githubusercontent.com/wine-mirror/wine/wine-9.0/programs/msiexec/msiexec.c |
+| Shortcuts written by Wine | The header with the Unicode flag; the item list when there is one; the link information with the local base path in the ANSI code page at the offset in its header; then description, relative path, working directory, arguments and icon location, each as a 16-bit count that includes the terminator followed by UTF-16 | Wine 9.0, `dlls/shell32/shelllink.c`, `IPersistStream_fnSave`, `Stream_WriteLocationInfo`, `Stream_WriteString` |
+| Wine's registry files | Key lines are `[path] time` with the path escaped for `[` and `]`; string values are `"name"="value"`, with `str(2):` before an expandable string; `dword:%08x`; escapes are `\\`, `\"`, C escapes for control characters, `\x%04x` or `\x%x` for a UTF-16 unit above 127 and up to three octal digits below 32 | Wine 9.0, `server/registry.c` (`dump_value`, `save_subkeys`) and `server/unicode.c` (`dump_strW`) |
+| The class of a Wine window | `res_name` and `res_class` are both the process name, which is the program's file name passed through `RtlDowncaseUnicodeChar` | Wine 9.0, `dlls/winex11.drv/window.c` (`set_initial_wm_hints`) and `x11drv_main.c` (`setup_options`) |
+| What identifies each installer kind | Checked on the real files of the test matrix on 12 November 2026 by reading their bytes (nothing was run): the NSIS first header four bytes into the appended data of the Notepad++ 8.9.9.1 and VLC 3.0.24 installers; `rDlPtS` in resource 11111 of the Inno Setup 7.1.1 installer, inside the image; a 7z signature at the start of the appended data of 7-Zip 26.06's installer, whose version resource says `7-Zip Installer`; the package class in both `.msi` files | The files named in `tests/windows-runtime/apps.json` |
 
 Not verified, or verified only at second hand:
 
@@ -665,6 +974,22 @@ Not verified, or verified only at second hand:
   depends on either.
 - **esync and fsync** are treated as absent from upstream Wine. That is from
   knowledge of the project, not from a document read for this work.
+- **Microsoft's `msiexec` reference**
+  (https://learn.microsoft.com/windows-server/administration/windows-commands/msiexec)
+  is named as the documentation of `/qn` and was not read for this work. What
+  Wine's `msiexec` does with the option was read from its source, above.
+- **The file formats read during installation** (the PE section table and
+  resource tree, version resources, icon groups and their bitmaps, the Shell
+  Link format, PNG, zlib's stored blocks, SHA-256) are implemented from
+  knowledge of the formats, not from specifications read for this work. They
+  are checked three ways: unit tests against files built by hand and against
+  the published check values of SHA-256, CRC-32 and Adler-32; the real
+  installers and installed programs in the `windows-runtime` workflow; and,
+  for the icons written, an independent PNG reader in the test (Python's
+  `zlib`).
+- **Old Inno Setup installers** (before 5.1.5) keep their offset table
+  elsewhere and are not recognised; they are reported as `plain-exe`. None was
+  tried.
 
 ## Command line
 
@@ -683,9 +1008,21 @@ tur-runtime prefix revoke <app-id> <dir>
 tur-runtime launch <profile> [--migrate] [--env NAME=VALUE]... [--wine-debug CHANNELS]
         [-- arguments for the application]
 tur-runtime desktop-entry <profile> [--launcher PROGRAM]
+
+tur-runtime installer identify <file> [--json]
+tur-runtime app install <installer> [--app-id ID] [--name NAME] [--main-exe PROGRAM]
+        [--portable] [--no-network] [--timeout SECONDS] [--keep-failed]
+        [--launcher PROGRAM]
+tur-runtime app list [--json]
+tur-runtime app show <app-id> [--json]
+tur-runtime app launch <app-id> [--migrate] [--env NAME=VALUE]... [--wine-debug CHANNELS]
+        [-- arguments for the application]
+tur-runtime app uninstall <app-id> [--skip-uninstaller] [--remove-backups]
+        [--timeout SECONDS]
 ```
 
-Every `prefix` and `launch` command also takes:
+Every `prefix` and `launch` command, and `app install`, `app launch` and
+`app uninstall`, also takes:
 
 | Option | Meaning |
 |---|---|
@@ -703,12 +1040,12 @@ caller's `PATH`: what is found there is also visible inside the sandbox.
 | 0 | Success. For `inspect`: the file has a route and everything it needs is installed |
 | 1 | The input could not be read, or is truncated, malformed or over a limit |
 | 2 | The command line is wrong |
-| 3 | No supported runtime exists for the file |
+| 3 | No supported runtime exists for the file. For `installer identify` and `app install`: the file is not something that can be installed |
 | 4 | The file has a route, but something it needs is not installed |
 | 5 | The profile is not valid |
 | 6 | The operation was refused before anything was changed or started |
-| 7 | A step failed while the operation was carried out |
-| 8 | Verification found problems in the prefix |
+| 7 | A step failed while the operation was carried out. For `app install`: the installer failed or ran out of time, or what it installed could not be made into an application; the installation was rolled back |
+| 8 | Verification found problems in the prefix. For `app uninstall`: something was still there after the removal |
 
 Once the application has run, `launch` exits with the application's own exit
 status, which can be any of the numbers above; the JSON report says which it
@@ -720,35 +1057,57 @@ the report, or the error, is JSON on standard output.
 ## Not done yet
 
 - **Running on the TUR image.** Everything that has run, ran on a hosted Ubuntu
-  runner with Ubuntu's Wine ([report](../reports/windows-runtime-1.md)). Wine is
-  not in the image yet, and nothing here has run on Fedora, under SELinux, on
-  Plasma or with a GPU.
-- **Real applications.** Two test programs prove the launch path. No
-  application has been tried and nothing is claimed about compatibility.
+  runner with Ubuntu's Wine (reports [1](../reports/windows-runtime-1.md) and
+  [2](../reports/windows-runtime-2.md)). Wine is not in the image yet, and
+  nothing here has run on Fedora, under SELinux, on Plasma or with a GPU.
+- **Real applications beyond a first few.** Eight installers of five free
+  applications have been installed, started, used once and removed in CI; the
+  measured results are in the [second report](../reports/windows-runtime-2.md).
+  That is a first table, not a compatibility database: one window and one
+  function per application, one Wine version, software rendering. No
+  proprietary application, no game, no application that needs a Microsoft
+  component has been tried.
+- **Installers that ask questions.** An installer is run only in its
+  documented unattended mode. Running one with its windows shown, for a kind
+  that has no such mode or is not recognised, is not built; nor is choosing
+  components, an install directory or a language. Other installer kinds (WiX
+  Burn bundles, InstallShield, Wise, self-extracting archives, Squirrel) are
+  reported as plain programs.
+- **Dependencies.** Nothing is installed for an application: no Microsoft
+  component, no redistributable runtime, no Mono, no Gecko, no winetricks
+  recipe. An application that needs one fails, and that is the result.
+- **Installing the launcher entry.** The entry and its icon are staged under
+  the runtime manager's own directory. Putting them where the desktop looks,
+  refreshing the desktop's caches, categories, file associations and "open
+  with" are the desktop bridge's work (§9.3) and are not built.
+- **Updating an installed application.** There is install and uninstall. A
+  newer installer over an existing prefix is refused; so is a second
+  application in the same prefix.
+- **Application data at removal.** Removing an application deletes its private
+  home with it. Offering to keep or export the user's files first is not
+  built.
 - **Proton.** The `umu-run` path is planned and unit-tested only. It has never
   been run: not the download of a Proton build, not the Steam Linux Runtime
   inside the sandbox, not a game. Each application would fetch its own copy of
   the runtime into its private home; a shared, read-only runtime store is not
   built.
-- **Installers and dependency recipes.** An `msi` profile is refused. There is
-  no handling of `.exe` installers, no winetricks-style recipes, no Mono or
-  Gecko.
 - **DXVK and VKD3D-Proton packaging.** The overrides are set; the DLLs are not
   installed into a prefix, and nothing checks that a prefix has them.
 - **Several runtime versions side by side.** A pin is honoured by refusing; no
   second Wine can be selected.
 - **Wayland-native driver evaluation.** Both display sockets are passed to
   Wine and the choice is left to it.
-- **File associations, icons, window matching, installing desktop entries.**
-  Only the entry's text is produced.
 - **seccomp, Landlock, resource limits.** The sandbox is namespaces and mounts
   only. The `isolation_profile` field of a profile is not interpreted: there is
   one isolation profile, the one described above.
 - **Stop.** There is no way to stop a running application other than ending
   `tur-runtime`, which kills the sandbox without letting the Wine server write
   the registry. Rollback of a failed migration is a manual `prefix restore`.
-- **32-bit programs.** Not run. On the CI runner Wine had no 32-bit support
-  installed.
+- **32-bit applications.** Two 32-bit installer programs ran (the NSIS
+  installers of Notepad++ and VLC), in a 64-bit prefix, on a runner with
+  Ubuntu's `wine32:i386` installed. Every application they installed is
+  64-bit; no 32-bit application has been started. The launch-path job still
+  runs without Wine's 32-bit half.
 - **A portal-like grant flow.** Grants are made on the command line.
 - **Darling.** No environment is created; the macOS route is still
   recommendation only.
@@ -761,7 +1120,8 @@ the report, or the error, is JSON on standard output.
 - **Deeper inspection.** No PE import tables (so no detection of a user-mode
   program that needs a kernel driver, anti-cheat or DRM), no Mach-O load
   commands, no Android manifest decoding, no look inside nested packages, no
-  binary property lists, no installer-framework detection for `.exe` installers.
+  binary property lists. `inspect` does not say what kind of installer a
+  program is; `installer identify` does, for the kinds listed above.
 - **Other formats.** DMG, PKG, Flatpak and Snap bundles, Java archives and
   Windows shortcuts are reported as `unknown` or as a plain zip.
 - **Diagnostics.** Launch logs and an operations log are kept per application;
@@ -770,5 +1130,8 @@ the report, or the error, is JSON on standard output.
   enumerations, required fields and property names in step with the Rust types.
   Neither schema is run through a JSON Schema validator in CI.
 - **Error-code registry.** The codes above are not yet registry entries in the
-  sense of §29.3, and the `RUNTIME` family that issue #12 asks for does not
-  exist; the new codes use `WINDOWS`, `SECURITY` and `DESKTOP`.
+  sense of §29.3.
+- **Assistant tools for applications.** P@x can inspect a file
+  (`runtime_inspect_file`). It has no tool to identify an installer or to list
+  installed applications: both would be read-only, and both need entries in
+  the assistant's own tool tests, which belong to another component.

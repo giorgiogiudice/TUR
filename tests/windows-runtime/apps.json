@@ -21,8 +21,17 @@
       "expected_kind": "seven-zip-installer",
       "install_options": [],
       "main_executable": "7zFM.exe",
-      "check": { "kind": "seven-zip-round-trip", "tool": "7z.exe" },
-      "expected": { "install": "pass", "launch": "pass", "check": "pass", "uninstall": "pass" }
+      "window_title": "^7-Zip$",
+      "check": {
+        "kind": "seven-zip-round-trip",
+        "tool": "7z.exe"
+      },
+      "expected": {
+        "install": "pass",
+        "launch": "pass",
+        "check": "pass",
+        "uninstall": "pass"
+      }
     },
     {
       "id": "7zip-msi",
@@ -42,8 +51,17 @@
       "expected_kind": "msi",
       "install_options": [],
       "main_executable": "7zFM.exe",
-      "check": { "kind": "seven-zip-round-trip", "tool": "7z.exe" },
-      "expected": { "install": "pass", "launch": "pass", "check": "pass", "uninstall": "pass" }
+      "window_title": "^7-Zip$",
+      "check": {
+        "kind": "seven-zip-round-trip",
+        "tool": "7z.exe"
+      },
+      "expected": {
+        "install": "pass",
+        "launch": "pass",
+        "check": "pass",
+        "uninstall": "pass"
+      }
     },
     {
       "id": "notepadpp-nsis",
@@ -62,8 +80,18 @@
       "expected_kind": "nsis",
       "install_options": [],
       "main_executable": "notepad++.exe",
-      "check": { "kind": "open-file-title", "file": "tur-check.txt", "title": "tur-check\\.txt - Notepad\\+\\+" },
-      "expected": { "install": "pass", "launch": "pass", "check": "pass", "uninstall": "pass" }
+      "window_title": "Notepad\\+\\+",
+      "check": {
+        "kind": "open-file-title",
+        "file": "tur-check.txt",
+        "title": "tur-check\\.txt - Notepad\\+\\+"
+      },
+      "expected": {
+        "install": "pass",
+        "launch": "pass",
+        "check": "pass",
+        "uninstall": "pass"
+      }
     },
     {
       "id": "notepadpp-zip",
@@ -82,8 +110,18 @@
       "expected_kind": "portable-zip",
       "install_options": [],
       "main_executable": "notepad++.exe",
-      "check": { "kind": "open-file-title", "file": "tur-check.txt", "title": "tur-check\\.txt - Notepad\\+\\+" },
-      "expected": { "install": "pass", "launch": "pass", "check": "pass", "uninstall": "pass" }
+      "window_title": "Notepad\\+\\+",
+      "check": {
+        "kind": "open-file-title",
+        "file": "tur-check.txt",
+        "title": "tur-check\\.txt - Notepad\\+\\+"
+      },
+      "expected": {
+        "install": "pass",
+        "launch": "pass",
+        "check": "pass",
+        "uninstall": "pass"
+      }
     },
     {
       "id": "putty-msi",
@@ -102,8 +140,17 @@
       "expected_kind": "msi",
       "install_options": [],
       "main_executable": "putty.exe",
-      "check": { "kind": "plink-raw", "tool": "plink.exe" },
-      "expected": { "install": "pass", "launch": "pass", "check": "pass", "uninstall": "pass" }
+      "window_title": "^PuTTY Configuration$",
+      "check": {
+        "kind": "plink-raw",
+        "tool": "plink.exe"
+      },
+      "expected": {
+        "install": "pass",
+        "launch": "pass",
+        "check": "pass",
+        "uninstall": "pass"
+      }
     },
     {
       "id": "putty-exe",
@@ -120,10 +167,21 @@
       "sha256": "d01fdb5aae8f112526040a39b0bfb9e27d813003178645e65f8d1cfdb2a26c87",
       "hash_source": "https://the.earth.li/~sgtatham/putty/0.85/sha256sums",
       "expected_kind": "plain-exe",
-      "install_options": ["--portable"],
+      "install_options": [
+        "--portable"
+      ],
       "main_executable": "putty.exe",
-      "check": { "kind": "putty-raw", "title": "127\\.0\\.0\\.1 - PuTTY" },
-      "expected": { "install": "pass", "launch": "pass", "check": "pass", "uninstall": "pass" }
+      "window_title": "^PuTTY Configuration$",
+      "check": {
+        "kind": "putty-raw",
+        "title": "127\\.0\\.0\\.1 - PuTTY"
+      },
+      "expected": {
+        "install": "pass",
+        "launch": "pass",
+        "check": "pass",
+        "uninstall": "pass"
+      }
     },
     {
       "id": "innosetup",
@@ -141,9 +199,18 @@
       "hash_source": "The digest GitHub publishes for the release asset of jrsoftware/issrc is-7_1_1",
       "expected_kind": "inno-setup",
       "install_options": [],
-      "main_executable": "Compil32.exe",
-      "check": { "kind": "inno-compile", "tool": "ISCC.exe" },
-      "expected": { "install": "pass", "launch": "pass", "check": "pass", "uninstall": "pass" }
+      "main_executable": "ISIDE.exe",
+      "window_title": "Inno Setup Compiler 7\\.1\\.1",
+      "check": {
+        "kind": "inno-compile",
+        "tool": "ISCC.exe"
+      },
+      "expected": {
+        "install": "pass",
+        "launch": "pass",
+        "check": "pass",
+        "uninstall": "pass"
+      }
     },
     {
       "id": "vlc-nsis",
@@ -163,9 +230,19 @@
       "expected_kind": "nsis",
       "install_options": [],
       "main_executable": "vlc.exe",
-      "launch_arguments": ["--no-qt-privacy-ask"],
-      "check": { "kind": "vlc-transcode" },
-      "expected": { "install": "pass", "launch": "pass", "check": "pass", "uninstall": "pass" }
+      "window_title": "^VLC media player$",
+      "launch_arguments": [
+        "--no-qt-privacy-ask"
+      ],
+      "check": {
+        "kind": "vlc-transcode"
+      },
+      "expected": {
+        "install": "pass",
+        "launch": "pass",
+        "check": "pass",
+        "uninstall": "pass"
+      }
     }
   ]
 }
