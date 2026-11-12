@@ -194,7 +194,27 @@ def screenshot(qmp: Qmp, work: pathlib.Path, target: pathlib.Path) -> dict:
     qmp.command("screendump", filename=str(ppm))
     width, height, rgb = read_ppm(ppm)
     write_png(target, width, height, rgb)
+    shutil.copyfile(ppm, target.with_suffix(".ppm.tmp"))
     return describe_image(width, height, rgb)
+
+
+def changed_fraction(before: pathlib.Path, after: pathlib.Path) -> float | None:
+    """The share of sampled pixels that differ between two screenshots."""
+    try:
+        width, height, first = read_ppm(before)
+        width2, height2, second = read_ppm(after)
+    except (OSError, ValueError):
+        return None
+    if (width, height) != (width2, height2):
+        return 1.0
+    total = width * height
+    step = max(1, total // 150_000)
+    sampled = differing = 0
+    for index in range(0, total, step):
+        sampled += 1
+        if first[index * 3:index * 3 + 3] != second[index * 3:index * 3 + 3]:
+            differing += 1
+    return round(differing / sampled, 4) if sampled else None
 
 
 class SerialWatcher:
@@ -322,6 +342,8 @@ def main() -> int:
         return round(time.monotonic() - started, 1)
 
     def finish(outcome: str) -> int:
+        for leftover in out.glob("*.ppm.tmp"):
+            leftover.unlink()
         result["outcome"] = outcome
         result["elapsed_seconds"] = elapsed()
         result["serial_bytes"] = serial_log.stat().st_size if serial_log.exists() else 0
@@ -418,6 +440,30 @@ def main() -> int:
 
     # ---- screenshot: the session has had its hold time; allow slow painting ----
     shoot("second-boot", attempts=9, pause=5)
+
+    # The greeter shows a clock until someone touches the machine. Press Shift and
+    # move the pointer, then look again: a display that responds is a live session,
+    # not a frozen frame. Informational; never decides the result.
+    try:
+        qmp.command("send-key", keys=[{"type": "qcode", "data": "shift"}])
+        qmp.command(
+            "input-send-event",
+            events=[
+                {"type": "rel", "data": {"axis": "x", "value": 40}},
+                {"type": "rel", "data": {"axis": "y", "value": 40}},
+            ],
+        )
+        time.sleep(4)
+        shot = screenshot(qmp, work, out / "screenshot-second-boot-after-input.png")
+        shot["changed_fraction"] = changed_fraction(
+            out / "screenshot-second-boot.ppm.tmp", out / "screenshot-second-boot-after-input.ppm.tmp"
+        )
+        shot["at_seconds"] = elapsed()
+        shot["taken"] = "after a key press and pointer movement"
+        result["screenshots"]["second-boot-after-input"] = shot
+        print(f"[{elapsed():7.1f}s] screenshot after input: {shot}", flush=True)
+    except Exception as error:
+        print(f"[{elapsed():7.1f}s] no screenshot after input: {error}", flush=True)
 
     # ---- power off ----------------------------------------------------------------
     result["shutdown"] = "forced"

@@ -383,6 +383,17 @@ def check_boot(ev: Evidence, boot: str, checks: Checks, args, allowed: dict[str,
         f"{shot.get('distinct_colours', '?')} colours sampled, taken {shot.get('taken', 'never')}",
     )
 
+    if boot == "second-boot":
+        after = (vm.get("screenshots") or {}).get("second-boot-after-input") or {}
+        changed = after.get("changed_fraction")
+        add(
+            "display_responds",
+            "the display changes after a key press and pointer movement",
+            (changed > 0.01) if isinstance(changed, (int, float)) else None,
+            f"share of sampled pixels that changed: {changed if changed is not None else 'no data'}",
+            required=False,
+        )
+
     # ---- network -----------------------------------------------------------------------
     addresses = []
     for link in guest.json("ip-addr.json") or []:
@@ -479,6 +490,9 @@ def check_boot(ev: Evidence, boot: str, checks: Checks, args, allowed: dict[str,
         "session": session,
         "renderer": renderer,
         "screenshot": shot or None,
+        "screenshot_after_input": ((vm.get("screenshots") or {}).get("second-boot-after-input") or None)
+        if boot == "second-boot"
+        else None,
         "network": {
             "addresses": addresses,
             "gateway": st.get("gateway"),
