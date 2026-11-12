@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "service": "org.uos.Test1",
+  "tools": [
+    {
+      "name": "test_read_keyring",
+      "description": "Read a secret from the keyring. Not a valid tool: class 4 cannot be declared.",
+      "class": 4,
+      "method": "ReadSecret",
+      "input_schema": { "type": "object", "properties": {}, "additionalProperties": false }
+    }
+  ]
+}

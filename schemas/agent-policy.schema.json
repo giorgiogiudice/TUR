@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/giorgiogiudice/UOS/schemas/agent-policy.schema.json",
+  "title": "UOS agent user policy",
+  "description": "The user-adjustable policy of the AI control layer (section 5.3). The user can make the assistant stricter, and can relax the handling of classes 1 and 2 for a named application. Nothing in this file can relax class 3 or class 4. The loader in services/uos-agent is authoritative. It also enforces one rule this schema cannot express: an application has at most one relaxation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "mode"],
+  "$defs": {
+    "application": {
+      "description": "An application identifier: 1 to 255 characters, no control characters, no surrounding whitespace.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "pattern": "^(?!\\s)(?![\\s\\S]*\\s$)[^\\u0000-\\u001f\\u007f-\\u009f]+$"
+    }
+  },
+  "properties": {
+    "schema_version": { "const": 1 },
+    "mode": {
+      "description": "normal: the rules of the design, unchanged. ask_every_action: ask before every action of every class; an unattended task is deferred. observe_only: only class 0 actions are available.",
+      "enum": ["normal", "ask_every_action", "observe_only"]
+    },
+    "excluded_applications": {
+      "description": "Applications the assistant must neither observe nor act in. Matched without regard to ASCII case.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/application" }
+    },
+    "sensitive_applications": {
+      "description": "Applications in which every accessibility and screen action, observation included, is treated as class 2 at least. Matched without regard to ASCII case. Overrides a relaxation.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/application" }
+    },
+    "relaxations": {
+      "description": "Per-application relaxations. Each applies to accessibility and screen actions in that application only, in normal mode, while the user is present.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["application", "class"],
+        "properties": {
+          "application": {
+            "description": "Matched exactly, including case.",
+            "$ref": "#/$defs/application"
+          },
+          "class": {
+            "description": "The highest class the relaxation covers. 2: consequential actions in the application run without asking. 1: accepted, and changes no decision, because class 1 is already allowed in normal mode and the stricter modes override every relaxation.",
+            "enum": [1, 2]
+          }
+        }
+      }
+    }
+  }
+}

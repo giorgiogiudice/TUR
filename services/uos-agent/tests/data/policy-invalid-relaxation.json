@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "mode": "normal",
+  "relaxations": [
+    { "application": "org.example.Disks", "class": 3 }
+  ]
+}

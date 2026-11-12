@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "mode": "ask_every_action",
+  "excluded_applications": ["org.example.Vault"],
+  "sensitive_applications": ["org.example.Bank"],
+  "relaxations": [
+    { "application": "org.example.Mail", "class": 2 }
+  ]
+}
