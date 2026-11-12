@@ -6,7 +6,7 @@ TUR DEVELOPMENT REPORT
 Task ID:          windows-runtime-2
 Subsystem:        Universal Runtime Manager (services/tur-runtime)
 Build ID:         not applicable: this task builds no image
-Source revision:  e358873 (feat/windows-real-apps, pull request 45), which
+Source revision:  389af3c (feat/windows-real-apps, pull request 45), which
                   is the commit the measurements below come from. The commit
                   that adds this report follows it and changes no code.
 
@@ -66,9 +66,9 @@ DIAGNOSTICS
 - Log paths: GitHub Actions runs below; artifact
   "windows-runtime-applications" (for every application: the identification,
   the installation report, the application record, the profile, the launcher
-  entry, the icon, screenshots, launch output, the operations log, the
-  removal report; results.json; compatibility.md; proposed catalogue
-  records); artifact "windows-runtime-evidence" for the launch-path job
+  entry, the icon's size and digest, screenshots, launch output, the
+  operations log, the removal report; results.json; compatibility.md;
+  proposed catalogue records); artifact "windows-runtime-evidence" for the launch-path job
 - Diagnostic bundle path: none; no bundle format exists yet
 - Relevant error IDs: 11 new codes, TUR-WINDOWS-APP-001 to -011
 
@@ -101,11 +101,20 @@ NEXT SAFE ACTION
 | `6bdf8de` | rust, windows-runtime | 43232014875, 43232014872 | Cancelled by the next push before they finished. No result |
 | `cd7bde0` | rust, windows-runtime | 43232271622, 43232271777 | Cancelled by the next push before they finished. No result |
 | `e358873` | rust | 43232475625 | Passed, all twelve components; 313 unit tests in `services/tur-runtime` |
-| `e358873` | windows-runtime | 43232475907 | Passed: launch-path job, 322 of 322 checks; applications job, 32 of 32 steps. **This report is written from this run** |
-| `e358873` | pax | 43232475496 | Passed |
+| `e358873` | windows-runtime | 43232475907 | Passed: launch-path job, 322 of 322 checks; applications job, 32 of 32 steps. The screenshots are from this run |
+| `46c7404` (the first version of this report) | rust, windows-runtime | 43233847621, 43233847616 | Passed: 322 of 322 checks; 32 of 32 steps |
+| `389af3c` | rust | 43234925411 | Passed, all twelve components; 313 unit tests in `services/tur-runtime` |
+| `389af3c` | windows-runtime | 43234925560 | Passed: launch-path job, 322 of 322 checks; applications job, 32 of 32 steps. **This report is written from this run** |
+| `389af3c` | pax | 43234925432 | Passed |
 
-The measurements in this report are from the last pair of runs. The commit
-that adds the report is later; its runs are named in the pull request.
+The measurements in this report are from the last three rows. The commit
+that brings the report up to them is later and changes no code; its runs are
+named in the pull request.
+
+The applications job has now run five times to the end: once with 31 of 32
+steps passing, for the reason above, and four times with 32 of 32. After
+that correction to the test, no step's result changed from one run to the
+next.
 
 ## Where this ran
 
@@ -190,14 +199,14 @@ terminal, Delphi VCL, Qt 5).
 
 | Application | Version | Installer kind | Install | Launch | Check | Uninstall | Notes |
 |---|---|---|---|---|---|---|---|
-| 7-Zip | 26.06 | seven-zip-installer | pass (18.4 s) | pass (window after 1.0 s) | pass | pass (2.2 s) | 7z.exe wrote a zip archive that Python's zipfile reads back intact, and a 7z archive (29% of the input) that it extracts again; SHA-256 of the 680 kB test file round-trips. Window: '7-Zip', 952x566. |
-| 7-Zip | 26.06 | msi | pass (12.2 s) | pass (window after 1.3 s) | pass | pass (2.2 s) | 7z.exe wrote a zip archive that Python's zipfile reads back intact, and a 7z archive (29% of the input) that it extracts again; SHA-256 of the 680 kB test file round-trips. Window: '7-Zip', 952x566. |
-| Notepad++ | 8.9.9.1 | nsis | pass (13.6 s) | pass (window after 3.0 s) | pass | pass (2.7 s) | given a file on its command line, it opened it: its window is titled 'Z:\\home\\runner\\work\\_temp\\tur-apps\\run\\shared\\notepadpp-nsis\\tur-check.txt - Notepad++ [Administrator]' after 2.8 s (closed). Window: 'new 1 - Notepad++ [Administrator]', 1016x666. |
-| Notepad++ (portable) | 8.9.9.1 | portable-zip | pass (10.8 s) | pass (window after 2.8 s) | pass | pass (0.1 s) | given a file on its command line, it opened it: its window is titled 'Z:\\home\\runner\\work\\_temp\\tur-apps\\run\\shared\\notepadpp-zip\\tur-check.txt - Notepad++ [Administrator]' after 3.0 s (closed). Window: 'new 1 - Notepad++ [Administrator]', 1016x666. It has no uninstaller; removing it is deleting its prefix. |
-| PuTTY | 0.85 | msi | pass (12.5 s) | pass (window after 1.0 s) | pass | pass (4.2 s) | plink.exe made a raw TCP connection to a listener on the runner and printed the line it was sent. Window: 'PuTTY Configuration', 450x410. |
-| PuTTY (single program) | 0.85 | plain-exe | pass (10.4 s) | pass (window after 1.0 s) | pass | pass (0.1 s) | putty.exe made a raw TCP connection to a listener on the runner and opened its terminal window, titled '127.0.0.1 - PuTTY', after 1.0 s (exited when the connection closed). Window: 'PuTTY Configuration', 450x410. It has no uninstaller; removing it is deleting its prefix. |
-| Inno Setup | 7.1.1 | inno-setup | pass (15.0 s) | pass (window after 2.5 s) | pass | pass (3.1 s) | ISCC.exe compiled a script into a 2102 kB installer, which `tur-runtime installer identify` recognises as Inno Setup. Window: 'Untitled – Inno Setup Compiler 7.1.1 – Non-commercial use only', 952x566. It also opened: 'Welcome'. |
-| VLC media player | 3.0.24 | nsis | pass (23.3 s) | pass (window after 1.3 s) | pass | pass (3.7 s) | vlc.exe, without its window, decoded a 2 s 440 Hz WAV, resampled it from 44.1 to 22.05 kHz and wrote 1.95 s of a 440 Hz tone, measured from the samples. Window: 'VLC media player', 600x420. |
+| 7-Zip | 26.06 | seven-zip-installer | pass (15.6 s) | pass (window after 1.0 s) | pass | pass (2.0 s) | 7z.exe wrote a zip archive that Python's zipfile reads back intact, and a 7z archive (29% of the input) that it extracts again; SHA-256 of the 680 kB test file round-trips. Window: '7-Zip', 952x566. |
+| 7-Zip | 26.06 | msi | pass (14.5 s) | pass (window after 1.0 s) | pass | pass (2.2 s) | 7z.exe wrote a zip archive that Python's zipfile reads back intact, and a 7z archive (29% of the input) that it extracts again; SHA-256 of the 680 kB test file round-trips. Window: '7-Zip', 952x566. |
+| Notepad++ | 8.9.9.1 | nsis | pass (11.9 s) | pass (window after 2.5 s) | pass | pass (2.4 s) | given a file on its command line, it opened it: its window is titled 'Z:\\home\\runner\\work\\_temp\\tur-apps\\run\\shared\\notepadpp-nsis\\tur-check.txt - Notepad++ [Administrator]' after 2.3 s (closed). Window: 'new 1 - Notepad++ [Administrator]', 1016x666. |
+| Notepad++ (portable) | 8.9.9.1 | portable-zip | pass (9.7 s) | pass (window after 2.5 s) | pass | pass (0.1 s) | given a file on its command line, it opened it: its window is titled 'Z:\\home\\runner\\work\\_temp\\tur-apps\\run\\shared\\notepadpp-zip\\tur-check.txt - Notepad++ [Administrator]' after 2.3 s (closed). Window: 'new 1 - Notepad++ [Administrator]', 1016x666. It has no uninstaller; removing it is deleting its prefix. |
+| PuTTY | 0.85 | msi | pass (11.4 s) | pass (window after 0.8 s) | pass | pass (2.0 s) | plink.exe made a raw TCP connection to a listener on the runner and printed the line it was sent. Window: 'PuTTY Configuration', 450x410. |
+| PuTTY (single program) | 0.85 | plain-exe | pass (9.3 s) | pass (window after 0.8 s) | pass | pass (0.1 s) | putty.exe made a raw TCP connection to a listener on the runner and opened its terminal window, titled '127.0.0.1 - PuTTY', after 0.8 s (exited when the connection closed). Window: 'PuTTY Configuration', 450x410. It has no uninstaller; removing it is deleting its prefix. |
+| Inno Setup | 7.1.1 | inno-setup | pass (13.3 s) | pass (window after 2.0 s) | pass | pass (2.9 s) | ISCC.exe compiled a script into a 2102 kB installer, which `tur-runtime installer identify` recognises as Inno Setup. Window: 'Untitled – Inno Setup Compiler 7.1.1 – Non-commercial use only', 952x566. It also opened: 'Welcome'. |
+| VLC media player | 3.0.24 | nsis | pass (22.3 s) | pass (window after 1.0 s) | pass | pass (3.2 s) | vlc.exe, without its window, decoded a 2 s 440 Hz WAV, resampled it from 44.1 to 22.05 kHz and wrote 1.95 s of a 440 Hz tone, measured from the samples. Window: 'VLC media player', 600x420. |
 
 Outside the sandbox: nothing appeared in the home directory of the user running the test, in any of the places Wine or an installer would use without one (~/.wine, ~/.local/share/applications, ~/.local/share/icons, ~/.local/share/mime, ~/.local/share/desktop-directories, ~/.config/menus, ~/.cache/wine, ~/Desktop).
 
@@ -226,6 +235,26 @@ What each column is:
 
 No result was retried. No application failed, so no row is classed as a TUR
 bug or a Wine limitation; what was learned on the way is in the next section.
+
+Times move from run to run. Over the five runs of the job, in seconds:
+
+| Application | Install | First window |
+|---|---|---|
+| 7-Zip, installer | 12.9 to 18.4 | 1.0 to 1.3 |
+| 7-Zip, package | 12.2 to 15.4 | 1.0 to 1.3 |
+| Notepad++, installer | 11.9 to 13.6 | 2.5 to 3.3 |
+| Notepad++, portable archive | 9.7 to 10.9 | 2.5 to 3.0 |
+| PuTTY, package | 11.4 to 12.6 | 0.8 to 1.0 |
+| PuTTY, single program | 9.3 to 10.4 | 0.8 to 1.0 |
+| Inno Setup | 13.3 to 15.3 | 2.0 to 2.5 |
+| VLC | 22.3 to 24.8 | 1.0 to 2.0 |
+
+Creating the prefix is about ten seconds of every installation. No installer
+or uninstaller that went through Wine took less than two seconds, however
+little it had to do; the likely reason is the Wine server's delay before it
+exits, which `tur-runtime` waits out so that the registry is written. That
+was not measured on its own. The window is looked for about four times a
+second, so the second column is coarse.
 
 **This table is small and friendly.** These are well-behaved, widely used free
 applications, picked for licences that allow the test. Eight passes say that
@@ -286,6 +315,7 @@ Things found, in the order they would matter to a user.
 | The unattended command for each kind, in the sandbox, with only the installer file shown | `install::tests` read the bubblewrap arguments back and hold them to the same boundary assertions as every other sandbox; `app_cli.rs` on the binary; the real installers ran |
 | A time limit on an installer, and stopping it with everything it started | `exec::tests` (a real process, stopped after one second); `e2e.py`: a stand-in installer that never finishes is stopped, no process of it is left, `TUR-WINDOWS-APP-004` |
 | A failing installer, and one that installs nothing: reported and rolled back | `e2e.py` with real Wine: `TUR-WINDOWS-APP-003` and `-005`, no prefix left, the log kept; `--keep-failed` keeps the prefix |
+| `--portable` is refused for a file whose content says it is an installer or an archive | `install::tests` |
 | Reading shortcuts, uninstall entries, version resources and icons out of a prefix; nothing outside it is read | Unit tests, including links that lead out of the prefix, truncated files at every length and hostile sizes; the real prefixes |
 | Choosing the main program by rule, and refusing to guess | `discover::tests`; the eight real installations |
 | The application record and its schema | `app_record::tests` (schema and types in step, 27 kinds of invalid record refused); the record on disk compared with the one reported, for every application |
@@ -335,11 +365,15 @@ Things found, in the order they would matter to a user.
   menu.
 - **The window test needs a window manager's cooperation to close a window.**
   All eight closed when asked.
+- **An installer reaches its file through the prefix's `Z:` drive**, as every
+  program started from outside its prefix does. A prefix hardened by removing
+  that drive would break both.
 
 ## Screenshots
 
 From run 43232475907, reduced to 800 pixels wide and 128 colours. Each was looked
-at.
+at. The run this report is written from produced the same images, byte for
+byte.
 
 | | |
 |---|---|
@@ -347,11 +381,15 @@ at.
 | ![PuTTY's terminal window](assets/windows-runtime-2/putty-check.png) PuTTY 0.85 on a raw connection to the runner, showing the line it was sent | ![PuTTY's configuration window](assets/windows-runtime-2/putty-launch.png) PuTTY 0.85, started from its launcher entry |
 | ![The Inno Setup Compiler](assets/windows-runtime-2/innosetup-launch.png) Inno Setup 7.1.1: its main window and its "Welcome" dialog | ![VLC media player](assets/windows-runtime-2/vlc-launch.png) VLC 3.0.24: its main window, and the small window of its notification-area icon |
 
-The icon files `tur-runtime` wrote are in the run's artifact
-(`apps/<application>/icon.png`) and are not committed: they are parts of the
+The icon files `tur-runtime` wrote are not committed: they are parts of the
 applications. Those of 7-Zip (from an 8-bit bitmap, 48 pixels), PuTTY (4-bit,
 48 pixels), Inno Setup (32-bit, 128 pixels) and Notepad++ (a 256-pixel PNG,
-copied) were opened and are the applications' icons, with their transparency.
+copied) were opened, from the artifacts of runs 43228908197 and 43232475907,
+and are the applications' icons, with their transparency. From `389af3c` on
+the job no longer uploads them: the Windows guest design says that icons
+extracted from Windows programs stay on the user's machine, and the test now
+keeps each icon's dimensions and digest instead. Every run still reads each
+icon back with an independent PNG reader.
 
 ## Proposed catalogue changes
 
@@ -461,6 +499,11 @@ CI only: Openbox, wmctrl, ImageMagick, x11-utils, Xvfb, and Ubuntu's
 11. **No assistant tool was added.** Two read-only ones would fit
     (`installer identify`, `app list`); they need entries in P@x's own tests,
     outside this change's paths.
+12. **The CI artifact holds screenshots of the applications and no extracted
+    icon files.** The screenshots were asked for; the icons follow the guest
+    design's rule for publishers' works.
+13. **An icon that is already a PNG is copied, not decoded and re-encoded**,
+    unlike what the guest design says of its own entries.
 
 ## Changes needed in shared files
 
