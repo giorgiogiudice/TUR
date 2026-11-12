@@ -3,7 +3,7 @@
   "$id": "https://github.com/giorgiogiudice/TUR/schemas/pax-models.schema.json",
   "$comment": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
   "title": "P@x model list",
-  "description": "The providers P@x can use, each by an identifier with an adapter family (ADR-0004, amended 12 November 2026), the models offered for each, and their prices. Read from /etc/tur/pax/models.json if it exists, else /usr/share/tur/pax/models.json; never written by P@x. Model names and prices are configuration, never compiled in (ADR-0004). A model the person types that is not listed is accepted; its price is then not known and P@x limits it in tokens. The loader in services/tur-pax (settings.rs) is authoritative and also enforces: a provider is listed once; a model name is listed once per provider, with no control characters and no surrounding whitespace; prices follow the rules of the provider configuration (finite, not negative, a currency of 1 to 8 letters). The adapter families' own companies (anthropic, openai, google) exist without an entry, at their public addresses and with no prices.",
+  "description": "The providers P@x can use, each by an identifier with an adapter family (ADR-0004, amended 12 November 2026), the models offered for each, and their prices. Read from /etc/tur/pax/models.json if it exists, else /usr/share/tur/pax/models.json; never written by P@x. Model names and prices are configuration, never compiled in (ADR-0004). A model the person types that is not listed is accepted; its price is then not known and P@x limits it in tokens. The loader in services/tur-pax (settings.rs) is authoritative and also enforces: a provider is listed once; a model name is listed once per provider, with no control characters and no surrounding whitespace; prices follow the rules of the provider configuration (finite, not negative, a currency of 1 to 8 letters); an openai-chat entry names its base_url; key_required false and send_back_reasoning true are for openai-chat only; data_terms with runs_locally need a base_url on this computer, and reviewed data terms name the pages they were read from. The adapter families' own companies (anthropic, openai, google) exist without an entry, at their public addresses and with no prices.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -39,6 +39,32 @@
     }
   },
   "$defs": {
+    "statement": {
+      "description": "One statement of TUR's summary of a provider's terms, in plain words.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 400
+    },
+    "capabilities": {
+      "description": "What is declared. Tool calling decides whether P@x offers tools; image input whether it offers screen control. Recorded as declared; the tool probe of tur-pax-providers can check tool calling.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tool_calling": {
+          "type": "boolean"
+        },
+        "streaming_tool_calls": {
+          "type": "boolean"
+        },
+        "image_input": {
+          "type": "boolean"
+        },
+        "context_tokens": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
     "provider": {
       "type": "object",
       "additionalProperties": false,
@@ -54,12 +80,54 @@
           "description": "The provider's identifier, by which settings, the interface and the keyring name it."
         },
         "adapter": {
-          "description": "The adapter family that speaks its interface. The loader accepts the families the provider layer has: anthropic (Messages), openai (Responses), google (Interactions).",
+          "description": "The adapter family that speaks its interface. The loader accepts the families the provider layer has: anthropic (Messages), openai (Responses), google (Interactions), openai-chat (the OpenAI-compatible Chat Completions of DeepSeek, other services and local servers).",
           "enum": [
             "anthropic",
             "openai",
-            "google"
+            "google",
+            "openai-chat"
           ]
+        },
+        "key_required": {
+          "description": "Whether the service needs a key. false only for openai-chat, for a server that takes none (a model server on this computer).",
+          "type": "boolean",
+          "default": true
+        },
+        "send_back_reasoning": {
+          "description": "openai-chat only: send the model's reasoning back with later requests, for a service whose documentation requires it (DeepSeek).",
+          "type": "boolean",
+          "default": false
+        },
+        "data_terms": {
+          "description": "What the provider says about the data sent to it, as TUR read it. Without reviewed_on the terms are not reviewed by TUR, and the consent text says so; an entry the person adds by hand is never shown as reviewed.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "reviewed_on": {
+              "description": "The day TUR read the pages in sources.",
+              "type": "string",
+              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+            },
+            "runs_locally": {
+              "description": "The model runs on this computer; the base_url must be a loopback address.",
+              "type": "boolean"
+            },
+            "stores_requests": { "$ref": "#/$defs/statement" },
+            "retention": { "$ref": "#/$defs/statement" },
+            "trains_on_data": { "$ref": "#/$defs/statement" },
+            "processing_location": { "$ref": "#/$defs/statement" },
+            "terms_url": {
+              "type": "string",
+              "pattern": "^https://"
+            },
+            "sources": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^https://"
+              }
+            }
+          }
         },
         "name": {
           "type": "string",
@@ -94,6 +162,10 @@
                 "type": "string",
                 "minLength": 1,
                 "maxLength": 200
+              },
+              "capabilities": {
+                "description": "What this model declares, in place of what its provider declares.",
+                "$ref": "#/$defs/capabilities"
               },
               "label": {
                 "type": "string"
@@ -145,28 +217,12 @@
         },
         "keyring_item": {
           "type": "string",
-          "pattern": "^[a-z][a-z0-9_-]{0,31}$",
-          "description": "The name of the password store item that holds its key. Its identifier when absent."
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+          "description": "The name of the password store item that holds its key; its identifier when absent. 1 to 64 lower-case letters, digits, '.', '-' and '_', starting with a letter or a digit, with no two dots in a row (the loader checks that). Every provider identifier is one."
         },
         "capabilities": {
-          "description": "What it declares it can do. Recorded and reported; the adapter finds out whether it is true.",
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "tool_calling": {
-              "type": "boolean"
-            },
-            "streaming_tool_calls": {
-              "type": "boolean"
-            },
-            "image_input": {
-              "type": "boolean"
-            },
-            "context_tokens": {
-              "type": "integer",
-              "minimum": 1
-            }
-          }
+          "description": "What its models declare they can do, unless a model declares otherwise. A model that declares no tool calling is offered no tools.",
+          "$ref": "#/$defs/capabilities"
         }
       }
     }

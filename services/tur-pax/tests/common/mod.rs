@@ -135,11 +135,13 @@ pub enum Wire {
     OpenAi,
     /// The Google Interactions API.
     Google,
+    /// The OpenAI-compatible Chat Completions API (DeepSeek and others).
+    OpenAiChat,
 }
 
 impl Wire {
     /// Every format an adapter exists for.
-    pub const ALL: [Wire; 3] = [Wire::Anthropic, Wire::OpenAi, Wire::Google];
+    pub const ALL: [Wire; 4] = [Wire::Anthropic, Wire::OpenAi, Wire::Google, Wire::OpenAiChat];
 
     /// The provider name of a configuration file.
     pub fn provider(self) -> &'static str {
@@ -147,6 +149,7 @@ impl Wire {
             Wire::Anthropic => "anthropic",
             Wire::OpenAi => "openai",
             Wire::Google => "google",
+            Wire::OpenAiChat => "openai-chat",
         }
     }
 
@@ -156,8 +159,88 @@ impl Wire {
             Wire::Anthropic => sse(turn),
             Wire::OpenAi => sse_openai(turn),
             Wire::Google => sse_google(turn),
+            Wire::OpenAiChat => sse_openai_chat(turn),
         }
     }
+}
+
+/// One chunk of a Chat Completions stream.
+fn chunk(choices: &Value, usage: &Value) -> String {
+    let data = json!({ "id": "chatcmpl-scripted", "object": "chat.completion.chunk",
+                       "created": 1_794_477_600, "model": "test-model",
+                       "choices": choices, "usage": usage });
+    format!("data: {data}\n\n")
+}
+
+/// The response as a stream of the OpenAI-compatible Chat Completions API,
+/// written by hand from OpenAI's reference and DeepSeek's documentation.
+///
+/// A streamed call starts with its identifier and name and its argument text
+/// arrives in two more deltas. A call delivered whole arrives in one delta,
+/// as xAI documents. The usage comes in a last chunk with no choices.
+pub fn sse_openai_chat(turn: &Turn) -> String {
+    let delta = |delta: Value| json!([{ "index": 0, "delta": delta, "finish_reason": null }]);
+    let mut stream = chunk(
+        &delta(json!({ "role": "assistant", "content": "" })),
+        &Value::Null,
+    );
+    if !turn.text.is_empty() {
+        stream.push_str(&chunk(&delta(json!({ "content": turn.text })), &Value::Null));
+    }
+    for (index, call) in turn.calls.iter().enumerate() {
+        if turn.whole {
+            stream.push_str(&chunk(
+                &delta(json!({ "tool_calls": [{ "index": index, "id": call.id, "type": "function",
+                    "function": { "name": call.name, "arguments": call.arguments } }] })),
+                &Value::Null,
+            ));
+            continue;
+        }
+        stream.push_str(&chunk(
+            &delta(json!({ "tool_calls": [{ "index": index, "id": call.id, "type": "function",
+                "function": { "name": call.name, "arguments": "" } }] })),
+            &Value::Null,
+        ));
+        let (first, second) = halves(&call.arguments);
+        for fragment in [first, second] {
+            stream.push_str(&chunk(
+                &delta(json!({ "tool_calls": [{ "index": index,
+                    "function": { "arguments": fragment } }] })),
+                &Value::Null,
+            ));
+        }
+    }
+    let finish = match turn.stop {
+        "error" => {
+            stream.push_str(&format!(
+                "data: {}\n\n",
+                json!({ "error": { "message": "The model is temporarily overloaded.",
+                                   "type": "server_error", "code": "server_is_overloaded" } })
+            ));
+            return stream;
+        }
+        "max_tokens" => "length",
+        "refusal" => {
+            stream.push_str(&chunk(
+                &delta(json!({ "refusal": "The scripted model declined." })),
+                &Value::Null,
+            ));
+            "stop"
+        }
+        _ if !turn.calls.is_empty() => "tool_calls",
+        _ => "stop",
+    };
+    stream.push_str(&chunk(
+        &json!([{ "index": 0, "delta": {}, "finish_reason": finish }]),
+        &Value::Null,
+    ));
+    stream.push_str(&chunk(
+        &json!([]),
+        &json!({ "prompt_tokens": turn.input_tokens, "completion_tokens": turn.output_tokens,
+                 "total_tokens": turn.input_tokens + turn.output_tokens }),
+    ));
+    stream.push_str("data: [DONE]\n\n");
+    stream
 }
 
 fn event(name: &str, data: &Value) -> String {
@@ -758,6 +841,13 @@ pub fn result_frames(wire: Wire, body: &Value) -> Vec<Value> {
             .filter(|step| step["type"] == "function_result")
             .filter_map(|step| step["result"][0]["text"].as_str().map(str::to_owned))
             .collect(),
+        Wire::OpenAiChat => body["messages"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|message| message["role"] == "tool")
+            .filter_map(|message| message["content"].as_str().map(str::to_owned))
+            .collect(),
     };
     texts
         .iter()
@@ -774,16 +864,30 @@ pub fn system_of(wire: Wire, body: &Value) -> Value {
         Wire::Anthropic => body["system"].clone(),
         Wire::OpenAi => body["instructions"].clone(),
         Wire::Google => body["system_instruction"].clone(),
+        Wire::OpenAiChat => {
+            let first = &body["messages"][0];
+            if first["role"] == "system" {
+                first["content"].clone()
+            } else {
+                Value::Null
+            }
+        }
     }
 }
 
-/// The names of the tools a request body offers.
+/// The names of the tools a request body offers. Chat Completions nests
+/// the name under `function`.
 pub fn offered_tools(body: &Value) -> Vec<String> {
     body["tools"]
         .as_array()
         .into_iter()
         .flatten()
-        .filter_map(|tool| tool["name"].as_str().map(str::to_owned))
+        .filter_map(|tool| {
+            tool["name"]
+                .as_str()
+                .or_else(|| tool["function"]["name"].as_str())
+                .map(str::to_owned)
+        })
         .collect()
 }
 

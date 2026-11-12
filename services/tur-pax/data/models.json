@@ -2,7 +2,7 @@
   "schema_version": 1,
   "status": "example",
   "prices_as_of": "2026-11-12",
-  "note": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0. An EXAMPLE, not a maintained price list. Model names and prices were read on 2026-11-12 from each provider's own pricing page (prices_url) and are the standard, pay-as-you-go prices in USD per million tokens. Each provider changes them without notice. Where a provider charges by prompt length, the price for the shortest prompts is given, which is what a task of P@x normally sends: Anthropic none; OpenAI up to 272K input tokens; Google none for the models listed. A model listed without prices has a price this format cannot state truthfully: tiered by prompt length (claude-haiku-5-5), or announced to change within weeks (gemini-4-carbon, from 2026-12-01). P@x then limits it in tokens. max_output_tokens is P@x's own limit for one response, chosen to bound what one response can cost; it is not the provider's maximum. No model here has been run with TUR: tested_with_tur is false everywhere. Each provider is an identifier with an adapter family (ADR-0004, amended 2026-11-12); a compatible service such as DeepSeek is an entry with its own id, the family that speaks its interface, its base_url and keyring_item. None is listed here: the compatible adapter family is not built yet.",
+  "note": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0. An EXAMPLE, not a maintained price list. Model names and prices were read on 2026-11-12 from each provider's own pricing page (prices_url) and are the standard, pay-as-you-go prices in USD per million tokens. Each provider changes them without notice. Where a provider charges by prompt length, the price for the shortest prompts is given, which is what a task of P@x normally sends: Anthropic none; OpenAI up to 272K input tokens; Google none for the models listed. A model listed without prices has a price this format cannot state truthfully: tiered by prompt length (claude-haiku-5-5), or announced to change within weeks (gemini-4-carbon, from 2026-12-01). P@x then limits it in tokens. max_output_tokens is P@x's own limit for one response, chosen to bound what one response can cost; it is not the provider's maximum. No model here has been run with TUR: tested_with_tur is false everywhere. Each provider is an identifier with an adapter family (ADR-0004, amended 2026-11-12). The presets of the OpenAI-compatible family (adapter openai-chat) were read from each service's own documentation on 2026-11-12; the pages are in docs/architecture/pax-providers.md, section 14. Their prices are EXAMPLES too: DeepSeek's are its peak rates (off-peak rates are half; peak is 01:00-04:00 and 06:00-10:00 UTC on weekdays), and its page shows them in dollars without naming the currency; xAI's and Mistral's are for prompts under 200K tokens where the page tiers them. Context sizes are as the pages write them (1M read as 1000000, 256k as 256000). capabilities are what the pages declare, not what TUR measured. data_terms are TUR's summary of the pages named in sources, read on reviewed_on; the three companies' entries have none, so their consent text says their terms are not reviewed by TUR. The two local presets point at the standard addresses of Ollama (127.0.0.1:11434) and llama.cpp's llama-server (127.0.0.1:9931), take no key, and declare nothing about tools: that depends on the model and on how the server was started.",
   "providers": [
     {
       "id": "anthropic",
@@ -104,6 +104,338 @@
           }
         }
       ]
+    },
+    {
+      "id": "deepseek",
+      "adapter": "openai-chat",
+      "name": "DeepSeek",
+      "base_url": "https://api.deepseek.com",
+      "send_back_reasoning": true,
+      "capabilities": {
+        "tool_calling": true,
+        "streaming_tool_calls": true,
+        "context_tokens": 1000000
+      },
+      "data_terms": {
+        "reviewed_on": "2026-11-12",
+        "stores_requests": "Yes. Its privacy policy says it collects and stores what you send (prompts, inputs, uploaded files) with your account; its API terms say nothing more specific.",
+        "retention": "No fixed period: as long as necessary to provide its services, and for as long as you have an account.",
+        "trains_on_data": "It may. Its privacy policy names training and improving its models among the uses of your data and gives a right to opt out; the opt-out its terms describe ('Improve the model for everyone') is a setting of its chat product, and none for the API was found.",
+        "processing_location": "The People's Republic of China, by Hangzhou DeepSeek Artificial Intelligence Co., Ltd.",
+        "terms_url": "https://cdn.deepseek.com/policies/en-US/deepseek-privacy-policy.html",
+        "sources": [
+          "https://cdn.deepseek.com/policies/en-US/deepseek-privacy-policy.html",
+          "https://cdn.deepseek.com/policies/en-US/deepseek-terms-of-use.html",
+          "https://cdn.deepseek.com/policies/en-US/deepseek-open-platform-terms-of-service.html"
+        ]
+      },
+      "data_terms_url": "https://cdn.deepseek.com/policies/en-US/deepseek-privacy-policy.html",
+      "prices_url": "https://api-docs.deepseek.com/quick_start/pricing",
+      "models": [
+        {
+          "model": "deepseek-flash",
+          "label": "DeepSeek V4.1 Flash",
+          "capabilities": { "image_input": true },
+          "max_output_tokens": 8192,
+          "tested_with_tur": false,
+          "prices": {
+            "currency": "USD",
+            "input_per_million": 0.3,
+            "output_per_million": 1.2,
+            "cached_input_per_million": 0.006
+          }
+        },
+        {
+          "model": "deepseek-v4-pro",
+          "label": "DeepSeek V4 Pro",
+          "capabilities": { "image_input": false },
+          "max_output_tokens": 8192,
+          "tested_with_tur": false,
+          "prices": {
+            "currency": "USD",
+            "input_per_million": 1.32,
+            "output_per_million": 3.96,
+            "cached_input_per_million": 0.044
+          }
+        }
+      ]
+    },
+    {
+      "id": "mistral",
+      "adapter": "openai-chat",
+      "name": "Mistral AI",
+      "base_url": "https://api.mistral.ai/v1",
+      "capabilities": {
+        "tool_calling": true
+      },
+      "data_terms": {
+        "reviewed_on": "2026-11-12",
+        "stores_requests": "Yes, to monitor abuse, unless zero data retention has been granted (on request, for paid plans).",
+        "retention": "For the time needed to answer, then 30 rolling days.",
+        "trains_on_data": "Its privacy policy lists training its models on your input and output, subject to your opt-out; its commercial terms say customer data is not used unless you opted in or did not opt out, depending on the product. Whether paid API use is trained on by default was not settled from what TUR read.",
+        "processing_location": "Not committed for the global address used here; providers in the European Union are preferred, with exceptions. Its EU and US addresses keep processing in that region.",
+        "terms_url": "https://legal.mistral.ai/terms/privacy-policy",
+        "sources": [
+          "https://legal.mistral.ai/terms/privacy-policy",
+          "https://legal.mistral.ai/terms/commercial-terms-of-service",
+          "https://docs.mistral.ai/inference/regional-inference.md",
+          "https://docs.mistral.ai/admin/monitor-comply/zero-data-retention.md"
+        ]
+      },
+      "data_terms_url": "https://legal.mistral.ai/terms/privacy-policy",
+      "prices_url": "https://docs.mistral.ai/inference/pricing.md",
+      "models": [
+        {
+          "model": "mistral-small-2603",
+          "label": "Mistral Small",
+          "capabilities": { "image_input": true, "context_tokens": 256000 },
+          "max_output_tokens": 8192,
+          "tested_with_tur": false,
+          "prices": {
+            "currency": "USD",
+            "input_per_million": 0.15,
+            "output_per_million": 0.6
+          }
+        },
+        {
+          "model": "mistral-large-4",
+          "label": "Mistral Large 4",
+          "capabilities": { "image_input": true, "context_tokens": 1000000 },
+          "max_output_tokens": 8192,
+          "tested_with_tur": false,
+          "prices": {
+            "currency": "USD",
+            "input_per_million": 0.7,
+            "output_per_million": 2.1,
+            "cached_input_per_million": 0.07
+          }
+        }
+      ]
+    },
+    {
+      "id": "xai",
+      "adapter": "openai-chat",
+      "name": "xAI",
+      "base_url": "https://api.x.ai/v1",
+      "capabilities": {
+        "tool_calling": true,
+        "streaming_tool_calls": false
+      },
+      "data_terms": {
+        "reviewed_on": "2026-11-12",
+        "stores_requests": "Yes: requests and responses are kept, encrypted, for abuse auditing, unless a team administrator switches on zero data retention.",
+        "retention": "30 days, then deleted automatically.",
+        "trains_on_data": "No, not without your explicit permission.",
+        "processing_location": "Not guaranteed: requests may be routed between regions. Its US address keeps processing in the United States.",
+        "terms_url": "https://docs.x.ai/developers/faq/security.md",
+        "sources": [
+          "https://docs.x.ai/developers/faq/security.md",
+          "https://docs.x.ai/developers/advanced-api-usage/regions.md"
+        ]
+      },
+      "data_terms_url": "https://docs.x.ai/developers/faq/security.md",
+      "prices_url": "https://docs.x.ai/developers/pricing.md",
+      "models": [
+        {
+          "model": "grok-4.3",
+          "label": "Grok 4.3",
+          "capabilities": { "image_input": true, "context_tokens": 1000000 },
+          "max_output_tokens": 8192,
+          "tested_with_tur": false,
+          "prices": {
+            "currency": "USD",
+            "input_per_million": 1.25,
+            "output_per_million": 2.5,
+            "cached_input_per_million": 0.2
+          }
+        },
+        {
+          "model": "grok-4.7",
+          "label": "Grok 4.7",
+          "capabilities": { "image_input": true, "context_tokens": 500000 },
+          "max_output_tokens": 8192,
+          "tested_with_tur": false,
+          "prices": {
+            "currency": "USD",
+            "input_per_million": 2.0,
+            "output_per_million": 6.0,
+            "cached_input_per_million": 0.5
+          }
+        }
+      ]
+    },
+    {
+      "id": "groq",
+      "adapter": "openai-chat",
+      "name": "Groq",
+      "base_url": "https://api.groq.com/openai/v1",
+      "capabilities": {
+        "tool_calling": true,
+        "streaming_tool_calls": true
+      },
+      "data_terms": {
+        "reviewed_on": "2026-11-12",
+        "stores_requests": "No by default for inference requests; logs for reliability and abuse may be kept. Zero data retention can be switched on in its data controls.",
+        "retention": "Up to 30 days for those logs.",
+        "trains_on_data": "No: its services agreement does not permit it to train on inputs or outputs without explicit permission.",
+        "processing_location": "The United States (customer data is kept in Google Cloud buckets in the US).",
+        "terms_url": "https://console.groq.com/docs/your-data",
+        "sources": [
+          "https://console.groq.com/docs/your-data",
+          "https://console.groq.com/docs/legal/services-agreement"
+        ]
+      },
+      "data_terms_url": "https://console.groq.com/docs/your-data",
+      "prices_url": "https://console.groq.com/docs/models",
+      "models": [
+        {
+          "model": "openai/gpt-oss-120b",
+          "label": "GPT-OSS 120B on Groq",
+          "capabilities": { "image_input": false, "context_tokens": 131072 },
+          "max_output_tokens": 8192,
+          "tested_with_tur": false,
+          "prices": {
+            "currency": "USD",
+            "input_per_million": 0.15,
+            "output_per_million": 0.6
+          }
+        },
+        {
+          "model": "qwen/qwen3.8-27b",
+          "label": "Qwen 3.8 27B on Groq (preview)",
+          "capabilities": { "image_input": true, "context_tokens": 131072 },
+          "max_output_tokens": 8192,
+          "tested_with_tur": false,
+          "prices": {
+            "currency": "USD",
+            "input_per_million": 0.8,
+            "output_per_million": 4.0
+          }
+        }
+      ]
+    },
+    {
+      "id": "openrouter",
+      "adapter": "openai-chat",
+      "name": "OpenRouter",
+      "base_url": "https://openrouter.ai/api/v1",
+      "capabilities": {
+        "tool_calling": true,
+        "streaming_tool_calls": true
+      },
+      "data_terms": {
+        "reviewed_on": "2026-11-12",
+        "stores_requests": "Not by OpenRouter, unless you opt in to logging or content is flagged as possible abuse material. The service it routes each request to has its own policy.",
+        "retention": "At least three months for logging you opted in to. The upstream service's own retention applies to what it receives.",
+        "trains_on_data": "OpenRouter's use for product improvement is off by default. Upstream services have their own policies; those that train on data can be blocked in its settings.",
+        "processing_location": "Not stated; each request goes to an upstream service chosen by routing.",
+        "terms_url": "https://openrouter.ai/docs/guides/privacy/data-collection.md",
+        "sources": [
+          "https://openrouter.ai/docs/guides/privacy/data-collection.md",
+          "https://openrouter.ai/docs/guides/features/input-output-logging.md",
+          "https://openrouter.ai/docs/guides/privacy/provider-logging.md",
+          "https://openrouter.ai/docs/guides/features/zdr.md"
+        ]
+      },
+      "data_terms_url": "https://openrouter.ai/docs/guides/privacy/data-collection.md",
+      "models": [
+        {
+          "model": "mistralai/mistral-small-2603",
+          "label": "Mistral Small through OpenRouter",
+          "capabilities": { "image_input": true, "context_tokens": 262144 },
+          "max_output_tokens": 8192,
+          "tested_with_tur": false,
+          "prices": {
+            "currency": "USD",
+            "input_per_million": 0.15,
+            "output_per_million": 0.6
+          }
+        },
+        {
+          "model": "x-ai/grok-4.3",
+          "label": "Grok 4.3 through OpenRouter",
+          "capabilities": { "image_input": true, "context_tokens": 1000000 },
+          "max_output_tokens": 8192,
+          "tested_with_tur": false,
+          "prices": {
+            "currency": "USD",
+            "input_per_million": 1.25,
+            "output_per_million": 2.5
+          }
+        }
+      ]
+    },
+    {
+      "id": "together",
+      "adapter": "openai-chat",
+      "name": "Together AI",
+      "base_url": "https://api.together.ai/v1",
+      "capabilities": {
+        "tool_calling": true,
+        "streaming_tool_calls": true
+      },
+      "data_terms": {
+        "reviewed_on": "2026-11-12",
+        "stores_requests": "Yes by default: prompts and responses are stored and may be used for product improvements, unless prompt storage is switched off (zero data retention).",
+        "retention": "No period stated; stored data can be deleted at any time.",
+        "trains_on_data": "Sharing data to train other models is opt-in and off by default.",
+        "processing_location": "Not stated in general; North American data centres for some models; a US-only address is offered.",
+        "terms_url": "https://docs.together.ai/docs/privacy-and-security.md",
+        "sources": [
+          "https://docs.together.ai/docs/privacy-and-security.md",
+          "https://docs.together.ai/docs/zero-data-retention.md"
+        ]
+      },
+      "data_terms_url": "https://docs.together.ai/docs/privacy-and-security.md",
+      "prices_url": "https://docs.together.ai/docs/serverless/models.md",
+      "models": [
+        {
+          "model": "openai/gpt-oss-120b",
+          "label": "GPT-OSS 120B on Together",
+          "capabilities": { "image_input": false, "context_tokens": 131072 },
+          "max_output_tokens": 8192,
+          "tested_with_tur": false,
+          "prices": {
+            "currency": "USD",
+            "input_per_million": 0.15,
+            "output_per_million": 0.6
+          }
+        },
+        {
+          "model": "Qwen/Qwen3.5-9B",
+          "label": "Qwen 3.5 9B on Together",
+          "capabilities": { "image_input": true, "context_tokens": 262144 },
+          "max_output_tokens": 8192,
+          "tested_with_tur": false,
+          "prices": {
+            "currency": "USD",
+            "input_per_million": 0.17,
+            "output_per_million": 0.25
+          }
+        }
+      ]
+    },
+    {
+      "id": "ollama",
+      "adapter": "openai-chat",
+      "name": "Ollama on this computer",
+      "base_url": "http://127.0.0.1:11434/v1",
+      "key_required": false,
+      "data_terms": {
+        "runs_locally": true
+      },
+      "models": []
+    },
+    {
+      "id": "llama-server",
+      "adapter": "openai-chat",
+      "name": "llama.cpp server on this computer",
+      "base_url": "http://127.0.0.1:9931/v1",
+      "key_required": false,
+      "data_terms": {
+        "runs_locally": true
+      },
+      "models": []
     }
   ]
 }

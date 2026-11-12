@@ -1185,7 +1185,10 @@ fn a_provider_added_by_hand_is_used_by_its_identifier_and_keyring_item() {
             name: "A compatible service".to_owned(),
             base_url: Some(base_url),
             keyring_item: Some("compat-key".to_owned()),
+            key_required: true,
+            send_back_reasoning: false,
             capabilities: None,
+            data_terms: None,
             data_terms_url: None,
             key_url: None,
             prices_url: None,
@@ -1200,6 +1203,7 @@ fn a_provider_added_by_hand_is_used_by_its_identifier_and_keyring_item() {
     assert!(text.starts_with("What P@x sends to A compatible service"));
     assert!(text.contains("You added A compatible service yourself."));
     assert!(text.contains("Whether A compatible service honours that is not known to TUR."));
+    assert!(text.contains("not reviewed by TUR"));
     world.core.enable(&version).expect("switched on");
     // The key goes under the entry's item.
     world.core.set_key("compat", KEY).expect("stored");
@@ -1334,4 +1338,206 @@ fn memory_is_the_persons_to_switch_keep_and_forget() {
     );
     let activity = world.core.activity(5).expect("the activity");
     assert_eq!(activity[0]["kind"], "settings");
+}
+
+// ------------------------------------------- the OpenAI-compatible family
+
+/// A service on a scratch directory whose model list is `models`.
+fn with_models(name: &str, models: &str, settings: impl FnOnce(&mut Settings)) -> World {
+    let list = models.to_owned();
+    // The directory `World::new` makes, before it calls `settings`.
+    let path = std::env::temp_dir()
+        .join(format!("tur-pax-service-{name}-{}", std::process::id()))
+        .join("models.json");
+    World::new(name, move |initial| {
+        fs::write(&path, list).expect("the model list is written");
+        settings(initial);
+    })
+}
+
+/// A model list with one provider of the compatible family at `base_url`.
+fn compatible_list(base_url: &str) -> String {
+    format!(
+        r#"{{ "schema_version": 1, "status": "example", "prices_as_of": "2026-11-12",
+             "providers": [{{
+                "id": "deepseek", "adapter": "openai-chat", "name": "DeepSeek",
+                "base_url": "{base_url}", "send_back_reasoning": true,
+                "capabilities": {{ "tool_calling": true, "image_input": false }},
+                "data_terms": {{
+                    "reviewed_on": "2026-11-12",
+                    "stores_requests": "yes",
+                    "trains_on_data": "yes, unless you opt out",
+                    "processing_location": "the People's Republic of China",
+                    "terms_url": "https://example.org/privacy",
+                    "sources": ["https://example.org/privacy"]
+                }},
+                "models": [
+                    {{ "model": "acts" }},
+                    {{ "model": "talks", "capabilities": {{ "tool_calling": false }} }}
+                ]
+             }}] }}"#
+    )
+}
+
+#[test]
+fn a_listed_compatible_provider_shows_its_terms_and_runs_through_its_family() {
+    let server = FakeServer::start_on(
+        Wire::OpenAiChat,
+        vec![
+            calls("I will look.", vec![call("toolu_1", "test_observe", "{}")]),
+            says("The value is fine."),
+        ],
+    );
+    let list = compatible_list(&format!("{}/v1", server.base_url()));
+    let models = ModelList::from_json(&list).expect("a model list");
+    let world = with_models("compatible", &list, |settings| {
+        settings
+            .set_provider("deepseek", "acts", &models)
+            .expect("a provider");
+    });
+    // The consent text says what TUR read of the terms, and when.
+    let (version, text) = world.core.consent("deepseek").expect("the text");
+    assert_eq!(version, CONSENT_TEXT_VERSION);
+    assert!(text.contains("What DeepSeek's terms say, as TUR read them on 2026-11-12:"));
+    assert!(text.contains("- where it processes it: the People's Republic of China"));
+    assert!(text.contains("DeepSeek's data terms: https://example.org/privacy"));
+    assert!(!text.contains("not reviewed by TUR"));
+    world.core.enable(&version).expect("switched on");
+    world.core.set_key("deepseek", KEY).expect("stored");
+
+    let status = world.core.status();
+    assert_eq!(status["adapter"], "openai-chat");
+    assert_eq!(status["key"], "set");
+    assert_eq!(status["ready"], true);
+    assert_eq!(status["abilities"]["act"], true);
+    assert_eq!(status["abilities"]["see"], false);
+    let listed = world.core.models();
+    let deepseek = &listed["providers"][0];
+    assert_eq!(deepseek["data_terms_reviewed"], true);
+    assert_eq!(deepseek["data_terms"]["reviewed_on"], "2026-11-12");
+    assert_eq!(deepseek["models"][1]["can_act"], false);
+
+    let result = world.run("Look at the test value.");
+    assert_eq!(result["outcome"], "completed");
+    assert_eq!(result["answer"], "The value is fine.");
+    let requests = server.requests();
+    assert_eq!(requests.len(), 2);
+    assert!(
+        requests
+            .iter()
+            .all(|request| request.path == "/v1/chat/completions")
+    );
+    // The tools were offered, and the result went back as a tool message.
+    let body = requests[1].json();
+    assert!(
+        body["tools"]
+            .as_array()
+            .is_some_and(|tools| !tools.is_empty())
+    );
+    let tool_messages: Vec<&Value> = body["messages"]
+        .as_array()
+        .expect("messages")
+        .iter()
+        .filter(|message| message["role"] == "tool")
+        .collect();
+    assert_eq!(tool_messages.len(), 1);
+    assert_eq!(tool_messages[0]["tool_call_id"], "toolu_1");
+    // Nothing above class 1 ran, and the key is in no file.
+    assert_eq!(
+        world.commands(),
+        [vec!["/usr/bin/tur-pax-test-tool", "observe"]]
+    );
+    for (path, bytes) in world.every_file() {
+        assert!(
+            !String::from_utf8_lossy(&bytes).contains(KEY),
+            "{}",
+            path.display()
+        );
+    }
+
+    // Switching to another provider asks again.
+    world
+        .core
+        .set_provider("anthropic", "test-model")
+        .expect("another provider");
+    assert_eq!(world.core.status()["consent"]["current"], false);
+    assert_eq!(
+        code(world.core.start_task("Hello", "").expect_err("refused")),
+        "TUR-AI-SERVICE-001"
+    );
+}
+
+#[test]
+fn a_model_that_cannot_call_tools_is_offered_none_and_the_person_is_told() {
+    let server = FakeServer::start_on(Wire::OpenAiChat, vec![says("Only words from me.")]);
+    let list = compatible_list(&server.base_url());
+    let models = ModelList::from_json(&list).expect("a model list");
+    let world = with_models("cannot-act", &list, |settings| {
+        settings
+            .set_provider("deepseek", "talks", &models)
+            .expect("a provider");
+        settings
+            .enable(CONSENT_TEXT_VERSION, NOW)
+            .expect("switched on");
+    });
+    world.keys.set("deepseek", KEY).expect("a key");
+    let status = world.core.status();
+    assert_eq!(status["abilities"]["act"], false);
+    assert_eq!(
+        status["abilities"]["notices"][0],
+        tur_pax::settings::MODEL_CANNOT_ACT
+    );
+
+    let result = world.run("Set the test value to night.");
+    assert_eq!(result["outcome"], "completed");
+    assert_eq!(result["answer"], "Only words from me.");
+    // No tool and no command was offered.
+    let body = server.requests()[0].json();
+    assert!(body.get("tools").is_none(), "{body}");
+    assert!(body.get("tool_choice").is_none());
+    // The person was told why, in plain words.
+    let notices: Vec<&str> = result["texts"]
+        .as_array()
+        .expect("texts")
+        .iter()
+        .filter(|text| text["kind"] == "notice")
+        .filter_map(|text| text["text"].as_str())
+        .collect();
+    assert_eq!(notices, [tur_pax::settings::MODEL_CANNOT_ACT]);
+    assert!(world.commands().is_empty());
+}
+
+#[test]
+fn a_model_server_on_this_computer_needs_no_key_and_says_so() {
+    let server = FakeServer::start_on(Wire::OpenAiChat, vec![says("Hello from here.")]);
+    let list = format!(
+        r#"{{ "schema_version": 1, "status": "example", "prices_as_of": "2026-11-12",
+             "providers": [{{
+                "id": "ollama", "adapter": "openai-chat", "name": "Ollama",
+                "base_url": "{}/v1", "key_required": false,
+                "data_terms": {{ "runs_locally": true }}
+             }}] }}"#,
+        server.base_url()
+    );
+    let models = ModelList::from_json(&list).expect("a model list");
+    let world = with_models("local", &list, |settings| {
+        settings
+            .set_provider("ollama", "any-local-model", &models)
+            .expect("a provider");
+    });
+    let (version, text) = world.core.consent("ollama").expect("the text");
+    assert!(text.contains("P@x sends these to Ollama, which runs on this computer:"));
+    assert!(text.contains("no company receives it"));
+    world.core.enable(&version).expect("switched on");
+    let status = world.core.status();
+    assert_eq!(status["key"], "not_needed");
+    assert_eq!(status["ready"], true);
+    // Not declared: tools are offered, and nothing is said to be withheld.
+    assert_eq!(status["abilities"]["act"], Value::Null);
+
+    let result = world.run("Hello.");
+    assert_eq!(result["outcome"], "completed");
+    assert_eq!(result["answer"], "Hello from here.");
+    assert!(!world.keys.is_set("ollama").expect("asked"));
+    assert_eq!(server.requests()[0].path, "/v1/chat/completions");
 }
