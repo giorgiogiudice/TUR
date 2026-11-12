@@ -182,7 +182,7 @@ licence list kept in
 
 `/usr/lib/os-release` is TUR's: `NAME="TUR"`, `ID=tur`, `ID_LIKE=fedora`,
 `VERSION_ID` and `IMAGE_VERSION` the TUR version, `BUILD_ID` the build,
-`LOGO=tur-logo-icon`, `DEFAULT_HOSTNAME=tur`, and the project's addresses on
+`LOGO=tur-logo-icon`, `DEFAULT_HOSTNAME=tur-pc` (not `tur`: see TUR-008), and the project's addresses on
 GitHub. `ID_LIKE=fedora` tells tools that look for the family (fwupd, for
 example) where they are. `/etc/system-release` reads `TUR release <version>`;
 the firmware boot entry that bootupd creates is named from it.

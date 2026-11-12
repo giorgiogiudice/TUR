@@ -49,10 +49,13 @@ TEXT_ROOTS = ["/etc", "/usr/bin", "/usr/sbin", "/usr/lib", "/usr/lib64", "/usr/l
 SKIP_DIRS = ["/usr/share/doc", "/usr/share/licenses", "/usr/share/man", "/usr/share/info", "/usr/share/locale",
              "/usr/share/gtk-doc", "/usr/share/help", "/usr/lib/modules", "/usr/lib/firmware", "/usr/lib/sysimage",
              "/usr/lib/.build-id", "/usr/lib/debug"]
+# Where artwork lives: file names are checked here.
 ART_DIRS = ["/usr/share/icons", "/usr/share/pixmaps", "/usr/share/plymouth", "/usr/share/wallpapers",
             "/usr/share/backgrounds", "/usr/share/plasma", "/usr/share/anaconda", "/usr/share/firstboot",
-            "/usr/share/sddm", "/usr/share/plasmalogin", "/usr/share/applications", "/usr/share/metainfo",
-            "/usr/share/fedora-logos", "/usr/share/oxygen", "/usr/share/tur", "/etc"]
+            "/usr/share/sddm", "/usr/share/plasmalogin", "/usr/share/applications",
+            "/usr/share/fedora-logos", "/usr/share/oxygen"]
+# Checksums against fedora-logos are checked in a wider set.
+DIGEST_DIRS = ART_DIRS + ["/usr/share/metainfo", "/usr/share/tur", "/etc"]
 fedora_digests = set(config["fedora_logos_digests"])
 
 def grep(roots, skip):
@@ -113,8 +116,8 @@ texts = grep(TEXT_ROOTS, SKIP_DIRS)
 own = owners(texts)
 result["text"] = [{"path": p, "owner": own.get(p, "?"), "lines": lines(p)} for p in texts]
 
-for path in walk([d for d in ART_DIRS if os.path.isdir(d)]):
-    if "fedora" in os.path.basename(path).lower():
+for path in walk([d for d in DIGEST_DIRS if os.path.isdir(d)]):
+    if "fedora" in os.path.basename(path).lower() and any(path.startswith(d + "/") for d in ART_DIRS):
         result["names"].append({"path": path, "target": os.path.realpath(path)})
     if os.path.isfile(path) and not os.path.islink(path):
         try:

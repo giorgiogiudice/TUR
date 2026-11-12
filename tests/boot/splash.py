@@ -44,6 +44,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import vm  # noqa: E402
 
 TEST_USER = "turtest"  # tests/boot/guest/rootfs/usr/libexec/tur-boot-test/guest-agent
+ROOT_X86_64 = "4f68bce3-e8cd-4db1-96e7-fbcaf984b709"  # the GPT type of an x86-64 root partition
 
 
 def run(*cmd: str, check: bool = True) -> str:
@@ -61,13 +62,19 @@ def prepare(disk: str, work: pathlib.Path) -> int:
     mounted = False
     try:
         run("udevadm", "settle", "--timeout=30", check=False)
-        devices = json.loads(run("lsblk", "--json", "-o", "PATH,PARTLABEL,FSTYPE", loop))
-        children = devices["blockdevices"][0].get("children") or []
-        root = next((c for c in children if (c.get("partlabel") or "") == "root"), None) \
-            or next((c for c in children if c.get("fstype") in ("ext4", "xfs", "btrfs")), None)
+        # The partition table says which partition is the root (by its type,
+        # as tests/boot/inspect-disk.py reads it); its device node may need a
+        # moment, or a nudge, to appear.
+        table = json.loads(run("sfdisk", "--json", loop))["partitiontable"]["partitions"]
+        root = next((p["node"] for p in table if p["type"].lower() == ROOT_X86_64), None)
         if not root:
-            raise RuntimeError(f"no root partition among {children}")
-        run("mount", root["path"], str(mnt))
+            raise RuntimeError(f"no x86-64 root partition in {table}")
+        for _ in range(30):
+            if os.path.exists(root):
+                break
+            run("partx", "--add", loop, check=False)
+            time.sleep(1)
+        run("mount", root, str(mnt))
         mounted = True
         entries = sorted((mnt / "boot/loader/entries").glob("*.conf"))
         if not entries:

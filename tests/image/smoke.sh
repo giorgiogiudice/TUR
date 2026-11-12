@@ -45,7 +45,7 @@ check "the family is fedora (ID_LIKE)"        test "$(osr ID_LIKE)" = "fedora"
 check "VERSION_ID is TUR's version"           test "$(osr VERSION_ID)" = "$(turr TUR_VERSION)"
 check "os-release names TUR and TUR's addresses" bash -c \
     '. /usr/lib/os-release; [ "$NAME" = TUR ] && [ "$PRETTY_NAME" = "TUR $VERSION_ID" ] && [ "$LOGO" = tur-logo-icon ] &&
-     [ "$DEFAULT_HOSTNAME" = tur ] && [ "$HOME_URL" = https://github.com/giorgiogiudice/TUR ] &&
+     [ "$DEFAULT_HOSTNAME" = tur-pc ] && [ "$HOME_URL" = https://github.com/giorgiogiudice/TUR ] &&
      [[ "$SUPPORT_URL" == https://github.com/giorgiogiudice/TUR/* ]] && [[ "$BUG_REPORT_URL" == https://github.com/giorgiogiudice/TUR/* ]]'
 check "no Fedora or Red Hat in os-release but ID_LIKE" bash -c \
     '! grep -v -x "ID_LIKE=fedora" /usr/lib/os-release | grep -i -E "fedora|red ?hat"'
@@ -84,10 +84,10 @@ check "login and lock screens show TUR's wallpaper" bash -c \
      grep -q "Image=file:///usr/share/wallpapers/Tur/" /usr/share/kde-settings/kde-profile/default/xdg/kscreenlockerrc'
 check "Firefox does not open Fedora's start page" bash -c \
     'grep -q "browser.startup.homepage\", \"about:home\"" /usr/lib64/firefox/browser/defaults/preferences/tur-default-prefs.js &&
-     ! grep -i fedora /usr/lib64/firefox/distribution/distribution.ini'
+     ! grep -v "^#" /usr/lib64/firefox/distribution/distribution.ini | grep -i fedora'
 check "installation counting is off"          bash -c '[ "$(readlink /usr/lib/systemd/system/rpm-ostree-countme.timer)" = /dev/null ]'
 check "the connectivity check does not ask Fedora's server" bash -c \
-    '! grep -r -s -l fedoraproject /usr/lib/NetworkManager/conf.d /etc/NetworkManager/conf.d'
+    '! grep -r -s -h "^[[:space:]]*uri[[:space:]]*=" /usr/lib/NetworkManager/conf.d /etc/NetworkManager/conf.d | grep -i fedora'
 check "release file records the build ID"     test "$(turr TUR_BUILD_ID)" = "${EXPECT_BUILD_ID}"
 check "release file records the base digest"  test "$(turr TUR_BASE_DIGEST)" = "${EXPECT_BASE_DIGEST}"
 check "source revision is a full commit hash" bash -c '[[ "$(. /usr/lib/tur/release; echo "$TUR_SOURCE_REVISION")" =~ ^[0-9a-f]{40}$ ]]'

@@ -137,6 +137,10 @@ done
 # ---- 3. os-release and the release files --------------------------------------
 # ID=tur, ID_LIKE=fedora: the change Fedora intends for a derived system
 # (desktop-experience.md, 12.1). What depends on ID is recorded in TUR-008.
+# The default host name is not "tur": tur-diag's redactor replaces the host
+# name wherever it stands as a word, and "tur" is the first word of every TUR
+# program's name (tur-boot-health's journal records vanished from the
+# support bundle in the boot test; TUR-008).
 cat > /usr/lib/os-release <<EOF
 NAME="TUR"
 VERSION="${version}"
@@ -147,7 +151,7 @@ PRETTY_NAME="TUR ${version}"
 ANSI_COLOR="0;38;2;42;169;248"
 LOGO=tur-logo-icon
 CPE_NAME="cpe:/o:tur:tur:${version}"
-DEFAULT_HOSTNAME="tur"
+DEFAULT_HOSTNAME="tur-pc"
 HOME_URL="https://github.com/giorgiogiudice/TUR"
 DOCUMENTATION_URL="https://github.com/giorgiogiudice/TUR/tree/main/docs"
 SUPPORT_URL="https://github.com/giorgiogiudice/TUR/issues"
