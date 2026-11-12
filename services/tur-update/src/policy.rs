@@ -40,16 +40,18 @@
 //!    now would remove the only version known to work.
 //! 7. The running version failed its checks: an automatic request waits
 //!    (`HEALTH-006`).
-//! 8. Automatic downloads are off: an automatic request waits
+//! 8. Going back is queued for the next restart: wait (`STAGE-007`). Staging
+//!    would undo a person's choice.
+//! 9. Automatic downloads are off: an automatic request waits
 //!    (`SETTINGS-001`).
-//! 9. A repair session is open: an automatic request waits (`SESSION-001`).
-//! 10. Offline: wait (`NETWORK-001`). Metered, and not allowed in the
+//! 10. A repair session is open: an automatic request waits (`SESSION-001`).
+//! 11. Offline: wait (`NETWORK-001`). Metered, and not allowed in the
 //!     settings: an automatic request waits (`NETWORK-002`).
-//! 11. On battery below the threshold: wait (`POWER-001` for an automatic
+//! 12. On battery below the threshold: wait (`POWER-001` for an automatic
 //!     request, `POWER-002` for a person, with a lower threshold).
-//! 12. Otherwise the update may be staged (`STAGE-001`; `STAGE-006` when it
+//! 13. Otherwise the update may be staged (`STAGE-001`; `STAGE-006` when it
 //!     replaces a staged one; `STAGE-005` when a held one only needs
-//!     releasing, for which rules 5, 8, 10 and 11 do not apply, because
+//!     releasing, for which rules 5, 9, 11 and 12 do not apply, because
 //!     nothing is downloaded).
 //!
 //! # Going back ([`decide_rollback`])
@@ -388,6 +390,14 @@ pub fn decide_stage(
                 ));
             }
         }
+    }
+
+    // A person chose to go back at the next restart. Staging would undo it.
+    if state.rollback_queued {
+        findings.push(wait(
+            UpdateCode::RollbackPending,
+            "going back to the previous version is queued for the next restart".to_owned(),
+        ));
     }
 
     // Space, for a download.

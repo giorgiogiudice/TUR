@@ -229,18 +229,24 @@ in Settings or at a terminal.
 | 8 | Free space below what is needed | refuse | refuse | `TUR-UPDATE-SPACE-001` |
 | 9 | The running version is on trial, or not judged yet | wait | wait | `TUR-UPDATE-HEALTH-005` |
 | 10 | This start failed its checks | wait | proceed | `TUR-UPDATE-HEALTH-006` |
-| 11 | "Download updates automatically" is off | wait | proceed | `TUR-UPDATE-SETTINGS-001` |
-| 12 | A repair session is open | wait | proceed | `TUR-UPDATE-SESSION-001` |
-| 13 | Offline | wait | wait | `TUR-UPDATE-NETWORK-001` |
-| 14 | Metered, and "Download on metered connections" is off | wait | proceed, with a note | `TUR-UPDATE-NETWORK-002` |
-| 15 | On battery below 50 %, or at an unknown charge | wait | — | `TUR-UPDATE-POWER-001` |
-| 16 | On battery below 20 % | (rule 15) | wait | `TUR-UPDATE-POWER-002` |
-| 17 | Otherwise | proceed | proceed | `TUR-UPDATE-STAGE-001` |
+| 11 | Going back is queued for the next restart | wait | wait | `TUR-UPDATE-STAGE-007` |
+| 12 | "Download updates automatically" is off | wait | proceed | `TUR-UPDATE-SETTINGS-001` |
+| 13 | A repair session is open | wait | proceed | `TUR-UPDATE-SESSION-001` |
+| 14 | Offline | wait | wait | `TUR-UPDATE-NETWORK-001` |
+| 15 | Metered, and "Download on metered connections" is off | wait | proceed, with a note | `TUR-UPDATE-NETWORK-002` |
+| 16 | On battery below 50 %, or at an unknown charge | wait | — | `TUR-UPDATE-POWER-001` |
+| 17 | On battery below 20 % | (rule 16) | wait | `TUR-UPDATE-POWER-002` |
+| 18 | Otherwise | proceed | proceed | `TUR-UPDATE-STAGE-001` |
 
-Variants of rule 17: when the update replaces one that is staged, the code is
+Variants of rule 18: when the update replaces one that is staged, the code is
 `TUR-UPDATE-STAGE-006`. When the update is already staged and held, only its
 release remains (`TUR-UPDATE-STAGE-005`): nothing is downloaded, so rules 8,
-11 and 13 to 16 do not apply; rules 5 to 7, 9, 10 and 12 do.
+12 and 14 to 17 do not apply; rules 5 to 7, 9 to 11 and 13 do.
+
+Rule 11 is there because bootc says so: a rollback is a change of the
+start-up order, and "an active agent doing automated upgrades" may revert it
+(`bootc-rollback(8)`). A person chose to go back; until the restart that makes
+it so, the update manager stages nothing, for anyone.
 
 **What an unknown means.**
 
@@ -298,17 +304,19 @@ unknown going back proceeds, and the note says rule 5 could not be checked.
 ### 4.7 How the policy is tested
 
 `tests/policy.rs`. Each row of 4.3 is a test that changes one condition from
-favourable ones and expects its code, for both requesters (26 rows). Then every
-combination is walked: 12 machines, 6 states of power, 5 of the network, 3 of
+favourable ones and expects its code, for both requesters (26 rows, and rule
+11 by itself). Then every
+combination is walked: 13 machines, 6 states of power, 5 of the network, 3 of
 free space, 10 of boot health, a repair session or none, and the two settings:
-7 200 sets of conditions, 172 800 staging decisions, with their plans. For each
+7 200 sets of conditions, 187 200 staging decisions, with their plans. For each
 the test asserts what the principles promise, independently of how the rules
 are written: nothing is staged without boot health, on trial, or where attempts
-cannot be counted; by itself the update manager never stages a rejected image,
+cannot be counted, or while going back is queued; by itself the update manager
+never stages a rejected image,
 never acts in a repair session, never downloads against a setting or on a low
 battery; a person is never held back where the update manager is not; each
 code is given with one outcome only; `also` lists refusals before waits and no
-code twice; a plan has steps exactly when its decision proceeds. All 21 codes a
+code twice; a plan has steps exactly when its decision proceeds. All 22 codes a
 staging decision can carry are met in the walk.
 
 ## 5. What "roll back" and "keep this version" mean
@@ -426,7 +434,10 @@ Three places where the two do not yet meet (section 14 proposes text):
    it and the update manager must not write another component's state. Here a
    person's request stages the image for a new trial and the entry stays, so
    that the image is still not staged automatically. If the retried version is
-   marked good, the entry is stale and harmless.
+   then marked good, the entry is stale. `status` does not mark the version in
+   use as failed; but once that version is the previous one, going back to it
+   is refused on the strength of the stale entry (4.5 rule 5). That is the
+   cost of the gap, and the reason to close it.
 2. **A rollback by a person arms no trial**, by design (5.10). The update
    manager therefore refuses the one case where that is unsafe (4.5 rule 5).
 3. **`status --json` of boot health is root's view.** A session program cannot
@@ -597,6 +608,7 @@ rules: a code that stopped an update begins "The update was not applied."
 | `TUR-UPDATE-STAGE-004` | info | The update is ready. Restart to use it. |
 | `TUR-UPDATE-STAGE-005` | info | The update has been downloaded and is waiting to be released. |
 | `TUR-UPDATE-STAGE-006` | info | A newer update replaces the one that was waiting. |
+| `TUR-UPDATE-STAGE-007` | notice | The update is waiting until the computer has restarted into the previous version. |
 | `TUR-UPDATE-ROLLBACK-001` | info | TUR can go back to the previous version. |
 | `TUR-UPDATE-ROLLBACK-002` | notice | There is no previous version on this computer to go back to. |
 | `TUR-UPDATE-ROLLBACK-003` | warning | TUR will not go back to that version: it did not start properly on this computer. |
@@ -666,7 +678,8 @@ reports when it fails, and belong to the slice that runs one.
    broken that means no updates at all until it is repaired, including the
    update that would repair it. A recovery path for that case (for instance,
    staging from the rescue environment) is not designed.
-3. **A person may retry a rejected image**, and the entry stays in the list.
+3. **A person may retry a rejected image**, and the entry stays in the list
+   (section 7, item 1, for what that costs).
 4. **A person is not held back by the settings, a repair session, a metered
    connection or a start that failed its checks.** The desktop should say so
    before the download (the note is in the decision).
@@ -681,10 +694,11 @@ reports when it fails, and belong to the slice that runs one.
    metered.**
 9. **How many versions may be kept** is not limited. Each costs disk space.
 10. **Should a version a person went back from be offered again
-    automatically?** bootc warns that an agent doing automatic upgrades may
-    undo a rollback. Here that needs the update manager's own state (the
-    digest gone back from), which the executing slice adds; the policy has no
-    rule for it yet.
+    automatically?** Until the restart, nothing is staged (rule 11). After
+    it, the version left is the "previous version", and if it is still what
+    the registry offers the update manager would stage it again. Preventing
+    that needs the update manager's own state (the digest gone back from),
+    which the executing slice adds; the policy has no rule for it yet.
 11. **The interface of section 8 is a proposal.** In particular: whether
     `Download` needs authentication; whether `Plan` should exist or the
     desktop should compose its own text.

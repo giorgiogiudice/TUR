@@ -677,6 +677,34 @@ fn a_held_update_is_released_without_a_download() {
 }
 
 #[test]
+fn nothing_is_staged_while_going_back_is_queued() {
+    let mut state = updated();
+    state.update = UpdateKnowledge::Available(image('c', "0.4.1"));
+    state.rollback_queued = true;
+    for requester in [Requester::Automatic, Requester::Person] {
+        let decision = decide_stage(&state, &favourable(), requester);
+        assert_decision(
+            &decision,
+            Outcome::Wait,
+            UpdateCode::RollbackPending,
+            "queued",
+        );
+        assert!(decision.also.is_empty());
+        assert!(
+            plan_stage(&state, &favourable(), requester)
+                .steps
+                .is_empty()
+        );
+    }
+    assert_eq!(next_step(&state, &favourable()).action, Action::Wait);
+    // A check changes no deployment and may run.
+    assert!(decide_check(&state, &favourable()).proceeds());
+    // Without the queued rollback the same machine stages the update.
+    state.rollback_queued = false;
+    assert!(decide_stage(&state, &favourable(), Requester::Automatic).proceeds());
+}
+
+#[test]
 fn a_newer_update_replaces_the_staged_one() {
     for requester in [Requester::Automatic, Requester::Person] {
         let decision = decide_stage(&staged_superseded(), &favourable(), requester);
@@ -1320,6 +1348,8 @@ fn every_state() -> Vec<(&'static str, SystemState)> {
     updated_with_update.update = UpdateKnowledge::Available(image('c', "0.4.1"));
     let mut queued = updated();
     queued.rollback_queued = true;
+    let mut queued_with_update = updated_with_update.clone();
+    queued_with_update.rollback_queued = true;
     vec![
         ("not checked", not_checked()),
         ("up to date", up_to_date()),
@@ -1331,6 +1361,7 @@ fn every_state() -> Vec<(&'static str, SystemState)> {
         ("updated", updated()),
         ("updated, update available", updated_with_update),
         ("rollback queued", queued),
+        ("rollback queued, update available", queued_with_update),
         ("no image", no_image),
         ("read-only", live_media),
     ]
@@ -1424,6 +1455,7 @@ fn outcome_of(code: UpdateCode) -> Option<Outcome> {
         | Code::BatteryLow
         | Code::TrialInProgress
         | Code::BootUnhealthy
+        | Code::RollbackPending
         | Code::AutomaticDownloadOff
         | Code::RepairSession => Outcome::Wait,
         Code::BootedNotManaged
@@ -1556,6 +1588,9 @@ fn every_combination_keeps_the_promises_of_the_policy() {
                 // and, for a download, with a network that is not known to
                 // be down and space that is not known to be short.
                 assert!(managed, "{context}");
+                // ... and never while a person's choice to go back is
+                // waiting for a restart.
+                assert!(!state.rollback_queued, "{context}");
                 let (digest, downloads) = target.clone().expect("something to stage");
                 let health = conditions.boot_health.as_ref().expect("boot health known");
                 assert!(health.counting_usable, "{context}");
@@ -1691,7 +1726,7 @@ fn every_combination_keeps_the_promises_of_the_policy() {
             );
         }
     }
-    assert_eq!(decisions, 12 * 7200 * 2);
+    assert_eq!(decisions, 13 * 7200 * 2);
     // The walk is not vacuous: updates were staged, and every code a staging
     // decision can carry was met.
     assert!(proceeded > 1000, "{proceeded}");
@@ -1711,6 +1746,7 @@ fn every_combination_keeps_the_promises_of_the_policy() {
         UpdateCode::NotEnoughSpace,
         UpdateCode::TrialInProgress,
         UpdateCode::BootUnhealthy,
+        UpdateCode::RollbackPending,
         UpdateCode::AutomaticDownloadOff,
         UpdateCode::RepairSession,
         UpdateCode::Offline,
@@ -1720,7 +1756,7 @@ fn every_combination_keeps_the_promises_of_the_policy() {
     ] {
         assert!(codes_seen.contains(&code), "{code} was never the decision");
     }
-    assert_eq!(codes_seen.len(), 21, "{codes_seen:?}");
+    assert_eq!(codes_seen.len(), 22, "{codes_seen:?}");
 }
 
 #[test]

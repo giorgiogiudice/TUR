@@ -82,6 +82,8 @@ section 3):
   is unknown, not where attempts cannot be counted, and not while the running
   version is itself on trial, when staging would remove the only version
   known to work. This holds for a person's request as for a timer.
+- **Nothing is staged while going back is queued.** bootc warns that an
+  agent doing automatic upgrades may revert a rollback; this agent does not.
 - **A rejected image is staged again only at a person's request**, as a new
   counted trial. Going back to a rejected version with `bootc rollback` is
   refused, because that start would not be counted.
@@ -134,7 +136,7 @@ Shown by this change, in CI:
 - Every command a plan can name exists in the base image, and every option is
   one its `--help` describes (`update` workflow).
 - The policy keeps its promises over every combination of the conditions it
-  knows (172 800 decisions).
+  knows (187 200 decisions).
 
 Not shown, and required before the decision is accepted as built:
 

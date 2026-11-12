@@ -519,6 +519,23 @@ Boot health
 
 #[test]
 fn status_shows_what_is_waiting_kept_and_held() {
+    // A staged version that failed here before is marked, wherever it stands.
+    let text = ok(&[
+        "status",
+        "--from",
+        path("bootc/tur-staged.json"),
+        "--boot-health",
+        path("boot-health/after-fallback.json"),
+    ]);
+    assert!(
+        text.contains(
+            "\n  waiting   TUR 0.1.0-dev  sha256:d726caf08260…  built \
+             2026-11-12T11:27:09.488245657Z  [failed to start here]\n"
+        ),
+        "{text}"
+    );
+    assert_eq!(text.matches("failed to start here").count(), 1, "{text}");
+
     let text = ok(&["status", "--from", path("bootc/tur-staged.json")]);
     assert!(text.starts_with("TUR 0.1.0-dev is ready. Restart to use it.\nState:    ready\n"));
     assert!(text.contains("Follows:  /run/tur-test/images:check-fails (oci), signature: none\n"));
@@ -918,7 +935,7 @@ fn commands_lists_everything_the_tool_names_and_what_it_runs() {
 fn codes_prints_the_registry() {
     let report = json(&["codes", "--json"]);
     let codes = report["codes"].as_array().expect("codes");
-    assert_eq!(codes.len(), 37);
+    assert_eq!(codes.len(), 38);
     assert_eq!(codes[0]["code"], "TUR-UPDATE-STATE-001");
     let offline = codes
         .iter()
@@ -931,7 +948,7 @@ fn codes_prints_the_registry() {
     assert_eq!(offline["severity"], "notice");
     let text = ok(&["codes"]);
     assert!(text.starts_with("TUR-UPDATE-STATE-001 [error] System state could not be read\n"));
-    assert_eq!(text.matches("\n  What to do: ").count(), 37);
+    assert_eq!(text.matches("\n  What to do: ").count(), 38);
 }
 
 // ---------------------------------------------------------------------------

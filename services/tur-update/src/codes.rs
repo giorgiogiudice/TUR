@@ -89,6 +89,8 @@ string_enum! {
         StagedHeld => "TUR-UPDATE-STAGE-005",
         /// A newer update than the staged one may be staged in its place.
         StagedSuperseded => "TUR-UPDATE-STAGE-006",
+        /// Going back is queued for the next restart, so nothing is staged.
+        RollbackPending => "TUR-UPDATE-STAGE-007",
         /// Going back to the previous version may proceed.
         RollbackAllowed => "TUR-UPDATE-ROLLBACK-001",
         /// There is no previous version.
@@ -484,6 +486,20 @@ impl UpdateCode {
                                         image discards the one staged before.",
                 recovery_action: "No action is needed.",
             },
+            UpdateCode::RollbackPending => CodeEntry {
+                code: self,
+                title: "Going back is queued",
+                severity: Severity::Notice,
+                detection: "An update could be staged, and bootc status reports rollbackQueued \
+                            as true: the next restart starts the previous version.",
+                user_message: "The update is waiting until the computer has restarted into the \
+                               previous version.",
+                technical_explanation: "A person chose to go back, and that takes effect at \
+                                        the next restart. Staging an update now would put the \
+                                        new version first in the start-up order and undo that \
+                                        choice.",
+                recovery_action: "Restart to finish going back. Updates continue afterwards.",
+            },
             UpdateCode::RollbackAllowed => CodeEntry {
                 code: self,
                 title: "Going back may proceed",
@@ -641,7 +657,7 @@ mod tests {
     fn codes_are_unique() {
         let texts: BTreeSet<&str> = UpdateCode::all().iter().map(|code| code.as_str()).collect();
         assert_eq!(texts.len(), UpdateCode::all().len());
-        assert_eq!(UpdateCode::all().len(), 37);
+        assert_eq!(UpdateCode::all().len(), 38);
     }
 
     #[test]

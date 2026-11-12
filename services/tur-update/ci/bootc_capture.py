@@ -223,12 +223,12 @@ def check(out: pathlib.Path, fixtures: pathlib.Path, binary: str | None) -> int:
                 present = re.search(rf"(?<![\w-]){re.escape(flag)}(?![\w-])", help_text) is not None
                 checks.check(f"{command['id']}: `{line}`: {flag} is an option its help describes", present)
             for operand in command["operands"]:
-                checks.check(
-                    f"{command['id']}: operand {operand} (documented in ostree-admin-pin(1), not in --help)",
-                    True,
-                    "informational",
-                )
-    checks.summary("bootc and ostree of the base image", out)
+                named = re.search(rf"\b{re.escape(operand)}\b", help_text) is not None
+                checks.check(f"{command['id']}: `{operand}` is a value its help names", named)
+    # The step is run twice, without and with the binary. The summary is
+    # written by the run that has everything, or by one that failed.
+    if binary or checks.failed:
+        checks.summary("bootc and ostree of the base image", out)
     return 1 if checks.failed else 0
 
 

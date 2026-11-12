@@ -335,8 +335,8 @@ pub struct Version {
     pub kept: bool,
     /// It is staged but held.
     pub held: bool,
-    /// It failed its start-up trial on this computer. `None` when the
-    /// boot-health state is not known.
+    /// It failed its start-up trial on this computer, and is not the version
+    /// in use. `None` when the boot-health state is not known.
     pub failed_to_start: Option<bool>,
 }
 
@@ -354,10 +354,14 @@ fn versions(state: &SystemState, health: Option<&BootHealth>) -> Vec<Version> {
                 .and_then(|image| image.timestamp.clone()),
             kept: deployment.pinned,
             held: deployment.download_only,
+            // The version in use is running: an old entry for it in the
+            // rejected list, left from before a person tried it again, is
+            // not a reason to call it failed.
             failed_to_start: health.map(|health| {
-                deployment
-                    .digest()
-                    .is_some_and(|digest| health.is_rejected(digest))
+                deployment.slot != Slot::Booted
+                    && deployment
+                        .digest()
+                        .is_some_and(|digest| health.is_rejected(digest))
             }),
         })
         .collect()
@@ -1075,6 +1079,27 @@ mod tests {
         assert_eq!(report["versions"][0]["name"], "TUR 0.3.2");
         assert!(report["versions"][0]["failed_to_start"].is_null());
         assert!(report["boot_health"].is_null());
+    }
+
+    #[test]
+    fn the_version_in_use_is_never_marked_as_failed() {
+        let host = bootc::parse_status(BOOTED).expect("a document");
+        let state = SystemState::from_host(&host).expect("a state");
+        let mut health = BootHealth::healthy();
+        health.rejected.push(crate::health::RejectedImage {
+            digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaa".to_owned(),
+            image: "example.org/tur:stable".to_owned(),
+            version: "0.3.2".to_owned(),
+            event_id: "e1".to_owned(),
+        });
+        assert!(health.is_rejected(state.booted.digest().expect("a digest")));
+        // It runs: an entry left from before a person tried it again does
+        // not make it a version that failed.
+        let listed = versions(&state, Some(&health));
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].failed_to_start, Some(false));
+        // Without boot health nothing is claimed either way.
+        assert_eq!(versions(&state, None)[0].failed_to_start, None);
     }
 
     #[test]
