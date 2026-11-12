@@ -240,9 +240,8 @@ fn evaluate(args: &CheckArgs) -> Result<(Decision, AuditRecord), Vec<Problem>> {
 
     let mut standing_approvals = Vec::with_capacity(args.standing_approvals.len());
     for text in &args.standing_approvals {
-        let approval: StandingApproval = serde_json::from_str(text).map_err(|error| {
-            invalid_input(format!("--standing-approval is not valid: {error}"))
-        })?;
+        let approval: StandingApproval = serde_json::from_str(text)
+            .map_err(|error| invalid_input(format!("--standing-approval is not valid: {error}")))?;
         standing_approvals.push(approval);
     }
 
@@ -322,7 +321,13 @@ mod tests {
     #[test]
     fn the_trusted_path_is_off_unless_stated() {
         let cli = Cli::try_parse_from([
-            "uos-agent", "policy", "check", "--manifest", "m.json", "--tool", "t",
+            "uos-agent",
+            "policy",
+            "check",
+            "--manifest",
+            "m.json",
+            "--tool",
+            "t",
         ])
         .expect("the command line is valid");
         let TopCommand::Policy {
@@ -341,7 +346,15 @@ mod tests {
 
     #[test]
     fn a_repair_session_needs_both_a_purpose_and_an_expiry() {
-        let base = ["uos-agent", "policy", "check", "--manifest", "m.json", "--tool", "t"];
+        let base = [
+            "uos-agent",
+            "policy",
+            "check",
+            "--manifest",
+            "m.json",
+            "--tool",
+            "t",
+        ];
         let mut only_until = base.to_vec();
         only_until.extend(["--repair-session-until", "10"]);
         assert!(Cli::try_parse_from(only_until).is_err());
@@ -351,7 +364,12 @@ mod tests {
         assert!(Cli::try_parse_from(only_purpose).is_err());
 
         let mut both = base.to_vec();
-        both.extend(["--repair-session-until", "10", "--repair-session-purpose", "fix"]);
+        both.extend([
+            "--repair-session-until",
+            "10",
+            "--repair-session-purpose",
+            "fix",
+        ]);
         assert!(Cli::try_parse_from(both).is_ok());
     }
 
@@ -370,6 +388,9 @@ mod tests {
         assert_eq!(status, EXIT_INPUT_ERROR);
         assert!(out.is_empty());
         let message = String::from_utf8(err).expect("the message is UTF-8");
-        assert!(message.starts_with("error: UOS-AI-INPUT-001: "), "{message}");
+        assert!(
+            message.starts_with("error: UOS-AI-INPUT-001: "),
+            "{message}"
+        );
     }
 }

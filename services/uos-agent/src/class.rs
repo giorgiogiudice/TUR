@@ -128,7 +128,10 @@ mod tests {
 
     #[test]
     fn serialises_as_a_number() {
-        assert_eq!(serde_json::to_string(&ActionClass::Consequential).unwrap(), "2");
+        assert_eq!(
+            serde_json::to_string(&ActionClass::Consequential).unwrap(),
+            "2"
+        );
         assert_eq!(
             serde_json::from_str::<ActionClass>("3").unwrap(),
             ActionClass::SystemCritical

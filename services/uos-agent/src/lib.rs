@@ -58,8 +58,7 @@ pub use action::{
     UiActionKind, WorkingContext,
 };
 pub use audit::{
-    AuditMeta, AuditOutcome, AuditRecord, AuditSink, AuditWriteError, MemorySink,
-    decide_and_record,
+    AuditMeta, AuditOutcome, AuditRecord, AuditSink, AuditWriteError, MemorySink, decide_and_record,
 };
 pub use class::ActionClass;
 pub use codes::{Code, Problem};

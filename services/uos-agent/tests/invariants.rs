@@ -532,7 +532,10 @@ fn an_excluded_application_is_never_observed_or_acted_on() {
     let mut seen = 0_usize;
     for_every_input(|case, context, policy, decision| {
         if let Some(application) = ui_application(&case.action)
-            && policy.excluded_applications.iter().any(|entry| entry == application)
+            && policy
+                .excluded_applications
+                .iter()
+                .any(|entry| entry == application)
         {
             seen += 1;
             assert_eq!(
@@ -569,8 +572,15 @@ fn a_relaxation_only_turns_an_attended_class_2_ui_ask_into_allow() {
         assert_eq!(unrelaxed.class(), ActionClass::Consequential, "{explain}");
         assert_eq!(decision.class(), ActionClass::Consequential, "{explain}");
         // Only this one change is possible.
-        assert_eq!(unrelaxed.reason(), Reason::ConsequentialNeedsConfirmation, "{explain}");
-        assert!(matches!(unrelaxed.verdict(), Verdict::Ask { .. }), "{explain}");
+        assert_eq!(
+            unrelaxed.reason(),
+            Reason::ConsequentialNeedsConfirmation,
+            "{explain}"
+        );
+        assert!(
+            matches!(unrelaxed.verdict(), Verdict::Ask { .. }),
+            "{explain}"
+        );
         assert_eq!(decision.reason(), Reason::RelaxedByUserPolicy, "{explain}");
         assert_eq!(decision.verdict(), &Verdict::Allow, "{explain}");
         // And only here.
@@ -583,8 +593,20 @@ fn a_relaxation_only_turns_an_attended_class_2_ui_ask_into_allow() {
                     && relaxation.level == RelaxationLevel::Consequential),
             "{explain}"
         );
-        assert!(!policy.sensitive_applications.iter().any(|entry| entry == application), "{explain}");
-        assert!(!policy.excluded_applications.iter().any(|entry| entry == application), "{explain}");
+        assert!(
+            !policy
+                .sensitive_applications
+                .iter()
+                .any(|entry| entry == application),
+            "{explain}"
+        );
+        assert!(
+            !policy
+                .excluded_applications
+                .iter()
+                .any(|entry| entry == application),
+            "{explain}"
+        );
         assert_eq!(policy.mode, Mode::Normal, "{explain}");
         assert_eq!(context.presence, Presence::Attended, "{explain}");
         assert!(!context.session_locked, "{explain}");
@@ -676,7 +698,14 @@ fn unattended_class_2_runs_only_with_an_exactly_matching_standing_approval() {
         if decision.is_allow() {
             allowed += 1;
             assert!(exact_match, "{explain}");
-            assert_eq!(decision.reason(), Reason::StandingApprovalMatched, "{explain}");
+            assert_eq!(
+                decision.reason(),
+                Reason::StandingApprovalMatched,
+                "{explain}"
+            );
+            // Only a task that really is unattended: an attended task in a
+            // locked session is paused, and has no schedule to approve it.
+            assert_eq!(context.presence, Presence::Unattended, "{explain}");
             assert!(context.trusted_path_available, "{explain}");
             assert_eq!(policy.mode, Mode::Normal, "{explain}");
         } else {
@@ -687,7 +716,11 @@ fn unattended_class_2_runs_only_with_an_exactly_matching_standing_approval() {
             );
         }
         // The other direction: an exact match is honoured in normal mode.
-        if exact_match && context.trusted_path_available && policy.mode == Mode::Normal {
+        if exact_match
+            && context.presence == Presence::Unattended
+            && context.trusted_path_available
+            && policy.mode == Mode::Normal
+        {
             assert!(decision.is_allow(), "{explain}");
         }
     });
@@ -734,7 +767,10 @@ fn a_privileged_command_runs_only_inside_an_open_repair_session() {
         if !open {
             // Expired, expiring now, without a purpose, or absent.
             assert!(!decision.is_allow(), "{explain}");
-            assert!(!matches!(decision.verdict(), Verdict::Ask { .. }), "{explain}");
+            assert!(
+                !matches!(decision.verdict(), Verdict::Ask { .. }),
+                "{explain}"
+            );
         }
         // The other direction, so that the test is not vacuous.
         if open
@@ -751,7 +787,11 @@ fn a_privileged_command_runs_only_inside_an_open_repair_session() {
             && context.trusted_path_available
             && policy.mode != Mode::ObserveOnly
         {
-            assert_eq!(decision.reason(), Reason::RepairSessionRequired, "{explain}");
+            assert_eq!(
+                decision.reason(),
+                Reason::RepairSessionRequired,
+                "{explain}"
+            );
             assert!(
                 matches!(decision.verdict(), Verdict::Authenticate { .. }),
                 "{explain}"
@@ -814,9 +854,16 @@ fn observe_only_mode_allows_only_class_0() {
         }
         let explain = describe(case, context, policy, decision);
         assert!(
-            matches!(decision.verdict(), Verdict::Allow | Verdict::Refuse),
+            matches!(
+                decision.verdict(),
+                Verdict::Allow | Verdict::Defer | Verdict::Refuse
+            ),
             "{explain}"
         );
+        if decision.verdict() == &Verdict::Defer {
+            // The only deferral left is an attended task paused by the lock.
+            assert_eq!(decision.reason(), Reason::PausedWhileLocked, "{explain}");
+        }
         if decision.is_allow() {
             allowed += 1;
             assert_eq!(case.floor, ActionClass::Observe, "{explain}");
@@ -824,6 +871,130 @@ fn observe_only_mode_allows_only_class_0() {
         }
     });
     assert!(allowed > 0);
+}
+
+#[test]
+fn locking_the_session_is_never_more_permissive() {
+    let cases = cases();
+    let policies = policies();
+    for case in &cases {
+        for unlocked in contexts()
+            .into_iter()
+            .filter(|context| !context.session_locked)
+        {
+            let locked = Context {
+                session_locked: true,
+                ..unlocked.clone()
+            };
+            for policy in &policies {
+                let before = decide(&case.action, &unlocked, policy, NOW);
+                let after = decide(&case.action, &locked, policy, NOW);
+                assert!(
+                    after.strictness() >= before.strictness(),
+                    "{}\nlocked => {after:?}",
+                    describe(case, &unlocked, policy, &before)
+                );
+                // An attended task does nothing at all while the session is
+                // locked: it is paused.
+                if unlocked.presence == Presence::Attended {
+                    assert!(
+                        matches!(after.verdict(), Verdict::Defer | Verdict::Refuse),
+                        "{}",
+                        describe(case, &locked, policy, &after)
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn losing_the_trusted_path_is_never_more_permissive() {
+    let cases = cases();
+    let policies = policies();
+    for case in &cases {
+        for trusted in contexts()
+            .into_iter()
+            .filter(|context| context.trusted_path_available)
+        {
+            let untrusted = Context {
+                trusted_path_available: false,
+                ..trusted.clone()
+            };
+            for policy in &policies {
+                let before = decide(&case.action, &trusted, policy, NOW);
+                let after = decide(&case.action, &untrusted, policy, NOW);
+                assert!(
+                    after.strictness() >= before.strictness(),
+                    "{}\nwithout the trusted path => {after:?}",
+                    describe(case, &trusted, policy, &before)
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn a_repair_session_affects_only_privileged_commands() {
+    for_every_input(|case, context, policy, decision| {
+        let without_session = Context {
+            repair_session: None,
+            ..context.clone()
+        };
+        let baseline = decide(&case.action, &without_session, policy, NOW);
+        if privileged_operation(&case.action).is_none() {
+            assert_eq!(
+                &baseline,
+                decision,
+                "{}",
+                describe(case, context, policy, decision)
+            );
+        } else {
+            // Taking the session away is never more permissive.
+            assert!(
+                baseline.strictness() >= decision.strictness(),
+                "{}\nwithout a session => {baseline:?}",
+                describe(case, context, policy, decision)
+            );
+        }
+    });
+}
+
+#[test]
+fn a_standing_approval_affects_only_unattended_class_2_tool_calls() {
+    let mut honoured = 0_usize;
+    for_every_input(|case, context, policy, decision| {
+        let without_approvals = Context {
+            standing_approvals: Vec::new(),
+            ..context.clone()
+        };
+        let baseline = decide(&case.action, &without_approvals, policy, NOW);
+        if &baseline == decision {
+            return;
+        }
+        honoured += 1;
+        let explain = format!(
+            "{}\nwithout standing approvals => {baseline:?}",
+            describe(case, context, policy, decision)
+        );
+        assert_eq!(
+            decision.reason(),
+            Reason::StandingApprovalMatched,
+            "{explain}"
+        );
+        assert_eq!(
+            baseline.reason(),
+            Reason::UnattendedWithoutStandingApproval,
+            "{explain}"
+        );
+        assert!(matches!(case.action, Action::Tool(_)), "{explain}");
+        assert!(case.floor <= ActionClass::Consequential, "{explain}");
+        assert_eq!(decision.class(), ActionClass::Consequential, "{explain}");
+        assert_eq!(context.presence, Presence::Unattended, "{explain}");
+        assert!(context.trusted_path_available, "{explain}");
+        assert_eq!(policy.mode, Mode::Normal, "{explain}");
+    });
+    assert!(honoured > 0);
 }
 
 #[test]
@@ -861,7 +1032,10 @@ fn a_refusal_and_only_a_refusal_carries_an_error_code() {
             Verdict::Ask { .. } | Verdict::Authenticate { .. }
         );
         assert_eq!(decision.prompt().is_some(), prompts, "{explain}");
-        assert!(decision.prompt().is_none_or(|prompt| !prompt.is_empty()), "{explain}");
+        assert!(
+            decision.prompt().is_none_or(|prompt| !prompt.is_empty()),
+            "{explain}"
+        );
     });
 }
 
@@ -933,6 +1107,14 @@ fn the_documented_decision_table_holds() {
         session_locked: true,
         ..trusted.clone()
     };
+    let locked_with_approvals = Context {
+        standing_approvals: approvals_for(SUBJECT_APPROVED),
+        ..locked.clone()
+    };
+    let unattended_locked_approved = Context {
+        session_locked: true,
+        ..unattended_approved.clone()
+    };
     let hinted = Context {
         model_flags_consequential: true,
         ..trusted.clone()
@@ -989,70 +1171,486 @@ fn the_documented_decision_table_holds() {
 
     let rows: Vec<(&str, Action, &Context, &UserPolicy, &str, &str)> = vec![
         // Tool calls, attended, trusted path available.
-        ("tool 0", tool(0, SUBJECT_APPROVED), &trusted, &normal, "allow", "observe_permitted"),
-        ("tool 1", tool(1, SUBJECT_APPROVED), &trusted, &normal, "allow", "reversible_permitted"),
-        ("tool 2", tool(2, SUBJECT_APPROVED), &trusted, &normal, "ask", "consequential_needs_confirmation"),
-        ("tool 3", tool(3, SUBJECT_APPROVED), &trusted, &normal, "authenticate", "system_critical_needs_authentication"),
-        ("tool 3 in a repair session", tool(3, SUBJECT_APPROVED), &repair_open, &normal, "authenticate", "system_critical_needs_authentication"),
+        (
+            "tool 0",
+            tool(0, SUBJECT_APPROVED),
+            &trusted,
+            &normal,
+            "allow",
+            "observe_permitted",
+        ),
+        (
+            "tool 1",
+            tool(1, SUBJECT_APPROVED),
+            &trusted,
+            &normal,
+            "allow",
+            "reversible_permitted",
+        ),
+        (
+            "tool 2",
+            tool(2, SUBJECT_APPROVED),
+            &trusted,
+            &normal,
+            "ask",
+            "consequential_needs_confirmation",
+        ),
+        (
+            "tool 3",
+            tool(3, SUBJECT_APPROVED),
+            &trusted,
+            &normal,
+            "authenticate",
+            "system_critical_needs_authentication",
+        ),
+        (
+            "tool 3 in a repair session",
+            tool(3, SUBJECT_APPROVED),
+            &repair_open,
+            &normal,
+            "authenticate",
+            "system_critical_needs_authentication",
+        ),
         // Without the trusted path.
-        ("tool 1 untrusted", tool(1, SUBJECT_APPROVED), &untrusted, &normal, "allow", "reversible_permitted"),
-        ("tool 2 untrusted", tool(2, SUBJECT_APPROVED), &untrusted, &normal, "refuse", "trusted_path_unavailable"),
-        ("tool 3 untrusted", tool(3, SUBJECT_APPROVED), &untrusted, &normal, "refuse", "trusted_path_unavailable"),
+        (
+            "tool 1 untrusted",
+            tool(1, SUBJECT_APPROVED),
+            &untrusted,
+            &normal,
+            "allow",
+            "reversible_permitted",
+        ),
+        (
+            "tool 2 untrusted",
+            tool(2, SUBJECT_APPROVED),
+            &untrusted,
+            &normal,
+            "refuse",
+            "trusted_path_unavailable",
+        ),
+        (
+            "tool 3 untrusted",
+            tool(3, SUBJECT_APPROVED),
+            &untrusted,
+            &normal,
+            "refuse",
+            "trusted_path_unavailable",
+        ),
         // Unattended.
-        ("tool 1 unattended", tool(1, SUBJECT_APPROVED), &unattended, &normal, "allow", "reversible_permitted"),
-        ("tool 2 unattended", tool(2, SUBJECT_APPROVED), &unattended, &normal, "defer", "unattended_without_standing_approval"),
-        ("tool 2 approved", tool(2, SUBJECT_APPROVED), &unattended_approved, &normal, "allow", "standing_approval_matched"),
-        ("tool 2 other arguments", tool(2, SUBJECT_OTHER), &unattended_approved, &normal, "defer", "unattended_without_standing_approval"),
-        ("tool 2 near miss", tool(2, SUBJECT_APPROVED), &unattended_near_miss, &normal, "defer", "unattended_without_standing_approval"),
-        ("tool 3 unattended", tool(3, SUBJECT_APPROVED), &unattended_approved, &normal, "refuse", "system_critical_unattended"),
+        (
+            "tool 1 unattended",
+            tool(1, SUBJECT_APPROVED),
+            &unattended,
+            &normal,
+            "allow",
+            "reversible_permitted",
+        ),
+        (
+            "tool 2 unattended",
+            tool(2, SUBJECT_APPROVED),
+            &unattended,
+            &normal,
+            "defer",
+            "unattended_without_standing_approval",
+        ),
+        (
+            "tool 2 approved",
+            tool(2, SUBJECT_APPROVED),
+            &unattended_approved,
+            &normal,
+            "allow",
+            "standing_approval_matched",
+        ),
+        (
+            "tool 2 other arguments",
+            tool(2, SUBJECT_OTHER),
+            &unattended_approved,
+            &normal,
+            "defer",
+            "unattended_without_standing_approval",
+        ),
+        (
+            "tool 2 near miss",
+            tool(2, SUBJECT_APPROVED),
+            &unattended_near_miss,
+            &normal,
+            "defer",
+            "unattended_without_standing_approval",
+        ),
+        (
+            "tool 3 unattended",
+            tool(3, SUBJECT_APPROVED),
+            &unattended_approved,
+            &normal,
+            "refuse",
+            "system_critical_unattended",
+        ),
         // Locked session.
-        ("tool 2 locked", tool(2, SUBJECT_APPROVED), &locked, &normal, "defer", "unattended_without_standing_approval"),
-        ("tool 3 locked", tool(3, SUBJECT_APPROVED), &locked, &normal, "refuse", "system_critical_unattended"),
-        ("observe locked", observe(APP_PLAIN), &locked, &normal, "refuse", "session_locked"),
+        (
+            "tool 0 locked",
+            tool(0, SUBJECT_APPROVED),
+            &locked,
+            &normal,
+            "defer",
+            "paused_while_locked",
+        ),
+        (
+            "tool 2 locked",
+            tool(2, SUBJECT_APPROVED),
+            &locked,
+            &normal,
+            "defer",
+            "paused_while_locked",
+        ),
+        (
+            "tool 2 locked, approvals present",
+            tool(2, SUBJECT_APPROVED),
+            &locked_with_approvals,
+            &normal,
+            "defer",
+            "paused_while_locked",
+        ),
+        (
+            "tool 2 unattended and locked, approved",
+            tool(2, SUBJECT_APPROVED),
+            &unattended_locked_approved,
+            &normal,
+            "allow",
+            "standing_approval_matched",
+        ),
+        (
+            "tool 3 locked",
+            tool(3, SUBJECT_APPROVED),
+            &locked,
+            &normal,
+            "refuse",
+            "system_critical_unattended",
+        ),
+        (
+            "observe locked",
+            observe(APP_PLAIN),
+            &locked,
+            &normal,
+            "refuse",
+            "session_locked",
+        ),
         // User modes.
-        ("tool 0 observe-only", tool(0, SUBJECT_APPROVED), &trusted, &observe_only, "allow", "observe_permitted"),
-        ("tool 1 observe-only", tool(1, SUBJECT_APPROVED), &trusted, &observe_only, "refuse", "observe_only"),
-        ("tool 0 ask-every", tool(0, SUBJECT_APPROVED), &trusted, &ask_every, "ask", "ask_every_action_mode"),
-        ("tool 3 ask-every", tool(3, SUBJECT_APPROVED), &trusted, &ask_every, "authenticate", "system_critical_needs_authentication"),
-        ("tool 0 ask-every unattended", tool(0, SUBJECT_APPROVED), &unattended, &ask_every, "defer", "unattended_ask_every_action_mode"),
-        ("tool 2 ask-every approved", tool(2, SUBJECT_APPROVED), &unattended_approved, &ask_every, "defer", "unattended_ask_every_action_mode"),
+        (
+            "tool 0 observe-only",
+            tool(0, SUBJECT_APPROVED),
+            &trusted,
+            &observe_only,
+            "allow",
+            "observe_permitted",
+        ),
+        (
+            "tool 1 observe-only",
+            tool(1, SUBJECT_APPROVED),
+            &trusted,
+            &observe_only,
+            "refuse",
+            "observe_only",
+        ),
+        (
+            "tool 0 ask-every",
+            tool(0, SUBJECT_APPROVED),
+            &trusted,
+            &ask_every,
+            "ask",
+            "ask_every_action_mode",
+        ),
+        (
+            "tool 3 ask-every",
+            tool(3, SUBJECT_APPROVED),
+            &trusted,
+            &ask_every,
+            "authenticate",
+            "system_critical_needs_authentication",
+        ),
+        (
+            "tool 0 ask-every unattended",
+            tool(0, SUBJECT_APPROVED),
+            &unattended,
+            &ask_every,
+            "defer",
+            "unattended_ask_every_action_mode",
+        ),
+        (
+            "tool 2 ask-every approved",
+            tool(2, SUBJECT_APPROVED),
+            &unattended_approved,
+            &ask_every,
+            "defer",
+            "unattended_ask_every_action_mode",
+        ),
         // The model hint.
-        ("tool 0 hinted", tool(0, SUBJECT_APPROVED), &hinted, &normal, "ask", "consequential_needs_confirmation"),
-        ("tool 3 hinted", tool(3, SUBJECT_APPROVED), &hinted, &normal, "authenticate", "system_critical_needs_authentication"),
+        (
+            "tool 0 hinted",
+            tool(0, SUBJECT_APPROVED),
+            &hinted,
+            &normal,
+            "ask",
+            "consequential_needs_confirmation",
+        ),
+        (
+            "tool 3 hinted",
+            tool(3, SUBJECT_APPROVED),
+            &hinted,
+            &normal,
+            "authenticate",
+            "system_critical_needs_authentication",
+        ),
         // Commands.
-        ("read-only command", command(Sandbox::ReadOnly, session_context), &trusted, &normal, "allow", "observe_permitted"),
-        ("user command", command(Sandbox::User, session_context), &trusted, &normal, "ask", "consequential_needs_confirmation"),
-        ("user command in a workspace", command(Sandbox::User, WorkingContext::UndoableWorkspace), &trusted, &normal, "allow", "reversible_permitted"),
-        ("user command unattended", command(Sandbox::User, session_context), &unattended_approved, &normal, "defer", "unattended_without_standing_approval"),
-        ("privileged, no session", service_control.clone(), &trusted, &normal, "authenticate", "repair_session_required"),
-        ("privileged, open session", service_control.clone(), &repair_open, &normal, "allow", "repair_session_open"),
-        ("privileged, expired session", service_control.clone(), &repair_expired, &normal, "authenticate", "repair_session_required"),
-        ("privileged, ask-every", service_control.clone(), &repair_open, &ask_every, "ask", "ask_every_action_mode"),
-        ("privileged, unattended", service_control.clone(), &repair_open_unattended, &normal, "refuse", "privileged_unattended"),
-        ("privileged, locked", service_control.clone(), &repair_open_locked, &normal, "refuse", "privileged_unattended"),
-        ("privileged, untrusted", service_control, &untrusted, &normal, "refuse", "trusted_path_unavailable"),
-        ("bootloader, open session", bootloader.clone(), &repair_open, &normal, "refuse", "system_critical_as_command"),
-        ("bootloader, no session", bootloader, &trusted, &normal, "refuse", "system_critical_as_command"),
+        (
+            "read-only command",
+            command(Sandbox::ReadOnly, session_context),
+            &trusted,
+            &normal,
+            "allow",
+            "observe_permitted",
+        ),
+        (
+            "user command",
+            command(Sandbox::User, session_context),
+            &trusted,
+            &normal,
+            "ask",
+            "consequential_needs_confirmation",
+        ),
+        (
+            "user command in a workspace",
+            command(Sandbox::User, WorkingContext::UndoableWorkspace),
+            &trusted,
+            &normal,
+            "allow",
+            "reversible_permitted",
+        ),
+        (
+            "user command unattended",
+            command(Sandbox::User, session_context),
+            &unattended_approved,
+            &normal,
+            "defer",
+            "unattended_without_standing_approval",
+        ),
+        (
+            "privileged, no session",
+            service_control.clone(),
+            &trusted,
+            &normal,
+            "authenticate",
+            "repair_session_required",
+        ),
+        (
+            "privileged, open session",
+            service_control.clone(),
+            &repair_open,
+            &normal,
+            "allow",
+            "repair_session_open",
+        ),
+        (
+            "privileged, expired session",
+            service_control.clone(),
+            &repair_expired,
+            &normal,
+            "authenticate",
+            "repair_session_required",
+        ),
+        (
+            "privileged, ask-every",
+            service_control.clone(),
+            &repair_open,
+            &ask_every,
+            "ask",
+            "ask_every_action_mode",
+        ),
+        (
+            "privileged, unattended",
+            service_control.clone(),
+            &repair_open_unattended,
+            &normal,
+            "refuse",
+            "privileged_unattended",
+        ),
+        (
+            "privileged, locked",
+            service_control.clone(),
+            &repair_open_locked,
+            &normal,
+            "refuse",
+            "privileged_unattended",
+        ),
+        (
+            "privileged, untrusted",
+            service_control,
+            &untrusted,
+            &normal,
+            "refuse",
+            "trusted_path_unavailable",
+        ),
+        (
+            "bootloader, open session",
+            bootloader.clone(),
+            &repair_open,
+            &normal,
+            "refuse",
+            "system_critical_as_command",
+        ),
+        (
+            "bootloader, no session",
+            bootloader,
+            &trusted,
+            &normal,
+            "refuse",
+            "system_critical_as_command",
+        ),
         // Accessibility and screen actions.
-        ("observe", observe(APP_PLAIN), &trusted, &full, "allow", "observe_permitted"),
-        ("act on an ordinary control", act(APP_PLAIN, "Bold"), &trusted, &full, "allow", "reversible_permitted"),
-        ("act on Send", act(APP_PLAIN, "Send"), &trusted, &full, "ask", "consequential_needs_confirmation"),
-        ("act on an unnamed control", act(APP_PLAIN, ""), &trusted, &full, "ask", "consequential_needs_confirmation"),
-        ("act on Send, relaxed to 1", act(APP_RELAXED_1, "Send"), &trusted, &full, "ask", "consequential_needs_confirmation"),
-        ("act on Send, relaxed to 2", act(APP_RELAXED_2, "Send"), &trusted, &full, "allow", "relaxed_by_user_policy"),
-        ("act on Send, relaxed, unattended", act(APP_RELAXED_2, "Send"), &unattended, &full, "defer", "unattended_without_standing_approval"),
-        ("act on Send, relaxed, untrusted", act(APP_RELAXED_2, "Send"), &untrusted, &full, "refuse", "trusted_path_unavailable"),
-        ("observe, sensitive", observe(APP_SENSITIVE), &trusted, &full, "ask", "consequential_needs_confirmation"),
-        ("act, sensitive and relaxed", act(APP_SENSITIVE_RELAXED, "Bold"), &trusted, &full, "ask", "consequential_needs_confirmation"),
-        ("observe, excluded", observe(APP_EXCLUDED), &trusted, &full, "refuse", "excluded_application"),
+        (
+            "observe",
+            observe(APP_PLAIN),
+            &trusted,
+            &full,
+            "allow",
+            "observe_permitted",
+        ),
+        (
+            "act on an ordinary control",
+            act(APP_PLAIN, "Bold"),
+            &trusted,
+            &full,
+            "allow",
+            "reversible_permitted",
+        ),
+        (
+            "act on Send",
+            act(APP_PLAIN, "Send"),
+            &trusted,
+            &full,
+            "ask",
+            "consequential_needs_confirmation",
+        ),
+        (
+            "act on an unnamed control",
+            act(APP_PLAIN, ""),
+            &trusted,
+            &full,
+            "ask",
+            "consequential_needs_confirmation",
+        ),
+        (
+            "act on Send, relaxed to 1",
+            act(APP_RELAXED_1, "Send"),
+            &trusted,
+            &full,
+            "ask",
+            "consequential_needs_confirmation",
+        ),
+        (
+            "act on Send, relaxed to 2",
+            act(APP_RELAXED_2, "Send"),
+            &trusted,
+            &full,
+            "allow",
+            "relaxed_by_user_policy",
+        ),
+        (
+            "act on Send, relaxed, unattended",
+            act(APP_RELAXED_2, "Send"),
+            &unattended,
+            &full,
+            "defer",
+            "unattended_without_standing_approval",
+        ),
+        (
+            "act on Send, relaxed, untrusted",
+            act(APP_RELAXED_2, "Send"),
+            &untrusted,
+            &full,
+            "refuse",
+            "trusted_path_unavailable",
+        ),
+        (
+            "observe, sensitive",
+            observe(APP_SENSITIVE),
+            &trusted,
+            &full,
+            "ask",
+            "consequential_needs_confirmation",
+        ),
+        (
+            "act, sensitive and relaxed",
+            act(APP_SENSITIVE_RELAXED, "Bold"),
+            &trusted,
+            &full,
+            "ask",
+            "consequential_needs_confirmation",
+        ),
+        (
+            "observe, excluded",
+            observe(APP_EXCLUDED),
+            &trusted,
+            &full,
+            "refuse",
+            "excluded_application",
+        ),
         // The agent's own operations.
-        ("memory read", Action::Agent(AgentOperation::MemoryRead), &trusted, &normal, "allow", "observe_permitted"),
-        ("memory write", Action::Agent(AgentOperation::MemoryWrite), &trusted, &normal, "allow", "reversible_permitted"),
-        ("memory write unattended", Action::Agent(AgentOperation::MemoryWrite), &unattended, &normal, "allow", "reversible_permitted"),
-        ("schedule write", Action::Agent(AgentOperation::ScheduleWrite), &trusted, &normal, "ask", "consequential_needs_confirmation"),
-        ("policy write", Action::Agent(AgentOperation::PolicyWrite), &trusted, &normal, "refuse", "prohibited"),
-        ("standing approval write", Action::Agent(AgentOperation::StandingApprovalWrite), &trusted, &normal, "refuse", "prohibited"),
-        ("keyring read", Action::Agent(AgentOperation::KeyringSecretRead), &trusted, &normal, "refuse", "prohibited"),
+        (
+            "memory read",
+            Action::Agent(AgentOperation::MemoryRead),
+            &trusted,
+            &normal,
+            "allow",
+            "observe_permitted",
+        ),
+        (
+            "memory write",
+            Action::Agent(AgentOperation::MemoryWrite),
+            &trusted,
+            &normal,
+            "allow",
+            "reversible_permitted",
+        ),
+        (
+            "memory write unattended",
+            Action::Agent(AgentOperation::MemoryWrite),
+            &unattended,
+            &normal,
+            "allow",
+            "reversible_permitted",
+        ),
+        (
+            "schedule write",
+            Action::Agent(AgentOperation::ScheduleWrite),
+            &trusted,
+            &normal,
+            "ask",
+            "consequential_needs_confirmation",
+        ),
+        (
+            "policy write",
+            Action::Agent(AgentOperation::PolicyWrite),
+            &trusted,
+            &normal,
+            "refuse",
+            "prohibited",
+        ),
+        (
+            "standing approval write",
+            Action::Agent(AgentOperation::StandingApprovalWrite),
+            &trusted,
+            &normal,
+            "refuse",
+            "prohibited",
+        ),
+        (
+            "keyring read",
+            Action::Agent(AgentOperation::KeyringSecretRead),
+            &trusted,
+            &normal,
+            "refuse",
+            "prohibited",
+        ),
     ];
 
     for (name, action, context, policy, verdict, reason) in rows {

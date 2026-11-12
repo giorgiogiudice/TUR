@@ -138,9 +138,7 @@ impl ToolManifest {
                 ));
             }
 
-            let class = u8::try_from(tool.class)
-                .ok()
-                .and_then(ActionClass::from_u8);
+            let class = u8::try_from(tool.class).ok().and_then(ActionClass::from_u8);
             match class {
                 Some(ActionClass::Prohibited) => problems.push(Problem::new(
                     Code::ManifestClassProhibited,
@@ -319,7 +317,10 @@ fn check_schema(schema: &Value, path: &str, root: bool, problems: &mut Vec<Probl
         return;
     };
     let Some(kind) = object.get("type").and_then(Value::as_str) else {
-        problems.push(schema_problem(path, "\"type\" must be present and be one string"));
+        problems.push(schema_problem(
+            path,
+            "\"type\" must be present and be one string",
+        ));
         return;
     };
     if !SCHEMA_TYPES.contains(&kind) {
@@ -327,7 +328,10 @@ fn check_schema(schema: &Value, path: &str, root: bool, problems: &mut Vec<Probl
         return;
     }
     if root && kind != "object" {
-        problems.push(schema_problem(path, "the input schema must have type \"object\""));
+        problems.push(schema_problem(
+            path,
+            "the input schema must have type \"object\"",
+        ));
     }
 
     for (keyword, value) in object {
@@ -359,7 +363,10 @@ fn check_schema(schema: &Value, path: &str, root: bool, problems: &mut Vec<Probl
     if kind == "array" {
         match object.get("items") {
             Some(items) => check_schema(items, &format!("{path}.items"), false, problems),
-            None => problems.push(schema_problem(path, "an array schema must declare \"items\"")),
+            None => problems.push(schema_problem(
+                path,
+                "an array schema must declare \"items\"",
+            )),
         }
     }
 }
@@ -383,7 +390,12 @@ fn check_object_schema(object: &Map<String, Value>, path: &str, problems: &mut V
     if let Some(properties) = properties {
         for (name, schema) in properties {
             if is_member_name(name) && name.len() <= TOOL_NAME_MAX {
-                check_schema(schema, &format!("{path}.properties.{name}"), false, problems);
+                check_schema(
+                    schema,
+                    &format!("{path}.properties.{name}"),
+                    false,
+                    problems,
+                );
             } else {
                 problems.push(schema_problem(
                     path,
@@ -669,9 +681,23 @@ mod tests {
         let text = json!({ "schema_version": 2, "service": "org.uos.Test1", "tools": [tool_with(|_| {})] });
         assert_eq!(codes(&text.to_string()), [Code::ManifestVersion]);
 
-        for service in ["", "nodots", "org..uos", "org.uos.", ".org.uos", "org.9uos", "org.uos/x", "org.uos x"] {
-            let text = json!({ "schema_version": 1, "service": service, "tools": [tool_with(|_| {})] });
-            assert_eq!(codes(&text.to_string()), [Code::ManifestService], "{service:?}");
+        for service in [
+            "",
+            "nodots",
+            "org..uos",
+            "org.uos.",
+            ".org.uos",
+            "org.9uos",
+            "org.uos/x",
+            "org.uos x",
+        ] {
+            let text =
+                json!({ "schema_version": 1, "service": service, "tools": [tool_with(|_| {})] });
+            assert_eq!(
+                codes(&text.to_string()),
+                [Code::ManifestService],
+                "{service:?}"
+            );
         }
 
         let text = json!({ "schema_version": 1, "service": "org.uos.Test1", "tools": [] });
@@ -729,7 +755,10 @@ mod tests {
         for schema in bad {
             let found = schema_codes(schema.clone());
             assert!(!found.is_empty(), "{schema} must be rejected");
-            assert!(found.iter().all(|code| *code == Code::ManifestInputSchema), "{schema}");
+            assert!(
+                found.iter().all(|code| *code == Code::ManifestInputSchema),
+                "{schema}"
+            );
         }
     }
 
@@ -785,7 +814,11 @@ mod tests {
                 "additionalProperties": false,
                 "properties": { "value": property }
             });
-            assert_eq!(schema_codes(schema), [Code::ManifestInputSchema], "{keyword}");
+            assert_eq!(
+                schema_codes(schema),
+                [Code::ManifestInputSchema],
+                "{keyword}"
+            );
         }
 
         // A supported keyword on the wrong type, or with the wrong kind of value.
@@ -805,7 +838,11 @@ mod tests {
                 "additionalProperties": false,
                 "properties": { "value": property }
             });
-            assert_eq!(schema_codes(schema.clone()), [Code::ManifestInputSchema], "{schema}");
+            assert_eq!(
+                schema_codes(schema.clone()),
+                [Code::ManifestInputSchema],
+                "{schema}"
+            );
         }
     }
 
@@ -819,7 +856,11 @@ mod tests {
                 "additionalProperties": false,
                 "properties": properties
             });
-            assert_eq!(schema_codes(schema), [Code::ManifestInputSchema], "{name:?}");
+            assert_eq!(
+                schema_codes(schema),
+                [Code::ManifestInputSchema],
+                "{name:?}"
+            );
         }
     }
 
@@ -861,7 +902,10 @@ mod tests {
     #[test]
     fn tool_call_takes_the_class_from_the_manifest() {
         let manifest = checked_manifest();
-        let arguments = json!({ "volume_id": "vol1" }).as_object().cloned().unwrap_or_default();
+        let arguments = json!({ "volume_id": "vol1" })
+            .as_object()
+            .cloned()
+            .unwrap_or_default();
         let call = manifest.tool_call("test_tool", arguments.clone()).unwrap();
         assert_eq!(call.service, "org.uos.Test1");
         assert_eq!(call.tool, "test_tool");
@@ -890,7 +934,10 @@ mod tests {
             json!({ "volume_id": "vol1", "ratio": 3 }),
         ];
         for arguments in good {
-            assert!(argument_codes(&manifest, arguments.clone()).is_empty(), "{arguments}");
+            assert!(
+                argument_codes(&manifest, arguments.clone()).is_empty(),
+                "{arguments}"
+            );
         }
 
         let bad = [
@@ -925,7 +972,10 @@ mod tests {
         let manifest = checked_manifest();
         let arguments = json!({ "volume_id": 12345678, "hunter2secret": "p4ssw0rd-value" });
         let problems = manifest
-            .tool_call("test_tool", arguments.as_object().cloned().unwrap_or_default())
+            .tool_call(
+                "test_tool",
+                arguments.as_object().cloned().unwrap_or_default(),
+            )
             .expect_err("the arguments are invalid");
         assert_eq!(problems.len(), 2);
         for problem in problems {

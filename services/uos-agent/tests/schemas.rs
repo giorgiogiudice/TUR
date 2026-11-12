@@ -38,12 +38,21 @@ fn the_manifest_schema_agrees_with_the_loader() {
     assert_eq!(tool["properties"]["class"]["minimum"], 0);
     // Class 4 cannot be declared.
     assert_eq!(tool["properties"]["class"]["maximum"], 3);
-    assert_eq!(tool["properties"]["name"]["pattern"], "^[a-z][a-z0-9_]{0,63}$");
-    assert_eq!(tool["properties"]["input_schema"]["$ref"], "#/$defs/object_schema");
+    assert_eq!(
+        tool["properties"]["name"]["pattern"],
+        "^[a-z][a-z0-9_]{0,63}$"
+    );
+    assert_eq!(
+        tool["properties"]["input_schema"]["$ref"],
+        "#/$defs/object_schema"
+    );
 
     // The input schema must be closed.
     let object_schema = &schema["$defs"]["object_schema"];
-    assert_eq!(object_schema["properties"]["additionalProperties"]["const"], false);
+    assert_eq!(
+        object_schema["properties"]["additionalProperties"]["const"],
+        false
+    );
     assert!(
         object_schema["required"]
             .as_array()
@@ -120,7 +129,11 @@ fn the_policy_schema_agrees_with_the_loader() {
 fn the_test_fixtures_load() {
     let manifest = ToolManifest::from_json(include_str!("data/test-service.manifest.json"))
         .expect("the test service manifest is valid");
-    let classes: Vec<u8> = manifest.tools().iter().map(|tool| tool.class().as_u8()).collect();
+    let classes: Vec<u8> = manifest
+        .tools()
+        .iter()
+        .map(|tool| tool.class().as_u8())
+        .collect();
     assert_eq!(classes, [0, 1, 2, 3]);
 
     assert!(ToolManifest::from_json(include_str!("data/invalid-class-4.manifest.json")).is_err());
@@ -131,7 +144,5 @@ fn the_test_fixtures_load() {
     let ask_every = UserPolicy::from_json(include_str!("data/policy-ask-every-action.json"))
         .expect("the ask-every-action policy is valid");
     assert_eq!(ask_every.mode, Mode::AskEveryAction);
-    assert!(
-        UserPolicy::from_json(include_str!("data/policy-invalid-relaxation.json")).is_err()
-    );
+    assert!(UserPolicy::from_json(include_str!("data/policy-invalid-relaxation.json")).is_err());
 }

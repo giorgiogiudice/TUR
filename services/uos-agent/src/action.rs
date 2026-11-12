@@ -163,7 +163,8 @@ pub enum WorkingContext {
 
 impl WorkingContext {
     /// Both working contexts.
-    pub const ALL: [WorkingContext; 2] = [WorkingContext::Session, WorkingContext::UndoableWorkspace];
+    pub const ALL: [WorkingContext; 2] =
+        [WorkingContext::Session, WorkingContext::UndoableWorkspace];
 }
 
 /// The kind of operation a privileged command asks the privileged helper for.
@@ -378,7 +379,10 @@ mod tests {
 
     #[test]
     fn names_are_unique() {
-        let mut names: Vec<&str> = PrivilegedOperation::ALL.iter().map(|op| op.as_str()).collect();
+        let mut names: Vec<&str> = PrivilegedOperation::ALL
+            .iter()
+            .map(|op| op.as_str())
+            .collect();
         names.sort_unstable();
         names.dedup();
         assert_eq!(names.len(), PrivilegedOperation::ALL.len());

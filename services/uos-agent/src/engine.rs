@@ -62,15 +62,15 @@ pub fn decide(action: &Action, context: &Context, policy: &UserPolicy, now: Time
     }
 
     // A locked session has nobody at the screen, whatever the task says.
-    let attended = context.presence == Presence::Attended && !context.session_locked;
+    let present = context.presence == Presence::Attended && !context.session_locked;
 
     // 6. Class 3: its own authentication, every time. Never as a command,
-    //    never unattended, never covered by a repair session.
+    //    never without a person present, never covered by a repair session.
     if class == ActionClass::SystemCritical {
         if matches!(action, Action::Command(_)) {
             return Decision::refuse(class, Refusal::SystemCriticalAsCommand);
         }
-        if !attended {
+        if !present {
             return Decision::refuse(class, Refusal::SystemCriticalUnattended);
         }
         return Decision::authenticate(
@@ -80,11 +80,12 @@ pub fn decide(action: &Action, context: &Context, policy: &UserPolicy, now: Time
         );
     }
 
-    // 7. A privileged command: only attended, only inside an open repair session.
+    // 7. A privileged command: only with a person present, only inside an open
+    //    repair session. A lock closes the repair session.
     if let Action::Command(command) = action
         && matches!(command.sandbox, Sandbox::Privileged(_))
     {
-        if !attended {
+        if !present {
             return Decision::refuse(class, Refusal::PrivilegedUnattended);
         }
         let session_open = context
@@ -107,8 +108,14 @@ pub fn decide(action: &Action, context: &Context, policy: &UserPolicy, now: Time
         return Decision::allow(class, Reason::RepairSessionOpen);
     }
 
-    // 8. Unattended: nobody can be asked.
-    if !attended {
+    // 8. An attended task pauses while the session is locked. The standing
+    //    approvals of a schedule are not for it.
+    if context.presence == Presence::Attended && context.session_locked {
+        return Decision::defer(class, Reason::PausedWhileLocked);
+    }
+
+    // 9. Unattended: nobody can be asked.
+    if context.presence == Presence::Unattended {
         if policy.mode == Mode::AskEveryAction {
             return Decision::defer(class, Reason::UnattendedAskEveryActionMode);
         }
@@ -126,7 +133,7 @@ pub fn decide(action: &Action, context: &Context, policy: &UserPolicy, now: Time
         return Decision::defer(class, Reason::UnattendedWithoutStandingApproval);
     }
 
-    // 9. Attended.
+    // 10. Attended, with the user present.
     if policy.mode == Mode::AskEveryAction {
         return Decision::ask(class, Reason::AskEveryActionMode, describe(action));
     }
@@ -325,7 +332,10 @@ mod tests {
         Action::Tool(ToolCall {
             service: "org.uos.Test1".to_owned(),
             tool: "test_tool".to_owned(),
-            arguments: json!({ "name": "value" }).as_object().cloned().unwrap_or_default(),
+            arguments: json!({ "name": "value" })
+                .as_object()
+                .cloned()
+                .unwrap_or_default(),
             declared_class: class,
         })
     }
@@ -355,7 +365,10 @@ mod tests {
         // A right-to-left override cannot reorder the prompt.
         assert_eq!(quoted("a\u{202e}b"), "\"a\\u{202e}b\"");
         assert_eq!(quoted("é"), "\"\\u{e9}\"");
-        assert_eq!(printable("{\"k\":\"é\u{7f}\"}"), "{\"k\":\"\\u{e9}\\u{7f}\"}");
+        assert_eq!(
+            printable("{\"k\":\"é\u{7f}\"}"),
+            "{\"k\":\"\\u{e9}\\u{7f}\"}"
+        );
     }
 
     #[test]
@@ -431,7 +444,10 @@ mod tests {
         // A manifest cannot declare class 4, so a class 4 tool call cannot be
         // built outside this crate. The engine refuses it all the same, with
         // everything that could be granted granted.
-        let arguments = json!({ "name": "value" }).as_object().cloned().unwrap_or_default();
+        let arguments = json!({ "name": "value" })
+            .as_object()
+            .cloned()
+            .unwrap_or_default();
         for class in [ActionClass::SystemCritical, ActionClass::Prohibited] {
             for presence in Presence::ALL {
                 for session_locked in [false, true] {
@@ -457,7 +473,8 @@ mod tests {
                                     mode,
                                     ..UserPolicy::default()
                                 };
-                                let decision = decide(&tool(class), &context, &policy, Timestamp(0));
+                                let decision =
+                                    decide(&tool(class), &context, &policy, Timestamp(0));
                                 assert!(!decision.is_allow(), "{context:?} {policy:?}");
                                 assert_eq!(decision.class(), class);
                                 if class == ActionClass::Prohibited {
@@ -491,7 +508,10 @@ mod tests {
         // A harmless text in the privileged sandbox is still privileged.
         assert_eq!(
             classify(
-                &command(Sandbox::Privileged(PrivilegedOperation::Formatting), &["true"]),
+                &command(
+                    Sandbox::Privileged(PrivilegedOperation::Formatting),
+                    &["true"]
+                ),
                 &context,
                 &policy
             ),

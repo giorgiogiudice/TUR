@@ -75,10 +75,7 @@ const REDACTED: &str = "<redacted>";
 /// ```
 pub fn resembles_secret(text: &str) -> bool {
     let lowered = text.to_ascii_lowercase();
-    SECRET_MARKERS
-        .iter()
-        .any(|marker| lowered.contains(marker))
-        || has_opaque_run(text)
+    SECRET_MARKERS.iter().any(|marker| lowered.contains(marker)) || has_opaque_run(text)
 }
 
 fn has_opaque_run(text: &str) -> bool {
@@ -476,7 +473,10 @@ mod tests {
 
     #[test]
     fn renders_the_journal_fields_of_the_addendum() {
-        let action = tool(ActionClass::Reversible, json!({ "volume_id": "vol1", "force": true }));
+        let action = tool(
+            ActionClass::Reversible,
+            json!({ "volume_id": "vol1", "force": true }),
+        );
         let fields = record(&action, &trusted()).journal_fields();
         let names: Vec<&str> = fields.iter().map(|(name, _)| *name).collect();
         assert_eq!(
@@ -492,7 +492,10 @@ mod tests {
             ]
         );
         assert_eq!(field(&fields, "UOS_AI_TASK"), Some("task-0001"));
-        assert_eq!(field(&fields, "UOS_AI_ACTION"), Some("org.uos.Test1:test_tool"));
+        assert_eq!(
+            field(&fields, "UOS_AI_ACTION"),
+            Some("org.uos.Test1:test_tool")
+        );
         assert_eq!(field(&fields, "UOS_AI_CLASS"), Some("1"));
         assert_eq!(field(&fields, "UOS_AI_DECISION"), Some("allowed"));
         assert_eq!(field(&fields, "UOS_AI_TIER"), Some("1"));
@@ -529,14 +532,22 @@ mod tests {
         };
         let command = CommandAction {
             sandbox: Sandbox::Privileged(PrivilegedOperation::ServiceControl),
-            argv: vec!["/usr/bin/systemctl".to_owned(), "restart".to_owned(), "cups".to_owned()],
+            argv: vec![
+                "/usr/bin/systemctl".to_owned(),
+                "restart".to_owned(),
+                "cups".to_owned(),
+            ],
             working_context: WorkingContext::Session,
         };
         let cases = [
             (Action::Accessibility(ui.clone()), "2", "accessibility:act"),
             (Action::ScreenInput(ui), "3", "screen:act"),
             (Action::Command(command), "4", "command:privileged"),
-            (Action::Agent(AgentOperation::MemoryWrite), "0", "agent:memory_write"),
+            (
+                Action::Agent(AgentOperation::MemoryWrite),
+                "0",
+                "agent:memory_write",
+            ),
         ];
         for (action, tier, name) in cases {
             let fields = record(&action, &trusted()).journal_fields();
@@ -554,12 +565,19 @@ mod tests {
             kind: UiActionKind::Act,
         });
         let message = record(&ui, &trusted()).message();
-        assert!(message.ends_with("; application org.example.Mail, pattern send"), "{message}");
+        assert!(
+            message.ends_with("; application org.example.Mail, pattern send"),
+            "{message}"
+        );
         assert!(!message.contains("salary"), "{message}");
 
         let command = Action::Command(CommandAction {
             sandbox: Sandbox::Privileged(PrivilegedOperation::ServiceControl),
-            argv: vec!["/usr/bin/systemctl".to_owned(), "restart".to_owned(), "cups".to_owned()],
+            argv: vec![
+                "/usr/bin/systemctl".to_owned(),
+                "restart".to_owned(),
+                "cups".to_owned(),
+            ],
             working_context: WorkingContext::Session,
         });
         let message = record(&command, &trusted()).message();
@@ -582,7 +600,10 @@ mod tests {
             let mut arguments = Map::new();
             arguments.insert("password".to_owned(), json!(secret));
             arguments.insert("note".to_owned(), json!(secret));
-            arguments.insert("nested".to_owned(), json!({ "api_key": secret, "list": [secret] }));
+            arguments.insert(
+                "nested".to_owned(),
+                json!({ "api_key": secret, "list": [secret] }),
+            );
             // The secret as a property name.
             arguments.insert(secret.to_owned(), json!(1));
             let tool_call = Action::Tool(ToolCall {
@@ -651,7 +672,10 @@ mod tests {
             arguments.insert(format!("key_{index:02}"), json!(index));
         }
         let summary = summarise_arguments(&arguments);
-        assert!(summary.ends_with(", key_15=number, and 4 more"), "{summary}");
+        assert!(
+            summary.ends_with(", key_15=number, and 4 more"),
+            "{summary}"
+        );
     }
 
     #[test]
@@ -685,7 +709,14 @@ mod tests {
         ] {
             assert!(resembles_secret(text), "{text}");
         }
-        for text in ["volume_id", "systemctl", "mode", "0123456789", "abcdefghijklmnopqrstuvwxyz", ""] {
+        for text in [
+            "volume_id",
+            "systemctl",
+            "mode",
+            "0123456789",
+            "abcdefghijklmnopqrstuvwxyz",
+            "",
+        ] {
             assert!(!resembles_secret(text), "{text}");
         }
     }
@@ -727,8 +758,14 @@ mod tests {
         let policy = UserPolicy::default();
         for class in ActionClass::ALL {
             let action = tool(class, json!({}));
-            let decision =
-                decide_and_record(&action, &trusted(), &policy, Timestamp(0), &meta(), &mut sink);
+            let decision = decide_and_record(
+                &action,
+                &trusted(),
+                &policy,
+                Timestamp(0),
+                &meta(),
+                &mut sink,
+            );
             assert_eq!(decision, decide(&action, &trusted(), &policy, Timestamp(0)));
         }
         let outcomes: Vec<AuditOutcome> = sink.records().iter().map(AuditRecord::outcome).collect();

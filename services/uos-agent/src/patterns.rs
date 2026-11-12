@@ -177,7 +177,10 @@ mod tests {
 
     #[test]
     fn table_is_lower_case_and_free_of_duplicates() {
-        let mut stems: Vec<&str> = CONSEQUENTIAL_PATTERNS.iter().map(|entry| entry.stem).collect();
+        let mut stems: Vec<&str> = CONSEQUENTIAL_PATTERNS
+            .iter()
+            .map(|entry| entry.stem)
+            .collect();
         for stem in &stems {
             assert!(!stem.is_empty());
             assert!(

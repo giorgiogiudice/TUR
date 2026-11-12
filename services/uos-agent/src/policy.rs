@@ -322,14 +322,21 @@ mod tests {
             [Code::PolicyFileParse]
         );
         assert_eq!(
-            codes(UserPolicy::from_json(r#"{ "schema_version": 1, "mode": "relaxed" }"#)),
+            codes(UserPolicy::from_json(
+                r#"{ "schema_version": 1, "mode": "relaxed" }"#
+            )),
             [Code::PolicyFileParse]
         );
         assert_eq!(
-            codes(UserPolicy::from_json(r#"{ "schema_version": 2, "mode": "normal" }"#)),
+            codes(UserPolicy::from_json(
+                r#"{ "schema_version": 2, "mode": "normal" }"#
+            )),
             [Code::PolicyFileVersion]
         );
-        assert_eq!(codes(UserPolicy::from_json("not json")), [Code::PolicyFileParse]);
+        assert_eq!(
+            codes(UserPolicy::from_json("not json")),
+            [Code::PolicyFileParse]
+        );
     }
 
     #[test]

@@ -171,9 +171,13 @@ mod tests {
     fn standing_approval_matches_only_the_exact_call() {
         let approved = approval(json!({ "to": "a@example.org", "count": 1, "tags": ["x"] }));
 
-        assert!(approved.matches(&call(json!({ "to": "a@example.org", "count": 1, "tags": ["x"] }))));
+        assert!(approved.matches(&call(
+            json!({ "to": "a@example.org", "count": 1, "tags": ["x"] })
+        )));
         // Key order does not matter; everything else does.
-        assert!(approved.matches(&call(json!({ "tags": ["x"], "count": 1, "to": "a@example.org" }))));
+        assert!(approved.matches(&call(
+            json!({ "tags": ["x"], "count": 1, "to": "a@example.org" })
+        )));
 
         let near_misses = [
             json!({ "to": "b@example.org", "count": 1, "tags": ["x"] }),

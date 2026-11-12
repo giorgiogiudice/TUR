@@ -157,6 +157,8 @@ pub enum Reason {
     UnattendedWithoutStandingApproval,
     /// Defer: unattended while the user policy asks before every action.
     UnattendedAskEveryActionMode,
+    /// Defer: an attended task is paused while the session is locked.
+    PausedWhileLocked,
     /// Refused, for the stated reason.
     Refused(Refusal),
 }
@@ -175,6 +177,7 @@ impl Reason {
             Reason::SystemCriticalNeedsAuthentication => "system_critical_needs_authentication",
             Reason::RepairSessionRequired => "repair_session_required",
             Reason::UnattendedWithoutStandingApproval => "unattended_without_standing_approval",
+            Reason::PausedWhileLocked => "paused_while_locked",
             Reason::UnattendedAskEveryActionMode => "unattended_ask_every_action_mode",
             Reason::Refused(refusal) => refusal.as_str(),
         }
@@ -312,7 +315,10 @@ mod tests {
     fn every_refusal_has_its_own_code_and_name() {
         let codes: BTreeSet<Code> = Refusal::ALL.iter().map(|refusal| refusal.code()).collect();
         assert_eq!(codes.len(), Refusal::ALL.len());
-        let names: BTreeSet<&str> = Refusal::ALL.iter().map(|refusal| refusal.as_str()).collect();
+        let names: BTreeSet<&str> = Refusal::ALL
+            .iter()
+            .map(|refusal| refusal.as_str())
+            .collect();
         assert_eq!(names.len(), Refusal::ALL.len());
     }
 

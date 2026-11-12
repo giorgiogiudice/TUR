@@ -125,7 +125,11 @@ fn manifest_validate_rejects_a_class_4_tool() {
     let run = uos_agent(&["manifest", "validate", CLASS_4_MANIFEST]);
     assert_eq!(run.status, EXIT_INPUT_ERROR);
     assert!(run.stdout.is_empty());
-    assert!(run.stderr.starts_with("error: UOS-AI-MANIFEST-009: "), "{}", run.stderr);
+    assert!(
+        run.stderr.starts_with("error: UOS-AI-MANIFEST-009: "),
+        "{}",
+        run.stderr
+    );
 }
 
 #[test]
@@ -142,7 +146,11 @@ fn every_class_is_exercised_with_the_trusted_path() {
         assert_eq!(text(&document, "decision"), decision, "{tool}");
         assert_eq!(document["class"], class, "{tool}");
         assert_eq!(document["error_code"], Value::Null, "{tool}");
-        assert_eq!(document["audit"]["UOS_AI_CLASS"], class.to_string(), "{tool}");
+        assert_eq!(
+            document["audit"]["UOS_AI_CLASS"],
+            class.to_string(),
+            "{tool}"
+        );
         assert_eq!(document["audit"]["UOS_AI_TIER"], "1", "{tool}");
         assert_eq!(document["audit"]["UOS_AI_TASK"], "cli", "{tool}");
     }
@@ -153,8 +161,18 @@ fn without_the_trusted_path_only_classes_0_and_1_run() {
     let expected = [
         (OBSERVE, "allow", EXIT_ALLOW, Value::Null),
         (REVERSIBLE, "allow", EXIT_ALLOW, Value::Null),
-        (CONSEQUENTIAL, "refuse", EXIT_REFUSE, Value::from("UOS-AI-POLICY-006")),
-        (SYSTEM_CRITICAL, "refuse", EXIT_REFUSE, Value::from("UOS-AI-POLICY-006")),
+        (
+            CONSEQUENTIAL,
+            "refuse",
+            EXIT_REFUSE,
+            Value::from("UOS-AI-POLICY-006"),
+        ),
+        (
+            SYSTEM_CRITICAL,
+            "refuse",
+            EXIT_REFUSE,
+            Value::from("UOS-AI-POLICY-006"),
+        ),
     ];
     for (tool, decision, exit, code) in expected {
         // No context flags at all: the strict defaults apply.
@@ -215,12 +233,18 @@ fn class_3_is_never_allowed_whatever_the_caller_claims() {
 fn class_3_asks_for_authentication_only_when_a_person_can_give_it() {
     let (status, document) = check(SYSTEM_CRITICAL, &["--trusted-path"]);
     assert_eq!(status, EXIT_AUTHENTICATE);
-    assert_eq!(text(&document, "reason"), "system_critical_needs_authentication");
+    assert_eq!(
+        text(&document, "reason"),
+        "system_critical_needs_authentication"
+    );
     assert_eq!(
         text(&document, "prompt"),
         "Call tool \"test_system_critical\" of service \"org.uos.Test1\" with arguments {\"volume_id\":\"vol1\"}"
     );
-    assert_eq!(document["audit"]["UOS_AI_DECISION"], "authentication_required");
+    assert_eq!(
+        document["audit"]["UOS_AI_DECISION"],
+        "authentication_required"
+    );
 
     let (status, document) = check(SYSTEM_CRITICAL, &["--trusted-path", "--unattended"]);
     assert_eq!(status, EXIT_REFUSE);
@@ -237,7 +261,10 @@ fn unattended_class_2_needs_an_exactly_matching_standing_approval() {
 
     let (status, document) = check(CONSEQUENTIAL, &unattended);
     assert_eq!(status, EXIT_DEFER);
-    assert_eq!(text(&document, "reason"), "unattended_without_standing_approval");
+    assert_eq!(
+        text(&document, "reason"),
+        "unattended_without_standing_approval"
+    );
     assert_eq!(document["audit"]["UOS_AI_DECISION"], "deferred");
 
     let mut exact = unattended.to_vec();
@@ -365,16 +392,12 @@ fn the_plain_output_states_the_decision() {
         "decision: refuse\nclass: 3\nreason: trusted_path_unavailable\nerror_code: UOS-AI-POLICY-006\n"
     );
 
-    let run = uos_agent(&[
-        "policy",
-        "check",
-        "--manifest",
-        MANIFEST,
-        "--tool",
-        OBSERVE,
-    ]);
+    let run = uos_agent(&["policy", "check", "--manifest", MANIFEST, "--tool", OBSERVE]);
     assert_eq!(run.status, EXIT_ALLOW);
-    assert_eq!(run.stdout, "decision: allow\nclass: 0\nreason: observe_permitted\n");
+    assert_eq!(
+        run.stdout,
+        "decision: allow\nclass: 0\nreason: observe_permitted\n"
+    );
 }
 
 #[test]
@@ -387,14 +410,22 @@ fn invalid_input_is_reported_with_a_code_and_decides_nothing() {
             &["--tool", OBSERVE, "--args", r#"{"extra":true}"#],
             "UOS-AI-TOOL-002",
         ),
-        (&["--tool", OBSERVE, "--args", "not json"], "UOS-AI-INPUT-002"),
+        (
+            &["--tool", OBSERVE, "--args", "not json"],
+            "UOS-AI-INPUT-002",
+        ),
         (&["--tool", OBSERVE, "--args", "[]"], "UOS-AI-INPUT-002"),
         (
             &["--tool", OBSERVE, "--standing-approval", r#"{"tool":"x"}"#],
             "UOS-AI-INPUT-002",
         ),
         (
-            &["--tool", OBSERVE, "--policy", "/nonexistent/uos-agent/policy.json"],
+            &[
+                "--tool",
+                OBSERVE,
+                "--policy",
+                "/nonexistent/uos-agent/policy.json",
+            ],
             "UOS-AI-INPUT-001",
         ),
         (
@@ -415,9 +446,20 @@ fn invalid_input_is_reported_with_a_code_and_decides_nothing() {
         );
     }
 
-    let run = uos_agent(&["policy", "check", "--manifest", CLASS_4_MANIFEST, "--tool", "x"]);
+    let run = uos_agent(&[
+        "policy",
+        "check",
+        "--manifest",
+        CLASS_4_MANIFEST,
+        "--tool",
+        "x",
+    ]);
     assert_eq!(run.status, EXIT_INPUT_ERROR);
-    assert!(run.stderr.starts_with("error: UOS-AI-MANIFEST-009: "), "{}", run.stderr);
+    assert!(
+        run.stderr.starts_with("error: UOS-AI-MANIFEST-009: "),
+        "{}",
+        run.stderr
+    );
 }
 
 #[test]
@@ -425,7 +467,15 @@ fn a_usage_error_is_not_mistaken_for_a_decision() {
     let command_lines: [&[&str]; 5] = [
         &["policy", "check"],
         &["policy", "check", "--manifest", MANIFEST],
-        &["policy", "check", "--manifest", MANIFEST, "--tool", OBSERVE, "--allow"],
+        &[
+            "policy",
+            "check",
+            "--manifest",
+            MANIFEST,
+            "--tool",
+            OBSERVE,
+            "--allow",
+        ],
         &["frobnicate"],
         &[],
     ];
