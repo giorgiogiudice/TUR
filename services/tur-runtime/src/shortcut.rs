@@ -78,8 +78,10 @@ fn narrow_string(data: &[u8], at: usize) -> Option<String> {
 fn wide_string(data: &[u8], at: usize) -> Option<String> {
     let units: Vec<u16> = data
         .get(at..)?
-        .chunks_exact(2)
-        .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|pair| u16::from_le_bytes(*pair))
         .take_while(|unit| *unit != 0)
         .take(MAX_STRING_CHARS)
         .collect();
@@ -141,7 +143,11 @@ pub fn parse_shell_link(data: &[u8]) -> Option<ShellLink> {
             continue;
         }
         let count = usize::from(u16_at(data, at, LITTLE)?);
-        let length = if unicode { count.checked_mul(2)? } else { count };
+        let length = if unicode {
+            count.checked_mul(2)?
+        } else {
+            count
+        };
         let start = at.checked_add(2)?;
         let end = start.checked_add(length)?;
         let bytes = data.get(start..end)?;
@@ -149,8 +155,10 @@ pub fn parse_shell_link(data: &[u8]) -> Option<ShellLink> {
         // does. Either way the string ends at the first NUL.
         let text = if unicode {
             let units: Vec<u16> = bytes
-                .chunks_exact(2)
-                .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .map(|pair| u16::from_le_bytes(*pair))
                 .take_while(|unit| *unit != 0)
                 .collect();
             clean(&String::from_utf16_lossy(&units))
@@ -249,7 +257,11 @@ pub(crate) mod tests {
             }
             if self.target.is_some() || self.wide_target.is_some() {
                 let narrow = self.target.unwrap_or("");
-                let header_size: u32 = if self.wide_target.is_some() { 0x24 } else { 0x1c };
+                let header_size: u32 = if self.wide_target.is_some() {
+                    0x24
+                } else {
+                    0x1c
+                };
                 let volume = [0u8; 17];
                 let header_len = usize::try_from(header_size).unwrap();
                 let path_at = header_len + volume.len();

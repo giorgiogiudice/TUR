@@ -379,16 +379,21 @@ fn is_product_code(text: &str) -> bool {
     bytes.len() == 38
         && bytes.first() == Some(&b'{')
         && bytes.last() == Some(&b'}')
-        && bytes
-            .get(1..37)
-            .is_some_and(|inner| inner.iter().all(|byte| byte.is_ascii_hexdigit() || *byte == b'-'))
+        && bytes.get(1..37).is_some_and(|inner| {
+            inner
+                .iter()
+                .all(|byte| byte.is_ascii_hexdigit() || *byte == b'-')
+        })
 }
 
 /// Whether `path` is a Windows path on the prefix's `C:` drive, with no
 /// component that leads upwards.
 fn is_c_drive_path(path: &str) -> bool {
     is_drive_path(path)
-        && path.as_bytes().first().is_some_and(|drive| drive.eq_ignore_ascii_case(&b'c'))
+        && path
+            .as_bytes()
+            .first()
+            .is_some_and(|drive| drive.eq_ignore_ascii_case(&b'c'))
         && !path.split(['\\', '/']).any(|part| part == "..")
 }
 
@@ -467,10 +472,9 @@ fn uninstall_record(kind: InstallerKind, entry: Option<&UninstallEntry>) -> Unin
     // A Windows Installer product is removed by its product code, whatever
     // started the installation.
     let through_installer = command.as_ref().is_some_and(|(program, _)| {
-        program
-            .rsplit(['\\', '/'])
-            .next()
-            .is_some_and(|name| name.eq_ignore_ascii_case("msiexec.exe") || name.eq_ignore_ascii_case("msiexec"))
+        program.rsplit(['\\', '/']).next().is_some_and(|name| {
+            name.eq_ignore_ascii_case("msiexec.exe") || name.eq_ignore_ascii_case("msiexec")
+        })
     });
     if (entry.windows_installer || through_installer) && is_product_code(&entry.key) {
         return UninstallRecord {
@@ -638,9 +642,11 @@ pub fn describe_installation(
         // Installed is not tested: nothing here says that it works.
         test_status: TestStatus::Untested,
     };
-    profile.validate().map_err(|error| PlanError::InstallRequest {
-        problem: error.to_string(),
-    })?;
+    profile
+        .validate()
+        .map_err(|error| PlanError::InstallRequest {
+            problem: error.to_string(),
+        })?;
 
     // The launcher entry, and the icon when the program has one that can
     // be read. A program without an icon gets the theme's generic one.
@@ -801,10 +807,8 @@ pub fn plan_rollback(planner: &Planner<'_>) -> Plan {
     for path in [&app.app_dir, &app.staging, &app.launchers] {
         plan.steps.push(Step::RemoveTree { path: path.clone() });
     }
-    plan.notes.push(format!(
-        "The logs in {} are kept.",
-        app.logs.display()
-    ));
+    plan.notes
+        .push(format!("The logs in {} are kept.", app.logs.display()));
     plan
 }
 
@@ -1098,7 +1102,11 @@ mod tests {
             assert_eq!(run.plan.operation, Operation::Install);
             let mut expected = vec![path.as_str()];
             expected.extend(switches);
-            assert_eq!(command_of(&setup, &run.plan), supervised(&expected), "{name}");
+            assert_eq!(
+                command_of(&setup, &run.plan),
+                supervised(&expected),
+                "{name}"
+            );
         }
     }
 
@@ -1106,7 +1114,8 @@ mod tests {
     fn a_windows_installer_package_is_given_to_msiexec() {
         let setup = Setup::new("install-msi");
         let (path, info) = installer(&setup, "package", &testdata::ole(&ole::CLSID_MSI, 9));
-        let run = plan_installer_run(&planner(&setup), &recorded(), &request(&path, &info)).unwrap();
+        let run =
+            plan_installer_run(&planner(&setup), &recorded(), &request(&path, &info)).unwrap();
         assert_eq!(run.arguments, ["/qn"]);
         let windows_path = format!("Z:{}", path.replace('/', "\\"));
         assert_eq!(
@@ -1147,7 +1156,14 @@ mod tests {
         assert!(run.arguments.is_empty());
         assert_eq!(
             command_of(&setup, &run.plan),
-            ["/usr/bin/unzip", "-q", "-o", path.as_str(), "-d", target.as_str()]
+            [
+                "/usr/bin/unzip",
+                "-q",
+                "-o",
+                path.as_str(),
+                "-d",
+                target.as_str()
+            ]
         );
 
         // A plain program is not run as an installer...
@@ -1233,7 +1249,8 @@ mod tests {
             runtime_version: "GE-Proton10-20".to_owned(),
             ..recorded()
         };
-        let error = plan_installer_run(&planner(&setup), &proton, &request(&path, &info)).unwrap_err();
+        let error =
+            plan_installer_run(&planner(&setup), &proton, &request(&path, &info)).unwrap_err();
         assert_eq!(error.code(), Code::LaunchUnsupported);
 
         // No sandbox, no runtime, and never as root.
@@ -1287,7 +1304,11 @@ mod tests {
             "Program Files/7-Zip/7zFM.exe",
             &program("7-Zip", "26.06", "Igor Pavlov"),
         );
-        put(prefix, "Program Files/7-Zip/7z.exe", &image(0x8664, &[], b""));
+        put(
+            prefix,
+            "Program Files/7-Zip/7z.exe",
+            &image(0x8664, &[], b""),
+        );
         put(
             prefix,
             "Program Files/7-Zip/Uninstall.exe",
@@ -1314,7 +1335,10 @@ mod tests {
                 size: 1_659_704,
             },
             method,
-            arguments: arguments.iter().map(|argument| (*argument).to_owned()).collect(),
+            arguments: arguments
+                .iter()
+                .map(|argument| (*argument).to_owned())
+                .collect(),
         }
     }
 
@@ -1351,7 +1375,10 @@ mod tests {
         assert_eq!(record.name, "7-Zip 26.06 (x64)");
         assert_eq!(record.version.as_deref(), Some("26.06"));
         assert_eq!(record.publisher.as_deref(), Some("Igor Pavlov"));
-        let main = setup.app.prefix.join("drive_c/Program Files/7-Zip/7zFM.exe");
+        let main = setup
+            .app
+            .prefix
+            .join("drive_c/Program Files/7-Zip/7zFM.exe");
         assert_eq!(record.main_executable, main.to_str().unwrap());
         assert_eq!(
             record.main_executable_windows,
@@ -1421,10 +1448,7 @@ mod tests {
         assert!(contents.contains("Name=7-Zip 26.06 (x64)\n"));
         assert!(contents.contains(&format!("Icon={icon_path}\n")));
         assert!(contents.contains("StartupWMClass=7zfm.exe\n"));
-        assert!(contents.contains(&format!(
-            "Exec=tur-runtime launch \"{}\"\n",
-            record.profile
-        )));
+        assert!(contents.contains(&format!("Exec=tur-runtime launch \"{}\"\n", record.profile)));
         let icon = installed.icon.as_ref().unwrap();
         assert_eq!((icon.width, icon.height), (2, 2));
         let (_, _, pixels) = read_png(&icon.png);
@@ -1444,7 +1468,9 @@ mod tests {
             .steps
             .iter()
             .filter_map(|step| match step {
-                Step::WriteFile { path, .. } | Step::WriteBytes { path, .. } => Some(path.as_path()),
+                Step::WriteFile { path, .. } | Step::WriteBytes { path, .. } => {
+                    Some(path.as_path())
+                }
                 Step::CreateDir { .. } => None,
                 other => panic!("{other:?}"),
             })
@@ -1468,7 +1494,9 @@ mod tests {
             panic!();
         };
         assert_eq!(crate::app_record::parse_record(contents).unwrap(), *record);
-        assert!(plan.notes[0].contains("$XDG_DATA_HOME/applications/tur-wine-com.example.app.desktop"));
+        assert!(
+            plan.notes[0].contains("$XDG_DATA_HOME/applications/tur-wine-com.example.app.desktop")
+        );
         assert!(plan.notes[0].contains("icons/hicolor/2x2/apps/"));
         let report = run_plan(&plan, &mut FakeExecutor::default());
         assert!(report.succeeded());
@@ -1506,7 +1534,10 @@ mod tests {
         assert_eq!(error.code(), Code::InstallMainProgramUnclear);
         let message = error.to_string();
         assert!(message.contains("--main-exe"), "{message}");
-        assert!(message.contains("C:\\Program Files\\example-app\\putty.exe"), "{message}");
+        assert!(
+            message.contains("C:\\Program Files\\example-app\\putty.exe"),
+            "{message}"
+        );
 
         // Named by the caller: the record takes the program's own words.
         let named = RecordOptions {
@@ -1517,7 +1548,12 @@ mod tests {
         assert_eq!(installed.record.name, "PuTTY suite");
         assert_eq!(installed.record.version.as_deref(), Some("Release 0.85"));
         assert_eq!(installed.record.publisher.as_deref(), Some("Simon Tatham"));
-        assert!(installed.record.main_executable_reason.contains("named by the caller"));
+        assert!(
+            installed
+                .record
+                .main_executable_reason
+                .contains("named by the caller")
+        );
         // Nothing to run on removal: there was no installer.
         assert_eq!(
             installed.record.uninstall.method,
@@ -1537,7 +1573,10 @@ mod tests {
             main_executable: Some("putty.exe"),
             ..options(InstallMethod::Unpacked, &[])
         };
-        assert_eq!(describe(bad).unwrap_err().code(), Code::InstallRequestInvalid);
+        assert_eq!(
+            describe(bad).unwrap_err().code(),
+            Code::InstallRequestInvalid
+        );
         let absent = RecordOptions {
             main_executable: Some("absent.exe"),
             ..options(InstallMethod::Unpacked, &[])
@@ -1610,7 +1649,10 @@ mod tests {
     fn uninstall_commands_are_taken_apart() {
         assert_eq!(
             split_command("\"C:\\Program Files\\7-Zip\\Uninstall.exe\""),
-            Some(("C:\\Program Files\\7-Zip\\Uninstall.exe".to_owned(), Vec::new()))
+            Some((
+                "C:\\Program Files\\7-Zip\\Uninstall.exe".to_owned(),
+                Vec::new()
+            ))
         );
         assert_eq!(
             split_command("C:\\Program Files\\App\\unins000.exe /SILENT \"/LOG=C:\\a b.txt\"  x"),
@@ -1630,7 +1672,13 @@ mod tests {
                 vec!["/X{E5C4B1A0-0000-4000-8000-0123456789AB}".to_owned()]
             ))
         );
-        for bad in ["", "   ", "\"unterminated", "no-extension /S", "tool.exeextra /S"] {
+        for bad in [
+            "",
+            "   ",
+            "\"unterminated",
+            "no-extension /S",
+            "tool.exeextra /S",
+        ] {
             assert_eq!(split_command(bad), None, "{bad:?}");
         }
         assert!(is_product_code("{E5C4B1A0-0000-4000-8000-0123456789AB}"));
@@ -1645,7 +1693,12 @@ mod tests {
         }
         assert!(is_c_drive_path("C:\\Program Files\\App\\unins000.exe"));
         assert!(is_c_drive_path("c:/app/u.exe"));
-        for bad in ["Z:\\usr\\bin\\true", "C:\\app\\..\\..\\x.exe", "\\\\host\\x.exe", "app.exe"] {
+        for bad in [
+            "Z:\\usr\\bin\\true",
+            "C:\\app\\..\\..\\x.exe",
+            "\\\\host\\x.exe",
+            "app.exe",
+        ] {
             assert!(!is_c_drive_path(bad), "{bad:?}");
         }
     }
@@ -1670,19 +1723,37 @@ mod tests {
         // added to whatever the entry already passes.
         let inno = record(
             InstallerKind::InnoSetup,
-            &entry("App_is1", Some("\"C:\\Program Files\\App\\unins000.exe\" /norestart"), false),
+            &entry(
+                "App_is1",
+                Some("\"C:\\Program Files\\App\\unins000.exe\" /norestart"),
+                false,
+            ),
         );
         assert_eq!(inno.method, UninstallMethod::Uninstaller);
-        assert_eq!(inno.program.as_deref(), Some("C:\\Program Files\\App\\unins000.exe"));
-        assert_eq!(inno.arguments, ["/norestart", "/VERYSILENT", "/SUPPRESSMSGBOXES"]);
+        assert_eq!(
+            inno.program.as_deref(),
+            Some("C:\\Program Files\\App\\unins000.exe")
+        );
+        assert_eq!(
+            inno.arguments,
+            ["/norestart", "/VERYSILENT", "/SUPPRESSMSGBOXES"]
+        );
         assert_eq!(inno.registry_key.as_deref(), Some("HKLM\\App_is1"));
 
         // Windows Installer: the product code, from a package or from an
         // installer program that wraps one.
         for (kind, uninstall, flagged) in [
-            (InstallerKind::Msi, Some("MsiExec.exe /X{E5C4B1A0-0000-4000-8000-0123456789AB}"), true),
+            (
+                InstallerKind::Msi,
+                Some("MsiExec.exe /X{E5C4B1A0-0000-4000-8000-0123456789AB}"),
+                true,
+            ),
             (InstallerKind::Msi, None, true),
-            (InstallerKind::Nsis, Some("MsiExec.exe /I{E5C4B1A0-0000-4000-8000-0123456789AB}"), false),
+            (
+                InstallerKind::Nsis,
+                Some("MsiExec.exe /I{E5C4B1A0-0000-4000-8000-0123456789AB}"),
+                false,
+            ),
         ] {
             let msi = record(kind, &entry(CODE, uninstall, flagged));
             assert_eq!(msi.method, UninstallMethod::MsiProduct, "{uninstall:?}");
@@ -1696,9 +1767,18 @@ mod tests {
         let nothing = [
             uninstall_record(InstallerKind::Nsis, None),
             record(InstallerKind::Nsis, &entry("App", None, false)),
-            record(InstallerKind::Nsis, &entry("App", Some("Z:\\bin\\sh.exe -c x"), false)),
-            record(InstallerKind::Nsis, &entry("App", Some("C:\\a\\..\\..\\u.exe"), false)),
-            record(InstallerKind::Nsis, &entry("App", Some("msiexec.exe /x something"), false)),
+            record(
+                InstallerKind::Nsis,
+                &entry("App", Some("Z:\\bin\\sh.exe -c x"), false),
+            ),
+            record(
+                InstallerKind::Nsis,
+                &entry("App", Some("C:\\a\\..\\..\\u.exe"), false),
+            ),
+            record(
+                InstallerKind::Nsis,
+                &entry("App", Some("msiexec.exe /x something"), false),
+            ),
             record(
                 InstallerKind::PortableZip,
                 &entry("App", Some("\"C:\\App\\uninstall.exe\""), false),
@@ -1720,7 +1800,10 @@ mod tests {
             uninstall: UninstallRecord {
                 method,
                 program: program.map(str::to_owned),
-                arguments: arguments.iter().map(|argument| (*argument).to_owned()).collect(),
+                arguments: arguments
+                    .iter()
+                    .map(|argument| (*argument).to_owned())
+                    .collect(),
                 registry_key: None,
             },
             ..base.clone()
@@ -1750,12 +1833,20 @@ mod tests {
             .unwrap();
         assert_eq!(
             command_of(&setup, &plan),
-            supervised(&["msiexec", "/x", "{E5C4B1A0-0000-4000-8000-0123456789AB}", "/qn"])
+            supervised(&[
+                "msiexec",
+                "/x",
+                "{E5C4B1A0-0000-4000-8000-0123456789AB}",
+                "/qn"
+            ])
         );
 
         // No uninstaller: nothing is planned.
         let record = with(UninstallMethod::RemovePrefix, None, &[]);
-        assert_eq!(plan_uninstaller(&planner(&setup), &metadata, &record, 900), Ok(None));
+        assert_eq!(
+            plan_uninstaller(&planner(&setup), &metadata, &record, 900),
+            Ok(None)
+        );
 
         // A record edited to run something else is refused.
         for (method, program) in [
@@ -1923,9 +2014,15 @@ mod tests {
         fs::create_dir_all(dirs.prefixes().join("Not An Id")).unwrap();
 
         let (records, problems) = installed_applications(dirs);
-        let ids: Vec<&str> = records.iter().map(|record| record.app_id.as_str()).collect();
+        let ids: Vec<&str> = records
+            .iter()
+            .map(|record| record.app_id.as_str())
+            .collect();
         assert_eq!(ids, ["org.example.first", "org.example.second"]);
         assert_eq!(problems.len(), 1);
-        assert!(problems[0].starts_with("org.example.broken: "), "{problems:?}");
+        assert!(
+            problems[0].starts_with("org.example.broken: "),
+            "{problems:?}"
+        );
     }
 }

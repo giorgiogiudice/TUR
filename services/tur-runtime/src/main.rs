@@ -1426,7 +1426,12 @@ fn run_app_install(arguments: &InstallArguments<'_>) -> u8 {
     if let Some(failure) = &report.failure {
         let message = failure_message(failure, executor.last_output());
         roll_back(&mut executor);
-        return fail(json, Code::StepFailed, &format!("{message}{kept}"), EXIT_STEP_FAILED);
+        return fail(
+            json,
+            Code::StepFailed,
+            &format!("{message}{kept}"),
+            EXIT_STEP_FAILED,
+        );
     }
     let prefix_seconds = started.elapsed().as_secs_f64();
     let before = snapshot(&session.app.prefix);
@@ -1480,7 +1485,12 @@ fn run_app_install(arguments: &InstallArguments<'_>) -> u8 {
     if let Some(failure) = &report.failure {
         let message = failure_message(failure, executor.last_output());
         roll_back(&mut executor);
-        return fail(json, Code::StepFailed, &format!("{message}{kept}"), EXIT_STEP_FAILED);
+        return fail(
+            json,
+            Code::StepFailed,
+            &format!("{message}{kept}"),
+            EXIT_STEP_FAILED,
+        );
     }
 
     let record = &installed.record;
@@ -1513,10 +1523,7 @@ fn run_app_install(arguments: &InstallArguments<'_>) -> u8 {
             },
         }));
     } else {
-        print_line(&format!(
-            "installed: {} ({})",
-            record.name, record.app_id
-        ));
+        print_line(&format!("installed: {} ({})", record.name, record.app_id));
         print_line(&format!(
             "  version: {}",
             record.version.as_deref().unwrap_or("not stated")

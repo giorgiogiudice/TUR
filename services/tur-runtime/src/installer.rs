@@ -295,15 +295,11 @@ pub fn identify(path: &Path) -> Result<InstallerInfo, IdentifyError> {
             }
             Ok(found)
         }
-        Detected::Mz(_) => Err(not_installable(
-            "an MS-DOS or 16-bit Windows program",
-        )),
+        Detected::Mz(_) => Err(not_installable("an MS-DOS or 16-bit Windows program")),
         Detected::Elf(_) | Detected::Script(_) => {
             Err(not_installable("a Linux program, which needs no installer"))
         }
-        Detected::MachO(_) | Detected::MacAppBundle(_) => {
-            Err(not_installable("a macOS program"))
-        }
+        Detected::MachO(_) | Detected::MacAppBundle(_) => Err(not_installable("a macOS program")),
         Detected::Android(_) => Err(not_installable("an Android package")),
         Detected::Unknown => Err(not_installable("of a format that was not recognised")),
     }
@@ -347,14 +343,15 @@ fn scan_program(path: &Path) -> Result<(InstallerKind, String, Option<String>), 
         let header_at = overlay_at + u64::try_from(at.saturating_sub(4)).unwrap_or(0);
         return Ok((
             InstallerKind::Nsis,
-            format!("the NSIS first header at offset {header_at}, in the data appended to the program"),
+            format!(
+                "the NSIS first header at offset {header_at}, in the data appended to the program"
+            ),
             None,
         ));
     }
 
-    let image_len = usize::try_from(overlay_at).map_or(IMAGE_SEARCH_BYTES, |length| {
-        length.min(IMAGE_SEARCH_BYTES)
-    });
+    let image_len = usize::try_from(overlay_at)
+        .map_or(IMAGE_SEARCH_BYTES, |length| length.min(IMAGE_SEARCH_BYTES));
     let image = reader
         .read_up_to(0, image_len)
         .map_err(|error| error.with_path(path))?;
@@ -382,7 +379,9 @@ fn scan_program(path: &Path) -> Result<(InstallerKind, String, Option<String>), 
     if let Some(at) = find(&image, INNO_MAGIC) {
         return Ok((
             InstallerKind::InnoSetup,
-            format!("the Inno Setup loader's offset table at offset {at}, inside the program image"),
+            format!(
+                "the Inno Setup loader's offset table at offset {at}, inside the program image"
+            ),
             None,
         ));
     }
@@ -413,7 +412,11 @@ pub(crate) mod tests {
         let mut table = INNO_MAGIC.to_vec();
         table.extend_from_slice(&[0xcd, 0xe6, 0xd7, 0x7b, 0x0b, 0x2a]);
         table.extend_from_slice(&[0u8; 52]);
-        image(0x8664, &[(10, 11111, table)], b"zlb\x1a compressed setup data")
+        image(
+            0x8664,
+            &[(10, 11111, table)],
+            b"zlb\x1a compressed setup data",
+        )
     }
 
     /// A program shaped like 7-Zip's own installer.
@@ -424,7 +427,11 @@ pub(crate) mod tests {
         image(0x8664, &[(16, 1, version)], &overlay)
     }
 
-    fn identify_bytes(label: &str, name: &str, bytes: &[u8]) -> Result<InstallerInfo, IdentifyError> {
+    fn identify_bytes(
+        label: &str,
+        name: &str,
+        bytes: &[u8],
+    ) -> Result<InstallerInfo, IdentifyError> {
         let temp = TempDir::new(label);
         let path = temp.path().join(name);
         std::fs::write(&path, bytes).unwrap();
@@ -436,9 +443,24 @@ pub(crate) mod tests {
         // The names are deliberately wrong or meaningless: only the content
         // decides.
         let cases: Vec<(&str, Vec<u8>, InstallerKind, Option<Arch>)> = vec![
-            ("document.txt", testdata::ole(&ole::CLSID_MSI, 9), InstallerKind::Msi, None),
-            ("a.msi", nsis_installer(), InstallerKind::Nsis, Some(Arch::I386)),
-            ("b.zip", inno_installer(), InstallerKind::InnoSetup, Some(Arch::X86_64)),
+            (
+                "document.txt",
+                testdata::ole(&ole::CLSID_MSI, 9),
+                InstallerKind::Msi,
+                None,
+            ),
+            (
+                "a.msi",
+                nsis_installer(),
+                InstallerKind::Nsis,
+                Some(Arch::I386),
+            ),
+            (
+                "b.zip",
+                inno_installer(),
+                InstallerKind::InnoSetup,
+                Some(Arch::X86_64),
+            ),
             (
                 "c",
                 seven_zip_installer(),
@@ -472,14 +494,23 @@ pub(crate) mod tests {
 
     #[test]
     fn unattended_arguments_are_the_documented_ones() {
-        let arguments = |kind: InstallerKind| kind.unattended().map(|found| found.arguments.to_vec());
+        let arguments =
+            |kind: InstallerKind| kind.unattended().map(|found| found.arguments.to_vec());
         assert_eq!(arguments(InstallerKind::Msi), Some(vec!["/qn"]));
         assert_eq!(arguments(InstallerKind::Nsis), Some(vec!["/S"]));
         assert_eq!(
             arguments(InstallerKind::InnoSetup),
-            Some(vec!["/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/SP-"])
+            Some(vec![
+                "/VERYSILENT",
+                "/SUPPRESSMSGBOXES",
+                "/NORESTART",
+                "/SP-"
+            ])
         );
-        assert_eq!(arguments(InstallerKind::SevenZipInstaller), Some(vec!["/S"]));
+        assert_eq!(
+            arguments(InstallerKind::SevenZipInstaller),
+            Some(vec!["/S"])
+        );
         assert_eq!(arguments(InstallerKind::PortableZip), None);
         assert_eq!(arguments(InstallerKind::PlainExe), None);
         for kind in InstallerKind::ALL {
@@ -515,7 +546,11 @@ pub(crate) mod tests {
         let info = identify_bytes("installer-sfx", "archive.exe", &bytes).unwrap();
         assert_eq!(info.kind, InstallerKind::PlainExe);
         assert_eq!(info.unattended, None);
-        assert!(info.notes.iter().any(|note| note.contains("self-extracting")));
+        assert!(
+            info.notes
+                .iter()
+                .any(|note| note.contains("self-extracting"))
+        );
     }
 
     #[test]
@@ -523,8 +558,14 @@ pub(crate) mod tests {
         let cases: Vec<(Vec<u8>, &str)> = vec![
             (b"#!/bin/sh\necho\n".to_vec(), "Linux program"),
             (testdata::ElfSpec::linux_x86_64().build(), "Linux program"),
-            (testdata::zip(&["readme.txt", "data/file.bin"]), "no Windows program"),
-            (testdata::zip(&["AndroidManifest.xml", "classes.dex"]), "Android"),
+            (
+                testdata::zip(&["readme.txt", "data/file.bin"]),
+                "no Windows program",
+            ),
+            (
+                testdata::zip(&["AndroidManifest.xml", "classes.dex"]),
+                "Android",
+            ),
             (testdata::ole(&[0u8; 16], 9), "not an installer package"),
             (b"plain text".to_vec(), "not recognised"),
             (testdata::mz_with(b"NE\0\0"), "16-bit"),

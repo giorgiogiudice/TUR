@@ -150,18 +150,16 @@ impl Sha256 {
         padding.extend_from_slice(&bits.to_be_bytes());
         self.update(&padding);
         let mut digest = [0u8; 32];
-        for (chunk, word) in digest.chunks_exact_mut(4).zip(self.state) {
-            chunk.copy_from_slice(&word.to_be_bytes());
+        for (chunk, word) in digest.as_chunks_mut::<4>().0.iter_mut().zip(self.state) {
+            *chunk = word.to_be_bytes();
         }
         digest
     }
 
     fn compress(&mut self, block: &[u8; 64]) {
         let mut schedule = [0u32; 64];
-        for (slot, chunk) in schedule.iter_mut().zip(block.chunks_exact(4)) {
-            let mut word = [0u8; 4];
-            word.copy_from_slice(chunk);
-            *slot = u32::from_be_bytes(word);
+        for (slot, chunk) in schedule.iter_mut().zip(block.as_chunks::<4>().0) {
+            *slot = u32::from_be_bytes(*chunk);
         }
         for index in 16..64 {
             let fifteen = schedule[index - 15];

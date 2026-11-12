@@ -777,7 +777,11 @@ mod tests {
 
         // In time: the status and the output, as for any command.
         let outcome = executor
-            .execute(&bounded("quick", "echo \"[$TUR_TEST]\"; echo oops >&2; exit 4", 60))
+            .execute(&bounded(
+                "quick",
+                "echo \"[$TUR_TEST]\"; echo oops >&2; exit 4",
+                60,
+            ))
             .unwrap();
         assert_eq!(outcome, StepOutcome::Exited { status: 4 });
         let output = executor.last_output().to_owned();

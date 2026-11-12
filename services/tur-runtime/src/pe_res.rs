@@ -231,7 +231,8 @@ fn directory(reader: &mut Reader<'_>, base: u64, offset: u32) -> Result<Vec<Entr
         .ok_or_else(|| truncated("a resource directory"))?;
     let mut found = Vec::with_capacity(count);
     for index in 0..count {
-        let fields = u32_at(&entries, index * 8, LITTLE).zip(u32_at(&entries, index * 8 + 4, LITTLE));
+        let fields =
+            u32_at(&entries, index * 8, LITTLE).zip(u32_at(&entries, index * 8 + 4, LITTLE));
         let Some((name, target)) = fields else {
             return Err(truncated("a resource directory"));
         };
@@ -337,9 +338,11 @@ fn version_string(blob: &[u8], key: &str) -> Option<String> {
     let start = (at + pattern.len()).div_ceil(4) * 4;
     let units: Vec<u16> = blob
         .get(start..)?
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .take(value_units.min(MAX_VERSION_STRING_UNITS))
-        .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
+        .map(|pair| u16::from_le_bytes(*pair))
         .take_while(|unit| *unit != 0)
         .collect();
     let text: String = String::from_utf16_lossy(&units)
@@ -457,7 +460,10 @@ pub(crate) mod tests {
             put16(&mut out, 0);
             put16(&mut out, 1);
             put32(&mut out, 1033);
-            put32(&mut out, u32::try_from(data_entries_at + 16 * index).unwrap());
+            put32(
+                &mut out,
+                u32::try_from(data_entries_at + 16 * index).unwrap(),
+            );
         }
         // Data entries, then the data.
         let mut offset = data_at;
@@ -652,7 +658,8 @@ pub(crate) mod tests {
         }
         // A directory that claims more entries than are allowed.
         let mut hostile = whole.clone();
-        hostile[resources_start + 14..resources_start + 16].copy_from_slice(&0xffffu16.to_le_bytes());
+        hostile[resources_start + 14..resources_start + 16]
+            .copy_from_slice(&0xffffu16.to_le_bytes());
         let mut reader = Reader::from_bytes(&hostile);
         assert!(resource(&mut reader, &full, RT_ICON, Some(1), 1024).is_err());
     }

@@ -299,7 +299,8 @@ fn read_registry(path: &Path) -> String {
         return String::new();
     }
     let mut bytes = Vec::new();
-    let read = File::open(path).and_then(|file| file.take(MAX_REGISTRY_BYTES).read_to_end(&mut bytes));
+    let read =
+        File::open(path).and_then(|file| file.take(MAX_REGISTRY_BYTES).read_to_end(&mut bytes));
     if read.is_err() {
         return String::new();
     }
@@ -309,7 +310,8 @@ fn read_registry(path: &Path) -> String {
 /// Reads the uninstall entries of the prefix at `prefix`, from both hives,
 /// in a stable order.
 pub fn read_uninstall_entries(prefix: &Path) -> Vec<UninstallEntry> {
-    let mut entries = parse_uninstall_entries(&read_registry(&prefix.join("system.reg")), Hive::Machine);
+    let mut entries =
+        parse_uninstall_entries(&read_registry(&prefix.join("system.reg")), Hive::Machine);
     entries.extend(parse_uninstall_entries(
         &read_registry(&prefix.join("user.reg")),
         Hive::User,
@@ -406,7 +408,10 @@ pub(crate) mod tests {
         let cafe = &entries[2];
         assert!(cafe.wow64);
         assert!(cafe.system_component);
-        assert_eq!(cafe.display_name.as_deref(), Some("Caf\u{e9} \u{263a} Tool"));
+        assert_eq!(
+            cafe.display_name.as_deref(),
+            Some("Caf\u{e9} \u{263a} Tool")
+        );
         assert_eq!(cafe.identity(), "HKLM\\Wow6432Node\\Caf\u{e9} Tool");
     }
 
@@ -448,8 +453,17 @@ pub(crate) mod tests {
         assert_eq!(entry.display_icon.as_deref(), Some("C:\\app\\app.exe,0"));
         assert_eq!(entry.identity(), "HKCU\\App");
         // Headers that are not uninstall keys, or are cut short.
-        for text in ["", "[", "[]", "[Software\\\\Microsoft", "garbage\n\"a\"=\"b\""] {
-            assert!(parse_uninstall_entries(text, Hive::Machine).is_empty(), "{text:?}");
+        for text in [
+            "",
+            "[",
+            "[]",
+            "[Software\\\\Microsoft",
+            "garbage\n\"a\"=\"b\"",
+        ] {
+            assert!(
+                parse_uninstall_entries(text, Hive::Machine).is_empty(),
+                "{text:?}"
+            );
         }
     }
 
@@ -462,7 +476,10 @@ pub(crate) mod tests {
                  \"DisplayName\"=\"App {index}\"\n\n"
             ));
         }
-        assert_eq!(parse_uninstall_entries(&text, Hive::Machine).len(), MAX_ENTRIES);
+        assert_eq!(
+            parse_uninstall_entries(&text, Hive::Machine).len(),
+            MAX_ENTRIES
+        );
     }
 
     #[test]

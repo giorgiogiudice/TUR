@@ -252,7 +252,7 @@ fn decode_bitmap(image: &[u8]) -> Option<Bitmap> {
     // A 32-bit image whose alpha channel is all zero is an image without
     // one: its transparency is in the mask.
     if bits == 32 && !any_alpha {
-        for (pixel, transparent) in rgba.chunks_exact_mut(4).zip(&masked) {
+        for (pixel, transparent) in rgba.as_chunks_mut::<4>().0.iter_mut().zip(&masked) {
             pixel[3] = if *transparent { 0 } else { 255 };
         }
     }
@@ -482,13 +482,7 @@ pub(crate) mod tests {
     fn a_sixteen_colour_bitmap_becomes_a_png() {
         // The depth PuTTY's and 7-Zip's icons use.
         let palette = [[0, 0, 0], [255, 0, 0], [0, 255, 0], [0, 0, 255]];
-        let image = bitmap(
-            4,
-            3,
-            &palette,
-            &[vec![1, 2, 3], vec![3, 0, 1]],
-            &[(1, 1)],
-        );
+        let image = bitmap(4, 3, &palette, &[vec![1, 2, 3], vec![3, 0, 1]], &[(1, 1)]);
         let icon = decode(&image).unwrap();
         assert_eq!((icon.width, icon.height, icon.source_bits), (3, 2, 4));
         assert!(!icon.was_png);
@@ -590,7 +584,10 @@ pub(crate) mod tests {
             32,
             2,
             &[],
-            &[vec![0xff00_ff00, 0xff00_ff00], vec![0xff00_ff00, 0xff00_ff00]],
+            &[
+                vec![0xff00_ff00, 0xff00_ff00],
+                vec![0xff00_ff00, 0xff00_ff00],
+            ],
             &[],
         );
         let resources = vec![
@@ -598,7 +595,11 @@ pub(crate) mod tests {
             (RT_ICON, 2, large_shallow),
             (RT_ICON, 3, large_deep),
             (RT_ICON, 4, bitmap(4, 1, &palette, &[vec![0]], &[])),
-            (RT_GROUP_ICON, 10, group(&[(1, 4, 1), (2, 4, 2), (2, 32, 3)])),
+            (
+                RT_GROUP_ICON,
+                10,
+                group(&[(1, 4, 1), (2, 4, 2), (2, 32, 3)]),
+            ),
             (RT_GROUP_ICON, 20, group(&[(1, 4, 4)])),
         ];
         let temp = TempDir::new("icon");

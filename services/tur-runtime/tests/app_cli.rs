@@ -287,7 +287,11 @@ fn an_installer_is_identified_by_content_and_nothing_is_run() {
     let outcome = home.run(&["installer", "identify", &installer]);
     assert_eq!(outcome.status, 0, "{}", outcome.stderr);
     assert!(outcome.stdout.contains("Kind: NSIS installer (nsis)\n"));
-    assert!(outcome.stdout.contains("Unattended mode: /S (documented at https://"));
+    assert!(
+        outcome
+            .stdout
+            .contains("Unattended mode: /S (documented at https://")
+    );
 
     let outcome = home.run(&["installer", "identify", &installer, "--json"]);
     assert_eq!(outcome.status, 0, "{}", outcome.stderr);
@@ -334,7 +338,13 @@ fn install_dry_run_prints_both_plans_and_changes_nothing() {
     let home = Home::new("install-dry-run");
     let installer = home.path("home/Downloads/setup.bin");
     let outcome = home.run_named(&[
-        "app", "install", &installer, "--app-id", APP, "--dry-run", "--json",
+        "app",
+        "install",
+        &installer,
+        "--app-id",
+        APP,
+        "--dry-run",
+        "--json",
     ]);
     assert_eq!(outcome.status, 0, "{}", outcome.stderr);
     let report = outcome.json();
@@ -376,9 +386,7 @@ fn install_dry_run_prints_both_plans_and_changes_nothing() {
     }
 
     // Text form; a time limit; an identifier made from the file's name.
-    let outcome = home.run_named(&[
-        "app", "install", &installer, "--timeout", "60", "--dry-run",
-    ]);
+    let outcome = home.run_named(&["app", "install", &installer, "--timeout", "60", "--dry-run"]);
     assert_eq!(outcome.status, 0, "{}", outcome.stderr);
     assert!(outcome.stdout.contains("Kind: NSIS installer (nsis)\n"));
     assert!(
@@ -400,7 +408,14 @@ fn install_dry_run_prints_both_plans_and_changes_nothing() {
     // A plain program is copied when the caller says it is the application.
     let tool = home.path("home/Downloads/tool.bin");
     let outcome = home.run_named(&[
-        "app", "install", &tool, "--app-id", APP, "--portable", "--dry-run", "--json",
+        "app",
+        "install",
+        &tool,
+        "--app-id",
+        APP,
+        "--portable",
+        "--dry-run",
+        "--json",
     ]);
     assert_eq!(outcome.status, 0, "{}", outcome.stderr);
     let report = outcome.json();
@@ -453,7 +468,15 @@ fn installations_are_refused_with_codes_before_anything_is_changed() {
     );
     // A time limit of nothing.
     assert_failed(
-        &home.run_named(&["app", "install", &installer, "--app-id", APP, "--timeout", "0"]),
+        &home.run_named(&[
+            "app",
+            "install",
+            &installer,
+            "--app-id",
+            APP,
+            "--timeout",
+            "0",
+        ]),
         6,
         "TUR-WINDOWS-APP-010",
     );
@@ -522,7 +545,11 @@ fn installed_applications_are_listed_shown_and_launched_from_their_record() {
     assert_eq!(parse_record(&outcome.stdout).unwrap(), record);
     let outcome = home.run(&["app", "show", "org.example.other"]);
     assert!(outcome.stdout.starts_with("Example (org.example.other)\n"));
-    assert!(outcome.stdout.contains("  installer kind: NSIS installer\n"));
+    assert!(
+        outcome
+            .stdout
+            .contains("  installer kind: NSIS installer\n")
+    );
     assert!(outcome.stdout.contains(&format!(
         "  installed from: setup.exe (SHA-256 {})\n",
         other.install.source.sha256
@@ -548,7 +575,9 @@ fn installed_applications_are_listed_shown_and_launched_from_their_record() {
         home.data("prefixes")
             .join("org.example.other")
             .join("application.json"),
-        other.to_json().replace("org.example.other", "org.example.else"),
+        other
+            .to_json()
+            .replace("org.example.other", "org.example.else"),
     )
     .unwrap();
     assert_failed(

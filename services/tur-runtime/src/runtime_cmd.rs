@@ -311,7 +311,10 @@ impl fmt::Display for PlanError {
                 kind.label()
             ),
             PlanError::InstallRequest { problem } => {
-                write!(f, "the installation cannot be carried out as asked: {problem}")
+                write!(
+                    f,
+                    "the installation cannot be carried out as asked: {problem}"
+                )
             }
             PlanError::NothingInstalled => f.write_str(
                 "the installer finished, and no new program was found in the prefix: nothing \

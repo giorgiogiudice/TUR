@@ -108,7 +108,8 @@ fn walk(drive_c: &Path) -> Walked {
     if !fs::symlink_metadata(drive_c).is_ok_and(|metadata| metadata.is_dir()) {
         return walked;
     }
-    let mut pending: Vec<(PathBuf, String, usize)> = vec![(drive_c.to_path_buf(), String::new(), 0)];
+    let mut pending: Vec<(PathBuf, String, usize)> =
+        vec![(drive_c.to_path_buf(), String::new(), 0)];
     let mut seen: usize = 0;
     'walk: while let Some((directory, relative, depth)) = pending.pop() {
         let Ok(entries) = fs::read_dir(&directory) else {
@@ -195,7 +196,11 @@ fn place_of(relative: &str) -> ShortcutPlace {
     }
 }
 
-fn read_shortcut(drive_c: &Path, file: String, programs: &BTreeMap<String, String>) -> FoundShortcut {
+fn read_shortcut(
+    drive_c: &Path,
+    file: String,
+    programs: &BTreeMap<String, String>,
+) -> FoundShortcut {
     let name = file
         .rsplit('/')
         .next()
@@ -358,7 +363,10 @@ fn only(mut found: Vec<&String>) -> Option<&String> {
 ///
 /// [`ChoiceError`] when nothing was installed, when the named program is
 /// not there, or when no rule singles out one program.
-pub fn choose_main(discovery: &Discovery, requested: Option<&str>) -> Result<MainProgram, ChoiceError> {
+pub fn choose_main(
+    discovery: &Discovery,
+    requested: Option<&str>,
+) -> Result<MainProgram, ChoiceError> {
     let candidates: Vec<&String> = discovery
         .executables
         .iter()
@@ -576,7 +584,12 @@ pub(crate) mod tests {
         temp
     }
 
-    fn entry(key: &str, name: Option<&str>, icon: Option<&str>, location: Option<&str>) -> UninstallEntry {
+    fn entry(
+        key: &str,
+        name: Option<&str>,
+        icon: Option<&str>,
+        location: Option<&str>,
+    ) -> UninstallEntry {
         UninstallEntry {
             hive: Some(Hive::Machine),
             key: key.to_owned(),
@@ -598,7 +611,11 @@ pub(crate) mod tests {
         }
     }
 
-    fn found(executables: &[&str], shortcuts: Vec<FoundShortcut>, entries: Vec<UninstallEntry>) -> Discovery {
+    fn found(
+        executables: &[&str],
+        shortcuts: Vec<FoundShortcut>,
+        entries: Vec<UninstallEntry>,
+    ) -> Discovery {
         Discovery {
             executables: executables.iter().map(|path| (*path).to_owned()).collect(),
             shortcuts,
@@ -636,11 +653,7 @@ pub(crate) mod tests {
             "C:\\Program Files\\7-Zip\\7-zip.chm",
         );
         put(prefix, "users/Public/Desktop/broken.lnk", b"not a shortcut");
-        fs::write(
-            prefix.join("system.reg"),
-            crate::winreg::tests::SYSTEM_REG,
-        )
-        .unwrap();
+        fs::write(prefix.join("system.reg"), crate::winreg::tests::SYSTEM_REG).unwrap();
 
         let discovery = discover(prefix, &before);
         assert_eq!(
@@ -685,7 +698,11 @@ pub(crate) mod tests {
 
         let main = choose_main(&discovery, None).unwrap();
         assert_eq!(main.executable, "Program Files/7-Zip/7zFM.exe");
-        assert!(main.reason.contains("7-Zip File Manager"), "{}", main.reason);
+        assert!(
+            main.reason.contains("7-Zip File Manager"),
+            "{}",
+            main.reason
+        );
         let primary = primary_entry(&discovery, &main.executable).unwrap();
         assert_eq!(primary.key, "7-Zip");
     }
@@ -781,7 +798,12 @@ pub(crate) mod tests {
         let by_name = found(
             &programs,
             shortcuts(),
-            vec![entry("{CODE}", Some("PuTTY release 0.85 (64-bit)"), None, None)],
+            vec![entry(
+                "{CODE}",
+                Some("PuTTY release 0.85 (64-bit)"),
+                None,
+                None,
+            )],
         );
         let main = choose_main(&by_name, None).unwrap();
         assert_eq!(main.executable, programs[2]);
@@ -813,14 +835,22 @@ pub(crate) mod tests {
         let by_icon = found(
             &["Program Files/App/app.exe", "Program Files/App/tool.exe"],
             Vec::new(),
-            vec![entry("App", Some("App"), Some("C:\\Program Files\\App\\tool.exe,-101"), None)],
+            vec![entry(
+                "App",
+                Some("App"),
+                Some("C:\\Program Files\\App\\tool.exe,-101"),
+                None,
+            )],
         );
         assert_eq!(
             choose_main(&by_icon, None).unwrap().executable,
             "Program Files/App/tool.exe"
         );
         let single = found(
-            &["Program Files/App/app.exe", "Program Files/App/unins000.exe"],
+            &[
+                "Program Files/App/app.exe",
+                "Program Files/App/unins000.exe",
+            ],
             Vec::new(),
             Vec::new(),
         );
@@ -899,12 +929,22 @@ pub(crate) mod tests {
         ] {
             let main = choose_main(&discovery, Some(request))
                 .unwrap_or_else(|error| panic!("{request}: {error:?}"));
-            assert_eq!(main.executable, "Program Files/PuTTY/putty.exe", "{request}");
+            assert_eq!(
+                main.executable, "Program Files/PuTTY/putty.exe",
+                "{request}"
+            );
             assert!(main.reason.contains("named by the caller"));
         }
         // Two programs have this name; an uninstaller cannot be named; a
         // program that is not there cannot be named; nor can part of a name.
-        for request in ["putty.exe", "unins000.exe", "absent.exe", "tty.exe", "", "\\"] {
+        for request in [
+            "putty.exe",
+            "unins000.exe",
+            "absent.exe",
+            "tty.exe",
+            "",
+            "\\",
+        ] {
             let error = choose_main(&discovery, Some(request)).unwrap_err();
             assert!(
                 matches!(&error, ChoiceError::NotFound { requested, candidates }
@@ -917,8 +957,18 @@ pub(crate) mod tests {
     #[test]
     fn the_uninstall_entry_of_the_application_is_found() {
         let entries = vec![
-            entry("Helper", Some("Helper runtime"), None, Some("C:\\Program Files\\Helper")),
-            entry("App", Some("The App"), None, Some("\"C:\\Program Files\\App\\\"")),
+            entry(
+                "Helper",
+                Some("Helper runtime"),
+                None,
+                Some("C:\\Program Files\\Helper"),
+            ),
+            entry(
+                "App",
+                Some("The App"),
+                None,
+                Some("\"C:\\Program Files\\App\\\""),
+            ),
             UninstallEntry {
                 system_component: true,
                 ..entry("Hidden", Some("Hidden"), None, Some("C:\\Program Files"))
@@ -927,7 +977,9 @@ pub(crate) mod tests {
         let discovery = found(&["Program Files/App/bin/app.exe"], Vec::new(), entries);
         // The one installed where the program is, not the first one.
         assert_eq!(
-            primary_entry(&discovery, "Program Files/App/bin/app.exe").unwrap().key,
+            primary_entry(&discovery, "Program Files/App/bin/app.exe")
+                .unwrap()
+                .key,
             "App"
         );
         // A program elsewhere: the first entry that has a name.
@@ -937,7 +989,9 @@ pub(crate) mod tests {
         );
         // "Program Files\Apple" is not inside "Program Files\App".
         assert_eq!(
-            primary_entry(&discovery, "Program Files/Apple/app.exe").unwrap().key,
+            primary_entry(&discovery, "Program Files/Apple/app.exe")
+                .unwrap()
+                .key,
             "Helper"
         );
         assert_eq!(primary_entry(&Discovery::default(), "x.exe"), None);
@@ -947,16 +1001,31 @@ pub(crate) mod tests {
 
     #[test]
     fn helper_rules() {
-        assert_eq!(windows_path("Program Files/App/app.exe"), "C:\\Program Files\\App\\app.exe");
+        assert_eq!(
+            windows_path("Program Files/App/app.exe"),
+            "C:\\Program Files\\App\\app.exe"
+        );
         assert_eq!(icon_program("\"C:\\App\\App.exe\",0"), "c:\\app\\app.exe");
         assert_eq!(icon_program("C:/App/App.exe,-12"), "c:\\app\\app.exe");
-        assert_eq!(icon_program("C:\\Apps, Inc\\app.exe"), "c:\\apps, inc\\app.exe");
+        assert_eq!(
+            icon_program("C:\\Apps, Inc\\app.exe"),
+            "c:\\apps, inc\\app.exe"
+        );
         assert!(starts_with_word("PuTTY release 0.85", "PuTTY"));
         assert!(starts_with_word("putty", "PuTTY"));
         assert!(!starts_with_word("PuTTYgen", "PuTTY"));
         assert!(!starts_with_word("PuTTY", ""));
-        assert_eq!(place_of("users/ada/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/A.lnk"), ShortcutPlace::StartMenu);
-        assert_eq!(place_of("users/Public/Desktop/A.lnk"), ShortcutPlace::Desktop);
-        assert_eq!(place_of("Program Files/App/A.lnk"), ShortcutPlace::Elsewhere);
+        assert_eq!(
+            place_of("users/ada/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/A.lnk"),
+            ShortcutPlace::StartMenu
+        );
+        assert_eq!(
+            place_of("users/Public/Desktop/A.lnk"),
+            ShortcutPlace::Desktop
+        );
+        assert_eq!(
+            place_of("Program Files/App/A.lnk"),
+            ShortcutPlace::Elsewhere
+        );
     }
 }

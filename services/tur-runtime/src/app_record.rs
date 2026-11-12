@@ -238,7 +238,10 @@ impl fmt::Display for RecordError {
                 "the application record is {bytes} bytes; at most {MAX_RECORD_BYTES} are accepted"
             ),
             RecordError::Shape(detail) => {
-                write!(f, "the application record does not match the schema: {detail}")
+                write!(
+                    f,
+                    "the application record does not match the schema: {detail}"
+                )
             }
             RecordError::Invalid { field, problem } => {
                 write!(f, "application record field {field:?} {problem}")
@@ -310,7 +313,9 @@ impl AppRecord {
         )?;
         check(is_display_name(&self.name), "name", NOT_TEXT)?;
         check(
-            self.version.as_deref().is_none_or(|text| is_text(text, 100)),
+            self.version
+                .as_deref()
+                .is_none_or(|text| is_text(text, 100)),
             "version",
             NOT_TEXT,
         )?;
@@ -391,11 +396,7 @@ impl AppRecord {
         )?;
         check(
             is_plain_absolute(&self.launcher.desktop_entry)
-                && self
-                    .launcher
-                    .icon
-                    .as_deref()
-                    .is_none_or(is_plain_absolute),
+                && self.launcher.icon.as_deref().is_none_or(is_plain_absolute),
             "launcher",
             NOT_A_PATH,
         )?;
@@ -628,18 +629,24 @@ pub(crate) mod tests {
             case("main_executable_reason", |record| {
                 record.main_executable_reason = "r".repeat(501);
             }),
-            case("prefix_id", |record| record.prefix_id = "Has Space".to_owned()),
+            case("prefix_id", |record| {
+                record.prefix_id = "Has Space".to_owned()
+            }),
             case("runtime_version", |record| {
                 record.runtime_version = "wine 9".to_owned();
             }),
-            case("install", |record| record.install.arguments = vec![String::new()]),
+            case("install", |record| {
+                record.install.arguments = vec![String::new()]
+            }),
             case("install", |record| {
                 record.install.arguments = vec!["/S".to_owned(); 65];
             }),
             case("install", |record| {
                 record.install.source.file_name = "dir/setup.exe".to_owned();
             }),
-            case("install", |record| record.install.source.sha256 = "ABC".to_owned()),
+            case("install", |record| {
+                record.install.source.sha256 = "ABC".to_owned()
+            }),
             case("install", |record| {
                 record.install.source.sha256 = record.install.source.sha256.to_uppercase();
             }),
@@ -740,13 +747,19 @@ pub(crate) mod tests {
         std::fs::write(&other.record, record.to_json()).unwrap();
         assert!(matches!(
             load_record(&other),
-            Err(RecordError::Invalid { field: "app_id", .. })
+            Err(RecordError::Invalid {
+                field: "app_id",
+                ..
+            })
         ));
         // A record that names a prefix elsewhere.
         std::fs::write(&app.record, minimal().to_json()).unwrap();
         assert!(matches!(
             load_record(&app),
-            Err(RecordError::Invalid { field: "prefix", .. })
+            Err(RecordError::Invalid {
+                field: "prefix",
+                ..
+            })
         ));
         // Not JSON, and too large.
         std::fs::write(&app.record, "not json").unwrap();
@@ -760,8 +773,14 @@ pub(crate) mod tests {
 
     #[test]
     fn free_text_is_cleaned_before_it_is_recorded() {
-        assert_eq!(as_text("  7-Zip 26.06 (x64) ", 100).as_deref(), Some("7-Zip 26.06 (x64)"));
-        assert_eq!(as_text("Evil\u{1b}[31m\nname", 100).as_deref(), Some("Evil[31mname"));
+        assert_eq!(
+            as_text("  7-Zip 26.06 (x64) ", 100).as_deref(),
+            Some("7-Zip 26.06 (x64)")
+        );
+        assert_eq!(
+            as_text("Evil\u{1b}[31m\nname", 100).as_deref(),
+            Some("Evil[31mname")
+        );
         assert_eq!(as_text("abcdef", 3).as_deref(), Some("abc"));
         assert_eq!(as_text(" \t\n", 100), None);
         assert_eq!(as_text("", 100), None);
@@ -837,8 +856,7 @@ pub(crate) mod tests {
         );
         for list in ["executables", "shortcuts"] {
             assert_eq!(
-                schema["properties"][list]["maxItems"],
-                MAX_RECORDED_ITEMS,
+                schema["properties"][list]["maxItems"], MAX_RECORDED_ITEMS,
                 "{list}"
             );
         }
