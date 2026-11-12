@@ -410,7 +410,8 @@ sandbox is the boundary.
   in a world-readable file under `/etc` or in a log can be read and would go to
   the provider unless the output filter recognises it.
 - **What the user granted.** A granted folder is read whole. If it holds a
-  credential file, the filter is the only thing between it and the provider.
+  credential file, or a hard link to one, the filter is the only thing between
+  it and the provider. A symbolic link in it to something outside leads nowhere.
 - **Kernel bugs.** A namespace escape defeats it. There is no seccomp filter.
 - **Covert channels and timing.** Not considered.
 - **The model lying about what a command printed.** The audit trail holds what

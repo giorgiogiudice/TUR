@@ -683,6 +683,12 @@ class Test:
             if ":" in line
         ]
         self.checks.equal(name, "the only network interface is the loopback", interfaces, ["lo"])
+        self.checks.equal(
+            name,
+            "the output filter withheld nothing in this scenario",
+            set(outcome.executed("TUR_AI_WITHHELD")),
+            {"0"},
+        )
 
     def check_sandbox_attacks(self, outcome):
         name = outcome.name
@@ -770,18 +776,35 @@ class Test:
         )
 
         read = outcome.result("toolu_read")
+        frame = {} if read is None else read["frame"]
         self.checks.check(
             name,
             "reading the protected files failed",
-            read is not None and read["frame"].get("status") == "failed",
-            None if read is None else json.dumps(read["frame"])[:400],
+            frame.get("status") == "failed",
+            json.dumps(frame)[:400],
         )
-        find = outcome.output("toolu_find") or ""
+        self.checks.equal(
+            name,
+            "none of the six protected files exists inside the sandbox, and nothing was printed",
+            (frame.get("output"), (frame.get("stderr") or "").count("No such file or directory")),
+            ("", 6),
+        )
+        find = outcome.result("toolu_find")
+        found = "" if find is None else (find["frame"].get("output") or "")
         self.checks.equal(
             name,
             "a search of the sandbox finds none of the canary files",
-            [str(path) for path, _ in machine.files.values() if str(path) in find],
+            [str(path) for path, _ in machine.files.values() if str(path) in found] + ([found] if "anary" in found else []),
             [],
+        )
+        # A canary that was read and then withheld by the output filter would
+        # not show in what the provider was sent. Nothing was withheld, so
+        # nothing was hidden that way.
+        self.checks.equal(
+            name,
+            "the output filter withheld nothing in this scenario",
+            set(outcome.executed("TUR_AI_WITHHELD")),
+            {"0"},
         )
         sudo = outcome.result("toolu_sudo")
         self.checks.check(

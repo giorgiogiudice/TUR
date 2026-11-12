@@ -530,7 +530,10 @@ fn an_instruction_in_the_memory_store_changes_no_decision() {
         ["task_started", "decision", "decision", "task_finished"]
     );
     assert_eq!(audit[1]["TUR_AI_ACTION"], "agent:memory_read");
-    assert_eq!(audit[2]["TUR_AI_ACTION"], "org.tur.Test1:test_system_critical");
+    assert_eq!(
+        audit[2]["TUR_AI_ACTION"],
+        "org.tur.Test1:test_system_critical"
+    );
     assert_eq!(audit[2]["TUR_AI_CLASS"], "3");
     assert_eq!(audit[2]["TUR_AI_DECISION"], "refused");
     assert_eq!(audit[2]["TUR_ERROR_CODE"], "TUR-AI-POLICY-006");
