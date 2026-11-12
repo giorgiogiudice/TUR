@@ -207,7 +207,8 @@ install -m 0644 "${art}/wallpaper/2560x1440.png" "${wp}/contents/images/2560x144
 install -m 0644 "${art}/wallpaper/screenshot.png" "${wp}/contents/screenshot.png"
 # Plasma's first-run setup loads its background from Default/contents/images
 # (and images_dark), by these two names in JPEG XL (Fedora's patch to it).
-if magick -list format 2> /dev/null | grep -Eq '^ *JXL\*? +JXL +rw'; then
+formats="$(magick -list format 2> /dev/null || true)"
+if grep -Eq '^ *JXL\*? +JXL +rw' <<< "${formats}"; then
     magick "${art}/wallpaper/2560x1440.png" -resize 5120x2880 -quality 100 "${wp}/contents/images/5120x2880.jxl"
     magick "${art}/wallpaper/2560x1440.png" -resize 1440x2960^ -gravity center -extent 1440x2960 -quality 100 \
         "${wp}/contents/images/1440x2960.jxl"
@@ -241,18 +242,26 @@ say "desktop: global theme org.tur.dark, wallpaper Tur on the desktop, login and
 # compiles its bookmarks into the browser; if they are there, a policy keeps
 # them out of new profiles.
 omni=/usr/lib64/firefox/browser/omni.ja
-fedora_bookmarks="$(python3 - "${omni}" <<'PY'
-import sys, zipfile
-with zipfile.ZipFile(sys.argv[1]) as z:
-    hits = [n for n in z.namelist() if "bookmarks" in n.rsplit("/", 1)[-1] and b"Fedora" in z.read(n)]
-print(" ".join(hits))
-PY
-)" || die "could not read Firefox's ${omni}"
-if [ -n "${fedora_bookmarks}" ]; then
+# omni.ja is a zip file in Mozilla's own layout (Python's zipfile refuses it;
+# unzip reads it with a warning). If it cannot be read, the policy is
+# installed anyway: keeping Fedora's bookmarks out matters more than the note
+# Firefox then shows about a managed browser.
+names="$(unzip -Z1 "${omni}" 2> /dev/null || true)"
+fedora_bookmarks=""
+while read -r name; do
+    case "${name##*/}" in *bookmarks*) ;; *) continue ;; esac
+    if { unzip -p "${omni}" "${name}" 2> /dev/null || true; } | grep -q Fedora; then
+        fedora_bookmarks="${fedora_bookmarks} ${name}"
+    fi
+done <<< "${names}"
+if [ -z "${names}" ]; then
     install -m 0644 "${here}/firefox-policies.json" /usr/lib64/firefox/distribution/policies.json
-    say "Firefox: Fedora's bookmarks are built in (${fedora_bookmarks}); policy NoDefaultBookmarks installed"
+    say "Firefox: could not list ${omni}; policy NoDefaultBookmarks installed regardless"
+elif [ -n "${fedora_bookmarks}" ]; then
+    install -m 0644 "${here}/firefox-policies.json" /usr/lib64/firefox/distribution/policies.json
+    say "Firefox: Fedora's bookmarks are built in (${fedora_bookmarks# }); policy NoDefaultBookmarks installed"
 else
-    say "Firefox: no built-in bookmarks name Fedora; no policy installed"
+    say "Firefox: $(grep -c . <<< "${names}") files in omni.ja, no built-in bookmarks name Fedora; no policy installed"
 fi
 grep -q 'browser.startup.homepage", "about:home"' /usr/lib64/firefox/browser/defaults/preferences/tur-default-prefs.js \
     || die "TUR's Firefox defaults are missing"
@@ -281,6 +290,6 @@ chmod 0644 "/usr/lib/modules/${kver}/initramfs.img"
 listing="$(lsinitrd "/usr/lib/modules/${kver}/initramfs.img")"
 grep -q 'usr/share/plymouth/themes/tur/tur.plymouth' <<< "${listing}" || die "the initramfs lacks the TUR splash"
 grep -q 'usr/share/plymouth/themes/tur/watermark.png' <<< "${listing}" || die "the initramfs lacks the TUR mark"
-lsinitrd -f usr/lib/initrd-release "/usr/lib/modules/${kver}/initramfs.img" | grep -qx 'NAME="TUR"' \
-    || die "the initramfs's os-release does not name TUR"
+release="$(lsinitrd -f usr/lib/initrd-release "/usr/lib/modules/${kver}/initramfs.img")"
+grep -qx 'NAME="TUR"' <<< "${release}" || die "the initramfs's os-release does not name TUR: ${release}"
 say "initramfs regenerated for ${kver} ($(stat -c %s "/usr/lib/modules/${kver}/initramfs.img") bytes, SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH})"
