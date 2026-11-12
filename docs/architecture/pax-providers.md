@@ -487,6 +487,17 @@ tur-pax-providers check --config <file> [--ping] [--probe-tools]
                         [--key-env <VARIABLE> | --no-key]
 ```
 
+`tur-pax run` and `tur-pax chat` take a configuration file
+(`--provider-config`), or a provider of the model list by its identifier
+(`--provider ID --model NAME [--models FILE]`), whose entry then gives the
+family, the address and the key source as in the session service. The key
+comes from the environment (`--key-env`, `TUR_PAX_API_KEY` by default),
+from the entry's key file (`runtime_key_file`, the `local` preset), or not at
+all: for an entry that takes none, or with `--no-key` (`openai-chat` only).
+The provider's identifier is written to the audit trail as
+`TUR_AI_PROVIDER_ID` beside the family in `TUR_AI_PROVIDER`
+(pax-orchestrator.md, section 7).
+
 `check` validates a configuration and prints the endpoint, the API and the
 capabilities the adapter declares. It makes no network call. With `--ping` it
 reads the key from an environment variable (`TUR_PAX_API_KEY` by default) and
@@ -881,12 +892,53 @@ shows its data terms as summarised in the file, with the date.
 | `together` | `https://api.together.ai/v1` | `openai/gpt-oss-120b` (131 072; no), `Qwen/Qwen3.5-9B` (262 144; yes) | 0.15 / 0.60; 0.17 / 0.25 | <https://docs.together.ai/docs/inference/openai-compatibility.md>, function-calling guides, `/serverless/models.md` | Privacy and security, zero data retention; its legal privacy page was not read |
 | `ollama` | `http://127.0.0.1:11434/v1` | none listed: any model the person has | none: runs here | <https://docs.ollama.com/api/openai-compatibility.md>, `/faq.md` (binds 127.0.0.1:11434 by default) | "Runs on this computer"; no key |
 | `llama-server` | `http://127.0.0.1:9931/v1` | none listed | none: runs here | `tools/server/README.md` of llama.cpp, branch `master` (`--port` "default: 9931", `--host` 127.0.0.1, `--api-key` "default: none"; function calling with `--jinja`, now enabled by default) | "Runs on this computer"; no key |
+| `local` | `http://127.0.0.1:39281/v1` | `qwen3-4b`, `qwen3-vl-2b-instruct` (image input), `granite-4.0-1b`, `qwen3-0.6b`: the chat models of `tur-ai-local`'s catalogue that call tools (8 192, its default context; output limit 1 024, P@x's choice) | none: runs here | TUR's own `tur-ai-local` ([local-ai.md](local-ai.md), section 7): `serve` listens on 127.0.0.1:39281 and writes its access key to `$XDG_RUNTIME_DIR/tur-ai-local/api-key` | "Runs on this computer"; key from the file `tur-ai-local` writes |
 
 Every cloud preset declares tool calling (from the pages above), and
-DeepSeek alone sends its reasoning back. The two local presets declare
-nothing about tools or images: that depends on the model loaded and how the
-server was started, and the probe is the way to find out. If `llama-server`
-is started with `--api-key`, its entry must be changed to need a key.
+DeepSeek alone sends its reasoning back. The `ollama` and `llama-server`
+presets declare nothing about tools or images: that depends on the model
+loaded and how the server was started, and the probe is the way to find out.
+If `llama-server` is started with `--api-key`, its entry must be changed to
+need a key.
+
+**`local`: TUR's own local AI.** The preset for `tur-ai-local`, which starts
+llama.cpp's `llama-server` for one model of its catalogue at a time
+([local-ai.md](local-ai.md)). Its address is the one `tur-ai-local serve`
+uses unless told another, `127.0.0.1:39281`, with `/v1` for the Chat
+Completions path; `tur-ai-local status` reports the same port and base URL
+(`base_url` in its state). Its models are the catalogue ids of the models
+whose capabilities include `chat` and `tools`
+(`services/tur-ai-local/catalogue/`), and a test holds the two lists
+together (`settings::tests::the_local_preset_offers_the_catalogue_s_chat_models_that_call_tools`);
+`qwen3-vl-2b-instruct` declares image input, the others none. It declares
+tool calling, streamed tool calls and a context of 8 192 tokens, what
+`tur-ai-local serve` gives a model unless told another. Its data terms are
+`runs_locally`: the consent text says that what P@x sends stays on this
+computer and no company receives it.
+
+It **needs a key** (`key_required`, the default) and **does not keep it in the
+password store**: `runtime_key_file: "tur-ai-local/api-key"` names the file,
+relative to the session's runtime directory, that `tur-ai-local serve` writes
+each time it starts a model (a new random 256-bit key, mode 0600). P@x reads
+it for each task through `FileKeySource` (`tur-pax-providers/src/secret.rs`)
+and `settings::runtime_key`: only for an address of this computer, only a
+regular file that no one but its owner can read, the error naming the file
+and never its content. Why not the keyring: the key changes with every start
+of the engine, is worthless once the engine stops, and lives in the person's
+own runtime folder, which is emptied at log-out; a copy in the password store
+would be stale after the next start. A missing file means no model is
+served: the task does not start (`TUR-AI-PROVIDER-012`) and `GetStatus` says
+`file_missing` (pax-service.md, section 5). A model on the processor reads a
+P@x request (instructions and tool definitions, thousands of tokens) for a
+minute or more before it answers, so a provider whose address is this
+computer is given ten minutes to begin a response (`response_ms` 600 000)
+instead of two.
+
+Proved in CI by the `local-ai` workflow (`pax` job): `tur-pax run --provider
+local --model qwen3-4b` against `tur-ai-local` serving Qwen3 4B on llama.cpp's
+own b9840 build, every component's tools and the read-only command tool
+offered, in the real sandbox (`tests/pax/local_model.py`; the results are in
+`docs/reports/pax-5.md`).
 
 **Left out:** none of the five named candidates was left out; each
 documents an OpenAI-compatible Chat Completions endpoint with tool calling.
@@ -896,6 +948,5 @@ xAI, OpenRouter and Together, only their documentation's data pages were
 read, not their legal privacy policies. The consent text shows what was
 read, with its date and source.
 
-**Not a preset:** the local AI service of ADR-0021 (`tur-ai-local`) is
-being built separately; when it serves its OpenAI-compatible API, its
-address can be an entry like `ollama`'s.
+**The local AI service of ADR-0021** (`tur-ai-local`) is the preset
+`local`, above.
