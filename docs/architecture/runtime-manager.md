@@ -252,6 +252,12 @@ Everything from here on is about the `wine` and `proton` runtimes. Nothing is
 run because of a file's type: a launch happens when the user asks for one, from
 a profile.
 
+The application catalogue ([catalogue and routing](catalogue-and-routing.md))
+chooses a route for a known application. Its `wine` and `proton` routes are the
+two runtime kinds here, with the same names; its `windows-guest` route is not
+handled by this code. Nothing connects the two yet: a launch starts from a
+profile, and no code turns a catalogue decision into one.
+
 ### Plans
 
 Every operation is a **plan** before it is anything else: a list of steps that
