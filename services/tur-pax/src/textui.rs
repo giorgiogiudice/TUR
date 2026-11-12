@@ -4,7 +4,7 @@
 //!
 //! ```text
 //! tur-pax run "<request>" [--provider-config <file>] [--policy <file>]
-//!                         [--manifests <dir>] [--adapters <dir>]
+//!                         [--tools <dir>] [--manifests <dir>] [--adapters <dir>]
 //!                         [--grant-read <path>]... [--audit-log <file>]
 //!                         [--memory-store <dir>] [--key-env <VARIABLE>]
 //!                         [--max-steps <n>] [--max-seconds <n>]
@@ -52,7 +52,7 @@ use crate::orchestrator::{
     TaskLimits, TaskOutcome, TaskReport, TaskRequest,
 };
 use crate::policy::UserPolicy;
-use crate::registry::ToolRegistry;
+use crate::registry::{ToolFiles, ToolRegistry, read_tool_sets};
 use crate::sandbox::{Grant, GrantRules};
 use crate::trail::FileTrail;
 
@@ -71,11 +71,10 @@ pub const EXIT_AUDIT: u8 = 23;
 /// named. For development only; the keyring source is not built yet.
 pub const DEFAULT_KEY_VARIABLE: &str = "TUR_PAX_API_KEY";
 
-/// Where the tool manifests are read from unless a directory is named.
-pub const DEFAULT_MANIFEST_DIR: &str = "/usr/share/tur/pax/manifests";
-
-/// Where the tool adapters are read from unless a directory is named.
-pub const DEFAULT_ADAPTER_DIR: &str = "/usr/share/tur/pax/adapters";
+/// The directory of tool sets that is read unless another is named: one
+/// subdirectory for each component, holding its `agent-tools.json` and its
+/// `agent-tools.adapter.json` ([`crate::registry::read_tool_sets`]).
+pub const DEFAULT_TOOLS_DIR: &str = "/usr/share/tur/pax/tools";
 
 /// The options `run` and `chat` share.
 #[derive(Debug, Args)]
@@ -88,10 +87,18 @@ pub struct TaskArgs {
     /// that cannot be read or is not valid leaves P@x able to observe only.
     #[arg(long, value_name = "FILE")]
     pub policy: Option<PathBuf>,
-    /// The directory of tool manifests, one JSON file per service.
+    /// The directory of tool sets: one subdirectory for each component that
+    /// ships tools, holding its agent-tools.json and, beside it, its
+    /// agent-tools.adapter.json. Without it, /usr/share/tur/pax/tools is
+    /// read if it exists.
+    #[arg(long, value_name = "DIR")]
+    pub tools: Option<PathBuf>,
+    /// A further directory of tool manifests, one JSON file per service.
+    /// Read in addition to the tool sets.
     #[arg(long, value_name = "DIR")]
     pub manifests: Option<PathBuf>,
-    /// The directory of tool adapters, one JSON file per service.
+    /// A further directory of tool adapters, one JSON file per service.
+    /// Read in addition to the tool sets.
     #[arg(long, value_name = "DIR")]
     pub adapters: Option<PathBuf>,
     /// The environment variable that holds the API key.
@@ -197,14 +204,25 @@ fn read_file(path: &Path) -> Result<String, Fault> {
     })
 }
 
-/// The texts of the `.json` files of a directory, in name order.
+/// The tool sets of the components: what the directory of tool sets holds.
 ///
 /// A directory that was not named and does not exist holds nothing.
-fn read_json_dir(named: Option<&Path>, default: &str) -> Result<Vec<String>, Fault> {
+fn read_tools(named: Option<&Path>, default: &str) -> Result<ToolFiles, Fault> {
     let directory = match named {
         Some(directory) => directory,
         None if Path::new(default).is_dir() => Path::new(default),
-        None => return Ok(Vec::new()),
+        None => return Ok(ToolFiles::default()),
+    };
+    read_tool_sets(directory)
+        .map_err(|error| input_fault(Code::InputUnreadable, error.to_string()))
+}
+
+/// The texts of the `.json` files of a directory, in name order.
+///
+/// A directory that was not named holds nothing.
+fn read_json_dir(named: Option<&Path>) -> Result<Vec<String>, Fault> {
+    let Some(directory) = named else {
+        return Ok(Vec::new());
     };
     let entries = fs::read_dir(directory).map_err(|error| {
         input_fault(
@@ -272,15 +290,21 @@ fn build(args: &TaskArgs, err: &mut dyn Write) -> io::Result<Result<Setup, Vec<F
         Err(error) => return Ok(Err(vec![provider_fault(error)])),
     };
 
-    // The tools.
-    let manifests = match read_json_dir(args.manifests.as_deref(), DEFAULT_MANIFEST_DIR) {
-        Ok(texts) => texts,
+    // The tools: what each component ships, then any further directories.
+    let tools = match read_tools(args.tools.as_deref(), DEFAULT_TOOLS_DIR) {
+        Ok(files) => files,
         Err(fault) => return Ok(Err(vec![fault])),
     };
-    let adapters = match read_json_dir(args.adapters.as_deref(), DEFAULT_ADAPTER_DIR) {
-        Ok(texts) => texts,
+    let mut manifests = tools.manifests;
+    let mut adapters = tools.adapters;
+    match read_json_dir(args.manifests.as_deref()) {
+        Ok(texts) => manifests.extend(texts),
         Err(fault) => return Ok(Err(vec![fault])),
-    };
+    }
+    match read_json_dir(args.adapters.as_deref()) {
+        Ok(texts) => adapters.extend(texts),
+        Err(fault) => return Ok(Err(vec![fault])),
+    }
     let registry = match ToolRegistry::load(&manifests, &adapters, !args.no_commands) {
         Ok(registry) => registry,
         Err(problems) => return Ok(Err(problems)),
@@ -683,18 +707,24 @@ mod tests {
 
     #[test]
     fn a_directory_that_was_not_named_and_does_not_exist_holds_nothing() {
-        let texts = read_json_dir(None, "/nonexistent/tur-pax-test/manifests").expect("no error");
-        assert!(texts.is_empty());
-        let named = read_json_dir(
-            Some(Path::new("/nonexistent/tur-pax-test/manifests")),
-            DEFAULT_MANIFEST_DIR,
-        );
+        let tools = read_tools(None, "/nonexistent/tur-pax-test/tools").expect("no error");
+        assert_eq!(tools, ToolFiles::default());
+        assert!(read_json_dir(None).expect("no error").is_empty());
+        let missing = Path::new("/nonexistent/tur-pax-test/tools");
         assert_eq!(
-            named
+            read_tools(Some(missing), DEFAULT_TOOLS_DIR)
                 .expect_err("a named directory must exist")
                 .code
                 .as_str(),
             "TUR-AI-INPUT-001"
         );
+        assert_eq!(
+            read_json_dir(Some(missing))
+                .expect_err("a named directory must exist")
+                .code
+                .as_str(),
+            "TUR-AI-INPUT-001"
+        );
+        assert_eq!(DEFAULT_TOOLS_DIR, "/usr/share/tur/pax/tools");
     }
 }

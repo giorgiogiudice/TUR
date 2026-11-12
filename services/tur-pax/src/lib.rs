@@ -102,6 +102,6 @@ pub use orchestrator::{
     SharedControl, Signal, Situation, SystemTaskClock, TaskClock, TaskLimits, TaskOutcome,
     TaskReport, TaskRequest,
 };
-pub use registry::{COMMAND_TOOL, ToolRegistry};
+pub use registry::{COMMAND_TOOL, ToolFiles, ToolRegistry, read_tool_sets};
 pub use sandbox::{Grant, GrantRefusal, GrantRules, Limits, SandboxPlan};
 pub use trail::{EventKind, FileTrail, MemoryTrail, Trail, TrailEntry, TrailEvent};

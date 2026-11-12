@@ -1789,17 +1789,16 @@ fn the_users_acts_on_memory_and_schedules_are_never_performed() {
                 // it. The best it gets is a question to the user.
                 assert!(!decision.is_allow(), "{explain}");
             }
-            AgentOperation::ScheduleProposal => {
-                // A proposal changes nothing, so it is an ordinary class 1
-                // action, attended or not.
+            // A proposal changes nothing, so it is an ordinary class 1
+            // action, attended or not.
+            AgentOperation::ScheduleProposal
                 if policy.mode == Mode::Normal
                     && !context.model_flags_consequential
-                    && !(context.presence == Presence::Attended && context.session_locked)
-                {
-                    proposed += 1;
-                    assert!(decision.is_allow(), "{explain}");
-                    assert_eq!(decision.class(), ActionClass::Reversible, "{explain}");
-                }
+                    && !(context.presence == Presence::Attended && context.session_locked) =>
+            {
+                proposed += 1;
+                assert!(decision.is_allow(), "{explain}");
+                assert_eq!(decision.class(), ActionClass::Reversible, "{explain}");
             }
             _ => {}
         }

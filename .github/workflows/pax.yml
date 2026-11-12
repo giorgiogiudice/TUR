@@ -136,6 +136,17 @@ jobs:
           sudo install -m 0755 services/tur-runtime/target/debug/tur-runtime /usr/bin/tur-runtime
           sudo mkdir -p /usr/share/tur /usr/share/tur-pax-e2e
           sudo cp -r catalogue /usr/share/tur/catalogue
+          # Each component's assistant tools, where tur-pax looks for them
+          # when it is not told otherwise: one directory for each component,
+          # holding its manifest and, beside it, its adapters.
+          for component in services/*/; do
+            if [ -f "$component/agent-tools.json" ]; then
+              name="$(basename "$component")"
+              sudo install -D -m 0644 "$component/agent-tools.json" "/usr/share/tur/pax/tools/$name/agent-tools.json"
+              sudo install -D -m 0644 "$component/agent-tools.adapter.json" "/usr/share/tur/pax/tools/$name/agent-tools.adapter.json"
+            fi
+          done
+          find /usr/share/tur/pax -type f | sort
           sudo cp -r services/tur-device-manager/tests/fixtures/laptop /usr/share/tur-pax-e2e/laptop
           sudo install -m 0644 tests/pax/probe_sockets.py /usr/share/tur-pax-e2e/probe_sockets.py
           sudo install -m 0755 tests/pax/tur-pax-test-tool /usr/bin/tur-pax-test-tool

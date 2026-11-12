@@ -19,8 +19,30 @@
 //!   input by which a model could name another sandbox.
 //!
 //! A tool that has no adapter cannot be performed, so it is not offered.
+//!
+//! # Where the files come from
+//!
+//! Every component ships its own tools (AGENTS.md: "each component ships the
+//! tools P@x needs as it lands"): a manifest, [`MANIFEST_FILE`], and beside
+//! it the adapters that perform its tools with the component's own program,
+//! [`ADAPTER_FILE`]. Installed, each component has a directory of its own
+//! under one directory of tool sets, and [`read_tool_sets`] reads them all:
+//!
+//! ```text
+//! /usr/share/tur/pax/tools/
+//!     tur-storage/agent-tools.json
+//!     tur-storage/agent-tools.adapter.json
+//!     tur-diagnostics/agent-tools.json
+//!     tur-diagnostics/agent-tools.adapter.json
+//! ```
+//!
+//! The source tree has the same shape: `services/<component>/` holds the two
+//! files, so `services/` is itself a directory of tool sets.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::fs;
+use std::io;
+use std::path::Path;
 
 use serde_json::{Map, Value};
 use tur_pax_providers::ToolDefinition;
@@ -65,6 +87,84 @@ const BUILT_IN_MANIFEST: &str = r#"{
     }]
 }"#;
 
+/// The file name of a component's tool manifest.
+pub const MANIFEST_FILE: &str = "agent-tools.json";
+
+/// The file name of a component's adapters, beside its manifest.
+pub const ADAPTER_FILE: &str = "agent-tools.adapter.json";
+
+/// What a directory of tool sets holds: the texts to hand to
+/// [`ToolRegistry::load`].
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ToolFiles {
+    /// The names of the components that ship tools, in name order.
+    pub components: Vec<String>,
+    /// The text of each component's manifest, in the same order.
+    pub manifests: Vec<String>,
+    /// The text of each adapter file that exists, in the same order.
+    pub adapters: Vec<String>,
+}
+
+/// Read a directory of tool sets.
+///
+/// Every subdirectory that holds a [`MANIFEST_FILE`] is a component's tool
+/// set; its [`ADAPTER_FILE`] is read too if it is there. A component may
+/// declare tools before a program can perform them: such tools are loaded
+/// and not offered. A subdirectory with neither file is not a tool set and
+/// is passed over. Components are read in name order. Nothing is checked
+/// here: the texts are checked together by [`ToolRegistry::load`].
+///
+/// # Errors
+///
+/// The directory or a file in it cannot be read; or a subdirectory holds an
+/// adapter file and no manifest, which can only be a mistake.
+pub fn read_tool_sets(directory: &Path) -> io::Result<ToolFiles> {
+    let describe = |path: &Path, error: io::Error| {
+        io::Error::new(error.kind(), format!("{}: {error}", path.display()))
+    };
+    let mut components: Vec<(String, std::path::PathBuf)> = Vec::new();
+    for entry in fs::read_dir(directory).map_err(|error| describe(directory, error))? {
+        let path = entry.map_err(|error| describe(directory, error))?.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = path
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        components.push((name, path));
+    }
+    components.sort();
+
+    let mut files = ToolFiles::default();
+    for (name, path) in components {
+        let manifest = path.join(MANIFEST_FILE);
+        let adapter = path.join(ADAPTER_FILE);
+        if !manifest.is_file() {
+            if adapter.is_file() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!(
+                        "{}: adapters without a manifest ({MANIFEST_FILE})",
+                        adapter.display()
+                    ),
+                ));
+            }
+            continue;
+        }
+        files
+            .manifests
+            .push(fs::read_to_string(&manifest).map_err(|error| describe(&manifest, error))?);
+        if adapter.is_file() {
+            files
+                .adapters
+                .push(fs::read_to_string(&adapter).map_err(|error| describe(&adapter, error))?);
+        }
+        files.components.push(name);
+    }
+    Ok(files)
+}
+
 /// One service: its manifest and the adapters of its tools.
 #[derive(Debug, Clone, PartialEq)]
 struct Service {
@@ -99,6 +199,21 @@ pub enum Performer<'a> {
         /// The program and its arguments.
         argv: Vec<String>,
     },
+}
+
+impl Performer<'_> {
+    /// The command line the action would be performed with: the program,
+    /// then its arguments. Nothing is run.
+    ///
+    /// # Errors
+    ///
+    /// A value of the call cannot be passed to the program safely.
+    pub fn command_line(&self) -> Result<Vec<String>, Fault> {
+        match self {
+            Performer::Adapter { adapter, arguments } => adapter.argv(arguments),
+            Performer::Command { argv } => Ok(argv.clone()),
+        }
+    }
 }
 
 /// A tool call that became a proposed action.

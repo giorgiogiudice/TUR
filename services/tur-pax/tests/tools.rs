@@ -4,34 +4,48 @@
 //! today, and the adapters that perform them with the components' own
 //! command-line programs.
 //!
-//! The manifests of the device manager and of storage are the ones those
-//! components ship (`agent-tools.json`). Diagnostics, the catalogue and the
-//! runtime manager do not ship one yet; theirs are kept here, in
-//! `tools/manifests`, until they do.
+//! Every component ships its own two files: `agent-tools.json` and, beside
+//! it, `agent-tools.adapter.json`. This crate holds none of them. Each
+//! component also has a test of its own (`tests/agent_tools.rs`) that loads
+//! its files with this crate's loader and holds every command line against
+//! the program it has built. The tests here look at all of them together:
+//! that the whole set loads as one registry, with no name used twice, and
+//! that the source tree is read the way an installed directory of tool sets
+//! is.
 //!
-//! These tests load the files and check the command lines. That the programs
-//! really run in the sandbox and return what the adapters expect is checked
-//! by the `pax` workflow.
+//! That the programs really run in the sandbox and return what the adapters
+//! expect is checked by the `pax` workflow.
+
+use std::path::Path;
 
 use serde_json::{Map, Value, json};
-use tur_pax::registry::{Performer, ToolRegistry};
+use tur_pax::registry::{ADAPTER_FILE, MANIFEST_FILE, Performer, ToolRegistry, read_tool_sets};
 use tur_pax::sandbox::is_system_visible;
 use tur_pax::{Action, ActionClass};
 
+/// The components that ship tools, in name order.
+const COMPONENTS: [&str; 5] = [
+    "tur-catalogue",
+    "tur-device-manager",
+    "tur-diagnostics",
+    "tur-runtime",
+    "tur-storage",
+];
+
 const MANIFESTS: [&str; 5] = [
+    include_str!("../../tur-catalogue/agent-tools.json"),
     include_str!("../../tur-device-manager/agent-tools.json"),
+    include_str!("../../tur-diagnostics/agent-tools.json"),
+    include_str!("../../tur-runtime/agent-tools.json"),
     include_str!("../../tur-storage/agent-tools.json"),
-    include_str!("../tools/manifests/catalogue.json"),
-    include_str!("../tools/manifests/diagnostics.json"),
-    include_str!("../tools/manifests/runtime.json"),
 ];
 
 const ADAPTERS: [&str; 5] = [
-    include_str!("../tools/adapters/catalogue.json"),
-    include_str!("../tools/adapters/device.json"),
-    include_str!("../tools/adapters/diagnostics.json"),
-    include_str!("../tools/adapters/runtime.json"),
-    include_str!("../tools/adapters/storage.json"),
+    include_str!("../../tur-catalogue/agent-tools.adapter.json"),
+    include_str!("../../tur-device-manager/agent-tools.adapter.json"),
+    include_str!("../../tur-diagnostics/agent-tools.adapter.json"),
+    include_str!("../../tur-runtime/agent-tools.adapter.json"),
+    include_str!("../../tur-storage/agent-tools.adapter.json"),
 ];
 
 /// The adapter file format, as published.
@@ -68,6 +82,77 @@ fn command_line(registry: &ToolRegistry, tool: &str, arguments: Value) -> Vec<St
 }
 
 #[test]
+fn the_source_tree_is_read_as_a_directory_of_tool_sets() {
+    // `services/` has the shape of an installed directory of tool sets: one
+    // subdirectory for each component, with its two files. The loader the
+    // program uses reads it, and finds exactly the components that ship
+    // tools. This crate's own directory holds neither file and is passed
+    // over.
+    let services = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    let files = read_tool_sets(&services).expect("the services directory can be read");
+    assert_eq!(files.components, COMPONENTS);
+    assert_eq!(files.manifests, MANIFESTS);
+    assert_eq!(files.adapters, ADAPTERS);
+    assert_eq!((MANIFEST_FILE, ADAPTER_FILE), ("agent-tools.json", "agent-tools.adapter.json"));
+    for component in ["tur-pax", "tur-pax-providers", "tur-pax-memory"] {
+        assert!(!services.join(component).join(MANIFEST_FILE).exists());
+        assert!(!services.join(component).join(ADAPTER_FILE).exists());
+    }
+    // Nothing is left where the files used to be.
+    assert!(!Path::new(env!("CARGO_MANIFEST_DIR")).join("tools").exists());
+
+    // What it read loads as the registry the other tests use.
+    let loaded = ToolRegistry::load(&files.manifests, &files.adapters, true)
+        .expect("the tool sets of the source tree load");
+    assert_eq!(loaded, registry());
+}
+
+#[test]
+fn a_directory_of_tool_sets_is_read_component_by_component() {
+    let root = std::env::temp_dir().join(format!("tur-pax-tool-sets-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let write = |relative: &str, text: &str| {
+        let path = root.join(relative);
+        std::fs::create_dir_all(path.parent().expect("a parent")).expect("a directory");
+        std::fs::write(path, text).expect("a file");
+    };
+    // Two components, the second without adapters yet; a directory that is
+    // not a tool set; and files that are not in a component's directory.
+    write("b-storage/agent-tools.json", MANIFESTS[4]);
+    write("b-storage/agent-tools.adapter.json", ADAPTERS[4]);
+    write("a-device/agent-tools.json", MANIFESTS[1]);
+    write("c-other/README", "not a tool set");
+    write("c-other/tools.json", "{}");
+    write("agent-tools.json", "{ not read: it is in no component's directory");
+    write("a-device/notes.json", "{ not read: it has another name");
+
+    let files = read_tool_sets(&root).expect("the directory can be read");
+    assert_eq!(files.components, ["a-device", "b-storage"]);
+    assert_eq!(files.manifests, [MANIFESTS[1], MANIFESTS[4]]);
+    assert_eq!(files.adapters, [ADAPTERS[4]]);
+    let registry = ToolRegistry::load(&files.manifests, &files.adapters, false)
+        .expect("the two tool sets load");
+    // The component without adapters declares tools; none is offered.
+    let offered: Vec<String> = registry.offered().into_iter().map(|tool| tool.name).collect();
+    assert_eq!(offered, ["storage_list_volumes"]);
+    assert!(registry.unavailable().contains(&"device_get_inventory".to_owned()));
+
+    // Adapters without a manifest can only be a mistake.
+    write("d-broken/agent-tools.adapter.json", ADAPTERS[0]);
+    let error = read_tool_sets(&root).expect_err("adapters without a manifest");
+    assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
+    assert!(error.to_string().contains("d-broken"), "{error}");
+
+    // A directory that does not exist is an error, with its name.
+    let missing = root.join("missing");
+    let error = read_tool_sets(&missing).expect_err("no such directory");
+    assert_eq!(error.kind(), std::io::ErrorKind::NotFound);
+    assert!(error.to_string().contains("missing"), "{error}");
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
 fn the_shipped_tool_set_loads_and_every_offered_tool_only_observes() {
     let registry = registry();
     let offered = registry.offered();
@@ -75,14 +160,14 @@ fn the_shipped_tool_set_loads_and_every_offered_tool_only_observes() {
     assert_eq!(
         names,
         [
-            "device_get_inventory",
-            "device_list_problems",
-            "storage_list_volumes",
             "catalogue_search",
             "catalogue_show",
             "catalogue_route",
+            "device_get_inventory",
+            "device_list_problems",
             "diag_get_status",
             "runtime_inspect_file",
+            "storage_list_volumes",
             "run_readonly_command"
         ]
     );

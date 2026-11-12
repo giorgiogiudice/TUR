@@ -277,6 +277,9 @@ def system_text(body):
     return None
 
 
+# The directory of tool sets tur-pax reads when it is not told another.
+INSTALLED_TOOLS = Path("/usr/share/tur/pax/tools")
+
 # Where each adapter sends its requests.
 ENDPOINTS = {"anthropic": "/v1/messages", "openai": "/v1/responses", "google": "/v1beta/interactions"}
 
@@ -343,19 +346,43 @@ class Test:
     # ------------------------------------------------------------- setup
 
     def tool_set(self):
-        """The tool set of the test: what ships, plus two test services."""
+        """The tool set of the test: what ships, plus two test services.
+
+        What ships is not copied here. Each component's agent-tools.json and
+        agent-tools.adapter.json were installed by the workflow into the
+        directory of tool sets tur-pax reads by default, one subdirectory for
+        each component, and tur-pax is not told where they are. This checks
+        that they are there, exactly as the components have them.
+        """
         for directory in (self.manifests, self.adapters):
             if directory.exists():
                 shutil.rmtree(directory)
             directory.mkdir(parents=True)
         services = ROOT / "services"
-        shutil.copy(services / "tur-device-manager" / "agent-tools.json", self.manifests / "device.json")
-        shutil.copy(services / "tur-storage" / "agent-tools.json", self.manifests / "storage.json")
-        for path in sorted((services / "tur-pax" / "tools" / "manifests").glob("*.json")):
-            shutil.copy(path, self.manifests / path.name)
-        # The adapters that ship, as they are.
-        for path in sorted((services / "tur-pax" / "tools" / "adapters").glob("*.json")):
-            shutil.copy(path, self.adapters / path.name)
+        name = "tool sets"
+        print(name, flush=True)
+        shipped = sorted(path.parent.name for path in services.glob("*/agent-tools.json"))
+        self.checks.equal(
+            name,
+            "five components ship assistant tools",
+            shipped,
+            ["tur-catalogue", "tur-device-manager", "tur-diagnostics", "tur-runtime", "tur-storage"],
+        )
+        installed = sorted(path.name for path in INSTALLED_TOOLS.iterdir()) if INSTALLED_TOOLS.is_dir() else []
+        self.checks.equal(name, f"each has its directory under {INSTALLED_TOOLS}", installed, shipped)
+        different = [
+            f"{component}/{file}"
+            for component in shipped
+            for file in ("agent-tools.json", "agent-tools.adapter.json")
+            if not (INSTALLED_TOOLS / component / file).is_file()
+            or (INSTALLED_TOOLS / component / file).read_bytes() != (services / component / file).read_bytes()
+        ]
+        self.checks.equal(name, "the installed manifests and adapters are the components' own", different, [])
+        self.checks.check(
+            name,
+            "the assistant itself holds no manifest and no adapter of a component",
+            not (services / "tur-pax" / "tools").exists(),
+        )
         # A test service with one tool of each class 0 to 3, and a tool that
         # reads a fixture tree instead of this machine.
         data = services / "tur-pax" / "tests" / "data"

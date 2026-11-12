@@ -232,20 +232,46 @@ event.
 
 | Tool | Class | Performed by | Manifest |
 |---|---|---|---|
-| `diag_get_status` | 0 | `tur-diag status --json` | `services/tur-pax/tools/manifests/diagnostics.json` |
-| `device_get_inventory` | 0 | `tur-device inventory --json --redact` | `services/tur-device-manager/agent-tools.json` |
+| `diag_get_status` | 0 | `tur-diag status --json` | `services/tur-diagnostics` |
+| `device_get_inventory` | 0 | `tur-device inventory --json --redact` | `services/tur-device-manager` |
 | `device_list_problems` | 0 | `tur-device problems --json` | the same |
-| `storage_list_volumes` | 0 | `lsblk --json --bytes --output-all`, fed to `tur-storage volumes --from /dev/stdin --json` | `services/tur-storage/agent-tools.json` |
-| `catalogue_search` | 0 | `tur-catalogue --catalogue /usr/share/tur/catalogue search --json -- <query>` | `services/tur-pax/tools/manifests/catalogue.json` |
+| `storage_list_volumes` | 0 | `lsblk --json --bytes --output-all`, fed to `tur-storage volumes --from /dev/stdin --json` | `services/tur-storage` |
+| `catalogue_search` | 0 | `tur-catalogue --catalogue /usr/share/tur/catalogue search --json -- <query>` | `services/tur-catalogue` |
 | `catalogue_show` | 0 | `tur-catalogue … show --json -- <id>` | the same |
 | `catalogue_route` | 0 | `tur-catalogue … route --json -- <id>` | the same |
-| `runtime_inspect_file` | 0 | `tur-runtime inspect --json -- <path>` | `services/tur-pax/tools/manifests/runtime.json` |
+| `runtime_inspect_file` | 0 | `tur-runtime inspect --json -- <path>` | `services/tur-runtime` |
 | `run_readonly_command` | 0 | built in: any argument vector, in the read-only sandbox | built in |
 
-The adapters are in `services/tur-pax/tools/adapters`. `tur-pax run` reads
-manifests from `/usr/share/tur/pax/manifests` and adapters from
-`/usr/share/tur/pax/adapters` unless told otherwise; nothing installs them there
-yet.
+**Every component ships its own tools.** A component that has tools for P@x
+holds two files beside its code: the manifest, `agent-tools.json`, and the
+adapters that perform its tools with its own program,
+`agent-tools.adapter.json`. `services/tur-pax` holds neither for any other
+component. A component's own test (`tests/agent_tools.rs`) loads its two files
+with P@x's loader, checks every class, and holds every command line an adapter
+builds against the program the component has just built: the subcommand must
+be one the program lists and each option one its help describes. Where the
+tool can be run on a fixture, it is run.
+
+Installed, each component has a directory of its own under one directory of
+tool sets, and `tur-pax run` reads them all (`registry::read_tool_sets`):
+
+```text
+/usr/share/tur/pax/tools/
+    tur-catalogue/agent-tools.json
+    tur-catalogue/agent-tools.adapter.json
+    tur-storage/agent-tools.json
+    tur-storage/agent-tools.adapter.json
+    …
+```
+
+`--tools DIR` names another directory of tool sets; the source tree's
+`services/` has the same shape and can be named directly. A subdirectory with
+a manifest and no adapters is loaded and none of its tools is offered; one
+with adapters and no manifest is an error; one with neither is not a tool set.
+`--manifests DIR` and `--adapters DIR` still name flat directories of further
+files, one per service, read in addition; the tests use them for their own
+services. Nothing installs the tool sets on the image yet; the `pax` workflow
+installs them on its runner and lets `tur-pax` find them by default.
 
 Declared by a component but not offered, because no program performs them yet:
 `device_list`, `device_get`, `storage_preview_mount`, `storage_mount`,
@@ -639,10 +665,10 @@ change: they were accepted when the two components were added.
 | Component | Change | Until then |
 |---|---|---|
 | `tur-pax-providers` | Done: tool-call arguments are parsed strictly and the argument text comes with the call (`ToolCallEnd.arguments_text`). | – |
-| `tur-diagnostics`, `tur-catalogue`, `tur-runtime` | Ship an `agent-tools.json`. | The manifests are in `services/tur-pax/tools/manifests`. |
+| `tur-diagnostics`, `tur-catalogue`, `tur-runtime` | Done: each ships `agent-tools.json` and `agent-tools.adapter.json`, as `tur-storage` and `tur-device-manager` do. | – |
 | `tur-storage` | A way to list volumes of the live system (`volumes` takes only a captured `lsblk` file), and an access spelling shared by the manifest (`read-only`) and the command line (`ro`). | The adapter feeds `lsblk` to `volumes --from /dev/stdin`. `storage_preview_mount` has no adapter. |
 | `tur-device-manager` | Command-line forms for `device_list` (with categories) and `device_get`. | Not offered. |
-| The image | Install manifests to `/usr/share/tur/pax/manifests`, adapters to `/usr/share/tur/pax/adapters`, the catalogue to `/usr/share/tur/catalogue`; make sure `bubblewrap` and `prlimit` are present. | `tur-pax run --manifests DIR --adapters DIR`. |
+| The image | Install each component's two tool files to `/usr/share/tur/pax/tools/<component>/`, the catalogue to `/usr/share/tur/catalogue`; make sure `bubblewrap` and `prlimit` are present. | `tur-pax run --tools DIR`. |
 | `agent-policy.md` | Done: section 9 points here for `run` and `chat`. | – |
 
 ## 13. Findings on the design
