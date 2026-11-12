@@ -445,7 +445,9 @@ command_line() {
     echo 'install. Type "exit" to return to the installer.'
     echo
     stty isig 2> /dev/null
-    PS1='tur-installer# ' /usr/bin/bash --norc --noprofile -i
+    # Interactive bash writes its prompt and what is typed to standard error,
+    # which this unit sends to the journal: give it the console instead.
+    PS1='tur-installer# ' /usr/bin/bash --norc --noprofile -i 2>&1
     stty -isig 2> /dev/null
     mark "shell=ended"
 }
@@ -586,9 +588,10 @@ screen_confirm() {
         done < <(contents "${d_name[i]}")
     fi
     say ""
-    say "  What will be written: a new partition table, a small boot partition, an"
-    say "  EFI system partition, and one ext4 partition with TUR on the rest of the"
-    say "  disk. Not encrypted. No other operating system and no data are kept."
+    say "  What will be written: a new GPT partition table with a 1 MiB BIOS boot"
+    say "  partition, an EFI system partition, and one ext4 partition with TUR on"
+    say "  the rest of the disk. Not encrypted. No other operating system and no"
+    say "  data are kept."
     say ""
     mark "confirm name=${d_name[i]} by_id=${d_byid[i]} phrase=\"${phrase}\""
     say "To erase this disk and install TUR, type exactly:  ${phrase}"
