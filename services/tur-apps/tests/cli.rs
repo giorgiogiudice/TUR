@@ -98,7 +98,8 @@ impl World {
     }
 
     fn write_entry(&self, id: &str, text: &str) {
-        let header = "# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0\nschema_version = 1\n";
+        let header =
+            "# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0\nschema_version = 1\n";
         fs::write(
             self.catalogue.join(format!("{id}.toml")),
             format!("{header}id = \"{id}\"\n{text}"),
@@ -253,11 +254,7 @@ fn routes_that_are_not_built_are_refused_and_built_ones_are_named() {
 #[test]
 fn a_pinned_windows_installer_is_planned_with_its_size_digest_and_source() {
     let world = World::new("windows-plan", None);
-    let run = world.run(&[
-        "plan",
-        "org.notepad-plus-plus.notepad-plus-plus",
-        "--json",
-    ]);
+    let run = world.run(&["plan", "org.notepad-plus-plus.notepad-plus-plus", "--json"]);
     assert_eq!(run.status, 0, "{}", run.stdout);
     let plan = run.json();
     assert_eq!(plan["kind"], "plan");
@@ -308,10 +305,12 @@ fn a_flatpak_is_planned_installed_listed_and_removed_keeping_its_data() {
     let run = world.run(&["plan", "org.example.viewer", "--json"]);
     assert_eq!(run.status, 3);
     assert_eq!(run.json()["error"]["code"], "TUR-DESKTOP-APPS-008");
-    assert!(run.json()["error"]["message"]
-        .as_str()
-        .unwrap()
-        .contains("tur-apps sources enable flathub"));
+    assert!(
+        run.json()["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("tur-apps sources enable flathub")
+    );
 
     switch_flathub_on(&world);
     fs::write(
@@ -338,12 +337,18 @@ fn a_flatpak_is_planned_installed_listed_and_removed_keeping_its_data() {
         .iter()
         .map(|access| access["permission"].as_str().unwrap())
         .collect();
-    assert_eq!(permissions, ["xdg-pictures:ro", "network", "ipc", "x11", "wayland"]);
+    assert_eq!(
+        permissions,
+        ["xdg-pictures:ro", "network", "ipc", "x11", "wayland"]
+    );
 
     // Without confirmation, nothing is installed.
     let run = world.run(&["install", "org.example.viewer", "--events"]);
     assert_eq!(run.status, 3);
-    assert_eq!(run.events().last().unwrap()["error"]["code"], "TUR-DESKTOP-APPS-013");
+    assert_eq!(
+        run.events().last().unwrap()["error"]["code"],
+        "TUR-DESKTOP-APPS-013"
+    );
     assert!(!world.log("flatpak.log").contains("install --user"));
 
     let run = world.run(&["install", "org.example.viewer", "--yes", "--events"]);
@@ -358,7 +363,12 @@ fn a_flatpak_is_planned_installed_listed_and_removed_keeping_its_data() {
     assert_eq!(last["result"]["version"], "1.0");
     let added = last["result"]["flatpak"]["added_refs"].as_array().unwrap();
     assert_eq!(added.len(), 2, "{added:?}");
-    assert!(world.data().join("tur/apps/installed/org.example.viewer.json").is_file());
+    assert!(
+        world
+            .data()
+            .join("tur/apps/installed/org.example.viewer.json")
+            .is_file()
+    );
 
     // Installing again is refused.
     let run = world.run(&["install", "org.example.viewer", "--yes", "--events"]);
@@ -381,14 +391,19 @@ fn a_flatpak_is_planned_installed_listed_and_removed_keeping_its_data() {
     fs::write(data.join("notes.txt"), b"mine").unwrap();
     let run = world.run(&["remove", "org.example.viewer", "--events"]);
     assert_eq!(run.status, 0, "{}{}", run.stdout, run.stderr);
-    let result = &run.events().last().unwrap()["result"];
+    let result = run.events().last().unwrap()["result"].clone();
     assert_eq!(result["data"], "keep");
     assert_eq!(result["left_behind"].as_array().unwrap().len(), 0);
     assert_eq!(fs::read(data.join("notes.txt")).unwrap(), b"mine");
     // The runtime it brought in went with it; no application is left.
     assert_eq!(fs::read_to_string(world.state("refs")).unwrap().trim(), "");
     assert!(!world.data().join("flatpak/app/org.example.Viewer").exists());
-    assert!(!world.data().join("tur/apps/installed/org.example.viewer.json").exists());
+    assert!(
+        !world
+            .data()
+            .join("tur/apps/installed/org.example.viewer.json")
+            .exists()
+    );
     let run = world.run(&["remove", "org.example.viewer", "--events"]);
     assert_eq!(run.status, 6);
 
@@ -398,7 +413,11 @@ fn a_flatpak_is_planned_installed_listed_and_removed_keeping_its_data() {
     let run = world.run(&["remove", "org.example.viewer", "--delete-data", "--events"]);
     assert_eq!(run.status, 0, "{}{}", run.stdout, run.stderr);
     assert!(!data.exists());
-    assert!(world.log("flatpak.log").contains("--delete-data app/org.example.Viewer/x86_64/stable"));
+    assert!(
+        world
+            .log("flatpak.log")
+            .contains("--delete-data app/org.example.Viewer/x86_64/stable")
+    );
 }
 
 #[test]
@@ -408,10 +427,18 @@ fn a_failed_flatpak_installation_takes_back_what_it_added() {
     fs::write(world.state("fail-install"), b"").unwrap();
     let run = world.run(&["install", "org.example.viewer", "--yes", "--events"]);
     assert_eq!(run.status, 7, "{}", run.stdout);
-    assert_eq!(run.events().last().unwrap()["error"]["code"], "TUR-DESKTOP-APPS-010");
+    assert_eq!(
+        run.events().last().unwrap()["error"]["code"],
+        "TUR-DESKTOP-APPS-010"
+    );
     // The runtime the attempt installed was removed again; no record.
     assert_eq!(fs::read_to_string(world.state("refs")).unwrap().trim(), "");
-    assert!(!world.data().join("tur/apps/installed/org.example.viewer.json").exists());
+    assert!(
+        !world
+            .data()
+            .join("tur/apps/installed/org.example.viewer.json")
+            .exists()
+    );
 }
 
 #[test]
@@ -443,16 +470,26 @@ fn a_windows_application_is_downloaded_checked_installed_and_removed_keeping_doc
     assert_eq!(progress["total"], BODY.len());
     // tur-runtime was given the checked file, under the catalogue's id.
     let log = world.log("runtime.log");
-    assert!(log.contains("--app-id org.example.tool --name Example Tool --json"), "{log}");
+    assert!(
+        log.contains("--app-id org.example.tool --name Example Tool --json"),
+        "{log}"
+    );
     assert_eq!(fs::read(world.state("installed-file")).unwrap(), BODY);
     // The download is gone; the record keeps its digest.
-    assert!(!world.home().join(".cache/tur/apps/downloads/org.example.tool").exists());
+    assert!(
+        !world
+            .home()
+            .join(".cache/tur/apps/downloads/org.example.tool")
+            .exists()
+    );
     let result = &events.last().unwrap()["result"];
     assert_eq!(result["source"]["pinned"], true);
     assert_eq!(result["source"]["size"], BODY.len());
 
     // The application keeps a document in its private home.
-    let home = world.data().join("tur/runtime/prefixes/org.example.tool/home");
+    let home = world
+        .data()
+        .join("tur/runtime/prefixes/org.example.tool/home");
     fs::create_dir_all(home.join("Documents")).unwrap();
     fs::write(home.join("Documents/letter.txt"), b"Dear reader").unwrap();
 
@@ -464,7 +501,7 @@ fn a_windows_application_is_downloaded_checked_installed_and_removed_keeping_doc
 
     let run = world.run(&["remove", "org.example.tool", "--events"]);
     assert_eq!(run.status, 0, "{}{}", run.stdout, run.stderr);
-    let result = &run.events().last().unwrap()["result"];
+    let result = run.events().last().unwrap()["result"].clone();
     assert_eq!(result["data"], "keep");
     let kept_root = world.data().join("tur/apps/kept/org.example.tool");
     let kept: Vec<PathBuf> = fs::read_dir(&kept_root)
@@ -481,22 +518,55 @@ fn a_windows_application_is_downloaded_checked_installed_and_removed_keeping_doc
         "settings\n"
     );
     // Removed by tur-runtime, with the backups kept; nothing else left.
-    assert!(world.log("runtime.log").contains("app uninstall org.example.tool --json\n"));
-    assert!(!world.data().join("tur/runtime/prefixes/org.example.tool").exists());
-    assert!(!world.data().join("tur/runtime/launchers/org.example.tool").exists());
-    assert!(!world.data().join("tur/apps/installed/org.example.tool.json").exists());
+    assert!(
+        world
+            .log("runtime.log")
+            .contains("app uninstall org.example.tool --json\n")
+    );
+    assert!(
+        !world
+            .data()
+            .join("tur/runtime/prefixes/org.example.tool")
+            .exists()
+    );
+    assert!(
+        !world
+            .data()
+            .join("tur/runtime/launchers/org.example.tool")
+            .exists()
+    );
+    assert!(
+        !world
+            .data()
+            .join("tur/apps/installed/org.example.tool.json")
+            .exists()
+    );
 }
 
 #[test]
 fn a_windows_application_removed_with_its_data_leaves_nothing() {
     let world = test_world("windows-delete");
     fs::write(world.state("download"), BODY).unwrap();
-    assert_eq!(world.run(&["install", "org.example.tool", "--yes", "--events"]).status, 0);
+    assert_eq!(
+        world
+            .run(&["install", "org.example.tool", "--yes", "--events"])
+            .status,
+        0
+    );
     let run = world.run(&["remove", "org.example.tool", "--delete-data", "--events"]);
     assert_eq!(run.status, 0, "{}{}", run.stdout, run.stderr);
-    assert!(world.log("runtime.log").contains("app uninstall org.example.tool --json --remove-backups"));
+    assert!(
+        world
+            .log("runtime.log")
+            .contains("app uninstall org.example.tool --json --remove-backups")
+    );
     assert!(!world.data().join("tur/apps/kept").exists());
-    assert!(!world.data().join("tur/runtime/prefixes/org.example.tool").exists());
+    assert!(
+        !world
+            .data()
+            .join("tur/runtime/prefixes/org.example.tool")
+            .exists()
+    );
 }
 
 #[test]
@@ -507,15 +577,31 @@ fn a_corrupted_download_is_refused_before_anything_runs() {
     fs::write(world.state("download"), &wrong).unwrap();
     let run = world.run(&["install", "org.example.tool", "--yes", "--events"]);
     assert_eq!(run.status, 5, "{}", run.stdout);
-    let error = &run.events().last().unwrap()["error"];
+    let error = run.events().last().unwrap()["error"].clone();
     assert_eq!(error["code"], "TUR-DESKTOP-APPS-006");
-    assert!(error["message"].as_str().unwrap().contains("Nothing in it was run"));
+    assert!(
+        error["message"]
+            .as_str()
+            .unwrap()
+            .contains("Nothing in it was run")
+    );
     // tur-runtime was never called; nothing is kept, nothing recorded.
     assert_eq!(world.log("runtime.log"), "");
-    assert!(world.log("curl.log").contains("https://downloads.example.org/1.0/tool-1.0-setup.exe"));
-    let downloads = world.home().join(".cache/tur/apps/downloads/org.example.tool");
+    assert!(
+        world
+            .log("curl.log")
+            .contains("https://downloads.example.org/1.0/tool-1.0-setup.exe")
+    );
+    let downloads = world
+        .home()
+        .join(".cache/tur/apps/downloads/org.example.tool");
     assert!(!downloads.exists() || fs::read_dir(&downloads).unwrap().count() == 0);
-    assert!(!world.data().join("tur/apps/installed/org.example.tool.json").exists());
+    assert!(
+        !world
+            .data()
+            .join("tur/apps/installed/org.example.tool.json")
+            .exists()
+    );
 
     // A shorter file is refused the same way.
     fs::write(world.state("download"), &BODY[..10]).unwrap();
@@ -527,7 +613,10 @@ fn a_corrupted_download_is_refused_before_anything_runs() {
     fs::remove_file(world.state("download")).unwrap();
     let run = world.run(&["install", "org.example.tool", "--yes", "--events"]);
     assert_eq!(run.status, 7);
-    assert_eq!(run.events().last().unwrap()["error"]["code"], "TUR-DESKTOP-APPS-007");
+    assert_eq!(
+        run.events().last().unwrap()["error"]["code"],
+        "TUR-DESKTOP-APPS-007"
+    );
     assert_eq!(world.log("runtime.log"), "");
 }
 
@@ -562,7 +651,7 @@ fn a_file_you_give_is_checked_from_the_hash_on() {
         "--events",
     ]);
     assert_eq!(run.status, 0, "{}{}", run.stdout, run.stderr);
-    let result = &run.events().last().unwrap()["result"];
+    let result = run.events().last().unwrap()["result"].clone();
     assert_eq!(result["source"]["kind"], "user-file");
     assert_eq!(result["source"]["pinned"], true);
     assert_eq!(world.log("curl.log"), "");
@@ -595,10 +684,12 @@ fn proprietary_software_is_never_downloaded_and_takes_your_file() {
     let plan = run.json();
     assert_eq!(plan["source"]["kind"], "user-file");
     assert!(plan["downloads"].as_array().unwrap().is_empty());
-    assert!(plan["source"]["verification"]
-        .as_str()
-        .unwrap()
-        .contains("cannot check this file against its publisher"));
+    assert!(
+        plan["source"]["verification"]
+            .as_str()
+            .unwrap()
+            .contains("cannot check this file against its publisher")
+    );
     assert_eq!(world.log("curl.log"), "");
 
     // The game with kernel anti-cheat has no route at all.
@@ -611,7 +702,12 @@ fn proprietary_software_is_never_downloaded_and_takes_your_file() {
 fn updates_are_found_and_applied_for_a_flatpak_and_refused_for_windows() {
     let world = test_world("updates");
     switch_flathub_on(&world);
-    assert_eq!(world.run(&["install", "org.example.viewer", "--yes", "--events"]).status, 0);
+    assert_eq!(
+        world
+            .run(&["install", "org.example.viewer", "--yes", "--events"])
+            .status,
+        0
+    );
     fs::write(world.state("updates"), "org.example.Viewer\t2.0\tflathub\n").unwrap();
     let run = world.run(&["list", "--check-updates", "--json"]);
     let update = &run.json()["applications"][0]["update"];
@@ -619,13 +715,25 @@ fn updates_are_found_and_applied_for_a_flatpak_and_refused_for_windows() {
     assert_eq!(update["version"], "2.0");
     let run = world.run(&["update", "org.example.viewer", "--events"]);
     assert_eq!(run.status, 0, "{}{}", run.stdout, run.stderr);
-    assert!(world.log("flatpak.log").contains("update --user --noninteractive app/org.example.Viewer/x86_64/stable"));
+    assert!(
+        world
+            .log("flatpak.log")
+            .contains("update --user --noninteractive app/org.example.Viewer/x86_64/stable")
+    );
 
     fs::write(world.state("download"), BODY).unwrap();
-    assert_eq!(world.run(&["install", "org.example.tool", "--yes", "--events"]).status, 0);
+    assert_eq!(
+        world
+            .run(&["install", "org.example.tool", "--yes", "--events"])
+            .status,
+        0
+    );
     let run = world.run(&["update", "org.example.tool", "--events"]);
     assert_eq!(run.status, 3);
-    assert_eq!(run.events().last().unwrap()["error"]["code"], "TUR-DESKTOP-APPS-004");
+    assert_eq!(
+        run.events().last().unwrap()["error"]["code"],
+        "TUR-DESKTOP-APPS-004"
+    );
 }
 
 #[test]

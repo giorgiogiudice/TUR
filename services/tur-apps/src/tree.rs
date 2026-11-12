@@ -53,7 +53,10 @@ pub fn copy(source: &Path, target: &Path) -> Result<Copied, Failure> {
     if fs::symlink_metadata(target).is_ok() {
         return Err(Failure::new(
             Code::StepFailed,
-            format!("{} already exists; nothing was copied over it", target.display()),
+            format!(
+                "{} already exists; nothing was copied over it",
+                target.display()
+            ),
         ));
     }
     let mut copied = Copied::default();

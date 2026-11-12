@@ -26,10 +26,10 @@ use std::collections::BTreeMap;
 use std::sync::Mutex;
 
 use tur_catalogue::{
-    ALTERNATIVE_TEXT_IDS, AndroidStore, Arch, CAVEAT_TEXT_IDS, Category, CaveatCode, Edition, EditionKind, Entry, EntryKind, GpuClass,
-    HostFacts, Licence, Obtain, Outlook, Preferences, Rating, RatingSource, ReasonCode, ReasonPart,
-    Record, Reporter, Requirement, Route, RouteOption, RouteRequest, SCHEMA_VERSION, Severity,
-    requirement_severity, route,
+    ALTERNATIVE_TEXT_IDS, AndroidStore, Arch, CAVEAT_TEXT_IDS, Category, CaveatCode, Edition,
+    EditionKind, Entry, EntryKind, GpuClass, HostFacts, Licence, Obtain, Outlook, Preferences,
+    Rating, RatingSource, ReasonCode, ReasonPart, Record, Reporter, Requirement, Route,
+    RouteOption, RouteRequest, SCHEMA_VERSION, Severity, requirement_severity, route,
 };
 
 const APP_ID: &str = "org.example.app";
@@ -492,7 +492,9 @@ fn guest_only_for_a_reason(case: &Case<'_>, options: &[RouteOption]) {
 static SENTENCES: Mutex<BTreeMap<(String, String), String>> = Mutex::new(BTreeMap::new());
 
 fn same_sentence_every_time(kind: &str, id: &str, params: &str, text: &str) {
-    let mut seen = SENTENCES.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let mut seen = SENTENCES
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let key = (format!("{kind}:{id}"), params.to_owned());
     match seen.get(&key) {
         Some(known) => assert_eq!(

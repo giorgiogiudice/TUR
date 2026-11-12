@@ -294,7 +294,10 @@ pub fn host_facts(context: &Context) -> Result<HostReport, Failure> {
         let facts = parse_host_facts(&text).map_err(|reason| {
             Failure::new(
                 Code::InputInvalid,
-                format!("the host-facts file {} is not valid: {reason}", path.display()),
+                format!(
+                    "the host-facts file {} is not valid: {reason}",
+                    path.display()
+                ),
             )
         })?;
         return Ok(HostReport {
@@ -326,7 +329,10 @@ fn preferences(context: &Context) -> Result<Preferences, Failure> {
     parse_preferences(&text).map_err(|reason| {
         Failure::new(
             Code::InputInvalid,
-            format!("the preferences file {} is not valid: {reason}", path.display()),
+            format!(
+                "the preferences file {} is not valid: {reason}",
+                path.display()
+            ),
         )
     })
 }
@@ -537,12 +543,17 @@ fn flatpak_plan(
             "the catalogue's Flatpak edition has no Flatpak identifier",
         ));
     };
-    let remote = edition.remote.clone().unwrap_or_else(|| "flathub".to_owned());
+    let remote = edition
+        .remote
+        .clone()
+        .unwrap_or_else(|| "flathub".to_owned());
     let title = source_title(&remote);
     context.flatpak.require("to install Linux applications")?;
 
     let enable_hint = match flatpak::known_source(&remote) {
-        Some(KnownSource { name, .. }) => format!("switch it on with `tur-apps sources enable {name}`"),
+        Some(KnownSource { name, .. }) => {
+            format!("switch it on with `tur-apps sources enable {name}`")
+        }
         None => format!("the catalogue names the remote \"{remote}\", which TUR cannot switch on"),
     };
     let state = remote_state(&context.flatpak, &remote)?;
@@ -616,7 +627,10 @@ fn flatpak_plan(
                     FlathubSummary::default()
                 };
                 runtime_download = Some(Download {
-                    what: format!("the runtime {runtime}, which {} needs and which is not installed yet", entry.name),
+                    what: format!(
+                        "the runtime {runtime}, which {} needs and which is not installed yet",
+                        entry.name
+                    ),
                     from: format!("{title} ({remote_url})"),
                     size: sizes.download_size,
                     installed_size: sizes.installed_size,
@@ -656,7 +670,10 @@ fn flatpak_plan(
         None => (Vec::new(), false),
     };
     let data = dirs.flatpak_data(&flatpak_id);
-    let install_line = command(&context.flatpak, flatpak::install_arguments(&remote, &reference));
+    let install_line = command(
+        &context.flatpak,
+        flatpak::install_arguments(&remote, &reference),
+    );
     Ok(Plan {
         schema_version: PLAN_VERSION,
         kind: "plan",
@@ -677,7 +694,11 @@ fn flatpak_plan(
         },
         downloads,
         installs: vec![
-            place("the application, for you only", &dirs.flatpak_app(&flatpak_id), dirs),
+            place(
+                "the application, for you only",
+                &dirs.flatpak_app(&flatpak_id),
+                dirs,
+            ),
             place(
                 "its launcher entry",
                 &dirs.flatpak_desktop_entry(&flatpak_id),
@@ -861,7 +882,9 @@ fn windows_plan(
                         &context.curl,
                         crate::download::installer_arguments(
                             &pin.url,
-                            &dirs.downloads(&app_id).join(format!(".{}.part", pin.file_name())),
+                            &dirs
+                                .downloads(&app_id)
+                                .join(format!(".{}.part", pin.file_name())),
                             pin.size,
                         ),
                     ),
@@ -1010,7 +1033,11 @@ pub fn render(plan: &Plan) -> String {
     );
     let _ = writeln!(out, "  Why: {}", plan.router.reason);
     for caveat in &plan.router.caveats {
-        let _ = writeln!(out, "  Before you install ({:?}): {}", caveat.severity, caveat.text);
+        let _ = writeln!(
+            out,
+            "  Before you install ({:?}): {}",
+            caveat.severity, caveat.text
+        );
     }
     let _ = writeln!(out, "Source: {}", plan.source.name);
     if let Some(url) = &plan.source.url {
@@ -1024,7 +1051,11 @@ pub fn render(plan: &Plan) -> String {
         let size = download
             .size
             .map_or_else(|| "size not known".to_owned(), human_size);
-        let _ = writeln!(out, "Downloads: {} — {size}, from {}", download.what, download.from);
+        let _ = writeln!(
+            out,
+            "Downloads: {} — {size}, from {}",
+            download.what, download.from
+        );
         if let Some(sha256) = &download.sha256 {
             let _ = writeln!(out, "  SHA-256 {sha256}");
         }

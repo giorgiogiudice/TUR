@@ -34,6 +34,7 @@ the [specification](../architecture/specification.md).
 | [0015](0015-seamless-windows-guest.md) | Seamless Windows guest on QEMU/KVM, libvirt and FreeRDP RemoteApp | Accepted |
 | [0016](0016-desktop-and-user-interface.md) | Desktop and user interface: standalone programs, Plasma by configuration, one identity | Accepted |
 | [0017](0017-update-manager.md) | The update manager: TUR drives bootc in three steps, and stages nothing boot health cannot undo | Accepted, amended |
+| [0019](0019-app-install-backend.md) | Installing applications: one backend, two routes, pinned downloads through curl | Proposed |
 
 ## Open questions from the specification
 

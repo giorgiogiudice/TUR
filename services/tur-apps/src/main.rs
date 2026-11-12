@@ -64,10 +64,7 @@ fn report(json: bool, failure: &Failure) -> u8 {
 
 fn context(cli: &Cli) -> Result<Context, Failure> {
     let program = |name: &'static str, given: &Option<std::path::PathBuf>, defaults: &[&str]| {
-        Program::new(
-            name,
-            given.clone().unwrap_or_else(|| find(defaults)),
-        )
+        Program::new(name, given.clone().unwrap_or_else(|| find(defaults)))
     };
     Ok(Context {
         catalogue: cli.catalogue.clone(),
@@ -292,7 +289,10 @@ fn run(cli: Cli) -> u8 {
 }
 
 fn print_list(document: &Value) {
-    let applications = document["applications"].as_array().cloned().unwrap_or_default();
+    let applications = document["applications"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
     if applications.is_empty() {
         print_line("Nothing is installed for you.");
     }

@@ -86,10 +86,8 @@ mod tests {
     use super::*;
 
     fn scratch(name: &str, content: &[u8]) -> std::path::PathBuf {
-        let directory = std::env::temp_dir().join(format!(
-            "tur-apps-digest-{}-{name}",
-            std::process::id()
-        ));
+        let directory =
+            std::env::temp_dir().join(format!("tur-apps-digest-{}-{name}", std::process::id()));
         std::fs::create_dir_all(&directory).unwrap();
         let path = directory.join("file");
         std::fs::write(&path, content).unwrap();

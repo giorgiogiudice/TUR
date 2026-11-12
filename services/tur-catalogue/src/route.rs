@@ -512,7 +512,11 @@ fn requirement_caveat(
     host: &HostFacts,
 ) -> (Severity, &'static str, String) {
     let (severity, text) = requirement_caveat_text(requirement, route, host);
-    (severity, requirement_text_id(requirement, route, host), text)
+    (
+        severity,
+        requirement_text_id(requirement, route, host),
+        text,
+    )
 }
 
 /// The identifier of the sentence [`requirement_caveat_text`] writes for a
@@ -1623,10 +1627,7 @@ pub fn route(
                             "you have also chosen never to use a virtual machine",
                         )
                     } else if options.iter().any(|option| option.route == pinned_route) {
-                        (
-                            "blocked",
-                            "it cannot run this application on this machine",
-                        )
+                        ("blocked", "it cannot run this application on this machine")
                     } else {
                         (
                             "not-offered",
@@ -2746,14 +2747,14 @@ mod tests {
 
     #[test]
     fn a_demoted_edition_and_a_no_route_statement_carry_every_part_of_their_reason() {
-        let entry = entry(
+        let pair = entry(
             Category::Productivity,
             vec![
                 rated(flatpak(), Route::Flatpak, Rating::Broken),
                 rated(windows(), Route::Wine, Rating::Good),
             ],
         );
-        let options = run(&entry, &full_host(), &Preferences::default());
+        let options = run(&pair, &full_host(), &Preferences::default());
         let demoted = options
             .iter()
             .find(|option| option.route == Route::Flatpak)

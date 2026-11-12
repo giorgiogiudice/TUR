@@ -134,7 +134,12 @@ impl Record {
                     return Err("its tur-runtime identifier is not valid".to_owned());
                 }
             }
-            _ => return Err(format!("route \"{}\" does not match what it holds", self.route)),
+            _ => {
+                return Err(format!(
+                    "route \"{}\" does not match what it holds",
+                    self.route
+                ));
+            }
         }
         Ok(())
     }
@@ -221,7 +226,10 @@ pub fn load_all(dirs: &Dirs) -> (Vec<Record>, Vec<String>) {
 /// record is never half written.
 pub fn save(dirs: &Dirs, record: &Record) -> Result<(), Failure> {
     let failed = |what: &str, error: std::io::Error| {
-        Failure::new(Code::StepFailed, format!("cannot {what} the record: {error}"))
+        Failure::new(
+            Code::StepFailed,
+            format!("cannot {what} the record: {error}"),
+        )
     };
     let directory = dirs.records();
     fs::create_dir_all(&directory).map_err(|error| failed("create the directory of", error))?;
@@ -298,10 +306,8 @@ mod tests {
     use super::*;
 
     fn scratch(label: &str) -> Dirs {
-        let root = std::env::temp_dir().join(format!(
-            "tur-apps-records-{}-{label}",
-            std::process::id()
-        ));
+        let root =
+            std::env::temp_dir().join(format!("tur-apps-records-{}-{label}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(&root).unwrap();
         let home = root.display().to_string();
@@ -343,7 +349,8 @@ mod tests {
         save(&dirs, &record).unwrap();
         assert_eq!(load(&dirs, &record.id).unwrap(), Some(record.clone()));
         let (all, problems) = load_all(&dirs);
-        assert_eq!(all, [record.clone()]);
+        assert_eq!(all.len(), 1);
+        assert_eq!(all[0], record);
         assert!(problems.is_empty());
         remove(&dirs, &record.id).unwrap();
         assert_eq!(load(&dirs, &record.id).unwrap(), None);
@@ -356,11 +363,15 @@ mod tests {
         let mut record = flatpak_record();
         save(&dirs, &record).unwrap();
         let path = dirs.record(&record.id);
-        let other = fs::read_to_string(&path)
-            .unwrap()
-            .replace("\"id\": \"net.sourceforge.klavaro\"", "\"id\": \"org.example.other\"");
+        let other = fs::read_to_string(&path).unwrap().replace(
+            "\"id\": \"net.sourceforge.klavaro\"",
+            "\"id\": \"org.example.other\"",
+        );
         fs::write(&path, other).unwrap();
-        assert_eq!(load(&dirs, &record.id).unwrap_err().code, Code::RecordInvalid);
+        assert_eq!(
+            load(&dirs, &record.id).unwrap_err().code,
+            Code::RecordInvalid
+        );
 
         record.route = "wine".to_owned();
         assert!(record.check(&record.id.clone()).is_err());
@@ -368,7 +379,10 @@ mod tests {
             .unwrap()
             .replace("\"name\"", "\"colour\":1,\"name\"");
         fs::write(&path, unknown).unwrap();
-        assert_eq!(load(&dirs, "net.sourceforge.klavaro").unwrap_err().code, Code::RecordInvalid);
+        assert_eq!(
+            load(&dirs, "net.sourceforge.klavaro").unwrap_err().code,
+            Code::RecordInvalid
+        );
         let (all, problems) = load_all(&dirs);
         assert!(all.is_empty());
         assert_eq!(problems.len(), 1);

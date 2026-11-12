@@ -153,7 +153,8 @@ pub fn is_app_id(id: &str) -> bool {
             bytes
                 .next()
                 .is_some_and(|first| first.is_ascii_lowercase() || first.is_ascii_digit())
-                && bytes.all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_' || b == b'-')
+                && bytes
+                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_' || b == b'-')
         })
 }
 
@@ -207,23 +208,41 @@ mod tests {
         assert_eq!(found.cache_home, PathBuf::from("/home/u/.cache"));
         assert_eq!(found.flatpak_user_dir, PathBuf::from("/fp"));
         assert_eq!(dirs(&[]).unwrap_err().code, Code::Unreadable);
-        assert_eq!(dirs(&[("HOME", "home")]).unwrap_err().code, Code::Unreadable);
+        assert_eq!(
+            dirs(&[("HOME", "home")]).unwrap_err().code,
+            Code::Unreadable
+        );
     }
 
     #[test]
     fn a_path_under_home_is_shown_with_a_tilde() {
         let found = dirs(&[("HOME", "/home/u")]).unwrap();
-        assert_eq!(display(Path::new("/home/u/.var/app/x"), &found), "~/.var/app/x");
+        assert_eq!(
+            display(Path::new("/home/u/.var/app/x"), &found),
+            "~/.var/app/x"
+        );
         assert_eq!(display(Path::new("/home/u"), &found), "~");
         assert_eq!(display(Path::new("/opt/x"), &found), "/opt/x");
     }
 
     #[test]
     fn application_identifiers_are_the_catalogue_s() {
-        for good in ["org.example.app", "uk.org.greenend.chiark.putty", "org.7-zip.7zip"] {
+        for good in [
+            "org.example.app",
+            "uk.org.greenend.chiark.putty",
+            "org.7-zip.7zip",
+        ] {
             assert!(is_app_id(good), "{good}");
         }
-        for bad in ["", "app", "Org.example", "org..app", "org.example/../x", "org.-x", ".org.x"] {
+        for bad in [
+            "",
+            "app",
+            "Org.example",
+            "org..app",
+            "org.example/../x",
+            "org.-x",
+            ".org.x",
+        ] {
             assert!(!is_app_id(bad), "{bad}");
         }
     }

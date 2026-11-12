@@ -55,11 +55,16 @@ fn keys(value: &Value) -> BTreeSet<String> {
 #[test]
 fn the_dbus_interface_and_the_command_line_are_one() {
     let xml = xml();
-    assert!(xml.starts_with("<!-- SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0 -->\n"));
+    assert!(
+        xml.starts_with("<!-- SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0 -->\n")
+    );
     assert!(xml.contains("Status: proposed, not frozen, and not implemented."));
     assert_eq!(xml_names(&xml, "node"), ["/org/tur/Apps1"]);
     assert_eq!(xml_names(&xml, "interface"), ["org.tur.Apps1"]);
-    let methods: Vec<String> = DBUS_METHODS.iter().map(|(name, _, _)| (*name).to_owned()).collect();
+    let methods: Vec<String> = DBUS_METHODS
+        .iter()
+        .map(|(name, _, _)| (*name).to_owned())
+        .collect();
     assert_eq!(xml_names(&xml, "method"), methods);
     assert_eq!(xml_names(&xml, "signal"), ["Event"]);
     assert_eq!(xml_names(&xml, "property"), ["SchemaVersion"]);
@@ -91,7 +96,7 @@ fn the_dbus_interface_and_the_command_line_are_one() {
 #[test]
 fn the_assistant_s_tools_are_methods_that_only_read() {
     let manifest: Value =
-        serde_json::from_str(&read(&component().join("agent-tools.json"))).expect("JSON");
+        serde_json::from_str(&read(&component().join("pax/agent-tools.json"))).expect("JSON");
     let xml_methods = xml_names(&xml(), "method");
     for tool in manifest["tools"].as_array().expect("tools") {
         let method = tool["method"].as_str().expect("a method");
@@ -138,11 +143,28 @@ fn the_record_schema_names_the_record_s_fields() {
     };
     let written = serde_json::to_value(&record).unwrap();
     assert_eq!(keys(&written), keys(&schema["properties"]));
-    assert_eq!(keys(&written["source"]), keys(&schema["$defs"]["source"]["properties"]));
-    assert_eq!(keys(&written["flatpak"]), keys(&schema["$defs"]["flatpak"]["properties"]));
-    assert_eq!(keys(&written["windows"]), keys(&schema["$defs"]["windows"]["properties"]));
-    assert_eq!(schema["properties"]["schema_version"]["const"], RECORD_VERSION);
-    for object in [&schema, &schema["$defs"]["source"], &schema["$defs"]["flatpak"], &schema["$defs"]["windows"]] {
+    assert_eq!(
+        keys(&written["source"]),
+        keys(&schema["$defs"]["source"]["properties"])
+    );
+    assert_eq!(
+        keys(&written["flatpak"]),
+        keys(&schema["$defs"]["flatpak"]["properties"])
+    );
+    assert_eq!(
+        keys(&written["windows"]),
+        keys(&schema["$defs"]["windows"]["properties"])
+    );
+    assert_eq!(
+        schema["properties"]["schema_version"]["const"],
+        RECORD_VERSION
+    );
+    for object in [
+        &schema,
+        &schema["$defs"]["source"],
+        &schema["$defs"]["flatpak"],
+        &schema["$defs"]["windows"],
+    ] {
         assert_eq!(object["additionalProperties"], Value::Bool(false));
     }
 }
@@ -152,12 +174,30 @@ fn the_event_schema_names_every_event() {
     let schema = schema("app-install-event.schema.json");
     let samples = [
         Event::Plan { plan: Value::Null },
-        Event::StepStarted { step: String::new(), text: String::new() },
-        Event::StepFinished { step: String::new(), ok: true },
-        Event::Activity { step: String::new(), text: String::new() },
-        Event::Progress { step: String::new(), done: 0, total: Some(1) },
-        Event::Result { operation: String::new(), result: Value::Null },
-        Event::Error { error: tur_apps::Failure::new(Code::StepFailed, "x") },
+        Event::StepStarted {
+            step: String::new(),
+            text: String::new(),
+        },
+        Event::StepFinished {
+            step: String::new(),
+            ok: true,
+        },
+        Event::Activity {
+            step: String::new(),
+            text: String::new(),
+        },
+        Event::Progress {
+            step: String::new(),
+            done: 0,
+            total: Some(1),
+        },
+        Event::Result {
+            operation: String::new(),
+            result: Value::Null,
+        },
+        Event::Error {
+            error: tur_apps::Failure::new(Code::StepFailed, "x"),
+        },
     ];
     let count = |event: &Event| match event {
         Event::Plan { .. }
@@ -171,7 +211,12 @@ fn the_event_schema_names_every_event() {
     assert_eq!(samples.iter().map(count).sum::<usize>(), 7);
     let names: BTreeSet<String> = samples
         .iter()
-        .map(|event| serde_json::to_value(event).unwrap()["event"].as_str().unwrap().to_owned())
+        .map(|event| {
+            serde_json::to_value(event).unwrap()["event"]
+                .as_str()
+                .unwrap()
+                .to_owned()
+        })
         .collect();
     let listed: BTreeSet<String> = schema["properties"]["event"]["enum"]
         .as_array()
@@ -188,12 +233,19 @@ fn the_event_schema_names_every_event() {
         let documented = keys(&schema["$defs"][kind]["properties"]);
         assert_eq!(fields, documented, "{kind}");
     }
-    let codes: Vec<String> = Code::ALL.iter().map(|code| code.as_str().to_owned()).collect();
+    let codes: Vec<String> = Code::ALL
+        .iter()
+        .map(|code| code.as_str().to_owned())
+        .collect();
     let pattern = schema["$defs"]["failure"]["properties"]["code"]["pattern"]
         .as_str()
         .unwrap();
     assert_eq!(pattern, "^TUR-DESKTOP-APPS-[0-9]{3}$");
-    assert!(codes.iter().all(|code| code.starts_with("TUR-DESKTOP-APPS-")));
+    assert!(
+        codes
+            .iter()
+            .all(|code| code.starts_with("TUR-DESKTOP-APPS-"))
+    );
 }
 
 #[test]
@@ -228,7 +280,10 @@ fn the_plan_schema_names_the_plan_s_fields() {
     .collect();
     assert_eq!(keys(&schema["properties"]), fields);
     assert_eq!(required, fields);
-    assert_eq!(schema["properties"]["route"]["enum"], serde_json::json!(["flatpak", "wine"]));
+    assert_eq!(
+        schema["properties"]["route"]["enum"],
+        serde_json::json!(["flatpak", "wine"])
+    );
     assert_eq!(
         schema["properties"]["removal"]["properties"]["data_kept_by_default"]["const"],
         true

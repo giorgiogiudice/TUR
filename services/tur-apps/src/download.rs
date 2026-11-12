@@ -138,20 +138,24 @@ pub fn fetch_installer(
 
     let mut command = Command::new(curl);
     command
-        .args(installer_arguments(&installer.url, &partial, installer.size))
+        .args(installer_arguments(
+            &installer.url,
+            &partial,
+            installer.size,
+        ))
         .env("LC_ALL", "C.UTF-8")
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     let mut child = spawn(&mut command).map_err(|error| {
-            Failure::new(
-                Code::ProgramMissing,
-                format!(
-                    "curl is needed to download the installer, and cannot be started ({}): {error}",
-                    curl.display()
-                ),
-            )
-        })?;
+        Failure::new(
+            Code::ProgramMissing,
+            format!(
+                "curl is needed to download the installer, and cannot be started ({}): {error}",
+                curl.display()
+            ),
+        )
+    })?;
     loop {
         match child.try_wait() {
             Ok(Some(_)) => break,
@@ -368,9 +372,10 @@ mod tests {
         };
         let target = directory.join("downloads");
         let mut progress = Vec::new();
-        let failure =
-            fetch_installer(&fake, &installer, &target, &mut |bytes| progress.push(bytes))
-                .unwrap_err();
+        let failure = fetch_installer(&fake, &installer, &target, &mut |bytes| {
+            progress.push(bytes)
+        })
+        .unwrap_err();
         assert_eq!(failure.code, Code::NotVerified);
         assert!(failure.message.contains("not the one the catalogue pins"));
         assert_eq!(std::fs::read_dir(&target).unwrap().count(), 0);

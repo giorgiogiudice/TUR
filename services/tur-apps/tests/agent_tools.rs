@@ -18,8 +18,8 @@ use tur_pax::adapter::AdapterFile;
 use tur_pax::registry::ToolRegistry;
 use tur_pax::{Action, ActionClass};
 
-const MANIFEST: &str = include_str!("../agent-tools.json");
-const ADAPTERS: &str = include_str!("../agent-tools.adapter.json");
+const MANIFEST: &str = include_str!("../pax/agent-tools.json");
+const ADAPTERS: &str = include_str!("../pax/agent-tools.adapter.json");
 const PROGRAM: &str = env!("CARGO_BIN_EXE_tur-apps");
 const INSTALLED: &str = "/usr/bin/tur-apps";
 const SERVICE: &str = "org.tur.Apps1";

@@ -45,7 +45,10 @@ impl Outcome {
         } else {
             &self.stderr
         };
-        let lines: Vec<&str> = text.lines().filter(|line| !line.trim().is_empty()).collect();
+        let lines: Vec<&str> = text
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .collect();
         let start = lines.len().saturating_sub(6);
         lines[start..].join(" | ")
     }
@@ -126,7 +129,11 @@ impl Program {
         let mut child = spawn(&mut command).map_err(|error| {
             Failure::new(
                 Code::ProgramMissing,
-                format!("cannot start {} ({}): {error}", self.name, self.path.display()),
+                format!(
+                    "cannot start {} ({}): {error}",
+                    self.name,
+                    self.path.display()
+                ),
             )
         })?;
         let (sender, receiver) = mpsc::channel::<(Stream, String)>();
@@ -250,12 +257,11 @@ mod tests {
     fn a_missing_program_is_reported_with_its_name() {
         let program = Program::new("flatpak", "/nonexistent/flatpak");
         assert!(!program.exists());
-        let failure = program.require("to install Linux applications").unwrap_err();
+        let failure = program
+            .require("to install Linux applications")
+            .unwrap_err();
         assert_eq!(failure.code, Code::ProgramMissing);
         assert!(failure.message.contains("flatpak"));
-        assert_eq!(
-            program.run(&[]).unwrap_err().code,
-            Code::ProgramMissing
-        );
+        assert_eq!(program.run(&[]).unwrap_err().code, Code::ProgramMissing);
     }
 }

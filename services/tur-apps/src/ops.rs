@@ -54,7 +54,10 @@ fn flatpak_refs(flatpak: &Program) -> Result<Vec<String>, Failure> {
     if !outcome.success() {
         return Err(Failure::new(
             Code::StepFailed,
-            format!("flatpak could not list what is installed: {}", outcome.tail()),
+            format!(
+                "flatpak could not list what is installed: {}",
+                outcome.tail()
+            ),
         ));
     }
     Ok(flatpak::parse_refs(&outcome.stdout))
@@ -152,7 +155,10 @@ fn install_flatpak(
     let before: BTreeSet<String> = flatpak_refs(flatpak)?.into_iter().collect();
     emitter.started(
         "install",
-        format!("Installing {} from {}", plan.application.name, plan.source.name),
+        format!(
+            "Installing {} from {}",
+            plan.application.name, plan.source.name
+        ),
     );
     let outcome = {
         let mut forward = forward_lines(emitter, "install", true);
@@ -246,7 +252,10 @@ fn install_windows(
                 }
             };
             emitter.finished("download", true);
-            emitter.started("verify", format!("SHA-256 {} matches the catalogue", fetched.hashed.sha256));
+            emitter.started(
+                "verify",
+                format!("SHA-256 {} matches the catalogue", fetched.hashed.sha256),
+            );
             emitter.finished("verify", true);
             let source = Source {
                 kind: "publisher-download".to_owned(),
@@ -298,7 +307,10 @@ fn install_windows(
 
     emitter.started(
         "install",
-        format!("Installing {} with tur-runtime, unattended, in its sandbox", plan.application.name),
+        format!(
+            "Installing {} with tur-runtime, unattended, in its sandbox",
+            plan.application.name
+        ),
     );
     let arguments =
         runtime::install_arguments(&path, runtime_app_id, &plan.application.name, portable);
@@ -347,7 +359,12 @@ fn not_installed(id: &str) -> Failure {
 }
 
 /// Removes an application. Its data is kept, or deleted, as `choice` says.
-pub fn remove(context: &Context, id: &str, choice: DataChoice, emitter: &mut Emitter) -> Result<Value, Failure> {
+pub fn remove(
+    context: &Context,
+    id: &str,
+    choice: DataChoice,
+    emitter: &mut Emitter,
+) -> Result<Value, Failure> {
     let dirs = &context.dirs;
     let record = records::load(dirs, id)?.ok_or_else(|| not_installed(id))?;
     let (removed, kept, findings) = match (&record.flatpak, &record.windows) {
@@ -424,7 +441,11 @@ fn remove_flatpak(
             emitter.finished("uninstall", false);
             return Err(Failure::new(
                 Code::StepFailed,
-                format!("flatpak did not remove {}: {}", part.reference, outcome.tail()),
+                format!(
+                    "flatpak did not remove {}: {}",
+                    part.reference,
+                    outcome.tail()
+                ),
             ));
         }
     } else if delete {
@@ -456,7 +477,10 @@ fn remove_flatpak(
     if !unused.is_empty() {
         emitter.started(
             "unused",
-            format!("Removing {} runtime(s) and extension(s) only it used", unused.len()),
+            format!(
+                "Removing {} runtime(s) and extension(s) only it used",
+                unused.len()
+            ),
         );
         let outcome = {
             let mut forward = forward_lines(emitter, "unused", true);
@@ -472,7 +496,10 @@ fn remove_flatpak(
             findings.push(format!("{reference} is still installed"));
         }
     }
-    for path in [dirs.flatpak_app(&part.app_id), dirs.flatpak_desktop_entry(&part.app_id)] {
+    for path in [
+        dirs.flatpak_app(&part.app_id),
+        dirs.flatpak_desktop_entry(&part.app_id),
+    ] {
         if exists(&path) {
             findings.push(format!("{} is still there", display(&path, dirs)));
         }
@@ -539,10 +566,7 @@ fn remove_windows(
                             if copied.skipped.is_empty() {
                                 String::new()
                             } else {
-                                format!(
-                                    "; links not followed: {}",
-                                    copied.skipped.join(", ")
-                                )
+                                format!("; links not followed: {}", copied.skipped.join(", "))
                             }
                         ),
                     );
@@ -566,7 +590,10 @@ fn remove_windows(
         }
     }
 
-    emitter.started("uninstall", format!("Removing {} with tur-runtime", record.name));
+    emitter.started(
+        "uninstall",
+        format!("Removing {} with tur-runtime", record.name),
+    );
     let outcome = {
         let mut forward = forward_lines(emitter, "uninstall", false);
         context.tur_runtime.run_streaming(
@@ -587,7 +614,8 @@ fn remove_windows(
                 }));
             }
             if findings.is_empty() {
-                findings.push(runtime::parse_error(&outcome.stdout).unwrap_or_else(|| outcome.tail()));
+                findings
+                    .push(runtime::parse_error(&outcome.stdout).unwrap_or_else(|| outcome.tail()));
             }
         }
         _ => {
@@ -651,7 +679,11 @@ pub fn update(context: &Context, id: &str, emitter: &mut Emitter) -> Result<Valu
         emitter.finished("update", false);
         return Err(Failure::new(
             Code::StepFailed,
-            format!("flatpak did not update {}: {}", part.reference, outcome.tail()),
+            format!(
+                "flatpak did not update {}: {}",
+                part.reference,
+                outcome.tail()
+            ),
         ));
     }
     emitter.finished("update", true);
@@ -743,7 +775,10 @@ fn flatpak_updates(flatpak: &Program) -> Result<BTreeMap<String, Option<String>>
         .into_iter()
         .filter_map(|row| {
             let id = row.first()?.clone();
-            let version = row.get(1).filter(|version| !version.is_empty() && *version != "-").cloned();
+            let version = row
+                .get(1)
+                .filter(|version| !version.is_empty() && *version != "-")
+                .cloned();
             Some((id, version))
         })
         .collect())
@@ -778,7 +813,9 @@ pub fn list(context: &Context, check_updates: bool) -> Result<Value, Failure> {
         match flatpak_updates(&context.flatpak) {
             Ok(found) => Some(found),
             Err(why) => {
-                problems.push(format!("the Flatpak sources could not be asked for updates: {why}"));
+                problems.push(format!(
+                    "the Flatpak sources could not be asked for updates: {why}"
+                ));
                 None
             }
         }
@@ -821,7 +858,12 @@ pub fn list(context: &Context, check_updates: bool) -> Result<Value, Failure> {
                     .or_else(|| record.version.clone()),
                 size,
                 data: vec![display(&dirs.flatpak_data(&part.app_id), dirs)],
-                state: if live.is_some() { "installed" } else { "missing" }.to_owned(),
+                state: if live.is_some() {
+                    "installed"
+                } else {
+                    "missing"
+                }
+                .to_owned(),
                 update: flatpak_update(&part.app_id),
             });
         } else if let Some(part) = &record.windows {
@@ -832,12 +874,19 @@ pub fn list(context: &Context, check_updates: bool) -> Result<Value, Failure> {
             let pin = catalogue
                 .as_ref()
                 .and_then(|catalogue| catalogue.get(&record.id))
-                .and_then(|entry| entry.editions.iter().find_map(|edition| edition.installer.clone()));
+                .and_then(|entry| {
+                    entry
+                        .editions
+                        .iter()
+                        .find_map(|edition| edition.installer.clone())
+                });
             let update = if check_updates && record.source.pinned {
                 match &pin {
                     Some(pin) => UpdateState {
                         checked: true,
-                        available: Some(record.source.sha256.as_deref() != Some(pin.sha256.as_str())),
+                        available: Some(
+                            record.source.sha256.as_deref() != Some(pin.sha256.as_str()),
+                        ),
                         version: Some(pin.version.clone()),
                         source: Some("the catalogue's pinned download".to_owned()),
                     },
@@ -866,7 +915,12 @@ pub fn list(context: &Context, check_updates: bool) -> Result<Value, Failure> {
                     display(&dirs.runtime_home(&part.runtime_app_id), dirs),
                     display(&dirs.runtime_profiles(&part.runtime_app_id), dirs),
                 ],
-                state: if live.is_some() { "installed" } else { "missing" }.to_owned(),
+                state: if live.is_some() {
+                    "installed"
+                } else {
+                    "missing"
+                }
+                .to_owned(),
                 update,
             });
         }
@@ -878,13 +932,17 @@ pub fn list(context: &Context, check_updates: bool) -> Result<Value, Failure> {
     {
         let entry = catalogue.as_ref().and_then(|catalogue| {
             catalogue.entries().iter().find(|entry| {
-                entry
-                    .editions
-                    .iter()
-                    .any(|edition| edition.flatpak_id.as_deref() == Some(listed.application.as_str()))
+                entry.editions.iter().any(|edition| {
+                    edition.flatpak_id.as_deref() == Some(listed.application.as_str())
+                })
             })
         });
-        let reference = format!("app/{}/{}/{}", listed.application, flatpak::arch(), listed.branch);
+        let reference = format!(
+            "app/{}/{}/{}",
+            listed.application,
+            flatpak::arch(),
+            listed.branch
+        );
         let size = context
             .flatpak
             .run(&flatpak::size_arguments(&reference))
@@ -921,7 +979,12 @@ pub fn list(context: &Context, check_updates: bool) -> Result<Value, Failure> {
             update: UpdateState::not_checked(),
         });
     }
-    applications.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()).then(a.id.cmp(&b.id)));
+    applications.sort_by(|a, b| {
+        a.name
+            .to_lowercase()
+            .cmp(&b.name.to_lowercase())
+            .then(a.id.cmp(&b.id))
+    });
     Ok(json!({
         "schema_version": 1,
         "kind": "installed",
@@ -1003,34 +1066,58 @@ pub fn sources(context: &Context) -> Result<Value, Failure> {
 }
 
 /// Switches a known source on or off, for this user.
-pub fn set_source(context: &Context, name: &str, on: bool, emitter: &mut Emitter) -> Result<Value, Failure> {
+pub fn set_source(
+    context: &Context,
+    name: &str,
+    on: bool,
+    emitter: &mut Emitter,
+) -> Result<Value, Failure> {
     let Some(known) = flatpak::known_source(name) else {
-        let names: Vec<&str> = flatpak::KNOWN_SOURCES.iter().map(|source| source.name).collect();
+        let names: Vec<&str> = flatpak::KNOWN_SOURCES
+            .iter()
+            .map(|source| source.name)
+            .collect();
         return Err(Failure::new(
             Code::InputInvalid,
-            format!("TUR knows the sources {}, not \"{name}\"", names.join(" and ")),
+            format!(
+                "TUR knows the sources {}, not \"{name}\"",
+                names.join(" and ")
+            ),
         ));
     };
     context.flatpak.require("to switch a Flatpak source")?;
     let current = plan::remote_state(&context.flatpak, name)?;
     let arguments = match (&current, on) {
         (None, true) => Some(flatpak::remote_add_arguments(known)),
-        (Some(remote), true) if remote.disabled => Some(flatpak::remote_modify_arguments(name, true)),
-        (Some(remote), false) if !remote.disabled => Some(flatpak::remote_modify_arguments(name, false)),
+        (Some(remote), true) if remote.disabled => {
+            Some(flatpak::remote_modify_arguments(name, true))
+        }
+        (Some(remote), false) if !remote.disabled => {
+            Some(flatpak::remote_modify_arguments(name, false))
+        }
         _ => None,
     };
     let changed = arguments.is_some();
     if let Some(arguments) = arguments {
         emitter.started(
             "source",
-            format!("Switching {} {}", known.title, if on { "on" } else { "off" }),
+            format!(
+                "Switching {} {}",
+                known.title,
+                if on { "on" } else { "off" }
+            ),
         );
         let outcome = context.flatpak.run(&arguments)?;
         if !outcome.success() {
             emitter.finished("source", false);
             return Err(Failure::new(
                 Code::StepFailed,
-                format!("flatpak could not switch {} {}: {}", known.title, if on { "on" } else { "off" }, outcome.tail()),
+                format!(
+                    "flatpak could not switch {} {}: {}",
+                    known.title,
+                    if on { "on" } else { "off" },
+                    outcome.tail()
+                ),
             ));
         }
         emitter.finished("source", true);
@@ -1050,7 +1137,12 @@ mod tests {
 
     #[test]
     fn dirs_are_used_for_kept_data() {
-        let dirs = crate::paths::Dirs::from_env(|name| (name == "HOME").then(|| "/home/u".to_owned())).unwrap();
-        assert!(dirs.kept("a.b").starts_with("/home/u/.local/share/tur/apps/kept"));
+        let dirs =
+            crate::paths::Dirs::from_env(|name| (name == "HOME").then(|| "/home/u".to_owned()))
+                .unwrap();
+        assert!(
+            dirs.kept("a.b")
+                .starts_with("/home/u/.local/share/tur/apps/kept")
+        );
     }
 }

@@ -78,7 +78,12 @@ pub fn known_source(name: &str) -> Option<&'static KnownSource> {
 
 /// `flatpak remotes`: every per-user remote, switched off ones too.
 pub fn remotes_arguments() -> Vec<String> {
-    strings(&["remotes", "--user", "--show-disabled", "--columns=name,url,options"])
+    strings(&[
+        "remotes",
+        "--user",
+        "--show-disabled",
+        "--columns=name,url,options",
+    ])
 }
 
 /// `flatpak remote-add` for a known source.
@@ -99,7 +104,13 @@ pub fn remote_modify_arguments(name: &str, enable: bool) -> Vec<String> {
 /// `flatpak remote-info --show-metadata`: the application's metadata, as
 /// the remote publishes it, which lists the permissions it asks for.
 pub fn remote_metadata_arguments(remote: &str, reference: &str) -> Vec<String> {
-    strings(&["remote-info", "--user", "--show-metadata", remote, reference])
+    strings(&[
+        "remote-info",
+        "--user",
+        "--show-metadata",
+        remote,
+        reference,
+    ])
 }
 
 /// `flatpak remote-info --show-commit`: the commit that would be installed.
@@ -181,7 +192,11 @@ fn strings(list: &[&str]) -> Vec<String> {
 pub fn parse_table(text: &str) -> Vec<Vec<String>> {
     text.lines()
         .filter(|line| !line.trim().is_empty())
-        .map(|line| line.split('\t').map(|cell| cell.trim().to_owned()).collect())
+        .map(|line| {
+            line.split('\t')
+                .map(|cell| cell.trim().to_owned())
+                .collect()
+        })
         .collect()
 }
 
@@ -332,7 +347,10 @@ pub fn parse_metadata(text: &str) -> Metadata {
         if line.is_empty() || line.starts_with('#') {
             continue;
         }
-        if let Some(name) = line.strip_prefix('[').and_then(|rest| rest.strip_suffix(']')) {
+        if let Some(name) = line
+            .strip_prefix('[')
+            .and_then(|rest| rest.strip_suffix(']'))
+        {
             group = name.to_owned();
             continue;
         }
@@ -423,8 +441,9 @@ pub fn access(metadata: &Metadata) -> Vec<Access> {
     for item in &metadata.devices {
         let text = match item.as_str() {
             "dri" => "It can use the graphics processor.".to_owned(),
-            "all" => "It can use every device: cameras, microphones, USB devices and others."
-                .to_owned(),
+            "all" => {
+                "It can use every device: cameras, microphones, USB devices and others.".to_owned()
+            }
             "kvm" => "It can run virtual machines.".to_owned(),
             "input" => "It can read input devices directly.".to_owned(),
             "usb" => "It can use USB devices.".to_owned(),
@@ -523,7 +542,10 @@ mod tests {
         ] {
             assert!(arguments.contains(&"--noninteractive".to_owned()));
         }
-        assert!(!uninstall_arguments(&[reference.to_owned()], false).contains(&"--delete-data".to_owned()));
+        assert!(
+            !uninstall_arguments(&[reference.to_owned()], false)
+                .contains(&"--delete-data".to_owned())
+        );
         assert_eq!(
             remote_add_arguments(&KNOWN_SOURCES[0]),
             [
@@ -558,7 +580,8 @@ mod tests {
         );
         assert_eq!(apps[1].version, None);
 
-        let refs = parse_refs("app/a.b.C/x86_64/stable\nruntime/org.freedesktop.Platform/x86_64/24.08\n");
+        let refs =
+            parse_refs("app/a.b.C/x86_64/stable\nruntime/org.freedesktop.Platform/x86_64/24.08\n");
         assert_eq!(refs.len(), 2);
         assert_eq!(ref_id(&refs[1]), "org.freedesktop.Platform");
         assert_eq!(parse_size("2523136\n"), Some(2_523_136));
@@ -604,7 +627,10 @@ mod tests {
                 .unwrap_or_default()
         };
         assert_eq!(text_of("xdg-documents:ro"), "It can read xdg-documents.");
-        assert_eq!(text_of("home"), "It can read and change every file in your home folder.");
+        assert_eq!(
+            text_of("home"),
+            "It can read and change every file in your home folder."
+        );
         assert!(!listed.iter().any(|item| item.permission == "!host"));
         assert_eq!(text_of("network"), "It can use the network.");
         assert!(text_of("x11").contains("keystrokes"));

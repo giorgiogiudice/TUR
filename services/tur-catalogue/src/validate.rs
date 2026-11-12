@@ -502,7 +502,12 @@ fn check_installer(
         && name
             .bytes()
             .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'+' | b'-'));
-    if !plain || !name_valid || !INSTALLER_ENDINGS.iter().any(|ending| lower.ends_with(ending)) {
+    if !plain
+        || !name_valid
+        || !INSTALLER_ENDINGS
+            .iter()
+            .any(|ending| lower.ends_with(ending))
+    {
         findings.invalid(format!(
             "{url_what} must end in the name of the file, a .exe, .msi or .zip, with no query or fragment"
         ));
@@ -1593,7 +1598,10 @@ mod tests {
         from_a_store.download_page = None;
         from_a_store.store_id = Some("12345".to_owned());
         let text = messages(&entry(vec![from_a_store]));
-        assert!(text.contains("obtained from the publisher's page"), "{text}");
+        assert!(
+            text.contains("obtained from the publisher's page"),
+            "{text}"
+        );
 
         let mut linux = flatpak();
         linux.licence = Some(Licence::OpenSource);
@@ -1649,7 +1657,10 @@ mod tests {
 
         let mut archive = pinned();
         archive.url = "https://downloads.example.org/example-1.2.zip".to_owned();
-        assert_eq!(codes(&entry(vec![from_the_publisher(archive.clone())])), NONE);
+        assert_eq!(
+            codes(&entry(vec![from_the_publisher(archive.clone())])),
+            NONE
+        );
         archive.portable = true;
         assert!(messages(&entry(vec![from_the_publisher(archive)])).contains("single program"));
     }

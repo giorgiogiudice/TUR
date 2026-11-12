@@ -143,8 +143,10 @@ mod tests {
                 "--json"
             ]
         );
-        assert!(install_arguments(Path::new("/c/p.exe"), "a.b", "B", true)
-            .contains(&"--portable".to_owned()));
+        assert!(
+            install_arguments(Path::new("/c/p.exe"), "a.b", "B", true)
+                .contains(&"--portable".to_owned())
+        );
         assert_eq!(
             uninstall_arguments("a.b", false),
             ["app", "uninstall", "a.b", "--json"]
@@ -158,14 +160,21 @@ mod tests {
         let report = r#"{"dry_run":false,"record":{"app_id":"a.b","name":"Notepad++","version":"8.9.9.1","main_executable_windows":"C:\\Program Files\\Notepad++\\notepad++.exe"}}"#;
         let installed = parse_install_report(report);
         assert_eq!(installed.version.as_deref(), Some("8.9.9.1"));
-        assert!(installed.main_executable.unwrap().ends_with("notepad++.exe"));
+        assert!(
+            installed
+                .main_executable
+                .unwrap()
+                .ends_with("notepad++.exe")
+        );
         assert_eq!(parse_install_report("garbage"), Installed::default());
         assert_eq!(
             parse_error(r#"{"error":{"code":"TUR-WINDOWS-APP-003","title":"t","message":"m"}}"#)
                 .as_deref(),
             Some("TUR-WINDOWS-APP-003: m")
         );
-        let list = parse_list(r#"{"applications":[{"app_id":"a.b","name":"B","version":null}],"problems":[]}"#);
+        let list = parse_list(
+            r#"{"applications":[{"app_id":"a.b","name":"B","version":null}],"problems":[]}"#,
+        );
         assert_eq!(list.len(), 1);
         assert_eq!(list[0].version, None);
         assert!(parse_list("").is_empty());
