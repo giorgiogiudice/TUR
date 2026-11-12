@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# The launcher entry of tur-settings, and its link scheme: a link of the form
+# tur-settings:tur.appearance#variant is handed to the program as its
+# argument. Installed as /usr/share/applications/org.tur.Settings.desktop.
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=Settings
+GenericName=TUR settings
+Comment=The state of this system, and TUR's own settings
+Exec=tur-settings %u
+Icon=preferences-system
+Terminal=false
+Categories=Settings;
+Keywords=settings;preferences;configuration;TUR;updates;appearance;about;
+MimeType=x-scheme-handler/tur-settings;
+StartupNotify=true
+SingleMainWindow=true

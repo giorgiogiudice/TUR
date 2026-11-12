@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# The entry "TUR" in the side list of KDE System Settings
+# (docs/architecture/desktop-experience.md, 10.1). Choosing it starts
+# tur-settings; System Settings says that an external application was
+# launched. This is configuration, not a module: nothing of TUR's runs inside
+# System Settings. Installed as
+# /usr/share/plasma/systemsettings/externalmodules/org.tur.Settings.desktop.
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=TUR
+Comment=Updates, recovery, applications and the assistant
+Exec=tur-settings
+Icon=preferences-system
+Terminal=false
+NoDisplay=true
+X-KDE-System-Settings-Parent-Category=system-administration
+X-KDE-Weight=10

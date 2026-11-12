@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
 #
-# Desktop (D-01, D-02): the licence boundary, the build and tests of the Qt
-# programs under desktop/, and their screenshots. Nothing under desktop/ is
-# ever compiled or run anywhere else. See desktop/README.md,
-# docs/architecture/desktop-kit.md and docs/architecture/desktop-experience.md,
-# section 15.3.
+# Desktop (D-01, D-02): the licence boundary, the settings registries, the
+# build and tests of the Qt programs under desktop/, and their screenshots.
+# Nothing under desktop/ is ever compiled or run anywhere else. See
+# desktop/README.md, docs/architecture/desktop-kit.md and
+# docs/architecture/desktop-experience.md, section 15.3.
 name: desktop
 
 on:
@@ -54,6 +54,7 @@ jobs:
           shellcheck -x --severity=warning desktop/ci/*.sh
           python3 --version
           python3 -m py_compile desktop/ci/*.py desktop/kit/tokens/gen_tokens.py
+          sudo apt-get install -y --no-install-recommends python3-jsonschema >/dev/null
 
       - name: The check catches what it should
         run: python3 desktop/ci/boundary.py --self-test
@@ -63,6 +64,17 @@ jobs:
 
       - name: Tokens and the contrast table
         run: python3 desktop/kit/tokens/gen_tokens.py --check --table
+
+      - name: The registry check catches what it should
+        run: python3 desktop/ci/registry.py --self-test
+
+      # Every settings registry follows schemas/settings-registry.schema.json,
+      # and no address that the main branch has was dropped: an address keeps
+      # its meaning for ever (design, 10.3).
+      - name: Settings registries
+        run: |
+          git fetch --no-tags --depth=1 origin main
+          python3 desktop/ci/registry.py --against FETCH_HEAD
 
   builder:
     name: Builder image

@@ -1,0 +1,299 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/giorgiogiudice/TUR/schemas/settings-registry.schema.json",
+  "title": "Settings registry",
+  "description": "The addressable settings of one program (desktop experience, section 10.3; docs/architecture/tur-settings.md). Every settings page and every row on it has an address, page[#row], that keeps its meaning for ever and is never reused. A program with addressable content ships one registry file, installed under /usr/share/tur/settings/; tur-settings merges them, searches them and resolves an address to its owner. The loader in desktop/apps/tur-settings (src/registrydata.cpp) and the check desktop/ci/registry.py are authoritative. They also enforce what this schema cannot express: a page address occurs once in all loaded registries and a row identifier once on its page; a row's section is one its page declares; an address named by replaced_by exists and is not itself removed; a page in the kde namespace says how it is opened; and an address that was ever on the main branch is still there, marked removed if it is gone.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "program", "pages"],
+  "$defs": {
+    "text": {
+      "description": "A source string in British English, translated with the program. Not blank, at most 200 characters, no control characters.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]*[^\\s\\u0000-\\u001f\\u007f-\\u009f][^\\u0000-\\u001f\\u007f-\\u009f]*$"
+    },
+    "keywords": {
+      "description": "Words a person might search for that are not in the title. Source strings, translated with the program.",
+      "type": "array",
+      "maxItems": 24,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/text" }
+    },
+    "page_address": {
+      "description": "The address of a page: a namespace, tur or kde, and one or more segments. Lower-case ASCII; never translated; never shown outside developer mode.",
+      "type": "string",
+      "maxLength": 120,
+      "pattern": "^(tur|kde)(\\.[a-z0-9_-]+)+$"
+    },
+    "row_id": {
+      "description": "The identifier of a row on its page; the part of an address after '#'.",
+      "type": "string",
+      "maxLength": 64,
+      "pattern": "^[a-z0-9-]+$"
+    },
+    "address": {
+      "description": "A page, or a row on a page.",
+      "type": "string",
+      "maxLength": 185,
+      "pattern": "^(tur|kde)(\\.[a-z0-9_-]+)+(#[a-z0-9-]+)?$"
+    },
+    "section": {
+      "description": "A titled group of rows on a page. Sections are not addressable: a row that moves to another section keeps its address.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title"],
+      "properties": {
+        "id": { "$ref": "#/$defs/row_id" },
+        "title": { "$ref": "#/$defs/text" }
+      }
+    },
+    "change": {
+      "description": "What changing the setting is, for the assistant. class is the action class of the AI control layer: 0 observe, 1 reversible, 2 consequential, 3 system-critical, 4 the assistant may open the page and point at the row and nothing more. Pointing at a setting is always class 0. tool names the typed tool that changes it, when one exists.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["class"],
+      "properties": {
+        "class": { "type": "integer", "minimum": 0, "maximum": 4 },
+        "tool": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$" }
+      }
+    },
+    "source": {
+      "description": "What backs a row: where its value is read from, or what a change is given to. available says whether that exists in the system today; a row whose source is not available is shown as unavailable and is never given a made-up value. waits_for says what is missing.",
+      "type": "object",
+      "required": ["type", "available"],
+      "properties": {
+        "type": {
+          "enum": ["file", "dbus", "command", "kde-config", "platform", "program", "address"]
+        },
+        "available": { "type": "boolean" },
+        "waits_for": { "$ref": "#/$defs/text" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "available": { "const": false } } },
+          "then": { "required": ["waits_for"] },
+          "else": { "not": { "required": ["waits_for"] } }
+        }
+      ],
+      "oneOf": [
+        {
+          "description": "A key of a file of KEY=VALUE lines, or the whole file.",
+          "additionalProperties": false,
+          "required": ["type", "available", "path"],
+          "properties": {
+            "type": { "const": "file" },
+            "available": true,
+            "waits_for": true,
+            "path": { "type": "string", "pattern": "^/[^\\u0000-\\u001f]*$", "maxLength": 255 },
+            "key": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$", "maxLength": 64 }
+          }
+        },
+        {
+          "description": "A property or a method of a D-Bus service.",
+          "additionalProperties": false,
+          "required": ["type", "available", "bus", "service"],
+          "properties": {
+            "type": { "const": "dbus" },
+            "available": true,
+            "waits_for": true,
+            "bus": { "enum": ["session", "system"] },
+            "service": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)+$", "maxLength": 255 },
+            "member": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$", "maxLength": 255 }
+          }
+        },
+        {
+          "description": "What a program prints. The program is an absolute path and its arguments a vector; nothing is given to a shell.",
+          "additionalProperties": false,
+          "required": ["type", "available", "program"],
+          "properties": {
+            "type": { "const": "command" },
+            "available": true,
+            "waits_for": true,
+            "program": { "type": "string", "pattern": "^/[^\\u0000-\\u001f]*$", "maxLength": 255 },
+            "arguments": { "type": "array", "maxItems": 16, "items": { "type": "string", "maxLength": 255 } }
+          }
+        },
+        {
+          "description": "A key of one of KDE's configuration files, as kreadconfig6 names it.",
+          "additionalProperties": false,
+          "required": ["type", "available", "file", "group", "key"],
+          "properties": {
+            "type": { "const": "kde-config" },
+            "available": true,
+            "waits_for": true,
+            "file": { "type": "string", "pattern": "^[A-Za-z0-9._-]+$", "maxLength": 64 },
+            "group": { "type": "string", "minLength": 1, "maxLength": 64 },
+            "key": { "type": "string", "minLength": 1, "maxLength": 64 }
+          }
+        },
+        {
+          "description": "What the desktop tells every program, through Qt: for example whether it prefers a light or a dark scheme.",
+          "additionalProperties": false,
+          "required": ["type", "available", "hint"],
+          "properties": {
+            "type": { "const": "platform" },
+            "available": true,
+            "waits_for": true,
+            "hint": { "enum": ["colour-scheme"] }
+          }
+        },
+        {
+          "description": "Something the program that shows the row knows by itself: its own version, a text it carries.",
+          "additionalProperties": false,
+          "required": ["type", "available", "what"],
+          "properties": {
+            "type": { "const": "program" },
+            "available": true,
+            "waits_for": true,
+            "what": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$", "maxLength": 64 }
+          }
+        },
+        {
+          "description": "A row that leads somewhere else: it opens another address.",
+          "additionalProperties": false,
+          "required": ["type", "available", "opens"],
+          "properties": {
+            "type": { "const": "address" },
+            "available": true,
+            "waits_for": true,
+            "opens": { "$ref": "#/$defs/address" }
+          }
+        }
+      ]
+    },
+    "locator": {
+      "description": "For a row of a program TUR does not write: how the control is found in that program's accessibility tree (desktop experience, section 10.4). Tried in order: the accessibility identifier, then the role with the label looked up in the program's own translation catalogue. The locator and its test are task D-20; nothing resolves one yet.",
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "accessible_id": { "type": "string", "minLength": 1, "maxLength": 255 },
+        "role": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "label_catalog": { "type": "string", "minLength": 1, "maxLength": 255 },
+        "label_msgid": { "type": "string", "minLength": 1, "maxLength": 255 }
+      }
+    },
+    "row": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title"],
+      "properties": {
+        "id": { "$ref": "#/$defs/row_id" },
+        "title": { "$ref": "#/$defs/text" },
+        "keywords": { "$ref": "#/$defs/keywords" },
+        "kind": {
+          "description": "What the row is: a switch, a choice among a few, a number, a text, a list, an action (a button), or information that is only read.",
+          "enum": ["switch", "choice", "number", "text", "list", "action", "information"]
+        },
+        "section": { "$ref": "#/$defs/row_id" },
+        "source": { "$ref": "#/$defs/source" },
+        "change": { "$ref": "#/$defs/change" },
+        "locator": { "$ref": "#/$defs/locator" },
+        "status": {
+          "description": "available (the default), or removed: the row is gone and its address is kept so that it is never given to anything else.",
+          "enum": ["available", "removed"]
+        },
+        "replaced_by": { "$ref": "#/$defs/address" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "removed" } }, "required": ["status"] },
+          "then": { "properties": { "kind": false, "section": false, "source": false, "change": false, "locator": false } },
+          "else": { "required": ["kind"], "not": { "required": ["replaced_by"] } }
+        },
+        {
+          "description": "Information is only read: there is nothing to change. Every other kind says what changing it is.",
+          "if": { "properties": { "kind": { "const": "information" } }, "required": ["kind"] },
+          "then": { "not": { "required": ["change"] } }
+        },
+        {
+          "if": {
+            "required": ["kind"],
+            "properties": { "kind": { "enum": ["switch", "choice", "number", "text", "list", "action"] } }
+          },
+          "then": { "required": ["change"] }
+        }
+      ]
+    },
+    "page": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["page", "title", "path"],
+      "properties": {
+        "page": { "$ref": "#/$defs/page_address" },
+        "title": { "$ref": "#/$defs/text" },
+        "path": {
+          "description": "Where the page is in its program's list, from the top: [\"P@x\", \"Privacy\"]. The last item is the page's own title.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "items": { "$ref": "#/$defs/text" }
+        },
+        "keywords": { "$ref": "#/$defs/keywords" },
+        "status": {
+          "description": "available (the default); planned: the address is reserved and the page is not built, so it cannot be opened; removed: the page is gone and its address is kept.",
+          "enum": ["available", "planned", "removed"]
+        },
+        "replaced_by": { "$ref": "#/$defs/address" },
+        "listed": {
+          "description": "False for a page that is in the list only while a feature is enabled. Default true.",
+          "type": "boolean"
+        },
+        "open": {
+          "description": "For a page of a program TUR does not write: how it is opened. module is the identifier of a module of KDE System Settings, as `systemsettings --list` prints it; arguments are passed to it with --args.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["module"],
+          "properties": {
+            "module": { "type": "string", "pattern": "^[a-z][a-z0-9_-]*$", "maxLength": 64 },
+            "arguments": { "type": "array", "maxItems": 8, "items": { "type": "string", "minLength": 1, "maxLength": 255, "pattern": "^[^\\s\\u0000-\\u001f]+$" } }
+          }
+        },
+        "verified_with": {
+          "description": "The version of the other program the page's entry and its locators were checked against, for example plasma-6.8.2.",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*-[0-9][0-9A-Za-z.]*$",
+          "maxLength": 64
+        },
+        "sections": {
+          "type": "array",
+          "maxItems": 16,
+          "items": { "$ref": "#/$defs/section" }
+        },
+        "rows": {
+          "type": "array",
+          "maxItems": 200,
+          "items": { "$ref": "#/$defs/row" }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "removed" } }, "required": ["status"] },
+          "else": { "not": { "required": ["replaced_by"] } }
+        }
+      ]
+    }
+  },
+  "properties": {
+    "licence": {
+      "description": "The SPDX identifier of the file, as a string: JSON has no comments.",
+      "type": "string",
+      "pattern": "^SPDX-License-Identifier: [A-Za-z0-9.+-]+$"
+    },
+    "schema_version": { "const": 1 },
+    "program": {
+      "description": "The program the pages belong to: its application identifier, which is also the D-Bus well-known name on which it offers org.tur.Addressable1 at /org/tur/Addressable1. org.tur.Settings for tur-settings. For KDE System Settings, which offers no such interface, org.kde.systemsettings.",
+      "type": "string",
+      "maxLength": 255,
+      "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)+$"
+    },
+    "pages": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 500,
+      "items": { "$ref": "#/$defs/page" }
+    }
+  }
+}
