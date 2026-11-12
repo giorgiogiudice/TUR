@@ -37,6 +37,8 @@ jobs:
           SHA: ${{ github.event.pull_request.head.sha || github.event.workflow_run.head_sha }}
           EVENT: ${{ github.event_name }}
           SELF: ${{ github.workflow }}
+          TRIGGER_ID: ${{ github.event.workflow_run.id }}
+          TRIGGER_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
         run: |
           python3 - <<'PY'
           import json, os, time, urllib.request
@@ -52,6 +54,12 @@ jobs:
           if os.environ["EVENT"] == "pull_request":
               time.sleep(20)  # let the other workflows be created
           runs = call("GET", f"/actions/runs?head_sha={sha}&per_page=100")["workflow_runs"]
+          # The run that triggered this evaluation has finished, but the list
+          # may not say so yet: take its result from the event itself.
+          trig = os.environ.get("TRIGGER_ID")
+          for r in runs:
+              if trig and str(r["id"]) == trig:
+                  r["status"], r["conclusion"] = "completed", os.environ["TRIGGER_CONCLUSION"]
           latest = {}
           for r in runs:
               if r["name"] in (os.environ["SELF"], "pax-live"):
