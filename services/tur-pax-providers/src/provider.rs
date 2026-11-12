@@ -25,7 +25,7 @@ use crate::http::{Auth, BodyReader, Call, Classifier, Transport, read_error};
 use crate::model::{FinishReason, ProviderId, Request, StreamEvent};
 use crate::secret::{ApiKey, REDACTED};
 use crate::sse::{SseError, SseEvent, SseReader};
-use crate::{anthropic, google, openai, strict};
+use crate::{anthropic, google, openai, openai_chat, strict};
 
 /// What an adapter can do. The orchestrator adapts to this instead of assuming
 /// that providers are alike (AI control layer design, section 10).
@@ -74,12 +74,15 @@ pub trait Provider: Send + Sync {
     fn stream(&self, request: &Request) -> EventStream;
 }
 
-/// The capabilities the adapter of a provider declares.
+/// The capabilities the adapter of a family declares: what the adapter can
+/// carry. What one model of one service can do is the service's entry's to
+/// declare (the session service checks it before it offers tools).
 pub fn capabilities_of(provider: ProviderId) -> Capabilities {
     match provider {
         ProviderId::Anthropic => anthropic::CAPABILITIES,
         ProviderId::OpenAi => openai::CAPABILITIES,
         ProviderId::Google => google::CAPABILITIES,
+        ProviderId::OpenAiChat => openai_chat::CAPABILITIES,
     }
 }
 
@@ -89,6 +92,7 @@ pub fn endpoint_path(provider: ProviderId) -> &'static str {
         ProviderId::Anthropic => anthropic::ENDPOINT.path,
         ProviderId::OpenAi => openai::ENDPOINT.path,
         ProviderId::Google => google::ENDPOINT.path,
+        ProviderId::OpenAiChat => openai_chat::ENDPOINT.path,
     }
 }
 
@@ -96,6 +100,29 @@ pub fn endpoint_path(provider: ProviderId) -> &'static str {
 ///
 /// The configuration is validated first. No network call is made.
 pub fn connect(config: &ProviderConfig, key: ApiKey) -> Result<Box<dyn Provider>, ProviderError> {
+    build(config, Some(key))
+}
+
+/// Build the adapter of a configuration for a service that takes no key,
+/// such as a model server on this computer. No credential header is sent.
+///
+/// Only the OpenAI-compatible family can be used without a key: the three
+/// companies' interfaces all require one.
+///
+/// # Errors
+///
+/// `TUR-AI-PROVIDER-011` for another family or a configuration that is not
+/// valid.
+pub fn connect_without_key(config: &ProviderConfig) -> Result<Box<dyn Provider>, ProviderError> {
+    if config.provider != ProviderId::OpenAiChat {
+        return Err(ProviderError::new(ErrorKind::ConfigInvalid)
+            .with_detail("only the openai-chat family can be used without a key")
+            .with_provider(config.provider));
+    }
+    build(config, None)
+}
+
+fn build(config: &ProviderConfig, key: Option<ApiKey>) -> Result<Box<dyn Provider>, ProviderError> {
     config
         .validate()
         .map_err(|error| error.with_provider(config.provider))?;
@@ -108,6 +135,10 @@ pub fn connect(config: &ProviderConfig, key: ApiKey) -> Result<Box<dyn Provider>
         ProviderId::Anthropic => Box::new(anthropic::AnthropicProvider::new(shared)),
         ProviderId::OpenAi => Box::new(openai::OpenAiProvider::new(shared)),
         ProviderId::Google => Box::new(google::GoogleProvider::new(shared)),
+        ProviderId::OpenAiChat => Box::new(openai_chat::OpenAiChatProvider::new(
+            shared,
+            config.send_back_reasoning,
+        )),
     };
     Ok(provider)
 }
@@ -115,8 +146,17 @@ pub fn connect(config: &ProviderConfig, key: ApiKey) -> Result<Box<dyn Provider>
 /// What an adapter needs to make a call.
 pub(crate) struct Shared {
     base_url: String,
-    key: ApiKey,
+    /// `None` for a service that takes no key.
+    key: Option<ApiKey>,
     transport: Transport,
+}
+
+impl Shared {
+    /// The key text, to remove it from what a provider sends back. Empty
+    /// without a key.
+    fn secret(&self) -> &str {
+        self.key.as_ref().map_or("", |key| key.expose())
+    }
 }
 
 /// Where and how an adapter posts a conversation.
@@ -153,7 +193,7 @@ impl Shared {
                 body: &body,
                 classify: endpoint.classify,
             };
-            shared.transport.open(&call, &shared.key)
+            shared.transport.open(&call, shared.key.as_ref())
         });
         EventStream {
             provider: endpoint.provider,
@@ -171,6 +211,16 @@ pub(crate) trait Decoder: Send {
     /// Handle one event. Neutral events are appended to `out`; a
     /// [`StreamEvent::Finish`] ends the stream.
     fn decode(&mut self, event: &SseEvent, out: &mut VecDeque<StreamEvent>);
+
+    /// The stream sent its `[DONE]` marker. For a format whose final event
+    /// is that marker, this is where the finish is produced. By default the
+    /// marker means nothing: the finish came before it.
+    fn done(&mut self, _out: &mut VecDeque<StreamEvent>) {}
+
+    /// The stream is about to end with a failure of its own (cut, unreadable)
+    /// after some of the response was read. An adapter that has to account
+    /// for what was used may add events before the failure.
+    fn interrupted(&mut self, _out: &mut VecDeque<StreamEvent>) {}
 }
 
 type Opener = Box<dyn FnOnce() -> Result<BodyReader, ProviderError> + Send>;
@@ -219,6 +269,16 @@ impl EventStream {
             )));
     }
 
+    /// The stream ends with a failure of its own after some of the response
+    /// was read: the adapter may account for it first.
+    fn interrupted(&mut self) {
+        if self.received
+            && let Some(decoder) = self.decoder.as_mut()
+        {
+            decoder.interrupted(&mut self.queue);
+        }
+    }
+
     /// The connection closed before the provider's own end of stream.
     fn ended_early(&self) -> ProviderError {
         if self.received {
@@ -257,7 +317,7 @@ impl Iterator for EventStream {
                 self.queue.clear();
                 // A provider may repeat the key in an error message.
                 let reason = match self.shared.take() {
-                    Some(shared) => reason.scrubbed(shared.key.expose()),
+                    Some(shared) => reason.scrubbed(shared.secret()),
                     None => reason,
                 };
                 return Some(StreamEvent::Finish(reason));
@@ -273,14 +333,19 @@ impl Iterator for EventStream {
                         self.state = State::Open(reader);
                         // A provider may repeat the key it was sent. It is
                         // removed before anything is made of the event.
-                        if let Some(shared) = &self.shared
-                            && event.data.contains(shared.key.expose())
-                        {
-                            event.data = event.data.replace(shared.key.expose(), REDACTED);
+                        if let Some(shared) = &self.shared {
+                            let secret = shared.secret();
+                            if !secret.is_empty() && event.data.contains(secret) {
+                                event.data = event.data.replace(secret, REDACTED);
+                            }
                         }
-                        // Two providers end a stream with this marker. The
-                        // finish event has been produced by then.
+                        // Three formats end a stream with this marker. Two
+                        // have produced their finish by then; for the
+                        // OpenAI-compatible one it is the end.
                         if event.data.trim() == "[DONE]" {
+                            if let Some(decoder) = self.decoder.as_mut() {
+                                decoder.done(&mut self.queue);
+                            }
                             continue;
                         }
                         self.received = true;
@@ -289,10 +354,14 @@ impl Iterator for EventStream {
                         }
                     }
                     Ok(None) => {
+                        self.interrupted();
                         let error = self.ended_early();
                         self.fail(error);
                     }
-                    Err(error) => self.fail(stream_error(error)),
+                    Err(error) => {
+                        self.interrupted();
+                        self.fail(stream_error(error));
+                    }
                 },
             }
         }
@@ -508,9 +577,72 @@ mod tests {
             assert!(capabilities.tool_calling, "{provider}");
             assert!(capabilities.image_input, "{provider}");
             // Recorded, not implemented: screen control is out of scope here.
-            assert!(capabilities.native_computer_control.provider_tool.is_some());
+            // Only a company's own interface has a computer-control tool of
+            // its own.
+            assert_eq!(
+                capabilities.native_computer_control.provider_tool.is_some(),
+                provider.is_company_interface(),
+                "{provider}"
+            );
             assert!(!capabilities.native_computer_control.implemented);
-            assert!(endpoint_path(provider).starts_with("/v1"));
+            if provider.is_company_interface() {
+                assert!(endpoint_path(provider).starts_with("/v1"));
+            } else {
+                // Below a base URL that already holds the version.
+                assert_eq!(endpoint_path(provider), "/chat/completions");
+            }
         }
+    }
+
+    /// Echoes the data, finishes on the marker, says when it is interrupted.
+    struct Hooks;
+
+    impl Decoder for Hooks {
+        fn decode(&mut self, event: &SseEvent, out: &mut VecDeque<StreamEvent>) {
+            out.push_back(StreamEvent::TextDelta {
+                text: event.data.clone(),
+            });
+        }
+
+        fn done(&mut self, out: &mut VecDeque<StreamEvent>) {
+            out.push_back(StreamEvent::Finish(FinishReason::EndTurn));
+        }
+
+        fn interrupted(&mut self, out: &mut VecDeque<StreamEvent>) {
+            out.push_back(StreamEvent::TextDelta {
+                text: "interrupted".to_owned(),
+            });
+        }
+    }
+
+    fn hooked(text: &'static str) -> EventStream {
+        EventStream {
+            provider: ProviderId::OpenAiChat,
+            state: State::Pending(body(text)),
+            decoder: Some(Box::new(Hooks)),
+            queue: VecDeque::new(),
+            received: false,
+            shared: None,
+        }
+    }
+
+    #[test]
+    fn the_done_marker_and_an_interruption_reach_the_decoder() {
+        // The marker is where this decoder finishes.
+        let events: Vec<StreamEvent> =
+            hooked("data: a\n\ndata: [DONE]\n\ndata: late\n\n").collect();
+        assert_eq!(
+            events,
+            vec![text("a"), StreamEvent::Finish(FinishReason::EndTurn)]
+        );
+        // Cut after something was read: the decoder is told before the
+        // failure.
+        let events: Vec<StreamEvent> = hooked("data: a\n\ndata: b").collect();
+        assert_eq!(events[..2], [text("a"), text("interrupted")]);
+        assert_eq!(only_error(&events).kind(), ErrorKind::Network);
+        // Nothing read: nothing to account for.
+        let events: Vec<StreamEvent> = hooked("").collect();
+        assert_eq!(events.len(), 1);
+        assert_eq!(only_error(&events).kind(), ErrorKind::MalformedResponse);
     }
 }

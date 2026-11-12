@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
 
 //! The P@x provider layer: one provider-neutral interface and an adapter for
-//! each of Anthropic, OpenAI and Google.
+//! each API family: Anthropic's Messages, OpenAI's Responses, Google's
+//! Interactions, and the OpenAI-compatible Chat Completions that DeepSeek and
+//! many other services and local servers offer.
 //!
 //! P@x, the assistant, is provider-agnostic (ADR-0004). The orchestrator
 //! speaks only the neutral model of this crate; everything specific to a
@@ -12,7 +14,9 @@
 //!   definitions, requests, and the events of a streamed response.
 //! * [`provider`] is the interface: a [`Provider`] declares its
 //!   [`Capabilities`] and streams a response as an [`EventStream`].
-//! * [`anthropic`], [`openai`] and [`google`] are the adapters.
+//! * [`anthropic`], [`openai`], [`google`] and [`openai_chat`] are the
+//!   adapters, one for each family.
+//! * [`probe`] checks with one small request whether a model calls tools.
 //! * [`error`] is the typed error with its stable `TUR-AI-PROVIDER-*` code.
 //! * [`secret`] holds the API key, which cannot be printed.
 //! * [`config`] is the configuration file format.
@@ -79,6 +83,8 @@ pub mod google;
 mod http;
 pub mod model;
 pub mod openai;
+pub mod openai_chat;
+pub mod probe;
 pub mod provider;
 pub mod secret;
 pub mod spend;
@@ -92,9 +98,10 @@ pub use model::{
     FinishReason, Image, Message, OpaquePart, Part, ProviderId, Request, ResultContent, Role,
     StreamEvent, ToolCall, ToolDefinition, ToolResult, Turn, Usage,
 };
+pub use probe::{ToolProbe, probe_tool_calling};
 pub use provider::{
     Capabilities, EventStream, NativeComputerControl, Provider, capabilities_of, connect,
-    endpoint_path,
+    connect_without_key, endpoint_path,
 };
 pub use secret::{ApiKey, EnvKeySource, KeySource, is_usable_key};
 pub use spend::{MeteredStream, SpendMeter};

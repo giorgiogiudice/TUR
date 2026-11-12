@@ -382,6 +382,7 @@ fn usage(usage: &Value, out: &mut VecDeque<StreamEvent>) {
         cached_input_tokens: usage["input_tokens_details"]["cached_tokens"]
             .as_u64()
             .unwrap_or(0),
+        estimated: false,
     }));
 }
 

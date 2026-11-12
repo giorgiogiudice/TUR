@@ -35,12 +35,23 @@ pub const ATTEMPTS_MAX: u32 = 10;
 pub struct ProviderConfig {
     /// The schema version. Must be [`CONFIG_SCHEMA_VERSION`].
     pub schema_version: u32,
-    /// The provider, which selects the adapter.
+    /// The adapter family, which selects the adapter.
     pub provider: ProviderId,
-    /// The base URL of the provider's API. Without it the provider's public
-    /// endpoint is used. Set it to use a compatible gateway.
+    /// The base URL of the provider's API. Without it the family's public
+    /// endpoint is used. Set it to use a compatible gateway. The
+    /// OpenAI-compatible family has no public endpoint and needs one: the
+    /// address up to the path `/chat/completions`, as the service documents
+    /// it (for example `https://api.example.org/v1`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub base_url: Option<String>,
+    /// Whether the model's reasoning text, which the service streams beside
+    /// the answer, is sent back with the assistant turns of later requests.
+    /// Only the OpenAI-compatible family reads it, and only for a service
+    /// whose documentation requires it (DeepSeek, when tools are offered).
+    /// Off by default: the reasoning is then kept with the conversation and
+    /// never sent.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub send_back_reasoning: bool,
     /// The model name, as the provider spells it.
     pub model: String,
     /// The most output tokens the model may produce for one request.
@@ -166,8 +177,20 @@ impl ProviderConfig {
         if self.max_output_tokens == 0 {
             return Err(invalid("max_output_tokens must be at least 1"));
         }
-        if let Some(base_url) = &self.base_url {
-            check_base_url(base_url)?;
+        match (&self.base_url, default_base_url(self.provider)) {
+            (Some(base_url), _) => check_base_url(base_url)?,
+            (None, Some(_)) => {}
+            (None, None) => {
+                return Err(invalid(&format!(
+                    "base_url is needed: the {} family has no public address of its own",
+                    self.provider
+                )));
+            }
+        }
+        if self.send_back_reasoning && self.provider != ProviderId::OpenAiChat {
+            return Err(invalid(
+                "send_back_reasoning is read by the openai-chat family only",
+            ));
         }
         for (name, value) in [
             ("timeouts.connect_ms", self.timeouts.connect_ms),
@@ -227,12 +250,14 @@ impl ProviderConfig {
         Ok(())
     }
 
-    /// The base URL requests go to: the configured one, or the provider's
-    /// public endpoint. It has no trailing slash.
+    /// The base URL requests go to: the configured one, or the family's
+    /// public endpoint. It has no trailing slash. Empty for a configuration
+    /// that [`ProviderConfig::validate`] refuses because it names no address
+    /// and its family has none.
     pub fn effective_base_url(&self) -> &str {
         match &self.base_url {
             Some(base_url) => base_url.trim_end_matches('/'),
-            None => default_base_url(self.provider),
+            None => default_base_url(self.provider).unwrap_or(""),
         }
     }
 
@@ -253,13 +278,20 @@ impl ProviderConfig {
     }
 }
 
-/// The public endpoint of a provider.
-pub const fn default_base_url(provider: ProviderId) -> &'static str {
+/// The public endpoint of an adapter family, if it has one. The
+/// OpenAI-compatible family is spoken by many services and has none: every
+/// configuration of it names its address.
+pub const fn default_base_url(provider: ProviderId) -> Option<&'static str> {
     match provider {
-        ProviderId::Anthropic => "https://api.anthropic.com",
-        ProviderId::OpenAi => "https://api.openai.com",
-        ProviderId::Google => "https://generativelanguage.googleapis.com",
+        ProviderId::Anthropic => Some("https://api.anthropic.com"),
+        ProviderId::OpenAi => Some("https://api.openai.com"),
+        ProviderId::Google => Some("https://generativelanguage.googleapis.com"),
+        ProviderId::OpenAiChat => None,
     }
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 fn is_price(amount: f64) -> bool {
@@ -371,13 +403,55 @@ mod tests {
     }
 
     #[test]
-    fn every_provider_has_a_public_endpoint() {
+    fn every_company_family_has_a_public_endpoint_and_the_compatible_one_none() {
         for provider in ProviderId::ALL {
-            let config = with(|value| value["provider"] = json!(provider.as_str())).unwrap();
-            assert_eq!(config.provider, provider);
-            assert!(config.effective_base_url().starts_with("https://"));
-            assert_eq!(config.effective_base_url(), default_base_url(provider));
+            match default_base_url(provider) {
+                Some(public) => {
+                    assert!(provider.is_company_interface(), "{provider}");
+                    let config =
+                        with(|value| value["provider"] = json!(provider.as_str())).unwrap();
+                    assert_eq!(config.provider, provider);
+                    assert!(config.effective_base_url().starts_with("https://"));
+                    assert_eq!(config.effective_base_url(), public);
+                }
+                None => {
+                    assert!(!provider.is_company_interface(), "{provider}");
+                    // Without an address of its own a configuration is refused.
+                    let detail = rejected(|value| value["provider"] = json!(provider.as_str()));
+                    assert!(detail.contains("base_url"), "{detail}");
+                    let config = with(|value| {
+                        value["provider"] = json!(provider.as_str());
+                        value["base_url"] = json!("https://api.example.org/v1/");
+                    })
+                    .unwrap();
+                    assert_eq!(config.effective_base_url(), "https://api.example.org/v1");
+                }
+            }
         }
+        assert_eq!(default_base_url(ProviderId::OpenAiChat), None);
+    }
+
+    #[test]
+    fn reasoning_is_sent_back_only_by_the_family_that_reads_the_setting() {
+        let config = with(|value| {
+            value["provider"] = json!("openai-chat");
+            value["base_url"] = json!("http://127.0.0.1:11434/v1");
+            value["send_back_reasoning"] = json!(true);
+        })
+        .unwrap();
+        assert!(config.send_back_reasoning);
+        let text = serde_json::to_string(&config).unwrap();
+        assert_eq!(ProviderConfig::from_json(&text).unwrap(), config);
+        // Off by default, and not written out when off.
+        let plain = with(|_| {}).unwrap();
+        assert!(!plain.send_back_reasoning);
+        assert!(
+            !serde_json::to_string(&plain)
+                .unwrap()
+                .contains("send_back_reasoning")
+        );
+        let detail = rejected(|value| value["send_back_reasoning"] = json!(true));
+        assert!(detail.contains("openai-chat"), "{detail}");
     }
 
     #[test]

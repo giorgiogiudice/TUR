@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "provider": "openai-chat",
+  "base_url": "http://127.0.0.1:11434/v1",
+  "send_back_reasoning": true,
+  "model": "example-local-model",
+  "max_output_tokens": 2048,
+  "timeouts": { "connect_ms": 2000, "response_ms": 300000, "idle_ms": 120000 },
+  "retry": { "max_attempts": 2, "initial_delay_ms": 250, "max_delay_ms": 5000 },
+  "prices": { "currency": "USD", "input_per_million": 0.0, "output_per_million": 0.0 },
+  "task_limit": { "max_tokens": 200000 }
+}

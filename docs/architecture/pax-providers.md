@@ -10,19 +10,27 @@ it, what each adapter declares it can do, the error codes, how untrusted content
 is marked, what was verified in each provider's documentation, and what is
 known to be missing.
 
-**Nothing here has been tested against a real provider.** The adapters are
-written from the providers' published documentation, read on 2026-11-12, and
-tested against a local server that replays responses written by hand from that
-documentation. No request has been sent to Anthropic, OpenAI or Google, and no
-API key exists in CI. Every statement below about a provider's behaviour is a
-statement about its documentation. A conformance run against real providers is
-the next step and is listed under [known gaps](#11-known-gaps).
+**Nothing here has been tested against a real provider by this work.** The
+adapters are written from the providers' published documentation, read on
+2026-11-12, and tested against a local server that replays responses written
+by hand from that documentation. No request has been sent to Anthropic,
+OpenAI, Google, DeepSeek or any other compatible service by the tests, and no
+key exists in CI outside the manual workflow `pax-live`. Every statement
+below about a provider's behaviour is a statement about its documentation.
+
+**Four adapter families, any number of providers** (ADR-0004, amended 12
+November 2026). The fourth family, `openai-chat`, speaks the
+OpenAI-compatible Chat Completions API that DeepSeek, Mistral, xAI, Groq,
+OpenRouter, Together and local model servers (Ollama, llama.cpp's
+`llama-server`) offer. A *provider* is data: an entry naming its family, its
+address, its key's keyring item, its models and what they can do, and its
+data terms ([section 14](#14-the-openai-compatible-family-and-its-presets)).
 
 ---
 
 ## 1. What the layer is
 
-One interface, three adapters, no policy.
+One interface, four adapters, no policy.
 
 ```text
 orchestrator ── Request ──▶ Provider::stream ──▶ EventStream (an iterator)
@@ -46,7 +54,8 @@ call on a thread of its own. There is no async runtime.
 |---|---|
 | `model` | The neutral conversation model and the stream events |
 | `provider` | The `Provider` trait, `Capabilities`, `EventStream`, `connect` |
-| `anthropic`, `openai`, `google` | The adapters |
+| `anthropic`, `openai`, `google`, `openai_chat` | The adapters, one for each family |
+| `probe` | A one-request check that a model calls tools |
 | `error` | `ProviderError` and the `TUR-AI-PROVIDER-*` registry |
 | `secret` | `ApiKey`, `KeySource`, `EnvKeySource` |
 | `config` | The configuration file format |
@@ -60,6 +69,7 @@ call on a thread of its own. There is no async runtime.
 | Anthropic | Messages API, `POST /v1/messages`, API version `2026-10-21` | The provider's one conversation API. The version is the current one and is pinned in the `anthropic-version` header. |
 | OpenAI | Responses API, `POST /v1/responses` | The provider's guide says: "While Chat Completions remains supported, Responses is recommended for all new projects." Chat Completions is not used. |
 | Google | Gemini Interactions API, `POST /v1beta/interactions` | The provider's overview says the Interactions API is generally available as of June 2026 and "the recommended interface for all new projects", and that `generateContent` "is now considered legacy" though it "remains fully supported". |
+| Any compatible service (`openai-chat`) | Chat Completions, `POST <base URL>/chat/completions` | The interface DeepSeek and the other services of section 14 document as their OpenAI-compatible one. The base URL is the service's, as it documents it (`https://api.deepseek.com`, `https://api.groq.com/openai/v1`, `http://127.0.0.1:11434/v1`); the family has none of its own and a configuration without one is refused. This is not used for OpenAI itself, whose own family stays the Responses API. |
 
 The task that produced this layer named `generateContent` for Google. That was
 written before the documentation was read. The documentation at
@@ -281,6 +291,15 @@ needs.
 | Model discovery | No | no | no | no |
 | Speech services | No | no | no | no |
 
+The `openai-chat` family declares what the *format* can carry: streaming,
+tool calling, several calls in one response and image input in a user
+message, yes; images in tool results, no (the reference: "For tool
+messages, only type `text` is supported", so a tool result with an image is
+refused before anything is sent); native computer control, none. What one
+model of one service can do is declared by its provider entry, not by the
+adapter, and checked before tools are offered
+([section 14.4](#144-declared-capabilities-are-checked)).
+
 **Native computer control** is recorded, not implemented: screen control is out
 of scope for this layer. What each provider documents today:
 
@@ -440,7 +459,11 @@ consent text of section 8 is written.
 prices. A test checks that no source file of the crate contains a model name.
 
 `base_url` is how the tests point an adapter at the fake server, and how a
-compatible gateway can be used.
+compatible gateway can be used. The `openai-chat` family needs one; it also
+reads `send_back_reasoning` (default `false`), which no other family
+accepts. A service that takes no key is reached with
+`connect_without_key`, which only the `openai-chat` family allows; no
+credential header is sent then.
 
 **Spend.** A `SpendMeter` adds up the usage of every request of a task and, if
 prices are configured, converts it to a cost. A stream read through
@@ -460,15 +483,19 @@ across tasks. Prices are configuration there too, from a model list.
 **Command line.**
 
 ```text
-tur-pax-providers check --config <file> [--ping] [--key-env <VARIABLE>]
+tur-pax-providers check --config <file> [--ping] [--probe-tools]
+                        [--key-env <VARIABLE> | --no-key]
 ```
 
 `check` validates a configuration and prints the endpoint, the API and the
 capabilities the adapter declares. It makes no network call. With `--ping` it
 reads the key from an environment variable (`TUR_PAX_API_KEY` by default) and
-sends one request of at most 64 output tokens, which the provider bills. Exit
-status: 0 valid (and ping succeeded), 1 invalid configuration, 2 usage error,
-3 ping failed.
+sends one request of at most 64 output tokens, which the provider bills. With
+`--probe-tools` it sends the tool probe of section 14.4 (at most 512 output
+tokens, billed). `--no-key` sends no key, for a server that takes none
+(`openai-chat` only). Exit status: 0 valid (and the requests succeeded, the
+probe verified), 1 invalid configuration, 2 usage error, 3 ping failed or no
+adapter could be built, 4 the probe did not show that the model calls tools.
 
 ## 11. Known gaps
 
@@ -508,7 +535,9 @@ status: 0 valid (and ping succeeded), 1 invalid configuration, 2 usage error,
 - **Tool schemas are sent unchanged.** Google documents that it supports "a
   subset of the OpenAPI schema" for parameters. Whether every keyword of the
   manifest's subset, `additionalProperties` among them, is accepted was not
-  verified.
+  verified. The same holds for every compatible service.
+- **The compatible family** has its own list in
+  [section 14.7](#147-what-is-not-verified-or-not-built).
 
 ## 12. What was verified, and what was not
 
@@ -598,7 +627,8 @@ All tests run in CI and nowhere else. None contacts a provider.
 
 | Test | What it shows |
 |---|---|
-| `tests/conformance.rs` | The provider conformance suite of sections 10 and 12 of the design. Twenty-two neutral-level tests, each run against all three adapters. |
+| `tests/conformance.rs` | The provider conformance suite of sections 10 and 12 of the design. Twenty-two neutral-level tests, each run against all four adapter families. |
+| `tests/openai_chat.rs` | What the compatible family must do beyond that (section 14.6). |
 | `tests/secrets.rs` | The key is in no error, event or debug rendering, and is sent only in the documented header. |
 | `tests/config_and_schema.rs` | The schema and the loader agree; the examples load; no model name is compiled in. |
 | `tests/cli.rs` | The built binary: `check` makes no network call; `--ping` makes one; the key is never printed. |
@@ -608,8 +638,9 @@ The conformance suite uses a fake server in `tests/common/`: the standard
 library's `TcpListener`, one thread, one connection at a time. It answers each
 request with the next scripted reply, sending event streams with chunked
 transfer encoding in pieces of seven bytes, and records what it was sent. The
-scripts are in `tests/common/{anthropic,openai,google}.rs`, one set per
-provider, written by hand from the documentation listed above.
+scripts are in `tests/common/{anthropic,openai,google,openai_chat}.rs`, one
+set per family, written by hand from the documentation listed above and in
+section 14; none is a recording of a real service.
 
 | Conformance test | Asserts, for each adapter |
 |---|---|
@@ -635,3 +666,236 @@ provider, written by hand from the documentation listed above.
 | Spend limit | The stream is cut with `TUR-AI-PROVIDER-010`; the next request is not sent |
 | Spend under the limit | Usage and cost add up over two requests |
 | Capabilities | The adapter declares the required rows; nothing is sent |
+
+For the compatible family, "the reasoning content unchanged" in the tool
+round trip reads: the reasoning is kept as an opaque part and, with the
+default configuration, *not* sent back; "arguments delivered whole" reads:
+one delta that holds all of the argument text, the only form Chat
+Completions has.
+
+## 14. The OpenAI-compatible family and its presets
+
+### 14.1 Mapping
+
+Sources: OpenAI's Chat Completions reference
+(<https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create.md>,
+<https://developers.openai.com/api/reference/resources/chat/subresources/completions/streaming-events.md>),
+its function-calling guide in chat mode
+(<https://developers.openai.com/api/docs/guides/function-calling?api-mode=chat>),
+the type definitions of the official Python SDK (`src/openai/types/chat/`,
+`completion_usage.py`, `_streaming.py`), and DeepSeek's API documentation
+(<https://api-docs.deepseek.com>), all read on 2026-11-12.
+
+| Neutral | Chat Completions |
+|---|---|
+| Endpoint | `POST <base URL>/chat/completions` |
+| Key | `Authorization: Bearer`; none at all for a service whose entry says `key_required: false` |
+| `system` | The first message, `{"role": "system"}` |
+| `max_output_tokens` | `max_tokens` (the reference calls it deprecated in favour of `max_completion_tokens`; DeepSeek and Ollama document `max_tokens`, and Ollama does not list the other) |
+| Streaming | `stream: true`, `stream_options: {"include_usage": true}` |
+| Tool | `{"type": "function", "function": {name, description, parameters}}`; `tool_choice: "auto"` when tools are offered (the documented default; a forced choice is refused by DeepSeek in thinking mode). `strict` and `parallel_tool_calls` are not sent |
+| User text and images | One `user` message: a string, or text and `image_url` parts with a `data:` URL when there is an image |
+| Assistant text and calls | One `assistant` message: `content` (null when there is only a call), `tool_calls` with `arguments` as a JSON string |
+| Tool result | A `tool` message `{tool_call_id, content}` for each result, placed before the user's text, text only; `is_error` is not sent (no field for it) |
+| Reasoning (opaque) | Kept from `reasoning_content` or `reasoning`; sent back in the same field on the assistant message only with `send_back_reasoning` |
+
+| Neutral event | Chat Completions |
+|---|---|
+| `TextDelta` | `choices[0].delta.content` (a string; in a list of parts, only `text` parts) |
+| `ToolCallStart` | The first delta of a call that names it; argument text that came before the name waits for it |
+| `ToolCallArgumentsDelta` | `delta.tool_calls[].function.arguments`, by `index` |
+| `ToolCallEnd` | Every open call ends when the stream ends |
+| `Opaque` | The reasoning so far, delivered before the text or call that follows it |
+| `Usage` | Any chunk with a `usage` object (OpenAI: a last chunk with no choices; DeepSeek: the last chunk with the finish; OpenRouter: a chunk that repeats the finish) |
+| `Finish` | `data: [DONE]`, with the first `finish_reason` seen |
+
+| `finish_reason` | Neutral |
+|---|---|
+| `stop`, `tool_calls` | `ToolUse` if a call was delivered, `EndTurn` otherwise; a `refusal` text makes it `Refusal` |
+| `length` | `OutputLimit`: the task loop discards the response whole |
+| `content_filter` | `Refusal` (`TUR-AI-PROVIDER-005`) |
+| `insufficient_system_resource`, `aborted` (DeepSeek), `error` (OpenRouter) | `Error`, `Overloaded` |
+| `function_call`, anything else, none before `[DONE]` | `Error`, `MalformedResponse` |
+
+A chunk with an `error` object (the reference: "An error after streaming
+begins can arrive as a stream event"; OpenRouter documents the shape) ends
+the stream with that error; a status number in its `code` is read as one.
+Errors before the stream use the statuses of section 6 and the `error`
+object's `code` and `type`; DeepSeek's 402 "Insufficient Balance" is
+`QuotaExhausted`, its 422 `RequestRejected`. A stream that closes before
+`[DONE]` is a `Network` error.
+
+**Choices.** One is asked for (no `n`); a choice with another index is
+ignored.
+
+**Calls without an index.** The reference requires `index`. A call that
+comes without one is told apart by its `id`; a delta with neither belongs to
+the last call.
+
+### 14.2 Strict reading
+
+As for every family (section 4.3): every chunk is parsed strictly; the
+argument text of every call is read strictly when the stream ends; a call
+that repeats a key at any depth, or whose text is not one JSON object, is
+not delivered, and a normal end of the response is then
+`MalformedResponse`, so the task loop discards the whole response. Three
+more ways to say two things about one call do the same: a second, different
+name; a second, different identifier (or one that arrives after the call was
+started without one); arguments that are not text. A call that never gets a
+name is not delivered either.
+
+### 14.3 Usage and the limit of a day
+
+Every request asks for usage in the stream. When a response finishes
+without any, the adapter delivers an estimate, marked
+(`Usage.estimated`, written `"estimated": true` wherever a usage is written
+out): one token for every two bytes of the request as sent, without image
+data; 3 000 tokens for each image; and the whole output limit. It is meant
+to be high: a response nobody counted would otherwise cost nothing to the
+task's limit and to the day's. The same estimate is delivered before an
+error chunk and before a stream that is cut after something arrived. A sum
+with an estimate in it is an estimate. Groq and llama.cpp's server do not
+document usage in streams, so this is the path their responses are
+expected to take.
+
+### 14.4 Declared capabilities are checked
+
+A provider entry declares `tool_calling`, `streaming_tool_calls`,
+`image_input` and `context_tokens`, for the provider and, overriding it,
+for each model. The session service acts on them:
+
+- A model that declares no tool calling is offered **no tools and no
+  command**. The task runs as a conversation and the person is told, as a
+  notice of the task: "This model cannot call tools, as its provider's entry
+  declares, so P@x can talk with it but cannot act with it: no tool or
+  command is offered to it." `GetStatus` (`abilities`) and `ListModels`
+  (`can_act`, `can_see`, `notices`) say it before the person chooses.
+- A model that declares no image input is marked `can_see: false` with the
+  sentence "This model takes no images, as its provider's entry declares, so
+  P@x will not offer it control of the screen." This build has no screen
+  control to withhold; the flag is there for when it has.
+- Nothing declared: tools are offered, as before.
+
+**The probe.** `tur_pax_providers::probe_tool_calling` (and
+`tur-pax-providers check --probe-tools`) sends one request that offers one
+harmless tool, `tur_probe`, and asks for it to be called; the call is
+looked at, never performed. Verdicts: `verified`, `not_called`,
+`inconclusive` (cut at the output limit, refused, failed). It is billed and
+is made only when asked. The settings page that would run it when a person
+adds a model does not exist yet; the command line does.
+
+### 14.5 Reasoning
+
+DeepSeek, xAI and llama.cpp's server stream the model's reasoning in
+`reasoning_content`; Ollama, Groq and OpenRouter in `reasoning`. Decided
+here:
+
+- It is **never text of the answer**: it produces no `TextDelta`, is not in
+  the answer, the transcript, the activity or the trail, and is never shown
+  as P@x's words.
+- It is **never an instruction**: it is kept as an opaque part of the
+  assistant turn, which the orchestrator does not read.
+- It is **sent back only where the service's documentation requires it**:
+  `send_back_reasoning: true` in the configuration, set by the DeepSeek
+  preset only. DeepSeek's thinking-mode guide
+  (<https://api-docs.deepseek.com/guides/thinking_mode>): "for requests
+  carrying the tools parameter, the reasoning_content must be fully passed
+  back to the API in all subsequent requests — even for turns where the
+  model did not perform a tool call. If your code does not correctly pass
+  back reasoning_content, the API will return a 400 error." It goes back in
+  the field it came in. Every other service: kept, never sent.
+- A list of content parts with a `thinking` part (Mistral's reasoning
+  models with `reasoning_effort`, which P@x does not set) contributes only
+  its `text` parts; the thinking part is dropped, not sent back. Mistral
+  asks for the whole message to be replayed in that mode; it is not used.
+
+### 14.6 Tests
+
+`tests/openai_chat.rs` (hand-written scripts in
+`tests/common/openai_chat.rs`; no real service):
+
+| Test | Shows |
+|---|---|
+| `reasoning_is_never_text_and_goes_back_only_where_the_service_requires_it` | DeepSeek's `reasoning_content`: not in the text; an opaque part first; sent back in the next request only with `send_back_reasoning` |
+| `the_reasoning_field_of_other_servers_is_kept_the_same_way` | Ollama's `reasoning` and its whole-call delta |
+| `tool_call_text_cut_inside_an_escape_and_bytes_cut_inside_a_character` | Argument text cut inside `\"` and `ö`; the stream sent one byte at a time |
+| `a_repeated_key_split_across_deltas_at_any_depth_discards_the_response` | A nested repeated key across two deltas, beside an unremarkable call |
+| `a_service_that_sends_no_usage_is_counted_at_a_marked_estimate` | The estimate, its figures, the task limit acting on it, a cut stream counted |
+| `a_reported_usage_is_taken_as_it_is_wherever_the_service_puts_it` | OpenRouter's repeated finish and its usage chunk |
+| `the_endings_a_service_can_give` | `content_filter`, an error chunk with status 200, `insufficient_system_resource`, no `[DONE]` |
+| `a_rate_limit_with_retry_after_is_waited_for_then_succeeds` | A 429 with `retry-after: 1` is waited for |
+| `a_server_that_takes_no_key_is_sent_no_credential` | No `Authorization` header; the companies' families refuse it |
+
+Also: the conformance suite (all 22 tests, `openai_chat` module), the key
+tests of `tests/secrets.rs`, the command line (`tests/cli.rs`: ping,
+probe, `--no-key`), unit tests in `openai_chat.rs` and `probe.rs`; in
+`tur-pax`, `tests/wires.rs` runs the loop through all four families
+(including "nothing above class 1 runs through any adapter"), and
+`tests/service.rs` the service with a listed compatible provider, a model
+without tool calling and a keyless local server; the `pax` workflow runs
+scenarios 18 and 19 through the family.
+
+### 14.7 What is not verified or not built
+
+- **No compatible service has been called.** The DeepSeek preset can be run
+  by hand with `pax-live` once the secret `DEEPSEEK_KEY` exists.
+- **Streamed tool calls** are shown in documentation by OpenAI, DeepSeek,
+  Groq and Together. Mistral's FAQ says the delta structure is the same but
+  shows no tool-call chunk; xAI sends each call whole in one chunk; Ollama's
+  documentation does not say (its source sends each call whole);
+  llama.cpp's README does not say.
+- **Usage in streams** is documented by OpenAI, DeepSeek, xAI (two
+  conflicting descriptions), OpenRouter (always), Together (a usage-only
+  chunk) and Ollama (`include_usage` ticked); Mistral's pages conflict;
+  Groq and llama.cpp document none: the estimate applies.
+- **`tool_choice`**: Ollama lists it as not supported, llama.cpp does not
+  document it for chat; `"auto"` is sent anyway, as the documented default.
+  Whether either rejects it was not verified.
+- **`max_tokens`** is deprecated by OpenAI in favour of
+  `max_completion_tokens`; which compatible services accept which was not
+  verified beyond DeepSeek and Ollama (`max_tokens`).
+- **Images in tool results** are refused by this family although DeepSeek
+  documents them; the format's reference does not.
+- **Retry-After** is documented by Groq (429), OpenRouter (429, 503, some
+  402) and Mistral (429); not by DeepSeek, xAI or Together. Backoff applies.
+- **Service-specific extras** are not used: DeepSeek's `thinking` switch,
+  `user_id` cache isolation and beta `strict` tools; Mistral's
+  `prompt_mode`; Groq's `reasoning_format`; OpenRouter's routing and `zdr`.
+- **The settings page** that adds a provider, shows its terms and runs the
+  probe is the desktop's (D-19); the interface gives it the data.
+
+### 14.8 Presets
+
+In `services/tur-pax/data/models.json`. Every page was read on
+**2026-11-12**. Prices are **examples** in USD per million tokens (input /
+output / cached input) and change without notice; the consent text of each
+shows its data terms as summarised in the file, with the date.
+
+| Preset | Base URL | Models (context; image input) | Example prices | Verified in | Data terms read from |
+|---|---|---|---|---|---|
+| `deepseek` | `https://api.deepseek.com` | `deepseek-flash` (1M; yes), `deepseek-v4-pro` (1M; no) | peak rates: 0.30 / 1.20 / 0.006 and 1.32 / 3.96 / 0.044; off-peak half; shown with `$` and no currency named | <https://api-docs.deepseek.com/quick_start/pricing>, `/api/create-chat-completion`, `/guides/tool_calls`, `/guides/thinking_mode`, `/quick_start/error_codes`, `/quick_start/rate_limit`, `/updates` | Privacy policy (updated 2026-02-10) <https://cdn.deepseek.com/policies/en-US/deepseek-privacy-policy.html>, terms of use (2026-03-27), open platform terms (2026-04-29) |
+| `mistral` | `https://api.mistral.ai/v1` | `mistral-small-2603` (256k; yes), `mistral-large-4` (1M; yes) | 0.15 / 0.60; 0.70 / 2.10 / 0.07 | <https://docs.mistral.ai/resources/migration-guides.md> ("The Mistral Chat Completions API follows the same request structure as OpenAI"), `/inference/pricing.md`, model cards | Privacy policy <https://legal.mistral.ai/terms/privacy-policy>, commercial terms, regional inference, zero data retention |
+| `xai` | `https://api.x.ai/v1` | `grok-4.3` (1M; yes), `grok-4.7` (500k; yes) | under 200K-token prompts: 1.25 / 2.50 / 0.20; 2.00 / 6.00 / 0.50 | <https://docs.x.ai/developers/model-capabilities/legacy/chat-completions.md> (a "legacy endpoint"), `/tools/function-calling.md`, `/pricing.md` | Security FAQ in its documentation <https://docs.x.ai/developers/faq/security.md>; its legal pages were not read |
+| `groq` | `https://api.groq.com/openai/v1` | `openai/gpt-oss-120b` (131 072; no), `qwen/qwen3.8-27b` (preview; 131 072; yes) | 0.15 / 0.60; 0.80 / 4.00 | <https://console.groq.com/docs/openai>, `/tool-use`, `/models`, `/vision` | <https://console.groq.com/docs/your-data>, services agreement (2026-06-22) |
+| `openrouter` | `https://openrouter.ai/api/v1` | `mistralai/mistral-small-2603` (262 144; yes), `x-ai/grok-4.3` (1M; yes) | 0.15 / 0.60; 1.25 / 2.50 (shown with `$`) | <https://openrouter.ai/docs/api_reference/overview.md>, `/parameters.md`, `/streaming.md` | Data collection, logging, provider logging and ZDR guides; its legal privacy page was not read |
+| `together` | `https://api.together.ai/v1` | `openai/gpt-oss-120b` (131 072; no), `Qwen/Qwen3.5-9B` (262 144; yes) | 0.15 / 0.60; 0.17 / 0.25 | <https://docs.together.ai/docs/inference/openai-compatibility.md>, function-calling guides, `/serverless/models.md` | Privacy and security, zero data retention; its legal privacy page was not read |
+| `ollama` | `http://127.0.0.1:11434/v1` | none listed: any model the person has | none: runs here | <https://docs.ollama.com/api/openai-compatibility.md>, `/faq.md` (binds 127.0.0.1:11434 by default) | "Runs on this computer"; no key |
+| `llama-server` | `http://127.0.0.1:9931/v1` | none listed | none: runs here | `tools/server/README.md` of llama.cpp, branch `master` (`--port` "default: 9931", `--host` 127.0.0.1, `--api-key` "default: none"; function calling with `--jinja`, now enabled by default) | "Runs on this computer"; no key |
+
+Every cloud preset declares tool calling (from the pages above), and
+DeepSeek alone sends its reasoning back. The two local presets declare
+nothing about tools or images: that depends on the model loaded and how the
+server was started, and the probe is the way to find out. If `llama-server`
+is started with `--api-key`, its entry must be changed to need a key.
+
+**Left out:** none of the five named candidates was left out; each
+documents an OpenAI-compatible Chat Completions endpoint with tool calling.
+Two kinds of statement were not settled: for Mistral, whether paid API use
+is trained on by default (its policy and its terms read differently); for
+xAI, OpenRouter and Together, only their documentation's data pages were
+read, not their legal privacy policies. The consent text shows what was
+read, with its date and source.
+
+**Not a preset:** the local AI service of ADR-0021 (`tur-ai-local`) is
+being built separately; when it serves its OpenAI-compatible API, its
+address can be an entry like `ollama`'s.

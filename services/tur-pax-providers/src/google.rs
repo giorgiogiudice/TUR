@@ -420,6 +420,7 @@ fn usage(usage: &Value, out: &mut VecDeque<StreamEvent>) {
         input_tokens: usage["total_input_tokens"].as_u64().unwrap_or(0),
         output_tokens: output.saturating_add(thought),
         cached_input_tokens: usage["total_cached_tokens"].as_u64().unwrap_or(0),
+        estimated: false,
     }));
 }
 

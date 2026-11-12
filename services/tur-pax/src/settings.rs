@@ -170,12 +170,192 @@ pub struct DeclaredCapabilities {
     pub context_tokens: Option<u64>,
 }
 
+impl DeclaredCapabilities {
+    /// These declarations, with what `over` declares in their place: a
+    /// model's own declarations over its provider's.
+    #[must_use]
+    pub fn overlaid(self, over: Option<DeclaredCapabilities>) -> DeclaredCapabilities {
+        let Some(over) = over else {
+            return self;
+        };
+        DeclaredCapabilities {
+            tool_calling: over.tool_calling.or(self.tool_calling),
+            streaming_tool_calls: over.streaming_tool_calls.or(self.streaming_tool_calls),
+            image_input: over.image_input.or(self.image_input),
+            context_tokens: over.context_tokens.or(self.context_tokens),
+        }
+    }
+}
+
+/// What P@x may attempt with a model, from what its entry declares
+/// (ADR-0004, amended 12 November 2026): a model without tool calling can
+/// converse and not act; a model without image input cannot control
+/// applications by sight. `None` where nothing is declared.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Abilities {
+    /// Whether P@x may offer it tools.
+    pub act: Option<bool>,
+    /// Whether P@x may offer it screen control.
+    pub see: Option<bool>,
+}
+
+impl Abilities {
+    /// What the person is told, in plain words, about what P@x will not
+    /// attempt with the model. Empty when nothing is withheld.
+    pub fn notices(&self) -> Vec<&'static str> {
+        let mut said = Vec::new();
+        if self.act == Some(false) {
+            said.push(MODEL_CANNOT_ACT);
+        }
+        if self.see == Some(false) {
+            said.push(MODEL_CANNOT_SEE);
+        }
+        said
+    }
+}
+
+/// What the person is told when the model in use cannot call tools.
+pub const MODEL_CANNOT_ACT: &str = "This model cannot call tools, as its provider's entry \
+     declares, so P@x can talk with it but cannot act with it: no tool or command is offered to it.";
+
+/// What the person is told when the model in use takes no images.
+pub const MODEL_CANNOT_SEE: &str = "This model takes no images, as its provider's entry \
+     declares, so P@x will not offer it control of the screen.";
+
+/// What a provider says about the data sent to it, as TUR read it.
+///
+/// The statements are TUR's summary in plain words of the provider's own
+/// pages, read on `reviewed_on` from `sources`. Without `reviewed_on`
+/// nothing has been reviewed, and the consent text says "not reviewed by
+/// TUR". A provider the person adds by hand is never shown as reviewed,
+/// whatever its entry says.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DataTerms {
+    /// The day TUR read the provider's terms, as `YYYY-MM-DD`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reviewed_on: Option<String>,
+    /// The model runs on this computer: nothing is sent to a company. Only
+    /// true of an entry whose address is this computer.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub runs_locally: bool,
+    /// Whether the provider keeps what it is sent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stores_requests: Option<String>,
+    /// For how long.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retention: Option<String>,
+    /// Whether it trains models on what it is sent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trains_on_data: Option<String>,
+    /// Where it processes and keeps it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub processing_location: Option<String>,
+    /// Where its terms are.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub terms_url: Option<String>,
+    /// The pages the statements were read from.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sources: Vec<String>,
+}
+
+/// The longest statement of [`DataTerms`], in characters.
+pub const TERMS_STATEMENT_MAX: usize = 400;
+
+fn is_false(value: &bool) -> bool {
+    !*value
+}
+
+fn is_true(value: &bool) -> bool {
+    *value
+}
+
+fn yes() -> bool {
+    true
+}
+
+/// Whether `text` is written `YYYY-MM-DD`.
+fn is_date(text: &str) -> bool {
+    let date = text.as_bytes();
+    date.len() == 10
+        && date.iter().enumerate().all(|(index, byte)| {
+            if index == 4 || index == 7 {
+                *byte == b'-'
+            } else {
+                byte.is_ascii_digit()
+            }
+        })
+}
+
+impl DataTerms {
+    /// Check the statements. The reason quotes nothing.
+    fn check(&self) -> Result<(), &'static str> {
+        if self
+            .reviewed_on
+            .as_deref()
+            .is_some_and(|date| !is_date(date))
+        {
+            return Err("the date its terms were read is not written YYYY-MM-DD");
+        }
+        for statement in [
+            &self.stores_requests,
+            &self.retention,
+            &self.trains_on_data,
+            &self.processing_location,
+        ]
+        .into_iter()
+        .flatten()
+        {
+            let fine = !statement.trim().is_empty()
+                && statement.chars().count() <= TERMS_STATEMENT_MAX
+                && !statement.chars().any(char::is_control);
+            if !fine {
+                return Err("a statement of its data terms is empty, too long or not plain text");
+            }
+        }
+        for url in self.terms_url.iter().chain(&self.sources) {
+            if !is_https_url(url) {
+                return Err("an address of its data terms is not an https address");
+            }
+        }
+        if self.reviewed_on.is_some() && self.sources.is_empty() && !self.runs_locally {
+            return Err("reviewed data terms name no page they were read from");
+        }
+        Ok(())
+    }
+}
+
+/// Whether an address is on this computer: `http` or `https` to
+/// `localhost` or a loopback address.
+pub fn is_loopback_url(url: &str) -> bool {
+    let Some((scheme, rest)) = url.split_once("://") else {
+        return false;
+    };
+    if !matches!(scheme, "http" | "https") {
+        return false;
+    }
+    let authority = rest.split('/').next().unwrap_or("");
+    let host = if let Some(bracketed) = authority.strip_prefix('[') {
+        bracketed.split(']').next().unwrap_or("")
+    } else {
+        authority.split(':').next().unwrap_or("")
+    };
+    host == "localhost"
+        || host
+            .parse::<std::net::IpAddr>()
+            .is_ok_and(|address| address.is_loopback())
+}
+
 /// One model of a provider entry.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ModelEntry {
     /// The model name, as the provider spells it.
     pub model: String,
+    /// What this model declares it can do, in place of what its provider
+    /// declares.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capabilities: Option<DeclaredCapabilities>,
     /// A name for a person to read.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
@@ -215,9 +395,22 @@ pub struct ProviderEntry {
     /// identifier when absent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub keyring_item: Option<String>,
-    /// What it declares it can do.
+    /// Whether it needs a key. Only a service of the OpenAI-compatible
+    /// family, such as a model server on this computer, can do without one.
+    #[serde(default = "yes", skip_serializing_if = "is_true")]
+    pub key_required: bool,
+    /// Whether the model's reasoning is sent back with later requests,
+    /// because the service's documentation requires it (OpenAI-compatible
+    /// family only; DeepSeek).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub send_back_reasoning: bool,
+    /// What it declares its models can do, unless a model declares otherwise.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub capabilities: Option<DeclaredCapabilities>,
+    /// What it says about the data sent to it, as TUR read it, or nothing
+    /// when TUR has not reviewed it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub data_terms: Option<DataTerms>,
     /// Where the provider says how it handles data sent to its interface.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub data_terms_url: Option<String>,
@@ -255,14 +448,33 @@ impl Origin {
     }
 }
 
-/// Whether `id` can be the identifier of a provider or the name of a
-/// password store item: 1 to 32 lower-case ASCII letters, digits, `-` and
-/// `_`, starting with a letter.
+/// Whether `id` can be the identifier of a provider: 1 to 32 lower-case
+/// ASCII letters, digits, `-` and `_`, starting with a letter. Every
+/// identifier is also a valid password store item name
+/// ([`is_keyring_item`]), so a provider's key can always be kept under its
+/// identifier.
 pub fn is_provider_id(id: &str) -> bool {
     (1..=32).contains(&id.len())
         && id.as_bytes()[0].is_ascii_lowercase()
         && id.bytes().all(|byte| {
             byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'-' | b'_')
+        })
+}
+
+/// The longest password store item name, in bytes.
+pub const KEYRING_ITEM_MAX: usize = 64;
+
+/// Whether `name` can name the password store item of a provider's key: 1
+/// to 64 lower-case ASCII letters, digits, `-`, `_` and `.`, starting with a
+/// letter or a digit, with no two dots in a row. A safe set: it goes into a
+/// Secret Service attribute and a label, and is never a path. Every provider
+/// identifier is one.
+pub fn is_keyring_item(name: &str) -> bool {
+    (1..=KEYRING_ITEM_MAX).contains(&name.len())
+        && name.as_bytes()[0].is_ascii_alphanumeric()
+        && !name.contains("..")
+        && name.bytes().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'-' | b'_' | b'.')
         })
 }
 
@@ -275,12 +487,56 @@ impl ProviderEntry {
             name: family_name(adapter).to_owned(),
             base_url: None,
             keyring_item: None,
+            key_required: true,
+            send_back_reasoning: false,
             capabilities: None,
+            data_terms: None,
             data_terms_url: None,
             key_url: None,
             prices_url: None,
             models: Vec::new(),
         }
+    }
+
+    /// What a model of this provider declares it can do: the model's own
+    /// declarations over the provider's.
+    pub fn declared(&self, model: &str) -> DeclaredCapabilities {
+        self.capabilities
+            .unwrap_or_default()
+            .overlaid(self.model(model).and_then(|entry| entry.capabilities))
+    }
+
+    /// What P@x may attempt with a model of this provider.
+    pub fn abilities(&self, model: &str) -> Abilities {
+        let declared = self.declared(model);
+        Abilities {
+            act: declared.tool_calling,
+            see: declared.image_input,
+        }
+    }
+
+    /// The data terms TUR reviewed, if the entry is TUR's (not added by
+    /// hand) and the address P@x uses is the entry's own: a review says
+    /// nothing about another address.
+    pub fn reviewed_terms(&self, origin: Origin, address_changed: bool) -> Option<&DataTerms> {
+        if origin == Origin::ByHand || address_changed {
+            return None;
+        }
+        self.data_terms
+            .as_ref()
+            .filter(|terms| terms.reviewed_on.is_some() || terms.runs_locally)
+    }
+
+    /// Whether what P@x sends this provider stays on this computer: its
+    /// entry says the model runs locally and the address is this computer.
+    pub fn runs_locally(&self, origin: Origin, address: Option<&str>) -> bool {
+        let address = address.or(self.base_url.as_deref());
+        origin != Origin::ByHand
+            && self
+                .data_terms
+                .as_ref()
+                .is_some_and(|terms| terms.runs_locally)
+            && address.is_some_and(is_loopback_url)
     }
 
     /// The name of the password store item that holds the key.
@@ -306,6 +562,7 @@ impl ProviderEntry {
             schema_version: tur_pax_providers::config::CONFIG_SCHEMA_VERSION,
             provider: self.adapter,
             base_url: self.base_url.clone(),
+            send_back_reasoning: self.send_back_reasoning,
             model: model.to_owned(),
             max_output_tokens: 1,
             timeouts: Timeouts::default(),
@@ -323,9 +580,36 @@ impl ProviderEntry {
         if self
             .keyring_item
             .as_deref()
-            .is_some_and(|item| !is_provider_id(item))
+            .is_some_and(|item| !is_keyring_item(item))
         {
             return Err(format!("the keyring item of {} is not valid", self.id));
+        }
+        if !self.key_required && self.adapter != ProviderId::OpenAiChat {
+            return Err(format!(
+                "{} cannot do without a key: only the openai-chat family can",
+                self.id
+            ));
+        }
+        if let Some(terms) = &self.data_terms {
+            terms
+                .check()
+                .map_err(|reason| format!("{}: {reason}", self.id))?;
+            if terms.runs_locally && !self.base_url.as_deref().is_some_and(is_loopback_url) {
+                return Err(format!(
+                    "{} is said to run on this computer, and its address is not this computer",
+                    self.id
+                ));
+            }
+        }
+        let contexts = self.capabilities.iter().chain(
+            self.models
+                .iter()
+                .filter_map(|model| model.capabilities.as_ref()),
+        );
+        for declared in contexts {
+            if declared.context_tokens == Some(0) {
+                return Err(format!("a context size of {} is zero", self.id));
+            }
         }
         let name_ok = !self.name.trim().is_empty()
             && self.name.len() <= 80
@@ -712,6 +996,7 @@ impl Settings {
             schema_version: tur_pax_providers::config::CONFIG_SCHEMA_VERSION,
             provider: entry.adapter,
             base_url: self.base_url.clone().or_else(|| entry.base_url.clone()),
+            send_back_reasoning: entry.send_back_reasoning,
             model: model.clone(),
             max_output_tokens: self
                 .max_output_tokens
@@ -1532,6 +1817,231 @@ mod tests {
         fs::write(&present, "{").expect("written");
         assert!(ModelList::load(&[present]).is_err());
         let _ = fs::remove_dir_all(&directory);
+    }
+
+    #[test]
+    fn a_compatible_provider_is_data_with_terms_capabilities_and_an_optional_key() {
+        let listed = r#"{
+            "schema_version": 1, "status": "example", "prices_as_of": "2026-11-12",
+            "providers": [{
+                "id": "deepseek", "adapter": "openai-chat", "name": "DeepSeek",
+                "base_url": "https://api.example.org", "send_back_reasoning": true,
+                "capabilities": { "tool_calling": true, "image_input": false },
+                "data_terms": {
+                    "reviewed_on": "2026-11-12",
+                    "stores_requests": "yes",
+                    "trains_on_data": "yes, unless you opt out",
+                    "processing_location": "the People's Republic of China",
+                    "terms_url": "https://example.org/privacy",
+                    "sources": ["https://example.org/privacy"]
+                },
+                "models": [
+                    { "model": "sees", "capabilities": { "image_input": true, "context_tokens": 1000 } },
+                    { "model": "talks", "capabilities": { "tool_calling": false } }
+                ]
+            }, {
+                "id": "local", "adapter": "openai-chat", "name": "On this computer",
+                "base_url": "http://127.0.0.1:11434/v1", "key_required": false,
+                "data_terms": { "runs_locally": true }
+            }]
+        }"#;
+        let models = ModelList::from_json(listed).expect("a model list");
+        let (deepseek, origin) =
+            find_provider(&models, &Settings::default(), "deepseek").expect("listed");
+        assert_eq!(origin, Origin::Listed);
+        assert!(deepseek.key_required);
+        // A model's declarations over its provider's.
+        assert_eq!(
+            deepseek.abilities("sees"),
+            Abilities {
+                act: Some(true),
+                see: Some(true)
+            }
+        );
+        assert_eq!(deepseek.declared("sees").context_tokens, Some(1000));
+        assert_eq!(
+            deepseek.abilities("talks"),
+            Abilities {
+                act: Some(false),
+                see: Some(false)
+            }
+        );
+        assert_eq!(
+            deepseek.abilities("typed-by-hand"),
+            Abilities {
+                act: Some(true),
+                see: Some(false)
+            }
+        );
+        assert_eq!(
+            deepseek.abilities("talks").notices(),
+            [MODEL_CANNOT_ACT, MODEL_CANNOT_SEE]
+        );
+        assert!(
+            ProviderEntry::implicit(ProviderId::Anthropic)
+                .abilities("any")
+                .notices()
+                .is_empty()
+        );
+        // Reviewed terms are shown for the entry at its own address only,
+        // and never for an entry the person added.
+        assert!(deepseek.reviewed_terms(Origin::Listed, false).is_some());
+        assert!(deepseek.reviewed_terms(Origin::Listed, true).is_none());
+        assert!(deepseek.reviewed_terms(Origin::ByHand, false).is_none());
+        // The family and the reasoning setting reach the configuration.
+        let mut settings = Settings::default();
+        settings
+            .set_provider("deepseek", "sees", &models)
+            .expect("a provider");
+        let config = settings.provider_config(&models).expect("a configuration");
+        assert_eq!(config.provider, ProviderId::OpenAiChat);
+        assert!(config.send_back_reasoning);
+
+        // A server on this computer needs no key and runs locally.
+        let (local, origin) =
+            find_provider(&models, &Settings::default(), "local").expect("listed");
+        assert!(!local.key_required);
+        assert!(local.runs_locally(origin, None));
+        assert!(!local.runs_locally(origin, Some("https://gateway.example.org")));
+        assert!(!local.runs_locally(Origin::ByHand, None));
+
+        // What an entry may not say.
+        let entry = |fields: &str| {
+            format!(
+                r#"{{ "schema_version": 1, "status": "example", "prices_as_of": "2026-11-12",
+                     "providers": [{{ "id": "x", "name": "X", {fields} }}] }}"#
+            )
+        };
+        for fields in [
+            // The compatible family has no address of its own.
+            r#""adapter": "openai-chat""#,
+            // Only it can do without a key, or send reasoning back.
+            r#""adapter": "openai", "key_required": false"#,
+            r#""adapter": "anthropic", "send_back_reasoning": true"#,
+            // Local means this computer.
+            r#""adapter": "openai-chat", "base_url": "https://api.example.org", "data_terms": { "runs_locally": true }"#,
+            // Reviewed terms say when, from where, in plain words.
+            r#""adapter": "openai-chat", "base_url": "https://a.example.org", "data_terms": { "reviewed_on": "12 November" , "sources": ["https://a.example.org"] }"#,
+            r#""adapter": "openai-chat", "base_url": "https://a.example.org", "data_terms": { "reviewed_on": "2026-11-12" }"#,
+            r#""adapter": "openai-chat", "base_url": "https://a.example.org", "data_terms": { "stores_requests": "" }"#,
+            r#""adapter": "openai-chat", "base_url": "https://a.example.org", "data_terms": { "retention": "a\nb" }"#,
+            r#""adapter": "openai-chat", "base_url": "https://a.example.org", "data_terms": { "terms_url": "http://a.example.org" }"#,
+            r#""adapter": "openai-chat", "base_url": "https://a.example.org", "data_terms": { "unknown": 1 }"#,
+            r#""adapter": "openai-chat", "base_url": "https://a.example.org", "models": [{ "model": "m", "capabilities": { "context_tokens": 0 } }]"#,
+        ] {
+            assert_eq!(
+                ModelList::from_json(&entry(fields))
+                    .expect_err(fields)
+                    .code
+                    .as_str(),
+                "TUR-AI-SERVICE-009",
+                "{fields}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_shipped_list_loads_with_its_presets() {
+        let shipped = ModelList::from_json(include_str!("../data/models.json")).expect("loads");
+        assert_eq!(shipped.status, "example");
+        let compatible: Vec<&ProviderEntry> = shipped
+            .providers
+            .iter()
+            .filter(|entry| entry.adapter == ProviderId::OpenAiChat)
+            .collect();
+        let ids: Vec<&str> = compatible.iter().map(|entry| entry.id.as_str()).collect();
+        assert_eq!(
+            ids,
+            [
+                "deepseek",
+                "mistral",
+                "xai",
+                "groq",
+                "openrouter",
+                "together",
+                "ollama",
+                "llama-server"
+            ]
+        );
+        for entry in compatible {
+            let terms = entry.data_terms.as_ref().expect("data terms");
+            if entry.key_required {
+                // A cloud service: reviewed, with the pages it was read from,
+                // at an https address, offering tools.
+                assert_eq!(
+                    terms.reviewed_on.as_deref(),
+                    Some("2026-11-12"),
+                    "{}",
+                    entry.id
+                );
+                assert!(!terms.sources.is_empty(), "{}", entry.id);
+                assert!(!terms.runs_locally, "{}", entry.id);
+                assert!(
+                    entry
+                        .base_url
+                        .as_deref()
+                        .is_some_and(|url| url.starts_with("https://")),
+                    "{}",
+                    entry.id
+                );
+                assert_eq!(entry.declared("").tool_calling, Some(true), "{}", entry.id);
+                assert!(!entry.models.is_empty(), "{}", entry.id);
+            } else {
+                // A server on this computer: no key, nothing declared.
+                assert!(terms.runs_locally, "{}", entry.id);
+                assert!(entry.runs_locally(Origin::Listed, None), "{}", entry.id);
+                assert_eq!(entry.declared("").tool_calling, None, "{}", entry.id);
+            }
+            // Only DeepSeek's documentation requires its reasoning back.
+            assert_eq!(entry.send_back_reasoning, entry.id == "deepseek");
+        }
+        // The three companies' terms were not reviewed.
+        for id in ["anthropic", "openai", "google"] {
+            let entry = shipped.provider(id).expect("listed");
+            assert!(
+                entry.reviewed_terms(Origin::Listed, false).is_none(),
+                "{id}"
+            );
+        }
+    }
+
+    #[test]
+    fn every_provider_identifier_is_a_keyring_item_and_the_set_is_safe() {
+        let longest_id = "a".repeat(32);
+        for id in [
+            "deepseek",
+            "open-router_2",
+            "x",
+            "llama-server",
+            longest_id.as_str(),
+        ] {
+            assert!(is_provider_id(id), "{id}");
+            assert!(is_keyring_item(id), "{id}");
+        }
+        let longest_item = "k".repeat(64);
+        for item in ["deepseek.com", "groq-work-2", "0key", longest_item.as_str()] {
+            assert!(is_keyring_item(item), "{item}");
+        }
+        let long = "k".repeat(65);
+        for bad in [
+            "",
+            "Deep",
+            ".hidden",
+            "a..b",
+            "a/b",
+            "a b",
+            "naïve",
+            "-dash",
+            long.as_str(),
+        ] {
+            assert!(!is_keyring_item(bad), "{bad:?}");
+        }
+        assert!(is_loopback_url("http://127.0.0.1:11434/v1"));
+        assert!(is_loopback_url("http://localhost:9931/v1"));
+        assert!(is_loopback_url("http://[::1]:8080"));
+        assert!(!is_loopback_url("https://api.example.org"));
+        assert!(!is_loopback_url("http://127.example.org"));
+        assert!(!is_loopback_url("not a url"));
     }
 
     #[test]

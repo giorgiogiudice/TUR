@@ -12,6 +12,7 @@
 pub mod anthropic;
 pub mod google;
 pub mod openai;
+pub mod openai_chat;
 
 use std::io::{self, Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
@@ -334,6 +335,27 @@ pub struct Wire {
     pub check_follow_up: fn(&Value, &FollowUp),
 }
 
+/// The scripts and checks of every adapter family.
+pub fn all_wires() -> [Wire; 4] {
+    [
+        anthropic::wire(),
+        openai::wire(),
+        google::wire(),
+        openai_chat::wire(),
+    ]
+}
+
+/// The base URL a family is configured with to reach the server. A
+/// compatible service documents its base URL with the version in it, as
+/// `https://api.example.org/v1`; the companies' families add their own.
+pub fn base_url(provider: ProviderId, server: &FakeServer) -> String {
+    if provider.is_company_interface() {
+        server.base_url()
+    } else {
+        format!("{}/v1", server.base_url())
+    }
+}
+
 /// A configuration that points at the server, with short timeouts and delays.
 pub fn config(provider: ProviderId, server: &FakeServer) -> ProviderConfig {
     config_with(provider, server, |_| {})
@@ -348,7 +370,7 @@ pub fn config_with(
     let mut value = json!({
         "schema_version": 1,
         "provider": provider.as_str(),
-        "base_url": server.base_url(),
+        "base_url": base_url(provider, server),
         "model": "test-model",
         "max_output_tokens": 256,
         "timeouts": { "connect_ms": 3000, "response_ms": 3000, "idle_ms": 3000 },

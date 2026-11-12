@@ -90,6 +90,7 @@ fn usage(input: u64, output: u64) -> Usage {
         input_tokens: input,
         output_tokens: output,
         cached_input_tokens: 0,
+        estimated: false,
     }
 }
 
@@ -188,11 +189,16 @@ fn tool_call_with_split_arguments(wire: &Wire) {
 
     // The tools were offered with their names.
     let body = server.requests()[0].json();
+    // Chat Completions nests the name under `function`.
     let offered: Vec<&str> = body["tools"]
         .as_array()
         .expect("tools")
         .iter()
-        .filter_map(|tool| tool["name"].as_str())
+        .filter_map(|tool| {
+            tool["name"]
+                .as_str()
+                .or_else(|| tool["function"]["name"].as_str())
+        })
         .collect();
     assert_eq!(offered, ["storage_list_volumes", "storage_unmount"]);
 }
@@ -289,13 +295,21 @@ fn a_repeated_key_in_whole_arguments_is_a_malformed_response(wire: &Wire) {
 fn arguments_delivered_whole_are_one_complete_call(wire: &Wire) {
     let (_server, events) = events_of(wire, wire.whole_arguments);
 
-    // No fragment was streamed.
-    assert!(
-        !events
-            .iter()
-            .any(|event| matches!(event, StreamEvent::ToolCallArgumentsDelta { .. })),
-        "{events:?}"
-    );
+    // No fragment was streamed. Chat Completions has no other way to carry
+    // arguments than text in a delta: there, "whole" is one delta, which is
+    // one fragment holding all of the text.
+    let fragments: Vec<&str> = events
+        .iter()
+        .filter_map(|event| match event {
+            StreamEvent::ToolCallArgumentsDelta { fragment, .. } => Some(fragment.as_str()),
+            _ => None,
+        })
+        .collect();
+    if wire.provider.is_company_interface() {
+        assert!(fragments.is_empty(), "{events:?}");
+    } else {
+        assert_eq!(fragments.len(), 1, "{events:?}");
+    }
     let starts = events
         .iter()
         .filter(|event| matches!(event, StreamEvent::ToolCallStart { .. }))
@@ -659,6 +673,7 @@ macro_rules! for_every_provider {
         conformance!(anthropic: $($test),+);
         conformance!(openai: $($test),+);
         conformance!(google: $($test),+);
+        conformance!(openai_chat: $($test),+);
     };
 }
 

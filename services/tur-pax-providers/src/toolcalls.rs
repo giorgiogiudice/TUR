@@ -85,6 +85,15 @@ impl ToolCalls {
         self.open.contains_key(&key)
     }
 
+    /// The provider said two things about one call (two names, two
+    /// identifiers, arguments that are not text): it has no single reading
+    /// and is never delivered. A normal end of the response is then
+    /// malformed, as for arguments that repeat a key.
+    pub(crate) fn discard(&mut self, key: u64) {
+        self.open.remove(&key);
+        self.broken = true;
+    }
+
     /// More argument text arrived for an open call.
     pub(crate) fn fragment(&mut self, key: u64, fragment: &str, out: &mut VecDeque<StreamEvent>) {
         if fragment.is_empty() {

@@ -58,7 +58,7 @@ use tur_pax_memory::{
     ScheduleEdit, ScheduleId, ScheduledAction, ShortMonth, StdFs, Timestamp, Trigger,
     UserConfirmation, is_known_zone, weekday_and_day_of,
 };
-use tur_pax_providers::{Message, ProviderConfig, SpendMeter, Usage, connect};
+use tur_pax_providers::{Message, ProviderConfig, SpendMeter, Usage, connect, connect_without_key};
 
 use crate::audit::{AuditRecord, AuditWriteError};
 use crate::codes::{Code, Problem};
@@ -76,8 +76,8 @@ use crate::registry::{ASSISTANT_TOOLS, AssistantCall, AssistantTools, COMMAND_TO
 use crate::sandbox::{Grant, GrantRules};
 use crate::scheduler::{Runner, TaskRun, TickReport, outcome_name, run_due};
 use crate::settings::{
-    Limits, ModelList, Origin, Paths, ProviderEntry, Settings, find_provider, is_provider_id,
-    providers,
+    Limits, MODEL_CANNOT_ACT, ModelList, Origin, Paths, ProviderEntry, Settings, find_provider,
+    is_provider_id, providers,
 };
 use crate::spending::{Ledger, TaskBudget, Zone, day_of};
 use crate::textui::{DEFAULT_TOOLS_DIR, read_json_dir, read_tools};
@@ -916,12 +916,27 @@ impl Core {
     /// `TUR-AI-SERVICE-006` if no provider has that identifier.
     pub fn consent(&self, provider: &str) -> Result<(String, String), Fault> {
         let (entry, origin) = self.provider_entry(provider)?;
+        // A gateway address in the settings replaces the entry's for the
+        // provider in use: TUR's review of the entry says nothing about it.
+        let gateway = {
+            let state = self.state();
+            if state.settings.provider.as_deref() == Some(provider) {
+                state.settings.base_url.clone()
+            } else {
+                None
+            }
+        };
+        let terms = entry.reviewed_terms(origin, gateway.is_some());
         let subject = Subject {
             name: &entry.name,
             adapter: entry.adapter,
             native: entry.is_native(),
-            terms_url: entry.data_terms_url.as_deref(),
+            terms_url: terms
+                .and_then(|terms| terms.terms_url.as_deref())
+                .or(entry.data_terms_url.as_deref()),
             by_hand: origin == Origin::ByHand,
+            terms,
+            runs_locally: entry.runs_locally(origin, gateway.as_deref()),
         };
         Ok((CONSENT_TEXT_VERSION.to_owned(), consent_text(&subject)))
     }
@@ -1050,15 +1065,21 @@ impl Core {
                     .models
                     .iter()
                     .map(|model| {
+                        let abilities = entry.abilities(&model.model);
                         json!({
                             "model": model.model,
                             "label": model.label,
                             "max_output_tokens": model.max_output_tokens,
                             "tested_with_tur": model.tested_with_tur,
                             "prices": model.prices,
+                            "capabilities": entry.declared(&model.model),
+                            "can_act": abilities.act,
+                            "can_see": abilities.see,
+                            "notices": abilities.notices(),
                         })
                     })
                     .collect();
+                let terms = entry.reviewed_terms(*origin, false);
                 json!({
                     "id": entry.id,
                     "adapter": entry.adapter.as_str(),
@@ -1066,7 +1087,11 @@ impl Core {
                     "origin": origin.as_str(),
                     "base_url": entry.base_url,
                     "keyring_item": entry.keyring_item(),
+                    "key_required": entry.key_required,
                     "capabilities": entry.capabilities,
+                    "data_terms": terms,
+                    "data_terms_reviewed": terms.is_some_and(|terms| terms.reviewed_on.is_some()),
+                    "runs_locally": entry.runs_locally(*origin, None),
                     "data_terms_url": entry.data_terms_url,
                     "key_url": entry.key_url,
                     "prices_url": entry.prices_url,
@@ -1175,6 +1200,11 @@ impl Core {
             _ => None,
         };
         let prices = listed.and_then(|entry| entry.prices.as_ref());
+        let key_needed = current.as_ref().is_none_or(|(entry, _)| entry.key_required);
+        let abilities = match (&current, &settings.model) {
+            (Some((entry, _)), Some(model)) => Some(entry.abilities(model)),
+            _ => None,
+        };
         let day_limit = settings.day_limit(prices.is_some());
         let today = day_of(self.now(), &(self.parts.zone)());
         let (used_today, used_month, ledger_problem) = match &self.ledger {
@@ -1213,7 +1243,7 @@ impl Core {
             "interface_version": INTERFACE_VERSION,
             "enabled": settings.enabled && state.settings_fault.is_none(),
             "state": state_name,
-            "ready": problem.is_none() && state.key_set == Some(true),
+            "ready": problem.is_none() && (state.key_set == Some(true) || !key_needed),
             "problem": problem.as_ref().map(|problem| json!({
                 "error_code": problem.code.as_str(),
                 "message": problem.detail,
@@ -1234,10 +1264,16 @@ impl Core {
             "model_tested": listed.is_some_and(|entry| entry.tested_with_tur),
             "price_known": prices.is_some(),
             "key": match state.key_set {
+                _ if !key_needed => "not_needed",
                 Some(true) => "set",
                 Some(false) => "not_set",
                 None => "unknown",
             },
+            "abilities": abilities.map(|abilities| json!({
+                "act": abilities.act,
+                "see": abilities.see,
+                "notices": abilities.notices(),
+            })),
             "session_locked": state.locked,
             "running": state.running.as_ref().map(|running| json!({
                 "task": running.id,
@@ -1341,12 +1377,19 @@ impl Core {
             return Err(coded(TaskCode::ServiceNotConfigured));
         };
         // The key is looked for before anything starts, so that a missing
-        // key is an answer to the call and not the end of a task.
-        let item = self.keyring_item(&provider)?;
-        let key_set = self.parts.keys.is_set(&item)?;
-        self.state().key_set = Some(key_set);
-        if !key_set {
-            return Err(coded(TaskCode::KeyNotSet));
+        // key is an answer to the call and not the end of a task. A server
+        // that takes no key is sent none, and none is looked for.
+        let key_needed = !matches!(
+            self.provider_entry(&provider),
+            Ok((entry, _)) if !entry.key_required
+        );
+        if key_needed {
+            let item = self.keyring_item(&provider)?;
+            let key_set = self.parts.keys.is_set(&item)?;
+            self.state().key_set = Some(key_set);
+            if !key_set {
+                return Err(coded(TaskCode::KeyNotSet));
+            }
         }
         let rules = GrantRules::new(self.parts.paths.home.as_deref());
         let mut grants = Vec::new();
@@ -1540,15 +1583,20 @@ impl Core {
             Ok(config) => config,
             Err(problem) => return not_started(problem),
         };
-        let item = match settings.current_provider(&models) {
-            Some((entry, _)) => entry.keyring_item().to_owned(),
-            None => return not_started(coded(TaskCode::ServiceNotConfigured)),
+        let Some((entry, _)) = settings.current_provider(&models) else {
+            return not_started(coded(TaskCode::ServiceNotConfigured));
         };
-        let key = match self.parts.keys.key(&item) {
-            Ok(key) => key,
-            Err(problem) => return not_started(problem),
+        // A server that takes no key, such as a model server on this
+        // computer, is sent none.
+        let connected = if entry.key_required {
+            match self.parts.keys.key(entry.keyring_item()) {
+                Ok(key) => connect(&config, key),
+                Err(problem) => return not_started(problem),
+            }
+        } else {
+            connect_without_key(&config)
         };
-        let provider = match connect(&config, key) {
+        let provider = match connected {
             Ok(provider) => provider,
             Err(error) => {
                 return not_started(Fault {
@@ -1557,6 +1605,14 @@ impl Core {
                 });
             }
         };
+        // What the model's entry declares decides what P@x offers it: a
+        // model that cannot call tools is offered none, and the person is
+        // told so in plain words.
+        let abilities = settings
+            .model
+            .as_deref()
+            .map(|model| entry.abilities(model));
+        let can_act = abilities.is_none_or(|abilities| abilities.act != Some(false));
         let memory = self.memory();
         let memory_on = memory.is_enabled().unwrap_or(false);
         let recalled = if memory_on {
@@ -1566,7 +1622,16 @@ impl Core {
         } else {
             RecalledNotes::none()
         };
-        let registry = match self.registry(memory_on) {
+        let registry = if can_act {
+            self.registry(memory_on)
+        } else {
+            ToolRegistry::load(&[], &[], false).map_err(|problems| {
+                problems.into_iter().next().unwrap_or_else(|| {
+                    fault(TaskCode::ServiceStorage, "the tool set could not be loaded")
+                })
+            })
+        };
+        let registry = match registry {
             Ok(registry) => registry,
             Err(problem) => return not_started(problem),
         };
@@ -1610,6 +1675,12 @@ impl Core {
             performed: Vec::new(),
             held: Vec::new(),
         };
+        if !can_act {
+            observer.item(&ReportItem::Notice {
+                code: None,
+                message: MODEL_CANNOT_ACT.to_owned(),
+            });
+        }
         let mut history = if job.resume {
             let state = self.state();
             if state.history.len() > CONVERSATION_MAX_MESSAGES {

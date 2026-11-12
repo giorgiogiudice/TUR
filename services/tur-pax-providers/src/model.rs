@@ -21,7 +21,15 @@ use crate::error::{ErrorKind, ProviderError};
 /// The longest tool name every supported provider accepts, in bytes.
 pub const TOOL_NAME_MAX: usize = 64;
 
-/// A model provider with an adapter in this crate.
+/// An adapter family of this crate: one wire format, spoken by the adapter
+/// written for it.
+///
+/// The name is historical. Three families are one company's own interface
+/// and carry its name; the fourth, [`ProviderId::OpenAiChat`], is the
+/// OpenAI-compatible Chat Completions interface that many services and
+/// local servers offer (ADR-0004, amended 12 November 2026). Which
+/// *service* a configuration talks to is data: its base URL here, and in the
+/// session service a provider entry with an identifier of its own.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ProviderId {
@@ -31,23 +39,36 @@ pub enum ProviderId {
     OpenAi,
     /// Google (Gemini), through the Interactions API.
     Google,
+    /// Any service that offers the OpenAI-compatible Chat Completions API:
+    /// DeepSeek, other cloud services, a server on this computer. It has no
+    /// public address of its own: a configuration must name one.
+    #[serde(rename = "openai-chat")]
+    OpenAiChat,
 }
 
 impl ProviderId {
-    /// Every provider, in the priority order of the adapters.
-    pub const ALL: [ProviderId; 3] = [
+    /// Every adapter family, in the priority order of the adapters.
+    pub const ALL: [ProviderId; 4] = [
         ProviderId::Anthropic,
         ProviderId::OpenAi,
         ProviderId::Google,
+        ProviderId::OpenAiChat,
     ];
 
-    /// The provider's name as it appears in configuration.
+    /// The family's name as it appears in configuration.
     pub const fn as_str(self) -> &'static str {
         match self {
             ProviderId::Anthropic => "anthropic",
             ProviderId::OpenAi => "openai",
             ProviderId::Google => "google",
+            ProviderId::OpenAiChat => "openai-chat",
         }
+    }
+
+    /// Whether the family is one company's own interface, with a public
+    /// address of its own. The compatible family is not.
+    pub const fn is_company_interface(self) -> bool {
+        !matches!(self, ProviderId::OpenAiChat)
     }
 }
 
@@ -345,6 +366,16 @@ pub struct Usage {
     pub output_tokens: u64,
     /// The part of `input_tokens` that was read from the provider's cache.
     pub cached_input_tokens: u64,
+    /// The counts are not the provider's. The service sent no usage, so the
+    /// adapter estimated them high, from the size of the request and its
+    /// output limit, rather than count a response as costing nothing. Shown
+    /// as an estimate wherever it is shown.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub estimated: bool,
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 impl Usage {
@@ -353,7 +384,7 @@ impl Usage {
         self.input_tokens.saturating_add(self.output_tokens)
     }
 
-    /// The sum of two usages.
+    /// The sum of two usages. A sum with an estimate in it is an estimate.
     pub fn plus(&self, other: &Usage) -> Usage {
         Usage {
             input_tokens: self.input_tokens.saturating_add(other.input_tokens),
@@ -361,6 +392,7 @@ impl Usage {
             cached_input_tokens: self
                 .cached_input_tokens
                 .saturating_add(other.cached_input_tokens),
+            estimated: self.estimated || other.estimated,
         }
     }
 }
@@ -664,6 +696,7 @@ mod tests {
                 input_tokens: 10,
                 output_tokens: 1,
                 cached_input_tokens: 0,
+                estimated: false,
             }),
             StreamEvent::Opaque(opaque.clone()),
             StreamEvent::TextDelta {
@@ -690,6 +723,7 @@ mod tests {
                 input_tokens: 10,
                 output_tokens: 7,
                 cached_input_tokens: 2,
+                estimated: false,
             }),
             StreamEvent::Finish(FinishReason::ToolUse),
             StreamEvent::TextDelta {
@@ -729,16 +763,49 @@ mod tests {
             input_tokens: 5,
             output_tokens: 6,
             cached_input_tokens: 1,
+            estimated: false,
         };
         let b = Usage {
             input_tokens: u64::MAX,
             output_tokens: 1,
             cached_input_tokens: 2,
+            estimated: false,
         };
         let sum = a.plus(&b);
         assert_eq!(sum.input_tokens, u64::MAX);
         assert_eq!(sum.output_tokens, 7);
         assert_eq!(sum.cached_input_tokens, 3);
         assert_eq!(sum.total_tokens(), u64::MAX);
+        assert!(!sum.estimated);
+        // A sum with an estimate in it is an estimate, and says so when it
+        // is written out. A count that is the provider's says nothing more.
+        let guessed = Usage {
+            estimated: true,
+            ..a
+        };
+        assert!(a.plus(&guessed).estimated);
+        assert!(guessed.plus(&a).estimated);
+        assert_eq!(serde_json::to_value(a).unwrap().get("estimated"), None);
+        assert_eq!(serde_json::to_value(guessed).unwrap()["estimated"], true);
+        let read: Usage = serde_json::from_value(
+            json!({ "input_tokens": 1, "output_tokens": 2, "cached_input_tokens": 0 }),
+        )
+        .unwrap();
+        assert!(!read.estimated);
+    }
+
+    #[test]
+    fn the_compatible_family_has_its_own_name_and_no_company() {
+        assert_eq!(ProviderId::OpenAiChat.as_str(), "openai-chat");
+        assert_eq!(json!(ProviderId::OpenAiChat), json!("openai-chat"));
+        assert!(!ProviderId::OpenAiChat.is_company_interface());
+        for family in [
+            ProviderId::Anthropic,
+            ProviderId::OpenAi,
+            ProviderId::Google,
+        ] {
+            assert!(family.is_company_interface(), "{family}");
+        }
+        assert!(serde_json::from_value::<ProviderId>(json!("openaichat")).is_err());
     }
 }
