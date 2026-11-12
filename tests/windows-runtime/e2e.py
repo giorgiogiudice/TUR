@@ -324,6 +324,8 @@ class Bench:
     def uos_run(self, arguments: list[str], timeout: int = 900, **extra_env: str) -> subprocess.CompletedProcess:
         done = run([self.uos, *arguments], env=self.env(**extra_env), timeout=timeout)
         print(f"$ uos-runtime {' '.join(arguments)}\n  -> exit status {done.returncode}", flush=True)
+        if done.returncode != 0 and done.stderr.strip():
+            print("  stderr: " + tail(done.stderr, 12), flush=True)
         return done
 
     def profile(self, name: str, app: str, exe: str, **members) -> str:
@@ -583,12 +585,21 @@ def check_prefix_and_launch(bench: Bench) -> None:
             str(tagged(done.stdout)))
 
     section("Repair")
-    (prefix / "drive_c/windows/system32/kernel32.dll").unlink(missing_ok=True)
+    # A system file Wine can start without. (Without kernel32.dll in the
+    # prefix Wine cannot start at all, so it cannot repair that either: that
+    # case needs a restore or a reset.)
+    victim = prefix / "drive_c/windows/system32/d3d11.dll"
+    R.check("the system file to delete is there", victim.is_file())
+    victim.unlink(missing_ok=True)
     done = bench.uos_run(["prefix", "repair", APP])
     R.equal("prefix repair: exit status", done.returncode, 0)
-    R.check("prefix repair: Wine restored a deleted system file",
-            (prefix / "drive_c/windows/system32/kernel32.dll").exists())
+    R.check("prefix repair: Wine restored a deleted system file", victim.is_file())
     R.check("prefix repair: user files are kept", marker.is_file())
+    R.check("prefix repair: Wine's own updating is still switched off",
+            (prefix / ".update-timestamp").read_text() == "disable\n")
+    done = bench.uos_run(bench.launch_arguments(profile, ["0"]))
+    R.check("launch after repair: the run count continues", "prefix-runs=6" in tagged(done.stdout),
+            str(tagged(done.stdout)))
 
     section("Hostile grants and metadata")
     for hostile in ["/", str(bench.home), str(bench.home / ".ssh"), str(bench.grant / ".." / "outside"),
@@ -710,8 +721,15 @@ def check_reset_and_remove(bench: Bench) -> None:
     backups = sorted((bench.data / "uos/runtime/backups" / APP).glob("*-before-reset.tar.gz"))
     R.equal("prefix reset: the old prefix was archived first", len(backups), 1)
 
+    # Removal deletes the application's logs and metadata; keep a copy as
+    # evidence of what ran.
+    kept = bench.work / "kept" / APP
+    shutil.copytree(bench.state / "uos/runtime/logs" / APP, kept / "logs", dirs_exist_ok=True)
+    shutil.copy(bench.metadata_path(), kept / "metadata.json")
+
     done = bench.uos_run(["prefix", "remove", APP])
     R.equal("prefix remove: exit status", done.returncode, 0)
+    R.check("prefix remove: the application's logs are gone", not (bench.state / "uos/runtime/logs" / APP).exists())
     R.check("prefix remove: the application's directory is gone", not bench.app_dir().exists())
     R.check("prefix remove: backups are kept", bool(backups) and backups[0].is_file())
     R.check("prefix remove: the other applications are untouched",

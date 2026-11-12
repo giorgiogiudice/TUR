@@ -293,7 +293,12 @@ pub fn build(request: &SandboxRequest<'_>) -> Result<Sandbox, SandboxError> {
     let sockets = &host.sockets;
     if let Some(x11) = &sockets.x11 {
         let socket = text(&x11.socket, "the X11 socket")?;
-        mounts.push(Mount::host(MountKind::ReadOnly, socket, false, "X11 display"));
+        mounts.push(Mount::host(
+            MountKind::ReadOnly,
+            socket,
+            false,
+            "X11 display",
+        ));
     }
     if let Some(runtime_dir) = &host.runtime_dir {
         let runtime_dir = text(runtime_dir, "the runtime directory")?;
@@ -303,7 +308,10 @@ pub fn build(request: &SandboxRequest<'_>) -> Result<Sandbox, SandboxError> {
             "private runtime directory",
         ));
         let session = [
-            (sockets.wayland.as_ref().map(|display| &display.socket), "Wayland display"),
+            (
+                sockets.wayland.as_ref().map(|display| &display.socket),
+                "Wayland display",
+            ),
             (sockets.pipewire.as_ref(), "audio (PipeWire)"),
             (sockets.pulse.as_ref(), "audio (PulseAudio protocol)"),
         ];
@@ -341,7 +349,12 @@ pub fn build(request: &SandboxRequest<'_>) -> Result<Sandbox, SandboxError> {
     let prefix = text(&request.app.prefix, "the prefix")?;
     let home = text(&request.app.home, "the private home directory")?;
     mounts.push(Mount::host(MountKind::ReadWrite, prefix, false, "prefix"));
-    mounts.push(Mount::host(MountKind::ReadWrite, home, false, "private home"));
+    mounts.push(Mount::host(
+        MountKind::ReadWrite,
+        home,
+        false,
+        "private home",
+    ));
     if request.supervisor {
         mounts.push(Mount {
             kind: MountKind::ReadOnly,
@@ -353,7 +366,12 @@ pub fn build(request: &SandboxRequest<'_>) -> Result<Sandbox, SandboxError> {
     }
     if let Some(file) = request.program_file {
         let file = text(file, "the program file")?;
-        mounts.push(Mount::host(MountKind::ReadOnly, file, false, "program file"));
+        mounts.push(Mount::host(
+            MountKind::ReadOnly,
+            file,
+            false,
+            "program file",
+        ));
     }
 
     // What the user granted, checked again against the file system as it is.
@@ -442,9 +460,15 @@ pub(crate) mod tests {
                     assert_eq!(at, arguments.len() - 1, "\"--\" must come last");
                     at += 1;
                 }
-                "--unshare-user" | "--unshare-ipc" | "--unshare-pid" | "--unshare-uts"
-                | "--unshare-cgroup-try" | "--unshare-net" | "--disable-userns"
-                | "--die-with-parent" | "--new-session" => {
+                "--unshare-user"
+                | "--unshare-ipc"
+                | "--unshare-pid"
+                | "--unshare-uts"
+                | "--unshare-cgroup-try"
+                | "--unshare-net"
+                | "--disable-userns"
+                | "--die-with-parent"
+                | "--new-session" => {
                     flags.push(option.to_owned());
                     at += 1;
                 }
@@ -503,7 +527,10 @@ pub(crate) mod tests {
             "--die-with-parent",
             "--new-session",
         ] {
-            assert!(flags.iter().any(|flag| flag == required), "{required} is missing");
+            assert!(
+                flags.iter().any(|flag| flag == required),
+                "{required} is missing"
+            );
         }
 
         let sockets = ["wayland-0", "pipewire-0", "pulse/native", "xauth_AbCdEf"]
@@ -524,7 +551,10 @@ pub(crate) mod tests {
             );
             // From the runtime directory, only the session's own sockets.
             if source.starts_with(&machine.runtime_dir) {
-                assert!(sockets.contains(source), "{source:?} is not a session socket");
+                assert!(
+                    sockets.contains(source),
+                    "{source:?} is not a session socket"
+                );
                 assert!(!writable);
             }
             // From the runtime manager's data, only this application's
@@ -540,15 +570,21 @@ pub(crate) mod tests {
             // Nothing of the system is writable.
             if *writable {
                 assert!(
-                    !["/usr", "/etc", "/bin", "/lib", "/lib64", "/sys", "/proc", "/boot"]
-                        .iter()
-                        .any(|system| source.starts_with(system)),
+                    ![
+                        "/usr", "/etc", "/bin", "/lib", "/lib64", "/sys", "/proc", "/boot"
+                    ]
+                    .iter()
+                    .any(|system| source.starts_with(system)),
                     "{source:?} is writable"
                 );
             }
         }
         // The metadata file is not visible: only its two siblings are.
-        assert!(!paths.iter().any(|(source, _)| app.metadata.starts_with(source)));
+        assert!(
+            !paths
+                .iter()
+                .any(|(source, _)| app.metadata.starts_with(source))
+        );
 
         // /tmp, /proc and /dev are the sandbox's own.
         for (option, target) in [("--tmpfs", "/tmp"), ("--proc", "/proc"), ("--dev", "/dev")] {
@@ -560,15 +596,13 @@ pub(crate) mod tests {
             );
         }
         assert!(
-            !paths
-                .iter()
-                .any(|(source, _)| source == Path::new("/tmp")
-                    || source == Path::new("/proc")
-                    || source == Path::new("/dev")
-                    || source == Path::new("/run")
-                    || source == Path::new("/var")
-                    || source == Path::new("/home")
-                    || source == Path::new("/")),
+            !paths.iter().any(|(source, _)| source == Path::new("/tmp")
+                || source == Path::new("/proc")
+                || source == Path::new("/dev")
+                || source == Path::new("/run")
+                || source == Path::new("/var")
+                || source == Path::new("/home")
+                || source == Path::new("/")),
             "a whole system tree is mounted"
         );
     }
@@ -644,7 +678,11 @@ pub(crate) mod tests {
         assert!(has("--ro-bind", "/tmp/.X11-unix/X0", "/tmp/.X11-unix/X0"));
         assert!(has("--ro-bind", "/usr/bin/uos-runtime", SUPERVISOR_PATH));
         let authority = machine.runtime_dir.join("xauth_AbCdEf");
-        assert!(has("--ro-bind", authority.to_str().unwrap(), XAUTHORITY_PATH));
+        assert!(has(
+            "--ro-bind",
+            authority.to_str().unwrap(),
+            XAUTHORITY_PATH
+        ));
         assert!(has("--ro-bind-try", RESOLVER_DIRECTORY, RESOLVER_DIRECTORY));
         // No ntsync device on this host, so none is passed through.
         assert!(!entries.iter().any(|entry| entry.target == "/dev/ntsync"));
@@ -673,7 +711,10 @@ pub(crate) mod tests {
             .iter()
             .filter(|mount| mount.source.is_some())
             .count();
-        let parsed_binds = entries.iter().filter(|entry| entry.source.is_some()).count();
+        let parsed_binds = entries
+            .iter()
+            .filter(|entry| entry.source.is_some())
+            .count();
         assert_eq!(binds, parsed_binds);
     }
 
@@ -698,7 +739,11 @@ pub(crate) mod tests {
         assert!(flags.contains(&"--unshare-net".to_owned()));
         assert!(!flags.contains(&"--disable-userns".to_owned()));
         assert!(!entries.iter().any(|entry| entry.target == SUPERVISOR_PATH));
-        assert!(!entries.iter().any(|entry| entry.target == RESOLVER_DIRECTORY));
+        assert!(
+            !entries
+                .iter()
+                .any(|entry| entry.target == RESOLVER_DIRECTORY)
+        );
         assert!(
             entries
                 .iter()
@@ -839,7 +884,11 @@ pub(crate) mod tests {
         // The application, which can write to Games, swaps the nested
         // directory for a link to the user's keys.
         fs::remove_dir(machine.home.join("Games/installed")).unwrap();
-        symlink(machine.home.join(".ssh"), machine.home.join("Games/installed")).unwrap();
+        symlink(
+            machine.home.join(".ssh"),
+            machine.home.join("Games/installed"),
+        )
+        .unwrap();
         let error = build(&request(&host, &app, &context, &grants)).unwrap_err();
         assert!(
             matches!(

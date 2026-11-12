@@ -668,7 +668,9 @@ fn text(path: &Path) -> Result<String, PlanError> {
 /// same directory.
 pub fn with_grant(metadata: &PrefixMetadata, grant: Grant) -> PrefixMetadata {
     let mut changed = metadata.clone();
-    changed.grants.retain(|existing| existing.path != grant.path);
+    changed
+        .grants
+        .retain(|existing| existing.path != grant.path);
     changed.grants.push(grant);
     changed
 }
@@ -856,13 +858,18 @@ pub(crate) mod tests {
             "disable\n"
         );
         assert_eq!(written(&plan, &setup.app.metadata), metadata.to_json());
-        assert!(matches!(plan.steps.last(), Some(Step::WriteFile { path, .. }) if *path == setup.app.metadata));
+        assert!(
+            matches!(plan.steps.last(), Some(Step::WriteFile { path, .. }) if *path == setup.app.metadata)
+        );
 
         assert_eq!(metadata.app_id, "com.example.app");
         assert_eq!(metadata.prefix_id, "example-app");
         assert_eq!(metadata.runtime, RuntimeKind::Wine);
         assert_eq!(metadata.runtime_version, "wine-9.0");
-        assert_eq!(metadata.runtime_build, "wine-9.0 (Ubuntu 9.0~repack-4build3)");
+        assert_eq!(
+            metadata.runtime_build,
+            "wine-9.0 (Ubuntu 9.0~repack-4build3)"
+        );
         assert_eq!(metadata.architecture, PrefixArch::Win64);
         assert_eq!(metadata.created_at, NOW);
         assert_eq!(metadata.last_run_at, None);
@@ -882,7 +889,12 @@ pub(crate) mod tests {
         };
         let report = run_plan(&plan, &mut executor);
         assert_eq!(report.failure.unwrap().step, 3);
-        assert!(!executor.steps.iter().any(|step| matches!(step, Step::WriteFile { .. })));
+        assert!(
+            !executor
+                .steps
+                .iter()
+                .any(|step| matches!(step, Step::WriteFile { .. }))
+        );
 
         // If Wine exits cleanly and there is no registry, none is written
         // either.
@@ -892,7 +904,12 @@ pub(crate) mod tests {
         };
         let report = run_plan(&plan, &mut executor);
         assert_eq!(report.failure.unwrap().step, 4);
-        assert!(!executor.steps.iter().any(|step| matches!(step, Step::WriteFile { .. })));
+        assert!(
+            !executor
+                .steps
+                .iter()
+                .any(|step| matches!(step, Step::WriteFile { .. }))
+        );
     }
 
     #[test]
@@ -1025,7 +1042,10 @@ pub(crate) mod tests {
             ]
         );
         let command = run_command(&plan, 3);
-        assert_eq!(command.arguments.last().map(String::as_str), Some("--update"));
+        assert_eq!(
+            command.arguments.last().map(String::as_str),
+            Some("--update")
+        );
         assert!(!command.environment.contains_key("WINEARCH"));
         // The record is unchanged.
         assert_eq!(written(&plan, &setup.app.metadata), recorded().to_json());
@@ -1131,7 +1151,11 @@ pub(crate) mod tests {
             }
         );
         // The check matches what metadata really looks like on disk.
-        assert!(recorded().to_json().contains("\"app_id\": \"com.example.app\""));
+        assert!(
+            recorded()
+                .to_json()
+                .contains("\"app_id\": \"com.example.app\"")
+        );
 
         // An archive of another application stops the plan before the
         // existing prefix is touched.
@@ -1141,7 +1165,12 @@ pub(crate) mod tests {
         };
         let report = run_plan(&plan, &mut executor);
         assert_eq!(report.failure.unwrap().step, 4);
-        assert!(!executor.steps.iter().any(|step| matches!(step, Step::Rename { .. })));
+        assert!(
+            !executor
+                .steps
+                .iter()
+                .any(|step| matches!(step, Step::Rename { .. }))
+        );
 
         // With no prefix in place there is nothing to move away.
         let plan = planner(&setup)
@@ -1162,7 +1191,12 @@ pub(crate) mod tests {
             ]
         );
 
-        for name in ["", "latest", "../../etc/passwd", "20261112T101500Z-manual.tar.gz"] {
+        for name in [
+            "",
+            "latest",
+            "../../etc/passwd",
+            "20261112T101500Z-manual.tar.gz",
+        ] {
             let error = planner(&setup).restore(name, true).unwrap_err();
             assert_eq!(error.code(), Code::BackupMissing, "{name:?}");
         }
@@ -1270,7 +1304,12 @@ pub(crate) mod tests {
         };
         let report = run_plan(&plan, &mut executor);
         assert_eq!(report.failure.unwrap().step, 1);
-        assert!(!executor.steps.iter().any(|step| matches!(step, Step::RemoveTree { .. })));
+        assert!(
+            !executor
+                .steps
+                .iter()
+                .any(|step| matches!(step, Step::RemoveTree { .. }))
+        );
 
         let without = planner(&setup).reset(&before, &wine_9(), false).unwrap();
         assert_eq!(kinds(&without)[0], "remove-tree");
@@ -1286,7 +1325,9 @@ pub(crate) mod tests {
             ..before
         };
         assert_eq!(
-            planner(&setup).reset(&pinned, &wine_11(), true).unwrap_err(),
+            planner(&setup)
+                .reset(&pinned, &wine_11(), true)
+                .unwrap_err(),
             PlanError::Pinned {
                 version: "wine-9.0".to_owned()
             }
@@ -1321,8 +1362,15 @@ pub(crate) mod tests {
         );
         // Then the runtime's own prefix update.
         let update = run_command(&plan, 3);
-        assert_eq!(update.arguments.last().map(String::as_str), Some("--update"));
-        assert!(plan.steps[3].describe().contains("from wine-9.0 to wine-11.0"));
+        assert_eq!(
+            update.arguments.last().map(String::as_str),
+            Some("--update")
+        );
+        assert!(
+            plan.steps[3]
+                .describe()
+                .contains("from wine-9.0 to wine-11.0")
+        );
         // Then the record: the new version, and where it came from.
         let after = parse_metadata(&written(&plan, &setup.app.metadata)).unwrap();
         assert_eq!(after.runtime_version, "wine-11.0");
@@ -1384,13 +1432,15 @@ pub(crate) mod tests {
         assert!(error.to_string().contains("the SSH directory"));
         for hostile in ["/", "/usr", "relative", "/proc/self/root"] {
             assert!(
-                planner.admit_grant(hostile, GrantAccess::ReadWrite).is_err(),
+                planner
+                    .admit_grant(hostile, GrantAccess::ReadWrite)
+                    .is_err(),
                 "{hostile}"
             );
         }
 
         let granted = with_grant(&recorded(), saves.clone());
-        assert_eq!(granted.grants, [saves.clone()]);
+        assert_eq!(granted.grants, std::slice::from_ref(&saves));
         // Granting the same directory again replaces the entry.
         let upgraded = with_grant(
             &granted,
@@ -1457,8 +1507,14 @@ pub(crate) mod tests {
     #[test]
     fn default_prefix_names() {
         assert_eq!(default_prefix_id("com.example.app"), "com-example-app");
-        assert_eq!(default_prefix_id("local.setup_wizard"), "local-setup-wizard");
-        assert!(is_slug(&default_prefix_id(&format!("a.{}", "b".repeat(200)))));
+        assert_eq!(
+            default_prefix_id("local.setup_wizard"),
+            "local-setup-wizard"
+        );
+        assert!(is_slug(&default_prefix_id(&format!(
+            "a.{}",
+            "b".repeat(200)
+        ))));
         assert!(is_backup_reason("before-reset"));
         assert!(!is_backup_reason("Before Reset"));
     }

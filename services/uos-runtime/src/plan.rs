@@ -90,7 +90,10 @@ fn quote(text: &str) -> String {
     let plain = !text.is_empty()
         && text.bytes().all(|byte| {
             byte.is_ascii_alphanumeric()
-                || matches!(byte, b'/' | b'.' | b'_' | b'-' | b'=' | b':' | b',' | b'+' | b'@')
+                || matches!(
+                    byte,
+                    b'/' | b'.' | b'_' | b'-' | b'=' | b':' | b',' | b'+' | b'@'
+                )
         });
     if plain {
         text.to_owned()
@@ -645,7 +648,11 @@ mod tests {
         assert_eq!(json["steps"][1]["step"], "run");
         assert_eq!(json["steps"][1]["command"]["program"], "/usr/bin/wine");
         assert_eq!(json["steps"][1]["command"]["arguments"][1], "--init");
-        assert!(json["steps"][1]["command"].get("working_directory").is_none());
+        assert!(
+            json["steps"][1]["command"]
+                .get("working_directory")
+                .is_none()
+        );
         assert_eq!(json["steps"][2]["step"], "check");
         assert_eq!(json["steps"][2]["check"]["kind"], "file");
         assert_eq!(json["steps"][4]["step"], "launch");
@@ -656,7 +663,13 @@ mod tests {
     fn display_lines_are_quoted_and_carry_no_control_characters() {
         let spec = command(
             "/usr/bin/wine",
-            &["C:\\Program Files\\App\\app.exe", "", "it's", "a\u{1b}[31mb", "--flag=1"],
+            &[
+                "C:\\Program Files\\App\\app.exe",
+                "",
+                "it's",
+                "a\u{1b}[31mb",
+                "--flag=1",
+            ],
         );
         assert_eq!(
             spec.display_line(),

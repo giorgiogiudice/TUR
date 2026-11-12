@@ -110,10 +110,7 @@ impl RuntimeDirs {
             let explicit = lookup(variable).filter(|value| value.starts_with('/'));
             let (value, source) = match (explicit, &home) {
                 (Some(value), _) => (PathBuf::from(value), variable),
-                (None, Some(home)) => (
-                    Path::new(home).join(fallback[0]).join(fallback[1]),
-                    "HOME",
-                ),
+                (None, Some(home)) => (Path::new(home).join(fallback[0]).join(fallback[1]), "HOME"),
                 (None, None) => return Err(PathsError::NoHome),
             };
             if plain_text(&value).is_none() {
@@ -239,10 +236,7 @@ mod tests {
 
     #[test]
     fn unusable_environments_are_refused() {
-        assert_eq!(
-            RuntimeDirs::from_env(lookup(&[])),
-            Err(PathsError::NoHome)
-        );
+        assert_eq!(RuntimeDirs::from_env(lookup(&[])), Err(PathsError::NoHome));
         assert_eq!(
             RuntimeDirs::from_env(lookup(&[("HOME", "relative")])),
             Err(PathsError::NoHome)
@@ -326,7 +320,10 @@ mod tests {
         assert!(!is_plain_absolute("/home/ada/../root"));
         assert!(!is_plain_absolute("/home/./ada"));
         assert!(!is_plain_absolute("/home/ada\n"));
-        assert!(!is_plain_absolute(&format!("/{}", "a".repeat(MAX_PATH_BYTES))));
+        assert!(!is_plain_absolute(&format!(
+            "/{}",
+            "a".repeat(MAX_PATH_BYTES)
+        )));
         assert_eq!(plain_text(Path::new("/a/b")), Some("/a/b"));
         assert_eq!(plain_text(Path::new("a/b")), None);
     }

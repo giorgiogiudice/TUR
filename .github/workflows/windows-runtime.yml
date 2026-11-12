@@ -62,7 +62,7 @@ jobs:
             echo "runner image: ${ImageOS:-?} ${ImageVersion:-?}"
             . /etc/os-release; echo "os: $PRETTY_NAME"
             echo "kernel: $(uname -r)"
-            echo "wine: $(wine --version 2>&1 | head -n 1)"
+            echo "wine: $(wine --version 2>/dev/null | head -n 1)"
             echo "bubblewrap: $(bwrap --version)"
             echo "mingw x86_64: $(x86_64-w64-mingw32-gcc --version | head -n 1)"
             echo "mingw i686: $(i686-w64-mingw32-gcc --version | head -n 1)"
@@ -119,6 +119,7 @@ jobs:
         run: |
           mkdir -p "$WORK/evidence"
           cp -r "$WORK/run/xdg-state/uos/runtime/logs" "$WORK/evidence/logs" 2>/dev/null || true
+          cp -r "$WORK/run/kept" "$WORK/evidence/removed-application" 2>/dev/null || true
           mkdir -p "$WORK/evidence/metadata"
           for file in "$WORK"/run/xdg-data/uos/runtime/prefixes/*/metadata.json; do
             if [ -f "$file" ]; then

@@ -18,12 +18,12 @@ use std::path::PathBuf;
 
 use serde::Serialize;
 
+use crate::grant::ProgramFile;
 use crate::launch_host::RuntimeVersion;
 use crate::metadata::{PrefixMetadata, RuntimeKind, SyncRecord};
 use crate::plan::{CommandSpec, Operation, Plan, Step};
-use crate::profile::{AppProfile, GraphicsBackend, ProfileFormat, ProfileRuntime, SyncBackend};
-use crate::grant::ProgramFile;
 use crate::prefix::{Planner, PrefixSettings};
+use crate::profile::{AppProfile, GraphicsBackend, ProfileFormat, ProfileRuntime, SyncBackend};
 use crate::runtime_cmd::{Invocation, PlanError, Task, assemble, decide_sync, dll_overrides};
 use crate::sandbox::Mount;
 
@@ -244,9 +244,7 @@ pub fn plan_launch(
     let outside_prefix = matches!(program, ProgramFile::Outside(_));
 
     // Settings for this launch, and the record of them.
-    let graphics = profile
-        .graphics_backend
-        .unwrap_or(current.graphics_backend);
+    let graphics = profile.graphics_backend.unwrap_or(current.graphics_backend);
     let sync = decide_sync(
         profile.sync_backend.unwrap_or(SyncBackend::Auto),
         runtime,
@@ -466,10 +464,7 @@ mod tests {
 
         let (command, log) = launch_step(&plan);
         assert_eq!(command.program, "/usr/bin/bwrap");
-        assert_eq!(
-            *log,
-            setup.app.logs.join("20261112T101500Z-4242.log")
-        );
+        assert_eq!(*log, setup.app.logs.join("20261112T101500Z-4242.log"));
         assert_eq!(plan.log, *log);
         let split = command
             .arguments
@@ -482,7 +477,12 @@ mod tests {
         // so, in the plan and in the record.
         assert_eq!(plan.sync.selected, SyncMode::Server);
         assert_eq!(plan.sync.ntsync_device, NtsyncDevice::Absent);
-        assert!(plan.plan.notes.iter().any(|note| note.contains("/dev/ntsync")));
+        assert!(
+            plan.plan
+                .notes
+                .iter()
+                .any(|note| note.contains("/dev/ntsync"))
+        );
 
         // A second launch counts on from the record of the first.
         let again = plan_launch(
@@ -536,7 +536,12 @@ mod tests {
         let report = run_plan(&plan.plan, &mut executor);
         assert_eq!(report.exit_status, None);
         assert!(report.failure.is_some());
-        assert!(!executor.steps.iter().any(|step| matches!(step, Step::Launch { .. })));
+        assert!(
+            !executor
+                .steps
+                .iter()
+                .any(|step| matches!(step, Step::Launch { .. }))
+        );
     }
 
     #[test]
@@ -705,15 +710,15 @@ mod tests {
         native.runtime = ProfileRuntime::Native;
         native.format = ProfileFormat::Elf;
         for profile in [msi, vm, native] {
-            let error = plan_launch(&planner(&setup), &request(&profile, &installed, None))
-                .unwrap_err();
+            let error =
+                plan_launch(&planner(&setup), &request(&profile, &installed, None)).unwrap_err();
             assert_eq!(error.code(), Code::LaunchUnsupported, "{profile:?}");
         }
 
         let mut other_app = base.clone();
         other_app.app_id = "com.example.other".to_owned();
-        let error = plan_launch(&planner(&setup), &request(&other_app, &installed, None))
-            .unwrap_err();
+        let error =
+            plan_launch(&planner(&setup), &request(&other_app, &installed, None)).unwrap_err();
         assert_eq!(error.code(), Code::PrefixOwner);
     }
 
@@ -745,7 +750,10 @@ mod tests {
                     what: "the SSH directory",
                 },
             ),
-            (setup.machine.path("Games/missing.exe"), GrantRefusal::Missing),
+            (
+                setup.machine.path("Games/missing.exe"),
+                GrantRefusal::Missing,
+            ),
             (setup.machine.path("Games"), GrantRefusal::WrongKind),
         ] {
             profile.binary.clone_from(&binary);
@@ -799,8 +807,9 @@ mod tests {
         let (_, entries) = parse(sandbox_arguments);
         let saves = setup.machine.path("Saves");
         let documents = setup.machine.path("Documents");
-        assert!(entries.iter().any(|entry| entry.option == "--bind"
-            && entry.source.as_deref() == Some(saves.as_str())));
+        assert!(entries.iter().any(
+            |entry| entry.option == "--bind" && entry.source.as_deref() == Some(saves.as_str())
+        ));
         assert!(entries.iter().any(|entry| entry.option == "--ro-bind"
             && entry.source.as_deref() == Some(documents.as_str())));
 
@@ -827,8 +836,7 @@ mod tests {
         profile.runtime = ProfileRuntime::Proton;
 
         // Without a pin the launcher would follow the latest build.
-        let error = plan_launch(&planner(&setup), &request(&profile, &wine_9(), None))
-            .unwrap_err();
+        let error = plan_launch(&planner(&setup), &request(&profile, &wine_9(), None)).unwrap_err();
         assert_eq!(error, PlanError::ProtonUnpinned);
         assert_eq!(error.code(), Code::ProtonUnpinned);
 
@@ -850,7 +858,12 @@ mod tests {
         assert_eq!(plan.application.environment["GAMEID"], "umu-default");
         assert_eq!(plan.sync.selected, SyncMode::RuntimeDefault);
         assert!(plan.creates_prefix);
-        assert!(plan.plan.notes.iter().any(|note| note.contains("by default")));
+        assert!(
+            plan.plan
+                .notes
+                .iter()
+                .any(|note| note.contains("by default"))
+        );
 
         // A prefix on another Proton build is not moved by a launch.
         let existing = PrefixMetadata {
@@ -874,8 +887,8 @@ mod tests {
 
         let mut missing = Setup::new("launch-proton-missing");
         missing.host.umu_run = None;
-        let error = plan_launch(&planner(&missing), &request(&profile, &wine_9(), None))
-            .unwrap_err();
+        let error =
+            plan_launch(&planner(&missing), &request(&profile, &wine_9(), None)).unwrap_err();
         assert_eq!(error.code(), Code::ProtonLauncherMissing);
     }
 

@@ -474,9 +474,19 @@ mod tests {
         let scratch = scratch("exec-files");
         let mut executor = SystemExecutor::new(&scratch.dirs);
         let prefix = scratch.app.join("prefix");
-        done(&mut executor, Step::CreateDir { path: prefix.clone() });
+        done(
+            &mut executor,
+            Step::CreateDir {
+                path: prefix.clone(),
+            },
+        );
         // Creating it again is not an error.
-        done(&mut executor, Step::CreateDir { path: prefix.clone() });
+        done(
+            &mut executor,
+            Step::CreateDir {
+                path: prefix.clone(),
+            },
+        );
         let mode = fs::metadata(&prefix).unwrap().permissions().mode();
         assert_eq!(mode & 0o777, 0o700);
 
@@ -539,7 +549,10 @@ mod tests {
                     path: refused.clone(),
                 })
                 .unwrap_err();
-            assert!(error.message.starts_with("refusing to delete"), "{refused:?}");
+            assert!(
+                error.message.starts_with("refusing to delete"),
+                "{refused:?}"
+            );
             for (from, to) in [(&refused, &prefix), (&prefix, &refused)] {
                 let error = executor
                     .execute(&Step::Rename {
@@ -553,15 +566,30 @@ mod tests {
         assert!(prefix.join("system.reg").exists());
 
         // Deleting the prefix removes the link, not what it points to.
-        done(&mut executor, Step::RemoveTree { path: prefix.clone() });
+        done(
+            &mut executor,
+            Step::RemoveTree {
+                path: prefix.clone(),
+            },
+        );
         assert!(!prefix.exists());
         assert_eq!(fs::read(outside.join("precious")).unwrap(), b"keep");
         // Deleting something that is not there is not an error.
-        done(&mut executor, Step::RemoveTree { path: prefix.clone() });
+        done(
+            &mut executor,
+            Step::RemoveTree {
+                path: prefix.clone(),
+            },
+        );
 
         // A link in place of a directory is removed as a link.
         symlink(&outside, &prefix).unwrap();
-        done(&mut executor, Step::RemoveTree { path: prefix.clone() });
+        done(
+            &mut executor,
+            Step::RemoveTree {
+                path: prefix.clone(),
+            },
+        );
         assert!(fs::symlink_metadata(&prefix).is_err());
         assert!(outside.join("precious").exists());
 
@@ -621,7 +649,11 @@ mod tests {
                 },
             })
             .unwrap_err();
-        assert!(error.message.starts_with("cannot start /nonexistent/program"));
+        assert!(
+            error
+                .message
+                .starts_with("cannot start /nonexistent/program")
+        );
     }
 
     #[test]
@@ -776,14 +808,25 @@ mod tests {
         assert_eq!(status, 7);
         assert_eq!(fs::read_to_string(&marker).unwrap(), "--wait\n");
 
-        assert_eq!(supervise(None, "/bin/sh", &["-c".to_owned(), "exit 0".to_owned()]), Ok(0));
+        assert_eq!(
+            supervise(None, "/bin/sh", &["-c".to_owned(), "exit 0".to_owned()]),
+            Ok(0)
+        );
         // A missing settle program does not change the result.
         let missing = scratch.dirs.state_root().join("no-such-program");
         assert_eq!(
-            supervise(Some(&missing), "/bin/sh", &["-c".to_owned(), "exit 5".to_owned()]),
+            supervise(
+                Some(&missing),
+                "/bin/sh",
+                &["-c".to_owned(), "exit 5".to_owned()]
+            ),
             Ok(5)
         );
         let error = supervise(None, "/nonexistent/program", &[]).unwrap_err();
-        assert!(error.message.starts_with("cannot start /nonexistent/program"));
+        assert!(
+            error
+                .message
+                .starts_with("cannot start /nonexistent/program")
+        );
     }
 }

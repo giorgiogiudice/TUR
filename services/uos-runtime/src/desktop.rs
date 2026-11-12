@@ -79,9 +79,9 @@ fn is_plain_launcher(launcher: &str) -> bool {
     !launcher.is_empty()
         && launcher.len() <= 1024
         && (!launcher.contains('/') || is_plain_absolute(launcher))
-        && launcher
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'/' | b'.' | b'_' | b'-' | b'+'))
+        && launcher.bytes().all(|byte| {
+            byte.is_ascii_alphanumeric() || matches!(byte, b'/' | b'.' | b'_' | b'-' | b'+')
+        })
 }
 
 /// Writes the desktop entry for `profile`.

@@ -214,7 +214,9 @@ impl fmt::Display for PlanError {
                 "the runtime did not report a version that can be recorded, so the prefix cannot \
                  be tied to it",
             ),
-            PlanError::Unsupported { reason } => write!(f, "this profile cannot be launched: {reason}"),
+            PlanError::Unsupported { reason } => {
+                write!(f, "this profile cannot be launched: {reason}")
+            }
             PlanError::PrefixMissing => f.write_str("the application has no prefix"),
             PlanError::PrefixExists => f.write_str("the application already has a prefix"),
             PlanError::PrefixOwner { detail } => {
@@ -225,7 +227,10 @@ impl fmt::Display for PlanError {
                 "the profile pins runtime version {pinned} and the installed runtime is \
                  {installed}; nothing was started"
             ),
-            PlanError::RuntimeMismatch { recorded, installed } => write!(
+            PlanError::RuntimeMismatch {
+                recorded,
+                installed,
+            } => write!(
                 f,
                 "the prefix is on runtime version {recorded} and the installed runtime is \
                  {installed}; a prefix is never changed by a runtime upgrade on its own. Ask for \
@@ -248,10 +253,16 @@ impl fmt::Display for PlanError {
                 write!(f, "the program file {path:?} cannot be used: {refusal}")
             }
             PlanError::Environment { name, problem } => {
-                write!(f, "the environment variable {name:?} cannot be set: {problem}")
+                write!(
+                    f,
+                    "the environment variable {name:?} cannot be set: {problem}"
+                )
             }
             PlanError::Arguments { problem } => {
-                write!(f, "the arguments for the application cannot be used: {problem}")
+                write!(
+                    f,
+                    "the arguments for the application cannot be used: {problem}"
+                )
             }
             PlanError::BackupMissing { name } => {
                 write!(f, "there is no backup named {name:?} for this application")
@@ -289,7 +300,10 @@ impl From<PathsError> for PlanError {
 pub fn wine_has_ntsync(version: &str) -> bool {
     version
         .strip_prefix("wine-")
-        .and_then(|rest| rest.split(|character: char| !character.is_ascii_digit()).next())
+        .and_then(|rest| {
+            rest.split(|character: char| !character.is_ascii_digit())
+                .next()
+        })
         .and_then(|major| major.parse::<u32>().ok())
         .is_some_and(|major| major >= 11)
 }
@@ -427,7 +441,10 @@ pub fn check_extra_environment(extra: &[(String, String)]) -> Result<(), PlanErr
             return refuse(name, "the runtime manager sets this variable itself");
         }
         if name.starts_with("LD_") {
-            return refuse(name, "variables that change how programs are loaded are not accepted");
+            return refuse(
+                name,
+                "variables that change how programs are loaded are not accepted",
+            );
         }
         if value.len() > MAX_ENVIRONMENT_VALUE_BYTES || value.chars().any(char::is_control) {
             return refuse(name, "the value is too long or holds a control character");
@@ -526,17 +543,26 @@ fn path_text(path: &Path, role: &'static str) -> Result<String, PlanError> {
 }
 
 /// The environment of a runtime command.
-fn environment(invocation: &Invocation<'_>, creating: bool) -> Result<BTreeMap<String, String>, PlanError> {
+fn environment(
+    invocation: &Invocation<'_>,
+    creating: bool,
+) -> Result<BTreeMap<String, String>, PlanError> {
     let host = invocation.host;
     let mut environment: BTreeMap<String, String> = host.passthrough.clone();
     let mut set = |name: &str, value: String| {
         environment.insert(name.to_owned(), value);
     };
     set("PATH", RUNTIME_PATH.to_owned());
-    set("HOME", path_text(&invocation.app.home, "the private home directory")?);
+    set(
+        "HOME",
+        path_text(&invocation.app.home, "the private home directory")?,
+    );
     set("USER", host.user.clone());
     set("LOGNAME", host.user.clone());
-    set("WINEPREFIX", path_text(&invocation.app.prefix, "the prefix")?);
+    set(
+        "WINEPREFIX",
+        path_text(&invocation.app.prefix, "the prefix")?,
+    );
 
     if let Some(x11) = &host.sockets.x11 {
         set("DISPLAY", x11.display.clone());
@@ -545,7 +571,10 @@ fn environment(invocation: &Invocation<'_>, creating: bool) -> Result<BTreeMap<S
         }
     }
     if let Some(runtime_dir) = &host.runtime_dir {
-        set("XDG_RUNTIME_DIR", path_text(runtime_dir, "the runtime directory")?);
+        set(
+            "XDG_RUNTIME_DIR",
+            path_text(runtime_dir, "the runtime directory")?,
+        );
         if let Some(wayland) = &host.sockets.wayland {
             set("WAYLAND_DISPLAY", wayland.name.clone());
         }
@@ -554,7 +583,10 @@ fn environment(invocation: &Invocation<'_>, creating: bool) -> Result<BTreeMap<S
     match invocation.runtime {
         RuntimeKind::Wine => {
             set("WINEDEBUG", invocation.wine_debug.to_owned());
-            set("WINEDLLOVERRIDES", dll_overrides(invocation.graphics, creating));
+            set(
+                "WINEDLLOVERRIDES",
+                dll_overrides(invocation.graphics, creating),
+            );
             if creating {
                 set("WINEARCH", invocation.architecture.winearch().to_owned());
             }
@@ -608,7 +640,10 @@ pub fn assemble(invocation: &Invocation<'_>, task: Task<'_>) -> Result<Assembled
                 program,
             };
             let wine = host.wine.as_ref().ok_or_else(|| missing("wine"))?;
-            let server = wine.server.as_deref().ok_or_else(|| missing("wineserver"))?;
+            let server = wine
+                .server
+                .as_deref()
+                .ok_or_else(|| missing("wineserver"))?;
             (
                 path_text(&wine.program, "wine")?,
                 Vec::new(),
@@ -716,7 +751,12 @@ pub(crate) mod tests {
 
     pub(crate) const NOW: Timestamp = Timestamp::from_unix(1_794_478_500);
 
-    fn sync(requested: SyncBackend, runtime: RuntimeKind, version: &str, device: NtsyncDevice) -> SyncRecord {
+    fn sync(
+        requested: SyncBackend,
+        runtime: RuntimeKind,
+        version: &str,
+        device: NtsyncDevice,
+    ) -> SyncRecord {
         decide_sync(requested, runtime, version, device, NOW)
     }
 
@@ -740,10 +780,28 @@ pub(crate) mod tests {
             (Ntsync, Wine, "wine-11.0", NotChecked, SyncMode::Server),
             (Esync, Wine, "wine-11.0", Present, SyncMode::Server),
             (Fsync, Wine, "wine-11.0", Present, SyncMode::Server),
-            (Auto, Proton, "GE-Proton10-20", Present, SyncMode::RuntimeDefault),
-            (Auto, Proton, "GE-Proton10-20", Absent, SyncMode::RuntimeDefault),
+            (
+                Auto,
+                Proton,
+                "GE-Proton10-20",
+                Present,
+                SyncMode::RuntimeDefault,
+            ),
+            (
+                Auto,
+                Proton,
+                "GE-Proton10-20",
+                Absent,
+                SyncMode::RuntimeDefault,
+            ),
             (Ntsync, Proton, "GE-Proton10-20", Present, SyncMode::Ntsync),
-            (Ntsync, Proton, "GE-Proton10-20", Absent, SyncMode::RuntimeDefault),
+            (
+                Ntsync,
+                Proton,
+                "GE-Proton10-20",
+                Absent,
+                SyncMode::RuntimeDefault,
+            ),
             (Esync, Proton, "GE-Proton10-20", Absent, SyncMode::Esync),
             (Fsync, Proton, "GE-Proton10-20", Absent, SyncMode::Fsync),
         ];
@@ -768,7 +826,13 @@ pub(crate) mod tests {
 
     #[test]
     fn wine_versions_that_use_ntsync() {
-        for version in ["wine-11.0", "wine-11.0-rc1", "wine-11.5", "wine-12.0", "wine-100.1"] {
+        for version in [
+            "wine-11.0",
+            "wine-11.0-rc1",
+            "wine-11.5",
+            "wine-12.0",
+            "wine-100.1",
+        ] {
             assert!(wine_has_ntsync(version), "{version}");
         }
         for version in [
@@ -966,7 +1030,10 @@ pub(crate) mod tests {
         );
         assert_eq!(environment["PATH"], "/usr/bin:/bin");
         assert_eq!(environment["HOME"], setup.app.home.to_str().unwrap());
-        assert_eq!(environment["WINEPREFIX"], setup.app.prefix.to_str().unwrap());
+        assert_eq!(
+            environment["WINEPREFIX"],
+            setup.app.prefix.to_str().unwrap()
+        );
         assert_eq!(environment["USER"], "ada");
         assert_eq!(environment["DISPLAY"], ":0");
         assert_eq!(environment["WAYLAND_DISPLAY"], "wayland-0");
@@ -1009,8 +1076,14 @@ pub(crate) mod tests {
             ]
         );
         let (_, entries) = parse(sandbox_arguments);
-        let chdir = entries.iter().find(|entry| entry.option == "--chdir").unwrap();
-        assert_eq!(Some(chdir.target.as_str()), setup.machine.home.join("Games").to_str());
+        let chdir = entries
+            .iter()
+            .find(|entry| entry.option == "--chdir")
+            .unwrap();
+        assert_eq!(
+            Some(chdir.target.as_str()),
+            setup.machine.home.join("Games").to_str()
+        );
         assert_eq!(assembled.mounts.len(), entries.len() - 2);
     }
 
@@ -1072,7 +1145,10 @@ pub(crate) mod tests {
         assert_eq!(application.program, "/usr/bin/umu-run");
         assert_eq!(application.arguments, [program.to_str().unwrap()]);
         let environment = &application.environment;
-        assert_eq!(environment["WINEPREFIX"], setup.app.prefix.to_str().unwrap());
+        assert_eq!(
+            environment["WINEPREFIX"],
+            setup.app.prefix.to_str().unwrap()
+        );
         assert_eq!(environment["GAMEID"], "umu-default");
         assert_eq!(environment["STORE"], "none");
         assert_eq!(environment["PROTONPATH"], "GE-Proton10-20");
@@ -1175,8 +1251,16 @@ pub(crate) mod tests {
         setup.host.sockets = crate::launch_host::Sockets::default();
         setup.host.runtime_dir = None;
         let assembled = assemble(&setup.invocation(RuntimeKind::Wine), Task::Update).unwrap();
-        for absent in ["DISPLAY", "WAYLAND_DISPLAY", "XAUTHORITY", "XDG_RUNTIME_DIR"] {
-            assert!(!assembled.application.environment.contains_key(absent), "{absent}");
+        for absent in [
+            "DISPLAY",
+            "WAYLAND_DISPLAY",
+            "XAUTHORITY",
+            "XDG_RUNTIME_DIR",
+        ] {
+            assert!(
+                !assembled.application.environment.contains_key(absent),
+                "{absent}"
+            );
         }
     }
 

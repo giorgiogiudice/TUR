@@ -277,7 +277,10 @@ impl GrantContext {
             return Err(GrantRefusal::NotPlain);
         }
         let resolved = fs::canonicalize(binary).map_err(|_| GrantRefusal::Missing)?;
-        if resolved.to_str().is_none_or(|text| !is_plain_absolute(text)) {
+        if resolved
+            .to_str()
+            .is_none_or(|text| !is_plain_absolute(text))
+        {
             return Err(GrantRefusal::NotPlain);
         }
         let is_file = fs::metadata(&resolved).is_ok_and(|metadata| metadata.is_file());
@@ -336,7 +339,11 @@ impl GrantContext {
         if self.homes.iter().any(|home| home.starts_with(resolved)) {
             return Err(GrantRefusal::ContainsHome);
         }
-        if let Some(found) = self.protected.iter().find(|entry| overlaps(resolved, &entry.path)) {
+        if let Some(found) = self
+            .protected
+            .iter()
+            .find(|entry| overlaps(resolved, &entry.path))
+        {
             return Err(GrantRefusal::Protected { what: found.what });
         }
         if self.hidden_in_home(resolved) {
@@ -548,11 +555,20 @@ pub(crate) mod tests {
                 (self.path("snap/firefox"), false),
                 (self.runtime_dir.to_str().unwrap().to_owned(), false),
                 (
-                    self.runtime_dir.join("keyring").to_str().unwrap().to_owned(),
+                    self.runtime_dir
+                        .join("keyring")
+                        .to_str()
+                        .unwrap()
+                        .to_owned(),
                     false,
                 ),
                 (
-                    self.runtime_dir.parent().unwrap().to_str().unwrap().to_owned(),
+                    self.runtime_dir
+                        .parent()
+                        .unwrap()
+                        .to_str()
+                        .unwrap()
+                        .to_owned(),
                     false,
                 ),
                 // ".." in any position.
@@ -568,7 +584,10 @@ pub(crate) mod tests {
                 (self.path("Games/home"), false),
                 (self.path("Documents/up"), false),
                 (format!("{outside}/prefixes"), false),
-                (format!("{outside}/prefixes/prefixes/com.example.other"), false),
+                (
+                    format!("{outside}/prefixes/prefixes/com.example.other"),
+                    false,
+                ),
                 ("/proc/self/root".to_owned(), false),
                 // System directories and kernel file systems.
                 ("/usr".to_owned(), false),
@@ -662,7 +681,10 @@ pub(crate) mod tests {
                     what: "the SSH directory",
                 },
             ),
-            (machine.path(".config/other-tool"), GrantRefusal::HiddenInHome),
+            (
+                machine.path(".config/other-tool"),
+                GrantRefusal::HiddenInHome,
+            ),
             (machine.path("Games/everything"), GrantRefusal::Root),
             (machine.path("Games/home"), GrantRefusal::ContainsHome),
             (machine.path("Games/../.ssh"), GrantRefusal::NotPlain),
@@ -732,7 +754,10 @@ pub(crate) mod tests {
         for (path, what) in [
             ("/home/ada/.ssh", "the SSH directory"),
             ("/home/ada/.ssh/keys", "the SSH directory"),
-            ("/home/ada/snap/firefox/common", "the data of snap applications"),
+            (
+                "/home/ada/snap/firefox/common",
+                "the data of snap applications",
+            ),
             ("/tmp/ssh-XXXXabcd", "the SSH agent socket"),
             ("/tmp", "the SSH agent socket"),
             (
@@ -862,7 +887,10 @@ pub(crate) mod tests {
             ),
             (machine.path("Games"), GrantRefusal::WrongKind),
             (machine.path("Games/missing.exe"), GrantRefusal::Missing),
-            (machine.path("Games/../Games/setup.exe"), GrantRefusal::NotPlain),
+            (
+                machine.path("Games/../Games/setup.exe"),
+                GrantRefusal::NotPlain,
+            ),
             ("/proc/self/environ".to_owned(), GrantRefusal::System),
             ("setup.exe".to_owned(), GrantRefusal::NotPlain),
         ];

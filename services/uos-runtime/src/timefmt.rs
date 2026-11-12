@@ -84,8 +84,18 @@ impl Timestamp {
         if bytes.len() != 20 {
             return None;
         }
-        let separators = [(4, b'-'), (7, b'-'), (10, b'T'), (13, b':'), (16, b':'), (19, b'Z')];
-        if separators.iter().any(|&(at, byte)| bytes.get(at) != Some(&byte)) {
+        let separators = [
+            (4, b'-'),
+            (7, b'-'),
+            (10, b'T'),
+            (13, b':'),
+            (16, b':'),
+            (19, b'Z'),
+        ];
+        if separators
+            .iter()
+            .any(|&(at, byte)| bytes.get(at) != Some(&byte))
+        {
             return None;
         }
         let number = |from: usize, to: usize| -> Option<u64> {
@@ -235,10 +245,7 @@ mod tests {
         let timestamp = Timestamp::from_unix(1_794_478_500);
         let json = serde_json::to_string(&timestamp).unwrap();
         assert_eq!(json, "\"2026-11-12T10:15:00Z\"");
-        assert_eq!(
-            serde_json::from_str::<Timestamp>(&json).unwrap(),
-            timestamp
-        );
+        assert_eq!(serde_json::from_str::<Timestamp>(&json).unwrap(), timestamp);
         assert!(serde_json::from_str::<Timestamp>("\"yesterday\"").is_err());
         assert!(serde_json::from_str::<Timestamp>("1794478500").is_err());
     }

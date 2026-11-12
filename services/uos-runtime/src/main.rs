@@ -540,7 +540,9 @@ impl Session {
         };
         match runtime {
             RuntimeKind::Wine => {
-                let server = program.parent().map(|directory| directory.join("wineserver"));
+                let server = program
+                    .parent()
+                    .map(|directory| directory.join("wineserver"));
                 self.host.wine = Some(WineInstall {
                     program: program.clone(),
                     server,
@@ -759,13 +761,16 @@ fn plan_prefix_in(
             grant_rw,
             ..
         } => {
-            let runtime = RuntimeKind::from_name(runtime).ok_or_else(|| PlanError::Unsupported {
-                reason: format!("\"{runtime}\" is not a runtime; use wine or proton"),
-            })?;
-            let graphics = serde_json::from_value::<GraphicsBackend>(Value::from(graphics.as_str()))
-                .map_err(|_| PlanError::Unsupported {
-                    reason: format!("\"{graphics}\" is not a graphics setting"),
+            let runtime =
+                RuntimeKind::from_name(runtime).ok_or_else(|| PlanError::Unsupported {
+                    reason: format!("\"{runtime}\" is not a runtime; use wine or proton"),
                 })?;
+            let graphics = serde_json::from_value::<GraphicsBackend>(Value::from(
+                graphics.as_str(),
+            ))
+            .map_err(|_| PlanError::Unsupported {
+                reason: format!("\"{graphics}\" is not a graphics setting"),
+            })?;
             session.use_runtime_program(runtime, common);
             let version = session.runtime_version(runtime, common, None)?;
             let planner = session.planner();
@@ -1041,7 +1046,10 @@ fn run_supervise(settle: Option<&Path>, command: &[String]) -> u8 {
     match supervise(settle, program, arguments) {
         Ok(status) => u8::try_from(status).unwrap_or(EXIT_INPUT),
         Err(error) => {
-            print_error_line(&format!("error[{}]: {error}", Code::StepFailed.error_code()));
+            print_error_line(&format!(
+                "error[{}]: {error}",
+                Code::StepFailed.error_code()
+            ));
             EXIT_STEP_FAILED
         }
     }

@@ -260,8 +260,16 @@ fn create_dry_run_prints_the_plan_and_changes_nothing() {
     // Text form.
     let outcome = home.run_named(&["prefix", "create", APP, "--dry-run"]);
     assert_eq!(outcome.status, 0, "{}", outcome.stderr);
-    assert!(outcome.stdout.starts_with("Plan: create com.example.app (7 steps)\n"));
-    assert!(outcome.stdout.contains("  4. create the prefix: /usr/bin/bwrap "));
+    assert!(
+        outcome
+            .stdout
+            .starts_with("Plan: create com.example.app (7 steps)\n")
+    );
+    assert!(
+        outcome
+            .stdout
+            .contains("  4. create the prefix: /usr/bin/bwrap ")
+    );
 
     // Nothing was created.
     assert!(!home.root.join("data").exists());
@@ -272,7 +280,9 @@ fn create_dry_run_prints_the_plan_and_changes_nothing() {
 fn refusals_have_codes_and_exit_status_six() {
     let home = Home::new("refusals");
 
-    for operation in ["verify", "repair", "reset", "backup", "migrate", "remove", "pin"] {
+    for operation in [
+        "verify", "repair", "reset", "backup", "migrate", "remove", "pin",
+    ] {
         let outcome = home.run_named(&["prefix", operation, APP]);
         assert_refused(&outcome, "UOS-WINDOWS-PREFIX-001");
     }
@@ -298,8 +308,14 @@ fn refusals_have_codes_and_exit_status_six() {
     ] {
         let outcome = home.run_named(&["prefix", "create", APP, "--grant", directory, "--dry-run"]);
         assert_refused(&outcome, "UOS-SECURITY-SANDBOX-003");
-        let outcome =
-            home.run_named(&["prefix", "create", APP, "--grant-rw", directory, "--dry-run"]);
+        let outcome = home.run_named(&[
+            "prefix",
+            "create",
+            APP,
+            "--grant-rw",
+            directory,
+            "--dry-run",
+        ]);
         assert_refused(&outcome, "UOS-SECURITY-SANDBOX-003");
     }
 
@@ -344,13 +360,20 @@ fn launch_dry_run_shows_the_whole_command_and_runs_nothing() {
     assert_eq!(launch["runtime"], "wine");
     assert_eq!(launch["runtime_version"], "wine-9.0");
     assert_eq!(launch["creates_prefix"], true);
-    assert_eq!(launch["prefix"], home.app_dir().join("prefix").to_str().unwrap());
+    assert_eq!(
+        launch["prefix"],
+        home.app_dir().join("prefix").to_str().unwrap()
+    );
 
     let application = &launch["application"];
     assert_eq!(application["program"], "/usr/bin/wine");
     assert_eq!(
         application["arguments"],
-        serde_json::json!([home.path("home/Games/app.exe"), "--first", "second argument"])
+        serde_json::json!([
+            home.path("home/Games/app.exe"),
+            "--first",
+            "second argument"
+        ])
     );
     assert_eq!(application["working_directory"], home.path("home/Games"));
 
@@ -414,9 +437,17 @@ fn launch_dry_run_shows_the_whole_command_and_runs_nothing() {
             .starts_with("Launch: com.example.app (Example Application) with wine wine-9.0\n")
     );
     assert!(outcome.stdout.contains("  program: /usr/bin/wine\n"));
-    assert!(outcome.stdout.contains("    WINEDLLOVERRIDES=winemenubuilder.exe=\n"));
+    assert!(
+        outcome
+            .stdout
+            .contains("    WINEDLLOVERRIDES=winemenubuilder.exe=\n")
+    );
     assert!(outcome.stdout.contains("    read-only /usr: system\n"));
-    assert!(outcome.stdout.contains("Plan: launch com.example.app (10 steps)\n"));
+    assert!(
+        outcome
+            .stdout
+            .contains("Plan: launch com.example.app (10 steps)\n")
+    );
     assert!(!outcome.stdout.contains(CANARY));
 
     // A dry run creates nothing.
@@ -451,7 +482,13 @@ fn a_launch_never_changes_the_runtime_version_of_a_prefix() {
     assert_eq!(home.metadata(), before);
 
     // Asked to migrate, the plan backs the prefix up before updating it.
-    let outcome = home.run_named(&["launch", profile.as_str(), "--migrate", "--dry-run", "--json"]);
+    let outcome = home.run_named(&[
+        "launch",
+        profile.as_str(),
+        "--migrate",
+        "--dry-run",
+        "--json",
+    ]);
     assert_eq!(outcome.status, 0, "{}", outcome.stderr);
     let report = outcome.json();
     let launch = &report["launch"];
@@ -483,7 +520,11 @@ fn a_launch_never_changes_the_runtime_version_of_a_prefix() {
     assert!(!home.metadata().pinned);
     let outcome = home.run_named(&["prefix", "migrate", APP, "--dry-run"]);
     assert_eq!(outcome.status, 0, "{}", outcome.stderr);
-    assert!(outcome.stdout.starts_with("Plan: migrate com.example.app (7 steps)\n"));
+    assert!(
+        outcome
+            .stdout
+            .starts_with("Plan: migrate com.example.app (7 steps)\n")
+    );
 
     // With the version the prefix is on, the launch is planned and the
     // prefix is reused.
@@ -523,8 +564,7 @@ fn launch_refuses_bad_environment_profiles_and_programs() {
         "HOME=/home/ada",
         "9BAD=x",
     ] {
-        let outcome =
-            home.run_named(&["launch", profile.as_str(), "--env", variable, "--dry-run"]);
+        let outcome = home.run_named(&["launch", profile.as_str(), "--env", variable, "--dry-run"]);
         assert_refused(&outcome, "UOS-SECURITY-SANDBOX-005");
     }
 
@@ -533,11 +573,19 @@ fn launch_refuses_bad_environment_profiles_and_programs() {
     fs::write(&invalid, b"{ \"schema_version\": 1 }").unwrap();
     let outcome = home.run_named(&["launch", invalid.to_str().unwrap(), "--dry-run"]);
     assert_eq!(outcome.status, 5);
-    assert!(outcome.stderr.starts_with("error[UOS-DESKTOP-PROFILE-002]: "));
+    assert!(
+        outcome
+            .stderr
+            .starts_with("error[UOS-DESKTOP-PROFILE-002]: ")
+    );
     let missing = home.root.join("missing.json");
     let outcome = home.run_named(&["launch", missing.to_str().unwrap(), "--dry-run"]);
     assert_eq!(outcome.status, 1);
-    assert!(outcome.stderr.starts_with("error[UOS-DESKTOP-PROFILE-001]: "));
+    assert!(
+        outcome
+            .stderr
+            .starts_with("error[UOS-DESKTOP-PROFILE-001]: ")
+    );
 
     // A program file in a protected directory.
     let text = fs::read_to_string(&profile).unwrap();
@@ -620,7 +668,11 @@ fn prefix_operations_that_start_no_runtime_are_carried_out() {
     assert_eq!(outcome.status, 8, "{}\n{}", outcome.stdout, outcome.stderr);
     assert!(outcome.stdout.contains("finding: expected that "));
     assert!(outcome.stdout.contains("user.reg is a file"));
-    assert!(outcome.stderr.starts_with("error[UOS-WINDOWS-PREFIX-004]: "));
+    assert!(
+        outcome
+            .stderr
+            .starts_with("error[UOS-WINDOWS-PREFIX-004]: ")
+    );
     let outcome = home.run(&["prefix", "verify", APP, "--json"]);
     assert_eq!(outcome.status, 8);
     let report = outcome.json();
@@ -672,7 +724,13 @@ fn prefix_operations_that_start_no_runtime_are_carried_out() {
         fs::read(home.app_dir().join("home/note.txt")).unwrap(),
         b"private home"
     );
-    assert!(!home.root.join("data/uos/runtime/staging").join(APP).exists());
+    assert!(
+        !home
+            .root
+            .join("data/uos/runtime/staging")
+            .join(APP)
+            .exists()
+    );
 
     // Restore over an existing prefix replaces it.
     fs::write(home.app_dir().join("prefix/drive_c/save.dat"), b"corrupted").unwrap();
@@ -724,11 +782,21 @@ fn desktop_entry_is_printed_and_nothing_is_installed() {
 #[test]
 fn the_supervisor_passes_the_exit_status_on() {
     let home = Home::new("supervise");
-    let outcome = home.run(&["supervise", "--", "/bin/sh", "-c", "echo supervised; exit 9"]);
+    let outcome = home.run(&[
+        "supervise",
+        "--",
+        "/bin/sh",
+        "-c",
+        "echo supervised; exit 9",
+    ]);
     assert_eq!(outcome.status, 9);
     assert_eq!(outcome.stdout, "supervised\n");
     let outcome = home.run(&["supervise", "--", "/nonexistent/program"]);
     assert_eq!(outcome.status, 7);
-    assert!(outcome.stderr.starts_with("error[UOS-WINDOWS-RUNTIME-010]: "));
+    assert!(
+        outcome
+            .stderr
+            .starts_with("error[UOS-WINDOWS-RUNTIME-010]: ")
+    );
     assert_eq!(home.run(&["supervise"]).status, 2);
 }

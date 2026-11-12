@@ -171,7 +171,9 @@ pub fn current_effective_uid() -> Option<u32> {
 /// display on another host, or anything else, gives `None`.
 pub fn x11_display_number(display: &str) -> Option<u32> {
     let rest = display.strip_prefix(':')?;
-    let number = rest.split_once('.').map_or(rest, |(number, _screen)| number);
+    let number = rest
+        .split_once('.')
+        .map_or(rest, |(number, _screen)| number);
     if number.is_empty() || number.len() > 5 || !number.bytes().all(|byte| byte.is_ascii_digit()) {
         return None;
     }
@@ -268,7 +270,8 @@ pub fn probe_wine_version(wine: &Path) -> Option<RuntimeVersion> {
 /// a character device, and it has to open. The kernel version is not
 /// consulted (specification §8.2).
 pub fn probe_ntsync(device: &Path) -> NtsyncDevice {
-    let is_device = fs::metadata(device).is_ok_and(|metadata| metadata.file_type().is_char_device());
+    let is_device =
+        fs::metadata(device).is_ok_and(|metadata| metadata.file_type().is_char_device());
     if !is_device {
         return NtsyncDevice::Absent;
     }
@@ -337,7 +340,7 @@ impl LaunchHost {
 
         let passthrough = PASSTHROUGH
             .iter()
-            .filter_map(|name| Some(((*name).to_owned(), variable(*name)?)))
+            .filter_map(|name| Some(((*name).to_owned(), variable(name)?)))
             .collect();
 
         let x11 = variable("DISPLAY").and_then(|display| {
@@ -452,7 +455,8 @@ pub(crate) mod tests {
 
     #[test]
     fn effective_uid_is_the_second_number() {
-        let status = "Name:\tuos-runtime\nUmask:\t0022\nUid:\t1000\t1001\t1002\t1003\nGid:\t5\t6\t7\t8\n";
+        let status =
+            "Name:\tuos-runtime\nUmask:\t0022\nUid:\t1000\t1001\t1002\t1003\nGid:\t5\t6\t7\t8\n";
         assert_eq!(effective_uid(status), Some(1001));
         assert_eq!(effective_uid("Uid:\t0\t0\t0\t0\n"), Some(0));
         assert_eq!(effective_uid("Name:\tx\n"), None);
@@ -513,7 +517,11 @@ pub(crate) mod tests {
         let home = Path::new("/home/ada");
         let runtime = Some(Path::new("/run/user/1000"));
         assert!(is_known_xauthority("/home/ada/.Xauthority", home, runtime));
-        assert!(is_known_xauthority("/run/user/1000/xauth_AbCdEf", home, runtime));
+        assert!(is_known_xauthority(
+            "/run/user/1000/xauth_AbCdEf",
+            home,
+            runtime
+        ));
         assert!(is_known_xauthority(
             "/run/user/1000/.mutter-Xwaylandauth.ABC123",
             home,
@@ -533,7 +541,11 @@ pub(crate) mod tests {
         ] {
             assert!(!is_known_xauthority(other, home, runtime), "{other:?}");
         }
-        assert!(!is_known_xauthority("/run/user/1000/xauth_AbCdEf", home, None));
+        assert!(!is_known_xauthority(
+            "/run/user/1000/xauth_AbCdEf",
+            home,
+            None
+        ));
     }
 
     #[test]
@@ -566,7 +578,10 @@ pub(crate) mod tests {
         ] {
             assert_eq!(parse_wine_version(other), None, "{other:?}");
         }
-        assert_eq!(parse_wine_version(&format!("wine-{}", "9".repeat(300))), None);
+        assert_eq!(
+            parse_wine_version(&format!("wine-{}", "9".repeat(300))),
+            None
+        );
     }
 
     #[test]
@@ -609,7 +624,11 @@ pub(crate) mod tests {
         if let Some(host) = LaunchHost::detect() {
             assert_eq!(Some(host.euid), current_effective_uid());
             assert!(host.home.is_absolute());
-            assert!(host.passthrough.keys().all(|name| PASSTHROUGH.contains(&name.as_str())));
+            assert!(
+                host.passthrough
+                    .keys()
+                    .all(|name| PASSTHROUGH.contains(&name.as_str()))
+            );
             for entry in &host.system {
                 match entry {
                     SystemEntry::Directory(path) | SystemEntry::Link { path, .. } => {
