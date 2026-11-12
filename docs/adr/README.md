@@ -33,6 +33,7 @@ the [specification](../architecture/specification.md).
 | [0014](0014-boot-health-and-rollback.md) | Boot health and rollback: a TUR attempt counter in GRUB's environment block | Accepted |
 | [0015](0015-seamless-windows-guest.md) | Seamless Windows guest on QEMU/KVM, libvirt and FreeRDP RemoteApp | Accepted |
 | [0016](0016-desktop-and-user-interface.md) | Desktop and user interface: standalone programs, Plasma by configuration, one identity | Accepted |
+| [0018](0018-first-installer-medium.md) | The first installer medium: a small live environment that runs the image's own installer | Proposed |
 
 ## Open questions from the specification
 

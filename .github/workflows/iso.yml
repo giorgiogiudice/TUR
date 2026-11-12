@@ -385,6 +385,8 @@ jobs:
             xorriso squashfs-tools mtools dosfstools
           qemu-system-x86_64 --version | head -1
           qemu-img --version | head -1
+          # tests/boot/report.py records the firmware files it was given.
+          ls -la /usr/share/OVMF/ | tee "$OUT/boot/host/ovmf-files.txt"
 
       - name: Build image
         run: |

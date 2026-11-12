@@ -14,7 +14,7 @@ started on a development machine.
 |---|---|---|
 | `build-medium.sh` | Builds the medium from a TUR image and records what went into it | TUR |
 | `medium-manifest.py` | Writes the manifest that travels beside the medium | TUR |
-| `Containerfile` | The installer environment: the image to install, plus Fedora's `dracut-live` and the installer | TUR |
+| `Containerfile` | The installer environment: the image to install, plus Fedora's `dracut-live` (with its dependencies `dracut-network` and `fuse`) and the installer | TUR |
 | `rootfs/usr/libexec/tur-installer/tur-install` | The installer: a text program on the first console | TUR |
 | `rootfs/usr/lib/systemd/system/` | The two units that start it instead of the desktop | TUR |
 | `third-party-licensed/grub/` | The medium's boot menu, interpreted by GRUB | BSD-3-Clause |
