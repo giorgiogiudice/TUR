@@ -1987,7 +1987,7 @@ fn contexts_for_text() -> Vec<Context> {
             .into_iter()
             .find_map(|(session, open)| session.filter(|_| open)),
     ];
-    contexts(&sessions, &[Vec::new()], &WindowOwner::ALL)
+    contexts(&sessions, &[HeldApprovals::none()], &WindowOwner::ALL)
 }
 
 #[test]
