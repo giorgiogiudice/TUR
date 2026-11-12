@@ -250,10 +250,21 @@ mod tests {
     /// else is allowed.
     fn assert_same_shape(schema_node: &Value, instance: &Value, what: &str) {
         assert_eq!(schema_node["type"], "object", "{what}: type");
-        assert_eq!(schema_node["additionalProperties"], false, "{what}: additionalProperties");
+        assert_eq!(
+            schema_node["additionalProperties"], false,
+            "{what}: additionalProperties"
+        );
         let properties = keys(&schema_node["properties"]);
-        assert_eq!(properties, keys(instance), "{what}: properties differ from the Rust type");
-        assert_eq!(properties, strings(&schema_node["required"]), "{what}: required");
+        assert_eq!(
+            properties,
+            keys(instance),
+            "{what}: properties differ from the Rust type"
+        );
+        assert_eq!(
+            properties,
+            strings(&schema_node["required"]),
+            "{what}: required"
+        );
     }
 
     #[test]
@@ -314,12 +325,27 @@ mod tests {
 
         assert_same_shape(&schema, &instance, "manifest");
         let properties = &schema["properties"];
-        assert_same_shape(&properties["collector"], &instance["collector"], "collector");
+        assert_same_shape(
+            &properties["collector"],
+            &instance["collector"],
+            "collector",
+        );
         assert_same_shape(&properties["uos"], &instance["uos"], "uos");
-        assert_same_shape(&properties["files"]["items"], &instance["files"][0], "files[]");
-        assert_same_shape(&properties["missing"]["items"], &instance["missing"][0], "missing[]");
+        assert_same_shape(
+            &properties["files"]["items"],
+            &instance["files"][0],
+            "files[]",
+        );
+        assert_same_shape(
+            &properties["missing"]["items"],
+            &instance["missing"][0],
+            "missing[]",
+        );
 
-        assert_eq!(properties["schema_version"]["const"], MANIFEST_SCHEMA_VERSION);
+        assert_eq!(
+            properties["schema_version"]["const"],
+            MANIFEST_SCHEMA_VERSION
+        );
 
         let reasons: BTreeSet<String> = MissingReason::ALL
             .into_iter()

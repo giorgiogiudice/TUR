@@ -279,7 +279,10 @@ fn to_pretty_json<T: serde::Serialize>(value: &T) -> Result<Vec<u8>, DiagError> 
 ///
 /// A collector that fails is recorded in the manifest's `missing` list and
 /// never fails the bundle. The only errors are internal ones.
-pub fn build_bundle(host: &dyn Host, request: &CollectRequest<'_>) -> Result<BuiltBundle, DiagError> {
+pub fn build_bundle(
+    host: &dyn Host,
+    request: &CollectRequest<'_>,
+) -> Result<BuiltBundle, DiagError> {
     let identity = gather_identity(host);
     let options = CollectOptions {
         since_boot: request.since_boot,
@@ -431,7 +434,10 @@ pub fn verify_archive(archive: &[u8]) -> Result<Verified, DiagError> {
 
     let required = |path: &str| {
         by_path.get(path).copied().ok_or_else(|| {
-            DiagError::new(ErrorKind::MemberMissing, format!("{path} is not in the archive"))
+            DiagError::new(
+                ErrorKind::MemberMissing,
+                format!("{path} is not in the archive"),
+            )
         })
     };
     let manifest_bytes = required(MANIFEST_PATH)?;
@@ -510,7 +516,9 @@ pub fn verify_archive(archive: &[u8]) -> Result<Verified, DiagError> {
             )));
         }
         if !listed.insert(path) {
-            return Err(unlisted(format!("{path} is listed twice in {MANIFEST_PATH}")));
+            return Err(unlisted(format!(
+                "{path} is listed twice in {MANIFEST_PATH}"
+            )));
         }
     }
     for path in by_path.keys() {
@@ -551,15 +559,28 @@ mod tests {
 
     fn host() -> FakeHost {
         FakeHost::new()
-            .with_command("uname", "Linux workstation-7 6.17.1-300.fc45.x86_64 #1 SMP x86_64 GNU/Linux\n")
-            .with_file("/proc/cmdline", "root=UUID=6f1c2a9e-0d7b-4c55-9a1e-3b8f5d2c7e10 quiet\n")
+            .with_command(
+                "uname",
+                "Linux workstation-7 6.17.1-300.fc45.x86_64 #1 SMP x86_64 GNU/Linux\n",
+            )
+            .with_file(
+                "/proc/cmdline",
+                "root=UUID=6f1c2a9e-0d7b-4c55-9a1e-3b8f5d2c7e10 quiet\n",
+            )
             .with_file("/proc/sys/kernel/osrelease", "6.17.1-300.fc45.x86_64\n")
             .with_file(
                 "/proc/sys/kernel/random/boot_id",
                 "0f0e0d0c-0b0a-4909-8807-060504030201\n",
             )
-            .with_file("/usr/lib/uos/release", "UOS_VERSION=0.1.0\nUOS_BUILD_ID=20261112.g0123456789ab\n")
-            .with_failing_command("dmesg", 1, "dmesg: read kernel buffer failed: Operation not permitted for alice")
+            .with_file(
+                "/usr/lib/uos/release",
+                "UOS_VERSION=0.1.0\nUOS_BUILD_ID=20261112.g0123456789ab\n",
+            )
+            .with_failing_command(
+                "dmesg",
+                1,
+                "dmesg: read kernel buffer failed: Operation not permitted for alice",
+            )
     }
 
     fn request(profile: Profile) -> CollectRequest<'static> {
@@ -616,7 +637,9 @@ mod tests {
     #[test]
     fn unpack_rejects_what_is_not_a_bundle() {
         assert_eq!(
-            unpack(b"this is not zstd").expect_err("not an archive").kind(),
+            unpack(b"this is not zstd")
+                .expect_err("not an archive")
+                .kind(),
             ErrorKind::ArchiveDamaged
         );
         let archive = pack(&[member("system/kernel.txt", "Linux\n")], EPOCH).expect("members pack");
@@ -688,16 +711,26 @@ mod tests {
         let manifest = &built.manifest;
         assert_eq!(manifest.schema_version, 1);
         assert_eq!(manifest.created_utc, "2023-11-14T22:13:20Z");
-        assert_eq!(manifest.uos.build_id.as_deref(), Some("20261112.g0123456789ab"));
+        assert_eq!(
+            manifest.uos.build_id.as_deref(),
+            Some("20261112.g0123456789ab")
+        );
         assert_eq!(
             manifest.boot_id.as_deref(),
             Some("0f0e0d0c-0b0a-4909-8807-060504030201")
         );
-        assert_eq!(manifest.kernel_release.as_deref(), Some("6.17.1-300.fc45.x86_64"));
+        assert_eq!(
+            manifest.kernel_release.as_deref(),
+            Some("6.17.1-300.fc45.x86_64")
+        );
         assert_eq!(manifest.redaction_profile, Profile::Default);
         assert_eq!(manifest.collector.name, "uos-diag");
         assert_eq!(manifest.installer_session_id, None);
-        let listed: Vec<&str> = manifest.files.iter().map(|file| file.path.as_str()).collect();
+        let listed: Vec<&str> = manifest
+            .files
+            .iter()
+            .map(|file| file.path.as_str())
+            .collect();
         assert_eq!(
             listed,
             [
@@ -746,7 +779,9 @@ mod tests {
                 .expect("the member exists");
             String::from_utf8_lossy(data).into_owned()
         };
-        assert!(text_of("system/kernel-cmdline.txt").contains("6f1c2a9e-0d7b-4c55-9a1e-3b8f5d2c7e10"));
+        assert!(
+            text_of("system/kernel-cmdline.txt").contains("6f1c2a9e-0d7b-4c55-9a1e-3b8f5d2c7e10")
+        );
         assert!(text_of("system/kernel.txt").contains("<host-1>"));
         assert!(text_of("README.txt").contains("technical profile"));
         assert!(text_of("manifest.json").contains("\"redaction_profile\": \"technical\""));
@@ -762,7 +797,8 @@ mod tests {
 
     #[test]
     fn a_bundle_from_a_host_with_nothing_still_builds_and_verifies() {
-        let built = build_bundle(&FakeHost::new(), &request(Profile::Default)).expect("the bundle builds");
+        let built =
+            build_bundle(&FakeHost::new(), &request(Profile::Default)).expect("the bundle builds");
         assert_eq!(built.manifest.missing.len(), COLLECTORS.len());
         assert_eq!(built.manifest.files.len(), 2);
         assert_eq!(built.manifest.boot_id, None);
@@ -777,7 +813,12 @@ mod tests {
         let host = host().with_command("journalctl", "{\"MESSAGE\":\"hello\"}\n");
         let built = build_bundle(&host, &since_boot).expect("the bundle builds");
         assert!(built.manifest.since_boot);
-        let paths: Vec<&str> = built.manifest.files.iter().map(|file| file.path.as_str()).collect();
+        let paths: Vec<&str> = built
+            .manifest
+            .files
+            .iter()
+            .map(|file| file.path.as_str())
+            .collect();
         assert!(paths.contains(&"boot/current-journal.jsonl"));
         assert!(!paths.contains(&"boot/previous-journal.jsonl"));
         let excluded: Vec<&str> = built
@@ -787,7 +828,10 @@ mod tests {
             .filter(|entry| entry.reason == MissingReason::ExcludedByOption)
             .map(|entry| entry.path.as_str())
             .collect();
-        assert_eq!(excluded, ["boot/previous-journal.jsonl", "boot/pstore/listing.txt"]);
+        assert_eq!(
+            excluded,
+            ["boot/previous-journal.jsonl", "boot/pstore/listing.txt"]
+        );
     }
 
     #[test]
@@ -803,7 +847,11 @@ mod tests {
         let error = verify_archive(&tampered).expect_err("verification must fail");
         assert_eq!(error.kind(), ErrorKind::ChecksumMismatch);
         assert_eq!(error.code().to_string(), "UOS-DIAG-BUNDLE-007");
-        assert!(error.detail().contains("system/kernel.txt"), "{}", error.detail());
+        assert!(
+            error.detail().contains("system/kernel.txt"),
+            "{}",
+            error.detail()
+        );
     }
 
     #[test]
@@ -828,7 +876,10 @@ mod tests {
             }
         });
         // checksums.sha256 now agrees with the file, but the manifest does not.
-        assert_eq!(kind_of(verify_archive(&tampered)), ErrorKind::ChecksumMismatch);
+        assert_eq!(
+            kind_of(verify_archive(&tampered)),
+            ErrorKind::ChecksumMismatch
+        );
     }
 
     #[test]
@@ -843,7 +894,10 @@ mod tests {
         let removed = repack(&built.archive, |members| {
             members.retain(|(path, _)| path.as_str() != "system/kernel.txt");
         });
-        assert_eq!(kind_of(verify_archive(&removed)), ErrorKind::FileListMismatch);
+        assert_eq!(
+            kind_of(verify_archive(&removed)),
+            ErrorKind::FileListMismatch
+        );
     }
 
     #[test]
@@ -853,12 +907,18 @@ mod tests {
         let no_manifest = repack(&built.archive, |members| {
             members.retain(|(path, _)| path.as_str() != MANIFEST_PATH);
         });
-        assert_eq!(kind_of(verify_archive(&no_manifest)), ErrorKind::MemberMissing);
+        assert_eq!(
+            kind_of(verify_archive(&no_manifest)),
+            ErrorKind::MemberMissing
+        );
 
         let no_checksums = repack(&built.archive, |members| {
             members.retain(|(path, _)| path.as_str() != CHECKSUMS_PATH);
         });
-        assert_eq!(kind_of(verify_archive(&no_checksums)), ErrorKind::MemberMissing);
+        assert_eq!(
+            kind_of(verify_archive(&no_checksums)),
+            ErrorKind::MemberMissing
+        );
 
         let replace_manifest = |content: &'static str| {
             repack(&built.archive, |members| {

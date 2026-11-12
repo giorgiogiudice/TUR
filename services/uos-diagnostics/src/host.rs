@@ -160,7 +160,10 @@ impl Host for SystemHost {
                 _ => RunError::Io(error.to_string()),
             })?;
 
-        let stdout = child.stdout.take().map(|pipe| drain(pipe, limits.max_bytes));
+        let stdout = child
+            .stdout
+            .take()
+            .map(|pipe| drain(pipe, limits.max_bytes));
         let stderr = child.stderr.take().map(|pipe| drain(pipe, STDERR_LIMIT));
 
         let deadline = Instant::now() + limits.timeout;
@@ -201,7 +204,9 @@ impl Host for SystemHost {
             _ => ReadError::Io(error.to_string()),
         };
         let file = File::open(path).map_err(convert)?;
-        let limit = u64::try_from(max_bytes).unwrap_or(u64::MAX).saturating_add(1);
+        let limit = u64::try_from(max_bytes)
+            .unwrap_or(u64::MAX)
+            .saturating_add(1);
         let mut data = Vec::new();
         file.take(limit).read_to_end(&mut data).map_err(convert)?;
         let truncated = data.len() > max_bytes;
@@ -352,7 +357,10 @@ mod tests {
         assert!(output.success());
         assert!(!output.truncated);
         let text = String::from_utf8_lossy(&output.stdout);
-        assert!(text.contains("system_host_captures_output_and_exit_code"), "{text}");
+        assert!(
+            text.contains("system_host_captures_output_and_exit_code"),
+            "{text}"
+        );
     }
 
     #[test]
@@ -421,7 +429,10 @@ mod tests {
     fn fake_host_reports_unknown_commands_and_files_as_absent() {
         let host = FakeHost::new();
         assert_eq!(host.run("lspci", &[], GENEROUS), Err(RunError::NotFound));
-        assert_eq!(host.read_file("/proc/cmdline", 10), Err(ReadError::NotFound));
+        assert_eq!(
+            host.read_file("/proc/cmdline", 10),
+            Err(ReadError::NotFound)
+        );
     }
 
     #[test]

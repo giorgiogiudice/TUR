@@ -218,7 +218,9 @@ pub fn render_status(status: &Status) -> String {
         ("UOS build", build),
         (
             "Source revision",
-            uos.source_revision.clone().unwrap_or_else(|| UNKNOWN.to_owned()),
+            uos.source_revision
+                .clone()
+                .unwrap_or_else(|| UNKNOWN.to_owned()),
         ),
         (
             "Deployment",
@@ -228,12 +230,18 @@ pub fn render_status(status: &Status) -> String {
         ),
         (
             "System",
-            identity.os_name.clone().unwrap_or_else(|| UNKNOWN.to_owned()),
+            identity
+                .os_name
+                .clone()
+                .unwrap_or_else(|| UNKNOWN.to_owned()),
         ),
         ("Kernel", format!("{kernel} ({architecture})")),
         (
             "Boot ID",
-            identity.boot_id.clone().unwrap_or_else(|| UNKNOWN.to_owned()),
+            identity
+                .boot_id
+                .clone()
+                .unwrap_or_else(|| UNKNOWN.to_owned()),
         ),
         ("Failed units", failed),
     ];
@@ -360,19 +368,28 @@ mod tests {
     #[test]
     fn identity_of_a_uos_host() {
         let identity = gather_identity(&uos_host());
-        assert_eq!(identity.uos.build_id.as_deref(), Some("20261112.g0123456789ab"));
+        assert_eq!(
+            identity.uos.build_id.as_deref(),
+            Some("20261112.g0123456789ab")
+        );
         assert_eq!(identity.uos.version.as_deref(), Some("0.1.0"));
         assert_eq!(
             identity.uos.source_revision.as_deref(),
             Some("0123456789abcdef0123456789abcdef01234567")
         );
-        assert_eq!(identity.uos.deployment_checksum.as_deref(), Some("feedc0de"));
+        assert_eq!(
+            identity.uos.deployment_checksum.as_deref(),
+            Some("feedc0de")
+        );
         assert_eq!(identity.uos.image_digest.as_deref(), Some("sha256:abc"));
         assert_eq!(
             identity.os_name.as_deref(),
             Some("UOS 0.1.0 (based on Fedora Linux 45)")
         );
-        assert_eq!(identity.kernel_release.as_deref(), Some("6.17.1-300.fc45.x86_64"));
+        assert_eq!(
+            identity.kernel_release.as_deref(),
+            Some("6.17.1-300.fc45.x86_64")
+        );
         assert_eq!(
             identity.boot_id.as_deref(),
             Some("0f0e0d0c-0b0a-4909-8807-060504030201")
@@ -401,9 +418,15 @@ mod tests {
         assert_eq!(status.failed_units, Some(2));
 
         let text = render_status(&status);
-        assert!(text.contains("20261112.g0123456789ab (version 0.1.0)"), "{text}");
+        assert!(
+            text.contains("20261112.g0123456789ab (version 0.1.0)"),
+            "{text}"
+        );
         assert!(text.contains("6.17.1-300.fc45.x86_64"), "{text}");
-        assert!(text.contains("0f0e0d0c-0b0a-4909-8807-060504030201"), "{text}");
+        assert!(
+            text.contains("0f0e0d0c-0b0a-4909-8807-060504030201"),
+            "{text}"
+        );
         assert!(text.contains("feedc0de"), "{text}");
         let failed_line = text
             .lines()
@@ -430,7 +453,8 @@ mod tests {
         assert_eq!(value["failed_units"], 2);
         assert_eq!(value["boot_id"], "0f0e0d0c-0b0a-4909-8807-060504030201");
 
-        let absent = serde_json::to_value(gather_status(&FakeHost::new())).expect("status serialises");
+        let absent =
+            serde_json::to_value(gather_status(&FakeHost::new())).expect("status serialises");
         assert_eq!(absent["uos"]["build_id"], Value::Null);
         assert_eq!(absent["failed_units"], Value::Null);
     }
@@ -456,13 +480,19 @@ mod tests {
                       bob:x:1001:1001::/home/robert:/bin/zsh\n\
                       nobody:x:65534:65534:Kernel Overflow User:/:/usr/sbin/nologin\n\
                       broken line\n";
-        assert_eq!(passwd_names(passwd), ["alice", "Alice Example", "bob", "robert"]);
+        assert_eq!(
+            passwd_names(passwd),
+            ["alice", "Alice Example", "bob", "robert"]
+        );
     }
 
     #[test]
     fn known_identifiers_come_from_the_host_and_the_session() {
         let host = FakeHost::new()
-            .with_file("/etc/passwd", "alice:x:1000:1000:Alice Example:/home/alice:/bin/bash\n")
+            .with_file(
+                "/etc/passwd",
+                "alice:x:1000:1000:Alice Example:/home/alice:/bin/bash\n",
+            )
             .with_file("/proc/sys/kernel/hostname", "workstation-7\n")
             .with_file("/etc/hostname", "workstation-7.lan.example.org\n")
             .with_file("/etc/machine-id", "0123456789abcdef0123456789abcdef\n")
@@ -472,9 +502,15 @@ mod tests {
             );
         let known = gather_known_identifiers(&host, &["carol".to_owned(), "alice".to_owned()]);
         assert_eq!(known.usernames, ["carol", "alice", "Alice Example"]);
-        assert_eq!(known.hostnames, ["workstation-7", "workstation-7.lan.example.org"]);
+        assert_eq!(
+            known.hostnames,
+            ["workstation-7", "workstation-7.lan.example.org"]
+        );
         assert_eq!(known.machine_ids, ["0123456789abcdef0123456789abcdef"]);
-        assert_eq!(known.preserved_ids, ["0f0e0d0c-0b0a-4909-8807-060504030201"]);
+        assert_eq!(
+            known.preserved_ids,
+            ["0f0e0d0c-0b0a-4909-8807-060504030201"]
+        );
 
         let nothing = gather_known_identifiers(&FakeHost::new(), &[]);
         assert_eq!(nothing, KnownIdentifiers::default());

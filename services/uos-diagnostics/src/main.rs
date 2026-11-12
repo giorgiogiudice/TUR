@@ -12,7 +12,8 @@ use clap::{Parser, Subcommand, ValueEnum};
 
 use uos_diag::{
     COLLECTORS, CollectRequest, DEFAULT_MAX_BYTES, DiagError, ErrorKind, Profile, SystemHost,
-    build_bundle, gather_known_identifiers, gather_status, render_status, verify_file, write_bundle,
+    build_bundle, gather_known_identifiers, gather_status, render_status, verify_file,
+    write_bundle,
 };
 
 /// Collect and verify UOS diagnostic bundles. Everything stays on this
@@ -204,7 +205,9 @@ mod tests {
             .expect("collect parses");
         match cli.command {
             Command::Collect {
-                since_boot, profile, ..
+                since_boot,
+                profile,
+                ..
             } => {
                 assert!(!since_boot);
                 assert_eq!(Profile::from(profile), Profile::Default);
@@ -221,7 +224,10 @@ mod tests {
     fn invalid_command_lines_are_rejected() {
         assert!(Cli::try_parse_from(["uos-diag"]).is_err());
         assert!(Cli::try_parse_from(["uos-diag", "collect"]).is_err());
-        assert!(Cli::try_parse_from(["uos-diag", "collect", "--output", "x", "--profile", "all"]).is_err());
+        assert!(
+            Cli::try_parse_from(["uos-diag", "collect", "--output", "x", "--profile", "all"])
+                .is_err()
+        );
         assert!(Cli::try_parse_from(["uos-diag", "verify-bundle"]).is_err());
         assert!(Cli::try_parse_from(["uos-diag", "upload"]).is_err());
     }

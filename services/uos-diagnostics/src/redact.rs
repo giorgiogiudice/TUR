@@ -79,10 +79,9 @@ impl Profile {
     pub const fn redacts(self, category: Category) -> bool {
         match self {
             Profile::Default => true,
-            Profile::Technical => !matches!(
-                category,
-                Category::Serial | Category::Mac | Category::Uuid
-            ),
+            Profile::Technical => {
+                !matches!(category, Category::Serial | Category::Mac | Category::Uuid)
+            }
         }
     }
 }
@@ -824,8 +823,7 @@ impl Redactor {
         if link_local || unique_local {
             // Readable, unless the interface identifier is a MAC address in
             // EUI-64 form (xxxx:xxff:fexx:xxxx) and MAC addresses are redacted.
-            let embeds_mac =
-                (segments[5] & 0x00ff) == 0x00ff && (segments[6] & 0xff00) == 0xfe00;
+            let embeds_mac = (segments[5] & 0x00ff) == 0x00ff && (segments[6] & 0xff00) == 0xfe00;
             return embeds_mac && self.profile.redacts(Category::Mac);
         }
         let documentation = segments[0] == 0x2001 && segments[1] == 0x0db8;
@@ -1103,7 +1101,11 @@ fn valid_keyed_uuid(value: &str) -> bool {
 }
 
 fn valid_ssid(value: &str) -> bool {
-    value.len() <= 64 && !matches!(value, "" | "--" | "*" | "any" | "off/any" | "(null)" | "(hidden)")
+    value.len() <= 64
+        && !matches!(
+            value,
+            "" | "--" | "*" | "any" | "off/any" | "(null)" | "(hidden)"
+        )
 }
 
 fn valid_machine_id(value: &str) -> bool {
@@ -1119,7 +1121,9 @@ fn valid_secret(value: &str) -> bool {
 }
 
 fn is_hex_pair(bytes: &[u8], index: usize) -> bool {
-    bytes.get(index).is_some_and(|byte| byte.is_ascii_hexdigit())
+    bytes
+        .get(index)
+        .is_some_and(|byte| byte.is_ascii_hexdigit())
         && bytes
             .get(index + 1)
             .is_some_and(|byte| byte.is_ascii_hexdigit())
@@ -1227,11 +1231,15 @@ fn uuid_at(bytes: &[u8], start: usize) -> Option<usize> {
 /// glued to a word, a `-`, a `_` or a `.` on the left (`v1.2.3.4`,
 /// `pkg-1.2.3.4`), has a fifth dotted part (`1.2.3.4.5`, `1.2.3.4.fc45`), is
 /// followed by `-` and a letter or digit (`1.2.3.4-5`), or has an octet with
-/// a leading zero.
+/// a leading zero. The two ends of an address range (`1.2.3.4-1.2.3.9`) are
+/// both candidates.
 fn ipv4_at(bytes: &[u8], start: usize) -> Option<(usize, [u8; 4])> {
     if start > 0 {
         let previous = bytes[start - 1];
-        if previous.is_ascii_alphanumeric() || matches!(previous, b'.' | b'_' | b'-') {
+        let attached = previous.is_ascii_alphanumeric() || matches!(previous, b'.' | b'_' | b'-');
+        // After "-", only the end of an address range ("1.2.3.4-1.2.3.9") counts.
+        let range_end = previous == b'-' && start >= 2 && bytes[start - 2].is_ascii_digit();
+        if attached && !range_end {
             return None;
         }
     }
@@ -1264,7 +1272,12 @@ fn ipv4_at(bytes: &[u8], start: usize) -> Option<(usize, [u8; 4])> {
     let after_next = bytes.get(position + 1).copied();
     let glued = match next {
         Some(byte) if byte.is_ascii_alphanumeric() || byte == b'_' => true,
-        Some(b'.' | b'-') => after_next.is_some_and(|byte| byte.is_ascii_alphanumeric()),
+        Some(b'.') => after_next.is_some_and(|byte| byte.is_ascii_alphanumeric()),
+        // "1.2.3.4-5" is a version; "1.2.3.4-1.2.3.9" is a range of addresses.
+        Some(b'-') => {
+            after_next.is_some_and(|byte| byte.is_ascii_alphanumeric())
+                && ipv4_at(bytes, position + 1).is_none()
+        }
         _ => false,
     };
     if glued {

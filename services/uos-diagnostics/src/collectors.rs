@@ -191,12 +191,24 @@ pub const COLLECTORS: &[Collector] = &[
     Collector::file("system", "os-release.txt", "/etc/os-release"),
     Collector::file("system", "uos-release.txt", "/usr/lib/uos/release"),
     Collector::file("system", "modules.txt", "/proc/modules"),
-    Collector::command("system", "deployment.json", "bootc", &["status", "--format=json"]),
+    Collector::command(
+        "system",
+        "deployment.json",
+        "bootc",
+        &["status", "--format=json"],
+    ),
     Collector::command(
         "system",
         "failed-units.txt",
         "systemctl",
-        &["list-units", "--state=failed", "--all", "--no-legend", "--plain", "--no-pager"],
+        &[
+            "list-units",
+            "--state=failed",
+            "--all",
+            "--no-legend",
+            "--plain",
+            "--no-pager",
+        ],
     ),
     Collector::command(
         "system",
@@ -223,8 +235,13 @@ pub const COLLECTORS: &[Collector] = &[
     .about_previous_boot()
     .with_timeout_seconds(JOURNAL_TIMEOUT_SECONDS),
     Collector::command("boot", "kernel-ring-buffer.txt", "dmesg", &[]),
-    Collector::command("boot", "pstore/listing.txt", "ls", &["-lA", "/sys/fs/pstore"])
-        .about_previous_boot(),
+    Collector::command(
+        "boot",
+        "pstore/listing.txt",
+        "ls",
+        &["-lA", "/sys/fs/pstore"],
+    )
+    .about_previous_boot(),
     // hardware/
     Collector::command("hardware", "pci.txt", "lspci", &["-nnk"]),
     Collector::command("hardware", "usb.txt", "lsusb", &[]),
@@ -266,7 +283,14 @@ pub const COLLECTORS: &[Collector] = &[
         "services",
         "uos-service-status.txt",
         "systemctl",
-        &["list-units", "uos-*", "--all", "--no-legend", "--plain", "--no-pager"],
+        &[
+            "list-units",
+            "uos-*",
+            "--all",
+            "--no-legend",
+            "--plain",
+            "--no-pager",
+        ],
     ),
 ];
 
@@ -396,7 +420,10 @@ pub fn run_collector(
         Source::File { path } => match host.read_file(path, options.max_bytes) {
             Ok(content) => (content.data, content.truncated),
             Err(ReadError::NotFound) => {
-                return absent(MissingReason::FileNotFound, format!("{path} does not exist"));
+                return absent(
+                    MissingReason::FileNotFound,
+                    format!("{path} does not exist"),
+                );
             }
             Err(ReadError::PermissionDenied) => {
                 return absent(
@@ -450,7 +477,10 @@ fn omit_lines(text: &str, prefixes: &[&str]) -> String {
 /// The first line of a command's standard error, shortened.
 fn excerpt(stderr: &[u8]) -> String {
     let text = String::from_utf8_lossy(stderr);
-    let line = text.lines().find(|line| !line.trim().is_empty()).unwrap_or("");
+    let line = text
+        .lines()
+        .find(|line| !line.trim().is_empty())
+        .unwrap_or("");
     line.trim().chars().take(STDERR_EXCERPT_CHARS).collect()
 }
 
@@ -469,7 +499,15 @@ mod tests {
     #[test]
     fn no_collector_touches_a_home_directory_or_anything_outside_the_allow_list() {
         const FORBIDDEN_WORDS: [&str; 9] = [
-            "home", "/root", "~", "$", "/Users", "/run/user", "/run/media", "/media", "/mnt",
+            "home",
+            "/root",
+            "~",
+            "$",
+            "/Users",
+            "/run/user",
+            "/run/media",
+            "/media",
+            "/mnt",
         ];
         for collector in COLLECTORS {
             let source = collector.describe_source();
@@ -482,14 +520,23 @@ mod tests {
                     assert!(is_allowed_path(path), "{path} is not on the allow list");
                 }
                 Source::Command { program, args } => {
-                    assert!(!program.contains('/'), "{program} must be found on the search path");
                     assert!(
-                        !matches!(program, "sh" | "bash" | "env" | "sudo" | "pkexec" | "cat" | "find"),
+                        !program.contains('/'),
+                        "{program} must be found on the search path"
+                    );
+                    assert!(
+                        !matches!(
+                            program,
+                            "sh" | "bash" | "env" | "sudo" | "pkexec" | "cat" | "find"
+                        ),
                         "{program} could read anything"
                     );
                     for arg in args {
                         if arg.contains('/') && !arg.contains(',') {
-                            assert!(is_allowed_path(arg), "{source}: {arg} is not on the allow list");
+                            assert!(
+                                is_allowed_path(arg),
+                                "{source}: {arg} is not on the allow list"
+                            );
                         }
                     }
                 }
@@ -539,8 +586,14 @@ mod tests {
                 ),
                 "{path}"
             );
-            assert!(!collector.file.starts_with('/') && !collector.file.contains(".."), "{path}");
-            assert!(collector.timeout_seconds > 0 && collector.timeout_seconds <= 120, "{path}");
+            assert!(
+                !collector.file.starts_with('/') && !collector.file.contains(".."),
+                "{path}"
+            );
+            assert!(
+                collector.timeout_seconds > 0 && collector.timeout_seconds <= 120,
+                "{path}"
+            );
             assert!(paths.insert(path.clone()), "{path} is produced twice");
         }
         for expected in [
@@ -630,20 +683,28 @@ mod tests {
         assert_eq!(detail, "killed after 20 seconds");
 
         let host = FakeHost::new().with_command_result("lspci", Err(RunError::PermissionDenied));
-        assert_eq!(reason_for(&host, &command).0, MissingReason::PermissionDenied);
+        assert_eq!(
+            reason_for(&host, &command).0,
+            MissingReason::PermissionDenied
+        );
 
-        let host = FakeHost::new().with_command_result("lspci", Err(RunError::Io("boom".to_owned())));
-        assert_eq!(reason_for(&host, &command), (MissingReason::IoError, "boom".to_owned()));
+        let host =
+            FakeHost::new().with_command_result("lspci", Err(RunError::Io("boom".to_owned())));
+        assert_eq!(
+            reason_for(&host, &command),
+            (MissingReason::IoError, "boom".to_owned())
+        );
 
         let (reason, detail) = reason_for(&FakeHost::new(), &file);
         assert_eq!(reason, MissingReason::FileNotFound);
         assert_eq!(detail, "/usr/lib/uos/release does not exist");
 
-        let host = FakeHost::new().with_file_error("/usr/lib/uos/release", ReadError::PermissionDenied);
+        let host =
+            FakeHost::new().with_file_error("/usr/lib/uos/release", ReadError::PermissionDenied);
         assert_eq!(reason_for(&host, &file).0, MissingReason::PermissionDenied);
 
-        let host =
-            FakeHost::new().with_file_error("/usr/lib/uos/release", ReadError::Io("bad".to_owned()));
+        let host = FakeHost::new()
+            .with_file_error("/usr/lib/uos/release", ReadError::Io("bad".to_owned()));
         assert_eq!(reason_for(&host, &file).0, MissingReason::IoError);
     }
 
@@ -679,7 +740,10 @@ mod tests {
         );
 
         let (output, problem) = run_collector(&host, &previous, &OPTIONS);
-        assert_eq!(output.expect("collected without --since-boot").format, Format::JsonLines);
+        assert_eq!(
+            output.expect("collected without --since-boot").format,
+            Format::JsonLines
+        );
         assert_eq!(problem, None);
     }
 
@@ -695,7 +759,10 @@ mod tests {
         assert_eq!(output.expect("partial output is kept").text, "line one\n");
         let problem = problem.expect("the truncation is recorded");
         assert_eq!(problem.reason, MissingReason::Truncated);
-        assert_eq!(problem.detail, "output exceeded 14 bytes; the end was dropped");
+        assert_eq!(
+            problem.detail,
+            "output exceeded 14 bytes; the end was dropped"
+        );
     }
 
     #[test]

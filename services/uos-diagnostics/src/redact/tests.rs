@@ -49,10 +49,7 @@ fn longer_hardware_addresses_are_redacted_whole() {
         redactor.redact("duid 00:01:00:01:2a:bb:cc:dd:3c:52:82:aa:0b:1f"),
         "duid <mac-1>"
     );
-    assert_eq!(
-        redactor.redact("aa:bb:cc:dd:ee:ff:1234"),
-        "<mac-2>:1234"
-    );
+    assert_eq!(redactor.redact("aa:bb:cc:dd:ee:ff:1234"), "<mac-2>:1234");
 }
 
 #[test]
@@ -92,6 +89,15 @@ fn ipv4_addresses_at_the_end_of_a_sentence_are_redacted() {
     assert_eq!(
         redactor.redact("Connection from 93.184.216.34. Closing (93.184.216.35)"),
         "Connection from <ipv4-1>. Closing (<ipv4-2>)"
+    );
+}
+
+#[test]
+fn ipv4_address_ranges_are_redacted_at_both_ends() {
+    let mut redactor = plain();
+    assert_eq!(
+        redactor.redact("pool 93.184.216.1-93.184.216.254 lan 192.168.1.2-192.168.1.9"),
+        "pool <ipv4-1>-<ipv4-2> lan 192.168.1.2-192.168.1.9"
     );
 }
 
@@ -372,7 +378,10 @@ fn a_value_named_in_one_field_is_redacted_in_every_other() {
     let lsblk_out = redactor.redact_document(Format::Text, lsblk);
     let journal_out = redactor.redact_document(Format::JsonLines, journal);
 
-    assert!(lsblk_out.contains("\"serial\": \"<serial-1>\""), "{lsblk_out}");
+    assert!(
+        lsblk_out.contains("\"serial\": \"<serial-1>\""),
+        "{lsblk_out}"
+    );
     assert!(
         journal_out.contains("nvme nvme0: <serial-1> firmware 2B4QFXO7"),
         "{journal_out}"
@@ -383,7 +392,10 @@ fn a_value_named_in_one_field_is_redacted_in_every_other() {
     );
     for original in ["S4EWNX0M123456", "den-pc", "dana"] {
         assert!(!lsblk_out.contains(original), "{original} in {lsblk_out}");
-        assert!(!journal_out.contains(original), "{original} in {journal_out}");
+        assert!(
+            !journal_out.contains(original),
+            "{original} in {journal_out}"
+        );
     }
 }
 
@@ -448,7 +460,12 @@ fn technical_profile_keeps_exactly_serials_macs_and_uuids() {
 
     for category in Category::ALL {
         let kept = matches!(category, Category::Serial | Category::Mac | Category::Uuid);
-        assert_eq!(Profile::Technical.redacts(category), !kept, "{}", category.name());
+        assert_eq!(
+            Profile::Technical.redacts(category),
+            !kept,
+            "{}",
+            category.name()
+        );
         assert!(Profile::Default.redacts(category), "{}", category.name());
     }
 }
@@ -476,7 +493,8 @@ fn ordinary_log_lines_are_left_alone() {
 #[test]
 fn report_counts_values_and_never_contains_them() {
     let mut redactor = default_redactor();
-    let out = redactor.redact("alice alice bob 3c:52:82:aa:0b:1f 3c:52:82:aa:0b:20 3c:52:82:aa:0b:1f");
+    let out =
+        redactor.redact("alice alice bob 3c:52:82:aa:0b:1f 3c:52:82:aa:0b:20 3c:52:82:aa:0b:1f");
     assert_eq!(out, "<user-1> <user-1> bob <mac-1> <mac-2> <mac-1>");
 
     let report = redactor.report();

@@ -356,7 +356,11 @@ mod tests {
                 ("explanation", entry.explanation),
                 ("recovery", entry.recovery),
             ] {
-                assert!(!text.trim().is_empty(), "{} has an empty {field}", entry.code);
+                assert!(
+                    !text.trim().is_empty(),
+                    "{} has an empty {field}",
+                    entry.code
+                );
             }
             assert_eq!(entry.severity.as_str(), "error");
         }
@@ -388,7 +392,10 @@ mod tests {
 
     #[test]
     fn display_has_both_layers() {
-        let error = DiagError::new(ErrorKind::ChecksumMismatch, "system/kernel.txt: sha256 differs");
+        let error = DiagError::new(
+            ErrorKind::ChecksumMismatch,
+            "system/kernel.txt: sha256 differs",
+        );
         let text = error.to_string();
         let mut lines = text.lines();
         assert_eq!(lines.next(), Some("UOS-DIAG-BUNDLE-007"));

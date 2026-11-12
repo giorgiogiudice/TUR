@@ -125,10 +125,20 @@ fn collect_write_verify_then_corrupt() {
     let manifest = &verified.manifest;
     assert_eq!(manifest.schema_version, 1);
     assert_eq!(manifest.created_utc, format_utc(EPOCH));
-    assert!(manifest.created_utc.starts_with("2026-10-26T"), "{}", manifest.created_utc);
-    assert_eq!(manifest.uos.build_id.as_deref(), Some("20261112.g0123456789ab"));
+    assert!(
+        manifest.created_utc.starts_with("2026-10-26T"),
+        "{}",
+        manifest.created_utc
+    );
+    assert_eq!(
+        manifest.uos.build_id.as_deref(),
+        Some("20261112.g0123456789ab")
+    );
     assert_eq!(manifest.boot_id.as_deref(), Some(BOOT_ID));
-    assert_eq!(manifest.kernel_release.as_deref(), Some("6.17.1-300.fc45.x86_64"));
+    assert_eq!(
+        manifest.kernel_release.as_deref(),
+        Some("6.17.1-300.fc45.x86_64")
+    );
     assert_eq!(manifest.redaction_profile, Profile::Default);
     assert!(!manifest.since_boot);
 
@@ -141,17 +151,38 @@ fn collect_write_verify_then_corrupt() {
             .find(|entry| entry.path == path)
             .map(|entry| entry.reason)
     };
-    assert_eq!(reason_of("boot/kernel-ring-buffer.txt"), Some(MissingReason::NonZeroExit));
-    assert_eq!(reason_of("hardware/firmware.txt"), Some(MissingReason::TimedOut));
-    assert_eq!(reason_of("hardware/usb.txt"), Some(MissingReason::CommandNotFound));
-    assert_eq!(reason_of("boot/previous-journal.jsonl"), Some(MissingReason::CommandNotFound));
+    assert_eq!(
+        reason_of("boot/kernel-ring-buffer.txt"),
+        Some(MissingReason::NonZeroExit)
+    );
+    assert_eq!(
+        reason_of("hardware/firmware.txt"),
+        Some(MissingReason::TimedOut)
+    );
+    assert_eq!(
+        reason_of("hardware/usb.txt"),
+        Some(MissingReason::CommandNotFound)
+    );
+    assert_eq!(
+        reason_of("boot/previous-journal.jsonl"),
+        Some(MissingReason::CommandNotFound)
+    );
     assert_eq!(reason_of("system/kernel.txt"), None);
-    assert_eq!(manifest.files.len() + manifest.missing.len(), COLLECTORS.len() + 2);
+    assert_eq!(
+        manifest.files.len() + manifest.missing.len(),
+        COLLECTORS.len() + 2
+    );
 
     // Nothing that identifies the machine or its user is in any member.
     let members = unpack(&built.archive).expect("the bundle unpacks");
-    assert_eq!(members.first().map(|(path, _)| path.as_str()), Some(MANIFEST_PATH));
-    assert_eq!(members.last().map(|(path, _)| path.as_str()), Some(CHECKSUMS_PATH));
+    assert_eq!(
+        members.first().map(|(path, _)| path.as_str()),
+        Some(MANIFEST_PATH)
+    );
+    assert_eq!(
+        members.last().map(|(path, _)| path.as_str()),
+        Some(CHECKSUMS_PATH)
+    );
     for (member_path, data) in &members {
         let text = String::from_utf8(data.clone()).expect("members are UTF-8");
         for original in [
@@ -188,10 +219,22 @@ fn collect_write_verify_then_corrupt() {
         .and_then(|rest| rest.split('"').next())
         .expect("lsblk output has a serial field")
         .to_owned();
-    assert!(serial_pseudonym.starts_with("<serial-"), "{serial_pseudonym}");
-    assert!(journal.contains(&format!("nvme nvme0: {serial_pseudonym} ready")), "{journal}");
-    assert!(mounts.contains(&format!("/run/media/<user-1>/{serial_pseudonym} vfat")), "{mounts}");
-    assert!(journal.contains("/home/<user-1>/.config/app.toml"), "{journal}");
+    assert!(
+        serial_pseudonym.starts_with("<serial-"),
+        "{serial_pseudonym}"
+    );
+    assert!(
+        journal.contains(&format!("nvme nvme0: {serial_pseudonym} ready")),
+        "{journal}"
+    );
+    assert!(
+        mounts.contains(&format!("/run/media/<user-1>/{serial_pseudonym} vfat")),
+        "{mounts}"
+    );
+    assert!(
+        journal.contains("/home/<user-1>/.config/app.toml"),
+        "{journal}"
+    );
     assert!(text_of("system/kernel.txt").starts_with("Linux <host-1> 6.17.1-300.fc45.x86_64"));
     assert!(!text_of("hardware/bluetooth.txt").contains("Alias"));
 
@@ -224,12 +267,19 @@ fn collect_write_verify_then_corrupt() {
         .expect("system/kernel.txt is in the bundle");
     kernel[0] ^= 0x01;
     let tampered_path = directory.file("tampered.tar.zst");
-    fs::write(&tampered_path, pack(&tampered, EPOCH).expect("the members pack"))
-        .expect("the tampered copy is written");
+    fs::write(
+        &tampered_path,
+        pack(&tampered, EPOCH).expect("the members pack"),
+    )
+    .expect("the tampered copy is written");
     let error = verify_file(&tampered_path).expect_err("a tampered bundle must not verify");
     assert_eq!(error.kind(), ErrorKind::ChecksumMismatch);
     assert_eq!(error.code().to_string(), "UOS-DIAG-BUNDLE-007");
-    assert!(error.detail().contains("system/kernel.txt"), "{}", error.detail());
+    assert!(
+        error.detail().contains("system/kernel.txt"),
+        "{}",
+        error.detail()
+    );
 
     // The original is untouched by all of this and still verifies.
     verify_file(&path).expect("the original still verifies");
@@ -258,7 +308,10 @@ fn a_written_bundle_is_private_to_its_owner() {
     let directory = TempDir::new("mode");
     let path = directory.file("bundle.tar.zst");
     write_bundle(&path, b"content").expect("the bundle is written");
-    let mode = fs::metadata(&path).expect("the file exists").permissions().mode();
+    let mode = fs::metadata(&path)
+        .expect("the file exists")
+        .permissions()
+        .mode();
     assert_eq!(mode & 0o777, 0o600);
 }
 
@@ -280,7 +333,10 @@ fn verifying_something_that_is_not_a_bundle_fails_cleanly() {
     fs::write(&empty, b"").expect("the file is written");
     let error = verify_file(&empty).expect_err("an empty file is not a bundle");
     assert!(
-        matches!(error.kind(), ErrorKind::ArchiveDamaged | ErrorKind::MemberMissing),
+        matches!(
+            error.kind(),
+            ErrorKind::ArchiveDamaged | ErrorKind::MemberMissing
+        ),
         "{error}"
     );
 }
@@ -288,7 +344,8 @@ fn verifying_something_that_is_not_a_bundle_fails_cleanly() {
 #[test]
 fn the_technical_profile_keeps_what_it_says_and_nothing_else() {
     let host = fake_machine();
-    let built = build_bundle(&host, &request(&host, Profile::Technical)).expect("the bundle builds");
+    let built =
+        build_bundle(&host, &request(&host, Profile::Technical)).expect("the bundle builds");
     assert_eq!(built.manifest.redaction_profile, Profile::Technical);
 
     let members = unpack(&built.archive).expect("the bundle unpacks");
@@ -297,10 +354,22 @@ fn the_technical_profile_keeps_what_it_says_and_nothing_else() {
         .map(|(_, data)| String::from_utf8_lossy(data).into_owned())
         .collect();
     for kept in [SERIAL, MAC, DISK_UUID] {
-        assert!(all_text.contains(kept), "{kept} should be kept by the technical profile");
+        assert!(
+            all_text.contains(kept),
+            "{kept} should be kept by the technical profile"
+        );
     }
-    for redacted in ["alice", "workstation-7", PUBLIC_IP, MACHINE_ID, "Casa Rossi"] {
-        assert!(!all_text.contains(redacted), "{redacted} must be redacted in every profile");
+    for redacted in [
+        "alice",
+        "workstation-7",
+        PUBLIC_IP,
+        MACHINE_ID,
+        "Casa Rossi",
+    ] {
+        assert!(
+            !all_text.contains(redacted),
+            "{redacted} must be redacted in every profile"
+        );
     }
     let report = &built.report.categories;
     assert_eq!(report["mac_address"].replacements, 0);
@@ -320,7 +389,14 @@ fn known_identifiers_are_optional() {
     let members = unpack(&built.archive).expect("the bundle unpacks");
     for (path, data) in &members {
         let text = String::from_utf8_lossy(data);
-        for original in [SERIAL, MAC, DISK_UUID, PUBLIC_IP, "Casa Rossi", "/home/alice"] {
+        for original in [
+            SERIAL,
+            MAC,
+            DISK_UUID,
+            PUBLIC_IP,
+            "Casa Rossi",
+            "/home/alice",
+        ] {
             assert!(!text.contains(original), "{original} is in {path}");
         }
     }

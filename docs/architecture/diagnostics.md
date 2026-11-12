@@ -241,6 +241,8 @@ have no UOS code.
 - **Redaction is rule-based and incomplete.** It does not recognise: e-mail
   addresses and personal names that are not account names; secrets without one of
   the labels above; MAC addresses written without separators or in dotted form;
+  a public IPv4 address joined to a word by `-` or `_` (`host-203.0.113.9`),
+  which is taken for a version number;
   short filesystem identifiers inside systemd-escaped unit names; an unquoted SSID
   containing spaces on a line longer than 32 bytes (only its first word is
   replaced); Bluetooth device names in `wpctl status`; mount points named after a

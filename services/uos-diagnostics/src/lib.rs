@@ -29,7 +29,9 @@ pub mod identity;
 pub mod manifest;
 pub mod redact;
 
-pub use bundle::{BuiltBundle, CollectRequest, Verified, build_bundle, verify_archive, verify_file, write_bundle};
+pub use bundle::{
+    BuiltBundle, CollectRequest, Verified, build_bundle, verify_archive, verify_file, write_bundle,
+};
 pub use collectors::{COLLECTORS, Collector, DEFAULT_MAX_BYTES};
 pub use error::{DiagError, ErrorKind};
 pub use host::{FakeHost, Host, SystemHost};
