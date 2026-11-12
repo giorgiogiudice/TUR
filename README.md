@@ -153,10 +153,11 @@ becomes.
 | Area | State |
 |---|---|
 | Architecture and decisions | Published: [specification](docs/architecture/specification.md), [decision records](docs/adr/README.md) |
-| Operating-system image | Builds reproducibly and is tested in continuous integration ([report](docs/reports/UOS-002.md)). Not yet shown to boot |
+| Operating-system image | Builds reproducibly ([report](docs/reports/UOS-002.md)), installs to a disk and **boots to a graphical login in a virtual machine** on every change ([report and screenshots](docs/reports/UOS-003.md)). Not yet tested on real hardware |
 | P@x | [Design](docs/architecture/ai-control-layer.md) published. The engine that decides what P@x may do is written and tested ([details](docs/architecture/agent-policy.md)). No assistant can be used yet |
 | Android | [Design](docs/architecture/android-runtime.md) published; not yet built |
-| Diagnostics, application detection, installer, storage, devices | In development |
+| Diagnostics, application detection, installer planning, storage safety | First versions written and tested as libraries and command-line tools; not yet part of the image |
+| Devices, updates and rollback, P@x's providers and memory, application catalogue, running Windows programs | In development |
 | Desktop, application centre, Windows and Android running | Not started |
 | Anything you can install | Not yet |
 

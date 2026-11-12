@@ -1,6 +1,6 @@
-# ADR-0006: Bootloader — GRUB 2 through shim, installed by bootupd
+# ADR-0013: Bootloader — GRUB 2 through shim, installed by bootupd
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-12
 - **Specification sections:** §4.1, §4.3, §5.1, §5.3, §5.4, §23 (question 1), §27.1
 
