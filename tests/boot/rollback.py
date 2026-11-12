@@ -908,10 +908,14 @@ def evaluate(name: str, spec: dict, seen: dict, out: pathlib.Path, guest_source:
         hashes = [report.text("grubenv-sha256.txt").split()[0] for report in ordinary if report.text("grubenv-sha256.txt")]
         marked = [report for report in boots if report.status.get("classification") == "trial" and report.status.get("verdict") in ("passed", "degraded")]
         marked_hash = marked[-1].text("grubenv-sha256.txt").split()[0] if marked and marked[-1].text("grubenv-sha256.txt") else None
+        # The boot that was marked good sent no report if the power was cut
+        # as it was marked (P3). Then the ordinary boots are compared with
+        # each other: there must be at least two.
+        reference = marked_hash or (hashes[0] if len(hashes) >= 2 else None)
         checks.add(
             "next_boot_writes_nothing",
             "The boot after the one that was marked good is ordinary, and GRUB wrote nothing to the block",
-            bool(ordinary) and bool(marked_hash) and all(value == marked_hash for value in hashes),
+            bool(ordinary) and bool(reference) and all(value == reference for value in hashes),
             f"block SHA-256 after marking good: {str(marked_hash)[:16]}; in the ordinary boot(s) after it: {[value[:16] for value in hashes]}",
         )
     if outcome == "stale":

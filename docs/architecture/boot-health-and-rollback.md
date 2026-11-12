@@ -1483,3 +1483,83 @@ driver; whether PID 1 opens a watchdog device that appears after it started;
 how OSTree cleans up after an interrupted staging; whether the `fedora-bootc`
 base image includes greenboot; every behaviour of the snippet and of the
 argument expansion on the real image.
+
+## 17. Measured (TUR-005)
+
+**Added by the implementation, 12 November 2026. Sections 1 to 16 are the
+design as accepted and are unchanged.** This section records what CI measured
+against the design's assumptions. The evidence, the run numbers and what is
+still unproven are in [TUR-005](../reports/TUR-005.md). Everything here was
+measured in QEMU/KVM with OVMF on hosted runners, without Secure Boot. None of
+it is a result on real firmware, a real drive or a real watchdog.
+
+### 17.1 Assumptions
+
+| Section | Assumption | Result |
+|---|---|---|
+| 5.3 | `save_env` succeeds on this layout | **Confirmed.** GRUB saved the decremented counter on ext4 on a plain partition with `/boot` on the root filesystem, in every counted boot of every scenario |
+| 5.3 | `increment` is usable without loading a module | **Confirmed without Secure Boot.** Not tested with Secure Boot enforced |
+| 5.3 | `fallback=1`, set as a plain variable, is honoured by the menu | **Confirmed** with an empty kernel image: GRUB reported `kernel is too small` and started the second entry in the same boot. See 17.2 for a kernel image that is merely cut short |
+| 5.3 | `set timeout=5` is not overridden by a later fragment | **Confirmed.** A fallback boot spends about 8.4 s between reset and kernel start, every other boot about 4.4 s |
+| 5.3 | Index 1 is the previous deployment | **Confirmed.** The fallback boot's `ostree=` argument ends in `/1` and the previous version runs |
+| 5.4 | A `$`-prefixed argument passes through `kargs.d`, `bootc container lint`, OSTree and the loader entry unchanged | **Confirmed.** The entry on the installed disk has `$tur_boot_args` verbatim. This was the go or no-go of ADR-0014: **go** |
+| 5.4 | An unset or empty variable leaves a valid command line | **Confirmed** |
+| 5.4 | An argument that expands to several words reaches the kernel as several arguments | **Confirmed.** A trial boot has all of `tur.boot_contract=1 tur.boot=trial tur.boot_tries_left=N panic=30 rd.shell=0 rd.emergency=reboot systemd.watchdog_sec=180` |
+| 5.2, 5.5 | `/boot` is mounted read-only and a unit may require it | **Refuted in part.** `/boot` is read-only, but it is an automount with a two-minute idle timeout (`systemd-gpt-auto-generator`) over a bind mount of `/sysroot/boot` (`ostree-system-generator`). systemd stops a unit that requires the mount when the automount expires. The arming unit acts when it is stopped: as designed it would have fired two minutes after boot and no longer existed at shutdown. No TUR unit requires `/boot` now; they are ordered after it. See 17.2 |
+| 5.5 | `ostree admin lock-finalization` at that point in shutdown stops OSTree's stop action | **Not tested** |
+| 5.6 | `ostree admin status --is-default` and `rollbackQueued` agree | **Confirmed** |
+| 5.9 | `bootc rollback` from the second entry makes the booted deployment the default | **Confirmed** in every fallback |
+| 3.3 | `bootc rollback` logs journal message ID `26f3b1eb24464d12aa5e7b544a6b5468` | **Refuted** for bootc 1.17.1 as Fedora 45 ships it. It logs `Rolling back to image: sha256:…` with no message ID, and the digest it names is that of the image being left |
+| 3.3 | Kinoite enables `bootc-fetch-apply-updates.timer` | It does not (disabled). Masked in the image regardless |
+| 3.4 | `bootupctl update` does not rewrite `grub.cfg` | **Not contradicted.** `bootloader-update.service` is enabled and runs on every boot; the fragment was still in `grub.cfg` after it. No bootloader update was pending in any run |
+| 3.5 | Kinoite's initramfs has no watchdog driver | **Refuted as stated, confirmed in effect.** The initramfs contains the watchdog drivers as files (37 of them, `iTCO_wdt` among them). In a trial boot the driver was initialised 9.0 s after kernel start, after the switch to the real root, so the initramfs is not covered by a watchdog |
+| 3.5, 16 | PID 1 opens a watchdog device that appears after it started | **Confirmed.** systemd logged "Using hardware watchdog /dev/watchdog0" 0.9 s after the driver appeared |
+| 8 | `systemd-pstore.service` is enabled, and a pstore backend works under OVMF | The service is enabled. **No backend is registered** (`backend: (null)`), so a panic in a trial left no pstore record in the VM |
+| 11.3 | bootc accepts `path:reference` for the `oci` transport | **Confirmed** |
+| 11.3 | Uncompressed layers let bootc reuse what it has | **Confirmed.** "layers already present: 72; layers needed: 1 (9.2 kB)"; staging took 31 to 66 s, of which 11 s is the deployment itself |
+| 11.4 | An unknown `rootflags=` option makes the root unmountable | **Confirmed** |
+| 11.6 | The runner's OVMF package has a Secure Boot build with enrolled keys | The files are there (`OVMF_CODE_4M.secboot.fd`, `OVMF_VARS_4M.ms.fd`). Scenario SB was **not run** |
+| 9 | The hardware watchdog resets a machine whose PID 1 has stopped after 180 s | **Confirmed that it resets; the time was 360 s** after PID 1 stopped, on QEMU's ICH9 watchdog, which resets on its second expiry. Real chipsets are untested |
+
+### 17.2 What the design did not foresee
+
+1. **GRUB can act on an environment block that is out of date.** GRUB reads
+   ext4 without replaying its journal, and `grub2-editenv` rewrites the block
+   by truncating the file, which moves it to another disk block (measured).
+   When the program only fsynced the file after such a write, a power cut
+   left GRUB reading the block as it was before the write, until Linux had
+   mounted the filesystem again. Seen three ways: after a power cut following
+   step 3 of a fallback GRUB still acted on `-1`; after a power cut following
+   `mark-good` it still counted the removed counter; after a power cut
+   following arming it saw no counter at all. Each case converged, and the
+   last one needed a row the table of section 5.6 does not have (below).
+   GRUB's own `save_env` then writes into the old block, which the
+   filesystem considers free. A sync of the whole filesystem after the write
+   puts the block where GRUB looks; the program now does that, and TUR-005
+   records what the scenarios showed afterwards. A window remains between the
+   rewrite and the end of that sync. Section 5.12 and the interruption table
+   of section 5.9 assume GRUB sees what userspace wrote. **This needs a
+   decision in ADR-0014**: write the block in place, without truncating,
+   instead of through `grub2-editenv`.
+2. **A state the table of section 5.6 does not list**, and which point 1
+   produces: no `tur.boot` argument, a trial record in phase `trial`, the
+   booted deployment is the default and is the *previous* one, and the block
+   holds a counter. It is what a power cut between arming and OSTree's
+   finalisation leaves. The implementation classifies it as `stale` (row 4):
+   the update was not applied.
+3. **Check R1 must not resolve `ostree=` after a rollback.** `bootc rollback`
+   re-points the links that the kernel's `ostree=` argument goes through. The
+   argument is resolved once, when the boot is classified.
+4. **A kernel image that is cut short is not caught by GRUB** without Secure
+   Boot. GRUB starts it, the firmware stops in an exception handler, and
+   nothing restarts the machine. The row "GRUB cannot load or start the
+   kernel (missing, corrupt, …)" of section 5.8 holds for an image GRUB
+   refuses to load, not for a corrupt one. The attempt is counted, so forced
+   restarts reach the previous version (section 5.13, item 1).
+5. **The gate is ordered after `basic.target`**, so a boot that stalls before
+   that target has no deadline from the gate. systemd's own start timeouts
+   turn most such stalls into emergency mode, which is covered.
+6. **An update staged while a trial is still running** makes the unproven
+   version the "previous" one of the next trial. Not handled; not tested.
+7. **`systemd-analyze`'s "Startup finished" now includes the gate**: about
+   29 s where it was 14 s. The time to `graphical.target` is unchanged.
