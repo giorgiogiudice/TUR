@@ -91,9 +91,9 @@ pub use codes::{Code, Problem, RegistryEntry, Severity};
 pub use context::{Context, Presence, RepairSession, StandingApproval, Timestamp, WindowOwner};
 pub use decision::{Decision, Reason, Refusal, Verdict};
 pub use engine::decide;
-pub use store::{HeldApprovals, PolicyStore};
 pub use manifest::{ToolManifest, ToolSpec};
 pub use policy::{Evidence, KnownApplication, Mode, Relaxation, RelaxationLevel, UserPolicy};
+pub use store::{HeldApprovals, PolicyStore};
 
 pub use exec::{BwrapExecutor, ExecOutput, ExecStatus, Executor};
 pub use faults::{Fault, TaskCode};

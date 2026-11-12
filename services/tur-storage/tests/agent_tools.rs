@@ -37,7 +37,10 @@ fn registry() -> ToolRegistry {
         Ok(registry) => registry,
         Err(problems) => {
             let lines: Vec<String> = problems.iter().map(ToString::to_string).collect();
-            panic!("the tools of this component do not load:\n{}", lines.join("\n"));
+            panic!(
+                "the tools of this component do not load:\n{}",
+                lines.join("\n")
+            );
         }
     }
 }

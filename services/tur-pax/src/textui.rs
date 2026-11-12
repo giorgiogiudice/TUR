@@ -213,8 +213,7 @@ fn read_tools(named: Option<&Path>, default: &str) -> Result<ToolFiles, Fault> {
         None if Path::new(default).is_dir() => Path::new(default),
         None => return Ok(ToolFiles::default()),
     };
-    read_tool_sets(directory)
-        .map_err(|error| input_fault(Code::InputUnreadable, error.to_string()))
+    read_tool_sets(directory).map_err(|error| input_fault(Code::InputUnreadable, error.to_string()))
 }
 
 /// The texts of the `.json` files of a directory, in name order.

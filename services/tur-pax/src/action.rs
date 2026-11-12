@@ -1898,15 +1898,21 @@ mod tests {
             assert_eq!(covering[0].operation, expected, "{unit}");
             // Written in another letter case it is the same unit.
             assert!(
-                PROTECTED_TARGETS.iter().any(|entry| entry.rule == TargetRule::Unit
-                    && entry.covers(&unit.to_ascii_uppercase())),
+                PROTECTED_TARGETS
+                    .iter()
+                    .any(|entry| entry.rule == TargetRule::Unit
+                        && entry.covers(&unit.to_ascii_uppercase())),
                 "{unit}"
             );
             // Whatever it is treated as, no repair session covers it.
             assert!(!expected.repair_session_may_cover(), "{unit}");
         }
         // An ordinary unit is not caught by any of the prefixes.
-        for unit in ["cups.service", "bluetooth.service", "NetworkManager.service"] {
+        for unit in [
+            "cups.service",
+            "bluetooth.service",
+            "NetworkManager.service",
+        ] {
             assert!(
                 !PROTECTED_TARGETS
                     .iter()

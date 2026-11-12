@@ -428,7 +428,7 @@ mod tests {
         assert_eq!(
             event.message(),
             "tur-pax: output_withheld action=command:read_only withheld=2 \
-             withheld_kinds=password error_code=TUR-AI-OUTPUT-001"
+             withheld_kinds=password tur_error_code=TUR-AI-OUTPUT-001"
         );
     }
 

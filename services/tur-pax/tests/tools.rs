@@ -93,7 +93,10 @@ fn the_source_tree_is_read_as_a_directory_of_tool_sets() {
     assert_eq!(files.components, COMPONENTS);
     assert_eq!(files.manifests, MANIFESTS);
     assert_eq!(files.adapters, ADAPTERS);
-    assert_eq!((MANIFEST_FILE, ADAPTER_FILE), ("agent-tools.json", "agent-tools.adapter.json"));
+    assert_eq!(
+        (MANIFEST_FILE, ADAPTER_FILE),
+        ("agent-tools.json", "agent-tools.adapter.json")
+    );
     for component in ["tur-pax", "tur-pax-providers", "tur-pax-memory"] {
         assert!(!services.join(component).join(MANIFEST_FILE).exists());
         assert!(!services.join(component).join(ADAPTER_FILE).exists());
@@ -123,7 +126,10 @@ fn a_directory_of_tool_sets_is_read_component_by_component() {
     write("a-device/agent-tools.json", MANIFESTS[1]);
     write("c-other/README", "not a tool set");
     write("c-other/tools.json", "{}");
-    write("agent-tools.json", "{ not read: it is in no component's directory");
+    write(
+        "agent-tools.json",
+        "{ not read: it is in no component's directory",
+    );
     write("a-device/notes.json", "{ not read: it has another name");
 
     let files = read_tool_sets(&root).expect("the directory can be read");
@@ -133,9 +139,17 @@ fn a_directory_of_tool_sets_is_read_component_by_component() {
     let registry = ToolRegistry::load(&files.manifests, &files.adapters, false)
         .expect("the two tool sets load");
     // The component without adapters declares tools; none is offered.
-    let offered: Vec<String> = registry.offered().into_iter().map(|tool| tool.name).collect();
+    let offered: Vec<String> = registry
+        .offered()
+        .into_iter()
+        .map(|tool| tool.name)
+        .collect();
     assert_eq!(offered, ["storage_list_volumes"]);
-    assert!(registry.unavailable().contains(&"device_get_inventory".to_owned()));
+    assert!(
+        registry
+            .unavailable()
+            .contains(&"device_get_inventory".to_owned())
+    );
 
     // Adapters without a manifest can only be a mistake.
     write("d-broken/agent-tools.adapter.json", ADAPTERS[0]);

@@ -762,9 +762,8 @@ impl Performed {
     /// The code the user is shown: the failure, or else that output was
     /// withheld.
     fn code(&self) -> Option<TaskCode> {
-        self.failure().or_else(|| {
-            (!self.withheld.is_empty()).then_some(TaskCode::OutputWithheld)
-        })
+        self.failure()
+            .or_else(|| (!self.withheld.is_empty()).then_some(TaskCode::OutputWithheld))
     }
 
     /// The text of the tool result: the output inside a frame that says what
@@ -1218,9 +1217,7 @@ impl Orchestrator<'_> {
                     output_bytes: performed.bytes,
                     truncated: performed.truncated,
                     withheld: performed.withheld.len(),
-                    error_code: performed
-                        .failure()
-                        .map(|code| code.as_str().to_owned()),
+                    error_code: performed.failure().map(|code| code.as_str().to_owned()),
                 };
                 let kinds: Vec<&'static str> = performed
                     .withheld
@@ -1233,8 +1230,7 @@ impl Orchestrator<'_> {
                     report.message = Some(code.user_message().to_owned());
                 }
                 // The records come before the result is passed on.
-                let event =
-                    TrailEvent::action_outcome(session.task, session.provider, &outcome);
+                let event = TrailEvent::action_outcome(session.task, session.provider, &outcome);
                 if self.trail.event(&event).is_err() {
                     return Err(Stop::audit());
                 }
