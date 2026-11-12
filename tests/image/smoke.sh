@@ -224,6 +224,8 @@ check "every third-party licence directory belongs to a listed crate" bash -c \
 echo "--- third-party crates"
 echo "      $(grep -v '^#' "${third}/crates.tsv" | cut -f2,3 | sort -u | wc -l) distinct, in $(grep -v '^#' "${third}/crates.tsv" | cut -f1 | sort -u | wc -l) programs; $(find "${third}" -type f | wc -l) files, $(du -sk "${third}" | cut -f1) KiB"
 echo "      without a licence file of their own: $(grep -v '^#' "${third}/crates.tsv" | awk -F'\t' '$6 == 0 { print $2 "-" $3 }' | sort -u | tr '\n' ' ')"
+echo "      the largest files:"
+find "${third}" -type f -printf '%s %P\n' | sort -rn | head -n 12 | sed 's/^/        /'
 # Everything TUR adds must be readable by an ordinary user: the checks above
 # run as root, which would not notice.
 check "what TUR adds is readable by every user" bash -c \
