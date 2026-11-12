@@ -48,10 +48,8 @@ Item {
         function test_walk(data) {
             Kit.Theme.light = data.light
             const page = host.load(data.page)
-            if (page.focusTarget !== null)
-                page.focusTarget.forceActiveFocus(Qt.TabFocusReason)
-            else if (page.focusName.length > 0)
-                findChild(page, page.focusName).forceActiveFocus(Qt.TabFocusReason)
+            host.showKeyboardFocus(page.focusTarget !== null ? page.focusTarget
+                                   : page.focusName.length > 0 ? findChild(page, page.focusName) : null)
             wait(50)
             // A grab makes the scene lay itself out as it will be painted.
             grabImage(page)

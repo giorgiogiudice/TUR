@@ -97,6 +97,7 @@ T.TextField {
 
             anchors.left: parent.left
             anchors.top: parent.top
+            anchors.topMargin: supportLabel.halfLeading
             visible: control.invalid
             kind: Glyph.Negative
             tint: Theme.negative

@@ -76,10 +76,8 @@ Item {
             Testing.Harness.pseudo = data.rtl ? Testing.Harness.RtlLong : Testing.Harness.None
 
             const page = host.load(data.page)
-            if (page.focusTarget !== null)
-                page.focusTarget.forceActiveFocus(Qt.TabFocusReason)
-            else if (page.focusName.length > 0)
-                findChild(page, page.focusName).forceActiveFocus(Qt.TabFocusReason)
+            host.showKeyboardFocus(page.focusTarget !== null ? page.focusTarget
+                                   : page.focusName.length > 0 ? findChild(page, page.focusName) : null)
 
             // The first grab makes the scene lay itself out; the page's
             // height is final only after it.

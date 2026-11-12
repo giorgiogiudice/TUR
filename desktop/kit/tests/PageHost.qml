@@ -31,6 +31,17 @@ Item {
         return host.page
     }
 
+    // Puts keyboard focus on a control so that its focus ring is drawn. Qt
+    // draws the ring only when focus arrives from the keyboard, so focus that
+    // is already there is taken away first.
+    function showKeyboardFocus(target) {
+        if (target === null)
+            return
+        if (target.activeFocus)
+            target.focus = false
+        target.forceActiveFocus(Qt.TabFocusReason)
+    }
+
     // The caller lets the event loop run afterwards (wait(0)), so that the
     // old page is really gone before the next is looked at.
     function unload() {

@@ -140,6 +140,7 @@ Item {
 
             const second = createTemporaryObject(buttonComponent, root, { y: 100 })
             watch(second, "clicked")
+            spy.clear()
             second.forceActiveFocus(Qt.TabFocusReason)
             verify(second.activeFocus)
             verify(second.visualFocus, "a button focused from the keyboard shows it")
@@ -308,6 +309,7 @@ Item {
             const erase = findChild(sheet.sheetItem, "sheetErase")
             verify(back !== null && erase !== null)
             tryCompare(back, "activeFocus", true)
+            tryCompare(back, "visualFocus", true, 1000, "an open sheet shows which button has the keyboard")
 
             // The keyboard stays in the sheet: Tab goes round its controls.
             keyClick(Qt.Key_Tab)

@@ -161,7 +161,9 @@ def main() -> int:
                         row["detail"] = f"{exact} pixels differ within the tolerance"
 
         if row["status"] != "match":
-            shutil.copy2(args.actual / name, args.out / "proposed" / name)
+            # The same pixels, packed as tightly as PNG allows: a reference is
+            # kept in the repository for good.
+            picture.save(args.out / "proposed" / name, optimize=True)
         rows.append(row)
 
     stale = [name for name in references if name not in actual]

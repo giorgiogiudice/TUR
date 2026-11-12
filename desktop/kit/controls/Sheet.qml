@@ -31,6 +31,26 @@ T.Dialog {
     // Everything the sheet draws, for tests that walk it.
     readonly property Item sheetItem: frame.parent
 
+    // Focus is always visible (desktop-experience.md, 13.1, X2). Qt draws a
+    // focus ring only when focus came from the keyboard, and a sheet that has
+    // just opened hands focus to its safe button without one. Say that it
+    // came from the keyboard, so that the person can see which button Space
+    // will press.
+    function showFocus(): void {
+        const item = control.contentItem.Window.activeFocusItem
+        if (item === null || item === control.sheetItem)
+            return
+        for (let at = item.parent; at !== null; at = at.parent) {
+            if (at === control.sheetItem) {
+                item.focus = false
+                item.forceActiveFocus(Qt.TabFocusReason)
+                return
+            }
+        }
+    }
+
+    onOpened: control.showFocus()
+
     anchors.centerIn: parent
     width: Math.min(480, parent ? parent.width - 2 * Theme.spaceMargin : 480)
     implicitHeight: Math.max(implicitBackgroundHeight + topInset + bottomInset,
