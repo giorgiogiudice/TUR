@@ -1,0 +1,60 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR application catalogue entry. Format: schemas/app-catalogue-entry.schema.json.
+# How entries are written and sourced: catalogue/README.md.
+# TUR has not tested this application. Every rating below is reported by the
+# named source, which was checked on the date given; no record means unknown.
+
+schema_version = 1
+id = "com.ea.apexlegends"
+name = "Apex Legends"
+publisher = "Electronic Arts"
+category = "game"
+summary = "Free-to-play battle royale shooter."
+
+[[editions]]
+kind = "windows"
+obtain = "steam"
+store_id = "1172470"
+licence = "proprietary"
+requirements = ["kernel-anti-cheat"]
+notes = "The requirement is entered because the publisher has ruled out Proton for its anti-cheat (AreWeAntiCheatYet status Denied), which is the second case of the kernel-anti-cheat definition."
+
+[[editions.records]]
+route = "proton"
+rating = "broken"
+reported_by = "external"
+source_name = "AreWeAntiCheatYet"
+source_url = "https://areweanticheatyet.com/game/apex-legends"
+source_rating = "Denied"
+date = "2026-11-12"
+notes = "Anti-cheat: Easy Anti-Cheat and Hyperion. Status last updated on 31 October 2024."
+
+[[editions.records]]
+route = "proton"
+rating = "broken"
+reported_by = "external"
+source_name = "Valve Steam Deck compatibility"
+source_url = "https://store.steampowered.com/app/1172470/"
+source_rating = "Unsupported"
+date = "2026-11-12"
+notes = "Valve's review for the Steam Deck, which runs this Windows edition through Proton. It says nothing about other hardware."
+
+[[editions.records]]
+route = "proton"
+rating = "usable"
+reported_by = "external"
+source_name = "ProtonDB"
+source_url = "https://www.protondb.com/app/1172470"
+source_rating = "silver"
+date = "2026-11-12"
+notes = "ProtonDB summary tier, from 1,794 user reports; trending tier bronze. The summary aggregates reports from before the publisher blocked Linux, and contradicts the two records above; the router uses the first record."
+
+[[editions.references]]
+title = "Steam store listing; platforms listed by the store's public API: Windows only"
+url = "https://store.steampowered.com/app/1172470/"
+checked = "2026-11-12"
+
+[[editions.references]]
+title = "AreWeAntiCheatYet: Apex Legends, status Denied"
+url = "https://areweanticheatyet.com/game/apex-legends"
+checked = "2026-11-12"

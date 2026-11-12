@@ -18,15 +18,19 @@ Do not load the whole specification by default. Read the sections your task name
 
 Never trade a higher item for a lower one.
 
-1. UOS boots reliably and recovers.
+1. The system boots reliably and recovers.
 2. Installation is safe, observable and exportable for diagnosis.
 3. Linux hardware, storage, networking, audio and display work well.
-4. The desktop is responsive and polished.
-5. Windows compatibility, validated with real applications.
-6. macOS compatibility, with an honest published matrix.
-7. Desktop bridge and runtime manager.
-8. Full Windows VM mode.
-9. APFS and advanced device work, only with data-protection tests.
+4. The desktop is responsive and polished, with one application centre.
+5. Windows applications, validated with real applications: a compatibility layer
+   first, a seamless Windows guest only where that is not enough (ADR-0007).
+6. Android applications (ADR-0006).
+7. The application catalogue, router and desktop integration.
+8. macOS applications: an optional, experimental feature, not a main effort.
+9. APFS and advanced device work: deferred; only with data-protection tests.
+
+P@x, the assistant, is built alongside every item, never ahead of item 1. Each
+component ships the tools P@x needs as it lands.
 
 ## Hard rules
 

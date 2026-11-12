@@ -1,0 +1,138 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/giorgiogiudice/TUR/schemas/pax-provider-config.schema.json",
+  "title": "P@x provider configuration",
+  "description": "How P@x reaches one model provider: which provider, which model, the output limit, timeouts, retry behaviour, and optionally prices and a limit for one task. The API key is never part of this file: it lives in the system keyring. The loader in services/tur-pax-providers is authoritative. It also enforces rules this schema cannot express: a base URL may use plain http only for a loopback host, retry.initial_delay_ms may not exceed retry.max_delay_ms, and task_limit.max_cost needs prices.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "provider", "model", "max_output_tokens"],
+  "$defs": {
+    "duration_ms": {
+      "description": "A duration in milliseconds, at most one hour.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 3600000
+    },
+    "price": {
+      "description": "A price per million tokens, in the currency of the prices.",
+      "type": "number",
+      "minimum": 0
+    }
+  },
+  "properties": {
+    "schema_version": { "const": 1 },
+    "provider": {
+      "description": "The provider, which selects the adapter. anthropic: the Messages API. openai: the Responses API. google: the Gemini Interactions API.",
+      "enum": ["anthropic", "openai", "google"]
+    },
+    "base_url": {
+      "description": "The base URL of the provider's API, without the path of an endpoint. Without it the provider's public endpoint is used. Set it to use a compatible gateway. It must be https://host[:port][/path]; http is accepted for a loopback host only. User information, a query and a fragment are not accepted.",
+      "type": "string",
+      "pattern": "^https?://[^\\s?#@\\\\]+$"
+    },
+    "model": {
+      "description": "The model name, as the provider spells it. There is no default: model names are configuration and are never compiled in (ADR-0004).",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "^\\S(.*\\S)?$"
+    },
+    "max_output_tokens": {
+      "description": "The most output tokens the model may produce for one request. There is no default.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4294967295
+    },
+    "timeouts": {
+      "description": "Timeouts.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "connect_ms": {
+          "description": "The longest wait for the connection to be established.",
+          "$ref": "#/$defs/duration_ms",
+          "default": 10000
+        },
+        "response_ms": {
+          "description": "The longest wait for the provider to start answering.",
+          "$ref": "#/$defs/duration_ms",
+          "default": 120000
+        },
+        "idle_ms": {
+          "description": "The longest silence tolerated in the middle of a stream.",
+          "$ref": "#/$defs/duration_ms",
+          "default": 120000
+        }
+      }
+    },
+    "retry": {
+      "description": "How failed requests are retried. Only failures the providers document as transient are retried: a rate limit, an overloaded or unavailable service, a connection that could not be made and a timeout. A rejected request is never retried, and nothing is retried once any of the response has been delivered.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_attempts": {
+          "description": "The most times one request is sent, the first attempt included.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10,
+          "default": 3
+        },
+        "initial_delay_ms": {
+          "description": "The delay before the second attempt. It doubles for each later attempt. Used when the provider names no delay.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3600000,
+          "default": 500
+        },
+        "max_delay_ms": {
+          "description": "The longest delay between two attempts. If the provider asks for a longer delay, the request is not retried and the delay is reported.",
+          "$ref": "#/$defs/duration_ms",
+          "default": 30000
+        }
+      }
+    },
+    "prices": {
+      "description": "Prices per million tokens, for showing what a task cost. There are no default prices. Without this object only tokens are counted.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["currency", "input_per_million", "output_per_million"],
+      "properties": {
+        "currency": {
+          "description": "The currency the prices are in, for display.",
+          "type": "string",
+          "pattern": "^[A-Za-z]{1,8}$"
+        },
+        "input_per_million": {
+          "description": "The price of a million input tokens.",
+          "$ref": "#/$defs/price"
+        },
+        "output_per_million": {
+          "description": "The price of a million output tokens, the model's reasoning included.",
+          "$ref": "#/$defs/price"
+        },
+        "cached_input_per_million": {
+          "description": "The price of a million input tokens read from the provider's cache. Without it they are priced as ordinary input.",
+          "$ref": "#/$defs/price"
+        }
+      }
+    },
+    "task_limit": {
+      "description": "The limit for one task. A stream is stopped when the task goes over it. At least one of the two limits must be set.",
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "max_cost": {
+          "description": "The most a task may cost, in the currency of the prices. Needs prices.",
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "max_tokens": {
+          "description": "The most tokens a task may use, input and output together.",
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    }
+  }
+}

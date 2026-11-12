@@ -1,0 +1,19 @@
+# Aliases extracted from modules themselves.
+alias pci:v00008086d00009A49sv*sd*bc03sc*i* i915
+alias pci:v00008086d000015FCsv*sd*bc*sc*i* e1000e
+alias pci:v00008086d0000A0F0sv*sd*bc*sc*i* iwlwifi
+alias pci:v00008086d0000A0C8sv*sd*bc*sc*i* snd_hda_intel
+alias pci:v00008086d0000A0C8sv*sd*bc*sc*i* snd_sof_pci_intel_tgl
+alias pci:v*d*sv*sd*bc01sc08i02* nvme
+alias pci:v*d*sv*sd*bc01sc06i01* ahci
+alias pci:v*d*sv*sd*bc0Csc03i30* xhci_pci
+alias pci:v*d*sv*sd*bc0Csc03i40* thunderbolt
+alias pci:v000010ECd0000522Asv*sd*bc*sc*i* rtsx_pci
+alias pci:v000010ECd0000C822sv*sd*bc*sc*i* rtw88_8822ce
+alias pci:v000010DEd*sv*sd*bc03sc*i* nouveau
+alias usb:v*p*d*dc*dsc*dp*ic03isc*ip*in* usbhid
+alias usb:v*p*d*dc*dsc*dp*ic0Eisc01ip00in* uvcvideo
+alias usb:v8087p0026d*dc*dsc*dp*ic*isc*ip*in* btusb
+alias usb:v0BDAp8153d*dc*dsc*dp*ic*isc*ip*in* r8152
+alias usb:v*p*d*dc*dsc*dp*ic08isc06ip50in* usb-storage
+alias usb:v*p*d*dc*dsc*dp*ic08isc06ip62in* uas

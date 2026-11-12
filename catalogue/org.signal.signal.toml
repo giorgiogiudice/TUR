@@ -1,0 +1,91 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR application catalogue entry. Format: schemas/app-catalogue-entry.schema.json.
+# How entries are written and sourced: catalogue/README.md.
+# TUR has not tested this application. Every rating below is reported by the
+# named source, which was checked on the date given; no record means unknown.
+
+schema_version = 1
+id = "org.signal.signal"
+name = "Signal"
+aliases = ["Signal Desktop", "Signal Private Messenger"]
+publisher = "Signal Foundation"
+category = "communication"
+summary = "Private messenger."
+homepage = "https://signal.org/"
+
+[[editions]]
+kind = "flatpak"
+flatpak_id = "org.signal.Signal"
+licence = "open-source"
+packaging = "community"
+
+[[editions.references]]
+title = "Flathub listing; not verified by Flathub as coming from the publisher; licence AGPL-3.0-only"
+url = "https://flathub.org/apps/org.signal.Signal"
+checked = "2026-11-12"
+
+[[editions]]
+kind = "linux-native"
+obtain = "publisher-page"
+download_page = "https://signal.org/download/"
+licence = "open-source"
+packaging = "publisher"
+notes = "The publisher's AppImage."
+
+[[editions.references]]
+title = "Signal download page: Linux AppImage"
+url = "https://signal.org/download/"
+checked = "2026-11-12"
+
+[[editions]]
+kind = "linux-native"
+obtain = "other-distribution-package"
+distribution = "debian"
+package = "signal-desktop"
+download_page = "https://signal.org/download/"
+licence = "open-source"
+packaging = "publisher"
+
+[[editions.references]]
+title = "Signal download page: the apt repository works only on 64-bit Debian-based distributions"
+url = "https://signal.org/download/"
+checked = "2026-11-12"
+
+[[editions]]
+kind = "windows"
+obtain = "publisher-page"
+download_page = "https://signal.org/download/"
+licence = "open-source"
+
+[[editions.references]]
+title = "Signal download page"
+url = "https://signal.org/download/"
+checked = "2026-11-12"
+
+[[editions]]
+kind = "macos"
+obtain = "publisher-page"
+download_page = "https://signal.org/download/"
+licence = "open-source"
+
+[[editions.references]]
+title = "Signal download page"
+url = "https://signal.org/download/"
+checked = "2026-11-12"
+
+[[editions]]
+kind = "android"
+package = "org.thoughtcrime.securesms"
+download_page = "https://signal.org/android/apk/"
+stores = ["google-play", "publisher-page"]
+licence = "open-source"
+
+[[editions.references]]
+title = "Google Play listing"
+url = "https://play.google.com/store/apps/details?id=org.thoughtcrime.securesms&hl=en"
+checked = "2026-11-12"
+
+[[editions.references]]
+title = "Signal Android APK page"
+url = "https://signal.org/android/apk/"
+checked = "2026-11-12"

@@ -1,0 +1,150 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/giorgiogiudice/UOS/schemas/installer-session.schema.json",
+  "title": "UOS installer session",
+  "description": "The session.json file of an installer session: the session's identity, its target, and a snapshot of the sixteen phase records. Each line of the session's phases.jsonl file is one object matching #/$defs/transition_record. The log is the authority; this file is rewritten atomically after every transition. Kept in agreement with the SessionMeta and TransitionRecord types in installer/uos-installer-core by that crate's tests.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "session_id", "installer_version", "created_at", "updated_at", "mode",
+    "target", "target_writes_started", "records_written", "phases"
+  ],
+  "$defs": {
+    "optional_string": { "type": ["string", "null"] },
+    "timestamp": {
+      "description": "UTC, millisecond precision, in the form YYYY-MM-DDTHH:MM:SS.mmmZ.",
+      "type": "string",
+      "minLength": 24
+    },
+    "optional_timestamp": {
+      "oneOf": [{ "$ref": "#/$defs/timestamp" }, { "type": "null" }]
+    },
+    "identity": {
+      "description": "What identifies a physical disk. A device path is never part of it.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "model", "serial", "wwn", "size_bytes", "transport", "logical_sector_size",
+        "physical_sector_size", "by_id_path", "by_path"
+      ],
+      "properties": {
+        "model": { "$ref": "#/$defs/optional_string" },
+        "serial": { "$ref": "#/$defs/optional_string" },
+        "wwn": { "$ref": "#/$defs/optional_string" },
+        "size_bytes": { "type": "integer", "minimum": 0 },
+        "transport": {
+          "enum": [
+            "nvme", "sata", "ata", "usb", "scsi", "sas", "mmc", "virtio", "fibre_channel",
+            "iscsi", "unknown"
+          ]
+        },
+        "logical_sector_size": { "type": "integer", "minimum": 0 },
+        "physical_sector_size": { "type": "integer", "minimum": 0 },
+        "by_id_path": { "$ref": "#/$defs/optional_string" },
+        "by_path": { "$ref": "#/$defs/optional_string" }
+      }
+    },
+    "phase_id": {
+      "enum": [
+        "START", "ENVIRONMENT_CHECK", "HARDWARE_INVENTORY", "STORAGE_DISCOVERY",
+        "TARGET_SELECTION", "PARTITION_PLAN", "USER_CONFIRMATION", "PARTITIONING",
+        "ENCRYPTION_SETUP", "FILESYSTEM_CREATION", "IMAGE_DEPLOYMENT", "BOOTLOADER_INSTALL",
+        "INITRAMFS_CONFIGURATION", "FIRST_BOOT_CONFIGURATION", "INSTALL_VALIDATION",
+        "COMPLETE"
+      ]
+    },
+    "phase_state": {
+      "enum": ["pending", "running", "succeeded", "warning", "failed", "skipped", "cancelled"]
+    },
+    "progress": {
+      "description": "A reliable count out of a known total, or only the current activity. Never a percentage without a reliable total.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "completed", "total", "unit"],
+          "properties": {
+            "kind": { "const": "determinate" },
+            "completed": { "type": "integer", "minimum": 0 },
+            "total": { "type": "integer", "minimum": 0 },
+            "unit": { "type": "string" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "activity"],
+          "properties": {
+            "kind": { "const": "indeterminate" },
+            "activity": { "type": "string" }
+          }
+        }
+      ]
+    },
+    "phase_record": {
+      "description": "Everything a phase emits (specification section 6.2).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "phase_id", "phase_name", "state", "attempt", "started_at", "finished_at",
+        "duration_ms", "progress", "error_code", "summary", "technical_details",
+        "log_reference", "recovery_action"
+      ],
+      "properties": {
+        "phase_id": { "$ref": "#/$defs/phase_id" },
+        "phase_name": { "type": "string", "minLength": 1 },
+        "state": { "$ref": "#/$defs/phase_state" },
+        "attempt": { "type": "integer", "minimum": 0 },
+        "started_at": { "$ref": "#/$defs/optional_timestamp" },
+        "finished_at": { "$ref": "#/$defs/optional_timestamp" },
+        "duration_ms": { "type": ["integer", "null"], "minimum": 0 },
+        "progress": { "oneOf": [{ "$ref": "#/$defs/progress" }, { "type": "null" }] },
+        "error_code": {
+          "description": "A stable UOS error code such as UOS-INSTALL-SESSION-005, when the phase failed.",
+          "$ref": "#/$defs/optional_string"
+        },
+        "summary": { "type": "string" },
+        "technical_details": { "$ref": "#/$defs/optional_string" },
+        "log_reference": { "$ref": "#/$defs/optional_string" },
+        "recovery_action": { "$ref": "#/$defs/optional_string" }
+      }
+    },
+    "transition_record": {
+      "description": "One line of phases.jsonl: the record of one phase after a transition.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["seq", "recorded_at", "phase"],
+      "properties": {
+        "seq": { "type": "integer", "minimum": 1 },
+        "recorded_at": { "$ref": "#/$defs/timestamp" },
+        "phase": { "$ref": "#/$defs/phase_record" }
+      }
+    }
+  },
+  "properties": {
+    "schema_version": { "const": 1 },
+    "session_id": { "type": "string", "minLength": 1 },
+    "installer_version": { "type": "string", "minLength": 1 },
+    "created_at": { "$ref": "#/$defs/timestamp" },
+    "updated_at": { "$ref": "#/$defs/timestamp" },
+    "mode": {
+      "enum": ["erase_disk", "alongside", "manual", "reinstall_preserving_data", null]
+    },
+    "target": { "oneOf": [{ "$ref": "#/$defs/identity" }, { "type": "null" }] },
+    "target_writes_started": {
+      "description": "True from just before the first record of a phase that writes to the target is appended to phases.jsonl. Never cleared. A session with this flag set is never resumed without reconciliation.",
+      "type": "boolean"
+    },
+    "records_written": {
+      "description": "The sequence number of the last phases.jsonl record this snapshot reflects.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "phases": {
+      "type": "array",
+      "minItems": 16,
+      "maxItems": 16,
+      "items": { "$ref": "#/$defs/phase_record" }
+    }
+  }
+}

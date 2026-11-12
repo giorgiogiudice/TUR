@@ -1,0 +1,44 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR application catalogue entry. Format: schemas/app-catalogue-entry.schema.json.
+# How entries are written and sourced: catalogue/README.md.
+# TUR has not tested this application. Every rating below is reported by the
+# named source, which was checked on the date given; no record means unknown.
+
+schema_version = 1
+id = "com.riotgames.valorant"
+name = "Valorant"
+publisher = "Riot Games"
+category = "game"
+summary = "Competitive first-person shooter."
+
+[[editions]]
+kind = "windows"
+obtain = "publisher-page"
+download_page = "https://playvalorant.com/en-gb/download/"
+licence = "proprietary"
+requirements = ["kernel-anti-cheat"]
+
+[[editions.records]]
+route = "proton"
+rating = "broken"
+reported_by = "external"
+source_name = "AreWeAntiCheatYet"
+source_url = "https://areweanticheatyet.com/game/valorant"
+source_rating = "Denied"
+date = "2026-11-12"
+notes = "Anti-cheat: Vanguard. AreWeAntiCheatYet's status Denied means the game does not run through Proton and its publisher has ruled out support."
+
+[[editions.references]]
+title = "Riot Games Support, What is Vanguard?: it consists of a client and a kernel mode driver"
+url = "https://support-valorant.riotgames.com/hc/en-us/articles/360046160933-What-is-Vanguard"
+checked = "2026-11-12"
+
+[[editions.references]]
+title = "Riot's specifications page lists Windows only, and requires TPM 2.0 and UEFI Secure Boot on Windows 11"
+url = "https://playvalorant.com/en-gb/specs/"
+checked = "2026-11-12"
+
+[[editions.references]]
+title = "AreWeAntiCheatYet: Valorant, status Denied"
+url = "https://areweanticheatyet.com/game/valorant"
+checked = "2026-11-12"

@@ -1,0 +1,124 @@
+{
+  "blockdevices": [
+    {
+      "name": "sda", "path": "/dev/sda", "type": "disk", "size": 62008590336, "rm": true,
+      "hotplug": true, "ro": false, "tran": "usb", "model": "Example Flash", "serial": "USB0001",
+      "fstype": null, "mountpoints": [null], "fsroots": [null],
+      "children": [
+        {
+          "name": "sda1", "path": "/dev/sda1", "type": "part", "size": 62007541760, "start": 2048,
+          "rm": true, "hotplug": true, "ro": false, "tran": null, "fstype": "exfat",
+          "fsver": "1.0", "label": "SANDISK", "uuid": "64A5-F00D", "partuuid": "1a2b3c4d-01",
+          "parttype": "0x7", "parttypename": "HPFS/NTFS/exFAT",
+          "mountpoints": [null], "fsroots": [null]
+        }
+      ]
+    },
+    {
+      "name": "sdb", "path": "/dev/sdb", "type": "disk", "size": 31914983424, "rm": true,
+      "hotplug": true, "ro": true, "tran": "usb", "model": "Example Card Reader",
+      "serial": "USB0002", "fstype": null, "mountpoints": [null], "fsroots": [null],
+      "children": [
+        {
+          "name": "sdb1", "path": "/dev/sdb1", "type": "part", "size": 31910789120, "start": 8192,
+          "rm": true, "hotplug": true, "ro": true, "tran": null, "fstype": "vfat",
+          "fsver": "FAT32", "label": "CAMERA", "uuid": "3A4B-5C6D", "partuuid": "2b3c4d5e-01",
+          "parttype": "0xc", "parttypename": "W95 FAT32 (LBA)",
+          "mountpoints": [null], "fsroots": [null]
+        }
+      ]
+    },
+    {
+      "name": "sdc", "path": "/dev/sdc", "type": "disk", "size": 15931539456, "rm": true,
+      "hotplug": true, "ro": false, "tran": "usb", "model": "Example Stick", "serial": "USB0003",
+      "fstype": null, "mountpoints": [null], "fsroots": [null],
+      "children": [
+        {
+          "name": "sdc1", "path": "/dev/sdc1", "type": "part", "size": 15930490880, "start": 2048,
+          "rm": true, "hotplug": true, "ro": false, "tran": null, "fstype": "vfat",
+          "fsver": "FAT32", "label": null, "uuid": "9F8E-7D6C", "partuuid": "3c4d5e6f-01",
+          "parttype": "0xb", "parttypename": "W95 FAT32",
+          "mountpoints": [null], "fsroots": [null]
+        }
+      ]
+    },
+    {
+      "name": "sdd", "path": "/dev/sdd", "type": "disk", "size": 2000398934016, "rm": false,
+      "hotplug": true, "ro": false, "tran": "usb", "model": "Example Portable 2TB",
+      "serial": "USB0004", "fstype": null, "mountpoints": [null], "fsroots": [null],
+      "children": [
+        {
+          "name": "sdd1", "path": "/dev/sdd1", "type": "part", "size": 2000397795328,
+          "start": 2048, "rm": false, "hotplug": true, "ro": false, "tran": null,
+          "fstype": "ext4", "fsver": "1.0", "label": "BACKUP",
+          "uuid": "d1d1d1d1-aaaa-4bbb-8ccc-000000000401",
+          "partuuid": "4d5e6f70-0001-4000-8000-000000000401",
+          "parttypename": "Linux filesystem", "mountpoints": [null], "fsroots": [null]
+        }
+      ]
+    },
+    {
+      "name": "sde", "path": "/dev/sde", "type": "disk", "size": 1000204886016, "rm": false,
+      "hotplug": true, "ro": false, "tran": "usb", "model": "Example Portable 1TB",
+      "serial": "USB0005", "fstype": null, "mountpoints": [null], "fsroots": [null],
+      "children": [
+        {
+          "name": "sde1", "path": "/dev/sde1", "type": "part", "size": 1000203837440,
+          "start": 2048, "rm": false, "hotplug": true, "ro": false, "tran": null,
+          "fstype": "exfat", "fsver": "1.0", "label": "BACKUP", "uuid": "E1E1-0501",
+          "partuuid": "5e6f7081-0001-4000-8000-000000000501",
+          "parttypename": "Microsoft basic data", "mountpoints": [null], "fsroots": [null]
+        }
+      ]
+    },
+    {
+      "name": "sdf", "path": "/dev/sdf", "type": "disk", "size": 8002732032, "rm": true,
+      "hotplug": true, "ro": false, "tran": "usb", "model": "Example Stick", "serial": "USB0006",
+      "fstype": null, "mountpoints": [null], "fsroots": [null],
+      "children": [
+        {
+          "name": "sdf1", "path": "/dev/sdf1", "type": "part", "size": 8001683456, "start": 2048,
+          "rm": true, "hotplug": true, "ro": false, "tran": null, "fstype": "ext4",
+          "fsver": "1.0", "label": "../../etc/\u0007pass\nwd:x\\y\u001b[31m",
+          "uuid": "f1f1f1f1-aaaa-4bbb-8ccc-000000000601", "partuuid": "6f708192-01",
+          "parttypename": "Linux", "mountpoints": [null], "fsroots": [null]
+        }
+      ]
+    },
+    {
+      "name": "sdg", "path": "/dev/sdg", "type": "disk", "size": 256060514304, "rm": false,
+      "hotplug": true, "ro": false, "tran": "usb", "model": "Example SSD", "serial": "USB0007",
+      "fstype": null, "mountpoints": [null], "fsroots": [null],
+      "children": [
+        {
+          "name": "sdg1", "path": "/dev/sdg1", "type": "part", "size": 256059465728,
+          "start": 2048, "rm": false, "hotplug": true, "ro": false, "tran": null,
+          "fstype": "crypto_LUKS", "fsver": "2", "label": null,
+          "uuid": "10c4ed00-aaaa-4bbb-8ccc-000000000701",
+          "partuuid": "708192a3-0001-4000-8000-000000000701",
+          "parttypename": "Linux filesystem", "mountpoints": [null], "fsroots": [null]
+        }
+      ]
+    },
+    {
+      "name": "sdh", "path": "/dev/sdh", "type": "disk", "size": 4000787030016, "rm": false,
+      "hotplug": true, "ro": false, "tran": "usb", "model": "Example Desk 4TB",
+      "serial": "USB0008", "fstype": null, "mountpoints": [null], "fsroots": [null],
+      "children": [
+        {
+          "name": "sdh1", "path": "/dev/sdh1", "type": "part", "size": 4000785981440,
+          "start": 2048, "rm": false, "hotplug": true, "ro": false, "tran": null,
+          "fstype": "ntfs", "fsver": null, "label": "Elements", "uuid": "5A5A5A5A0B0B0801",
+          "partuuid": "8192a3b4-0001-4000-8000-000000000801",
+          "parttypename": "Microsoft basic data", "mountpoints": [null], "fsroots": [null]
+        }
+      ]
+    },
+    {
+      "name": "sr0", "path": "/dev/sr0", "type": "rom", "size": 2936012800, "rm": true,
+      "hotplug": true, "ro": false, "tran": "sata", "model": "Example DVD-RW",
+      "fstype": "iso9660", "fsver": "Joliet Extension", "label": "Fedora-KDE-Live-45",
+      "uuid": "2026-10-20-08-15-30-00", "mountpoints": [null], "fsroots": [null]
+    }
+  ]
+}

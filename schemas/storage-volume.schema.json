@@ -1,0 +1,215 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/giorgiogiudice/UOS/schemas/storage-volume.schema.json",
+  "title": "UOS storage volume documents",
+  "description": "JSON documents emitted by uos-storage: the volume inventory (volumes --json), the decision for one volume (decide --json) and the metadata losses of a copy between two filesystems (capabilities --json). The same documents are the string results of the proposed org.uos.Storage1 D-Bus interface. null means the value is absent or could not be determined.",
+  "oneOf": [
+    { "$ref": "#/$defs/inventory" },
+    { "$ref": "#/$defs/decision_report" },
+    { "$ref": "#/$defs/capability_report" }
+  ],
+  "$defs": {
+    "volume_id": {
+      "description": "UOS volume identifier: fs-<filesystem UUID>, part-<partition UUID>, dev-<hash of hardware identity> or tmp-<hash of device path>. Always safe as one path component.",
+      "type": "string",
+      "pattern": "^(fs|part|dev|tmp)-[a-z0-9-]+$",
+      "maxLength": 96
+    },
+    "error_code": {
+      "description": "A stable UOS storage error code.",
+      "type": "string",
+      "pattern": "^UOS-STORAGE-[A-Z0-9]+-[0-9]{3}$"
+    },
+    "nullable_string": { "type": ["string", "null"] },
+    "string_list": { "type": "array", "items": { "type": "string" } },
+    "access": { "enum": ["read-only", "read-write"] },
+    "filesystem": {
+      "enum": [
+        "ext4", "btrfs", "xfs", "ntfs", "exfat", "vfat", "hfsplus", "apfs", "refs", "zfs",
+        "iso9660", "luks", "bitlocker", "lvm-member", "raid-member", "unknown"
+      ]
+    },
+    "support": { "enum": ["yes", "partial", "no", "unverified"] },
+    "policy": {
+      "description": "The policy overrides the decisions were made under.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["unsafe_ntfs", "hfsplus_write", "apfs_read_only", "noexec_removable"],
+      "properties": {
+        "unsafe_ntfs": { "enum": ["read-only", "refuse"] },
+        "hfsplus_write": { "type": "boolean" },
+        "apfs_read_only": { "type": "boolean" },
+        "noexec_removable": { "type": "boolean" }
+      }
+    },
+    "technical_detail": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["device", "driver", "mount_policy", "evidence", "explanation"],
+      "properties": {
+        "device": { "type": "string" },
+        "driver": { "$ref": "#/$defs/nullable_string" },
+        "mount_policy": { "enum": ["read/write", "read-only", "not mounted"] },
+        "evidence": { "type": "string" },
+        "explanation": { "type": "string" }
+      }
+    },
+    "decision": {
+      "description": "A mount decision. driver, implementation and options are set exactly when the outcome is a mount.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "outcome", "requested_access", "code", "severity", "driver", "implementation",
+        "mount_type", "options", "user_message", "reason", "recovery_action", "technical_detail"
+      ],
+      "properties": {
+        "outcome": {
+          "enum": ["mount-read-write", "mount-read-only", "refuse", "needs-unlock", "unsupported"]
+        },
+        "requested_access": { "$ref": "#/$defs/access" },
+        "code": { "$ref": "#/$defs/error_code" },
+        "severity": { "enum": ["info", "notice", "warning", "error"] },
+        "driver": { "$ref": "#/$defs/nullable_string" },
+        "implementation": { "enum": ["kernel", "userspace", "none", null] },
+        "mount_type": { "$ref": "#/$defs/nullable_string" },
+        "options": { "$ref": "#/$defs/string_list" },
+        "user_message": { "type": "string", "minLength": 1 },
+        "reason": { "type": "string", "minLength": 1 },
+        "recovery_action": { "type": "string", "minLength": 1 },
+        "technical_detail": { "$ref": "#/$defs/technical_detail" }
+      }
+    },
+    "mount": {
+      "description": "The one real mount of a volume, at its canonical path.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sources", "target", "driver", "mount_type", "options", "read_only"],
+      "properties": {
+        "sources": { "$ref": "#/$defs/string_list" },
+        "target": { "type": "string", "minLength": 1 },
+        "driver": { "$ref": "#/$defs/nullable_string" },
+        "mount_type": { "$ref": "#/$defs/nullable_string" },
+        "options": { "$ref": "#/$defs/string_list" },
+        "read_only": { "type": "boolean" }
+      }
+    },
+    "view": {
+      "description": "One runtime's view of the canonical mount. A view never mounts the filesystem again.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runtime", "kind", "path", "target", "read_only", "requires_grant", "drive_letter"
+      ],
+      "properties": {
+        "runtime": { "enum": ["linux", "windows", "macos", "android"] },
+        "kind": { "enum": ["bind", "symlink", "grant"] },
+        "path": { "type": "string", "minLength": 1 },
+        "target": { "type": "string", "minLength": 1 },
+        "read_only": { "type": "boolean" },
+        "requires_grant": { "type": "boolean" },
+        "drive_letter": { "type": ["string", "null"], "minLength": 1, "maxLength": 1 }
+      }
+    },
+    "volume": {
+      "description": "A volume: its facts, its decision, its one mount and its runtime views.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id", "id_source", "devices", "filesystem", "signature", "fs_version", "uuid", "label",
+        "partition_uuid", "partition_type", "size_bytes", "transport", "removable", "optical",
+        "device_read_only", "system", "encryption", "ntfs_state", "hfs_journal",
+        "duplicate_identity", "mountpoints", "subvolumes", "display_name", "canonical_path",
+        "already_mounted", "decision", "mount", "views"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/volume_id" },
+        "id_source": {
+          "enum": ["filesystem-uuid", "partition-uuid", "hardware-identity", "unstable"]
+        },
+        "devices": { "$ref": "#/$defs/string_list" },
+        "filesystem": { "$ref": "#/$defs/filesystem" },
+        "signature": { "$ref": "#/$defs/nullable_string" },
+        "fs_version": { "$ref": "#/$defs/nullable_string" },
+        "uuid": { "$ref": "#/$defs/nullable_string" },
+        "label": {
+          "description": "The label exactly as reported. It may contain any character; use display_name for paths.",
+          "type": ["string", "null"]
+        },
+        "partition_uuid": { "$ref": "#/$defs/nullable_string" },
+        "partition_type": { "$ref": "#/$defs/nullable_string" },
+        "size_bytes": { "type": "integer", "minimum": 0 },
+        "transport": { "$ref": "#/$defs/nullable_string" },
+        "removable": { "type": "boolean" },
+        "optical": { "type": "boolean" },
+        "device_read_only": { "type": "boolean" },
+        "system": { "type": "boolean" },
+        "encryption": { "enum": ["none", "locked", "unlocked", "mapping"] },
+        "ntfs_state": { "enum": ["clean", "dirty", "hibernated", "unknown", null] },
+        "hfs_journal": { "enum": ["journalled", "not-journalled", "unknown", null] },
+        "duplicate_identity": { "type": "boolean" },
+        "mountpoints": { "$ref": "#/$defs/string_list" },
+        "subvolumes": { "$ref": "#/$defs/string_list" },
+        "display_name": { "type": "string", "minLength": 1 },
+        "canonical_path": { "type": "string", "minLength": 1 },
+        "already_mounted": { "type": "boolean" },
+        "decision": { "$ref": "#/$defs/decision" },
+        "mount": { "oneOf": [{ "$ref": "#/$defs/mount" }, { "type": "null" }] },
+        "views": { "type": "array", "items": { "$ref": "#/$defs/view" } }
+      }
+    },
+    "loss": {
+      "description": "A metadata feature that a copy would not preserve in full.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["feature", "kind", "source", "destination"],
+      "properties": {
+        "feature": {
+          "enum": [
+            "posix-permissions", "acls", "extended-attributes", "alternate-data-streams",
+            "windows-security-descriptors", "apple-resource-forks", "case-sensitive-names",
+            "symbolic-links", "hard-links", "sparse-files", "compression", "snapshots",
+            "copy-on-write"
+          ]
+        },
+        "kind": { "enum": ["lost", "degraded", "unverified"] },
+        "source": { "$ref": "#/$defs/support" },
+        "destination": { "$ref": "#/$defs/support" }
+      }
+    },
+    "inventory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "kind", "policy", "volumes"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "kind": { "const": "inventory" },
+        "policy": { "$ref": "#/$defs/policy" },
+        "volumes": { "type": "array", "items": { "$ref": "#/$defs/volume" } }
+      }
+    },
+    "decision_report": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "kind", "policy", "volume"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "kind": { "const": "decision" },
+        "policy": { "$ref": "#/$defs/policy" },
+        "volume": { "$ref": "#/$defs/volume" }
+      }
+    },
+    "capability_report": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "kind", "source", "destination", "assessment", "losses"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "kind": { "const": "capabilities" },
+        "source": { "$ref": "#/$defs/filesystem" },
+        "destination": { "$ref": "#/$defs/filesystem" },
+        "assessment": { "enum": ["complete", "destination-not-writable", "no-data"] },
+        "losses": { "type": "array", "items": { "$ref": "#/$defs/loss" } }
+      }
+    }
+  }
+}

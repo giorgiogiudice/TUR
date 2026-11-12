@@ -1,0 +1,11 @@
+Linux version 6.19.2-300.fc45.x86_64 (mockbuild@example) #1 SMP PREEMPT_DYNAMIC
+pci 0000:04:00.0: [10de:25a2] type 00 class 0x030200 PCIe Endpoint
+e1000e 0000:00:1f.6 enp0s31f6: renamed from eth0
+iwlwifi 0000:00:14.3: Direct firmware load for iwlwifi-QuZ-a0-hr-b0-78.ucode failed with error -2
+iwlwifi 0000:00:14.3: loaded firmware version 77.2df8986f.0 QuZ-a0-hr-b0-77.ucode op_mode iwlmvm
+rtw_8822ce 0000:03:00.0: Direct firmware load for rtw88/rtw8822c_fw.bin failed with error -2
+rtw_8822ce 0000:03:00.0: failed to request firmware
+rtw_8822ce 0000:03:00.0: Direct firmware load for rtw88/rtw8822c_fw.bin failed with error -2
+pci 0000:04:00.0: probe with driver nouveau failed with error -12
+usb 2-1: SerialNumber: 4C530001230915112345
+r8152 2-2:1.0 enx00e04c680001: renamed from eth1

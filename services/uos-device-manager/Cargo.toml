@@ -1,0 +1,38 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+[package]
+name = "uos-device-manager"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+license = "PolyForm-Noncommercial-1.0.0"
+description = "UOS device manager: a read-only hardware inventory, problem findings and the guest hand-off state types."
+repository = "https://github.com/giorgiogiudice/UOS"
+publish = false
+
+# Each component is its own workspace with its own lockfile. See ADR-0005.
+[workspace]
+
+[lib]
+name = "uos_device_manager"
+path = "src/lib.rs"
+
+[[bin]]
+name = "uos-device"
+path = "src/main.rs"
+
+[dependencies]
+# Command-line parsing. Colour and suggestion features are left out to keep the
+# dependency tree small.
+clap = { version = "4.5", default-features = false, features = ["std", "derive", "help", "usage", "error-context"] }
+# Serialisation of the inventory and the findings.
+serde = { version = "1.0", features = ["derive"] }
+# JSON output, and parsing of `fwupdmgr get-devices --json`.
+serde_json = "1.0"
+# SHA-256 for device identifiers: a serial number or MAC address is hashed with
+# the machine identifier so that the identifier does not disclose it.
+sha2 = "0.10"
+uos-core = { path = "../../crates/uos-core" }
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"

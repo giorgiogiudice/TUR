@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+#
+# Present only in the boot-test image (tests/boot/guest). Never part of UOS.
+
+[Unit]
+Description=UOS boot test agent (test image only)
+Documentation=https://github.com/giorgiogiudice/UOS/tree/main/tests/boot
+# Inert unless the disk was installed by the boot test, and never on hardware.
+ConditionKernelCommandLine=uos.boot_test
+ConditionVirtualization=vm
+After=basic.target
+
+[Service]
+# "exec" so the unit counts as started once the agent runs: the agent observes
+# the rest of the boot and must not be a job the boot waits for.
+Type=exec
+ExecStart=/usr/libexec/uos-boot-test/guest-agent
+StandardOutput=journal+console
+StandardError=journal+console
+TimeoutStopSec=20
+
+[Install]
+WantedBy=multi-user.target

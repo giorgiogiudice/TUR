@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "provider": "google",
+  "model": "example-model-name",
+  "max_output_tokens": 2048,
+  "task_limit": { "max_tokens": 100000 }
+}

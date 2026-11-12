@@ -1,0 +1,162 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/giorgiogiudice/UOS/schemas/installer-plan.schema.json",
+  "title": "UOS installer partition plan",
+  "description": "The partition-plan.json file of an installer session: what would be written to the target disk, what would be destroyed, and the text of the confirmation screen. It is a description, not a list of commands. The target is named by its identity; the recorded device path is for display only. Kept in agreement with the Plan type in installer/uos-installer-core by that crate's tests.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "mode", "scheme", "scheme_verified", "target", "partition_table",
+    "alignment_bytes", "encryption", "partitions", "consequences", "confirmation"
+  ],
+  "$defs": {
+    "optional_string": { "type": ["string", "null"] },
+    "bytes": { "type": "integer", "minimum": 0 },
+    "encryption": { "enum": ["luks2", null] },
+    "identity": {
+      "description": "What identifies a physical disk. A device path is never part of it.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "model", "serial", "wwn", "size_bytes", "transport", "logical_sector_size",
+        "physical_sector_size", "by_id_path", "by_path"
+      ],
+      "properties": {
+        "model": { "$ref": "#/$defs/optional_string" },
+        "serial": { "$ref": "#/$defs/optional_string" },
+        "wwn": { "$ref": "#/$defs/optional_string" },
+        "size_bytes": { "$ref": "#/$defs/bytes" },
+        "transport": {
+          "enum": [
+            "nvme", "sata", "ata", "usb", "scsi", "sas", "mmc", "virtio", "fibre_channel",
+            "iscsi", "unknown"
+          ]
+        },
+        "logical_sector_size": { "type": "integer", "minimum": 0 },
+        "physical_sector_size": { "type": "integer", "minimum": 0 },
+        "by_id_path": { "$ref": "#/$defs/optional_string" },
+        "by_path": { "$ref": "#/$defs/optional_string" }
+      }
+    },
+    "partition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "number", "role", "label", "type_guid", "offset_bytes", "size_bytes", "filesystem",
+        "mount_point", "encryption"
+      ],
+      "properties": {
+        "number": { "type": "integer", "minimum": 1 },
+        "role": { "enum": ["esp", "boot", "root", "data"] },
+        "label": { "type": "string" },
+        "type_guid": { "type": "string" },
+        "offset_bytes": { "$ref": "#/$defs/bytes" },
+        "size_bytes": { "type": "integer", "minimum": 1 },
+        "filesystem": { "enum": ["vfat", "ext4", "xfs", "btrfs"] },
+        "mount_point": { "type": "string" },
+        "encryption": { "$ref": "#/$defs/encryption" }
+      }
+    },
+    "destroyed_item": {
+      "description": "One existing partition, volume or filesystem that the plan would destroy.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path", "kind", "size_bytes", "partition_number", "partition_type_name",
+        "partition_label", "partition_uuid", "filesystem", "filesystem_label",
+        "filesystem_uuid", "description"
+      ],
+      "properties": {
+        "path": { "type": "string" },
+        "kind": {
+          "enum": [
+            "disk", "partition", "loop", "rom", "crypt", "lvm", "multipath", "raid",
+            "compressed_ram", "other"
+          ]
+        },
+        "size_bytes": { "$ref": "#/$defs/bytes" },
+        "partition_number": { "type": ["integer", "null"], "minimum": 0 },
+        "partition_type_name": { "$ref": "#/$defs/optional_string" },
+        "partition_label": { "$ref": "#/$defs/optional_string" },
+        "partition_uuid": { "$ref": "#/$defs/optional_string" },
+        "filesystem": { "$ref": "#/$defs/optional_string" },
+        "filesystem_label": { "$ref": "#/$defs/optional_string" },
+        "filesystem_uuid": { "$ref": "#/$defs/optional_string" },
+        "description": { "type": "string" }
+      }
+    },
+    "detected_os": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["family", "confidence", "evidence"],
+      "properties": {
+        "family": { "enum": ["windows", "linux", "macos"] },
+        "confidence": { "enum": ["likely", "possible"] },
+        "evidence": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  },
+  "properties": {
+    "schema_version": { "const": 1 },
+    "mode": { "enum": ["erase_disk", "alongside", "manual", "reinstall_preserving_data"] },
+    "scheme": { "type": "string", "minLength": 1 },
+    "scheme_verified": { "type": "boolean" },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "identity", "identity_strength", "weaker_identity_acknowledged",
+        "device_path_when_planned"
+      ],
+      "properties": {
+        "identity": { "$ref": "#/$defs/identity" },
+        "identity_strength": { "enum": ["stable", "weak"] },
+        "weaker_identity_acknowledged": { "type": "boolean" },
+        "device_path_when_planned": { "type": "string" }
+      }
+    },
+    "partition_table": { "enum": ["gpt"] },
+    "alignment_bytes": { "type": "integer", "minimum": 1 },
+    "encryption": { "$ref": "#/$defs/encryption" },
+    "partitions": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/partition" }
+    },
+    "consequences": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "existing_partition_table", "destroyed", "other_operating_systems",
+        "user_data_preserved", "summary"
+      ],
+      "properties": {
+        "existing_partition_table": { "$ref": "#/$defs/optional_string" },
+        "destroyed": { "type": "array", "items": { "$ref": "#/$defs/destroyed_item" } },
+        "other_operating_systems": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/detected_os" }
+        },
+        "user_data_preserved": { "type": "boolean" },
+        "summary": { "type": "string" }
+      }
+    },
+    "confirmation": {
+      "description": "The text of the final confirmation screen. required_phrase is what the user must type; the installer recomputes it from the target identity and does not trust this copy.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "heading", "lines", "privacy_notice", "encryption_notice", "required_phrase",
+        "phrase_instruction"
+      ],
+      "properties": {
+        "heading": { "type": "string" },
+        "lines": { "type": "array", "items": { "type": "string" } },
+        "privacy_notice": { "type": "string" },
+        "encryption_notice": { "type": "string" },
+        "required_phrase": { "type": "string", "minLength": 1 },
+        "phrase_instruction": { "type": "string" }
+      }
+    }
+  }
+}
