@@ -294,7 +294,7 @@ class Test:
         self.reports = {}
         self.admin_output = ""
         planted = json.loads((args.material / "planted-values.json").read_text())
-        self.planted = [(item["category"], item["value"]) for item in planted] + CLIENT_PLANTED
+        self.planted_values = [(item["category"], item["value"]) for item in planted] + CLIENT_PLANTED
         self.host_names = sorted({socket.gethostname(), socket.gethostname().split(".")[0]})
 
     # ------------------------------------------------------------ helpers
@@ -430,7 +430,7 @@ class Test:
         self.checks.check(name, "its summary was filed", filed)
         everything = "\n".join(call["body"] for call in self.standin.calls())
         lower = everything.lower()
-        leaked = [f"{category}: {value}" for category, value in self.planted if value.lower() in lower]
+        leaked = [f"{category}: {value}" for category, value in self.planted_values if value.lower() in lower]
         self.checks.equal(name, "no planted value reached the stand-in (bundle and client description)",
                           leaked, [])
         hosts = [host for host in self.host_names if len(host) >= 4 and host.lower() in lower]
@@ -589,7 +589,7 @@ class Test:
         (self.out / "receiver-limits.log").write_text(texts["limits receiver"])
         for label, text in texts.items():
             lower = text.lower()
-            leaked = [f"{category}: {value}" for category, value in self.planted if value.lower() in lower]
+            leaked = [f"{category}: {value}" for category, value in self.planted_values if value.lower() in lower]
             self.checks.equal(name, f"no planted value in the {label} log", leaked, [])
             self.checks.equal(name, f"no status token in the {label} log",
                               [token[:8] for token in self.tokens if token in text], [])
@@ -600,7 +600,7 @@ class Test:
         self.checks.check(name, "the receiver did log its events",
                           "event=received" in texts["receiver"] and "event=filed" in texts["receiver"])
         answers = "\n".join(self.answers).lower()
-        leaked = [f"{category}: {value}" for category, value in self.planted if value.lower() in answers]
+        leaked = [f"{category}: {value}" for category, value in self.planted_values if value.lower() in answers]
         self.checks.equal(name, "no planted value in any answer of the receiver", leaked, [])
         calls = self.standin.calls()
         self.checks.check(name, "every call to the stand-in carried the token", all(call["authorized"] for call in calls))
