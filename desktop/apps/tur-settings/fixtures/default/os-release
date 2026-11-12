@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# os-release of a TUR image as it is today: the base system's own file, with
+# the three keys and the PRETTY_NAME that image/Containerfile stamps on it.
+# Only the keys this program reads, and the ones the stamp writes, are here.
+# See ../README.md.
+NAME="Fedora Linux"
+VERSION="45.20261112.0 (Kinoite)"
+ID=fedora
+VERSION_ID=45
+PRETTY_NAME="TUR 0.1.0-dev (based on Fedora Linux 45.20261112.0 (Kinoite))"
+VARIANT="Kinoite"
+VARIANT_ID=kinoite
+IMAGE_ID=tur
+IMAGE_VERSION=0.1.0-dev
+BUILD_ID=20261112.g387ac4f62f6c

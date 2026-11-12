@@ -1,0 +1,39 @@
+{
+  "licence": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+  "schema_version": 1,
+  "program": "org.kde.systemsettings",
+  "pages": [
+    {
+      "page": "kde.kcm_lookandfeel",
+      "title": "Global Theme",
+      "path": ["System Settings", "Global Theme"],
+      "keywords": ["theme", "look and feel", "skin", "appearance"],
+      "open": { "module": "kcm_lookandfeel" },
+      "verified_with": "plasma-6.8.2"
+    },
+    {
+      "page": "kde.kcm_colors",
+      "title": "Colours",
+      "path": ["System Settings", "Colours"],
+      "keywords": ["colors", "colour scheme", "color scheme", "accent colour", "accent color", "contrast"],
+      "open": { "module": "kcm_colors" },
+      "verified_with": "plasma-6.8.2"
+    },
+    {
+      "page": "kde.kcm_fonts",
+      "title": "Fonts",
+      "path": ["System Settings", "Fonts"],
+      "keywords": ["font size", "text size", "typeface", "bigger text"],
+      "open": { "module": "kcm_fonts" },
+      "verified_with": "plasma-6.8.2"
+    },
+    {
+      "page": "kde.kcm_nightlight",
+      "title": "Night Light",
+      "path": ["System Settings", "Night Light"],
+      "keywords": ["blue light", "warm colours", "warm colors", "evening", "colour temperature", "color temperature"],
+      "open": { "module": "kcm_nightlight" },
+      "verified_with": "plasma-6.8.2"
+    }
+  ]
+}

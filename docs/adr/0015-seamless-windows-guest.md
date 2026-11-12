@@ -192,3 +192,32 @@ conditions stand: nothing in this tier is released to users before the legal
 review of Microsoft's licence terms described above, and every budget in the
 design is a target until it has been measured.
 
+## Amendment: Windows 10 and Windows 11 (12 November 2026)
+
+The owner requires the guest to support **both Windows 10 and Windows 11**.
+The baseline above ("Windows 11 Pro, current release. Home is refused";
+"Windows 10 is not offered for new guests") is replaced by:
+
+- **Windows 10 and Windows 11 are both supported guests.** The setup flow
+  reads the edition and version from the media the user supplies.
+- **Individual application windows (RemoteApp)** need an edition that accepts
+  Remote Desktop connections: Pro, Education or Enterprise, of Windows 10 or
+  of Windows 11. Microsoft lists Windows 10 Pro and Enterprise and Windows 11
+  Pro and Enterprise among the editions that accept them
+  ([design §3](../architecture/windows-guest.md)).
+- **Home editions are not refused.** They cannot show applications as
+  separate windows, so the guest runs as the whole Windows desktop in one
+  window (QEMU's own display), with the same setup, storage and shutdown
+  handling. The setup flow says this before anything is installed.
+- **Support status is shown, not hidden.** Windows 10 Home and Pro are out of
+  mainstream support; the setup flow states the media's support status from
+  Microsoft's lifecycle data and the date it was checked, as specification
+  §13.4 requires, and never describes an unsupported installation as secure.
+- Windows 10's lower hardware requirements (no TPM 2.0 requirement) mean its
+  guest needs no virtual TPM; Windows 11's does.
+- The legal review named above covers both versions, and the CI and
+  hardware tests of the design's milestones W1 to W6 are run for one
+  Windows 10 Pro and one Windows 11 Pro guest. GitHub's hosted Windows
+  machines may be used to build and test the guest-side helper (owner,
+  12 November 2026).
+
