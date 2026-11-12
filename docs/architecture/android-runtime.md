@@ -2,7 +2,7 @@
 
 **Specification addendum B — Accepted 12 November 2026 (ADR-0006)**
 **Applies to:** specification revision 1.0
-**Related decision:** [ADR-0006](../adr/0006-android-runtime.md) (Proposed)
+**Related decision:** [ADR-0006](../adr/0006-android-runtime.md) (Accepted)
 
 This addendum specifies how UOS runs Android applications. It adds a fourth
 application ecosystem to the specification and lists the amendments that requires

@@ -1,6 +1,6 @@
 # ADR-0014: Boot health and rollback — a TUR attempt counter in GRUB's environment block
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-12
 - **Specification sections:** §3.5, §3.6, §5.3 to §5.6, §15.1, §19.5,
   §22 (UOS-005), §27.1, §27.4, §27.5
@@ -176,3 +176,11 @@ implementation brief):
 - Re-check at each rebase: that `blscfg` still expands variables, that
   bootupd still installs `configs.d` fragments, the shape of
   `bootc status --format=json`, and what greenboot and bootc then offer.
+
+## Acceptance (12 November 2026)
+
+Accepted as the approach to build and test. It stands or falls on step 2 of the
+implementation brief: whether a kernel argument written as a GRUB variable
+survives bootc and OSTree and is expanded at boot. If that step fails, this
+record is revisited before anything further is built on it.
+
