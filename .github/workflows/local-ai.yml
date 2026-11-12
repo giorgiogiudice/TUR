@@ -11,8 +11,11 @@
 #          idle stop), then every catalogue model measured.
 # compare: the engine comparison on the same runner: llama.cpp's own
 #          release build of the same version, and Fedora 45's Ollama.
-# pax:     P@x's own provider adapters (tur-pax run) and a minimal Chat
-#          Completions harness against the local server, with TUR's tools.
+# pax:     P@x itself against the local server: tur-pax run through the
+#          local preset (docs/architecture/pax-providers.md, 14.8), the key
+#          read from tur-ai-local's key file, every component's tools and
+#          the read-only command tool in the real sandbox, Qwen3 4B on
+#          llama.cpp's own build (tests/pax/local_model.py).
 #
 # Checks about TUR fail the workflow. What a model answers is measured and
 # recorded, and never fails it. Nothing runs on a graphics processor: the
@@ -23,6 +26,9 @@ on:
   pull_request:
     paths:
       - "services/tur-ai-local/**"
+      # The local preset, and the script that runs P@x through it.
+      - "services/tur-pax/data/models.json"
+      - "tests/pax/local_model.py"
       - "schemas/local-model.schema.json"
       - "schemas/ai-local-report.schema.json"
       - "crates/tur-core/**"
@@ -281,11 +287,15 @@ jobs:
           if-no-files-found: warn
 
   pax:
-    name: P@x against the local model
+    name: P@x through the local preset, against tur-ai-local
     runs-on: ubuntu-24.04
     timeout-minutes: 150
     env:
       DEBIAN_FRONTEND: noninteractive
+      # The model P@x is run with: the catalogue's recommendation for an
+      # assistant that acts, on llama.cpp's own build (Fedora's reads a P@x
+      # request too slowly: docs/reports/local-ai-1.md, section 3).
+      PAX_MODEL: qwen3-4b
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
@@ -294,7 +304,9 @@ jobs:
           WORK="$RUNNER_TEMP/local-ai"
           echo "WORK=$WORK" >> "$GITHUB_ENV"
           sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache/CodeQL
-          mkdir -p "$WORK/bin" "$WORK/data" "$WORK/run" "$WORK/evidence" "$WORK/pax"
+          mkdir -p "$WORK/bin" "$WORK/data" "$WORK/run" "$WORK/evidence/pax" "$WORK/pax"
+          chmod 0700 "$WORK/run"
+          python3 -m py_compile tests/pax/local_model.py
 
       - name: Install bubblewrap
         run: |
@@ -315,63 +327,77 @@ jobs:
             ~/.cargo/registry/index
             ~/.cargo/registry/cache
             ~/.cargo/git/db
-            services/tur-ai-local/target
-            services/tur-pax/target
-            services/tur-catalogue/target
-            services/tur-device-manager/target
-          key: local-ai-pax-${{ hashFiles('rust-toolchain.toml', 'services/tur-ai-local/Cargo.lock', 'services/tur-pax/Cargo.lock', 'services/tur-catalogue/Cargo.lock', 'services/tur-device-manager/Cargo.lock') }}
+            services/*/target
+          key: local-ai-pax-${{ hashFiles('rust-toolchain.toml', 'services/*/Cargo.lock') }}
           restore-keys: local-ai-pax-
 
-      - name: Build tur-pax, its tool programs and tur-ai-local
+      - name: Discover the tool sets
+        # The rule P@x reads them by: services/<component>/agent-tools.json
+        # with agent-tools.adapter.json beside it. No component is named
+        # here. Each program an adapter starts is built from its component.
         run: |
-          for component in tur-pax tur-catalogue tur-device-manager; do
-            (cd "services/$component" && cargo build --locked)
-          done
-          (cd services/tur-ai-local && if [ -f Cargo.lock ]; then cargo build --release --locked; else cargo build --release; fi)
+          python3 - > "$WORK/programs.tsv" <<'PY'
+          import json, pathlib, sys
+          rows = set()
+          for adapters in sorted(pathlib.Path("services").glob("*/agent-tools.adapter.json")):
+              component = adapters.parent.name
+              for adapter in json.loads(adapters.read_text())["adapters"]:
+                  program = adapter["program"]
+                  if not program.startswith("/usr/bin/"):
+                      sys.exit(f"{component}: {program} is not a program in /usr/bin")
+                  rows.add((component, program))
+          for component, program in sorted(rows):
+              print(f"{component}\t{program}")
+          PY
+          tee "$WORK/evidence/pax/tool-programs.tsv" < "$WORK/programs.tsv"
+
+      - name: Build tur-pax, the tool programs and tur-ai-local
+        run: |
+          (cd services/tur-pax && cargo build --locked)
+          while IFS="$(printf '\t')" read -r component program; do
+            echo "::group::cargo build: $component ($(basename "$program"))"
+            (cd "services/$component" && cargo build --locked --bin "$(basename "$program")")
+            echo "::endgroup::"
+          done < "$WORK/programs.tsv"
+          (cd services/tur-ai-local && cargo build --release --locked)
           install -m 0755 services/tur-ai-local/target/release/tur-ai-local "$WORK/bin/tur-ai-local"
 
       - name: Put the programs, the catalogues and the tools in place
-        # Where the shipped adapters expect them. The tool sets are the
-        # components' own files; the fixture tool is P@x's test fixture.
+        # Where the shipped adapters expect them. Every component's tool set
+        # is installed as tur-pax reads an installed directory of tool sets;
+        # the fixture tool is P@x's test fixture.
         run: |
-          sudo install -m 0755 services/tur-catalogue/target/debug/tur-catalogue /usr/bin/tur-catalogue
-          sudo install -m 0755 services/tur-device-manager/target/debug/tur-device /usr/bin/tur-device
-          sudo install -m 0755 "$WORK/bin/tur-ai-local" /usr/bin/tur-ai-local
+          while IFS="$(printf '\t')" read -r component program; do
+            sudo install -m 0755 "services/$component/target/debug/$(basename "$program")" "$program"
+          done < "$WORK/programs.tsv"
           sudo mkdir -p /usr/share/tur/ai-local /usr/share/tur-pax-e2e
           sudo cp -r catalogue /usr/share/tur/catalogue
           sudo cp -r services/tur-ai-local/catalogue /usr/share/tur/ai-local/models
           sudo cp -r services/tur-device-manager/tests/fixtures/laptop /usr/share/tur-pax-e2e/laptop
           tools="$WORK/pax/tools"
-          for component in tur-catalogue tur-device-manager; do
-            install -D -m 0644 "services/$component/agent-tools.json" "$tools/$component/agent-tools.json"
-            install -D -m 0644 "services/$component/agent-tools.adapter.json" "$tools/$component/agent-tools.adapter.json"
+          for component in services/*/; do
+            if [ -f "$component/agent-tools.json" ]; then
+              name="$(basename "$component")"
+              install -D -m 0644 "$component/agent-tools.json" "$tools/$name/agent-tools.json"
+              install -D -m 0644 "$component/agent-tools.adapter.json" "$tools/$name/agent-tools.adapter.json"
+            fi
           done
-          install -D -m 0644 services/tur-ai-local/pax/agent-tools.json "$tools/tur-ai-local/agent-tools.json"
-          install -D -m 0644 services/tur-ai-local/pax/agent-tools.adapter.json "$tools/tur-ai-local/agent-tools.adapter.json"
           mkdir -p "$WORK/pax/manifests" "$WORK/pax/adapters"
           cp tests/pax/manifests/fixture.json "$WORK/pax/manifests/fixture.json"
           cp tests/pax/adapters/fixture.json "$WORK/pax/adapters/fixture.json"
-          uid="$(id -u)"
-          sudo mkdir -p "/run/user/$uid" && sudo chown "$uid" "/run/user/$uid" && sudo chmod 0700 "/run/user/$uid"
-          find "$tools" "$WORK/pax/manifests" "$WORK/pax/adapters" -type f | sort
+          find "$tools" "$WORK/pax/manifests" "$WORK/pax/adapters" -type f | sort | tee "$WORK/evidence/pax/tool-sets.txt"
 
-      - name: The smallest model, from the cache when it is there
-        uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
+      - name: The model, from the cache when it is there
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
-          path: ${{ runner.temp }}/local-ai/data/tur/models/qwen3-0.6b
-          key: local-ai-model-qwen3-0.6b-9465e63a22add5354d9bb4b99e90117043c7124007664907259bd16d043bb031
+          path: ${{ runner.temp }}/local-ai/data/tur/models/qwen3-4b
+          key: local-ai-model-qwen3-4b-7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5
 
-      - name: The models, through tur-ai-local
+      - name: The model, through tur-ai-local
+        # Downloaded and checked against the catalogue's digest, or checked
+        # again when it came from the cache.
         run: |
-          for model in qwen3-0.6b qwen3-4b; do
-            "$WORK/bin/tur-ai-local" pull "$model" --catalogue services/tur-ai-local/catalogue --models-dir "$WORK/data/tur/models"
-          done
-
-      - name: Fedora 45's llama-server in a container on the host network
-        run: |
-          docker run -d --name fedora --network host -v "$GITHUB_WORKSPACE:/w:ro" -v "$WORK:$WORK" "$FEDORA_IMAGE" sleep infinity
-          docker exec fedora dnf -y --setopt=install_weak_deps=False install "$LLAMA_CPP_RPM" util-linux >/dev/null
-          docker exec fedora rpm -q llama-cpp
+          "$WORK/bin/tur-ai-local" pull "$PAX_MODEL" --catalogue services/tur-ai-local/catalogue --models-dir "$WORK/data/tur/models"
 
       - name: llama.cpp's own release build, checked
         # For the 4B model: with Fedora's build it processed prompts at
@@ -383,71 +409,45 @@ jobs:
           mkdir -p "$WORK/upstream" && tar -xzf "$WORK/llama.tar.gz" -C "$WORK/upstream"
           echo "UPSTREAM_SERVER=$(find "$WORK/upstream" -name llama-server -type f | head -n 1)" >> "$GITHUB_ENV"
 
-      - name: P@x and the harness, with each model
-        # qwen3-0.6b with Fedora's llama-server in the container; qwen3-4b
-        # with llama.cpp's own build on the runner. tur-pax runs with
-        # --no-commands: the read-only command tool's schema (argv items of
-        # up to 4 096 characters) makes llama-server's tool grammar fail
-        # ("number of repetitions exceeds sane defaults"), and every request
-        # that offers it is rejected (run 43277339192).
+      - name: P@x through the local preset
+        # tur-ai-local serves the model as it would for a person: on
+        # 127.0.0.1:39281, its default address, with a new access key in
+        # $WORK/run/tur-ai-local/api-key and its default context. P@x is
+        # `tur-pax run --provider local --model qwen3-4b`: the preset gives
+        # the address and reads that key file; the read-only command tool
+        # is on, in the real sandbox. What the model does is recorded; what
+        # fails the step is listed in tests/pax/local_model.py.
         run: |
+          log="$WORK/run/serve-$PAX_MODEL.log"
+          "$WORK/bin/tur-ai-local" serve "$PAX_MODEL" --json --idle-stop 3600 --engine "$UPSTREAM_SERVER" \
+            --catalogue services/tur-ai-local/catalogue --models-dir "$WORK/data/tur/models" --runtime-dir "$WORK/run" \
+            > "$log" 2> "$log.err" &
+          for _ in $(seq 1 600); do grep -q '"event":"ready"' "$log" 2>/dev/null && break; sleep 1; done
+          if ! grep -q '"event":"ready"' "$log"; then
+            echo "::error::the engine did not become ready with $PAX_MODEL"; cat "$log.err"; exit 1
+          fi
+          grep '"event":"ready"' "$log"
           set +e
-          status=0
-          scenario=tests/pax/scenarios/01-two-tools.json
-          local_request="Which AI model could run locally on this computer, and why?"
-          two_tools_request="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["request"])' "$scenario")"
-          ci=services/tur-ai-local/ci/local_ai_ci.py
-          base=http://127.0.0.1:39281
-          key="$WORK/run/tur-ai-local/api-key"
-          for model in qwen3-0.6b qwen3-4b; do
-            echo "::group::$model"
-            log="$WORK/run/serve-$model.log"
-            if [ "$model" = qwen3-0.6b ]; then
-              engine=fedora-llama-cpp-b9840
-              docker exec -d fedora setpriv --reuid="$(id -u)" --regid="$(id -g)" --clear-groups -- bash -c \
-                "$WORK/bin/tur-ai-local serve $model --json --port 39281 --idle-stop 3600 --catalogue /w/services/tur-ai-local/catalogue --models-dir $WORK/data/tur/models --runtime-dir $WORK/run > $log 2> $log.err"
-            else
-              engine=upstream-llama-cpp-b9840-cpu
-              "$WORK/bin/tur-ai-local" serve "$model" --json --port 39281 --idle-stop 3600 --engine "$UPSTREAM_SERVER" \
-                --catalogue services/tur-ai-local/catalogue --models-dir "$WORK/data/tur/models" --runtime-dir "$WORK/run" \
-                > "$log" 2> "$log.err" &
-            fi
-            for _ in $(seq 1 600); do grep -q '"event":"ready"' "$log" 2>/dev/null && break; sleep 1; done
-            if ! grep -q '"event":"ready"' "$log"; then
-              echo "::error::the engine did not become ready with $model"; cat "$log.err"; status=1; continue
-            fi
-            python3 "$ci" harness --base-url "$base" --key-file "$key" --model "$model" --scenario "$scenario" \
-              --tools "$WORK/pax/tools" "$WORK/pax/manifests" "$WORK/pax/adapters" --evidence "$WORK/evidence/pax/$engine"
-            python3 "$ci" harness --base-url "$base" --key-file "$key" --model "$model" --scenario "$scenario" \
-              --name local-ai --request "$local_request" --expect ai_local_recommend \
-              --tools "$WORK/pax/tools" --evidence "$WORK/evidence/pax/$engine"
-            for wire in openai anthropic; do
-              python3 "$ci" pax --tur-pax services/tur-pax/target/debug/tur-pax --wire "$wire" --base-url "$base" \
-                --key-file "$key" --model "$model" --name two-tools --request "$two_tools_request" \
-                --tools "$WORK/pax/tools" --manifests "$WORK/pax/manifests" --adapters "$WORK/pax/adapters" \
-                --work "$WORK/pax/work" --evidence "$WORK/evidence/pax/$engine"
-              python3 "$ci" pax --tur-pax services/tur-pax/target/debug/tur-pax --wire "$wire" --base-url "$base" \
-                --key-file "$key" --model "$model" --name local-ai --request "$local_request" \
-                --tools "$WORK/pax/tools" --work "$WORK/pax/work" --evidence "$WORK/evidence/pax/$engine"
-            done
-            cp "$WORK/run/tur-ai-local/engine.log" "$WORK/evidence/pax/$engine/engine-$model.log" 2>/dev/null || true
-            if [ "$model" = qwen3-0.6b ]; then
-              docker exec fedora setpriv --reuid="$(id -u)" --regid="$(id -g)" --clear-groups -- \
-                "$WORK/bin/tur-ai-local" stop --runtime-dir "$WORK/run"
-            else
-              "$WORK/bin/tur-ai-local" stop --runtime-dir "$WORK/run"
-            fi
-            echo "::endgroup::"
-          done
+          python3 tests/pax/local_model.py \
+            --tur-pax services/tur-pax/target/debug/tur-pax \
+            --models services/tur-pax/data/models.json \
+            --tools "$WORK/pax/tools" \
+            --fixture-manifests "$WORK/pax/manifests" --fixture-adapters "$WORK/pax/adapters" \
+            --runtime-dir "$WORK/run" --engine-log "$WORK/run/tur-ai-local/engine.log" \
+            --model "$PAX_MODEL" --engine upstream-llama-cpp-b9840-cpu \
+            --work-dir "$WORK/pax/work" --evidence "$WORK/evidence/pax"
+          status=$?
+          cp "$WORK/run/tur-ai-local/engine.log" "$WORK/evidence/pax/engine-$PAX_MODEL.log" 2>/dev/null || true
+          "$WORK/bin/tur-ai-local" stop --runtime-dir "$WORK/run"
           exit $status
 
       - name: Summary
         if: always()
         run: |
+          cat "$WORK"/evidence/pax/pax-local-*.md >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
           python3 services/tur-ai-local/ci/local_ai_ci.py summary --evidence "$WORK/evidence" --out "$WORK/evidence/summary.md" >/dev/null || true
           cat "$WORK/evidence/summary.md" >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
           cp "$WORK"/run/serve-*.log "$WORK"/run/serve-*.err "$WORK/evidence/" 2>/dev/null || true
-          docker rm -f fedora >/dev/null 2>&1 || true
 
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         if: always()

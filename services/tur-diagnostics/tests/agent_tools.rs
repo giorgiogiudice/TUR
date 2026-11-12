@@ -4,12 +4,9 @@
 //! it the adapters that perform them with this component's own program,
 //! `agent-tools.adapter.json`.
 //!
-//! Beside them are `agent-tools.next.json` and `agent-tools.next.adapter.json`:
-//! the same files with the two read-only problem report tools added
-//! (`diag_report_prepare`, preview only, and `diag_report_list`). They are
-//! what the shipped files become once P@x's own test of the whole tool set
-//! (`services/tur-pax/tests/tools.rs`) lists the two new names; until then
-//! P@x does not load them. Every check below runs on both pairs.
+//! Three tools: `diag_get_status`, and the two read-only problem report
+//! tools, `diag_report_prepare` (a preview only) and `diag_report_list`.
+//! Sending a report is not a tool (ADR-0024).
 //!
 //! The files are loaded with P@x's own loader (`tur-pax`, a development
 //! dependency of this test only), and every command line an adapter builds
@@ -29,8 +26,6 @@ use tur_pax::{Action, ActionClass};
 
 const MANIFEST: &str = include_str!("../agent-tools.json");
 const ADAPTERS: &str = include_str!("../agent-tools.adapter.json");
-const NEXT_MANIFEST: &str = include_str!("../agent-tools.next.json");
-const NEXT_ADAPTERS: &str = include_str!("../agent-tools.next.adapter.json");
 
 /// The program this component built.
 const PROGRAM: &str = env!("CARGO_BIN_EXE_tur-diag");
@@ -41,8 +36,8 @@ const INSTALLED: &str = "/usr/bin/tur-diag";
 /// The service the manifest declares.
 const SERVICE: &str = "org.tur.Diagnostics1";
 
-fn registry_of(manifest: &str, adapters: &str) -> ToolRegistry {
-    match ToolRegistry::load(&[manifest.to_owned()], &[adapters.to_owned()], false) {
+fn registry() -> ToolRegistry {
+    match ToolRegistry::load(&[MANIFEST.to_owned()], &[ADAPTERS.to_owned()], false) {
         Ok(registry) => registry,
         Err(problems) => {
             let lines: Vec<String> = problems.iter().map(ToString::to_string).collect();
@@ -52,14 +47,6 @@ fn registry_of(manifest: &str, adapters: &str) -> ToolRegistry {
             );
         }
     }
-}
-
-fn registry() -> ToolRegistry {
-    registry_of(MANIFEST, ADAPTERS)
-}
-
-fn next_registry() -> ToolRegistry {
-    registry_of(NEXT_MANIFEST, NEXT_ADAPTERS)
 }
 
 /// The command line a call of a tool would be performed with.
@@ -130,22 +117,16 @@ fn check_against_the_program(tool: &str, line: &[String], subcommands: &[&str]) 
     }
 }
 
-/// The tools P@x is offered today, in the order of the manifest.
-const OFFERED: [&str; 1] = ["diag_get_status"];
-
-/// The tools of the next manifest, in its order.
-const NEXT_OFFERED: [&str; 3] = ["diag_get_status", "diag_report_prepare", "diag_report_list"];
+/// The tools P@x is offered, in the order of the manifest.
+const OFFERED: [&str; 3] = ["diag_get_status", "diag_report_prepare", "diag_report_list"];
 
 /// The tools the manifest declares that no program performs yet.
 const NOT_OFFERED: [&str; 0] = [];
 
-/// Every tool with the class the manifest declares.
-const CLASSES: [(&str, u64); 1] = [("diag_get_status", 0)];
-
-/// Every tool of the next manifest with its class. Preparing a report is a
+/// Every tool with the class the manifest declares. Preparing a report is a
 /// preview and listing reports reads a local list: both observe. Sending is
 /// class 2 (ADR-0024) and is not a tool at all.
-const NEXT_CLASSES: [(&str, u64); 3] = [
+const CLASSES: [(&str, u64); 3] = [
     ("diag_get_status", 0),
     ("diag_report_prepare", 0),
     ("diag_report_list", 0),
@@ -156,17 +137,14 @@ const NEXT_CLASSES: [(&str, u64); 3] = [
 type Case = (&'static str, Value, Vec<&'static str>, Vec<&'static str>);
 
 fn cases() -> Vec<Case> {
-    vec![(
-        "diag_get_status",
-        json!({}),
-        vec!["status"],
-        vec!["/usr/bin/tur-diag", "status", "--json"],
-    )]
-}
-
-fn next_cases() -> Vec<Case> {
-    let mut cases = cases();
-    cases.push((
+    vec![
+        (
+            "diag_get_status",
+            json!({}),
+            vec!["status"],
+            vec!["/usr/bin/tur-diag", "status", "--json"],
+        ),
+        (
         "diag_report_prepare",
         json!({
             "title": "No sound after resume",
@@ -188,8 +166,8 @@ fn next_cases() -> Vec<Case> {
             "--component=audio",
             "--error-code=TUR-AUDIO-RESUME-001",
         ],
-    ));
-    cases.push((
+        ),
+        (
         "diag_report_prepare",
         json!({ "from_boot_health": true }),
         vec!["report", "prepare"],
@@ -202,18 +180,18 @@ fn next_cases() -> Vec<Case> {
             "--prepared-by=pax",
             "--from-boot-health",
         ],
-    ));
-    cases.push((
-        "diag_report_list",
-        json!({}),
-        vec!["report", "list"],
-        vec!["/usr/bin/tur-diag", "report", "list", "--json"],
-    ));
-    cases
+        ),
+        (
+            "diag_report_list",
+            json!({}),
+            vec!["report", "list"],
+            vec!["/usr/bin/tur-diag", "report", "list", "--json"],
+        ),
+    ]
 }
 
-fn declared_classes(manifest: &str) -> Vec<(String, u64)> {
-    let manifest: Value = serde_json::from_str(manifest).expect("the manifest is JSON");
+fn declared_classes() -> Vec<(String, u64)> {
+    let manifest: Value = serde_json::from_str(MANIFEST).expect("the manifest is JSON");
     manifest["tools"]
         .as_array()
         .expect("tools")
@@ -227,10 +205,12 @@ fn declared_classes(manifest: &str) -> Vec<(String, u64)> {
         .collect()
 }
 
-fn check_loads(registry: &ToolRegistry, adapters: &str, offered: &[&str]) {
+#[test]
+fn the_manifest_and_the_adapters_load() {
+    let registry = registry();
     let tools = registry.offered();
     let names: Vec<&str> = tools.iter().map(|tool| tool.name.as_str()).collect();
-    assert_eq!(names, offered);
+    assert_eq!(names, OFFERED);
     for tool in &tools {
         assert_eq!(tool.service, SERVICE, "{}", tool.name);
     }
@@ -239,17 +219,11 @@ fn check_loads(registry: &ToolRegistry, adapters: &str, offered: &[&str]) {
 
     // The adapters are for this component's service, and every one names
     // this component's program.
-    let file = AdapterFile::from_json(adapters).expect("a valid adapter file");
+    let file = AdapterFile::from_json(ADAPTERS).expect("a valid adapter file");
     assert_eq!(file.service(), SERVICE);
     for adapter in file.adapters() {
         assert_eq!(adapter.program(), INSTALLED);
     }
-}
-
-#[test]
-fn the_manifest_and_the_adapters_load() {
-    check_loads(&registry(), ADAPTERS, &OFFERED);
-    check_loads(&next_registry(), NEXT_ADAPTERS, &NEXT_OFFERED);
 }
 
 #[test]
@@ -261,45 +235,10 @@ fn every_tool_has_the_class_the_design_gives_it() {
         .iter()
         .map(|(name, class)| ((*name).to_owned(), *class))
         .collect();
-    assert_eq!(declared_classes(MANIFEST), expected);
-    let expected: Vec<(String, u64)> = NEXT_CLASSES
-        .iter()
-        .map(|(name, class)| ((*name).to_owned(), *class))
-        .collect();
-    assert_eq!(declared_classes(NEXT_MANIFEST), expected);
+    assert_eq!(declared_classes(), expected);
     // Whatever is offered only observes.
-    for tool in registry()
-        .offered()
-        .iter()
-        .chain(next_registry().offered().iter())
-    {
+    for tool in &registry().offered() {
         assert_eq!(tool.class, ActionClass::Observe, "{}", tool.name);
-    }
-}
-
-#[test]
-fn the_next_manifest_only_adds_to_the_shipped_one() {
-    let shipped: Value = serde_json::from_str(MANIFEST).expect("JSON");
-    let next: Value = serde_json::from_str(NEXT_MANIFEST).expect("JSON");
-    assert_eq!(shipped["service"], next["service"]);
-    for tool in shipped["tools"].as_array().expect("tools") {
-        assert!(
-            next["tools"].as_array().expect("tools").contains(tool),
-            "{} changed",
-            tool["name"]
-        );
-    }
-    let shipped: Value = serde_json::from_str(ADAPTERS).expect("JSON");
-    let next: Value = serde_json::from_str(NEXT_ADAPTERS).expect("JSON");
-    for adapter in shipped["adapters"].as_array().expect("adapters") {
-        assert!(
-            next["adapters"]
-                .as_array()
-                .expect("adapters")
-                .contains(adapter),
-            "{} changed",
-            adapter["tool"]
-        );
     }
 }
 
@@ -308,15 +247,13 @@ fn no_tool_can_send_a_report() {
     // ADR-0024: sending is class 2 when P@x proposes it, and P@x performs
     // nothing above class 1, so no adapter may lead to `report send` or to
     // anything but a preview.
-    for adapters in [ADAPTERS, NEXT_ADAPTERS] {
-        let file: Value = serde_json::from_str(adapters).expect("JSON");
-        let text = file.to_string();
-        assert!(!text.contains("\"send\""), "an adapter names send");
-        assert!(!text.contains("--yes"), "an adapter confirms");
-        assert!(!text.contains("--output"), "an adapter saves a file");
-    }
-    let registry = next_registry();
-    for (tool, arguments, _, _) in next_cases() {
+    let file: Value = serde_json::from_str(ADAPTERS).expect("JSON");
+    let text = file.to_string();
+    assert!(!text.contains("\"send\""), "an adapter names send");
+    assert!(!text.contains("--yes"), "an adapter confirms");
+    assert!(!text.contains("--output"), "an adapter saves a file");
+    let registry = registry();
+    for (tool, arguments, _, _) in cases() {
         let line = command_line(&registry, tool, arguments);
         assert!(!line.iter().any(|argument| argument == "send"), "{tool}");
         if line.iter().any(|argument| argument == "prepare") {
@@ -342,19 +279,16 @@ fn no_tool_can_send_a_report() {
 
 #[test]
 fn every_command_line_is_one_the_program_really_has() {
-    for (registry, cases, offered) in [
-        (registry(), cases(), OFFERED.to_vec()),
-        (next_registry(), next_cases(), NEXT_OFFERED.to_vec()),
-    ] {
-        // Every offered tool is covered.
-        let covered: Vec<&str> = cases.iter().map(|case| case.0).collect();
-        for tool in offered {
-            assert!(covered.contains(&tool), "{tool} has no case");
-        }
-        for (tool, arguments, subcommands, expected) in cases {
-            let line = command_line(&registry, tool, arguments);
-            assert_eq!(line, expected, "{tool}");
-            check_against_the_program(tool, &line, &subcommands);
-        }
+    let registry = registry();
+    let cases = cases();
+    // Every offered tool is covered.
+    let covered: Vec<&str> = cases.iter().map(|case| case.0).collect();
+    for tool in OFFERED {
+        assert!(covered.contains(&tool), "{tool} has no case");
+    }
+    for (tool, arguments, subcommands, expected) in cases {
+        let line = command_line(&registry, tool, arguments);
+        assert_eq!(line, expected, "{tool}");
+        check_against_the_program(tool, &line, &subcommands);
     }
 }

@@ -11,9 +11,14 @@
 //!
 //! Keys arrive through the [`KeySource`] trait. The system keyring is the real
 //! source and is implemented elsewhere. [`EnvKeySource`] reads an environment
-//! variable and is for development only.
+//! variable and is for development only. [`FileKeySource`] reads a key that a
+//! model server on this computer wrote for the person, such as the access key
+//! `tur-ai-local` writes each time it starts a model.
 
 use std::fmt;
+use std::io::Read;
+use std::os::unix::fs::MetadataExt;
+use std::path::{Path, PathBuf};
 
 use zeroize::Zeroizing;
 
@@ -112,6 +117,75 @@ impl KeySource for EnvKeySource {
     }
 }
 
+/// Reads the key from a file that a service on this computer wrote for the
+/// person, and that only the person can read.
+///
+/// This is for a model server on this computer that makes a new random key
+/// each time it starts, and writes it to a file in the session's runtime
+/// directory for the programs of the person's session: `tur-ai-local`
+/// writes `$XDG_RUNTIME_DIR/tur-ai-local/api-key` (mode 0600). Such a key is
+/// not the person's to keep in the password store: it changes with every
+/// start, is worthless once the server stops, and is removed at log-out.
+///
+/// The file is refused unless it is a regular file (not a link), no larger
+/// than a key can be, and readable by nobody but its owner: no permission
+/// for the group or for others. Errors name the file and never its content.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FileKeySource {
+    path: PathBuf,
+}
+
+impl FileKeySource {
+    /// A source that reads the named file.
+    pub fn new(path: impl Into<PathBuf>) -> Self {
+        FileKeySource { path: path.into() }
+    }
+
+    /// The file.
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl KeySource for FileKeySource {
+    fn api_key(&self, provider: ProviderId) -> Result<ApiKey, ProviderError> {
+        key_from_file(&self.path).map_err(|error| error.with_provider(provider))
+    }
+}
+
+/// Read a key from a file the person alone can read. The error names the
+/// file and never its content.
+fn key_from_file(path: &Path) -> Result<ApiKey, ProviderError> {
+    let refused = |why: &str| {
+        ProviderError::new(ErrorKind::KeyUnavailable)
+            .with_detail(format!("the key file {} {why}", path.display()))
+    };
+    let metadata = std::fs::symlink_metadata(path).map_err(|error| {
+        if error.kind() == std::io::ErrorKind::NotFound {
+            refused("does not exist")
+        } else {
+            refused("cannot be read")
+        }
+    })?;
+    if !metadata.file_type().is_file() {
+        return Err(refused("is not a regular file"));
+    }
+    if metadata.mode() & 0o077 != 0 {
+        return Err(refused("can be read by others than its owner"));
+    }
+    // A key and a line break, at most.
+    let limit = KEY_MAX + 2;
+    if metadata.len() > limit as u64 {
+        return Err(refused("is larger than a key"));
+    }
+    let file = std::fs::File::open(path).map_err(|_| refused("cannot be read"))?;
+    let mut text = Zeroizing::new(String::with_capacity(limit + 1));
+    file.take(limit as u64 + 1)
+        .read_to_string(&mut text)
+        .map_err(|_| refused("cannot be read"))?;
+    ApiKey::new(std::mem::take(&mut *text)).map_err(|_| refused("does not hold a usable key"))
+}
+
 /// Turn the result of looking up `variable` into a key. The error names the
 /// variable and never its value.
 fn key_from_lookup(variable: &str, value: Option<String>) -> Result<ApiKey, ProviderError> {
@@ -193,6 +267,64 @@ mod tests {
         assert_eq!(unusable.kind(), ErrorKind::KeyUnavailable);
         assert!(unusable.to_string().contains("TUR_TEST_KEY"));
         assert!(!unusable.to_string().contains("bad key value"));
+    }
+
+    #[test]
+    fn the_file_source_reads_a_key_only_its_owner_can_read() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let directory = std::env::temp_dir().join(format!(
+            "tur-pax-providers-key-file-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&directory);
+        std::fs::create_dir_all(&directory).unwrap();
+        let path = directory.join("api-key");
+        let write = |text: &str, mode: u32| {
+            std::fs::write(&path, text).unwrap();
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(mode)).unwrap();
+        };
+        let source = FileKeySource::new(&path);
+        assert_eq!(source.path(), path);
+
+        write(&format!("{KEY}\n"), 0o600);
+        let key = source.api_key(ProviderId::OpenAiChat).unwrap();
+        assert_eq!(key.expose(), KEY);
+
+        let refusals = [
+            (KEY.to_owned(), 0o640, "can be read by others than its owner"),
+            (KEY.to_owned(), 0o604, "can be read by others than its owner"),
+            ("bad key value".to_owned(), 0o600, "does not hold a usable key"),
+            (String::new(), 0o600, "does not hold a usable key"),
+            ("k".repeat(KEY_MAX + 3), 0o600, "is larger than a key"),
+        ];
+        for (text, mode, why) in refusals {
+            write(&text, mode);
+            let error = source.api_key(ProviderId::OpenAiChat).unwrap_err();
+            assert_eq!(error.kind(), ErrorKind::KeyUnavailable);
+            assert_eq!(error.provider(), Some(ProviderId::OpenAiChat));
+            let said = error.to_string();
+            assert!(said.contains(why), "{said}");
+            assert!(said.contains("api-key"), "{said}");
+            if !text.is_empty() && text.len() < 100 {
+                assert!(!said.contains(text.trim()), "{said}");
+            }
+        }
+
+        // A link is not followed, and a file that is not there is named.
+        std::fs::remove_file(&path).unwrap();
+        let missing = source.api_key(ProviderId::OpenAiChat).unwrap_err();
+        assert!(missing.to_string().contains("does not exist"), "{missing}");
+        let target = directory.join("elsewhere");
+        std::fs::write(&target, KEY).unwrap();
+        std::fs::set_permissions(&target, std::fs::Permissions::from_mode(0o600)).unwrap();
+        std::os::unix::fs::symlink(&target, &path).unwrap();
+        let linked = source.api_key(ProviderId::OpenAiChat).unwrap_err();
+        assert!(
+            linked.to_string().contains("is not a regular file"),
+            "{linked}"
+        );
+        let _ = std::fs::remove_dir_all(&directory);
     }
 
     #[test]

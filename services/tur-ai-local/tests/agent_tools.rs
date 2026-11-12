@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
 
-//! The assistant tools this component ships: `pax/agent-tools.json`, and
+//! The assistant tools this component ships: `agent-tools.json`, and
 //! beside it the adapters that perform them with this component's own
-//! program, `pax/agent-tools.adapter.json`.
+//! program, `agent-tools.adapter.json`.
 //!
 //! The files are loaded with P@x's own loader (`tur-pax`, a development
 //! dependency of this test only), and every command line an adapter builds
@@ -24,8 +24,8 @@ use tur_pax::adapter::AdapterFile;
 use tur_pax::registry::{ADAPTER_FILE, MANIFEST_FILE, ToolRegistry, read_tool_sets};
 use tur_pax::{Action, ActionClass};
 
-const MANIFEST: &str = include_str!("../pax/agent-tools.json");
-const ADAPTERS: &str = include_str!("../pax/agent-tools.adapter.json");
+const MANIFEST: &str = include_str!("../agent-tools.json");
+const ADAPTERS: &str = include_str!("../agent-tools.adapter.json");
 
 /// The program this component built.
 const PROGRAM: &str = env!("CARGO_BIN_EXE_tur-ai-local");
@@ -321,23 +321,24 @@ fn the_tools_run_as_in_the_sandbox() {
 
 #[test]
 fn where_the_tool_set_is_and_is_not() {
-    // The two files have the names tur-pax looks for, and the directory that
-    // holds them is a tool set as tur-pax reads one.
+    // The two files are at the component's root, with the names tur-pax
+    // looks for: `services/` is read as a directory of tool sets, and this
+    // component is one of them, with exactly these files. Nothing is left
+    // one directory down, where they used to be.
     let component = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let files = read_tool_sets(component).expect("the component directory can be read");
-    assert_eq!(files.components, ["pax"]);
-    assert_eq!(files.manifests, [MANIFEST]);
-    assert_eq!(files.adapters, [ADAPTERS]);
+    let services = component.parent().expect("the services directory");
+    let files = read_tool_sets(services).expect("the services directory can be read");
+    let index = files
+        .components
+        .iter()
+        .position(|name| name == "tur-ai-local")
+        .expect("tur-ai-local is a tool set");
+    assert_eq!(files.manifests[index], MANIFEST);
     assert_eq!(
         (MANIFEST_FILE, ADAPTER_FILE),
         ("agent-tools.json", "agent-tools.adapter.json")
     );
-    // They are one directory below where the first components keep theirs,
-    // like tur-update's: `tests/pax/e2e.py` and tur-pax's own tests list the
-    // components whose tools sit directly in their directory, and adding one
-    // is a change to the assistant's tests. Until that change P@x does not
-    // load these tools by default; the local-ai workflow gives them to
-    // tur-pax explicitly.
-    assert!(!component.join(MANIFEST_FILE).exists());
-    assert!(!component.join(ADAPTER_FILE).exists());
+    assert!(component.join(MANIFEST_FILE).is_file());
+    assert!(component.join(ADAPTER_FILE).is_file());
+    assert!(!component.join("pax").exists());
 }

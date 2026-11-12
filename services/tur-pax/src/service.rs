@@ -58,7 +58,9 @@ use tur_pax_memory::{
     ScheduleEdit, ScheduleId, ScheduledAction, ShortMonth, StdFs, Timestamp, Trigger,
     UserConfirmation, is_known_zone, weekday_and_day_of,
 };
-use tur_pax_providers::{Message, ProviderConfig, SpendMeter, Usage, connect, connect_without_key};
+use tur_pax_providers::{
+    ApiKey, Message, ProviderConfig, ProviderId, SpendMeter, Usage, connect, connect_without_key,
+};
 
 use crate::audit::{AuditRecord, AuditWriteError};
 use crate::codes::{Code, Problem};
@@ -76,8 +78,8 @@ use crate::registry::{ASSISTANT_TOOLS, AssistantCall, AssistantTools, COMMAND_TO
 use crate::sandbox::{Grant, GrantRules};
 use crate::scheduler::{Runner, TaskRun, TickReport, outcome_name, run_due};
 use crate::settings::{
-    Limits, MODEL_CANNOT_ACT, ModelList, Origin, Paths, ProviderEntry, Settings, find_provider,
-    is_provider_id, providers,
+    KeySourceKind, Limits, MODEL_CANNOT_ACT, ModelList, Origin, Paths, ProviderEntry, Settings,
+    find_provider, is_provider_id, providers, runtime_key,
 };
 use crate::spending::{Ledger, TaskBudget, Zone, day_of};
 use crate::textui::{DEFAULT_TOOLS_DIR, read_json_dir, read_tools};
@@ -959,6 +961,18 @@ impl Core {
         }
     }
 
+    /// The key a model server on this computer wrote for the person, in the
+    /// file `file` of the session's runtime directory: see
+    /// [`crate::settings::runtime_key`].
+    fn runtime_key(
+        &self,
+        adapter: ProviderId,
+        file: &str,
+        address: Option<&str>,
+    ) -> Result<ApiKey, Fault> {
+        runtime_key(self.parts.paths.runtime.as_deref(), adapter, file, address)
+    }
+
     /// Switch P@x on. The caller names the version of the consent text the
     /// person read.
     ///
@@ -1088,6 +1102,12 @@ impl Core {
                     "base_url": entry.base_url,
                     "keyring_item": entry.keyring_item(),
                     "key_required": entry.key_required,
+                    "key_source": match entry.key_source() {
+                        KeySourceKind::None => "none",
+                        KeySourceKind::Keyring(_) => "keyring",
+                        KeySourceKind::RuntimeFile(_) => "runtime_file",
+                    },
+                    "runtime_key_file": entry.runtime_key_file,
                     "capabilities": entry.capabilities,
                     "data_terms": terms,
                     "data_terms_reviewed": terms.is_some_and(|terms| terms.reviewed_on.is_some()),
@@ -1182,12 +1202,28 @@ impl Core {
         // Whether a key is set is asked of the password store each time: a
         // key can be set or removed by another program. Asking never makes
         // the store prompt the person.
-        let provider = self.state().settings.provider.clone();
+        // A model server on this computer that writes its key to a file has
+        // a key while it runs: the file is looked at each time too.
+        let (provider, gateway) = {
+            let state = self.state();
+            (
+                state.settings.provider.clone(),
+                state.settings.base_url.clone(),
+            )
+        };
         if let Some(provider) = provider {
-            let found = self
-                .keyring_item(&provider)
-                .and_then(|item| self.parts.keys.is_set(&item))
-                .ok();
+            let entry = self.provider_entry(&provider).ok().map(|(entry, _)| entry);
+            let found = match entry.as_ref().map(ProviderEntry::key_source) {
+                Some(KeySourceKind::RuntimeFile(file)) => {
+                    let address = gateway.or_else(|| entry.as_ref().and_then(|e| e.base_url.clone()));
+                    let adapter = entry.as_ref().map_or(ProviderId::OpenAiChat, |e| e.adapter);
+                    Some(self.runtime_key(adapter, file, address.as_deref()).is_ok())
+                }
+                _ => self
+                    .keyring_item(&provider)
+                    .and_then(|item| self.parts.keys.is_set(&item))
+                    .ok(),
+            };
             self.state().key_set = found;
         }
 
@@ -1201,6 +1237,9 @@ impl Core {
         };
         let prices = listed.and_then(|entry| entry.prices.as_ref());
         let key_needed = current.as_ref().is_none_or(|(entry, _)| entry.key_required);
+        let key_in_file = current
+            .as_ref()
+            .is_some_and(|(entry, _)| matches!(entry.key_source(), KeySourceKind::RuntimeFile(_)));
         let abilities = match (&current, &settings.model) {
             (Some((entry, _)), Some(model)) => Some(entry.abilities(model)),
             _ => None,
@@ -1265,6 +1304,8 @@ impl Core {
             "price_known": prices.is_some(),
             "key": match state.key_set {
                 _ if !key_needed => "not_needed",
+                Some(true) if key_in_file => "in_file",
+                Some(false) if key_in_file => "file_missing",
                 Some(true) => "set",
                 Some(false) => "not_set",
                 None => "unknown",
@@ -1378,17 +1419,27 @@ impl Core {
         };
         // The key is looked for before anything starts, so that a missing
         // key is an answer to the call and not the end of a task. A server
-        // that takes no key is sent none, and none is looked for.
-        let key_needed = !matches!(
-            self.provider_entry(&provider),
-            Ok((entry, _)) if !entry.key_required
-        );
-        if key_needed {
-            let item = self.keyring_item(&provider)?;
-            let key_set = self.parts.keys.is_set(&item)?;
-            self.state().key_set = Some(key_set);
-            if !key_set {
-                return Err(coded(TaskCode::KeyNotSet));
+        // that takes no key is sent none, and none is looked for. A model
+        // server on this computer that writes its key to a file has one
+        // only while it runs.
+        let entry = self.provider_entry(&provider).ok().map(|(entry, _)| entry);
+        match entry.as_ref().map(ProviderEntry::key_source) {
+            Some(KeySourceKind::None) => {}
+            Some(KeySourceKind::RuntimeFile(file)) => {
+                let gateway = self.state().settings.base_url.clone();
+                let address = gateway.or_else(|| entry.as_ref().and_then(|e| e.base_url.clone()));
+                let adapter = entry.as_ref().map_or(ProviderId::OpenAiChat, |e| e.adapter);
+                let found = self.runtime_key(adapter, file, address.as_deref());
+                self.state().key_set = Some(found.is_ok());
+                found?;
+            }
+            Some(KeySourceKind::Keyring(_)) | None => {
+                let item = self.keyring_item(&provider)?;
+                let key_set = self.parts.keys.is_set(&item)?;
+                self.state().key_set = Some(key_set);
+                if !key_set {
+                    return Err(coded(TaskCode::KeyNotSet));
+                }
             }
         }
         let rules = GrantRules::new(self.parts.paths.home.as_deref());
@@ -1587,14 +1638,20 @@ impl Core {
             return not_started(coded(TaskCode::ServiceNotConfigured));
         };
         // A server that takes no key, such as a model server on this
-        // computer, is sent none.
-        let connected = if entry.key_required {
-            match self.parts.keys.key(entry.keyring_item()) {
+        // computer, is sent none. One that writes its key to a file is sent
+        // what the file holds now, and only at an address of this computer.
+        let connected = match entry.key_source() {
+            KeySourceKind::None => connect_without_key(&config),
+            KeySourceKind::RuntimeFile(file) => {
+                match self.runtime_key(entry.adapter, file, config.base_url.as_deref()) {
+                    Ok(key) => connect(&config, key),
+                    Err(problem) => return not_started(problem),
+                }
+            }
+            KeySourceKind::Keyring(item) => match self.parts.keys.key(item) {
                 Ok(key) => connect(&config, key),
                 Err(problem) => return not_started(problem),
-            }
-        } else {
-            connect_without_key(&config)
+            },
         };
         let provider = match connected {
             Ok(provider) => provider,
@@ -1712,6 +1769,7 @@ impl Core {
             };
             let request = TaskRequest {
                 task_id: &job.id,
+                provider_id: Some(&entry.id),
                 request: &job.request,
                 recalled: &recalled,
             };
@@ -2627,6 +2685,7 @@ pub fn activity_from(trail: &str, limit: usize) -> Vec<Value> {
                 .first()
                 .and_then(|line| line.get("TUR_AI_PROVIDER"))
                 .and_then(Value::as_str),
+            "provider_id": find("task_started", "TUR_AI_PROVIDER_ID"),
             "outcome": find("task_finished", "TUR_AI_OUTCOME"),
             "error_code": find("task_finished", "TUR_ERROR_CODE"),
             "schedule": find("schedule_run", "TUR_AI_SCHEDULE"),
