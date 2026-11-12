@@ -261,9 +261,9 @@ impl Origin {
 pub fn is_provider_id(id: &str) -> bool {
     (1..=32).contains(&id.len())
         && id.as_bytes()[0].is_ascii_lowercase()
-        && id
-            .bytes()
-            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'-' | b'_'))
+        && id.bytes().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'-' | b'_')
+        })
 }
 
 impl ProviderEntry {
@@ -320,7 +320,11 @@ impl ProviderEntry {
         if !is_provider_id(&self.id) {
             return Err("the identifier of a provider is not valid".to_owned());
         }
-        if self.keyring_item.as_deref().is_some_and(|item| !is_provider_id(item)) {
+        if self
+            .keyring_item
+            .as_deref()
+            .is_some_and(|item| !is_provider_id(item))
+        {
             return Err(format!("the keyring item of {} is not valid", self.id));
         }
         let name_ok = !self.name.trim().is_empty()
@@ -355,9 +359,15 @@ impl ProviderEntry {
                 return Err(format!("an output limit of {} is zero", self.id));
             }
             if let Some(prices) = &model.prices
-                && self.probe(&model.model, Some(prices.clone())).validate().is_err()
+                && self
+                    .probe(&model.model, Some(prices.clone()))
+                    .validate()
+                    .is_err()
             {
-                return Err(format!("the prices of a model of {} are not valid", self.id));
+                return Err(format!(
+                    "the prices of a model of {} are not valid",
+                    self.id
+                ));
             }
         }
         Ok(())
@@ -445,8 +455,11 @@ pub fn is_model_name(name: &str) -> bool {
 /// it. A family for a kind of interface many services offer (the
 /// OpenAI-compatible Chat Completions of ADR-0004's amendment) has no such
 /// company and does not belong here.
-pub const COMPANY_FAMILIES: [ProviderId; 3] =
-    [ProviderId::Anthropic, ProviderId::OpenAi, ProviderId::Google];
+pub const COMPANY_FAMILIES: [ProviderId; 3] = [
+    ProviderId::Anthropic,
+    ProviderId::OpenAi,
+    ProviderId::Google,
+];
 
 /// Every provider there is, by identifier: the model list's, then the
 /// person's own, then the adapter families' companies no list names.
@@ -1079,17 +1092,23 @@ mod tests {
     #[test]
     fn consent_for_one_provider_or_one_text_does_not_cover_another() {
         let mut settings = Settings::default();
-        settings.set_provider("anthropic", "m", &ModelList::empty()).expect("a provider");
+        settings
+            .set_provider("anthropic", "m", &ModelList::empty())
+            .expect("a provider");
         settings.base_url = Some("https://gateway.example.org".to_owned());
         settings.enable(CONSENT_TEXT_VERSION, 5).expect("enabled");
 
         // Another model of the same provider: nothing is withdrawn.
-        settings.set_provider("anthropic", "m2", &ModelList::empty()).expect("a model");
+        settings
+            .set_provider("anthropic", "m2", &ModelList::empty())
+            .expect("a model");
         assert!(settings.enabled);
         assert!(settings.base_url.is_some());
 
         // Another provider: off, no consent, and the gateway address gone.
-        settings.set_provider("openai", "m3", &ModelList::empty()).expect("a provider");
+        settings
+            .set_provider("openai", "m3", &ModelList::empty())
+            .expect("a provider");
         assert!(!settings.enabled);
         assert_eq!(settings.consent, None);
         assert_eq!(settings.base_url, None);
@@ -1255,7 +1274,9 @@ mod tests {
         settings.limits = Limits::default();
         settings.max_output_tokens = None;
         for model in ["unpriced-model", "typed-by-hand"] {
-            settings.set_provider("anthropic", model, &ModelList::empty()).expect("a model");
+            settings
+                .set_provider("anthropic", model, &ModelList::empty())
+                .expect("a model");
             let config = settings.provider_config(&models).expect("a configuration");
             assert_eq!(config.prices, None, "{model}");
             assert_eq!(config.max_output_tokens, DEFAULT_MAX_OUTPUT_TOKENS);
@@ -1342,7 +1363,10 @@ mod tests {
         let config = settings.provider_config(&models).expect("a configuration");
         assert_eq!(config.provider, ProviderId::OpenAi);
         assert_eq!(config.base_url.as_deref(), Some("https://api.example.org"));
-        assert_eq!(config.prices.map(|prices| prices.output_per_million), Some(1.0));
+        assert_eq!(
+            config.prices.map(|prices| prices.output_per_million),
+            Some(1.0)
+        );
 
         // The adapter families' own companies exist without any list.
         for adapter in COMPANY_FAMILIES {
@@ -1385,7 +1409,9 @@ mod tests {
             .set_provider("deepseek", "chat-model", &models)
             .expect("a provider");
         assert_eq!(
-            shadow.current_provider(&models).map(|(entry, origin)| (entry.name, origin)),
+            shadow
+                .current_provider(&models)
+                .map(|(entry, origin)| (entry.name, origin)),
             Some(("DeepSeek".to_owned(), Origin::Listed))
         );
         // Unknown identifiers cannot be chosen; bad entries are refused.
@@ -1459,9 +1485,13 @@ mod tests {
             Box::new(|value: &mut serde_json::Value| {
                 value["providers"][0]["models"][0]["api_key"] = "x".into()
             }),
-            Box::new(|value: &mut serde_json::Value| value["providers"][0]["id"] = "Anthropic".into()),
+            Box::new(|value: &mut serde_json::Value| {
+                value["providers"][0]["id"] = "Anthropic".into()
+            }),
             Box::new(|value: &mut serde_json::Value| value["providers"][0]["id"] = "".into()),
-            Box::new(|value: &mut serde_json::Value| value["providers"][0]["adapter"] = "claude".into()),
+            Box::new(|value: &mut serde_json::Value| {
+                value["providers"][0]["adapter"] = "claude".into()
+            }),
             Box::new(|value: &mut serde_json::Value| {
                 value["providers"][0]["keyring_item"] = "a b".into()
             }),

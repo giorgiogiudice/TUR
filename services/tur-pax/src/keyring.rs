@@ -438,10 +438,7 @@ impl KeyStore for SecretService {
                     "org.freedesktop.Secret.Item.Label",
                     Value::string(format!("P@x: key for {item}")),
                 ),
-                (
-                    "org.freedesktop.Secret.Item.Attributes",
-                    attributes(item),
-                ),
+                ("org.freedesktop.Secret.Item.Attributes", attributes(item)),
             ]);
             let secret = Value::Struct(vec![
                 Value::path(session.session.clone()),
@@ -588,11 +585,7 @@ mod tests {
         let store = MemoryKeyStore::new();
         assert!(!store.is_set("anthropic").expect("answered"));
         assert_eq!(
-            store
-                .key("anthropic")
-                .expect_err("no key")
-                .code
-                .as_str(),
+            store.key("anthropic").expect_err("no key").code.as_str(),
             "TUR-AI-KEY-002"
         );
         store.set("anthropic", KEY).expect("stored");

@@ -264,7 +264,8 @@ impl World {
     fn ready(name: &str, server: &FakeServer) -> World {
         let base_url = server.base_url();
         let world = World::new(name, |settings| {
-            settings.set_provider("anthropic", "test-model", &ModelList::empty())
+            settings
+                .set_provider("anthropic", "test-model", &ModelList::empty())
                 .expect("a provider");
             settings.base_url = Some(base_url);
             settings
@@ -421,10 +422,7 @@ fn p_a_x_refuses_tasks_until_it_is_switched_on_with_the_current_consent() {
     // The acceptance is in the file, with the provider it was given for.
     let saved = Settings::load(&world.paths.settings).expect("the settings");
     assert!(saved.enabled);
-    assert_eq!(
-        saved.consent.expect("recorded").provider,
-        "anthropic"
-    );
+    assert_eq!(saved.consent.expect("recorded").provider, "anthropic");
 
     // Switched on, with no key.
     assert_eq!(refusal(&world), "TUR-AI-KEY-002");
@@ -1046,7 +1044,9 @@ fn a_reminder_proposed_in_conversation_fires_only_once_the_person_confirmed_it()
 #[test]
 fn a_reminder_that_came_due_while_the_computer_was_off_says_when_it_was_due() {
     let world = World::new("late", |settings| {
-        settings.set_provider("anthropic", "m", &ModelList::empty()).expect("a provider");
+        settings
+            .set_provider("anthropic", "m", &ModelList::empty())
+            .expect("a provider");
         settings.enable(CONSENT_TEXT_VERSION, NOW).expect("on");
     });
     let definition = json!({
@@ -1216,7 +1216,11 @@ fn a_provider_added_by_hand_is_used_by_its_identifier_and_keyring_item() {
     assert_eq!(result["outcome"], "completed");
     assert_eq!(result["answer"], "Hello from elsewhere.");
     assert_eq!(
-        server.requests().iter().map(|request| request.path.clone()).collect::<Vec<_>>(),
+        server
+            .requests()
+            .iter()
+            .map(|request| request.path.clone())
+            .collect::<Vec<_>>(),
         ["/v1/responses"]
     );
     // It is listed beside the families' own companies.
