@@ -498,7 +498,8 @@ fn f20_a_class_1_relaxation_is_not_part_of_the_file_format() {
 
 #[test]
 fn f21_a_repeated_key_inside_a_standing_approval_is_rejected() {
-    let once = r#"{"service":"org.uos.Test1","tool":"mail_send","arguments":{"to":"a@example.org"}}"#;
+    let once =
+        r#"{"service":"org.uos.Test1","tool":"mail_send","arguments":{"to":"a@example.org"}}"#;
     assert!(serde_json::from_str::<StandingApproval>(once).is_ok());
 
     let twice = r#"{"service":"org.uos.Test1","tool":"mail_send","arguments":{"to":"a@example.org","to":"b@example.org"}}"#;
