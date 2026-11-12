@@ -1,0 +1,152 @@
+{
+  "schema_version": 1,
+  "boot_id": "ae5a5f6742e54f1c8f3e35566002350e",
+  "build_id": "20261112.g173effe13bec",
+  "boot": {
+    "schema_version": 1,
+    "boot_id": "ae5a5f6742e54f1c8f3e35566002350e",
+    "classification": "normal",
+    "boot_argument": "none",
+    "tries_left": null,
+    "contract": "1",
+    "deployment": "bb6536c239e8139dc9e5f67852b068677ebf4c318ca5151027e10120d5c5ca04.0",
+    "image_digest": "sha256:864f59815ad6f533c6ff8774dbe9a0e1459a59bc02f361e6e4cbd05446060b6a",
+    "build_id": "20261112.g173effe13bec",
+    "event_id": null
+  },
+  "verdict": {
+    "schema_version": 1,
+    "boot_id": "ae5a5f6742e54f1c8f3e35566002350e",
+    "classification": "normal",
+    "result": "degraded",
+    "failed_check": null,
+    "error_code": null,
+    "failed_detail": null,
+    "finished_uptime_ms": 29970,
+    "checks": [
+      {
+        "id": "R1",
+        "name": "root filesystem",
+        "required": true,
+        "state": "succeeded",
+        "error_code": null,
+        "detail": "/ is the composefs mount of deployment bb6536c239e8139dc9e5f67852b068677ebf4c318ca5151027e10120d5c5ca04.0",
+        "duration_ms": 960
+      },
+      {
+        "id": "R2",
+        "name": "critical paths",
+        "required": true,
+        "state": "succeeded",
+        "error_code": null,
+        "detail": "os-release, the TUR release file and the GRUB environment block are readable; /var/lib/tur is writable",
+        "duration_ms": 10
+      },
+      {
+        "id": "R3",
+        "name": "default target",
+        "required": true,
+        "state": "succeeded",
+        "error_code": null,
+        "detail": "graphical.target is active",
+        "duration_ms": 3240
+      },
+      {
+        "id": "R4",
+        "name": "core units",
+        "required": true,
+        "state": "succeeded",
+        "error_code": null,
+        "detail": "active: dbus.service, systemd-logind.service, systemd-journald.service, systemd-udevd.service",
+        "duration_ms": 90
+      },
+      {
+        "id": "R5",
+        "name": "TUR units",
+        "required": true,
+        "state": "skipped",
+        "error_code": null,
+        "detail": "no unit is listed in required-units.d",
+        "duration_ms": 0
+      },
+      {
+        "id": "R6",
+        "name": "display manager",
+        "required": true,
+        "state": "succeeded",
+        "error_code": null,
+        "detail": "display-manager.service is active",
+        "duration_ms": 20
+      },
+      {
+        "id": "R7",
+        "name": "seat session",
+        "required": true,
+        "state": "succeeded",
+        "error_code": null,
+        "detail": "session c1 type wayland class greeter state active, compositor process 1152",
+        "duration_ms": 70
+      },
+      {
+        "id": "R8",
+        "name": "stability",
+        "required": true,
+        "state": "succeeded",
+        "error_code": null,
+        "detail": "unchanged after 15 s: session c1 type wayland class greeter state active, compositor process 1152",
+        "duration_ms": 15080
+      },
+      {
+        "id": "W1",
+        "name": "failed units",
+        "required": false,
+        "state": "failed",
+        "error_code": null,
+        "detail": "mcelog.service",
+        "duration_ms": 0
+      },
+      {
+        "id": "W8",
+        "name": "finalisation of the previous update",
+        "required": false,
+        "state": "succeeded",
+        "error_code": null,
+        "detail": "ostree-boot-complete.service is inactive",
+        "duration_ms": 0
+      },
+      {
+        "id": "W10",
+        "name": "boot attempts can be counted",
+        "required": false,
+        "state": "succeeded",
+        "error_code": null,
+        "detail": "contract version on the kernel command line: 1; /boot/grub2 is on ext4 on /dev/vda3 (a plain partition)",
+        "duration_ms": 0
+      },
+      {
+        "id": "W12",
+        "name": "hardware watchdog",
+        "required": false,
+        "state": "succeeded",
+        "error_code": null,
+        "detail": "iTCO_wdt",
+        "duration_ms": 0
+      }
+    ]
+  },
+  "counting": {
+    "usable": true,
+    "contract": "1",
+    "layout": "ext4 on /dev/vda3 (a plain partition)",
+    "environment_block": "valid",
+    "boot_counter": null
+  },
+  "watchdog": "iTCO_wdt",
+  "trial": null,
+  "rejected": {
+    "schema_version": 1,
+    "images": []
+  },
+  "notice": null,
+  "recent_events": []
+}

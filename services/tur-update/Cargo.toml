@@ -1,0 +1,44 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+[package]
+name = "tur-update"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+license = "LicenseRef-TUR-Noncommercial-1.0.0"
+description = "TUR update manager, first slice: the model of system state read from bootc, the update policy, and plans that are printed and never run."
+repository = "https://github.com/giorgiogiudice/TUR"
+publish = false
+
+# Each component is its own workspace with its own lockfile. See ADR-0005.
+[workspace]
+
+[lib]
+name = "tur_update"
+path = "src/lib.rs"
+
+[[bin]]
+name = "tur-update"
+path = "src/main.rs"
+
+# Three third-party crates, the same three tur-storage uses, all under
+# MIT OR Apache-2.0.
+[dependencies]
+tur-core = { path = "../../crates/tur-core" }
+# Deserialises `bootc status --format=json` and the boot-health status, and
+# serialises the versioned JSON reports.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Command-line parsing. Colour and suggestion features are left out to keep the
+# dependency tree small; the `env` feature is deliberately not enabled, so no
+# argument can be supplied through the environment.
+clap = { version = "4", default-features = false, features = ["std", "derive", "help", "usage", "error-context"] }
+
+[dev-dependencies]
+# P@x's loader of tool manifests and adapters, to check the ones this
+# component ships (tests/agent_tools.rs). Only that test uses it; the
+# program does not depend on the assistant.
+tur-pax = { path = "../tur-pax" }
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"

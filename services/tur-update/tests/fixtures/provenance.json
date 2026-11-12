@@ -1,0 +1,346 @@
+{
+  "schema_version": 1,
+  "description": "Where every fixture in this directory comes from. Fixtures of kind ci-capture are the unchanged output of a program in a CI run of this repository; sha256 is the hash of the file as it is in the run's artifact. Fixtures of kind upstream-fixture are samples from bootc's source tree, converted from YAML to JSON by services/tur-update/ci/check_fixtures.py, which the update workflow runs to check them; they are under bootc's licence (bootc-upstream/LICENSE-MIT). Fixtures of kind written are written by hand for a state no capture or upstream sample shows; each says what it was derived from.",
+  "bootc_version": "1.17.1",
+  "fixtures": [
+    {
+      "file": "bootc/container-base-image.json",
+      "kind": "ci-capture",
+      "content": "bootc-status",
+      "state": "The pinned base image run as a container with podman: bootc reports a host that is not a bootc host. An ordinary user in the container got the same document.",
+      "source": {
+        "repository": "giorgiogiudice/TUR",
+        "workflow": "update",
+        "run_id": 43224766510,
+        "commit": "20acc2e9819c8810e707b60e5c9d995b952381ea",
+        "branch": "feat/tur-update (pull request 44)",
+        "artifact": "tur-update-bootc",
+        "image": "quay.io/fedora/fedora-kinoite@sha256:f857f6c5da48a7c39721e40de51d9c0fef446a25e0360be4fb8964cbdf48f537",
+        "path": "status-json.out",
+        "command": "bootc status --format=json"
+      },
+      "sha256": "4a7d60eaebc7793d14f9464682ea1d6edc9a71845e75ee5374c4bcfdf7a4fcee"
+    },
+    {
+      "file": "bootc/tur-booted.json",
+      "kind": "ci-capture",
+      "content": "bootc-status",
+      "state": "The TUR test image after installation, first boot: one deployment.",
+      "source": {
+        "repository": "giorgiogiudice/TUR",
+        "workflow": "boot",
+        "run_id": 43186059647,
+        "commit": "6a13a68b00a2cec273477feaad950e0f84d1b7f6",
+        "branch": "main",
+        "artifact": "tur-boot-test",
+        "path": "guest-from-disk/first-boot/bootc-status.json",
+        "command": "bootc status --json"
+      },
+      "sha256": "4615e6448a53850feba44c56eb6f1aefac40a9fdb1d5720d371cc6b4f45a96f7"
+    },
+    {
+      "file": "bootc/tur-staged.json",
+      "kind": "ci-capture",
+      "content": "bootc-status",
+      "state": "The same kind of machine after `bootc switch --transport oci`: a staged deployment beside the booted one.",
+      "source": {
+        "repository": "giorgiogiudice/TUR",
+        "workflow": "rollback",
+        "run_id": 43207801019,
+        "commit": "c1667d989357ea67b2eba22ff876078e50369378",
+        "branch": "feat/boot-health (pull request 36)",
+        "artifact": "tur-rollback-failing-gate",
+        "path": "check-fails/guest/stage-1/bootc-status-staged.json",
+        "command": "bootc status --format=json"
+      },
+      "sha256": "0877893cc44383619759999324afdff4b9974f4294bd7c7a0b99b969d09936c7"
+    },
+    {
+      "file": "bootc/tur-after-fallback.json",
+      "kind": "ci-capture",
+      "content": "bootc-status",
+      "state": "After the staged version failed three counted attempts and tur-boot-health made the fallback permanent: the previous version is booted, the failed one is the rollback entry.",
+      "source": {
+        "repository": "giorgiogiudice/TUR",
+        "workflow": "rollback",
+        "run_id": 43207801019,
+        "commit": "c1667d989357ea67b2eba22ff876078e50369378",
+        "branch": "feat/boot-health (pull request 36)",
+        "artifact": "tur-rollback-failing-gate",
+        "path": "check-fails/guest/boot-4/bootc-status.json",
+        "command": "bootc status --format=json"
+      },
+      "sha256": "6b1ad4098e201d1ecfa4079e379c42a388007fbabb71aac6c9f10d66b887ff6d"
+    },
+    {
+      "file": "bootc/tur-after-update.json",
+      "kind": "ci-capture",
+      "content": "bootc-status",
+      "state": "After a good update: the new version is booted, the previous one is the rollback entry.",
+      "source": {
+        "repository": "giorgiogiudice/TUR",
+        "workflow": "rollback",
+        "run_id": 43207801019,
+        "commit": "c1667d989357ea67b2eba22ff876078e50369378",
+        "branch": "feat/boot-health (pull request 36)",
+        "artifact": "tur-rollback-kept-or-not-applied",
+        "path": "good/guest/boot-1/bootc-status.json",
+        "command": "bootc status --format=json"
+      },
+      "sha256": "62dd8987f37e974130e1899745e0e697e2b800ebc5055f5847a33b73366602c2"
+    },
+    {
+      "file": "boot-health/normal.json",
+      "kind": "ci-capture",
+      "content": "boot-health-status",
+      "state": "tur-boot-health status --json on an ordinary boot, taken with bootc/tur-staged.json.",
+      "source": {
+        "repository": "giorgiogiudice/TUR",
+        "workflow": "rollback",
+        "run_id": 43207801019,
+        "commit": "c1667d989357ea67b2eba22ff876078e50369378",
+        "branch": "feat/boot-health (pull request 36)",
+        "artifact": "tur-rollback-failing-gate",
+        "path": "check-fails/guest/stage-1/tur-status.json",
+        "command": "tur-boot-health status --json"
+      },
+      "sha256": "ce58feb5b48b02c5f62eac70764b9e3fd1c225f4c41187b481899411627fe576"
+    },
+    {
+      "file": "boot-health/after-fallback.json",
+      "kind": "ci-capture",
+      "content": "boot-health-status",
+      "state": "After a fallback: one rejected image and a notice. Taken with bootc/tur-after-fallback.json.",
+      "source": {
+        "repository": "giorgiogiudice/TUR",
+        "workflow": "rollback",
+        "run_id": 43207801019,
+        "commit": "c1667d989357ea67b2eba22ff876078e50369378",
+        "branch": "feat/boot-health (pull request 36)",
+        "artifact": "tur-rollback-failing-gate",
+        "path": "check-fails/guest/boot-4/tur-status.json",
+        "command": "tur-boot-health status --json"
+      },
+      "sha256": "748e84870f092573b72f5e35c5398f19f55bc36e8ab9631344438469c5fb937a"
+    },
+    {
+      "file": "boot-health/after-update.json",
+      "kind": "ci-capture",
+      "content": "boot-health-status",
+      "state": "The first boot of a good update, after it was marked good. Taken with bootc/tur-after-update.json.",
+      "source": {
+        "repository": "giorgiogiudice/TUR",
+        "workflow": "rollback",
+        "run_id": 43207801019,
+        "commit": "c1667d989357ea67b2eba22ff876078e50369378",
+        "branch": "feat/boot-health (pull request 36)",
+        "artifact": "tur-rollback-kept-or-not-applied",
+        "path": "good/guest/boot-1/tur-status.json",
+        "command": "tur-boot-health status --json"
+      },
+      "sha256": "fc2a66d17fd9760a7b5fd08f9df4791ad0b573551b99152ff547cb1ef76bf683"
+    },
+    {
+      "file": "boot-health/not-applied.json",
+      "kind": "ci-capture",
+      "content": "boot-health-status",
+      "state": "An update whose finalisation failed: the old version is running and a not-applied notice is pending.",
+      "source": {
+        "repository": "giorgiogiudice/TUR",
+        "workflow": "rollback",
+        "run_id": 43207801019,
+        "commit": "c1667d989357ea67b2eba22ff876078e50369378",
+        "branch": "feat/boot-health (pull request 36)",
+        "artifact": "tur-rollback-kept-or-not-applied",
+        "path": "finalize-fails/guest/boot-1/tur-status.json",
+        "command": "tur-boot-health status --json"
+      },
+      "sha256": "f3e559bcc3dc072afaccce709584ea757c7e400e9a19b9e2e45a5ea8d6862d99"
+    },
+    {
+      "file": "boot-health/rejected.json",
+      "kind": "ci-capture",
+      "content": "boot-health-rejected",
+      "state": "The state file /var/lib/tur/boot-health/rejected.json after a fallback.",
+      "source": {
+        "repository": "giorgiogiudice/TUR",
+        "workflow": "rollback",
+        "run_id": 43207801019,
+        "commit": "c1667d989357ea67b2eba22ff876078e50369378",
+        "branch": "feat/boot-health (pull request 36)",
+        "artifact": "tur-rollback-failing-gate",
+        "path": "check-fails/guest/boot-4/boot-health/rejected.json",
+        "command": "(file copied from the guest)"
+      },
+      "sha256": "6914b2de540812f565853bb2e73a5b039e5721485c492c3e666467ed63a6275b"
+    },
+    {
+      "file": "bootc-upstream/booted-pinned.json",
+      "kind": "upstream-fixture",
+      "content": "bootc-status",
+      "source": {
+        "repository": "bootc-dev/bootc",
+        "tag": "v1.17.1",
+        "path": "crates/lib/src/fixtures/spec-booted-pinned.yaml",
+        "blob_sha": "3043946624cf4c9c278a477f5185c14d5ea50822",
+        "licence": "MIT OR Apache-2.0"
+      }
+    },
+    {
+      "file": "bootc-upstream/booted-update-same-digest.json",
+      "kind": "upstream-fixture",
+      "content": "bootc-status",
+      "source": {
+        "repository": "bootc-dev/bootc",
+        "tag": "v1.17.1",
+        "path": "crates/lib/src/fixtures/spec-booted-update-same-digest.yaml",
+        "blob_sha": "3b3b5eaeff0e6685cdb901b0cdfa7ac69143e62e",
+        "licence": "MIT OR Apache-2.0"
+      }
+    },
+    {
+      "file": "bootc-upstream/booted-usroverlay.json",
+      "kind": "upstream-fixture",
+      "content": "bootc-status",
+      "source": {
+        "repository": "bootc-dev/bootc",
+        "tag": "v1.17.1",
+        "path": "crates/lib/src/fixtures/spec-booted-usroverlay.yaml",
+        "blob_sha": "5e8a68ae18bca1628762b16d8d81ba192fe424cd",
+        "licence": "MIT OR Apache-2.0"
+      }
+    },
+    {
+      "file": "bootc-upstream/booted-with-update-no-version.json",
+      "kind": "upstream-fixture",
+      "content": "bootc-status",
+      "source": {
+        "repository": "bootc-dev/bootc",
+        "tag": "v1.17.1",
+        "path": "crates/lib/src/fixtures/spec-booted-with-update-no-version.yaml",
+        "blob_sha": "b76624be5dd701e655137f39a9aebf8f51a16679",
+        "licence": "MIT OR Apache-2.0"
+      }
+    },
+    {
+      "file": "bootc-upstream/booted-with-update.json",
+      "kind": "upstream-fixture",
+      "content": "bootc-status",
+      "source": {
+        "repository": "bootc-dev/bootc",
+        "tag": "v1.17.1",
+        "path": "crates/lib/src/fixtures/spec-booted-with-update.yaml",
+        "blob_sha": "66d056255a2dbf9f27a750f720bcaf2db7f56036",
+        "licence": "MIT OR Apache-2.0"
+      }
+    },
+    {
+      "file": "bootc-upstream/only-booted.json",
+      "kind": "upstream-fixture",
+      "content": "bootc-status",
+      "source": {
+        "repository": "bootc-dev/bootc",
+        "tag": "v1.17.1",
+        "path": "crates/lib/src/fixtures/spec-only-booted.yaml",
+        "blob_sha": "212250e4d28b126cc85d04783d341fc192b6f3ee",
+        "licence": "MIT OR Apache-2.0"
+      }
+    },
+    {
+      "file": "bootc-upstream/ostree-remote.json",
+      "kind": "upstream-fixture",
+      "content": "bootc-status",
+      "source": {
+        "repository": "bootc-dev/bootc",
+        "tag": "v1.17.1",
+        "path": "crates/lib/src/fixtures/spec-ostree-remote.yaml",
+        "blob_sha": "49185940d019c62cd230e1910ef5542d009ca0b5",
+        "licence": "MIT OR Apache-2.0"
+      }
+    },
+    {
+      "file": "bootc-upstream/ostree-to-bootc.json",
+      "kind": "upstream-fixture",
+      "content": "bootc-status",
+      "source": {
+        "repository": "bootc-dev/bootc",
+        "tag": "v1.17.1",
+        "path": "crates/lib/src/fixtures/spec-ostree-to-bootc.yaml",
+        "blob_sha": "e37a05586a21129a18128afd6096a6586d4c6b32",
+        "licence": "MIT OR Apache-2.0"
+      }
+    },
+    {
+      "file": "bootc-upstream/rfe-ostree-deployment.json",
+      "kind": "upstream-fixture",
+      "content": "bootc-status",
+      "source": {
+        "repository": "bootc-dev/bootc",
+        "tag": "v1.17.1",
+        "path": "crates/lib/src/fixtures/spec-rfe-ostree-deployment.yaml",
+        "blob_sha": "89a0d51076da4767c64dba795776f3896c32bee3",
+        "licence": "MIT OR Apache-2.0"
+      }
+    },
+    {
+      "file": "bootc-upstream/staged-booted.json",
+      "kind": "upstream-fixture",
+      "content": "bootc-status",
+      "source": {
+        "repository": "bootc-dev/bootc",
+        "tag": "v1.17.1",
+        "path": "crates/lib/src/fixtures/spec-staged-booted.yaml",
+        "blob_sha": "2982c2b1df8288db45e06fa94f15b10cafa93611",
+        "licence": "MIT OR Apache-2.0"
+      }
+    },
+    {
+      "file": "bootc-upstream/staged-download-only.json",
+      "kind": "upstream-fixture",
+      "content": "bootc-status",
+      "source": {
+        "repository": "bootc-dev/bootc",
+        "tag": "v1.17.1",
+        "path": "crates/lib/src/fixtures/spec-staged-download-only.yaml",
+        "blob_sha": "6c71d15e1af716936ce5cdd69fc8702b810833d4",
+        "licence": "MIT OR Apache-2.0"
+      }
+    },
+    {
+      "file": "bootc-upstream/staged-rollback.json",
+      "kind": "upstream-fixture",
+      "content": "bootc-status",
+      "source": {
+        "repository": "bootc-dev/bootc",
+        "tag": "v1.17.1",
+        "path": "crates/lib/src/fixtures/spec-staged-rollback.yaml",
+        "blob_sha": "12322b593aa081ae5f34fb46e11cce9adf91336a",
+        "licence": "MIT OR Apache-2.0"
+      }
+    },
+    {
+      "file": "bootc-upstream/v1-null.json",
+      "kind": "upstream-fixture",
+      "content": "bootc-status",
+      "source": {
+        "repository": "bootc-dev/bootc",
+        "tag": "v1.17.1",
+        "path": "crates/lib/src/fixtures/spec-v1-null.json",
+        "blob_sha": "afd801a9e9aee7967cc9eb3a68a6a4236b3911f4",
+        "licence": "MIT OR Apache-2.0"
+      }
+    },
+    {
+      "file": "bootc-upstream/via-local-oci.json",
+      "kind": "upstream-fixture",
+      "content": "bootc-status",
+      "source": {
+        "repository": "bootc-dev/bootc",
+        "tag": "v1.17.1",
+        "path": "crates/lib/src/fixtures/spec-via-local-oci.yaml",
+        "blob_sha": "f972c851562ccdfe9637010c639a913949354a36",
+        "licence": "MIT OR Apache-2.0"
+      }
+    }
+  ]
+}
