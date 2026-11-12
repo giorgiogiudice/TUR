@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Starts tur-settings when something calls org.tur.Settings1 on the session
+# bus and no Settings window is open ("started on demand",
+# docs/architecture/desktop-experience.md, 10.3). Installed as
+# /usr/share/dbus-1/services/org.tur.Settings1.service.
+[D-BUS Service]
+Name=org.tur.Settings1
+Exec=/usr/bin/tur-settings

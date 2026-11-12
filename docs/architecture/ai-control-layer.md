@@ -1,6 +1,6 @@
 # AI control layer
 
-**Specification addendum A — Revision 9 (12 November 2026)**
+**Specification addendum A — Revision 10 (12 November 2026)**
 **Applies to:** specification revision 1.0
 **Related decision:** [ADR-0004](../adr/0004-ai-provider-model.md)
 
@@ -845,3 +845,13 @@ were checked against upstream sources and Fedora package file lists on
 12 November 2026 ([agent-policy.md](agent-policy.md), section 2.5). Fourteen
 identifiers could not be verified and are marked there. None has been checked on
 the TUR image.
+
+## 23. The owner's decisions on approval and stopping (12 November 2026)
+
+| # | Question | Decision |
+|---|---|---|
+| 1 | Where a class 2 action (send, buy, delete, install) is approved | **On the desktop**, in an approval sheet protected by TUR's own code. Class 3, opening a repair session, and anything that loosens P@x's limits stay on the separate trusted screen. Section 6 and the policy engine's interpretation 29 are to be amended to name the two levels. Until the approval sheet exists (desktop task D-18), P@x still performs nothing above class 1. |
+| 2 | A stop control nothing in the session can suppress | **Allowed:** a small system service that reads physical keyboards and reports only that the stop combination was pressed and that some physical key was used. It needs its own ADR and a review before it ships. |
+| 3 | How the person knows how to stop P@x | **The stop combination and P@x's other keyboard commands are visible at all times** while P@x is switched on, in P@x's indicator, with the full list one action away. |
+| 4 | Testing against a real provider | The owner has supplied a short-lived Anthropic key for CI. It is used only by a manually started workflow with a hard limit on requests and tokens per run, never on pull requests, and never printed. |
+

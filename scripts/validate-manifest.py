@@ -40,6 +40,27 @@ def main() -> int:
         if any(value == p or value.startswith(p + "-") for p in PLACEHOLDERS):
             errors.append(f"{path}: placeholder value {value!r}")
 
+    # The programs the image holds are the ones image/programs.tsv names, each
+    # where that file says: nothing was left out and nothing came from
+    # elsewhere.
+    wanted = {}
+    for line in (ROOT / "image" / "programs.tsv").read_text().splitlines():
+        if line.strip() and not line.startswith("#"):
+            component, program, where = line.split("\t")
+            wanted[program] = (where, component)
+    found = {}
+    for program in manifest.get("programs") or []:
+        if isinstance(program, dict):
+            found[program.get("name")] = (program.get("path"), program.get("component"))
+    for name in sorted(set(wanted) | set(found)):
+        if wanted.get(name) != found.get(name):
+            errors.append(
+                f"programs: {name}: image/programs.tsv says {wanted.get(name)}, the image has {found.get(name)}"
+            )
+    hashes = [program.get("sha256") for program in manifest.get("programs") or [] if isinstance(program, dict)]
+    if len(set(hashes)) != len(hashes):
+        errors.append("programs: two programs have the same SHA-256")
+
     if errors:
         print("build manifest is invalid:")
         for error in errors:

@@ -23,8 +23,16 @@ read -r -a podman <<<"${PODMAN:-podman}"
 set -u
 fail=0
 check() { # check DESCRIPTION COMMAND...
-    local what="$1"; shift
-    if "$@" >/dev/null 2>&1; then echo "PASS  ${what}"; else echo "FAIL  ${what}"; fail=1; fi
+    local what="$1" said; shift
+    # No command may read this script, which arrives on standard input. What
+    # a failing command printed is shown: a FAIL alone says too little.
+    if said="$("$@" 2>&1 </dev/null)"; then
+        echo "PASS  ${what}"
+    else
+        echo "FAIL  ${what}"
+        printf '%s\n' "${said}" | head -n 12 | sed 's/^/      | /'
+        fail=1
+    fi
 }
 osr() { ( . /usr/lib/os-release; eval "printf '%s' \"\${$1:-}\"" ); }
 turr() { ( . /usr/lib/tur/release; eval "printf '%s' \"\${$1:-}\"" ); }
@@ -100,6 +108,128 @@ check "the journal is persistent by decision" grep -qx 'Storage=persistent' /usr
 check "state directories are declared"        grep -q '^d /var/lib/tur/boot-health ' /usr/lib/tmpfiles.d/tur-boot-health.conf
 check "the gate's configuration is in the image" grep -qx 'attempts = 3' /usr/lib/tur/boot-health/gate.toml
 check "no TUR file under /etc"                bash -c '! ls -d /etc/tur* /usr/etc/tur* 2>/dev/null | grep -q .'
+
+# TUR's own programs (image/programs.tsv; image/README.md, "Programs built
+# into the image"). The list the build wrote is in the image.
+programs=/usr/lib/tur/programs.tsv
+check "the list of TUR programs is in the image" test -s "${programs}"
+check "eleven programs are listed"            bash -c '[ "$(grep -c -v "^#" "$1")" = 11 ]' _ "${programs}"
+echo "--- TUR programs"
+while IFS=$'\t' read -r program path component tools; do
+    case "${program}" in "#"* | "") continue ;; esac
+    check "${program} is installed at ${path}" test -x "${path}"
+    version="$("${path}" --version 2>&1 < /dev/null | head -n1)"
+    echo "      ${version}  ($(stat -c %s "${path}") bytes, from ${component})"
+    check "${program} --version names the program and a version" \
+        bash -c '[[ "$1" =~ ^"$2"\ [0-9]+\.[0-9]+\.[0-9]+ ]]' _ "${version}" "${program}"
+    if [ "${tools}" != "-" ]; then
+        check "${program}: its assistant tools are in ${tools}" \
+            test -s "${tools}/agent-tools.json" -a -s "${tools}/agent-tools.adapter.json"
+        check "${program}: tur-pax loads its tool manifest" \
+            tur-pax manifest validate "${tools}/agent-tools.json"
+        # The adapters say which program performs each tool. Each adapter
+        # must be for a tool the manifest declares and name a program that is
+        # in the image. A tool without an adapter is not offered to a model
+        # (pax-orchestrator.md); which those are is printed.
+        check "${program}: every adapter is for a declared tool and names a program in the image" \
+            python3 -c '
+import json, os, sys
+manifest = json.load(open(sys.argv[1] + "/agent-tools.json"))
+adapters = json.load(open(sys.argv[1] + "/agent-tools.adapter.json"))
+assert manifest["service"] == adapters["service"], "the two files name different services"
+declared = {tool["name"] for tool in manifest["tools"]}
+performed = {adapter["tool"]: adapter["program"] for adapter in adapters["adapters"]}
+assert performed, "no adapter at all"
+unknown = sorted(set(performed) - declared)
+assert not unknown, f"adapters for tools the manifest does not declare: {unknown}"
+missing = sorted({name for name in performed.values() if not os.access(name, os.X_OK)})
+assert not missing, f"not in the image: {missing}"
+' "${tools}"
+        echo "      offered: $(jq -r '[.adapters[].tool] | join(" ")' "${tools}/agent-tools.adapter.json")"
+        echo "      declared, with no adapter: $(jq -r --slurpfile a "${tools}/agent-tools.adapter.json" \
+            '[.tools[].name] - [$a[0].adapters[].tool] | join(" ")' "${tools}/agent-tools.json")"
+    fi
+done < "${programs}"
+check "programs a person or an adapter starts are in /usr/bin" bash -c \
+    'for p in tur-diag tur-device tur-storage tur-catalogue tur-runtime tur-update tur-pax tur-pax-memory tur-boot-health; do
+         [ -x "/usr/bin/$p" ] || exit 1; done'
+check "five components have their assistant tools installed" bash -c \
+    '[ "$(ls -1 /usr/share/tur/pax/tools | tr "\n" " ")" = "tur-catalogue tur-device-manager tur-diagnostics tur-runtime tur-storage " ]'
+
+# The application catalogue, where tur-catalogue reads it when it is not told
+# otherwise, and where its assistant tools name it.
+catalogue=/usr/share/tur/catalogue
+check "the catalogue is installed"            bash -c '[ "$(ls -1 "$1"/*.toml | wc -l)" -ge 30 ]' _ "${catalogue}"
+check "tur-catalogue validates the installed catalogue, found without an option" tur-catalogue validate
+check "tur-catalogue finds an application in it" bash -c \
+    'cd / && tur-catalogue search discord --json | jq -e ".hits[] | select(.id == \"com.discord.discord\")"'
+check "the catalogue its assistant tools name is that directory" \
+    grep -q "\"${catalogue}\"" /usr/share/tur/pax/tools/tur-catalogue/agent-tools.adapter.json
+
+# What the programs start (specification section 12; pax-orchestrator.md).
+# Nothing is added to the image for them: every one comes with the base.
+for tool in /usr/bin/bwrap /usr/bin/prlimit /usr/bin/lsblk /usr/bin/udevadm /usr/bin/journalctl \
+            /usr/bin/fwupdmgr /usr/bin/systemctl /usr/bin/tar /usr/bin/bootc /bin/sh; do
+    check "${tool}, which a TUR program starts by path, is in the image" test -x "${tool}"
+done
+for tool in uname systemd-analyze dmesg lspci lsusb vulkaninfo wpctl nmcli bluetoothctl blkid ls; do
+    check "${tool}, which tur-diag collects with, is on the PATH" bash -c 'command -v "$1"' _ "${tool}"
+done
+check "bubblewrap and util-linux are packages of the base" rpm -q bubblewrap util-linux
+check "bubblewrap is not set-user-ID"         bash -c '[ ! -u /usr/bin/bwrap ]'
+check "no Windows, Android or macOS runtime is in the image" bash -c \
+    'for name in wine wine64 wineserver umu-run waydroid darling; do
+         if command -v "${name}"; then exit 1; fi
+     done
+     if rpm -qa | grep -i -E "^(wine|waydroid|darling|umu-launcher)"; then exit 1; fi'
+
+# A program runs, not only prints its version.
+check "tur-diag status works without a running system" bash -c \
+    'tur-diag status --json | jq -e ".tur.build_id == \"${EXPECT_BUILD_ID}\" and .architecture == \"x86_64\""'
+check "tur-runtime recognises a Linux program" bash -c \
+    'tur-runtime inspect --json /usr/bin/true | jq -e ".recommendation.runtime == \"native-linux\""'
+check "tur-update lists the commands it names" bash -c 'tur-update commands | grep -q bootc'
+check "tur-boot-health is still on the PATH"  tur-boot-health --version
+# What a program needs from the image at run time: the C library and the
+# compiler's support library, which every image has. Everything else a program
+# contains is linked in (docs/dependencies/licence-review.md, item 13).
+echo "--- shared libraries the programs need"
+grep -v '^#' "${programs}" | cut -f2 | while read -r path; do
+    echo "      ${path}: $(ldd "${path}" 2>&1 | awk '{print $1}' | sort | tr '\n' ' ')"
+done
+check "the programs need only the C library and libgcc at run time" bash -c \
+    'for path in $(grep -v "^#" "$1" | cut -f2); do
+         ldd "${path}" | awk "{print \$1}" | grep -v -E "^(linux-vdso\.so\.1|libc\.so\.6|libm\.so\.6|libgcc_s\.so\.1|/lib64/ld-linux-x86-64\.so\.2)\$" \
+             && { echo "${path}"; exit 1; }
+     done; exit 0' _ "${programs}"
+
+# Licences (THIRD_PARTY_NOTICES.md).
+third=/usr/share/licenses/tur-third-party
+check "TUR's licence and notice are in the image" bash -c \
+    'grep -q "TUR Noncommercial License" /usr/share/licenses/tur/LICENSE.md && grep -q "Required Notice" /usr/share/licenses/tur/NOTICE'
+check "the list of third-party crates is in the image" test -s "${third}/crates.tsv"
+check "every listed crate has its directory of licence files" bash -c \
+    'grep -v "^#" "$1/crates.tsv" | while IFS=$'"'"'\t'"'"' read -r program crate version licence sum files; do
+         [ "${files}" -gt 0 ] || continue
+         [ -d "$1/${crate}-${version}" ] || { echo "${crate}-${version}"; exit 1; }
+     done' _ "${third}"
+check "the notices of the Rust standard library are in the image" bash -c \
+    'grep -q -i "apache license" "$1"/rust-std-*/COPYRIGHT-library.html' _ "${third}"
+check "every third-party licence directory belongs to a listed crate" bash -c \
+    'for dir in "$1"/*/; do
+         name="$(basename "${dir}")"
+         grep -v "^#" "$1/crates.tsv" | awk -F"\t" -v n="${name}" "\$2 \"-\" \$3 == n { found = 1 } END { exit !found }" \
+             || { echo "${name}"; exit 1; }
+     done' _ "${third}"
+echo "--- third-party crates"
+echo "      $(grep -v '^#' "${third}/crates.tsv" | cut -f2,3 | sort -u | wc -l) distinct, in $(grep -v '^#' "${third}/crates.tsv" | cut -f1 | sort -u | wc -l) programs; $(find "${third}" -type f | wc -l) files, $(du -sk "${third}" | cut -f1) KiB"
+echo "      without a licence file of their own: $(grep -v '^#' "${third}/crates.tsv" | awk -F'\t' '$6 == 0 { print $2 "-" $3 }' | sort -u | tr '\n' ' ')"
+echo "      the largest files:"
+find "${third}" -type f -printf '%s %P\n' | sort -rn | head -n 12 | sed 's/^/        /'
+# Everything TUR adds must be readable by an ordinary user: the checks above
+# run as root, which would not notice.
+check "what TUR adds is readable by every user" bash -c \
+    '[ -z "$(find /usr/share/tur /usr/share/licenses/tur /usr/share/licenses/tur-third-party /usr/share/licenses/tur-grub-boot-count /usr/lib/tur /usr/libexec/tur \( -type d ! -perm -0555 \) -o \( -type f ! -perm -0444 \) | head -n 5)" ]'
 
 # The unit graph (design section 6.1). Printed in full: a warning here is
 # worth reading even when the check passes.

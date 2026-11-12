@@ -1,0 +1,126 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Holds tur-update against the real thing it reads and names: the bootc and
+# ostree of the pinned base image, and bootc's own samples of its status
+# output. See docs/architecture/update-manager.md, section 3, and
+# services/tur-update/ci/.
+#
+# The base image is run as a container. In a container bootc reports a host
+# that is not a bootc host; that output is recorded and compared with the
+# committed fixture. Output of a booted machine comes from the boot and
+# rollback workflows, whose artifacts the fixtures were taken from
+# (services/tur-update/tests/fixtures/provenance.json). Nothing here stages,
+# rolls back or pins anything: there is no booted system to do it to.
+#
+# This workflow fails when the base image's bootc is no longer the version
+# the fixtures were verified against. That is its purpose: a change of the
+# base pin has to come with a fresh look at `bootc status` (ADR-0014).
+name: update
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "services/tur-update/**"
+      - "crates/tur-core/**"
+      - "image/base.lock"
+      - "rust-toolchain.toml"
+      - ".github/workflows/update.yml"
+  pull_request:
+    paths:
+      - "services/tur-update/**"
+      - "crates/tur-core/**"
+      - "image/base.lock"
+      - "rust-toolchain.toml"
+      - ".github/workflows/update.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: update-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PODMAN: sudo podman
+  OUT: ${{ github.workspace }}/out/update
+
+jobs:
+  bootc:
+    name: tur-update against the bootc of the base image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      CARGO_TERM_COLOR: never
+      CARGO_INCREMENTAL: "0"
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Lint the scripts
+        run: python3 -m py_compile services/tur-update/ci/*.py
+
+      - name: The fixtures from bootc's source tree are what they say they are
+        # Fetches each sample at the recorded tag, checks its git blob
+        # identifier, converts it and compares it with the committed file.
+        run: |
+          python3 -c 'import yaml' 2>/dev/null || sudo apt-get install -y --no-install-recommends python3-yaml >/dev/null
+          python3 services/tur-update/ci/check_fixtures.py services/tur-update/tests/fixtures/provenance.json
+
+      - name: Pull the pinned base image
+        run: |
+          # shellcheck source=/dev/null
+          . image/base.lock
+          image="${BASE_IMAGE}@${BASE_DIGEST}"
+          echo "BASE=${image}" >> "$GITHUB_ENV"
+          echo "base image: ${image} (${BASE_VERSION})"
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache/CodeQL
+          df -h / | tail -1
+          $PODMAN pull --quiet "${image}"
+
+      - name: Record what the image's bootc and ostree print
+        run: python3 services/tur-update/ci/bootc_capture.py capture "$BASE" "$OUT"
+
+      - name: Compare with the committed fixtures
+        run: python3 services/tur-update/ci/bootc_capture.py check "$OUT" services/tur-update/tests/fixtures
+
+      - name: Toolchain
+        run: |
+          rustup show active-toolchain || rustup toolchain install
+          rustc --version; cargo --version
+
+      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            services/tur-update/target
+          key: update-${{ hashFiles('rust-toolchain.toml', 'services/tur-update/Cargo.toml', 'services/tur-update/Cargo.lock') }}
+          restore-keys: update-
+
+      - name: Build tur-update
+        working-directory: services/tur-update
+        run: cargo build --locked
+
+      - name: Every command tur-update names is one the image's programs have
+        run: |
+          python3 services/tur-update/ci/bootc_capture.py check "$OUT" services/tur-update/tests/fixtures \
+            --tur-update services/tur-update/target/debug/tur-update
+
+      - name: tur-update's live read, with the image's bootc
+        run: |
+          python3 services/tur-update/ci/bootc_capture.py live "$BASE" \
+            services/tur-update/target/debug/tur-update services/tur-update/tests/fixtures "$OUT"
+
+      - name: Summary
+        if: always()
+        run: |
+          if [ -f "$OUT/summary.md" ]; then cat "$OUT/summary.md" >> "$GITHUB_STEP_SUMMARY"; fi
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: tur-update-bootc
+          path: out/update/
+          if-no-files-found: warn

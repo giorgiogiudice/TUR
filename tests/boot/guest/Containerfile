@@ -2,19 +2,50 @@
 #
 # Boot-test image: the TUR image plus a test agent.
 #
-# The product image carries no test hooks. This layer adds one systemd unit and
-# two scripts, and nothing else. The agent only runs in a virtual machine whose
-# kernel command line contains tur.boot_test, which tests/boot/build-disk.sh
-# sets at install time. guest-agent observes the boot test's three boots;
-# scenario-agent takes over in the boot-health scenarios (tests/boot/rollback.py).
+# The product image carries no test hooks. This layer adds one systemd unit,
+# the test's scripts and the fixtures of the P@x end-to-end test, and nothing
+# else. The agent only runs in a virtual machine whose kernel command line
+# contains tur.boot_test, which tests/boot/build-disk.sh sets at install time.
+# guest-agent observes the boot test's three boots and, in the second, has
+# component-checks run TUR's programs as an ordinary user; scenario-agent takes
+# over in the boot-health scenarios (tests/boot/rollback.py).
+#
+# The build context is the repository root, filtered by
+# Containerfile.containerignore beside this file.
 
 ARG BASE=localhost/tur:ci
 FROM ${BASE}
 
-COPY rootfs/ /
+COPY tests/boot/guest/rootfs/ /
+
+# What tests/pax/e2e.py needs on the machine it runs on, where the pax
+# workflow puts it on its Ubuntu runner (.github/workflows/pax.yml): the test
+# itself with the files it reads from the repository, a fixture tree, the
+# socket probe and the program behind the test service. The test is not
+# changed for the guest; "repo" has the shape of the repository as far as the
+# test looks at it. /usr is read-only on the installed system, so these are
+# part of the test image.
+COPY tests/pax/ /usr/share/tur-pax-e2e/repo/tests/pax/
+COPY services/tur-pax/tests/data/ /usr/share/tur-pax-e2e/repo/services/tur-pax/tests/data/
+COPY services/tur-catalogue/agent-tools.json services/tur-catalogue/agent-tools.adapter.json \
+     /usr/share/tur-pax-e2e/repo/services/tur-catalogue/
+COPY services/tur-device-manager/agent-tools.json services/tur-device-manager/agent-tools.adapter.json \
+     /usr/share/tur-pax-e2e/repo/services/tur-device-manager/
+COPY services/tur-diagnostics/agent-tools.json services/tur-diagnostics/agent-tools.adapter.json \
+     /usr/share/tur-pax-e2e/repo/services/tur-diagnostics/
+COPY services/tur-runtime/agent-tools.json services/tur-runtime/agent-tools.adapter.json \
+     /usr/share/tur-pax-e2e/repo/services/tur-runtime/
+COPY services/tur-storage/agent-tools.json services/tur-storage/agent-tools.adapter.json \
+     /usr/share/tur-pax-e2e/repo/services/tur-storage/
+COPY services/tur-device-manager/tests/fixtures/laptop/ /usr/share/tur-pax-e2e/laptop/
 
 RUN set -eu; \
-    chmod 0755 /usr/libexec/tur-boot-test/guest-agent /usr/libexec/tur-boot-test/scenario-agent; \
+    chmod 0755 /usr/libexec/tur-boot-test/guest-agent /usr/libexec/tur-boot-test/scenario-agent \
+        /usr/libexec/tur-boot-test/component-checks /usr/libexec/tur-boot-test/make-pe-fixture; \
+    install -m 0644 /usr/share/tur-pax-e2e/repo/tests/pax/probe_sockets.py /usr/share/tur-pax-e2e/probe_sockets.py; \
+    install -m 0755 /usr/share/tur-pax-e2e/repo/tests/pax/tur-pax-test-tool /usr/bin/tur-pax-test-tool; \
+    find /usr/share/tur-pax-e2e -type d -exec chmod 0755 {} +; \
+    find /usr/share/tur-pax-e2e -type f -exec chmod a+r {} +; \
     mkdir -p /usr/lib/systemd/system/multi-user.target.wants; \
     ln -s ../tur-boot-test.service \
         /usr/lib/systemd/system/multi-user.target.wants/tur-boot-test.service; \

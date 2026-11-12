@@ -33,7 +33,10 @@ the [specification](../architecture/specification.md).
 | [0014](0014-boot-health-and-rollback.md) | Boot health and rollback: a TUR attempt counter in GRUB's environment block | Accepted |
 | [0015](0015-seamless-windows-guest.md) | Seamless Windows guest on QEMU/KVM, libvirt and FreeRDP RemoteApp | Accepted |
 | [0016](0016-desktop-and-user-interface.md) | Desktop and user interface: standalone programs, Plasma by configuration, one identity | Accepted |
+| [0017](0017-update-manager.md) | The update manager: TUR drives bootc in three steps, and stages nothing boot health cannot undo | Accepted, amended |
 | [0018](0018-first-installer-medium.md) | The first installer medium: a small live environment that runs the image's own installer | Proposed |
+| [0020](0020-overlay-window-positions.md) | P@x's overlay finds other programs' windows through the Plasma window-management protocol, read with KWayland | Proposed |
+| [0021](0021-local-ai.md) | Local AI: models that run on the computer, for P@x and for every application | Accepted |
 
 ## Open questions from the specification
 

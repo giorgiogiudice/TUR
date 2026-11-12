@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# /usr/lib/tur/release as image/Containerfile writes it. Shell-sourceable
+# KEY=VALUE lines. See ../README.md.
+TUR_VERSION=0.1.0-dev
+TUR_BUILD_ID=20261112.g387ac4f62f6c
+TUR_SOURCE_REVISION=387ac4f62f6cc07a6d0a3430c64634ca2b72fc02
+TUR_BASE_IMAGE=quay.io/fedora/fedora-kinoite
+TUR_BASE_DIGEST=sha256:f857f6c5da48a7c39721e40de51d9c0fef446a25e0360be4fb8964cbdf48f537
+TUR_BASE_VERSION=45.20261112.0

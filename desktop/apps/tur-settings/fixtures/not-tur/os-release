@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# A system that is not TUR: there is no tur-release beside this file, on
+# purpose. See ../README.md.
+NAME="Fedora Linux"
+VERSION="45.20261112.0 (Kinoite)"
+ID=fedora
+VERSION_ID=45
+PRETTY_NAME="Fedora Linux 45.20261112.0 (Kinoite)"
+VARIANT="Kinoite"
+VARIANT_ID=kinoite

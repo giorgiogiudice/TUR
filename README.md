@@ -100,8 +100,8 @@ nothing until you use them, and step back when you stop.
 
 ## P@x, your assistant
 
-**P@x** is the assistant built into TUR. Add your own key from Anthropic (Claude),
-OpenAI or Google, and you can speak or type to your computer and have things done.
+**P@x** is the assistant built into TUR. Run it **entirely on your own computer with local AI**, or add your own key from
+Anthropic (Claude), OpenAI, Google, DeepSeek or another compatible service, and you can speak or type to your computer and have things done.
 
 - **It can do what you can do.** It opens and operates applications from every
   ecosystem, manages files, changes settings, installs software.
@@ -114,6 +114,17 @@ OpenAI or Google, and you can speak or type to your computer and have things don
   preferences and of what worked, and it runs reminders and scheduled tasks.
 - **It is optional.** P@x is off until you turn it on, and TUR is complete
   without it.
+
+### Local AI, built in
+
+TUR can run AI models **on your own computer**. No account, no key, no bill,
+and nothing you ask leaves the machine. Choose a model in the application centre;
+TUR shows what each one is good at, how much memory it needs, how fast it will be
+on *your* computer and what its licence allows, and recommends one that fits.
+P@x can use it, a simple chat window uses it, and other applications can be
+allowed to use it through a standard local interface. Speech recognition and
+speech run locally too, so the assistant can work fully offline. Local AI is off
+until you switch it on. ([Design](docs/architecture/local-ai.md); not built yet.)
 
 **You stay in charge.** An assistant that can do anything needs limits you can
 trust, so they are built into the system, not left to the AI's judgement:
@@ -156,14 +167,15 @@ becomes.
 |---|---|
 | Architecture and decisions | Published: [specification](docs/architecture/specification.md), [decision records](docs/adr/README.md) |
 | Operating-system image | Builds reproducibly ([report](docs/reports/TUR-002.md)), installs to a disk and **boots to a graphical login in a virtual machine** on every change ([report and screenshots](docs/reports/TUR-003.md)). Not yet tested on real hardware |
+| TUR's own programs | **Eleven programs are built into the image and run on the installed, booted system** with SELinux enforcing: diagnostics, devices, storage, the application catalogue, the Windows runtime, the update manager, boot health, the installer core, and P@x with its memory and AI connections. P@x's 349 end-to-end checks pass there, including its sandbox ([report](docs/reports/TUR-006.md)). The desktop programs are not in the image yet |
 | P@x | [Design](docs/architecture/ai-control-layer.md) published. A text assistant runs end to end in continuous integration against a scripted stand-in for the AI: it uses real system tools, runs read-only commands in a sandbox, and refuses everything that would need the user's approval. It runs the same way through its Claude, OpenAI and Gemini connections ([first report](docs/reports/pax-1.md), [second report](docs/reports/pax-2.md)). Never yet run with a real AI model; no voice, screen control or approvals |
 | Android | [Design](docs/architecture/android-runtime.md) published; not yet built |
-| Diagnostics, application detection, installer planning, storage safety | First versions written and tested as libraries and command-line tools; not yet part of the image |
-| Devices, P@x's connections to AI providers, P@x's memory and schedules, application catalogue and router | First versions written and tested; not yet part of the image |
-| Running Windows programs | A Windows program built in continuous integration runs under Wine through TUR's launcher, inside a sandbox that keeps it out of the user's files ([report](docs/reports/windows-runtime-1.md)). Tested on Ubuntu, not yet on the TUR image; no real application tried |
+| Running Windows programs | **Five real applications** (7-Zip, Notepad++, PuTTY, VLC, Inno Setup; eight installers of five kinds) are installed unattended, started, checked for one real function and removed without leftovers through TUR's runtime manager, inside a sandbox that keeps them out of the user's files, on every change ([report and screenshots](docs/reports/windows-runtime-2.md)). A small, friendly sample: it says nothing yet about demanding applications. Tested with Ubuntu's Wine on a build machine without a graphics card, not yet on the TUR image |
 | Desktop and application centre | The shared interface kit and the first part of the application centre (search, how an application will run and who says so, and a plain answer when it cannot) are built and checked by screenshot tests in both themes ([kit](docs/reports/desktop-1.md), [centre](docs/reports/desktop-2.md)). Not yet run in a real desktop session; cannot install anything yet |
+| Settings | The settings program has its first pages (Overview, Appearance, About), search, and **an address for every setting**: it can be opened at an exact row, reports where that row is on screen and highlights it, which is what lets P@x show you where a setting is ([report](docs/reports/desktop-3.md)). Pages for what is not built say so. Not yet run in a real desktop session |
 | Rollback of a bad update | **Built and proven in a virtual machine**: a new version that fails its health check, crashes the login screen, cannot mount its disk, panics or hangs is replaced by the previous version within three attempts, and power cuts during an update leave one whole version (26 scenarios on every change; [report](docs/reports/TUR-005.md)). Not yet shown on real hardware or with Secure Boot; nothing tells the user on screen yet |
-| Updates, the Windows guest | [Designed](docs/adr/README.md); the update manager is being built |
+| Updates | The update manager reads the system's state and decides what should happen and why, with every refusal explained ([design](docs/architecture/update-manager.md), [report](docs/reports/update-1.md)). It does not download or apply anything yet |
+| The Windows guest | [Designed](docs/adr/README.md) |
 | Desktop, application centre, Windows and Android running | Not started |
 | Anything you can install | Not yet |
 

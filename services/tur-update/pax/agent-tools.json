@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "service": "org.tur.Update1",
+  "tools": [
+    {
+      "name": "update_status",
+      "description": "Show the versions of the system on this computer (in use, previous, waiting for a restart, kept), the image the system follows and the state of updates. Reads only.",
+      "class": 0,
+      "method": "GetStatus",
+      "input_schema": { "type": "object", "properties": {}, "additionalProperties": false }
+    },
+    {
+      "name": "update_preview_check",
+      "description": "Preview what a check for updates and the update manager would do next, and why: whether an update would be downloaded, would wait, or is refused. Runs no check and changes nothing.",
+      "class": 0,
+      "method": "PreviewCheck",
+      "input_schema": { "type": "object", "properties": {}, "additionalProperties": false }
+    }
+  ]
+}

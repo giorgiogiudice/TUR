@@ -42,13 +42,17 @@ work="$(cd "${work}" && pwd)"
 host="$(cd "${out}/host" && pwd)"
 
 echo "== boot-test image: ${test_image} FROM ${image}"
+# The context is the repository root: the layer also carries the fixtures of
+# the P@x end-to-end test. What is sent is listed in the ignore file.
 "${podman[@]}" build \
     --file tests/boot/guest/Containerfile \
+    --ignorefile tests/boot/guest/Containerfile.containerignore \
     --build-arg "BASE=${image}" \
     --pull=never \
     --tag "${test_image}" \
-    tests/boot/guest
+    .
 "${podman[@]}" image inspect -f 'image id: {{.Id}}  size: {{.Size}} bytes' "${test_image}"
+"${podman[@]}" image inspect -f 'tur image id: {{.Id}}  size: {{.Size}} bytes' "${image}"
 
 echo "== installer in the image"
 "${podman[@]}" run --rm --network none "${test_image}" bootc --version | tee "${host}/bootc-version.txt"

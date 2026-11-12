@@ -242,6 +242,12 @@ pub const COLLECTORS: &[Collector] = &[
         &["-lA", "/sys/fs/pstore"],
     )
     .about_previous_boot(),
+    Collector::command(
+        "boot",
+        "boot-health.json",
+        "tur-boot-health",
+        &["status", "--json"],
+    ),
     // hardware/
     Collector::command("hardware", "pci.txt", "lspci", &["-nnk"]),
     Collector::command("hardware", "usb.txt", "lsusb", &[]),

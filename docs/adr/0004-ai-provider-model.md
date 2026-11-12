@@ -48,6 +48,7 @@ and Google (Gemini)**.
   between providers. The compatibility of each provider is published, like
   application compatibility.
 - A local-model adapter is not required now. The interface must not prevent one.
+  *(Superseded on 12 November 2026 by [ADR-0021](0021-local-ai.md): local AI is a built-in feature.)*
 - TUR without a key is a complete product. No boot, install, update or recovery
   path may depend on the AI layer.
 
@@ -56,3 +57,38 @@ and Google (Gemini)**.
 - Check each provider's current API documentation, terms of use and data-retention
   terms when its adapter is written; do not rely on recalled API shapes.
 - A conformance suite that runs the same scripted tasks against every adapter.
+
+## Amendment: DeepSeek and any compatible provider (12 November 2026)
+
+The owner requires P@x to work with **DeepSeek** and to be adjustable for the
+other kinds of AI API keys widely available. Three named providers are not
+enough.
+
+- **Adapters are by API family, not by company.** Besides the three native
+  adapters (Anthropic Messages, OpenAI Responses, Google), TUR has an adapter
+  for the **OpenAI-compatible Chat Completions** API, which DeepSeek and many
+  other services offer. It is configured, not compiled: a provider is a
+  configuration entry naming the adapter family, the base URL, the model, the
+  keyring item that holds its key, and its declared capabilities.
+- **DeepSeek is the first named preset** of that adapter. Others (for example
+  Mistral, xAI, Groq, OpenRouter, Together, or a local server such as Ollama or
+  llama.cpp) are presets or entries the person adds in settings. A preset is
+  data and can be added without a new release.
+- **Capabilities decide what P@x may attempt with a provider**, and are checked
+  against the live service where it can be done cheaply: tool calling,
+  streaming of tool calls, image input (needed for screen control), and the
+  context size. A model without tool calling can converse but cannot act; a
+  model without image input cannot control applications by sight. The person
+  is told which, before choosing.
+- **Data terms are shown per provider**, as for the first three: whether the
+  service keeps requests, for how long, whether it trains on them, and where
+  it processes them, with the date the terms were read. Where a service
+  offers no way to ask it not to keep requests, the consent text says so. A
+  provider entry the person adds by hand is shown as "terms not reviewed by
+  TUR".
+- Every rule of the AI control layer applies unchanged to every provider: the
+  policy engine, the action classes, the sandbox, the discard-whole rule for
+  malformed or refused responses, and the spending limit.
+- Conformance tests run the same scripted tasks against every adapter family;
+  a preset is tested against the real service only where a key is available.
+

@@ -21,8 +21,10 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::path::Path;
 
+use crate::app_record::RecordError;
 use crate::codes::Code;
 use crate::grant::{GrantContext, GrantRefusal};
+use crate::installer::InstallerKind;
 use crate::launch_host::LaunchHost;
 use crate::limits::{MAX_ENVIRONMENT_VALUE_BYTES, MAX_EXTRA_ENVIRONMENT, MAX_LAUNCH_ARGUMENTS};
 use crate::metadata::{
@@ -155,6 +157,32 @@ pub enum PlanError {
     Metadata(MetadataError),
     /// The runtime manager's directories cannot be used.
     Paths(PathsError),
+    /// The file's kind is not one that is run unattended.
+    NoUnattendedMode {
+        /// The kind.
+        kind: InstallerKind,
+    },
+    /// A value given for an installation is not allowed.
+    InstallRequest {
+        /// What is wrong.
+        problem: String,
+    },
+    /// The installer finished and installed no program.
+    NothingInstalled,
+    /// No program could be chosen as the application's main program.
+    MainProgramUnclear {
+        /// The program the caller named, when the caller named one.
+        requested: Option<String>,
+        /// The programs it could be, as Windows paths.
+        candidates: Vec<String>,
+    },
+    /// No application with this identifier is installed.
+    AppNotInstalled {
+        /// Whether the identifier has a prefix all the same.
+        has_prefix: bool,
+    },
+    /// The application record is not valid.
+    Record(RecordError),
 }
 
 impl PlanError {
@@ -188,6 +216,12 @@ impl PlanError {
             PlanError::Metadata(error) => error.code(),
             PlanError::Paths(PathsError::BadAppId) => Code::ProfileInvalid,
             PlanError::Paths(_) => Code::StorageUnusable,
+            PlanError::NoUnattendedMode { .. } => Code::InstallerNoUnattendedMode,
+            PlanError::InstallRequest { .. } => Code::InstallRequestInvalid,
+            PlanError::NothingInstalled => Code::InstallNothingFound,
+            PlanError::MainProgramUnclear { .. } => Code::InstallMainProgramUnclear,
+            PlanError::AppNotInstalled { .. } => Code::AppNotInstalled,
+            PlanError::Record(error) => error.code(),
         }
     }
 }
@@ -269,6 +303,52 @@ impl fmt::Display for PlanError {
             }
             PlanError::Metadata(error) => write!(f, "{error}"),
             PlanError::Paths(error) => write!(f, "{error}"),
+            PlanError::NoUnattendedMode { kind } => write!(
+                f,
+                "the file is a {}: no way of installing it without questions is known, so it \
+                 is not run. If the file is the application itself and not an installer, say so \
+                 (--portable) and it is copied into a prefix of its own",
+                kind.label()
+            ),
+            PlanError::InstallRequest { problem } => {
+                write!(
+                    f,
+                    "the installation cannot be carried out as asked: {problem}"
+                )
+            }
+            PlanError::NothingInstalled => f.write_str(
+                "the installer finished, and no new program was found in the prefix: nothing \
+                 was installed",
+            ),
+            PlanError::MainProgramUnclear {
+                requested,
+                candidates,
+            } => {
+                match requested {
+                    Some(requested) => write!(
+                        f,
+                        "{requested:?} does not name exactly one of the programs that were \
+                         installed"
+                    )?,
+                    None => f.write_str(
+                        "several programs were installed and nothing singles one out as the \
+                         application's main program; name it (--main-exe)",
+                    )?,
+                }
+                if candidates.is_empty() {
+                    f.write_str(". No program was installed")
+                } else {
+                    write!(f, ". The programs are: {}", candidates.join("; "))
+                }
+            }
+            PlanError::AppNotInstalled { has_prefix: false } => {
+                f.write_str("no application with this identifier is installed")
+            }
+            PlanError::AppNotInstalled { has_prefix: true } => f.write_str(
+                "no application with this identifier is installed. It has a prefix that was \
+                 not made by an installation; `prefix remove` deletes that",
+            ),
+            PlanError::Record(error) => write!(f, "{error}"),
         }
     }
 }
@@ -290,6 +370,12 @@ impl From<MetadataError> for PlanError {
 impl From<PathsError> for PlanError {
     fn from(error: PathsError) -> Self {
         PlanError::Paths(error)
+    }
+}
+
+impl From<RecordError> for PlanError {
+    fn from(error: RecordError) -> Self {
+        PlanError::Record(error)
     }
 }
 
@@ -493,6 +579,27 @@ pub enum Task<'a> {
         /// Arguments passed on to the program.
         arguments: &'a [String],
     },
+    /// Run a Windows command through the runtime, in the prefix: a program
+    /// of the prefix by its Windows path, or one of the runtime's own tools
+    /// such as `msiexec`.
+    Tool {
+        /// The command and its arguments, as the runtime is given them.
+        arguments: &'a [String],
+        /// A file outside the prefix that the command reads. That one file
+        /// is shown, read-only.
+        shown: Option<&'a Path>,
+    },
+    /// Run a program of this system inside the sandbox, without the
+    /// runtime: unpacking an archive, copying a file into the prefix.
+    Host {
+        /// The program.
+        program: &'a Path,
+        /// Its arguments.
+        arguments: &'a [String],
+        /// A file outside the prefix that the program reads. That one file
+        /// is shown, read-only.
+        shown: Option<&'a Path>,
+    },
 }
 
 /// Everything a runtime command is assembled from.
@@ -633,8 +740,9 @@ pub fn assemble(invocation: &Invocation<'_>, task: Task<'_>) -> Result<Assembled
     let environment = environment(invocation, creating)?;
 
     // The command on the application's side of the sandbox.
-    let (program, mut arguments, supervisor) = match invocation.runtime {
-        RuntimeKind::Wine => {
+    let (program, mut arguments, supervisor) = match (task, invocation.runtime) {
+        (Task::Host { program, .. }, _) => (path_text(program, "the program")?, Vec::new(), None),
+        (_, RuntimeKind::Wine) => {
             let missing = |program| PlanError::RuntimeMissing {
                 runtime: RuntimeKind::Wine,
                 program,
@@ -650,7 +758,7 @@ pub fn assemble(invocation: &Invocation<'_>, task: Task<'_>) -> Result<Assembled
                 Some(path_text(server, "wineserver")?),
             )
         }
-        RuntimeKind::Proton => {
+        (_, RuntimeKind::Proton) => {
             let launcher = host.umu_run.as_deref().ok_or(PlanError::RuntimeMissing {
                 runtime: RuntimeKind::Proton,
                 program: "umu-run",
@@ -686,6 +794,22 @@ pub fn assemble(invocation: &Invocation<'_>, task: Task<'_>) -> Result<Assembled
             if let Some(parent) = file.parent() {
                 working_directory = parent;
             }
+        }
+        (
+            Task::Tool {
+                arguments: passed,
+                shown,
+            }
+            | Task::Host {
+                arguments: passed,
+                shown,
+                ..
+            },
+            _,
+        ) => {
+            check_arguments(passed)?;
+            arguments.extend(passed.iter().cloned());
+            program_file = shown;
         }
     }
 
