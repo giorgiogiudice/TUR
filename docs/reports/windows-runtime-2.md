@@ -452,10 +452,12 @@ Before taking them:
   Windows edition is only interesting for its file manager.
 - **Notepad++, PuTTY and Inno Setup have no entries.** Adding them is a
   catalogue decision; the measurements are in the table above.
-- The rust workflow does not run for a change that touches only
-  `catalogue/`, as `catalogue-and-routing.md` already notes; a record with
-  `test_report = "docs/reports/windows-runtime-2.md"` is checked against the
-  file's existence when it does run.
+- A record with `test_report = "docs/reports/windows-runtime-2.md"` is
+  checked against the file's existence by the catalogue's seed tests, which
+  the rust workflow runs for a change under `catalogue/`.
+  (`catalogue-and-routing.md` still says, under "Not done yet", that the
+  workflow does not list `catalogue/`. It does now; that sentence is out of
+  date, and is not this change's to correct.)
 
 ## Dependencies
 
