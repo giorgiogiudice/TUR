@@ -195,6 +195,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "tur-core"
+version = "0.1.0"
+
+[[package]]
 name = "tur-pax-memory"
 version = "0.1.0"
 dependencies = [
@@ -203,7 +207,7 @@ dependencies = [
  "clap",
  "serde",
  "serde_json",
- "uos-core",
+ "tur-core",
 ]
 
 [[package]]
@@ -211,10 +215,6 @@ name = "unicode-ident"
 version = "1.0.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2c754d6c33795a1c324727428e5a7dedb5b06195f9890bdbcba760d3e246563"
-
-[[package]]
-name = "uos-core"
-version = "0.1.0"
 
 [[package]]
 name = "zmij"

@@ -1,4 +1,4 @@
-# Pinned base image for UOS. See ADR-0001 and image/README.md.
+# Pinned base image for TUR. See ADR-0001 and image/README.md.
 # Update only through scripts/update-base-pin.sh, in its own change, so CI
 # proves the new base builds and passes the image tests.
 BASE_IMAGE=quay.io/fedora/fedora-kinoite

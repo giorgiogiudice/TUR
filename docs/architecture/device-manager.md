@@ -1,13 +1,13 @@
 # Device manager: hardware inventory
 
-Design note for `services/uos-device-manager` (task UOS-007). Baseline:
+Design note for `services/tur-device-manager` (task TUR-007). Baseline:
 specification §3.1, §6.3, §6.5, §10, §16 and §31;
 [ADR-0005](../adr/0005-languages-and-workspace.md);
 [ADR-0007](../adr/0007-app-centric-routing.md), which reduces the device manager
 to "a device inventory and guest hand-off"; AI control layer §5 and §11.
 
 **Status.** The inventory core, the problem findings, the redacted view and the
-`uos-device` command-line tool are built and tested in CI **against fixtures
+`tur-device` command-line tool are built and tested in CI **against fixtures
 only**. No test has run on real hardware. The D-Bus interface is defined but not
 implemented. The hand-off state machine exists as types only. See
 [What is not done](#what-is-not-done).
@@ -22,12 +22,12 @@ change device ownership, bind or unbind a driver, or write to sysfs.
 
 | Part | Where |
 |---|---|
-| Library, all logic | `services/uos-device-manager/src/lib.rs` and modules |
-| Command-line tool `uos-device` | `src/main.rs` |
+| Library, all logic | `services/tur-device-manager/src/lib.rs` and modules |
+| Command-line tool `tur-device` | `src/main.rs` |
 | Schema of the JSON output | `schemas/device-inventory.schema.json` |
-| D-Bus interface definition | `services/uos-device-manager/dbus/org.uos.Device1.xml` |
-| Assistant tool manifest | `services/uos-device-manager/agent-tools.json` |
-| Fixture: a hand-written tree, not a capture | `services/uos-device-manager/tests/fixtures/laptop/`, written by `generate-laptop.py` beside it |
+| D-Bus interface definition | `services/tur-device-manager/dbus/org.tur.Device1.xml` |
+| Assistant tool manifest | `services/tur-device-manager/agent-tools.json` |
+| Fixture: a hand-written tree, not a capture | `services/tur-device-manager/tests/fixtures/laptop/`, written by `generate-laptop.py` beside it |
 
 ## 2. Sources
 
@@ -169,19 +169,19 @@ title, the device identifier, a user message, a next step and technical detail
 
 | Code | Title | Detected when | Severity | Next step |
 |---|---|---|---|---|
-| `UOS-DEVICE-DRIVER-001` | No driver for the device | No `driver` link, and no module alias matches (or the alias table could not be read) | Warning for storage, network, display, multimedia, communication, input, serial-bus and wireless controllers; information for other PCI classes and for USB interfaces, which are often driven from user space | Install updates and restart; report with `uos-diag hardware` |
-| `UOS-DEVICE-DRIVER-002` | Driver available but not loaded | No `driver` link; a module alias matches; no matching module is loaded | As above | Restart; check for a deny-list entry or kernel option; report |
-| `UOS-DEVICE-DRIVER-003` | Driver did not attach to the device | The kernel log records a failed probe (error); or no `driver` link although a matching module is loaded (as above); or the log records a failed probe of a device outside the inventory (warning) | See left | Restart; report |
-| `UOS-DEVICE-FIRMWARE-001` | Firmware file could not be loaded | The kernel log records a failed firmware load | Warning if the device also has no driver or is inactive; otherwise information, because drivers often ask for optional files | Install updates; report; do not copy firmware from other sources |
-| `UOS-DEVICE-INACTIVE-001` | Driver attached but the device is not usable | A PCI network controller (class 0200 or 0280) has a driver, at least one interface exists on the system, and none belongs to it | Warning | Restart; install updates; report |
-| `UOS-DEVICE-THUNDERBOLT-001` | Thunderbolt device not authorised | `authorized` is 0 on a device that is not the host router | Information | Authorise it in settings if trusted; otherwise unplug it |
-| `UOS-DEVICE-INPUT-001` | Fixture directory cannot be read | `uos-device --from` names something that is not a directory | Command fails, exit status 1 | Correct the path |
-| `UOS-DEVICE-OUTPUT-001` | Output cannot be written | Encoding or writing the result failed | Command fails, exit status 1 | None |
+| `TUR-DEVICE-DRIVER-001` | No driver for the device | No `driver` link, and no module alias matches (or the alias table could not be read) | Warning for storage, network, display, multimedia, communication, input, serial-bus and wireless controllers; information for other PCI classes and for USB interfaces, which are often driven from user space | Install updates and restart; report with `tur-diag hardware` |
+| `TUR-DEVICE-DRIVER-002` | Driver available but not loaded | No `driver` link; a module alias matches; no matching module is loaded | As above | Restart; check for a deny-list entry or kernel option; report |
+| `TUR-DEVICE-DRIVER-003` | Driver did not attach to the device | The kernel log records a failed probe (error); or no `driver` link although a matching module is loaded (as above); or the log records a failed probe of a device outside the inventory (warning) | See left | Restart; report |
+| `TUR-DEVICE-FIRMWARE-001` | Firmware file could not be loaded | The kernel log records a failed firmware load | Warning if the device also has no driver or is inactive; otherwise information, because drivers often ask for optional files | Install updates; report; do not copy firmware from other sources |
+| `TUR-DEVICE-INACTIVE-001` | Driver attached but the device is not usable | A PCI network controller (class 0200 or 0280) has a driver, at least one interface exists on the system, and none belongs to it | Warning | Restart; install updates; report |
+| `TUR-DEVICE-THUNDERBOLT-001` | Thunderbolt device not authorised | `authorized` is 0 on a device that is not the host router | Information | Authorise it in settings if trusted; otherwise unplug it |
+| `TUR-DEVICE-INPUT-001` | Fixture directory cannot be read | `tur-device --from` names something that is not a directory | Command fails, exit status 1 | Correct the path |
+| `TUR-DEVICE-OUTPUT-001` | Output cannot be written | Encoding or writing the result failed | Command fails, exit status 1 | None |
 
 What the findings can and cannot see: a driver that failed to bind is reported
 with certainty only when the kernel log is readable. Without it, the failure is
 inferred from a loaded module that is not bound. Missing firmware is visible
-only in the kernel log; `UOS-DEVICE-INACTIVE-001` is the sysfs-only hint. Each
+only in the kernel log; `TUR-DEVICE-INACTIVE-001` is the sysfs-only hint. Each
 finding states its evidence.
 
 Tests for each code are in `src/problems.rs` and `tests/inventory.rs`.
@@ -217,8 +217,8 @@ between host and guest.
 ## 9. Command line
 
 ```text
-uos-device inventory [--from <dir>] [--json] [--redact]
-uos-device problems  [--from <dir>] [--json]
+tur-device inventory [--from <dir>] [--json] [--redact]
+tur-device problems  [--from <dir>] [--json]
 ```
 
 With `--from`, a directory laid out like the root of a small system is read
@@ -228,32 +228,32 @@ command output in `commands/` (`udevadm-info-export-db.txt`,
 `fwupdmgr-get-devices.json`, `journalctl-kernel.txt`).
 
 Exit status: 0 on success, whether or not problems were found; 1 if the input
-or output failed, with `error: UOS-DEVICE-...` on standard error; 2 for a usage
+or output failed, with `error: TUR-DEVICE-...` on standard error; 2 for a usage
 error.
 
 ## 10. D-Bus interface
 
-`org.uos.Device1` on the system bus, object `/org/uos/Device1`.
+`org.tur.Device1` on the system bus, object `/org/tur/Device1`.
 **Proposed, not implemented and not frozen.** JSON results are documents of
 `schemas/device-inventory.schema.json`.
 
 | Member | Returns | Authorisation |
 |---|---|---|
-| `ListDevices(a{sv} options) -> a(ssss)` | id, category, name, driver for each device (`device_summary`). Option `categories` (`as`) filters | `org.uos.device.read`: allowed for any local user. The same facts are world-readable in sysfs |
-| `GetDevice(s id, a{sv} options) -> s` | JSON `device_document`, redacted unless `include-sensitive` is true | `org.uos.device.read`; with `include-sensitive`, `org.uos.device.read-sensitive`: administrator authentication in an active local session, refused otherwise |
+| `ListDevices(a{sv} options) -> a(ssss)` | id, category, name, driver for each device (`device_summary`). Option `categories` (`as`) filters | `org.tur.device.read`: allowed for any local user. The same facts are world-readable in sysfs |
+| `GetDevice(s id, a{sv} options) -> s` | JSON `device_document`, redacted unless `include-sensitive` is true | `org.tur.device.read`; with `include-sensitive`, `org.tur.device.read-sensitive`: administrator authentication in an active local session, refused otherwise |
 | `GetInventory(a{sv} options) -> s` | JSON inventory, redacted unless `include-sensitive` is true | As `GetDevice` |
-| `ListProblems(a{sv} options) -> a(sssssssa{ss})` | code, severity, device identifier, category, title, user message, next step, technical detail for each finding | `org.uos.device.read` |
+| `ListProblems(a{sv} options) -> a(sssssssa{ss})` | code, severity, device identifier, category, title, user message, next step, technical detail for each finding | `org.tur.device.read` |
 | Signal `DeviceAdded(s id, s category)` | A device appeared | Broadcast; carries no sensitive value |
 | Signal `DeviceRemoved(s id, s category)` | A device went away | Broadcast |
 | Property `SchemaVersion` (`u`, constant) | The `schema_version` of the JSON documents | Readable by any local user |
 
 Contract common to every method:
 
-- **Errors.** `org.uos.Device1.Error.InvalidArgument` (malformed identifier,
-  unknown option, option of the wrong type); `org.uos.Device1.Error.NoSuchDevice`
-  (`GetDevice` only); `org.uos.Device1.Error.NotAuthorized`;
-  `org.uos.Device1.Error.NotReady` (no scan has completed);
-  `org.uos.Device1.Error.Failed` (internal error, with a `UOS-DEVICE-*` code in
+- **Errors.** `org.tur.Device1.Error.InvalidArgument` (malformed identifier,
+  unknown option, option of the wrong type); `org.tur.Device1.Error.NoSuchDevice`
+  (`GetDevice` only); `org.tur.Device1.Error.NotAuthorized`;
+  `org.tur.Device1.Error.NotReady` (no scan has completed);
+  `org.tur.Device1.Error.Failed` (internal error, with a `TUR-DEVICE-*` code in
   the message).
 - **Timeout.** A method answers from the last completed scan and never scans
   inside a call, so it answers within one second. If no scan has completed since
@@ -283,7 +283,7 @@ part of this interface.
 - **Any change of ownership.** No driver is bound or unbound, no device is
   attached to a guest, nothing is written to sysfs. The hand-off state machine
   is types and a pure function.
-- **The D-Bus server.** No process owns `org.uos.Device1`. There is no polkit
+- **The D-Bus server.** No process owns `org.tur.Device1`. There is no polkit
   policy file, no systemd unit and no subscription to udev events; the signals
   are defined but nothing emits them.
 - **The Device Centre user interface.**
@@ -291,7 +291,7 @@ part of this interface.
   (USB HID, storage, serial, audio, webcam; AMD, Intel and NVIDIA GPUs; internal
   and USB audio; Ethernet and Wi-Fi; Bluetooth; fwupd; Thunderbolt). No hardware
   runner exists (ADR-0002).
-- **The live path.** `uos-device` without `--from` (reading the running system
+- **The live path.** `tur-device` without `--from` (reading the running system
   and running `udevadm`, `fwupdmgr` and `journalctl`) is compiled but has not
   been run by any test. The bounding of command output and time is tested with
   `echo` and `sleep`.

@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/giorgiogiudice/UOS/schemas/app-profile.schema.json",
-  "title": "UOS application profile",
-  "description": "How one application is run under UOS: its binary, format, architecture, runtime and the runtime's settings (specification section 7.3). A profile must never hold a secret. The uos-runtime validator additionally rejects any key that looks like the name of a credential and any value that looks like a private key or a URL with a password in it; unknown keys are rejected by this schema in any case.",
+  "$id": "https://github.com/giorgiogiudice/TUR/schemas/app-profile.schema.json",
+  "title": "TUR application profile",
+  "description": "How one application is run under TUR: its binary, format, architecture, runtime and the runtime's settings (specification section 7.3). A profile must never hold a secret. The tur-runtime validator additionally rejects any key that looks like the name of a credential and any value that looks like a private key or a URL with a password in it; unknown keys are rejected by this schema in any case.",
   "type": "object",
   "additionalProperties": false,
   "required": [

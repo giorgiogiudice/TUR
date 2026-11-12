@@ -5,8 +5,8 @@
 **Related decisions:** [ADR-0001](../adr/0001-base-distribution.md),
 [ADR-0013](../adr/0013-bootloader.md),
 [ADR-0014](../adr/0014-boot-health-and-rollback.md) (Proposed)
-**Tasks:** UOS-005 (boot fallback proof); builds on
-[UOS-003](../reports/UOS-003.md)
+**Tasks:** TUR-005 (boot fallback proof); builds on
+[TUR-003](../reports/TUR-003.md)
 
 TUR's central promise is that an update can never leave the machine unable to
 start. A new OS version is deployed beside the running one. If it does not
@@ -34,7 +34,7 @@ says what the user has to do.
   the documentation or the source code was read. It does not mean the
   behaviour was observed on a TUR image.
 - **Measured.** Observed on the TUR image in CI, in the runs recorded in
-  [UOS-003](../reports/UOS-003.md) and the UOS-002 build manifest.
+  [TUR-003](../reports/TUR-003.md) and the TUR-002 build manifest.
 - **Assumption.** Not verified. Marked as such, and assigned to a step of the
   [implementation brief](#15-implementation-brief) that verifies it before
   anything depends on it (§0, rule 14).
@@ -52,7 +52,7 @@ says what the user has to do.
   (§5.5, §5.6).
 - Boots that hang: watchdogs and deadlines.
 - What the image must contain for all of this.
-- The test plan that proves it (UOS-005, §19.5).
+- The test plan that proves it (TUR-005, §19.5).
 
 **Out of scope**
 
@@ -100,19 +100,19 @@ says what the user has to do.
 
 Checked on 12 November 2026. This section records what was found, including
 where it differs from what [ADR-0013](../adr/0013-bootloader.md) and
-[UOS-003](../reports/UOS-003.md) expected.
+[TUR-003](../reports/TUR-003.md) expected.
 
 ### 3.1 The measured stack
 
 | Item | Value | Source |
 |---|---|---|
-| Firmware path | UEFI; shim 16.1 loads GRUB 2.12 (`grub2-2.12-83.fc45`); both installed by bootupd | Measured, UOS-003 |
+| Firmware path | UEFI; shim 16.1 loads GRUB 2.12 (`grub2-2.12-83.fc45`); both installed by bootupd | Measured, TUR-003 |
 | GRUB configuration | bootupd's static `grub.cfg` in `/boot/grub2`, reached from a stub on the ESP; entries from `blscfg`; menu shown for one second | Measured; [S12] |
 | Boot counting in the loader | None. `bootctl` lists GRUB's features without it | Measured |
 | GRUB environment block | `/boot/grub2/grubenv` exists and is empty | Measured |
 | Layout | GPT; 512 MiB FAT ESP; one ext4 root; no separate `/boot` | Measured |
 | Deployment | bootc 1.17.1, OSTree 2026.4, OSTree backend; `/` is a read-only composefs mount; `/etc` and `/var` writable | Measured |
-| systemd, dracut | systemd 262.1 (UOS-002 manifest); dracut 111 in Fedora 45 | Measured; [S27] |
+| systemd, dracut | systemd 262.1 (TUR-002 manifest); dracut 111 in Fedora 45 | Measured; [S27] |
 | First boot | KDE's setup wizard in an automatic login of the system user `plasma-setup`; no user account exists | Measured |
 | Later boots | Plasma Login Manager's greeter (`plasmalogin.service`, logind class `greeter`) | Measured |
 | Units failing on a healthy boot | `mcelog.service` on AMD CPUs; none on Intel | Measured |
@@ -140,7 +140,7 @@ where it differs from what [ADR-0013](../adr/0013-bootloader.md) and
 | Relation to systemd | The health check is ordered before `boot-complete.target`, but greenboot manages the restart itself. systemd's maintainers asked for the duplication to be removed; open. | [S2] [S3] |
 
 Two corrections to earlier TUR documents follow from this table.
-[ADR-0013](../adr/0013-bootloader.md) and UOS-003 describe greenboot as
+[ADR-0013](../adr/0013-bootloader.md) and TUR-003 describe greenboot as
 counting attempts and falling back. That was true of the shell implementation.
 The implementation Fedora 45 ships counts only what its own health check has
 already seen fail.
@@ -310,7 +310,7 @@ flowchart TB
 `grub2-editenv`, `bootc status --format=json`, `bootc rollback`,
 `ostree admin status --is-default`, `systemctl`, `loginctl`, `journalctl`.
 Each call has a time limit and no shell. The specification names two
-programs, `uos-boot-health` (§5.4) and `uos-boot-agent` (§27.4). They are one
+programs, `tur-boot-health` (§5.4) and `tur-boot-agent` (§27.4). They are one
 program here, because the gate and the stage records observe the same boot.
 
 ### 5.2 State, and where it lives
@@ -623,7 +623,7 @@ person to restart it, and the attempt is still counted.
 What happens when the failure is in a deployment that is **not** under
 trial: nothing automatic. The gate records the failure, the user gets the
 notice "TUR started, but some checks failed", and the system stays up if it
-can (§27.5, "UOS service fails"). A machine that restarts itself must be in a
+can (§27.5, "TUR service fails"). A machine that restarts itself must be in a
 bounded trial.
 
 ### 5.9 Selecting the previous deployment
@@ -846,7 +846,7 @@ How the measured facts are accounted for:
 - **mcelog on AMD.** No check asks whether *any* unit failed. Required units
   are a named list. `mcelog.service` lands in W1 and marks the boot
   degraded, not failed. The defect should still be fixed in the image
-  (UOS-003, open item 1).
+  (TUR-003, open item 1).
 - **SELinux denials.** Counted in W5. Never part of the verdict.
 - **Networking.** No required check touches the network. The gate does not
   wait for `network-online.target`.
@@ -1004,7 +1004,7 @@ Storage=persistent
 
 The journal is already persistent on this image (measured), because
 `/var/log/journal` exists. The setting makes that a decision instead of an
-accident. Size limits stay at systemd's defaults until UOS-004 decides them.
+accident. Size limits stay at systemd's defaults until TUR-004 decides them.
 
 **What `/var` and `/etc` mean for evidence and state.**
 
@@ -1153,7 +1153,7 @@ records this.
 - Any `/etc` file.
 - Test hooks. The boot test's agent stays in the test layer.
 
-**Requirements on the installer** (UOS-006). The filesystem that holds
+**Requirements on the installer** (TUR-006). The filesystem that holds
 `/boot/grub2` must be ext4 on a plain partition: either the root filesystem
 as installed today, or the separate unencrypted `/boot` that
 [installer.md](installer.md) already plans for encrypted and Btrfs roots.
@@ -1168,7 +1168,7 @@ image that is installed anywhere, the fragment is frozen.
 
 ## 11. The proof
 
-Task UOS-005 and §19.5 require a failed new deployment to return to the
+Task TUR-005 and §19.5 require a failed new deployment to return to the
 previous one within the attempt policy, and a power interruption to leave
 either the old or the new deployment. This section extends `tests/boot/`.
 Nothing here runs outside CI (ADR-0002).
@@ -1269,7 +1269,7 @@ and the disk exist.
    rollback message ID; the evidence directory has a journal export for
    each attempt that reached userspace.
 6. The journal of the surviving version identifies the failed deployment
-   and the reason (UOS-005).
+   and the reason (TUR-005).
 7. `tur-diag collect` succeeds on the final system and the bundle contains
    the boot-health files (Phase 1 exit criterion).
 8. Total time is below the scenario's bound. Every wait in the driver has a
@@ -1280,7 +1280,7 @@ and the disk exist.
 | Scenario | Hosted runner (KVM, measured available) | Needs more |
 |---|---|---|
 | G1, F1 to F7, H1, H2, H3, P1 to P4, S1, L1 | Yes | — |
-| SB | Yes, **if** the runner's OVMF package has a Secure Boot build with enrolled keys (assumption; UOS-003 used a build without) | Otherwise a firmware image TUR prepares |
+| SB | Yes, **if** the runner's OVMF package has a Secure Boot build with enrolled keys (assumption; TUR-003 used a build without) | Otherwise a firmware image TUR prepares |
 | Power loss with a drive's write cache | No. Killing QEMU stops the guest at once but keeps every write the guest had already issued. A real power cut can drop them | QEMU's write-logging driver with replay to chosen points on a hosted runner, as a later and separate test; and a real power cut on a hardware runner |
 | Real firmware: boot-order handling, firmware storage for pstore, Secure Boot with a vendor's keys | No | **Hardware runner** |
 | Real hardware watchdogs on Intel and AMD | No | **Hardware runner** |
@@ -1293,7 +1293,7 @@ exists (ADR-0002). A VM result is never reported in their place.
 Run sequentially after one image build and one installation, the hosted
 scenarios take roughly two hours. The workflow should build once and run
 them as a matrix of four groups from a shared disk artefact, or build per
-group; UOS-003 measured ten minutes for build and installation.
+group; TUR-003 measured ten minutes for build and installation.
 
 ## 12. Error codes
 
@@ -1366,7 +1366,7 @@ Each gets the registry fields of §29.3 when implemented.
     stand in for the missing GRUB pass?
 12. **The first-run wizard as a session.** It runs as a system user in a
     session of class `user`. If KDE changes that, R7 changes with it.
-13. **mcelog.** Fix in the image (UOS-003, open item 1), independent of
+13. **mcelog.** Fix in the image (TUR-003, open item 1), independent of
     this design.
 14. **Upstream.** Report to greenboot that the counter is not armed for a
     new deployment's first boot, with the source reference of section 3.2.
@@ -1386,11 +1386,11 @@ Each gets the registry fields of §29.3 when implemented.
 | §18.1 | Add `services/tur-boot-health/`, `tests/boot/scenarios/`, `image/third-party-licensed/`. |
 | §18.3 | Add a CI stage: rollback scenarios (section 11). |
 | §19.5 | "A failed new deployment returns to the previous deployment within the configured boot-attempt policy": add "within three counted attempts, for the failures of section 5.8; forced restarts by a person are counted". "A power interruption ...": add the note of section 11.6 on what a VM can show. |
-| §22, UOS-005 | Replace the four bullets with the scenarios of section 11.4. Add as a first bullet the verification of section 5.4. |
+| §22, TUR-005 | Replace the four bullets with the scenarios of section 11.4. Add as a first bullet the verification of section 5.4. |
 | §23 | Question 1 is answered by ADR-0013 and ADR-0014. |
 | §24 | Add the risks of section 13. |
 | §27.1 | `BOOT-001` to `BOOT-070` are recorded after the fact, or not at all if the boot dies there. `BOOT-010`: the attempt counter comes from GRUB's environment block through the kernel command line. `BOOT-110`: on first boot the display manager's session is the setup wizard. `BOOT-140`: "Seat session healthy". Add the column of section 7. |
-| §27.4 | `uos-boot-agent` is not a separate program; `tur-boot-health gate` writes the stage records. Add the fields `TUR_BOOT_MODE`, `TUR_BOOT_TRIES_LEFT`, `TUR_IMAGE_DIGEST`, `TUR_BUILD_ID`, `TUR_STAGE_MONOTONIC_USEC` and the `timeout` and `skipped` states. No local status interface in version 1. |
+| §27.4 | `tur-boot-agent` is not a separate program; `tur-boot-health gate` writes the stage records. Add the fields `TUR_BOOT_MODE`, `TUR_BOOT_TRIES_LEFT`, `TUR_IMAGE_DIGEST`, `TUR_BUILD_ID`, `TUR_STAGE_MONOTONIC_USEC` and the `timeout` and `skipped` states. No local status interface in version 1. |
 | §27.5 | Row "New deployment repeatedly fails": the response is as section 5.8, the message as section 5.11. Add rows: "Update could not be finalised" (keep current; "The update was not applied"); "Machine hangs with no watchdog" (none; the user forces a restart; counted). Row "KWin fails": in a trial this is a failed gate and is restarted; the text console applies outside a trial. |
 | §27.6 | pstore is archived by `systemd-pstore`; a panic in a trial is read from the previous version after the fallback. |
 | §29.1 | Add `boot/boot-health/` (trial record, history, rejected list, evidence summaries) and `boot/boot-stages.jsonl`, produced from the journal by message ID. |
@@ -1419,10 +1419,10 @@ merged. New files use `tur-` names. Add `services/tur-boot-health/**`,
 | 9 | **Early failures.** `tur-boot-emergency-retry.service`; pstore check | units; scenarios `root`, `emergency` | F4 and F7 pass; F5 reports whether a pstore archive appeared |
 | 10 | **Hangs.** Watchdog devices in the harness; scenarios | `tests/boot/*`, scenarios `pid1`, `stall`, `silent` | H1, H2 and H3 pass; a nightly run uses the product deadline |
 | 11 | **Power cuts.** Kill points and sweeps | `tests/boot/rollback.py` | P1 to P4 pass on every sweep point |
-| 12 | **Stage records and diagnostics.** `BOOT-001` to `BOOT-150`; `tur-diag` collectors for the stage records and the boot-health files | crate; `services/uos-diagnostics/` | Boot test asserts the sixteen stages on a good boot; bundles from a good and a failed path contain the files |
+| 12 | **Stage records and diagnostics.** `BOOT-001` to `BOOT-150`; `tur-diag` collectors for the stage records and the boot-health files | crate; `services/tur-diagnostics/` | Boot test asserts the sixteen stages on a good boot; bundles from a good and a failed path contain the files |
 | 13 | **The notice.** `tur-boot-notify`; `acknowledge` | `services/tur-boot-notify/` | After F1 the agent's session receives the notification over D-Bus; acknowledging clears it |
 | 14 | **Secure Boot.** Scenario SB | workflow; harness | G1 and F5 pass with Secure Boot enforced, or the step reports what the firmware lacks |
-| 15 | **Report.** `docs/reports/UOS-005.md` with measured results against every assumption in this document; move ADR-0014 to Accepted or amend it | docs | — |
+| 15 | **Report.** `docs/reports/TUR-005.md` with measured results against every assumption in this document; move ADR-0014 to Accepted or amend it | docs | — |
 
 Rules for every step:
 
@@ -1438,8 +1438,8 @@ Rules for every step:
 ## 16. Sources
 
 Measured values come from the CI runs recorded in
-[UOS-003](../reports/UOS-003.md) (runs 43153380759 and 43152105040) and the
-UOS-002 build manifest.
+[TUR-003](../reports/TUR-003.md) (runs 43153380759 and 43152105040) and the
+TUR-002 build manifest.
 
 All external sources were checked on 12 November 2026. "Secondary" marks a
 claim taken from a search summary or from a source other than the project

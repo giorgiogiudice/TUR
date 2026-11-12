@@ -704,7 +704,7 @@ fn printable(text: &str) -> String {
 /// Whether a source name is TUR itself under some spelling.
 fn claims_tur(name: &str) -> bool {
     let key = normalise(name);
-    key == "tur" || key == "uos" || key.starts_with("turtest") || key == "theunifiedrealm"
+    key == "tur" || key == "tur" || key.starts_with("turtest") || key == "theunifiedrealm"
 }
 
 fn is_application_id(text: &str) -> bool {
@@ -1042,7 +1042,7 @@ mod tests {
             "tur",
             "T.U.R.",
             "TUR test",
-            "UOS",
+            "TUR",
             "The Unified Realm",
         ] {
             let mut record = external(Route::Proton, Rating::Good);

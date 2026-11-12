@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
 #
-# Container-level checks on a built UOS image. These prove the image content,
+# Container-level checks on a built TUR image. These prove the image content,
 # not that it boots; boot tests live in tests/boot.
 #
 #   tests/image/smoke.sh IMAGE EXPECTED_BUILD_ID
@@ -27,16 +27,16 @@ check() { # check DESCRIPTION COMMAND...
     if "$@" >/dev/null 2>&1; then echo "PASS  ${what}"; else echo "FAIL  ${what}"; fail=1; fi
 }
 osr() { ( . /usr/lib/os-release; eval "printf '%s' \"\${$1:-}\"" ); }
-uosr() { ( . /usr/lib/uos/release; eval "printf '%s' \"\${$1:-}\"" ); }
+turr() { ( . /usr/lib/tur/release; eval "printf '%s' \"\${$1:-}\"" ); }
 
-check "os-release IMAGE_ID is uos"            test "$(osr IMAGE_ID)" = "uos"
+check "os-release IMAGE_ID is tur"            test "$(osr IMAGE_ID)" = "tur"
 check "os-release BUILD_ID matches the build" test "$(osr BUILD_ID)" = "${EXPECT_BUILD_ID}"
-check "os-release PRETTY_NAME names UOS"      bash -c '[[ "$(. /usr/lib/os-release; echo "$PRETTY_NAME")" == UOS\ * ]]'
+check "os-release PRETTY_NAME names TUR"      bash -c '[[ "$(. /usr/lib/os-release; echo "$PRETTY_NAME")" == TUR\ * ]]'
 check "distribution ID is still fedora"       test "$(osr ID)" = "fedora"
 check "Fedora release is ${EXPECT_FEDORA}"    test "$(osr VERSION_ID)" = "${EXPECT_FEDORA}"
-check "release file records the build ID"     test "$(uosr UOS_BUILD_ID)" = "${EXPECT_BUILD_ID}"
-check "release file records the base digest"  test "$(uosr UOS_BASE_DIGEST)" = "${EXPECT_BASE_DIGEST}"
-check "source revision is a full commit hash" bash -c '[[ "$(. /usr/lib/uos/release; echo "$UOS_SOURCE_REVISION")" =~ ^[0-9a-f]{40}$ ]]'
+check "release file records the build ID"     test "$(turr TUR_BUILD_ID)" = "${EXPECT_BUILD_ID}"
+check "release file records the base digest"  test "$(turr TUR_BASE_DIGEST)" = "${EXPECT_BASE_DIGEST}"
+check "source revision is a full commit hash" bash -c '[[ "$(. /usr/lib/tur/release; echo "$TUR_SOURCE_REVISION")" =~ ^[0-9a-f]{40}$ ]]'
 
 for pkg in systemd bootc ostree kernel dracut selinux-policy-targeted \
            plasma-workspace plasma-desktop kwin \

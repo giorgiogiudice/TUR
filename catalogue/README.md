@@ -22,7 +22,7 @@ that breaks a rule breaks CI.
 
 A record with `reported_by = "tur-test"` must give `test_report`, the path of
 the test report in this repository, and the report must exist. Without it the
-entry is refused (`UOS-DESKTOP-CATALOGUE-006`).
+entry is refused (`TUR-DESKTOP-CATALOGUE-006`).
 
 An entry with every route unknown is a good entry. An invented rating is not.
 The same holds for requirements and editions: enter what a reference shows,

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
 #
-# Build the boot-test image on top of a UOS image and install it to a raw disk
+# Build the boot-test image on top of a TUR image and install it to a raw disk
 # image with the installer the image itself carries:
 #
 #     bootc install to-disk --generic-image --via-loopback
@@ -9,33 +9,33 @@
 # as documented by bootc for the version in the image
 # (https://github.com/bootc-dev/bootc, docs/src/bootc-installation.7.md).
 #
-#   tests/boot/build-disk.sh UOS_IMAGE WORK_DIR OUT_DIR
+#   tests/boot/build-disk.sh TUR_IMAGE WORK_DIR OUT_DIR
 #
 # WORK_DIR receives disk.raw. OUT_DIR/host receives the install log and what
 # was decided. PODMAN names the container tool and must run as root, for
 # example PODMAN="sudo podman": the installer needs a privileged container.
 #
 # Environment:
-#   UOS_BOOT_DISK_SIZE   size of the disk image (default 20G, sparse)
-#   UOS_BOOT_ROOT_FS     root filesystem to use when the image does not
+#   TUR_BOOT_DISK_SIZE   size of the disk image (default 20G, sparse)
+#   TUR_BOOT_ROOT_FS     root filesystem to use when the image does not
 #                        configure one (default ext4)
 #
 # Run this in CI only, never on a shared server.
 set -euo pipefail
 
 cd "$(dirname "$0")/../.."
-image="${1:?UOS image reference required}"
+image="${1:?TUR image reference required}"
 work="${2:?work directory required}"
 out="${3:?output directory required}"
 read -r -a podman <<<"${PODMAN:-podman}"
 
-test_image="${UOS_BOOT_TEST_IMAGE:-localhost/uos-boot-test:ci}"
-disk_size="${UOS_BOOT_DISK_SIZE:-20G}"
-fallback_fs="${UOS_BOOT_ROOT_FS:-ext4}"
+test_image="${TUR_BOOT_TEST_IMAGE:-localhost/tur-boot-test:ci}"
+disk_size="${TUR_BOOT_DISK_SIZE:-20G}"
+fallback_fs="${TUR_BOOT_ROOT_FS:-ext4}"
 # Kernel arguments added at install time, the documented way to make them
 # machine-local state. The last console= becomes /dev/console, so the serial
 # port carries the systemd status output and the agent's markers.
-kargs=("console=tty0" "console=ttyS0,115200n8" "uos.boot_test=1")
+kargs=("console=tty0" "console=ttyS0,115200n8" "tur.boot_test=1")
 
 mkdir -p "${work}" "${out}/host"
 work="$(cd "${work}" && pwd)"
@@ -114,8 +114,8 @@ finished="$(date +%s)"
 {
     echo "test_image=${test_image}"
     echo "test_image_id=$("${podman[@]}" image inspect -f '{{.Id}}' "${test_image}")"
-    echo "uos_image=${image}"
-    echo "uos_image_id=$("${podman[@]}" image inspect -f '{{.Id}}' "${image}")"
+    echo "tur_image=${image}"
+    echo "tur_image_id=$("${podman[@]}" image inspect -f '{{.Id}}' "${image}")"
     echo "install_command=bootc install to-disk ${install_args[*]} /output/disk.raw"
     echo "install_seconds=$((finished - started))"
     echo "root_fs=${root_fs}"

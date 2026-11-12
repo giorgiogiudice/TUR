@@ -255,7 +255,7 @@ pub struct OpaquePart {
 /// input.
 ///
 /// These are the three fields of a tool in the reviewed tool manifest
-/// (`services/uos-agent`), so a definition is built from a manifest tool with
+/// (`services/tur-pax`), so a definition is built from a manifest tool with
 /// `ToolDefinition::new(tool.name(), tool.description(), tool.input_schema().clone())`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ToolDefinition {

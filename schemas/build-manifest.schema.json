@@ -1,12 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/giorgiogiudice/UOS/schemas/build-manifest.schema.json",
-  "title": "UOS build manifest",
-  "description": "Machine-readable record of what a UOS image was built from and what it contains. Every value is read from the build; null means the value could not be determined or the component is absent.",
+  "$id": "https://github.com/giorgiogiudice/TUR/schemas/build-manifest.schema.json",
+  "title": "TUR build manifest",
+  "description": "Machine-readable record of what a TUR image was built from and what it contains. Every value is read from the build; null means the value could not be determined or the component is absent.",
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "schema_version", "uos_version", "build_id", "source_revision", "source_date_epoch",
+    "schema_version", "tur_version", "build_id", "source_revision", "source_date_epoch",
     "architecture", "image", "base", "kernel_release", "kernel_config_sha256",
     "kernel_config", "bootloader", "desktop", "security", "packages", "rpm_count",
     "runtime_versions", "sbom"
@@ -18,7 +18,7 @@
   },
   "properties": {
     "schema_version": { "const": 1 },
-    "uos_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.-]+)?$" },
+    "tur_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.-]+)?$" },
     "build_id": { "type": "string", "pattern": "^[0-9]{8}\\.g[0-9a-f]{12}(\\.dirty)?$" },
     "source_revision": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
     "source_date_epoch": { "type": "integer", "minimum": 1 },

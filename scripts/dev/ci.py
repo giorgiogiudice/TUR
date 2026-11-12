@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
 """Developer helper for working against GitHub Actions without local builds.
 
-UOS is built and tested in CI, not on development machines (ADR-0002). This
+TUR is built and tested in CI, not on development machines (ADR-0002). This
 tool lets a developer or agent push, wait for the result, read failures and
 pull back the fixes CI can compute (lockfiles, formatting).
 
@@ -16,7 +16,7 @@ pull back the fixes CI can compute (lockfiles, formatting).
     scripts/dev/ci.py pr-status NUMBER                 show a pull request's state
     scripts/dev/ci.py pr-edit NUMBER --body-file F     replace a pull request's description
 
-The token comes from UOS_GH_TOKEN or from git's configured credential helper.
+The token comes from TUR_GH_TOKEN or from git's configured credential helper.
 """
 
 from __future__ import annotations
@@ -49,8 +49,8 @@ def repo_slug() -> str:
 
 
 def token() -> str:
-    if os.environ.get("UOS_GH_TOKEN"):
-        return os.environ["UOS_GH_TOKEN"]
+    if os.environ.get("TUR_GH_TOKEN"):
+        return os.environ["TUR_GH_TOKEN"]
     out = subprocess.run(
         ["git", "-C", str(ROOT), "credential", "fill"],
         input="protocol=https\nhost=github.com\n\n",
@@ -60,7 +60,7 @@ def token() -> str:
     for line in out.splitlines():
         if line.startswith("password="):
             return line[len("password="):]
-    sys.exit("no GitHub token: set UOS_GH_TOKEN or configure a git credential helper")
+    sys.exit("no GitHub token: set TUR_GH_TOKEN or configure a git credential helper")
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -74,7 +74,7 @@ def request(method: str, path: str, body: dict | None = None, raw: bool = False)
     headers = {
         "Authorization": f"Bearer {token()}",
         "Accept": "application/vnd.github+json",
-        "User-Agent": "uos-ci-helper",
+        "User-Agent": "tur-ci-helper",
     }
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(url, data=data, method=method, headers=headers)
@@ -91,7 +91,7 @@ def request(method: str, path: str, body: dict | None = None, raw: bool = False)
                     # The repository was renamed or moved: same API, keep the token.
                     return request(method, location, body, raw)
                 # Logs and artifacts live on another host: follow without the token.
-                plain = urllib.request.Request(location, headers={"User-Agent": "uos-ci-helper"})
+                plain = urllib.request.Request(location, headers={"User-Agent": "tur-ci-helper"})
                 with urllib.request.urlopen(plain, timeout=120) as resp:
                     return resp.read()
             if err.code in (502, 503, 504) and attempt < 3:

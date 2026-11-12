@@ -821,7 +821,7 @@ mod tests {
     #[test]
     fn a_procedure_needs_steps_and_only_a_procedure_has_them() {
         let step = ProcedureStep {
-            service: "org.uos.Network1".to_owned(),
+            service: "org.tur.Network1".to_owned(),
             tool: "network_reset_profile".to_owned(),
             arguments: json!({ "profile": "{{profile}}" })
                 .as_object()
@@ -854,9 +854,9 @@ mod tests {
 
         for (service, tool) in [
             ("network", "network_reset_profile"),
-            ("org.uos.Network1", "Reset"),
+            ("org.tur.Network1", "Reset"),
             ("org..Network1", "reset"),
-            ("org.uos.Network1", "reset profile"),
+            ("org.tur.Network1", "reset profile"),
         ] {
             let bad = Procedure {
                 name: "Bad".to_owned(),

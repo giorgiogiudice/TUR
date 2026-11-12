@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
-"""Generate the UOS build manifest from a built image.
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+"""Generate the TUR build manifest from a built image.
 
     scripts/gen-manifest.py IMAGE OUTPUT.json [--sbom sbom.spdx.json]
 
@@ -58,7 +58,7 @@ for p in __PACKAGES__; do
     if v=$(rpm -q --qf '%{EVR}' "$p" 2>/dev/null); then echo "p:$p=$v"; fi
 done
 sed 's/^/o:/' /usr/lib/os-release
-sed 's/^/u:/' /usr/lib/uos/release
+sed 's/^/u:/' /usr/lib/tur/release
 echo "v:default_target=$(systemctl get-default 2>/dev/null)"
 echo "v:selinux=$(grep -E '^SELINUX=' /etc/selinux/config | cut -d= -f2)"
 dm=$(readlink /etc/systemd/system/display-manager.service 2>/dev/null || true)
@@ -89,8 +89,8 @@ def main() -> int:
     kconfig: dict[str, str] = {}
     packages: dict[str, str] = {}
     osrel: dict[str, str] = {}
-    uosrel: dict[str, str] = {}
-    targets = {"v": values, "k": kconfig, "p": packages, "o": osrel, "u": uosrel}
+    turrel: dict[str, str] = {}
+    targets = {"v": values, "k": kconfig, "p": packages, "o": osrel, "u": turrel}
     for line in out.splitlines():
         kind, _, rest = line.partition(":")
         key, sep, value = rest.partition("=")
@@ -112,9 +112,9 @@ def main() -> int:
 
     manifest = {
         "schema_version": 1,
-        "uos_version": uosrel.get("UOS_VERSION"),
-        "build_id": uosrel.get("UOS_BUILD_ID"),
-        "source_revision": uosrel.get("UOS_SOURCE_REVISION"),
+        "tur_version": turrel.get("TUR_VERSION"),
+        "build_id": turrel.get("TUR_BUILD_ID"),
+        "source_revision": turrel.get("TUR_SOURCE_REVISION"),
         "source_date_epoch": int(run(["git", "-C", str(ROOT), "show", "-s", "--format=%ct", "HEAD"]).strip()),
         "architecture": arch,
         "image": {
@@ -122,9 +122,9 @@ def main() -> int:
             "digest": inspect.get("Digest") or None,
         },
         "base": {
-            "image": uosrel.get("UOS_BASE_IMAGE"),
+            "image": turrel.get("TUR_BASE_IMAGE"),
             "tag": lock.get("BASE_TAG"),
-            "digest": uosrel.get("UOS_BASE_DIGEST"),
+            "digest": turrel.get("TUR_BASE_DIGEST"),
             "version": osrel.get("OSTREE_VERSION") or lock.get("BASE_VERSION"),
             "os_id": osrel.get("ID"),
             "os_version_id": osrel.get("VERSION_ID"),

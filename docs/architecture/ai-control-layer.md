@@ -4,7 +4,7 @@
 **Applies to:** specification revision 1.0
 **Related decision:** [ADR-0004](../adr/0004-ai-provider-model.md)
 
-This addendum specifies the optional layer that lets a person operate UOS through
+This addendum specifies the optional layer that lets a person operate TUR through
 an AI assistant, **P@x**: by voice or text, with the assistant able to see and
 control applications from every runtime. "The assistant" below means P@x. It adds a subsystem to the specification and
 lists the amendments it requires in [section 14](#14-amendments-to-specification-revision-10).
@@ -32,7 +32,7 @@ implementation, as the specification requires (§0, rule 14).
 
 **In scope**
 
-- A session service, `uos-agent`, that turns a spoken or typed request into
+- A session service, `tur-pax`, that turns a spoken or typed request into
   actions on the system.
 - Four ways of acting: typed system tools, commands, the accessibility tree, and
   screen plus input.
@@ -49,11 +49,11 @@ implementation, as the specification requires (§0, rule 14).
   the AI layer.
 - Real-time control of games.
 - Training or fine-tuning models.
-- A bundled model or a UOS-operated cloud service. The user brings a key.
+- A bundled model or a TUR-operated cloud service. The user brings a key.
 
 ## 2. Principles
 
-1. **Optional and off by default.** UOS without a key is a complete product.
+1. **Optional and off by default.** TUR without a key is a complete product.
 2. **Reach is not authority.** The assistant can reach every application. What it
    may do unprompted is decided by policy, never by the model.
 3. **Most structured path first.** A typed tool is preferred to the accessibility
@@ -78,7 +78,7 @@ flowchart TB
         TTS["Text to speech"]
     end
 
-    subgraph AGENT["uos-agent · user session service"]
+    subgraph AGENT["tur-pax · user session service"]
         direction TB
         ORCH["Orchestrator<br/>task loop"]
         POL["Policy engine<br/>action classes"]
@@ -101,7 +101,7 @@ flowchart TB
 
     subgraph ACT["Ways of acting"]
         direction LR
-        T1["System tools<br/>org.uos.* over D-Bus"]
+        T1["System tools<br/>org.tur.* over D-Bus"]
         T1B["Commands<br/>sandboxed"]
         T2["Accessibility tree<br/>AT-SPI"]
         T3["Screen and input<br/>via the compositor"]
@@ -122,7 +122,7 @@ flowchart TB
 |---|---|
 | **Orchestrator** | Runs the task loop: send context to the provider, receive proposed actions, pass each through the policy engine, return results. Enforces step, time and spend limits. |
 | **Policy engine** | Classifies every proposed action and decides: allow, ask, require authentication, or refuse. The only component that can release an action. |
-| **Tool registry** | Loads tool manifests published by UOS services and exposes them to the provider in its tool format. |
+| **Tool registry** | Loads tool manifests published by TUR services and exposes them to the provider in its tool format. |
 | **Provider adapters** | Translate between the common interface and one provider's API. |
 | **Audit log** | Records every proposed and executed action in the journal. |
 | **Voice** | Local wake word, speech recognition and speech synthesis. |
@@ -131,14 +131,14 @@ flowchart TB
 | **Scheduler** | Fires reminders and scheduled tasks (section 16.2). |
 | **Trusted confirmation path** | A compositor-protected prompt the assistant can neither see into nor operate. |
 
-`uos-agent` runs as the logged-in user, with no more privilege than that user. It
+`tur-pax` runs as the logged-in user, with no more privilege than that user. It
 has no access to other users' sessions.
 
 ## 4. Ways of acting
 
 | Tier | Mechanism | Reliability | Used for |
 |---|---|---|---|
-| **1. System tools** | Typed operations on `org.uos.*` services and standard desktop interfaces | High; fast; cheap | Launching applications, volumes, devices, updates, diagnostics, settings, files |
+| **1. System tools** | Typed operations on `org.tur.*` services and standard desktop interfaces | High; fast; cheap | Launching applications, volumes, devices, updates, diagnostics, settings, files |
 | **1b. Commands** | Shell commands in a sandbox (section 5.4) | High for anything a terminal can do | Troubleshooting, inspection, repair, automation, anything no typed tool covers |
 | **2. Accessibility tree** | AT-SPI: named controls, roles, states and actions | Good where applications expose it | Native Qt and GTK applications |
 | **3. Screen and input** | Screen capture and emulated keyboard and pointer, through the compositor | Variable; seconds per step | Everything else |
@@ -147,7 +147,7 @@ Expected coverage by runtime:
 
 | Application type | Tier 1 | Tier 2 | Tier 3 |
 |---|---|---|---|
-| UOS services and settings | Yes | Yes | Yes |
+| TUR services and settings | Yes | Yes | Yes |
 | Native Linux (Qt, GTK) | Launch and files | Yes | Yes |
 | Native Linux (other toolkits) | Launch and files | Partial | Yes |
 | Windows applications under Wine | Launch and files | Not assumed | Yes |
@@ -306,7 +306,7 @@ compositor therefore provides the following, and the design depends on them:
 
 1. **Emulated input is distinguishable.** The compositor knows which input events
    come from physical devices and which from the assistant.
-2. **Protected surfaces ignore emulated input.** Authentication dialogs, UOS
+2. **Protected surfaces ignore emulated input.** Authentication dialogs, TUR
    confirmation prompts, keyring prompts and the lock screen accept physical input
    only.
 3. **Protected surfaces are not captured.** They are excluded from the screen
@@ -331,7 +331,7 @@ classes 0 and 1.
 | **Spoofed confirmation prompt** | An application draws a fake approval dialog | Real prompts are compositor-drawn and cannot be imitated or covered. |
 | **Secret disclosure to the provider** | A password manager is visible when a screenshot is taken | Sensitive applications and protected surfaces are excluded from capture. Private mode. Per-application exclusion. |
 | **Secret disclosure by action** | The assistant is induced to type or paste a secret into a web form | Keyring access is class 4. Clipboard reads are logged. Credential entry is left to the user. |
-| **API key theft** | Another process reads the key | The key is in the system keyring, released only to `uos-agent`, and never written to profiles, logs or bundles. |
+| **API key theft** | Another process reads the key | The key is in the system keyring, released only to `tur-pax`, and never written to profiles, logs or bundles. |
 | **Malicious or compromised provider** | Responses propose harmful actions | The policy engine treats every proposal as untrusted. The provider gains no authority the user has not granted. |
 | **Privilege escalation** | The assistant is used to obtain root | It runs as the user. Privileged operations go through polkit with human authentication. |
 | **Self-modification** | The assistant relaxes its own policy or adds itself to autostart | Policy, permissions, indicator and audit log are class 4 and are not writable by the agent's user-level process. |
@@ -350,7 +350,7 @@ section 11 are the answer to that, not a claim that it cannot happen.
 ## 8. Privacy
 
 Enabling the AI layer with a cloud provider sends data off the machine. This is
-the one place UOS does so in normal operation, so it is governed by the same rule
+the one place TUR does so in normal operation, so it is governed by the same rule
 as diagnostics (§0, rule 9): nothing silent, everything explained.
 
 **What is sent to the provider:** the user's request as text, screenshots of the
@@ -369,7 +369,7 @@ it and says so.
 
 **Controls**
 
-- **Consent at setup.** Before the first use, UOS shows what will be sent, to
+- **Consent at setup.** Before the first use, TUR shows what will be sent, to
   which provider, and links to that provider's data terms.
 - **Indicator.** A persistent, compositor-drawn indicator shows when the assistant
   is observing and when it is controlling.
@@ -417,7 +417,7 @@ Rules:
 - The adapter reports the provider's declared capabilities; the orchestrator
   adapts rather than assuming parity.
 - A provider's refusal, rate limit, timeout or malformed response is a normal
-  result with a stable `UOS-AI-*` error code, reported to the user in plain terms.
+  result with a stable `TUR-AI-*` error code, reported to the user in plain terms.
 - Each adapter passes the same conformance suite (section 12). Results are
   published per provider.
 - Adapters are written against the provider's current documentation at the time,
@@ -435,7 +435,7 @@ provider's documentation are described in [pax-providers.md](pax-providers.md).
 
 ## 11. Interfaces, logging and undo
 
-**D-Bus.** `org.uos.Agent1` on the session bus. Proposed surface, to be fixed in an
+**D-Bus.** `org.tur.Agent1` on the session bus. Proposed surface, to be fixed in an
 interface specification before implementation (§16):
 
 ```text
@@ -452,13 +452,13 @@ Signals   ActionProposed(task_id, action, class)
           TaskFinished(task_id, outcome)
 ```
 
-**Tool manifest.** Each UOS service ships a manifest describing its
+**Tool manifest.** Each TUR service ships a manifest describing its
 assistant-facing operations. Illustrative:
 
 ```json
 {
   "schema_version": 1,
-  "service": "org.uos.Storage1",
+  "service": "org.tur.Storage1",
   "tools": [
     {
       "name": "storage_list_volumes",
@@ -469,7 +469,7 @@ assistant-facing operations. Illustrative:
     },
     {
       "name": "storage_unmount",
-      "description": "Unmount a volume by its UOS volume identifier.",
+      "description": "Unmount a volume by its TUR volume identifier.",
       "class": 1,
       "method": "Unmount",
       "input_schema": {
@@ -489,18 +489,18 @@ A manifest is part of a service's definition of done. Destructive operations
 **Audit log.** Structured journal records, one per proposed action:
 
 ```text
-UOS_AI_TASK=<task-id>
-UOS_AI_ACTION=<tool or input action>
-UOS_AI_CLASS=<0-4>
-UOS_AI_DECISION=allowed | confirmed | denied | refused
-UOS_AI_TIER=<1-3>
-UOS_AI_SANDBOX=<read-only | workspace | user | privileged, for commands>
-UOS_AI_ATTENDED=<yes | no>
-UOS_AI_PROVIDER=<adapter>
-UOS_ERROR_CODE=<UOS-AI-* if any>
+TUR_AI_TASK=<task-id>
+TUR_AI_ACTION=<tool or input action>
+TUR_AI_CLASS=<0-4>
+TUR_AI_DECISION=allowed | confirmed | denied | refused
+TUR_AI_TIER=<1-3>
+TUR_AI_SANDBOX=<read-only | workspace | user | privileged, for commands>
+TUR_AI_ATTENDED=<yes | no>
+TUR_AI_PROVIDER=<adapter>
+TUR_ERROR_CODE=<TUR-AI-* if any>
 ```
 
-**Error codes.** A new family, `UOS-AI-*`, in the registry (§29.3).
+**Error codes.** A new family, `TUR-AI-*`, in the registry (§29.3).
 
 **Undo.**
 
@@ -544,7 +544,7 @@ The AI layer is built alongside the existing phases, not after them.
 | Milestone | With phase | Deliverable | Exit criterion |
 |---|---|---|---|
 | **A0 Foundations** | 0–1 | Tool manifest schema, policy engine covering every rule in section 5, audit log; no model | A scripted caller exercises every class against a test service; class 3 fails without authentication |
-| **A1 Tools per service** | 1–2 onward | Each UOS service ships its manifest | Diagnostics, storage, device and update tools pass policy tests |
+| **A1 Tools per service** | 1–2 onward | Each TUR service ships its manifest | Diagnostics, storage, device and update tools pass policy tests |
 | **A2 Screen and input** | 3 | Compositor capture and input harness; scripted GUI test driver | CI drives the desktop in a VM without an API key |
 | **A3 Trusted path** | 3 | The five compositor guarantees of section 6 | Trusted-path tests pass; until then the assistant is limited to classes 0 and 1 |
 | **A4 Providers and text interface** | after 3 | Anthropic, OpenAI and Google adapters; text command interface | Conformance suite passes on each; injection suite passes |
@@ -560,18 +560,18 @@ The AI layer is built alongside the existing phases, not after them.
 
 | Section | Amendment |
 |---|---|
-| §0 | Add rules: the AI layer is optional and off by default; the assistant never holds authority a person has not granted; no provider contact outside `uos-agent`. |
-| §1 | Add **UOS Agent** as a sixth integration-layer contribution. |
+| §0 | Add rules: the AI layer is optional and off by default; the assistant never holds authority a person has not granted; no provider contact outside `tur-pax`. |
+| §1 | Add **TUR Agent** as a sixth integration-layer contribution. |
 | §2.1 | Add goal: optional operation of the whole system by voice or text through an AI assistant. |
-| §2.2 | Add non-goals: a bundled model; a UOS cloud service; AI in the boot or recovery path. |
+| §2.2 | Add non-goals: a bundled model; a TUR cloud service; AI in the boot or recovery path. |
 | §9.4 | Add the trusted confirmation path and the activity indicator to shared desktop services. |
 | §12 | Add §12.5, AI layer security, referring to sections 5 to 8 here. |
-| §16 | Add `org.uos.Agent1` and the tool-manifest requirement for every service. |
-| §18.1 | Add `services/uos-agent/` and `tests/ai/`. |
+| §16 | Add `org.tur.Agent1` and the tool-manifest requirement for every service. |
+| §18.1 | Add `services/tur-pax/` and `tests/ai/`. |
 | §18.3 | Add CI stages: policy tests, trusted-path tests, injection suite. |
 | §20 | Add milestones A0 to A10 as in section 13. |
 | §24 | Add risks: prompt injection (critical); disclosure to a provider (high); provider API change (medium). |
-| §29.3 | Add the `UOS-AI-*` error-code family. |
+| §29.3 | Add the `TUR-AI-*` error-code family. |
 | §29.4 | Clarify that the rule against an automated agent changing bootloader, partition, encryption, kernel or firmware settings on a live computer applies equally to the on-device assistant: class 3, never covered by a repair session. |
 
 ## 15. Open questions
@@ -653,7 +653,7 @@ investigates and fixes it rather than describing what the user might try.
    devices, network, storage, the runtime an application uses, its own logs. No
    approval needed.
 2. **Explain.** State the cause in plain language, with the evidence and the
-   `UOS-*` error code where there is one.
+   `TUR-*` error code where there is one.
 3. **Fix.** Reversible, user-level fixes are applied directly. A user-level change
    that is not reversible is shown first. A fix that needs administrator rights
    opens a repair session (section 5.5).
@@ -667,7 +667,7 @@ Linux application's sandbox permissions. Where the cause is a limit of a
 compatibility layer, the assistant says so and offers the next route to the same
 application.
 
-The assistant works from the same evidence a developer would: `uos-diag` and the
+The assistant works from the same evidence a developer would: `tur-diag` and the
 error-code registry exist partly so that it can.
 
 ### 16.4 Reporting issues
@@ -679,7 +679,7 @@ Nothing is reported automatically.
 
 ### 16.5 Proactive help
 
-The assistant may notice that something failed — a `UOS-*` error, a failed
+The assistant may notice that something failed — a `TUR-*` error, a failed
 update, a crashed application — and offer to look into it. Noticing and offering
 is all it does on its own initiative. It reads nothing beyond class 0, and acts
 only when asked.
@@ -736,7 +736,7 @@ own decision table and its tested invariants are in
 | 8 | "Tasks pause when the session locks" conflicted with scheduled tasks. | An attended task pauses when the session locks. An unattended task runs, without screen or accessibility actions. |
 | 9 | "Every privileged command is logged" conflicted with "arguments are never logged in full". | Privileged requests are logged in full, because they are shown to the user anyway and must be reviewable; values marked secret are replaced. Arguments of ordinary tool calls are summarised. |
 | 10 | Unspecified: repair-session length, the class of a privileged command, creating a schedule, whether ask-every-action covers observing. | A repair session lasts 15 minutes by default and at most 60. A privileged request is class 2 that additionally requires an open repair session. P@x proposes a schedule; creating it is the user's act. Ask-every-action covers class 0 too. |
-| 11 | The audit fields could not express a pending or deferred outcome, or a command. | `UOS_AI_DECISION` gains `confirmation_required`, `authentication_required` and `deferred`. `UOS_AI_TIER` is 1 for tools, 2 for the accessibility tree, 3 for the screen, 4 for commands and 0 for P@x's own operations such as memory. |
+| 11 | The audit fields could not express a pending or deferred outcome, or a command. | `TUR_AI_DECISION` gains `confirmation_required`, `authentication_required` and `deferred`. `TUR_AI_TIER` is 1 for tools, 2 for the accessibility tree, 3 for the screen, 4 for commands and 0 for P@x's own operations such as memory. |
 | 12 | Spoken approval of class 2 sat outside the trusted path. | Settled in section 5.2: on screen by default; spoken approval only if the user enables it. |
 
 Where the design was silent, the engine takes the stricter reading. The full list
@@ -797,7 +797,7 @@ this section governs.
 | 5 | A locked, unattended task | Tools and read-only commands only. A workspace command is deferred until the user returns. |
 | 6 | The repair-session record | Carries its opening time and an ended mark, so a session cannot reopen after a lock or outlive its limit. |
 | 7 | Marking a value secret in a privileged request | Only the component that builds the request from a typed operation can mark a value secret. Free text is recorded as written. |
-| 8 | Audit fields | Adds `UOS_AI_REQUEST` (the privileged request in full) and `privileged` as a sandbox value. |
+| 8 | Audit fields | Adds `TUR_AI_REQUEST` (the privileged request in full) and `privileged` as a sandbox value. |
 
 The engine's decision table, its invariants and the tests that enforce them are in
 [agent-policy.md](agent-policy.md).

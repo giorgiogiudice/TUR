@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
 """Prove that this user can use KVM, before anything expensive is built.
 
     tests/boot/check-kvm.py [RESULT.json]

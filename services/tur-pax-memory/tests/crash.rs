@@ -504,7 +504,7 @@ fn run_of(schedule: u64) -> NewRun {
         started_at: Timestamp(90_001),
         outcome: RunOutcome::Completed,
         performed: vec![ActionRecord {
-            service: "org.uos.Mail1".to_owned(),
+            service: "org.tur.Mail1".to_owned(),
             tool: "mail_send".to_owned(),
             arguments: json!({ "to": "manager@example.org" })
                 .as_object()

@@ -1,14 +1,14 @@
-# Diagnostics: `uos-diag`
+# Diagnostics: `tur-diag`
 
-Design note for the diagnostics collector (task UOS-004, first slice).
+Design note for the diagnostics collector (task TUR-004, first slice).
 Specification sections: §5.5, §6.3, §6.4, §6.5, §29.1 to §29.3.
 
-- Code: `services/uos-diagnostics/` (library `uos_diag`, binary `uos-diag`).
+- Code: `services/tur-diagnostics/` (library `tur_diag`, binary `tur-diag`).
 - Manifest schema: `schemas/diag-bundle-manifest.schema.json`.
 
 ## Purpose
 
-`uos-diag` produces a support bundle: one local file that describes the state of a
+`tur-diag` produces a support bundle: one local file that describes the state of a
 machine well enough for someone else to diagnose a problem, with personal and
 machine identifiers replaced. It runs only when a person asks. It has no network
 code and uploads nothing.
@@ -16,14 +16,14 @@ code and uploads nothing.
 ## Commands
 
 ```sh
-uos-diag status [--json]
-uos-diag collect --output FILE.tar.zst [--since-boot] [--profile default|technical]
-uos-diag verify-bundle FILE
+tur-diag status [--json]
+tur-diag collect --output FILE.tar.zst [--since-boot] [--profile default|technical]
+tur-diag verify-bundle FILE
 ```
 
-- `status` prints the UOS build (from `/usr/lib/uos/release`), source revision,
+- `status` prints the TUR build (from `/usr/lib/tur/release`), source revision,
   deployment checksum (from `bootc status`), system name, kernel, boot ID and the
-  number of failed systemd units. On a host that is not UOS it says so and still
+  number of failed systemd units. On a host that is not TUR it says so and still
   reports the rest. Values that cannot be read are shown as unknown, or `null` in
   JSON.
 - `collect` writes a new file with mode 0600. It refuses to overwrite an existing
@@ -46,7 +46,7 @@ is recorded in the manifest and the rest is still collected.
 | `manifest` | The types behind `manifest.json`. |
 | `bundle` | Builds, writes and verifies the archive. |
 | `identity` | Build identity and status; the names given to the redactor. |
-| `error` | The `UOS-DIAG-*` registry. |
+| `error` | The `TUR-DIAG-*` registry. |
 
 `main.rs` only parses arguments and prints.
 
@@ -61,7 +61,7 @@ output limit (64 MiB).
 | `system/kernel.txt` | `uname -a` |
 | `system/kernel-cmdline.txt` | `/proc/cmdline` |
 | `system/os-release.txt` | `/etc/os-release` |
-| `system/uos-release.txt` | `/usr/lib/uos/release` |
+| `system/tur-release.txt` | `/usr/lib/tur/release` |
 | `system/modules.txt` | `/proc/modules` |
 | `system/deployment.json` | `bootc status --format=json` |
 | `system/failed-units.txt` | `systemctl list-units --state=failed` |
@@ -82,7 +82,7 @@ output limit (64 MiB).
 | `hardware/firmware.txt` | `fwupdmgr get-devices` |
 | `storage/filesystems.txt` | `blkid` limited to the `TYPE`, `UUID`, `PARTUUID` and `PTTYPE` tags |
 | `storage/mounts.txt` | `/proc/mounts` |
-| `services/uos-service-status.txt` | `systemctl list-units 'uos-*'` |
+| `services/tur-service-status.txt` | `systemctl list-units 'tur-*'` |
 
 A missing command, a non-zero exit, a timeout, a missing or unreadable file never
 fails the bundle. The item is left out and recorded in the manifest's `missing`
@@ -183,7 +183,7 @@ Members are written in the order shown, so the same input produces the same
 bytes.
 
 `manifest.json` (schema version 1) records: the collector name and version, the
-UTC creation time, the UOS build ID, version, source revision, deployment checksum
+UTC creation time, the TUR build ID, version, source revision, deployment checksum
 and image digest where available, boot ID, architecture, kernel release, an
 installer session ID (always `null` for now), the redaction profile, whether
 `--since-boot` was used, every file with its SHA-256 and size as stored, and the
@@ -208,33 +208,33 @@ and both lists consistently is not detected.
 - Categories without a collector yet are absent: `desktop/`, `runtimes/`,
   `installer/`, and `system/bootloader.txt`, `system/build-manifest.json`,
   `boot/boot-stages.jsonl`, `storage/udisks-status.json`.
-- The file is named by `--output`; the `uos-support-<build-id>-<boot-id>` name is
+- The file is named by `--output`; the `tur-support-<build-id>-<boot-id>` name is
   not generated.
 
 ## Error codes
 
 Every failure is reported in two layers (§6.3): the code and a message for the
 user with an action, then the technical detail. The registry is in
-`src/error.rs`; a test checks that every code parses as a `uos_core::ErrorCode` in
+`src/error.rs`; a test checks that every code parses as a `tur_core::ErrorCode` in
 the `DIAG` family, is unique, and has not changed.
 
 | Code | Meaning |
 |---|---|
-| `UOS-DIAG-COLLECT-001` | The bundle could not be written to the output path. |
-| `UOS-DIAG-COLLECT-002` | The output path already exists; nothing was overwritten. |
-| `UOS-DIAG-BUNDLE-001` | The bundle file could not be read. |
-| `UOS-DIAG-BUNDLE-002` | The archive is damaged: zstd or tar decoding failed. |
-| `UOS-DIAG-BUNDLE-003` | The archive has a member `uos-diag` never writes (not a regular file, unsafe path, duplicate). |
-| `UOS-DIAG-BUNDLE-004` | `manifest.json` or `checksums.sha256` is missing. |
-| `UOS-DIAG-BUNDLE-005` | The manifest or the checksum list cannot be parsed. |
-| `UOS-DIAG-BUNDLE-006` | The manifest's schema version is not supported. |
-| `UOS-DIAG-BUNDLE-007` | A file does not match its recorded SHA-256 or size. |
-| `UOS-DIAG-BUNDLE-008` | Files were added or removed: the lists and the archive disagree. |
-| `UOS-DIAG-BUNDLE-009` | The archive expands beyond the 2 GiB verification limit. |
-| `UOS-DIAG-INTERNAL-001` | A defect in `uos-diag`. |
+| `TUR-DIAG-COLLECT-001` | The bundle could not be written to the output path. |
+| `TUR-DIAG-COLLECT-002` | The output path already exists; nothing was overwritten. |
+| `TUR-DIAG-BUNDLE-001` | The bundle file could not be read. |
+| `TUR-DIAG-BUNDLE-002` | The archive is damaged: zstd or tar decoding failed. |
+| `TUR-DIAG-BUNDLE-003` | The archive has a member `tur-diag` never writes (not a regular file, unsafe path, duplicate). |
+| `TUR-DIAG-BUNDLE-004` | `manifest.json` or `checksums.sha256` is missing. |
+| `TUR-DIAG-BUNDLE-005` | The manifest or the checksum list cannot be parsed. |
+| `TUR-DIAG-BUNDLE-006` | The manifest's schema version is not supported. |
+| `TUR-DIAG-BUNDLE-007` | A file does not match its recorded SHA-256 or size. |
+| `TUR-DIAG-BUNDLE-008` | Files were added or removed: the lists and the archive disagree. |
+| `TUR-DIAG-BUNDLE-009` | The archive expands beyond the 2 GiB verification limit. |
+| `TUR-DIAG-INTERNAL-001` | A defect in `tur-diag`. |
 
 Command-line usage errors are reported by the argument parser with exit code 2 and
-have no UOS code.
+have no TUR code.
 
 ## Known gaps
 
@@ -250,7 +250,7 @@ have no UOS code.
   should be read before it is shared, and `README.txt` says so.
 - **No preview before export.** §6.5 asks for one. `collect` prints counts after
   writing; an interactive preview belongs with the GUI entry point.
-- **Not run on a real UOS image.** The code is tested with a fake host only. The
+- **Not run on a real TUR image.** The code is tested with a fake host only. The
   exact output and exit codes of the collected tools on Fedora 45, and the field
   names read from `bootc status --format=json`, have not been checked against a
   running system. A tool that behaves differently is recorded as missing data
@@ -272,5 +272,5 @@ have no UOS code.
   `runtimes`.
 - Upload of any kind.
 - journald persistence configuration in the image (§5.5), and installing
-  `uos-diag` into the image.
-- Test of export to a removable disk image (UOS-004).
+  `tur-diag` into the image.
+- Test of export to a removable disk image (TUR-004).

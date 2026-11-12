@@ -17,7 +17,7 @@
 //! installs or launches an application, and nothing uses the network.
 //!
 //! This crate handles "the user named an application". The case "the user
-//! has a file" belongs to the runtime manager's inspection (`uos-runtime`),
+//! has a file" belongs to the runtime manager's inspection (`tur-runtime`),
 //! which this crate does not depend on.
 //!
 //! ```

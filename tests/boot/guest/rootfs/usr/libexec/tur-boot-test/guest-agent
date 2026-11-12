@@ -1,0 +1,374 @@
+#!/usr/bin/bash
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# TUR boot-test guest agent. Present only in the boot-test image.
+#
+# Started early by tur-boot-test.service. It watches the boot from inside,
+# records facts as plain files, sends them to the host as a tar stream over a
+# virtio-serial port, and prints marker lines on the console (the serial port)
+# that the host waits for. It decides nothing: tests/boot/report.py on the host
+# turns the facts into checks.
+#
+# The test boots the disk twice:
+#
+#   first-boot   the disk exactly as installed. Nobody has an account, so the
+#                display manager starts the first-run setup session.
+#   second-boot  after the agent has created a user and the setup-done flag,
+#                standing in for a person who completed first-run setup. The
+#                display manager shows its login greeter.
+#
+# Markers (all start with "TUR-BOOT-TEST: "):
+#   START phase=...                the agent is running
+#   graphical.target reached ...   systemd reports graphical.target active
+#   graphical session running ...  a compositor owns the seat
+#   FIRST-BOOT-DONE ...            first report sent; the guest reboots shortly
+#   COMPLETE ...                   second report sent; the host may take its
+#                                  screenshot and power the guest off
+set -u
+
+port_name=org.tur.boottest
+port="/dev/virtio-ports/${port_name}"
+state=/var/lib/tur-boot-test
+dm_unit=plasmalogin.service
+setup_done_flag=/etc/plasma-setup-done
+test_user=turtest
+
+if [ -e "${state}/first-boot-done" ]; then phase=second-boot; else phase=first-boot; fi
+out="${state}/report/${phase}"
+status="${out}/status"
+
+# Bounded waits, in seconds. The host has its own hard timeout above their sum.
+wait_graphical=240
+wait_dm=60
+wait_session=90
+wait_settle=120
+wait_network=45
+hold=15
+
+say() { printf 'TUR-BOOT-TEST: %s\n' "$*"; }
+put() { printf '%s=%s\n' "$1" "$2" >> "${status}"; }
+uptime_s() { cut -d' ' -f1 /proc/uptime; }
+
+# cap NAME COMMAND...: keep the output of a command; note its exit status.
+cap() {
+    local name="$1" rc
+    shift
+    timeout 60 "$@" > "${out}/${name}" 2>&1
+    rc=$?
+    printf '%s\t%s\n' "${name}" "${rc}" >> "${out}/exit-status.tsv"
+    return 0
+}
+
+# The session that owns the display: the active session on seat0.
+seat_session() { loginctl show-seat seat0 -p ActiveSession --value 2> /dev/null; }
+session_prop() { loginctl show-session "$1" -p "$2" --value 2> /dev/null; }
+compositor_pid() {
+    local sid uid
+    sid="$(seat_session)"
+    if [ -z "${sid}" ]; then return 1; fi
+    uid="$(session_prop "${sid}" User)"
+    if [ -z "${uid}" ]; then return 1; fi
+    pgrep -U "${uid}" -x kwin_wayland | head -n1
+}
+graphical_session() {
+    local sid
+    sid="$(seat_session)"
+    if [ -z "${sid}" ]; then return 1; fi
+    case "$(session_prop "${sid}" Type)" in
+        wayland | x11) ;;
+        *) return 1 ;;
+    esac
+    if [ "$(session_prop "${sid}" State)" != active ]; then return 1; fi
+    test -n "$(compositor_pid)"
+}
+
+check() {
+    case "$1" in
+        graphical) systemctl is-active --quiet graphical.target ;;
+        dm) systemctl is-active --quiet "${dm_unit}" ;;
+        session) graphical_session ;;
+        route) ip -4 route show default | grep -q '^default' ;;
+        port) test -e "${port}" ;;
+        *) return 2 ;;
+    esac
+}
+
+# wait_for SECONDS CONDITION: poll a condition once a second.
+wait_for() {
+    local limit="$1" what="$2" start="${SECONDS}"
+    until check "${what}" > /dev/null 2>&1; do
+        if [ $((SECONDS - start)) -ge "${limit}" ]; then return 1; fi
+        sleep 1
+    done
+    return 0
+}
+
+rm -rf "${out}"
+mkdir -p "${out}"
+: > "${status}"
+
+build_id="$(sed -n 's/^BUILD_ID=//p' /usr/lib/os-release | tr -d '"')"
+put phase "${phase}"
+put build_id "${build_id}"
+put kernel "$(uname -r)"
+put boot_id "$(cat /proc/sys/kernel/random/boot_id)"
+say "START phase=${phase} build_id=${build_id} kernel=$(uname -r) uptime=$(uptime_s)"
+
+# --- graphical target -------------------------------------------------------
+if wait_for "${wait_graphical}" graphical; then
+    put graphical_target reached
+    say "graphical.target reached phase=${phase} uptime=$(uptime_s)"
+else
+    put graphical_target timeout
+    say "graphical.target NOT reached within ${wait_graphical} s"
+    cap jobs.txt systemctl list-jobs --no-pager
+fi
+
+# --- display manager and the session it starts ---------------------------------
+if wait_for "${wait_dm}" dm; then
+    put display_manager active
+else
+    put display_manager "$(systemctl is-active "${dm_unit}" 2>&1 | head -n1)"
+fi
+if wait_for "${wait_session}" session; then
+    put graphical_session up
+    say "graphical session running phase=${phase} uptime=$(uptime_s)"
+else
+    put graphical_session timeout
+    say "graphical session NOT seen within ${wait_session} s"
+fi
+session="$(seat_session)"
+put session_id "${session}"
+put compositor_pid "$(compositor_pid)"
+
+# Let the boot finish, so that systemd can report its timings.
+put system_state "$(timeout "${wait_settle}" systemctl is-system-running --wait 2>&1 | head -n1)"
+
+# The session must stay up, not start and crash: same session, same compositor
+# process after a hold. The hold also gives a software renderer time to paint.
+sleep "${hold}"
+put session_id_after_hold "$(seat_session)"
+put compositor_pid_after_hold "$(compositor_pid)"
+if check dm > /dev/null 2>&1; then put display_manager_after_hold active; else put display_manager_after_hold inactive; fi
+session="$(seat_session)"
+session_uid=""
+if [ -n "${session}" ]; then
+    session_uid="$(session_prop "${session}" User)"
+    put session_user "$(session_prop "${session}" Name)"
+    put session_class "$(session_prop "${session}" Class)"
+    put session_type "$(session_prop "${session}" Type)"
+    put session_state "$(session_prop "${session}" State)"
+    put session_service "$(session_prop "${session}" Service)"
+    put session_seat "$(session_prop "${session}" Seat)"
+    put session_vt "$(session_prop "${session}" VTNr)"
+fi
+
+# --- network ------------------------------------------------------------------
+if wait_for "${wait_network}" route; then put default_route yes; else put default_route no; fi
+gateway="$(ip -4 route show default | awk '/^default/ {print $3; exit}')"
+put gateway "${gateway}"
+if [ -n "${gateway}" ] && timeout 20 ping -c 3 -W 2 "${gateway}" > "${out}/ping-gateway.txt" 2>&1; then
+    put gateway_ping ok
+else
+    put gateway_ping failed
+fi
+if timeout 15 getent ahosts fedoraproject.org > "${out}/dns-lookup.txt" 2>&1; then
+    put dns_lookup ok
+else
+    put dns_lookup failed
+fi
+cap ip-addr.json ip -j addr
+cap ip-route.json ip -j route
+cap ip-addr.txt ip addr
+cap nmcli-general.txt nmcli -t -f STATE,CONNECTIVITY general
+cap nmcli-device.txt nmcli -t device
+cap resolv.conf cat /etc/resolv.conf
+
+# --- identity -----------------------------------------------------------------
+cap os-release cat /usr/lib/os-release
+cap tur-release cat /usr/lib/tur/release
+cap uname.txt uname -a
+cap cmdline.txt cat /proc/cmdline
+cap virt.txt systemd-detect-virt
+cap getenforce.txt getenforce
+cap nproc.txt nproc
+cap free.txt free -m
+cap lscpu.txt lscpu
+if [ -d /sys/firmware/efi ]; then put uefi yes; else put uefi no; fi
+if [ -d "/usr/lib/modules/$(uname -r)" ]; then put kernel_modules_match yes; else put kernel_modules_match no; fi
+
+# --- boot chain ---------------------------------------------------------------
+cap secure-boot.txt mokutil --sb-state
+cap bootctl-status.txt bootctl status --no-pager
+cap efibootmgr.txt efibootmgr -v
+cap bootupctl-status.txt bootupctl status
+cap bootc-version.txt bootc --version
+cap bootc-status.json bootc status --json
+cap bootc-status.txt bootc status
+cap ostree-status.txt ostree admin status
+cap boot-listing.txt ls -laR /boot/loader /boot/grub2
+cap grubenv.txt grub2-editenv list
+cap grub.cfg cat /boot/grub2/grub.cfg
+{
+    for entry in /boot/loader/entries/*.conf; do
+        printf '### %s\n' "${entry}"
+        cat "${entry}"
+        printf '\n'
+    done
+} > "${out}/boot-entries.txt" 2>&1
+loader_info=/sys/firmware/efi/efivars/LoaderInfo-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f
+if [ -r "${loader_info}" ]; then
+    put loader_info "$(tail -c +5 "${loader_info}" | tr -d '\000')"
+else
+    put loader_info ""
+fi
+
+# --- storage ------------------------------------------------------------------
+lsblk_columns=NAME,PATH,SIZE,TYPE,FSTYPE,LABEL,PARTLABEL,PARTTYPE,PARTTYPENAME,UUID,PARTUUID,MOUNTPOINTS,MODEL,SERIAL,TRAN
+cap lsblk.json lsblk --json --bytes -o "${lsblk_columns}"
+cap lsblk.txt lsblk -o "${lsblk_columns}"
+cap findmnt.json findmnt --json
+cap findmnt.txt findmnt
+cap findmnt-sysroot.json findmnt --json /sysroot
+cap findmnt-root.json findmnt --json /
+cap findmnt-var.json findmnt --json /var
+cap findmnt-boot.json findmnt --json /boot
+cap df.txt df -hT
+
+# --- systemd ------------------------------------------------------------------
+cap systemd-analyze-time.txt systemd-analyze time
+cap systemd-analyze-blame.txt systemd-analyze blame --no-pager
+cap systemd-analyze-critical-chain.txt systemd-analyze critical-chain --no-pager graphical.target
+cap manager-timestamps.txt systemctl show --no-pager \
+    -p FirmwareTimestampMonotonic -p LoaderTimestampMonotonic \
+    -p KernelTimestampMonotonic -p InitRDTimestampMonotonic \
+    -p UserspaceTimestampMonotonic -p FinishTimestampMonotonic \
+    -p SystemState -p Version
+cap unit-graphical.txt systemctl show --no-pager graphical.target \
+    -p ActiveState -p ActiveEnterTimestampMonotonic
+cap unit-multi-user.txt systemctl show --no-pager multi-user.target \
+    -p ActiveState -p ActiveEnterTimestampMonotonic
+cap unit-dm.txt systemctl show --no-pager "${dm_unit}" \
+    -p Id -p Names -p LoadState -p ActiveState -p SubState -p Result \
+    -p NRestarts -p ExecMainPID -p ActiveEnterTimestampMonotonic
+cap unit-dm-alias.txt systemctl show --no-pager display-manager.service -p Id -p LoadState
+cap unit-dm-failure.txt systemctl show --no-pager plasma-login-failure.service \
+    -p LoadState -p ActiveState -p Result -p ExecMainStartTimestampMonotonic
+cap unit-first-run-setup.txt systemctl show --no-pager plasma-setup.service \
+    -p LoadState -p ActiveState -p Result -p ConditionResult -p ExecMainStartTimestampMonotonic
+cap dm-status.txt systemctl status --no-pager -l "${dm_unit}"
+cap default-target.txt systemctl get-default
+cap failed-units.json systemctl list-units --failed --no-pager --output=json
+cap failed-units.txt systemctl list-units --failed --no-pager
+{
+    systemctl list-units --failed --no-pager --plain --no-legend | awk '{print $1}' \
+        | while read -r unit; do
+            printf '### %s\n' "${unit}"
+            systemctl status --no-pager -l "${unit}"
+            printf '\n'
+        done
+} > "${out}/failed-units-status.txt" 2>&1
+cap jobs-after.txt systemctl list-jobs --no-pager
+
+# --- sessions and display -------------------------------------------------------
+cap sessions.json loginctl list-sessions --no-pager --json=short
+cap sessions.txt loginctl list-sessions --no-pager
+{
+    loginctl list-sessions --no-pager --no-legend | awk '{print $1}' \
+        | while read -r id; do
+            printf '### session %s\n' "${id}"
+            loginctl show-session "${id}"
+            printf '\n'
+        done
+} > "${out}/sessions-detail.txt" 2>&1
+cap processes.txt ps -eo user:20,pid,ppid,etimes,rss,comm,args
+if [ -n "${session_uid}" ]; then
+    cap session-processes.txt ps -U "${session_uid}" -o pid,ppid,etimes,rss,comm,args
+    cap session-journal.txt journalctl -b --no-pager -o short-monotonic "_UID=${session_uid}"
+    # What the compositor itself says it renders with. Asked on the session's
+    # own bus, as the session's user.
+    bus="unix:path=/run/user/${session_uid}/bus"
+    runuser -u "$(id -nu "${session_uid}")" -- env "DBUS_SESSION_BUS_ADDRESS=${bus}" \
+        timeout 30 busctl --address="${bus}" --json=short \
+        call org.kde.KWin /KWin org.kde.KWin supportInformation \
+        > "${out}/kwin-support.json" 2> "${out}/kwin-support.err"
+    if [ ! -s "${out}/kwin-support.json" ]; then
+        timeout 30 busctl --address="${bus}" --json=short \
+            call org.kde.KWin /KWin org.kde.KWin supportInformation \
+            > "${out}/kwin-support.json" 2>> "${out}/kwin-support.err"
+    fi
+    jq -r '.data[0]' "${out}/kwin-support.json" > "${out}/kwin-support-information.txt" 2>> "${out}/kwin-support.err"
+fi
+{
+    for card in /sys/class/drm/card*; do
+        printf '%s\n' "${card}"
+        for attr in status enabled modes; do
+            if [ -r "${card}/${attr}" ]; then
+                printf '  %s: %s\n' "${attr}" "$(tr '\n' ' ' < "${card}/${attr}")"
+            fi
+        done
+    done
+    ls -la /dev/dri
+} > "${out}/drm.txt" 2>&1
+cap dmesg-drm.txt journalctl -b -k --no-pager -o short-monotonic -g 'drm|virtio_gpu|fbcon|fb0'
+cap avc-denials.txt journalctl -b --no-pager -o short-monotonic -g 'avc:  denied'
+
+# --- journal ------------------------------------------------------------------
+journalctl -b --no-pager -o short-monotonic > "${out}/journal.txt" 2>&1
+journalctl -b --no-pager -p warning -o short-monotonic > "${out}/journal-warnings.txt" 2>&1
+journalctl -b --no-pager -o export 2> /dev/null | gzip -c > "${out}/journal.export.gz"
+
+# --- first boot only: stand in for a person completing first-run setup -----------
+if [ "${phase}" = first-boot ]; then
+    {
+        useradd --create-home --comment "TUR boot test" "${test_user}" && echo "created user ${test_user}"
+        touch "${setup_done_flag}" && echo "created ${setup_done_flag}"
+        getent passwd "${test_user}"
+        ls -la "${setup_done_flag}"
+    } > "${out}/prepare-second-boot.txt" 2>&1
+    if getent passwd "${test_user}" > /dev/null && [ -e "${setup_done_flag}" ]; then
+        put second_boot_prepared yes
+    else
+        put second_boot_prepared no
+    fi
+fi
+
+put agent_finished_uptime "$(uptime_s)"
+
+# --- send ---------------------------------------------------------------------
+if wait_for 20 port; then
+    if tar -C "${state}/report" -cf - "${phase}" > "${port}"; then
+        say "report sent over ${port_name} phase=${phase}"
+    else
+        say "report NOT sent: writing to ${port} failed"
+    fi
+else
+    say "report NOT sent: ${port} is missing"
+fi
+sync
+finished="$(uptime_s)"
+
+if [ "${phase}" = first-boot ]; then
+    touch "${state}/first-boot-done"
+    sync
+    # Said three times: a kernel message can cut through a console line.
+    for _ in 1 2 3; do
+        sleep 1
+        say "FIRST-BOOT-DONE uptime=${finished}"
+    done
+    # Time for the host to take its screenshot of this boot.
+    sleep 20
+    say "rebooting for the second boot"
+    systemctl reboot
+    exit 0
+fi
+
+for _ in 1 2 3; do
+    sleep 1
+    say "COMPLETE uptime=${finished}"
+done
+
+# The host powers the guest off after its screenshot. If it does not, leave.
+sleep 100
+say "the host did not power the guest off; powering off"
+systemctl poweroff

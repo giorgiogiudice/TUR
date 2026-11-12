@@ -1,19 +1,19 @@
-// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
 //
 // A Windows console program for the windows-runtime end-to-end test.
 //
 // It is compiled on the CI runner with mingw-w64 and run under Wine through
-// `uos-runtime launch`. It prints what it could and could not do; the test
+// `tur-runtime launch`. It prints what it could and could not do; the test
 // driver (e2e.py) decides what that means. Nothing here is a judgement.
 //
 //   console.exe [EXIT-CODE [ARG...]]
 //
 // Environment, all optional, all Unix paths:
-//   UOS_TEST_VALUE          printed back
-//   UOS_TEST_HOST_CANARY    printed back; the launcher must not pass it on
-//   UOS_TEST_GRANT_DIR      a directory to write a file into
-//   UOS_TEST_READONLY_DIR   a directory to read from and try to write into
-//   UOS_TEST_OUTSIDE_FILES  ';'-separated files to try to read
+//   TUR_TEST_VALUE          printed back
+//   TUR_TEST_HOST_CANARY    printed back; the launcher must not pass it on
+//   TUR_TEST_GRANT_DIR      a directory to write a file into
+//   TUR_TEST_READONLY_DIR   a directory to read from and try to write into
+//   TUR_TEST_OUTSIDE_FILES  ';'-separated files to try to read
 //
 // Unix paths are reached through Z:, which Wine maps to the Unix root.
 
@@ -22,7 +22,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define TAG "uos-windows-test: "
+#define TAG "tur-windows-test: "
 
 static void windows_path(char *out, size_t size, const char *unix_path, const char *leaf)
 {
@@ -61,10 +61,10 @@ int main(int argc, char **argv)
     printf(TAG "pointer-bits=%u\n", (unsigned)(sizeof(void *) * 8));
     for (int i = 1; i < argc; ++i)
         printf(TAG "arg[%d]=%s\n", i, argv[i]);
-    printf(TAG "env UOS_TEST_VALUE=%s\n", printable(getenv("UOS_TEST_VALUE")));
-    printf(TAG "env UOS_TEST_HOST_CANARY=%s\n", printable(getenv("UOS_TEST_HOST_CANARY")));
+    printf(TAG "env TUR_TEST_VALUE=%s\n", printable(getenv("TUR_TEST_VALUE")));
+    printf(TAG "env TUR_TEST_HOST_CANARY=%s\n", printable(getenv("TUR_TEST_HOST_CANARY")));
 
-    const char *grant = getenv("UOS_TEST_GRANT_DIR");
+    const char *grant = getenv("TUR_TEST_GRANT_DIR");
     if (grant) {
         windows_path(path, sizeof path, grant, "written-by-windows.txt");
         FILE *file = fopen(path, "wb");
@@ -74,7 +74,7 @@ int main(int argc, char **argv)
             printf(TAG "grant-write: failed errno=%d\n", errno);
     }
 
-    const char *readonly = getenv("UOS_TEST_READONLY_DIR");
+    const char *readonly = getenv("TUR_TEST_READONLY_DIR");
     if (readonly) {
         windows_path(path, sizeof path, readonly, "readable.txt");
         if (first_line(path, text, sizeof text))
@@ -92,7 +92,7 @@ int main(int argc, char **argv)
         }
     }
 
-    const char *outside = getenv("UOS_TEST_OUTSIDE_FILES");
+    const char *outside = getenv("TUR_TEST_OUTSIDE_FILES");
     if (outside) {
         char *list = strdup(outside);
         for (char *item = strtok(list, ";"); item; item = strtok(NULL, ";")) {
@@ -107,13 +107,13 @@ int main(int argc, char **argv)
 
     /* One line is added to a file inside the prefix at every run, so the
        driver can tell a reused prefix from a new one. */
-    FILE *runs = fopen("C:\\uos-test-runs.txt", "ab");
+    FILE *runs = fopen("C:\\tur-test-runs.txt", "ab");
     if (runs) {
         fputs("run\n", runs);
         fclose(runs);
     }
     int count = 0;
-    runs = fopen("C:\\uos-test-runs.txt", "rb");
+    runs = fopen("C:\\tur-test-runs.txt", "rb");
     if (runs) {
         for (int c = fgetc(runs); c != EOF; c = fgetc(runs))
             if (c == '\n')

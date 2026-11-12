@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+[package]
+name = "tur-installer-core"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+license = "LicenseRef-TUR-Noncommercial-1.0.0"
+description = "Non-destructive core of the TUR installer: storage inventory, target identity, partition planning, preflight checks and the durable phase state machine."
+repository = "https://github.com/giorgiogiudice/TUR"
+publish = false
+
+# Each component is its own workspace with its own lockfile. See ADR-0005.
+[workspace]
+
+[lib]
+name = "tur_installer_core"
+path = "src/lib.rs"
+
+[[bin]]
+name = "tur-installer"
+path = "src/main.rs"
+
+[dependencies]
+tur-core = { path = "../../crates/tur-core" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+clap = { version = "4", default-features = false, features = ["std", "derive", "help", "usage", "error-context"] }
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"

@@ -7,7 +7,7 @@
 ### The operating system of the future
 
 **One computer. Every application. An assistant that can run it for you.<br/>
-And a system that cannot be broken by an update.**
+And a system that undoes a bad update by itself.**
 
 [![Status: pre-alpha](https://img.shields.io/badge/status-pre--alpha-orange)](#where-tur-is-today)
 [![License: TUR Noncommercial](https://img.shields.io/badge/license-TUR%20Noncommercial-blue)](LICENSE.md)
@@ -40,7 +40,7 @@ leave it unable to start.
   have it done.
 - Your computer should explain itself when something fails, and repair itself
   when it can.
-- An update should never be able to break it.
+- A bad update should undo itself.
 - And it should stay yours: private by default, with nothing collected behind
   your back.
 
@@ -79,9 +79,11 @@ published, including what does not work and why.
 
 ### A system that looks after itself
 
-- **Updates cannot break it.** The operating system is a sealed image. An update
-  is installed alongside the running system; if the new one fails to start
-  properly, TUR returns to the previous one by itself.
+- **A bad update undoes itself.** The operating system is a sealed image. An
+  update is installed alongside the running system; if the new one fails to start
+  properly, TUR returns to the previous one by itself. A few failures cannot be
+  caught automatically, and the [design](docs/architecture/boot-health-and-rollback.md)
+  lists them.
 - **It tells you what happened.** Installation, start-up and updates report what
   they are doing in plain language. Every failure has a stable code, an
   explanation, and a safe next step.
@@ -153,7 +155,7 @@ becomes.
 | Area | State |
 |---|---|
 | Architecture and decisions | Published: [specification](docs/architecture/specification.md), [decision records](docs/adr/README.md) |
-| Operating-system image | Builds reproducibly ([report](docs/reports/UOS-002.md)), installs to a disk and **boots to a graphical login in a virtual machine** on every change ([report and screenshots](docs/reports/UOS-003.md)). Not yet tested on real hardware |
+| Operating-system image | Builds reproducibly ([report](docs/reports/TUR-002.md)), installs to a disk and **boots to a graphical login in a virtual machine** on every change ([report and screenshots](docs/reports/TUR-003.md)). Not yet tested on real hardware |
 | P@x | [Design](docs/architecture/ai-control-layer.md) published. The engine that decides what P@x may do is written and tested ([details](docs/architecture/agent-policy.md)). No assistant can be used yet |
 | Android | [Design](docs/architecture/android-runtime.md) published; not yet built |
 | Diagnostics, application detection, installer planning, storage safety | First versions written and tested as libraries and command-line tools; not yet part of the image |
@@ -162,9 +164,6 @@ becomes.
 | Updates and rollback, the desktop and application centre, the Windows guest | [Designed](docs/adr/README.md); not yet built |
 | Desktop, application centre, Windows and Android running | Not started |
 | Anything you can install | Not yet |
-
-The code still uses the project's earlier working name, `uos`, in program names
-and identifiers. The rename to TUR is under way.
 
 ## How it is built
 

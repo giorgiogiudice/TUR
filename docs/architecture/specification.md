@@ -1,8 +1,8 @@
-# UOS: Universal Operating System
+# TUR: The Unified Realm
 ## Technical Architecture, Implementation Specification, and Development-Agent Handoff
 
 **Document type:** Engineering specification and research execution plan  
-**Project:** UOS (Universal Operating System)  
+**Project:** TUR (The Unified Realm)  
 **Document revision:** 1.0  
 **Date:** 12 November 2026  
 **Primary target:** x86-64 UEFI PCs  
@@ -14,7 +14,7 @@
 
 # 0. Instructions for the development agent
 
-This document defines the intended architecture and implementation constraints for UOS. Treat it as the project baseline. Do not interpret aspirational goals as proof that an upstream component already supports them.
+This document defines the intended architecture and implementation constraints for TUR. Treat it as the project baseline. Do not interpret aspirational goals as proof that an upstream component already supports them.
 
 The development agent must:
 
@@ -52,7 +52,7 @@ Do not merge a change merely because it compiles. Boot-critical and storage-crit
 
 # 1. Executive summary
 
-UOS is a Linux-based operating system designed to provide one integrated desktop and one shared hardware platform for applications originating from three operating-system ecosystems:
+TUR is a Linux-based operating system designed to provide one integrated desktop and one shared hardware platform for applications originating from three operating-system ecosystems:
 
 - **Linux:** native ELF applications using the Linux ABI.
 - **Windows:** PE applications using Win32/Win64 APIs through Wine, with Proton and graphics translation components available for gaming.
@@ -60,7 +60,7 @@ UOS is a Linux-based operating system designed to provide one integrated desktop
 
 The system uses one Linux kernel. It does not merge the Windows NT kernel, Apple's XNU kernel, and Linux. It does not boot three operating systems simultaneously as peers. Windows and macOS compatibility environments run in userspace on Linux. A genuine Windows installation remains available as an optional full operating-system backend through QEMU/KVM or dual boot for software that requires Windows kernel behavior, proprietary drivers, anti-cheat, or services that compatibility layers do not implement.
 
-UOS must feel like one coherent operating system:
+TUR must feel like one coherent operating system:
 
 - One desktop shell and window manager.
 - One application launcher and application catalog.
@@ -72,11 +72,11 @@ UOS must feel like one coherent operating system:
 
 The project's largest original engineering contribution should be the integration layer, especially:
 
-1. **UOS Runtime Manager:** executable detection, runtime selection, dependency management, application profiles, and fallback policy.
-2. **UOS Desktop Bridge:** integration of Wine and Darling windows and application behavior with KDE Plasma/Wayland.
-3. **UOS Device Manager:** one host-level model for devices, permissions, drivers, firmware, and exclusive device assignment.
-4. **UOS Storage Manager:** safe filesystem discovery, mounting, namespace presentation, metadata capability reporting, and compatibility mappings.
-5. **UOS Diagnostics and Recovery:** detailed installer/boot feedback, persistent logs, support bundles, immutable updates, boot-health assessment, rollback, and recovery.
+1. **TUR Runtime Manager:** executable detection, runtime selection, dependency management, application profiles, and fallback policy.
+2. **TUR Desktop Bridge:** integration of Wine and Darling windows and application behavior with KDE Plasma/Wayland.
+3. **TUR Device Manager:** one host-level model for devices, permissions, drivers, firmware, and exclusive device assignment.
+4. **TUR Storage Manager:** safe filesystem discovery, mounting, namespace presentation, metadata capability reporting, and compatibility mappings.
+5. **TUR Diagnostics and Recovery:** detailed installer/boot feedback, persistent logs, support bundles, immutable updates, boot-health assessment, rollback, and recovery.
 
 The first release is a research prototype for x86-64 UEFI hardware. It should prioritize reproducibility, observability, and recoverability over broad marketing claims.
 
@@ -86,7 +86,7 @@ The first release is a research prototype for x86-64 UEFI hardware. It should pr
 
 ## 2.1 Primary goals
 
-1. Boot directly into a Linux-based UOS installation.
+1. Boot directly into a Linux-based TUR installation.
 2. Run Linux ELF applications natively.
 3. Run a defined and tested set of Windows applications through Wine.
 4. Run a defined and tested set of macOS command-line applications through Darling.
@@ -119,15 +119,15 @@ The first release is a research prototype for x86-64 UEFI hardware. It should pr
 
 A file extension does not prove that an application is runnable. A `.exe` can be a Win32 app, installer, self-extracting archive, .NET app, .NET Native app, UWP-related component, driver installer, or a program that requires a Windows kernel driver. Likewise, a `.app` bundle is not necessarily portable outside macOS and may depend on private frameworks, code-signing rules, hardware features, or Apple services.
 
-UOS must use executable inspection and compatibility profiles rather than extension-only routing.
+TUR must use executable inspection and compatibility profiles rather than extension-only routing.
 
 **Compatibility claims must be evidence-based.** Maintain a tested application matrix with exact application version, runtime version, GPU, driver, result, known defects, and reproduction steps.
 
 ## 2.4 OpenCore is not part of the Linux runtime architecture
 
-OpenCorePkg is a UEFI bootloader and platform-configuration project used in Hackintosh configurations. It is not a macOS application runtime and does not provide Darwin APIs to Linux. UOS should boot Linux directly through its supported UEFI boot chain. OpenCore is not required for UOS's normal operation.
+OpenCorePkg is a UEFI bootloader and platform-configuration project used in Hackintosh configurations. It is not a macOS application runtime and does not provide Darwin APIs to Linux. TUR should boot Linux directly through its supported UEFI boot chain. OpenCore is not required for TUR's normal operation.
 
-Darling, not OpenCore, is the relevant project for running supported macOS applications on Linux. OpenCore may be studied separately for firmware/boot research, but it must not become a dependency of the UOS desktop or application execution path.
+Darling, not OpenCore, is the relevant project for running supported macOS applications on Linux. OpenCore may be studied separately for firmware/boot research, but it must not become a dependency of the TUR desktop or application execution path.
 
 ---
 
@@ -165,7 +165,7 @@ Compatibility layers should adapt Windows/Darwin APIs to host services where pos
 
 ## 3.4 Separate app compatibility from full OS virtualization
 
-Wine and Darling are compatibility environments. QEMU/KVM Windows is a full guest OS. They have different performance, driver, security, and compatibility properties. UOS must expose these distinctions clearly in its internal architecture and user-facing diagnostics.
+Wine and Darling are compatibility environments. QEMU/KVM Windows is a full guest OS. They have different performance, driver, security, and compatibility properties. TUR must expose these distinctions clearly in its internal architecture and user-facing diagnostics.
 
 ## 3.5 Recovery is a product feature
 
@@ -173,7 +173,7 @@ Every change capable of preventing boot, corrupting storage, breaking the displa
 
 ## 3.6 Diagnose first, repair second
 
-When boot or installation fails, UOS must preserve enough information to explain the failure. A recovery process that silently overwrites logs or retries indefinitely is unacceptable.
+When boot or installation fails, TUR must preserve enough information to explain the failure. A recovery process that silently overwrites logs or retries indefinitely is unacceptable.
 
 ## 3.7 Reproducible builds and pinned dependencies
 
@@ -189,12 +189,12 @@ Every release image must have a manifest containing source revisions, build IDs,
 - Firmware: UEFI.
 - Partitioning: GPT as the normal installation format.
 - Boot path: UEFI bootloader, signed UKI where practical, initramfs, Linux kernel.
-- Memory: 16 GB minimum for development; 32 GB recommended; 64 GB recommended for concurrent UOS plus Windows VM development.
+- Memory: 16 GB minimum for development; 32 GB recommended; 64 GB recommended for concurrent TUR plus Windows VM development.
 - Storage: NVMe SSD recommended.
 - Graphics: GPU with maintained Linux DRM driver and adequate Vulkan support.
 - First preferred validation hardware: AMD GPU with Mesa RADV; Intel integrated/discrete GPU with Mesa ANV as a secondary target. NVIDIA support should be tested separately with its supported driver stack.
 
-These are development recommendations, not strict hardware minimums. UOS should publish a compatibility matrix rather than make broad universal hardware claims.
+These are development recommendations, not strict hardware minimums. TUR should publish a compatibility matrix rather than make broad universal hardware claims.
 
 ## 4.2 Architecture scope
 
@@ -204,7 +204,7 @@ Potential future approaches include QEMU user-mode emulation, FEX, or other tran
 
 ## 4.3 Secure Boot
 
-UOS should support a secure boot path with signed boot components and signed kernel modules. The selected distribution/build model must define:
+TUR should support a secure boot path with signed boot components and signed kernel modules. The selected distribution/build model must define:
 
 - Who owns the signing keys.
 - How test keys differ from production keys.
@@ -219,7 +219,7 @@ Never disable Secure Boot silently. The installer must explain unsupported or un
 
 # 5. Operating-system image, boot, update, and recovery architecture
 
-This section is a top-level priority. UOS is a research distribution, so developers need the ability to install, update, break, diagnose, and recover it repeatedly.
+This section is a top-level priority. TUR is a research distribution, so developers need the ability to install, update, break, diagnose, and recover it repeatedly.
 
 ## 5.1 Recommended distribution model
 
@@ -235,7 +235,7 @@ Recommended research foundation:
 
 Do not assume every bootloader feature is supported identically by every bootc/OSTree release. Confirm the exact combination in CI before committing to it.
 
-The `bootc install to-disk` documentation describes supported disk installation and partitioning options, including GPT/DPS defaults and options for more complex block layouts. Use it as a reference, not as permission to skip UOS's own installer validation and safety checks.
+The `bootc install to-disk` documentation describes supported disk installation and partitioning options, including GPT/DPS defaults and options for more complex block layouts. Use it as a reference, not as permission to skip TUR's own installer validation and safety checks.
 
 Reference: https://github.com/bootc-dev/bootc
 Reference: https://github.com/ostreedev/ostree
@@ -289,20 +289,20 @@ References:
 
 ## 5.4 Boot health gate
 
-Implement `uos-boot-health.service` and a small health-check executable.
+Implement `tur-boot-health.service` and a small health-check executable.
 
 A deployment is not marked good until the following checks pass or are explicitly classified as non-blocking:
 
 - Root filesystem is mounted and verified.
 - `/usr` and critical runtime paths are readable.
 - systemd reaches the intended graphical target.
-- Required UOS core services start.
+- Required TUR core services start.
 - Device enumeration completes without fatal udev/systemd errors.
 - Display manager or compositor starts.
 - A user session can be created.
 - Storage manager starts.
 - Network initialization completes or is recorded as unavailable (network must not be a hard requirement for local boot).
-- UOS diagnostics service is operational.
+- TUR diagnostics service is operational.
 
 The health gate must not wait forever for optional hardware, Wi-Fi, Bluetooth, external disks, or cloud services. Define bounded timeouts and classify optional failures.
 
@@ -314,7 +314,7 @@ Use journald persistent storage. Do not keep all useful logs only in volatile `/
 
 Required identifiers and metadata:
 
-- UOS build ID.
+- TUR build ID.
 - OS deployment checksum.
 - Kernel release and config hash.
 - Initramfs build ID.
@@ -328,7 +328,7 @@ Required identifiers and metadata:
 - Phase start and end timestamps.
 - Exit status and structured error code for each phase.
 
-Use structured logs (journal fields or JSON lines) for UOS-created services. Human-readable messages are also required. Do not make developers parse arbitrary unstructured console text as the sole source of truth.
+Use structured logs (journal fields or JSON lines) for TUR-created services. Human-readable messages are also required. Do not make developers parse arbitrary unstructured console text as the sole source of truth.
 
 ## 5.6 Early boot and crash evidence
 
@@ -360,7 +360,7 @@ At minimum, recovery must offer:
 6. Export diagnostic bundle to USB or another user-selected destination.
 7. Reinstall the OS without intentionally formatting user data, when the partition layout supports it.
 8. Restore OS deployment from signed image or local cache.
-9. Restore UOS configuration from a backup.
+9. Restore TUR configuration from a backup.
 
 Do not promise recovery of encrypted user data if the user loses every valid key. Explain that encryption key loss is not recoverable by the OS vendor.
 
@@ -368,7 +368,7 @@ Do not promise recovery of encrypted user data if the user loses every valid key
 
 # 6. Installer, first boot, diagnostics, and development feedback
 
-This is a differentiating requirement. UOS must explain what it is doing, what failed, where evidence is stored, and how the user can hand the evidence to a development agent.
+This is a differentiating requirement. TUR must explain what it is doing, what failed, where evidence is stored, and how the user can hand the evidence to a development agent.
 
 ## 6.1 Installer UX requirements
 
@@ -436,12 +436,12 @@ Every error must have two layers:
 
 **User message:** concise, tells the user what happened and what action to take.
 
-**Technical detail:** exact command/component, exit code, stderr excerpt, device identifiers, relevant kernel/journal evidence, and a stable UOS error ID.
+**Technical detail:** exact command/component, exit code, stderr excerpt, device identifiers, relevant kernel/journal evidence, and a stable TUR error ID.
 
 Example:
 
 ```text
-UOS-STORAGE-NTFS-004
+TUR-STORAGE-NTFS-004
 The Windows volume was not mounted for writing.
 
 Reason:
@@ -449,7 +449,7 @@ The volume appears to be hibernated or in an unsafe state.
 
 Action:
 Boot Windows, disable Fast Startup/hibernation, shut down fully,
-then retry. UOS mounted the volume read-only to protect your data.
+then retry. TUR mounted the volume read-only to protect your data.
 
 Technical detail:
 Device: /dev/disk/by-uuid/<redacted>
@@ -460,21 +460,21 @@ Evidence: journal entry reference <boot-id>/<cursor>
 
 Error messages must never instruct users to force an unsafe filesystem mount as the default fix.
 
-## 6.4 `uos-diag` diagnostic collector
+## 6.4 `tur-diag` diagnostic collector
 
 Implement a CLI and GUI entry point:
 
 ```bash
-uos-diag status
-uos-diag boot-report
-uos-diag hardware
-uos-diag storage
-uos-diag drivers
-uos-diag runtimes
-uos-diag collect --output /run/media/$USER/USB/UOS-support.tar.zst
-uos-diag collect --since-boot
-uos-diag collect --installer-session <SESSION_ID>
-uos-diag verify-bundle <bundle>
+tur-diag status
+tur-diag boot-report
+tur-diag hardware
+tur-diag storage
+tur-diag drivers
+tur-diag runtimes
+tur-diag collect --output /run/media/$USER/USB/TUR-support.tar.zst
+tur-diag collect --since-boot
+tur-diag collect --installer-session <SESSION_ID>
+tur-diag verify-bundle <bundle>
 ```
 
 The diagnostic collector should gather, where available:
@@ -493,7 +493,7 @@ The diagnostic collector should gather, where available:
 - Network device and NetworkManager status.
 - Bluetooth adapter status.
 - Storage driver and mount options.
-- UOS service status.
+- TUR service status.
 - Runtime versions and prefixes (not user application documents).
 - App compatibility report and relevant crash logs when selected.
 - Installer phase state and logs.
@@ -520,7 +520,7 @@ Before export, show a preview and redact by default:
 
 Provide a technical mode that allows a developer to include selected identifiers when needed. Make the privacy implications clear.
 
-Bundle metadata must include a schema version. `uos-diag verify-bundle` must verify archive integrity and manifest checksums.
+Bundle metadata must include a schema version. `tur-diag verify-bundle` must verify archive integrity and manifest checksums.
 
 ## 6.6 First-boot self-test
 
@@ -576,7 +576,7 @@ Wine translates Windows API calls into host-compatible behavior rather than emul
 
 Darling is a Linux runtime environment that implements macOS-facing system interfaces in userspace and reimplements frameworks. Its current README describes GUI support as active development, not complete macOS compatibility.
 
-## 7.2 Universal Runtime Manager (`uos-runtime`)
+## 7.2 Universal Runtime Manager (`tur-runtime`)
 
 Responsibilities:
 
@@ -660,7 +660,7 @@ Performance is a first-class design requirement. Do not add translation or isola
 
 ## 8.2 Windows synchronization (`ntsync`)
 
-Linux `ntsync` entered the mainline kernel in Linux 6.14. UOS should enable and test it where available, and pair it with a Wine build that supports it. Runtime must detect actual availability and fall back cleanly when missing.
+Linux `ntsync` entered the mainline kernel in Linux 6.14. TUR should enable and test it where available, and pair it with a Wine build that supports it. Runtime must detect actual availability and fall back cleanly when missing.
 
 Do not hard-code a minimum version number as the only capability check. Test the device/interface and runtime support at boot and record the result.
 
@@ -679,7 +679,7 @@ Suggested path:
 - Windows Vulkan: Wine Vulkan path to host Vulkan.
 - macOS Metal: Darling's implementation/translation path as it matures. Treat Metal compatibility as experimental.
 
-Hardware support and Vulkan feature requirements change. Pin known-good versions for each UOS release and test against the GPU driver matrix. DXVK's current driver support page specifies version and Vulkan feature requirements; do not assume an older GPU or driver is compatible.
+Hardware support and Vulkan feature requirements change. Pin known-good versions for each TUR release and test against the GPU driver matrix. DXVK's current driver support page specifies version and Vulkan feature requirements; do not assume an older GPU or driver is compatible.
 
 Repositories:
 - https://github.com/doitsujin/dxvk
@@ -710,7 +710,7 @@ Targets are engineering goals, not promises:
 - Wine CPU workloads: aim for within 5-10% of comparable native workload where API behavior is not a bottleneck.
 - DXVK gaming: aim for within 10-15% of native Windows for selected supported games, measured with the same hardware and settings. Some titles will be worse or unsupported.
 - Darling: establish application-specific baselines. Do not set a global macOS performance claim until the framework coverage is broad enough.
-- UOS shell idle overhead: keep CPU and memory use low and publish actual measured numbers.
+- TUR shell idle overhead: keep CPU and memory use low and publish actual measured numbers.
 
 Every benchmark must record hardware, kernel, driver, runtime versions, power profile, resolution, application version, warm-up procedure, and test repetitions.
 
@@ -726,7 +726,7 @@ Primary components:
 
 - Plasma Desktop and Workspace.
 - KWin Wayland compositor.
-- Qt 6 and QML for UOS-specific UI.
+- Qt 6 and QML for TUR-specific UI.
 - Dolphin as the initial file manager.
 - KRunner for search/command launch.
 - KDE System Settings as the system-settings foundation.
@@ -739,7 +739,7 @@ References:
 - https://invent.kde.org/plasma/plasma-desktop
 - https://invent.kde.org/plasma/plasma-workspace
 
-## 9.2 UOS visual modes
+## 9.2 TUR visual modes
 
 Provide optional visual profiles, not separate desktops:
 
@@ -749,7 +749,7 @@ Provide optional visual profiles, not separate desktops:
 
 All profiles use the same KWin session and underlying application services. Changing visual profiles must not restart running applications.
 
-## 9.3 UOS Desktop Bridge (`uos-desktop-bridge`)
+## 9.3 TUR Desktop Bridge (`tur-desktop-bridge`)
 
 Responsibilities:
 
@@ -804,7 +804,7 @@ Linux owns the physical device by default. Compatibility runtimes consume host s
 
 The same physical USB device must not be controlled by a Linux driver and a Windows VM driver at the same time.
 
-## 10.2 Device Manager (`uos-device-manager`)
+## 10.2 Device Manager (`tur-device-manager`)
 
 Core responsibilities:
 
@@ -862,7 +862,7 @@ Do not update firmware automatically without explicit user policy. A failed firm
 - Use in-tree kernel drivers whenever possible.
 - Package additional Linux drivers only after license, Secure Boot signing, update, and recovery review.
 - Never distribute Windows or macOS kernel drivers as if Linux could load them.
-- Record unsupported devices and provide `uos-diag hardware` output.
+- Record unsupported devices and provide `tur-diag hardware` output.
 - Keep a hardware compatibility database with PCI/USB IDs, kernel driver, firmware, test status, and known caveats.
 
 ---
@@ -912,13 +912,13 @@ References:
 - APFS-FUSE: https://github.com/sgan81/apfs-fuse
 - Experimental APFS write project: https://github.com/linux-apfs/linux-apfs-rw
 
-APFS-FUSE currently describes itself as read-only and notes unsupported or incomplete behaviors such as firmlinks and some compression methods. The experimental `linux-apfs-rw` project explicitly warns of corruption risk and has significant limitations, including encryption limitations. UOS must therefore make APFS read-only by default.
+APFS-FUSE currently describes itself as read-only and notes unsupported or incomplete behaviors such as firmlinks and some compression methods. The experimental `linux-apfs-rw` project explicitly warns of corruption risk and has significant limitations, including encryption limitations. TUR must therefore make APFS read-only by default.
 
 ## 11.4 Mount namespace
 
 Use stable internal mount paths based on filesystem UUID or a generated volume identifier, for example:
 
-`/run/uos/volumes/<volume-id>`
+`/run/tur/volumes/<volume-id>`
 
 Expose user-friendly paths such as `/run/media/<user>/<label>` and, where needed for compatibility, a controlled `/Volumes/<label>` mapping for Darling. Wine drive letters map to the same host mount through Wine's prefix configuration.
 
@@ -948,7 +948,7 @@ If an NTFS volume is hibernated, dirty, or otherwise unsafe, mount read-only or 
 
 ## 11.7 Universal Storage service
 
-Implement `uos-storage` as a D-Bus service with:
+Implement `tur-storage` as a D-Bus service with:
 
 - Volume inventory.
 - Filesystem type and driver.
@@ -966,7 +966,7 @@ The service should orchestrate UDisks2/libblockdev rather than replace them.
 
 # 12. Security and isolation
 
-UOS runs applications from ecosystems with different security models. The system must not weaken the host merely to improve compatibility.
+TUR runs applications from ecosystems with different security models. The system must not weaken the host merely to improve compatibility.
 
 ## 12.1 Host security
 
@@ -1031,7 +1031,7 @@ Possible components:
 
 - QEMU.
 - KVM.
-- libvirt/virt-manager or a UOS VM manager.
+- libvirt/virt-manager or a TUR VM manager.
 - OVMF UEFI firmware.
 - virtio storage/network/display where suitable.
 - VFIO for PCIe GPU/device passthrough where hardware supports it.
@@ -1043,11 +1043,11 @@ The VM must be optional. Do not require it to launch ordinary Wine-compatible ap
 
 Offer a documented dual-boot path for cases where direct hardware access and native Windows drivers matter more than simultaneous operation.
 
-Do not rely on OpenCore for the normal Linux boot. Use the UOS/Linux bootloader for UOS and register the Windows boot entry through standard UEFI mechanisms.
+Do not rely on OpenCore for the normal Linux boot. Use the TUR/Linux bootloader for TUR and register the Windows boot entry through standard UEFI mechanisms.
 
 ## 13.4 User experience
 
-The user may select “Run in full Windows” from an application's compatibility settings. UOS should explain:
+The user may select “Run in full Windows” from an application's compatibility settings. TUR should explain:
 
 - This starts or resumes a real Windows installation/VM.
 - The application may not share the normal Linux process or filesystem semantics.
@@ -1063,17 +1063,17 @@ The user may select “Run in full Windows” from an application's compatibilit
 
 ## 14.1 Installer approach
 
-Prototype the image install using bootc's supported installation workflow. A custom UOS graphical installer can orchestrate this process after safety checks and partition planning are mature. Calamares may be evaluated for UI and partitioning modules, but do not assume it natively solves every bootc/OSTree deployment requirement.
+Prototype the image install using bootc's supported installation workflow. A custom TUR graphical installer can orchestrate this process after safety checks and partition planning are mature. Calamares may be evaluated for UI and partitioning modules, but do not assume it natively solves every bootc/OSTree deployment requirement.
 
 The installer should be separable from the installed system image and should support offline installation from the ISO.
 
 ## 14.2 Installation modes
 
-- Erase target disk and install UOS.
+- Erase target disk and install TUR.
 - Install alongside an existing operating system where partitioning and bootloader detection are reliable.
 - Manual partitioning for advanced users.
 - Encrypted installation.
-- Reinstall UOS while preserving a supported user-data partition.
+- Reinstall TUR while preserving a supported user-data partition.
 - Live environment with diagnostics but no installation.
 
 ## 14.3 Preflight checks
@@ -1119,9 +1119,9 @@ For each application, retain enough metadata to reproduce the previous runtime c
 
 ## 15.3 Configuration backup
 
-Back up UOS configuration separately from user documents. Include:
+Back up TUR configuration separately from user documents. Include:
 
-- UOS service configuration.
+- TUR service configuration.
 - Runtime profiles.
 - Device policy configuration.
 - Desktop settings.
@@ -1134,8 +1134,8 @@ Do not automatically include large app prefixes unless the user selects them. Pr
 
 At boot show:
 
-- UOS current deployment.
-- UOS previous deployment.
+- TUR current deployment.
+- TUR previous deployment.
 - Fallback kernel if available.
 - Rescue environment.
 - Firmware setup option where firmware exposes one.
@@ -1149,17 +1149,17 @@ The recovery interface should identify the selected deployment and show build ID
 
 Prefer D-Bus for system services and documented command-line interfaces for diagnostics and automation.
 
-Suggested UOS services:
+Suggested TUR services:
 
 | Service | Suggested D-Bus name | Main function |
 |---|---|---|
-| Runtime manager | `org.uos.Runtime1` | Detect and launch applications |
-| Device manager | `org.uos.Device1` | Device inventory and handoff |
-| Storage manager | `org.uos.Storage1` | Volume inventory and policy |
-| Desktop bridge | `org.uos.DesktopBridge1` | Runtime-to-desktop integration |
-| Diagnostics | `org.uos.Diagnostics1` | Reports and support bundles |
-| Update manager | `org.uos.Update1` | Stage, deploy, assess, rollback |
-| Installer | `org.uos.Installer1` | Installation phase state |
+| Runtime manager | `org.tur.Runtime1` | Detect and launch applications |
+| Device manager | `org.tur.Device1` | Device inventory and handoff |
+| Storage manager | `org.tur.Storage1` | Volume inventory and policy |
+| Desktop bridge | `org.tur.DesktopBridge1` | Runtime-to-desktop integration |
+| Diagnostics | `org.tur.Diagnostics1` | Reports and support bundles |
+| Update manager | `org.tur.Update1` | Stage, deploy, assess, rollback |
+| Installer | `org.tur.Installer1` | Installation phase state |
 
 D-Bus names are proposed and must be registered in an interface specification before implementation. Every method must define authorization, return types, error names, timeout policy, and cancellation semantics.
 
@@ -1171,7 +1171,7 @@ Use versioned API schemas. Do not expose unstable internal C++ or Rust types as 
 
 This is a starting shortlist. Verify current release, branch, maintenance status, build system, license, submodules, and transitive dependencies before pinning.
 
-| Project | Repository | UOS role | Strategy |
+| Project | Repository | TUR role | Strategy |
 |---|---|---|---|
 | Linux kernel | https://github.com/torvalds/linux | Host kernel | Use distribution kernel; maintain small config/patch set |
 | systemd | https://github.com/systemd/systemd | Init, services, logging, boot assessment | Integrate |
@@ -1204,7 +1204,7 @@ This is a starting shortlist. Verify current release, branch, maintenance status
 ## 17.1 Forking policy
 
 - Integrate upstream releases using distribution packaging where possible.
-- Keep patches in a small UOS patch queue.
+- Keep patches in a small TUR patch queue.
 - Rebase frequently.
 - Submit generic fixes upstream.
 - Do not silently change upstream licenses.
@@ -1223,20 +1223,20 @@ Before shipping a component, record:
 - Trademark usage constraints.
 - Whether component pulls proprietary codecs, firmware, fonts, or SDKs.
 
-Do not bundle proprietary Apple frameworks or Windows system binaries as a shortcut. UOS should provide compatibility infrastructure and require users to supply software they are legally entitled to use. Legal review is required before public distribution.
+Do not bundle proprietary Apple frameworks or Windows system binaries as a shortcut. TUR should provide compatibility infrastructure and require users to supply software they are legally entitled to use. Legal review is required before public distribution.
 
 ---
 
 # 18. Build, CI, release engineering, and repository layout
 
-## 18.1 Main UOS repository
+## 18.1 Main TUR repository
 
-The main UOS repository should own UOS code, image definitions, configuration, tests, and integration metadata. It should not copy entire upstream repositories into the tree unless there is a clear reason.
+The main TUR repository should own TUR code, image definitions, configuration, tests, and integration metadata. It should not copy entire upstream repositories into the tree unless there is a clear reason.
 
 Suggested structure:
 
 ```text
-uos/
+tur/
   README.md
   CONTRIBUTING.md
   AGENTS.md
@@ -1258,12 +1258,12 @@ uos/
     boot/
     branding/
   services/
-    uos-runtime/
-    uos-device-manager/
-    uos-storage/
-    uos-desktop-bridge/
-    uos-diagnostics/
-    uos-update/
+    tur-runtime/
+    tur-device-manager/
+    tur-storage/
+    tur-desktop-bridge/
+    tur-diagnostics/
+    tur-update/
   desktop/
     plasma-config/
     themes/
@@ -1296,7 +1296,7 @@ Every build must produce a machine-readable manifest:
 ```json
 {
   "schema_version": 1,
-  "uos_version": "0.1.0-dev",
+  "tur_version": "0.1.0-dev",
   "build_id": "ci-generated-immutable-id",
   "architecture": "x86_64",
   "kernel_release": "build-value",
@@ -1325,7 +1325,7 @@ Required stages:
 2. Static analysis.
 3. Unit tests.
 4. Service API schema validation.
-5. Build UOS services.
+5. Build TUR services.
 6. Build container/OS image.
 7. SBOM generation and license checks.
 8. VM boot smoke test.
@@ -1354,7 +1354,7 @@ Do not run destructive installer tests on developer hosts. Use disposable VM dis
 
 - A PE executable is identified correctly.
 - Wine runtime and prefix are selected.
-- A tested Win32/Win64 app launches from the UOS application launcher.
+- A tested Win32/Win64 app launches from the TUR application launcher.
 - App window participates in KWin task switching.
 - Clipboard and file access work for the supported test profile.
 - DXVK test workload uses Vulkan when applicable.
@@ -1366,7 +1366,7 @@ Do not run destructive installer tests on developer hosts. Use disposable VM dis
 - Mach-O architecture and format are identified.
 - Darling loader/server starts as an unprivileged user.
 - A supported CLI application launches and returns expected output.
-- Application logs are captured by UOS diagnostics.
+- Application logs are captured by TUR diagnostics.
 - Unsupported framework calls produce useful errors.
 - No claim of full macOS app compatibility is made.
 
@@ -1382,7 +1382,7 @@ GUI acceptance should be a separate gate and require a specifically enumerated t
 - Experimental APFS write is absent from production images or visibly disabled.
 - Every mount can be unmounted cleanly.
 - No duplicate mount ownership is created across runtimes.
-- Filesystem errors are represented with stable UOS error codes.
+- Filesystem errors are represented with stable TUR error codes.
 
 ## 19.5 Installer and recovery acceptance
 
@@ -1400,7 +1400,7 @@ GUI acceptance should be a separate gate and require a specifically enumerated t
 Every supported benchmark set must publish:
 
 - Base OS result.
-- UOS result.
+- TUR result.
 - Hardware and firmware.
 - Kernel and driver versions.
 - Runtime versions.
@@ -1425,7 +1425,7 @@ Deliverables:
 - CI that builds an ISO/image.
 - VM boot test.
 
-Exit criteria: a reproducible UOS image boots in QEMU and emits a build manifest.
+Exit criteria: a reproducible TUR image boots in QEMU and emits a build manifest.
 
 ## Phase 1: Boot, diagnostics, and recovery first
 
@@ -1434,7 +1434,7 @@ Deliverables:
 - UEFI boot.
 - Kernel/initramfs integration.
 - Persistent journal.
-- `uos-diag` CLI.
+- `tur-diag` CLI.
 - Installer phase state machine.
 - Recovery boot entry.
 - Atomic update proof-of-concept.
@@ -1455,14 +1455,14 @@ Deliverables:
 
 Exit criteria: hotplug USB devices, disks, audio and network without reboot; diagnostics show useful state.
 
-## Phase 3: Native desktop and UOS shell
+## Phase 3: Native desktop and TUR shell
 
 Deliverables:
 
 - KDE Plasma Wayland image.
-- UOS branding and visual modes.
+- TUR branding and visual modes.
 - Application launcher integration.
-- UOS Desktop Bridge skeleton.
+- TUR Desktop Bridge skeleton.
 - Portal integration.
 
 Exit criteria: polished responsive desktop with no runtime compatibility dependencies.
@@ -1528,7 +1528,7 @@ Exit criteria: independent tester can install, use, update, deliberately break, 
 At the end of every implementation task, produce a report using this template:
 
 ```text
-UOS DEVELOPMENT REPORT
+TUR DEVELOPMENT REPORT
 
 Task ID:
 Subsystem:
@@ -1580,7 +1580,7 @@ The agent must not say "working" without stating what was built and tested. If t
 
 The first agent should not begin by modifying Wine or Darling. It should establish a reliable, observable base system.
 
-## Task UOS-001: Create repository and architecture records
+## Task TUR-001: Create repository and architecture records
 
 - Create main repository structure.
 - Add this specification.
@@ -1588,7 +1588,7 @@ The first agent should not begin by modifying Wine or Darling. It should establi
 - Add ADR templates.
 - Add dependency inventory and licensing checklist.
 
-## Task UOS-002: Build minimal UOS image
+## Task TUR-002: Build minimal TUR image
 
 - Choose bootc/OSTree distribution foundation.
 - Pin base image and kernel.
@@ -1596,7 +1596,7 @@ The first agent should not begin by modifying Wine or Darling. It should establi
 - Build reproducible image.
 - Generate manifest and SBOM.
 
-## Task UOS-003: QEMU smoke boot
+## Task TUR-003: QEMU smoke boot
 
 - Boot image under UEFI QEMU.
 - Verify graphical session.
@@ -1604,22 +1604,22 @@ The first agent should not begin by modifying Wine or Darling. It should establi
 - Capture serial console and journal.
 - Save screenshot and test report.
 
-## Task UOS-004: Persistent diagnostics
+## Task TUR-004: Persistent diagnostics
 
 - Configure journald persistence.
-- Implement `uos-diag status` and `uos-diag collect`.
+- Implement `tur-diag status` and `tur-diag collect`.
 - Add bundle manifest and checksum.
 - Add privacy redaction.
 - Test export to a removable disk image.
 
-## Task UOS-005: Boot fallback proof
+## Task TUR-005: Boot fallback proof
 
 - Create second OS deployment.
 - Deliberately make it fail a health check.
 - Verify bounded retry and previous-deployment fallback.
 - Verify logs identify the failed deployment and reason.
 
-## Task UOS-006: Installer prototype
+## Task TUR-006: Installer prototype
 
 - Detect disks and partition tables.
 - Implement non-destructive preflight and dry-run plan.
@@ -1627,7 +1627,7 @@ The first agent should not begin by modifying Wine or Darling. It should establi
 - Persist all phase states and logs.
 - Export failure report.
 
-## Task UOS-007: Hardware inventory
+## Task TUR-007: Hardware inventory
 
 - Implement D-Bus device inventory using udev/sysfs.
 - Report PCI, USB, GPU, network, audio, storage and firmware status.
@@ -1643,7 +1643,7 @@ These questions do not block the first bootable prototype but must be resolved b
 
 1. Which bootloader is the best supported combination for the chosen bootc/OSTree release and target hardware: systemd-boot or GRUB?
 2. Which base distribution provides the best kernel, Mesa, Wine, Darling, KDE, security and update balance?
-3. Should UOS use SELinux or AppArmor as its primary mandatory access-control framework?
+3. Should TUR use SELinux or AppArmor as its primary mandatory access-control framework?
 4. Should the initial OS image be built as a bootc container image or assembled through a more traditional distribution image builder?
 5. Which Wine version/channel is the baseline, and how should Proton be exposed outside Steam?
 6. What minimum Darling feature set is required for the first macOS compatibility milestone?
@@ -1742,9 +1742,9 @@ The architecture in this document uses the state of upstream projects as underst
 
 # 26. Definition of success
 
-UOS succeeds as a research project when an independent developer can:
+TUR succeeds as a research project when an independent developer can:
 
-1. Build a reproducible UOS image from documented instructions.
+1. Build a reproducible TUR image from documented instructions.
 2. Install it on supported x86-64 UEFI hardware without risking an unselected disk.
 3. Understand every installer phase and recover logs after a failure.
 4. Boot into a modern, responsive KDE Wayland desktop.
@@ -1787,7 +1787,7 @@ The boot path must expose stable stage names. These stage names should appear in
 | `BOOT-100` | Graphics initialization | DRM device, driver, modeset status, Vulkan availability if testable | graphics |
 | `BOOT-110` | Display manager | selected display manager and status | login |
 | `BOOT-120` | Wayland compositor | KWin version, output count, session status | desktop |
-| `BOOT-130` | UOS session services | runtime manager, storage, device manager, desktop bridge | UOS integration |
+| `BOOT-130` | TUR session services | runtime manager, storage, device manager, desktop bridge | TUR integration |
 | `BOOT-140` | User session healthy | user session ID and health result | session |
 | `BOOT-150` | Boot marked successful | active deployment, health-check summary, success marker | boot assessment |
 
@@ -1797,8 +1797,8 @@ The boot splash must not fake a percentage when the system has no accurate estim
 
 Provide the following boot menu entries where available:
 
-- Normal UOS.
-- Previous known-good UOS deployment.
+- Normal TUR.
+- Previous known-good TUR deployment.
 - Fallback kernel/initramfs.
 - Safe graphics mode (conservative display path; no untested proprietary graphics module).
 - Recovery shell.
@@ -1806,7 +1806,7 @@ Provide the following boot menu entries where available:
 - Windows boot entry if detected.
 - Firmware setup entry if supported.
 
-The menu should display the UOS build ID and deployment date. It should distinguish the currently selected deployment from the last known-good deployment.
+The menu should display the TUR build ID and deployment date. It should distinguish the currently selected deployment from the last known-good deployment.
 
 ## 27.3 Safe graphics mode
 
@@ -1825,18 +1825,18 @@ Do not call safe graphics mode a guaranteed recovery route. A complete display h
 
 ## 27.4 Boot-stage heartbeat protocol
 
-A small `uos-boot-agent` should publish structured stage transitions to journald and, where practical, to a lightweight local status interface.
+A small `tur-boot-agent` should publish structured stage transitions to journald and, where practical, to a lightweight local status interface.
 
 Example journal fields:
 
 ```text
 MESSAGE=Boot stage completed: graphics initialization
-UOS_BOOT_STAGE=BOOT-100
-UOS_BOOT_STAGE_STATE=succeeded
-UOS_BOOT_ID=<boot-id>
-UOS_DEPLOYMENT=<deployment-checksum>
-UOS_DURATION_MS=824
-UOS_ERROR_CODE=
+TUR_BOOT_STAGE=BOOT-100
+TUR_BOOT_STAGE_STATE=succeeded
+TUR_BOOT_ID=<boot-id>
+TUR_DEPLOYMENT=<deployment-checksum>
+TUR_DURATION_MS=824
+TUR_ERROR_CODE=
 ```
 
 The boot agent must not block boot-critical services. It should use bounded IPC timeouts and fall back to journal-only operation if the status UI is unavailable.
@@ -1851,7 +1851,7 @@ The boot agent must not block boot-critical services. It should use bounded IPC 
 | Root filesystem check failure | Do not force read/write mount | Recovery shell / filesystem-specific repair guidance | fsck output, kernel log, mount result |
 | GPU driver crash | Offer safe graphics and previous kernel | “Graphics driver failed to initialize.” | DRM logs, module list, PCI IDs |
 | KWin fails | Offer text console and fallback session if packaged | “Desktop did not start.” | compositor logs, session journal |
-| UOS service fails | Start desktop if noncritical, mark health degraded | “A UOS service failed. Diagnostics are available.” | unit status, service logs |
+| TUR service fails | Start desktop if noncritical, mark health degraded | “A TUR service failed. Diagnostics are available.” | unit status, service logs |
 | Installer power loss | Read persisted installer session and revalidate disk state | “Previous installation did not finish.” | phase journal, disk plan, command results |
 | Update download/signature failure | Keep current deployment active | “Update was not applied.” | URL/repository ID, signature and checksum error, no secrets |
 | pstore contains panic data | Archive it during next boot | Show crash report available | raw pstore record, boot ID correlation |
@@ -1908,7 +1908,7 @@ Partition table writes, LUKS format, and filesystem creation must be treated as 
 Persist a session directory in the live environment and copy it to the target when the target is mounted. Suggested layout:
 
 ```text
-/var/log/uos-installer/<session-id>/
+/var/log/tur-installer/<session-id>/
   session.json
   phases.jsonl
   hardware.json
@@ -1966,7 +1966,7 @@ The confirmation must require an explicit button or typed phrase for full-disk e
 A support bundle should be deterministic and versioned:
 
 ```text
-uos-support-<build-id>-<boot-id>.tar.zst
+tur-support-<build-id>-<boot-id>.tar.zst
   manifest.json
   README.txt
   redaction-report.json
@@ -2011,7 +2011,7 @@ uos-support-<build-id>-<boot-id>.tar.zst
     phases.jsonl
     command-results/
   services/
-    uos-service-status.json
+    tur-service-status.json
     service-logs/
   checksums.sha256
 ```
@@ -2023,8 +2023,8 @@ The collector must omit a category when access is unavailable and record why. Do
 `manifest.json` must contain:
 
 - Schema version.
-- UOS build ID.
-- UOS deployment checksum.
+- TUR build ID.
+- TUR deployment checksum.
 - Boot ID.
 - Timestamp in UTC.
 - Architecture.
@@ -2041,19 +2041,19 @@ Use stable, namespaced codes. Do not change the meaning of an existing code afte
 
 Suggested families:
 
-- `UOS-BOOT-*`
-- `UOS-INSTALL-*`
-- `UOS-UPDATE-*`
-- `UOS-STORAGE-*`
-- `UOS-DEVICE-*`
-- `UOS-GRAPHICS-*`
-- `UOS-AUDIO-*`
-- `UOS-NETWORK-*`
-- `UOS-WINDOWS-*`
-- `UOS-DARWIN-*`
-- `UOS-DESKTOP-*`
-- `UOS-SECURITY-*`
-- `UOS-DIAG-*`
+- `TUR-BOOT-*`
+- `TUR-INSTALL-*`
+- `TUR-UPDATE-*`
+- `TUR-STORAGE-*`
+- `TUR-DEVICE-*`
+- `TUR-GRAPHICS-*`
+- `TUR-AUDIO-*`
+- `TUR-NETWORK-*`
+- `TUR-WINDOWS-*`
+- `TUR-DARWIN-*`
+- `TUR-DESKTOP-*`
+- `TUR-SECURITY-*`
+- `TUR-DIAG-*`
 
 Each code must have a registry entry with title, severity, detection criteria, user message, technical explanation, recovery action, and tests.
 
@@ -2062,7 +2062,7 @@ Each code must have a registry entry with title, severity, detection criteria, u
 The intended development workflow is:
 
 1. User/QA reproduces a problem.
-2. UOS records phase and structured error code.
+2. TUR records phase and structured error code.
 3. User exports diagnostic bundle locally.
 4. Development agent reads manifest first, then the relevant subsystem files.
 5. Agent identifies probable cause and supporting evidence.
@@ -2104,7 +2104,7 @@ Track:
 - Login-to-usable-desktop time.
 - Shell idle RSS.
 - Compositor RSS.
-- UOS service RSS.
+- TUR service RSS.
 - Runtime idle RSS.
 - Application cold and warm launch time.
 - Memory pressure and swap activity with mixed app load.
@@ -2146,7 +2146,7 @@ Every test result must be tied to a hardware profile and firmware version. A suc
 
 The development agent must preserve this priority order:
 
-1. Make UOS reliably bootable and recoverable.
+1. Make TUR reliably bootable and recoverable.
 2. Make installation safe, observable, and exportable for diagnosis.
 3. Make Linux hardware, storage, networking, audio, and display work well.
 4. Deliver a responsive and polished KDE Wayland desktop.
@@ -2158,4 +2158,4 @@ The development agent must preserve this priority order:
 
 Do not reverse this order. An impressive application launcher is not valuable if an update can leave the system unbootable, and universal filesystem access is not valuable if it risks corrupting a user's Mac or Windows volume.
 
-**The defining property of UOS is not that it claims to run every application. It is that it offers one coherent, high-performance, diagnosable, and recoverable host environment for multiple application ecosystems.**
+**The defining property of TUR is not that it claims to run every application. It is that it offers one coherent, high-performance, diagnosable, and recoverable host environment for multiple application ecosystems.**

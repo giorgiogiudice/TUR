@@ -40,7 +40,7 @@ directly, so "Linux applications" is not one case either.
 2. **VM only:** run every foreign application in a real guest OS. Highest
    compatibility for productivity software; heavy; poor for games; no legal route
    for macOS on PC hardware.
-3. **App-centric routing across both.** The user asks for an application; UOS
+3. **App-centric routing across both.** The user asks for an application; TUR
    chooses the best route to it from a ladder that includes both compatibility
    layers and a seamless real-OS guest, and presents every route as ordinary
    windows.
@@ -51,7 +51,7 @@ Adopt option 3.
 
 1. **The unit is the application, not the executable.** An application catalogue
    records, for each known application, which routes work and how well. Inspection
-   of an executable (the `uos-runtime` work) remains the fallback for unknown
+   of an executable (the `tur-runtime` work) remains the fallback for unknown
    software.
 
 2. **Routing ladder.** The first route that is known to work is used; the user can
@@ -72,7 +72,7 @@ Adopt option 3.
 3. **A seamless guest is a first-class tier.** One Windows guest under QEMU/KVM,
    started on demand and suspended when its last window closes. Its applications
    appear as individual windows on the Plasma desktop, in the launcher and the task
-   switcher, with shared folders, clipboard and audio. A small UOS agent inside the
+   switcher, with shared folders, clipboard and audio. A small TUR agent inside the
    guest handles integration and gives the AI layer a semantic view of guest
    applications. GPU passthrough and Looking Glass become an expert option, not
    the default display path.
@@ -84,9 +84,9 @@ Adopt option 3.
    is not an option: Apple's licence allows macOS virtual machines only on Apple
    hardware.
 
-5. **UOS builds the router and the experience, not the engines.** The engines are
+5. **TUR builds the router and the experience, not the engines.** The engines are
    upstream: Proton and `umu-launcher`, Wine, Waydroid, Flatpak, a container tool
-   for other distributions, QEMU/KVM and FreeRDP. UOS writes the catalogue, the
+   for other distributions, QEMU/KVM and FreeRDP. TUR writes the catalogue, the
    routing, the application centre, the guest integration and the diagnostics.
 
 ## Consequences
@@ -95,14 +95,14 @@ Adopt option 3.
   route column, and the answer for a given application can be "in the Windows
   guest".
 - The guest tier needs a licensed Windows installation, supplied by the user, and
-  costs memory while it runs. UOS without the guest remains a complete system.
+  costs memory while it runs. TUR without the guest remains a complete system.
   Indicative memory: 8 GB without the guest tier, 16 GB with it. To be measured.
 - The guest tier is a security improvement for untrusted Windows software: a guest
   is a stronger boundary than a Wine prefix.
 - Specification §3.4 still holds: a compatibility layer and a guest are different
   things, and diagnostics and application properties must say which one an
   application is using.
-- Some things no route delivers, and UOS must say so plainly: games with kernel
+- Some things no route delivers, and TUR must say so plainly: games with kernel
   anti-cheat (dual boot only); Android applications that require Google's device
   attestation; macOS and iOS applications in general.
 - Roadmap changes: the "full Windows backend" (Phase 6) moves forward to sit
@@ -111,12 +111,12 @@ Adopt option 3.
   catalogue and application centre are added to Phase 3–4.
 - Deferred or dropped from revision 1.0: GPU passthrough with Looking Glass as the
   default guest display; two of the three visual modes; most of
-  `uos-device-manager` beyond a device inventory and guest hand-off; APFS; the
+  `tur-device-manager` beyond a device inventory and guest hand-off; APFS; the
   custom graphical installer until the standard one has been outgrown.
 
 ## Verification
 
-- Evaluate WinBoat and WinApps on the UOS image before choosing whether to adopt
+- Evaluate WinBoat and WinApps on the TUR image before choosing whether to adopt
   one, adapt one, or build the guest integration directly on FreeRDP: licence
   compatibility, how each provisions Windows, and behaviour on Wayland.
 - Confirm `umu-launcher` and the Proton builds it manages can be shipped or

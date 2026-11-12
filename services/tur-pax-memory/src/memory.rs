@@ -264,7 +264,7 @@ impl<S: Store> Memory<S> {
 
     /// Whether memory is on.
     ///
-    /// Fails with `UOS-AI-MEMORY-006` if the state file is damaged: it is then
+    /// Fails with `TUR-AI-MEMORY-006` if the state file is damaged: it is then
     /// not known whether the user turned memory off, so nothing is written or
     /// recalled until the user sets the switch again.
     pub fn is_enabled(&self) -> Result<bool, Problem> {
@@ -318,8 +318,8 @@ impl<S: Store> Memory<S> {
     ///
     /// The entry's trust level and state follow from its kind: an entry taken
     /// from content is stored as pending and is not recalled until the user
-    /// confirms it. Refused with a `UOS-AI-MEMORY-SECRET-*` code if any of its
-    /// texts looks like a secret, and with `UOS-AI-MEMORY-001` while memory is
+    /// confirms it. Refused with a `TUR-AI-MEMORY-SECRET-*` code if any of its
+    /// texts looks like a secret, and with `TUR-AI-MEMORY-001` while memory is
     /// off.
     pub fn add(&mut self, new: NewEntry, now: Timestamp) -> Result<MemoryEntry, Problem> {
         let mut state = self.require_enabled()?;
@@ -745,7 +745,7 @@ mod tests {
         let mut memory = memory();
         let hash = "3f786850e387550fdab836ed7e6dc881de23001b";
         let step = |arguments: Value| ProcedureStep {
-            service: "org.uos.Build1".to_owned(),
+            service: "org.tur.Build1".to_owned(),
             tool: "build_checkout".to_owned(),
             arguments: arguments.as_object().cloned().unwrap_or_default(),
         };

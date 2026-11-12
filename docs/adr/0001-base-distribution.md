@@ -12,7 +12,7 @@ maintained security baseline. It left the base distribution, the mandatory
 access-control framework and the image build model open.
 
 Building these foundations from scratch would consume the project's early phases
-without producing anything that distinguishes UOS. An existing distribution already
+without producing anything that distinguishes TUR. An existing distribution already
 ships an image-based KDE desktop on the tooling the specification names.
 
 ## Options considered
@@ -20,19 +20,19 @@ ships an image-based KDE desktop on the tooling the specification names.
 1. **Fedora Kinoite (Fedora Atomic KDE), consumed as a bootc container image.**
    First-party bootc and OSTree integration, a current kernel and Mesa, KDE Plasma
    on Wayland, SELinux enforcing, signed boot components. Fedora releases roughly
-   every six months, so UOS must rebase regularly.
+   every six months, so TUR must rebase regularly.
 2. **A Universal Blue image (Aurora or Bazzite) as the base.** More is
    pre-integrated, including gaming components, but it adds a second upstream
-   between UOS and Fedora whose choices UOS would inherit.
+   between TUR and Fedora whose choices TUR would inherit.
 3. **openSUSE Kalpa.** An image-like KDE desktop, but built on transactional
    updates and snapshots rather than bootc, so it does not match the specified
    update model.
-4. **A Debian, Ubuntu or Arch base assembled into an image by UOS.** Full control,
-   but UOS would own the image tooling, update model and security baseline itself.
+4. **A Debian, Ubuntu or Arch base assembled into an image by TUR.** Full control,
+   but TUR would own the image tooling, update model and security baseline itself.
 
 ## Decision
 
-UOS derives from the Fedora Kinoite bootc image. The OS is defined as a
+TUR derives from the Fedora Kinoite bootc image. The OS is defined as a
 `Containerfile` on that base and delivered as a bootc image. SELinux is the
 mandatory access-control framework.
 
@@ -40,16 +40,16 @@ mandatory access-control framework.
 
 - Specification questions 2 (base distribution), 3 (SELinux or AppArmor) and
   4 (bootc container image or traditional image builder) are settled.
-- UOS uses the Fedora kernel unmodified. This keeps Secure Boot working through
+- TUR uses the Fedora kernel unmodified. This keeps Secure Boot working through
   Fedora's signed boot chain. Any out-of-tree kernel module reopens the signing
   problem and needs its own ADR.
 - Phases 0 to 3 of the roadmap become integration and verification work on an
   existing base rather than construction.
 - Packages come from Fedora where they exist. Components Fedora does not package
-  (Darling in particular) must be built and pinned by UOS.
-- UOS takes on a rebase to each new Fedora release, gated by the boot, rollback and
+  (Darling in particular) must be built and pinned by TUR.
+- TUR takes on a rebase to each new Fedora release, gated by the boot, rollback and
   regression tests.
-- Fedora's trademarks may not be used to brand UOS. Branding is replaced in the
+- Fedora's trademarks may not be used to brand TUR. Branding is replaced in the
   image.
 
 ## Verification
@@ -60,7 +60,7 @@ recorded in that task's report before anything is pinned:
 - The exact image reference and digest of the Kinoite bootc base.
 - **Bootloader and boot health (specification question 1).** Which bootloader the
   chosen bootc release supports on this base, and whether health-checked rollback
-  is provided by an existing mechanism that UOS should wrap rather than replace.
+  is provided by an existing mechanism that TUR should wrap rather than replace.
   The specification's assumption of systemd-boot boot counting must be tested, not
   assumed.
 - That `ntsync` is enabled in the Fedora kernel in use.

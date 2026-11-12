@@ -5,7 +5,7 @@
 //! Addendum A section 16.1: "Secrets are never stored. Passwords, keys and
 //! payment details are refused at the point of writing." Every text that is
 //! about to be stored passes through [`detect`], and a hit refuses the write
-//! with a `UOS-AI-MEMORY-SECRET-*` code.
+//! with a `TUR-AI-MEMORY-SECRET-*` code.
 //!
 //! # What it recognises
 //!
@@ -1158,7 +1158,7 @@ mod tests {
             .collect();
         assert_eq!(codes.len(), SecretKind::ALL.len());
         for code in codes {
-            assert!(code.starts_with("UOS-AI-MEMORY-SECRET-"), "{code}");
+            assert!(code.starts_with("TUR-AI-MEMORY-SECRET-"), "{code}");
         }
     }
 }

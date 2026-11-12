@@ -1,8 +1,8 @@
 # Installer core
 
 **Status:** non-destructive core only. Nothing described here writes to a disk.
-**Component:** `installer/uos-installer-core` (library and the `uos-installer` binary)
-**Specification sections:** §5.2, §6.1 to §6.3, §14, §19.5, §28; task UOS-006
+**Component:** `installer/tur-installer-core` (library and the `tur-installer` binary)
+**Specification sections:** §5.2, §6.1 to §6.3, §14, §19.5, §28; task TUR-006
 **Related decisions:** [ADR-0001](../adr/0001-base-distribution.md), [ADR-0005](../adr/0005-languages-and-workspace.md)
 
 This note describes the part of the installer that decides which disk is meant,
@@ -22,7 +22,7 @@ not yet verified is listed under [Assumptions](#assumptions-to-verify).
 - **The graphical installer** and the **D-Bus service**.
 - **The other installation modes**: "install alongside", "manual" and
   "reinstall preserving data" are defined as `InstallMode` variants and return
-  `UOS-INSTALL-PLAN-002`.
+  `TUR-INSTALL-PLAN-002`.
 - **Continuing an interrupted installation.** Reconciliation examines the disk
   and reports; it never permits carrying on.
 - Hardware inventory, GPU and storage-controller preflight checks, swap, a
@@ -74,8 +74,8 @@ from one step to the next. What it carries is an `Identity`:
 
 A target is chosen with a selector: a `/dev/disk/by-id/...` path, or identity
 attributes (`serial=...`, `wwn=...`, `model=...`, `size=...`, `by-path=...`).
-Any other `/dev/...` path is `UOS-INSTALL-TARGET-001`; a bare kernel name is
-`UOS-INSTALL-TARGET-002`. The selector must resolve to exactly one whole disk
+Any other `/dev/...` path is `TUR-INSTALL-TARGET-001`; a bare kernel name is
+`TUR-INSTALL-TARGET-002`. The selector must resolve to exactly one whole disk
 that holds a medium, and no other disk may share its identity. Two enclosures
 that report the same serial number, or two paths to one multipath disk, are
 therefore refused as ambiguous however they are selected.
@@ -106,22 +106,22 @@ the installed system can work, and warns where it is informational.
 
 | Code | Check | Blocks when |
 |---|---|---|
-| `UOS-INSTALL-PREFLIGHT-001` | boot mode | not UEFI, or not determined |
-| `UOS-INSTALL-PREFLIGHT-002` | Secure Boot state | never (warning unless enabled) |
-| `UOS-INSTALL-PREFLIGHT-003` | CPU architecture | not `x86_64`, or not determined |
-| `UOS-INSTALL-PREFLIGHT-004` | CPU features | a required feature is missing, or not determined |
-| `UOS-INSTALL-PREFLIGHT-005` | memory | below the minimum, or not determined (warning below the recommendation) |
-| `UOS-INSTALL-PREFLIGHT-006` | target capacity | no medium, or smaller than the layout needs |
-| `UOS-INSTALL-PREFLIGHT-007` | target not in use | anything on the disk is mounted or held open |
-| `UOS-INSTALL-PREFLIGHT-008` | target is not the live medium | it is |
-| `UOS-INSTALL-PREFLIGHT-009` | other operating systems | never (warning when one is detected) |
-| `UOS-INSTALL-PREFLIGHT-010` | safe graphics mode | never (warning when active or not determined) |
-| `UOS-INSTALL-PREFLIGHT-011` | network | never (informational) |
-| `UOS-INSTALL-PREFLIGHT-012` | target writable | the disk is read-only |
-| `UOS-INSTALL-PREFLIGHT-013` | target identity | never (warning for a weak identity) |
+| `TUR-INSTALL-PREFLIGHT-001` | boot mode | not UEFI, or not determined |
+| `TUR-INSTALL-PREFLIGHT-002` | Secure Boot state | never (warning unless enabled) |
+| `TUR-INSTALL-PREFLIGHT-003` | CPU architecture | not `x86_64`, or not determined |
+| `TUR-INSTALL-PREFLIGHT-004` | CPU features | a required feature is missing, or not determined |
+| `TUR-INSTALL-PREFLIGHT-005` | memory | below the minimum, or not determined (warning below the recommendation) |
+| `TUR-INSTALL-PREFLIGHT-006` | target capacity | no medium, or smaller than the layout needs |
+| `TUR-INSTALL-PREFLIGHT-007` | target not in use | anything on the disk is mounted or held open |
+| `TUR-INSTALL-PREFLIGHT-008` | target is not the live medium | it is |
+| `TUR-INSTALL-PREFLIGHT-009` | other operating systems | never (warning when one is detected) |
+| `TUR-INSTALL-PREFLIGHT-010` | safe graphics mode | never (warning when active or not determined) |
+| `TUR-INSTALL-PREFLIGHT-011` | network | never (informational) |
+| `TUR-INSTALL-PREFLIGHT-012` | target writable | the disk is read-only |
+| `TUR-INSTALL-PREFLIGHT-013` | target identity | never (warning for a weak identity) |
 
 The live medium, a disk in use and a read-only disk are refused twice over: by
-these checks, and by plan building itself (`UOS-INSTALL-PLAN-005`, `-006`,
+these checks, and by plan building itself (`TUR-INSTALL-PLAN-005`, `-006`,
 `-007`), so no plan value can exist for such a disk.
 
 ## 5. The plan and its consequences
@@ -148,7 +148,7 @@ one disk does not confirm another. The installer recomputes it from the
 identity when checking; it does not trust the copy in a plan file.
 
 All layout arithmetic is checked. Every offset and size is a multiple of the
-alignment. A disk that is too small is `UOS-INSTALL-PLAN-001`, with the
+alignment. A disk that is too small is `TUR-INSTALL-PLAN-001`, with the
 required and available sizes.
 
 ### The layout is an unverified assumption
@@ -172,7 +172,7 @@ What the draft scheme assumes:
 | Boot partition | 1 GiB, ext4, `/boot`, always created | bootc may need it only with encryption, or not at all with a UKI in the ESP |
 | Root | rest of the disk, Btrfs, at least 20 GiB | bootc's default root filesystem and Kinoite's differ; the minimum is a guess |
 | Root with a data partition | 64 GiB when the disk allows, never below the minimum | a guess |
-| Data partition | rest of the disk, Btrfs, `/var/home`, at least 8 GiB | the mount point follows Fedora Atomic's `/home` link; unverified for UOS |
+| Data partition | rest of the disk, Btrfs, `/var/home`, at least 8 GiB | the mount point follows Fedora Atomic's `/home` link; unverified for TUR |
 | Encryption | LUKS2 on root and data; ESP and boot stay plain | how bootc sets up LUKS on this base is unverified |
 | Type GUIDs | Discoverable Partitions Specification (ESP, XBOOTLDR, root x86-64, home) | whether the base image relies on them is unverified |
 
@@ -245,7 +245,7 @@ Legal transitions:
 - a phase and all later ones back to `pending` (the user goes back), only while
   no destructive phase has ever started and none of them is running.
 
-Everything else is a typed error (`UOS-INSTALL-PHASE-*`).
+Everything else is a typed error (`TUR-INSTALL-PHASE-*`).
 
 ## 8. Session directory and crash safety
 
@@ -307,7 +307,7 @@ Loading never trusts the session's files further than this.
    not implemented.
 3. **No evidence of a write** and a consistent log: the decision is *resume*,
    from storage discovery or earlier, never from a destructive phase. A phase
-   that was running is recorded as failed with `UOS-INSTALL-SESSION-005`.
+   that was running is recorded as failed with `TUR-INSTALL-SESSION-005`.
    Discovery, selection, planning and confirmation run again, and the session
    forgets its plan: the saved inventory is stale, and the confirmation existed
    only in memory.
@@ -331,12 +331,12 @@ declared secret inside another argument.
 ## 11. Dry-run command line
 
 ```text
-uos-installer inventory --from <lsblk.json> [--links <links.json>] [--json]
-uos-installer plan --from <lsblk.json> --target <by-id path or identity>
+tur-installer inventory --from <lsblk.json> [--links <links.json>] [--json]
+tur-installer plan --from <lsblk.json> --target <by-id path or identity>
                    [--links <links.json>] [--facts <facts.json>]
                    [--encrypt] [--data-partition]
                    [--acknowledge-weak-identity] [--json]
-uos-installer session show <dir> [--json]
+tur-installer session show <dir> [--json]
 ```
 
 Every subcommand reads files and writes to standard output. Input paths must be
@@ -355,64 +355,64 @@ detail with the exact values.
 
 | Code | Severity | Meaning |
 |---|---|---|
-| `UOS-INSTALL-INVENTORY-001` | error | Installer input data could not be read |
-| `UOS-INSTALL-INVENTORY-002` | error | Installer input data is not in the expected format |
-| `UOS-INSTALL-TARGET-001` | error | A device path was given as the installation target |
-| `UOS-INSTALL-TARGET-002` | error | The target selector is not valid |
-| `UOS-INSTALL-TARGET-003` | error | No disk matches the target selector |
-| `UOS-INSTALL-TARGET-004` | error | More than one disk matches the target |
-| `UOS-INSTALL-TARGET-005` | error | The target is not a whole disk |
-| `UOS-INSTALL-TARGET-006` | error | The target drive holds no medium |
-| `UOS-INSTALL-TARGET-007` | error | The target has no stable identifier and this was not acknowledged |
-| `UOS-INSTALL-IDENTITY-001` | error | The target disk is no longer present |
-| `UOS-INSTALL-IDENTITY-002` | error | The target disk changed size |
-| `UOS-INSTALL-IDENTITY-003` | error | A different disk is now in the target's place |
-| `UOS-INSTALL-IDENTITY-004` | error | Several disks now match the target's identity |
-| `UOS-INSTALL-IDENTITY-005` | error | The target disk's reported attributes changed |
-| `UOS-INSTALL-PREFLIGHT-001` | error | Preflight check: firmware boot mode is UEFI |
-| `UOS-INSTALL-PREFLIGHT-002` | warning | Preflight check: Secure Boot state |
-| `UOS-INSTALL-PREFLIGHT-003` | error | Preflight check: CPU architecture |
-| `UOS-INSTALL-PREFLIGHT-004` | error | Preflight check: required CPU features |
-| `UOS-INSTALL-PREFLIGHT-005` | error | Preflight check: installed memory |
-| `UOS-INSTALL-PREFLIGHT-006` | error | Preflight check: target disk capacity |
-| `UOS-INSTALL-PREFLIGHT-007` | error | Preflight check: target disk is not in use |
-| `UOS-INSTALL-PREFLIGHT-008` | error | Preflight check: target disk is not the live medium |
-| `UOS-INSTALL-PREFLIGHT-009` | warning | Preflight check: other operating systems on the target |
-| `UOS-INSTALL-PREFLIGHT-010` | warning | Preflight check: installer graphics mode |
-| `UOS-INSTALL-PREFLIGHT-011` | info | Preflight check: network availability |
-| `UOS-INSTALL-PREFLIGHT-012` | error | Preflight check: target disk is writable |
-| `UOS-INSTALL-PREFLIGHT-013` | warning | Preflight check: target disk has a stable identifier |
-| `UOS-INSTALL-PLAN-001` | error | The target disk is too small |
-| `UOS-INSTALL-PLAN-002` | error | The installation mode is not implemented yet |
-| `UOS-INSTALL-PLAN-003` | error | The target disk's sector size is not supported |
-| `UOS-INSTALL-PLAN-004` | error | A partition size calculation overflowed |
-| `UOS-INSTALL-PLAN-005` | error | The target is the medium the installer runs from |
-| `UOS-INSTALL-PLAN-006` | error | The target disk is in use |
-| `UOS-INSTALL-PLAN-007` | error | The target disk is read-only |
-| `UOS-INSTALL-PLAN-008` | error | The partition plan is not consistent |
-| `UOS-INSTALL-CONFIRM-001` | error | The confirmation phrase was not typed exactly |
-| `UOS-INSTALL-CONFIRM-002` | error | A blocking preflight check prevents confirmation |
-| `UOS-INSTALL-CONFIRM-003` | error | The preflight report is not for the planned target |
-| `UOS-INSTALL-CONFIRM-004` | error | The target's contents changed after confirmation |
-| `UOS-INSTALL-CONFIRM-005` | error | The plan's weaker identity was not acknowledged |
-| `UOS-INSTALL-PHASE-001` | error | Illegal phase transition |
-| `UOS-INSTALL-PHASE-002` | error | A phase was started before an earlier phase finished |
-| `UOS-INSTALL-PHASE-003` | error | A non-repeatable phase cannot be retried |
-| `UOS-INSTALL-PHASE-004` | error | Phases cannot be reopened after the target was written |
-| `UOS-INSTALL-PHASE-005` | error | A mandatory phase cannot be skipped |
-| `UOS-INSTALL-SESSION-001` | error | The session directory could not be read or written |
-| `UOS-INSTALL-SESSION-002` | error | A session file is corrupt |
-| `UOS-INSTALL-SESSION-003` | error | The session was written by an incompatible installer |
-| `UOS-INSTALL-SESSION-004` | error | The session wrote to the target and must be reconciled |
-| `UOS-INSTALL-SESSION-005` | warning | The installer stopped while a phase was running |
-| `UOS-INSTALL-SESSION-006` | error | The session directory already holds a session |
-| `UOS-INSTALL-SESSION-007` | error | A phase that writes to the target needs a revalidated target |
-| `UOS-INSTALL-SESSION-008` | error | The session has no partition plan |
-| `UOS-INSTALL-SESSION-009` | error | No session was found in the directory |
-| `UOS-INSTALL-SESSION-010` | error | The session cannot be resumed |
-| `UOS-INSTALL-SESSION-011` | error | The session identifier is not valid |
-| `UOS-INSTALL-SESSION-012` | error | The session failed to persist and must be reloaded |
-| `UOS-INSTALL-SESSION-013` | error | The plan cannot change after the target was written |
+| `TUR-INSTALL-INVENTORY-001` | error | Installer input data could not be read |
+| `TUR-INSTALL-INVENTORY-002` | error | Installer input data is not in the expected format |
+| `TUR-INSTALL-TARGET-001` | error | A device path was given as the installation target |
+| `TUR-INSTALL-TARGET-002` | error | The target selector is not valid |
+| `TUR-INSTALL-TARGET-003` | error | No disk matches the target selector |
+| `TUR-INSTALL-TARGET-004` | error | More than one disk matches the target |
+| `TUR-INSTALL-TARGET-005` | error | The target is not a whole disk |
+| `TUR-INSTALL-TARGET-006` | error | The target drive holds no medium |
+| `TUR-INSTALL-TARGET-007` | error | The target has no stable identifier and this was not acknowledged |
+| `TUR-INSTALL-IDENTITY-001` | error | The target disk is no longer present |
+| `TUR-INSTALL-IDENTITY-002` | error | The target disk changed size |
+| `TUR-INSTALL-IDENTITY-003` | error | A different disk is now in the target's place |
+| `TUR-INSTALL-IDENTITY-004` | error | Several disks now match the target's identity |
+| `TUR-INSTALL-IDENTITY-005` | error | The target disk's reported attributes changed |
+| `TUR-INSTALL-PREFLIGHT-001` | error | Preflight check: firmware boot mode is UEFI |
+| `TUR-INSTALL-PREFLIGHT-002` | warning | Preflight check: Secure Boot state |
+| `TUR-INSTALL-PREFLIGHT-003` | error | Preflight check: CPU architecture |
+| `TUR-INSTALL-PREFLIGHT-004` | error | Preflight check: required CPU features |
+| `TUR-INSTALL-PREFLIGHT-005` | error | Preflight check: installed memory |
+| `TUR-INSTALL-PREFLIGHT-006` | error | Preflight check: target disk capacity |
+| `TUR-INSTALL-PREFLIGHT-007` | error | Preflight check: target disk is not in use |
+| `TUR-INSTALL-PREFLIGHT-008` | error | Preflight check: target disk is not the live medium |
+| `TUR-INSTALL-PREFLIGHT-009` | warning | Preflight check: other operating systems on the target |
+| `TUR-INSTALL-PREFLIGHT-010` | warning | Preflight check: installer graphics mode |
+| `TUR-INSTALL-PREFLIGHT-011` | info | Preflight check: network availability |
+| `TUR-INSTALL-PREFLIGHT-012` | error | Preflight check: target disk is writable |
+| `TUR-INSTALL-PREFLIGHT-013` | warning | Preflight check: target disk has a stable identifier |
+| `TUR-INSTALL-PLAN-001` | error | The target disk is too small |
+| `TUR-INSTALL-PLAN-002` | error | The installation mode is not implemented yet |
+| `TUR-INSTALL-PLAN-003` | error | The target disk's sector size is not supported |
+| `TUR-INSTALL-PLAN-004` | error | A partition size calculation overflowed |
+| `TUR-INSTALL-PLAN-005` | error | The target is the medium the installer runs from |
+| `TUR-INSTALL-PLAN-006` | error | The target disk is in use |
+| `TUR-INSTALL-PLAN-007` | error | The target disk is read-only |
+| `TUR-INSTALL-PLAN-008` | error | The partition plan is not consistent |
+| `TUR-INSTALL-CONFIRM-001` | error | The confirmation phrase was not typed exactly |
+| `TUR-INSTALL-CONFIRM-002` | error | A blocking preflight check prevents confirmation |
+| `TUR-INSTALL-CONFIRM-003` | error | The preflight report is not for the planned target |
+| `TUR-INSTALL-CONFIRM-004` | error | The target's contents changed after confirmation |
+| `TUR-INSTALL-CONFIRM-005` | error | The plan's weaker identity was not acknowledged |
+| `TUR-INSTALL-PHASE-001` | error | Illegal phase transition |
+| `TUR-INSTALL-PHASE-002` | error | A phase was started before an earlier phase finished |
+| `TUR-INSTALL-PHASE-003` | error | A non-repeatable phase cannot be retried |
+| `TUR-INSTALL-PHASE-004` | error | Phases cannot be reopened after the target was written |
+| `TUR-INSTALL-PHASE-005` | error | A mandatory phase cannot be skipped |
+| `TUR-INSTALL-SESSION-001` | error | The session directory could not be read or written |
+| `TUR-INSTALL-SESSION-002` | error | A session file is corrupt |
+| `TUR-INSTALL-SESSION-003` | error | The session was written by an incompatible installer |
+| `TUR-INSTALL-SESSION-004` | error | The session wrote to the target and must be reconciled |
+| `TUR-INSTALL-SESSION-005` | warning | The installer stopped while a phase was running |
+| `TUR-INSTALL-SESSION-006` | error | The session directory already holds a session |
+| `TUR-INSTALL-SESSION-007` | error | A phase that writes to the target needs a revalidated target |
+| `TUR-INSTALL-SESSION-008` | error | The session has no partition plan |
+| `TUR-INSTALL-SESSION-009` | error | No session was found in the directory |
+| `TUR-INSTALL-SESSION-010` | error | The session cannot be resumed |
+| `TUR-INSTALL-SESSION-011` | error | The session identifier is not valid |
+| `TUR-INSTALL-SESSION-012` | error | The session failed to persist and must be reloaded |
+| `TUR-INSTALL-SESSION-013` | error | The plan cannot change after the target was written |
 
 The registry in code (`src/codes.rs`) holds the code, title and severity. The
 detection criteria, user message, technical explanation and recovery action
@@ -421,14 +421,14 @@ yet in one registry file.
 
 ## Assumptions to verify
 
-Each of these is a design assumption. None has been checked against the UOS
+Each of these is a design assumption. None has been checked against the TUR
 image or a real machine.
 
 1. **The partition scheme**, as tabled in section 5.
 2. **Live-medium mount points.** The three paths in section 2 are those of a
-   dracut live boot. The UOS live image does not exist yet.
+   dracut live boot. The TUR live image does not exist yet.
 3. **lsblk output.** The fixtures are hand-written to the documented shape of
-   lsblk's JSON; they were not captured from the lsblk the UOS image ships.
+   lsblk's JSON; they were not captured from the lsblk the TUR image ships.
    `SystemProbe` has never been run.
 4. **Memory thresholds.** Blocking below 3 GiB and warning below 7 GiB are
    placeholders chosen so that machines sold with 4 GB and 8 GB pass. The

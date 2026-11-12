@@ -4,15 +4,15 @@
 **Applies to:** specification revision 1.0
 **Related decision:** [ADR-0006](../adr/0006-android-runtime.md) (Accepted)
 
-This addendum specifies how UOS runs Android applications. It adds a fourth
+This addendum specifies how TUR runs Android applications. It adds a fourth
 application ecosystem to the specification and lists the amendments that requires
 in [section 15](#15-amendments-to-specification-revision-10).
 
 The owner's requirement is that Android applications "should fully work and be
 supported". This document pursues that seriously and states plainly where it
 cannot be met. A large class of Android applications is tied to Google's device
-certification, and no engineering inside UOS changes that
-([section 11](#11-what-will-and-will-not-work)). UOS does not claim complete
+certification, and no engineering inside TUR changes that
+([section 11](#11-what-will-and-will-not-work)). TUR does not claim complete
 Android compatibility. Compatibility is application-specific and is measured
 (§0, rule 7).
 
@@ -20,7 +20,7 @@ Android compatibility. Compatibility is application-specific and is measured
 
 - **Verified.** Checked against the upstream source on 12 November 2026. Each has
   a reference such as [S3] to [section 17](#17-sources).
-- **Measured.** Taken from a UOS build manifest produced by CI, with the run
+- **Measured.** Taken from a TUR build manifest produced by CI, with the run
   number.
 - **Assumption.** Not verified. Marked as such, and to be verified before
   implementation, as the specification requires (§0, rule 14).
@@ -32,9 +32,9 @@ Android compatibility. Compatibility is application-specific and is measured
 **In scope**
 
 - Installing, launching and removing Android applications supplied by the user as
-  APK files or split-APK sets, through `uos-runtime`.
+  APK files or split-APK sets, through `tur-runtime`.
 - Presenting them as ordinary windows and launcher entries on the Plasma desktop.
-- Sharing host services with them under UOS policy: storage, audio, network,
+- Sharing host services with them under TUR policy: storage, audio, network,
   selected devices, clipboard, notifications.
 - Versioning, pinning, updating and rolling back the Android system image on an
   immutable host.
@@ -48,12 +48,12 @@ Android compatibility. Compatibility is application-specific and is measured
 - Bundling Google Mobile Services, the Play Store, an ARM translation layer,
   Widevine, or any other proprietary component
   ([ADR-0003](../adr/0003-licence.md)).
-- Circumventing attestation, DRM, licence checks or anti-cheat. UOS ships no
+- Circumventing attestation, DRM, licence checks or anti-cheat. TUR ships no
   tool whose purpose is to defeat them.
 - Hardware that a PC does not have: cellular radio, NFC, a secure element.
-- A UOS application store.
+- A TUR application store.
 - Android as a boot target, or any role for Android in boot, installation,
-  update or recovery of UOS itself.
+  update or recovery of TUR itself.
 
 ## 2. Principles
 
@@ -61,17 +61,17 @@ Android compatibility. Compatibility is application-specific and is measured
    daemon for it is active, until the user turns Android support on.
 2. **The host kernel stays the only hardware authority.** Android receives host
    services and explicitly granted devices. It owns no physical device.
-3. **Nothing proprietary in the image.** What UOS cannot ship, the user may
+3. **Nothing proprietary in the image.** What TUR cannot ship, the user may
    supply or opt into, with the consequences stated first.
 4. **Explain before installing.** A package is inspected before it runs. If it
-   cannot work, UOS says so and why, with a stable error code, instead of
+   cannot work, TUR says so and why, with a stable error code, instead of
    installing something that will crash.
 5. **Android grants are host grants.** A permission dialog inside Android is not
    a security boundary for the host. Access to a host resource is decided on the
    host.
 6. **Measured, not claimed.** Results are published per application, with
    versions and hardware.
-7. **Integrate, do not fork.** UOS drives upstream Waydroid through its
+7. **Integrate, do not fork.** TUR drives upstream Waydroid through its
    documented interfaces. Fixes go upstream first.
 
 ## 3. State of upstream, November 2026
@@ -109,13 +109,13 @@ where it differs from what the project assumed when this work was requested.
 | SELinux domain of the Android processes | The policy lets the container's entry point enter `container_runtime_t`, the domain of the container runtime itself; a denial report of October 2026 also shows `spc_t`, the privileged-container domain. Both are domains that SELinux confines little (**assumption**, to be measured). Android's own SELinux policy is not enforced inside the container; a request to add it has been open since 2023. | [S12] [S14] |
 | How it is installed on Fedora Atomic desktops | Upstream documents `rpm-ostree install waydroid` (package layering) on Silverblue, Kinoite and other variants. Bazzite, a bootc image derived from Fedora Atomic, ships Waydroid inside the image and configures it with a helper command; it uses its own kernel build. | [S4] [S23] |
 | Does it run on the stock Fedora kernel? | A bug report from October 2026 shows Waydroid 1.6.3 running on Fedora 44 with stock kernel `7.2.9-200.fc44`. See section 3.3. | [S12] |
-| What this means for UOS | UOS is a bootc image, so the package is added in the `Containerfile` at build time, as Bazzite does, not layered on the installed system. | — |
+| What this means for TUR | TUR is a bootc image, so the package is added in the `Containerfile` at build time, as Bazzite does, not layered on the installed system. | — |
 
 ### 3.3 Binder in the kernel
 
 Waydroid needs the Android binder IPC driver in the host kernel.
 
-**Measured.** From the build manifest of CI run 43147702795, UOS image, kernel
+**Measured.** From the build manifest of CI run 43147702795, TUR image, kernel
 `7.3.3-300.fc45.x86_64`:
 
 | Option | Value | Meaning |
@@ -133,10 +133,10 @@ options `CONFIG_ANDROID_BINDER_IPC` and `CONFIG_ANDROID_BINDERFS`. Those name
 the C driver, which Fedora does not build and which mainline has removed: at
 7.4-rc2 only `ANDROID_BINDER_IPC_RUST` and `ANDROID_BINDER_DEVICES` remain.
 [S16] [S17] Fedora 43 and 44 carry the same configuration as Fedora 45. [S15]
-Any check in UOS must key on the Rust option, not on the old names.
+Any check in TUR must key on the Rust option, not on the old names.
 
 Three questions follow from "the driver is there". Each answer below is from
-reading source, and none is yet a measurement on a running UOS image. The first
+reading source, and none is yet a measurement on a running TUR image. The first
 container start in CI (milestone B1) is the functional test for all three.
 
 **1. Is binderfs present, although `CONFIG_ANDROID_BINDERFS` is absent?**
@@ -179,10 +179,10 @@ Expected to, with known defects.
   binder devices for the daemon, and `binder` call and transfer rules between
   the daemon, the container and the user's session. [S14]
 - It labels everything under `/var/lib/waydroid` for the daemon, and mounts the
-  Android root filesystem with a fixed label. [S14] Images that UOS manages
-  must therefore live under that directory, or UOS must add a file-context rule.
+  Android root filesystem with a fixed label. [S14] Images that TUR manages
+  must therefore live under that directory, or TUR must add a file-context rule.
 - The policy is not complete. A report of October 2026 on Fedora 44 shows a
-  `binder` transfer denied between two container domains. [S12] UOS tests with
+  `binder` transfer denied between two container domains. [S12] TUR tests with
   SELinux enforcing and treats any denial on the supported path as a defect to
   report upstream, never as a reason to go permissive.
 - **Assumption:** the module installs correctly when the package is added
@@ -229,7 +229,7 @@ difference must stay visible to users and in diagnostics:
 | | A. Waydroid container | B. Android in a virtual machine | C. Android Translation Layer | D. Out-of-tree binder module, then A |
 |---|---|---|---|---|
 | Kind | OS container | Full guest | Compatibility runtime | OS container |
-| Host kernel requirement | Binder (measured: present) | KVM (measured: present) | None | A module UOS builds and signs |
+| Host kernel requirement | Binder (measured: present) | KVM (measured: present) | None | A module TUR builds and signs |
 | Root on the host | A root daemon; root inside the container is host root with reduced capabilities (to be verified) | The VM monitor runs as the user | None | As A |
 | Application compatibility | Highest available: a real Android system | Same as A in principle | Low today | As A |
 | Per-application windows | Yes, upstream feature | Unproven. QEMU documents Wayland passthrough; nobody ships it for Android | Yes, by design | As A |
@@ -252,7 +252,7 @@ applications.
   only one packaged for the base distribution with an SELinux policy.
 - It needs no kernel change: binder is in the stock kernel (section 3.3), so
   [ADR-0001](../adr/0001-base-distribution.md) holds.
-- Desktop integration that UOS would otherwise have to build already exists
+- Desktop integration that TUR would otherwise have to build already exists
   upstream: per-application windows, launcher entries, notifications, clipboard.
 - It is how Android is run on Fedora Atomic desktops today (section 3.2).
 
@@ -270,11 +270,11 @@ from the host kernel. Nobody is known to ship this combination; it is an
 become the default.
 
 Android Translation Layer is tracked and re-evaluated at each Fedora rebase. It
-fits UOS's principles best and runs the fewest applications.
+fits TUR's principles best and runs the fewest applications.
 
 ### 4.3 Contingency: if binder stops being usable
 
-Binder is in the stock kernel today, but UOS controls neither Fedora's
+Binder is in the stock kernel today, but TUR controls neither Fedora's
 configuration nor the Rust driver's quality. If a Fedora rebase removes binder,
 or a driver defect makes Waydroid unusable, the order of preference is:
 
@@ -285,10 +285,10 @@ or a driver defect makes Waydroid unusable, the order of preference is:
 2. **Move Android into a micro-VM with its own kernel**, as described in 4.2.
    The guest kernel is a file loaded by a user-space VM monitor. It is not part
    of the host boot chain, so Secure Boot is unaffected. It is never installed
-   as a host kernel. UOS would have to build, pin and update it.
+   as a host kernel. TUR would have to build, pin and update it.
 3. **Not an out-of-tree binder module, and not a custom host kernel.** An
    out-of-tree module must be built in CI for each exact kernel, signed with a
-   UOS key that every user enrols in firmware by hand, and would block kernel
+   TUR key that every user enrols in firmware by hand, and would block kernel
    updates until it builds. It would be a private copy of a driver that mainline
    has deleted; the one maintained copy calls unexported kernel functions
    through address lookup. [S18] A defect in it crashes the host. This trades
@@ -306,14 +306,14 @@ virtual devices. Sections 6 to 9 would stay as written above that transport.
 flowchart TB
     U(["User"])
 
-    subgraph UOSL["UOS integration layer"]
+    subgraph TURL["TUR integration layer"]
         direction LR
-        RT["uos-runtime<br/>package inspection<br/>profiles"]
-        DB["uos-desktop-bridge"]
-        ST["uos-storage"]
-        DM["uos-device-manager"]
-        UP["uos-update"]
-        DG["uos-diagnostics"]
+        RT["tur-runtime<br/>package inspection<br/>profiles"]
+        DB["tur-desktop-bridge"]
+        ST["tur-storage"]
+        DM["tur-device-manager"]
+        UP["tur-update"]
+        DG["tur-diagnostics"]
     end
 
     WS["Waydroid session<br/>runs as the user"]
@@ -355,13 +355,13 @@ flowchart TB
 
 | Component | Role | Owner |
 |---|---|---|
-| **Android system image** | LineageOS-based system and vendor images. Read-only at run time. | Upstream Waydroid; pinned by UOS |
+| **Android system image** | LineageOS-based system and vendor images. Read-only at run time. | Upstream Waydroid; pinned by TUR |
 | **Container service** | Root daemon that mounts the images, creates the container and the virtual network. | Upstream Waydroid, Fedora package |
 | **Session** | Per-user process that connects the container to the user's Wayland and audio sockets and holds the user's Android data. | Upstream Waydroid |
-| **Android adapter in `uos-runtime`** | Inspects packages, decides whether they can run, installs, launches, removes, and applies UOS policy to the container. | UOS |
-| **Android adapter in `uos-desktop-bridge`** | Window identity, launcher entries, notifications, clipboard and link handling. | UOS |
+| **Android adapter in `tur-runtime`** | Inspects packages, decides whether they can run, installs, launches, removes, and applies TUR policy to the container. | TUR |
+| **Android adapter in `tur-desktop-bridge`** | Window identity, launcher entries, notifications, clipboard and link handling. | TUR |
 
-UOS code talks to Waydroid through its command line and D-Bus interface only. It
+TUR code talks to Waydroid through its command line and D-Bus interface only. It
 does not import or link Waydroid's code, which keeps the licence boundary of
 ADR-0003 clear.
 
@@ -369,8 +369,8 @@ ADR-0003 clear.
 
 | Principle | How the design meets it | Tension |
 |---|---|---|
-| §3.1 One kernel, one hardware authority | Android runs on the host kernel and has no driver of its own. GPU, audio and network reach it as host services. | Upstream passes raw device nodes into the container by default. UOS removes those (section 10). |
-| §3.2 Native execution before translation | x86-64 and architecture-neutral applications run directly. | ARM-only applications need instruction translation, the first case of it in UOS. It is opt-in and not shipped (section 12). |
+| §3.1 One kernel, one hardware authority | Android runs on the host kernel and has no driver of its own. GPU, audio and network reach it as host services. | Upstream passes raw device nodes into the container by default. TUR removes those (section 10). |
+| §3.2 Native execution before translation | x86-64 and architecture-neutral applications run directly. | ARM-only applications need instruction translation, the first case of it in TUR. It is opt-in and not shipped (section 12). |
 | §3.3 Host services shared, not duplicated | PipeWire, KWin and NetworkManager stay the only managers of physical resources. | Waydroid runs its own DHCP and DNS service for its virtual bridge. It manages no physical interface. Recorded as accepted. |
 | §3.4 Runtime and full OS kept distinct | The OS-container kind is named in the UI and in diagnostics. | None. |
 | §3.5 Recovery | The Android image is outside the OS deployment and has its own rollback. A broken Android runtime never affects boot health. | None. |
@@ -387,7 +387,7 @@ Detection is by content, never by extension (§2.3). Nothing is executed.
 |---|---|---|
 | **APK** | ZIP archive containing a binary `AndroidManifest.xml` and at least one DEX file; signing block present | Installable, subject to the checks below |
 | **Split-APK set** (`.apks`, `.xapk`, `.apkm`) | ZIP archive containing several APKs with a base APK and a set description; optional expansion files | Installable as one session. The matching splits for architecture, density and language are selected. These container formats are community conventions without a formal specification: **assumption**, to be pinned to tested samples |
-| **Android App Bundle** (`.aab`) | ZIP archive with a `base/` module and protocol-buffer manifest | **Not installable.** A bundle is a publishing format. Turning it into APKs needs Google's `bundletool` and a signing key, and the result is not signed by the original developer. UOS explains this (`UOS-ANDROID-PKG-006`). An opt-in developer path is an open question |
+| **Android App Bundle** (`.aab`) | ZIP archive with a `base/` module and protocol-buffer manifest | **Not installable.** A bundle is a publishing format. Turning it into APKs needs Google's `bundletool` and a signing key, and the result is not signed by the original developer. TUR explains this (`TUR-ANDROID-PKG-006`). An opt-in developer path is an open question |
 | **Expansion file** (`.obb`) | Belongs to an installed package | Offered only alongside its package |
 
 The inspector reads from the package: the package name, version, minimum and
@@ -399,12 +399,12 @@ dependency on Google Play services.
 
 | Check | Outcome when it fails | Code |
 |---|---|---|
-| Android support enabled and image present | Offer to enable; nothing is installed | `UOS-ANDROID-RUNTIME-001` |
-| Minimum API level is at most the image's level (33 for the current image) | Refuse and explain | `UOS-ANDROID-PKG-003` |
-| Native code includes `x86_64`, or the package has no native code | If ARM only: refuse unless the user has supplied a translation layer; then install with a warning | `UOS-ANDROID-ABI-001`, `-002` |
-| Required hardware features exist (telephony, NFC, GPS, Bluetooth and so on) | Warn and name the missing feature; the user may continue | `UOS-ANDROID-DEVICE-001` |
-| No dependency on Google Play services, or a provider is installed | Warn that features will be missing; the user may continue | `UOS-ANDROID-GMS-001` |
-| Signature valid; on update, same signer as the installed version | Refuse | `UOS-ANDROID-PKG-004`, `-005` |
+| Android support enabled and image present | Offer to enable; nothing is installed | `TUR-ANDROID-RUNTIME-001` |
+| Minimum API level is at most the image's level (33 for the current image) | Refuse and explain | `TUR-ANDROID-PKG-003` |
+| Native code includes `x86_64`, or the package has no native code | If ARM only: refuse unless the user has supplied a translation layer; then install with a warning | `TUR-ANDROID-ABI-001`, `-002` |
+| Required hardware features exist (telephony, NFC, GPS, Bluetooth and so on) | Warn and name the missing feature; the user may continue | `TUR-ANDROID-DEVICE-001` |
+| No dependency on Google Play services, or a provider is installed | Warn that features will be missing; the user may continue | `TUR-ANDROID-GMS-001` |
+| Signature valid; on update, same signer as the installed version | Refuse | `TUR-ANDROID-PKG-004`, `-005` |
 
 The verdict is shown before anything is installed: who signed the package, what
 it asks for, and what is expected not to work. Installation is always started by
@@ -448,7 +448,7 @@ profile records settings, not an environment.
 
 ### 6.4 Operations
 
-Exposed on `org.uos.Runtime1`, not on a new service.
+Exposed on `org.tur.Runtime1`, not on a new service.
 
 | Operation | Effect | Authorisation |
 |---|---|---|
@@ -482,7 +482,7 @@ be used.
 | Clipboard | Supported | Built-in synchronisation. [S2] Shared both ways while an Android window has focus; a setting turns it off. Whether upstream offers that switch is an **assumption** |
 | File chooser | Partial | Android applications see Android's own picker over the folders granted in 7.2. No portal integration |
 | Opening a file with an Android application | Later | The file must be inside a granted folder; the bridge then sends a view intent |
-| Links from the host into an application | Partial | `uos-runtime` can send an intent with a URI. Custom URI schemes are registered on the host only when the user chooses. Web links are never claimed: the host browser stays the default |
+| Links from the host into an application | Partial | `tur-runtime` can send an intent with a URI. Custom URI schemes are registered on the host only when the user chooses. Web links are never claimed: the host browser stays the default |
 | Links from Android to the host browser | **Assumption:** not provided upstream | To be built or proposed upstream; until then links open inside Android |
 | Share between host and Android applications | Unavailable | No bridge between the Android share sheet and the desktop |
 | Drag and drop | Unavailable | |
@@ -493,11 +493,11 @@ be used.
 ### 7.2 Storage
 
 - **Nothing from the host is visible by default.** Not the home directory, not
-  `/run/uos/volumes`.
+  `/run/tur/volumes`.
 - Android's own shared storage lives in the user's Waydroid data directory.
   [S8] Files there are owned by Android's identities, not by the user, so the
   desktop cannot simply browse it.
-- `uos-storage` offers **grants**: the user picks a folder or a mounted volume,
+- `tur-storage` offers **grants**: the user picks a folder or a mounted volume,
   and it appears inside Android's shared storage, read-only or read-write. A
   grant is a bind of the one canonical host mount (§11.4), never a second mount
   of the filesystem.
@@ -512,16 +512,16 @@ be used.
 ### 7.3 Devices
 
 Linux owns every device (§10.1). The container receives a device only through a
-grant from `uos-device-manager`. Upstream's default of passing in every video
+grant from `tur-device-manager`. Upstream's default of passing in every video
 node is removed.
 
 | Device | In the container by default | With a grant | Limit and where it can be fixed |
 |---|---|---|---|
 | GPU | Render node only | — | Intel and AMD through Mesa. NVIDIA proprietary driver: software rendering. Upstream |
 | Audio output | Yes | — | Through the host audio socket |
-| Microphone | **No** | Yes, per session | Upstream shares the user's whole audio socket, which includes capture. UOS must restrict it; mechanism is an open question |
+| Microphone | **No** | Yes, per session | Upstream shares the user's whole audio socket, which includes capture. TUR must restrict it; mechanism is an open question |
 | Camera | **No** | Yes, per session | Unreliable upstream: open crash reports on Fedora. Treated as not working until measured. Preferred route is a PipeWire camera, not a raw video node. Upstream |
-| Location | None | A host-provided location, later | A PC has no satellite receiver. Feeding the host's location service into Android is UOS work, not yet designed |
+| Location | None | A host-provided location, later | A PC has no satellite receiver. Feeding the host's location service into Android is TUR work, not yet designed |
 | Bluetooth | None | No | Not supported upstream. BlueZ owns the adapter; handing it to Android would break §10.1. Not planned |
 | USB devices | None | No | No route for Android's USB host interface. Game controllers and keyboards arrive as input devices |
 | NFC, cellular, SMS, fingerprint | None | No | No such hardware, or no bridge. Not fixable in a container |
@@ -580,33 +580,33 @@ named application, after redaction, and is shown in the bundle preview (§6.5).
 
 ### 8.2 Error codes
 
-The `UOS-ANDROID-*` family is already registered in `crates/uos-core`. Proposed
+The `TUR-ANDROID-*` family is already registered in `crates/tur-core`. Proposed
 first entries, each to receive a full registry entry (§29.3) when implemented:
 
 | Code | Meaning |
 |---|---|
-| `UOS-ANDROID-KERNEL-001` | The kernel provides no binder driver |
-| `UOS-ANDROID-KERNEL-002` | Binder devices could not be created or mounted |
-| `UOS-ANDROID-RUNTIME-001` | Android support is not enabled |
-| `UOS-ANDROID-RUNTIME-002` | The container failed to start |
-| `UOS-ANDROID-RUNTIME-003` | The Android system did not finish booting in time |
-| `UOS-ANDROID-IMAGE-001` | Image missing, or digest does not match the pin |
-| `UOS-ANDROID-IMAGE-002` | Image version not supported by the installed Waydroid |
-| `UOS-ANDROID-GPU-001` | No usable render node; software rendering in use |
-| `UOS-ANDROID-PKG-001` | Not a valid Android package |
-| `UOS-ANDROID-PKG-002` | Split set incomplete for this device |
-| `UOS-ANDROID-PKG-003` | Package needs a newer Android than the image provides |
-| `UOS-ANDROID-PKG-004` | Signature invalid |
-| `UOS-ANDROID-PKG-005` | Update signed by a different key than the installed version |
-| `UOS-ANDROID-PKG-006` | File is an App Bundle, which cannot be installed directly |
-| `UOS-ANDROID-ABI-001` | Package contains ARM code only and no translation layer is present |
-| `UOS-ANDROID-ABI-002` | Package runs through a user-supplied translation layer; not covered by UOS testing |
-| `UOS-ANDROID-GMS-001` | Package depends on Google Play services, which are not present |
-| `UOS-ANDROID-ATTEST-001` | Application reports that the device failed an integrity check. Not fixable |
-| `UOS-ANDROID-DRM-001` | Protected playback unavailable |
-| `UOS-ANDROID-DEVICE-001` | Package requires hardware this computer or runtime does not provide |
-| `UOS-ANDROID-STORAGE-001` | A granted folder could not be attached |
-| `UOS-ANDROID-NET-001` | The container network could not be set up |
+| `TUR-ANDROID-KERNEL-001` | The kernel provides no binder driver |
+| `TUR-ANDROID-KERNEL-002` | Binder devices could not be created or mounted |
+| `TUR-ANDROID-RUNTIME-001` | Android support is not enabled |
+| `TUR-ANDROID-RUNTIME-002` | The container failed to start |
+| `TUR-ANDROID-RUNTIME-003` | The Android system did not finish booting in time |
+| `TUR-ANDROID-IMAGE-001` | Image missing, or digest does not match the pin |
+| `TUR-ANDROID-IMAGE-002` | Image version not supported by the installed Waydroid |
+| `TUR-ANDROID-GPU-001` | No usable render node; software rendering in use |
+| `TUR-ANDROID-PKG-001` | Not a valid Android package |
+| `TUR-ANDROID-PKG-002` | Split set incomplete for this device |
+| `TUR-ANDROID-PKG-003` | Package needs a newer Android than the image provides |
+| `TUR-ANDROID-PKG-004` | Signature invalid |
+| `TUR-ANDROID-PKG-005` | Update signed by a different key than the installed version |
+| `TUR-ANDROID-PKG-006` | File is an App Bundle, which cannot be installed directly |
+| `TUR-ANDROID-ABI-001` | Package contains ARM code only and no translation layer is present |
+| `TUR-ANDROID-ABI-002` | Package runs through a user-supplied translation layer; not covered by TUR testing |
+| `TUR-ANDROID-GMS-001` | Package depends on Google Play services, which are not present |
+| `TUR-ANDROID-ATTEST-001` | Application reports that the device failed an integrity check. Not fixable |
+| `TUR-ANDROID-DRM-001` | Protected playback unavailable |
+| `TUR-ANDROID-DEVICE-001` | Package requires hardware this computer or runtime does not provide |
+| `TUR-ANDROID-STORAGE-001` | A granted folder could not be attached |
+| `TUR-ANDROID-NET-001` | The container network could not be set up |
 
 `ATTEST-001` and `DRM-001` cannot be detected reliably from outside an
 application. They are raised from known log signatures and from the
@@ -618,38 +618,38 @@ change the result.
 | Item | Location | Updated by |
 |---|---|---|
 | Waydroid, LXC, SELinux module | In the OS image, under `/usr` | The OS update, atomically, with rollback |
-| Android system and vendor images | `/var/lib/waydroid/uos-images/<version>/`, inside Waydroid's state directory so that Fedora's SELinux labels apply (section 3.3) | `uos-update`, as a runtime payload |
-| Container configuration and overlay | `/var/lib/waydroid/` | Regenerated by `uos-runtime` |
+| Android system and vendor images | `/var/lib/waydroid/tur-images/<version>/`, inside Waydroid's state directory so that Fedora's SELinux labels apply (section 3.3) | `tur-update`, as a runtime payload |
+| Container configuration and overlay | `/var/lib/waydroid/` | Regenerated by `tur-runtime` |
 | The user's Android data and applications | The user's Waydroid data directory under the home directory | The Android system itself |
 
 Rules:
 
 1. **Not in the OS image.** The images are large (about 850 MB and 190 MB
    compressed [S3]) and optional. Baking them in would charge every user for a
-   feature that is off by default and would make UOS their redistributor
+   feature that is off by default and would make TUR their redistributor
    (section 12). They are fetched when the user enables Android support.
 2. **Pinned.** A runtime manifest shipped in the OS image names the exact system
    and vendor image and their SHA-256 digests. Upstream's image index publishes
-   a digest for each image. [S3] UOS installs only what the manifest names.
+   a digest for each image. [S3] TUR installs only what the manifest names.
    This satisfies "never track an unpinned upstream branch".
 3. **Upstream's own updater is disabled.** Waydroid treats images found in its
    pre-installed image path as externally managed and disables its updater.
-   [S10] UOS points that path at the active version directory. **Assumption**
+   [S10] TUR points that path at the active version directory. **Assumption**
    that this works through a symbolic link; to be verified.
 4. **Staged and verified.** A new image set is downloaded beside the old one,
    verified, and activated with the session stopped.
 5. **Rollback.** The previous image set is retained. Rollback is supported
    within one Android major version. A major upgrade, for example 13 to 16,
    migrates the user's Android data forward and cannot be undone by switching
-   the image back. Before a major upgrade `uos-update` archives or snapshots
+   the image back. Before a major upgrade `tur-update` archives or snapshots
    the user's Android data and says so.
 6. **Compatibility is checked.** Each Waydroid version supports a range of
    images. The runtime manifest records the pair, and an OS update that would
    break the pair is reported before it is activated.
 7. **Never part of boot health.** A failed Android runtime is reported by
    diagnostics. It never causes an OS rollback.
-8. **Not built by UOS.** Building Android from source is beyond hosted CI
-   (ADR-0002). UOS pins upstream's published binaries by digest instead of by
+8. **Not built by TUR.** Building Android from source is beyond hosted CI
+   (ADR-0002). TUR pins upstream's published binaries by digest instead of by
    source revision. This is a stated gap against §3.7.
 
 The build manifest (§18.2) gains the Waydroid package version and the pinned
@@ -664,12 +664,12 @@ thing of substance: a second semantic tier.
 
 Android has its own accessibility tree: every standard control exposes a role,
 a label, a state, its bounds and the actions it accepts. It is not AT-SPI, and
-nothing bridges the two. UOS adds an adapter:
+nothing bridges the two. TUR adds an adapter:
 
 - A small helper inside Android, or Android's own UI-automation interface,
   exports the tree of the foreground application over a channel that only
-  `uos-runtime` can open.
-- `uos-runtime` presents it to the tool registry in the same node schema as
+  `tur-runtime` can open.
+- `tur-runtime` presents it to the tool registry in the same node schema as
   AT-SPI, as tier 2.
 - Actions are semantic: activate this node, set this text, scroll this list.
 
@@ -751,7 +751,7 @@ escapes Android's own sandbox reaches a root process confined by capabilities,
 seccomp and whatever SELinux allows the container runtime domain. That is a much
 shorter path to the host than from a Wine prefix running as the user.
 
-### 10.2 What UOS adds
+### 10.2 What TUR adds
 
 | Measure | Effect |
 |---|---|
@@ -762,14 +762,14 @@ shorter path to the host than from a Wine prefix running as the user.
 | No host folders by default | An application cannot read the home directory |
 | Restrictive firewall zone | Android cannot reach host-local services |
 | ADB secure mode kept on; no listening debug port | No unauthenticated control channel |
-| Everything through `uos-runtime` with polkit | Users and applications do not call the root daemon directly |
-| A tighter SELinux domain for the container payload | Proposed to Fedora and Waydroid first; carried as a UOS policy module only if upstream declines, with an ADR |
+| Everything through `tur-runtime` with polkit | Users and applications do not call the root daemon directly |
+| A tighter SELinux domain for the container payload | Proposed to Fedora and Waydroid first; carried as a TUR policy module only if upstream declines, with an ADR |
 | SELinux stays enforcing; no permissive domain is added | Tested in CI: no denials on the supported path |
 | Image pinned by digest | No silent replacement of the Android system |
 | Published warning on patch level | The current image is Android 13, which Google no longer patches. Stated at opt-in and in the compatibility matrix |
 
 Removing device nodes means changing what Waydroid generates. The preferred
-route is an upstream option. Until one exists UOS post-processes the generated
+route is an upstream option. Until one exists TUR post-processes the generated
 container configuration, and that step is listed in the patch queue with its
 reason (§17.1).
 
@@ -799,25 +799,25 @@ then waits for milestone B7.
 |---|---|---|
 | **Malicious application** | A sideloaded package from an untrusted site | Inspection and signer shown before install. No host folders, camera or microphone without a grant. No claim that Android's sandbox protects the host |
 | **Container escape** | A kernel or binder defect reachable from Android | Opt-in. Reduced device nodes. SELinux enforcing. Kernel updates through the OS image. Residual risk stated to the user. VM route evaluated |
-| **Outdated Android system** | A fixed Android vulnerability is still present in the Android 13 image | Patch level shown. Image updates through `uos-update`. Move to a supported Android version when upstream ships one |
+| **Outdated Android system** | A fixed Android vulnerability is still present in the Android 13 image | Patch level shown. Image updates through `tur-update`. Move to a supported Android version when upstream ships one |
 | **Covert capture** | An application records the microphone or camera through the shared sockets and nodes | Capture and video withheld from the container until a host grant; an indicator while granted |
 | **Clipboard disclosure** | An Android application reads what the user copied on the desktop | Synchronisation only while an Android window has focus; a switch to disable it |
 | **Tampered image** | A modified system image is substituted in transit or on disk | Digest pinned in the OS image; verified at install and at each start |
 | **Network reach** | An application scans the home network or host services | Restrictive zone; outbound NAT only. The local network remains reachable as it is for any application; an optional block is an open question |
-| **Abuse of the root daemon** | A local process asks the daemon to mount or start something | The daemon's bus interface is reachable only through `uos-runtime` and polkit |
+| **Abuse of the root daemon** | A local process asks the daemon to mount or start something | The daemon's bus interface is reachable only through `tur-runtime` and polkit |
 | **Unsafe user-supplied component** | A translation library or Google package of unknown origin runs with system privilege inside Android | Imported only by an explicit class 3 action; recorded; marked in diagnostics and in every test result |
 | **Spoofed application** | A package imitates a known application's name and icon | The launcher entry shows the package name and signer in properties; an update from a different signer is refused |
 | **Assistant misled inside Android** | A notification or screen tells the assistant to approve a purchase | Section 9.4 |
-| **Account and data loss** | A game bans the account for running in an emulator; a messaging application moves the account to this device | Stated in the compatibility matrix per application; UOS cannot prevent it |
+| **Account and data loss** | A game bans the account for running in an emulator; a messaging application moves the account to this device | Stated in the compatibility matrix per application; TUR cannot prevent it |
 
 ## 11. What will and will not work
 
 "Expected" means expected, not promised. Each row becomes a measured entry in
 the compatibility matrix.
 
-**Fixable by** uses four values. **UOS:** engineering in this project.
+**Fixable by** uses four values. **TUR:** engineering in this project.
 **Upstream:** needs a change in Waydroid, Mesa, the kernel or Android.
-**User:** the user can supply or opt into something UOS may not ship.
+**User:** the user can supply or opt into something TUR may not ship.
 **No:** not fixable by anyone outside Google or the application's vendor.
 
 | Category | Expectation | Reason | Fixable by |
@@ -831,21 +831,21 @@ the compatibility matrix.
 | **Subscription video in HD: Netflix and similar** | **Will not work; some services refuse entirely** | Widevine level 1 needs a trusted execution environment and device provisioning; many of these applications also check certification | **No.** Use the service's website in the host browser |
 | **Games with anti-cheat or emulator detection** | Fail, or risk an account ban | The game detects a non-certified or emulated device | **No** |
 | Demanding 3D games on Intel or AMD graphics | Application-specific | Host Mesa drivers; many are also ARM-only | Upstream, User |
-| Anything graphical on NVIDIA's proprietary driver | Software rendering: usable for simple applications, not for games | Waydroid needs a Mesa driver | Upstream. Community work exists; UOS may evaluate it |
-| Camera: scanning, video calls | Unreliable; treated as not working | Open upstream defects | Upstream, then UOS |
-| Location: navigation, delivery, ride hailing | No position | No receiver; no upstream bridge | UOS, later, from the host's location service; coarse accuracy |
+| Anything graphical on NVIDIA's proprietary driver | Software rendering: usable for simple applications, not for games | Waydroid needs a Mesa driver | Upstream. Community work exists; TUR may evaluate it |
+| Camera: scanning, video calls | Unreliable; treated as not working | Open upstream defects | Upstream, then TUR |
+| Location: navigation, delivery, ride hailing | No position | No receiver; no upstream bridge | TUR, later, from the host's location service; coarse accuracy |
 | Bluetooth: wearables, trackers, smart-home setup | Will not work | Not supported upstream; conflicts with host ownership | Upstream; not planned |
 | NFC, tap to pay, fingerprint unlock inside applications | Will not work | No hardware route; payment also fails attestation | No |
 | Phone calls and SMS; applications that verify by SMS on this device | No telephony. Verification by a code typed in may work and may move the account away from the phone | No modem | No |
-| Casting, local-network discovery, printing | Expected to fail | The container is behind address translation; no print bridge | UOS, partly |
-| Push notifications while the Android session is stopped | Not delivered | Nothing is running to receive them | UOS: an option to keep the session running |
-| Home-screen widgets, launchers, live wallpapers, keyboards | Not integrated | They belong to an Android home screen UOS does not show | Not planned |
+| Casting, local-network discovery, printing | Expected to fail | The container is behind address translation; no print bridge | TUR, partly |
+| Push notifications while the Android session is stopped | Not delivered | Nothing is running to receive them | TUR: an option to keep the session running |
+| Home-screen widgets, launchers, live wallpapers, keyboards | Not integrated | They belong to an Android home screen TUR does not show | Not planned |
 | Work profiles and device-management enrolment | Will not work | Need a certified, policy-compliant device | No |
-| Android App Bundles (`.aab`) | Not installable directly | Section 6.1 | UOS, as a developer option |
-| Applications that only support touch | Usable with the pointer delivered as touch; multi-touch gestures need a touchscreen | Upstream property per application | UOS exposes the setting |
+| Android App Bundles (`.aab`) | Not installable directly | Section 6.1 | TUR, as a developer option |
+| Applications that only support touch | Usable with the pointer delivered as touch; multi-touch gestures need a touchscreen | Upstream property per application | TUR exposes the setting |
 
 **In one sentence for users:** applications that do not depend on Google's
-certification, on phone hardware, or on ARM-only code are the ones UOS can run;
+certification, on phone hardware, or on ARM-only code are the ones TUR can run;
 the best-known commercial applications often depend on at least one of the three.
 
 ## 12. Legal and licensing
@@ -854,24 +854,24 @@ Subject to the legal review the specification requires before public
 distribution (§17.2). This section states the engineering position, not legal
 advice.
 
-### 12.1 What UOS ships
+### 12.1 What TUR ships
 
 | Component | Licence | In the OS image |
 |---|---|---|
 | Waydroid | GPL-3.0 [S1] | Yes, as the Fedora package. A separate program driven over its command line and D-Bus |
 | LXC, libgbinder and other dependencies | Their own; from Fedora | Yes |
 | Fedora's Waydroid SELinux module | From the Fedora package | Yes |
-| UOS Android adapters | PolyForm Noncommercial, as separate processes | Yes |
+| TUR Android adapters | PolyForm Noncommercial, as separate processes | Yes |
 | Patches to Waydroid, if any | GPL-3.0, in a marked directory (ADR-0003) | As a patch queue |
-| A UOS-built test application | PolyForm Noncommercial | In tests only |
+| A TUR-built test application | PolyForm Noncommercial | In tests only |
 
-### 12.2 What UOS does not ship
+### 12.2 What TUR does not ship
 
 | Component | Why not | How a user gets it |
 |---|---|---|
-| Android system and vendor images | Not audited: the images are binaries built by upstream from LineageOS sources. Size. Fedora's package also declines to pre-fill their location | Downloaded from upstream when the user enables Android support. Whether UOS may pre-fill the pinned location is a decision for the owner |
-| Google Mobile Services, Play Store | Proprietary; licensed by Google to device makers | The user opts into upstream's image variant with Google applications and registers the device with Google. UOS states that it is neither licensed nor certified by Google |
-| ARM translation (`libhoudini`, `libndk_translation`) | Proprietary. No redistribution licence was found. A copy of Intel's carries a notice forbidding distribution without Intel's consent (secondary source) [S22] | The user supplies the files. UOS provides an import function and performs no download from third-party mirrors |
+| Android system and vendor images | Not audited: the images are binaries built by upstream from LineageOS sources. Size. Fedora's package also declines to pre-fill their location | Downloaded from upstream when the user enables Android support. Whether TUR may pre-fill the pinned location is a decision for the owner |
+| Google Mobile Services, Play Store | Proprietary; licensed by Google to device makers | The user opts into upstream's image variant with Google applications and registers the device with Google. TUR states that it is neither licensed nor certified by Google |
+| ARM translation (`libhoudini`, `libndk_translation`) | Proprietary. No redistribution licence was found. A copy of Intel's carries a notice forbidding distribution without Intel's consent (secondary source) [S22] | The user supplies the files. TUR provides an import function and performs no download from third-party mirrors |
 | Widevine | Proprietary | Not offered |
 | microG | Apache-2.0 [S25]; legally shippable | Offered as an opt-in download, not bundled, because it needs signature spoofing support in the image. Whether upstream's image has that is an **assumption** to verify |
 | Applications | Belong to their publishers | The user supplies packages they are entitled to use |
@@ -879,13 +879,13 @@ advice.
 
 ### 12.3 Other points
 
-- **Names.** "Android" is a trademark of Google. UOS says that it "runs Android
+- **Names.** "Android" is a trademark of Google. TUR says that it "runs Android
   applications". It does not say "Android compatible", a term tied to Google's
   compatibility programme, and uses no Android logo. To be confirmed in legal
   review. The README's trademark note needs an Android line.
 - **Terms of service.** Running an application in a non-certified environment
-  may breach that application's terms. UOS says so where it is known.
-- **GPL-3.0 and the UOS licence.** UOS code never links to or imports Waydroid.
+  may breach that application's terms. TUR says so where it is known.
+- **GPL-3.0 and the TUR licence.** TUR code never links to or imports Waydroid.
   If a feature can only be built inside Waydroid, it is written as an upstream
   patch under GPL-3.0.
 - **Developer verification.** Google has announced that from September 2026,
@@ -908,12 +908,12 @@ In the style of §19. This becomes §19.7.
   is inactive.
 - An APK, a split set and an App Bundle are each identified correctly from
   content, with the extension changed.
-- An ARM-only package is refused with `UOS-ANDROID-ABI-001` before installation.
-- A package needing a newer API level is refused with `UOS-ANDROID-PKG-003`.
+- An ARM-only package is refused with `TUR-ANDROID-ABI-001` before installation.
+- A package needing a newer API level is refused with `TUR-ANDROID-PKG-003`.
 - The pinned image is fetched, verified against its digest and rejected when a
   byte is changed.
-- The UOS test application installs, launches from the application launcher,
-  and is removed, through `org.uos.Runtime1`.
+- The TUR test application installs, launches from the application launcher,
+  and is removed, through `org.tur.Runtime1`.
 - Its window is a separate entry in KWin task switching, with the application's
   own name and icon.
 - A notification it posts appears through the desktop notification service.
@@ -927,7 +927,7 @@ In the style of §19. This becomes §19.7.
   data survives both.
 - A support bundle contains `runtimes/android/` and no Android log unless
   requested.
-- A deliberately broken image produces `UOS-ANDROID-RUNTIME-003` and leaves the
+- A deliberately broken image produces `TUR-ANDROID-RUNTIME-003` and leaves the
   OS boot health unaffected.
 - No claim of complete Android compatibility is made anywhere in the product.
 
@@ -964,11 +964,11 @@ higher item in the priority order.
 
 | Milestone | With phase | Deliverable | Exit criterion |
 |---|---|---|---|
-| **B0 Foundations** | 0–1 | Binder probe in the build manifest (done) and a binderfs check on the booted image; ADR-0006 decided; package inspector in `uos-runtime`; first `UOS-ANDROID-*` registry entries; licence review of the image | Binderfs mounts on the booted image in CI; the inspector classifies a fixture set including ARM-only, split and bundle inputs |
+| **B0 Foundations** | 0–1 | Binder probe in the build manifest (done) and a binderfs check on the booted image; ADR-0006 decided; package inspector in `tur-runtime`; first `TUR-ANDROID-*` registry entries; licence review of the image | Binderfs mounts on the booted image in CI; the inspector classifies a fixture set including ARM-only, split and bundle inputs |
 | **B1 Container in CI** | 2 | Waydroid in the image, inactive by default; image fetch, pin and verify; container policy of section 10.2 | The test application installs and runs in a CI VM; no Waydroid process without opt-in; no SELinux denial |
 | **B2 Desktop integration** | 3 | Multi-window, launcher entries, notifications, clipboard through the desktop bridge | Window, notification and clipboard acceptance tests pass |
-| **B3 Runtime, storage and devices** | 4 | `org.uos.Runtime1` operations, profiles, verdicts, storage and device grants | Section 13.1 passes in CI |
-| **B4 Image updates** | 4–5 | `uos-update` handling of Android images | Update and rollback test passes with data preserved |
+| **B3 Runtime, storage and devices** | 4 | `org.tur.Runtime1` operations, profiles, verdicts, storage and device grants | Section 13.1 passes in CI |
+| **B4 Image updates** | 4–5 | `tur-update` handling of Android images | Update and rollback test passes with data preserved |
 | **B5 Matrix and optional components** | 5 | Opt-in Google applications, microG, translation-layer import; first hardware results | A published matrix for a defined application set on Intel and AMD hardware |
 | **B6 Assistant** | with A9 | Android tools and the accessibility adapter | Per-application success rates published |
 | **B7 VM backend evaluation** | 6 | Prototype of Android in a micro-VM with Wayland passthrough; review of Android Translation Layer | An ADR deciding whether a VM backend ships, and whether it replaces the container |
@@ -984,7 +984,7 @@ micro-VM and B7 moves to the front.
 | §0 | Extend rule 7: never claim complete Android compatibility. Add: never bundle Google proprietary software, an ARM translation layer or Widevine; never ship a tool that defeats attestation or DRM. |
 | §1 | Four ecosystems. Add **Android:** APK packages on an Android system in an OS container. |
 | §2.1 | Add goal: run a defined and tested set of Android applications. |
-| §2.2 | Add non-goals: passing Play Integrity; bundling Google Mobile Services; phone hardware; a UOS application store. |
+| §2.2 | Add non-goals: passing Play Integrity; bundling Google Mobile Services; phone hardware; a TUR application store. |
 | §3.2 | Note that ARM-only Android applications are the first case of instruction translation, opt-in and user-supplied. |
 | §3.4 | Add the OS-container kind between compatibility runtime and full guest. |
 | §7.1 | Add the Android runtime type. |
@@ -1007,7 +1007,7 @@ micro-VM and B7 moves to the front.
 | §23 | Add the open questions of section 16. |
 | §24 | Add risks: container escape through a root container (high); upstream image on an unpatched Android version (high); binder driver regression in the stock kernel (medium/high); user expectation of full compatibility (high); dependence on one small upstream (medium). |
 | §29.1 | Add `runtimes/android/` to the bundle layout. |
-| §29.3 | Add `UOS-ANDROID-*`. The family exists in `crates/uos-core` but not in the specification. |
+| §29.3 | Add `TUR-ANDROID-*`. The family exists in `crates/tur-core` but not in the specification. |
 | Addendum A §4 | Tier 2 is "an accessibility tree", of which AT-SPI is one source. Add the Android rows of section 9.2. |
 | `AGENTS.md` | Add Android to the priority order where the owner places it, and the two "never" rules of §0 above. |
 
@@ -1020,16 +1020,16 @@ micro-VM and B7 moves to the front.
    This document assumes after macOS. Android is likely to produce more working
    applications sooner than Darling; the owner may prefer it earlier.
 3. **The §12.1 deviation.** Is a root container acceptable under the conditions
-   of section 10.3, or should UOS wait for a VM backend?
+   of section 10.3, or should TUR wait for a VM backend?
 4. **Android 13.** Is an image on an Android version that Google no longer
    patches acceptable for a first release, with a warning? Or does Android
    support wait for upstream's Android 16 image?
-5. **Image location.** May UOS pre-fill the pinned image location, or must the
+5. **Image location.** May TUR pre-fill the pinned image location, or must the
    user enter it, as on Fedora?
 6. **Google applications.** Is an opt-in switch to upstream's image with Google
-   applications acceptable, given that UOS only points to it?
+   applications acceptable, given that TUR only points to it?
 7. **Translation layer.** Is "user supplies the files" the right line, or should
-   UOS decline even an import function?
+   TUR decline even an import function?
 8. **Guest kernel for a micro-VM.** Built from Fedora's source with one option
    changed, or an Android common kernel?
 9. **Wayland passthrough from a guest.** Does it carry Waydroid's multi-window
@@ -1042,7 +1042,7 @@ micro-VM and B7 moves to the front.
     breaks under it?
 13. **One user at a time.** Can two logged-in users each have an Android session?
     The design assumes not.
-14. **Application source.** Should UOS offer an open application catalogue such
+14. **Application source.** Should TUR offer an open application catalogue such
     as F-Droid as an opt-in installation?
 15. **App Bundles.** Is a developer option that converts a bundle locally worth
     carrying a Java dependency?
@@ -1052,8 +1052,8 @@ micro-VM and B7 moves to the front.
 
 ## 17. Sources
 
-Measured values come from the UOS build manifests of CI runs 43146811082
-([UOS-002 report](../reports/UOS-002.md)) and 43147702795.
+Measured values come from the TUR build manifests of CI runs 43146811082
+([TUR-002 report](../reports/TUR-002.md)) and 43147702795.
 
 All external sources were checked on 12 November 2026. "Secondary" marks a
 claim taken from a source other than the project concerned, or from a search

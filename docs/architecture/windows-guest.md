@@ -17,8 +17,8 @@ the amendments that requires in
 
 The project is TUR and the assistant is P@x
 ([ADR-0009](../adr/0009-project-name.md)). Components that exist today under a
-`uos-` name are written here with the name they will have after the rename:
-`tur-runtime` is today's `uos-runtime`, `tur-pax` is today's `uos-agent`, and
+`tur-` name are written here with the name they will have after the rename:
+`tur-runtime` is today's `tur-runtime`, `tur-pax` is today's `tur-pax`, and
 so on. New components are named `tur-guest…`.
 
 TUR does not claim complete Windows compatibility. A guest raises compatibility
@@ -179,15 +179,15 @@ Microsoft's own WSLg. [S8] [S13] [S39]
 
 | Question | Finding | Source |
 |---|---|---|
-| KVM | **Measured:** `CONFIG_KVM=m` in kernel 7.3.3-300.fc45 (run 43147702795). | [UOS-002](../reports/UOS-002.md) |
-| Desktop | **Measured:** Plasma 6.8.2, KWin 6.8.2, Wayland sessions, Xwayland 24.1.15, PipeWire 1.6.11, SELinux enforcing. | [UOS-002](../reports/UOS-002.md), [UOS-003](../reports/UOS-003.md), [S6] |
+| KVM | **Measured:** `CONFIG_KVM=m` in kernel 7.3.3-300.fc45 (run 43147702795). | [TUR-002](../reports/TUR-002.md) |
+| Desktop | **Measured:** Plasma 6.8.2, KWin 6.8.2, Wayland sessions, Xwayland 24.1.15, PipeWire 1.6.11, SELinux enforcing. | [TUR-002](../reports/TUR-002.md), [TUR-003](../reports/TUR-003.md), [S6] |
 | In the image today | FreeRDP 3.33.1, passt, CUPS, `pipewire-pulseaudio`, `pcsc-lite`, FUSE 3. Of QEMU only the guest agent and a user-mode emulator; **no system emulator, no libvirt, no firmware, no TPM emulator.** | [S6] |
 | Packaged in Fedora 45 | `qemu-system-x86-core` 11.1.2, `libvirt-daemon-driver-qemu` 12.6.0, `edk2-ovmf` 20260812, `swtpm` 0.10.2, `virtiofsd` 1.14.0, `passt`, `wimlib-utils` 1.14.5, `mingw64-gcc` 16.2.1. This answers the "not checked" note in the [upstream inventory](../dependencies/upstream-projects.md). | [S7] |
 | QEMU as an ordinary user | libvirt's session instance (`qemu:///session`) runs the guest "as the same user/group ID as the client application". | [S34] |
 | SELinux confinement (sVirt) | libvirt gives each guest "an automatically assigned unique label", for example `svirt_t:s0:c34,c44`. The page describes the system instance. That session guests are confined the same way is reported by users and by Fedora bug reports, and is an **assumption** to be measured on the image. | [S34] [S45] (secondary) |
 | virtiofs as an ordinary user | Supported in the session instance since libvirt 10.0.0; needs shared guest memory (memfd). Versions of virtiofsd before 1.11 do not support migration, and "migration, save/managed-save, or snapshots with memory may not [be] supported if a VM has a virtiofs filesystem connected". Fedora has 1.14.0. | [S35] [S7] |
 | Network as an ordinary user | passt needs no privilege and isolates itself. **By default it maps the guest's gateway address to the host**, so the guest can reach services bound to the host's loopback interface. `--no-map-gw` turns that off. Forwarded ports can be bound to one address. | [S38] |
-| CI runner | **Measured:** GitHub-hosted runners give working KVM, 4 vCPUs, 15 GiB RAM, QEMU 8.2.2 (run 43153380759). Whether a guest can be started inside the booted TUR test VM (nested twice) is not known. | [UOS-003](../reports/UOS-003.md) |
+| CI runner | **Measured:** GitHub-hosted runners give working KVM, 4 vCPUs, 15 GiB RAM, QEMU 8.2.2 (run 43153380759). Whether a guest can be started inside the booted TUR test VM (nested twice) is not known. | [TUR-003](../reports/TUR-003.md) |
 
 ### 3.6 Guest drivers and graphics
 
@@ -1352,7 +1352,7 @@ graphics modes. The upstream sample server is not built by Fedora. [S5]
 | Agent against real UI Automation: tree export, actions, application and icon listing | Partly, under Wine, if its UI Automation is adequate (assumption) | **Yes**, against Notepad and a TUR test application | Repeated against Office and Adobe applications |
 | Unattended Windows installation; RemoteApp on Pro; activation persistence; Windows Update maintenance | No | No | **Required** |
 | Office and Adobe applications; the published matrix | No | No | **Required** |
-| Budgets of section 8; idle processor use; latency | No (a shared runner is not a benchmark, UOS-003) | No | **Required** |
+| Budgets of section 8; idle processor use; latency | No (a shared runner is not a benchmark, TUR-003) | No | **Required** |
 | USB hand-off; printing to a real printer; microphone; camera | No | No | **Required** |
 | HiDPI, mixed scale, several monitors, input methods | Single scale only | No | **Required** |
 | GPU passthrough | No | No | **Required**, hardware with two GPUs |
@@ -1488,8 +1488,8 @@ Release to users additionally needs the legal answers of section 13.3.
 ## 19. Sources
 
 Measured values come from TUR's build manifest and SBOM of CI run 43147702795
-([UOS-002 report](../reports/UOS-002.md)) and from the
-[UOS-003 report](../reports/UOS-003.md) (runs 43153380759 and 43152105040).
+([TUR-002 report](../reports/TUR-002.md)) and from the
+[TUR-003 report](../reports/TUR-003.md) (runs 43153380759 and 43152105040).
 
 All external sources were read on 12 November 2026. "Secondary" marks a claim
 taken from a source other than the project or company concerned, or from a

@@ -314,7 +314,7 @@ mod tests {
         match &events[0] {
             StreamEvent::Finish(FinishReason::Error(error)) => {
                 assert_eq!(error.kind(), ErrorKind::SpendLimitReached);
-                assert_eq!(error.code(), "UOS-AI-PROVIDER-010");
+                assert_eq!(error.code(), "TUR-AI-PROVIDER-010");
             }
             other => panic!("unexpected event: {other:?}"),
         }

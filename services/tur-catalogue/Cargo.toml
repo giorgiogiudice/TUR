@@ -17,7 +17,7 @@ clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 toml = "1"
-uos-core = { path = "../../crates/uos-core" }
+tur-core = { path = "../../crates/tur-core" }
 
 [lints.rust]
 unsafe_code = "forbid"

@@ -2,14 +2,14 @@
 
 //! The stable error codes this component reports (specification §29.3).
 //!
-//! `uos-core` has no family for the catalogue yet, so every code uses the
+//! `tur-core` has no family for the catalogue yet, so every code uses the
 //! `DESKTOP` family with a `CATALOGUE` topic. A dedicated family is planned;
 //! when it exists these codes move in one change, here.
 
 use std::fmt;
 
 use serde::{Serialize, Serializer};
-use uos_core::ErrorCode;
+use tur_core::ErrorCode;
 
 /// A condition the catalogue or the router reports with a stable code.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -60,21 +60,21 @@ impl Code {
         Code::InputInvalid,
     ];
 
-    /// The code as text, for example `UOS-DESKTOP-CATALOGUE-001`.
+    /// The code as text, for example `TUR-DESKTOP-CATALOGUE-001`.
     pub const fn as_str(self) -> &'static str {
         match self {
-            Code::Unreadable => "UOS-DESKTOP-CATALOGUE-001",
-            Code::EntrySyntax => "UOS-DESKTOP-CATALOGUE-002",
-            Code::EntryInvalid => "UOS-DESKTOP-CATALOGUE-003",
-            Code::DuplicateId => "UOS-DESKTOP-CATALOGUE-004",
-            Code::AliasCollision => "UOS-DESKTOP-CATALOGUE-005",
-            Code::UnsourcedRating => "UOS-DESKTOP-CATALOGUE-006",
-            Code::RouteMismatch => "UOS-DESKTOP-CATALOGUE-007",
-            Code::LimitExceeded => "UOS-DESKTOP-CATALOGUE-008",
-            Code::UnknownApplication => "UOS-DESKTOP-CATALOGUE-009",
-            Code::NoMatch => "UOS-DESKTOP-CATALOGUE-010",
-            Code::NoRoute => "UOS-DESKTOP-CATALOGUE-011",
-            Code::InputInvalid => "UOS-DESKTOP-CATALOGUE-012",
+            Code::Unreadable => "TUR-DESKTOP-CATALOGUE-001",
+            Code::EntrySyntax => "TUR-DESKTOP-CATALOGUE-002",
+            Code::EntryInvalid => "TUR-DESKTOP-CATALOGUE-003",
+            Code::DuplicateId => "TUR-DESKTOP-CATALOGUE-004",
+            Code::AliasCollision => "TUR-DESKTOP-CATALOGUE-005",
+            Code::UnsourcedRating => "TUR-DESKTOP-CATALOGUE-006",
+            Code::RouteMismatch => "TUR-DESKTOP-CATALOGUE-007",
+            Code::LimitExceeded => "TUR-DESKTOP-CATALOGUE-008",
+            Code::UnknownApplication => "TUR-DESKTOP-CATALOGUE-009",
+            Code::NoMatch => "TUR-DESKTOP-CATALOGUE-010",
+            Code::NoRoute => "TUR-DESKTOP-CATALOGUE-011",
+            Code::InputInvalid => "TUR-DESKTOP-CATALOGUE-012",
         }
     }
 
@@ -165,7 +165,7 @@ impl fmt::Display for Problem {
 mod tests {
     use std::collections::BTreeSet;
 
-    use uos_core::Family;
+    use tur_core::Family;
 
     use super::*;
 
@@ -190,7 +190,7 @@ mod tests {
     fn every_code_is_in_the_desktop_family_with_the_catalogue_topic() {
         for code in Code::ALL {
             assert_eq!(code.error_code().family(), Family::Desktop);
-            assert!(code.as_str().starts_with("UOS-DESKTOP-CATALOGUE-"));
+            assert!(code.as_str().starts_with("TUR-DESKTOP-CATALOGUE-"));
         }
     }
 
@@ -220,7 +220,7 @@ mod tests {
     #[test]
     fn serialises_as_the_code_text() {
         let json = serde_json::to_string(&Code::NoRoute).unwrap();
-        assert_eq!(json, "\"UOS-DESKTOP-CATALOGUE-011\"");
+        assert_eq!(json, "\"TUR-DESKTOP-CATALOGUE-011\"");
     }
 
     #[test]
@@ -228,12 +228,12 @@ mod tests {
         let problem = Problem::in_file(Code::EntryInvalid, "a.toml", "bad");
         assert_eq!(
             problem.to_string(),
-            "error[UOS-DESKTOP-CATALOGUE-003]: a.toml: bad"
+            "error[TUR-DESKTOP-CATALOGUE-003]: a.toml: bad"
         );
         let general = Problem::general(Code::Unreadable, "gone");
         assert_eq!(
             general.to_string(),
-            "error[UOS-DESKTOP-CATALOGUE-001]: gone"
+            "error[TUR-DESKTOP-CATALOGUE-001]: gone"
         );
     }
 }

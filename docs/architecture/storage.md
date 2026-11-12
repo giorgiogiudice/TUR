@@ -1,6 +1,6 @@
 # Storage policy core
 
-- **Component:** `services/uos-storage` (library `uos_storage`, binary `uos-storage`)
+- **Component:** `services/tur-storage` (library `tur_storage`, binary `tur-storage`)
 - **Specification sections:** §3.3, §6.3, §8.5, §11, §16, §19.4, §29.3; AI control
   layer §5 and §11; ADR-0007
 - **Status:** policy core only. Nothing in this component mounts, unmounts,
@@ -40,8 +40,8 @@ inventory is built from:
   is rejected rather than guessed);
 - `blkid --output export` style properties per device. `UUID_SUB` is read from
   them. Two facts that neither tool reports are passed the same way:
-  `UOS_NTFS_STATE` (`clean`, `dirty`, `hibernated`, `unknown`) and
-  `UOS_HFS_JOURNAL` (`journalled`, `not-journalled`, `unknown`). A missing or
+  `TUR_NTFS_STATE` (`clean`, `dirty`, `hibernated`, `unknown`) and
+  `TUR_HFS_JOURNAL` (`journalled`, `not-journalled`, `unknown`). A missing or
   unreadable fact is `unknown`, which is treated as unsafe.
 
 Rules applied while building the inventory:
@@ -118,29 +118,29 @@ form of §6.3.
 
 Rules, in order. The first that applies decides.
 
-1. System storage is refused (`UOS-STORAGE-SYSTEM-001`). It is never offered
+1. System storage is refused (`TUR-STORAGE-SYSTEM-001`). It is never offered
    for remounting.
 2. A volume whose identity another device also claims is refused
-   (`UOS-STORAGE-ID-001`).
+   (`TUR-STORAGE-ID-001`).
 3. A volume already mounted somewhere other than its canonical path is refused
-   (`UOS-STORAGE-MOUNT-003`): UOS keeps one mount per filesystem.
-4. Unsupported rows are unsupported (`UOS-STORAGE-FS-001`,
-   `UOS-STORAGE-FS-002`, `UOS-STORAGE-BITLOCKER-001`). Container rows are
-   refused (`UOS-STORAGE-CONTAINER-001`), except a locked LUKS container, which
-   needs unlocking (`UOS-STORAGE-LUKS-001`).
+   (`TUR-STORAGE-MOUNT-003`): TUR keeps one mount per filesystem.
+4. Unsupported rows are unsupported (`TUR-STORAGE-FS-001`,
+   `TUR-STORAGE-FS-002`, `TUR-STORAGE-BITLOCKER-001`). Container rows are
+   refused (`TUR-STORAGE-CONTAINER-001`), except a locked LUKS container, which
+   needs unlocking (`TUR-STORAGE-LUKS-001`).
 5. A row's read conditions must hold, otherwise unsupported
-   (`UOS-STORAGE-APFS-002`).
+   (`TUR-STORAGE-APFS-002`).
 6. Writing is allowed only if every write condition of the row holds, the row
    is writable at all, and the device is not read-only. The first failure
-   gives the code: `UOS-STORAGE-NTFS-004`, `UOS-STORAGE-NTFS-005`,
-   `UOS-STORAGE-HFSPLUS-001`, `UOS-STORAGE-HFSPLUS-002`,
-   `UOS-STORAGE-APFS-001`, `UOS-STORAGE-FS-003`, `UOS-STORAGE-MEDIA-001`.
+   gives the code: `TUR-STORAGE-NTFS-004`, `TUR-STORAGE-NTFS-005`,
+   `TUR-STORAGE-HFSPLUS-001`, `TUR-STORAGE-HFSPLUS-002`,
+   `TUR-STORAGE-APFS-001`, `TUR-STORAGE-FS-003`, `TUR-STORAGE-MEDIA-001`.
    - If the failure is an NTFS state and `unsafe_ntfs` is `refuse`, the volume
      is refused whatever was requested.
    - Otherwise a read/write request is downgraded to read-only with that code.
 7. A read/write request that passed rule 6 is granted
-   (`UOS-STORAGE-MOUNT-001`). A read-only request is granted as asked
-   (`UOS-STORAGE-MOUNT-002`).
+   (`TUR-STORAGE-MOUNT-001`). A read-only request is granted as asked
+   (`TUR-STORAGE-MOUNT-002`).
 
 A request is therefore never exceeded: the result is the request, less than
 the request, or nothing.
@@ -148,19 +148,19 @@ the request, or nothing.
 ### NTFS
 
 The state is an input: `Clean`, `Dirty`, `Hibernated` or `Unknown`. Only
-`Clean` can be written. `Hibernated` and `Unknown` give `UOS-STORAGE-NTFS-004`;
-`Dirty` gives `UOS-STORAGE-NTFS-005`. The message for the hibernated case
+`Clean` can be written. `Hibernated` and `Unknown` give `TUR-STORAGE-NTFS-004`;
+`Dirty` gives `TUR-STORAGE-NTFS-005`. The message for the hibernated case
 follows the example in §6.3:
 
 ```text
-UOS-STORAGE-NTFS-004
+TUR-STORAGE-NTFS-004
 The Windows volume was not mounted for writing.
 
 Reason:
 The volume appears to be hibernated or in an unsafe state.
 
 Action:
-Boot Windows, disable Fast Startup/hibernation, shut down fully, then retry. UOS mounts the volume read-only to protect your data.
+Boot Windows, disable Fast Startup/hibernation, shut down fully, then retry. TUR mounts the volume read-only to protect your data.
 
 Technical detail:
 Device: /dev/disk/by-uuid/01D9A7C2E4F6B801
@@ -191,7 +191,7 @@ section 8 and its references.
 
 The masks keep other local users out of filesystems that have no ownership of
 their own, because the canonical mount point is not inside a per-user
-directory. `windows_names` stops UOS creating names Windows cannot use.
+directory. `windows_names` stops TUR creating names Windows cannot use.
 
 No decision contains `force`, and no message suggests it. The `hfsplus`
 driver has a `force` option for journalled volumes and `ntfs3` has one for
@@ -240,7 +240,7 @@ next identifier form so that it can still be named.
 
 **Paths.**
 
-- Canonical: `/run/uos/volumes/<volume-id>`. The label is not part of it.
+- Canonical: `/run/tur/volumes/<volume-id>`. The label is not part of it.
 - User-facing: `/run/media/<user>/<name>`.
 
 `<name>` is the sanitised label: control and invisible characters removed,
@@ -279,7 +279,7 @@ sees a view of that mount; no view mounts the filesystem again.
 ## 7. Metadata capability registry
 
 `src/capabilities.rs` records, for each mountable filesystem, how well it
-represents each feature listed in §11.5 **as mounted by the driver UOS uses**:
+represents each feature listed in §11.5 **as mounted by the driver TUR uses**:
 `yes`, `partial`, `no` or `unverified`.
 
 | | perm | ACL | xattr | ADS | sec. desc. | res. fork | case-sens. | symlink | hard link | sparse | compr. | snapshot | CoW |
@@ -347,7 +347,7 @@ From reading `fs/ntfs3` on the kernel's master branch the same day (`super.c`,
   dirty flag is clear the driver will mount it read/write and replay its
   journal.
 
-From the ntfs-3g source (`libntfs-3g/volume.c`, not used by UOS, read for the
+From the ntfs-3g source (`libntfs-3g/volume.c`, not used by TUR, read for the
 detection rule): a volume is treated as hibernated when `/hiberfil.sys`
 exists and its first four bytes are `hibr` or `HIBR`.
 
@@ -363,7 +363,7 @@ exists and its first four bytes are `hibr` or `HIBR`.
 
 ### Consequence for this component
 
-`ntfs3` protects a dirty volume and does nothing for a hibernated one. UOS
+`ntfs3` protects a dirty volume and does nothing for a hibernated one. TUR
 must therefore establish the state itself, before any read/write mount, and
 must treat "could not establish" as unsafe. That is why the state is an input
 with an `Unknown` value that is never writable.
@@ -413,46 +413,46 @@ detection criteria, user message, technical explanation and recovery action.
 
 | Code | Severity | Meaning |
 |---|---|---|
-| `UOS-STORAGE-MOUNT-001` | info | A read/write mount is permitted |
-| `UOS-STORAGE-MOUNT-002` | info | A read-only mount, as requested |
-| `UOS-STORAGE-MOUNT-003` | warning | Already mounted outside the UOS namespace; not mounted again |
-| `UOS-STORAGE-SYSTEM-001` | notice | Part of the running system; not offered |
-| `UOS-STORAGE-ID-001` | error | Two devices claim the same filesystem identity |
-| `UOS-STORAGE-NTFS-004` | warning | NTFS hibernated or in an unsafe (undetermined) state; not mounted for writing |
-| `UOS-STORAGE-NTFS-005` | warning | NTFS dirty flag set; not mounted for writing |
-| `UOS-STORAGE-HFSPLUS-001` | warning | HFS+ journalled or journal state unknown; not mounted for writing |
-| `UOS-STORAGE-HFSPLUS-002` | notice | HFS+ writing switched off by policy |
-| `UOS-STORAGE-APFS-001` | notice | APFS is read-only |
-| `UOS-STORAGE-APFS-002` | notice | APFS support not enabled |
-| `UOS-STORAGE-FS-001` | notice | Filesystem known and not supported |
-| `UOS-STORAGE-FS-002` | notice | No recognised filesystem |
-| `UOS-STORAGE-FS-003` | info | Read-only filesystem format |
-| `UOS-STORAGE-MEDIA-001` | notice | Device or medium is write-protected |
-| `UOS-STORAGE-LUKS-001` | info | Encrypted volume is locked |
-| `UOS-STORAGE-CONTAINER-001` | info | A container for other volumes, not a filesystem |
-| `UOS-STORAGE-BITLOCKER-001` | notice | BitLocker volume; not supported |
-| `UOS-STORAGE-PROBE-001` | error | Probe input could not be read or parsed |
-| `UOS-STORAGE-VOLUME-001` | error | Unknown volume identifier |
+| `TUR-STORAGE-MOUNT-001` | info | A read/write mount is permitted |
+| `TUR-STORAGE-MOUNT-002` | info | A read-only mount, as requested |
+| `TUR-STORAGE-MOUNT-003` | warning | Already mounted outside the TUR namespace; not mounted again |
+| `TUR-STORAGE-SYSTEM-001` | notice | Part of the running system; not offered |
+| `TUR-STORAGE-ID-001` | error | Two devices claim the same filesystem identity |
+| `TUR-STORAGE-NTFS-004` | warning | NTFS hibernated or in an unsafe (undetermined) state; not mounted for writing |
+| `TUR-STORAGE-NTFS-005` | warning | NTFS dirty flag set; not mounted for writing |
+| `TUR-STORAGE-HFSPLUS-001` | warning | HFS+ journalled or journal state unknown; not mounted for writing |
+| `TUR-STORAGE-HFSPLUS-002` | notice | HFS+ writing switched off by policy |
+| `TUR-STORAGE-APFS-001` | notice | APFS is read-only |
+| `TUR-STORAGE-APFS-002` | notice | APFS support not enabled |
+| `TUR-STORAGE-FS-001` | notice | Filesystem known and not supported |
+| `TUR-STORAGE-FS-002` | notice | No recognised filesystem |
+| `TUR-STORAGE-FS-003` | info | Read-only filesystem format |
+| `TUR-STORAGE-MEDIA-001` | notice | Device or medium is write-protected |
+| `TUR-STORAGE-LUKS-001` | info | Encrypted volume is locked |
+| `TUR-STORAGE-CONTAINER-001` | info | A container for other volumes, not a filesystem |
+| `TUR-STORAGE-BITLOCKER-001` | notice | BitLocker volume; not supported |
+| `TUR-STORAGE-PROBE-001` | error | Probe input could not be read or parsed |
+| `TUR-STORAGE-VOLUME-001` | error | Unknown volume identifier |
 
-`UOS-STORAGE-NTFS-004` has the meaning of the specification's example. The
+`TUR-STORAGE-NTFS-004` has the meaning of the specification's example. The
 dirty case has its own code because the recovery action differs (let Windows
-check the disk). `UOS-STORAGE-NTFS-001` to `003` are not assigned.
+check the disk). `TUR-STORAGE-NTFS-001` to `003` are not assigned.
 
-Tests: every code parses as a `uos-core` storage code and is unique; the set
+Tests: every code parses as a `tur-core` storage code and is unique; the set
 of codes produced by the full enumeration of decisions equals the set of
 decision codes in the registry; the two input codes are produced by the
 command-line tests.
 
 ## 10. D-Bus contract (proposed, not implemented)
 
-`services/uos-storage/dbus/org.uos.Storage1.xml`. System bus, name
-`org.uos.Storage1`, object `/org/uos/Storage1`. The interface is **not
+`services/tur-storage/dbus/org.tur.Storage1.xml`. System bus, name
+`org.tur.Storage1`, object `/org/tur/Storage1`. The interface is **not
 frozen**; it should be reviewed and frozen before other components depend on
 it.
 
 The service will orchestrate UDisks2 and libblockdev (§11.7) and will not
 replace them: block-device operations are requested from UDisks2 over D-Bus,
-and `uos-storage` adds the policy decision, the canonical namespace and the
+and `tur-storage` adds the policy decision, the canonical namespace and the
 runtime views. It will be the only component that asks for mounts (§3.3).
 The licence review allows UDisks2 over D-Bus without constraint; linking
 `libudisks2` or `libblockdev` is an open licence question there, and a UDisks
@@ -465,19 +465,19 @@ schema (§16).
 
 | Method | Authorisation (polkit action) | Returns | Timeout | Cancellation |
 |---|---|---|---|---|
-| `ListVolumes` | `org.uos.storage.read`: any local session | `s`: inventory document | 5 s | Not cancellable; read-only |
-| `PreviewMount` | `org.uos.storage.read` | `s`: decision document | 5 s | Not cancellable; read-only |
-| `Mount` | `org.uos.storage.mount-removable`: active local session. `org.uos.storage.mount-internal`: administrator authentication, kept for the session | `s`: decision document for what was done | 30 s; 60 s for a userspace driver | `Cancel` before the mount call is issued abandons it. After that the mount completes and is undone before the method returns `Cancelled` |
-| `Unmount` | `org.uos.storage.unmount`: the session that mounted it. `org.uos.storage.unmount-others`: administrator authentication | nothing | 120 s | `Cancel` while waiting for users of the volume or for data to be written leaves it mounted. Not cancellable once the unmount has happened |
-| `Unlock` | `org.uos.storage.unlock`: active local session for removable media, administrator authentication for internal; then the passphrase, asked by the system's authentication agent | `s`: identifier of the volume inside | 180 s, which includes the person typing | `Cancel` dismisses the prompt; nothing is unlocked |
+| `ListVolumes` | `org.tur.storage.read`: any local session | `s`: inventory document | 5 s | Not cancellable; read-only |
+| `PreviewMount` | `org.tur.storage.read` | `s`: decision document | 5 s | Not cancellable; read-only |
+| `Mount` | `org.tur.storage.mount-removable`: active local session. `org.tur.storage.mount-internal`: administrator authentication, kept for the session | `s`: decision document for what was done | 30 s; 60 s for a userspace driver | `Cancel` before the mount call is issued abandons it. After that the mount completes and is undone before the method returns `Cancelled` |
+| `Unmount` | `org.tur.storage.unmount`: the session that mounted it. `org.tur.storage.unmount-others`: administrator authentication | nothing | 120 s | `Cancel` while waiting for users of the volume or for data to be written leaves it mounted. Not cancellable once the unmount has happened |
+| `Unlock` | `org.tur.storage.unlock`: active local session for removable media, administrator authentication for internal; then the passphrase, asked by the system's authentication agent | `s`: identifier of the volume inside | 180 s, which includes the person typing | `Cancel` dismisses the prompt; nothing is unlocked |
 | `Cancel` | The caller that started the operation | nothing | 5 s | — |
 
 Rules common to all methods:
 
-- **Errors.** `org.uos.Storage1.Error.NoSuchVolume`, `.InvalidArgument`,
+- **Errors.** `org.tur.Storage1.Error.NoSuchVolume`, `.InvalidArgument`,
   `.NotAuthorized`, `.Refused`, `.NeedsUnlock`, `.Unsupported`, `.Busy`,
   `.Cancelled`, `.TimedOut`, `.Failed`. The message starts with the
-  `UOS-STORAGE-*` code, then the user message. `Mount` returns `.Refused`,
+  `TUR-STORAGE-*` code, then the user message. `Mount` returns `.Refused`,
   `.NeedsUnlock` or `.Unsupported` when the decision is not a mount; a
   read/write request that is downgraded is a success whose result says so.
 - **Timeouts** are enforced by the service. On expiry the method returns
@@ -497,9 +497,9 @@ identifier. Property: `SchemaVersion`.
 
 ## 11. Assistant tools, command line and schema
 
-`services/uos-storage/agent-tools.json` follows the manifest example in the AI
+`services/tur-storage/agent-tools.json` follows the manifest example in the AI
 control layer §11 and the rules of `schemas/agent-tool-manifest.schema.json`.
-The loader in `services/uos-agent` is the authority on manifests; this
+The loader in `services/tur-pax` is the authority on manifests; this
 component's tests check the same rules by hand and do not run that loader.
 
 | Tool | Class | Method |
@@ -515,12 +515,12 @@ this service as tools or as D-Bus methods. Enabling APFS writing is class 4
 and cannot be expressed. The assistant passes a volume identifier and an
 access level, never a device path, an option or a secret.
 
-Command line (input from files only; see `uos-storage --help`):
+Command line (input from files only; see `tur-storage --help`):
 
 ```sh
-uos-storage volumes --from lsblk.json [--props blkid.export] [--user NAME] [--json]
-uos-storage decide --from lsblk.json --volume ID [--access ro|rw] [--json]
-uos-storage capabilities --from-fs ntfs --to-fs exfat [--json]
+tur-storage volumes --from lsblk.json [--props blkid.export] [--user NAME] [--json]
+tur-storage decide --from lsblk.json --volume ID [--access ro|rw] [--json]
+tur-storage capabilities --from-fs ntfs --to-fs exfat [--json]
 ```
 
 Exit status 0 on success (whatever the decision), 1 for unusable input or an
@@ -548,9 +548,9 @@ binary prints for the fixtures against it.
 ## 13. Open questions
 
 1. **Canonical path and UDisks2.** §11.4 wants the one real mount at
-   `/run/uos/volumes/<id>`; §11.7 wants UDisks2 to do the mounting, and
+   `/run/tur/volumes/<id>`; §11.7 wants UDisks2 to do the mounting, and
    UDisks2 chooses its own mount point under `/run/media/<user>`. Either
-   UDisks2's mount becomes the canonical one, or `uos-storage` mounts through
+   UDisks2's mount becomes the canonical one, or `tur-storage` mounts through
    libblockdev at the canonical path and tells UDisks2. Until that is decided,
    a volume that something else has mounted is refused rather than mounted a
    second time.
@@ -570,7 +570,7 @@ binary prints for the fixtures against it.
 
 ## 14. Code that should move to a shared crate
 
-The installer core (`installer/uos-installer-core`, [installer.md](installer.md))
+The installer core (`installer/tur-installer-core`, [installer.md](installer.md))
 also has a `Probe` trait over `lsblk --json --bytes --output-all` and its own
 tolerant parser. Nothing is shared in this change, so there are now two
 parsers of the same input. Candidates for one shared crate: the `lsblk` JSON
@@ -579,7 +579,7 @@ flattening of the device tree with de-duplication; the rules for "in use",
 system storage and removable media, which the two components should not
 define differently; the stable device identity (`VolumeId` and its fallbacks,
 the installer's by-id paths); and safe printing of device-supplied text.
-`uos-core`'s `ErrorCode` would be easier to use with optional `serde`
+`tur-core`'s `ErrorCode` would be easier to use with optional `serde`
 support.
 
 ## References

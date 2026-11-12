@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/giorgiogiudice/UOS/schemas/installer-plan.schema.json",
-  "title": "UOS installer partition plan",
-  "description": "The partition-plan.json file of an installer session: what would be written to the target disk, what would be destroyed, and the text of the confirmation screen. It is a description, not a list of commands. The target is named by its identity; the recorded device path is for display only. Kept in agreement with the Plan type in installer/uos-installer-core by that crate's tests.",
+  "$id": "https://github.com/giorgiogiudice/TUR/schemas/installer-plan.schema.json",
+  "title": "TUR installer partition plan",
+  "description": "The partition-plan.json file of an installer session: what would be written to the target disk, what would be destroyed, and the text of the confirmation screen. It is a description, not a list of commands. The target is named by its identity; the recorded device path is for display only. Kept in agreement with the Plan type in installer/tur-installer-core by that crate's tests.",
   "type": "object",
   "additionalProperties": false,
   "required": [

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
 name: image
 
 on:
@@ -34,7 +34,7 @@ concurrency:
 
 env:
   PODMAN: sudo podman
-  IMAGE: localhost/uos:ci
+  IMAGE: localhost/tur:ci
 
 jobs:
   build:
@@ -64,7 +64,7 @@ jobs:
 
       - name: Build image
         run: |
-          UOS_BUILD_ID_FILE="$RUNNER_TEMP/build-id" scripts/build-image.sh "$IMAGE"
+          TUR_BUILD_ID_FILE="$RUNNER_TEMP/build-id" scripts/build-image.sh "$IMAGE"
           echo "BUILD_ID=$(cat "$RUNNER_TEMP/build-id")" >> "$GITHUB_ENV"
 
       - name: Image smoke tests
@@ -72,9 +72,9 @@ jobs:
 
       - name: Reproducibility check
         run: |
-          scripts/build-image.sh localhost/uos:repro --no-cache
+          scripts/build-image.sh localhost/tur:repro --no-cache
           a=$($PODMAN image inspect -f '{{.Id}}' "$IMAGE")
-          b=$($PODMAN image inspect -f '{{.Id}}' localhost/uos:repro)
+          b=$($PODMAN image inspect -f '{{.Id}}' localhost/tur:repro)
           echo "first:  $a"; echo "second: $b"
           test "$a" = "$b"
 
@@ -94,6 +94,6 @@ jobs:
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         if: always()
         with:
-          name: uos-image-metadata
+          name: tur-image-metadata
           path: out/
           if-no-files-found: warn

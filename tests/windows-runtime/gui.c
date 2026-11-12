@@ -1,11 +1,11 @@
-// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
 //
 // A minimal Windows GUI-subsystem program for the windows-runtime end-to-end
-// test. It opens one window titled "UOS test window", keeps it for four
+// test. It opens one window titled "TUR test window", keeps it for four
 // seconds so that the test driver can find it on the X display, then closes
 // it and exits with status 7.
 //
-// When UOS_TEST_GRANT_DIR is set (a Unix path) it writes gui-ran.txt there
+// When TUR_TEST_GRANT_DIR is set (a Unix path) it writes gui-ran.txt there
 // once the window exists.
 
 #include <stdio.h>
@@ -28,7 +28,7 @@ static LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LP
 
 static void report(HWND window)
 {
-    const char *grant = getenv("UOS_TEST_GRANT_DIR");
+    const char *grant = getenv("TUR_TEST_GRANT_DIR");
     char path[2048];
     if (!grant)
         return;
@@ -53,12 +53,12 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command_line, i
     WNDCLASSA window_class = {0};
     window_class.lpfnWndProc = window_proc;
     window_class.hInstance = instance;
-    window_class.lpszClassName = "UosTestWindow";
+    window_class.lpszClassName = "TurTestWindow";
     window_class.hCursor = LoadCursorA(NULL, (LPCSTR)IDC_ARROW);
     if (!RegisterClassA(&window_class))
         return 2;
 
-    HWND window = CreateWindowExA(0, "UosTestWindow", "UOS test window", WS_OVERLAPPEDWINDOW,
+    HWND window = CreateWindowExA(0, "TurTestWindow", "TUR test window", WS_OVERLAPPEDWINDOW,
                                   CW_USEDEFAULT, CW_USEDEFAULT, 320, 200, NULL, NULL, instance,
                                   NULL);
     if (!window)

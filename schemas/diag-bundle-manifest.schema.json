@@ -1,12 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/giorgiogiudice/UOS/schemas/diag-bundle-manifest.schema.json",
-  "title": "UOS diagnostic bundle manifest",
-  "description": "manifest.json inside a support bundle written by uos-diag collect. It records what the bundle is, which files it holds with their SHA-256 as stored, and what was wanted but is absent. null means the value could not be determined or does not apply.",
+  "$id": "https://github.com/giorgiogiudice/TUR/schemas/diag-bundle-manifest.schema.json",
+  "title": "TUR diagnostic bundle manifest",
+  "description": "manifest.json inside a support bundle written by tur-diag collect. It records what the bundle is, which files it holds with their SHA-256 as stored, and what was wanted but is absent. null means the value could not be determined or does not apply.",
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "schema_version", "collector", "created_utc", "uos", "boot_id", "architecture",
+    "schema_version", "collector", "created_utc", "tur", "boot_id", "architecture",
     "kernel_release", "installer_session_id", "redaction_profile", "since_boot",
     "files", "missing"
   ],
@@ -27,7 +27,7 @@
       "additionalProperties": false,
       "required": ["name", "version"],
       "properties": {
-        "name": { "const": "uos-diag" },
+        "name": { "const": "tur-diag" },
         "version": { "type": "string", "minLength": 1 }
       }
     },
@@ -36,8 +36,8 @@
       "type": "string",
       "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
     },
-    "uos": {
-      "description": "The UOS build and deployment the machine was running. All null on a host that is not UOS.",
+    "tur": {
+      "description": "The TUR build and deployment the machine was running. All null on a host that is not TUR.",
       "type": "object",
       "additionalProperties": false,
       "required": ["build_id", "version", "source_revision", "deployment_checksum", "image_digest"],

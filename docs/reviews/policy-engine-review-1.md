@@ -1,6 +1,6 @@
 # Policy engine: independent review 1
 
-- **Subject:** `services/uos-agent` as merged in pull request #6 (source revision
+- **Subject:** `services/tur-pax` as merged in pull request #6 (source revision
   `e9b3675` on `main`), with `docs/architecture/agent-policy.md` as its author's
   account
 - **Reviewed against:** AI control layer (addendum A) **revision 4**, sections 5,
@@ -20,7 +20,7 @@ embodies is [ADR-0012](../adr/0012-assistant-policy-model.md).
 
 ## 1. How the review was done
 
-**Reading.** All of `services/uos-agent` (eleven source files, three test files,
+**Reading.** All of `services/tur-pax` (eleven source files, three test files,
 five fixtures), both JSON schemas, `agent-policy.md` and addendum A revision 4,
 read as someone who controls everything the model says and everything on screen.
 
@@ -71,7 +71,7 @@ with small effect; **note** — recorded so that it is not rediscovered.
 | F-07 | medium | "OK", "Yes", "Continue" and "Apply" are class 1 | Fixed |
 | F-08 | medium | The pattern table lacks destructive and granting words | Fixed |
 | F-09 | medium | A locked unattended task runs commands outside the read-only sandbox | Fixed |
-| F-10 | low | The audit record lacks `UOS_AI_ATTENDED` and `UOS_AI_SANDBOX` | Fixed |
+| F-10 | low | The audit record lacks `TUR_AI_ATTENDED` and `TUR_AI_SANDBOX` | Fixed |
 | F-11 | medium | A privileged command is recorded as a program name and a count | Fixed |
 | F-12 | low | The record names a program by its last path component | Fixed |
 | F-13 | medium | One method can be declared with two classes | Fixed |
@@ -212,8 +212,8 @@ Fix: rule 9b defers it (`unattended_command_while_locked`).
 
 ### F-10, F-11, F-12 — The audit record
 
-- **F-10 (low).** Section 11 of the design lists `UOS_AI_SANDBOX` and
-  `UOS_AI_ATTENDED`. Neither was written. A record could not tell an unattended
+- **F-10 (low).** Section 11 of the design lists `TUR_AI_SANDBOX` and
+  `TUR_AI_ATTENDED`. Neither was written. A record could not tell an unattended
   action from an attended one, or a workspace command from one on the user's
   files.
 - **F-11 (medium).** Section 17, item 9: a privileged request is logged in full.
@@ -226,7 +226,7 @@ Fix: rule 9b defers it (`unattended_command_while_locked`).
 Evidence: `f10_…`, `f11_…`, `f12_…`, failing in run 43157368292.
 
 Fix: both fields are written. A privileged request is recorded with the exact
-text shown to the user, in `MESSAGE` and in `UOS_AI_REQUEST`; a content marked
+text shown to the user, in `MESSAGE` and in `TUR_AI_REQUEST`; a content marked
 secret is replaced, and nothing else is (interpretations 44 and 45). A command is
 named by the path it was given.
 
@@ -248,7 +248,7 @@ manifest looks for the dangerous method's name and finds it marked class 3.
 Evidence: `f13_a_method_cannot_be_declared_with_two_classes`, failing in run
 43157368292.
 
-Fix: `UOS-AI-MANIFEST-011`. The service's own check through polkit remains the
+Fix: `TUR-AI-MANIFEST-011`. The service's own check through polkit remains the
 enforcement; this closes the silent case.
 
 ### F-14, F-21, F-23 — Repeated keys
@@ -562,7 +562,7 @@ In summary:
   engine was not reviewed against them. Three items of section 18 bear on the
   engine, and section 19 changes what "trusted path available" has to mean; both
   are listed in agent-policy.md, limit 16.
-- **Other components.** `crates/uos-core` was changed only to add the constant
+- **Other components.** `crates/tur-core` was changed only to add the constant
   constructor issue #8 asks for. No other component was read beyond checking that
   none depends on this engine's types (none does at the reviewed revision of
   `main`; the storage service's manifest was checked against the stricter loader
@@ -575,8 +575,8 @@ In summary:
 
 - `docs/adr/README.md`: add the row for ADR-0012.
 - `docs/architecture/ai-control-layer.md`:
-  - section 11, audit log: add `UOS_AI_REQUEST` (the full statement of a
-    privileged request) and say that `UOS_AI_SANDBOX` is `privileged` for a typed
+  - section 11, audit log: add `TUR_AI_REQUEST` (the full statement of a
+    privileged request) and say that `TUR_AI_SANDBOX` is `privileged` for a typed
     operation;
   - section 17, item 9: say who may mark a value secret (interpretation 44);
   - section 17, item 2, or section 6: say that the compositor reports, for a

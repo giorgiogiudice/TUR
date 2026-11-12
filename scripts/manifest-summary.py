@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
 """Print a Markdown summary of a build manifest, for the CI job summary.
 
     scripts/manifest-summary.py build-manifest.json
@@ -14,7 +14,7 @@ import sys
 
 def main() -> int:
     path = pathlib.Path(sys.argv[1])
-    print("### UOS image")
+    print("### TUR image")
     if not path.exists():
         print("No build manifest was produced.")
         return 0

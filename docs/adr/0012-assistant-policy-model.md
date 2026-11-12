@@ -25,7 +25,7 @@ Constraints and what is known:
   the user policy, "the trusted path is available", "this window belongs to the
   user". If the assistant's own process could write any of them, it could
   approve itself.
-- The engine exists (`services/uos-agent`, milestone A0). It was reviewed
+- The engine exists (`services/tur-pax`, milestone A0). It was reviewed
   independently ([policy-engine-review-1](../reviews/policy-engine-review-1.md));
   the review found defects in rules and in parsing, and none that came from the
   form chosen here.
@@ -62,7 +62,7 @@ exists yet.
 ## Decision
 
 The assistant's authority is enforced by option 4: a pure, deterministic decision
-function in `services/uos-agent`, outside the model, whose invariants are tested
+function in `services/tur-pax`, outside the model, whose invariants are tested
 over its whole enumerated input space; and every input that grants authority (the
 user policy, standing approvals, the repair-session record, the trusted-path
 state and the owner of a target window) is owned and supplied by a separate
@@ -114,7 +114,7 @@ Harder, and what must now be true elsewhere:
 
 ## Verification
 
-- `services/uos-agent/tests/invariants.rs` enumerates the input space and
+- `services/tur-pax/tests/invariants.rs` enumerates the input space and
   asserts each invariant on every decision; `tests/review.rs` holds a regression
   test for each finding of the first review. Both run in CI on every change.
 - The first review checked that the tests bite: for the five most important

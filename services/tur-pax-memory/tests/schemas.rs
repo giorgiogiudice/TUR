@@ -264,7 +264,7 @@ fn sample_entries() -> Vec<Value> {
     let procedure = Procedure {
         name: "Reset the wireless profile".to_owned(),
         steps: vec![ProcedureStep {
-            service: "org.uos.Network1".to_owned(),
+            service: "org.tur.Network1".to_owned(),
             tool: "network_reset_profile".to_owned(),
             arguments: object(json!({ "profile": "{{profile}}", "retries": 2 })),
         }],
@@ -519,7 +519,7 @@ fn sample_schedules() -> (ScheduleBook<MemoryStore>, Vec<(ScheduleId, Value)>) {
             ProposedAction::Task {
                 request: "Send the weekly report to my manager.".to_owned(),
                 approvals: vec![ApprovalRequest {
-                    service: "org.uos.Mail1".to_owned(),
+                    service: "org.tur.Mail1".to_owned(),
                     tool: "mail_send".to_owned(),
                     arguments: object(json!({ "to": "manager@example.org", "copies": 1 })),
                 }],
@@ -601,7 +601,7 @@ fn what_the_schedule_schema_rejects_the_loader_rejects() {
     let mutations: [Mutation; 24] = [
         ("a reminder with standing approvals", 1, |schedule| {
             schedule["action"]["standing_approvals"] = json!([
-                { "service": "org.uos.Mail1", "tool": "mail_send", "arguments": {} }
+                { "service": "org.tur.Mail1", "tool": "mail_send", "arguments": {} }
             ]);
         }),
         ("a reminder with a request", 1, |schedule| {

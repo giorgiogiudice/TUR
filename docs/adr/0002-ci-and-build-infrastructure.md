@@ -6,7 +6,7 @@
 
 ## Context
 
-UOS needs to build OS images and boot them under UEFI in a virtual machine on every
+TUR needs to build OS images and boot them under UEFI in a virtual machine on every
 change. It also needs, eventually, tests that only real hardware can run: GPUs,
 Bluetooth, suspend and resume, firmware updates, device passthrough and voice
 input.

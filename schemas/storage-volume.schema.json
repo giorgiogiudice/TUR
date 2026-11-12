@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/giorgiogiudice/UOS/schemas/storage-volume.schema.json",
-  "title": "UOS storage volume documents",
-  "description": "JSON documents emitted by uos-storage: the volume inventory (volumes --json), the decision for one volume (decide --json) and the metadata losses of a copy between two filesystems (capabilities --json). The same documents are the string results of the proposed org.uos.Storage1 D-Bus interface. null means the value is absent or could not be determined.",
+  "$id": "https://github.com/giorgiogiudice/TUR/schemas/storage-volume.schema.json",
+  "title": "TUR storage volume documents",
+  "description": "JSON documents emitted by tur-storage: the volume inventory (volumes --json), the decision for one volume (decide --json) and the metadata losses of a copy between two filesystems (capabilities --json). The same documents are the string results of the proposed org.tur.Storage1 D-Bus interface. null means the value is absent or could not be determined.",
   "oneOf": [
     { "$ref": "#/$defs/inventory" },
     { "$ref": "#/$defs/decision_report" },
@@ -10,15 +10,15 @@
   ],
   "$defs": {
     "volume_id": {
-      "description": "UOS volume identifier: fs-<filesystem UUID>, part-<partition UUID>, dev-<hash of hardware identity> or tmp-<hash of device path>. Always safe as one path component.",
+      "description": "TUR volume identifier: fs-<filesystem UUID>, part-<partition UUID>, dev-<hash of hardware identity> or tmp-<hash of device path>. Always safe as one path component.",
       "type": "string",
       "pattern": "^(fs|part|dev|tmp)-[a-z0-9-]+$",
       "maxLength": 96
     },
     "error_code": {
-      "description": "A stable UOS storage error code.",
+      "description": "A stable TUR storage error code.",
       "type": "string",
-      "pattern": "^UOS-STORAGE-[A-Z0-9]+-[0-9]{3}$"
+      "pattern": "^TUR-STORAGE-[A-Z0-9]+-[0-9]{3}$"
     },
     "nullable_string": { "type": ["string", "null"] },
     "string_list": { "type": "array", "items": { "type": "string" } },

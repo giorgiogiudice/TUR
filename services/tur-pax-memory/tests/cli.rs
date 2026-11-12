@@ -222,10 +222,10 @@ fn confirm_makes_a_pending_entry_active() {
     // Confirming something that is not pending is refused.
     let run = pax(&dir.path, &["confirm", "m-00000001"]);
     assert_eq!(run.status, EXIT_ERROR);
-    assert!(run.stderr.contains("UOS-AI-MEMORY-004"), "{}", run.stderr);
+    assert!(run.stderr.contains("TUR-AI-MEMORY-004"), "{}", run.stderr);
     let run = pax(&dir.path, &["confirm", "m-00000009"]);
     assert_eq!(run.status, EXIT_ERROR);
-    assert!(run.stderr.contains("UOS-AI-MEMORY-002"), "{}", run.stderr);
+    assert!(run.stderr.contains("TUR-AI-MEMORY-002"), "{}", run.stderr);
     let before = memory(&dir.path).get(&planted).expect("loads");
     assert_eq!(before.state(), EntryState::Pending);
 
@@ -243,7 +243,7 @@ fn confirm_makes_a_pending_entry_active() {
     // Twice is refused: it is no longer pending.
     let run = pax(&dir.path, &["confirm", "m-00000003"]);
     assert_eq!(run.status, EXIT_ERROR);
-    assert!(run.stderr.contains("UOS-AI-MEMORY-004"), "{}", run.stderr);
+    assert!(run.stderr.contains("TUR-AI-MEMORY-004"), "{}", run.stderr);
 }
 
 #[test]
@@ -271,17 +271,17 @@ fn forget_removes_the_bytes_from_the_store() {
     }
     let run = pax(&dir.path, &["show", "m-00000002"]);
     assert_eq!(run.status, EXIT_ERROR);
-    assert!(run.stderr.contains("UOS-AI-MEMORY-002"), "{}", run.stderr);
+    assert!(run.stderr.contains("TUR-AI-MEMORY-002"), "{}", run.stderr);
     let run = pax(&dir.path, &["forget", "m-00000002"]);
     assert_eq!(run.status, EXIT_ERROR);
-    assert!(run.stderr.contains("UOS-AI-MEMORY-002"), "{}", run.stderr);
+    assert!(run.stderr.contains("TUR-AI-MEMORY-002"), "{}", run.stderr);
     // The other entries are untouched.
     assert_eq!(pax(&dir.path, &["list"]).stdout.lines().count(), 2);
 
     for id in ["zebra", "m-1", "../m-00000001", "s-00000001"] {
         let run = pax(&dir.path, &["forget", id]);
         assert_eq!(run.status, EXIT_ERROR, "{id}");
-        assert!(run.stderr.contains("UOS-AI-MEMORY-009"), "{}", run.stderr);
+        assert!(run.stderr.contains("TUR-AI-MEMORY-009"), "{}", run.stderr);
     }
 }
 
@@ -329,14 +329,14 @@ fn a_damaged_file_is_reported_and_the_rest_still_listed() {
     assert_eq!(run.stdout.lines().count(), 2, "{}", run.stdout);
     assert!(run.stdout.contains("m-00000001"));
     assert!(run.stdout.contains("m-00000003"));
-    assert!(run.stderr.contains("UOS-AI-MEMORY-006"), "{}", run.stderr);
+    assert!(run.stderr.contains("TUR-AI-MEMORY-006"), "{}", run.stderr);
     assert!(run.stderr.contains("m-00000002"), "{}", run.stderr);
     // The report says where the file is damaged, not what is in it.
     assert!(!run.stderr.contains("Firefox"), "{}", run.stderr);
 
     let run = pax(&dir.path, &["show", "m-00000002"]);
     assert_eq!(run.status, EXIT_ERROR);
-    assert!(run.stderr.contains("UOS-AI-MEMORY-006"), "{}", run.stderr);
+    assert!(run.stderr.contains("TUR-AI-MEMORY-006"), "{}", run.stderr);
 
     let run = pax(&dir.path, &["export"]);
     assert_eq!(run.status, EXIT_DAMAGED);
@@ -371,7 +371,7 @@ fn reading_an_empty_store_creates_nothing() {
     assert!(!dir.path.exists(), "a read created the store directory");
     let run = pax(&dir.path, &["forget", "m-00000001"]);
     assert_eq!(run.status, EXIT_ERROR);
-    assert!(run.stderr.contains("UOS-AI-MEMORY-002"), "{}", run.stderr);
+    assert!(run.stderr.contains("TUR-AI-MEMORY-002"), "{}", run.stderr);
 }
 
 // Two schedules created at T0: a daily task with one standing approval, and
@@ -384,7 +384,7 @@ fn schedules(store: &Path) {
         action: ProposedAction::Task {
             request: "Send the weekly report to my manager.".to_owned(),
             approvals: vec![ApprovalRequest {
-                service: "org.uos.Mail1".to_owned(),
+                service: "org.tur.Mail1".to_owned(),
                 tool: "mail_send".to_owned(),
                 arguments: arguments.as_object().cloned().unwrap_or_default(),
             }],
@@ -483,7 +483,7 @@ fn schedules_list_next_and_show() {
         "missed runs: run_once",
         "confirmed by the user: 2026-11-12T10:00:00Z",
         "standing approvals: 1",
-        "  org.uos.Mail1 mail_send {\"subject\":\"Weekly report\",\"to\":\"manager@example.org\"}",
+        "  org.tur.Mail1 mail_send {\"subject\":\"Weekly report\",\"to\":\"manager@example.org\"}",
         "last run: never",
         "now: next run 2026-11-13T06:30:00Z",
         "--- tur-pax-schedule-s-00000001.service (not installed)",
@@ -514,13 +514,13 @@ fn schedules_list_next_and_show() {
 
     let run = pax(&dir.path, &["schedules", "show", "s-00000009"]);
     assert_eq!(run.status, EXIT_ERROR);
-    assert!(run.stderr.contains("UOS-AI-SCHEDULE-001"), "{}", run.stderr);
+    assert!(run.stderr.contains("TUR-AI-SCHEDULE-001"), "{}", run.stderr);
     let run = pax(&dir.path, &["schedules", "next", "s-00000009"]);
     assert_eq!(run.status, EXIT_ERROR);
-    assert!(run.stderr.contains("UOS-AI-SCHEDULE-001"), "{}", run.stderr);
+    assert!(run.stderr.contains("TUR-AI-SCHEDULE-001"), "{}", run.stderr);
     let run = pax(&dir.path, &["schedules", "show", "m-00000001"]);
     assert_eq!(run.status, EXIT_ERROR);
-    assert!(run.stderr.contains("UOS-AI-SCHEDULE-013"), "{}", run.stderr);
+    assert!(run.stderr.contains("TUR-AI-SCHEDULE-013"), "{}", run.stderr);
 
     // Rendering units wrote nothing outside the store, and nothing new in it.
     let files: Vec<String> = all_files(&dir.path)
@@ -556,14 +556,14 @@ fn usage_errors_and_invalid_values() {
     let run = pax(&dir.path, &["list", "--kind", "authority"]);
     assert_eq!(run.status, EXIT_ERROR);
     assert!(
-        run.stderr.contains("UOS-AI-MEMORY-INPUT-001"),
+        run.stderr.contains("TUR-AI-MEMORY-INPUT-001"),
         "{}",
         run.stderr
     );
     let run = pax(&dir.path, &["list", "--state", "trusted"]);
     assert_eq!(run.status, EXIT_ERROR);
     assert!(
-        run.stderr.contains("UOS-AI-MEMORY-INPUT-001"),
+        run.stderr.contains("TUR-AI-MEMORY-INPUT-001"),
         "{}",
         run.stderr
     );
@@ -591,7 +591,7 @@ fn the_default_store_follows_xdg() {
         .expect("the binary runs");
     assert_eq!(output.status.code(), Some(EXIT_ERROR));
     assert!(
-        String::from_utf8_lossy(&output.stderr).contains("UOS-AI-MEMORY-INPUT-001"),
+        String::from_utf8_lossy(&output.stderr).contains("TUR-AI-MEMORY-INPUT-001"),
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );

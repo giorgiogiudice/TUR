@@ -1,7 +1,7 @@
 # Agent policy engine
 
 **Milestone A0 of the [AI control layer](ai-control-layer.md)**
-**Component:** `services/uos-agent`
+**Component:** `services/tur-pax`
 **Related decisions:** [ADR-0004](../adr/0004-ai-provider-model.md), [ADR-0005](../adr/0005-languages-and-workspace.md), [ADR-0012](../adr/0012-assistant-policy-model.md)
 **Reviews:** [first independent review](../reviews/policy-engine-review-1.md)
 
@@ -232,7 +232,7 @@ identifier may look like a listed one without being equal to it.
 | `ask` | The user must approve this one action | Reason, the text to show |
 | `authenticate` | A person must authenticate on the trusted path | Reason, the text to show |
 | `defer` | Nobody can be asked now; held for the user's return | Reason |
-| `refuse` | The action does not run | Reason, `UOS-AI-*` error code |
+| `refuse` | The action does not run | Reason, `TUR-AI-*` error code |
 
 The decisions have a total strictness order, used by the tests:
 `allow < ask < authenticate < defer < refuse`. The order is by what must happen
@@ -414,11 +414,11 @@ Schema: [`schemas/agent-tool-manifest.schema.json`](../../schemas/agent-tool-man
 ```json
 {
   "schema_version": 1,
-  "service": "org.uos.Storage1",
+  "service": "org.tur.Storage1",
   "tools": [
     {
       "name": "storage_unmount",
-      "description": "Unmount a volume by its UOS volume identifier.",
+      "description": "Unmount a volume by its TUR volume identifier.",
       "class": 1,
       "method": "Unmount",
       "input_schema": {
@@ -520,27 +520,27 @@ with a fraction, and repeated keys.
 One record for each proposed action and its decision, rendered to journal fields:
 
 ```text
-MESSAGE=uos-agent: refused org.uos.Storage1:storage_format (class 3, tier 1): trusted_path_unavailable; arguments volume_id=string
-UOS_AI_TASK=task-0001
-UOS_AI_ACTION=org.uos.Storage1:storage_format
-UOS_AI_CLASS=3
-UOS_AI_DECISION=refused
-UOS_AI_TIER=1
-UOS_AI_ATTENDED=yes
-UOS_AI_PROVIDER=anthropic
-UOS_ERROR_CODE=UOS-AI-POLICY-006
+MESSAGE=tur-pax: refused org.tur.Storage1:storage_format (class 3, tier 1): trusted_path_unavailable; arguments volume_id=string
+TUR_AI_TASK=task-0001
+TUR_AI_ACTION=org.tur.Storage1:storage_format
+TUR_AI_CLASS=3
+TUR_AI_DECISION=refused
+TUR_AI_TIER=1
+TUR_AI_ATTENDED=yes
+TUR_AI_PROVIDER=anthropic
+TUR_ERROR_CODE=TUR-AI-POLICY-006
 ```
 
 | Field | Values |
 |---|---|
-| `UOS_AI_ACTION` | `<service>:<tool>`; `accessibility:observe`, `accessibility:act`; `screen:observe`, `screen:act`; `command:read_only`, `command:user`, `command:privileged`; `operation:<typed operation>`; `agent:<operation>` |
-| `UOS_AI_CLASS` | The class the action was treated as, 0 to 4 |
-| `UOS_AI_DECISION` | `allowed`, `confirmation_required`, `authentication_required`, `deferred`, `refused`; and, for the user's answer to a prompt, `confirmed`, `denied` |
-| `UOS_AI_TIER` | 1 tool, 2 accessibility, 3 screen and input, 4 command or typed operation, 0 an operation of the agent itself |
-| `UOS_AI_SANDBOX` | Present for a command: `read-only`, `workspace`, `user` or `privileged`; and for a typed operation: `privileged` |
-| `UOS_AI_ATTENDED` | `yes` or `no`: the presence of the task. A locked session does not make an attended task unattended. |
-| `UOS_AI_REQUEST` | Present for a privileged request: the full statement of the request |
-| `UOS_ERROR_CODE` | Present only for a refusal |
+| `TUR_AI_ACTION` | `<service>:<tool>`; `accessibility:observe`, `accessibility:act`; `screen:observe`, `screen:act`; `command:read_only`, `command:user`, `command:privileged`; `operation:<typed operation>`; `agent:<operation>` |
+| `TUR_AI_CLASS` | The class the action was treated as, 0 to 4 |
+| `TUR_AI_DECISION` | `allowed`, `confirmation_required`, `authentication_required`, `deferred`, `refused`; and, for the user's answer to a prompt, `confirmed`, `denied` |
+| `TUR_AI_TIER` | 1 tool, 2 accessibility, 3 screen and input, 4 command or typed operation, 0 an operation of the agent itself |
+| `TUR_AI_SANDBOX` | Present for a command: `read-only`, `workspace`, `user` or `privileged`; and for a typed operation: `privileged` |
+| `TUR_AI_ATTENDED` | `yes` or `no`: the presence of the task. A locked session does not make an attended task unattended. |
+| `TUR_AI_REQUEST` | Present for a privileged request: the full statement of the request |
+| `TUR_ERROR_CODE` | Present only for a refusal |
 
 What a record may contain is restricted by construction:
 
@@ -579,8 +579,8 @@ refuses the action if the record cannot be written.
 ## 9. Command line and error codes
 
 ```text
-uos-agent manifest validate <file>
-uos-agent policy check --manifest <file> --tool <name> [--args <json>]
+tur-pax manifest validate <file>
+tur-pax policy check --manifest <file> --tool <name> [--args <json>]
                        [--policy <file>] [--unattended] [--locked] [--trusted-path]
                        [--repair-session-until <seconds> --repair-session-purpose <text>
                         [--repair-session-opened <seconds>]]
@@ -626,21 +626,21 @@ codes and titles are unique, and that a user message uses no term of the design.
 
 | Code | Severity | Meaning |
 |---|---|---|
-| `UOS-AI-MANIFEST-001` to `-011` | error | Tool manifest: parse, version, service, no tools, tool name, duplicate tool, description or method, class range, class 4 declared, input schema, a method declared with two classes |
-| `UOS-AI-TOOL-001`, `-002` | warning | Unknown tool; arguments do not match the input schema |
-| `UOS-AI-POLICYFILE-001` to `-004` | error | Policy file: parse, version, application, relaxation |
-| `UOS-AI-POLICY-001` | warning | Prohibited (class 4) |
-| `UOS-AI-POLICY-002` | warning | Malformed action |
-| `UOS-AI-POLICY-003` | notice | Excluded application |
-| `UOS-AI-POLICY-004` | notice | Session locked |
-| `UOS-AI-POLICY-005` | notice | Observe-only mode |
-| `UOS-AI-POLICY-006` | notice | Trusted path not available |
-| `UOS-AI-POLICY-007` | notice | System-critical action with nobody present |
-| `UOS-AI-POLICY-008` | warning | System-critical operation proposed as a privileged request |
-| `UOS-AI-POLICY-009` | notice | Privileged request with nobody present |
-| `UOS-AI-POLICY-010` | warning | Target window belongs to a process with administrator rights |
-| `UOS-AI-AUDIT-001` | critical | Audit record could not be written |
-| `UOS-AI-INPUT-001`, `-002` | error | Unreadable file; invalid command-line value |
+| `TUR-AI-MANIFEST-001` to `-011` | error | Tool manifest: parse, version, service, no tools, tool name, duplicate tool, description or method, class range, class 4 declared, input schema, a method declared with two classes |
+| `TUR-AI-TOOL-001`, `-002` | warning | Unknown tool; arguments do not match the input schema |
+| `TUR-AI-POLICYFILE-001` to `-004` | error | Policy file: parse, version, application, relaxation |
+| `TUR-AI-POLICY-001` | warning | Prohibited (class 4) |
+| `TUR-AI-POLICY-002` | warning | Malformed action |
+| `TUR-AI-POLICY-003` | notice | Excluded application |
+| `TUR-AI-POLICY-004` | notice | Session locked |
+| `TUR-AI-POLICY-005` | notice | Observe-only mode |
+| `TUR-AI-POLICY-006` | notice | Trusted path not available |
+| `TUR-AI-POLICY-007` | notice | System-critical action with nobody present |
+| `TUR-AI-POLICY-008` | warning | System-critical operation proposed as a privileged request |
+| `TUR-AI-POLICY-009` | notice | Privileged request with nobody present |
+| `TUR-AI-POLICY-010` | warning | Target window belongs to a process with administrator rights |
+| `TUR-AI-AUDIT-001` | critical | Audit record could not be written |
+| `TUR-AI-INPUT-001`, `-002` | error | Unreadable file; invalid command-line value |
 
 ## 10. Interpretations
 
@@ -681,8 +681,8 @@ it changed. Choices 39 onward were made while aligning the engine with revision 
 | 27 | Class of removing a memory entry | Class 1, the same operation as writing. | Kept, with a reservation: it is not the stricter reading. Removing or changing something the user stated ("always ask before emailing my manager") can change later behaviour and should be asked. It needs the operation to be split, which is the memory component's interface. |
 | 28 | Unattended class 2 without the trusted path | Refused, not deferred. | Kept. |
 | 29 | Class 2 confirmation without the trusted path | Refused. | Kept. |
-| 30 | `UOS_AI_DECISION` for a decision that is not final | `confirmation_required`, `authentication_required`, `deferred`. | Kept; now the design (section 17, item 11). |
-| 31 | `UOS_AI_TIER` for a command and for an agent operation | 4 and 0. | Kept; now the design. A typed operation is tier 4 too (57). |
+| 30 | `TUR_AI_DECISION` for a decision that is not final | `confirmation_required`, `authentication_required`, `deferred`. | Kept; now the design (section 17, item 11). |
+| 31 | `TUR_AI_TIER` for a command and for an agent operation | 4 and 0. | Kept; now the design. A typed operation is tier 4 too (57). |
 | 32 | An audit record that cannot be written | The action is refused. | Kept. |
 | 33 | Logging of privileged commands | Program name, argument count and operation type only. | **Overruled** by section 17, item 9: recorded in full. |
 | 34 | An incomplete action | Refused. | Kept. |
@@ -706,9 +706,9 @@ it changed. Choices 39 onward were made while aligning the engine with revision 
 | 52 | A time before the opening of a repair session | Closed. This catches a clock set back past the opening. | New. |
 | 53 | A JSON object that repeats a key | An error: in tool arguments, in a standing approval, in an input schema. | New. |
 | 54 | One method declared with two classes | An error, also when the second declaration is the stricter one. | New. |
-| 55 | `UOS_AI_ATTENDED` for an attended task in a locked session | `yes`. The field records what the task is, not who is at the screen. | New. |
-| 56 | `UOS_AI_SANDBOX` for a typed operation | `privileged`. | New. |
-| 57 | `UOS_AI_TIER` for a typed operation | 4, as for a command. | New. |
+| 55 | `TUR_AI_ATTENDED` for an attended task in a locked session | `yes`. The field records what the task is, not who is at the screen. | New. |
+| 56 | `TUR_AI_SANDBOX` for a typed operation | `privileged`. | New. |
+| 57 | `TUR_AI_TIER` for a typed operation | 4, as for a command. | New. |
 
 ## 11. Known limits
 
