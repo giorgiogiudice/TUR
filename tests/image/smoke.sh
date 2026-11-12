@@ -40,8 +40,54 @@ turr() { ( . /usr/lib/tur/release; eval "printf '%s' \"\${$1:-}\"" ); }
 check "os-release IMAGE_ID is tur"            test "$(osr IMAGE_ID)" = "tur"
 check "os-release BUILD_ID matches the build" test "$(osr BUILD_ID)" = "${EXPECT_BUILD_ID}"
 check "os-release PRETTY_NAME names TUR"      bash -c '[[ "$(. /usr/lib/os-release; echo "$PRETTY_NAME")" == TUR\ * ]]'
-check "distribution ID is still fedora"       test "$(osr ID)" = "fedora"
-check "Fedora release is ${EXPECT_FEDORA}"    test "$(osr VERSION_ID)" = "${EXPECT_FEDORA}"
+check "distribution ID is tur"                test "$(osr ID)" = "tur"
+check "the family is fedora (ID_LIKE)"        test "$(osr ID_LIKE)" = "fedora"
+check "VERSION_ID is TUR's version"           test "$(osr VERSION_ID)" = "$(turr TUR_VERSION)"
+check "os-release names TUR and TUR's addresses" bash -c \
+    '. /usr/lib/os-release; [ "$NAME" = TUR ] && [ "$PRETTY_NAME" = "TUR $VERSION_ID" ] && [ "$LOGO" = tur-logo-icon ] &&
+     [ "$DEFAULT_HOSTNAME" = tur ] && [ "$HOME_URL" = https://github.com/giorgiogiudice/TUR ] &&
+     [[ "$SUPPORT_URL" == https://github.com/giorgiogiudice/TUR/* ]] && [[ "$BUG_REPORT_URL" == https://github.com/giorgiogiudice/TUR/* ]]'
+check "no Fedora or Red Hat in os-release but ID_LIKE" bash -c \
+    '! grep -v -x "ID_LIKE=fedora" /usr/lib/os-release | grep -i -E "fedora|red ?hat"'
+check "the base is Fedora ${EXPECT_FEDORA}, as recorded" bash -c \
+    '[ "$(. /usr/lib/tur/release; echo "$TUR_BASE_OS_ID $TUR_BASE_OS_VERSION_ID")" = "fedora $1" ]' _ "${EXPECT_FEDORA}"
+check "system-release names TUR"              bash -c '[ "$(cat /etc/system-release)" = "TUR release $(. /usr/lib/os-release; echo "$VERSION_ID")" ]'
+check "release package is Fedora's generic-release" bash -c \
+    '[ "$(rpm -q --whatprovides system-release --qf "%{NAME}")" = generic-release ]'
+check "logo package is Fedora's generic-logos" bash -c \
+    '[ "$(rpm -q --whatprovides system-logos --qf "%{NAME}")" = generic-logos ]'
+for pkg in fedora-logos fedora-release fedora-release-common fedora-release-kinoite fedora-release-identity-kinoite \
+           fedora-release-ostree-desktop fedora-release-notes fedora-bookmarks plasma-welcome-fedora \
+           fedora-workstation-backgrounds NetworkManager-config-connectivity-fedora; do
+    check "package ${pkg} is not installed"   bash -c '! rpm -q "$1"' _ "${pkg}"
+done
+check "the rpm-ostree polkit rule of the release package is kept" \
+    grep -q 'org.projectatomic.rpmostree1.upgrade' /usr/share/polkit-1/rules.d/org.projectatomic.rpmostree1.rules
+check "the systemd presets are kept"          test -s /usr/lib/systemd/system-preset/90-default.preset
+check "the statement of origin is in the image" grep -qx \
+    'TUR is built from software packaged by the Fedora Project and many other projects. TUR is not provided, endorsed or supported by the Fedora Project or by Red Hat.' \
+    /usr/share/tur/statement-of-origin.txt
+check "TUR's logo is the system logo"        bash -c 'test -s /usr/share/icons/hicolor/scalable/apps/tur-logo-icon.svg &&
+     cmp -s /usr/share/icons/hicolor/scalable/apps/tur-logo-icon.svg /usr/share/icons/hicolor/scalable/places/start-here.svg &&
+     cmp -s /usr/share/pixmaps/system-logo-white.png /usr/share/icons/hicolor/256x256/apps/tur-logo-icon.png'
+check "Plymouth's default theme is tur"       bash -c '[ "$(plymouth-set-default-theme)" = tur ]'
+check "the initramfs carries the TUR splash and names TUR" bash -c \
+    'i=$(ls -1 /usr/lib/modules/*/initramfs.img); lsinitrd "$i" | grep -q usr/share/plymouth/themes/tur/watermark.png &&
+     lsinitrd -f usr/lib/initrd-release "$i" | grep -qx "NAME=\"TUR\""'
+check "the default global theme is TUR's"     grep -qx 'LookAndFeelPackage=org.tur.dark' /usr/share/kde-settings/kde-profile/default/xdg/kdeglobals
+check "no Fedora global theme"                bash -c '! ls -d /usr/share/plasma/look-and-feel/org.fedoraproject.* 2>/dev/null'
+check "the default wallpaper is TUR's"        bash -c '[ "$(readlink -f /usr/share/wallpapers/Default)" = /usr/share/wallpapers/Tur ] &&
+     test -s /usr/share/wallpapers/Tur/contents/images/1920x1080.png'
+check "login and lock screens show TUR's wallpaper" bash -c \
+    'grep -q "Image=file:///usr/share/wallpapers/Tur/" /usr/lib/plasmalogin/plasmalogin.conf.d/10-tur.conf &&
+     grep -q "Image=file:///usr/share/wallpapers/Tur/" /usr/lib/plasmalogin/defaults.conf &&
+     grep -q "Image=file:///usr/share/wallpapers/Tur/" /usr/share/kde-settings/kde-profile/default/xdg/kscreenlockerrc'
+check "Firefox does not open Fedora's start page" bash -c \
+    'grep -q "browser.startup.homepage\", \"about:home\"" /usr/lib64/firefox/browser/defaults/preferences/tur-default-prefs.js &&
+     ! grep -i fedora /usr/lib64/firefox/distribution/distribution.ini'
+check "installation counting is off"          bash -c '[ "$(readlink /usr/lib/systemd/system/rpm-ostree-countme.timer)" = /dev/null ]'
+check "the connectivity check does not ask Fedora's server" bash -c \
+    '! grep -r -s -l fedoraproject /usr/lib/NetworkManager/conf.d /etc/NetworkManager/conf.d'
 check "release file records the build ID"     test "$(turr TUR_BUILD_ID)" = "${EXPECT_BUILD_ID}"
 check "release file records the base digest"  test "$(turr TUR_BASE_DIGEST)" = "${EXPECT_BASE_DIGEST}"
 check "source revision is a full commit hash" bash -c '[[ "$(. /usr/lib/tur/release; echo "$TUR_SOURCE_REVISION")" =~ ^[0-9a-f]{40}$ ]]'

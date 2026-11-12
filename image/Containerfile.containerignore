@@ -9,6 +9,12 @@
 # joins the image adds its directory here.
 *
 !image/
+# TUR's artwork (the flat mark, the splash images, the wallpaper), installed
+# by image/branding/branding.sh. The source logo and the drawing program are
+# not needed in the build.
+!branding/
+branding/tur-logo.png
+branding/render.py
 !rust-toolchain.toml
 !LICENSE.md
 !NOTICE

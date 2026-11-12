@@ -6,6 +6,8 @@ on:
     branches: [main]
     paths:
       - "image/**"
+      # TUR's artwork, installed by image/branding/branding.sh.
+      - "branding/**"
       # Programs compiled into the image (image/programs.tsv), what they are
       # compiled with, and what is installed beside them.
       - "services/tur-boot-health/**"
@@ -34,6 +36,8 @@ on:
   pull_request:
     paths:
       - "image/**"
+      # TUR's artwork, installed by image/branding/branding.sh.
+      - "branding/**"
       # Programs compiled into the image (image/programs.tsv), what they are
       # compiled with, and what is installed beside them.
       - "services/tur-boot-health/**"
@@ -82,7 +86,7 @@ jobs:
 
       - name: Lint scripts
         run: |
-          shellcheck -x scripts/*.sh tests/image/*.sh image/*.sh
+          shellcheck -x scripts/*.sh tests/image/*.sh image/*.sh image/branding/*.sh
           python3 -m py_compile scripts/*.py tests/image/*.py
 
       - name: Runner environment
@@ -126,13 +130,28 @@ jobs:
           echo "first:  $a"; echo "second: $b"
           if [ "$a" != "$b" ]; then
             # Say which of the files TUR adds differ between the two builds.
-            list='cd / && find usr/bin/tur-* usr/libexec/tur usr/lib/tur usr/share/tur usr/share/licenses/tur usr/share/licenses/tur-third-party -type f | LC_ALL=C sort | xargs sha256sum'
+            list='cd / && find usr/bin/tur-* usr/libexec/tur usr/lib/tur usr/share/tur usr/share/licenses/tur usr/share/licenses/tur-third-party usr/lib/os-release usr/lib/modules/*/initramfs.img usr/share/plymouth/themes/tur usr/share/wallpapers/Tur usr/share/icons/hicolor/icon-theme.cache usr/lib/sysimage/rpm -type f | LC_ALL=C sort | xargs sha256sum'
             $PODMAN run --rm --network none "$IMAGE" /bin/bash -c "$list" > "$RUNNER_TEMP/first.sha256"
             $PODMAN run --rm --network none localhost/tur:repro /bin/bash -c "$list" > "$RUNNER_TEMP/second.sha256"
             echo "files TUR adds that differ between the two builds:"
             diff "$RUNNER_TEMP/first.sha256" "$RUNNER_TEMP/second.sha256" | head -n 60 || true
             exit 1
           fi
+
+      # Fedora's marks (desktop-experience.md, 12.5): fails on anything the
+      # allow-list (tests/image/marks-allowlist.tsv) does not account for. The
+      # inventory beside it is for a person to read (docs/reports/TUR-008.md).
+      - name: Fedora's marks
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          status=0
+          python3 tests/image/marks.py "$IMAGE" out || status=$?
+          cat out/marks.md >> "$GITHUB_STEP_SUMMARY" || true
+          exit "$status"
+
+      - name: Inventory of Fedora's name in the image (informational)
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: tests/image/marks-inventory.sh "$IMAGE" out
 
       - name: SBOM and licence summary
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}

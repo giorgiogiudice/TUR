@@ -10,6 +10,9 @@ on:
     branches: [main]
     paths:
       - "image/**"
+      # TUR's artwork: the boot splash, the logo and the wallpaper the
+      # screenshots show.
+      - "branding/**"
       # Programs compiled into the image (image/programs.tsv), what they are
       # compiled with, and what is installed beside them. Each is run on the
       # booted system, the P@x end-to-end test among them.
@@ -35,6 +38,9 @@ on:
   pull_request:
     paths:
       - "image/**"
+      # TUR's artwork: the boot splash, the logo and the wallpaper the
+      # screenshots show.
+      - "branding/**"
       # Programs compiled into the image (image/programs.tsv), what they are
       # compiled with, and what is installed beside them. Each is run on the
       # booted system, the P@x end-to-end test among them.
@@ -183,6 +189,7 @@ jobs:
         run: sudo python3 tests/boot/inspect-disk.py installed "$WORK/disk.raw" "$OUT"
 
       - name: Boot under UEFI in QEMU/KVM
+        id: boot
         # Three boots: as installed, after first-run setup, and one with GRUB's
         # boot counter set by hand (ADR-0014, step 2 of the design's brief). The
         # third waits about three minutes for the automount behind /boot to expire.
@@ -212,6 +219,24 @@ jobs:
         if: always()
         run: |
           if [ -f "$OUT/summary.md" ]; then cat "$OUT/summary.md" >> "$GITHUB_STEP_SUMMARY"; fi
+
+      # TUR-008: one more boot of the tested disk, after everything above has
+      # read it, to see the boot splash (the test's own boots show text) and
+      # the desktop of a signed-in user. Then the text on every screenshot is
+      # read: none may name Fedora (desktop-experience.md, 12.5).
+      - name: Boot splash and first desktop (an extra boot of the tested disk)
+        id: splash
+        if: ${{ !cancelled() && steps.boot.outcome == 'success' }}
+        run: |
+          sudo python3 tests/boot/splash.py prepare "$WORK/disk.raw" "$WORK"
+          python3 tests/boot/splash.py boot "$WORK" "$OUT" --seconds 200
+
+      - name: No screenshot names Fedora
+        if: ${{ !cancelled() && steps.boot.outcome == 'success' }}
+        run: |
+          sudo apt-get install -y --no-install-recommends tesseract-ocr > /dev/null
+          tesseract --version | head -1
+          python3 tests/boot/screenshot-text.py "$OUT"
 
       - name: Diagnostics on failure
         if: failure()

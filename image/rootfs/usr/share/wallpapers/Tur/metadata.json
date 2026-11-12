@@ -1,0 +1,12 @@
+{
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "TUR project authors"
+            }
+        ],
+        "Id": "Tur",
+        "License": "LicenseRef-TUR-Noncommercial-1.0.0",
+        "Name": "TUR"
+    }
+}

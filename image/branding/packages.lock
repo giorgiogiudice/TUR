@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Fedora's mark-free replacements for its release and logo packages, pinned
+# by the SHA-256 of the signed package as published in the Fedora 45 release
+# tree (which does not change after the release). image/branding/branding.sh
+# downloads each from the first address that answers and refuses one whose
+# checksum differs. Change only together with image/base.lock, in a pull
+# request of its own (image/README.md, "Fedora's marks").
+#
+# file	sha256	licence	path under the Fedora 45 release tree
+generic-release-45-0.4.noarch.rpm	667aa24443e175d9970bd99f9956079b5be5e45b43ffa1e4c3c9a37c5da72b3d	MIT	Everything/x86_64/os/Packages/g/generic-release-45-0.4.noarch.rpm
+generic-release-common-45-0.4.noarch.rpm	558b754d59cef8978251d6016eebd8c864feebb77dffb8435f10938d56a33599	MIT	Everything/x86_64/os/Packages/g/generic-release-common-45-0.4.noarch.rpm
+generic-logos-18.0.0-29.fc45.noarch.rpm	8502055f0c7df27660359694ceffe4704d62021b6bde2c2922c20d8887e273b9	GPL-2.0-only	Everything/x86_64/os/Packages/g/generic-logos-18.0.0-29.fc45.noarch.rpm
