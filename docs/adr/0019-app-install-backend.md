@@ -1,6 +1,6 @@
 # ADR-0019: Installing applications: one backend, two routes, pinned downloads through curl
 
-- **Status:** Proposed
+- **Status:** Accepted (12 November 2026)
 - **Date:** 2026-11-12
 - **Specification sections:** §7.2, §7.4, §15.2, §29.3; [ADR-0007](0007-app-centric-routing.md), [ADR-0011](0011-application-centre-and-stores.md)
 
