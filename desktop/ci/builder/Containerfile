@@ -1,0 +1,42 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# The builder image for TUR's desktop programs: Fedora 45 with Qt 6, the KDE
+# libraries a TUR program may use, the build tools and the fonts. Every job of
+# the desktop workflow that compiles, tests or renders runs in it.
+#
+# The base is pinned by digest in ../builder.lock and passed in as BASE. The
+# packages are whatever Fedora 45 offers on the day the image is built: Fedora
+# keeps only the newest update of a package, so a version cannot be pinned
+# here. What was installed is written to /usr/share/tur-builder/packages.tsv
+# and compared with ../builder.packages by the workflow. The built image is
+# kept in the Actions cache under a key made from this file and builder.lock,
+# so it is rebuilt only when one of them changes.
+#
+# Package names are those of docs/architecture/desktop-experience.md, section
+# 15.3, checked against Fedora 45 on 12 November 2026.
+
+ARG BASE
+FROM ${BASE}
+
+RUN dnf -y --setopt=install_weak_deps=False --setopt=tsflags=nodocs install \
+        cmake ninja-build gcc-c++ libasan libubsan ccache binutils \
+        qt6-qtbase-devel qt6-qtbase-private-devel qt6-qtdeclarative-devel \
+        qt6-qtsvg-devel qt6-qttools-devel qt6-linguist qt6-qtwayland-devel \
+        extra-cmake-modules kf6-kirigami-devel kf6-kcolorscheme-devel \
+        layer-shell-qt-devel qqc2-breeze-style plasma-integration \
+        kwin mesa-dri-drivers breeze-icon-theme appstream \
+        rsms-inter-fonts jetbrains-mono-fonts \
+        google-noto-sans-vf-fonts google-noto-sans-hebrew-vf-fonts \
+        python3 python3-pillow \
+    && dnf clean all \
+    && rm -rf /var/cache/dnf /var/cache/libdnf5 /var/log/dnf* \
+    && fc-cache -f \
+    && mkdir -p /usr/share/tur-builder \
+    && rpm -qa --qf '%{NAME}\t%{VERSION}-%{RELEASE}\t%{LICENSE}\n' | sort > /usr/share/tur-builder/packages.tsv
+
+# The tools of Qt (qmllint, lupdate) are not on the default path in Fedora.
+ENV PATH=/usr/lib64/qt6/bin:/usr/lib64/qt6/libexec:${PATH} \
+    LANG=C.UTF-8
+
+LABEL org.opencontainers.image.title="TUR desktop builder" \
+      org.opencontainers.image.description="Build and test environment for desktop/; not shipped"

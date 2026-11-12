@@ -1,0 +1,220 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# What a TUR desktop program may import, link and write, and what it must
+# not. The data of the licence boundary check, desktop/ci/boundary.py, which
+# the `boundary` job of the desktop workflow runs on every change.
+#
+# Sources: AGENTS.md, "Licence boundary rules"; docs/architecture/
+# desktop-experience.md, sections 3.5, 4 and 5.1; ADR-0016.
+#
+# TUR's programs carry the project's noncommercial licence. Such a program may
+# link, dynamically, a library under the LGPL. It may not link or import
+# anything that is GPL-only: that would make the combined program GPL. Adding
+# an `allow` line means its licence was checked file by file where a project
+# mixes licences. Removing or weakening a `forbid` line needs an ADR.
+#
+# Rules, one to a line; "#" starts a comment. NAME and PATHS are globs
+# ("*" matches anything, including "/" and "."). PATHS is a comma-separated
+# list of repository paths; a leading "!" takes paths away again.
+#
+#   allow  KIND  NAME  PATHS  LICENCE         permitted, in the files PATHS matches
+#   forbid KIND  NAME  REASON...              never permitted; checked before `allow`
+#   literals PATHS                            QML files that may contain colour literals
+#   deny-text PATHS  REGEX  REASON...         text that must not occur in those files
+#
+#   KIND   qml      a QML module, as written after "import"
+#          cmake    a CMake package or target: KF6Kirigami, Qt6::Quick. A
+#                   component of find_package(Qt6 COMPONENTS X) is Qt6::X
+#          include  a C++ header, as written between < > or " "
+#          word     an identifier in C++ source
+#          soname   a shared library a built program or library needs
+#
+# Anything not allowed is refused, so that a new dependency is always a
+# visible change to this file.
+
+# --- Qt 6: the modules available under LGPL-3.0 (design, section 3.5) -------
+
+allow qml QtQuick                 desktop/**   LGPL-3.0-only
+allow qml QtQuick.Window          desktop/**   LGPL-3.0-only
+allow qml QtQuick.Layouts         desktop/**   LGPL-3.0-only
+allow qml QtQuick.Controls        desktop/**   LGPL-3.0-only
+allow qml QtQuick.Controls.Basic  desktop/**   LGPL-3.0-only
+allow qml QtQuick.Templates       desktop/**   LGPL-3.0-only
+allow qml QtQuick.Dialogs         desktop/**   LGPL-3.0-only
+allow qml QtQuick.Shapes          desktop/**   LGPL-3.0-only
+allow qml QtQuick.Effects         desktop/**   LGPL-3.0-only
+allow qml QtQml                   desktop/**   LGPL-3.0-only
+allow qml QtQml.Models            desktop/**   LGPL-3.0-only
+allow qml QtCore                  desktop/**   LGPL-3.0-only
+
+allow cmake Qt6                   desktop/**   LGPL-3.0-only
+allow cmake Qt6::Core             desktop/**   LGPL-3.0-only
+allow cmake Qt6::Gui              desktop/**   LGPL-3.0-only
+allow cmake Qt6::Qml              desktop/**   LGPL-3.0-only
+allow cmake Qt6::Quick            desktop/**   LGPL-3.0-only
+allow cmake Qt6::QuickControls2   desktop/**   LGPL-3.0-only
+allow cmake Qt6::Svg              desktop/**   LGPL-3.0-only
+allow cmake Qt6::DBus             desktop/**   LGPL-3.0-only
+allow cmake Qt6::Network          desktop/**   LGPL-3.0-only
+
+allow soname libQt6Core.so.6            *   LGPL-3.0-only
+allow soname libQt6Gui.so.6             *   LGPL-3.0-only
+allow soname libQt6Qml.so.6             *   LGPL-3.0-only
+allow soname libQt6Quick.so.6           *   LGPL-3.0-only
+allow soname libQt6QuickControls2.so.6  *   LGPL-3.0-only
+allow soname libQt6Network.so.6         *   LGPL-3.0-only
+allow soname libQt6OpenGL.so.6          *   LGPL-3.0-only
+allow soname libQt6QmlMeta.so.6         *   LGPL-3.0-only
+allow soname libQt6QmlModels.so.6       *   LGPL-3.0-only
+allow soname libQt6QmlWorkerScript.so.6 *   LGPL-3.0-only
+allow soname libQt6QuickTemplates2.so.6 *  LGPL-3.0-only
+allow soname libQt6DBus.so.6            *   LGPL-3.0-only
+# libglvnd, which Qt Gui's link interface names.
+allow soname libOpenGL.so.0             *   MIT
+allow soname libGLX.so.0                *   MIT
+allow soname libEGL.so.1                *   MIT
+
+# --- KDE Frameworks that are LGPL throughout their shipped code -------------
+#
+# Kirigami is for the programs inside the session. tur-kit itself must work
+# with nothing from KDE (the trusted screen and the installer use it), so
+# Kirigami is refused under desktop/kit. The toolchain proof imports it to
+# find out what it reports.
+
+allow qml org.kde.kirigami        desktop/**,!desktop/kit/**   LGPL-2.0-or-later
+
+# --- TUR's own -------------------------------------------------------------
+
+allow qml Tur.Kit                 desktop/**                   LicenseRef-TUR-Noncommercial-1.0.0
+allow qml Tur.Kit.Gallery         desktop/kit/gallery/**,desktop/kit/tests/**   LicenseRef-TUR-Noncommercial-1.0.0
+allow cmake turkit                desktop/**                   LicenseRef-TUR-Noncommercial-1.0.0
+allow cmake turkitgallery         desktop/kit/**               LicenseRef-TUR-Noncommercial-1.0.0
+allow soname libturkit.so*        *                            LicenseRef-TUR-Noncommercial-1.0.0
+allow soname libturkitgallery.so* *                            LicenseRef-TUR-Noncommercial-1.0.0
+
+# Gold is P@x and nothing else (design, section 5.1). The gold tokens and the
+# components drawn in them are the module Tur.Kit.Pax; only P@x's surfaces,
+# the gallery and the tests may import it.
+allow qml Tur.Kit.Pax             desktop/kit/pax/**,desktop/kit/gallery/**,desktop/kit/tests/**,desktop/apps/pax-ui/**,desktop/apps/pax-overlay/**,desktop/apps/pax-approve/**   LicenseRef-TUR-Noncommercial-1.0.0
+allow cmake turkitpax             desktop/kit/**,desktop/apps/pax-ui/**,desktop/apps/pax-overlay/**,desktop/apps/pax-approve/**   LicenseRef-TUR-Noncommercial-1.0.0
+allow soname libturkitpax.so*     *                            LicenseRef-TUR-Noncommercial-1.0.0
+
+# And blue is the system: what is drawn in P@x's module does not use the
+# system's accent.
+deny-text desktop/kit/pax/*.qml  Theme\.(accent|selection)  blue is the system's colour; P@x's components are gold (design, 5.1)
+
+# --- Tests only ------------------------------------------------------------
+#
+# Qt Test and Qt Quick Test are linked into test programs, which are not
+# shipped. The test harness is TUR's own.
+
+allow qml QtTest                  desktop/**/tests/**,desktop/ci/probe/tst_*.qml   LGPL-3.0-only
+allow qml Tur.Kit.Testing         desktop/**/tests/**,desktop/ci/probe/tst_*.qml   LicenseRef-TUR-Noncommercial-1.0.0
+allow cmake Qt6::Test             desktop/**/tests/**,desktop/CMakeLists.txt       LGPL-3.0-only
+allow cmake Qt6::QuickTest        desktop/**/tests/**,desktop/CMakeLists.txt       LGPL-3.0-only
+allow cmake turkittesting         desktop/**/tests/**,desktop/kit/a11y/**          LicenseRef-TUR-Noncommercial-1.0.0
+allow soname libQt6Test.so.6      */tst_*                      LGPL-3.0-only
+allow soname libQt6QuickTest.so.6 */tst_*                      LGPL-3.0-only
+allow soname libturkittesting.so* */tst_*,*turkittesting*      LicenseRef-TUR-Noncommercial-1.0.0
+
+# --- The C and C++ runtime ---------------------------------------------------
+
+allow soname libc.so.6            *   LGPL-2.1-or-later
+allow soname libm.so.6            *   LGPL-2.1-or-later
+allow soname libstdc++.so.6       *   GPL-3.0-or-later WITH GCC-exception-3.1
+allow soname libgcc_s.so.1        *   GPL-3.0-or-later WITH GCC-exception-3.1
+allow soname ld-linux-*.so.*      *   LGPL-2.1-or-later
+# The sanitizer build only; never shipped.
+allow soname libasan.so.*         */build/ci-sanitize/*   GPL-3.0-or-later WITH GCC-exception-3.1
+allow soname libubsan.so.*        */build/ci-sanitize/*   GPL-3.0-or-later WITH GCC-exception-3.1
+
+# --- Colour ------------------------------------------------------------------
+#
+# Every colour comes from a token. A colour written into a component is how
+# white text ends up on a white surface in one variant. Only the two generated
+# token files hold colour values.
+
+literals desktop/kit/tokens/Theme.qml,desktop/kit/pax/PaxTheme.qml
+
+# --- Forbidden ---------------------------------------------------------------
+
+# A QApplication loads the widget style, and under Plasma that is Breeze,
+# which is GPL-only (design, sections 3.5 and 4). A TUR program is a
+# QGuiApplication.
+forbid word    QApplication            a QApplication loads the GPL Breeze widget style; use QGuiApplication
+forbid include QApplication            a QApplication loads the GPL Breeze widget style; use QGuiApplication
+forbid include QtWidgets*              Qt Widgets brings the GPL Breeze widget style; use Qt Quick
+forbid include QWidget*                Qt Widgets brings the GPL Breeze widget style; use Qt Quick
+forbid cmake   Qt6::Widgets            Qt Widgets brings the GPL Breeze widget style; use Qt Quick
+forbid cmake   Qt6::QuickWidgets       Qt Widgets brings the GPL Breeze widget style; use Qt Quick
+forbid soname  libQt6Widgets.so*       Qt Widgets brings the GPL Breeze widget style; use Qt Quick
+forbid qml     org.kde.desktop*        the org.kde.desktop style paints through the GPL widget style
+forbid qml     QtQuick.Controls.impl   private to Qt Quick Controls; not a public interface
+
+# Qt modules that are GPL-only (AGENTS.md; design, section 3.5).
+forbid qml     QtQuick.VirtualKeyboard*  Qt Virtual Keyboard is GPL-only
+forbid cmake   Qt6::VirtualKeyboard*     Qt Virtual Keyboard is GPL-only
+forbid qml     QtWayland.Compositor*     Qt Wayland Compositor is GPL-only
+forbid cmake   Qt6::WaylandCompositor*   Qt Wayland Compositor is GPL-only
+forbid qml     QtQuick3D*                Qt Quick 3D and Qt Quick 3D Physics are GPL-only
+forbid cmake   Qt6::Quick3D*             Qt Quick 3D and Qt Quick 3D Physics are GPL-only
+forbid qml     QtQuick.Timeline*         Qt Quick Timeline is GPL-only
+forbid cmake   Qt6::QuickTimeline*       Qt Quick Timeline is GPL-only
+forbid qml     QtGraphs*                 Qt Graphs is GPL-only
+forbid cmake   Qt6::Graphs*              Qt Graphs is GPL-only
+forbid qml     QtCharts*                 Qt Charts is GPL-only
+forbid cmake   Qt6::Charts*              Qt Charts is GPL-only
+forbid qml     QtDataVisualization*      Qt Data Visualization is GPL-only
+forbid cmake   Qt6::DataVisualization*   Qt Data Visualization is GPL-only
+forbid qml     Qt.labs.lottieqt*         Qt Lottie is GPL-only
+forbid qml     QtLottie*                 Qt Lottie is GPL-only
+forbid cmake   Qt6::Bodymovin*           Qt Lottie is GPL-only
+forbid cmake   Qt6::Lottie*              Qt Lottie is GPL-only
+forbid cmake   Qt6::HttpServer*          Qt HTTP Server is GPL-only
+forbid qml     QtGrpc*                   Qt GRPC is GPL-only
+forbid cmake   Qt6::Grpc*                Qt GRPC is GPL-only
+forbid cmake   Qt6::Protobuf*            Qt GRPC (with Qt Protobuf) is GPL-only
+forbid qml     QtMqtt*                   Qt MQTT is GPL-only
+forbid cmake   Qt6::Mqtt*                Qt MQTT is GPL-only
+forbid qml     QtCoap*                   Qt CoAP is GPL-only
+forbid cmake   Qt6::Coap*                Qt CoAP is GPL-only
+forbid qml     QtNetworkAuth*            Qt Network Authorization is GPL-only
+forbid cmake   Qt6::NetworkAuth*         Qt Network Authorization is GPL-only
+forbid qml     QtCanvasPainter*          Qt Canvas Painter is GPL-only
+forbid cmake   Qt6::CanvasPainter*       Qt Canvas Painter is GPL-only
+forbid soname  libQt6VirtualKeyboard*    Qt Virtual Keyboard is GPL-only
+forbid soname  libQt6WaylandCompositor*  Qt Wayland Compositor is GPL-only
+forbid soname  libQt6Quick3D*            Qt Quick 3D is GPL-only
+forbid soname  libQt6QuickTimeline*      Qt Quick Timeline is GPL-only
+forbid soname  libQt6Graphs*             Qt Graphs is GPL-only
+forbid soname  libQt6Charts*             Qt Charts is GPL-only
+forbid soname  libQt6DataVisualization*  Qt Data Visualization is GPL-only
+forbid soname  libQt6Bodymovin*          Qt Lottie is GPL-only
+forbid soname  libQt6HttpServer*         Qt HTTP Server is GPL-only
+forbid soname  libQt6Grpc*               Qt GRPC is GPL-only
+forbid soname  libQt6Mqtt*               Qt MQTT is GPL-only
+forbid soname  libQt6Coap*               Qt CoAP is GPL-only
+forbid soname  libQt6NetworkAuth*        Qt Network Authorization is GPL-only
+
+# KDE frameworks described as LGPL that contain GPL-only files (AGENTS.md;
+# design, sections 3.5 and 4). Not to be added without an ADR.
+forbid qml     org.kde.kirigamiaddons*   Kirigami Addons contains GPL-only components
+forbid cmake   KF6KirigamiAddons*        Kirigami Addons contains GPL-only components
+forbid cmake   KF6::KirigamiAddons*      Kirigami Addons contains GPL-only components
+forbid qml     org.kde.ksvg*             the QML plugin of KSvg is GPL-only
+forbid qml     org.kde.iconthemes*       the icon dialog of KIconThemes is GPL-only
+forbid cmake   KF6IconThemes*            KIconThemes contains GPL-only files (the icon dialog)
+forbid cmake   KF6::IconThemes*          KIconThemes contains GPL-only files (the icon dialog)
+forbid qml     org.kde.kio*              parts of KIO are GPL-only
+forbid cmake   KF6KIO*                   parts of KIO are GPL-only
+forbid cmake   KF6::KIO*                 parts of KIO are GPL-only
+forbid soname  libKF6KIO*                parts of KIO are GPL-only
+forbid qml     org.kde.plasma*           libplasma and Plasma's QML modules run inside a GPL host
+forbid cmake   Plasma*                   libplasma is not for TUR's programs (GPL parts)
+forbid cmake   KF6Plasma*                libplasma is not for TUR's programs (GPL parts)
+forbid soname  libPlasma*                libplasma is not for TUR's programs (GPL parts)
+forbid qml     org.kde.purpose*          Purpose contains GPL-only files
+forbid cmake   KF6Purpose*               Purpose contains GPL-only files
+forbid cmake   KF6::Purpose*             Purpose contains GPL-only files
+forbid qml     org.kde.kwin*             KWin's QML modules run inside KWin, which is GPL
+forbid soname  libbluetooth*             libbluetooth (BlueZ) is GPL-only

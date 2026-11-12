@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# The versions, in the builder image the reference images were made with, of
+# the packages a rendered picture depends on: Qt, the text stack and the
+# fonts. desktop/ci/versions.sh compares the image in use with this list and
+# warns on a difference. Format: package name, then version-release.
+#
+# From run 43187894364, the first build of the image.
+qt6-qtbase 6.11.2-3.fc45
+qt6-qtbase-gui 6.11.2-3.fc45
+qt6-qtdeclarative 6.11.2-3.fc45
+qt6-qtsvg 6.11.2-1.fc45
+freetype 2.14.3-3.fc45
+harfbuzz 15.0.0-2.fc45
+fontconfig 2.18.3-2.fc45
+rsms-inter-fonts 4.1-4.fc45
+jetbrains-mono-fonts 2.304-11.fc45
+google-noto-sans-vf-fonts 20260601-3.fc45
+google-noto-sans-hebrew-vf-fonts 20260601-3.fc45
