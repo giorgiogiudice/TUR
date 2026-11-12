@@ -401,18 +401,20 @@ is removed, unless it is kept.
 ## 7. How it fits boot health
 
 Boot health is designed in [addendum C](boot-health-and-rollback.md) and
-decided in ADR-0014. Its implementation is pull request 36
-(`services/tur-boot-health`), not merged when this was written. This component
+decided in ADR-0014. Its implementation is `services/tur-boot-health` (pull
+request 36), which was merged while this change was in review. This component
 depends on none of its code. It reads one document, the output of
-`tur-boot-health status --json` (`boot-health-status.schema.json` in that
-pull request), and the fixtures are that program's real output from the
-rollback workflow.
+`tur-boot-health status --json`
+(`services/tur-boot-health/schemas/boot-health-status.schema.json`), and the
+fixtures are that program's real output from the rollback workflow, taken at
+commit `c1667d98` of the pull request. The code that writes the document
+(`status.rs`, `state.rs`) is the same in that commit and in the merge.
 
 | What boot health records | Member read | What the update manager does with it |
 |---|---|---|
 | Images that failed their trial | `rejected.images[].digest` | Never staged automatically (4.3 rule 7); never gone back to (4.5 rule 5); marked in `status` |
 | Whether attempts can be counted | `counting.usable` | Nothing is staged where they cannot (rule 6). Boot health would refuse to apply the update at shutdown (`TUR-BOOT-TRIAL-002`); the update manager does not download it |
-| A trial in progress | `trial` not null, or `counting.boot_counter` not null | Nothing is staged or reordered (rule 9; 4.5 rule 6) |
+| A trial in progress | `trial` not null, or `counting.boot_counter` not null | Nothing is staged or reordered (rule 9; 4.5 rule 6). Boot health's own measurements name the case as not handled there: "An update staged while a trial is still running makes the unproven version the 'previous' one of the next trial" (addendum C, 17.2, item 6). Rule 9 is the handling |
 | The gate's verdict for this boot | `verdict.result`; `null` while it runs | `null`: as a trial. `failed`: no automatic staging (rule 10) |
 | What the user is to be told | `notice` (kind, text, code), until acknowledged | Passed through in `status`. "The update was not applied" (`TUR-BOOT-TRIAL-001`) and the fallback notice are boot health's text and are not rephrased |
 
@@ -655,9 +657,10 @@ reports when it fails, and belong to the slice that runs one.
   `TUR-UPDATE-STATE-004` path is tested with a stand-in for bootc.
 - **In P@x's sandbox: NOT RUN** (section 9.1).
 - **On real hardware: NOT RUN.** There is no hardware runner (ADR-0002).
-- **Against boot health as merged: NOT RUN.** The boot-health fixtures are
-  output of pull request 36 at commit `c1667d98`. If its `status --json`
-  changes before it merges, `health.rs` and four fixtures change with it.
+- **Against a run of boot health on main: NOT RUN.** The boot-health
+  fixtures are output of pull request 36 at commit `c1667d98`, before it was
+  merged. The code that writes them did not change between that commit and
+  the merge, but no fixture was taken again from a run on main.
 - **The conditions are not measured.** Power, network, free space and the
   repair session are what the command line is told.
 - **No D-Bus service, no polkit actions, no systemd units, nothing in the
@@ -685,8 +688,11 @@ reports when it fails, and belong to the slice that runs one.
    before the download (the note is in the decision).
 5. **The thresholds**: 50 % and 20 % battery; 8 GiB assumed and 2 GiB kept
    free, so 10 GiB when the size is not known. On a small disk that may never
-   be met. The size becomes known when a check records it (`bootc upgrade
-   --check` prints the difference between the manifests).
+   be met, and it is far more than an ordinary update needs: boot health
+   measured an update that shared 72 of 73 layers with what was installed
+   (addendum C, 17.1). The size becomes known when a check records it (`bootc
+   upgrade --check` prints the difference between the manifests); until the
+   executing slice does that, the assumption is the whole image.
 6. **"Keep this version" does not stop updates.** A user may expect it to.
 7. **Going back to a rejected version is refused outright.** An alternative is
    to arm a trial for a manual rollback, which is a change to boot health.

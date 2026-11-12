@@ -10,9 +10,15 @@
 //! nothing is staged or reordered while a trial is in progress.
 //!
 //! This module reads the document `tur-boot-health status --json` prints
-//! (`boot-health-status.schema.json`, schema version 1). It depends on no
-//! code of that program: the document is the interface. Members it does not
-//! use are passed over, as that schema asks of every reader.
+//! (`services/tur-boot-health/schemas/boot-health-status.schema.json`, schema
+//! version 1). It depends on no code of that program: the document is the
+//! interface. Members it does not use are passed over, as that schema asks
+//! of every reader.
+//!
+//! The third of those rules is the update manager's own. Boot health's
+//! measurements name the case and leave it open: "An update staged while a
+//! trial is still running makes the unproven version the 'previous' one of
+//! the next trial" (boot-health-and-rollback.md, section 17.2, item 6).
 
 use serde::{Deserialize, Serialize};
 
