@@ -102,7 +102,7 @@ that none of them is a second-class fit.
 | **Two roles, no system role.** The system text is a field of the request. | All three take instructions outside the conversation: `system`, `instructions`, `system_instruction`. A system role inside the message list would have to be hoisted out for every provider. It also keeps a rule simple: nothing untrusted can be in the instructions, because nothing but the orchestrator's own text is ever put in that field. |
 | **A tool result is a part of a user message**, not a role of its own. | Anthropic puts `tool_result` blocks in a user message. OpenAI and Google use separate items (`function_call_output`, `function_result`) in a flat list. A part of a user message maps to both; a separate role would not map to Anthropic without merging. |
 | **A tool result carries the tool name** as well as the call identifier. | Google's `function_result` requires `name`. The other two ignore it. |
-| **Tool-call arguments are always a JSON object**, and a call is delivered complete only if they parse as one. | Anthropic's `input` and Google's `arguments` are objects; OpenAI's `arguments` is a JSON string. All three stream them as fragments of JSON text. The policy engine needs an object. |
+| **Tool-call arguments are always a JSON object with one reading**, and a call is delivered complete only if they parse as one, strictly: no object in them, at any depth, repeats a key. The text they were read from is delivered with the call (`ToolCallEnd.arguments_text`). | Anthropic's `input` and Google's `arguments` are objects; OpenAI's `arguments` is a JSON string. All three stream them as fragments of JSON text. The policy engine needs an object. JSON does not say what a repeated key means, and a lenient parser keeps the last value: one value could be shown to the user and another acted on. See [section 4.3](#43-strict-reading). |
 | **An opaque part**, tagged with its provider, that is sent back unchanged. | All three return a record of the model's reasoning that they expect in the next request, each in its own form: Anthropic `thinking` and `redacted_thinking` blocks with a signature, OpenAI `reasoning` items with `encrypted_content`, Google `thought` steps with a signature. Anthropic rejects a tool-use turn whose thinking blocks were changed. The orchestrator must not interpret these, so they are opaque. They are tagged so that an adapter sends back only its own. |
 | **Events arrive in the provider's order, and `Turn::collect` keeps that order** in the assistant message. | Anthropic requires thinking blocks to stay where they were relative to the tool call. OpenAI requires a reasoning item to precede the call it led to. Google's documentation says to send the model's steps back "exactly as received". |
 | **A tool call has a start, argument fragments and an end**, numbered from 0 within a response. | That is the common outline of `content_block_*` (Anthropic), `response.output_item.*` with `response.function_call_arguments.*` (OpenAI) and `step.*` (Google). The providers' own indices differ in meaning and are not exposed. |
@@ -194,7 +194,7 @@ apply.
 | `TextDelta` | `content_block_delta` with `text_delta` | `response.output_text.delta` | `step.delta` with `text` |
 | `ToolCallStart` | `content_block_start` with a `tool_use` block | `response.output_item.added` with a `function_call` item | `step.start` with a `function_call` step |
 | `ToolCallArgumentsDelta` | `input_json_delta` | `response.function_call_arguments.delta` | `step.delta` with `arguments_delta` |
-| `ToolCallEnd` | `content_block_stop` | `response.output_item.done` (its `arguments` are authoritative) | `step.stop` |
+| `ToolCallEnd` | `content_block_stop` | `response.output_item.done` (its `arguments` are the text the call is read from; the deltas must add up to the same arguments) | `step.stop` |
 | `Opaque` | `content_block_stop` of a thinking block, assembled from `thinking_delta` and `signature_delta` | `response.output_item.done` with a `reasoning` item | `step.stop` of a `thought` step, assembled from `thought_signature` and `thought_summary` |
 | `Usage` | `message_start`, `message_delta` | `response.completed`, `response.incomplete`, `response.failed` | `interaction.completed` |
 | `Finish` | `message_stop` | `response.completed`, `response.incomplete`, `response.failed`, `error` | `interaction.completed`, `error` |
@@ -223,6 +223,45 @@ A tool call whose arguments do not parse as a JSON object is never delivered as
 complete. If the response then claims a normal end, the finish is a
 `MalformedResponse` error. If the response was cut at the output limit or
 refused, the incomplete call is expected and the provider's reason stands.
+
+### 4.3 Strict reading
+
+Everything a provider sends is read through one parser, `strict.rs`, which
+refuses an object that repeats a key at any depth. It is the parser the policy
+engine uses for manifests, standing approvals and its command line
+(`tur_pax::strict` re-exports it), so the provider layer and the engine cannot
+read one text in two ways.
+
+| What is read strictly | Where | A repeated key gives |
+|---|---|---|
+| The data of every event of a stream | `provider::parse_data` | The stream ends there with `MalformedResponse` (`TUR-AI-PROVIDER-007`) |
+| The argument text of every tool call | `ToolCalls::end` | The call is not delivered; a normal end of the response becomes `MalformedResponse` |
+
+The first row is what makes a call whose arguments arrive as a JSON object
+inside an event safe to take from the parsed event. Google sends such a call
+when a `function_call` step starts with its arguments complete; the adapter
+also accepts an Anthropic `tool_use` block that starts with a non-empty
+`input`, which the streaming reference does not describe. In both cases the
+text delivered with the call is the object written out again.
+
+Where a provider sends the arguments twice, as fragments and as one text
+(OpenAI's deltas and the finished item), both must read as the same
+arguments. Fragments that are not one JSON object, or that say something else
+than the complete text, make the call undeliverable.
+
+**The effect on a task.** A response in which any call repeats a key is a
+malformed response, and the orchestrator discards a malformed response whole
+(addendum A section 10): none of its calls is decided or run, the unremarkable
+ones included. This is stricter than rejecting the one call. It is the same
+treatment a call with arguments that are not JSON has always had, and it
+leaves no reading of the ambiguous text to anyone.
+
+Before this, arguments were parsed with `serde_json`, which keeps the last
+value of a repeated key, and the orchestrator worked round it by rebuilding
+the argument text from the streamed fragments and parsing it again. A call
+whose arguments arrived whole had no fragments, so every such call was
+refused: with the Google adapter, no call that started with its arguments
+could ever run.
 
 ## 5. Capabilities
 
@@ -554,7 +593,7 @@ All tests run in CI and nowhere else. None contacts a provider.
 
 | Test | What it shows |
 |---|---|
-| `tests/conformance.rs` | The provider conformance suite of sections 10 and 12 of the design. Nineteen neutral-level tests, each run against all three adapters. |
+| `tests/conformance.rs` | The provider conformance suite of sections 10 and 12 of the design. Twenty-two neutral-level tests, each run against all three adapters. |
 | `tests/secrets.rs` | The key is in no error, event or debug rendering, and is sent only in the documented header. |
 | `tests/config_and_schema.rs` | The schema and the loader agree; the examples load; no model name is compiled in. |
 | `tests/cli.rs` | The built binary: `check` makes no network call; `--ping` makes one; the key is never printed. |
@@ -572,6 +611,9 @@ provider, written by hand from the documentation listed above.
 | Plain answer | The text, the usage and a normal finish; the request goes to the documented path with the key in the documented header and only the documented fields; a keep-alive comment and an unknown event type in the stream are ignored |
 | Tool call with split arguments | Start, at least two argument fragments that add up to the arguments, end; the reasoning content comes first, unchanged; the tools were offered |
 | Two tool calls in one turn | Both calls, in order, with distinct identifiers; one has no arguments |
+| A repeated key in streamed arguments | The call is announced but never delivered; the finish is `MalformedResponse`, `TUR-AI-PROVIDER-007`; the collected turn holds no call; not sent again |
+| A repeated key in arguments delivered whole | The same, with the key repeated inside a nested object: in the `input` of the block (Anthropic), in the `arguments` string of the finished item (OpenAI), in the `arguments` object of the step (Google) |
+| Arguments delivered whole | One start, no fragment, one complete call with nested arguments; the text delivered with the call, read strictly, is the call's arguments |
 | Refusal | A `Refusal` finish with `TUR-AI-PROVIDER-005`; not retried |
 | Rate limit, then success | The second attempt succeeds; the same body was sent twice |
 | Rate limit beyond the ceiling | Not retried; the error carries the provider's delay |

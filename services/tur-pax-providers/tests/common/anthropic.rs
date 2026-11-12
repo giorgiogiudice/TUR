@@ -189,6 +189,69 @@ data: {"type":"message_stop"}
 
 "#;
 
+/// A tool call whose argument text names `volume_id` twice. The response then
+/// ends as if nothing were wrong.
+const REPEATED_KEY: &str = r#"event: message_start
+data: {"type":"message_start","message":{"id":"msg_08","type":"message","role":"assistant","content":[],"model":"test-model","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":40,"output_tokens":1}}}
+
+event: content_block_start
+data: {"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"toolu_08A","name":"storage_unmount","input":{}}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\"volume_id\": \"vol-1\","}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":" \"volume_id\": \"vol-2\"}"}}
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":0}
+
+event: message_delta
+data: {"type":"message_delta","delta":{"stop_reason":"tool_use","stop_sequence":null},"usage":{"output_tokens":30}}
+
+event: message_stop
+data: {"type":"message_stop"}
+
+"#;
+
+/// A tool call whose block starts with its whole input and has no delta. The
+/// streaming reference always starts a block with an empty input; this is what
+/// a block looks like when it does not.
+const WHOLE_ARGUMENTS: &str = r#"event: message_start
+data: {"type":"message_start","message":{"id":"msg_09","type":"message","role":"assistant","content":[],"model":"test-model","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":40,"output_tokens":1}}}
+
+event: content_block_start
+data: {"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"toolu_09A","name":"storage_unmount","input":{"volume_id":"vol-1","options":{"force":false}}}}
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":0}
+
+event: message_delta
+data: {"type":"message_delta","delta":{"stop_reason":"tool_use","stop_sequence":null},"usage":{"output_tokens":30}}
+
+event: message_stop
+data: {"type":"message_stop"}
+
+"#;
+
+/// As [`WHOLE_ARGUMENTS`], with `force` named twice inside `options`.
+const WHOLE_REPEATED_KEY: &str = r#"event: message_start
+data: {"type":"message_start","message":{"id":"msg_10","type":"message","role":"assistant","content":[],"model":"test-model","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":40,"output_tokens":1}}}
+
+event: content_block_start
+data: {"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"toolu_10A","name":"storage_unmount","input":{"volume_id":"vol-1","options":{"force":false,"force":true}}}}
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":0}
+
+event: message_delta
+data: {"type":"message_delta","delta":{"stop_reason":"tool_use","stop_sequence":null},"usage":{"output_tokens":30}}
+
+event: message_stop
+data: {"type":"message_stop"}
+
+"#;
+
 const RATE_LIMITED: &str = r#"{"type":"error","error":{"type":"rate_limit_error","message":"This request would exceed your organization's rate limit of 50 requests per minute."},"request_id":"req_01"}"#;
 
 const AUTH_FAILED: &str = r#"{"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"},"request_id":"req_02"}"#;
@@ -261,6 +324,9 @@ pub fn wire() -> Wire {
         cut_short: CUT_SHORT,
         overloaded_mid_stream: OVERLOADED_MID_STREAM,
         output_limit: OUTPUT_LIMIT,
+        repeated_key: REPEATED_KEY,
+        whole_arguments: WHOLE_ARGUMENTS,
+        whole_repeated_key: WHOLE_REPEATED_KEY,
         rate_limited: ErrorReply {
             status: 429,
             body: RATE_LIMITED,

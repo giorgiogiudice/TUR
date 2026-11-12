@@ -9,22 +9,33 @@
 //! this module turns the pieces into neutral events and numbers the calls of a
 //! response from 0.
 //!
-//! A call whose arguments do not parse as a JSON object is never delivered as
-//! complete. Whether that is an error depends on why the response ended, which
-//! [`ToolCalls::settle`] decides.
+//! **The arguments of a call have one reading, or the call is not delivered.**
+//! The argument text is parsed with [`crate::strict`]: it must be one JSON
+//! object in which no object, at any depth, repeats a key. Where a provider
+//! sends both fragments and the complete text, the two must say the same.
+//! The text that was parsed is delivered with the call, so that whoever acts
+//! on the call can read it again.
+//!
+//! A call that fails any of this is never delivered as complete. Whether that
+//! is an error depends on why the response ended, which [`ToolCalls::settle`]
+//! decides.
 
 use std::collections::{BTreeMap, VecDeque};
 
-use serde_json::Value;
+use serde_json::{Map, Value};
 
 use crate::error::{ErrorKind, ProviderError};
 use crate::model::{FinishReason, StreamEvent, ToolCall};
+use crate::strict;
 
 struct OpenCall {
     index: usize,
     id: String,
     name: String,
-    arguments: String,
+    /// The fragments the provider streamed, added up.
+    streamed: String,
+    /// The complete argument text, where the provider sent it in one piece.
+    whole: Option<String>,
 }
 
 /// The tool calls of one response.
@@ -63,7 +74,8 @@ impl ToolCalls {
                 index,
                 id,
                 name: name.to_owned(),
-                arguments: String::new(),
+                streamed: String::new(),
+                whole: None,
             },
         );
     }
@@ -79,7 +91,7 @@ impl ToolCalls {
             return;
         }
         if let Some(call) = self.open.get_mut(&key) {
-            call.arguments.push_str(fragment);
+            call.streamed.push_str(fragment);
             out.push_back(StreamEvent::ToolCallArgumentsDelta {
                 index: call.index,
                 fragment: fragment.to_owned(),
@@ -87,11 +99,12 @@ impl ToolCalls {
         }
     }
 
-    /// The provider sent the complete argument text of an open call. It
-    /// replaces what the fragments added up to.
+    /// The provider sent the complete argument text of an open call in one
+    /// piece. It is the text the call is read from. Fragments, if there were
+    /// any, must add up to the same arguments.
     pub(crate) fn set_arguments(&mut self, key: u64, arguments: &str) {
         if let Some(call) = self.open.get_mut(&key) {
-            call.arguments = arguments.to_owned();
+            call.whole = Some(arguments.to_owned());
         }
     }
 
@@ -100,13 +113,8 @@ impl ToolCalls {
         let Some(call) = self.open.remove(&key) else {
             return;
         };
-        let text = if call.arguments.trim().is_empty() {
-            "{}"
-        } else {
-            call.arguments.as_str()
-        };
-        match serde_json::from_str::<Value>(text) {
-            Ok(Value::Object(arguments)) => {
+        match read_arguments(call.whole.as_deref(), &call.streamed) {
+            Some((arguments, arguments_text)) => {
                 self.completed += 1;
                 out.push_back(StreamEvent::ToolCallEnd {
                     index: call.index,
@@ -115,9 +123,10 @@ impl ToolCalls {
                         name: call.name,
                         arguments,
                     },
+                    arguments_text,
                 });
             }
-            _ => self.broken = true,
+            None => self.broken = true,
         }
     }
 
@@ -128,21 +137,46 @@ impl ToolCalls {
 
     /// The reason to report, given the reason the provider gave.
     ///
-    /// A response that claims a normal end while a call is unfinished or its
-    /// arguments are not a JSON object is malformed. When the response was cut
-    /// short, refused or failed, the incomplete call is expected and the
-    /// provider's reason stands.
+    /// A response that claims a normal end while a call is unfinished, or its
+    /// arguments are not one JSON object with one reading, is malformed. When
+    /// the response was cut short, refused or failed, the incomplete call is
+    /// expected and the provider's reason stands.
     pub(crate) fn settle(&self, reason: FinishReason) -> FinishReason {
         let incomplete = self.broken || !self.open.is_empty();
         match reason {
             FinishReason::EndTurn | FinishReason::ToolUse if incomplete => FinishReason::Error(
                 ProviderError::new(ErrorKind::MalformedResponse).with_detail(
-                    "a tool call was left unfinished or its arguments were not a JSON object",
+                    "a tool call was left unfinished, or its arguments were not one JSON object \
+                     with one reading",
                 ),
             ),
             other => other,
         }
     }
+}
+
+/// The arguments of a call and the text they were read from, or `None` if the
+/// text has no single reading.
+///
+/// `whole` is the complete text where the provider sent one; `streamed` is
+/// what the fragments add up to. No text at all means no arguments.
+fn read_arguments(whole: Option<&str>, streamed: &str) -> Option<(Map<String, Value>, String)> {
+    let streamed = streamed.trim();
+    let text = match whole.map(str::trim) {
+        Some(whole) if !whole.is_empty() => whole,
+        _ => streamed,
+    };
+    let text = if text.is_empty() { "{}" } else { text };
+    let arguments = strict::object_from_str(text).ok()?;
+    // A provider that streamed one thing and then stated another has shown
+    // two readings of one call.
+    if whole.is_some() && !streamed.is_empty() {
+        let fragments = strict::object_from_str(streamed).ok()?;
+        if fragments != arguments {
+            return None;
+        }
+    }
+    Some((arguments, text.to_owned()))
 }
 
 #[cfg(test)]
@@ -177,13 +211,19 @@ mod tests {
             }
         );
         match &events[3] {
-            StreamEvent::ToolCallEnd { index, call } => {
+            StreamEvent::ToolCallEnd {
+                index,
+                call,
+                arguments_text,
+            } => {
                 assert_eq!(*index, 0);
                 assert_eq!(call.id, "call-a");
                 assert_eq!(
                     Value::Object(call.arguments.clone()),
                     json!({ "volume_id": "vol-1" })
                 );
+                // The text the arguments were read from comes with the call.
+                assert_eq!(arguments_text, "{\"volume_id\": \"vol-1\"}");
             }
             other => panic!("unexpected event: {other:?}"),
         }
@@ -199,20 +239,32 @@ mod tests {
         calls.set_arguments(5, "{\"a\":1}");
         calls.end(5, &mut out);
         calls.end(3, &mut out);
-        let ended: Vec<(usize, String, Value)> = out
+        let ended: Vec<(usize, String, Value, String)> = out
             .into_iter()
             .filter_map(|event| match event {
-                StreamEvent::ToolCallEnd { index, call } => {
-                    Some((index, call.id, Value::Object(call.arguments)))
-                }
+                StreamEvent::ToolCallEnd {
+                    index,
+                    call,
+                    arguments_text,
+                } => Some((
+                    index,
+                    call.id,
+                    Value::Object(call.arguments),
+                    arguments_text,
+                )),
                 _ => None,
             })
             .collect();
         assert_eq!(
             ended,
             vec![
-                (1, "id-2".to_owned(), json!({ "a": 1 })),
-                (0, "call-0".to_owned(), json!({})),
+                (
+                    1,
+                    "id-2".to_owned(),
+                    json!({ "a": 1 }),
+                    "{\"a\":1}".to_owned()
+                ),
+                (0, "call-0".to_owned(), json!({}), "{}".to_owned()),
             ]
         );
         assert_eq!(calls.completed(), 2);
@@ -249,5 +301,104 @@ mod tests {
         assert!(calls.settle(FinishReason::ToolUse).error().is_some());
         let refusal = FinishReason::Refusal(ProviderError::new(ErrorKind::Refusal));
         assert_eq!(calls.settle(refusal.clone()), refusal);
+    }
+
+    /// Deliver one call and say whether it came out complete.
+    fn delivered(fragments: &[&str], whole: Option<&str>) -> bool {
+        let mut calls = ToolCalls::default();
+        let mut out = VecDeque::new();
+        calls.start(0, "c", "tool", &mut out);
+        for fragment in fragments {
+            calls.fragment(0, fragment, &mut out);
+        }
+        if let Some(whole) = whole {
+            calls.set_arguments(0, whole);
+        }
+        calls.end(0, &mut out);
+        let complete = out
+            .iter()
+            .any(|event| matches!(event, StreamEvent::ToolCallEnd { .. }));
+        assert_eq!(complete, calls.completed() == 1);
+        // A call that was not delivered makes a normal end malformed.
+        assert_eq!(calls.settle(FinishReason::ToolUse).error().is_none(), complete);
+        complete
+    }
+
+    #[test]
+    fn a_repeated_key_at_any_depth_is_never_delivered() {
+        for text in [
+            r#"{"to": "a", "to": "b"}"#,
+            r#"{"to": "a", "to": "a"}"#,
+            r#"{"to": "a", "cc": {"x": 1, "x": 2}}"#,
+            r#"{"list": [1, {"deep": [{"k": null, "k": null}]}]}"#,
+            // The same key, once written with an escape.
+            r#"{"to": "a", "to": "b"}"#,
+        ] {
+            // In fragments, cut anywhere.
+            let middle = text.len() / 2;
+            assert!(!delivered(&[&text[..middle], &text[middle..]], None), "{text}");
+            // In one piece.
+            assert!(!delivered(&[], Some(text)), "{text}");
+            // The fragments are fine and the complete text is not, and the
+            // other way round.
+            assert!(!delivered(&[r#"{"to": "b"}"#], Some(text)), "{text}");
+            assert!(!delivered(&[text], Some(r#"{"to": "b"}"#)), "{text}");
+        }
+        // The same texts without the repetition are delivered.
+        assert!(delivered(&[r#"{"to": "a", "#, r#""cc": {"x": 1}}"#], None));
+        assert!(delivered(&[], Some(r#"{"to": "a", "cc": {"x": 1}}"#)));
+    }
+
+    #[test]
+    fn fragments_and_the_complete_text_must_say_the_same() {
+        // The same arguments, written differently: one reading.
+        assert!(delivered(
+            &["{\"a\":", "1,\"b\":[2]}"],
+            Some("{ \"b\": [2], \"a\": 1 }")
+        ));
+        // Another value, another key, another kind of number.
+        assert!(!delivered(&["{\"a\":1}"], Some("{\"a\":2}")));
+        assert!(!delivered(&["{\"a\":1}"], Some("{\"a\":1,\"b\":2}")));
+        assert!(!delivered(&["{\"a\":1}"], Some("{\"a\":1.0}")));
+        // Fragments that are not JSON at all, next to a complete text.
+        assert!(!delivered(&["{\"a\":"], Some("{\"a\":1}")));
+        // A complete text that is empty stands for nothing: the fragments
+        // are read.
+        assert!(delivered(&["{\"a\":1}"], Some("  ")));
+        assert!(delivered(&[], Some("")));
+        assert!(delivered(&[], None));
+    }
+
+    #[test]
+    fn the_text_delivered_with_a_call_reads_as_its_arguments() {
+        for (fragments, whole) in [
+            (vec!["{\"a\":", " [1, 2]}"], None),
+            (vec![], Some(" {\"a\": [1, 2]} ")),
+            (vec!["{\"a\":[1,2]}"], Some("{\"a\": [1, 2]}")),
+            (vec![], None),
+        ] {
+            let mut calls = ToolCalls::default();
+            let mut out = VecDeque::new();
+            calls.start(0, "c", "tool", &mut out);
+            for fragment in &fragments {
+                calls.fragment(0, fragment, &mut out);
+            }
+            if let Some(whole) = whole {
+                calls.set_arguments(0, whole);
+            }
+            calls.end(0, &mut out);
+            let Some(StreamEvent::ToolCallEnd {
+                call,
+                arguments_text,
+                ..
+            }) = out.pop_back()
+            else {
+                panic!("the call was not delivered: {fragments:?} {whole:?}");
+            };
+            assert_eq!(
+                strict::object_from_str(&arguments_text).ok(),
+                Some(call.arguments)
+            );
+        }
     }
 }

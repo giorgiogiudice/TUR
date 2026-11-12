@@ -233,7 +233,13 @@ class Machine:
 
 
 def tool_results(body):
-    """Every tool result of a request body, with the frame P@x put around it."""
+    """Every tool result of a request body, with the frame P@x put around it.
+
+    A tool result is looked for where each wire format puts it: a
+    `tool_result` block of a message (Anthropic), a `function_call_output`
+    item (OpenAI, which has no field for a failed call) or a
+    `function_result` step (Google).
+    """
     found = []
     for message in body.get("messages", []):
         content = message.get("content")
@@ -249,14 +255,39 @@ def tool_results(body):
             found.append(
                 {"id": block.get("tool_use_id"), "is_error": bool(block.get("is_error")), "frame": frame}
             )
+    items = body.get("input")
+    for item in items if isinstance(items, list) else []:
+        if item.get("type") == "function_call_output" and isinstance(item.get("output"), str):
+            frame = json.loads(item["output"])["tur_pax_tool_result"]
+            found.append({"id": item.get("call_id"), "is_error": None, "frame": frame})
+        elif item.get("type") == "function_result":
+            text = "".join(
+                piece.get("text", "") for piece in item.get("result", []) if piece.get("type") == "text"
+            )
+            frame = json.loads(text)["tur_pax_tool_result"]
+            found.append({"id": item.get("call_id"), "is_error": bool(item.get("is_error")), "frame": frame})
     return found
+
+
+def system_text(body):
+    """The system text of a request body, where its wire format puts it."""
+    for field in ("system", "instructions", "system_instruction"):
+        if field in body:
+            return body[field]
+    return None
+
+
+# Where each adapter sends its requests.
+ENDPOINTS = {"anthropic": "/v1/messages", "openai": "/v1/responses", "google": "/v1beta/interactions"}
 
 
 class Outcome:
     """What one run of a scenario left behind."""
 
-    def __init__(self, name, status, stdout, stderr, audit, bodies):
+    def __init__(self, name, status, stdout, stderr, audit, bodies, wire="anthropic", paths=()):
         self.name = name
+        self.wire = wire
+        self.paths = list(paths)
         self.status = status
         self.stdout = stdout
         self.stderr = stderr
@@ -423,10 +454,11 @@ class Test:
         name = scenario["name"]
         print(f"\n{name}: {scenario['what']}", flush=True)
 
-        provider = ScriptedProvider(scenario["turns"], scenario.get("repeat_last", False)).start()
+        wire = scenario.get("wire", "anthropic")
+        provider = ScriptedProvider(scenario["turns"], scenario.get("repeat_last", False), wire=wire).start()
         config = {
             "schema_version": 1,
-            "provider": "anthropic",
+            "provider": wire,
             "base_url": provider.base_url,
             "model": "scripted-model",
             "max_output_tokens": 1024,
@@ -468,6 +500,7 @@ class Test:
         except subprocess.TimeoutExpired as error:
             status, stdout, stderr = -1, error.stdout or "", f"timed out: {error}"
         bodies = provider.bodies()
+        paths = [request["path"] for request in provider.requests]
         provider.stop()
 
         audit = []
@@ -478,8 +511,20 @@ class Test:
         (self.evidence / f"{name}.stderr.txt").write_text(stderr)
         (self.evidence / f"{name}.requests.json").write_text(json.dumps(bodies, indent=2))
 
-        outcome = Outcome(name, status, stdout, stderr, audit, bodies)
+        outcome = Outcome(name, status, stdout, stderr, audit, bodies, wire, paths)
         self.outcomes.append(outcome)
+        self.checks.equal(
+            name,
+            f"every request went to the endpoint of the {wire} adapter",
+            sorted(set(paths)),
+            [ENDPOINTS[wire]] if paths else [],
+        )
+        self.checks.equal(
+            name,
+            "every record of the trail names the adapter",
+            {entry.get("TUR_AI_PROVIDER") for entry in audit},
+            {wire} if audit else set(),
+        )
         self.checks.check(name, "the transcript is one JSON document", bool(outcome.transcript), stdout[:300] + stderr[:300])
         self.checks.check(
             name,
@@ -494,11 +539,15 @@ class Test:
             all(entry.get("TUR_AI_TASK") == name for entry in audit),
         )
         last = scenario["turns"][-1]
+        expected = scenario.get("outcome", "completed")
         if not scenario.get("repeat_last"):
-            self.checks.equal(name, "exit status", status, 0)
-            self.checks.equal(name, "outcome", outcome.transcript.get("outcome"), "completed")
-            self.checks.equal(name, "the final answer is the model's", outcome.transcript.get("answer"), last.get("text"))
-        getattr(self, "check_" + name.replace("-", "_"))(outcome)
+            self.checks.equal(name, "outcome", outcome.transcript.get("outcome"), expected)
+            if expected == "completed":
+                self.checks.equal(name, "exit status", status, 0)
+                self.checks.equal(
+                    name, "the final answer is the model's", outcome.transcript.get("answer"), last.get("text")
+                )
+        getattr(self, "check_" + scenario.get("check", name).replace("-", "_"))(outcome)
         return outcome
 
     # ------------------------------------------------------------ checks
@@ -894,15 +943,15 @@ class Test:
         rejected = outcome.events("proposal_rejected")
         self.checks.equal(
             name,
-            "the eight calls were rejected before they became actions",
+            "the six calls were rejected before they became actions",
             [entry.get("TUR_ERROR_CODE") for entry in rejected],
-            ["TUR-AI-TOOL-002"] * 2 + ["TUR-AI-TOOL-001"] * 2 + ["TUR-AI-TOOL-002"] * 4,
+            ["TUR-AI-TOOL-002"] * 2 + ["TUR-AI-TOOL-001"] * 2 + ["TUR-AI-TOOL-002"] * 2,
         )
         self.checks.equal(
             name,
             "each for its own reason",
             [entry.get("TUR_AI_REASON") for entry in rejected],
-            ["arguments_invalid"] * 2 + ["tool_unknown"] * 2 + ["arguments_invalid"] * 2 + ["arguments_ambiguous"] * 2,
+            ["arguments_invalid"] * 2 + ["tool_unknown"] * 2 + ["arguments_invalid"] * 2,
         )
         self.checks.equal(
             name,
@@ -913,8 +962,108 @@ class Test:
         results = tool_results(outcome.bodies[1]) if len(outcome.bodies) > 1 else []
         self.checks.check(
             name,
-            "the model is told that all eight were refused",
-            len(results) == 8 and all(result["is_error"] and result["frame"].get("status") == "refused" for result in results),
+            "the model is told that all six were refused",
+            len(results) == 6 and all(result["is_error"] and result["frame"].get("status") == "refused" for result in results),
+        )
+
+    def check_repeated_key(self, outcome):
+        """A call that repeats a key: the response is malformed and discarded whole."""
+        name = outcome.name
+        self.checks.equal(name, "exit status: the provider's response could not be used", outcome.status, 21)
+        self.checks.equal(name, "the error code", outcome.transcript.get("error_code"), "TUR-AI-PROVIDER-007")
+        self.checks.equal(name, "no call of the response was decided", len(outcome.events("decision")), 0)
+        self.checks.equal(name, "nothing was performed, the unremarkable first call included", len(outcome.events("executed")), 0)
+        self.checks.equal(name, "no call reached the loop to be rejected one by one", len(outcome.events("proposal_rejected")), 0)
+        discarded = outcome.events("response_discarded")
+        self.checks.equal(
+            name,
+            "the response was discarded whole, as malformed",
+            [(entry.get("TUR_AI_REASON"), entry.get("TUR_ERROR_CODE")) for entry in discarded],
+            [("error", "TUR-AI-PROVIDER-007")],
+        )
+        self.checks.equal(name, "the provider was asked once", len(outcome.bodies), 1)
+        self.checks.check(
+            name,
+            "neither value of the repeated key is in the transcript or the trail",
+            "harmful" not in outcome.stdout and "harmful" not in json.dumps(outcome.audit),
+        )
+        self.checks.check(
+            name,
+            "the command hidden behind the repeated key did not run",
+            not Path("/tmp/tur-pax-duplicate-key").exists(),
+        )
+
+    def check_other_adapter(self, outcome):
+        """The same loop through the OpenAI or the Google adapter."""
+        name = outcome.name
+        self.checks.equal(
+            name,
+            "seven actions were decided one by one, as their manifests name them",
+            outcome.decisions("TUR_AI_ACTION"),
+            [
+                "org.tur.PaxFixture1:fixture_device_problems",
+                "org.tur.Catalogue1:catalogue_route",
+                "command:read_only",
+                "org.tur.Test1:test_observe",
+                "org.tur.Test1:test_reversible",
+                "org.tur.Test1:test_system_critical",
+                "org.tur.Test1:test_consequential",
+            ],
+        )
+        self.checks.equal(
+            name, "with the classes of the manifests", outcome.decisions("TUR_AI_CLASS"), ["0", "0", "0", "0", "1", "3", "2"]
+        )
+        self.checks.equal(
+            name,
+            "class 0 and 1 allowed, class 2 and 3 refused",
+            outcome.decisions("TUR_AI_DECISION"),
+            ["allowed"] * 5 + ["refused"] * 2,
+        )
+        self.checks.equal(name, "five actions were performed and succeeded", outcome.executed("TUR_AI_RESULT"), ["ok"] * 5)
+        self.checks.equal(name, "no call was rejected for the way its arguments arrived", len(outcome.events("proposal_rejected")), 0)
+        self.checks.equal(name, "the provider was asked three times", len(outcome.bodies), 3)
+        problems = outcome.result("call_problems")
+        route = outcome.result("call_route")
+        release = outcome.output("call_release") or ""
+        self.checks.check(
+            name,
+            "the results went back in this format's tool-result position",
+            problems is not None and route is not None and outcome.result("call_release") is not None,
+        )
+        if problems is not None and route is not None:
+            found = problems["frame"].get("output")
+            self.checks.check(
+                name,
+                "tur-device reported the fixture's problems with their codes",
+                isinstance(found, dict) and len(found.get("findings", [])) > 0 and "TUR-DEVICE-" in json.dumps(found),
+                json.dumps(found)[:400],
+            )
+            routed = route["frame"].get("output")
+            self.checks.check(
+                name,
+                "tur-catalogue routed the application, from arguments the model sent",
+                isinstance(routed, dict) and routed.get("application", {}).get("id") == "com.discord.discord",
+                json.dumps(routed)[:400],
+            )
+        self.checks.check(name, "the output of the command reached the model", "NAME=" in release, str(release)[:200])
+        statuses = {
+            call: (outcome.result(call) or {}).get("frame", {}).get("status")
+            for call in ("call_observe", "call_set", "call_format", "call_send")
+        }
+        self.checks.equal(
+            name,
+            "the model is told which calls ran and which were refused",
+            statuses,
+            {"call_observe": "ok", "call_set": "ok", "call_format": "refused", "call_send": "refused"},
+        )
+        self.checks.check(
+            name,
+            "every result is framed as untrusted data",
+            all(
+                "Untrusted data" in result["frame"].get("notice", "")
+                for body in outcome.bodies
+                for result in tool_results(body)
+            ),
         )
 
     def never_stops(self, outcome, expected_outcome, code, requests, performed):
@@ -1024,8 +1173,16 @@ class Test:
             [action for action in performed if action not in allowed],
             [],
         )
-        system_texts = {json.dumps(body.get("system")) for outcome in self.outcomes for body in outcome.bodies}
-        self.checks.equal(name, "the system text is the same in every request", len(system_texts), 1)
+        system_texts = {json.dumps(system_text(body)) for outcome in self.outcomes for body in outcome.bodies}
+        self.checks.equal(
+            name, "the system text is the same in every request, through every adapter", len(system_texts), 1
+        )
+        self.checks.equal(
+            name,
+            "the loop was run through all three adapters",
+            sorted({outcome.wire for outcome in self.outcomes}),
+            ["anthropic", "google", "openai"],
+        )
 
     # ------------------------------------------------------------ report
 

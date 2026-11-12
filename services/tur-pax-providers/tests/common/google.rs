@@ -185,6 +185,68 @@ data: [DONE]
 
 "#;
 
+/// A function call whose streamed argument text names `volume_id` twice. The
+/// interaction then asks for the action as if nothing were wrong.
+const REPEATED_KEY: &str = r#"event: interaction.created
+data: {"interaction":{"id":"v1_test08","status":"in_progress","object":"interaction","model":"test-model"},"event_type":"interaction.created"}
+
+event: step.start
+data: {"index":0,"step":{"id":"fc_g08A","type":"function_call","name":"storage_unmount","arguments":{}},"event_type":"step.start"}
+
+event: step.delta
+data: {"index":0,"delta":{"arguments":"{\"volume_id\": \"vol-1\",","type":"arguments_delta"},"event_type":"step.delta"}
+
+event: step.delta
+data: {"index":0,"delta":{"arguments":" \"volume_id\": \"vol-2\"}","type":"arguments_delta"},"event_type":"step.delta"}
+
+event: step.stop
+data: {"index":0,"event_type":"step.stop"}
+
+event: interaction.completed
+data: {"interaction":{"id":"v1_test08","status":"requires_action","usage":{"total_tokens":70,"total_input_tokens":40,"total_cached_tokens":0,"total_output_tokens":30,"total_tool_use_tokens":0,"total_thought_tokens":0},"object":"interaction","model":"test-model"},"event_type":"interaction.completed"}
+
+event: done
+data: [DONE]
+
+"#;
+
+/// A function call whose step starts with its arguments complete, as a JSON
+/// object and not as text, and has no delta.
+const WHOLE_ARGUMENTS: &str = r#"event: interaction.created
+data: {"interaction":{"id":"v1_test09","status":"in_progress","object":"interaction","model":"test-model"},"event_type":"interaction.created"}
+
+event: step.start
+data: {"index":0,"step":{"id":"fc_g09A","type":"function_call","name":"storage_unmount","arguments":{"volume_id":"vol-1","options":{"force":false}}},"event_type":"step.start"}
+
+event: step.stop
+data: {"index":0,"event_type":"step.stop"}
+
+event: interaction.completed
+data: {"interaction":{"id":"v1_test09","status":"requires_action","usage":{"total_tokens":70,"total_input_tokens":40,"total_cached_tokens":0,"total_output_tokens":30,"total_tool_use_tokens":0,"total_thought_tokens":0},"object":"interaction","model":"test-model"},"event_type":"interaction.completed"}
+
+event: done
+data: [DONE]
+
+"#;
+
+/// As [`WHOLE_ARGUMENTS`], with `force` named twice inside `options`.
+const WHOLE_REPEATED_KEY: &str = r#"event: interaction.created
+data: {"interaction":{"id":"v1_test10","status":"in_progress","object":"interaction","model":"test-model"},"event_type":"interaction.created"}
+
+event: step.start
+data: {"index":0,"step":{"id":"fc_g10A","type":"function_call","name":"storage_unmount","arguments":{"volume_id":"vol-1","options":{"force":false,"force":true}}},"event_type":"step.start"}
+
+event: step.stop
+data: {"index":0,"event_type":"step.stop"}
+
+event: interaction.completed
+data: {"interaction":{"id":"v1_test10","status":"requires_action","usage":{"total_tokens":70,"total_input_tokens":40,"total_cached_tokens":0,"total_output_tokens":30,"total_tool_use_tokens":0,"total_thought_tokens":0},"object":"interaction","model":"test-model"},"event_type":"interaction.completed"}
+
+event: done
+data: [DONE]
+
+"#;
+
 const RATE_LIMITED: &str = r#"{"error":{"code":"rate_limit_exceeded","message":"You have exceeded the per-minute request limit."}}"#;
 
 const AUTH_FAILED: &str = r#"{"error":{"code":"authentication","message":"The API key is missing, invalid, or expired."}}"#;
@@ -264,6 +326,9 @@ pub fn wire() -> Wire {
         cut_short: CUT_SHORT,
         overloaded_mid_stream: OVERLOADED_MID_STREAM,
         output_limit: OUTPUT_LIMIT,
+        repeated_key: REPEATED_KEY,
+        whole_arguments: WHOLE_ARGUMENTS,
+        whole_repeated_key: WHOLE_REPEATED_KEY,
         rate_limited: ErrorReply {
             status: 429,
             body: RATE_LIMITED,

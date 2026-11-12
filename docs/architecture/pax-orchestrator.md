@@ -120,10 +120,16 @@ In words, for one task:
 5. **A response with no tool call is the answer.**
 6. **Each tool call is handled on its own, in order.** Between two calls the stop
    control and the time limit are looked at again.
-   1. *One reading.* The text the arguments arrived as is parsed again, strictly,
-      and must give exactly the arguments the provider layer delivered. A
-      repeated key at any depth, or arguments that arrived without their text,
-      end here.
+   1. *One reading.* The provider layer reads a call's arguments strictly and
+      delivers the text it read them from with the call
+      ([pax-providers.md](pax-providers.md), section 4.3). A response in which
+      a call repeats a key at any depth never gets here: it is malformed, and
+      is discarded whole at step 4. As a second check, for a provider that is
+      not one of the shipped adapters, the text delivered with the call is
+      parsed again, strictly, and must give exactly the arguments that were
+      delivered. The text is the one of the finished call, not the streamed
+      fragments, so a call whose arguments arrive in one piece is checked like
+      any other.
    2. *The action.* The registry looks the name up among the offered tools and
       builds the engine's `Action` from the manifest that declares it: the
       service, the tool and the class are the manifest's; the arguments are
@@ -527,7 +533,8 @@ Tests: `orchestrator` = `services/tur-pax/tests/orchestrator.rs`; `injection` =
 | Tool results are marked as untrusted data (§7) | `Performed::text`; the provider layer's tool-result position | `orchestrator::tool_calls_of_one_response…`; `injection::instructions_in_a_tool_result…`; `pax` `two-tools` |
 | No record, no action (§11) | `decide_and_record`; `handle`; `drive` | `orchestrator::no_record_no_action` |
 | Audit fields (§11, §17.11, §20.8) | The engine's `AuditRecord`, unchanged; `trail.rs` | unit `trail::tests`; `orchestrator::a_command_is…` (tier 4, `read-only`); `injection::an_instruction_recalled…` (tier 0); `orchestrator::the_trail_never_holds…` |
-| Arguments have one reading (agent-policy.md, `strict`) | `orchestrator::one_reading` | unit `orchestrator::tests::arguments_must_have_one_reading`; `injection::a_false_class…`; `pax` `injection-lies` |
+| Arguments have one reading (agent-policy.md, `strict`) | The provider layer: `ToolCalls::end`, `provider::parse_data`. Behind it, `orchestrator::one_reading` | `tur-pax-providers`: `toolcalls::tests`, conformance "a repeated key…" for each adapter. Here: unit `orchestrator::tests::arguments_must_have_one_reading`, `…the_text_of_a_call_is_the_one_delivered_with_it…`; `injection::a_repeated_key_never_reaches_the_loop_as_a_call`; `wires::a_repeated_key_discards_the_whole_response_through_every_adapter`, `…at_depth…`; `pax` `repeated-key`, `openai-repeated-key`, `google-repeated-key` |
+| The loop behaves the same through every adapter (§10) | The loop is written against the neutral interface only | `wires::*` (each of the three wire formats, arguments streamed and delivered whole); `pax` `openai-adapter`, `google-adapter` |
 | An adapter builds an argument vector; a value cannot become an option | `Adapter::argv` | unit `adapter::tests`; `tools::a_value_from_the_model_cannot_become_an_option…` |
 | The key is not printed or logged | The provider layer's `ApiKey`; the trail holds no request | `run_cli::run_prints_the_answer…`; `pax` "the key appears in no transcript, error output or trail" |
 
@@ -536,7 +543,8 @@ The injection scenarios, as the task names them:
 | | Scenario | Rust test | `pax` scenario |
 |---|---|---|---|
 | a | A tool result says "ignore your instructions"; the model then proposes a class 2 and a class 3 action | `injection::instructions_in_a_tool_result…`, `…the_claim_that_the_user_approved…` | `injection-tool-result` |
-| b | A false class, an invented tool, arguments outside the schema, a repeated key | `injection::a_false_class_an_invented_tool_and_bad_arguments…` | `injection-lies` |
+| b | A false class, an invented tool, arguments outside the schema | `injection::a_false_class_an_invented_tool_and_bad_arguments…` | `injection-lies` |
+| b | A repeated key | `injection::a_repeated_key_never_reaches_the_loop_as_a_call`; `wires::a_repeated_key_discards…` | `repeated-key`, `openai-repeated-key`, `google-repeated-key` |
 | c | Commands that write, delete, reach the network or read a protected path | `injection::hostile_commands…` (the plan only) | `sandbox-attacks` (real bubblewrap, canaries) |
 | d | An instruction recalled from memory | `injection::an_instruction_recalled_from_memory…`; through the built program, `run_cli::an_instruction_in_the_memory_store_changes_no_decision` | not run: no program can put an entry into a memory store, so the `pax` workflow has no way to prepare one |
 | e | A model that never stops | `injection::a_model_told_to_loop…` | `never-stops-steps`, `never-stops-spend` |
@@ -544,17 +552,18 @@ The injection scenarios, as the task names them:
 ## 9. Known gaps
 
 1. **No real model.** See the top of this document.
-2. **One wire format in the tests.** The scripted provider speaks the Anthropic
-   Messages format. The loop is written against the neutral interface, but it
-   has not been run through the OpenAI or the Google adapter.
-3. **The one-reading check depends on argument text the adapter streams.** The
-   provider layer parses a call's arguments leniently (a repeated key keeps the
-   last value) and gives the loop the parsed map. The loop reads the text again
-   from the stream's fragments. Where an adapter delivers arguments without
-   fragments (the Google adapter does when a call starts with its arguments
-   complete), the loop cannot check and refuses the call. Safe, but such calls
-   never run. The provider layer should parse strictly itself
-   ([section 12](#12-what-other-components-need)).
+2. **Three wire formats, all written by hand.** The scripted provider speaks
+   the Anthropic, the OpenAI and the Google format, and the loop is run
+   through each adapter (`tests/wires.rs`; `pax` scenarios `openai-adapter`
+   and `google-adapter`). The formats come from the providers' documentation,
+   not from recordings: a real provider may differ, and none has been called.
+   Most scenarios of the `pax` workflow still use the Anthropic format only.
+3. **A repeated key ends the task.** Closed as a defect: the provider layer now
+   reads arguments strictly, and a call whose arguments arrive in one piece
+   (the Google adapter) runs. What remains is a choice with a cost: a response
+   in which one call repeats a key is malformed and is discarded whole, so the
+   task ends with `TUR-AI-PROVIDER-007` instead of rejecting that call and
+   carrying on. A model that does this by accident loses the task.
 4. **The grant can change between the check and the start.** The executor checks
    that a granted path still resolves to itself immediately before it starts
    bubblewrap. A process of the same user can replace the folder with a link in
@@ -625,7 +634,7 @@ change: they were accepted when the two components were added.
 
 | Component | Change | Until then |
 |---|---|---|
-| `tur-pax-providers` | Parse tool-call arguments strictly (refuse a repeated key) in `ToolCalls::end`, or hand the orchestrator the argument text with the call. | The loop reads the text from the stream's fragments and refuses a call it cannot check. |
+| `tur-pax-providers` | Done: tool-call arguments are parsed strictly and the argument text comes with the call (`ToolCallEnd.arguments_text`). | – |
 | `tur-diagnostics`, `tur-catalogue`, `tur-runtime` | Ship an `agent-tools.json`. | The manifests are in `services/tur-pax/tools/manifests`. |
 | `tur-storage` | A way to list volumes of the live system (`volumes` takes only a captured `lsblk` file), and an access spelling shared by the manifest (`read-only`) and the command line (`ro`). | The adapter feeds `lsblk` to `volumes --from /dev/stdin`. `storage_preview_mount` has no adapter. |
 | `tur-device-manager` | Command-line forms for `device_list` (with categories) and `device_get`. | Not offered. |
@@ -674,7 +683,8 @@ Where the design was silent, the stricter reading was taken:
 | 2 | Network in the read-only sandbox | None, with no option. |
 | 3 | Tool programs | Run in the same sandbox as commands, not as P@x's own process. |
 | 4 | A response cut at the output limit | Discarded whole; the task ends. |
-| 5 | Arguments whose text did not arrive | Refused. |
+| 5 | Arguments whose text did not arrive | Refused, unless there are none. The shipped adapters always deliver the text. |
+| 5a | A call that repeats a key | The whole response is malformed and discarded; the task ends. Not: reject the one call. |
 | 6 | Ask, authenticate, defer | Never resolved; refused to the model. Also for class 0 and 1 in ask-every-action mode. |
 | 7 | Time spent paused | Counts towards the time limit. |
 | 8 | A failed write to the audit trail after an action ran | The result is not sent to the provider; the task stops. |

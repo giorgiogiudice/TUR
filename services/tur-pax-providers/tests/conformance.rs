@@ -207,7 +207,7 @@ fn two_tool_calls_in_one_turn(wire: &Wire) {
     let ended: Vec<(usize, String, Value)> = events
         .iter()
         .filter_map(|event| match event {
-            StreamEvent::ToolCallEnd { index, call } => Some((
+            StreamEvent::ToolCallEnd { index, call, .. } => Some((
                 *index,
                 call.name.clone(),
                 Value::Object(call.arguments.clone()),
@@ -234,6 +234,104 @@ fn two_tool_calls_in_one_turn(wire: &Wire) {
     assert!(!calls[0].id.is_empty());
     assert!(!calls[1].id.is_empty());
     assert_ne!(calls[0].id, calls[1].id);
+}
+
+/// The events of a scripted response to a request that offers the tools.
+fn events_of(wire: &Wire, script: &'static str) -> (FakeServer, Vec<StreamEvent>) {
+    let server = FakeServer::start(vec![Reply::stream(script)]);
+    let config = config(wire.provider, &server);
+    let mut request = hello(&config);
+    request.tools = tools();
+    let events = run(&config, &request);
+    (server, events)
+}
+
+/// A response in which a call repeats a key delivers no call and is
+/// malformed as a whole.
+fn assert_no_call_and_malformed(server: &FakeServer, events: Vec<StreamEvent>) {
+    assert!(
+        !events
+            .iter()
+            .any(|event| matches!(event, StreamEvent::ToolCallEnd { .. })),
+        "{events:?}"
+    );
+    match finish(&events) {
+        FinishReason::Error(error) => {
+            assert_eq!(error.kind(), ErrorKind::MalformedResponse);
+            assert_eq!(error.code(), "TUR-AI-PROVIDER-007");
+        }
+        other => panic!("not an error: {other:?}"),
+    }
+    // Neither value of the repeated key is offered as the call's arguments.
+    let turn = Turn::collect(events);
+    assert!(turn.tool_calls().is_empty());
+    // A malformed response is an answer. It is not asked for again.
+    assert_eq!(server.requests().len(), 1);
+}
+
+fn a_repeated_key_in_streamed_arguments_is_a_malformed_response(wire: &Wire) {
+    let (server, events) = events_of(wire, wire.repeated_key);
+    // The call was announced, and its text streamed, before the repetition
+    // could be seen.
+    assert!(
+        events
+            .iter()
+            .any(|event| matches!(event, StreamEvent::ToolCallStart { .. }))
+    );
+    assert_no_call_and_malformed(&server, events);
+}
+
+fn a_repeated_key_in_whole_arguments_is_a_malformed_response(wire: &Wire) {
+    let (server, events) = events_of(wire, wire.whole_repeated_key);
+    assert_no_call_and_malformed(&server, events);
+}
+
+fn arguments_delivered_whole_are_one_complete_call(wire: &Wire) {
+    let (_server, events) = events_of(wire, wire.whole_arguments);
+
+    // No fragment was streamed.
+    assert!(
+        !events
+            .iter()
+            .any(|event| matches!(event, StreamEvent::ToolCallArgumentsDelta { .. })),
+        "{events:?}"
+    );
+    let starts = events
+        .iter()
+        .filter(|event| matches!(event, StreamEvent::ToolCallStart { .. }))
+        .count();
+    assert_eq!(starts, 1);
+    let ended: Vec<(usize, &str, Value, &str)> = events
+        .iter()
+        .filter_map(|event| match event {
+            StreamEvent::ToolCallEnd {
+                index,
+                call,
+                arguments_text,
+            } => Some((
+                *index,
+                call.name.as_str(),
+                Value::Object(call.arguments.clone()),
+                arguments_text.as_str(),
+            )),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(ended.len(), 1, "{events:?}");
+    let (index, name, arguments, arguments_text) = &ended[0];
+    assert_eq!(*index, 0);
+    assert_eq!(*name, "storage_unmount");
+    let expected = json!({ "volume_id": "vol-1", "options": { "force": false } });
+    assert_eq!(arguments, &expected);
+    // The text that comes with the call, read strictly, is the call.
+    let read_again = tur_pax_providers::strict::object_from_str(arguments_text)
+        .expect("the argument text has one reading");
+    assert_eq!(Value::Object(read_again), expected);
+
+    assert_eq!(finish(&events), &FinishReason::ToolUse);
+    assert_eq!(last_usage(&events), Some(usage(40, 30)));
+    let turn = Turn::collect(events);
+    assert_eq!(turn.tool_calls().len(), 1);
 }
 
 fn refusal_is_a_normal_result(wire: &Wire) {
@@ -568,6 +666,9 @@ for_every_provider!(
     plain_answer,
     tool_call_with_split_arguments,
     two_tool_calls_in_one_turn,
+    a_repeated_key_in_streamed_arguments_is_a_malformed_response,
+    a_repeated_key_in_whole_arguments_is_a_malformed_response,
+    arguments_delivered_whole_are_one_complete_call,
     refusal_is_a_normal_result,
     rate_limit_then_success,
     rate_limit_reports_the_delay_the_provider_gave,

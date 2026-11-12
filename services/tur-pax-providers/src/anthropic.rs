@@ -296,12 +296,22 @@ impl AnthropicDecoder {
         };
         let block = &data["content_block"];
         match block["type"].as_str().unwrap_or("") {
-            "tool_use" => self.calls.start(
-                index,
-                block["id"].as_str().unwrap_or(""),
-                block["name"].as_str().unwrap_or(""),
-                out,
-            ),
+            "tool_use" => {
+                self.calls.start(
+                    index,
+                    block["id"].as_str().unwrap_or(""),
+                    block["name"].as_str().unwrap_or(""),
+                    out,
+                );
+                // A streamed block starts with an empty input, and the
+                // arguments arrive in deltas. A block that starts with its
+                // input already has all of it. The event was parsed strictly,
+                // so writing the object out loses nothing.
+                if block["input"].as_object().is_some_and(|map| !map.is_empty()) {
+                    self.calls
+                        .set_arguments(index, &block["input"].to_string());
+                }
+            }
             "thinking" | "redacted_thinking" => {
                 self.thinking.insert(index, block.clone());
             }

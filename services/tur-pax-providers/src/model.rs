@@ -389,12 +389,21 @@ pub enum StreamEvent {
         /// The new fragment.
         fragment: String,
     },
-    /// A tool call is complete and its arguments parsed as a JSON object.
+    /// A tool call is complete. Its arguments were read strictly
+    /// ([`crate::strict`]): they are one JSON object in which no key is
+    /// repeated at any depth. A call whose arguments are anything else is
+    /// never delivered, and makes the response malformed.
     ToolCallEnd {
         /// The position of the call among the calls of this response.
         index: usize,
         /// The complete call.
         call: ToolCall,
+        /// The text the arguments were read from: what the provider sent,
+        /// whether in fragments or in one piece, or `{}` if it sent none.
+        /// Where a provider sends the arguments as a JSON object and not as
+        /// text, this is that object written out. Read strictly, it gives
+        /// exactly the arguments of `call`.
+        arguments_text: String,
     },
     /// Provider-specific content to send back unchanged in the next request.
     Opaque(OpaquePart),
@@ -675,6 +684,7 @@ mod tests {
             StreamEvent::ToolCallEnd {
                 index: 0,
                 call: call.clone(),
+                arguments_text: "{\"a\":1}".to_owned(),
             },
             StreamEvent::Usage(Usage {
                 input_tokens: 10,

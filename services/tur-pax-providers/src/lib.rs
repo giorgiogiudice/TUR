@@ -17,6 +17,8 @@
 //! * [`secret`] holds the API key, which cannot be printed.
 //! * [`config`] is the configuration file format.
 //! * [`spend`] adds up what a task used and enforces its limit.
+//! * [`strict`] is the JSON parser that refuses a repeated key. Everything a
+//!   provider sends is read through it.
 //!
 //! The interface is blocking and has no async runtime: a stream is an iterator,
 //! and a caller runs a provider call on a thread of its own.
@@ -81,6 +83,7 @@ pub mod provider;
 pub mod secret;
 pub mod spend;
 mod sse;
+pub mod strict;
 mod toolcalls;
 
 pub use config::{Prices, ProviderConfig, RetryPolicy, TaskLimit, Timeouts};

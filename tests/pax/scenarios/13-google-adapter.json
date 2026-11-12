@@ -1,0 +1,72 @@
+{
+  "name": "google-adapter",
+  "what": "The task loop through the Google adapter: the scripted provider speaks the Interactions API. The first response delivers the arguments of each call whole, inside the step that starts it, which is the delivery the loop used to refuse; the second streams them in deltas.",
+  "check": "other-adapter",
+  "wire": "google",
+  "request": "What is wrong with my laptop, how would I run Discord, and which system is this? Then try the test service.",
+  "turns": [
+    {
+      "text": "I will check the hardware, the catalogue and the system.",
+      "calls": [
+        {
+          "id": "call_problems",
+          "name": "fixture_device_problems",
+          "arguments": {}
+        },
+        {
+          "id": "call_route",
+          "name": "catalogue_route",
+          "arguments": {
+            "id": "com.discord.discord"
+          }
+        },
+        {
+          "id": "call_release",
+          "name": "run_readonly_command",
+          "arguments": {
+            "argv": [
+              "/usr/bin/cat",
+              "/etc/os-release"
+            ]
+          }
+        }
+      ],
+      "whole": true
+    },
+    {
+      "text": "Now the test service.",
+      "calls": [
+        {
+          "id": "call_observe",
+          "name": "test_observe",
+          "arguments": {}
+        },
+        {
+          "id": "call_set",
+          "name": "test_reversible",
+          "arguments": {
+            "value": "night"
+          }
+        },
+        {
+          "id": "call_format",
+          "name": "test_system_critical",
+          "arguments": {
+            "volume_id": "vol-1"
+          }
+        },
+        {
+          "id": "call_send",
+          "name": "test_consequential",
+          "arguments": {
+            "recipient": "someone@example.net",
+            "subject": "done"
+          }
+        }
+      ]
+    },
+    {
+      "text": "The hardware, the route and the system are above. Formatting and sending were refused."
+    }
+  ]
+}

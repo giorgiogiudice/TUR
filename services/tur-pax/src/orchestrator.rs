@@ -12,7 +12,9 @@
 //!    its end. A response that ends in a refusal or an error is discarded
 //!    whole: its text is not shown and nothing it proposed is looked at.
 //! 3. Each tool call of an accepted response is handled on its own, in
-//!    order: it must have one reading; it must name an offered tool and fit
+//!    order: it must have one reading (the provider layer delivers no call
+//!    that has two, and the text that comes with the call is read again
+//!    here); it must name an offered tool and fit
 //!    its input schema; the [`Action`] is built by the registry from the
 //!    reviewed manifest; the policy engine decides, and the decision is
 //!    written to the trail before anything else happens.
@@ -35,7 +37,6 @@
 //!
 //! Nothing in the loop reads an environment variable or a file.
 
-use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -561,10 +562,10 @@ struct Session<'t> {
     steps: u32,
 }
 
-/// One tool call of a response, with the text its arguments arrived as.
+/// One tool call of a response, with the text its arguments were read from.
 struct ProposedCall {
     call: ToolCall,
-    raw: Option<String>,
+    text: String,
 }
 
 /// One response of the model, read to its end.
@@ -588,10 +589,13 @@ impl Response {
 
 /// Read a response to its end, keeping the text of each call's arguments
 /// next to the parsed call.
+///
+/// The text is the one the provider layer read the arguments from and
+/// delivers with the finished call. The fragments it streamed on the way are
+/// not looked at: a call whose arguments arrive in one piece has none.
 fn collect_response(events: impl Iterator<Item = StreamEvent>) -> Response {
     let mut parts: Vec<Part> = Vec::new();
     let mut calls: Vec<ProposedCall> = Vec::new();
-    let mut raw: BTreeMap<usize, String> = BTreeMap::new();
     let mut finish = None;
     for event in events {
         match event {
@@ -599,14 +603,17 @@ fn collect_response(events: impl Iterator<Item = StreamEvent>) -> Response {
                 Some(Part::Text { text: existing }) => existing.push_str(&text),
                 _ => parts.push(Part::Text { text }),
             },
-            StreamEvent::ToolCallStart { .. } | StreamEvent::Usage(_) => {}
-            StreamEvent::ToolCallArgumentsDelta { index, fragment } => {
-                raw.entry(index).or_default().push_str(&fragment);
-            }
-            StreamEvent::ToolCallEnd { index, call } => {
+            StreamEvent::ToolCallStart { .. }
+            | StreamEvent::ToolCallArgumentsDelta { .. }
+            | StreamEvent::Usage(_) => {}
+            StreamEvent::ToolCallEnd {
+                call,
+                arguments_text,
+                ..
+            } => {
                 calls.push(ProposedCall {
                     call: call.clone(),
-                    raw: raw.remove(&index),
+                    text: arguments_text,
                 });
                 parts.push(Part::ToolCall(call));
             }
@@ -632,14 +639,16 @@ fn collect_response(events: impl Iterator<Item = StreamEvent>) -> Response {
 
 /// Whether the arguments of a call have one reading.
 ///
-/// JSON does not say what a repeated key means, and the provider layer keeps
-/// the last value. The text the arguments arrived as is therefore parsed
-/// again, strictly, and must give exactly the arguments that were delivered.
-/// Arguments that arrived without their text cannot be checked and are
-/// refused, unless there are none.
-fn one_reading(parsed: &Map<String, Value>, raw: Option<&str>) -> Result<(), &'static str> {
-    let raw = raw.map(str::trim).unwrap_or("");
-    if raw.is_empty() {
+/// JSON does not say what a repeated key means. The provider layer reads a
+/// call's arguments strictly and delivers no call whose arguments repeat a
+/// key; a response that holds one is malformed and is discarded whole. This
+/// is the second check behind it, for a provider that is not one of the
+/// shipped adapters: the text delivered with the call is parsed again,
+/// strictly, and must give exactly the arguments that were delivered. A call
+/// that comes with no text can only be a call with no arguments.
+fn one_reading(parsed: &Map<String, Value>, text: &str) -> Result<(), &'static str> {
+    let text = text.trim();
+    if text.is_empty() {
         return if parsed.is_empty() {
             Ok(())
         } else {
@@ -649,7 +658,7 @@ fn one_reading(parsed: &Map<String, Value>, raw: Option<&str>) -> Result<(), &'s
             )
         };
     }
-    match strict::object_from_str(raw) {
+    match strict::object_from_str(text) {
         Ok(strictly) if strictly == *parsed => Ok(()),
         Ok(_) => Err("the arguments that were delivered differ from the text they arrived as"),
         Err(_) => Err("the arguments repeat a key or are not one JSON object"),
@@ -1129,7 +1138,7 @@ impl Orchestrator<'_> {
         let call = &proposed.call;
 
         // 1. One reading of the arguments.
-        if let Err(detail) = one_reading(&call.arguments, proposed.raw.as_deref()) {
+        if let Err(detail) = one_reading(&call.arguments, &proposed.text) {
             return self.reject(
                 session,
                 call,
@@ -1446,28 +1455,77 @@ mod tests {
     fn arguments_must_have_one_reading() {
         let parsed = object(json!({ "volume_id": "b" }));
         // The text and the delivered arguments agree.
-        assert!(one_reading(&parsed, Some(r#"{"volume_id":"b"}"#)).is_ok());
-        assert!(one_reading(&parsed, Some(" {\n \"volume_id\" : \"b\" } ")).is_ok());
-        // A repeated key: the provider layer kept the last value.
-        assert!(one_reading(&parsed, Some(r#"{"volume_id":"a","volume_id":"b"}"#)).is_err());
+        assert!(one_reading(&parsed, r#"{"volume_id":"b"}"#).is_ok());
+        assert!(one_reading(&parsed, " {\n \"volume_id\" : \"b\" } ").is_ok());
+        // A repeated key, as a provider that parses leniently would deliver
+        // it: with the last value.
+        assert!(one_reading(&parsed, r#"{"volume_id":"a","volume_id":"b"}"#).is_err());
         // A repeated key at depth.
         let nested = object(json!({ "a": { "x": 2 } }));
-        assert!(one_reading(&nested, Some(r#"{"a":{"x":1,"x":2}}"#)).is_err());
+        assert!(one_reading(&nested, r#"{"a":{"x":1,"x":2}}"#).is_err());
         // The text says something else than what was delivered.
-        assert!(one_reading(&parsed, Some(r#"{"volume_id":"a"}"#)).is_err());
-        assert!(one_reading(&parsed, Some(r#"{"volume_id":"b","extra":1}"#)).is_err());
-        assert!(one_reading(&parsed, Some("[]")).is_err());
-        assert!(one_reading(&parsed, Some("not json")).is_err());
+        assert!(one_reading(&parsed, r#"{"volume_id":"a"}"#).is_err());
+        assert!(one_reading(&parsed, r#"{"volume_id":"b","extra":1}"#).is_err());
+        assert!(one_reading(&parsed, "[]").is_err());
+        assert!(one_reading(&parsed, "not json").is_err());
         // No text: only no arguments can be confirmed.
-        assert!(one_reading(&parsed, None).is_err());
-        assert!(one_reading(&parsed, Some("  ")).is_err());
-        assert!(one_reading(&Map::new(), None).is_ok());
-        assert!(one_reading(&Map::new(), Some("")).is_ok());
-        assert!(one_reading(&Map::new(), Some("{}")).is_ok());
+        assert!(one_reading(&parsed, "").is_err());
+        assert!(one_reading(&parsed, "  ").is_err());
+        assert!(one_reading(&Map::new(), "").is_ok());
+        assert!(one_reading(&Map::new(), "{}").is_ok());
         // An integer and a number with a fraction are different readings.
         let integer = object(json!({ "n": 1 }));
-        assert!(one_reading(&integer, Some(r#"{"n":1}"#)).is_ok());
-        assert!(one_reading(&integer, Some(r#"{"n":1.0}"#)).is_err());
+        assert!(one_reading(&integer, r#"{"n":1}"#).is_ok());
+        assert!(one_reading(&integer, r#"{"n":1.0}"#).is_err());
+    }
+
+    #[test]
+    fn the_text_of_a_call_is_the_one_delivered_with_it_not_the_fragments() {
+        // A call whose arguments arrived in one piece: no fragment at all.
+        // The Google adapter delivers such calls, and the loop used to
+        // refuse every one of them.
+        let call = ToolCall {
+            id: "call-1".to_owned(),
+            name: "test_reversible".to_owned(),
+            arguments: object(json!({ "value": "x" })),
+        };
+        let whole = collect_response(
+            vec![
+                StreamEvent::ToolCallStart {
+                    index: 0,
+                    id: "call-1".to_owned(),
+                    name: "test_reversible".to_owned(),
+                },
+                StreamEvent::ToolCallEnd {
+                    index: 0,
+                    call: call.clone(),
+                    arguments_text: r#"{"value":"x"}"#.to_owned(),
+                },
+                StreamEvent::Finish(FinishReason::ToolUse),
+            ]
+            .into_iter(),
+        );
+        assert_eq!(whole.calls.len(), 1);
+        assert!(one_reading(&whole.calls[0].call.arguments, &whole.calls[0].text).is_ok());
+
+        // Fragments that say something else do not stand in for the text: a
+        // provider that delivered a lenient reading is still caught.
+        let lenient = collect_response(
+            vec![
+                StreamEvent::ToolCallArgumentsDelta {
+                    index: 0,
+                    fragment: r#"{"value":"x"}"#.to_owned(),
+                },
+                StreamEvent::ToolCallEnd {
+                    index: 0,
+                    call,
+                    arguments_text: r#"{"value":"harmless","value":"x"}"#.to_owned(),
+                },
+                StreamEvent::Finish(FinishReason::ToolUse),
+            ]
+            .into_iter(),
+        );
+        assert!(one_reading(&lenient.calls[0].call.arguments, &lenient.calls[0].text).is_err());
     }
 
     #[test]
@@ -1500,6 +1558,7 @@ mod tests {
             StreamEvent::ToolCallEnd {
                 index: 0,
                 call: call.clone(),
+                arguments_text: "{\"a\":1}".to_owned(),
             },
             StreamEvent::Finish(FinishReason::ToolUse),
             // Nothing after the finish is read.
@@ -1512,7 +1571,7 @@ mod tests {
         assert_eq!(response.finish, FinishReason::ToolUse);
         assert_eq!(response.calls.len(), 1);
         assert_eq!(response.calls[0].call, call);
-        assert_eq!(response.calls[0].raw.as_deref(), Some("{\"a\":1}"));
+        assert_eq!(response.calls[0].text, "{\"a\":1}");
         assert_eq!(response.parts.len(), 2);
 
         // A stream that just stops is an error, not an answer.
