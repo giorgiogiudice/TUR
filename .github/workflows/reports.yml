@@ -133,7 +133,6 @@ jobs:
 
   end-to-end:
     name: Receiver container, tur-diag client, stand-in GitHub
-    needs: receiver
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
