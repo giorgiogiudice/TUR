@@ -46,7 +46,7 @@ jobs:
 
       - name: Lint scripts
         run: |
-          shellcheck scripts/*.sh tests/image/*.sh
+          shellcheck -x scripts/*.sh tests/image/*.sh
           python3 -m py_compile scripts/*.py
 
       - name: Runner environment

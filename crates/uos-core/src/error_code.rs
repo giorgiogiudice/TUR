@@ -90,7 +90,9 @@ impl Family {
     }
 
     fn from_segment(segment: &str) -> Option<Family> {
-        Family::ALL.into_iter().find(|family| family.as_str() == segment)
+        Family::ALL
+            .into_iter()
+            .find(|family| family.as_str() == segment)
     }
 }
 
@@ -173,7 +175,9 @@ impl FromStr for ErrorCode {
     type Err = ErrorCodeParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let rest = s.strip_prefix("UOS-").ok_or(ErrorCodeParseError::MissingPrefix)?;
+        let rest = s
+            .strip_prefix("UOS-")
+            .ok_or(ErrorCodeParseError::MissingPrefix)?;
         let segments: Vec<&str> = rest.split('-').collect();
         if segments.len() < 2 {
             return Err(ErrorCodeParseError::TooShort);
@@ -186,12 +190,15 @@ impl FromStr for ErrorCode {
         if last.len() != 3 || !last.bytes().all(|b| b.is_ascii_digit()) {
             return Err(ErrorCodeParseError::InvalidNumber(last.to_owned()));
         }
-        let number: u16 =
-            last.parse().map_err(|_| ErrorCodeParseError::InvalidNumber(last.to_owned()))?;
+        let number: u16 = last
+            .parse()
+            .map_err(|_| ErrorCodeParseError::InvalidNumber(last.to_owned()))?;
 
         for topic in &segments[1..segments.len() - 1] {
             let valid = !topic.is_empty()
-                && topic.bytes().all(|b| b.is_ascii_uppercase() || b.is_ascii_digit());
+                && topic
+                    .bytes()
+                    .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit());
             if !valid {
                 return Err(ErrorCodeParseError::InvalidTopic((*topic).to_owned()));
             }
@@ -245,10 +252,25 @@ mod tests {
         use ErrorCodeParseError as E;
         assert_eq!("STORAGE-004".parse::<ErrorCode>(), Err(E::MissingPrefix));
         assert_eq!("UOS-004".parse::<ErrorCode>(), Err(E::TooShort));
-        assert_eq!("UOS-NOPE-004".parse::<ErrorCode>(), Err(E::UnknownFamily("NOPE".into())));
-        assert_eq!("UOS-BOOT-4".parse::<ErrorCode>(), Err(E::InvalidNumber("4".into())));
-        assert_eq!("UOS-BOOT-0004".parse::<ErrorCode>(), Err(E::InvalidNumber("0004".into())));
-        assert_eq!("UOS-BOOT-ntfs-004".parse::<ErrorCode>(), Err(E::InvalidTopic("ntfs".into())));
-        assert_eq!("UOS-BOOT--004".parse::<ErrorCode>(), Err(E::InvalidTopic(String::new())));
+        assert_eq!(
+            "UOS-NOPE-004".parse::<ErrorCode>(),
+            Err(E::UnknownFamily("NOPE".into()))
+        );
+        assert_eq!(
+            "UOS-BOOT-4".parse::<ErrorCode>(),
+            Err(E::InvalidNumber("4".into()))
+        );
+        assert_eq!(
+            "UOS-BOOT-0004".parse::<ErrorCode>(),
+            Err(E::InvalidNumber("0004".into()))
+        );
+        assert_eq!(
+            "UOS-BOOT-ntfs-004".parse::<ErrorCode>(),
+            Err(E::InvalidTopic("ntfs".into()))
+        );
+        assert_eq!(
+            "UOS-BOOT--004".parse::<ErrorCode>(),
+            Err(E::InvalidTopic(String::new()))
+        );
     }
 }

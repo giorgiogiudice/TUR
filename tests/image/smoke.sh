@@ -12,7 +12,7 @@ image="${1:?image reference required}"
 expected_build_id="${2:?expected build id required}"
 read -r -a podman <<<"${PODMAN:-podman}"
 
-# shellcheck source=../../image/base.lock
+# shellcheck source=image/base.lock
 . image/base.lock
 
 "${podman[@]}" run --rm -i --network none \

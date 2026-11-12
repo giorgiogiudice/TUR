@@ -97,12 +97,24 @@ def request(method: str, path: str, body: dict | None = None, raw: bool = False)
 
 
 def job_log_tail(job_id: int, tail: int) -> str:
+    """The part of a job log that explains a failure.
+
+    Prints the lines leading up to each error annotation rather than the end of
+    the log, which is only post-job cleanup.
+    """
     text = request("GET", f"/actions/jobs/{job_id}/logs", raw=True).decode(errors="replace")
     lines = [line.split(" ", 1)[1] if line[:4].isdigit() and " " in line else line for line in text.splitlines()]
-    errors = [line for line in lines if "##[error]" in line]
-    out = lines[-tail:]
-    if errors:
-        out = ["--- error annotations ---", *errors[:20], f"--- last {tail} lines ---", *out]
+    marks = [i for i, line in enumerate(lines) if "##[error]" in line]
+    if not marks:
+        return "\n".join(lines[-tail:])
+    out: list[str] = []
+    shown_to = 0
+    for mark in marks[:3]:
+        step = max((i for i in range(mark) if lines[i].startswith("##[group]Run ")), default=0)
+        start = max(shown_to, step, mark - tail)
+        out.append(f"--- log before error at line {mark + 1} ---")
+        out.extend(line for line in lines[start:mark + 1] if not line.startswith("##[endgroup]"))
+        shown_to = mark + 1
     return "\n".join(out)
 
 

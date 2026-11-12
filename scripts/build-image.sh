@@ -18,7 +18,7 @@ read -r -a podman <<<"${PODMAN:-podman}"
 tag="${1:-localhost/uos:dev}"
 if [ "$#" -gt 0 ]; then shift; fi
 
-# shellcheck source=../image/base.lock
+# shellcheck source=image/base.lock
 . image/base.lock
 
 uos_version="$(cat VERSION)"
