@@ -745,7 +745,10 @@ def test_application(world: World, app: dict) -> dict:
             icon = pathlib.Path(record["launcher"]["icon"])
             launcher["icon"] = check_png(icon)
             launcher["icon"]["from"] = installed.get("launcher", {}).get("icon")
-            copy_evidence(icon, evidence / "icon.png")
+            # The icon is the publisher's work and stays on the machine it
+            # was extracted on (windows-guest.md 6.7): what is kept is its
+            # digest, not the file.
+            launcher["icon"]["sha256"] = sha256_of(icon)
             if entry.get("Icon") != str(icon):
                 problems.append("the launcher entry does not name the icon file")
         else:

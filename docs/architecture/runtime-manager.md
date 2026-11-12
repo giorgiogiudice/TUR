@@ -709,8 +709,11 @@ VLC ship 64-bit applications in 32-bit NSIS installers. Wine must have its
 A `plain-exe` is not run as an installer: nothing is known about what it would
 ask. `--portable` is the user's statement that the file is the application
 itself; it is then copied into the prefix. Without it the installation is
-refused (`TUR-WINDOWS-APP-002`). Running an installer of an unknown kind with
-its windows shown, for the user to click through, is not built.
+refused (`TUR-WINDOWS-APP-002`). The statement is only taken for a file that
+could be one: `--portable` with a file whose content says it is an installer
+or an archive is refused (`TUR-WINDOWS-APP-010`). Running an installer of an
+unknown kind with its windows shown, for the user to click through, is not
+built.
 
 ### The three plans
 
@@ -734,7 +737,11 @@ afterwards. `--dry-run` therefore prints the first two and says so.
 
    The sandbox is the one every launch gets, with no granted directory and
    one addition: the installer file itself, read-only, at its own path. Its
-   directory is not shown. `unzip` and `install` run inside the sandbox too,
+   directory is not shown. The installer reaches that file through the
+   prefix's `Z:` drive, which Wine maps to the root of what the sandbox
+   shows; so does every program started from outside its prefix. A prefix
+   without that drive, which is a hardening step some recommend, would need
+   the file handed over another way. `unzip` and `install` run inside the sandbox too,
    without Wine: an archive is untrusted, and whatever a hostile one tries
    (paths that climb out, links that point elsewhere) lands in a file system
    where only the prefix is writable. Nothing in a portable archive or a
@@ -868,7 +875,21 @@ the desktop's image decoder exactly as the application supplied it, and the
 desktop is outside the sandbox. Every packaging format that lets an
 application bring its own icon has this exposure. Closing it means decoding
 the PNG here and writing the pixels out again, which needs a PNG decoder in
-this component; that is not built.
+this component; that is not built. The Windows guest design
+([windows-guest.md](windows-guest.md), 6.7) says of its own launcher entries
+that "icons are decoded and re-encoded on the host"; this component does that
+for bitmaps and not yet for PNGs, and the two should end up the same.
+
+Two more things that design and the desktop design ask of a launcher entry
+are not in this one: the "About this application" action that opens the
+application's page in the application centre
+([desktop-experience.md](desktop-experience.md), 7.3), and a `%F` field code
+with the file types the application handles. Both belong with installing the
+entry.
+
+An extracted icon is the publisher's work. It is written beside the launcher
+entry on the user's machine and nowhere else: the test in CI keeps its
+dimensions and digest, not the file.
 
 `tur-runtime app launch <app-id>` is `tur-runtime launch` with the
 application's profile.

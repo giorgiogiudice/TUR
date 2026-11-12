@@ -197,6 +197,17 @@ pub fn plan_installer_run(
     };
     let file_text = text(&file, "the installer")?;
     let kind = request.info.kind;
+    // What the file is was read from its content. The caller's word that it
+    // is the application itself does not turn an installer into a program.
+    if request.portable && kind != InstallerKind::PlainExe {
+        return Err(PlanError::InstallRequest {
+            problem: format!(
+                "the file was said to be the application itself (--portable), and it is a {}; \
+                 leave the option out to install it",
+                kind.label()
+            ),
+        });
+    }
     let unattended: Vec<String> = kind
         .unattended()
         .map(|unattended| {
@@ -1258,6 +1269,15 @@ mod tests {
             let error = plan_installer_run(&planner(&setup), &metadata, &unlimited).unwrap_err();
             assert_eq!(error.code(), Code::InstallRequestInvalid);
         }
+
+        // An installer that the caller says is the application itself.
+        let mistaken = InstallRequest {
+            portable: true,
+            ..request(&path, &info)
+        };
+        let error = plan_installer_run(&planner(&setup), &metadata, &mistaken).unwrap_err();
+        assert_eq!(error.code(), Code::InstallRequestInvalid);
+        assert!(error.to_string().contains("NSIS installer"), "{error}");
 
         // A prefix that is not Wine's.
         let proton = PrefixMetadata {
