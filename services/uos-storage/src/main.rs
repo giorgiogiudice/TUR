@@ -8,5 +8,9 @@ use std::process::ExitCode;
 fn main() -> ExitCode {
     let mut stdout = std::io::stdout().lock();
     let mut stderr = std::io::stderr().lock();
-    ExitCode::from(uos_storage::cli::run(std::env::args_os(), &mut stdout, &mut stderr))
+    ExitCode::from(uos_storage::cli::run(
+        std::env::args_os(),
+        &mut stdout,
+        &mut stderr,
+    ))
 }

@@ -114,7 +114,10 @@ pub struct Decision {
 impl Decision {
     /// Whether the decision is to mount the volume.
     pub fn is_mount(&self) -> bool {
-        matches!(self.outcome, Outcome::MountReadWrite | Outcome::MountReadOnly)
+        matches!(
+            self.outcome,
+            Outcome::MountReadWrite | Outcome::MountReadOnly
+        )
     }
 
     /// The access the decision grants, if it mounts.
@@ -128,8 +131,11 @@ impl Decision {
 
     /// The decision as a two-layer message in the form of specification §6.3.
     pub fn render(&self) -> String {
-        let options =
-            if self.options.is_empty() { "none".to_owned() } else { self.options.join(",") };
+        let options = if self.options.is_empty() {
+            "none".to_owned()
+        } else {
+            self.options.join(",")
+        };
         format!(
             "{code}\n{message}\n\nReason:\n{reason}\n\nAction:\n{action}\n\nTechnical detail:\n\
              Device: {device}\nDriver: {driver}\nMount policy: {policy}\n\
@@ -159,7 +165,11 @@ struct Draft {
 }
 
 fn draft(outcome: Outcome, code: StorageCode, reason: &str) -> Draft {
-    Draft { outcome, code, reason: reason.to_owned() }
+    Draft {
+        outcome,
+        code,
+        reason: reason.to_owned(),
+    }
 }
 
 /// Decides how a volume may be mounted.
@@ -233,10 +243,18 @@ fn classify(
     if let Some((code, reason)) = write_denial(volume, policy, row) {
         let ntfs_state_unsafe = matches!(code, StorageCode::NtfsUnsafe | StorageCode::NtfsDirty);
         if ntfs_state_unsafe && policy.unsafe_ntfs == UnsafeNtfsPolicy::Refuse {
-            return Draft { outcome: Outcome::Refuse, code, reason };
+            return Draft {
+                outcome: Outcome::Refuse,
+                code,
+                reason,
+            };
         }
         if request.access == Access::ReadWrite {
-            return Draft { outcome: Outcome::MountReadOnly, code, reason };
+            return Draft {
+                outcome: Outcome::MountReadOnly,
+                code,
+                reason,
+            };
         }
     }
 
@@ -267,7 +285,11 @@ fn unsupported(volume: &Volume, row: &FsPolicy) -> Draft {
                 ),
                 None => "No filesystem signature was found on the volume.".to_owned(),
             };
-            Draft { outcome: Outcome::Unsupported, code: StorageCode::FilesystemUnknown, reason }
+            Draft {
+                outcome: Outcome::Unsupported,
+                code: StorageCode::FilesystemUnknown,
+                reason,
+            }
         }
         Filesystem::BitLocker => draft(
             Outcome::Unsupported,
@@ -345,7 +367,10 @@ fn write_denial(
     }
     if !row.writable {
         return Some(if volume.filesystem == Filesystem::Apfs {
-            (StorageCode::ApfsReadOnly, "APFS volumes are always read-only in UOS.".to_owned())
+            (
+                StorageCode::ApfsReadOnly,
+                "APFS volumes are always read-only in UOS.".to_owned(),
+            )
         } else {
             (
                 StorageCode::FilesystemReadOnlyByDesign,
@@ -376,7 +401,9 @@ fn protection_sentence(outcome: Outcome, code: StorageCode) -> Option<&'static s
         Outcome::MountReadOnly if protective => {
             Some("UOS mounts the volume read-only to protect your data.")
         }
-        Outcome::Refuse if protective => Some("UOS does not mount the volume, to protect your data."),
+        Outcome::Refuse if protective => {
+            Some("UOS does not mount the volume, to protect your data.")
+        }
         _ => None,
     }
 }
@@ -389,7 +416,10 @@ fn finish(
     draft: Draft,
 ) -> Decision {
     let entry = draft.code.entry();
-    let mounts = matches!(draft.outcome, Outcome::MountReadWrite | Outcome::MountReadOnly);
+    let mounts = matches!(
+        draft.outcome,
+        Outcome::MountReadWrite | Outcome::MountReadOnly
+    );
     let read_only = draft.outcome == Outcome::MountReadOnly;
     let driver = if mounts { row.driver } else { None };
     let recovery_action = match protection_sentence(draft.outcome, draft.code) {
@@ -409,7 +439,11 @@ fn finish(
         driver,
         implementation: mounts.then_some(row.implementation),
         mount_type: if mounts { row.mount_type } else { None },
-        options: if mounts { mount_options(volume, read_only, request, policy) } else { Vec::new() },
+        options: if mounts {
+            mount_options(volume, read_only, request, policy)
+        } else {
+            Vec::new()
+        },
         user_message: entry.user_message.to_owned(),
         reason: draft.reason,
         recovery_action,
@@ -486,7 +520,11 @@ fn device_reference(volume: &Volume) -> String {
         Some(uuid) if normalise_identifier(uuid).is_some() => {
             format!("/dev/disk/by-uuid/{}", uuid.trim())
         }
-        _ => volume.devices.first().map(|device| printable(device)).unwrap_or_default(),
+        _ => volume
+            .devices
+            .first()
+            .map(|device| printable(device))
+            .unwrap_or_default(),
     }
 }
 
@@ -507,7 +545,10 @@ fn evidence(volume: &Volume) -> String {
         let mounted: Vec<String> = volume.mountpoints.iter().map(|m| printable(m)).collect();
         facts.push(format!("mounted_at={}", mounted.join(",")));
     }
-    format!("{} (facts from the probe; no journal reference at this layer)", facts.join("; "))
+    format!(
+        "{} (facts from the probe; no journal reference at this layer)",
+        facts.join("; ")
+    )
 }
 
 #[cfg(test)]
@@ -518,8 +559,16 @@ mod tests {
     use crate::volume::testing;
     use std::collections::BTreeSet;
 
-    const RW: MountRequest = MountRequest { access: Access::ReadWrite, uid: 1000, gid: 1000 };
-    const RO: MountRequest = MountRequest { access: Access::ReadOnly, uid: 1000, gid: 1000 };
+    const RW: MountRequest = MountRequest {
+        access: Access::ReadWrite,
+        uid: 1000,
+        gid: 1000,
+    };
+    const RO: MountRequest = MountRequest {
+        access: Access::ReadOnly,
+        uid: 1000,
+        gid: 1000,
+    };
 
     struct Case {
         volume: Volume,
@@ -583,7 +632,12 @@ mod tests {
             for request in [RO, RW] {
                 for policy in PolicyOverrides::all() {
                     let decision = decide(&volume, &request, &policy);
-                    cases.push(Case { volume: volume.clone(), request, policy, decision });
+                    cases.push(Case {
+                        volume: volume.clone(),
+                        request,
+                        policy,
+                        decision,
+                    });
                 }
             }
         }
@@ -679,15 +733,20 @@ mod tests {
         for case in all_cases() {
             let volume = &case.volume;
             let row = policy_for(volume.filesystem);
-            let conditions_hold = row.write_conditions.iter().all(|condition| match condition {
-                WriteCondition::NtfsClean => volume.ntfs_state == Some(NtfsState::Clean),
-                WriteCondition::HfsPlusNotJournaled => {
-                    volume.hfs_journal == Some(HfsJournal::NotJournaled)
-                }
-                WriteCondition::HfsPlusWriteOptIn => case.policy.hfsplus_write,
-            });
-            let mounted_elsewhere =
-                volume.mountpoints.iter().any(|m| *m != canonical_path(&volume.id));
+            let conditions_hold = row
+                .write_conditions
+                .iter()
+                .all(|condition| match condition {
+                    WriteCondition::NtfsClean => volume.ntfs_state == Some(NtfsState::Clean),
+                    WriteCondition::HfsPlusNotJournaled => {
+                        volume.hfs_journal == Some(HfsJournal::NotJournaled)
+                    }
+                    WriteCondition::HfsPlusWriteOptIn => case.policy.hfsplus_write,
+                });
+            let mounted_elsewhere = volume
+                .mountpoints
+                .iter()
+                .any(|m| *m != canonical_path(&volume.id));
             let expected = case.request.access == Access::ReadWrite
                 && row.writable
                 && conditions_hold
@@ -717,7 +776,10 @@ mod tests {
             let state = case.volume.ntfs_state.unwrap();
             if state != NtfsState::Clean {
                 assert!(
-                    matches!(case.decision.outcome, Outcome::MountReadOnly | Outcome::Refuse),
+                    matches!(
+                        case.decision.outcome,
+                        Outcome::MountReadOnly | Outcome::Refuse
+                    ),
                     "{state}: {:?}",
                     case.decision.outcome
                 );
@@ -756,7 +818,10 @@ mod tests {
                 mounted += 1;
                 assert!(case.policy.apfs_read_only);
                 assert_eq!(case.decision.driver, Some("apfs-fuse"));
-                assert_eq!(case.decision.implementation, Some(ImplementationKind::Userspace));
+                assert_eq!(
+                    case.decision.implementation,
+                    Some(ImplementationKind::Userspace)
+                );
                 assert_eq!(case.decision.options[0], "ro");
             }
             if !case.policy.apfs_read_only {
@@ -782,7 +847,11 @@ mod tests {
             if case.volume.system {
                 continue;
             }
-            let elsewhere = case.volume.mountpoints.iter().any(|m| m == "/mnt/elsewhere");
+            let elsewhere = case
+                .volume
+                .mountpoints
+                .iter()
+                .any(|m| m == "/mnt/elsewhere");
             if case.volume.duplicate_identity {
                 assert_eq!(case.decision.code, StorageCode::DuplicateIdentity);
                 assert_eq!(case.decision.outcome, Outcome::Refuse);
@@ -802,10 +871,20 @@ mod tests {
             let decision = &case.decision;
             if decision.is_mount() {
                 let first = decision.options[0].as_str();
-                let expected = if decision.outcome == Outcome::MountReadWrite { "rw" } else { "ro" };
+                let expected = if decision.outcome == Outcome::MountReadWrite {
+                    "rw"
+                } else {
+                    "ro"
+                };
                 assert_eq!(first, expected);
-                assert_eq!(has(decision, "ro"), decision.outcome == Outcome::MountReadOnly);
-                assert_eq!(has(decision, "rw"), decision.outcome == Outcome::MountReadWrite);
+                assert_eq!(
+                    has(decision, "ro"),
+                    decision.outcome == Outcome::MountReadOnly
+                );
+                assert_eq!(
+                    has(decision, "rw"),
+                    decision.outcome == Outcome::MountReadWrite
+                );
                 assert!(has(decision, "nosuid") && has(decision, "nodev"));
                 assert!(decision.driver.is_some() && decision.implementation.is_some());
                 assert_eq!(decision.technical_detail.driver, decision.driver);
@@ -838,7 +917,11 @@ mod tests {
             let entry = case.decision.code.entry();
             assert_eq!(case.decision.severity, entry.severity);
             assert_eq!(case.decision.user_message, entry.user_message);
-            assert!(case.decision.recovery_action.starts_with(entry.recovery_action));
+            assert!(
+                case.decision
+                    .recovery_action
+                    .starts_with(entry.recovery_action)
+            );
             assert!(!case.decision.reason.is_empty());
         }
     }
@@ -846,7 +929,10 @@ mod tests {
     #[test]
     fn the_decision_is_deterministic() {
         for case in all_cases().into_iter().step_by(97) {
-            assert_eq!(decide(&case.volume, &case.request, &case.policy), case.decision);
+            assert_eq!(
+                decide(&case.volume, &case.request, &case.policy),
+                case.decision
+            );
         }
     }
 
@@ -858,8 +944,14 @@ mod tests {
         let decision = decide(&volume, &RW, &PolicyOverrides::default());
         assert_eq!(decision.outcome, Outcome::MountReadOnly);
         assert_eq!(decision.code.as_str(), "UOS-STORAGE-NTFS-004");
-        assert_eq!(decision.user_message, "The Windows volume was not mounted for writing.");
-        assert_eq!(decision.reason, "The volume appears to be hibernated or in an unsafe state.");
+        assert_eq!(
+            decision.user_message,
+            "The Windows volume was not mounted for writing."
+        );
+        assert_eq!(
+            decision.reason,
+            "The volume appears to be hibernated or in an unsafe state."
+        );
         assert_eq!(
             decision.recovery_action,
             "Boot Windows, disable Fast Startup/hibernation, shut down fully, then retry. UOS \
@@ -871,15 +963,19 @@ mod tests {
                               unsafe state.\n\nAction:\nBoot Windows, disable Fast \
                               Startup/hibernation, shut down fully, then retry.";
         assert!(rendered.starts_with(expected_start), "{rendered}");
-        assert!(rendered.contains("\nTechnical detail:\nDevice: /dev/disk/by-uuid/A1B2C3D4E5F60718\n"));
+        assert!(
+            rendered.contains("\nTechnical detail:\nDevice: /dev/disk/by-uuid/A1B2C3D4E5F60718\n")
+        );
         assert!(rendered.contains("\nDriver: ntfs3\nMount policy: read-only\n"));
         assert!(rendered.contains("ntfs_state=hibernated"));
     }
 
     #[test]
     fn unsafe_ntfs_can_be_refused_but_never_written() {
-        let refuse =
-            PolicyOverrides { unsafe_ntfs: UnsafeNtfsPolicy::Refuse, ..PolicyOverrides::default() };
+        let refuse = PolicyOverrides {
+            unsafe_ntfs: UnsafeNtfsPolicy::Refuse,
+            ..PolicyOverrides::default()
+        };
         for (state, code) in [
             (NtfsState::Hibernated, StorageCode::NtfsUnsafe),
             (NtfsState::Unknown, StorageCode::NtfsUnsafe),
@@ -908,13 +1004,21 @@ mod tests {
         volume.ntfs_state = Some(NtfsState::Dirty);
         let decision = decide(&volume, &RW, &PolicyOverrides::default());
         assert_eq!(decision.code.as_str(), "UOS-STORAGE-NTFS-005");
-        assert!(decision.recovery_action.starts_with("Boot Windows, let it check the disk"));
+        assert!(
+            decision
+                .recovery_action
+                .starts_with("Boot Windows, let it check the disk")
+        );
     }
 
     #[test]
     fn clean_ntfs_mounts_read_write_with_exact_options() {
         let volume = testing::volume(Filesystem::Ntfs);
-        let request = MountRequest { access: Access::ReadWrite, uid: 1001, gid: 1002 };
+        let request = MountRequest {
+            access: Access::ReadWrite,
+            uid: 1001,
+            gid: 1002,
+        };
         let decision = decide(&volume, &request, &PolicyOverrides::default());
         assert_eq!(decision.outcome, Outcome::MountReadWrite);
         assert_eq!(decision.code, StorageCode::MountReadWrite);
@@ -956,8 +1060,10 @@ mod tests {
                 "flush"
             ]
         );
-        let strict =
-            PolicyOverrides { noexec_removable: true, ..PolicyOverrides::default() };
+        let strict = PolicyOverrides {
+            noexec_removable: true,
+            ..PolicyOverrides::default()
+        };
         let mut card = testing::volume(Filesystem::Exfat);
         card.removable = true;
         let decision = decide(&card, &RO, &strict);
@@ -984,7 +1090,11 @@ mod tests {
     #[test]
     fn linux_filesystems_mount_read_write_with_generic_options_only() {
         for filesystem in [Filesystem::Ext4, Filesystem::Btrfs, Filesystem::Xfs] {
-            let decision = decide(&testing::volume(filesystem), &RW, &PolicyOverrides::default());
+            let decision = decide(
+                &testing::volume(filesystem),
+                &RW,
+                &PolicyOverrides::default(),
+            );
             assert_eq!(decision.outcome, Outcome::MountReadWrite, "{filesystem}");
             assert_eq!(decision.options, ["rw", "nosuid", "nodev"]);
             assert_eq!(decision.implementation, Some(ImplementationKind::Kernel));
@@ -993,21 +1103,35 @@ mod tests {
 
     #[test]
     fn hfsplus_is_read_only_unless_opted_in_and_not_journalled() {
-        let allow = PolicyOverrides { hfsplus_write: true, ..PolicyOverrides::default() };
+        let allow = PolicyOverrides {
+            hfsplus_write: true,
+            ..PolicyOverrides::default()
+        };
         let cases = [
             (HfsJournal::Journaled, false, StorageCode::HfsPlusJournaled),
             (HfsJournal::Journaled, true, StorageCode::HfsPlusJournaled),
             (HfsJournal::Unknown, true, StorageCode::HfsPlusJournaled),
-            (HfsJournal::NotJournaled, false, StorageCode::HfsPlusWriteDisabled),
+            (
+                HfsJournal::NotJournaled,
+                false,
+                StorageCode::HfsPlusWriteDisabled,
+            ),
         ];
         for (journal, opted_in, code) in cases {
             let mut volume = testing::volume(Filesystem::HfsPlus);
             volume.hfs_journal = Some(journal);
-            let policy = if opted_in { allow } else { PolicyOverrides::default() };
+            let policy = if opted_in {
+                allow
+            } else {
+                PolicyOverrides::default()
+            };
             let decision = decide(&volume, &RW, &policy);
             assert_eq!(decision.outcome, Outcome::MountReadOnly, "{journal}");
             assert_eq!(decision.code, code, "{journal}");
-            assert_eq!(decision.options, ["ro", "nosuid", "nodev", "uid=1000", "gid=1000"]);
+            assert_eq!(
+                decision.options,
+                ["ro", "nosuid", "nodev", "uid=1000", "gid=1000"]
+            );
         }
         let volume = testing::volume(Filesystem::HfsPlus);
         let decision = decide(&volume, &RW, &allow);
@@ -1021,7 +1145,10 @@ mod tests {
         let default = decide(&volume, &RW, &PolicyOverrides::default());
         assert_eq!(default.outcome, Outcome::Unsupported);
         assert_eq!(default.code, StorageCode::ApfsNotEnabled);
-        let enabled = PolicyOverrides { apfs_read_only: true, ..PolicyOverrides::default() };
+        let enabled = PolicyOverrides {
+            apfs_read_only: true,
+            ..PolicyOverrides::default()
+        };
         let decision = decide(&volume, &RW, &enabled);
         assert_eq!(decision.outcome, Outcome::MountReadOnly);
         assert_eq!(decision.code, StorageCode::ApfsReadOnly);
@@ -1039,8 +1166,11 @@ mod tests {
         ];
         for (filesystem, code) in cases {
             for request in [RO, RW] {
-                let decision =
-                    decide(&testing::volume(filesystem), &request, &PolicyOverrides::default());
+                let decision = decide(
+                    &testing::volume(filesystem),
+                    &request,
+                    &PolicyOverrides::default(),
+                );
                 assert_eq!(decision.outcome, Outcome::Unsupported, "{filesystem}");
                 assert_eq!(decision.code, code, "{filesystem}");
             }
@@ -1048,10 +1178,17 @@ mod tests {
         let mut odd = testing::volume(Filesystem::Unknown);
         odd.signature = Some("bcache\u{7}fs".to_owned());
         let decision = decide(&odd, &RW, &PolicyOverrides::default());
-        assert!(decision.reason.contains("bcache\\u{7}fs"), "{}", decision.reason);
+        assert!(
+            decision.reason.contains("bcache\\u{7}fs"),
+            "{}",
+            decision.reason
+        );
         odd.signature = None;
         let decision = decide(&odd, &RW, &PolicyOverrides::default());
-        assert_eq!(decision.reason, "No filesystem signature was found on the volume.");
+        assert_eq!(
+            decision.reason,
+            "No filesystem signature was found on the volume."
+        );
     }
 
     #[test]
@@ -1068,7 +1205,11 @@ mod tests {
         assert_eq!(decision.code, StorageCode::ContainerNotMountable);
 
         for filesystem in [Filesystem::LvmMember, Filesystem::RaidMember] {
-            let decision = decide(&testing::volume(filesystem), &RO, &PolicyOverrides::default());
+            let decision = decide(
+                &testing::volume(filesystem),
+                &RO,
+                &PolicyOverrides::default(),
+            );
             assert_eq!(decision.outcome, Outcome::Refuse);
             assert_eq!(decision.code, StorageCode::ContainerNotMountable);
         }

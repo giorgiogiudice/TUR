@@ -196,7 +196,10 @@ pub const POLICY_TABLE: &[FsPolicy] = &[
         driver: Some("hfsplus"),
         mount_type: Some("hfsplus"),
         // Checked in order: the journal state is reported before the opt-in.
-        write_conditions: &[WriteCondition::HfsPlusNotJournaled, WriteCondition::HfsPlusWriteOptIn],
+        write_conditions: &[
+            WriteCondition::HfsPlusNotJournaled,
+            WriteCondition::HfsPlusWriteOptIn,
+        ],
         read_conditions: &[],
         notes: "Policy-dependent. Caution with journalled volumes; validate before write.",
     },
@@ -338,7 +341,10 @@ pub const EXCLUDED_IMPLEMENTATIONS: &[ExcludedImplementation] = &[ExcludedImplem
 /// a row were ever missing, the lookup falls back to the unsupported row
 /// rather than to anything that mounts.
 pub fn policy_for(filesystem: Filesystem) -> &'static FsPolicy {
-    POLICY_TABLE.iter().find(|row| row.filesystem == filesystem).unwrap_or(&UNKNOWN_ROW)
+    POLICY_TABLE
+        .iter()
+        .find(|row| row.filesystem == filesystem)
+        .unwrap_or(&UNKNOWN_ROW)
 }
 
 string_enum! {
@@ -420,7 +426,10 @@ mod tests {
     #[test]
     fn every_filesystem_has_exactly_one_row() {
         for &filesystem in Filesystem::all() {
-            let rows = POLICY_TABLE.iter().filter(|row| row.filesystem == filesystem).count();
+            let rows = POLICY_TABLE
+                .iter()
+                .filter(|row| row.filesystem == filesystem)
+                .count();
             assert_eq!(rows, 1, "{filesystem}");
             assert_eq!(policy_for(filesystem).filesystem, filesystem);
         }
@@ -432,12 +441,42 @@ mod tests {
         // Filesystem, default access, implementation, driver: one line per
         // specification row that maps to a filesystem.
         let expected = [
-            (Filesystem::Ext4, DefaultAccess::ReadWrite, ImplementationKind::Kernel, Some("ext4")),
-            (Filesystem::Btrfs, DefaultAccess::ReadWrite, ImplementationKind::Kernel, Some("btrfs")),
-            (Filesystem::Xfs, DefaultAccess::ReadWrite, ImplementationKind::Kernel, Some("xfs")),
-            (Filesystem::Ntfs, DefaultAccess::ReadWrite, ImplementationKind::Kernel, Some("ntfs3")),
-            (Filesystem::Exfat, DefaultAccess::ReadWrite, ImplementationKind::Kernel, Some("exfat")),
-            (Filesystem::Vfat, DefaultAccess::ReadWrite, ImplementationKind::Kernel, Some("vfat")),
+            (
+                Filesystem::Ext4,
+                DefaultAccess::ReadWrite,
+                ImplementationKind::Kernel,
+                Some("ext4"),
+            ),
+            (
+                Filesystem::Btrfs,
+                DefaultAccess::ReadWrite,
+                ImplementationKind::Kernel,
+                Some("btrfs"),
+            ),
+            (
+                Filesystem::Xfs,
+                DefaultAccess::ReadWrite,
+                ImplementationKind::Kernel,
+                Some("xfs"),
+            ),
+            (
+                Filesystem::Ntfs,
+                DefaultAccess::ReadWrite,
+                ImplementationKind::Kernel,
+                Some("ntfs3"),
+            ),
+            (
+                Filesystem::Exfat,
+                DefaultAccess::ReadWrite,
+                ImplementationKind::Kernel,
+                Some("exfat"),
+            ),
+            (
+                Filesystem::Vfat,
+                DefaultAccess::ReadWrite,
+                ImplementationKind::Kernel,
+                Some("vfat"),
+            ),
             (
                 Filesystem::HfsPlus,
                 DefaultAccess::ReadOnly,
@@ -450,8 +489,18 @@ mod tests {
                 ImplementationKind::Userspace,
                 Some("apfs-fuse"),
             ),
-            (Filesystem::Refs, DefaultAccess::Unsupported, ImplementationKind::Absent, None),
-            (Filesystem::Zfs, DefaultAccess::Unsupported, ImplementationKind::Absent, None),
+            (
+                Filesystem::Refs,
+                DefaultAccess::Unsupported,
+                ImplementationKind::Absent,
+                None,
+            ),
+            (
+                Filesystem::Zfs,
+                DefaultAccess::Unsupported,
+                ImplementationKind::Absent,
+                None,
+            ),
         ];
         for (filesystem, access, implementation, driver) in expected {
             let row = row(filesystem);
@@ -466,7 +515,10 @@ mod tests {
 
     #[test]
     fn ntfs_writes_require_a_clean_volume() {
-        assert_eq!(row(Filesystem::Ntfs).write_conditions, &[WriteCondition::NtfsClean]);
+        assert_eq!(
+            row(Filesystem::Ntfs).write_conditions,
+            &[WriteCondition::NtfsClean]
+        );
     }
 
     #[test]
@@ -487,7 +539,11 @@ mod tests {
 
     #[test]
     fn excluded_implementations_are_not_drivers_in_the_table() {
-        assert!(EXCLUDED_IMPLEMENTATIONS.iter().any(|excluded| excluded.name == "linux-apfs-rw"));
+        assert!(
+            EXCLUDED_IMPLEMENTATIONS
+                .iter()
+                .any(|excluded| excluded.name == "linux-apfs-rw")
+        );
         for excluded in EXCLUDED_IMPLEMENTATIONS {
             for row in POLICY_TABLE {
                 assert_ne!(row.driver, Some(excluded.name));
@@ -499,8 +555,10 @@ mod tests {
     #[test]
     fn rows_that_never_mount_have_no_driver_and_are_not_writable() {
         for row in POLICY_TABLE {
-            let mounts =
-                matches!(row.default_access, DefaultAccess::ReadWrite | DefaultAccess::ReadOnly);
+            let mounts = matches!(
+                row.default_access,
+                DefaultAccess::ReadWrite | DefaultAccess::ReadOnly
+            );
             if mounts {
                 assert!(row.driver.is_some(), "{}", row.filesystem);
             } else {

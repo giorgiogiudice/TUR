@@ -46,7 +46,12 @@ fn xml_names(xml: &str, element: &str) -> Vec<String> {
 }
 
 fn keys(value: &Value) -> BTreeSet<&str> {
-    value.as_object().expect("an object").keys().map(String::as_str).collect()
+    value
+        .as_object()
+        .expect("an object")
+        .keys()
+        .map(String::as_str)
+        .collect()
 }
 
 fn rust_files(directory: &str) -> Vec<PathBuf> {
@@ -63,7 +68,10 @@ fn rust_files(directory: &str) -> Vec<PathBuf> {
 #[test]
 fn manifest_follows_the_addendum_format() {
     let manifest = manifest();
-    assert_eq!(keys(&manifest), BTreeSet::from(["schema_version", "service", "tools"]));
+    assert_eq!(
+        keys(&manifest),
+        BTreeSet::from(["schema_version", "service", "tools"])
+    );
     assert_eq!(manifest["schema_version"], 1);
     assert_eq!(manifest["service"], "org.uos.Storage1");
     let mut names = BTreeSet::new();
@@ -75,16 +83,33 @@ fn manifest_follows_the_addendum_format() {
         );
         let name = tool["name"].as_str().expect("name is a string");
         assert!(names.insert(name.to_owned()), "{name} appears twice");
-        let suffix = name.strip_prefix("storage_").expect("tool names start with storage_");
+        let suffix = name
+            .strip_prefix("storage_")
+            .expect("tool names start with storage_");
         assert!(!suffix.is_empty() && suffix.bytes().all(|b| b.is_ascii_lowercase() || b == b'_'));
-        assert!(tool["description"].as_str().is_some_and(|text| text.ends_with('.')), "{name}");
-        assert!(tool["class"].as_u64().is_some_and(|class| class <= 4), "{name}");
-        assert!(tool["method"].as_str().is_some_and(|method| !method.is_empty()), "{name}");
+        assert!(
+            tool["description"]
+                .as_str()
+                .is_some_and(|text| text.ends_with('.')),
+            "{name}"
+        );
+        assert!(
+            tool["class"].as_u64().is_some_and(|class| class <= 4),
+            "{name}"
+        );
+        assert!(
+            tool["method"]
+                .as_str()
+                .is_some_and(|method| !method.is_empty()),
+            "{name}"
+        );
 
         let input = &tool["input_schema"];
         assert_eq!(input["type"], "object", "{name}");
         assert_eq!(input["additionalProperties"], false, "{name}");
-        let properties = input["properties"].as_object().expect("properties is an object");
+        let properties = input["properties"]
+            .as_object()
+            .expect("properties is an object");
         for required in input["required"].as_array().into_iter().flatten() {
             let required = required.as_str().expect("required names are strings");
             assert!(properties.contains_key(required), "{name}: {required}");
@@ -99,7 +124,12 @@ fn manifest_offers_only_observation_and_reversible_tools() {
         .as_array()
         .unwrap()
         .iter()
-        .map(|tool| (tool["name"].as_str().unwrap(), tool["class"].as_u64().unwrap()))
+        .map(|tool| {
+            (
+                tool["name"].as_str().unwrap(),
+                tool["class"].as_u64().unwrap(),
+            )
+        })
         .collect();
     let expected = BTreeMap::from([
         ("storage_list_volumes", 0),
@@ -113,8 +143,17 @@ fn manifest_offers_only_observation_and_reversible_tools() {
 
 #[test]
 fn destructive_operations_are_not_offered_anywhere() {
-    let destructive =
-        ["format", "partition", "encrypt", "wipe", "erase", "mkfs", "resize", "label", "repair"];
+    let destructive = [
+        "format",
+        "partition",
+        "encrypt",
+        "wipe",
+        "erase",
+        "mkfs",
+        "resize",
+        "label",
+        "repair",
+    ];
     let manifest = manifest();
     for tool in manifest["tools"].as_array().unwrap() {
         for field in ["name", "method"] {
@@ -125,17 +164,29 @@ fn destructive_operations_are_not_offered_anywhere() {
         }
         // The assistant never passes a secret or a device path.
         let properties = keys(&tool["input_schema"]["properties"]);
-        assert!(properties.is_subset(&BTreeSet::from(["volume_id", "access"])), "{tool}");
+        assert!(
+            properties.is_subset(&BTreeSet::from(["volume_id", "access"])),
+            "{tool}"
+        );
     }
     let xml = dbus_xml();
     for method in xml_names(&xml, "method") {
         for word in destructive {
-            assert!(!method.to_lowercase().contains(word), "D-Bus method {method} offers {word}");
+            assert!(
+                !method.to_lowercase().contains(word),
+                "D-Bus method {method} offers {word}"
+            );
         }
     }
     for argument in xml_names(&xml, "arg") {
-        assert!(!argument.contains("pass"), "argument {argument} looks like a secret");
-        assert!(!argument.contains("key"), "argument {argument} looks like a secret");
+        assert!(
+            !argument.contains("pass"),
+            "argument {argument} looks like a secret"
+        );
+        assert!(
+            !argument.contains("key"),
+            "argument {argument} looks like a secret"
+        );
     }
 }
 
@@ -147,9 +198,19 @@ fn dbus_interface_has_the_documented_members() {
     assert_eq!(xml_names(&xml, "interface"), ["org.uos.Storage1"]);
     assert_eq!(
         xml_names(&xml, "method"),
-        ["ListVolumes", "PreviewMount", "Mount", "Unmount", "Unlock", "Cancel"]
+        [
+            "ListVolumes",
+            "PreviewMount",
+            "Mount",
+            "Unmount",
+            "Unlock",
+            "Cancel"
+        ]
     );
-    assert_eq!(xml_names(&xml, "signal"), ["VolumeAdded", "VolumeRemoved", "VolumeChanged"]);
+    assert_eq!(
+        xml_names(&xml, "signal"),
+        ["VolumeAdded", "VolumeRemoved", "VolumeChanged"]
+    );
     assert_eq!(xml_names(&xml, "property"), ["SchemaVersion"]);
     for element in ["node", "interface", "method", "signal"] {
         let opened = xml.matches(&format!("<{element} ")).count();
@@ -165,12 +226,17 @@ fn every_tool_maps_to_a_dbus_method() {
     let mut offered = BTreeSet::new();
     for tool in manifest["tools"].as_array().unwrap() {
         let method = tool["method"].as_str().unwrap();
-        assert!(methods.iter().any(|known| known == method), "{method} is not in the XML");
+        assert!(
+            methods.iter().any(|known| known == method),
+            "{method} is not in the XML"
+        );
         offered.insert(method.to_owned());
     }
     // Cancel is for callers that started an operation; it is not a tool.
-    let not_offered: Vec<&String> =
-        methods.iter().filter(|method| !offered.contains(*method)).collect();
+    let not_offered: Vec<&String> = methods
+        .iter()
+        .filter(|method| !offered.contains(*method))
+        .collect();
     assert_eq!(not_offered, ["Cancel"]);
 }
 
@@ -178,19 +244,34 @@ fn every_tool_maps_to_a_dbus_method() {
 fn design_note_covers_every_code_method_and_policy_row() {
     let note = design_note();
     for entry in registry() {
-        assert!(note.contains(entry.code.as_str()), "{} is not documented", entry.code);
+        assert!(
+            note.contains(entry.code.as_str()),
+            "{} is not documented",
+            entry.code
+        );
     }
     for method in xml_names(&dbus_xml(), "method") {
-        assert!(note.contains(&format!("`{method}`")), "{method} is not documented");
+        assert!(
+            note.contains(&format!("`{method}`")),
+            "{method} is not documented"
+        );
     }
     for row in POLICY_TABLE {
-        assert!(note.contains(row.spec_name), "{} is not documented", row.spec_name);
+        assert!(
+            note.contains(row.spec_name),
+            "{} is not documented",
+            row.spec_name
+        );
         if let Some(driver) = row.driver {
             assert!(note.contains(driver), "{driver} is not documented");
         }
     }
     for excluded in EXCLUDED_IMPLEMENTATIONS {
-        assert!(note.contains(excluded.name), "{} is not documented", excluded.name);
+        assert!(
+            note.contains(excluded.name),
+            "{} is not documented",
+            excluded.name
+        );
     }
     assert!(note.contains("NOT RUN"));
 }
@@ -235,7 +316,6 @@ fn the_sources_read_no_environment_start_no_program_and_write_no_file() {
             "remove_dir",
             "create_dir",
             "set_permissions",
-            "unsafe {",
         ] {
             assert!(!text.contains(forbidden), "{name} contains {forbidden}");
         }

@@ -14,7 +14,10 @@ use serde_json::Value;
 
 const BINARY: &str = env!("CARGO_BIN_EXE_uos-storage");
 const FIXTURES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures");
-const SCHEMA: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../schemas/storage-volume.schema.json");
+const SCHEMA: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../schemas/storage-volume.schema.json"
+);
 
 const WINDOWS: &str = "fs-01d9a7c2e4f6b801";
 const APFS: &str = "fs-0a0a0a0a-3333-4bbb-8ccc-000000000a03";
@@ -125,7 +128,9 @@ fn is_volume_id(text: &str) -> bool {
     ["fs-", "part-", "dev-", "tmp-"].iter().any(|prefix| {
         text.strip_prefix(prefix).is_some_and(|rest| {
             !rest.is_empty()
-                && rest.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+                && rest
+                    .bytes()
+                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
         })
     })
 }
@@ -138,7 +143,9 @@ fn is_storage_code(text: &str) -> bool {
         return false;
     };
     !topic.is_empty()
-        && topic.bytes().all(|b| b.is_ascii_uppercase() || b.is_ascii_digit())
+        && topic
+            .bytes()
+            .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit())
         && number.len() == 3
         && number.bytes().all(|b| b.is_ascii_digit())
 }
@@ -164,7 +171,9 @@ fn validate(root: &Value, schema: &Value, value: &Value, path: &str, errors: &mu
         }
     }
     if let Some(reference) = schema.get("$ref").and_then(Value::as_str) {
-        let target = reference.strip_prefix("#/$defs/").and_then(|name| root["$defs"].get(name));
+        let target = reference
+            .strip_prefix("#/$defs/")
+            .and_then(|name| root["$defs"].get(name));
         match target {
             Some(target) => validate(root, target, value, path, errors),
             None => errors.push(format!("{path}: reference {reference} does not resolve")),
@@ -180,7 +189,9 @@ fn validate(root: &Value, schema: &Value, value: &Value, path: &str, errors: &mu
             })
             .count();
         if matching != 1 {
-            errors.push(format!("{path}: matches {matching} oneOf alternatives, expected 1"));
+            errors.push(format!(
+                "{path}: matches {matching} oneOf alternatives, expected 1"
+            ));
         }
     }
     if let Some(expected) = schema.get("const")
@@ -215,7 +226,13 @@ fn validate(root: &Value, schema: &Value, value: &Value, path: &str, errors: &mu
         for (name, member) in object {
             match properties.and_then(|properties| properties.get(name)) {
                 Some(member_schema) => {
-                    validate(root, member_schema, member, &format!("{path}/{name}"), errors);
+                    validate(
+                        root,
+                        member_schema,
+                        member,
+                        &format!("{path}/{name}"),
+                        errors,
+                    );
                 }
                 None if closed => errors.push(format!("{path}: unexpected property {name}")),
                 None => {}
@@ -247,9 +264,10 @@ fn validate(root: &Value, schema: &Value, value: &Value, path: &str, errors: &mu
             }
         }
     }
-    if let (Some(minimum), Some(number)) =
-        (schema.get("minimum").and_then(Value::as_i64), value.as_i64())
-        && number < minimum
+    if let (Some(minimum), Some(number)) = (
+        schema.get("minimum").and_then(Value::as_i64),
+        value.as_i64(),
+    ) && number < minimum
     {
         errors.push(format!("{path}: {number} is below {minimum}"));
     }
@@ -276,7 +294,11 @@ fn inputs() -> Vec<Vec<String>> {
     let sets: [(&str, &[&str]); 4] = [
         (
             "dual-boot.json",
-            &["dual-boot.clean.props", "dual-boot.hibernated.props", "dual-boot.dirty.props"],
+            &[
+                "dual-boot.clean.props",
+                "dual-boot.hibernated.props",
+                "dual-boot.dirty.props",
+            ],
         ),
         ("removable.json", &["removable.props"]),
         ("linux-data.json", &["linux-data.props"]),
@@ -286,7 +308,12 @@ fn inputs() -> Vec<Vec<String>> {
     for (lsblk, properties) in sets {
         all.push(vec!["--from".to_owned(), fixture(lsblk)]);
         for file in properties {
-            all.push(vec!["--from".to_owned(), fixture(lsblk), "--props".to_owned(), fixture(file)]);
+            all.push(vec![
+                "--from".to_owned(),
+                fixture(lsblk),
+                "--props".to_owned(),
+                fixture(file),
+            ]);
         }
     }
     all
@@ -345,10 +372,19 @@ fn decision_json_conforms_to_the_schema_for_every_volume() {
 #[test]
 fn capability_json_conforms_to_the_schema() {
     let schema = schema();
-    let names = ["ext4", "btrfs", "xfs", "ntfs", "exfat", "vfat", "hfsplus", "apfs", "iso9660", "refs"];
+    let names = [
+        "ext4", "btrfs", "xfs", "ntfs", "exfat", "vfat", "hfsplus", "apfs", "iso9660", "refs",
+    ];
     for source in names {
         for destination in names {
-            let args = ["capabilities", "--from-fs", source, "--to-fs", destination, "--json"];
+            let args = [
+                "capabilities",
+                "--from-fs",
+                source,
+                "--to-fs",
+                destination,
+                "--json",
+            ];
             let document = json(&args);
             assert_valid(&schema, &document, &format!("{source} -> {destination}"));
             assert_eq!(document["kind"], "capabilities");
@@ -364,7 +400,10 @@ fn the_validator_rejects_documents_that_break_the_schema() {
     assert_valid(&schema, &good, "baseline");
 
     let mut missing = good.clone();
-    missing["volumes"][0].as_object_mut().unwrap().remove("decision");
+    missing["volumes"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("decision");
     assert!(!schema_errors(&schema, &missing).is_empty());
 
     let mut extra = good.clone();
@@ -409,9 +448,18 @@ fn volumes_text_lists_each_volume_with_its_decision() {
         "--user",
         "jay",
     ]);
-    assert!(stdout.contains("fs-01d9a7c2e4f6b801\n  Name:        Windows\n"), "{stdout}");
-    assert!(stdout.contains("  Decision:    mount-read-only (UOS-STORAGE-NTFS-004)\n"), "{stdout}");
-    assert!(stdout.contains("  Mount path:  /run/uos/volumes/fs-01d9a7c2e4f6b801\n"), "{stdout}");
+    assert!(
+        stdout.contains("fs-01d9a7c2e4f6b801\n  Name:        Windows\n"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("  Decision:    mount-read-only (UOS-STORAGE-NTFS-004)\n"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("  Mount path:  /run/uos/volumes/fs-01d9a7c2e4f6b801\n"),
+        "{stdout}"
+    );
     assert!(stdout.contains("  View:        linux /run/media/jay/Windows (bind, read-only)\n"));
     assert!(stdout.contains("  View:        windows dosdevices/d: (symlink, read-only)\n"));
     assert!(stdout.contains("  View:        macos /Volumes/Windows (bind, read-only)\n"));
@@ -419,7 +467,10 @@ fn volumes_text_lists_each_volume_with_its_decision() {
         "  View:        android /storage/emulated/0/Volumes/Windows (grant, read-only, needs a \
          grant)\n"
     ));
-    assert!(stdout.contains("  Decision:    refuse (UOS-STORAGE-SYSTEM-001)\n"), "{stdout}");
+    assert!(
+        stdout.contains("  Decision:    refuse (UOS-STORAGE-SYSTEM-001)\n"),
+        "{stdout}"
+    );
     assert_eq!(stdout.matches("  Decision:    ").count(), 7);
     assert!(!stdout.contains("zram"));
 }
@@ -469,8 +520,14 @@ fn decide_defaults_to_read_write_and_honours_a_read_only_request() {
     ];
     let default = json(&base);
     assert_eq!(default["volume"]["decision"]["outcome"], "mount-read-write");
-    assert_eq!(default["volume"]["decision"]["code"], "UOS-STORAGE-MOUNT-001");
-    assert_eq!(default["volume"]["decision"]["requested_access"], "read-write");
+    assert_eq!(
+        default["volume"]["decision"]["code"],
+        "UOS-STORAGE-MOUNT-001"
+    );
+    assert_eq!(
+        default["volume"]["decision"]["requested_access"],
+        "read-write"
+    );
     let options: Vec<&str> = default["volume"]["decision"]["options"]
         .as_array()
         .unwrap()
@@ -495,18 +552,33 @@ fn decide_defaults_to_read_write_and_honours_a_read_only_request() {
     let mut read_only = base.to_vec();
     read_only.extend(["--access", "ro"]);
     let requested = json(&read_only);
-    assert_eq!(requested["volume"]["decision"]["outcome"], "mount-read-only");
-    assert_eq!(requested["volume"]["decision"]["code"], "UOS-STORAGE-MOUNT-002");
+    assert_eq!(
+        requested["volume"]["decision"]["outcome"],
+        "mount-read-only"
+    );
+    assert_eq!(
+        requested["volume"]["decision"]["code"],
+        "UOS-STORAGE-MOUNT-002"
+    );
     assert_eq!(requested["volume"]["decision"]["options"][0], "ro");
 }
 
 #[test]
 fn an_unknown_volume_is_an_error_with_a_code() {
-    let result =
-        run(&["decide", "--from", path("removable.json"), "--volume", "fs-does-not-exist"]);
+    let result = run(&[
+        "decide",
+        "--from",
+        path("removable.json"),
+        "--volume",
+        "fs-does-not-exist",
+    ]);
     assert_eq!(result.status, 1);
     assert!(result.stdout.is_empty());
-    assert!(result.stderr.starts_with("UOS-STORAGE-VOLUME-001\n"), "{}", result.stderr);
+    assert!(
+        result.stderr.starts_with("UOS-STORAGE-VOLUME-001\n"),
+        "{}",
+        result.stderr
+    );
     assert!(result.stderr.contains("fs-does-not-exist"));
 }
 
@@ -526,7 +598,11 @@ fn unusable_input_is_an_error_with_a_code() {
         let result = run(args);
         assert_eq!(result.status, 1, "{args:?}");
         assert!(result.stdout.is_empty(), "{args:?}");
-        assert!(result.stderr.starts_with("UOS-STORAGE-PROBE-001\n"), "{args:?}: {}", result.stderr);
+        assert!(
+            result.stderr.starts_with("UOS-STORAGE-PROBE-001\n"),
+            "{args:?}: {}",
+            result.stderr
+        );
     }
     let result = run(&["volumes", "--from", human_sizes]);
     assert!(result.stderr.contains("465.8G"), "{}", result.stderr);
@@ -613,19 +689,31 @@ fn a_hibernated_volume_is_never_writable_through_the_command_line() {
     let props = path("dual-boot.hibernated.props");
     for bits in 0..16 {
         for access in ["ro", "rw"] {
-            let mut args = vec!["decide", "--from", from, "--props", props, "--volume", WINDOWS];
+            let mut args = vec![
+                "decide", "--from", from, "--props", props, "--volume", WINDOWS,
+            ];
             args.extend(["--access", access]);
             args.extend(policy_flags(bits));
             let text = ok(&args);
             assert!(!text.to_lowercase().contains("force"), "{args:?}\n{text}");
             assert!(!text.contains("remove_hiberfile"), "{args:?}");
-            assert!(!text.contains("Mount policy: read/write"), "{args:?}\n{text}");
+            assert!(
+                !text.contains("Mount policy: read/write"),
+                "{args:?}\n{text}"
+            );
             assert!(!text.contains("Mount options: rw"), "{args:?}\n{text}");
 
             args.push("--json");
             let document = json(&args);
-            let outcome = document["volume"]["decision"]["outcome"].as_str().unwrap().to_owned();
-            let expected = if bits & 1 != 0 { "refuse" } else { "mount-read-only" };
+            let outcome = document["volume"]["decision"]["outcome"]
+                .as_str()
+                .unwrap()
+                .to_owned();
+            let expected = if bits & 1 != 0 {
+                "refuse"
+            } else {
+                "mount-read-only"
+            };
             assert_eq!(outcome, expected, "{args:?}");
         }
     }
@@ -663,8 +751,14 @@ fn a_hostile_label_does_not_reach_the_terminal_or_a_path() {
     let text = ok(&["volumes", "--from", from, "--user", "jay"]);
     assert!(!text.contains('\u{1b}'));
     assert!(!text.contains('\u{7}'));
-    assert!(text.contains("  Name:        _.._etc_pass wd_x_y[31m\n"), "{text}");
-    assert!(text.contains("linux /run/media/jay/_.._etc_pass wd_x_y[31m ("), "{text}");
+    assert!(
+        text.contains("  Name:        _.._etc_pass wd_x_y[31m\n"),
+        "{text}"
+    );
+    assert!(
+        text.contains("linux /run/media/jay/_.._etc_pass wd_x_y[31m ("),
+        "{text}"
+    );
     for line in text.lines().filter(|line| line.starts_with("  View:")) {
         assert!(!line.split('/').any(|part| part == ".."), "{line}");
     }
@@ -698,7 +792,10 @@ fn equal_labels_are_distinct_in_the_output() {
 #[test]
 fn capabilities_reports_losses() {
     let text = ok(&["capabilities", "--from-fs", "ntfs", "--to-fs", "exfat"]);
-    assert!(text.starts_with("Copy from NTFS to exFAT\nAssessment: complete\n"), "{text}");
+    assert!(
+        text.starts_with("Copy from NTFS to exFAT\nAssessment: complete\n"),
+        "{text}"
+    );
     assert!(text.contains("  alternate-data-streams: lost (source yes, destination no)\n"));
     assert!(text.contains("  hard-links: lost (source yes, destination no)\n"));
 }

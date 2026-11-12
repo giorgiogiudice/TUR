@@ -369,7 +369,10 @@ impl StorageCode {
     /// Returns `None` only if the text form is not a valid UOS storage code; a
     /// unit test checks that this never happens for a registered code.
     pub fn error_code(self) -> Option<ErrorCode> {
-        self.as_str().parse::<ErrorCode>().ok().filter(|code| code.family() == Family::Storage)
+        self.as_str()
+            .parse::<ErrorCode>()
+            .ok()
+            .filter(|code| code.family() == Family::Storage)
     }
 }
 
@@ -390,7 +393,9 @@ mod tests {
     #[test]
     fn every_code_parses_as_a_storage_code() {
         for &code in StorageCode::all() {
-            let parsed = code.error_code().unwrap_or_else(|| panic!("{code} does not parse"));
+            let parsed = code
+                .error_code()
+                .unwrap_or_else(|| panic!("{code} does not parse"));
             assert_eq!(parsed.family(), Family::Storage);
             assert_eq!(parsed.as_str(), code.as_str());
         }
@@ -398,7 +403,10 @@ mod tests {
 
     #[test]
     fn codes_are_unique() {
-        let texts: BTreeSet<&str> = StorageCode::all().iter().map(|code| code.as_str()).collect();
+        let texts: BTreeSet<&str> = StorageCode::all()
+            .iter()
+            .map(|code| code.as_str())
+            .collect();
         assert_eq!(texts.len(), StorageCode::all().len());
     }
 
@@ -416,7 +424,11 @@ mod tests {
                 entry.recovery_action,
             ] {
                 assert!(!text.trim().is_empty(), "{}", entry.code);
-                assert!(!text.contains("  "), "{}: double space in {text:?}", entry.code);
+                assert!(
+                    !text.contains("  "),
+                    "{}: double space in {text:?}",
+                    entry.code
+                );
             }
             assert!(entry.user_message.ends_with('.'), "{}", entry.code);
             assert!(entry.recovery_action.ends_with('.'), "{}", entry.code);
@@ -427,7 +439,10 @@ mod tests {
     fn ntfs_004_keeps_the_specification_meaning() {
         let entry = StorageCode::NtfsUnsafe.entry();
         assert_eq!(entry.code.as_str(), "UOS-STORAGE-NTFS-004");
-        assert_eq!(entry.user_message, "The Windows volume was not mounted for writing.");
+        assert_eq!(
+            entry.user_message,
+            "The Windows volume was not mounted for writing."
+        );
         assert_eq!(
             entry.recovery_action,
             "Boot Windows, disable Fast Startup/hibernation, shut down fully, then retry."
@@ -447,7 +462,11 @@ mod tests {
             ] {
                 let lowered = text.to_lowercase();
                 for word in FORBIDDEN_WORDING {
-                    assert!(!lowered.contains(word), "{}: {word:?} in {text:?}", entry.code);
+                    assert!(
+                        !lowered.contains(word),
+                        "{}: {word:?} in {text:?}",
+                        entry.code
+                    );
                 }
             }
         }
@@ -460,6 +479,9 @@ mod tests {
             .filter(|entry| entry.origin == CodeOrigin::Input)
             .map(|entry| entry.code)
             .collect();
-        assert_eq!(input, vec![StorageCode::ProbeInputInvalid, StorageCode::NoSuchVolume]);
+        assert_eq!(
+            input,
+            vec![StorageCode::ProbeInputInvalid, StorageCode::NoSuchVolume]
+        );
     }
 }

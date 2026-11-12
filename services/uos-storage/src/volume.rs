@@ -112,7 +112,8 @@ impl VolumeId {
     /// lower-case ASCII letters, digits and hyphens.
     pub fn parse(text: &str) -> Option<VolumeId> {
         let known_prefix = IdSource::all().iter().any(|source| {
-            text.strip_prefix(source.prefix()).is_some_and(|rest| !rest.is_empty())
+            text.strip_prefix(source.prefix())
+                .is_some_and(|rest| !rest.is_empty())
         });
         let safe = text
             .bytes()
@@ -235,7 +236,9 @@ fn fnv1a64(bytes: &[u8]) -> u64 {
 }
 
 fn non_empty(value: Option<&String>) -> Option<&str> {
-    value.map(|text| text.trim()).filter(|text| !text.is_empty())
+    value
+        .map(|text| text.trim())
+        .filter(|text| !text.is_empty())
 }
 
 struct Node<'a> {
@@ -249,7 +252,9 @@ fn device_path(device: &LsblkDevice) -> String {
     if let Some(path) = non_empty(device.path.as_ref()) {
         return path.to_owned();
     }
-    let name = non_empty(device.kname.as_ref()).or(non_empty(device.name.as_ref())).unwrap_or("");
+    let name = non_empty(device.kname.as_ref())
+        .or(non_empty(device.name.as_ref()))
+        .unwrap_or("");
     format!("/dev/{name}")
 }
 
@@ -269,7 +274,12 @@ fn flatten(roots: &[LsblkDevice]) -> Vec<Node<'_>> {
             None => {
                 let index = nodes.len();
                 index_by_path.insert(path.clone(), index);
-                nodes.push(Node { device, path, parents: Vec::new(), children: Vec::new() });
+                nodes.push(Node {
+                    device,
+                    path,
+                    parents: Vec::new(),
+                    children: Vec::new(),
+                });
                 for child in device.children.iter().rev() {
                     stack.push((child, Some(index)));
                 }
@@ -304,7 +314,11 @@ fn reachable(nodes: &[Node<'_>], start: usize, upwards: bool) -> Vec<usize> {
 
 /// The parents of a node when `upwards` is true, otherwise its children.
 fn neighbours<'n>(nodes: &'n [Node<'_>], index: usize, upwards: bool) -> &'n [usize] {
-    if upwards { &nodes[index].parents } else { &nodes[index].children }
+    if upwards {
+        &nodes[index].parents
+    } else {
+        &nodes[index].children
+    }
 }
 
 fn mountpoints_of(device: &LsblkDevice) -> Vec<String> {
@@ -376,12 +390,18 @@ fn build_candidate(nodes: &[Node<'_>], index: usize, probe: &dyn Probe) -> Optio
     });
     let optical = lineage().any(|i| nodes[i].device.device_type.as_deref() == Some("rom"));
     let device_read_only = optical || lineage().any(|i| nodes[i].device.ro == Some(true));
-    let transport = lineage().find_map(|i| non_empty(nodes[i].device.tran.as_ref())).map(str::to_owned);
+    let transport = lineage()
+        .find_map(|i| non_empty(nodes[i].device.tran.as_ref()))
+        .map(str::to_owned);
 
     let mountpoints = mountpoints_of(device);
     let system = std::iter::once(index)
         .chain(descendants.iter().copied())
-        .any(|i| mountpoints_of(nodes[i].device).iter().any(|m| is_system_mountpoint(m)));
+        .any(|i| {
+            mountpoints_of(nodes[i].device)
+                .iter()
+                .any(|m| is_system_mountpoint(m))
+        });
 
     let inside_container = ancestors.iter().any(|&i| {
         matches!(
@@ -424,10 +444,12 @@ fn build_candidate(nodes: &[Node<'_>], index: usize, probe: &dyn Probe) -> Optio
     }
     let hardware = lineage().find_map(|i| {
         let d = nodes[i].device;
-        non_empty(d.wwn.as_ref()).or_else(|| non_empty(d.serial.as_ref())).map(|identity| {
-            let model = non_empty(d.model.as_ref()).unwrap_or("");
-            format!("{identity}|{model}")
-        })
+        non_empty(d.wwn.as_ref())
+            .or_else(|| non_empty(d.serial.as_ref()))
+            .map(|identity| {
+                let model = non_empty(d.model.as_ref()).unwrap_or("");
+                format!("{identity}|{model}")
+            })
     });
     if let Some(hardware) = hardware {
         let start = device.start.unwrap_or(0);
@@ -437,7 +459,10 @@ fn build_candidate(nodes: &[Node<'_>], index: usize, probe: &dyn Probe) -> Optio
             format!("dev-{:016x}", fnv1a64(material.as_bytes())),
         ));
     }
-    chain.push((IdSource::Unstable, format!("tmp-{:016x}", fnv1a64(node.path.as_bytes()))));
+    chain.push((
+        IdSource::Unstable,
+        format!("tmp-{:016x}", fnv1a64(node.path.as_bytes())),
+    ));
 
     let (id_source, id_text) = chain[0].clone();
     let volume = Volume {
@@ -465,7 +490,12 @@ fn build_candidate(nodes: &[Node<'_>], index: usize, probe: &dyn Probe) -> Optio
         subvolumes: device.fsroots.clone(),
     };
     let uuid_sub = non_empty(properties.get(PROP_UUID_SUB)).map(str::to_ascii_lowercase);
-    Some(Candidate { volume, chain, level: 0, uuid_sub })
+    Some(Candidate {
+        volume,
+        chain,
+        level: 0,
+        uuid_sub,
+    })
 }
 
 /// Groups candidate indices by their current identifier.
@@ -481,7 +511,10 @@ fn groups(candidates: &[Candidate]) -> Vec<Vec<usize>> {
 /// UUID: the members of a Btrfs filesystem, an MD RAID array or a ZFS pool
 /// share the set's UUID and differ in `UUID_SUB`.
 fn spans_devices(filesystem: Filesystem) -> bool {
-    matches!(filesystem, Filesystem::Btrfs | Filesystem::RaidMember | Filesystem::Zfs)
+    matches!(
+        filesystem,
+        Filesystem::Btrfs | Filesystem::RaidMember | Filesystem::Zfs
+    )
 }
 
 /// Whether a group of candidates with one identifier is a single multi-device
@@ -547,8 +580,9 @@ impl Inventory {
     pub fn from_probe(probe: &dyn Probe) -> Result<Inventory, ProbeError> {
         let roots = probe.block_devices()?;
         let nodes = flatten(&roots);
-        let mut candidates: Vec<Candidate> =
-            (0..nodes.len()).filter_map(|index| build_candidate(&nodes, index, probe)).collect();
+        let mut candidates: Vec<Candidate> = (0..nodes.len())
+            .filter_map(|index| build_candidate(&nodes, index, probe))
+            .collect();
 
         // Resolve identifier collisions. Each pass moves colliding candidates
         // one step down their chain, so the loop ends after at most as many
@@ -574,8 +608,10 @@ impl Inventory {
         }
 
         let final_groups = groups(&candidates);
-        let merge_flags: Vec<bool> =
-            final_groups.iter().map(|group| is_one_set(&candidates, group)).collect();
+        let merge_flags: Vec<bool> = final_groups
+            .iter()
+            .map(|group| is_one_set(&candidates, group))
+            .collect();
         let mut slots: Vec<Option<Candidate>> = candidates.into_iter().map(Some).collect();
         let mut volumes: Vec<Volume> = Vec::new();
         for (group, one_set) in final_groups.into_iter().zip(merge_flags) {
@@ -666,7 +702,10 @@ mod tests {
     use crate::probe::SnapshotProbe;
 
     fn inventory(json: &str, properties: &str) -> Inventory {
-        let probe = SnapshotProbe::from_lsblk_json(json).unwrap().with_properties(properties).unwrap();
+        let probe = SnapshotProbe::from_lsblk_json(json)
+            .unwrap()
+            .with_properties(properties)
+            .unwrap();
         Inventory::from_probe(&probe).unwrap()
     }
 
@@ -676,7 +715,16 @@ mod tests {
         assert!(VolumeId::parse("part-0a1b").is_some());
         assert!(VolumeId::parse("dev-0123456789abcdef").is_some());
         assert!(VolumeId::parse("tmp-0123456789abcdef").is_some());
-        for bad in ["", "fs-", "1234", "fs-ABCD", "fs-../etc", "fs-a/b", "fs-a b", "xx-1234"] {
+        for bad in [
+            "",
+            "fs-",
+            "1234",
+            "fs-ABCD",
+            "fs-../etc",
+            "fs-a/b",
+            "fs-a b",
+            "xx-1234",
+        ] {
             assert!(VolumeId::parse(bad).is_none(), "{bad:?}");
         }
         let long = format!("fs-{}", "a".repeat(VolumeId::MAX_LEN));
@@ -685,10 +733,27 @@ mod tests {
 
     #[test]
     fn uuid_normalisation_rejects_unsafe_and_empty_values() {
-        assert_eq!(normalise_identifier("A1B2C3D4E5F60718").as_deref(), Some("a1b2c3d4e5f60718"));
-        assert_eq!(normalise_identifier(" 1234-ABCD ").as_deref(), Some("1234-abcd"));
-        assert_eq!(normalise_identifier("2026-10-28-12-00-00-00").as_deref(), Some("2026-10-28-12-00-00-00"));
-        for bad in ["", "abc", "../../etc", "a/b/c/d", "0000-0000", "has space", "ünïcode"] {
+        assert_eq!(
+            normalise_identifier("A1B2C3D4E5F60718").as_deref(),
+            Some("a1b2c3d4e5f60718")
+        );
+        assert_eq!(
+            normalise_identifier(" 1234-ABCD ").as_deref(),
+            Some("1234-abcd")
+        );
+        assert_eq!(
+            normalise_identifier("2026-10-28-12-00-00-00").as_deref(),
+            Some("2026-10-28-12-00-00-00")
+        );
+        for bad in [
+            "",
+            "abc",
+            "../../etc",
+            "a/b/c/d",
+            "0000-0000",
+            "has space",
+            "ünïcode",
+        ] {
             assert_eq!(normalise_identifier(bad), None, "{bad:?}");
         }
         assert_eq!(normalise_identifier(&"a".repeat(65)), None);
@@ -704,7 +769,10 @@ mod tests {
             "",
         );
         let volume = &inventory.volumes[0];
-        assert_eq!(volume.id.as_str(), "fs-0f0e0d0c-1111-2222-3333-444455556666");
+        assert_eq!(
+            volume.id.as_str(),
+            "fs-0f0e0d0c-1111-2222-3333-444455556666"
+        );
         assert_eq!(volume.id_source, IdSource::FilesystemUuid);
         assert!(!volume.duplicate_identity);
     }
@@ -777,8 +845,18 @@ mod tests {
             "",
         );
         assert_eq!(inventory.volumes.len(), 2);
-        assert!(inventory.volumes.iter().all(|volume| volume.duplicate_identity));
-        assert!(inventory.volumes.iter().all(|volume| volume.id_source == IdSource::PartitionUuid));
+        assert!(
+            inventory
+                .volumes
+                .iter()
+                .all(|volume| volume.duplicate_identity)
+        );
+        assert!(
+            inventory
+                .volumes
+                .iter()
+                .all(|volume| volume.id_source == IdSource::PartitionUuid)
+        );
         assert_ne!(inventory.volumes[0].id, inventory.volumes[1].id);
     }
 
@@ -798,8 +876,18 @@ mod tests {
             "",
         );
         assert_eq!(inventory.volumes.len(), 2);
-        assert!(inventory.volumes.iter().all(|volume| volume.duplicate_identity));
-        assert!(inventory.volumes.iter().all(|volume| volume.id_source == IdSource::HardwareIdentity));
+        assert!(
+            inventory
+                .volumes
+                .iter()
+                .all(|volume| volume.duplicate_identity)
+        );
+        assert!(
+            inventory
+                .volumes
+                .iter()
+                .all(|volume| volume.id_source == IdSource::HardwareIdentity)
+        );
         assert_ne!(inventory.volumes[0].id, inventory.volumes[1].id);
     }
 
@@ -816,7 +904,10 @@ mod tests {
         );
         assert_eq!(merged.volumes.len(), 1);
         let pool = &merged.volumes[0];
-        assert_eq!(pool.devices, vec!["/dev/sda".to_owned(), "/dev/sdb".to_owned()]);
+        assert_eq!(
+            pool.devices,
+            vec!["/dev/sda".to_owned(), "/dev/sdb".to_owned()]
+        );
         assert_eq!(pool.size_bytes, 4000);
         assert!(!pool.duplicate_identity);
         assert_eq!(pool.id_source, IdSource::FilesystemUuid);
@@ -827,12 +918,22 @@ mod tests {
             "DEVNAME=/dev/sda\nUUID_SUB=aaaa\n\nDEVNAME=/dev/sdb\nUUID_SUB=aaaa\n",
         );
         assert_eq!(clones.volumes.len(), 2);
-        assert!(clones.volumes.iter().all(|volume| volume.duplicate_identity));
+        assert!(
+            clones
+                .volumes
+                .iter()
+                .all(|volume| volume.duplicate_identity)
+        );
 
         // Without UUID_SUB the two cannot be told apart from clones.
         let unknown = inventory(json, "");
         assert_eq!(unknown.volumes.len(), 2);
-        assert!(unknown.volumes.iter().all(|volume| volume.duplicate_identity));
+        assert!(
+            unknown
+                .volumes
+                .iter()
+                .all(|volume| volume.duplicate_identity)
+        );
     }
 
     #[test]
@@ -849,8 +950,11 @@ mod tests {
                   "children":[{lv}]}}]}}"#
         );
         let inventory = inventory(&json, "");
-        let logical: Vec<&Volume> =
-            inventory.volumes.iter().filter(|volume| volume.filesystem == Filesystem::Ext4).collect();
+        let logical: Vec<&Volume> = inventory
+            .volumes
+            .iter()
+            .filter(|volume| volume.filesystem == Filesystem::Ext4)
+            .collect();
         assert_eq!(logical.len(), 1);
         assert!(!logical[0].duplicate_identity);
         assert_eq!(inventory.volumes.len(), 3);
@@ -874,7 +978,11 @@ mod tests {
             "",
         );
         let by_device = |device: &str| {
-            inventory.volumes.iter().find(|volume| volume.devices[0] == device).unwrap()
+            inventory
+                .volumes
+                .iter()
+                .find(|volume| volume.devices[0] == device)
+                .unwrap()
         };
         assert!(by_device("/dev/nvme0n1p1").system);
         let container = by_device("/dev/nvme0n1p2");
@@ -883,7 +991,10 @@ mod tests {
         let root = by_device("/dev/mapper/luks-root");
         assert!(root.system);
         assert_eq!(root.encryption, Encryption::Mapping);
-        assert_eq!(root.subvolumes, vec!["/var".to_owned(), "/root".to_owned(), "/etc".to_owned()]);
+        assert_eq!(
+            root.subvolumes,
+            vec!["/var".to_owned(), "/root".to_owned(), "/etc".to_owned()]
+        );
         let data = by_device("/dev/nvme0n1p3");
         assert!(!data.system);
         assert_eq!(data.mountpoints, vec!["/var/mnt/data".to_owned()]);
@@ -929,8 +1040,11 @@ mod tests {
                    "uuid":"2026-01-01-00-00-00-00"}]}]}"#,
             "",
         );
-        let devices: Vec<&str> =
-            inventory.volumes.iter().map(|volume| volume.devices[0].as_str()).collect();
+        let devices: Vec<&str> = inventory
+            .volumes
+            .iter()
+            .map(|volume| volume.devices[0].as_str())
+            .collect();
         assert_eq!(devices.len(), 2, "{devices:?}");
         assert!(devices.contains(&"/dev/sda5"));
         assert!(devices.contains(&"/dev/sdb1"));
@@ -955,8 +1069,11 @@ mod tests {
              UOS_NTFS_STATE=nonsense\n\nDEVNAME=/dev/sda3\nUOS_HFS_JOURNAL=not-journalled\n",
         );
         let state = |device: &str| {
-            let volume =
-                inventory.volumes.iter().find(|volume| volume.devices[0] == device).unwrap();
+            let volume = inventory
+                .volumes
+                .iter()
+                .find(|volume| volume.devices[0] == device)
+                .unwrap();
             (volume.ntfs_state, volume.hfs_journal)
         };
         assert_eq!(state("/dev/sda1"), (Some(NtfsState::Hibernated), None));
@@ -975,10 +1092,17 @@ mod tests {
                  "uuid":"00000001-2222-3333-4444-555555555555"}]}"#,
             "",
         );
-        let ids: Vec<&str> = inventory.volumes.iter().map(|volume| volume.id.as_str()).collect();
+        let ids: Vec<&str> = inventory
+            .volumes
+            .iter()
+            .map(|volume| volume.id.as_str())
+            .collect();
         assert_eq!(
             ids,
-            vec!["fs-00000001-2222-3333-4444-555555555555", "fs-ffffffff-2222-3333-4444-555555555555"]
+            vec![
+                "fs-00000001-2222-3333-4444-555555555555",
+                "fs-ffffffff-2222-3333-4444-555555555555"
+            ]
         );
     }
 }

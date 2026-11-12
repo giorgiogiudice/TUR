@@ -288,27 +288,39 @@ fn load_plan(input: &InputArgs, access: Access) -> Result<(MountPlan, PolicyOver
     let mut probe = SnapshotProbe::from_lsblk_json(&read(&input.from)?)
         .map_err(|error| invalid(&input.from, &error))?;
     if let Some(path) = &input.props {
-        probe = probe.with_properties(&read(path)?).map_err(|error| invalid(path, &error))?;
+        probe = probe
+            .with_properties(&read(path)?)
+            .map_err(|error| invalid(path, &error))?;
     }
-    let inventory =
-        Inventory::from_probe(&probe).map_err(|error| invalid(&input.from, &error))?;
+    let inventory = Inventory::from_probe(&probe).map_err(|error| invalid(&input.from, &error))?;
 
     let user = match &input.user {
         Some(name) => Some(UserName::parse(name).ok_or_else(|| {
-            Failure::Usage(format!("\"{}\" is not a usable login name", printable(name)))
+            Failure::Usage(format!(
+                "\"{}\" is not a usable login name",
+                printable(name)
+            ))
         })?),
         None => None,
     };
-    let context = NamespaceContext { user, ..NamespaceContext::default() };
+    let context = NamespaceContext {
+        user,
+        ..NamespaceContext::default()
+    };
     let policy = policy_from(input);
-    let request = MountRequest { access, uid: input.uid, gid: input.gid };
+    let request = MountRequest {
+        access,
+        uid: input.uid,
+        gid: input.gid,
+    };
     let plan = plan(&inventory, &request, &policy, &context);
     plan.verify().map_err(Failure::Internal)?;
     Ok((plan, policy))
 }
 
 fn emit(out: &mut dyn Write, text: &str) -> Result<(), Failure> {
-    out.write_all(text.as_bytes()).map_err(|error| Failure::Output(error.to_string()))
+    out.write_all(text.as_bytes())
+        .map_err(|error| Failure::Output(error.to_string()))
 }
 
 fn emit_json<T: Serialize>(out: &mut dyn Write, report: &T) -> Result<(), Failure> {
@@ -320,7 +332,11 @@ fn emit_json<T: Serialize>(out: &mut dyn Write, report: &T) -> Result<(), Failur
 
 fn location(planned: &PlannedVolume) -> String {
     let volume = &planned.volume;
-    let mut parts: Vec<&str> = vec![if volume.removable { "removable" } else { "internal" }];
+    let mut parts: Vec<&str> = vec![if volume.removable {
+        "removable"
+    } else {
+        "internal"
+    }];
     if volume.optical {
         parts.push("optical");
     }
@@ -338,8 +354,15 @@ fn location(planned: &PlannedVolume) -> String {
 
 fn describe(planned: &PlannedVolume) -> String {
     let volume = &planned.volume;
-    let devices: Vec<String> = volume.devices.iter().map(|device| printable(device)).collect();
-    let signature = volume.signature.as_deref().map_or("none".to_owned(), printable);
+    let devices: Vec<String> = volume
+        .devices
+        .iter()
+        .map(|device| printable(device))
+        .collect();
+    let signature = volume
+        .signature
+        .as_deref()
+        .map_or("none".to_owned(), printable);
     let mut text = format!(
         "{id}\n  Name:        {name}\n  Filesystem:  {filesystem} (signature: {signature})\n  \
          Devices:     {devices}\n  Size:        {size} bytes\n  Location:    {location}\n  \
@@ -357,7 +380,10 @@ fn describe(planned: &PlannedVolume) -> String {
     );
     if planned.decision.is_mount() {
         text.push_str(&format!("  Mount path:  {}\n", planned.canonical_path));
-        text.push_str(&format!("  Options:     {}\n", planned.decision.options.join(",")));
+        text.push_str(&format!(
+            "  Options:     {}\n",
+            planned.decision.options.join(",")
+        ));
     }
     for view in &planned.views {
         let mut notes: Vec<&str> = vec![view.kind.as_str()];
@@ -405,7 +431,11 @@ fn decide_one(args: &DecideArgs, out: &mut dyn Write) -> Result<(), Failure> {
     let (plan, policy) = load_plan(&args.input, access)?;
     let planned = plan.find(&args.volume).ok_or_else(|| Failure::Coded {
         code: StorageCode::NoSuchVolume,
-        detail: format!("volume \"{}\" is not in {}", printable(&args.volume), args.input.from.display()),
+        detail: format!(
+            "volume \"{}\" is not in {}",
+            printable(&args.volume),
+            args.input.from.display()
+        ),
     })?;
     if args.input.json {
         return emit_json(
@@ -428,7 +458,10 @@ fn decide_one(args: &DecideArgs, out: &mut dyn Write) -> Result<(), Failure> {
 
 fn parse_filesystem(name: &str) -> Result<Filesystem, Failure> {
     Filesystem::from_name(name).ok_or_else(|| {
-        let known: Vec<&str> = Filesystem::all().iter().map(|filesystem| filesystem.as_str()).collect();
+        let known: Vec<&str> = Filesystem::all()
+            .iter()
+            .map(|filesystem| filesystem.as_str())
+            .collect();
         Failure::Usage(format!(
             "\"{}\" is not a known filesystem; known: {}",
             printable(name),
@@ -496,14 +529,21 @@ mod tests {
         let mut full = vec!["uos-storage"];
         full.extend_from_slice(args);
         let status = run(full, &mut stdout, &mut stderr);
-        (status, String::from_utf8(stdout).unwrap(), String::from_utf8(stderr).unwrap())
+        (
+            status,
+            String::from_utf8(stdout).unwrap(),
+            String::from_utf8(stderr).unwrap(),
+        )
     }
 
     #[test]
     fn help_and_version_succeed_on_stdout() {
         let (status, stdout, stderr) = run_with(&["--help"]);
         assert_eq!(status, 0);
-        assert!(stdout.contains("volumes") && stdout.contains("decide"), "{stdout}");
+        assert!(
+            stdout.contains("volumes") && stdout.contains("decide"),
+            "{stdout}"
+        );
         assert!(stderr.is_empty());
         let (status, stdout, _) = run_with(&["--version"]);
         assert_eq!(status, 0);
@@ -516,7 +556,9 @@ mod tests {
             vec![],
             vec!["volumes"],
             vec!["decide", "--from", "x.json"],
-            vec!["decide", "--from", "x.json", "--volume", "fs-1", "--access", "write"],
+            vec![
+                "decide", "--from", "x.json", "--volume", "fs-1", "--access", "write",
+            ],
             vec!["capabilities", "--from-fs", "ntfs"],
             vec!["format", "--device", "/dev/sda"],
         ] {
@@ -569,16 +611,19 @@ mod tests {
 
     #[test]
     fn capabilities_says_when_it_cannot_assess() {
-        let (status, stdout, _) = run_with(&["capabilities", "--from-fs", "ext4", "--to-fs", "apfs"]);
+        let (status, stdout, _) =
+            run_with(&["capabilities", "--from-fs", "ext4", "--to-fs", "apfs"]);
         assert_eq!(status, 0);
         assert!(stdout.contains("Assessment: destination-not-writable\n"));
         assert!(stdout.contains("UOS never writes to APFS."));
 
-        let (status, stdout, _) = run_with(&["capabilities", "--from-fs", "refs", "--to-fs", "ext4"]);
+        let (status, stdout, _) =
+            run_with(&["capabilities", "--from-fs", "refs", "--to-fs", "ext4"]);
         assert_eq!(status, 0);
         assert!(stdout.contains("Assessment: no-data\n"));
 
-        let (status, stdout, _) = run_with(&["capabilities", "--from-fs", "ext4", "--to-fs", "ext4"]);
+        let (status, stdout, _) =
+            run_with(&["capabilities", "--from-fs", "ext4", "--to-fs", "ext4"]);
         assert_eq!(status, 0);
         assert!(stdout.contains("Nothing recorded in the registry would be lost."));
     }
@@ -589,13 +634,22 @@ mod tests {
             run_with(&["capabilities", "--from-fs", "nonsense", "--to-fs", "ext4"]);
         assert_eq!(status, 2);
         assert!(stdout.is_empty());
-        assert!(stderr.contains("\"nonsense\" is not a known filesystem"), "{stderr}");
+        assert!(
+            stderr.contains("\"nonsense\" is not a known filesystem"),
+            "{stderr}"
+        );
     }
 
     #[test]
     fn capabilities_json_has_the_documented_shape() {
-        let (status, stdout, _) =
-            run_with(&["capabilities", "--from-fs", "btrfs", "--to-fs", "ext4", "--json"]);
+        let (status, stdout, _) = run_with(&[
+            "capabilities",
+            "--from-fs",
+            "btrfs",
+            "--to-fs",
+            "ext4",
+            "--json",
+        ]);
         assert_eq!(status, 0);
         let value: serde_json::Value = serde_json::from_str(&stdout).unwrap();
         assert_eq!(value["schema_version"], 1);

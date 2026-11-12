@@ -101,8 +101,13 @@ const REGISTRY: &[(Filesystem, [Support; FEATURE_COUNT])] = &[
 /// How well a filesystem represents a feature, or `None` when the registry
 /// has no entry for the filesystem.
 pub fn support(filesystem: Filesystem, feature: Feature) -> Option<Support> {
-    let position = Feature::all().iter().position(|candidate| *candidate == feature)?;
-    REGISTRY.iter().find(|(entry, _)| *entry == filesystem).map(|(_, row)| row[position])
+    let position = Feature::all()
+        .iter()
+        .position(|candidate| *candidate == feature)?;
+    REGISTRY
+        .iter()
+        .find(|(entry, _)| *entry == filesystem)
+        .map(|(_, row)| row[position])
 }
 
 string_enum! {
@@ -176,7 +181,12 @@ pub fn copy_losses(
             (Support::Partial, Support::Partial) => Some(LossKind::Unverified),
         };
         if let Some(kind) = kind {
-            losses.push(Loss { feature, kind, source: from, destination: to });
+            losses.push(Loss {
+                feature,
+                kind,
+                source: from,
+                destination: to,
+            });
         }
     }
     Ok(losses)
@@ -188,15 +198,23 @@ mod tests {
     use crate::policy::{DefaultAccess, POLICY_TABLE};
 
     fn kind(losses: &[Loss], feature: Feature) -> Option<LossKind> {
-        losses.iter().find(|loss| loss.feature == feature).map(|loss| loss.kind)
+        losses
+            .iter()
+            .find(|loss| loss.feature == feature)
+            .map(|loss| loss.kind)
     }
 
     #[test]
     fn every_mountable_filesystem_has_a_registry_row() {
         for row in POLICY_TABLE {
-            let mountable =
-                matches!(row.default_access, DefaultAccess::ReadWrite | DefaultAccess::ReadOnly);
-            let registered = REGISTRY.iter().filter(|(entry, _)| *entry == row.filesystem).count();
+            let mountable = matches!(
+                row.default_access,
+                DefaultAccess::ReadWrite | DefaultAccess::ReadOnly
+            );
+            let registered = REGISTRY
+                .iter()
+                .filter(|(entry, _)| *entry == row.filesystem)
+                .count();
             assert_eq!(registered, usize::from(mountable), "{}", row.filesystem);
         }
     }
@@ -207,9 +225,18 @@ mod tests {
             assert!(support(Filesystem::Ext4, feature).is_some());
             assert!(support(Filesystem::Refs, feature).is_none());
         }
-        assert_eq!(support(Filesystem::Ntfs, Feature::AlternateDataStreams), Some(Support::Yes));
-        assert_eq!(support(Filesystem::Btrfs, Feature::Snapshots), Some(Support::Yes));
-        assert_eq!(support(Filesystem::Exfat, Feature::PosixPermissions), Some(Support::No));
+        assert_eq!(
+            support(Filesystem::Ntfs, Feature::AlternateDataStreams),
+            Some(Support::Yes)
+        );
+        assert_eq!(
+            support(Filesystem::Btrfs, Feature::Snapshots),
+            Some(Support::Yes)
+        );
+        assert_eq!(
+            support(Filesystem::Exfat, Feature::PosixPermissions),
+            Some(Support::No)
+        );
     }
 
     #[test]
@@ -242,8 +269,14 @@ mod tests {
     #[test]
     fn ntfs_to_ext4_loses_windows_metadata() {
         let losses = copy_losses(Filesystem::Ntfs, Filesystem::Ext4).unwrap();
-        assert_eq!(kind(&losses, Feature::AlternateDataStreams), Some(LossKind::Lost));
-        assert_eq!(kind(&losses, Feature::SecurityDescriptors), Some(LossKind::Lost));
+        assert_eq!(
+            kind(&losses, Feature::AlternateDataStreams),
+            Some(LossKind::Lost)
+        );
+        assert_eq!(
+            kind(&losses, Feature::SecurityDescriptors),
+            Some(LossKind::Lost)
+        );
         assert_eq!(kind(&losses, Feature::Compression), Some(LossKind::Lost));
         assert_eq!(kind(&losses, Feature::PosixPermissions), None);
         assert_eq!(kind(&losses, Feature::HardLinks), None);
@@ -252,8 +285,14 @@ mod tests {
     #[test]
     fn ext4_to_ntfs_degrades_what_ntfs3_only_emulates() {
         let losses = copy_losses(Filesystem::Ext4, Filesystem::Ntfs).unwrap();
-        assert_eq!(kind(&losses, Feature::PosixPermissions), Some(LossKind::Degraded));
-        assert_eq!(kind(&losses, Feature::CaseSensitiveNames), Some(LossKind::Degraded));
+        assert_eq!(
+            kind(&losses, Feature::PosixPermissions),
+            Some(LossKind::Degraded)
+        );
+        assert_eq!(
+            kind(&losses, Feature::CaseSensitiveNames),
+            Some(LossKind::Degraded)
+        );
         assert_eq!(kind(&losses, Feature::HardLinks), None);
     }
 
@@ -261,15 +300,28 @@ mod tests {
     fn btrfs_to_ext4_loses_snapshots_compression_and_clones() {
         let losses = copy_losses(Filesystem::Btrfs, Filesystem::Ext4).unwrap();
         let features: Vec<Feature> = losses.iter().map(|loss| loss.feature).collect();
-        assert_eq!(features, [Feature::Compression, Feature::Snapshots, Feature::CopyOnWrite]);
+        assert_eq!(
+            features,
+            [
+                Feature::Compression,
+                Feature::Snapshots,
+                Feature::CopyOnWrite
+            ]
+        );
         assert!(losses.iter().all(|loss| loss.kind == LossKind::Lost));
     }
 
     #[test]
     fn unverified_entries_are_reported_not_hidden() {
         let losses = copy_losses(Filesystem::Apfs, Filesystem::Exfat).unwrap();
-        assert_eq!(kind(&losses, Feature::ResourceForks), Some(LossKind::Unverified));
-        assert_eq!(kind(&losses, Feature::PosixPermissions), Some(LossKind::Lost));
+        assert_eq!(
+            kind(&losses, Feature::ResourceForks),
+            Some(LossKind::Unverified)
+        );
+        assert_eq!(
+            kind(&losses, Feature::PosixPermissions),
+            Some(LossKind::Lost)
+        );
         let losses = copy_losses(Filesystem::Ext4, Filesystem::HfsPlus).unwrap();
         assert_eq!(kind(&losses, Feature::Acls), Some(LossKind::Unverified));
         assert_eq!(kind(&losses, Feature::SparseFiles), Some(LossKind::Lost));
@@ -287,9 +339,20 @@ mod tests {
 
     #[test]
     fn filesystems_without_data_are_not_assessed() {
-        for other in [Filesystem::Refs, Filesystem::Zfs, Filesystem::Luks, Filesystem::Unknown] {
-            assert_eq!(copy_losses(other, Filesystem::Ext4), Err(CapabilityAssessment::NoData));
-            assert_eq!(copy_losses(Filesystem::Ext4, other), Err(CapabilityAssessment::NoData));
+        for other in [
+            Filesystem::Refs,
+            Filesystem::Zfs,
+            Filesystem::Luks,
+            Filesystem::Unknown,
+        ] {
+            assert_eq!(
+                copy_losses(other, Filesystem::Ext4),
+                Err(CapabilityAssessment::NoData)
+            );
+            assert_eq!(
+                copy_losses(Filesystem::Ext4, other),
+                Err(CapabilityAssessment::NoData)
+            );
         }
     }
 

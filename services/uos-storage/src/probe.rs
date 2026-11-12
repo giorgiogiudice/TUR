@@ -193,14 +193,16 @@ fn flexible_bool<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<bo
         Some(FlexibleBool::Bool(value)) => Ok(Some(value)),
         Some(FlexibleBool::Number(0)) => Ok(Some(false)),
         Some(FlexibleBool::Number(1)) => Ok(Some(true)),
-        Some(FlexibleBool::Number(other)) => {
-            Err(serde::de::Error::custom(format!("{other} is not a flag value")))
-        }
+        Some(FlexibleBool::Number(other)) => Err(serde::de::Error::custom(format!(
+            "{other} is not a flag value"
+        ))),
         Some(FlexibleBool::Text(text)) => match text.trim() {
             "" => Ok(None),
             "0" | "false" => Ok(Some(false)),
             "1" | "true" => Ok(Some(true)),
-            other => Err(serde::de::Error::custom(format!("\"{other}\" is not a flag value"))),
+            other => Err(serde::de::Error::custom(format!(
+                "\"{other}\" is not a flag value"
+            ))),
         },
     }
 }
@@ -243,7 +245,9 @@ pub fn parse_properties(
             line: index + 1,
             message: message.to_owned(),
         };
-        let (key, value) = line.split_once('=').ok_or_else(|| malformed("expected KEY=value"))?;
+        let (key, value) = line
+            .split_once('=')
+            .ok_or_else(|| malformed("expected KEY=value"))?;
         let key = key.trim();
         if key.is_empty() {
             return Err(malformed("empty key"));
@@ -259,7 +263,10 @@ pub fn parse_properties(
         let Some(device) = current.as_ref() else {
             return Err(malformed("property before DEVNAME"));
         };
-        devices.entry(device.clone()).or_default().insert(key.to_owned(), value.to_owned());
+        devices
+            .entry(device.clone())
+            .or_default()
+            .insert(key.to_owned(), value.to_owned());
     }
     Ok(devices)
 }
@@ -274,14 +281,20 @@ pub struct SnapshotProbe {
 impl SnapshotProbe {
     /// Builds a probe from `lsblk --json --bytes --output-all` output.
     pub fn from_lsblk_json(json: &str) -> Result<SnapshotProbe, ProbeError> {
-        Ok(SnapshotProbe { devices: parse_lsblk_json(json)?, properties: BTreeMap::new() })
+        Ok(SnapshotProbe {
+            devices: parse_lsblk_json(json)?,
+            properties: BTreeMap::new(),
+        })
     }
 
     /// Adds `blkid --output export` style properties. Later calls add to and
     /// replace earlier properties for the same device.
     pub fn with_properties(mut self, text: &str) -> Result<SnapshotProbe, ProbeError> {
         for (device, properties) in parse_properties(text)? {
-            self.properties.entry(device).or_default().extend(properties);
+            self.properties
+                .entry(device)
+                .or_default()
+                .extend(properties);
         }
         Ok(self)
     }
@@ -322,7 +335,10 @@ mod tests {
         assert_eq!(part.size, Some(900));
         assert_eq!(part.rm, Some(false));
         assert_eq!(part.device_type.as_deref(), Some("part"));
-        assert_eq!(part.mountpoints, vec!["/mnt/a".to_owned(), "/mnt/b".to_owned()]);
+        assert_eq!(
+            part.mountpoints,
+            vec!["/mnt/a".to_owned(), "/mnt/b".to_owned()]
+        );
     }
 
     #[test]
@@ -337,22 +353,29 @@ mod tests {
 
     #[test]
     fn unknown_columns_are_ignored() {
-        let json = r#"{"blockdevices":[{"name":"sdb","maj:min":"8:16","fsuse%":null,"zoned":"none"}]}"#;
+        let json =
+            r#"{"blockdevices":[{"name":"sdb","maj:min":"8:16","fsuse%":null,"zoned":"none"}]}"#;
         assert_eq!(parse_lsblk_json(json).unwrap().len(), 1);
     }
 
     #[test]
     fn human_readable_sizes_are_rejected() {
-        let error = parse_lsblk_json(r#"{"blockdevices":[{"name":"sdb","size":"465.8G"}]}"#)
-            .unwrap_err();
+        let error =
+            parse_lsblk_json(r#"{"blockdevices":[{"name":"sdb","size":"465.8G"}]}"#).unwrap_err();
         assert!(error.to_string().contains("--bytes"), "{error}");
     }
 
     #[test]
     fn malformed_documents_are_rejected() {
-        assert!(matches!(parse_lsblk_json("not json"), Err(ProbeError::Lsblk(_))));
+        assert!(matches!(
+            parse_lsblk_json("not json"),
+            Err(ProbeError::Lsblk(_))
+        ));
         assert!(matches!(parse_lsblk_json("{}"), Err(ProbeError::Lsblk(_))));
-        assert!(matches!(parse_lsblk_json(r#"{"blockdevices":{}}"#), Err(ProbeError::Lsblk(_))));
+        assert!(matches!(
+            parse_lsblk_json(r#"{"blockdevices":{}}"#),
+            Err(ProbeError::Lsblk(_))
+        ));
         assert!(matches!(
             parse_lsblk_json(r#"{"blockdevices":[{"name":"sdb","rm":"maybe"}]}"#),
             Err(ProbeError::Lsblk(_))
@@ -374,15 +397,24 @@ mod tests {
     fn property_errors_carry_the_line_number() {
         assert_eq!(
             parse_properties("UUID=AAAA\n"),
-            Err(ProbeError::Properties { line: 1, message: "property before DEVNAME".to_owned() })
+            Err(ProbeError::Properties {
+                line: 1,
+                message: "property before DEVNAME".to_owned()
+            })
         );
         assert_eq!(
             parse_properties("DEVNAME=/dev/sda1\nnonsense\n"),
-            Err(ProbeError::Properties { line: 2, message: "expected KEY=value".to_owned() })
+            Err(ProbeError::Properties {
+                line: 2,
+                message: "expected KEY=value".to_owned()
+            })
         );
         assert_eq!(
             parse_properties("DEVNAME=/dev/sda1\n\nUUID=AAAA\n"),
-            Err(ProbeError::Properties { line: 3, message: "property before DEVNAME".to_owned() })
+            Err(ProbeError::Properties {
+                line: 3,
+                message: "property before DEVNAME".to_owned()
+            })
         );
     }
 

@@ -121,7 +121,11 @@ mod tests {
             ("linux_raid_member", Filesystem::RaidMember),
         ];
         for (signature, expected) in cases {
-            assert_eq!(Filesystem::from_signature(Some(signature)), expected, "{signature}");
+            assert_eq!(
+                Filesystem::from_signature(Some(signature)),
+                expected,
+                "{signature}"
+            );
         }
     }
 
@@ -129,8 +133,14 @@ mod tests {
     fn unknown_and_missing_signatures_are_unknown() {
         assert_eq!(Filesystem::from_signature(None), Filesystem::Unknown);
         assert_eq!(Filesystem::from_signature(Some("")), Filesystem::Unknown);
-        assert_eq!(Filesystem::from_signature(Some("bcachefs")), Filesystem::Unknown);
-        assert_eq!(Filesystem::from_signature(Some("ext3")), Filesystem::Unknown);
+        assert_eq!(
+            Filesystem::from_signature(Some("bcachefs")),
+            Filesystem::Unknown
+        );
+        assert_eq!(
+            Filesystem::from_signature(Some("ext3")),
+            Filesystem::Unknown
+        );
     }
 
     #[test]

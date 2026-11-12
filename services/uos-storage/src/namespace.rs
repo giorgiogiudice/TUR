@@ -93,17 +93,27 @@ pub fn sanitise_label(raw: &str) -> Option<String> {
             cleaned.push(' ');
             pending_space = false;
         }
-        cleaned.push(if is_separator(character) { '_' } else { character });
+        cleaned.push(if is_separator(character) {
+            '_'
+        } else {
+            character
+        });
     }
     let without_dots = cleaned.trim_start_matches(['.', ' ']);
     let limited: String = without_dots.chars().take(MAX_LABEL_CHARS).collect();
     let name = limited.trim_end();
-    let usable = name.chars().any(|character| character != '_' && character != '.');
+    let usable = name
+        .chars()
+        .any(|character| character != '_' && character != '.');
     usable.then(|| name.to_owned())
 }
 
 fn base_name(volume: &Volume) -> String {
-    volume.label.as_deref().and_then(sanitise_label).unwrap_or_else(|| volume.id.to_string())
+    volume
+        .label
+        .as_deref()
+        .and_then(sanitise_label)
+        .unwrap_or_else(|| volume.id.to_string())
 }
 
 /// Gives each volume a display name that is unique among them, ignoring
@@ -169,7 +179,9 @@ pub fn assign_drive_letters(
         if letters.contains_key(id) {
             continue;
         }
-        let free = WINE_DRIVE_LETTERS.chars().find(|letter| !used.contains(letter));
+        let free = WINE_DRIVE_LETTERS
+            .chars()
+            .find(|letter| !used.contains(letter));
         if let Some(letter) = free {
             used.insert(letter);
             letters.insert(id.clone(), letter);
@@ -187,9 +199,13 @@ impl UserName {
     /// Validates a login name: 1 to 64 characters from `A-Z a-z 0-9 _ . @ -`,
     /// starting with a letter, a digit or `_`.
     pub fn parse(text: &str) -> Option<UserName> {
-        let first_ok = text.chars().next().is_some_and(|c| c.is_ascii_alphanumeric() || c == '_');
-        let rest_ok =
-            text.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '@' | '-'));
+        let first_ok = text
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_ascii_alphanumeric() || c == '_');
+        let rest_ok = text
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '@' | '-'));
         (first_ok && rest_ok && text.len() <= 64).then(|| UserName(text.to_owned()))
     }
 
@@ -311,8 +327,11 @@ pub fn plan(
     policy: &PolicyOverrides,
     context: &NamespaceContext,
 ) -> MountPlan {
-    let decisions: Vec<Decision> =
-        inventory.volumes.iter().map(|volume| decide(volume, request, policy)).collect();
+    let decisions: Vec<Decision> = inventory
+        .volumes
+        .iter()
+        .map(|volume| decide(volume, request, policy))
+        .collect();
     let mountable: Vec<&Volume> = inventory
         .volumes
         .iter()
@@ -327,7 +346,10 @@ pub fn plan(
     let mut volumes: Vec<PlannedVolume> = Vec::new();
     for (volume, decision) in inventory.volumes.iter().zip(decisions) {
         let canonical = canonical_path(&volume.id);
-        let display_name = names.get(&volume.id).cloned().unwrap_or_else(|| base_name(volume));
+        let display_name = names
+            .get(&volume.id)
+            .cloned()
+            .unwrap_or_else(|| base_name(volume));
         let already_mounted = volume.mountpoints.contains(&canonical);
         let mut mount = None;
         let mut views = Vec::new();
@@ -362,7 +384,13 @@ pub fn plan(
             }
             if let Some(&letter) = letters.get(&volume.id) {
                 let path = format!("{WINE_DOSDEVICES_DIR}/{}:", letter.to_ascii_lowercase());
-                views.push(view(Runtime::Windows, ViewKind::Symlink, path, false, Some(letter)));
+                views.push(view(
+                    Runtime::Windows,
+                    ViewKind::Symlink,
+                    path,
+                    false,
+                    Some(letter),
+                ));
             }
             let macos = format!("{MACOS_VOLUMES_ROOT}/{display_name}");
             views.push(view(Runtime::Macos, ViewKind::Bind, macos, false, None));
@@ -385,7 +413,9 @@ pub fn plan(
 impl MountPlan {
     /// Finds a planned volume by identifier.
     pub fn find(&self, id: &str) -> Option<&PlannedVolume> {
-        self.volumes.iter().find(|planned| planned.volume.id.as_str() == id)
+        self.volumes
+            .iter()
+            .find(|planned| planned.volume.id.as_str() == id)
     }
 
     /// Checks the invariants of a plan:
@@ -411,15 +441,21 @@ impl MountPlan {
             }
             let canonical = canonical_path(&planned.volume.id);
             if planned.canonical_path != canonical {
-                return Err(format!("volume {id} has a canonical path that is not its own"));
+                return Err(format!(
+                    "volume {id} has a canonical path that is not its own"
+                ));
             }
             let mounts = planned.decision.is_mount();
             if !mounts && (planned.mount.is_some() || !planned.views.is_empty()) {
-                return Err(format!("volume {id} has a mount or views without a mount decision"));
+                return Err(format!(
+                    "volume {id} has a mount or views without a mount decision"
+                ));
             }
             if let Some(mount) = &planned.mount {
                 if planned.already_mounted {
-                    return Err(format!("volume {id} is already mounted and is planned again"));
+                    return Err(format!(
+                        "volume {id} is already mounted and is planned again"
+                    ));
                 }
                 if mount.target != canonical {
                     return Err(format!("volume {id} is mounted outside its canonical path"));
@@ -428,7 +464,9 @@ impl MountPlan {
                     return Err(format!("two mounts share the target {}", mount.target));
                 }
                 if mount.sources != planned.volume.devices || mount.sources.is_empty() {
-                    return Err(format!("volume {id} is mounted from devices that are not its own"));
+                    return Err(format!(
+                        "volume {id} is mounted from devices that are not its own"
+                    ));
                 }
                 for source in &mount.sources {
                     if !sources.insert(source.as_str()) {
@@ -437,7 +475,9 @@ impl MountPlan {
                 }
                 let read_only = planned.decision.outcome == Outcome::MountReadOnly;
                 if mount.read_only != read_only || mount.options != planned.decision.options {
-                    return Err(format!("volume {id} is mounted differently from its decision"));
+                    return Err(format!(
+                        "volume {id} is mounted differently from its decision"
+                    ));
                 }
             }
             for view in &planned.views {
@@ -451,7 +491,10 @@ impl MountPlan {
                     return Err(format!("a view of read-only volume {id} is writable"));
                 }
                 if !view_paths.insert((view.runtime, view.path.as_str())) {
-                    return Err(format!("two {} views share the path {}", view.runtime, view.path));
+                    return Err(format!(
+                        "two {} views share the path {}",
+                        view.runtime, view.path
+                    ));
                 }
             }
         }
@@ -466,7 +509,11 @@ mod tests {
     use crate::filesystem::Filesystem;
     use crate::volume::testing;
 
-    const RW: MountRequest = MountRequest { access: Access::ReadWrite, uid: 1000, gid: 1000 };
+    const RW: MountRequest = MountRequest {
+        access: Access::ReadWrite,
+        uid: 1000,
+        gid: 1000,
+    };
 
     fn labelled(filesystem: Filesystem, id: &str, label: Option<&str>) -> Volume {
         let mut volume = testing::volume_with_id(filesystem, id);
@@ -481,7 +528,10 @@ mod tests {
     }
 
     fn context(user: &str) -> NamespaceContext {
-        NamespaceContext { user: UserName::parse(user), ..NamespaceContext::default() }
+        NamespaceContext {
+            user: UserName::parse(user),
+            ..NamespaceContext::default()
+        }
     }
 
     #[test]
@@ -497,7 +547,10 @@ mod tests {
             ("  My  Data\t Disk ", Some("My Data Disk")),
             ("../../etc/passwd", Some("_.._etc_passwd")),
             ("a/b\\c:d", Some("a_b_c_d")),
-            ("bell\u{7}and\nnewline\u{1b}[31m", Some("belland newline[31m")),
+            (
+                "bell\u{7}and\nnewline\u{1b}[31m",
+                Some("belland newline[31m"),
+            ),
             ("right\u{202E}to-left", Some("rightto-left")),
             ("zero\u{200B}width", Some("zerowidth")),
             (".hidden", Some("hidden")),
@@ -542,17 +595,38 @@ mod tests {
                 assert!(name.chars().count() <= MAX_LABEL_CHARS);
                 assert!(name.len() <= 255);
                 assert_eq!(name.trim(), name);
-                assert_eq!(sanitise_label(&name).as_deref(), Some(name.as_str()), "not stable");
+                assert_eq!(
+                    sanitise_label(&name).as_deref(),
+                    Some(name.as_str()),
+                    "not stable"
+                );
             }
         }
     }
 
     #[test]
     fn user_names_are_validated() {
-        for good in ["jay", "user_1", "first.last", "user@example.org", "_svc", "9lives"] {
+        for good in [
+            "jay",
+            "user_1",
+            "first.last",
+            "user@example.org",
+            "_svc",
+            "9lives",
+        ] {
             assert!(UserName::parse(good).is_some(), "{good:?}");
         }
-        for bad in ["", ".", "..", "a/b", "-rf", ".hidden", "name with space", "ü", "a\nb"] {
+        for bad in [
+            "",
+            ".",
+            "..",
+            "a/b",
+            "-rf",
+            ".hidden",
+            "name with space",
+            "ü",
+            "a\nb",
+        ] {
             assert!(UserName::parse(bad).is_none(), "{bad:?}");
         }
         assert!(UserName::parse(&"a".repeat(65)).is_none());
@@ -623,7 +697,12 @@ mod tests {
     #[test]
     fn every_runtime_sees_the_one_canonical_mount() {
         let data = labelled(Filesystem::Ext4, "fs-aaaa", Some("Data"));
-        let plan = plan(&inventory(vec![data]), &RW, &PolicyOverrides::default(), &context("jay"));
+        let plan = plan(
+            &inventory(vec![data]),
+            &RW,
+            &PolicyOverrides::default(),
+            &context("jay"),
+        );
         plan.verify().unwrap();
         let planned = &plan.volumes[0];
         assert_eq!(planned.canonical_path, "/run/uos/volumes/fs-aaaa");
@@ -635,7 +714,12 @@ mod tests {
 
         let view = |runtime: Runtime| planned.views.iter().find(|v| v.runtime == runtime).unwrap();
         assert_eq!(planned.views.len(), 4);
-        assert!(planned.views.iter().all(|v| v.target == "/run/uos/volumes/fs-aaaa"));
+        assert!(
+            planned
+                .views
+                .iter()
+                .all(|v| v.target == "/run/uos/volumes/fs-aaaa")
+        );
         assert!(planned.views.iter().all(|v| !v.read_only));
         assert_eq!(view(Runtime::Linux).path, "/run/media/jay/Data");
         assert_eq!(view(Runtime::Linux).kind, ViewKind::Bind);
@@ -643,7 +727,10 @@ mod tests {
         assert_eq!(view(Runtime::Windows).kind, ViewKind::Symlink);
         assert_eq!(view(Runtime::Windows).drive_letter, Some('D'));
         assert_eq!(view(Runtime::Macos).path, "/Volumes/Data");
-        assert_eq!(view(Runtime::Android).path, "/storage/emulated/0/Volumes/Data");
+        assert_eq!(
+            view(Runtime::Android).path,
+            "/storage/emulated/0/Volumes/Data"
+        );
         assert_eq!(view(Runtime::Android).kind, ViewKind::Grant);
         assert!(view(Runtime::Android).requires_grant);
         assert!(!view(Runtime::Linux).requires_grant);
@@ -653,8 +740,12 @@ mod tests {
     fn views_of_a_read_only_mount_are_read_only() {
         let mut windows = labelled(Filesystem::Ntfs, "fs-aaaa", Some("Windows"));
         windows.ntfs_state = Some(crate::volume::NtfsState::Hibernated);
-        let plan =
-            plan(&inventory(vec![windows]), &RW, &PolicyOverrides::default(), &context("jay"));
+        let plan = plan(
+            &inventory(vec![windows]),
+            &RW,
+            &PolicyOverrides::default(),
+            &context("jay"),
+        );
         plan.verify().unwrap();
         let planned = &plan.volumes[0];
         assert_eq!(planned.decision.outcome, Outcome::MountReadOnly);
@@ -702,8 +793,14 @@ mod tests {
         let other = plan.find("fs-cccc").unwrap();
         assert_eq!(stick.display_name, "Data");
         assert_eq!(other.display_name, "DATA (2)");
-        assert_eq!(stick.views.iter().find_map(|view| view.drive_letter), Some('D'));
-        assert_eq!(other.views.iter().find_map(|view| view.drive_letter), Some('E'));
+        assert_eq!(
+            stick.views.iter().find_map(|view| view.drive_letter),
+            Some('D')
+        );
+        assert_eq!(
+            other.views.iter().find_map(|view| view.drive_letter),
+            Some('E')
+        );
     }
 
     #[test]
@@ -716,7 +813,12 @@ mod tests {
             &NamespaceContext::default(),
         );
         plan.verify().unwrap();
-        assert!(plan.volumes[0].views.iter().all(|view| view.runtime != Runtime::Linux));
+        assert!(
+            plan.volumes[0]
+                .views
+                .iter()
+                .all(|view| view.runtime != Runtime::Linux)
+        );
         assert_eq!(plan.volumes[0].views.len(), 3);
     }
 
@@ -724,7 +826,12 @@ mod tests {
     fn a_volume_already_at_its_canonical_path_is_not_mounted_again() {
         let mut data = labelled(Filesystem::Ext4, "fs-aaaa", Some("Data"));
         data.mountpoints = vec!["/run/uos/volumes/fs-aaaa".to_owned()];
-        let plan = plan(&inventory(vec![data]), &RW, &PolicyOverrides::default(), &context("jay"));
+        let plan = plan(
+            &inventory(vec![data]),
+            &RW,
+            &PolicyOverrides::default(),
+            &context("jay"),
+        );
         plan.verify().unwrap();
         let planned = &plan.volumes[0];
         assert!(planned.already_mounted);
@@ -748,7 +855,12 @@ mod tests {
         same_device.volumes[1].volume.devices = same_device.volumes[0].volume.devices.clone();
         same_device.volumes[1].mount.as_mut().unwrap().sources =
             same_device.volumes[0].volume.devices.clone();
-        assert!(same_device.verify().unwrap_err().contains("source of two mounts"));
+        assert!(
+            same_device
+                .verify()
+                .unwrap_err()
+                .contains("source of two mounts")
+        );
 
         let mut same_target = good.clone();
         same_target.volumes[1].mount.as_mut().unwrap().target =
