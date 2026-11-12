@@ -13,7 +13,7 @@ use crate::host::Host;
 use crate::json::Value;
 use crate::model::KernelArgs;
 use crate::state;
-use crate::trial::{self, MSG_STAGE, MSG_VERDICT, RUN_VERDICT};
+use crate::trial::{self, MSG_STAGE, MSG_VERDICT, RUN_OSTREE_TARGET, RUN_VERDICT};
 
 /// The core services of check R4.
 const CORE_UNITS: [&str; 4] = [
@@ -210,8 +210,20 @@ fn probe_root(host: &mut dyn Host) -> Probe {
     let Some(ostree) = args.ostree else {
         return Probe::Fail("the kernel command line has no ostree= argument".to_owned());
     };
-    let Some(target) = host.ostree_target(&ostree) else {
-        return Probe::Fail(format!("ostree={ostree} does not resolve to a deployment"));
+    // What `classify` resolved at the start of the boot, if it ran: a
+    // fallback made permanent in this boot has since re-pointed the links.
+    let recorded = host
+        .read_run(RUN_OSTREE_TARGET)
+        .map(|text| text.trim().to_owned())
+        .filter(|text| !text.is_empty());
+    let target = match recorded {
+        Some(target) => target,
+        None => match host.ostree_target(&ostree) {
+            Some(target) => target,
+            None => {
+                return Probe::Fail(format!("ostree={ostree} does not resolve to a deployment"));
+            }
+        },
     };
     if target != booted.name() {
         return Probe::Fail(format!(

@@ -36,6 +36,8 @@ pub(crate) struct FakeHost {
     pub(crate) booted: usize,
     pub(crate) staged: Option<Deployment>,
     pub(crate) finalization_locked: bool,
+    /// `bootc rollback` ran in this boot.
+    pub(crate) links_swapped: bool,
     pub(crate) state: BTreeMap<String, String>,
     pub(crate) run: BTreeMap<String, String>,
     /// Every write, in order.
@@ -93,6 +95,7 @@ impl FakeHost {
             booted: 0,
             staged: None,
             finalization_locked: false,
+            links_swapped: false,
             state: BTreeMap::new(),
             run: BTreeMap::new(),
             ops: Vec::new(),
@@ -193,6 +196,7 @@ impl FakeHost {
         self.dead = false;
         self.power = None;
         self.reboot_requested = false;
+        self.links_swapped = false;
         self.run.clear();
         self.boots += 1;
         self.uptime_ms = 5_000;
@@ -404,6 +408,7 @@ impl Host for FakeHost {
             return Err("no rollback deployment".to_owned());
         }
         self.write("rollback".to_owned())?;
+        self.links_swapped = true;
         self.deployments.swap(0, 1);
         self.booted = 1 - self.booted;
         Ok(())
@@ -504,7 +509,14 @@ impl Host for FakeHost {
     }
 
     fn ostree_target(&mut self, _ostree_argument: &str) -> Option<String> {
-        self.deployments.get(self.booted).map(Deployment::name)
+        // After a rollback in this boot the links the argument goes through
+        // lead to the other deployment (seen in CI, run 43200240515).
+        let index = if self.links_swapped && self.deployments.len() > 1 {
+            1 - self.booted
+        } else {
+            self.booted
+        };
+        self.deployments.get(index).map(Deployment::name)
     }
 
     fn path_readable(&mut self, path: &str) -> bool {

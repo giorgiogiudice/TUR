@@ -160,6 +160,12 @@ fn every_row_of_the_classification_table() {
             Classification::Stale,
         ),
         (
+            "4, when GRUB acted on a block from before the trial was armed",
+            facts(A::None, trial, true, W::Previous, true),
+            Decision::Stale,
+            Classification::Stale,
+        ),
+        (
             "5",
             facts(A::Trial, trial, false, W::Previous, true),
             start(true),
@@ -280,7 +286,6 @@ fn combinations_the_table_does_not_list_change_nothing() {
         facts(A::Fallback, trial, false, W::New, true),
         facts(A::Fallback, trial, false, W::Other, true),
         facts(A::Trial, trial, false, W::New, true),
-        facts(A::None, trial, true, W::Previous, false),
         facts(A::None, trial, false, W::Previous, false),
         facts(A::Fallback, reverting, false, W::Unknown, true),
         facts(A::None, reverting, true, W::Other, false),
@@ -578,6 +583,33 @@ fn an_update_that_was_never_finalised_is_not_rolled_back() {
     );
     host.grub();
     assert_eq!(classify(&mut host, &config()), Classification::Normal);
+}
+
+#[test]
+fn power_lost_between_arming_and_finalisation_leaves_the_update_not_applied() {
+    // Measured in CI: GRUB reads the filesystem without replaying its
+    // journal, so after a power cut it can act on the environment block as
+    // it was before the last write. Here that is the block before arming.
+    let mut host = FakeHost::new();
+    host.stage("new", "2.0");
+    arm(&mut host, &config());
+    host.staged = None;
+    let written = host.env.clone();
+    host.env = Some(Default::default());
+    host.grub();
+    host.env = written;
+    assert!(!host.cmdline.contains("tur.boot="), "GRUB saw no counter");
+    assert_eq!(host.counter().as_deref(), Some("3"), "the block holds one");
+    host.ops.clear();
+    assert_eq!(classify(&mut host, &config()), Classification::Stale);
+    assert!(host.ops_matching("rollback").is_empty(), "{:?}", host.ops);
+    assert_eq!(host.counter(), None);
+    assert!(host.read_state(TRIAL_FILE).is_none());
+    assert_eq!(notice(&host).str_or_empty("kind"), "not-applied");
+    host.grub();
+    assert!(!host.cmdline.contains("tur.boot="));
+    assert_eq!(classify(&mut host, &config()), Classification::Normal);
+    assert_eq!(host.booted_checksum(), "old");
 }
 
 #[test]
@@ -1396,6 +1428,33 @@ fn the_gate_writes_its_verdict_and_refuses_a_rejected_version() {
     assert_eq!(classify(&mut host, &config()), Classification::Rejected);
     assert!(!gate::gate(&mut host, Ok(config())));
     assert!(mark_good(&mut host).is_err());
+}
+
+#[test]
+fn the_gate_passes_in_the_boot_that_made_the_fallback_permanent() {
+    // `bootc rollback` re-points the links the kernel's ostree= argument goes
+    // through. Resolved again after it, the argument names the failed
+    // version, and R1 failed in the first CI run of the scenarios.
+    let mut host = at_fallback();
+    assert_eq!(classify(&mut host, &config()), Classification::Fallback);
+    assert!(host.links_swapped);
+    assert!(gate::gate(&mut host, Ok(config())));
+    assert_eq!(notice(&host).str_or_empty("kind"), "fallback");
+    // Without `classify` the gate resolves the argument itself.
+    let mut host = FakeHost::new();
+    assert_eq!(gate::run_gate(&mut host, &config(), "unknown").result, "passed");
+}
+
+#[test]
+fn a_failed_gate_does_not_replace_the_notice_of_a_fallback() {
+    let mut host = at_fallback();
+    assert_eq!(classify(&mut host, &config()), Classification::Fallback);
+    host.session = None;
+    assert!(!gate::gate(&mut host, Ok(config())));
+    record_failure(&mut host);
+    assert!(!host.reboot_requested);
+    assert_eq!(notice(&host).str_or_empty("kind"), "fallback");
+    assert_eq!(last_event(&host, "gate-failed").str_or_empty("failed_check"), "R7");
 }
 
 #[test]

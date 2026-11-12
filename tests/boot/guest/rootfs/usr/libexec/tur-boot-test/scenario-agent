@@ -27,6 +27,10 @@
 #   arm             "unit" (default) or "hand"
 #   finalize        "ok" (default) or "fail": make OSTree's finalisation fail
 #   extra_reboots   clean restarts to do once the trial is over (default 0)
+#   probe           "stale-block": no update at all. Rewrite GRUB's environment
+#                   block the way the product does, say so, and wait for the
+#                   host to cut the power; in the next boot report what GRUB
+#                   acted on and what the block holds.
 #
 # Markers (all start with "TUR-BOOT-TEST: "):
 #   SCENARIO-START name=... phase=stage|observe boot=N
@@ -58,6 +62,7 @@ image="$(fw image)"
 arm="$(fw arm)"
 finalize="$(fw finalize)"
 extra_reboots="$(fw extra_reboots)"
+probe="$(fw probe)"
 image="${image:-${scenario}}"
 arm="${arm:-unit}"
 finalize="${finalize:-ok}"
@@ -226,6 +231,8 @@ journals() {
     journalctl --no-pager -o json -t tur-boot-health 2> /dev/null | head -c 8000000 > "${out}/tur-journal-all.json"
     journalctl --no-pager -o json MESSAGE_ID=26f3b1eb24464d12aa5e7b544a6b5468 2> /dev/null \
         | head -c 2000000 > "${out}/bootc-rollback-messages.json"
+    # Everything bootc itself logged, with its fields: which message IDs it uses.
+    journalctl --no-pager -o json -t bootc 2> /dev/null | head -c 4000000 > "${out}/bootc-journal.json"
     journalctl --no-pager -o short-monotonic -g 'emergency.target|Emergency Mode|Freezing execution|Kernel panic|watchdog' 2> /dev/null \
         | tail -n 200 > "${out}/journal-notable.txt"
 }
@@ -272,6 +279,41 @@ verdict="$(sed -n 's/.*"result": *"\([^"]*\)".*/\1/p' /run/tur/boot-health/verdi
 put classification "${classification}"
 put verdict "${verdict}"
 say "SCENARIO-JUDGED name=${scenario} boot=${boot} gate=${gate} classification=${classification:-none} verdict=${verdict:-none} boot_counter=$(counter) uptime=$(uptime_s)"
+
+if [ "${phase}" = stage ] && [ "${probe}" = stale-block ]; then
+    facts
+    put probe_attempt "${attempt}"
+    if [ "${attempt}" -eq 1 ]; then
+        # Rewrite the block as tur-boot-health does (grub2-editenv, then fsync
+        # of the file), and tell the host. The host cuts the power.
+        {
+            echo "--- before"
+            grub2-editenv "${grubenv}" list
+            filefrag -v "${grubenv}"
+            echo "--- set boot_counter=2"
+            editenv set boot_counter=2
+            echo "exit status: $?"
+            echo "--- after"
+            grub2-editenv "${grubenv}" list
+            filefrag -v "${grubenv}"
+        } > "${out}/probe-write.txt" 2>&1
+        put probe_counter_written "$(counter)"
+        for _ in 1 2 3; do
+            say "SCENARIO-PROBE-WRITTEN name=${scenario} boot_counter=$(counter)"
+        done
+        sleep 900
+        exit 0
+    fi
+    journals
+    send "probe=observed grub_said=$(tur_arguments)counter_at_start=$(sed -n 's/^counter_at_start=//p' "${status}")"
+    for _ in 1 2 3; do
+        sleep 1
+        say "SCENARIO-COMPLETE name=${scenario} outcome=probe boot_counter=$(counter)"
+    done
+    sleep 900
+    systemctl poweroff
+    exit 0
+fi
 
 if [ "${phase}" = stage ]; then
     facts

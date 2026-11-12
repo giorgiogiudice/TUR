@@ -34,6 +34,10 @@ pub(crate) const MSG_PROBLEM: &str = "8f1c2a6e4b7d4c0f9a3e5d6b7c8a9e06";
 /// Runtime files under `/run/tur`.
 pub(crate) const RUN_BOOT: &str = "boot-health/boot.json";
 pub(crate) const RUN_VERDICT: &str = "boot-health/verdict.json";
+/// The deployment the kernel's `ostree=` argument named, resolved when the
+/// boot was classified. A rollback later in the same boot re-points the links
+/// that argument goes through, so the gate must not resolve it again.
+pub(crate) const RUN_OSTREE_TARGET: &str = "boot-health/ostree-target";
 /// Exists when this boot is a trial that GRUB could not announce on the
 /// kernel command line. The restart units test for it (design section 5.4).
 pub(crate) const RUN_TRIAL_FLAG: &str = "boot-trial";
@@ -194,6 +198,13 @@ pub(crate) fn decide(facts: &Facts) -> Decision {
                 loader: false,
             },
             (A::None, true, W::New) => Decision::TrialRecovered,
+            // Not in the design's table; measured in CI (run 43200240515).
+            // Power was lost at shutdown after the trial was armed and before
+            // OSTree changed the boot order. GRUB then acted on the block as
+            // it was before arming, because it reads the filesystem without
+            // replaying its journal: no trial arguments. The previous
+            // version is still the default, so the update was not applied.
+            (A::None, true, W::Previous) => Decision::Stale,
             (A::Fallback, true, W::New) => Decision::ManualRetry,
             _ => Decision::Unlisted,
         },
@@ -549,6 +560,13 @@ fn refuse(
 /// Classifies this boot and acts on the cases that need action.
 pub(crate) fn classify(host: &mut dyn Host, config: &GateConfig) -> Classification {
     let args = KernelArgs::parse(&host.cmdline());
+    // Before anything can change the boot order: which deployment was the
+    // kernel told to start?
+    if let Some(argument) = &args.ostree
+        && let Some(target) = host.ostree_target(argument)
+    {
+        let _ = host.write_run(RUN_OSTREE_TARGET, &target);
+    }
     let mut status = host.bootc_status();
     let mut tries = 0;
     while status.is_err() && tries < 3 {
@@ -1417,7 +1435,15 @@ pub(crate) fn record_failure(host: &mut dyn Host) {
             ("restart_follows", Value::Bool(will_restart)),
         ],
     );
-    if !will_restart {
+    // A fallback or an update that was not applied is the more important
+    // thing to tell the user: a notice about it is not replaced.
+    let pending = host
+        .read_state(NOTICE_FILE)
+        .and_then(|text| json::parse(&text).ok())
+        .map(|notice| notice.str_or_empty("kind"))
+        .unwrap_or_default();
+    let keep = !pending.is_empty() && pending != "unhealthy";
+    if !will_restart && !keep {
         let event = new_event_id(host);
         let boot_id = host.boot_id();
         write_notice(

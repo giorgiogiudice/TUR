@@ -1,7 +1,9 @@
 # SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
 #
-# Boot-health scenario image "kernel-truncated" (F6 of the design's test plan).
-# The kernel image is cut to 64 KiB, so GRUB cannot start it.
+# Boot-health scenario image "kernel-truncated" (F6, corrupt kernel, of the design's test plan).
+# The kernel image is cut to 64 KiB. Measured: without Secure Boot GRUB does
+# not notice. It starts the image, the firmware stops in an exception
+# handler, and nothing restarts the machine (docs/reports/TUR-005.md).
 #
 # Built FROM the boot-test image, so every other layer is identical and only
 # this change is under test. Never part of TUR.

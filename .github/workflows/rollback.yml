@@ -59,19 +59,21 @@ jobs:
         include:
           - group: kept-or-not-applied
             images: good
-            scenarios: good finalize-fails silent-hang cut-staging cut-mark-good
+            scenarios: good finalize-fails silent-hang cut-staging cut-mark-good stale-block
           - group: failing-gate
             images: check-fails unit-fails stall
             scenarios: check-fails unit-fails stall
           - group: early-failures
-            images: panic root-unmountable kernel-truncated emergency
-            scenarios: panic-counter-only panic root-unmountable kernel-truncated emergency
+            images: panic root-unmountable emergency kernel-missing kernel-truncated
+            scenarios: panic-counter-only panic root-unmountable emergency kernel-missing kernel-truncated
           - group: display-and-watchdog
             images: dm-crash pid1-stops
             scenarios: dm-crash pid1-stops
           - group: power-cut-finalisation
             images: good
-            scenarios: cut-finalize-0 cut-finalize-200 cut-finalize-500 cut-finalize-1000 cut-finalize-2000
+            scenarios: >-
+              cut-finalize-0 cut-finalize-200 cut-finalize-500 cut-finalize-1000
+              cut-finalize-2000 cut-finalize-2400 cut-finalize-2800
           - group: power-cut-fallback
             images: unit-fails
             scenarios: cut-fallback-step3 cut-fallback-step4
