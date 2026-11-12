@@ -22,6 +22,7 @@ const EXIT_OK: i32 = 0;
 const EXIT_INVALID: i32 = 1;
 const EXIT_USAGE: i32 = 2;
 const EXIT_PING_FAILED: i32 = 3;
+const EXIT_PROBE_NOT_VERIFIED: i32 = 4;
 
 /// The variable the tests pass the key in.
 const KEY_VARIABLE: &str = "TUR_PAX_PROVIDERS_CLI_TEST_KEY";
@@ -63,7 +64,7 @@ fn config_file(name: &str, provider: ProviderId, server: &FakeServer) -> String 
     let config = json!({
         "schema_version": 1,
         "provider": provider.as_str(),
-        "base_url": server.base_url(),
+        "base_url": common::base_url(provider, server),
         "model": "test-model",
         "max_output_tokens": 256,
         "timeouts": { "connect_ms": 3000, "response_ms": 3000, "idle_ms": 3000 },
@@ -79,11 +80,7 @@ fn data(name: &str) -> String {
 
 #[test]
 fn check_validates_and_prints_capabilities_without_a_network_call() {
-    for wire in [
-        common::anthropic::wire(),
-        common::openai::wire(),
-        common::google::wire(),
-    ] {
+    for wire in common::all_wires() {
         // The server has an answer ready, and must never be asked.
         let server = FakeServer::start(vec![Reply::stream(wire.plain)]);
         let path = config_file("check", wire.provider, &server);
@@ -91,6 +88,11 @@ fn check_validates_and_prints_capabilities_without_a_network_call() {
 
         assert_eq!(run.status, EXIT_OK, "{}", run.stderr);
         assert!(run.stderr.is_empty(), "{}", run.stderr);
+        let control = if wire.provider.is_company_interface() {
+            "native computer control: offered by the provider as"
+        } else {
+            "native computer control: not offered by the provider"
+        };
         for expected in [
             "config: valid",
             "model: test-model",
@@ -99,7 +101,7 @@ fn check_validates_and_prints_capabilities_without_a_network_call() {
             "streaming: yes",
             "tool calling: yes",
             "image input: yes",
-            "native computer control: offered by the provider as",
+            control,
             "model discovery: no",
             "ping: not requested; no network call was made",
         ] {
@@ -114,11 +116,7 @@ fn check_validates_and_prints_capabilities_without_a_network_call() {
 
 #[test]
 fn ping_sends_one_request_and_reports_the_result() {
-    for wire in [
-        common::anthropic::wire(),
-        common::openai::wire(),
-        common::google::wire(),
-    ] {
+    for wire in common::all_wires() {
         let server = FakeServer::start(vec![Reply::stream(wire.plain)]);
         let path = config_file("ping", wire.provider, &server);
         let run = tool(
@@ -163,11 +161,7 @@ fn ping_sends_one_request_and_reports_the_result() {
 
 #[test]
 fn a_failed_ping_reports_a_stable_code_and_never_the_key() {
-    for wire in [
-        common::anthropic::wire(),
-        common::openai::wire(),
-        common::google::wire(),
-    ] {
+    for wire in common::all_wires() {
         // The server refuses the key, and repeats it in its message.
         let body = json!({ "error": { "message": format!("bad key {TEST_KEY}") } }).to_string();
         let server = FakeServer::start(vec![Reply::status(401, &body)]);
@@ -230,11 +224,93 @@ fn ping_without_a_key_fails_before_any_network_call() {
 }
 
 #[test]
+fn the_tool_probe_reports_whether_the_model_called_the_tool() {
+    let chat = common::openai_chat::wire();
+    // A model that calls the probe's tool.
+    let server = FakeServer::start(vec![Reply::stream(common::openai_chat::PROBE_CALLED)]);
+    let path = config_file("probe", chat.provider, &server);
+    let run = tool(
+        &[
+            "check",
+            "--config",
+            &path,
+            "--probe-tools",
+            "--key-env",
+            KEY_VARIABLE,
+        ],
+        Some(TEST_KEY),
+    );
+    assert_eq!(run.status, EXIT_OK, "{}", run.stderr);
+    assert!(
+        run.stdout
+            .contains("tool probe: verified (the model called the tool)"),
+        "{}",
+        run.stdout
+    );
+    run.assert_no_key();
+    let requests = server.requests();
+    assert_eq!(requests.len(), 1);
+    let body = requests[0].json();
+    assert_eq!(body["tools"][0]["function"]["name"], "tur_probe");
+    assert_eq!(body["max_tokens"], 512);
+
+    // A model that answers in words, in every family.
+    for wire in common::all_wires() {
+        let server = FakeServer::start(vec![Reply::stream(wire.plain)]);
+        let path = config_file("probe-plain", wire.provider, &server);
+        let run = tool(
+            &[
+                "check",
+                "--config",
+                &path,
+                "--probe-tools",
+                "--key-env",
+                KEY_VARIABLE,
+            ],
+            Some(TEST_KEY),
+        );
+        assert_eq!(run.status, EXIT_PROBE_NOT_VERIFIED, "{}", run.stderr);
+        assert!(
+            run.stdout.contains("tool probe: not verified"),
+            "{}",
+            run.stdout
+        );
+        assert_eq!(server.requests().len(), 1);
+    }
+}
+
+#[test]
+fn a_server_that_takes_no_key_is_sent_none() {
+    let chat = common::openai_chat::wire();
+    let server = FakeServer::start(vec![Reply::stream(chat.plain)]);
+    let path = config_file("no-key-local", chat.provider, &server);
+    let run = tool(&["check", "--config", &path, "--ping", "--no-key"], None);
+    assert_eq!(run.status, EXIT_OK, "{}", run.stderr);
+    assert!(run.stdout.contains("ping: ok"), "{}", run.stdout);
+    let requests = server.requests();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0].header("authorization"), None);
+
+    // The companies' interfaces always need a key: nothing is sent.
+    let server = FakeServer::start(vec![Reply::stream(common::anthropic::wire().plain)]);
+    let path = config_file("no-key-company", ProviderId::Anthropic, &server);
+    let run = tool(&["check", "--config", &path, "--ping", "--no-key"], None);
+    assert_eq!(run.status, EXIT_PING_FAILED);
+    assert!(
+        run.stderr.starts_with("TUR-AI-PROVIDER-011"),
+        "{}",
+        run.stderr
+    );
+    assert!(server.requests().is_empty());
+}
+
+#[test]
 fn the_example_configurations_are_checked() {
     for valid in [
         "minimal-anthropic.json",
         "full-openai.json",
         "token-limit-google.json",
+        "full-openai-chat.json",
     ] {
         let run = tool(&["check", "--config", &data(valid)], None);
         assert_eq!(run.status, EXIT_OK, "{valid}: {}", run.stderr);

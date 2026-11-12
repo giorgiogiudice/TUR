@@ -311,6 +311,7 @@ impl Budget for TaskBudget {
             cached_input_tokens: usage
                 .cached_input_tokens
                 .saturating_sub(self.counted.cached_input_tokens),
+            estimated: usage.estimated,
         };
         let total_cost = cost.unwrap_or(0.0);
         let more_cost = (total_cost - self.counted_cost).max(0.0);
@@ -360,6 +361,7 @@ mod tests {
             input_tokens: input,
             output_tokens: output,
             cached_input_tokens: 0,
+            estimated: false,
         }
     }
 

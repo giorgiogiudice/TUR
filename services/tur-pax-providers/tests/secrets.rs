@@ -83,7 +83,7 @@ fn echoing_error(provider: ProviderId) -> String {
         ProviderId::Anthropic => {
             json!({ "type": "error", "error": { "type": "a_type_added_later", "message": message } })
         }
-        ProviderId::OpenAi => {
+        ProviderId::OpenAi | ProviderId::OpenAiChat => {
             json!({ "error": { "message": message, "type": "a_type_added_later", "code": null } })
         }
         ProviderId::Google => {
@@ -105,6 +105,9 @@ fn echoing_error_event(provider: ProviderId) -> String {
         }
         ProviderId::Google => {
             json!({ "event_type": "error", "error": { "code": "api_error", "message": message } })
+        }
+        ProviderId::OpenAiChat => {
+            json!({ "error": { "message": message, "type": "server_error", "code": "server_error" } })
         }
     };
     format!("event: error\ndata: {data}\n\n")
@@ -254,11 +257,7 @@ fn local_outcomes(seen: &mut Seen) {
 #[test]
 fn the_key_never_appears_in_any_error_or_event() {
     let mut seen = Seen::default();
-    for wire in [
-        common::anthropic::wire(),
-        common::openai::wire(),
-        common::google::wire(),
-    ] {
+    for wire in common::all_wires() {
         every_outcome(&wire, &mut seen);
     }
     local_outcomes(&mut seen);
@@ -285,11 +284,7 @@ fn the_key_never_appears_in_any_error_or_event() {
 
 #[test]
 fn the_request_carries_the_key_only_in_the_documented_header() {
-    for wire in [
-        common::anthropic::wire(),
-        common::openai::wire(),
-        common::google::wire(),
-    ] {
+    for wire in common::all_wires() {
         let server = FakeServer::start(vec![Reply::stream(wire.plain)]);
         let config = common::config(wire.provider, &server);
         let events = common::run(&config, &hello(&config));
@@ -311,7 +306,7 @@ fn the_request_carries_the_key_only_in_the_documented_header() {
             .collect();
         let expected = match wire.provider {
             ProviderId::Anthropic => "x-api-key",
-            ProviderId::OpenAi => "authorization",
+            ProviderId::OpenAi | ProviderId::OpenAiChat => "authorization",
             ProviderId::Google => "x-goog-api-key",
         };
         assert_eq!(carriers, [expected]);

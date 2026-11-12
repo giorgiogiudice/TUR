@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/giorgiogiudice/TUR/schemas/pax-provider-config.schema.json",
   "title": "P@x provider configuration",
-  "description": "How P@x reaches one model provider: which provider, which model, the output limit, timeouts, retry behaviour, and optionally prices and a limit for one task. The API key is never part of this file: it lives in the system keyring. The loader in services/tur-pax-providers is authoritative. It also enforces rules this schema cannot express: a base URL may use plain http only for a loopback host, retry.initial_delay_ms may not exceed retry.max_delay_ms, and task_limit.max_cost needs prices.",
+  "description": "How P@x reaches one model provider: which provider, which model, the output limit, timeouts, retry behaviour, and optionally prices and a limit for one task. The API key is never part of this file: it lives in the system keyring. The loader in services/tur-pax-providers is authoritative. It also enforces rules this schema cannot express: a base URL may use plain http only for a loopback host, retry.initial_delay_ms may not exceed retry.max_delay_ms, task_limit.max_cost needs prices, the openai-chat family needs a base_url, and send_back_reasoning is accepted for openai-chat only.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "provider", "model", "max_output_tokens"],
@@ -22,13 +22,18 @@
   "properties": {
     "schema_version": { "const": 1 },
     "provider": {
-      "description": "The provider, which selects the adapter. anthropic: the Messages API. openai: the Responses API. google: the Gemini Interactions API.",
-      "enum": ["anthropic", "openai", "google"]
+      "description": "The adapter family, which selects the adapter. anthropic: the Messages API. openai: the Responses API. google: the Gemini Interactions API. openai-chat: the OpenAI-compatible Chat Completions API that DeepSeek, other services and local model servers offer; it has no public address of its own.",
+      "enum": ["anthropic", "openai", "google", "openai-chat"]
     },
     "base_url": {
-      "description": "The base URL of the provider's API, without the path of an endpoint. Without it the provider's public endpoint is used. Set it to use a compatible gateway. It must be https://host[:port][/path]; http is accepted for a loopback host only. User information, a query and a fragment are not accepted.",
+      "description": "The base URL of the provider's API, without the path of an endpoint. Without it the family's public endpoint is used; openai-chat has none and needs one, given as the service documents it, up to the path /chat/completions (for example https://api.deepseek.com, http://127.0.0.1:11434/v1). Set it to use a compatible gateway. It must be https://host[:port][/path]; http is accepted for a loopback host only. User information, a query and a fragment are not accepted.",
       "type": "string",
       "pattern": "^https?://[^\\s?#@\\\\]+$"
+    },
+    "send_back_reasoning": {
+      "description": "openai-chat only. Whether the reasoning text a service streams beside the answer (reasoning_content, reasoning) is sent back with the assistant turns of later requests. Set it only for a service whose documentation requires it: DeepSeek, when tools are offered. Otherwise the reasoning is kept with the conversation and never sent.",
+      "type": "boolean",
+      "default": false
     },
     "model": {
       "description": "The model name, as the provider spells it. There is no default: model names are configuration and are never compiled in (ADR-0004).",

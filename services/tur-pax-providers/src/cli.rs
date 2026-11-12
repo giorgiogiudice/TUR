@@ -3,14 +3,19 @@
 //! The command-line interface.
 //!
 //! ```text
-//! tur-pax-providers check --config <file> [--ping] [--key-env <VARIABLE>]
+//! tur-pax-providers check --config <file> [--ping] [--probe-tools]
+//!                         [--key-env <VARIABLE> | --no-key]
 //! ```
 //!
 //! `check` validates a configuration file and prints what the adapter it names
-//! declares. It makes no network call unless `--ping` is given. With `--ping`
-//! it reads the API key from an environment variable (`TUR_PAX_API_KEY`, or the
-//! one named with `--key-env`) and sends one short request to the configured
-//! endpoint. That request is billed by the provider like any other.
+//! declares. It makes no network call unless `--ping` or `--probe-tools` is
+//! given. With `--ping` it reads the API key from an environment variable
+//! (`TUR_PAX_API_KEY`, or the one named with `--key-env`) and sends one short
+//! request to the configured endpoint. With `--probe-tools` it sends one small
+//! request that offers a harmless tool and reports whether the model called
+//! it ([`crate::probe`]). Each request is billed by the provider like any
+//! other. `--no-key` is for a server that takes no key (the openai-chat
+//! family only, such as a model server on this computer).
 //!
 //! The key is never printed.
 
@@ -19,7 +24,8 @@ use std::fs;
 use crate::config::ProviderConfig;
 use crate::error::{ErrorKind, ProviderError};
 use crate::model::{FinishReason, Message, ProviderId, Turn};
-use crate::provider::{capabilities_of, connect, endpoint_path};
+use crate::probe::{ToolProbe, probe_tool_calling};
+use crate::provider::{Provider, capabilities_of, connect, connect_without_key, endpoint_path};
 use crate::secret::{EnvKeySource, KeySource};
 use crate::{anthropic, google};
 
@@ -31,6 +37,9 @@ pub const EXIT_INVALID: u8 = 1;
 pub const EXIT_USAGE: u8 = 2;
 /// Exit status: the configuration is valid but the ping failed.
 pub const EXIT_PING_FAILED: u8 = 3;
+/// Exit status: the configuration is valid but the tool probe did not show
+/// that the model calls tools.
+pub const EXIT_PROBE_NOT_VERIFIED: u8 = 4;
 
 /// The environment variable `--ping` reads the key from by default.
 pub const DEFAULT_KEY_VARIABLE: &str = "TUR_PAX_API_KEY";
@@ -39,7 +48,8 @@ pub const DEFAULT_KEY_VARIABLE: &str = "TUR_PAX_API_KEY";
 pub const PING_OUTPUT_TOKENS: u32 = 64;
 
 const USAGE: &str = "\
-Usage: tur-pax-providers check --config <file> [--ping] [--key-env <VARIABLE>]
+Usage: tur-pax-providers check --config <file> [--ping] [--probe-tools]
+                               [--key-env <VARIABLE> | --no-key]
 
 Validates a provider configuration and prints the capabilities its adapter declares.
 
@@ -47,12 +57,15 @@ Options:
   --config <file>        The provider configuration, as JSON.
   --ping                 Also send one short request to the configured endpoint.
                          The provider bills it like any other request.
-  --key-env <VARIABLE>   The environment variable --ping reads the API key from.
+  --probe-tools          Also send one small request offering a harmless tool, and
+                         report whether the model called it. Billed like any request.
+  --key-env <VARIABLE>   The environment variable the API key is read from.
                          Default: TUR_PAX_API_KEY.
+  --no-key               Send no key: for a server that takes none (openai-chat only).
   -h, --help             Print this help.
   -V, --version          Print the version.
 
-Without --ping no network call is made.
+Without --ping or --probe-tools no network call is made.
 ";
 
 /// What a run of the command produced.
@@ -72,7 +85,9 @@ enum Command {
     Check {
         config: String,
         ping: bool,
-        key_variable: String,
+        probe: bool,
+        /// `None` for `--no-key`.
+        key_variable: Option<String>,
     },
 }
 
@@ -92,8 +107,9 @@ pub fn run(arguments: &[String]) -> Outcome {
         Ok(Command::Check {
             config,
             ping,
+            probe,
             key_variable,
-        }) => check(&config, ping, &key_variable),
+        }) => check(&config, ping, probe, key_variable.as_deref()),
         Err(problem) => Outcome {
             status: EXIT_USAGE,
             stdout: String::new(),
@@ -113,11 +129,15 @@ fn parse(arguments: &[String]) -> Result<Command, String> {
     }
     let mut config = None;
     let mut ping = false;
+    let mut probe = false;
+    let mut no_key = false;
     let mut key_variable = None;
     while let Some(argument) = rest.next() {
         match argument {
             "-h" | "--help" => return Ok(Command::Help),
             "--ping" => ping = true,
+            "--probe-tools" => probe = true,
+            "--no-key" => no_key = true,
             "--config" => {
                 config = Some(rest.next().ok_or("--config needs a file")?.to_owned());
             }
@@ -132,14 +152,23 @@ fn parse(arguments: &[String]) -> Result<Command, String> {
         }
     }
     let config = config.ok_or("--config <file> is needed")?;
+    if no_key && key_variable.is_some() {
+        return Err("--no-key and --key-env cannot be given together".to_owned());
+    }
+    let key_variable = if no_key {
+        None
+    } else {
+        Some(key_variable.unwrap_or_else(|| DEFAULT_KEY_VARIABLE.to_owned()))
+    };
     Ok(Command::Check {
         config,
         ping,
-        key_variable: key_variable.unwrap_or_else(|| DEFAULT_KEY_VARIABLE.to_owned()),
+        probe,
+        key_variable,
     })
 }
 
-fn check(path: &str, ping: bool, key_variable: &str) -> Outcome {
+fn check(path: &str, ping: bool, probe: bool, key_variable: Option<&str>) -> Outcome {
     let loaded = fs::read_to_string(path)
         .map_err(|error| {
             ProviderError::new(ErrorKind::ConfigInvalid)
@@ -158,7 +187,7 @@ fn check(path: &str, ping: bool, key_variable: &str) -> Outcome {
     };
 
     let mut stdout = report(&config);
-    if !ping {
+    if !ping && !probe {
         line(&mut stdout, "ping: not requested; no network call was made");
         return Outcome {
             status: EXIT_OK,
@@ -166,31 +195,94 @@ fn check(path: &str, ping: bool, key_variable: &str) -> Outcome {
             stderr: String::new(),
         };
     }
-    match send_ping(&config, key_variable) {
-        Ok(turn) => {
-            line(
-                &mut stdout,
-                &format!(
-                    "ping: ok (finish: {}; input tokens: {}; output tokens: {})",
-                    turn.finish.name(),
-                    turn.usage.input_tokens,
-                    turn.usage.output_tokens
-                ),
-            );
-            Outcome {
-                status: EXIT_OK,
-                stdout,
-                stderr: String::new(),
-            }
-        }
+    let provider = match adapter(&config, key_variable) {
+        Ok(provider) => provider,
         Err(error) => {
-            line(&mut stdout, "ping: failed");
-            Outcome {
+            line(&mut stdout, "no request was sent");
+            return Outcome {
                 status: EXIT_PING_FAILED,
                 stdout,
                 stderr: format!("{error}\n"),
+            };
+        }
+    };
+    if ping {
+        match send_ping(&config, &*provider) {
+            Ok(turn) => {
+                line(
+                    &mut stdout,
+                    &format!(
+                        "ping: ok (finish: {}; input tokens: {}; output tokens: {}{})",
+                        turn.finish.name(),
+                        turn.usage.input_tokens,
+                        turn.usage.output_tokens,
+                        if turn.usage.estimated {
+                            "; estimated: the service reported no usage"
+                        } else {
+                            ""
+                        }
+                    ),
+                );
+            }
+            Err(error) => {
+                line(&mut stdout, "ping: failed");
+                return Outcome {
+                    status: EXIT_PING_FAILED,
+                    stdout,
+                    stderr: format!("{error}\n"),
+                };
             }
         }
+    }
+    if probe {
+        let verdict = probe_tool_calling(&*provider, &config.model);
+        let (text, status, stderr) = match &verdict {
+            ToolProbe::Verified { .. } => (
+                "tool probe: verified (the model called the tool)".to_owned(),
+                EXIT_OK,
+                String::new(),
+            ),
+            ToolProbe::NotCalled { .. } => (
+                "tool probe: not verified (the model answered without calling the tool)"
+                    .to_owned(),
+                EXIT_PROBE_NOT_VERIFIED,
+                String::new(),
+            ),
+            ToolProbe::Inconclusive { reason, .. } => (
+                format!("tool probe: inconclusive (finish: {})", reason.name()),
+                EXIT_PROBE_NOT_VERIFIED,
+                reason
+                    .error()
+                    .map(|error| format!("{error}\n"))
+                    .unwrap_or_default(),
+            ),
+        };
+        line(&mut stdout, &text);
+        return Outcome {
+            status,
+            stdout,
+            stderr,
+        };
+    }
+    Outcome {
+        status: EXIT_OK,
+        stdout,
+        stderr: String::new(),
+    }
+}
+
+/// The adapter of a configuration, with the key from the environment, or
+/// without one for `--no-key`.
+fn adapter(
+    config: &ProviderConfig,
+    key_variable: Option<&str>,
+) -> Result<Box<dyn Provider>, ProviderError> {
+    match key_variable {
+        Some(variable) => {
+            let key = EnvKeySource::new(variable).api_key(config.provider)?;
+            connect(config, key)
+        }
+        None => connect_without_key(config),
     }
 }
 
@@ -333,13 +425,14 @@ fn api_description(provider: ProviderId) -> String {
             "Interactions API {}, stateless (store: false)",
             google::API_VERSION
         ),
+        ProviderId::OpenAiChat => {
+            "OpenAI-compatible Chat Completions, usage asked for in the stream".to_owned()
+        }
     }
 }
 
 /// Send one short request and return the response, or the reason it failed.
-fn send_ping(config: &ProviderConfig, key_variable: &str) -> Result<Turn, ProviderError> {
-    let key = EnvKeySource::new(key_variable).api_key(config.provider)?;
-    let provider = connect(config, key)?;
+fn send_ping(config: &ProviderConfig, provider: &dyn Provider) -> Result<Turn, ProviderError> {
     let mut request = config.request(None, vec![Message::user_text("ping")], Vec::new());
     request.max_output_tokens = request.max_output_tokens.min(PING_OUTPUT_TOKENS);
     let turn = Turn::collect(provider.stream(&request));
@@ -404,17 +497,22 @@ mod tests {
     fn the_report_names_every_capability_row() {
         for provider in ProviderId::ALL {
             let config = ProviderConfig::from_json(&format!(
-                r#"{{"schema_version": 1, "provider": "{provider}", "model": "example-model", "max_output_tokens": 256}}"#
+                r#"{{"schema_version": 1, "provider": "{provider}", "base_url": "https://api.example.org/v1", "model": "example-model", "max_output_tokens": 256}}"#
             ))
             .unwrap();
             let text = report(&config);
+            let control = if provider.is_company_interface() {
+                "native computer control: offered by the provider as"
+            } else {
+                "native computer control: not offered by the provider"
+            };
             for expected in [
                 "config: valid",
                 "model: example-model",
                 "streaming: yes",
                 "tool calling: yes",
                 "image input: yes",
-                "native computer control: offered by the provider as",
+                control,
                 "not implemented by this adapter",
                 "model discovery: no",
                 "speech services: no",
@@ -422,6 +520,20 @@ mod tests {
                 assert!(text.contains(expected), "{provider}: {expected}\n{text}");
             }
             assert!(text.contains(&format!("provider: {provider}")));
+            assert!(text.contains("endpoint: https://api.example.org/v1/"));
         }
+    }
+
+    #[test]
+    fn no_key_and_a_key_variable_cannot_be_given_together() {
+        let outcome = run(&arguments(&[
+            "check",
+            "--config",
+            "file.json",
+            "--no-key",
+            "--key-env",
+            "X",
+        ]));
+        assert_eq!(outcome.status, EXIT_USAGE);
     }
 }

@@ -37,11 +37,14 @@ pub const CONSENT_TEXT_VERSION: &str = "1";
 
 /// The name of the company behind an adapter family, as a person reads it.
 /// Used for a provider of that family that the model list does not name.
+/// The OpenAI-compatible family has no company: a provider of it is always
+/// an entry with a name of its own, and this is only its family's name.
 pub const fn family_name(adapter: ProviderId) -> &'static str {
     match adapter {
         ProviderId::Anthropic => "Anthropic",
         ProviderId::OpenAi => "OpenAI",
         ProviderId::Google => "Google",
+        ProviderId::OpenAiChat => "an OpenAI-compatible service",
     }
 }
 

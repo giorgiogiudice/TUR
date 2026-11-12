@@ -287,6 +287,7 @@ impl AnthropicDecoder {
                 .saturating_add(self.counts.cache_read),
             output_tokens: self.counts.output,
             cached_input_tokens: self.counts.cache_read,
+            estimated: false,
         }));
     }
 

@@ -23,9 +23,10 @@ const FULL: &str = include_str!("data/full-openai.json");
 const TOKEN_LIMIT: &str = include_str!("data/token-limit-google.json");
 const INVALID_NO_MODEL: &str = include_str!("data/invalid-no-model.json");
 const INVALID_PLAIN_HTTP: &str = include_str!("data/invalid-plain-http.json");
+const FULL_CHAT: &str = include_str!("data/full-openai-chat.json");
 
 /// Every source file of the library and the binary.
-const SOURCES: [(&str, &str); 15] = [
+const SOURCES: [(&str, &str); 17] = [
     ("anthropic.rs", include_str!("../src/anthropic.rs")),
     ("cli.rs", include_str!("../src/cli.rs")),
     ("config.rs", include_str!("../src/config.rs")),
@@ -36,6 +37,8 @@ const SOURCES: [(&str, &str); 15] = [
     ("main.rs", include_str!("../src/main.rs")),
     ("model.rs", include_str!("../src/model.rs")),
     ("openai.rs", include_str!("../src/openai.rs")),
+    ("openai_chat.rs", include_str!("../src/openai_chat.rs")),
+    ("probe.rs", include_str!("../src/probe.rs")),
     ("provider.rs", include_str!("../src/provider.rs")),
     ("secret.rs", include_str!("../src/secret.rs")),
     ("spend.rs", include_str!("../src/spend.rs")),
@@ -112,8 +115,13 @@ fn the_schema_and_the_loader_have_the_same_fields() {
     let properties = &schema["properties"];
     let full = ProviderConfig::from_json(FULL).expect("the full example loads");
     let serialised = serde_json::to_value(&full).expect("a configuration serialises");
-
-    assert_eq!(keys(&serialised), keys(properties));
+    // One field is read by the OpenAI-compatible family only, so the two
+    // full examples together have every field.
+    let chat = ProviderConfig::from_json(FULL_CHAT).expect("the full chat example loads");
+    let chat = serde_json::to_value(&chat).expect("a configuration serialises");
+    let mut every = keys(&serialised);
+    every.extend(keys(&chat));
+    assert_eq!(every, keys(properties));
     for name in ["timeouts", "retry", "prices", "task_limit"] {
         assert_eq!(
             keys(&serialised[name]),
@@ -198,7 +206,7 @@ fn no_model_name_is_compiled_in() {
             );
         }
     }
-    for example in [MINIMAL, FULL, TOKEN_LIMIT, SCHEMA] {
+    for example in [MINIMAL, FULL, TOKEN_LIMIT, FULL_CHAT, SCHEMA] {
         let lower = example.to_lowercase();
         for family in families {
             assert!(
@@ -248,6 +256,11 @@ fn the_examples_load() {
         limited.task_limit.and_then(|limit| limit.max_tokens),
         Some(100_000)
     );
+
+    let chat = ProviderConfig::from_json(FULL_CHAT).expect("the chat example loads");
+    assert_eq!(chat.provider, ProviderId::OpenAiChat);
+    assert_eq!(chat.effective_base_url(), "http://127.0.0.1:11434/v1");
+    assert!(chat.send_back_reasoning);
 
     for invalid in [INVALID_NO_MODEL, INVALID_PLAIN_HTTP] {
         let error = ProviderConfig::from_json(invalid).expect_err("an invalid example");

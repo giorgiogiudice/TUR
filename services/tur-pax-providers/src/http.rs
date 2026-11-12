@@ -93,7 +93,14 @@ impl Transport {
     /// A failure the provider documents as transient is retried, up to the
     /// configured number of attempts, after the delay the provider asked for or
     /// an exponential backoff. Any other failure is returned at once.
-    pub(crate) fn open(&self, call: &Call<'_>, key: &ApiKey) -> Result<BodyReader, ProviderError> {
+    ///
+    /// Without a key (a server on this computer that asks for none) no
+    /// credential header is sent at all.
+    pub(crate) fn open(
+        &self,
+        call: &Call<'_>,
+        key: Option<&ApiKey>,
+    ) -> Result<BodyReader, ProviderError> {
         let mut attempt: u32 = 1;
         loop {
             let error = match self.attempt(call, key) {
@@ -108,26 +115,27 @@ impl Transport {
         }
     }
 
-    fn attempt(&self, call: &Call<'_>, key: &ApiKey) -> Result<BodyReader, ProviderError> {
-        let secret = key.expose();
-        let (name, value) = match call.auth {
-            Auth::Header(name) => (name, Zeroizing::new(secret.to_owned())),
-            Auth::Bearer => ("authorization", Zeroizing::new(format!("Bearer {secret}"))),
-        };
-        let mut credential = HeaderValue::from_str(&value).map_err(|_| {
-            ProviderError::new(ErrorKind::KeyUnavailable)
-                .with_detail("the key cannot be sent as an HTTP header")
-                .with_provider(call.provider)
-        })?;
-        // Keeps the value out of the HTTP client's debug output.
-        credential.set_sensitive(true);
-
+    fn attempt(&self, call: &Call<'_>, key: Option<&ApiKey>) -> Result<BodyReader, ProviderError> {
+        let secret = key.map_or("", ApiKey::expose);
         let mut request = self
             .agent
             .post(call.url)
-            .header(name, credential)
             .header("content-type", "application/json")
             .header("accept", "text/event-stream");
+        if key.is_some() {
+            let (name, value) = match call.auth {
+                Auth::Header(name) => (name, Zeroizing::new(secret.to_owned())),
+                Auth::Bearer => ("authorization", Zeroizing::new(format!("Bearer {secret}"))),
+            };
+            let mut credential = HeaderValue::from_str(&value).map_err(|_| {
+                ProviderError::new(ErrorKind::KeyUnavailable)
+                    .with_detail("the key cannot be sent as an HTTP header")
+                    .with_provider(call.provider)
+            })?;
+            // Keeps the value out of the HTTP client's debug output.
+            credential.set_sensitive(true);
+            request = request.header(name, credential);
+        }
         for (name, value) in call.headers {
             request = request.header(*name, *value);
         }
@@ -149,7 +157,11 @@ impl Transport {
             .unwrap_or_default();
         // A provider may repeat the key it was sent. It is removed before
         // anything is made of the body.
-        let text = text.replace(secret, REDACTED);
+        let text = if secret.is_empty() {
+            text
+        } else {
+            text.replace(secret, REDACTED)
+        };
         Err((call.classify)(status, &text)
             .with_provider(call.provider)
             .with_status(status)
