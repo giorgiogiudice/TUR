@@ -1,0 +1,17 @@
+#!/usr/bin/bash
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Copies the graphical installer's state lines ("TUR-WIZARD: ...") to the
+# first serial port, as the text installer and the engine write theirs. A
+# person never needs them; tests/iso reads them while it drives the installer
+# with the keyboard. The installer itself runs as the live user, who may not
+# write to the serial port. Present only on the installer medium.
+set -u
+transcript=/run/tur-installer/wizard/transcript
+[ -c /dev/ttyS0 ] || exit 0
+exec 3> /dev/ttyS0 || exit 0
+printf 'TUR-LIVE: session-starting uptime=%s\r\n' "$(cut -d' ' -f1 /proc/uptime)" >&3
+until [ -e "${transcript}" ]; do sleep 1; done
+tail -n +1 -F "${transcript}" 2> /dev/null | while IFS= read -r line; do
+    printf '%s\r\n' "${line}" >&3
+done

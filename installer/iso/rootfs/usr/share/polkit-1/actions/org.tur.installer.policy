@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0 -->
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<!--
+  The privileged half of TUR's graphical installer (ADR-0018, amendment of
+  13 November 2026). pkexec starts exactly this program for this action and
+  no other. Present only on the installer medium.
+
+  By default an administrator's password is asked. On the medium the rule in
+  rules.d/50-tur-live-installer.rules allows it to the live session's user
+  without one: that user is the person sitting at the computer, and the
+  engine itself asks for nothing it does not check again (the disk's
+  identity and the typed confirmation phrase).
+-->
+<policyconfig>
+  <vendor>TUR</vendor>
+  <vendor_url>https://github.com/giorgiogiudice/TUR</vendor_url>
+  <action id="org.tur.installer.engine">
+    <description>Examine disks and install TUR</description>
+    <message>Installing TUR needs access to this computer's disks.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/tur-installer/tur-install-engine</annotate>
+  </action>
+</policyconfig>

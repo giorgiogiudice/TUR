@@ -100,6 +100,7 @@ def main() -> int:
             "volume_label": medium.get("label"),
             "format": "ISO 9660 (Rock Ridge) with a GPT and an appended EFI system partition; UEFI only, no BIOS boot code",
             "kernel_arguments": medium.get("kernel_arguments"),
+            "kernel_arguments_text_mode": medium.get("kernel_arguments_text_mode"),
             "bit_reproducible": False,
             "bit_reproducible_note": (
                 "Every input is fixed by the hashes below. The file itself is not claimed to be "

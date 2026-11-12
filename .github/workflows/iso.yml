@@ -30,6 +30,11 @@ on:
       - "installer/iso/**"
       - "tests/iso/**"
       - "image/**"
+      # The graphical installer, compiled into the medium, and what it is
+      # built on.
+      - "desktop/apps/tur-installer/**"
+      - "desktop/kit/**"
+      - "desktop/CMakeLists.txt"
       # Programs compiled into the image, and what they are compiled with.
       - "services/tur-boot-health/**"
       - "crates/**"
@@ -44,6 +49,11 @@ on:
       - "installer/iso/**"
       - "tests/iso/**"
       - "image/**"
+      # The graphical installer, compiled into the medium, and what it is
+      # built on.
+      - "desktop/apps/tur-installer/**"
+      - "desktop/kit/**"
+      - "desktop/CMakeLists.txt"
       # Programs compiled into the image, and what they are compiled with.
       - "services/tur-boot-health/**"
       - "crates/**"
@@ -87,14 +97,18 @@ jobs:
         run: |
           shellcheck --version | sed -n 2p
           shellcheck -x installer/iso/*.sh tests/iso/*.sh \
-            installer/iso/rootfs/usr/libexec/tur-installer/tur-install
+            installer/iso/rootfs/usr/libexec/tur-installer/tur-install \
+            installer/iso/rootfs/usr/libexec/tur-installer/tur-install-engine \
+            installer/iso/rootfs/usr/libexec/tur-installer/tur-live-transcript \
+            installer/iso/rootfs/usr/libexec/tur-installer/tur-installer-wizard \
+            installer/iso/rootfs/usr/lib/tur-installer/engine.sh
           python3 -m py_compile installer/iso/*.py tests/iso/*.py
 
   product:
     name: Product medium - build, install, first start
     needs: lint
     runs-on: ubuntu-24.04
-    timeout-minutes: 110
+    timeout-minutes: 150
     env:
       OUT: out/iso
     steps:
@@ -154,9 +168,9 @@ jobs:
         run: |
           sudo apt-get update -q
           sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils ovmf \
-            xorriso squashfs-tools mtools dosfstools ntfs-3g
+            xorriso squashfs-tools mtools dosfstools ntfs-3g attr e2fsprogs
           qemu-system-x86_64 --version | head -1
-          dpkg-query -W -f='${Package} ${Version}\n' qemu-system-x86 ovmf xorriso squashfs-tools mtools dosfstools ntfs-3g \
+          dpkg-query -W -f='${Package} ${Version}\n' qemu-system-x86 ovmf xorriso squashfs-tools mtools dosfstools ntfs-3g attr e2fsprogs \
             | tee "$OUT/host/tool-packages.txt"
           ls -la /usr/share/OVMF/ | tee "$OUT/host/ovmf-files.txt"
 
@@ -273,6 +287,54 @@ jobs:
           rm -f "$WORK/windows.raw" "$WORK/second.raw"
           exit "$status"
 
+      # The live session and the graphical installer (ADR-0018, amendment of
+      # 13 November 2026): the way a person installs. The medium starts with
+      # the boot menu's default entry, the installer is driven with the
+      # keyboard only, beside the Windows-like disk, whose whole image is
+      # hashed when made, after the installation and after TUR's first start.
+      - name: "Live session: install with the graphical installer beside a Windows-like disk, then start it"
+        if: ${{ !cancelled() && env.MEDIUM_STARTS == 'yes' }}
+        run: |
+          mkdir -p "$OUT/live"
+          tests/iso/make-windows-disk.sh "$WORK/windows-live.raw" 20G > "$OUT/live/windows-disk.txt"
+          disk_a_sha256() { sha256sum "$WORK/windows-live.raw" | cut -d" " -f1; }
+          echo "created=$(disk_a_sha256)" > "$OUT/live/disk-a.sha256.env"
+          truncate -s 20G "$WORK/live.raw"
+          status=0
+          python3 tests/iso/live.py install --medium "$MEDIUM" --medium-as usb \
+            --disk "$WORK/live.raw" --extra-disk "$WORK/windows-live.raw=windows-disk-a" \
+            --work "$WORK/vm" --out "$OUT/live" || status=$?
+          echo "after_install=$(disk_a_sha256)" >> "$OUT/live/disk-a.sha256.env"
+          if [ "$status" -eq 0 ]; then
+            sudo python3 tests/boot/inspect-disk.py installed "$WORK/live.raw" "$OUT/live" || status=$?
+            sudo python3 tests/iso/installed-root.py inspect "$WORK/live.raw" "$OUT/live/installed-root" || status=$?
+            python3 tests/iso/boot-installed.py --disk "$WORK/live.raw" \
+              --extra-disk "$WORK/windows-live.raw=windows-disk-a" \
+              --work "$WORK/vm" --out "$OUT/live/first-start" || status=$?
+            sudo python3 tests/boot/inspect-disk.py postmortem "$WORK/live.raw" "$OUT/live/first-start"
+            echo "after_first_start=$(disk_a_sha256)" >> "$OUT/live/disk-a.sha256.env"
+          fi
+          cat "$OUT/live/disk-a.sha256.env"
+          rm -f "$WORK/windows-live.raw"
+          if [ "$status" -eq 0 ]; then echo "LIVE_DISK=$WORK/live.raw" >> "$GITHUB_ENV"; else rm -f "$WORK/live.raw"; fi
+          exit "$status"
+
+      # Informational (issue 81): what GRUB does with a root filesystem given
+      # ext4's casefold feature after the installation. The installer does
+      # not set it; this shows why.
+      - name: "Casefold on the installed root: does the disk still start? (informational)"
+        if: ${{ !cancelled() && env.LIVE_DISK != '' }}
+        continue-on-error: true
+        run: |
+          status=0
+          sudo python3 tests/iso/installed-root.py casefold "$LIVE_DISK" "$OUT/casefold" || status=$?
+          if [ "$status" -eq 0 ]; then
+            python3 tests/iso/boot-installed.py --disk "$LIVE_DISK" --work "$WORK/vm" --out "$OUT/casefold/start" \
+              --timeout 240 --run-on 10 || status=$?
+          fi
+          rm -f "$LIVE_DISK"
+          exit "$status"
+
       # Informational. Nothing in TUR has been verified by firmware with
       # Secure Boot enforced before; a failure here is a finding, not a
       # regression, and does not fail the job.
@@ -313,9 +375,10 @@ jobs:
           show "$OUT/medium/facts/medium.env"
           show "$OUT/medium/facts/environment-package-changes.json"
           show "$OUT/medium/facts/xorriso-report.txt"
-          for run in too-small refuse install install-over-data windows-setup beside-windows secure-boot; do
+          for run in too-small refuse install install-over-data windows-setup beside-windows live secure-boot; do
             show "$OUT/$run/result.json" 120
             show "$OUT/$run/installer-screens.txt" 150
+            show "$OUT/$run/wizard-transcript.txt" 150
             show "$OUT/$run/host/qemu.log" 30
             show "$OUT/$run/first-start/first-start.json" 80
             show "$OUT/$run/first-start/boot-state-disk.txt" 60
@@ -367,7 +430,7 @@ jobs:
     name: Proof medium - boot checks and rollback on a disk installed from a medium
     needs: lint
     runs-on: ubuntu-24.04
-    timeout-minutes: 110
+    timeout-minutes: 150
     env:
       OUT: out/iso-proof
       TEST_IMAGE: localhost/tur-boot-test:ci
@@ -425,7 +488,7 @@ jobs:
         run: |
           sudo apt-get update -q
           sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils ovmf \
-            xorriso squashfs-tools mtools dosfstools
+            xorriso squashfs-tools mtools dosfstools attr e2fsprogs
           qemu-system-x86_64 --version | head -1
           qemu-img --version | head -1
           # tests/boot/report.py records the firmware files it was given.
@@ -461,11 +524,14 @@ jobs:
           echo "MEDIUM=$WORK/medium/tur-installer-boot-test.iso" >> "$GITHUB_ENV"
           df -h / "$WORK"
 
-      - name: Install from the medium onto a blank disk (medium as a USB stick, no network)
+      # With the graphical installer in the live session, driven with the
+      # keyboard (tests/iso/live.py): the way a person installs.
+      - name: Install from the medium's live session onto a blank disk (medium as a USB stick, no network)
         run: |
           truncate -s 20G "$WORK/disk.raw"
-          python3 tests/iso/install.py install --medium "$MEDIUM" --medium-as usb \
+          python3 tests/iso/live.py install --medium "$MEDIUM" --medium-as usb \
             --disk "$WORK/disk.raw" --work "$WORK/vm" --out "$OUT/install"
+          sudo python3 tests/iso/installed-root.py inspect "$WORK/disk.raw" "$OUT/install/installed-root"
 
       - name: Inspect the installed disk and compare it with the reference
         run: |
@@ -541,6 +607,7 @@ jobs:
           show "$OUT/medium/facts/environment-package-changes.json"
           show "$OUT/install/result.json" 120
           show "$OUT/install/installer-screens.txt" 150
+          show "$OUT/install/wizard-transcript.txt" 150
           show "$OUT/install/host/qemu.log" 30
           show "$OUT/layout-comparison.json"
           show "$OUT/boot/host/vm-result.json"

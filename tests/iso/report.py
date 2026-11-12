@@ -559,6 +559,172 @@ def check_beside_windows(out: pathlib.Path, checks: Checks, args, manifest: dict
     }
 
 
+def check_live(name: str, label: str, out: pathlib.Path, checks: Checks, windows: bool, required: bool = True) -> dict:
+    """The live session and the graphical installer (tests/iso/live.py)."""
+    directory = out / name
+    result = load(directory / "result.json")
+    facts = (result or {}).get("facts") or {}
+    live = facts.get("live") or {}
+    root = load(directory / "installed-root" / "installed-root.json")
+
+    def add(ident: str, description: str, passed, detail: str, need: bool = required) -> None:
+        checks.add(f"{name}.live.{ident}", f"{label}: {description}", passed, detail, need)
+
+    shots = {shot.get("screen"): shot for shot in (result or {}).get("screenshots") or []}
+    desktop = shots.get("live-desktop") or {}
+    cmdline = facts.get("kernel_command_line") or ""
+    add(
+        "session",
+        "the medium's default boot entry started the live session, signed in by itself, and the graphical "
+        "installer opened on the desktop",
+        (
+            "tur.live=1" in cmdline.split()
+            and "tur.installer=1" not in cmdline.split()
+            and live.get("wizard_started_seconds") is not None
+            and (live.get("wizard_start") or "").find("started_by_session=yes") >= 0
+            and desktop.get("looks_rendered") is True
+        )
+        if result
+        else None,
+        f"kernel command line: {cmdline}; the session's serial service after {live.get('session_service_seconds')} s; "
+        f"installer started after {live.get('wizard_started_seconds')} s ({live.get('wizard_start')}); window "
+        f"{live.get('window')}, active: {live.get('window_active')}; desktop screenshot {desktop}",
+    )
+    add(
+        "keyboard_only",
+        "the installer was driven with the keyboard alone (QMP send-key: Tab, Space, letters), as a person can",
+        (result.get("outcome") == "completed" and "send-key" in (result.get("input") or "")) if result else None,
+        f"outcome {(result or {}).get('outcome')}; {(result or {}).get('input')}; "
+        f"{len((result or {}).get('steps') or [])} steps",
+    )
+    medium = live.get("medium_as_listed") or {}
+    add(
+        "medium_refused",
+        "the medium the installer runs from is listed as such, cannot be chosen, and Tab never reaches it",
+        (medium.get("status") == "installer-medium" and live.get("medium_reached_by_tab") is False) if result else None,
+        f"medium as listed: {medium}; Tab passed: {live.get('tab_stops_on_the_disk_screen')}",
+    )
+    typed = live.get("phrase_typed") or {}
+    add(
+        "phrase",
+        "the erase button is enabled by the exact phrase only, and Enter in the field does not erase",
+        (typed.get("matches") == "yes" and typed.get("erase_enabled") == "yes" and live.get("enter_erased") is False
+         and live.get("focus_on_confirm") == "phraseField")
+        if result
+        else None,
+        f"after typing the phrase: {typed}; Enter erased: {live.get('enter_erased')}; keyboard on opening the "
+        f"confirmation: {live.get('focus_on_confirm')}",
+    )
+    if windows:
+        attempts = live.get("windows_phrase_attempts") or []
+        windows_listed = live.get("windows_disk_as_listed") or {}
+        confirm_windows = live.get("confirm_windows") or {}
+        confirm_blank = live.get("confirm_blank") or {}
+        add(
+            "windows_warning",
+            "the Windows-like disk is described as Windows with BitLocker; choosing it shows the Windows warning; "
+            "the blank disk shows none",
+            (windows_listed.get("windows") == "yes" and windows_listed.get("bitlocker") == "yes"
+             and confirm_windows.get("windows_warning") == "yes" and confirm_blank.get("windows_warning") == "no")
+            if result
+            else None,
+            f"listed: {windows_listed}; confirmation of the Windows disk: {confirm_windows}; of the blank disk: "
+            f"{confirm_blank}",
+        )
+        add(
+            "phrase_required_for_data",
+            "on the disk that holds data, a wrong phrase and the right phrase in lower case leave the erase button "
+            "unavailable, and nothing is asked of the engine",
+            (len(attempts) == 2 and all(item.get("erase_enabled") == "no" for item in attempts)
+             and live.get("windows_erase_requested") is False)
+            if result
+            else None,
+            f"attempts: {attempts}; erase asked: {live.get('windows_erase_requested')}",
+        )
+        hashes = {}
+        text = directory / "disk-a.sha256.env"
+        if text.exists():
+            for line in text.read_text().splitlines():
+                key, _, value = line.partition("=")
+                hashes[key.strip()] = value.strip()
+        add(
+            "windows_disk_identical",
+            "the Windows-like disk is byte-identical after the installation and after TUR's first start "
+            "(SHA-256 of the whole image)",
+            (bool(hashes.get("created")) and hashes.get("created") == hashes.get("after_install")
+             == hashes.get("after_first_start"))
+            if hashes
+            else None,
+            "; ".join(f"{key} {value}" for key, value in hashes.items()) or "no hashes recorded",
+        )
+    stages = live.get("stages_seen") or []
+    expected = ["revalidate", "prepare", "copy", "bootloader", "finish", "check", "record"]
+    add(
+        "stages",
+        "the progress screen followed the engine's real stages, in order, from bootc's own output",
+        ([stage for stage in stages if stage in expected] == expected) if result else None,
+        f"stages seen: {stages}",
+    )
+    add(
+        "cancel",
+        "Cancel was offered while the engine had written nothing, and not once the disk was being written",
+        (live.get("cancellable_while_revalidating") == "yes" and live.get("cancellable_while_copying") == "no")
+        if result
+        else None,
+        f"while looking at the disk again: {live.get('cancellable_while_revalidating')}; while copying: "
+        f"{live.get('cancellable_while_copying')}",
+    )
+    kept = facts.get("log_kept") or {}
+    files = (root or {}).get("installer_log_files") or []
+    add(
+        "log_kept",
+        "the installer's log is kept on the installed disk, in /var/log/tur-installer/<session>, with the SELinux "
+        "label of /var/log",
+        (kept.get("result") == "yes" and len(files) >= 2 and bool((root or {}).get("installer_log_directory_selinux"))
+         and (root or {}).get("engine_lines_in_kept_log", 0) > 0)
+        if (result and root)
+        else None,
+        f"engine: {kept}; on the disk: {(root or {}).get('installer_log_directories')}, files "
+        f"{[(item.get('name'), item.get('bytes'), item.get('selinux')) for item in files]}, directory label "
+        f"{(root or {}).get('installer_log_directory_selinux')}; lines from the engine in it: "
+        f"{(root or {}).get('engine_lines_in_kept_log')}",
+    )
+    add(
+        "root_features",
+        "the installed root filesystem's features are recorded; casefold is not among them (GRUB reads this "
+        "filesystem and does not know casefold)",
+        ((root or {}).get("casefold") is False and bool((root or {}).get("features"))) if root else None,
+        f"features: {(root or {}).get('features')}; engine: {facts.get('root_filesystem')}",
+        False,
+    )
+    return {
+        "name": name,
+        "session_service_seconds": live.get("session_service_seconds"),
+        "wizard_started_seconds": live.get("wizard_started_seconds"),
+        "welcome_seconds": live.get("welcome_seconds"),
+        "window_active": live.get("window_active"),
+        "stages_seen": stages,
+        "root_features": (root or {}).get("features"),
+        "log_on_disk": (root or {}).get("installer_log_directories"),
+    }
+
+
+def check_casefold(out: pathlib.Path, checks: Checks) -> dict:
+    """Informational: the installed disk given ext4's casefold feature, started."""
+    facts = load(out / "casefold" / "casefold.json")
+    start = load(out / "casefold" / "start" / "first-start.json")
+    checks.add(
+        "casefold.experiment",
+        "Informational (issue 81): the installed root given ext4's casefold feature afterwards (tune2fs, "
+        "unmounted), then started: whether a rendered screen appears",
+        (facts.get("casefold") is True and start is not None) if facts else None,
+        f"tune2fs: {(facts or {}).get('tune2fs')}; e2fsck after: status {((facts or {}).get('e2fsck_after') or {}).get('status')}; "
+        f"start: outcome {(start or {}).get('outcome')}, rendered after {(start or {}).get('rendered_first_seen_seconds')} s",
+        False,
+    )
+    return {"casefold": facts, "start_outcome": (start or {}).get("outcome")}
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--job", required=True, choices=["product", "proof"])
@@ -583,6 +749,12 @@ def main() -> int:
         )
         starts.append(check_first_start("install-over-data", "Disk with data, first start", out, checks))
         extra["beside_windows"] = check_beside_windows(out, checks, args, manifest)
+        # The live session and the graphical installer, beside the
+        # Windows-like disk (ADR-0018, amendment of 13 November 2026).
+        installs.append(check_install("live", "Live session, graphical installer, beside Windows", out, checks, args, manifest))
+        extra["live"] = check_live("live", "Live session, graphical installer", out, checks, windows=True)
+        starts.append(check_first_start("live", "Live session, first start (Windows-like disk attached)", out, checks))
+        extra["casefold"] = check_casefold(out, checks)
         # Secure Boot: recorded, never required. Nothing in TUR has been
         # verified by firmware before this.
         installs.append(
@@ -608,7 +780,9 @@ def main() -> int:
             False,
         )
     else:
-        installs.append(check_install("install", "Boot-test image, medium as a USB stick", out, checks, args, manifest))
+        installs.append(check_install("install", "Boot-test image, live session, graphical installer, medium as a "
+                                      "USB stick", out, checks, args, manifest))
+        live = check_live("install", "Boot-test image, live session", out, checks, windows=False)
         comparison = load(out / "layout-comparison.json")
         checks.add(
             "layout.same_as_boot_test",
@@ -642,7 +816,8 @@ def main() -> int:
             )
             or "no rollback report",
         )
-        extra = {"layout_comparison": comparison, "boot_report_result": (boot or {}).get("result"), "rollback": rollback}
+        extra = {"layout_comparison": comparison, "boot_report_result": (boot or {}).get("result"), "rollback": rollback,
+                 "live": live}
 
     timings = {}
     for item in args.timing:
@@ -654,7 +829,7 @@ def main() -> int:
     medium = manifest.get("medium") or {}
     report = {
         "schema_version": 1,
-        "task": "TUR-007",
+        "task": "TUR-007, TUR-009",
         "job": args.job,
         "result": "pass" if checks.passed() else "fail",
         "expected_build_id": args.expected_build_id or None,

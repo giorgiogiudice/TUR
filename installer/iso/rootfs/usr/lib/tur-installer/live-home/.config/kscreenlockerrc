@@ -1,0 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# The live user has no password: the screen must never lock.
+[Daemon]
+Autolock=false
+LockOnResume=false

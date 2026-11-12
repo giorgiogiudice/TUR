@@ -1,0 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# Nothing in the live session is kept: no wallet to set up or unlock.
+[Wallet]
+Enabled=false
+First Use=false

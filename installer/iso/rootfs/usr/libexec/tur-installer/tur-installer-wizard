@@ -1,0 +1,9 @@
+#!/usr/bin/sh
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Starts TUR's graphical installer (desktop/apps/tur-installer) as the live
+# session's user. Its libraries and QML modules are kept apart from the
+# system's, under /usr/lib/tur-installer, on the installer medium only.
+QML_IMPORT_PATH=/usr/lib/tur-installer/qml${QML_IMPORT_PATH:+:${QML_IMPORT_PATH}}
+export QML_IMPORT_PATH
+exec /usr/lib/tur-installer/bin/tur-installer-wizard "$@"

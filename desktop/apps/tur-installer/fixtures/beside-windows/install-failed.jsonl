@@ -1,0 +1,11 @@
+{"licence":"SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0","what":"tur-install-engine install, bootc failing while it copies: the shape of the engine's answer for TUR-INSTALL-MEDIUM-002"}
+{"event":"stage","stage":"revalidate"}
+{"event":"stage","stage":"prepare"}
+{"event":"line","text":"Installing image: docker://localhost/tur:20261112.g22433a6d07a6"}
+{"event":"line","text":"Wiping /dev/vda"}
+{"event":"stage","stage":"copy"}
+{"event":"line","text":"Initializing ostree layout"}
+{"event":"copy-total","text":"70 (3.2 GB)"}
+{"event":"written","bytes":1073741824}
+{"event":"line","text":"error: Installing to disk: Creating ostree deployment: Performing deployment: Importing: Unencapsulating base: Failed to read blob: Input/output error (os error 5)"}
+{"event":"result","outcome":"failed","code":"TUR-INSTALL-MEDIUM-002","message":"The installation stopped with an error (status 1) after 41 s.","disk_state":"erased","status":1,"seconds":41}

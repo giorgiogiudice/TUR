@@ -1,0 +1,12 @@
+{"licence":"SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0","what":"tur-install-engine install, held while it copies, for the tests and the picture of the progress screen; {\"event\":\"pause\"} stops a replay without an end"}
+{"event":"stage","stage":"revalidate"}
+{"event":"stage","stage":"prepare"}
+{"event":"line","text":"Installing image: docker://localhost/tur:20261112.g22433a6d07a6"}
+{"event":"line","text":"Wiping /dev/vda"}
+{"event":"line","text":"Creating root filesystem (ext4) on device /dev/vda3 (size=20.9 GB)"}
+{"event":"stage","stage":"copy"}
+{"event":"line","text":"Initializing ostree layout"}
+{"event":"copy-total","text":"70 (3.2 GB)"}
+{"event":"line","text":"layers already present: 0; layers needed: 70 (3.2 GB)"}
+{"event":"written","bytes":2254857830}
+{"event":"pause"}

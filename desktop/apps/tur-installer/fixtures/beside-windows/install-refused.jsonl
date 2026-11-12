@@ -1,0 +1,3 @@
+{"licence":"SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0","what":"tur-install-engine install refused before writing: the disk changed after it was shown"}
+{"event":"stage","stage":"revalidate"}
+{"event":"result","outcome":"refused","code":"TUR-INSTALL-CONFIRM-004","message":"What is on the chosen disk changed after you confirmed. Nothing was changed.","disk_state":"untouched"}

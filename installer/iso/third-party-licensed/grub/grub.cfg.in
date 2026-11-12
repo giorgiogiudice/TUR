@@ -2,12 +2,19 @@
 # The licence is in the LICENSE file beside the source of this file
 # (installer/iso/third-party-licensed/grub in the TUR tree).
 #
-# Boot menu of the TUR installer medium (ADR-0018). GRUB interprets this file;
-# installer/iso/build-medium.sh fills in the three placeholders and puts the
-# result on the medium's EFI system partition.
+# Boot menu of the TUR installer medium (ADR-0018 and its amendment of
+# 13 November 2026). GRUB interprets this file; installer/iso/build-medium.sh
+# fills in the placeholders and puts the result on the medium's EFI system
+# partition and in its ISO 9660 tree.
 #
 # Only commands that are part of Fedora's signed GRUB binary are used, so the
 # menu works with Secure Boot, where GRUB may not load modules from disk.
+#
+# Two entries:
+#   - the live session (the default): TUR's desktop, from which a person can
+#     try TUR and start the graphical installer;
+#   - the text installer, the fallback for a computer whose graphics do not
+#     start. Pressing "t" while the menu is shown starts it at once.
 
 set default=0
 set timeout=5
@@ -16,7 +23,12 @@ set timeout=5
 # whether the medium is a USB stick or an optical drive.
 search --no-floppy --set=root --label @LABEL@
 
-menuentry 'Install @TITLE@ (erases the disk you choose)' {
-    linux /boot/vmlinuz @KERNEL_ARGUMENTS@
+menuentry 'Try or install @TITLE@' --id=tur-live {
+    linux /boot/vmlinuz @LIVE_ARGUMENTS@
+    initrd /boot/initrd.img
+}
+
+menuentry 'Install @TITLE@ (text mode; erases the disk you choose)' --id=tur-text --hotkey=t {
+    linux /boot/vmlinuz @TEXT_ARGUMENTS@
     initrd /boot/initrd.img
 }

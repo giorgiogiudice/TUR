@@ -1,0 +1,14 @@
+// SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+//
+// Present only on the TUR installer medium (ADR-0018, amendment of
+// 13 November 2026). The live session's user may start the installation
+// engine, and nothing else, without a password. The engine re-checks the
+// chosen disk's identity and the typed confirmation phrase itself; the
+// graphical installer cannot erase a disk the engine was not shown and
+// confirmed for. Remote login is not possible on the medium (sshd is masked).
+polkit.addRule(function (action, subject) {
+    if (action.id === "org.tur.installer.engine" && subject.user === "liveuser") {
+        return polkit.Result.YES;
+    }
+    return polkit.Result.NOT_HANDLED;
+});
