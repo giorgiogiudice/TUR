@@ -1,0 +1,261 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# TUR Dark: TUR's dark colour scheme for KDE.
+# GENERATED from desktop/kit/tokens/tokens.json by desktop/data/gen_theme.py. Do not edit:
+# change the tokens (or the role table in gen_theme.py), then run
+#   python3 desktop/data/gen_theme.py --write
+# Each value is followed by the token it comes from. Gold is not here: it is P@x's.
+
+# Disabled text fades towards the background until it is text.disabled.
+[ColorEffects:Disabled]
+Enable=true
+ChangeSelectionColor=false
+IntensityEffect=0
+IntensityAmount=0
+ColorEffect=0
+ColorAmount=0
+Color=11,15,23
+ContrastEffect=1
+ContrastAmount=0.56
+
+# A window looks the same whether or not it has the focus.
+[ColorEffects:Inactive]
+Enable=false
+ChangeSelectionColor=false
+IntensityEffect=0
+IntensityAmount=0
+ColorEffect=0
+ColorAmount=0
+Color=11,15,23
+ContrastEffect=0
+ContrastAmount=0
+
+[Colors:Window]
+# BackgroundNormal     surface.base #0B0F17
+BackgroundNormal=11,15,23
+# BackgroundAlternate  surface.raised #131A27
+BackgroundAlternate=19,26,39
+# ForegroundNormal     text.primary #EEF1F6
+ForegroundNormal=238,241,246
+# ForegroundInactive   text.secondary #A9B4C6
+ForegroundInactive=169,180,198
+# ForegroundActive     accent.text #5BBEFF
+ForegroundActive=91,190,255
+# ForegroundLink       accent.text #5BBEFF
+ForegroundLink=91,190,255
+# ForegroundVisited    accent.text #5BBEFF
+ForegroundVisited=91,190,255
+# ForegroundNegative   negative #FF7A7A
+ForegroundNegative=255,122,122
+# ForegroundNeutral    warning #FF9A52
+ForegroundNeutral=255,154,82
+# ForegroundPositive   positive #4CCB8F
+ForegroundPositive=76,203,143
+# DecorationFocus      accent.text #5BBEFF
+DecorationFocus=91,190,255
+# DecorationHover      accent #2AA9F8
+DecorationHover=42,169,248
+
+[Colors:View]
+# BackgroundNormal     surface.raised #131A27
+BackgroundNormal=19,26,39
+# BackgroundAlternate  surface.base #0B0F17
+BackgroundAlternate=11,15,23
+# ForegroundNormal     text.primary #EEF1F6
+ForegroundNormal=238,241,246
+# ForegroundInactive   text.secondary #A9B4C6
+ForegroundInactive=169,180,198
+# ForegroundActive     accent.text #5BBEFF
+ForegroundActive=91,190,255
+# ForegroundLink       accent.text #5BBEFF
+ForegroundLink=91,190,255
+# ForegroundVisited    accent.text #5BBEFF
+ForegroundVisited=91,190,255
+# ForegroundNegative   negative #FF7A7A
+ForegroundNegative=255,122,122
+# ForegroundNeutral    warning #FF9A52
+ForegroundNeutral=255,154,82
+# ForegroundPositive   positive #4CCB8F
+ForegroundPositive=76,203,143
+# DecorationFocus      accent.text #5BBEFF
+DecorationFocus=91,190,255
+# DecorationHover      accent #2AA9F8
+DecorationHover=42,169,248
+
+[Colors:Button]
+# BackgroundNormal     surface.overlay #1B2434
+BackgroundNormal=27,36,52
+# BackgroundAlternate  surface.sunken #070A10
+BackgroundAlternate=7,10,16
+# ForegroundNormal     text.primary #EEF1F6
+ForegroundNormal=238,241,246
+# ForegroundInactive   text.secondary #A9B4C6
+ForegroundInactive=169,180,198
+# ForegroundActive     accent.text #5BBEFF
+ForegroundActive=91,190,255
+# ForegroundLink       accent.text #5BBEFF
+ForegroundLink=91,190,255
+# ForegroundVisited    accent.text #5BBEFF
+ForegroundVisited=91,190,255
+# ForegroundNegative   negative #FF7A7A
+ForegroundNegative=255,122,122
+# ForegroundNeutral    warning #FF9A52
+ForegroundNeutral=255,154,82
+# ForegroundPositive   positive #4CCB8F
+ForegroundPositive=76,203,143
+# DecorationFocus      accent.text #5BBEFF
+DecorationFocus=91,190,255
+# DecorationHover      accent #2AA9F8
+DecorationHover=42,169,248
+
+[Colors:Selection]
+# BackgroundNormal     selection #1267C4
+BackgroundNormal=18,103,196
+# BackgroundAlternate  selection #1267C4
+BackgroundAlternate=18,103,196
+# ForegroundNormal     selection.on #FFFFFF
+ForegroundNormal=255,255,255
+# ForegroundInactive   selection.on #FFFFFF
+ForegroundInactive=255,255,255
+# ForegroundActive     selection.on #FFFFFF
+ForegroundActive=255,255,255
+# ForegroundLink       selection.on #FFFFFF
+ForegroundLink=255,255,255
+# ForegroundVisited    selection.on #FFFFFF
+ForegroundVisited=255,255,255
+# ForegroundNegative   selection.on #FFFFFF
+ForegroundNegative=255,255,255
+# ForegroundNeutral    selection.on #FFFFFF
+ForegroundNeutral=255,255,255
+# ForegroundPositive   selection.on #FFFFFF
+ForegroundPositive=255,255,255
+# DecorationFocus      accent.text #5BBEFF
+DecorationFocus=91,190,255
+# DecorationHover      accent #2AA9F8
+DecorationHover=42,169,248
+
+[Colors:Tooltip]
+# BackgroundNormal     surface.overlay #1B2434
+BackgroundNormal=27,36,52
+# BackgroundAlternate  surface.raised #131A27
+BackgroundAlternate=19,26,39
+# ForegroundNormal     text.primary #EEF1F6
+ForegroundNormal=238,241,246
+# ForegroundInactive   text.secondary #A9B4C6
+ForegroundInactive=169,180,198
+# ForegroundActive     accent.text #5BBEFF
+ForegroundActive=91,190,255
+# ForegroundLink       accent.text #5BBEFF
+ForegroundLink=91,190,255
+# ForegroundVisited    accent.text #5BBEFF
+ForegroundVisited=91,190,255
+# ForegroundNegative   negative #FF7A7A
+ForegroundNegative=255,122,122
+# ForegroundNeutral    warning #FF9A52
+ForegroundNeutral=255,154,82
+# ForegroundPositive   positive #4CCB8F
+ForegroundPositive=76,203,143
+# DecorationFocus      accent.text #5BBEFF
+DecorationFocus=91,190,255
+# DecorationHover      accent #2AA9F8
+DecorationHover=42,169,248
+
+[Colors:Complementary]
+# BackgroundNormal     surface.base #0B0F17
+BackgroundNormal=11,15,23
+# BackgroundAlternate  surface.raised #131A27
+BackgroundAlternate=19,26,39
+# ForegroundNormal     text.primary #EEF1F6
+ForegroundNormal=238,241,246
+# ForegroundInactive   text.secondary #A9B4C6
+ForegroundInactive=169,180,198
+# ForegroundActive     accent.text #5BBEFF
+ForegroundActive=91,190,255
+# ForegroundLink       accent.text #5BBEFF
+ForegroundLink=91,190,255
+# ForegroundVisited    accent.text #5BBEFF
+ForegroundVisited=91,190,255
+# ForegroundNegative   negative #FF7A7A
+ForegroundNegative=255,122,122
+# ForegroundNeutral    warning #FF9A52
+ForegroundNeutral=255,154,82
+# ForegroundPositive   positive #4CCB8F
+ForegroundPositive=76,203,143
+# DecorationFocus      accent.text #5BBEFF
+DecorationFocus=91,190,255
+# DecorationHover      accent #2AA9F8
+DecorationHover=42,169,248
+
+[Colors:Header]
+# BackgroundNormal     surface.raised #131A27
+BackgroundNormal=19,26,39
+# BackgroundAlternate  surface.base #0B0F17
+BackgroundAlternate=11,15,23
+# ForegroundNormal     text.primary #EEF1F6
+ForegroundNormal=238,241,246
+# ForegroundInactive   text.secondary #A9B4C6
+ForegroundInactive=169,180,198
+# ForegroundActive     accent.text #5BBEFF
+ForegroundActive=91,190,255
+# ForegroundLink       accent.text #5BBEFF
+ForegroundLink=91,190,255
+# ForegroundVisited    accent.text #5BBEFF
+ForegroundVisited=91,190,255
+# ForegroundNegative   negative #FF7A7A
+ForegroundNegative=255,122,122
+# ForegroundNeutral    warning #FF9A52
+ForegroundNeutral=255,154,82
+# ForegroundPositive   positive #4CCB8F
+ForegroundPositive=76,203,143
+# DecorationFocus      accent.text #5BBEFF
+DecorationFocus=91,190,255
+# DecorationHover      accent #2AA9F8
+DecorationHover=42,169,248
+
+[Colors:Header][Inactive]
+# BackgroundNormal     surface.base #0B0F17
+BackgroundNormal=11,15,23
+# BackgroundAlternate  surface.raised #131A27
+BackgroundAlternate=19,26,39
+# ForegroundNormal     text.secondary #A9B4C6
+ForegroundNormal=169,180,198
+# ForegroundInactive   text.secondary #A9B4C6
+ForegroundInactive=169,180,198
+# ForegroundActive     accent.text #5BBEFF
+ForegroundActive=91,190,255
+# ForegroundLink       accent.text #5BBEFF
+ForegroundLink=91,190,255
+# ForegroundVisited    accent.text #5BBEFF
+ForegroundVisited=91,190,255
+# ForegroundNegative   negative #FF7A7A
+ForegroundNegative=255,122,122
+# ForegroundNeutral    warning #FF9A52
+ForegroundNeutral=255,154,82
+# ForegroundPositive   positive #4CCB8F
+ForegroundPositive=76,203,143
+# DecorationFocus      accent.text #5BBEFF
+DecorationFocus=91,190,255
+# DecorationHover      accent #2AA9F8
+DecorationHover=42,169,248
+
+[General]
+ColorScheme=TurDark
+Name=TUR Dark
+
+# How strongly frames are shaded (KDE's default is 7).
+[KDE]
+contrast=4
+
+[WM]
+# activeBackground    surface.raised #131A27
+activeBackground=19,26,39
+# activeForeground    text.primary #EEF1F6
+activeForeground=238,241,246
+# inactiveBackground  surface.base #0B0F17
+inactiveBackground=11,15,23
+# inactiveForeground  text.secondary #A9B4C6
+inactiveForeground=169,180,198
+# activeBlend         surface.raised #131A27
+activeBlend=19,26,39
+# inactiveBlend       surface.base #0B0F17
+inactiveBlend=11,15,23

@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# No splash screen while Plasma starts (desktop-experience.md, 6.4): the sign
+# that the desktop is ready is the desktop. Plasma 6.8 starts its splash only
+# when Engine is KSplashQML, the default (startkde/startplasma.cpp). A global
+# theme cannot turn it off without a splash QML file of its own, so it is
+# turned off here. A person can still choose a splash in System Settings.
+
+[KSplash]
+Engine=none
+Theme=None

@@ -1,0 +1,172 @@
+#!/usr/bin/bash
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# TUR boot-test desktop check (task D-04). Present only in the boot-test image,
+# and inert unless the kernel command line has tur.desktop_check, which only
+# the extra boot of tests/boot/splash.py sets.
+#
+# In that boot the boot test's user signs in automatically, for the first time
+# in a Plasma session: a new account. This records, from inside, what that
+# account got: its global theme and colours, the panel as Plasma holds it,
+# the wallpaper, whether KDE's welcome window or Plasma's splash appeared, the
+# global themes the system offers, and the files the image installed. Then,
+# when the host has taken its picture of the dark desktop (at the uptime the
+# host passes through QEMU's fw_cfg), it switches the account to TUR Light
+# the way System Settings does, so that the host can take a second picture,
+# and records the colours again.
+#
+# It decides nothing: tests/boot/splash.py on the host judges the facts. The
+# facts go to the host as a tar stream over the boot test's virtio-serial
+# port; progress markers go to the serial console.
+set -u
+
+user=turtest
+out=/run/tur-desktop-check
+port=/dev/virtio-ports/org.tur.boottest
+fw=/sys/firmware/qemu_fw_cfg/by_name/opt/org.tur/desktop-check
+
+say() { printf 'TUR-BOOT-TEST: %s\n' "$*" > /dev/ttyS0 2> /dev/null; printf '%s\n' "$*"; }
+uptime_s() { cut -d' ' -f1 /proc/uptime | cut -d. -f1; }
+
+rm -rf "${out}"
+mkdir -p "${out}/dark" "${out}/light"
+status="${out}/status"
+: > "${status}"
+put() { printf '%s=%s\n' "$1" "$2" >> "${status}"; }
+
+modprobe qemu_fw_cfg 2> /dev/null
+light_at=240
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+    if [ -e "${fw}/light-at/raw" ]; then
+        light_at="$(tr -dc '0-9' < "${fw}/light-at/raw")"
+        break
+    fi
+    sleep 1
+done
+if [ -z "${light_at}" ]; then light_at=240; fi
+put light_at "${light_at}"
+say "DESKTOP-CHECK-START user=${user} light_at=${light_at} uptime=$(uptime_s)"
+
+uid="$(id -u "${user}" 2> /dev/null)"
+home="$(getent passwd "${user}" | cut -d: -f6)"
+put uid "${uid}"
+put home "${home}"
+
+# --- wait for the account's Plasma session --------------------------------------
+pid=""
+for _ in $(seq 1 300); do
+    pid="$(pgrep -u "${uid}" -x plasmashell | head -n1)"
+    if [ -n "${pid}" ]; then break; fi
+    sleep 1
+done
+put plasmashell_pid "${pid}"
+put plasmashell_seen_uptime "$(uptime_s)"
+if [ -z "${pid}" ]; then
+    say "DESKTOP-CHECK plasmashell did not start"
+fi
+
+# Run a command as the user, in the environment of their Plasma shell: the
+# session bus, the Wayland display and the configuration directories Plasma
+# set up (with the account's kdedefaults first).
+envs=()
+if [ -n "${pid}" ]; then
+    mapfile -d '' envs < "/proc/${pid}/environ"
+    tr '\0' '\n' < "/proc/${pid}/environ" | grep -E '^(XDG_|DBUS_SESSION|WAYLAND_DISPLAY|KDE_|QT_)' \
+        > "${out}/plasmashell-environment.txt"
+fi
+as_user() { timeout 60 runuser -u "${user}" -- env -i "${envs[@]}" "$@"; }
+
+# Plasma's layout as plasmashell itself describes it (org.kde.PlasmaShell,
+# dumpCurrentLayoutJS: panels with their applets in order and their settings,
+# and the desktops of the current activity).
+layout() {
+    as_user busctl --user --json=short call org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell \
+        dumpCurrentLayoutJS > "$1" 2> "$1.err"
+}
+
+for _ in $(seq 1 120); do
+    if layout "${out}/dark/layout.json" && grep -q 'panels' "${out}/dark/layout.json"; then break; fi
+    sleep 1
+done
+# Let the session settle: the launcher's favourites, the welcome daemon.
+sleep 25
+
+# facts DIR: what the account has now.
+facts() {
+    local dir="$1" key
+    layout "${dir}/layout.json"
+    as_user busctl --user --json=short call org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell \
+        wallpaper u 0 > "${dir}/wallpaper.json" 2> "${dir}/wallpaper.err"
+    {
+        for key in "kdeglobals KDE LookAndFeelPackage" "kdeglobals KDE SingleClick" \
+            "kdeglobals General ColorScheme" "kdeglobals Icons Theme" "kdeglobals KDE widgetStyle" \
+            "kdeglobals Colors:Window BackgroundNormal" "kdeglobals Colors:Window ForegroundNormal" \
+            "kdeglobals Colors:Selection BackgroundNormal" "kdeglobals Colors:View BackgroundNormal" \
+            "kdeglobals WM activeBackground" "kcminputrc Mouse cursorTheme" "kwinrc org.kde.kdecoration2 library" \
+            "plasmarc Theme name" "ksplashrc KSplash Engine" "plasma-welcomerc General LastSeenVersion" \
+            "plasma-welcomerc General ShowUpdatePage"; do
+            # shellcheck disable=SC2086  # three words: file, group, key
+            set -- ${key}
+            printf '%s/%s/%s=%s\n' "$1" "$2" "$3" "$(as_user kreadconfig6 --file "$1" --group "$2" --key "$3" 2>&1)"
+        done
+    } > "${dir}/settings.txt"
+    cp -r "${home}/.config/kdedefaults" "${dir}/kdedefaults" 2> /dev/null
+    for f in kdeglobals plasma-welcomerc plasma-org.kde.plasma.desktop-appletsrc plasmashellrc \
+        kactivitymanagerd-statsrc ksplashrc; do
+        cp "${home}/.config/${f}" "${dir}/user-${f}" 2> /dev/null
+    done
+    ps -U "${uid}" -o pid,etimes,rss,comm,args > "${dir}/processes.txt" 2>&1
+}
+
+facts "${out}/dark"
+as_user plasma-apply-lookandfeel --list > "${out}/lookandfeel-list.txt" 2>&1
+as_user systemctl --user show plasma-ksplash.service -p LoadState -p ActiveState -p Result \
+    -p ExecMainStartTimestampMonotonic -p InactiveExitTimestampMonotonic > "${out}/ksplash-unit.txt" 2>&1
+journalctl -b --no-pager -o short-monotonic "_UID=${uid}" > "${out}/user-journal.txt" 2>&1
+pgrep -a -u "${uid}" -f 'plasma-welcome|ksplashqml' > "${out}/welcome-and-splash-processes.txt" 2>&1
+put welcome_process "$(pgrep -u "${uid}" -f plasma-welcome | head -n1)"
+# What the image installed for D-04 (the host compares with desktop/data/MANIFEST.tsv).
+{
+    find /usr/share/color-schemes /usr/share/plasma/look-and-feel/org.tur.dark /usr/share/plasma/look-and-feel/org.tur.light \
+        /usr/share/tur/xdg /etc/skel/.config -type f -exec sha256sum {} + 2>&1
+} | LC_ALL=C sort -k2 > "${out}/installed-sha256.txt"
+for f in /etc/xdg/kdeglobals /etc/xdg/ksplashrc /etc/xdg/plasma-welcomerc /etc/xdg/kicker-extra-favoritesrc; do
+    printf '%s\t%s\n' "${f}" "$(readlink "${f}" 2>&1)"
+done > "${out}/installed-links.txt"
+ls -la /usr/share/plasma/look-and-feel/ > "${out}/look-and-feel-dirs.txt" 2>&1
+ls -la /usr/share/wallpapers/ /usr/share/wallpapers/Tur/contents/ > "${out}/wallpapers.txt" 2>&1
+# The login screen's own account: which global theme Plasma applied to it the
+# last time the login screen ran (in the boot test's earlier boots).
+cat /var/lib/plasmalogin/.config/kdedefaults/package > "${out}/login-screen-package.txt" 2>&1
+# plasma-setup's light/dark switch: the global themes its program names
+# (compiled in; the switch cannot be pointed elsewhere by configuration).
+{
+    for f in $(rpm -ql plasma-setup 2> /dev/null | grep -E '\.so|plasma-setup$'); do
+        if [ -f "${f}" ] && grep -a -q 'plasma-apply-lookandfeel' "${f}"; then
+            printf '### %s\n' "${f}"
+            grep -a -o -E 'org\.[A-Za-z0-9.]+\.desktop' "${f}" | LC_ALL=C sort -u
+        fi
+    done
+} > "${out}/plasma-setup-themes.txt" 2>&1
+put dark_facts_uptime "$(uptime_s)"
+say "DESKTOP-CHECK dark facts recorded uptime=$(uptime_s)"
+
+# --- TUR Light, after the host's picture of the dark desktop ---------------------
+while [ "$(uptime_s)" -lt "${light_at}" ]; do sleep 1; done
+as_user plasma-apply-lookandfeel --apply org.tur.light > "${out}/light-apply.txt" 2>&1
+put light_apply_status "$?"
+sleep 20
+facts "${out}/light"
+put light_facts_uptime "$(uptime_s)"
+for _ in 1 2 3; do say "DESKTOP-LIGHT-APPLIED uptime=$(uptime_s)"; sleep 1; done
+
+# --- send ------------------------------------------------------------------------
+# The host takes its picture of the light desktop within a few seconds of the
+# marker; the facts follow.
+sleep 30
+chmod -R a+rX "${out}"
+if [ -e "${port}" ] && tar -C /run -cf - tur-desktop-check > "${port}"; then
+    for _ in 1 2 3; do say "DESKTOP-CHECK-DONE sent uptime=$(uptime_s)"; sleep 1; done
+else
+    for _ in 1 2 3; do say "DESKTOP-CHECK-DONE not-sent uptime=$(uptime_s)"; sleep 1; done
+fi

@@ -59,7 +59,9 @@ kit/                                tur-kit: QML module Tur.Kit and libturkit
 apps/tur-centre/                    tur-centre, the application centre, part 1 (D-10)
   src/ qml/ tests/                  the program; its unit and QML tests; shots/
   fixtures/                         recorded answers of tur-catalogue; see below
-apps/ dbus/ data/ packaging/        later tasks; see the README in each
+data/                               side B: TUR's colour schemes, global themes and the
+  rootfs/ gen_theme.py tests/       defaults of a new account, installed into the image (D-04)
+apps/ dbus/ packaging/              later tasks; see the README in each
 upstream-licensed/                  side C: empty but for a README
 ci/                                 the builder image, the scripts CI runs, the toolchain proof
 tests/screenshots/                  reference images
