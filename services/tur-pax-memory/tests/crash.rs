@@ -728,12 +728,18 @@ fn a_symbolic_link_in_the_store_is_not_followed() {
     // A link in place of a record is not listed and not read.
     let record = store.record_path(entries, "m-00000003");
     std::os::unix::fs::symlink(&outside, record).expect("links");
-    assert_eq!(store.ids(entries), Ok(vec!["m-00000001".to_owned(), "m-00000002".to_owned()]));
+    assert_eq!(
+        store.ids(entries),
+        Ok(vec!["m-00000001".to_owned(), "m-00000002".to_owned()])
+    );
     assert!(store.get(entries, "m-00000003").is_err());
 
     // Writing the record replaces the link, not the file it points at.
     store.put(entries, "m-00000003", b"three").expect("writes");
     assert_eq!(fs::read(&outside).expect("reads"), b"untouched");
-    assert_eq!(store.get(entries, "m-00000003"), Ok(Some(b"three".to_vec())));
+    assert_eq!(
+        store.get(entries, "m-00000003"),
+        Ok(Some(b"three".to_vec()))
+    );
     let _ = fs::remove_dir_all(dir);
 }

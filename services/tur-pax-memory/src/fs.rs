@@ -121,7 +121,10 @@ impl FileSystem for StdFs {
             Err(err) => return Err(err),
         };
         if !metadata.file_type().is_file() {
-            return Err(io::Error::new(io::ErrorKind::InvalidData, "not a regular file"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "not a regular file",
+            ));
         }
         let file = match File::open(path) {
             Ok(file) => file,

@@ -768,10 +768,15 @@ mod tests {
         let token = ["q7Zr2LmX9vB4tKc8NpW3", "yHd6JfS1gAe5UoT0iRbM"].concat();
         let leaking = Procedure {
             name: "Call the build service".to_owned(),
-            steps: vec![step(json!({ "headers": [format!("Authorization: Bearer {token}")] }))],
+            steps: vec![step(
+                json!({ "headers": [format!("Authorization: Bearer {token}")] }),
+            )],
         };
         let refused = memory
-            .add(NewEntry::procedure("Starts a build.", leaking, "task"), Timestamp(5))
+            .add(
+                NewEntry::procedure("Starts a build.", leaking, "task"),
+                Timestamp(5),
+            )
             .expect_err("a token");
         assert_eq!(refused.code, Code::MemorySecretKnownToken);
         assert!(!refused.detail.contains(&token), "{}", refused.detail);
