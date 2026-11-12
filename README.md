@@ -158,7 +158,8 @@ becomes.
 | Android | [Design](docs/architecture/android-runtime.md) published; not yet built |
 | Diagnostics, application detection, installer planning, storage safety | First versions written and tested as libraries and command-line tools; not yet part of the image |
 | Devices, P@x's connections to AI providers, P@x's memory and schedules, application catalogue and router | First versions written and tested; not yet part of the image |
-| Running Windows programs, updates and rollback, the desktop and application centre | In development |
+| Running Windows programs | A Windows program built in continuous integration runs under Wine through TUR's launcher, inside a sandbox that keeps it out of the user's files ([report](docs/reports/windows-runtime-1.md)). Tested on Ubuntu, not yet on the TUR image; no real application tried |
+| Updates and rollback, the desktop and application centre, the Windows guest | [Designed](docs/adr/README.md); not yet built |
 | Desktop, application centre, Windows and Android running | Not started |
 | Anything you can install | Not yet |
 
