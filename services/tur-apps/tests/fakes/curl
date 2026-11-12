@@ -1,0 +1,40 @@
+#!/bin/sh
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# A stand-in for curl in the tests of tur-apps (tests/cli.rs). It fetches
+# nothing: a download writes the file $FAKE_STATE/download to --output, and a
+# request without --output prints $FAKE_STATE/api.json. Without those files it
+# fails as curl --fail does on HTTP 404.
+set -eu
+state="${FAKE_STATE:?}"
+echo "$*" >> "$state/curl.log"
+output=""
+url=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+    --output)
+        output="$2"
+        shift 2
+        ;;
+    --)
+        url="$2"
+        shift 2
+        ;;
+    *)
+        shift
+        ;;
+    esac
+done
+if [ -n "$output" ]; then
+    if [ ! -f "$state/download" ]; then
+        echo "curl: (22) The requested URL returned error: 404" >&2
+        exit 22
+    fi
+    cat "$state/download" > "$output"
+    printf '%s\n200\n' "$url"
+else
+    if [ ! -f "$state/api.json" ]; then
+        exit 22
+    fi
+    cat "$state/api.json"
+fi

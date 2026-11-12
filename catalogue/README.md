@@ -12,7 +12,12 @@ that breaks a rule breaks CI.
 
 ## The honesty rule
 
-**TUR has tested nothing yet.** A rating may be entered only
+**TUR has rated nothing yet.** Its first automated tests of Windows
+applications (`docs/reports/windows-runtime-2.md`) are recorded as
+`reported_by = "tur-test"` with the rating `unknown`, because the application
+centre still says that every rating is a named source's (see
+`docs/architecture/catalogue-and-routing.md`, "Not built"). A rating may be
+entered only
 
 - as `unknown`, or by leaving the record out, which means the same; or
 - attributed to a **named public source that the author opened and read**,
@@ -36,6 +41,18 @@ and say in `notes` what could not be checked.
   under `tur.class.`.
 - The format is `schemas/app-catalogue-entry.schema.json`. Unknown fields are
   refused. Dates are quoted strings, `"YYYY-MM-DD"`.
+- A Windows edition of **free software** obtained from the publisher's page
+  may pin the publisher's installer under `[editions.installer]`: its `url`
+  (the publisher's own location, ending in the file's name), `sha256`,
+  `size`, `version`, `licence`, `licence_url`, `hash_source` (the
+  publisher's checksum file or release digest the SHA-256 was taken from) and
+  `checked`, and `portable = true` for a single program. Take every value from
+  the publisher, never compute a digest of a file you downloaded yourself and
+  call it the publisher's. The edition must say `licence = "open-source"`:
+  TUR never downloads proprietary software, and the validator refuses a pin
+  on any other edition. `tur-apps` downloads a pinned file when the user asks
+  for the application, and runs nothing in it before size and digest match
+  ([ADR-0019](../docs/adr/0019-app-install-backend.md)).
 - Every URL is `https`. `download_page` is a page for a person to read, never
   a direct link to an installer or archive: TUR does not fetch a binary the
   user did not ask for.

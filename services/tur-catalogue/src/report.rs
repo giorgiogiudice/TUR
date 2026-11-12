@@ -139,6 +139,18 @@ pub fn render_entry(entry: &Entry) -> String {
                 .collect();
             let _ = writeln!(out, "   Requires: {}", labels.join("; "));
         }
+        if let Some(installer) = &edition.installer {
+            let _ = writeln!(
+                out,
+                "   Installer: version {}, {} bytes, from {} (SHA-256 {}; licence {}; checked {})",
+                installer.version,
+                installer.size,
+                installer.url,
+                installer.sha256,
+                installer.licence,
+                installer.checked
+            );
+        }
         if let Some(notes) = &edition.notes {
             let _ = writeln!(out, "   Notes: {notes}");
         }

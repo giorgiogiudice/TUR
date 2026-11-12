@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
 # TUR application catalogue entry. Format: schemas/app-catalogue-entry.schema.json.
 # How entries are written and sourced: catalogue/README.md.
-# TUR has not tested this application. Every rating below is reported by the
-# named source, which was checked on the date given; no record means unknown.
+# TUR's automated test of the Windows edition is recorded below, with its
+# report, and carries no rating: playback was not tried. No other record
+# exists; no record means unknown.
 
 schema_version = 1
 id = "org.videolan.vlc"
@@ -40,6 +41,25 @@ kind = "windows"
 obtain = "publisher-page"
 download_page = "https://www.videolan.org/vlc/"
 licence = "open-source"
+
+[editions.installer]
+url = "https://download.videolan.org/pub/videolan/vlc/3.0.24/win64/vlc-3.0.24-win64.exe"
+sha256 = "d711e1e1fe52052748c39080c7dce63f6b7e4c315efedf1774a3f1957b782ff3"
+size = 46269360
+version = "3.0.24"
+licence = "GPL-2.0-or-later"
+licence_url = "https://www.videolan.org/legal.html"
+hash_source = "The .sha256 file beside the installer on download.videolan.org (tests/windows-runtime/apps.json)"
+checked = "2026-11-12"
+
+[[editions.records]]
+route = "wine"
+rating = "unknown"
+reported_by = "tur-test"
+test_report = "docs/reports/windows-runtime-2.md"
+version_tested = "3.0.24"
+date = "2026-11-12"
+notes = "Automated test of the NSIS installer vlc-3.0.24-win64.exe: install, launch, converting a sound file without the window, and uninstall all passed. Not tested: playing sound or video; the runner has no audio device and no GPU, so no rating. Wine 9.0 from Ubuntu on a hosted runner; not the TUR image."
 
 [[editions.references]]
 title = "VLC download page"

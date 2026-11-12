@@ -1,0 +1,138 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/giorgiogiudice/TUR/schemas/app-install-plan.schema.json",
+  "$comment": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+  "title": "TUR application installation plan",
+  "description": "What installing one application will do, worked out before anything is done: `tur-apps plan <id> --json`, the first event of `tur-apps install --events`, and the result of Plan on the proposed org.tur.Apps1. It starts from the router's own option for the route (router), and says where the application comes from, what is downloaded from where with its size and digest when known, where it is installed, what it may reach on this computer, and how it is removed. A refusal is not a plan: it is {\"error\": failure}, see app-install-event.schema.json#/$defs/failure. See docs/architecture/app-install-backend.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "kind", "application", "route", "chosen_by", "router", "host", "source",
+    "downloads", "installs", "access", "access_known", "removal", "steps", "notes"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "kind": { "const": "plan" },
+    "application": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "publisher", "category"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "publisher": { "type": "string" },
+        "category": { "type": "string" }
+      }
+    },
+    "route": {
+      "description": "The routes tur-apps installs by. Every other route is refused with TUR-DESKTOP-APPS-004.",
+      "enum": ["flatpak", "wine"]
+    },
+    "chosen_by": {
+      "description": "router: the router's recommendation; you: a route the user chose among those the router offers.",
+      "enum": ["router", "you"]
+    },
+    "router": {
+      "description": "The router's option for the route, exactly as `tur-catalogue route --json` writes an element of options: route, edition, rating and its source, outlook, reason with reason_code and reason_parts, caveats with text_id and params, prerequisites, alternative.",
+      "type": "object",
+      "required": ["route", "rating", "rating_source", "outlook", "reason", "reason_code", "reason_parts", "caveats", "prerequisites"]
+    },
+    "host": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["facts", "how"],
+      "properties": {
+        "facts": { "type": "object", "description": "The router's host facts." },
+        "how": {
+          "description": "detected: flatpak, Wine and the architecture were looked at, everything else is the router's default; stated: read from --host.",
+          "enum": ["detected", "stated"]
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "name", "remote", "url", "file", "verification"],
+      "properties": {
+        "kind": { "enum": ["flatpak-remote", "publisher-download", "user-file"] },
+        "name": { "type": "string" },
+        "remote": { "type": ["string", "null"] },
+        "url": { "type": ["string", "null"] },
+        "file": { "type": ["string", "null"] },
+        "verification": {
+          "description": "How what is installed is checked before it is used: Flatpak's check against the remote's signing key; the SHA-256 the catalogue pins; or, for a user's file with no pin, the statement that it cannot be checked and that its digest is recorded.",
+          "type": "string"
+        }
+      }
+    },
+    "downloads": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["what", "from", "size", "installed_size", "sha256", "commit", "size_source"],
+        "properties": {
+          "what": { "type": "string" },
+          "from": { "type": "string" },
+          "size": { "type": ["integer", "null"], "minimum": 0, "description": "Bytes; null when not known." },
+          "installed_size": { "type": ["integer", "null"], "minimum": 0 },
+          "sha256": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
+          "commit": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
+          "size_source": { "type": "string" }
+        }
+      }
+    },
+    "installs": { "type": "array", "items": { "$ref": "#/$defs/place" } },
+    "access": {
+      "description": "What the application may reach, in the words the application centre uses for every route. For a Flatpak, from the permissions in its metadata; for a Windows application, from tur-runtime's sandbox.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "permission", "text"],
+        "properties": {
+          "kind": { "enum": ["files", "devices", "network", "display", "sound", "services", "other"] },
+          "permission": { "type": "string" },
+          "text": { "type": "string" }
+        }
+      }
+    },
+    "access_known": { "type": "boolean" },
+    "removal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["command", "text", "data", "data_kept_by_default"],
+      "properties": {
+        "command": { "type": "string" },
+        "text": { "type": "string" },
+        "data": { "type": "array", "items": { "$ref": "#/$defs/place" } },
+        "data_kept_by_default": { "const": true }
+      }
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "text", "command"],
+        "properties": {
+          "id": { "enum": ["download", "verify", "install", "record"] },
+          "text": { "type": "string" },
+          "command": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "notes": { "type": "array", "items": { "type": "string" } }
+  },
+  "$defs": {
+    "place": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["what", "path"],
+      "properties": {
+        "what": { "type": "string" },
+        "path": { "type": "string", "description": "With the home folder written ~." }
+      }
+    }
+  }
+}

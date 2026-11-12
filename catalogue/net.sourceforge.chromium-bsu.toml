@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR application catalogue entry. Format: schemas/app-catalogue-entry.schema.json.
+# How entries are written and sourced: catalogue/README.md.
+# TUR has not rated this application. It is the small free application the
+# apps workflow installs from Flathub to prove the Flatpak route
+# (docs/reports/apps-1.md); that proves the installation, not the game.
+
+schema_version = 1
+id = "net.sourceforge.chromium-bsu"
+name = "Chromium B.S.U."
+publisher = "Mark B. Allan"
+category = "game"
+summary = "Arcade-style, top-scrolling space shooter."
+homepage = "https://chromium-bsu.sourceforge.net/"
+
+[[editions]]
+kind = "flatpak"
+flatpak_id = "net.sourceforge.chromium-bsu"
+licence = "open-source"
+notes = "Flathub lists it under the Clarified Artistic License (ClArtistic), version 0.9.16.1, on the runtime org.freedesktop.Platform 26.08, asking for X11, sound, the graphics processor and shared memory with the display server. Flathub does not mark it as verified by the publisher."
+
+[[editions.references]]
+title = "Flathub listing and API: version 0.9.16.1, licence ClArtistic, download 5.6 MB"
+url = "https://flathub.org/apps/net.sourceforge.chromium-bsu"
+checked = "2026-11-12"

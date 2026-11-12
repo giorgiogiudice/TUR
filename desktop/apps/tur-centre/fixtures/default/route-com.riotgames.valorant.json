@@ -57,14 +57,33 @@
                 "code": "requirement",
                 "severity": "blocker",
                 "requirement": "kernel-anti-cheat",
-                "text": "This game's anti-cheat will not work: it runs only on real Windows, with a kernel driver that a compatibility layer cannot provide. Dual boot is the only way."
+                "text": "This game's anti-cheat will not work: it runs only on real Windows, with a kernel driver that a compatibility layer cannot provide. Dual boot is the only way.",
+                "text_id": "requirement.kernel-anti-cheat.proton",
+                "params": {}
               }
             ],
             "prerequisites": [],
             "alternative": {
               "kind": "dual-boot",
-              "text": "Dual boot: install Windows beside TUR and run it there. That is the only way."
-            }
+              "text": "Dual boot: install Windows beside TUR and run it there. That is the only way.",
+              "text_id": "dual-boot.only-way"
+            },
+            "reason_code": "no-route",
+            "reason_parts": [
+              {
+                "code": "no-route",
+                "params": {
+                  "name": "Valorant"
+                }
+              },
+              {
+                "code": "route-blocked",
+                "params": {
+                  "caveat": "requirement.kernel-anti-cheat.proton",
+                  "route": "proton"
+                }
+              }
+            ]
           },
           {
             "route": "proton",
@@ -89,17 +108,33 @@
                 "code": "requirement",
                 "severity": "blocker",
                 "requirement": "kernel-anti-cheat",
-                "text": "This game's anti-cheat will not work: it runs only on real Windows, with a kernel driver that a compatibility layer cannot provide. Dual boot is the only way."
+                "text": "This game's anti-cheat will not work: it runs only on real Windows, with a kernel driver that a compatibility layer cannot provide. Dual boot is the only way.",
+                "text_id": "requirement.kernel-anti-cheat.proton",
+                "params": {}
               },
               {
                 "code": "reported-inadequate",
                 "severity": "warning",
                 "requirement": null,
-                "text": "Reported broken by AreWeAntiCheatYet (\"Denied\"), checked 2026-11-12. Not tested by TUR."
+                "text": "Reported broken by AreWeAntiCheatYet (\"Denied\"), checked 2026-11-12. Not tested by TUR.",
+                "text_id": "reported-inadequate.external",
+                "params": {
+                  "date": "2026-11-12",
+                  "rating": "broken",
+                  "source": "AreWeAntiCheatYet",
+                  "source_rating": "Denied"
+                }
               }
             ],
             "prerequisites": [],
-            "alternative": null
+            "alternative": null,
+            "reason_code": "windows-game-proton",
+            "reason_parts": [
+              {
+                "code": "windows-game-proton",
+                "params": {}
+              }
+            ]
           }
         ]
       }

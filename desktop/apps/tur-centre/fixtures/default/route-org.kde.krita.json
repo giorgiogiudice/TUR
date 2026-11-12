@@ -54,7 +54,14 @@
             "reason": "A Linux edition exists as a Flatpak: a native Linux edition comes first.",
             "caveats": [],
             "prerequisites": [],
-            "alternative": null
+            "alternative": null,
+            "reason_code": "linux-flatpak",
+            "reason_parts": [
+              {
+                "code": "linux-flatpak",
+                "params": {}
+              }
+            ]
           },
           {
             "route": "native",
@@ -74,11 +81,20 @@
                 "code": "community-package",
                 "severity": "note",
                 "requirement": null,
-                "text": "This package is maintained by its packagers, not by the application's publisher."
+                "text": "This package is maintained by its packagers, not by the application's publisher.",
+                "text_id": "community-package",
+                "params": {}
               }
             ],
             "prerequisites": [],
-            "alternative": null
+            "alternative": null,
+            "reason_code": "linux-native",
+            "reason_parts": [
+              {
+                "code": "linux-native",
+                "params": {}
+              }
+            ]
           }
         ]
       }

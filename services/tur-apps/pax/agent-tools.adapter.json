@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "service": "org.tur.Apps1",
+  "adapters": [
+    {
+      "tool": "apps_list_installed",
+      "kind": "command",
+      "program": "/usr/bin/tur-apps",
+      "arguments": [
+        { "literal": "list" },
+        { "literal": "--json" }
+      ],
+      "success_exit_codes": [0]
+    },
+    {
+      "tool": "apps_plan",
+      "kind": "command",
+      "program": "/usr/bin/tur-apps",
+      "arguments": [
+        { "literal": "--catalogue" },
+        { "literal": "/usr/share/tur/catalogue" },
+        { "literal": "plan" },
+        { "literal": "--offline" },
+        { "literal": "--json" },
+        { "literal": "--" },
+        { "input": "id" }
+      ],
+      "success_exit_codes": [0, 3, 5, 6]
+    }
+  ]
+}

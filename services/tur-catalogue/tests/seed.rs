@@ -424,10 +424,12 @@ fn every_seed_application_gets_an_answer_on_every_sample_machine() {
                         if preferences.never_use_virtual_machine {
                             assert_ne!(option.route, Route::WindowsGuest, "{}", entry.id);
                         }
-                        // No rating is presented as TUR's own: TUR has
-                        // tested nothing yet.
+                        // No rating is presented as TUR's own: TUR's own
+                        // test records (docs/reports/windows-runtime-2.md)
+                        // carry no rating yet.
                         assert!(
-                            !matches!(option.rating_source, RatingSource::TurTest { .. }),
+                            !matches!(option.rating_source, RatingSource::TurTest { .. })
+                                || option.rating == Rating::Unknown,
                             "{}",
                             entry.id
                         );

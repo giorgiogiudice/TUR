@@ -1,0 +1,144 @@
+<!-- SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0 -->
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+ "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<!--
+  org.tur.Apps1: install, update, list and remove applications for the
+  application centre.
+
+  Status: proposed, not frozen, and not implemented. No service exports this
+  interface yet. Every method does the work of one tur-apps subcommand, and
+  returns the JSON document that subcommand prints; the table that ties them
+  is DBUS_METHODS in services/tur-apps/src/cli.rs, and
+  services/tur-apps/tests/interfaces.rs holds this file, that table and the
+  command line together. The contract is in
+  docs/architecture/app-install-backend.md, "The service".
+
+  Bus: session bus (everything is per user). Well-known name: org.tur.Apps1.
+  Object: /org/tur/Apps1.
+
+  JSON documents conform to schemas/app-install-plan.schema.json (plans),
+  schemas/app-install-event.schema.json (events) and
+  schemas/app-installed.schema.json (records). Jobs report through the Event
+  signal, one event document per signal, ending with a "result" or an
+  "error" event.
+
+  Install, Update, Remove, Launch and SetSource change the computer. For the
+  assistant they are class 2 (ai-control-layer.md): it may propose them; the
+  user approves. Its tools today are the two that only read: Plan and
+  ListInstalled.
+-->
+<node name="/org/tur/Apps1">
+  <interface name="org.tur.Apps1">
+
+    <!-- Version of the JSON documents returned by this interface. -->
+    <property name="SchemaVersion" type="u" access="read"/>
+
+    <!--
+      Plan: what installing the application would do. Changes nothing.
+      id: the catalogue identifier.
+      options: "route" (s): a route the router offers instead of its
+      recommendation; "installer" (s): a file the user supplies; "offline"
+      (b): ask no remote.
+      plan: JSON plan, or JSON {"error": ...}.
+    -->
+    <method name="Plan">
+      <arg name="id" type="s" direction="in"/>
+      <arg name="options" type="a{sv}" direction="in"/>
+      <arg name="plan" type="s" direction="out"/>
+    </method>
+
+    <!--
+      Install: carry out the plan for the application. Returns when the job
+      has started; Event reports it. The service shows the plan through the
+      caller and installs only after the user confirmed it there.
+      options: as for Plan.
+      job: the job's identifier.
+    -->
+    <method name="Install">
+      <arg name="id" type="s" direction="in"/>
+      <arg name="options" type="a{sv}" direction="in"/>
+      <arg name="job" type="s" direction="out"/>
+    </method>
+
+    <!--
+      Update: update an application installed through this interface.
+      options: reserved; pass an empty dictionary.
+    -->
+    <method name="Update">
+      <arg name="id" type="s" direction="in"/>
+      <arg name="options" type="a{sv}" direction="in"/>
+      <arg name="job" type="s" direction="out"/>
+    </method>
+
+    <!--
+      Remove: remove an application installed through this interface.
+      options: "data" (s): "keep" or "delete". Required: the caller asks the
+      user (desktop-experience.md, section 8.5) and passes the answer; there
+      is no default over D-Bus.
+    -->
+    <method name="Remove">
+      <arg name="id" type="s" direction="in"/>
+      <arg name="options" type="a{sv}" direction="in"/>
+      <arg name="job" type="s" direction="out"/>
+    </method>
+
+    <!--
+      Launch: start an installed application.
+      options: reserved; pass an empty dictionary.
+    -->
+    <method name="Launch">
+      <arg name="id" type="s" direction="in"/>
+      <arg name="options" type="a{sv}" direction="in"/>
+      <arg name="job" type="s" direction="out"/>
+    </method>
+
+    <!--
+      ListInstalled: everything installed for the user, across routes.
+      options: "check_updates" (b): ask the sources for updates.
+      list: JSON document of kind "installed".
+    -->
+    <method name="ListInstalled">
+      <arg name="options" type="a{sv}" direction="in"/>
+      <arg name="list" type="s" direction="out"/>
+    </method>
+
+    <!--
+      GetSources: the Flatpak sources and their state, for the user.
+      sources: JSON document of kind "sources".
+    -->
+    <method name="GetSources">
+      <arg name="options" type="a{sv}" direction="in"/>
+      <arg name="sources" type="s" direction="out"/>
+    </method>
+
+    <!--
+      SetSource: switch a source on or off: "flathub" or "fedora".
+      result: JSON {"name", "state", "changed"}.
+    -->
+    <method name="SetSource">
+      <arg name="name" type="s" direction="in"/>
+      <arg name="enabled" type="b" direction="in"/>
+      <arg name="result" type="s" direction="out"/>
+    </method>
+
+    <!--
+      Cancel: stop a job while that is safe, and say what it left
+      ("Cancelled. Nothing was installed."). A job past the point where it
+      can stop safely goes on and reports so.
+    -->
+    <method name="Cancel">
+      <arg name="job" type="s" direction="in"/>
+      <arg name="cancelled" type="b" direction="out"/>
+    </method>
+
+    <!--
+      Event: one event of a job, a JSON document of
+      schemas/app-install-event.schema.json.
+    -->
+    <signal name="Event">
+      <arg name="job" type="s"/>
+      <arg name="event" type="s"/>
+    </signal>
+
+  </interface>
+</node>

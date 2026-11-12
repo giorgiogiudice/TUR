@@ -54,7 +54,14 @@
             "reason": "The web application is the publisher's primary form of this application.",
             "caveats": [],
             "prerequisites": [],
-            "alternative": null
+            "alternative": null,
+            "reason_code": "web-primary",
+            "reason_parts": [
+              {
+                "code": "web-primary",
+                "params": {}
+              }
+            ]
           },
           {
             "route": "android-runtime",
@@ -74,7 +81,9 @@
                 "code": "requirement",
                 "severity": "obstacle",
                 "requirement": "hardware-attested-drm",
-                "text": "Its copy protection needs hardware attestation, which this route cannot provide: protected content is limited to low quality or refused."
+                "text": "Its copy protection needs hardware attestation, which this route cannot provide: protected content is limited to low quality or refused.",
+                "text_id": "requirement.hardware-attested-drm.not-provided",
+                "params": {}
               }
             ],
             "prerequisites": [
@@ -87,7 +96,14 @@
                 "text": "The catalogue lists this package on Google Play only: Google Play must be opted into, under Google's terms."
               }
             ],
-            "alternative": null
+            "alternative": null,
+            "reason_code": "android",
+            "reason_parts": [
+              {
+                "code": "android",
+                "params": {}
+              }
+            ]
           }
         ]
       }

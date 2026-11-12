@@ -1,0 +1,50 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+[package]
+name = "tur-apps"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+license = "LicenseRef-TUR-Noncommercial-1.0.0"
+description = "TUR application installer: plans, installs, lists, updates and removes applications by the route the catalogue's router chooses (Flatpak from a remote, or a Windows application through tur-runtime)."
+repository = "https://github.com/giorgiogiudice/TUR"
+publish = false
+
+# Each component is its own workspace with its own lockfile. See ADR-0005.
+[workspace]
+
+[lib]
+name = "tur_apps"
+path = "src/lib.rs"
+
+[[bin]]
+name = "tur-apps"
+path = "src/main.rs"
+
+# Four third-party crates, all MIT OR Apache-2.0, all already used by other
+# TUR components. There is no HTTP client and no TLS library here: the one
+# place that downloads (src/download.rs) runs the system's curl, see
+# ADR-0019.
+[dependencies]
+tur-core = { path = "../../crates/tur-core" }
+# The catalogue and the router, as a library: the plan is the router's own
+# answer, not a copy of it.
+tur-catalogue = { path = "../tur-catalogue" }
+# The JSON documents: plans, events, records.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Command-line parsing, without colour or suggestions; the `env` feature is
+# deliberately not enabled, so no argument comes from the environment.
+clap = { version = "4", default-features = false, features = ["std", "derive", "help", "usage", "error-context"] }
+# SHA-256 of a downloaded or supplied installer, checked before anything
+# in it runs.
+sha2 = "0.10"
+
+[dev-dependencies]
+# P@x's loader of tool manifests and adapters, to check the ones this
+# component ships (tests/agent_tools.rs). Only that test uses it; the
+# program does not depend on the assistant.
+tur-pax = { path = "../tur-pax" }
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
