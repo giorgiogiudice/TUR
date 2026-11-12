@@ -5,7 +5,8 @@
 //! `uos-core` has no family for the runtime manager itself, so conditions that
 //! are not specific to one ecosystem use the `DESKTOP` family with a `RUNTIME`
 //! or `PROFILE` topic. Conditions specific to Windows, macOS or Android
-//! software use the `WINDOWS`, `DARWIN` and `ANDROID` families.
+//! software use the `WINDOWS`, `DARWIN` and `ANDROID` families, and refusals
+//! made to keep an application inside its sandbox use `SECURITY`.
 
 use std::fmt;
 
@@ -55,11 +56,55 @@ pub enum Code {
     ProfileInvalid,
     /// An application profile holds something that looks like a credential.
     ProfileSecret,
+    /// The runtime manager's data or state directory cannot be found or used.
+    StorageUnusable,
+    /// A program the runtime manager needs for the operation is not installed.
+    ToolMissing,
+    /// The profile pins a runtime version and a different one is installed.
+    RuntimePinMismatch,
+    /// The runtime did not report a version that can be recorded.
+    RuntimeVersionUnknown,
+    /// Proton is started through `umu-run`, which is not installed.
+    ProtonLauncherMissing,
+    /// A Proton profile does not pin a version, so the launcher would follow the latest build.
+    ProtonUnpinned,
+    /// The profile names a runtime or a format this build cannot launch.
+    LaunchUnsupported,
+    /// A step of a prefix operation or a launch failed while it was being carried out.
+    StepFailed,
+    /// The operation needs a prefix and the application has none.
+    PrefixMissing,
+    /// A prefix was to be created and the application already has one.
+    PrefixExists,
+    /// The metadata file beside a prefix cannot be read or is not valid.
+    PrefixMetadataInvalid,
+    /// Verification found something missing or wrong in a prefix.
+    PrefixDamaged,
+    /// The prefix is recorded as belonging to a different application, prefix name or runtime.
+    PrefixOwner,
+    /// The installed runtime is not the version the prefix is on; only an explicit migration changes that.
+    PrefixRuntimeMismatch,
+    /// A migration was asked for and the prefix is pinned.
+    PrefixPinned,
+    /// The named backup does not exist for this application.
+    BackupMissing,
+    /// The effective user is root; Wine and Proton are never run as root.
+    RunningAsRoot,
+    /// The sandbox cannot be built because `bwrap` is not installed. Nothing is run without it.
+    SandboxMissing,
+    /// A directory was to be granted that is, contains or lies inside a protected location.
+    GrantRefused,
+    /// A recorded grant now resolves somewhere else, or no longer passes the grant rules.
+    GrantChanged,
+    /// An extra environment variable has a name or value that is not allowed.
+    EnvironmentRefused,
+    /// The profile's binary is not a regular file, or lies in a protected location.
+    BinaryRefused,
 }
 
 impl Code {
     /// Every code this component can report.
-    pub const ALL: [Code; 20] = [
+    pub const ALL: [Code; 42] = [
         Code::Unreadable,
         Code::Damaged,
         Code::LimitExceeded,
@@ -80,6 +125,28 @@ impl Code {
         Code::ProfileSyntax,
         Code::ProfileInvalid,
         Code::ProfileSecret,
+        Code::StorageUnusable,
+        Code::ToolMissing,
+        Code::RuntimePinMismatch,
+        Code::RuntimeVersionUnknown,
+        Code::ProtonLauncherMissing,
+        Code::ProtonUnpinned,
+        Code::LaunchUnsupported,
+        Code::StepFailed,
+        Code::PrefixMissing,
+        Code::PrefixExists,
+        Code::PrefixMetadataInvalid,
+        Code::PrefixDamaged,
+        Code::PrefixOwner,
+        Code::PrefixRuntimeMismatch,
+        Code::PrefixPinned,
+        Code::BackupMissing,
+        Code::RunningAsRoot,
+        Code::SandboxMissing,
+        Code::GrantRefused,
+        Code::GrantChanged,
+        Code::EnvironmentRefused,
+        Code::BinaryRefused,
     ];
 
     /// The code as text, for example `UOS-WINDOWS-RUNTIME-001`.
@@ -105,6 +172,28 @@ impl Code {
             Code::ProfileSyntax => "UOS-DESKTOP-PROFILE-002",
             Code::ProfileInvalid => "UOS-DESKTOP-PROFILE-003",
             Code::ProfileSecret => "UOS-DESKTOP-PROFILE-004",
+            Code::StorageUnusable => "UOS-DESKTOP-RUNTIME-005",
+            Code::ToolMissing => "UOS-DESKTOP-RUNTIME-006",
+            Code::RuntimePinMismatch => "UOS-WINDOWS-RUNTIME-005",
+            Code::RuntimeVersionUnknown => "UOS-WINDOWS-RUNTIME-006",
+            Code::ProtonLauncherMissing => "UOS-WINDOWS-RUNTIME-007",
+            Code::ProtonUnpinned => "UOS-WINDOWS-RUNTIME-008",
+            Code::LaunchUnsupported => "UOS-WINDOWS-RUNTIME-009",
+            Code::StepFailed => "UOS-WINDOWS-RUNTIME-010",
+            Code::PrefixMissing => "UOS-WINDOWS-PREFIX-001",
+            Code::PrefixExists => "UOS-WINDOWS-PREFIX-002",
+            Code::PrefixMetadataInvalid => "UOS-WINDOWS-PREFIX-003",
+            Code::PrefixDamaged => "UOS-WINDOWS-PREFIX-004",
+            Code::PrefixOwner => "UOS-WINDOWS-PREFIX-005",
+            Code::PrefixRuntimeMismatch => "UOS-WINDOWS-PREFIX-006",
+            Code::PrefixPinned => "UOS-WINDOWS-PREFIX-007",
+            Code::BackupMissing => "UOS-WINDOWS-PREFIX-008",
+            Code::RunningAsRoot => "UOS-SECURITY-SANDBOX-001",
+            Code::SandboxMissing => "UOS-SECURITY-SANDBOX-002",
+            Code::GrantRefused => "UOS-SECURITY-SANDBOX-003",
+            Code::GrantChanged => "UOS-SECURITY-SANDBOX-004",
+            Code::EnvironmentRefused => "UOS-SECURITY-SANDBOX-005",
+            Code::BinaryRefused => "UOS-SECURITY-SANDBOX-006",
         }
     }
 
@@ -131,6 +220,28 @@ impl Code {
             Code::ProfileSyntax => "The application profile is not valid",
             Code::ProfileInvalid => "The application profile has a field that is not allowed",
             Code::ProfileSecret => "The application profile appears to contain a credential",
+            Code::StorageUnusable => "The runtime manager's own directories cannot be used",
+            Code::ToolMissing => "A program the runtime manager needs is not installed",
+            Code::RuntimePinMismatch => "The pinned runtime version is not the one installed",
+            Code::RuntimeVersionUnknown => "The runtime version could not be determined",
+            Code::ProtonLauncherMissing => "umu-run is not installed",
+            Code::ProtonUnpinned => "A Proton launch needs a pinned Proton version",
+            Code::LaunchUnsupported => "This profile cannot be launched",
+            Code::StepFailed => "A step of the operation failed",
+            Code::PrefixMissing => "No prefix exists for this application",
+            Code::PrefixExists => "A prefix already exists for this application",
+            Code::PrefixMetadataInvalid => "The prefix metadata is unreadable or not valid",
+            Code::PrefixDamaged => "The prefix failed verification",
+            Code::PrefixOwner => "The prefix belongs to another application or profile",
+            Code::PrefixRuntimeMismatch => "The prefix is on another runtime version",
+            Code::PrefixPinned => "The prefix is pinned to its runtime version",
+            Code::BackupMissing => "The backup does not exist",
+            Code::RunningAsRoot => "Windows software is never run as root",
+            Code::SandboxMissing => "bubblewrap is not installed",
+            Code::GrantRefused => "The directory cannot be granted to an application",
+            Code::GrantChanged => "A granted directory is no longer what was granted",
+            Code::EnvironmentRefused => "The environment variable cannot be set for an application",
+            Code::BinaryRefused => "The application's program file cannot be used",
         }
     }
 
@@ -190,6 +301,11 @@ mod tests {
         );
         assert_eq!(Code::NoRoute.error_code().family(), Family::Desktop);
         assert_eq!(Code::ProfileSecret.error_code().family(), Family::Desktop);
+        assert_eq!(Code::PrefixPinned.error_code().family(), Family::Windows);
+        assert_eq!(Code::StepFailed.error_code().family(), Family::Windows);
+        assert_eq!(Code::RunningAsRoot.error_code().family(), Family::Security);
+        assert_eq!(Code::GrantRefused.error_code().family(), Family::Security);
+        assert_eq!(Code::StorageUnusable.error_code().family(), Family::Desktop);
     }
 
     #[test]

@@ -1,20 +1,24 @@
-# Universal Runtime Manager: inspection and recommendation
+# Universal Runtime Manager
 
-Design note for the first slice of `uos-runtime` (specification §2.3, §7, §12.2,
-§13.1, §19.2, §19.3). Code: `services/uos-runtime/`. Profile schema:
-`schemas/app-profile.schema.json`.
+Design note for `uos-runtime` (specification §2.3, §7, §8.2, §12.1, §12.2, §13.1,
+§15.2, §19.2, §19.3). Code: `services/uos-runtime/`. Schemas:
+`schemas/app-profile.schema.json`, `schemas/prefix-metadata.schema.json`.
 
 ## Scope
 
-This slice answers two questions about a file the user points at: what is it, and
-which runtime is the route for it. It also defines the application profile.
+The first slice answers two questions about a file the user points at: what is
+it, and which runtime is the route for it. It also defines the application
+profile. That part only reads: the specification forbids executing a file because
+of its type (§7.2), and `uos-runtime inspect` never runs anything.
 
-It does not run anything. The specification forbids executing a file because of
-its type (§7.2); `uos-runtime inspect` only reads, and there is no launch command.
-See [Not done yet](#not-done-yet).
+The second slice runs a Windows program the user asks to run: a prefix per
+application, a launch plan, and a sandbox around every runtime command. It is
+described from [Running a Windows program](#running-a-windows-program) on.
 
 A recommendation names a route. It is never a statement that a particular
-application works: that needs a recorded test (§2.3).
+application works: that needs a recorded test (§2.3). The same holds for
+launching: the test programs prove the launch path, not compatibility.
+See [Not done yet](#not-done-yet).
 
 ## Inspection
 
@@ -139,8 +143,10 @@ design is settled. ARM translation is never detected. `--host-arch` and
 ### Error codes
 
 `uos-core` has no family for the runtime manager itself. Ecosystem-specific
-conditions use `WINDOWS`, `DARWIN` and `ANDROID`; the rest use `DESKTOP` with a
-`RUNTIME` or `PROFILE` topic until a family is agreed.
+conditions use `WINDOWS`, `DARWIN` and `ANDROID`; refusals that keep an
+application inside its sandbox use `SECURITY`; the rest use `DESKTOP` with a
+`RUNTIME` or `PROFILE` topic until a family is agreed. A test checks that every
+code parses and that no two conditions share one.
 
 | Code | Condition |
 |---|---|
@@ -148,11 +154,33 @@ conditions use `WINDOWS`, `DARWIN` and `ANDROID`; the rest use `DESKTOP` with a
 | `UOS-DESKTOP-RUNTIME-002` | An ELF, zip, OLE or script file is truncated or malformed |
 | `UOS-DESKTOP-RUNTIME-003` | The file exceeds an inspection limit |
 | `UOS-DESKTOP-RUNTIME-004` | No supported runtime exists for the file |
+| `UOS-DESKTOP-RUNTIME-005` | The runtime manager's data or state directory cannot be found or used |
+| `UOS-DESKTOP-RUNTIME-006` | A program the operation needs (`tar`) is not installed |
 | `UOS-WINDOWS-INSPECT-001` | A PE file is truncated or malformed |
 | `UOS-WINDOWS-RUNTIME-001` | Wine is not installed |
 | `UOS-WINDOWS-RUNTIME-002` | The file requires a Windows kernel |
 | `UOS-WINDOWS-RUNTIME-003` | The Windows VM backend is not installed |
 | `UOS-WINDOWS-RUNTIME-004` | A Windows file no runtime handles |
+| `UOS-WINDOWS-RUNTIME-005` | The profile pins a runtime version and another one is installed |
+| `UOS-WINDOWS-RUNTIME-006` | The runtime's version could not be determined |
+| `UOS-WINDOWS-RUNTIME-007` | `umu-run` is not installed |
+| `UOS-WINDOWS-RUNTIME-008` | A Proton profile does not pin a Proton version |
+| `UOS-WINDOWS-RUNTIME-009` | The profile is not one this build launches |
+| `UOS-WINDOWS-RUNTIME-010` | A step of an operation failed while it was carried out |
+| `UOS-WINDOWS-PREFIX-001` | The application has no prefix |
+| `UOS-WINDOWS-PREFIX-002` | The application already has a prefix |
+| `UOS-WINDOWS-PREFIX-003` | The prefix metadata is unreadable or not valid |
+| `UOS-WINDOWS-PREFIX-004` | Verification found problems in the prefix |
+| `UOS-WINDOWS-PREFIX-005` | The prefix belongs to another application, prefix name or runtime |
+| `UOS-WINDOWS-PREFIX-006` | The prefix is on another runtime version than the one installed |
+| `UOS-WINDOWS-PREFIX-007` | The prefix is pinned and a migration was asked for |
+| `UOS-WINDOWS-PREFIX-008` | The named backup does not exist |
+| `UOS-SECURITY-SANDBOX-001` | The effective user is root |
+| `UOS-SECURITY-SANDBOX-002` | bubblewrap is not installed |
+| `UOS-SECURITY-SANDBOX-003` | A directory cannot be granted to an application |
+| `UOS-SECURITY-SANDBOX-004` | A recorded grant no longer resolves to itself, or no longer passes the rules |
+| `UOS-SECURITY-SANDBOX-005` | An extra environment variable is not allowed |
+| `UOS-SECURITY-SANDBOX-006` | The profile's program file cannot be used |
 | `UOS-DARWIN-INSPECT-001` | A Mach-O file or bundle is truncated or malformed |
 | `UOS-DARWIN-RUNTIME-001` | Darling is not installed |
 | `UOS-DARWIN-RUNTIME-002` | A macOS kernel extension |
@@ -218,33 +246,508 @@ comes from the bundle identifier or, failing that, from the file name under
 Proton is a value in the schema and is never recommended: the specification
 reserves it for tested gaming profiles, which need the application database.
 
+## Running a Windows program
+
+Everything from here on is about the `wine` and `proton` runtimes. Nothing is
+run because of a file's type: a launch happens when the user asks for one, from
+a profile.
+
+The application catalogue ([catalogue and routing](catalogue-and-routing.md))
+chooses a route for a known application. Its `wine` and `proton` routes are the
+two runtime kinds here, with the same names; its `windows-guest` route is not
+handled by this code. Nothing connects the two yet: a launch starts from a
+profile, and no code turns a catalogue decision into one.
+
+### Plans
+
+Every operation is a **plan** before it is anything else: a list of steps that
+can be printed (`--dry-run`), serialised (`--json`), compared and tested without
+touching the system. A plan is carried out by `run_plan` through an `Executor`.
+Unit tests use an executor that records steps; `SystemExecutor` is the only code
+that creates, writes, deletes or starts anything.
+
+| Step | What the executor does |
+|---|---|
+| `create-dir` | Creates a directory and its parents, mode 0700 |
+| `write-file` | Writes a file through a temporary file and a rename, mode 0600 |
+| `remove-tree` | Deletes a tree. Refused unless the path lies inside an application's own directory under the runtime manager's roots. A symbolic link is removed, never followed |
+| `rename` | Renames; both paths are held to the same rule as `remove-tree` |
+| `run` | Runs a command to completion with exactly the planned environment. Any exit status but 0 stops the plan |
+| `launch` | Starts the application, copies its output to the log, and returns its exit status as the plan's result |
+| `check` | A read-only test. A failed check is a finding; the plan continues |
+| `require` | A read-only test the rest of the plan depends on. A failed requirement stops the plan |
+
+Planning is a function of the profile, the prefix metadata, the facts about the
+host (`LaunchHost`) and the time. It reads the file system to resolve granted
+paths; it starts nothing. The one program started outside a plan is `wine
+--version`, to learn the installed version; `--runtime-version` replaces that
+too. `--dry-run` therefore runs no step and changes nothing.
+
+### Prefix layout
+
+```
+$XDG_DATA_HOME/uos/runtime/
+    prefixes/<app-id>/metadata.json     written by uos-runtime only
+    prefixes/<app-id>/prefix/           the Wine prefix (WINEPREFIX)
+    prefixes/<app-id>/home/             the application's private HOME
+    backups/<app-id>/<time>-<reason>.tar.gz
+    staging/<app-id>/                   scratch space while restoring
+$XDG_STATE_HOME/uos/runtime/
+    logs/<app-id>/<time>-<pid>.log      one file per launch
+    logs/<app-id>/operations.log        output of prefix operations
+```
+
+One application, one prefix (§12.2). The directory is named by the application
+identifier, which is validated before it becomes a path. A profile's `prefix_id`
+is recorded in the metadata and must match at launch; so must the application
+identifier and the runtime. A prefix is never reused for another application.
+
+Only `prefix/` and `home/` are shown to the application. The metadata sits
+beside them, outside the sandbox, so an application cannot change its own
+grants; backups and logs are in other trees for the same reason.
+
+### Prefix metadata
+
+`schemas/prefix-metadata.schema.json`, schema version 1. Unknown fields are
+refused. A unit test keeps the schema and the Rust types in step.
+
+| Field | Meaning |
+|---|---|
+| `schema_version` | `1` |
+| `app_id`, `prefix_id` | The application the prefix belongs to, and the name its profile uses for it |
+| `runtime` | `wine` or `proton` |
+| `runtime_version` | The version the prefix is on, as a token: `wine-9.0`, `GE-Proton10-20` |
+| `runtime_build` | Everything the runtime reported, for example `wine-9.0 (Ubuntu 9.0~repack-4build3)` |
+| `pinned` | A pinned prefix is never migrated |
+| `architecture` | `win64` |
+| `created_at`, `last_run_at`, `launch_count` | Times in UTC to the second; `last_run_at` is the start of the latest launch |
+| `graphics_backend` | As in the profile |
+| `sync` | What the profile asked for, what was selected, what the `ntsync` probe found, when, and why |
+| `network` | Whether the host's network is shared |
+| `grants` | Host directories shown to the application, each `read-only` or `read-write` |
+| `migrations` | Earlier runtime versions, each with the name of the backup taken first |
+
+Only 64-bit prefixes are created. Wine 11.0 deprecates prefixes created with
+`WINEARCH=win32`; a 64-bit prefix hosts 32-bit programs where the Wine build
+can. Whether a given 32-bit program runs was not tested.
+
+The metadata is read with the same discipline as an inspected file: at most
+256 KiB, at most 64 grants and 32 remembered migrations, every path an absolute
+path without `..` or control characters, every version a version token. A
+launch takes at most 1024 arguments and 64 extra variables.
+
+### Prefix operations
+
+| Operation | Plan |
+|---|---|
+| create | Create the directories; run `wine wineboot --init` (or `umu-run ""`) in the sandbox; require `system.reg`; switch off Wine's own prefix updating; write the metadata. The metadata is written last, so a failed creation leaves no valid prefix behind |
+| verify | Checks only: the directories exist and are not links, the prefix belongs to the user, `system.reg` and `user.reg` exist, `drive_c/windows` exists, the registry's `#arch` line matches, Wine's own updating is still off. Exit status 8 when a check fails |
+| repair | `wine wineboot --update` with the runtime the prefix is on. Refused when another version is installed: that would be a migration. It restores system files Wine can start without; when Wine cannot start in the prefix at all (a missing `kernel32.dll`, measured in CI), only a restore or a reset helps |
+| back up | `tar --create --gzip` of `metadata.json`, `prefix/` and `home/` into `backups/<app-id>/` |
+| restore | Unpack into `staging/`; require that the archive's metadata names this application and that it holds a prefix; only then move the current prefix aside and the unpacked one into place |
+| reset | Back up (unless `--no-backup`), delete `prefix/` and `home/`, create again with the same settings and grants |
+| remove | Delete the application's directory, staging and logs. Backups are kept |
+| migrate | See below |
+| grant, revoke, pin, unpin | Rewrite the metadata |
+
+### Runtime versions (§15.2)
+
+A runtime upgrade must not change a prefix on its own. Three things make that
+true:
+
+1. **Wine's own updating is switched off.** Wine does not record its version in
+   a prefix. It stores the modification time of its `wine.inf` in
+   `<prefix>/.update-timestamp` and, when a newer Wine finds a different time,
+   updates the prefix by itself at the next start. `wineboot` skips that when
+   the file holds `disable`; every prefix created here holds it. An explicit
+   `wineboot --update` still works.
+2. **The launch plan compares versions.** The metadata records the version the
+   prefix is on. When the installed runtime reports another, the launch is
+   refused (`UOS-WINDOWS-PREFIX-006`) and nothing is started.
+3. **Migration is explicit and backed up.** `launch --migrate` or `prefix
+   migrate` plans: a backup, then `wineboot --update` with the installed
+   runtime, then the new record with the move appended to `migrations`. A
+   pinned prefix refuses it (`UOS-WINDOWS-PREFIX-007`).
+
+A profile's `runtime_version` pins the runtime itself: when it is set and
+another version is installed, the launch is refused (`UOS-WINDOWS-RUNTIME-005`),
+with or without `--migrate`. There is one system Wine; keeping several versions
+side by side is not built.
+
+For Proton, `umu-run` fetches the build named by `PROTONPATH`, and without one
+it follows the latest build. A Proton profile must therefore pin a version
+(`UOS-WINDOWS-RUNTIME-008`), and that version is what the prefix records.
+
+Versions are compared as tokens (`wine-9.0`). A distribution rebuild of the same
+upstream version is not a mismatch; the full build string is recorded for the
+record.
+
+### The launch command
+
+`plan_launch` produces the program, its arguments, its whole environment and
+its working directory, the sandbox they run in, and the steps.
+
+| Runtime | Command inside the sandbox |
+|---|---|
+| Wine | `wine <program> <arguments>` |
+| Proton | `umu-run <program> <arguments>`, with `PROTON_VERB=waitforexitandrun` |
+
+The working directory is the program's directory. Only Windows programs (`pe`)
+are launched; an installer package (`msi`) is refused.
+
+For Wine, the first process in the sandbox is not Wine but `uos-runtime
+supervise`, mounted read-only into the sandbox: it starts Wine, waits for it,
+then runs `wineserver --wait`. The Wine server outlives the program by a few
+seconds and writes the registry when it exits, and the sandbox is torn down when
+its first process exits; without the supervisor a short-lived program would
+lose its registry changes, and a freshly created prefix could be left without a
+registry at all. Proton's `waitforexitandrun` verb waits by itself.
+
+### The launch environment
+
+Nothing is inherited. The environment is built from:
+
+| Variables | Source |
+|---|---|
+| `PATH=/usr/bin:/bin`, `HOME` (the private home), `USER`, `LOGNAME` | Fixed, or the user's login name |
+| `LANG`, `LANGUAGE`, `LC_ALL`, `LC_COLLATE`, `LC_CTYPE`, `LC_MESSAGES`, `LC_MONETARY`, `LC_NUMERIC`, `LC_TIME`, `TZ`, `XDG_CURRENT_DESKTOP`, `XDG_SESSION_TYPE`, `DRI_PRIME`, `__NV_PRIME_RENDER_OFFLOAD`, `__GLX_VENDOR_LIBRARY_NAME`, `__VK_LAYER_NV_optimus` | Copied from the caller when set and free of control characters |
+| `DISPLAY`, `XAUTHORITY`, `WAYLAND_DISPLAY`, `XDG_RUNTIME_DIR` | Rebuilt from the session endpoints that were found and checked (see the sandbox) |
+| `WINEPREFIX` | The application's prefix |
+| `WINEDEBUG` | `fixme-all` unless `--wine-debug` says otherwise |
+| `WINEDLLOVERRIDES` | See below (Wine only) |
+| `WINEARCH=win64` | Only while a prefix is created (Wine only) |
+| `GAMEID=umu-default`, `STORE=none`, `PROTONPATH=<pinned version>`, `PROTON_VERB=waitforexitandrun` | Proton only. `umu-default` applies no fixes: there is no application database to supply a real identifier |
+| `--env NAME=VALUE` | Added by the user to one launch. A name this table sets, and any name starting with `LD_`, is refused |
+
+The session bus address, the SSH and GnuPG agent variables, tokens and everything
+else in the caller's environment are not passed on. Launch logs record the names
+of the variables, not their values.
+
+**DLL overrides and graphics (Wine).**
+
+| `graphics_backend` | `WINEDLLOVERRIDES` |
+|---|---|
+| `auto`, `wined3d`, `native` | `winemenubuilder.exe=` |
+| `dxvk` | `d3d8,d3d9,d3d10core,d3d11,dxgi=n,b;winemenubuilder.exe=` |
+| `vkd3d-proton` | `d3d12,d3d12core=n,b;winemenubuilder.exe=` |
+
+DXVK's instructions for a plain prefix are to copy its DLLs into the prefix and
+set native overrides for `d3d8`, `d3d9`, `d3d10core`, `d3d11` and `dxgi`.
+Installing the DLLs is not built, so the override is `n,b`: the translation
+layer when it is there, Wine's own implementation when it is not. The same form
+is used for VKD3D-Proton's `d3d12.dll` and `d3d12core.dll`; its README names
+the two DLLs but gives no prefix instructions, so that override is by analogy
+and was not verified. `winemenubuilder.exe` is disabled because desktop entries
+come from `uos-runtime`. While a prefix is created, `mscoree` and `mshtml` are
+disabled too, so that Wine does not offer to download Mono and Gecko.
+
+**Graphics (Proton).** Proton uses DXVK and VKD3D-Proton by default; nothing is
+overridden. `wined3d` sets `PROTON_USE_WINED3D=1`.
+
+**Synchronisation (§8.2).** The device is probed at every launch: `/dev/ntsync`
+has to be a character device and has to open. The kernel version is never
+consulted. The result, the choice and the reason are written to the metadata
+before the application starts.
+
+| Runtime | Asked for | Device opens | Result |
+|---|---|---|---|
+| Wine 11.0 or later | `auto`, `ntsync` | yes | `ntsync`: the device is passed into the sandbox; Wine uses it when it is available, no variable is needed |
+| Wine before 11.0 | `auto`, `ntsync` | yes | `server`: this Wine cannot use it |
+| Wine | `auto`, `ntsync` | no | `server`, with the reason. The launch does not fail |
+| Wine | `esync`, `fsync` | any | `server`: neither is part of upstream Wine |
+| Proton | `auto` | any | `runtime-default`: left to the Proton build |
+| Proton | `ntsync` | yes | `ntsync`, with `PROTON_USE_NTSYNC=1` |
+| Proton | `ntsync` | no | `runtime-default`, with the reason |
+| Proton | `esync` | any | `esync`, with `PROTON_NO_FSYNC=1` |
+| Proton | `fsync` | any | `fsync`: Proton's default, nothing set |
+
+`server` is synchronisation through the Wine server, which every Wine has.
+
+### The sandbox
+
+Every runtime command, including prefix creation, runs inside bubblewrap. There
+is no option to start an application without it; when `bwrap` is missing the
+operation is refused (`UOS-SECURITY-SANDBOX-002`). Root is refused before
+anything else is looked at (`UOS-SECURITY-SANDBOX-001`, §12.1).
+
+What the application sees:
+
+| Path | How |
+|---|---|
+| `/usr`, `/etc` | Read-only |
+| `/bin`, `/lib`, `/lib64`, ... | Recreated as the links they are on a merged-`/usr` system, or mounted read-only where they are directories |
+| `/proc` | A new one, showing the sandbox's own processes |
+| `/dev` | A minimal one, plus `/dev/dri` and the NVIDIA device nodes when they exist, plus `/dev/ntsync` when the probe opened it |
+| `/sys/block`, `/sys/bus`, `/sys/class`, `/sys/dev`, `/sys/devices` | Read-only, when they exist |
+| `/tmp` | A private, empty in-memory file system |
+| `XDG_RUNTIME_DIR` | A private, empty directory with these sockets mounted read-only, each on its own: the Wayland display, `pipewire-0`, `pulse/native` |
+| `/tmp/.X11-unix/X<n>` | The socket of a local X display, read-only |
+| The X authority file | Read-only, at a fixed path, only when it is `$HOME/.Xauthority` or a session file directly in the runtime directory |
+| `/run/systemd/resolve` | Read-only, when the network is shared |
+| The prefix and the private home | Read-write |
+| The program file, when it is outside the prefix | That one file, read-only. Never its directory |
+| Granted directories | Read-only or read-write, as granted |
+| `/` | An in-memory file system, sealed read-only once everything is mounted |
+
+What it does not see: the home directory, the session bus, the keyring, the SSH
+and GnuPG agents and directories, browser and mail profiles, any other
+application's prefix, its own metadata, backups and logs, `/var`, `/run`.
+
+Namespaces: user, IPC, PID, UTS and, where possible, cgroup. The network
+namespace is shared unless the prefix was created with `--no-network`. For Wine,
+the sandbox may not create further user namespaces (`--disable-userns`); for
+Proton it may, because `umu-run` starts Proton in the Steam Linux Runtime
+container. The sandbox dies with `uos-runtime` (`--die-with-parent`) and has no
+controlling terminal (`--new-session`); the application's standard input is
+`/dev/null`.
+
+**Grants.** The user grants a directory with `prefix create --grant[-rw]` or
+`prefix grant`. The rules are applied to the path with every symbolic link
+resolved, because that is what is mounted, and the resolved path is what is
+recorded:
+
+- `/`, the home directory, and anything that contains the home directory are
+  refused.
+- A protected location, anything inside one and anything that contains one are
+  refused: `.ssh`, `.gnupg`, `.pki`, the password store, the keyring and KDE
+  wallet directories, browser and mail profile directories, Flatpak and snap
+  application data, cloud and registry credentials, the runtime manager's own
+  data and state (every application's prefix), the user's runtime directory,
+  and the SSH agent socket.
+- Every hidden entry of the home directory is refused, named above or not.
+  Credentials and application profiles live there by convention and no list is
+  complete.
+- System directories and kernel file systems are refused, and so are `/tmp` and
+  `/var/tmp` as a whole.
+- A path with a `.` or `..` component, a relative path, a path that does not
+  exist and a path that is not a directory are refused.
+
+Every recorded grant is checked again when a launch is planned, against the file
+system as it then is, and must still resolve to itself. An application with
+write access to one granted directory therefore cannot turn a second grant
+nested in it into a link to somewhere else: the next launch is refused
+(`UOS-SECURITY-SANDBOX-004`). Metadata edited by hand to name a protected
+directory is refused the same way. A symbolic link *inside* a granted directory
+needs no rule: its target is resolved inside the sandbox, where the rest of the
+home directory does not exist.
+
+Session values are treated the same way. `WAYLAND_DISPLAY` is accepted only as a
+plain file name, although the protocol also allows a path; `DISPLAY` only as a
+local display; `XAUTHORITY` only in the two places a session puts it. The
+environment cannot name an arbitrary file to be mounted.
+
+**Threat model.** A Windows program under Wine is a Linux process: it can call
+Linux directly and can read and write whatever its user can. The sandbox is what
+stands between a malicious or compromised Windows program and the user's files.
+It is designed to stop that program from reading, encrypting or deleting
+anything outside its own prefix, its private home and the directories the user
+granted, and from reaching the user's credentials.
+
+It does not protect against:
+
+- **What the user granted.** A read-write grant can be encrypted or emptied.
+  Grants are the user's decision; they are narrow by rule and read-only unless
+  asked otherwise.
+- **X11.** Any X11 client can read the keyboard and the contents of other
+  windows and can send input to them. An application given the X socket has that
+  power. A Wayland-only path would not; evaluating Wine's Wayland driver is not
+  done.
+- **The network.** Shared by default: an application can reach the local
+  network and the internet. `--no-network` removes it.
+- **Kernel vulnerabilities and the GPU driver.** There is no seccomp filter:
+  the whole system-call surface is reachable, and so are the GPU device nodes.
+  A seccomp filter and Landlock (§12.1) are not built.
+- **Resource exhaustion.** No limits on memory, processes or disk are set.
+- **The user's own account being hostile.** Another process of the same user,
+  outside the sandbox, can change the prefix or the metadata.
+- **Proton.** `umu-run` and the Steam Linux Runtime run inside the sandbox with
+  nested user namespaces allowed; that combination has only been planned, not
+  run.
+
+For untrusted Windows software a guest is the stronger boundary (ADR-0007).
+
+The sandbox is tested as a boundary, not as a list of options. Unit tests build
+a scratch home with keys, browser profiles, a keyring and another application's
+prefix; put over a hundred grant requests to it, among them `/`, the home
+directory, paths with `..`, and links that lead to protected places; and for
+every sandbox that is built read the bubblewrap arguments back and assert that
+no mounted host path is, contains or lies inside a secret, that nothing from the
+runtime directory is mounted but the session's own sockets, and that the only
+writable paths are the prefix, the private home and read-write grants. The same
+requests are also written straight into metadata, bypassing admission. The
+`windows-runtime` workflow then runs a real Windows program inside the real
+sandbox and checks what it could and could not read.
+
+### Logs
+
+One file per launch, `logs/<app-id>/<UTC time>-<pid>.log`, mode 0600: a header
+with the command and the names of the environment variables, the application's
+standard output and standard error as they came, and the exit status. A launch
+log is capped at 64 MiB; later output is dropped and the log says so. In text
+mode the application's output is also `uos-runtime`'s own output; with `--json`
+it goes to the log only and standard output carries the report.
+
+### Desktop entries
+
+`uos-runtime desktop-entry <profile>` prints the text of a `.desktop` file and
+installs nothing:
+
+```
+[Desktop Entry]
+Version=1.5
+Type=Application
+Name=Example Application
+Comment=Windows application (Wine)
+Exec=uos-runtime launch "/path/to/profile.json"
+Icon=application-x-ms-dos-executable
+Terminal=false
+StartupNotify=true
+X-UOS-App-Id=com.example.app
+X-UOS-Runtime=wine
+X-UOS-Prefix-Id=example-app
+```
+
+`X-UOS-Runtime` and `X-UOS-App-Id` tell the desktop which runtime an entry
+belongs to (§3.4); the file is named `uos-<runtime>-<app-id>.desktop`. The entry
+goes through `uos-runtime launch`, so a click gets the same sandbox and the same
+refusals as the command line. Values are escaped by the Desktop Entry
+Specification's rules: the name cannot add a line or a key, and the profile path
+is always one quoted argument. Window matching (`StartupWMClass`), icons taken
+from the program, categories and file associations are not built.
+
+## Verified upstream
+
+Read on 12 November 2026. Where a primary source could not be read, that is
+said.
+
+| Subject | What was verified | Source |
+|---|---|---|
+| Wine environment | `WINEPREFIX` (default `$HOME/.wine`), `WINESERVER`, `WINEDEBUG` and its syntax (`fixme-all` is one of the man page's examples), `WINEDLLPATH`, `WINEDLLOVERRIDES`: `n` and `b`, an empty order disables a DLL, `;` between entries. `WINEARCH` takes `win32`, `win64` or `wow64`; it "is set at prefix creation time and cannot be changed afterwards", and "Wine will refuse to start if WINEARCH doesn't match the prefix architecture" | `wine(1)` source, https://raw.githubusercontent.com/wine-mirror/wine/master/tools/wine/wine.man.in |
+| `WINEARCH` status | Wine 11.0: the new WoW64 mode is "fully supported"; `WINEARCH=wow64` forces it in a 64-bit prefix; "Pure 32-bit prefixes created with `WINEARCH=win32` are deprecated"; the `wine64` loader is removed in favour of one `wine` | Wine 11.0 release notes, https://raw.githubusercontent.com/wine-mirror/wine/wine-11.0/ANNOUNCE.md |
+| `wineboot` | Options `--init`, `--update`, `--kill`, `--restart`, `--shutdown`, `--end-session`, `--force`. `--init` updates the prefix only when the stored time differs; `--update` forces it | `wineboot.c`, https://raw.githubusercontent.com/wine-mirror/wine/master/programs/wineboot/wineboot.c |
+| How a prefix records its Wine version | It does not. `.update-timestamp` holds the modification time of `wine.inf`; the text `disable` there makes `wineboot` skip the automatic update | Same file, `update_timestamp()` |
+| `ntsync` in Wine | "The NTSync Linux kernel module is used when available"; the module ships with the kernel from 6.14 | Wine 11.0 release notes, as above |
+| `ntsync` device | "The ntsync driver creates a single char device /dev/ntsync"; each open of it is an independent instance | https://docs.kernel.org/userspace-api/ntsync.html |
+| Wayland driver | Wine 11.0 calls it "the experimental Wayland driver"; clipboard and input methods are implemented in it | Wine 11.0 release notes, as above |
+| `umu-launcher` | `umu-run [FILE [ARG...]]`; `WINEPREFIX` (default `$HOME/Games/umu/$GAMEID`), `GAMEID` (default `umu-default`, "does not apply any fixes"), `PROTONPATH` (a directory, a version name, or `GE-Proton`; default UMU-Proton), `STORE`, `PROTON_VERB` (default `waitforexitandrun`), `UMU_RUNTIME_UPDATE`. `umu-run ""` creates a prefix. It downloads the Steam Linux Runtime into `$HOME/.local/share/umu`. Licence: GPLv3 | https://raw.githubusercontent.com/Open-Wine-Components/umu-launcher/main/README.md and `docs/umu.1.scd` in the same repository |
+| Proton options | `PROTON_USE_WINED3D`, `PROTON_NO_ESYNC`, `PROTON_NO_FSYNC`, `PROTON_LOG`, `PROTON_LOG_DIR` | https://raw.githubusercontent.com/ValveSoftware/Proton/proton_10.0/README.md |
+| DXVK in a plain prefix | Copy the DLLs into `system32` and `syswow64`; add native overrides for `d3d8`, `d3d9`, `d3d10core`, `d3d11` and `dxgi`; `wineboot -u` restores Wine's own files. Launchers such as Steam Play set DXVK up themselves | https://raw.githubusercontent.com/doitsujin/dxvk/master/README.md |
+| VKD3D-Proton | Used "as native Win32 DLLs (d3d12.dll and d3d12core.dll)"; needs Vulkan 1.3 | https://raw.githubusercontent.com/HansKristian-Work/vkd3d-proton/master/README.md |
+| bubblewrap | Every option used: `--unshare-user`, `--unshare-ipc`, `--unshare-pid`, `--unshare-uts`, `--unshare-cgroup-try`, `--unshare-net`, `--disable-userns` ("requires --unshare-user"), `--die-with-parent`, `--new-session`, `--ro-bind[-try]`, `--bind`, `--dev-bind[-try]`, `--proc`, `--dev`, `--tmpfs`, `--perms`, `--symlink`, `--remount-ro`, `--chdir`; file-system options "are applied in the order they are given" | `bwrap(1)` source, https://raw.githubusercontent.com/containers/bubblewrap/main/bwrap.xml |
+| Desktop entries | String escapes `\s`, `\n`, `\t`, `\r`, `\\`; `Exec` arguments quoted with double quotes, with `"`, `` ` ``, `$` and `\` escaped; a literal backslash is four in the file; `%` is `%%` | https://specifications.freedesktop.org/desktop-entry/latest/exec-variables.html and `value-types.html` |
+| Ubuntu and user namespaces | Ubuntu 23.10 and 24.04 restrict unprivileged user namespaces through AppArmor; what bubblewrap needed on the CI runner is in the [report](../reports/windows-runtime-1.md) | https://discourse.ubuntu.com/t/understanding-apparmor-user-namespace-restriction/58007 |
+
+Not verified, or verified only at second hand:
+
+- **winehq.org and gitlab.winehq.org** refused automated reading (HTTP 403 and
+  a bot check), so the Wine wiki was not consulted and Wine's sources were read
+  from the GitHub mirror `wine-mirror/wine`.
+- **Which display driver Wine prefers** when both an X11 and a Wayland display
+  are offered was not established from a primary source. Both sockets are passed
+  and the choice is left to Wine.
+- **`PROTON_USE_NTSYNC`** is not in Valve's README. It comes from coverage of
+  GE-Proton 10-9, which introduced it, and of 10-10, which made `ntsync` the
+  default where the kernel has it
+  (https://www.gamingonlinux.com/2025/07/ge-proton-10-9-released-with-ntsync-and-fsr4-upgrade-support).
+  The variable is only set when a profile asks for `ntsync` explicitly.
+- **VKD3D-Proton in a plain prefix**: the README gives no prefix instructions;
+  the override used is by analogy with DXVK's.
+- **How Proton records a prefix's version**, and where `umu-run` stores the
+  Proton builds it downloads, were not read from a primary source. Nothing here
+  depends on either.
+- **esync and fsync** are treated as absent from upstream Wine. That is from
+  knowledge of the project, not from a document read for this work.
+
 ## Command line
 
 ```
 uos-runtime inspect <path> [--json] [--host-arch ARCH] [--available LIST]
 uos-runtime profile validate <file>
+
+uos-runtime prefix create <app-id> [--runtime wine|proton] [--prefix-id NAME]
+        [--graphics SETTING] [--pin] [--no-network] [--grant DIR]... [--grant-rw DIR]...
+uos-runtime prefix verify|repair|backup|remove|migrate|pin|unpin <app-id>
+uos-runtime prefix reset <app-id> [--no-backup]
+uos-runtime prefix restore <app-id> <backup-name>
+uos-runtime prefix grant <app-id> <dir> [--read-write]
+uos-runtime prefix revoke <app-id> <dir>
+
+uos-runtime launch <profile> [--migrate] [--env NAME=VALUE]... [--wine-debug CHANNELS]
+        [-- arguments for the application]
+uos-runtime desktop-entry <profile> [--launcher PROGRAM]
 ```
+
+Every `prefix` and `launch` command also takes:
+
+| Option | Meaning |
+|---|---|
+| `--dry-run` | Print the plan and carry none of it out |
+| `--json` | Print JSON instead of text: the plan, and after a real run the report |
+| `--runtime-program PATH` | Use this `wine` (or `umu-run`) instead of the one found |
+| `--runtime-version VERSION` | Assume this version instead of asking the runtime; for Proton, the build to use |
+| `--sandbox-program PATH` | Use this `bwrap` instead of the one found |
+
+Programs are looked for in `/usr/bin`, `/usr/local/bin` and `/bin`, not in the
+caller's `PATH`: what is found there is also visible inside the sandbox.
 
 | Exit status | Meaning |
 |---|---|
-| 0 | The file has a route and everything it needs is installed; or the profile is valid |
+| 0 | Success. For `inspect`: the file has a route and everything it needs is installed |
 | 1 | The input could not be read, or is truncated, malformed or over a limit |
 | 2 | The command line is wrong |
 | 3 | No supported runtime exists for the file |
 | 4 | The file has a route, but something it needs is not installed |
 | 5 | The profile is not valid |
+| 6 | The operation was refused before anything was changed or started |
+| 7 | A step failed while the operation was carried out |
+| 8 | Verification found problems in the prefix |
 
-Errors are written to standard error as `error[CODE]: message`. With `--json`,
-`inspect` writes its report, or its error, as JSON on standard output.
+Once the application has run, `launch` exits with the application's own exit
+status, which can be any of the numbers above; the JSON report says which it
+was.
+
+Errors are written to standard error as `error[CODE]: message`. With `--json`
+the report, or the error, is JSON on standard output.
 
 ## Not done yet
 
-- **Launching.** No launch, stop, repair, reset, backup or rollback operation.
-- **Prefix management.** No Wine prefix or Darling environment is created; a
-  profile only names a prefix.
+- **Running on the TUR image.** Everything that has run, ran on a hosted Ubuntu
+  runner with Ubuntu's Wine ([report](../reports/windows-runtime-1.md)). Wine is
+  not in the image yet, and nothing here has run on Fedora, under SELinux, on
+  Plasma or with a GPU.
+- **Real applications.** Two test programs prove the launch path. No
+  application has been tried and nothing is claimed about compatibility.
+- **Proton.** The `umu-run` path is planned and unit-tested only. It has never
+  been run: not the download of a Proton build, not the Steam Linux Runtime
+  inside the sandbox, not a game. Each application would fetch its own copy of
+  the runtime into its private home; a shared, read-only runtime store is not
+  built.
+- **Installers and dependency recipes.** An `msi` profile is refused. There is
+  no handling of `.exe` installers, no winetricks-style recipes, no Mono or
+  Gecko.
+- **DXVK and VKD3D-Proton packaging.** The overrides are set; the DLLs are not
+  installed into a prefix, and nothing checks that a prefix has them.
+- **Several runtime versions side by side.** A pin is honoured by refusing; no
+  second Wine can be selected.
+- **Wayland-native driver evaluation.** Both display sockets are passed to
+  Wine and the choice is left to it.
+- **File associations, icons, window matching, installing desktop entries.**
+  Only the entry's text is produced.
+- **seccomp, Landlock, resource limits.** The sandbox is namespaces and mounts
+  only. The `isolation_profile` field of a profile is not interpreted: there is
+  one isolation profile, the one described above.
+- **Stop.** There is no way to stop a running application other than ending
+  `uos-runtime`, which kills the sandbox without letting the Wine server write
+  the registry. Rollback of a failed migration is a manual `prefix restore`.
+- **32-bit programs.** Not run. On the CI runner Wine had no 32-bit support
+  installed.
+- **A portal-like grant flow.** Grants are made on the command line.
+- **Darling.** No environment is created; the macOS route is still
+  recommendation only.
 - **Application database.** No known-application lookup, so the recommendation
   uses the file's format and architecture and the host's runtimes only. User
-  preferences and security policy (§7.4) are not inputs yet.
+  preferences and security policy (§7.4) are not inputs yet. Proton is never
+  recommended, and `GAMEID` is always `umu-default`.
 - **D-Bus.** No service and no interface. The library is linked directly by the
   command-line tool.
 - **Deeper inspection.** No PE import tables (so no detection of a user-mode
@@ -253,7 +756,11 @@ Errors are written to standard error as `error[CODE]: message`. With `--json`,
   binary property lists, no installer-framework detection for `.exe` installers.
 - **Other formats.** DMG, PKG, Flatpak and Snap bundles, Java archives and
   Windows shortcuts are reported as `unknown` or as a plain zip.
-- **Desktop entries, file associations, diagnostics.** Not started.
-- **Schema validation in CI.** A unit test keeps the schema's enumerations,
-  required fields and property names in step with the Rust types. The schema
-  itself is not run through a JSON Schema validator in CI.
+- **Diagnostics.** Launch logs and an operations log are kept per application;
+  nothing collects them into a diagnostic bundle (§6.4).
+- **Schema validation in CI.** A unit test for each schema keeps its
+  enumerations, required fields and property names in step with the Rust types.
+  Neither schema is run through a JSON Schema validator in CI.
+- **Error-code registry.** The codes above are not yet registry entries in the
+  sense of §29.3, and the `RUNTIME` family that issue #12 asks for does not
+  exist; the new codes use `WINDOWS`, `SECURITY` and `DESKTOP`.
