@@ -57,7 +57,7 @@ pub fn decide(action: &Action, context: &Context, policy: &UserPolicy, now: Time
 
     // 5. Without the trusted path, nothing above class 1, and no request to
     //    authenticate, because it could not be answered safely.
-    if !context.trusted_path_available && class >= ActionClass::Consequential {
+    if !context.trusted_path_available && class > ActionClass::Consequential {
         return Decision::refuse(class, Refusal::TrustedPathUnavailable);
     }
 
