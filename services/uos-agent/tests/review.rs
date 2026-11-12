@@ -3,17 +3,19 @@
 //! Regression tests for the findings of the first independent review of the
 //! policy engine (`docs/reviews/policy-engine-review-1.md`).
 //!
-//! Each test carries the identifier of the finding it demonstrates. Every one
-//! of them failed against the engine as it was reviewed; the review document
-//! records the run.
+//! Each test carries the number of the finding it demonstrates. Every one of
+//! them failed against the engine as it was reviewed, except `f04`, which
+//! could not be written before the context could name the owner of a window;
+//! the review document records the run.
 
 use std::process::Command;
 
 use serde_json::{Map, Value, json};
 use uos_agent::{
     Action, ActionClass, AuditMeta, CommandAction, Context, MemorySink, PrivilegedOperation,
-    Relaxation, RelaxationLevel, RepairSession, Sandbox, StandingApproval, Timestamp, ToolManifest,
-    UiAction, UiActionKind, UserPolicy, Verdict, WorkingContext, decide, decide_and_record,
+    Reason, Refusal, Relaxation, RelaxationLevel, RepairSession, Sandbox, StandingApproval,
+    Timestamp, ToolManifest, UiAction, UiActionKind, UserPolicy, Verdict, WindowOwner,
+    WorkingContext, decide, decide_and_record,
 };
 
 const NOW: Timestamp = Timestamp(1_000_000);
@@ -23,10 +25,12 @@ const TEST_SERVICE_MANIFEST: &str = concat!(
     "/tests/data/test-service.manifest.json"
 );
 
-/// Attended, unlocked, with the trusted path available.
+/// Attended, unlocked, with the trusted path available, and a target window
+/// that is known to belong to the user.
 fn trusted() -> Context {
     Context {
         trusted_path_available: true,
+        target_window_owner: WindowOwner::User,
         ..Context::attended()
     }
 }
@@ -34,7 +38,9 @@ fn trusted() -> Context {
 fn open_repair_session() -> RepairSession {
     RepairSession {
         purpose: "fix printing".to_owned(),
+        opened_at: Timestamp(NOW.0 - 300),
         expires_at: Timestamp(NOW.0 + 600),
+        ended: false,
     }
 }
 
@@ -189,11 +195,39 @@ fn f02_a_free_text_privileged_command_is_asked_inside_a_repair_session() {
 
 #[test]
 fn f03_a_repair_session_of_more_than_an_hour_is_closed() {
-    let session = RepairSession {
+    let session = |seconds: u64| RepairSession {
         purpose: "fix printing".to_owned(),
-        expires_at: Timestamp(NOW.0 + 3_601),
+        opened_at: NOW,
+        expires_at: Timestamp(NOW.0 + seconds),
+        ended: false,
     };
-    assert!(!session.is_open_at(NOW));
+    assert!(session(3_600).is_open_at(NOW));
+    assert!(!session(3_601).is_open_at(NOW));
+    assert!(!session(3_601).is_open_at(Timestamp(NOW.0 + 1)));
+    // The bound the engine had before: 24 hours.
+    assert!(!session(86_400).is_open_at(NOW));
+}
+
+#[test]
+fn f04_a_window_of_a_process_with_administrator_rights_is_refused() {
+    // An ordinary control in an ordinary application: class 1 by every other
+    // rule. What it does in a root window is not bounded by anything.
+    let administrator = Context {
+        target_window_owner: WindowOwner::Administrator,
+        ..trusted()
+    };
+    for action in [
+        act("org.example.Partitions", "Devices", "Next"),
+        observe("org.example.Partitions"),
+    ] {
+        let decision = decide(&action, &administrator, &UserPolicy::default(), NOW);
+        assert_eq!(
+            decision.reason(),
+            Reason::Refused(Refusal::PrivilegedWindow),
+            "{action:?}"
+        );
+        assert!(decide(&action, &trusted(), &UserPolicy::default(), NOW).is_allow());
+    }
 }
 
 #[test]

@@ -12,6 +12,10 @@
 //! its [`Context`], the [`UserPolicy`] and the current time to a [`Decision`].
 //! Nothing the model says can make a decision more permissive.
 //!
+//! The decision to enforce the assistant's authority this way is recorded in
+//! `docs/adr/0012-assistant-policy-model.md`; the first independent review of
+//! this crate is `docs/reviews/policy-engine-review-1.md`.
+//!
 //! ```
 //! use uos_agent::{Action, ActionClass, Context, Timestamp, ToolManifest, UserPolicy, decide};
 //!
@@ -52,17 +56,19 @@ pub mod engine;
 pub mod manifest;
 pub mod patterns;
 pub mod policy;
+pub mod strict;
 
 pub use action::{
-    Action, AgentOperation, CommandAction, PrivilegedOperation, Sandbox, ToolCall, UiAction,
-    UiActionKind, WorkingContext,
+    Action, AgentOperation, CommandAction, OperationContent, PrivilegedOperation,
+    PrivilegedRequestKind, ProtectedTarget, Sandbox, TargetRule, ToolCall, TypedOperation,
+    TypedOperationKind, TypedOperationSpec, UiAction, UiActionKind, WorkingContext,
 };
 pub use audit::{
     AuditMeta, AuditOutcome, AuditRecord, AuditSink, AuditWriteError, MemorySink, decide_and_record,
 };
 pub use class::ActionClass;
-pub use codes::{Code, Problem};
-pub use context::{Context, Presence, RepairSession, StandingApproval, Timestamp};
+pub use codes::{Code, Problem, RegistryEntry, Severity};
+pub use context::{Context, Presence, RepairSession, StandingApproval, Timestamp, WindowOwner};
 pub use decision::{Decision, Reason, Refusal, Verdict};
 pub use engine::decide;
 pub use manifest::{ToolManifest, ToolSpec};

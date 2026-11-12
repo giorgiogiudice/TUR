@@ -9,12 +9,19 @@
 //!
 //! What a record contains is restricted by construction:
 //!
-//! * Argument values are never written. Tool arguments are summarised as the
-//!   property names with the kind of each value.
+//! * The argument values of a tool call are never written. Tool arguments are
+//!   summarised as the property names with the kind of each value.
 //! * A property name that resembles a secret has its kind withheld too; a name
 //!   that is not a plain identifier is not written at all.
-//! * A command is summarised as its program name and argument count.
-//! * Window titles, control names and prompt texts are never written.
+//! * A command outside the privileged sandbox is summarised as the path of its
+//!   program and its argument count.
+//! * A privileged request, whether a free-text command or a typed operation,
+//!   is written in full, because it is shown to the user anyway and must be
+//!   reviewable (addendum section 17, item 9). A value that is marked secret
+//!   is replaced. Nothing else is: a rule that withheld what merely looks like
+//!   a secret would let the model keep part of a command out of the record.
+//! * Window titles, control names and the prompts of other actions are never
+//!   written.
 //! * Identifiers (task, provider, service, tool, application) are written only
 //!   if they use a restricted character set. They are not scanned for secrets:
 //!   service and tool names come from a validated manifest, and the task and
@@ -23,11 +30,11 @@
 use serde_json::{Map, Value};
 use uos_core::ErrorCode;
 
-use crate::action::{Action, CommandAction, Sandbox, UiAction, UiActionKind};
+use crate::action::{Action, CommandAction, Sandbox, UiAction, UiActionKind, WorkingContext};
 use crate::class::ActionClass;
-use crate::context::{Context, Timestamp};
+use crate::context::{Context, Presence, Timestamp};
 use crate::decision::{Decision, Refusal, Verdict};
-use crate::engine::decide;
+use crate::engine::{decide, describe};
 use crate::patterns::match_consequential;
 use crate::policy::UserPolicy;
 
@@ -99,10 +106,8 @@ fn has_opaque_run(text: &str) -> bool {
     false
 }
 
-/// The outcome recorded for an action.
-///
-/// The addendum lists `allowed`, `confirmed`, `denied` and `refused`. The
-/// record of a proposal also needs the outcomes that are not final yet.
+/// The outcome recorded for an action: the values of `UOS_AI_DECISION`
+/// (addendum sections 11 and 17, item 11).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AuditOutcome {
     /// The engine allowed the action.
@@ -167,11 +172,22 @@ pub struct AuditRecord {
     reason: &'static str,
     error_code: Option<ErrorCode>,
     summary: String,
+    sandbox: Option<&'static str>,
+    attended: bool,
+    request: Option<String>,
 }
 
 impl AuditRecord {
-    /// The record for a proposed action and the engine's decision.
-    pub fn new(meta: &AuditMeta<'_>, action: &Action, decision: &Decision) -> Self {
+    /// The record for a proposed action, the context it was decided in, and
+    /// the engine's decision.
+    pub fn new(
+        meta: &AuditMeta<'_>,
+        action: &Action,
+        context: &Context,
+        decision: &Decision,
+    ) -> Self {
+        // A privileged request is recorded in full.
+        let request = action.privileged_request().map(|_| describe(action));
         AuditRecord {
             task: identifier(meta.task),
             provider: identifier(meta.provider),
@@ -181,7 +197,10 @@ impl AuditRecord {
             outcome: AuditOutcome::of(decision.verdict()),
             reason: decision.reason().as_str(),
             error_code: decision.error_code(),
-            summary: summarise(action),
+            summary: request.clone().unwrap_or_else(|| summarise(action)),
+            sandbox: sandbox_name(action),
+            attended: context.presence == Presence::Attended,
+            request,
         }
     }
 
@@ -219,6 +238,23 @@ impl AuditRecord {
         self.error_code.as_ref()
     }
 
+    /// Whether the task was attended: the value of `UOS_AI_ATTENDED`.
+    pub fn attended(&self) -> bool {
+        self.attended
+    }
+
+    /// The sandbox of a command or a typed operation: the value of
+    /// `UOS_AI_SANDBOX`. `None` for every other action.
+    pub fn sandbox(&self) -> Option<&'static str> {
+        self.sandbox
+    }
+
+    /// The full statement of a privileged request: the value of
+    /// `UOS_AI_REQUEST`. `None` for every other action.
+    pub fn request(&self) -> Option<&str> {
+        self.request.as_deref()
+    }
+
     /// The human-readable `MESSAGE` field.
     pub fn message(&self) -> String {
         format!(
@@ -234,7 +270,9 @@ impl AuditRecord {
 
     /// The record as journal fields, in a fixed order.
     ///
-    /// `UOS_ERROR_CODE` is present only when the action was refused.
+    /// `UOS_AI_SANDBOX` is present only for a command or a typed operation,
+    /// `UOS_AI_REQUEST` only for a privileged request, and `UOS_ERROR_CODE`
+    /// only when the action was refused.
     pub fn journal_fields(&self) -> Vec<(&'static str, String)> {
         let mut fields = vec![
             ("MESSAGE", self.message()),
@@ -243,12 +281,39 @@ impl AuditRecord {
             ("UOS_AI_CLASS", self.class.to_string()),
             ("UOS_AI_DECISION", self.outcome.as_str().to_owned()),
             ("UOS_AI_TIER", self.tier.to_string()),
-            ("UOS_AI_PROVIDER", self.provider.clone()),
         ];
+        if let Some(sandbox) = self.sandbox {
+            fields.push(("UOS_AI_SANDBOX", sandbox.to_owned()));
+        }
+        let attended = if self.attended { "yes" } else { "no" };
+        fields.push(("UOS_AI_ATTENDED", attended.to_owned()));
+        fields.push(("UOS_AI_PROVIDER", self.provider.clone()));
+        if let Some(request) = &self.request {
+            fields.push(("UOS_AI_REQUEST", request.clone()));
+        }
         if let Some(code) = &self.error_code {
             fields.push(("UOS_ERROR_CODE", code.to_string()));
         }
         fields
+    }
+}
+
+/// The value of `UOS_AI_SANDBOX`: `read-only`, `workspace`, `user` or
+/// `privileged` for a command, `privileged` for a typed operation.
+fn sandbox_name(action: &Action) -> Option<&'static str> {
+    match action {
+        Action::Command(command) => Some(match command.sandbox {
+            Sandbox::ReadOnly => "read-only",
+            Sandbox::User => match command.working_context {
+                WorkingContext::UndoableWorkspace => "workspace",
+                WorkingContext::Session => "user",
+            },
+            Sandbox::Privileged(_) => "privileged",
+        }),
+        Action::Operation(_) => Some("privileged"),
+        Action::Tool(_) | Action::Accessibility(_) | Action::ScreenInput(_) | Action::Agent(_) => {
+            None
+        }
     }
 }
 
@@ -273,15 +338,19 @@ fn action_name(action: &Action) -> String {
         Action::Accessibility(ui) => format!("accessibility:{}", ui.kind.as_str()),
         Action::ScreenInput(ui) => format!("screen:{}", ui.kind.as_str()),
         Action::Command(command) => format!("command:{}", command.sandbox.as_str()),
+        Action::Operation(operation) => format!("operation:{}", operation.kind.as_str()),
         Action::Agent(operation) => format!("agent:{}", operation.as_str()),
     }
 }
 
+/// The summary of an action that is not a privileged request.
 fn summarise(action: &Action) -> String {
     match action {
         Action::Tool(call) => summarise_arguments(&call.arguments),
         Action::Accessibility(ui) | Action::ScreenInput(ui) => summarise_ui(ui),
         Action::Command(command) => summarise_command(command),
+        // A privileged request is not summarised; see `AuditRecord::new`.
+        Action::Operation(_) => describe(action),
         Action::Agent(_) => "no arguments".to_owned(),
     }
 }
@@ -341,27 +410,23 @@ fn summarise_ui(ui: &UiAction) -> String {
     }
 }
 
+/// The summary of a command outside the privileged sandbox: the program as it
+/// was given, with its directory, and the number of arguments.
+///
+/// The path is written whole so that a program planted under a familiar name
+/// in another directory does not read as the genuine one. It is withheld if it
+/// is not a plain path or if a part of it resembles a secret.
 fn summarise_command(command: &CommandAction) -> String {
-    let program = command
-        .argv
-        .first()
-        .and_then(|path| path.rsplit('/').next())
-        .unwrap_or("");
+    let program = command.argv.first().map_or("", String::as_str);
     let safe = !program.is_empty()
-        && program.len() <= 64
+        && program.len() <= 255
         && program
             .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'+' | b'-'))
-        && !resembles_secret(program);
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'+' | b'-' | b'/'))
+        && !program.split('/').any(resembles_secret);
     let program = if safe { program } else { REDACTED };
     let count = command.argv.len().saturating_sub(1);
-    match command.sandbox {
-        Sandbox::Privileged(operation) => format!(
-            "program {program}, {count} arguments, operation {}",
-            operation.as_str()
-        ),
-        Sandbox::ReadOnly | Sandbox::User => format!("program {program}, {count} arguments"),
-    }
+    format!("program {program}, {count} arguments")
 }
 
 /// The audit record could not be written.
@@ -420,7 +485,7 @@ pub fn decide_and_record(
     sink: &mut dyn AuditSink,
 ) -> Decision {
     let decision = decide(action, context, policy, now);
-    let record = AuditRecord::new(meta, action, &decision);
+    let record = AuditRecord::new(meta, action, context, &decision);
     match sink.write(&record) {
         Ok(()) => decision,
         Err(_) => Decision::refuse(decision.class(), Refusal::AuditUnavailable),
@@ -432,9 +497,12 @@ mod tests {
     use serde_json::json;
 
     use super::*;
-    use crate::action::{AgentOperation, PrivilegedOperation, ToolCall, WorkingContext};
+    use crate::action::{
+        AgentOperation, OperationContent, PrivilegedOperation, SECRET_PLACEHOLDER, ToolCall,
+        TypedOperation, TypedOperationKind,
+    };
     use crate::codes::Code;
-    use crate::context::RepairSession;
+    use crate::context::{RepairSession, WindowOwner};
 
     fn meta() -> AuditMeta<'static> {
         AuditMeta {
@@ -446,8 +514,28 @@ mod tests {
     fn trusted() -> Context {
         Context {
             trusted_path_available: true,
+            target_window_owner: WindowOwner::User,
             ..Context::attended()
         }
+    }
+
+    fn privileged(argv: &[&str]) -> Action {
+        Action::Command(CommandAction {
+            sandbox: Sandbox::Privileged(PrivilegedOperation::ServiceControl),
+            argv: argv.iter().map(|argument| (*argument).to_owned()).collect(),
+            working_context: WorkingContext::Session,
+        })
+    }
+
+    fn typed(kind: TypedOperationKind, target: &str, content: Option<(&str, bool)>) -> Action {
+        Action::Operation(TypedOperation {
+            kind,
+            target: target.to_owned(),
+            content: content.map(|(text, secret)| OperationContent {
+                text: text.to_owned(),
+                secret,
+            }),
+        })
     }
 
     fn tool(class: ActionClass, arguments: Value) -> Action {
@@ -461,7 +549,7 @@ mod tests {
 
     fn record(action: &Action, context: &Context) -> AuditRecord {
         let decision = decide(action, context, &UserPolicy::default(), Timestamp(0));
-        AuditRecord::new(&meta(), action, &decision)
+        AuditRecord::new(&meta(), action, context, &decision)
     }
 
     fn field<'a>(fields: &'a [(&'static str, String)], name: &str) -> Option<&'a str> {
@@ -488,9 +576,11 @@ mod tests {
                 "UOS_AI_CLASS",
                 "UOS_AI_DECISION",
                 "UOS_AI_TIER",
+                "UOS_AI_ATTENDED",
                 "UOS_AI_PROVIDER"
             ]
         );
+        assert_eq!(field(&fields, "UOS_AI_ATTENDED"), Some("yes"));
         assert_eq!(field(&fields, "UOS_AI_TASK"), Some("task-0001"));
         assert_eq!(
             field(&fields, "UOS_AI_ACTION"),
@@ -540,9 +630,19 @@ mod tests {
             working_context: WorkingContext::Session,
         };
         let cases = [
+            (
+                tool(ActionClass::Observe, json!({})),
+                "1",
+                "org.uos.Test1:test_tool",
+            ),
             (Action::Accessibility(ui.clone()), "2", "accessibility:act"),
             (Action::ScreenInput(ui), "3", "screen:act"),
             (Action::Command(command), "4", "command:privileged"),
+            (
+                typed(TypedOperationKind::ServiceRestart, "cups.service", None),
+                "4",
+                "operation:service_restart",
+            ),
             (
                 Action::Agent(AgentOperation::MemoryWrite),
                 "0",
@@ -572,20 +672,266 @@ mod tests {
         assert!(!message.contains("salary"), "{message}");
 
         let command = Action::Command(CommandAction {
-            sandbox: Sandbox::Privileged(PrivilegedOperation::ServiceControl),
+            sandbox: Sandbox::User,
             argv: vec![
                 "/usr/bin/systemctl".to_owned(),
+                "--user".to_owned(),
                 "restart".to_owned(),
-                "cups".to_owned(),
+                "pipewire".to_owned(),
             ],
             working_context: WorkingContext::Session,
         });
         let message = record(&command, &trusted()).message();
         assert!(
-            message.ends_with("; program systemctl, 2 arguments, operation service_control"),
+            message.ends_with("; program /usr/bin/systemctl, 3 arguments"),
             "{message}"
         );
-        assert!(!message.contains("cups"), "{message}");
+        assert!(!message.contains("pipewire"), "{message}");
+    }
+
+    #[test]
+    fn a_command_is_named_by_the_path_it_was_given() {
+        let summary = |program: &str| {
+            summarise_command(&CommandAction {
+                sandbox: Sandbox::User,
+                argv: vec![program.to_owned(), "x".to_owned()],
+                working_context: WorkingContext::Session,
+            })
+        };
+        assert_eq!(summary("systemctl"), "program systemctl, 1 arguments");
+        assert_eq!(
+            summary("/usr/bin/systemctl"),
+            "program /usr/bin/systemctl, 1 arguments"
+        );
+        // A program of the same name elsewhere reads differently.
+        assert_eq!(
+            summary("/tmp/x/systemctl"),
+            "program /tmp/x/systemctl, 1 arguments"
+        );
+        assert_eq!(
+            summary("/usr/lib64/qt6/bin/qdbus"),
+            "program /usr/lib64/qt6/bin/qdbus, 1 arguments"
+        );
+        assert_eq!(summary("./run.sh"), "program ./run.sh, 1 arguments");
+        // Not a plain path, or a part that resembles a secret: withheld.
+        for program in [
+            "",
+            "my program",
+            "/tmp/\u{202e}x",
+            "x;y",
+            "/home/u/sk-live-4f9a8b7c6d5e4f3a2b1c/run",
+            "/home/u/password/run",
+            "hunter2-correct-horse-battery",
+        ] {
+            assert_eq!(
+                summary(program),
+                "program <redacted>, 1 arguments",
+                "{program:?}"
+            );
+        }
+        let long = format!("/{}", "a".repeat(255));
+        assert_eq!(summary(&long), "program <redacted>, 1 arguments");
+    }
+
+    #[test]
+    fn the_record_states_the_sandbox_and_whether_the_task_was_attended() {
+        let command = |sandbox, working_context| {
+            Action::Command(CommandAction {
+                sandbox,
+                argv: vec!["true".to_owned()],
+                working_context,
+            })
+        };
+        let cases = [
+            (
+                command(Sandbox::ReadOnly, WorkingContext::Session),
+                Some("read-only"),
+            ),
+            (
+                command(Sandbox::ReadOnly, WorkingContext::UndoableWorkspace),
+                Some("read-only"),
+            ),
+            (
+                command(Sandbox::User, WorkingContext::UndoableWorkspace),
+                Some("workspace"),
+            ),
+            (
+                command(Sandbox::User, WorkingContext::Session),
+                Some("user"),
+            ),
+            (
+                command(
+                    Sandbox::Privileged(PrivilegedOperation::Diagnostics),
+                    WorkingContext::Session,
+                ),
+                Some("privileged"),
+            ),
+            (
+                typed(TypedOperationKind::ServiceRestart, "cups.service", None),
+                Some("privileged"),
+            ),
+            (tool(ActionClass::Observe, json!({})), None),
+            (Action::Agent(AgentOperation::MemoryRead), None),
+        ];
+        for (action, sandbox) in cases {
+            for (context, attended) in [
+                (trusted(), "yes"),
+                (Context::attended(), "yes"),
+                (Context::unattended(), "no"),
+                (
+                    Context {
+                        session_locked: true,
+                        ..Context::unattended()
+                    },
+                    "no",
+                ),
+                (
+                    // A locked session does not make an attended task unattended.
+                    Context {
+                        session_locked: true,
+                        ..trusted()
+                    },
+                    "yes",
+                ),
+            ] {
+                let record = record(&action, &context);
+                let fields = record.journal_fields();
+                assert_eq!(field(&fields, "UOS_AI_SANDBOX"), sandbox, "{action:?}");
+                assert_eq!(
+                    field(&fields, "UOS_AI_ATTENDED"),
+                    Some(attended),
+                    "{action:?}"
+                );
+                assert_eq!(record.sandbox(), sandbox);
+                assert_eq!(record.attended(), attended == "yes");
+            }
+        }
+    }
+
+    #[test]
+    fn a_privileged_request_is_recorded_in_full() {
+        let command = privileged(&[
+            "/usr/bin/systemctl",
+            "restart",
+            "cups.service",
+            "--message=two words",
+            "",
+            "x\ny",
+        ]);
+        let statement = "Run command [\"/usr/bin/systemctl\" \"restart\" \"cups.service\" \"--message=two words\" \"\" \"x\\u{a}y\"] as root through the privileged helper (operation type service_control)";
+        // Whatever the decision is: refused, offered for authentication, or
+        // asked inside a session.
+        let open = Context {
+            repair_session: RepairSession::open("fix printing", Timestamp(0)),
+            ..trusted()
+        };
+        for context in [Context::attended(), trusted(), open, Context::unattended()] {
+            let record = record(&command, &context);
+            assert_eq!(record.request(), Some(statement));
+            let fields = record.journal_fields();
+            assert_eq!(field(&fields, "UOS_AI_REQUEST"), Some(statement));
+            assert!(
+                field(&fields, "MESSAGE")
+                    .unwrap_or_default()
+                    .ends_with(&format!("; {statement}"))
+            );
+            for (name, value) in &fields {
+                assert!(
+                    value.chars().all(|c| matches!(c, ' '..='~')),
+                    "{name} is not printable ASCII"
+                );
+            }
+        }
+
+        let restart = typed(TypedOperationKind::ServiceRestart, "cups.service", None);
+        assert_eq!(
+            record(&restart, &trusted()).request(),
+            Some(
+                "Privileged operation service_restart on unit \"cups.service\" as root through the privileged helper (operation type service_control)"
+            )
+        );
+        let change = typed(
+            TypedOperationKind::ConfigurationFileChange,
+            "/etc/cups/cupsd.conf",
+            Some(("LogLevel debug\n", false)),
+        );
+        assert_eq!(
+            record(&change, &trusted()).request(),
+            Some(
+                "Privileged operation configuration_file_change on file \"/etc/cups/cupsd.conf\" with content \"LogLevel debug\\u{a}\" as root through the privileged helper (operation type system_configuration)"
+            )
+        );
+
+        // Nothing else has the field, and nothing else is written in full.
+        for action in [
+            tool(ActionClass::Consequential, json!({ "to": "a@example.org" })),
+            Action::Command(CommandAction {
+                sandbox: Sandbox::User,
+                argv: vec!["mail".to_owned(), "a@example.org".to_owned()],
+                working_context: WorkingContext::Session,
+            }),
+            Action::Agent(AgentOperation::ScheduleWrite),
+        ] {
+            let record = record(&action, &trusted());
+            assert_eq!(record.request(), None);
+            let fields = record.journal_fields();
+            assert_eq!(field(&fields, "UOS_AI_REQUEST"), None);
+            for (name, value) in &fields {
+                assert!(!value.contains("example.org"), "{name}={value}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_value_marked_secret_is_replaced_in_the_record_of_a_privileged_request() {
+        let secret = "hunter2-correct-horse";
+        let marked = typed(
+            TypedOperationKind::ConfigurationFileChange,
+            "/etc/samba/credentials",
+            Some((secret, true)),
+        );
+        let open = Context {
+            repair_session: RepairSession::open("fix the share", Timestamp(0)),
+            ..trusted()
+        };
+        for context in [trusted(), open.clone(), Context::unattended()] {
+            let record = record(&marked, &context);
+            for (name, value) in record.journal_fields() {
+                assert!(!value.contains(secret), "{name}={value} leaks the secret");
+            }
+            assert_eq!(
+                record.request(),
+                Some(
+                    "Privileged operation configuration_file_change on file \"/etc/samba/credentials\" with content <secret> as root through the privileged helper (operation type system_configuration)"
+                )
+            );
+            assert!(record.message().contains(SECRET_PLACEHOLDER));
+            // The debug form of the record does not hold it either.
+            assert!(!format!("{record:?}").contains(secret));
+        }
+
+        // The same value, not marked: recorded in full, as the design asks.
+        // The marking is the orchestrator's, for a value the user entered; a
+        // heuristic here would let the model hide what it writes.
+        let unmarked = typed(
+            TypedOperationKind::ConfigurationFileChange,
+            "/etc/samba/credentials",
+            Some((secret, false)),
+        );
+        assert!(
+            record(&unmarked, &open)
+                .request()
+                .unwrap_or_default()
+                .contains(secret)
+        );
+        // And a free-text command has nothing that could be marked.
+        let command = privileged(&["smbpasswd", "-s", secret]);
+        assert!(
+            record(&command, &open)
+                .request()
+                .unwrap_or_default()
+                .contains(secret)
+        );
     }
 
     #[test]
@@ -636,7 +982,7 @@ mod tests {
             for action in [tool_call, ui, command, program_is_secret] {
                 for context in [trusted(), Context::attended(), Context::unattended()] {
                     let decision = decide(&action, &context, &UserPolicy::default(), Timestamp(0));
-                    let record = AuditRecord::new(&meta(), &action, &decision);
+                    let record = AuditRecord::new(&meta(), &action, &context, &decision);
                     for (name, value) in record.journal_fields() {
                         assert!(!value.contains(secret), "{name}={value} leaks {secret}");
                     }
@@ -686,7 +1032,7 @@ mod tests {
         };
         let action = tool(ActionClass::Observe, json!({}));
         let decision = decide(&action, &trusted(), &UserPolicy::default(), Timestamp(0));
-        let fields = AuditRecord::new(&meta, &action, &decision).journal_fields();
+        let fields = AuditRecord::new(&meta, &action, &trusted(), &decision).journal_fields();
         assert_eq!(field(&fields, "UOS_AI_TASK"), Some("<invalid>"));
         assert_eq!(field(&fields, "UOS_AI_PROVIDER"), Some("<invalid>"));
         for (name, value) in &fields {
@@ -785,19 +1131,11 @@ mod tests {
     fn an_action_that_cannot_be_recorded_is_refused() {
         let policy = UserPolicy::default();
         let mut context = trusted();
-        context.repair_session = Some(RepairSession {
-            purpose: "fix printing".to_owned(),
-            expires_at: Timestamp(100),
-        });
-        let privileged = Action::Command(CommandAction {
-            sandbox: Sandbox::Privileged(PrivilegedOperation::ServiceControl),
-            argv: vec!["systemctl".to_owned()],
-            working_context: WorkingContext::Session,
-        });
+        context.repair_session = RepairSession::open("fix printing", Timestamp(0));
         let actions = [
             tool(ActionClass::Observe, json!({})),
             tool(ActionClass::Reversible, json!({})),
-            privileged,
+            typed(TypedOperationKind::ServiceRestart, "cups.service", None),
         ];
         for action in actions {
             assert!(decide(&action, &context, &policy, Timestamp(0)).is_allow());
