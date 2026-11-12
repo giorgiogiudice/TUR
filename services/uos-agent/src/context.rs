@@ -58,7 +58,7 @@ impl RepairSession {
     /// every session as closed while the session is locked or unattended.
     pub fn is_open_at(&self, now: Timestamp) -> bool {
         !self.purpose.trim().is_empty()
-            && now < self.expires_at
+            && now <= self.expires_at
             && self.expires_at.0 - now.0 <= MAX_REPAIR_SESSION_SECONDS
     }
 }
@@ -83,7 +83,7 @@ pub struct StandingApproval {
 impl StandingApproval {
     /// Whether the approval covers exactly this call.
     pub fn matches(&self, call: &ToolCall) -> bool {
-        self.service == call.service && self.tool == call.tool
+        self.service == call.service && self.tool == call.tool && self.arguments == call.arguments
     }
 }
 
