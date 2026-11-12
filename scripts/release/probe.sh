@@ -66,7 +66,18 @@ echo "--- sign: other key + rekor"; cosign sign "${common[@]}" "${legacy[@]}" --
 echo "--- sign: release key, no rekor"; cosign sign "${common[@]}" "${legacy[@]}" --tlog-upload=false --key release.key "$reg@$(digest_of norekor)"; echo "rc=$?"
 echo "--- sign: keyless"; cosign sign "${common[@]}" "${legacy[@]}" "$reg@$(digest_of keyless)"; echo "rc=$?"
 echo "--- sign: keyless default format (for comparison)"; cosign sign --yes --allow-http-registry "$reg@$(digest_of signed)"; echo "rc=$?"
-echo "--- registry tags"; curl -s http://localhost:5000/v2/tur/tags/list; echo
+echo "--- verify keyless with cosign"
+cosign verify --allow-http-registry --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+    --certificate-identity-regexp '^https://github.com/giorgiogiudice/TUR/' "$reg@$(digest_of keyless)" > keyless-verify.json; echo "rc=$?"
+python3 -c 'import json,sys; [print(json.dumps(x.get("optional"), indent=1)) for x in json.load(open(sys.argv[1]))]' keyless-verify.json | head -40
+echo "--- attest (legacy)"
+echo '{"spdxVersion":"SPDX-2.3","name":"probe"}' > sbom.json
+cosign attest --yes --allow-http-registry "${legacy[@]}" --type spdxjson --predicate sbom.json "$reg@$(digest_of keyless)"; echo "rc=$?"
+echo "--- copy with signatures"
+cosign copy --allow-http-registry "$reg@$(digest_of keyless)" localhost:5000/tur2:copied; echo "rc=$?"
+curl -s http://localhost:5000/v2/tur2/tags/list; echo
+skopeo inspect --tls-verify=false --format '{{.Digest}}' docker://localhost:5000/tur2:copied
+echo "--- registry tags";curl -s http://localhost:5000/v2/tur/tags/list; echo
 d=$(digest_of signed); sig="sha256-${d#sha256:}.sig"
 echo "--- $sig manifest"; skopeo inspect --tls-verify=false --raw "docker://$reg:$sig" | python3 -m json.tool | head -60
 cd - > /dev/null
@@ -87,6 +98,11 @@ docker:
   ghcr.io/giorgiogiudice/tur:
     use-sigstore-attachments: true
 EOF
+cat > "$work/physical.yaml" <<'EOF'
+docker:
+  localhost:5000/tur:
+    use-sigstore-attachments: true
+EOF
 cat > "$work/99-test.conf" <<'EOF'
 [[registry]]
 prefix = "ghcr.io/giorgiogiudice/tur"
@@ -97,16 +113,30 @@ for policy in key fulcio; do
   for t in signed unsigned other norekor keyless; do
     echo "--- policy=$policy image=$t"
     $P run --rm --network host -v "$work:/t:ro,z" \
-        -v "$work/policy-$policy.json:/etc/containers/policy.json:ro,z" \
-        -v "$work/tur.yaml:/etc/containers/registries.d/tur.yaml:ro,z" \
+        -v "$work/policy-$policy.json:/usr/share/containers/policy.json:ro,z" \
+        -v "$work/tur.yaml:/usr/share/containers/registries.d/tur.yaml:ro,z" \
+        -v "$work/physical.yaml:/etc/containers/registries.d/99-test.yaml:ro,z" \
         -v "$work/99-test.conf:/etc/containers/registries.conf.d/99-test.conf:ro,z" \
         "$base" skopeo copy "docker://ghcr.io/giorgiogiudice/tur:$t" oci:/tmp/out 2>&1 | tail -3
     echo "rc=${PIPESTATUS[0]}"
   done
 done
-echo "--- without the remap registries.d entry for the physical location: same as above (key, signed)"
+echo "--- policy=key image=signed, without the registries.d entry for the physical location"
+$P run --rm --network host -v "$work:/t:ro,z" \
+    -v "$work/policy-key.json:/usr/share/containers/policy.json:ro,z" \
+    -v "$work/tur.yaml:/usr/share/containers/registries.d/tur.yaml:ro,z" \
+    -v "$work/99-test.conf:/etc/containers/registries.conf.d/99-test.conf:ro,z" \
+    "$base" skopeo copy "docker://ghcr.io/giorgiogiudice/tur:signed" oci:/tmp/out 2>&1 | tail -3
+echo "rc=${PIPESTATUS[0]}"
+echo "--- policy=key image=signed pulled by its physical name (scope does not apply)"
+$P run --rm --network host -v "$work:/t:ro,z" \
+    -v "$work/policy-key.json:/usr/share/containers/policy.json:ro,z" \
+    "$base" skopeo copy --src-tls-verify=false "docker://localhost:5000/tur:unsigned" oci:/tmp/out 2>&1 | tail -3
+echo "rc=${PIPESTATUS[0]}"
+echo "--- bootc and the image proxy"
+$P run --rm --network none "$base" /bin/bash -c 'strings /usr/bin/bootc | grep -E -- "insecure-policy|experimental-image-proxy|insecureAcceptAnything" | sort -u | head'
 echo "--- oci transport unaffected"
-$P run --rm --network host -v "$work/policy-key.json:/etc/containers/policy.json:ro,z" "$base" \
+$P run --rm --network host -v "$work/policy-key.json:/usr/share/containers/policy.json:ro,z" "$base" \
     /bin/bash -c 'skopeo copy docker://localhost:5000/tur:unsigned --src-tls-verify=false oci:/tmp/l:x && skopeo copy oci:/tmp/l:x oci:/tmp/m:y && echo oci-ok'
 echo "::endgroup::"
 
