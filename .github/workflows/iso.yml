@@ -148,13 +148,15 @@ jobs:
           echo "work directory: $work ($(df --output=avail -h "$work" | tail -1 | xargs) free)"
           echo "WORK=$work" >> "$GITHUB_ENV"
 
+      # ntfs-3g makes the NTFS volume of the Windows-like test disk. Nothing
+      # from it goes into the medium.
       - name: Install QEMU, UEFI firmware and the tools that assemble the medium
         run: |
           sudo apt-get update -q
           sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils ovmf \
-            xorriso squashfs-tools mtools dosfstools
+            xorriso squashfs-tools mtools dosfstools ntfs-3g
           qemu-system-x86_64 --version | head -1
-          dpkg-query -W -f='${Package} ${Version}\n' qemu-system-x86 ovmf xorriso squashfs-tools mtools dosfstools \
+          dpkg-query -W -f='${Package} ${Version}\n' qemu-system-x86 ovmf xorriso squashfs-tools mtools dosfstools ntfs-3g \
             | tee "$OUT/host/tool-packages.txt"
           ls -la /usr/share/OVMF/ | tee "$OUT/host/ovmf-files.txt"
 
@@ -230,6 +232,47 @@ jobs:
           rm -f "$WORK/data.raw"
           exit "$status"
 
+      # TUR on a second disk beside Windows (ADR-0018). Disk A is laid out like
+      # a Windows disk without any Microsoft file. A first start of the medium
+      # creates a "Windows Boot Manager" firmware entry for it with efibootmgr,
+      # as Windows setup would have; that start keeps QEMU's boot order, which
+      # is harmless while the entry does not exist yet. The installation and
+      # the first start of TUR then run with no boot order from QEMU: with one,
+      # OVMF itself deletes HD() entries QEMU does not name (tests/iso/isovm.py).
+      # Disk A is hashed whole when made, after the installation and after
+      # TUR's first start.
+      - name: "Beside Windows: install onto a second disk, then start it with the Windows disk attached"
+        if: ${{ !cancelled() && env.MEDIUM_STARTS == 'yes' }}
+        run: |
+          mkdir -p "$OUT/beside-windows"
+          tests/iso/make-windows-disk.sh "$WORK/windows.raw" 20G | tee "$OUT/beside-windows/windows-disk.txt"
+          disk_a_sha256() { sha256sum "$WORK/windows.raw" | cut -d" " -f1; }
+          echo "created=$(disk_a_sha256)" > "$OUT/beside-windows/disk-a.sha256.env"
+          truncate -s 20G "$WORK/second.raw"
+          status=0
+          python3 tests/iso/install.py windows-setup --medium "$MEDIUM" --medium-as usb \
+            --disk "$WORK/second.raw" --extra-disk "$WORK/windows.raw=windows-disk-a" \
+            --work "$WORK/vm" --out "$OUT/windows-setup" || status=$?
+          if [ "$status" -eq 0 ]; then
+            python3 tests/iso/install.py beside-windows --medium "$MEDIUM" --medium-as usb --no-bootindex \
+              --variables-from "$OUT/windows-setup/host/OVMF_VARS.after.fd" \
+              --disk "$WORK/second.raw" --extra-disk "$WORK/windows.raw=windows-disk-a" \
+              --work "$WORK/vm" --out "$OUT/beside-windows" || status=$?
+          fi
+          echo "after_install=$(disk_a_sha256)" >> "$OUT/beside-windows/disk-a.sha256.env"
+          if [ "$status" -eq 0 ]; then
+            sudo python3 tests/boot/inspect-disk.py installed "$WORK/second.raw" "$OUT/beside-windows" || status=$?
+            python3 tests/iso/boot-installed.py --no-bootindex \
+              --variables-from "$OUT/beside-windows/host/OVMF_VARS.after.fd" \
+              --disk "$WORK/second.raw" --extra-disk "$WORK/windows.raw=windows-disk-a" \
+              --work "$WORK/vm" --out "$OUT/beside-windows/first-start" || status=$?
+            sudo python3 tests/boot/inspect-disk.py postmortem "$WORK/second.raw" "$OUT/beside-windows/first-start"
+            echo "after_first_start=$(disk_a_sha256)" >> "$OUT/beside-windows/disk-a.sha256.env"
+          fi
+          cat "$OUT/beside-windows/disk-a.sha256.env"
+          rm -f "$WORK/windows.raw" "$WORK/second.raw"
+          exit "$status"
+
       # Informational. Nothing in TUR has been verified by firmware with
       # Secure Boot enforced before; a failure here is a finding, not a
       # regression, and does not fail the job.
@@ -270,7 +313,7 @@ jobs:
           show "$OUT/medium/facts/medium.env"
           show "$OUT/medium/facts/environment-package-changes.json"
           show "$OUT/medium/facts/xorriso-report.txt"
-          for run in too-small refuse install install-over-data secure-boot; do
+          for run in too-small refuse install install-over-data windows-setup beside-windows secure-boot; do
             show "$OUT/$run/result.json" 120
             show "$OUT/$run/installer-screens.txt" 150
             show "$OUT/$run/host/qemu.log" 30

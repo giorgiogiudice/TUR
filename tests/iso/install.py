@@ -25,6 +25,24 @@ Scenarios:
   too-small   The disk is smaller than the installer accepts. It must say so,
               offer nothing to choose, and write nothing. Also opens the
               command line and leaves it again.
+  windows-setup
+              Not a test of the installer: prepares the firmware of the
+              "beside Windows" proof. Opens the installer's command line and
+              creates a "Windows Boot Manager" boot entry with efibootmgr,
+              pointing at the Windows-like disk (--extra-disk), as Windows
+              setup would have. Writes nothing to any disk.
+  beside-windows
+              Two disks: the Windows-like disk (--extra-disk, serial
+              windows-disk-a) and a blank one. The Windows disk must be
+              described as Windows; choosing it must show the Windows warning,
+              and the test goes back there without typing the phrase. Then it
+              installs onto the blank disk.
+
+--extra-disk PATH=SERIAL adds a writable disk; --no-bootindex starts the
+machine with no boot order from QEMU (see tests/iso/isovm.py for why);
+--variables-from starts from the firmware variables an earlier run left. The
+firmware's boot entries before and after the run are written to
+OUT_DIR/host/efivars-before.json and efivars-after.json.
 
 It writes OUT_DIR/result.json, OUT_DIR/serial.log, numbered screenshots, and
 exits 0 if the scenario ran to its end. Whether that is a pass is decided by
@@ -42,10 +60,12 @@ import sys
 import time
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import efivars  # noqa: E402
 import isovm  # noqa: E402
 from isovm import vm  # noqa: E402
 
 DISK_SERIAL = "tur-boot-test"  # set by tests/boot/vm.py on the virtio disk
+WINDOWS_SERIAL = "windows-disk-a"
 
 
 class Stop(Exception):
@@ -74,6 +94,9 @@ class Session:
             medium=args.medium,
             medium_as=args.medium_as,
             secure_boot=args.secure_boot,
+            extra_disks=[tuple(item.split("=", 1)) for item in args.extra_disk],
+            use_bootindex=not args.no_bootindex,
+            variables_from=args.variables_from,
         )
         for stale in (self.serial_log, self.machine.variables, self.host / "qemu.log"):
             stale.unlink(missing_ok=True)
@@ -90,6 +113,9 @@ class Session:
             "medium_attached_as": args.medium_as,
             "secure_boot_firmware": bool(args.secure_boot),
             "network_devices": 0,
+            "boot_order_from_qemu": not args.no_bootindex,
+            "extra_disks": list(args.extra_disk),
+            "variables_from": args.variables_from,
             "disk": str(args.disk),
             "disk_serial": DISK_SERIAL,
             "guest": {"cpus": args.cpus, "memory_mib": args.memory},
@@ -175,9 +201,21 @@ class Session:
             time.sleep(0.5)
         return False
 
+    def firmware_entries(self) -> None:
+        """The firmware's boot entries before and after this run, read from the files."""
+        for label, path in (("before", self.machine.variables_template), ("after", self.machine.variables)):
+            try:
+                entries = efivars.boot_entries(pathlib.Path(path))
+            except (OSError, ValueError) as error:
+                entries = {"error": str(error), "file": str(path)}
+            (self.host / f"efivars-{label}.json").write_text(json.dumps(entries, indent=2) + "\n")
+            self.result.setdefault("firmware_boot_entries", {})[label] = entries
+
     def finish(self, outcome: str) -> int:
         self.transcript.pump()
         self.machine.collect()
+        if not self.machine.alive():
+            self.firmware_entries()
         self.result["outcome"] = outcome
         self.result["elapsed_seconds"] = self.elapsed()
         self.result["events"] = [
@@ -257,12 +295,15 @@ class Session:
         self.step(f"disk screen; disks listed: {list(latest.values())}")
         return target
 
-    def to_confirm(self, target: dict) -> str:
+    def to_confirm(self, target: dict, serial: str = DISK_SERIAL) -> str:
+        before = self.cursor
         self.type_line(target["index"])
         match = self.wait(r'TUR-INSTALLER: confirm name=\S+ by_id=(\S+) phrase="([^"]*)"', 60, "the confirmation screen")
         shown = match.group(2)
         self.wait_prompt("confirm")
-        expected = isovm.confirmation_phrase(DISK_SERIAL)
+        expected = isovm.confirmation_phrase(serial)
+        warning = self.transcript.search(r"TUR-INSTALLER: confirm-warning (.*)$", before)
+        self.result["facts"].setdefault("warnings", {})[serial] = warning.group(1).strip() if warning else None
         facts = self.result["facts"]
         facts["confirmation"] = {
             "by_id": match.group(1),
@@ -394,7 +435,82 @@ def scenario_too_small(s: Session) -> None:
     s.step(f"disk unchanged: {facts['disk_unchanged']}")
 
 
-SCENARIOS = {"install": scenario_install, "refuse": scenario_refuse, "too-small": scenario_too_small}
+def scenario_windows_setup(s: Session) -> None:
+    facts = s.result["facts"]
+    s.to_welcome()
+    s.type_line("shell")
+    s.wait(r"TUR-INSTALLER: shell=started", 60, "the command line")
+    time.sleep(2)
+    command = (
+        f"efibootmgr --create --disk /dev/disk/by-id/virtio-{WINDOWS_SERIAL} --part 1 "
+        "--loader '\\EFI\\Microsoft\\Boot\\bootmgfw.efi' --label 'Windows Boot Manager' "
+        "> /dev/ttyS0 2>&1; echo efibootmgr-create-status-$? > /dev/ttyS0"
+    )
+    s.type_line(command)
+    match = s.wait(r"efibootmgr-create-status-(\d+)", 60, "efibootmgr")
+    facts["efibootmgr_status"] = int(match.group(1))
+    s.type_line("efibootmgr -v > /dev/ttyS0 2>&1")
+    time.sleep(3)
+    s.shot("windows-entry-created")
+    s.type_line("exit")
+    s.wait(r"TUR-INSTALLER: shell=ended", 60, "leaving the command line")
+    s.wait_prompt("welcome")
+    s.type_line("off")
+    s.wait(r"TUR-INSTALLER: power-off", 60, "the power-off")
+    facts["powered_off_by_installer"] = s.wait_power_off()
+    if not facts["powered_off_by_installer"]:
+        s.machine.quit()
+    if facts["efibootmgr_status"] != 0:
+        raise Stop(f"efibootmgr failed with status {facts['efibootmgr_status']}")
+
+
+def scenario_beside_windows(s: Session) -> None:
+    facts = s.result["facts"]
+    s.to_welcome()
+    target = s.to_disks()
+    disks = {disk.get("serial"): disk for disk in facts.get("disks", [])}
+    windows = disks.get(WINDOWS_SERIAL)
+    facts["windows_disk_as_listed"] = windows
+    s.shot("disks-beside-windows")
+    if not windows or not target or target.get("status") != "ok":
+        raise Stop(f"the two disks are not listed as expected: {disks}")
+    # Choose the Windows disk: the warning must be there. Go back without the phrase.
+    if windows.get("index", "-").isdigit():
+        s.to_confirm(windows, WINDOWS_SERIAL)
+        s.shot("confirm-windows-disk")
+        s.type_line("", "nothing")
+        match = s.wait(r"TUR-INSTALLER: confirm result=(\w+)", 60, "going back from the Windows disk")
+        facts["windows_disk_enter_alone"] = match.group(1)
+        s.wait_prompt("disks")
+    else:
+        facts["windows_disk_enter_alone"] = "not offered"
+    phrase = s.to_confirm(target)
+    s.shot("confirm-second-disk")
+    s.type_line(phrase)
+    s.wait(r"TUR-INSTALLER: confirm result=accepted", 60, "the confirmation to be accepted")
+    match = s.wait(r'TUR-INSTALLER: installing device=(\S+) command="([^"]*)"', 90, "the installation to start")
+    facts["install_device"], facts["install_command"] = match.group(1), match.group(2)
+    match = s.wait(r"TUR-INSTALLER: install-finished status=(\d+) seconds=(\d+)", 2400, "the installation to finish")
+    facts["install_status"], facts["install_seconds"] = int(match.group(1)), int(match.group(2))
+    match = s.wait(r"TUR-INSTALLER: result=(success|failed)\b[^\n]*", 120, "the result")
+    facts["result"] = match.group(1)
+    s.wait_prompt("finished" if facts["result"] == "success" else "failed", 60)
+    s.shot("finished-beside-windows")
+    if facts["result"] != "success":
+        raise Stop("the installer reported a failure")
+    s.type_line("", "nothing")
+    facts["powered_off_by_installer"] = s.wait_power_off()
+    if not facts["powered_off_by_installer"]:
+        s.machine.quit()
+
+
+SCENARIOS = {
+    "install": scenario_install,
+    "refuse": scenario_refuse,
+    "too-small": scenario_too_small,
+    "windows-setup": scenario_windows_setup,
+    "beside-windows": scenario_beside_windows,
+}
 
 
 def main() -> int:
@@ -406,6 +522,9 @@ def main() -> int:
     ap.add_argument("--out", required=True, help="artifact directory of this scenario")
     ap.add_argument("--medium-as", choices=["usb", "cdrom"], default="usb")
     ap.add_argument("--secure-boot", action="store_true", help="OVMF with Secure Boot enforced and Microsoft's keys")
+    ap.add_argument("--extra-disk", action="append", default=[], metavar="PATH=SERIAL", help="a further writable disk")
+    ap.add_argument("--no-bootindex", action="store_true", help="pass QEMU no boot order (OVMF then keeps BootOrder)")
+    ap.add_argument("--variables-from", help="start from these firmware variables")
     ap.add_argument("--cpus", type=int, default=2)
     ap.add_argument("--memory", type=int, default=4096, help="MiB")
     ap.add_argument("--qemu", default="qemu-system-x86_64")

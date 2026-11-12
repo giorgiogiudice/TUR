@@ -27,7 +27,17 @@
 #     on it now. The phrase follows installer/tur-installer-core
 #     (plan.rs, confirmation_phrase);
 #   - immediately before writing, the disk behind the stable path is looked
-#     at again and must be the same disk with the same content.
+#     at again and must be the same disk with the same content;
+#   - every disk is described in plain words before anything is chosen:
+#     Windows (an EFI system partition holding EFI/Microsoft/Boot), BitLocker,
+#     NTFS, Linux filesystems. This is read-only: signatures are read with
+#     lsblk and a few bytes with head, and an EFI system partition is mounted
+#     read-only in a private mount namespace only to look for that directory.
+#     A disk that holds Windows or BitLocker gets an explicit warning on the
+#     confirmation screen;
+#   - nothing is written to any disk but the chosen one, and no firmware boot
+#     variable is written: `--generic-image` makes bootc skip bootupd's
+#     firmware update (ADR-0018).
 #
 # Everything shown on the screen is also written, line by line, to the first
 # serial port when the machine has one, with state lines that start with
@@ -279,6 +289,7 @@ run_checks() {
 # ---- disks ------------------------------------------------------------------------
 
 d_name=() d_model=() d_serial=() d_wwn=() d_size=() d_tran=() d_byid=() d_status=() d_code=() d_why=() d_index=()
+d_holds=() d_windows=() d_bitlocker=()
 selectable=0
 
 prop() {
@@ -339,10 +350,100 @@ fingerprint() {
     lsblk -ln -b -o NAME,SIZE,FSTYPE,UUID,PARTUUID,PARTTYPE "/dev/$1" 2> /dev/null | sha256sum | cut -d' ' -f1
 }
 
+readonly ESP_PROBE="${SESSION}/esp-probe"
+
+# has_microsoft_boot PARTITION: does this EFI system partition hold
+# EFI/Microsoft/Boot? Read-only: mounted read-only, in a mount namespace of
+# its own that ends with the command, so nothing else sees the mount and it
+# cannot outlive the look. FAT lookups ignore case.
+has_microsoft_boot() {
+    mkdir -p "${ESP_PROBE}"
+    # shellcheck disable=SC2016  # expanded by the inner shell
+    unshare --mount --propagation private /bin/sh -c '
+        mount -t vfat -o ro,nodev,nosuid,noexec "$1" "$2" 2> /dev/null || exit 2
+        test -d "$2/EFI/Microsoft/Boot"
+        rc=$?
+        umount "$2" 2> /dev/null
+        exit "$rc"' _ "$1" "${ESP_PROBE}"
+}
+
+# classify NAME: what is on a disk, in plain words. Sets `holds` (for the
+# screen), `words` (for the transcript), `windows` and `bitlocker` (yes or
+# no). Reads only.
+classify() {
+    local name="$1" part ptype fstype magic ntfs=0 bitlocker_count=0 linux=0 esp=0 other=0
+    local -a found=()
+    windows=no bitlocker=no
+    while read -r part; do
+        [ -b "/dev/${part}" ] || continue
+        # One query per field: lsblk's list output leaves an empty column
+        # blank, which would shift the columns after it.
+        ptype="$(prop "${part}" PARTTYPE)"
+        ptype="${ptype,,}"
+        fstype="$(prop "${part}" FSTYPE)"
+        # BitLocker: lsblk's (blkid's) own detection, or the signature
+        # "-FVE-FS-" at byte 3 of the volume.
+        magic="$(head -c 11 "/dev/${part}" 2> /dev/null | tail -c 8 | tr -d '\000')"
+        if [ "${fstype}" = BitLocker ] || [ "${magic}" = "-FVE-FS-" ]; then
+            bitlocker_count=$((bitlocker_count + 1))
+            continue
+        fi
+        case "${fstype}" in
+            ntfs) ntfs=$((ntfs + 1)) ;;
+            ext2 | ext3 | ext4 | xfs | btrfs | f2fs | crypto_LUKS | LVM2_member | swap | linux_raid_member | squashfs | erofs)
+                linux=$((linux + 1))
+                ;;
+            vfat)
+                if [ "${ptype}" = "${ESP_GUID}" ]; then
+                    esp=$((esp + 1))
+                    if has_microsoft_boot "/dev/${part}"; then windows=yes; fi
+                else
+                    other=$((other + 1))
+                fi
+                ;;
+            "") ;;
+            *) other=$((other + 1)) ;;
+        esac
+    done < <(lsblk -ln -o NAME "/dev/${name}" 2> /dev/null)
+    if [ "${windows}" = yes ]; then found+=("Windows (EFI/Microsoft/Boot)"); fi
+    if [ "${bitlocker_count}" -gt 0 ]; then
+        bitlocker=yes
+        found+=("BitLocker-encrypted volumes: ${bitlocker_count}")
+    fi
+    if [ "${ntfs}" -gt 0 ]; then found+=("NTFS: ${ntfs}"); fi
+    if [ "${linux}" -gt 0 ]; then found+=("Linux filesystems: ${linux}"); fi
+    if [ "${esp}" -gt 0 ] && [ "${windows}" = no ]; then found+=("EFI system partitions: ${esp}"); fi
+    if [ "${other}" -gt 0 ]; then found+=("other filesystems: ${other}"); fi
+    if [ "${#found[@]}" -eq 0 ]; then
+        if [ "$(contents "${name}" | grep -c .)" -eq 0 ]; then
+            holds="nothing (no partitions)"
+        else
+            holds="partitions without a recognised filesystem"
+        fi
+    else
+        holds="$(printf '%s; ' "${found[@]}")"
+        holds="${holds%; }"
+    fi
+    words="windows=${windows},bitlocker=${bitlocker_count},ntfs=${ntfs},linux=${linux},esp=${esp},other=${other}"
+}
+
+# serial_end I: the end of a disk's serial number, for the screen.
+serial_end() {
+    local s="${d_serial[$1]:-${d_wwn[$1]}}"
+    if [ -z "${s}" ]; then
+        echo "none reported"
+    elif [ "${#s}" -gt 8 ]; then
+        echo "...${s: -8}"
+    else
+        echo "${s}"
+    fi
+}
+
 scan_disks() {
-    local name type live index=0 i size serial wwn link status code why parts
+    local name type live index=0 i size serial wwn link status code why parts holds words windows bitlocker
     udevadm settle --timeout=15 > /dev/null 2>&1
     d_name=() d_model=() d_serial=() d_wwn=() d_size=() d_tran=() d_byid=() d_status=() d_code=() d_why=() d_index=()
+    d_holds=() d_windows=() d_bitlocker=()
     selectable=0
     live=" $(live_disks | sort -u | tr '\n' ' ')"
     while read -r name type; do
@@ -392,7 +493,11 @@ scan_disks() {
             d_index[i]="-"
         fi
         parts="$(contents "${name}" | grep -c .)"
-        mark "disk index=${d_index[i]} name=${name} size=${d_size[i]} serial=\"${serial}\" transport=${d_tran[i]:-unknown} status=${status} code=${code:-none} by_id=${link:-none} partitions=${parts}"
+        classify "${name}"
+        d_holds[i]="${holds}"
+        d_windows[i]="${windows}"
+        d_bitlocker[i]="${bitlocker}"
+        mark "disk index=${d_index[i]} name=${name} size=${d_size[i]} serial=\"${serial}\" transport=${d_tran[i]:-unknown} status=${status} code=${code:-none} by_id=${link:-none} partitions=${parts} holds=${words}"
     done < <(lsblk -dn -o NAME,TYPE 2> /dev/null)
     selectable="${index}"
     mark "disks total=${#d_name[@]} selectable=${selectable}"
@@ -505,7 +610,7 @@ screen_welcome() {
 
 dumped=no
 screen_disks() {
-    local i shown=0 lines
+    local i shown=0
     screen disks "choose the disk to erase"
     scan_disks
     if [ "${dumped}" = no ]; then
@@ -515,16 +620,13 @@ screen_disks() {
     for i in "${!d_name[@]}"; do
         shown=$((shown + 1))
         if [ "${d_status[i]}" = ok ]; then
-            say "  [${d_index[i]}]  ${d_model[i]:-unnamed disk}, $(human "${d_size[i]}"), ${d_tran[i]:-unknown connection}"
+            say "  [${d_index[i]}]  ${d_model[i]:-unnamed disk}, $(human "${d_size[i]}"), ${d_tran[i]:-unknown connection}, serial $(serial_end "${i}")"
             say "       ${d_byid[i]}"
-            lines="$(contents "${d_name[i]}" | grep -c .)"
-            if [ "${lines}" -eq 0 ]; then
-                say "       holds: no partitions"
-            else
-                say "       holds: ${lines} partition(s) or volume(s); shown before you confirm"
-            fi
         else
-            say "  [-]  ${d_model[i]:-unnamed disk}, $(human "${d_size[i]}"), ${d_tran[i]:-unknown connection}"
+            say "  [-]  ${d_model[i]:-unnamed disk}, $(human "${d_size[i]}"), ${d_tran[i]:-unknown connection}, serial $(serial_end "${i}")"
+        fi
+        say "       holds: ${d_holds[i]}"
+        if [ "${d_status[i]}" != ok ]; then
             say "       cannot be chosen: ${d_why[i]} (${d_code[i]})"
         fi
     done
@@ -593,6 +695,16 @@ screen_confirm() {
     say "  the rest of the disk. Not encrypted. No other operating system and no"
     say "  data are kept."
     say ""
+    if [ "${d_windows[i]}" = yes ] || [ "${d_bitlocker[i]}" = yes ]; then
+        say "  !!! WARNING !!!"
+        say "  This disk holds Windows. Erasing it removes Windows and everything on it."
+        if [ "${d_bitlocker[i]}" = yes ]; then
+            say "  It also holds a BitLocker-encrypted volume, which is lost with it."
+        fi
+        say "  To keep Windows, press Enter alone to go back, and choose another disk."
+        say ""
+        mark "confirm-warning kind=windows windows=${d_windows[i]} bitlocker=${d_bitlocker[i]}"
+    fi
     mark "confirm name=${d_name[i]} by_id=${d_byid[i]} phrase=\"${phrase}\""
     say "To erase this disk and install TUR, type exactly:  ${phrase}"
     ask "(Enter alone goes back and changes nothing) > "

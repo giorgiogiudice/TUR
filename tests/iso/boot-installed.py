@@ -21,6 +21,12 @@ virtual display while it runs and the disk afterwards. This driver
 - presses a key and moves the pointer, and takes another screenshot;
 - asks for power-off through ACPI and waits; stops QEMU if the guest does not.
 
+With --extra-disk, --no-bootindex and --variables-from (as for
+tests/iso/install.py) it starts the disk beside another disk, from the
+firmware variables an earlier run left, without a boot order from QEMU. It
+writes the firmware's boot entries before and after to
+OUT_DIR/host/efivars-before.json and efivars-after.json.
+
 It writes OUT_DIR/first-start.json and the screenshots, and exits 0 if a
 rendered screen was seen. tests/boot/inspect-disk.py then reads the journal
 from the disk, and tests/iso/report.py decides what it all shows.
@@ -40,6 +46,7 @@ import sys
 import time
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import efivars  # noqa: E402
 import isovm  # noqa: E402
 from isovm import vm  # noqa: E402
 
@@ -50,6 +57,9 @@ def main() -> int:
     ap.add_argument("--work", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--secure-boot", action="store_true")
+    ap.add_argument("--extra-disk", action="append", default=[], metavar="PATH=SERIAL")
+    ap.add_argument("--no-bootindex", action="store_true")
+    ap.add_argument("--variables-from")
     ap.add_argument("--timeout", type=int, default=600, help="seconds allowed until a rendered screen")
     ap.add_argument("--run-on", type=int, default=75, help="seconds to keep running after the rendered screen")
     ap.add_argument("--cpus", type=int, default=2)
@@ -74,6 +84,9 @@ def main() -> int:
         qemu=args.qemu,
         medium=None,
         secure_boot=args.secure_boot,
+        extra_disks=[tuple(item.split("=", 1)) for item in args.extra_disk],
+        use_bootindex=not args.no_bootindex,
+        variables_from=args.variables_from,
     )
     for stale in (serial_log, machine.variables, host / "qemu.log"):
         stale.unlink(missing_ok=True)
@@ -87,6 +100,9 @@ def main() -> int:
         "medium_attached": False,
         "network_devices": 0,
         "secure_boot_firmware": bool(args.secure_boot),
+        "boot_order_from_qemu": not args.no_bootindex,
+        "extra_disks": list(args.extra_disk),
+        "variables_from": args.variables_from,
         "firmware": machine.code,
         "qemu_version": machine.version,
         "command": machine.command(),
@@ -98,6 +114,13 @@ def main() -> int:
         for leftover in out.glob("*.ppm.tmp"):
             leftover.unlink()
         machine.collect()
+        for label, path in (("before", machine.variables_template), ("after", machine.variables)):
+            try:
+                entries = efivars.boot_entries(pathlib.Path(path))
+            except (OSError, ValueError) as error:
+                entries = {"error": str(error), "file": str(path)}
+            (host / f"efivars-{label}.json").write_text(json.dumps(entries, indent=2) + "\n")
+            result.setdefault("firmware_boot_entries", {})[label] = entries
         result["outcome"] = outcome
         result["elapsed_seconds"] = elapsed()
         result["events"] = [

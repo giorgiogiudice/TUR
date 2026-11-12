@@ -8,7 +8,15 @@ installation needs and the boot tests do not:
 - `InstallMachine`: the boot tests' machine with the installer medium attached,
   as a USB stick or as an optical drive, and with **no network device at
   all**. Optionally OVMF with Secure Boot enforced and Microsoft's keys
-  enrolled.
+  enrolled, more writable disks, and no boot order from QEMU at all.
+
+  About the boot order: when QEMU passes one (any `bootindex`), OVMF rewrites
+  `BootOrder` from it and *deletes* every `Boot####` variable whose device
+  path starts with `HD()` that QEMU's order does not name
+  (`OvmfPkg/Library/QemuBootOrderLib`, `BootOrderComplete` and
+  `PruneBootVariables`, edk2-stable202402). A "Windows Boot Manager" entry is
+  such an entry. Scenarios about other systems' boot entries therefore run
+  with `use_bootindex=False`, where OVMF leaves `BootOrder` alone.
 - `Keyboard`: types on the virtual machine's keyboard through QMP, the way a
   person types on the first console.
 - `Transcript`: follows the serial log for what the installer wrote there.
@@ -42,11 +50,23 @@ SECURE_BOOT_FIRMWARE = [
 class InstallMachine(vm.Machine):
     """The boot tests' machine, with an installer medium and without a network."""
 
-    def __init__(self, *, medium: str | None = None, medium_as: str = "usb", secure_boot: bool = False, **kwargs):
+    def __init__(
+        self,
+        *,
+        medium: str | None = None,
+        medium_as: str = "usb",
+        secure_boot: bool = False,
+        extra_disks: list[tuple[str, str]] | None = None,
+        use_bootindex: bool = True,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
         if medium_as not in ("usb", "cdrom"):
             raise ValueError("medium_as must be usb or cdrom")
         self.medium, self.medium_as, self.secure_boot = medium, medium_as, secure_boot
+        # (path, serial) of further writable virtio disks, after the main one.
+        self.extra_disks = list(extra_disks or [])
+        self.use_bootindex = use_bootindex
         if secure_boot:
             for code, variables in SECURE_BOOT_FIRMWARE:
                 if os.path.exists(code) and os.path.exists(variables):
@@ -69,12 +89,17 @@ class InstallMachine(vm.Machine):
                 continue
             if flag == "-machine" and self.secure_boot:
                 value += ",smm=on"
-            if flag == "-device" and value.startswith("virtio-blk-pci,drive=disk0"):
+            if flag == "-device" and value.startswith("virtio-blk-pci,drive=disk0") and self.use_bootindex:
                 # The medium starts first when it is present; the disk otherwise.
                 value += ",bootindex=1"
             command += [flag, value]
             index += 2
         command += ["-nic", "none"]
+        for number, (path, serial) in enumerate(self.extra_disks, start=1):
+            command += [
+                "-drive", f"if=none,id=extra{number},format=raw,cache=unsafe,file={path}",
+                "-device", f"virtio-blk-pci,drive=extra{number},serial={serial}",
+            ]
         if self.secure_boot:
             command += ["-global", "driver=cfi.pflash01,property=secure,value=on"]
         if self.medium:
@@ -82,21 +107,24 @@ class InstallMachine(vm.Machine):
             if self.medium_as == "usb":
                 command += [
                     "-device", "qemu-xhci,id=xhci",
-                    "-device", "usb-storage,bus=xhci.0,drive=medium,removable=on,bootindex=0,serial=TURINSTALLERMEDIUM",
+                    "-device", "usb-storage,bus=xhci.0,drive=medium,removable=on,serial=TURINSTALLERMEDIUM"
+                    + (",bootindex=0" if self.use_bootindex else ""),
                 ]
             else:
-                command += ["-device", "ide-cd,bus=ide.0,drive=medium,bootindex=0"]
+                command += ["-device", "ide-cd,bus=ide.0,drive=medium" + (",bootindex=0" if self.use_bootindex else "")]
         return command
 
 
 # Characters a person types in these tests, as QEMU key codes.
 PLAIN = {
     " ": "spc", "-": "minus", "=": "equal", ".": "dot", ",": "comma", "/": "slash", ";": "semicolon",
-    "'": "apostrophe", "\n": "ret",
+    "'": "apostrophe", "\n": "ret", "\\": "backslash", "`": "grave_accent", "[": "bracket_left",
+    "]": "bracket_right",
 }
 SHIFTED = {
     "_": "minus", "+": "equal", ">": "dot", "<": "comma", "?": "slash", ":": "semicolon", '"': "apostrophe",
     "!": "1", "@": "2", "#": "3", "$": "4", "%": "5", "^": "6", "&": "7", "*": "8", "(": "9", ")": "0",
+    "|": "backslash", "~": "grave_accent", "{": "bracket_left", "}": "bracket_right",
 }
 
 

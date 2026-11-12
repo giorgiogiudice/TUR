@@ -22,7 +22,8 @@ The two jobs of the `iso` workflow:
   product   the medium that carries the product image: what a person would
             write to a USB stick. Refusal tests, an installation onto a blank
             disk, one onto a disk that holds data, the first start of an
-            installed disk, and (informational) the same under Secure Boot.
+            installed disk, an installation onto a second disk beside a
+            Windows-like disk, and (informational) the same under Secure Boot.
   proof     a medium built the same way that carries the boot-test image, so
             that the boot test's own checks and a boot-health scenario can run
             on a disk installed from a medium.
@@ -432,6 +433,132 @@ def check_untouched(name: str, label: str, out: pathlib.Path, checks: Checks, ki
     }
 
 
+def entry_named(entries: dict | None, description: str) -> dict | None:
+    for number, entry in ((entries or {}).get("entries") or {}).items():
+        if entry.get("description") == description:
+            return dict(entry, number=number)
+    return None
+
+
+def check_beside_windows(out: pathlib.Path, checks: Checks, args, manifest: dict) -> dict:
+    """Installation onto a second disk beside a Windows-like disk."""
+    setup = load(out / "windows-setup" / "result.json")
+    run = load(out / "beside-windows" / "result.json")
+    facts = (run or {}).get("facts") or {}
+    label = "Beside Windows"
+
+    def add(ident: str, description: str, passed, detail: str, required: bool = True) -> None:
+        checks.add(f"beside-windows.{ident}", f"{label}: {description}", passed, detail, required)
+
+    created = entry_named(((setup or {}).get("firmware_boot_entries") or {}).get("after"), "Windows Boot Manager")
+    add(
+        "fixture",
+        "the firmware holds a \"Windows Boot Manager\" entry pointing at the Windows-like disk, made with efibootmgr "
+        "before the installation (the fixture)",
+        (((setup or {}).get("facts") or {}).get("efibootmgr_status") == 0 and bool(created)
+         and "\\EFI\\Microsoft\\Boot\\bootmgfw.efi" in (created or {}).get("device_path", ""))
+        if setup else None,
+        f"efibootmgr status {((setup or {}).get('facts') or {}).get('efibootmgr_status')}; entry {created}",
+    )
+    windows = facts.get("windows_disk_as_listed") or {}
+    holds = dict(item.split("=", 1) for item in (windows.get("holds") or "").split(",") if "=" in item)
+    add(
+        "listed_as_windows",
+        "the disk list describes the Windows-like disk as Windows, with its NTFS and BitLocker volumes",
+        (holds.get("windows") == "yes" and holds.get("bitlocker") == "1" and holds.get("ntfs") == "1") if run else None,
+        f"as listed: {windows}",
+    )
+    target = facts.get("target_as_listed") or {}
+    target_holds = dict(item.split("=", 1) for item in (target.get("holds") or "").split(",") if "=" in item)
+    warnings = facts.get("warnings") or {}
+    add(
+        "warning",
+        "choosing the Windows disk shows the Windows warning before the phrase, Enter alone goes back; the blank "
+        "disk shows no such warning",
+        (
+            bool(warnings.get("windows-disk-a"))
+            and "windows=yes" in warnings.get("windows-disk-a", "")
+            and facts.get("windows_disk_enter_alone") == "back"
+            and "tur-boot-test" in warnings
+            and warnings.get("tur-boot-test") is None
+            and target_holds.get("windows") == "no"
+        )
+        if run
+        else None,
+        f"warnings by disk serial: {warnings}; Enter alone on the Windows disk: {facts.get('windows_disk_enter_alone')}",
+    )
+    add(
+        "installed",
+        "TUR was installed onto the second disk only",
+        (facts.get("install_status") == 0 and facts.get("result") == "success"
+         and target.get("by_id") == "/dev/disk/by-id/virtio-tur-boot-test"
+         and run.get("outcome") == "completed")
+        if run
+        else None,
+        f"bootc exit status {facts.get('install_status')} after {facts.get('install_seconds')} s; device "
+        f"{facts.get('install_device')}; chosen {target.get('by_id')}",
+    )
+    hashes = {}
+    text = out / "beside-windows" / "disk-a.sha256.env"
+    if text.exists():
+        for line in text.read_text().splitlines():
+            key, _, value = line.partition("=")
+            hashes[key.strip()] = value.strip()
+    add(
+        "disk_a_identical",
+        "the Windows-like disk is byte-identical after the setup, the installation and TUR's first start "
+        "(SHA-256 of the whole image)",
+        (bool(hashes.get("created")) and hashes.get("created") == hashes.get("after_install")
+         == hashes.get("after_first_start"))
+        if hashes else None,
+        "; ".join(f"{key} {value}" for key, value in hashes.items()) or "no hashes recorded",
+    )
+    install_after = ((run or {}).get("firmware_boot_entries") or {}).get("after")
+    first = load(out / "beside-windows" / "first-start" / "first-start.json")
+    first_after = ((first or {}).get("firmware_boot_entries") or {}).get("after")
+    kept_install = entry_named(install_after, "Windows Boot Manager")
+    kept_first = entry_named(first_after, "Windows Boot Manager")
+    new_install = [
+        entry for entry in ((install_after or {}).get("entries") or {}).values()
+        if "fedora" in (entry.get("description") or "").lower() or "\\fedora\\" in (entry.get("device_path") or "").lower()
+    ]
+    add(
+        "windows_entry_kept",
+        "the \"Windows Boot Manager\" entry is unchanged after the installation and after TUR's first start, and "
+        "the installation itself added no boot entry",
+        (
+            bool(created and kept_install and kept_first)
+            and kept_install.get("device_path") == created.get("device_path")
+            and kept_first.get("device_path") == created.get("device_path")
+            and not new_install
+        )
+        if (run and first)
+        else None,
+        f"after the installation: {kept_install}; entries naming Fedora after it: {new_install}; "
+        f"after the first start: {kept_first}",
+    )
+    order_before = (install_after or {}).get("boot_order_descriptions")
+    order_after = (first_after or {}).get("boot_order_descriptions")
+    add(
+        "boot_order",
+        "what the first start of TUR did to the firmware's boot order (recorded; shim's fallback adds its own entry)",
+        True if (install_after and first_after) else None,
+        f"after the installation: {order_before}; after TUR's first start: {order_after}",
+        False,
+    )
+    start = check_first_start("beside-windows", "Beside Windows, first start of the second disk", out, checks)
+    check_layout("beside-windows", label, out / "beside-windows", checks, args,
+                 (manifest.get("payload") or {}).get("recorded_origin"))
+    return {
+        "windows_disk_as_listed": windows,
+        "warnings": warnings,
+        "disk_a_sha256": hashes,
+        "boot_order_after_install": order_before,
+        "boot_order_after_first_start": order_after,
+        "first_start": start,
+    }
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--job", required=True, choices=["product", "proof"])
@@ -455,6 +582,7 @@ def main() -> int:
             check_install("install-over-data", "Disk with data, confirmed, medium as an optical drive", out, checks, args, manifest)
         )
         starts.append(check_first_start("install-over-data", "Disk with data, first start", out, checks))
+        extra["beside_windows"] = check_beside_windows(out, checks, args, manifest)
         # Secure Boot: recorded, never required. Nothing in TUR has been
         # verified by firmware before this.
         installs.append(
