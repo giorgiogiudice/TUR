@@ -81,8 +81,13 @@ def request(method: str, path: str, body: dict | None = None, raw: bool = False)
                 payload = resp.read()
             return payload if raw else (json.loads(payload) if payload else None)
         except urllib.error.HTTPError as err:
-            if err.code in (301, 302, 307) and err.headers.get("Location"):
-                plain = urllib.request.Request(err.headers["Location"], headers={"User-Agent": "uos-ci-helper"})
+            if err.code in (301, 302, 307, 308) and err.headers.get("Location"):
+                location = err.headers["Location"]
+                if location.startswith(API + "/"):
+                    # The repository was renamed or moved: same API, keep the token.
+                    return request(method, location, body, raw)
+                # Logs and artifacts live on another host: follow without the token.
+                plain = urllib.request.Request(location, headers={"User-Agent": "uos-ci-helper"})
                 with urllib.request.urlopen(plain, timeout=120) as resp:
                     return resp.read()
             if err.code in (502, 503, 504) and attempt < 3:
