@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/giorgiogiudice/TUR/schemas/report-receiver.schema.json",
+  "title": "TUR problem report receiver answers",
+  "description": "The bodies the receiver (server/report-receiver) answers with, all application/json. POST /v1/reports with a bundle as the body (Content-Type application/vnd.tur.diag-bundle+zstd) answers 202 with a receipt. GET /v1/reports/<status_token> answers 200 with a state and nothing else. Every refusal answers with an error and a stable TUR-DIAG-RECEIVER code (docs/architecture/problem-reports.md). The Rust types in tur_diag::report and in the receiver are authoritative and tests compare them with this schema.",
+  "oneOf": [
+    { "$ref": "#/$defs/receipt" },
+    { "$ref": "#/$defs/state" },
+    { "$ref": "#/$defs/error" }
+  ],
+  "$defs": {
+    "receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "report_id", "status_token", "status_url", "state", "retention_days"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "report_id": { "type": "string", "pattern": "^R-[0-9a-f]{16}$" },
+        "status_token": {
+          "description": "256 random bits. The receiver keeps only its SHA-256.",
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "status_url": { "description": "The receiver's public address, /v1/reports/ and the token.", "type": "string" },
+        "state": { "const": "received" },
+        "retention_days": { "description": "How long the bundle is kept, encrypted.", "type": "integer", "minimum": 1 }
+      }
+    },
+    "state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "state", "fixed_in"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "state": {
+          "description": "received: stored, not yet filed. filed: a summary is in the tracker. fixed: a maintainer marked it fixed in a version.",
+          "enum": ["received", "filed", "fixed"]
+        },
+        "fixed_in": { "type": ["string", "null"] }
+      }
+    },
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "code", "message", "detail_code"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "code": { "type": "string", "pattern": "^TUR-DIAG-RECEIVER-[0-9]{3}$" },
+        "message": { "description": "A short sentence. Never quotes the upload.", "type": "string" },
+        "detail_code": {
+          "description": "For a bundle that did not verify, the TUR-DIAG-BUNDLE code; null otherwise.",
+          "type": ["string", "null"]
+        }
+      }
+    }
+  }
+}

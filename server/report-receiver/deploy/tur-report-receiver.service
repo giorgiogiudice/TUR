@@ -1,0 +1,48 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# /etc/systemd/system/tur-report-receiver.service
+#
+# Runs the receiver's container with Podman on the host's network, so that
+# it listens on 127.0.0.1:8470 only and sees Caddy as 127.0.0.1. Nothing in
+# the container is writable except the data directory. See
+# docs/guides/deploy-report-receiver.md.
+#
+# Files on the host, all owned by uid 10001 (the container's user):
+#   /etc/tur-report-receiver/config.json        0640
+#   /etc/tur-report-receiver/keys/<id>.key      0400, directory 0700
+#   /etc/tur-report-receiver/github-token       0400
+#   /var/lib/tur-report-receiver/               0700
+#
+# On a host with SELinux enforcing, add ,Z to each --volume option.
+
+[Unit]
+Description=TUR problem report receiver
+Documentation=https://github.com/giorgiogiudice/TUR/blob/main/docs/guides/deploy-report-receiver.md
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+Environment=IMAGE=localhost/tur-report-receiver:current
+ExecStartPre=-/usr/bin/podman rm --force --ignore tur-report-receiver
+ExecStart=/usr/bin/podman run --rm --name tur-report-receiver \
+    --network host \
+    --read-only \
+    --cap-drop all \
+    --security-opt no-new-privileges \
+    --user 10001:10001 \
+    --pids-limit 256 \
+    --memory 768m \
+    --log-driver journald \
+    --volume /etc/tur-report-receiver/config.json:/etc/tur-report-receiver/config.json:ro \
+    --volume /etc/tur-report-receiver/keys:/etc/tur-report-receiver/keys:ro \
+    --volume /etc/tur-report-receiver/github-token:/etc/tur-report-receiver/github-token:ro \
+    --volume /var/lib/tur-report-receiver:/var/lib/tur-report-receiver:rw \
+    ${IMAGE} serve --config /etc/tur-report-receiver/config.json
+ExecStop=/usr/bin/podman stop --time 40 tur-report-receiver
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=60
+
+[Install]
+WantedBy=multi-user.target

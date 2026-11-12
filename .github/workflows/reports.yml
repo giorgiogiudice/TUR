@@ -1,0 +1,196 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Problem reports (ADR-0024): the receiver in server/report-receiver and the
+# client in services/tur-diagnostics (tur-diag report ...).
+#
+# receiver     rustfmt, lockfile, clippy and the receiver's own tests (unit
+#              tests and the in-process pipeline with a planted-data corpus),
+#              and the licences of every crate compiled into it. The `rust`
+#              workflow finds server/report-receiver too, but runs only when
+#              services/, crates/ or installer/ change; this job runs when
+#              the receiver changes.
+# end-to-end   the receiver's container image, started with a stand-in for
+#              the GitHub API (a local script that records calls), and
+#              tur-diag built in the same job as the client. See
+#              server/report-receiver/ci/e2e.py for every check.
+#
+# Nothing here calls the real GitHub API or any other server, and no
+# repository, issue or secret is created.
+name: reports
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "server/report-receiver/**"
+      - "services/tur-diagnostics/**"
+      - "crates/tur-core/**"
+      - "schemas/report-*.json"
+      - "schemas/diag-bundle-manifest.schema.json"
+      - "docs/dependencies/receiver-crates.csv"
+      - "rust-toolchain.toml"
+      - ".github/workflows/reports.yml"
+  pull_request:
+    paths:
+      - "server/report-receiver/**"
+      - "services/tur-diagnostics/**"
+      - "crates/tur-core/**"
+      - "schemas/report-*.json"
+      - "schemas/diag-bundle-manifest.schema.json"
+      - "docs/dependencies/receiver-crates.csv"
+      - "rust-toolchain.toml"
+      - ".github/workflows/reports.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: reports-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: never
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  receiver:
+    name: Receiver tests and dependency licences
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: server/report-receiver
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Toolchain
+        run: |
+          rustup show active-toolchain || rustup toolchain install
+          rustc --version; cargo --version
+
+      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            server/report-receiver/target
+          key: reports-receiver-${{ hashFiles('rust-toolchain.toml', 'server/report-receiver/Cargo.toml', 'server/report-receiver/Cargo.lock') }}
+          restore-keys: reports-receiver-
+
+      - name: Lockfile and formatting
+        id: fix
+        # As in the rust workflow: CI computes the lockfile and rustfmt's
+        # output, uploads what had to change, runs the checks on the
+        # corrected tree, and fails at the end.
+        run: |
+          fixes="$RUNNER_TEMP/fixes"; mkdir -p "$fixes"
+          if ! cargo metadata --locked --format-version 1 >/dev/null 2>&1; then
+            cargo metadata --format-version 1 >/dev/null
+            cp Cargo.lock "$fixes/Cargo.lock"
+            echo "::warning::Cargo.lock in server/report-receiver was missing or stale"
+          fi
+          cargo fmt --all
+          if ! git diff --quiet -- . ':!Cargo.lock'; then
+            git diff -- . ':!Cargo.lock' > "$fixes/rustfmt.patch"
+            echo "::warning::server/report-receiver was not formatted with rustfmt"
+          fi
+          if [ -n "$(ls -A "$fixes")" ]; then echo "needed=true" >> "$GITHUB_OUTPUT"; else echo "needed=false" >> "$GITHUB_OUTPUT"; fi
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: steps.fix.outputs.needed == 'true'
+        with:
+          name: ci-fixes-server-report-receiver
+          path: ${{ runner.temp }}/fixes/
+
+      - name: Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Test
+        run: cargo test --all-targets --all-features
+
+      - name: Doc tests
+        run: cargo test --doc --all-features
+
+      - name: Licences of the crates compiled into the receiver
+        id: crates
+        run: python3 ci/crates.py . ../../docs/dependencies/receiver-crates.csv "$RUNNER_TEMP/receiver-crates.csv"
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: receiver-crates
+          path: ${{ runner.temp }}/receiver-crates.csv
+          if-no-files-found: ignore
+
+      - name: Fail if fixes were needed
+        if: steps.fix.outputs.needed == 'true'
+        run: |
+          echo "The lockfile or formatting had to be corrected. Apply CI's fixes with:"
+          echo "  scripts/dev/ci.py fixes ${{ github.run_id }} server/report-receiver"
+          exit 1
+
+  end-to-end:
+    name: Receiver container, tur-diag client, stand-in GitHub
+    needs: receiver
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Scratch directory
+        run: |
+          mkdir -p "$RUNNER_TEMP/reports-e2e/material"
+          echo "WORK=$RUNNER_TEMP/reports-e2e" >> "$GITHUB_ENV"
+
+      - name: Toolchain
+        run: |
+          rustup show active-toolchain || rustup toolchain install
+          rustc --version; cargo --version; docker --version; curl --version | head -1
+
+      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            services/tur-diagnostics/target
+            server/report-receiver/target
+          key: reports-e2e-${{ hashFiles('rust-toolchain.toml', 'services/tur-diagnostics/Cargo.lock', 'server/report-receiver/Cargo.lock') }}
+          restore-keys: reports-e2e-
+
+      - name: Build tur-diag
+        working-directory: services/tur-diagnostics
+        run: cargo build --locked --bin tur-diag
+
+      - name: Build the test bundles
+        working-directory: server/report-receiver
+        run: cargo run --locked --example planted_bundle -- "$WORK/material"
+
+      - name: Build the receiver's container image
+        run: docker build --file server/report-receiver/Containerfile --tag tur-report-receiver:ci .
+
+      - name: Lint the scripts
+        run: python3 -m py_compile server/report-receiver/ci/*.py
+
+      - name: Run the end-to-end test
+        run: |
+          python3 server/report-receiver/ci/e2e.py \
+            --tur-diag services/tur-diagnostics/target/debug/tur-diag \
+            --image tur-report-receiver:ci \
+            --material "$WORK/material" \
+            --work "$WORK" \
+            --out out/reports
+
+      - name: Summary
+        if: always()
+        run: |
+          if [ -f out/reports/summary.md ]; then cat out/reports/summary.md >> "$GITHUB_STEP_SUMMARY"; fi
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: reports-e2e
+          path: out/reports/
+          if-no-files-found: warn

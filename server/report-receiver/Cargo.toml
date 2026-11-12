@@ -1,0 +1,52 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+[package]
+name = "tur-report-receiver"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+license = "LicenseRef-TUR-Noncommercial-1.0.0"
+description = "TUR's problem report receiver (ADR-0024): accepts verified tur-diag report bundles, removes personal data again, keeps bundles encrypted for 90 days and files summaries in a private tracker."
+repository = "https://github.com/giorgiogiudice/TUR"
+publish = false
+
+# Each component is its own workspace with its own lockfile. See ADR-0005.
+[workspace]
+
+[lib]
+name = "tur_report_receiver"
+path = "src/lib.rs"
+
+[[bin]]
+name = "tur-report-receiver"
+path = "src/main.rs"
+
+[dependencies]
+# The bundle format, its verification and report.json come from tur-diag
+# itself, so that the client and the receiver cannot disagree about them.
+tur-diagnostics = { path = "../../services/tur-diagnostics" }
+tur-core = { path = "../../crates/tur-core" }
+
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+regex = "1"
+getrandom = "0.3"
+# XChaCha20-Poly1305 for bundles at rest. 0.10, the line whose interface is
+# settled; see docs/architecture/problem-reports.md, section 9.
+chacha20poly1305 = { version = "0.10", default-features = false, features = ["alloc"] }
+
+# HTTP: hyper's HTTP/1 server on a single-threaded tokio runtime, behind a
+# TLS-terminating reverse proxy (Caddy).
+tokio = { version = "1", features = ["rt", "net", "time", "signal", "sync", "macros"] }
+hyper = { version = "1", features = ["server", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
+http-body-util = "0.1"
+
+# The client for the GitHub REST API: blocking, rustls with ring and the
+# Mozilla roots built in, no other features.
+ureq = { version = "3", default-features = false, features = ["rustls"] }
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"

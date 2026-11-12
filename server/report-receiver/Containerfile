@@ -1,0 +1,36 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# TUR's problem report receiver as a container image (ADR-0024).
+#
+# Build it from the root of the repository: the receiver links
+# services/tur-diagnostics and crates/tur-core by path.
+#
+#   podman build -f server/report-receiver/Containerfile -t tur-report-receiver .
+#
+# Both bases are pinned by digest (Docker Hub, checked 12 November 2026).
+# The Rust image is the release rust-toolchain.toml names, 1.99.1. The
+# image runs as an unprivileged user (uid 10001) and needs only its
+# configuration, its keys, its token and its data directory, mounted as in
+# deploy/tur-report-receiver.service.
+
+FROM docker.io/library/rust:1.99.1-slim-trixie@sha256:f6c4a35d21dbb3c89d7a8d056c193e94fc09037f2b58dd858b09c39a47dd02d7 AS build
+WORKDIR /src
+COPY crates/tur-core crates/tur-core
+COPY services/tur-diagnostics services/tur-diagnostics
+COPY schemas schemas
+COPY server/report-receiver server/report-receiver
+WORKDIR /src/server/report-receiver
+RUN cargo build --release --locked --bin tur-report-receiver \
+ && install -D -m 0755 target/release/tur-report-receiver /out/tur-report-receiver
+
+FROM docker.io/library/debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2
+LABEL org.opencontainers.image.title="tur-report-receiver" \
+      org.opencontainers.image.description="TUR problem report receiver" \
+      org.opencontainers.image.source="https://github.com/giorgiogiudice/TUR" \
+      org.opencontainers.image.licenses="LicenseRef-TUR-Noncommercial-1.0.0"
+RUN useradd --system --uid 10001 --user-group --no-create-home \
+      --home-dir /nonexistent --shell /usr/sbin/nologin receiver
+COPY --from=build /out/tur-report-receiver /usr/bin/tur-report-receiver
+USER 10001:10001
+ENTRYPOINT ["/usr/bin/tur-report-receiver"]
+CMD ["serve", "--config", "/etc/tur-report-receiver/config.json"]

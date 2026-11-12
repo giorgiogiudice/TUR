@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/giorgiogiudice/TUR/schemas/report-preview.schema.json",
+  "title": "TUR problem report preview",
+  "description": "What tur-diag report prepare --json prints: exactly what would be sent. P@x's diag_report_prepare tool returns it (with --preview, so prepared_file is null). The Rust type tur_diag::report::Preview is authoritative and a test compares the two.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "sent", "receiver", "prepared_file", "report", "bundle", "notice"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "sent": { "description": "Always false: preparing never sends.", "const": false },
+    "receiver": {
+      "description": "The configured receiver, or null when none is configured and nothing can be sent.",
+      "type": ["string", "null"]
+    },
+    "prepared_file": {
+      "description": "Where the prepared bundle was saved; null for a preview, which saves nothing.",
+      "type": ["string", "null"]
+    },
+    "report": {
+      "description": "report.json exactly as it stands in the bundle, after redaction.",
+      "$ref": "report-request.schema.json"
+    },
+    "bundle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "bytes", "unpacked_bytes", "sha256", "redaction_profile", "files", "missing",
+        "identifiers_replaced"
+      ],
+      "properties": {
+        "bytes": { "description": "Size as sent.", "type": "integer", "minimum": 0 },
+        "unpacked_bytes": { "description": "Total size of the files.", "type": "integer", "minimum": 0 },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "redaction_profile": { "const": "default" },
+        "files": {
+          "description": "Every file in the bundle, in archive order.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "size"],
+            "properties": {
+              "path": { "type": "string" },
+              "size": { "type": "integer", "minimum": 0 }
+            }
+          }
+        },
+        "missing": {
+          "description": "What could not be collected; the reasons are those of diag-bundle-manifest.schema.json.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "reason"],
+            "properties": {
+              "path": { "type": "string" },
+              "reason": { "type": "string" }
+            }
+          }
+        },
+        "identifiers_replaced": {
+          "description": "Replacements per redaction category, as in redaction-report.json.",
+          "type": "object",
+          "additionalProperties": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "notice": { "description": "What happens next, in words.", "type": "string" }
+  }
+}

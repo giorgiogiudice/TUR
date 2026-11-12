@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/giorgiogiudice/TUR/schemas/report-record.schema.json",
+  "title": "TUR sent problem report record",
+  "description": "A record of one sent problem report, kept by tur-diag in $XDG_STATE_HOME/tur/reports/sent/<report_id>.json (mode 0600), for Settings to list. The 'list' definition is what tur-diag report list --json prints; it leaves out status_url, which holds the status token. The Rust types tur_diag::report::SentRecord and ReportList are authoritative and a test compares them with this schema.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "report_id", "sent_utc", "receiver", "status_url", "title", "kind",
+    "component", "error_code", "bundle_sha256", "bundle_bytes", "state", "fixed_in",
+    "state_checked_utc"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "report_id": { "$ref": "#/$defs/report_id" },
+    "sent_utc": { "$ref": "#/$defs/utc" },
+    "receiver": { "description": "The receiver's base address.", "type": "string" },
+    "status_url": {
+      "description": "Where the state is read: the receiver's address, /v1/reports/ and the status token.",
+      "type": "string"
+    },
+    "title": { "type": "string" },
+    "kind": { "$ref": "report-request.schema.json#/properties/kind" },
+    "component": { "$ref": "report-request.schema.json#/properties/component" },
+    "error_code": { "type": ["string", "null"] },
+    "bundle_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "bundle_bytes": { "type": "integer", "minimum": 0 },
+    "state": { "$ref": "#/$defs/state" },
+    "fixed_in": { "type": ["string", "null"] },
+    "state_checked_utc": { "oneOf": [{ "$ref": "#/$defs/utc" }, { "type": "null" }] }
+  },
+  "$defs": {
+    "report_id": { "type": "string", "pattern": "^R-[0-9a-f]{16}$" },
+    "utc": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$" },
+    "state": { "enum": ["received", "filed", "fixed"] },
+    "list": {
+      "description": "What tur-diag report list --json prints.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "directory_found", "sent", "prepared", "unreadable_records"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "directory_found": {
+          "description": "false where no report was ever prepared, and in P@x's read-only sandbox, which hides the home directory.",
+          "type": "boolean"
+        },
+        "sent": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "report_id", "sent_utc", "receiver", "title", "kind", "component", "error_code",
+              "state", "fixed_in", "state_checked_utc"
+            ],
+            "properties": {
+              "report_id": { "$ref": "#/$defs/report_id" },
+              "sent_utc": { "$ref": "#/$defs/utc" },
+              "receiver": { "type": "string" },
+              "title": { "type": "string" },
+              "kind": { "$ref": "report-request.schema.json#/properties/kind" },
+              "component": { "$ref": "report-request.schema.json#/properties/component" },
+              "error_code": { "type": ["string", "null"] },
+              "state": { "$ref": "#/$defs/state" },
+              "fixed_in": { "type": ["string", "null"] },
+              "state_checked_utc": { "oneOf": [{ "$ref": "#/$defs/utc" }, { "type": "null" }] }
+            }
+          }
+        },
+        "prepared": {
+          "description": "Prepared reports not yet sent, by file name only.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "bytes"],
+            "properties": {
+              "name": { "type": "string" },
+              "bytes": { "type": "integer", "minimum": 0 }
+            }
+          }
+        },
+        "unreadable_records": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

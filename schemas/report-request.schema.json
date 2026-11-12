@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/giorgiogiudice/TUR/schemas/report-request.schema.json",
+  "title": "TUR problem report",
+  "description": "report.json: the member that turns a support bundle into a problem report (ADR-0024; docs/architecture/problem-reports.md). Written on one line by tur-diag report prepare and redacted with the rest of the bundle. The Rust type tur_diag::report::ReportRequest is authoritative and a test compares the two. The receiver accepts each text up to twice the limits stated here, because a pseudonym can be longer than what it replaced. Error messages about this document name the field, never its value.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "kind", "title", "description", "error_code", "component",
+    "affected_version", "prepared_by", "boot_health"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "kind": {
+      "description": "What kind of problem this is.",
+      "enum": ["failed-update", "boot-problem", "crash", "repair-failed", "request"]
+    },
+    "title": {
+      "description": "One line naming the problem. Not blank; no control characters.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "description": {
+      "description": "What happened, in words. Line breaks and tabs allowed; no other control characters.",
+      "type": "string",
+      "maxLength": 4000
+    },
+    "error_code": {
+      "description": "A TUR error code (specification 29.3), or null.",
+      "type": ["string", "null"],
+      "pattern": "^TUR-[A-Z]+(-[A-Z0-9]+)*-[0-9]{3}$",
+      "maxLength": 64
+    },
+    "component": {
+      "description": "The component concerned. A fixed list, so that nothing personal can travel in a field that groups reports.",
+      "enum": [
+        "android", "apps", "audio", "boot", "catalogue", "desktop", "device", "diag", "display",
+        "install", "network", "other", "pax", "runtime", "settings", "storage", "update", "windows"
+      ]
+    },
+    "affected_version": {
+      "description": "The TUR version the problem is in when it is not the running one; for a failed update, the version that failed. null otherwise.",
+      "type": ["string", "null"],
+      "pattern": "^[0-9A-Za-z][0-9A-Za-z.+_~-]{0,63}$"
+    },
+    "prepared_by": {
+      "description": "Who wrote the text.",
+      "enum": ["person", "pax"]
+    },
+    "boot_health": {
+      "description": "What boot health recorded, for a report made from its pending notice (tur-diag report prepare --from-boot-health). null otherwise.",
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["notice_kind", "error_code", "text", "failed_check", "rejected_version"],
+      "properties": {
+        "notice_kind": { "enum": ["fallback", "not-applied", "refused", "unhealthy"] },
+        "error_code": {
+          "type": ["string", "null"],
+          "pattern": "^TUR-[A-Z]+(-[A-Z0-9]+)*-[0-9]{3}$"
+        },
+        "text": { "type": "string", "maxLength": 1000 },
+        "failed_check": {
+          "type": ["string", "null"],
+          "pattern": "^[A-Za-z0-9:_.-]{1,64}$"
+        },
+        "rejected_version": {
+          "type": ["string", "null"],
+          "pattern": "^[0-9A-Za-z][0-9A-Za-z.+_~-]{0,63}$"
+        }
+      }
+    }
+  }
+}

@@ -8,6 +8,7 @@
 //! manifest.json            what the bundle is, its files and what is missing
 //! README.txt               what this is, for whoever opens it
 //! redaction-report.json    how many identifiers were replaced, per category
+//! report.json              only in a problem report (see the `report` module)
 //! system/ boot/ hardware/ storage/ services/   the collected files
 //! checksums.sha256         SHA-256 of every other member, sha256sum format
 //! ```
@@ -33,7 +34,7 @@ use crate::manifest::{
     COLLECTOR_NAME, COLLECTOR_VERSION, CollectorInfo, FileEntry, MANIFEST_SCHEMA_VERSION, Manifest,
     format_utc,
 };
-use crate::redact::{KnownIdentifiers, Profile, RedactionReport, Redactor};
+use crate::redact::{Format, KnownIdentifiers, Profile, RedactionReport, Redactor};
 
 /// The manifest's path inside a bundle.
 pub const MANIFEST_PATH: &str = "manifest.json";
@@ -51,6 +52,20 @@ const MAX_UNPACKED_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 
 /// One archive member: its path and its content.
 pub type Member = (String, Vec<u8>);
+
+/// A document that is not collected from the machine but added to a bundle
+/// by the caller, such as a problem report's `report.json`. It is learnt
+/// from and redacted together with the collected files, with the same
+/// pseudonyms.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExtraDocument {
+    /// The member's path inside the archive.
+    pub path: String,
+    /// How the text is structured.
+    pub format: Format,
+    /// The text before redaction.
+    pub text: String,
+}
 
 /// What to collect and how.
 #[derive(Debug, Clone)]
@@ -156,16 +171,25 @@ fn is_safe_member_path(path: &str) -> bool {
 /// Fails if the data is not a complete zstd stream holding a tar archive, or
 /// if a member is anything but a regular file with a safe, unique path.
 pub fn unpack(archive: &[u8]) -> Result<Vec<Member>, DiagError> {
+    unpack_within(archive, MAX_UNPACKED_BYTES)
+}
+
+/// [`unpack`] with a smaller limit on the decompressed size, for a caller
+/// that holds less memory than `verify-bundle` may use, such as the problem
+/// report receiver. Decompression stops as soon as the limit is passed, so a
+/// small file that expands enormously costs no more than the limit.
+pub fn unpack_within(archive: &[u8], max_unpacked_bytes: u64) -> Result<Vec<Member>, DiagError> {
+    let limit = max_unpacked_bytes.min(MAX_UNPACKED_BYTES);
     let decoder = zstd::stream::read::Decoder::new(archive).map_err(damaged)?;
     let mut tarball = Vec::new();
     decoder
-        .take(MAX_UNPACKED_BYTES + 1)
+        .take(limit + 1)
         .read_to_end(&mut tarball)
         .map_err(damaged)?;
-    if length(&tarball) > MAX_UNPACKED_BYTES {
+    if length(&tarball) > limit {
         return Err(DiagError::new(
             ErrorKind::BundleTooLarge,
-            format!("the archive expands to more than {MAX_UNPACKED_BYTES} bytes"),
+            format!("the archive expands to more than {limit} bytes"),
         ));
     }
 
@@ -218,7 +242,16 @@ pub fn render_checksums(members: &[Member]) -> String {
     lines.concat()
 }
 
-fn readme(profile: Profile) -> String {
+/// The read-me line for `report.json`, present only in a problem report.
+fn report_line(has_report: bool) -> &'static str {
+    if has_report {
+        "report.json            the problem report: what happened, in words\n"
+    } else {
+        ""
+    }
+}
+
+fn readme(profile: Profile, has_report: bool) -> String {
     let profile_name = profile.as_str();
     let profile_note = match profile {
         Profile::Default => {
@@ -235,6 +268,7 @@ fn readme(profile: Profile) -> String {
              Share it only with someone you trust with those identifiers."
         }
     };
+    let report_line = report_line(has_report);
     format!(
         "TUR support bundle\n\
          ==================\n\
@@ -248,6 +282,7 @@ fn readme(profile: Profile) -> String {
          manifest.json          what this bundle is, the files in it with their\n\
          \x20                      SHA-256, and what could not be collected and why\n\
          redaction-report.json  how many identifiers were replaced, per category\n\
+         {report_line}\
          system/                kernel, operating-system release, failed units\n\
          boot/                  system journal, kernel messages, crash-store listing\n\
          hardware/              PCI, USB, disks, graphics, audio, network, firmware\n\
@@ -283,6 +318,40 @@ pub fn build_bundle(
     host: &dyn Host,
     request: &CollectRequest<'_>,
 ) -> Result<BuiltBundle, DiagError> {
+    build_bundle_with(host, request, &[])
+}
+
+/// [`build_bundle`], with documents the caller adds. Each is learnt from and
+/// redacted with the collected files, and listed in the manifest like them.
+///
+/// An extra document whose path is unsafe, is one of the bundle's own
+/// members, is given twice or is also the path of a collector is a defect in
+/// the caller and fails with an internal error.
+pub fn build_bundle_with(
+    host: &dyn Host,
+    request: &CollectRequest<'_>,
+    extras: &[ExtraDocument],
+) -> Result<BuiltBundle, DiagError> {
+    let reserved = [
+        MANIFEST_PATH,
+        README_PATH,
+        REDACTION_REPORT_PATH,
+        CHECKSUMS_PATH,
+    ];
+    let mut extra_paths = BTreeSet::new();
+    for extra in extras {
+        let path = extra.path.as_str();
+        let collides = reserved.contains(&path)
+            || request
+                .collectors
+                .iter()
+                .any(|collector| collector.bundle_path() == path);
+        if !is_safe_member_path(path) || collides || !extra_paths.insert(path) {
+            return Err(internal(format!(
+                "{path} cannot be added to a bundle as an extra document"
+            )));
+        }
+    }
     let identity = gather_identity(host);
     let options = CollectOptions {
         since_boot: request.since_boot,
@@ -297,8 +366,16 @@ pub fn build_bundle(
         known.preserved_ids.push(boot_id.clone());
     }
     let mut redactor = Redactor::new(request.profile, &known);
+    for extra in extras {
+        redactor.learn_document(extra.format, &extra.text);
+    }
     for item in &collected {
         redactor.learn_document(item.format, &item.text);
+    }
+    let mut extra_members: Vec<Member> = Vec::with_capacity(extras.len());
+    for extra in extras {
+        let text = redactor.redact_document(extra.format, &extra.text);
+        extra_members.push((extra.path.clone(), text.into_bytes()));
     }
     let mut data_members: Vec<Member> = Vec::with_capacity(collected.len());
     for item in &collected {
@@ -310,10 +387,17 @@ pub fn build_bundle(
     }
     let report = redactor.report();
 
+    let has_report = extras
+        .iter()
+        .any(|extra| extra.path == crate::report::REPORT_PATH);
     let mut listed: Vec<Member> = vec![
-        (README_PATH.to_owned(), readme(request.profile).into_bytes()),
+        (
+            README_PATH.to_owned(),
+            readme(request.profile, has_report).into_bytes(),
+        ),
         (REDACTION_REPORT_PATH.to_owned(), to_pretty_json(&report)?),
     ];
+    listed.extend(extra_members);
     listed.extend(data_members);
 
     let mut files: Vec<FileEntry> = listed
@@ -426,7 +510,24 @@ fn parse_checksums(text: &str) -> Result<BTreeMap<&str, &str>, DiagError> {
 /// `checksums.sha256` and, for listed files, its SHA-256 and size in the
 /// manifest; and that the three file sets agree exactly.
 pub fn verify_archive(archive: &[u8]) -> Result<Verified, DiagError> {
-    let members = unpack(archive)?;
+    verify_members(archive, MAX_UNPACKED_BYTES).map(|(verified, _)| verified)
+}
+
+/// [`verify_archive`] with a limit on the decompressed size, returning the
+/// verified members as well, so that a caller can read them without
+/// unpacking the archive a second time. The problem report receiver
+/// (`server/report-receiver`) checks every upload with this.
+pub fn verify_members(
+    archive: &[u8],
+    max_unpacked_bytes: u64,
+) -> Result<(Verified, Vec<Member>), DiagError> {
+    let members = unpack_within(archive, max_unpacked_bytes)?;
+    let verified = verify_unpacked(&members)?;
+    Ok((verified, members))
+}
+
+/// The checks of [`verify_archive`] on members already unpacked.
+fn verify_unpacked(members: &[Member]) -> Result<Verified, DiagError> {
     let by_path: BTreeMap<&str, &[u8]> = members
         .iter()
         .map(|(path, data)| (path.as_str(), data.as_slice()))

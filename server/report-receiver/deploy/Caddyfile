@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# /etc/caddy/Caddyfile for the receiver's server. Replace the name with the
+# domain that points at the server. Caddy obtains and renews the
+# certificate itself, answers plain HTTP only with a redirect to HTTPS, and
+# forwards the receiver's two paths to it on the loopback interface. It
+# replaces any X-Forwarded-For a client sends with the client's address,
+# which is the only address the receiver uses (for rate limits, in memory).
+#
+# No access log is configured: Caddy writes none unless told to, and an
+# access log would record every reporter's IP address.
+
+reports.example.org {
+	@receiver path /v1/reports /v1/reports/*
+	handle @receiver {
+		request_body {
+			max_size 8MiB
+		}
+		reverse_proxy 127.0.0.1:8470
+	}
+	handle {
+		respond 404
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		-Server
+	}
+}
