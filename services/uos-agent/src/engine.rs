@@ -115,7 +115,11 @@ pub fn decide(action: &Action, context: &Context, policy: &UserPolicy, now: Time
             return Decision::ask(class, Reason::AskEveryActionMode, describe(action));
         }
         return match kind {
-            PrivilegedRequestKind::FreeText => Decision::allow(class, Reason::RepairSessionOpen),
+            PrivilegedRequestKind::FreeText => Decision::ask(
+                class,
+                Reason::PrivilegedCommandNeedsApproval,
+                describe(action),
+            ),
             PrivilegedRequestKind::Typed if context.model_flags_consequential => Decision::ask(
                 class,
                 Reason::ConsequentialNeedsConfirmation,
