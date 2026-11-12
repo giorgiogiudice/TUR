@@ -100,8 +100,8 @@ nothing until you use them, and step back when you stop.
 
 ## P@x, your assistant
 
-**P@x** is the assistant built into TUR. Add your own key from Anthropic (Claude),
-OpenAI or Google, and you can speak or type to your computer and have things done.
+**P@x** is the assistant built into TUR. Run it **entirely on your own computer with local AI**, or add your own key from
+Anthropic (Claude), OpenAI, Google, DeepSeek or another compatible service, and you can speak or type to your computer and have things done.
 
 - **It can do what you can do.** It opens and operates applications from every
   ecosystem, manages files, changes settings, installs software.
@@ -114,6 +114,17 @@ OpenAI or Google, and you can speak or type to your computer and have things don
   preferences and of what worked, and it runs reminders and scheduled tasks.
 - **It is optional.** P@x is off until you turn it on, and TUR is complete
   without it.
+
+### Local AI, built in
+
+TUR can run AI models **on your own computer**. No account, no key, no bill,
+and nothing you ask leaves the machine. Choose a model in the application centre;
+TUR shows what each one is good at, how much memory it needs, how fast it will be
+on *your* computer and what its licence allows, and recommends one that fits.
+P@x can use it, a simple chat window uses it, and other applications can be
+allowed to use it through a standard local interface. Speech recognition and
+speech run locally too, so the assistant can work fully offline. Local AI is off
+until you switch it on. ([Design](docs/architecture/local-ai.md); not built yet.)
 
 **You stay in charge.** An assistant that can do anything needs limits you can
 trust, so they are built into the system, not left to the AI's judgement:

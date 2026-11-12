@@ -48,6 +48,7 @@ and Google (Gemini)**.
   between providers. The compatibility of each provider is published, like
   application compatibility.
 - A local-model adapter is not required now. The interface must not prevent one.
+  *(Superseded on 12 November 2026 by [ADR-0021](0021-local-ai.md): local AI is a built-in feature.)*
 - TUR without a key is a complete product. No boot, install, update or recovery
   path may depend on the AI layer.
 
