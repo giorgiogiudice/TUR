@@ -1,0 +1,37 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+[package]
+name = "tur-pax-providers"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+license = "LicenseRef-TUR-Noncommercial-1.0.0"
+description = "P@x provider layer: one provider-neutral interface and adapters for Anthropic, OpenAI and Google."
+repository = "https://github.com/giorgiogiudice/TUR"
+publish = false
+
+# Each component is its own workspace with its own lockfile. See ADR-0005.
+[workspace]
+
+[lib]
+name = "tur_pax_providers"
+path = "src/lib.rs"
+
+[[bin]]
+name = "tur-pax-providers"
+path = "src/main.rs"
+
+[dependencies]
+# Configuration and the conversation model (de)serialisation.
+serde = { version = "1.0", features = ["derive"] }
+# Provider wire formats are JSON.
+serde_json = "1.0"
+# Blocking HTTP client. TLS is rustls with the bundled web PKI roots; the
+# default gzip feature is left out because event streams are not compressed.
+ureq = { version = "3.5", default-features = false, features = ["rustls"] }
+# Overwrites the API key in memory when it is dropped.
+zeroize = "1.8"
+uos-core = { path = "../../crates/uos-core" }
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"

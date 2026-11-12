@@ -1,0 +1,583 @@
+# P@x provider layer
+
+**Part of the [AI control layer](ai-control-layer.md)**, sections 3, 7, 8 and 10
+**Component:** `services/tur-pax-providers`
+**Related decisions:** [ADR-0004](../adr/0004-ai-provider-model.md), [ADR-0005](../adr/0005-languages-and-workspace.md), [ADR-0008](../adr/0008-assistant-tool-protocol.md)
+
+This document describes the provider layer as implemented: the neutral
+conversation model and why it has the shape it has, how each provider maps onto
+it, what each adapter declares it can do, the error codes, how untrusted content
+is marked, what was verified in each provider's documentation, and what is
+known to be missing.
+
+**Nothing here has been tested against a real provider.** The adapters are
+written from the providers' published documentation, read on 2026-11-12, and
+tested against a local server that replays responses written by hand from that
+documentation. No request has been sent to Anthropic, OpenAI or Google, and no
+API key exists in CI. Every statement below about a provider's behaviour is a
+statement about its documentation. A conformance run against real providers is
+the next step and is listed under [known gaps](#11-known-gaps).
+
+---
+
+## 1. What the layer is
+
+One interface, three adapters, no policy.
+
+```text
+orchestrator ── Request ──▶ Provider::stream ──▶ EventStream (an iterator)
+                                   │
+                    adapter: neutral request → the provider's JSON
+                             the provider's event stream → neutral events
+                                   │
+                              HTTPS to the provider
+```
+
+The layer sends a conversation and streams back what the model said and which
+tools it wants to call. It does not decide whether a tool call may run: that is
+the policy engine (`services/uos-agent`), and every tool call this layer
+reports is a proposal with no authority. It does not run tools, keep
+conversation history, or store keys.
+
+The interface is blocking. A stream is an iterator; the orchestrator runs a
+call on a thread of its own. There is no async runtime.
+
+| Module | Content |
+|---|---|
+| `model` | The neutral conversation model and the stream events |
+| `provider` | The `Provider` trait, `Capabilities`, `EventStream`, `connect` |
+| `anthropic`, `openai`, `google` | The adapters |
+| `error` | `ProviderError` and the `UOS-AI-PROVIDER-*` registry |
+| `secret` | `ApiKey`, `KeySource`, `EnvKeySource` |
+| `config` | The configuration file format |
+| `spend` | `SpendMeter`: usage per task, cost, the task limit |
+| `http`, `sse`, `toolcalls` | Private: transport and retries, the event-stream parser, tool-call assembly |
+
+## 2. Which API of each provider, and why
+
+| Provider | API | Reason |
+|---|---|---|
+| Anthropic | Messages API, `POST /v1/messages`, API version `2026-10-21` | The provider's one conversation API. The version is the current one and is pinned in the `anthropic-version` header. |
+| OpenAI | Responses API, `POST /v1/responses` | The provider's guide says: "While Chat Completions remains supported, Responses is recommended for all new projects." Chat Completions is not used. |
+| Google | Gemini Interactions API, `POST /v1beta/interactions` | The provider's overview says the Interactions API is generally available as of June 2026 and "the recommended interface for all new projects", and that `generateContent` "is now considered legacy" though it "remains fully supported". |
+
+The task that produced this layer named `generateContent` for Google. That was
+written before the documentation was read. The documentation at
+`ai.google.dev` now redirects to `aistudio.google.com`, is organised around the
+Interactions API, and no longer gives the `generateContent` streaming format,
+error format or thought-signature rules in its guides. An adapter for
+`generateContent` could therefore not have been verified against current
+documentation, and would have been new code against an interface its provider
+calls legacy. The Interactions API was used instead. This is a deviation from
+the brief and is flagged for review.
+
+OpenAI and Google both keep conversations on their servers by default. Both
+adapters send `store: false` on every request and carry the whole conversation
+each time: see [section 9](#9-privacy-what-each-provider-keeps).
+
+## 3. The neutral model
+
+### 3.1 Shape
+
+```text
+Request   model, system?, messages[], tools[], max_output_tokens
+Message   role (user | assistant), content[]
+Part      Text | Image | ToolCall | ToolResult | Opaque
+Tool      name, description, input_schema (JSON Schema, type object)
+
+StreamEvent   TextDelta
+              ToolCallStart / ToolCallArgumentsDelta / ToolCallEnd
+              Opaque
+              Usage
+              Finish(EndTurn | ToolUse | OutputLimit | Refusal(error) | Error(error))
+```
+
+### 3.2 Why this shape
+
+Each choice below is where the three interfaces differ, and what was chosen so
+that none of them is a second-class fit.
+
+| Choice | Reason |
+|---|---|
+| **Two roles, no system role.** The system text is a field of the request. | All three take instructions outside the conversation: `system`, `instructions`, `system_instruction`. A system role inside the message list would have to be hoisted out for every provider. It also keeps a rule simple: nothing untrusted can be in the instructions, because nothing but the orchestrator's own text is ever put in that field. |
+| **A tool result is a part of a user message**, not a role of its own. | Anthropic puts `tool_result` blocks in a user message. OpenAI and Google use separate items (`function_call_output`, `function_result`) in a flat list. A part of a user message maps to both; a separate role would not map to Anthropic without merging. |
+| **A tool result carries the tool name** as well as the call identifier. | Google's `function_result` requires `name`. The other two ignore it. |
+| **Tool-call arguments are always a JSON object**, and a call is delivered complete only if they parse as one. | Anthropic's `input` and Google's `arguments` are objects; OpenAI's `arguments` is a JSON string. All three stream them as fragments of JSON text. The policy engine needs an object. |
+| **An opaque part**, tagged with its provider, that is sent back unchanged. | All three return a record of the model's reasoning that they expect in the next request, each in its own form: Anthropic `thinking` and `redacted_thinking` blocks with a signature, OpenAI `reasoning` items with `encrypted_content`, Google `thought` steps with a signature. Anthropic rejects a tool-use turn whose thinking blocks were changed. The orchestrator must not interpret these, so they are opaque. They are tagged so that an adapter sends back only its own. |
+| **Events arrive in the provider's order, and `Turn::collect` keeps that order** in the assistant message. | Anthropic requires thinking blocks to stay where they were relative to the tool call. OpenAI requires a reasoning item to precede the call it led to. Google's documentation says to send the model's steps back "exactly as received". |
+| **A tool call has a start, argument fragments and an end**, numbered from 0 within a response. | That is the common outline of `content_block_*` (Anthropic), `response.output_item.*` with `response.function_call_arguments.*` (OpenAI) and `step.*` (Google). The providers' own indices differ in meaning and are not exposed. |
+| **Usage is a snapshot of the response so far**, not an increment. | Anthropic reports cumulative counts twice; OpenAI and Google report once at the end. A snapshot is the only form all three can produce. |
+| **Input tokens include cached ones; output tokens include reasoning.** | Anthropic reports uncached input separately from cache reads and writes; OpenAI reports a total with a cached part; Google reports thought tokens beside output tokens. The neutral counts are the totals that are billed as input and as output. |
+| **One finish event, always.** A refusal and an error are finish reasons that carry a typed error. | Section 10 of the design requires a refusal, a rate limit, a timeout and a malformed response to be normal results. A stream that always ends the same way cannot be mishandled by forgetting a case. |
+| **Refusal is separate from error.** | Anthropic reports a refusal as a stop reason, OpenAI as a refusal content part or a `content_filter` incomplete response, Google as a "generation blocked" error code. The orchestrator tells the user something different for a refusal than for a failure. |
+| **The output limit is a field of the request.** | Anthropic requires `max_tokens`. The other two accept a limit. One required field is simpler than an optional one with per-provider defaults. |
+| **Images are base64 with a media type.** | That is what all three accept inline (Anthropic `source.base64`, OpenAI a `data:` URL, Google `data` with `mime_type`). URLs and file uploads are provider-specific and are not modelled. |
+
+### 3.3 The stream contract
+
+`Provider::stream` returns at once and sends nothing. The request is sent when
+the stream is first polled. The stream then yields zero or more events and
+**exactly one `Finish`**, and nothing after it. This holds for every outcome,
+including a request that could not be built, a connection that could not be
+made and a stream cut half-way.
+
+On `Refusal` and on `Error`, what was streamed in that response is incomplete
+and must be discarded. Anthropic's documentation says so explicitly for a
+refusal that arrives mid-stream; the same rule is applied to all three.
+
+### 3.4 Tool definitions and the tool manifest
+
+A `ToolDefinition` is a name, a description and a JSON Schema: the three fields
+a tool has in the reviewed manifest of `services/uos-agent`. It is built with
+`ToolDefinition::new(tool.name(), tool.description(), tool.input_schema().clone())`.
+
+This crate does not depend on `uos-agent`. The dependency will run the other
+way: `uos-agent` owns all communication with providers (ADR-0004) and will
+depend on this crate, so a dependency from here to there would be circular. The
+constructor takes the three plain values instead.
+
+The name must be acceptable to all three providers, so it is limited to 1 to 64
+characters from `A-Z`, `a-z`, `0-9`, `_` and `-`. Manifest tool names
+(`^[a-z][a-z0-9_]{0,63}$`) always qualify.
+
+## 4. Mapping, per provider
+
+### 4.1 Request
+
+| Neutral | Anthropic | OpenAI | Google |
+|---|---|---|---|
+| Endpoint | `POST /v1/messages` | `POST /v1/responses` | `POST /v1beta/interactions` |
+| Key | header `x-api-key` | header `Authorization: Bearer` | header `x-goog-api-key` |
+| Version | header `anthropic-version: 2026-10-21` | none | path `v1beta` |
+| `model` | `model` | `model` | `model` |
+| `system` | `system` | `instructions` | `system_instruction` |
+| `max_output_tokens` | `max_tokens` | `max_output_tokens` | `generation_config.max_output_tokens` |
+| Streaming | `stream: true` | `stream: true` | `stream: true` |
+| Stateless | always | `store: false` | `store: false` |
+| Tool | `{name, description, input_schema}` | `{type: "function", name, description, parameters, strict: false}` | `{type: "function", name, description, parameters}` |
+| User text | `{type: "text"}` block | `input_text` part of a `user` message | `text` content of a `user_input` step |
+| Image | `{type: "image", source: {type: "base64", media_type, data}}` | `{type: "input_image", detail: "auto", image_url: "data:…"}` | `{type: "image", mime_type, data}` |
+| Assistant text | `text` block | `{role: "assistant", content: "…"}` | `model_output` step |
+| Tool call | `tool_use` block `{id, name, input}` | `function_call` item `{call_id, name, arguments}` (a JSON string) | `function_call` step `{id, name, arguments}` |
+| Tool result | `tool_result` block `{tool_use_id, content[], is_error}` | `function_call_output` item `{call_id, output}` | `function_result` step `{call_id, name, result[], is_error}` |
+| Opaque | `thinking` / `redacted_thinking` block, as received | `reasoning` item, as received | `thought` step, as received |
+
+Adapter behaviour that follows from the providers' rules:
+
+- **Anthropic.** Neighbouring messages of one role are sent as one, because the
+  API takes alternating turns. Within a user turn the `tool_result` blocks are
+  placed first, as the API requires. Empty text blocks are left out.
+- **OpenAI.** A user message becomes one `function_call_output` item for each
+  tool result, followed by one message item with the text and images. A tool
+  output that is all text is sent as a string; one with an image is sent as a
+  list of `input_text` and `input_image` parts. The API has no field that marks
+  a failed call, so `is_error` is not sent: the text has to say that the call
+  failed. `strict: false` is sent because without it the API tries to rewrite
+  the schema for strict mode; the schema goes as the manifest has it.
+- **Google.** A user message becomes one `function_result` step for each tool
+  result, followed by one `user_input` step.
+- **All three.** A part in the wrong role (a tool call in a user message, an
+  image in an assistant message) is rejected locally with
+  `UOS-AI-PROVIDER-004` before anything is sent. An opaque part from another
+  provider is left out.
+
+No sampling parameter (`temperature`, `top_p`, `top_k`), no thinking or
+reasoning setting and no tool-choice setting is sent to any provider. On the
+Anthropic API version used here, a sampling parameter is rejected with a 400,
+and several current models reject a forced tool choice. The model's defaults
+apply.
+
+### 4.2 Stream
+
+| Neutral event | Anthropic | OpenAI | Google |
+|---|---|---|---|
+| `TextDelta` | `content_block_delta` with `text_delta` | `response.output_text.delta` | `step.delta` with `text` |
+| `ToolCallStart` | `content_block_start` with a `tool_use` block | `response.output_item.added` with a `function_call` item | `step.start` with a `function_call` step |
+| `ToolCallArgumentsDelta` | `input_json_delta` | `response.function_call_arguments.delta` | `step.delta` with `arguments_delta` |
+| `ToolCallEnd` | `content_block_stop` | `response.output_item.done` (its `arguments` are authoritative) | `step.stop` |
+| `Opaque` | `content_block_stop` of a thinking block, assembled from `thinking_delta` and `signature_delta` | `response.output_item.done` with a `reasoning` item | `step.stop` of a `thought` step, assembled from `thought_signature` and `thought_summary` |
+| `Usage` | `message_start`, `message_delta` | `response.completed`, `response.incomplete`, `response.failed` | `interaction.completed` |
+| `Finish` | `message_stop` | `response.completed`, `response.incomplete`, `response.failed`, `error` | `interaction.completed`, `error` |
+| Ignored | `ping`, unknown types | `response.created`, `response.in_progress`, content part events, unknown types | `interaction.created`, `interaction.status_update` (unless failed or cancelled), unknown types, the `[DONE]` marker |
+
+| Finish reason | Anthropic `stop_reason` | OpenAI | Google `status` |
+|---|---|---|---|
+| `EndTurn` | `end_turn`, `stop_sequence` | `response.completed` with no function call | `completed` |
+| `ToolUse` | `tool_use` | `response.completed` with at least one function call | `requires_action` with at least one function call |
+| `OutputLimit` | `max_tokens`, `model_context_window_exceeded` | `response.incomplete`, reason `max_output_tokens` | `incomplete`, `requires_continuation` |
+| `Refusal` | `refusal` (detail from `stop_details`) | a `refusal` content part; `response.incomplete` with `content_filter`; a failed response with a policy code | an error with a "generation blocked" code (`safety`, `recitation`, `language`, `prohibited_content`, `spii`, `blocklist`, `content_blocked`, the `image_*` codes) |
+| `Error` | an `error` event; an unrecognised stop reason, `pause_turn` included | `response.failed`; an `error` event; an unrecognised incomplete reason | an `error` event; `failed`; `cancelled`; an unrecognised status |
+
+OpenAI has no stop reason for tool use: the adapter reports `ToolUse` when the
+response completed and contained a function call.
+
+The event-stream parser accepts chunks split anywhere, both line endings,
+comment lines (the keep-alive some providers send), and events and fields it
+does not know. Every adapter ignores event types it does not know, as all three
+providers ask. A stream that closes before the provider's final event is a
+`Network` error if any event had arrived, and a `MalformedResponse` if none
+had. Data that is not a JSON object, bytes that are not UTF-8, and an event
+larger than 8 MiB are `MalformedResponse`.
+
+A tool call whose arguments do not parse as a JSON object is never delivered as
+complete. If the response then claims a normal end, the finish is a
+`MalformedResponse` error. If the response was cut at the output limit or
+refused, the incomplete call is expected and the provider's reason stands.
+
+## 5. Capabilities
+
+Declared by each adapter and printed by `tur-pax-providers check`. The rows are
+the table of section 10 of the design, with three additions the orchestrator
+needs.
+
+| Capability | Required | Anthropic | OpenAI | Google |
+|---|---|---|---|---|
+| Streaming conversation | Yes | yes | yes | yes |
+| Tool calling with JSON Schema inputs | Yes | yes | yes | yes |
+| Several tool calls in one response | – | yes | yes | yes |
+| Image input | Yes | yes | yes | yes |
+| Images in tool results | – | yes | yes | yes |
+| Native computer control, offered by the provider | No | `computer_toolset_20260801` | `computer` | `computer_use` |
+| Native computer control, implemented here | No | no | no | no |
+| Model discovery | No | no | no | no |
+| Speech services | No | no | no | no |
+
+**Native computer control** is recorded, not implemented: screen control is out
+of scope for this layer. What each provider documents today:
+
+| Provider | Tool | Shape |
+|---|---|---|
+| Anthropic | `{"type": "computer_toolset_20260801"}` | No name and no display size. Optional `configs` to switch member tools off. The model's calls are ordinary `tool_use` blocks whose `name` is a member (`screenshot`, `left_click`, `type`, `zoom`, …) and which carry `"toolset_name": "computer"`; each result must repeat `toolset_name`. Several calls per turn are usual. No beta header. The earlier `computer_20251124` tool is rejected by current models on the provider's own API. |
+| OpenAI | `{"type": "computer"}` | The model returns `computer_call` items with an ordered `actions` array (`click`, `type`, `screenshot`, …). The client returns a `computer_call_output` item with a `computer_screenshot`. |
+| Google | `{"type": "computer_use", "environment": "browser" \| "mobile" \| "desktop"}` | Adds predefined functions. Options: `excluded_predefined_functions`, `enable_prompt_injection_detection`, `disabled_safety_policies`. |
+
+All three can ask for several actions in one turn. Each action must still pass
+the policy engine one by one.
+
+**Model discovery** is not implemented. All three providers offer an endpoint
+that lists models; `GET /v1/models` was seen in the Anthropic and OpenAI
+documentation, and the Google one was not looked up. Model names remain
+configuration.
+
+## 6. Errors
+
+Every failure is a `ProviderError` with one of these kinds. The code is stable
+and the message is what the user is shown. An error may also carry the
+provider, the HTTP status, the retry delay the provider gave, and a detail,
+which is the provider's own message cut to 300 characters.
+
+| Code | Kind | Message | Retried |
+|---|---|---|---|
+| `UOS-AI-PROVIDER-001` | Authentication failed | The provider did not accept the API key, or the key is not permitted to do this. | No |
+| `UOS-AI-PROVIDER-002` | Rate limited | The provider is limiting requests for this key. Try again in a moment. | Yes |
+| `UOS-AI-PROVIDER-003` | Overloaded | The provider is overloaded or temporarily unavailable. | Yes |
+| `UOS-AI-PROVIDER-004` | Request rejected | The provider rejected the request. | No |
+| `UOS-AI-PROVIDER-005` | Refusal | The model declined to respond to this request. | No |
+| `UOS-AI-PROVIDER-006` | Network | The provider could not be reached, or the connection was lost. | Yes |
+| `UOS-AI-PROVIDER-007` | Malformed response | The provider sent a response that could not be understood. | No |
+| `UOS-AI-PROVIDER-008` | Timed out | The provider did not respond in time. | Yes |
+| `UOS-AI-PROVIDER-009` | Quota exhausted | The provider account has no remaining credit or quota. | No |
+| `UOS-AI-PROVIDER-010` | Spend limit reached | The spending limit set for this task was reached. | No |
+| `UOS-AI-PROVIDER-011` | Configuration invalid | The provider configuration is not valid. | No |
+| `UOS-AI-PROVIDER-012` | Key unavailable | No usable API key is available for this provider. | No |
+
+How the providers' errors map:
+
+| Kind | Anthropic | OpenAI | Google |
+|---|---|---|---|
+| Authentication failed | 401 `authentication_error`, 403 `permission_error` | 401, 403 | 401 `authentication`, 403 `permission_denied` |
+| Rate limited | 429 `rate_limit_error` | 429 (`slow_down`, `rate_limit_exceeded`) | 429 `rate_limit_exceeded`, `too_many_requests` |
+| Overloaded | 500 `api_error`, 529 `overloaded_error`, other 5xx | 500, 503 `server_is_overloaded`, other 5xx | 500 `api_error`, 503 `service_unavailable` |
+| Request rejected | 400 `invalid_request_error`, 404, 409, 413, other 4xx | 400, 404, other 4xx | 400 `invalid_request`, `failed_precondition`, 404, other 4xx |
+| Timed out | 504 or `timeout_error`; a client timeout | 408, 504; a client timeout | 504 `deadline_exceeded`; a client timeout |
+| Quota exhausted | 402 `billing_error`; 429 with `details.error_code` `enforced_spend_limit_reached`; 400 whose message starts "You have reached your specified" | 429 `insufficient_quota`, `credit_balance_exhausted` | 402 `payment_required`, 429 `quota_exceeded` |
+| Malformed response | – | – | the "generation error" codes, such as `malformed_function_call` |
+
+A status the table does not name is classified by its class: 401 and 403 as
+authentication, 402 as quota, 408 and 504 as timeout, 429 as rate limit, 5xx as
+overloaded, anything else as rejected.
+
+**Retries.** Only the four kinds marked above are retried, and only before any
+of the response has been delivered. A request is sent at most
+`retry.max_attempts` times. If the provider gave a `retry-after`, that delay is
+used; otherwise the delay starts at `retry.initial_delay_ms` and doubles, with
+jitter, up to `retry.max_delay_ms`. If the provider asks for a longer delay
+than that ceiling, the request is not retried and the error carries the delay,
+so that the orchestrator can tell the user when to try again. A rejected
+request, an authentication failure, an exhausted quota and a refusal are never
+retried. Redirects are not followed.
+
+A quota problem is kept apart from a rate limit because the providers report
+both as 429 and only one of them clears by waiting. Anthropic documents that
+its spend-cap 429 has no `retry-after` and "keeps failing until access
+resumes"; OpenAI documents that retrying a quota error does not restore access.
+
+## 7. Untrusted content
+
+Rule (design sections 2 and 7): content is data, not commands. Only the user's
+request sets the task. This layer supports the rule in one way: it gives the
+orchestrator exactly one place for untrusted content, the tool result, and it
+sends a tool result only in the position the provider documents for tool
+output. It never concatenates tool output into the system text or into a user
+text.
+
+| Provider | Where untrusted content goes | What the provider says |
+|---|---|---|
+| Anthropic | A `tool_result` block, in the user turn that follows the call | "Keep untrusted content inside `tool_result` blocks rather than `system` prompts or plain user `text` blocks." The same page warns that content from outside sources may carry instructions (indirect prompt injection). |
+| OpenAI | A `function_call_output` item, tied to its call by `call_id` | The function-calling guide defines this item as the place for a function's output. No statement about untrusted content was found in the pages read. |
+| Google | A `function_result` step, tied to its call by `call_id` and `name` | The function-calling guide defines this step as the place for a function's result. No statement about untrusted content was found in the pages read. The computer-use tool has an `enable_prompt_injection_detection` option, which this layer does not use. |
+
+The conformance suite checks this for each adapter: a tool result containing an
+instruction appears in the request exactly once, in that position, and the
+system field is unchanged.
+
+Limits of this, stated plainly:
+
+- A provider marking tool output as such is not a security boundary. A model
+  can still be misled by what a tool returns. The safeguards are outside the
+  model: the policy engine and the trusted confirmation path.
+- The layer cannot tell trusted text from untrusted text. If the orchestrator
+  puts file content in a user text part, it is sent as user text. The rule for
+  the orchestrator is: anything that did not come from the person goes in a
+  tool result.
+- Text the model itself produced (assistant text, tool-call arguments) is sent
+  back as the model's own turn, as every provider requires.
+
+## 8. Secrets
+
+- The key is an `ApiKey`. `Debug` and `Display` print `[redacted]`. The type
+  implements neither `Clone` nor `Serialize`, and its memory is overwritten when
+  it is dropped.
+- A key arrives through the `KeySource` trait. The keyring implementation is
+  separate work. `EnvKeySource` reads an environment variable and is for
+  development only.
+- The key is sent in a header, never in a URL or a body. The header value is
+  marked sensitive for the HTTP client.
+- A base URL must be `https`, except for a loopback host, so that a key is not
+  sent unencrypted over a network.
+- The configuration format has no field for a key, and rejects unknown fields.
+- Errors never contain the HTTP client's own error text, only a fixed
+  description. A provider's error message is included as the detail, after every
+  occurrence of the key has been removed from the response body or the event
+  data it came from.
+- A test runs every kind of outcome against every adapter with a known key,
+  against a server that repeats the key in its error messages, renders every
+  event and error with `Debug` and `Display`, and asserts that the key is in
+  none of them. It also asserts that it saw every error kind and every event
+  type.
+
+Limits: the HTTP client copies the header value into its own buffers, which
+are not overwritten. A key held in the environment of a process (the
+development source) is readable by other processes of the same user.
+
+## 9. Privacy: what each provider keeps
+
+Section 8 of the design says what leaves the machine. Two of the three
+interfaces also keep it by default, which the design did not anticipate.
+
+| Provider | Default | What the adapter does |
+|---|---|---|
+| Anthropic | The Messages API is stateless: the conversation is sent with each request. Retention is governed by the account's terms. The reference material bundled with the development tooling says that some current models are not available to accounts with zero data retention; this was not checked against the provider's own pages. | Nothing to switch off. |
+| OpenAI | A response is stored: `store` "defaults to true", and stored data is kept "for at least 30 days". | Sends `store: false` on every request and carries the whole conversation each time. Reasoning items come back with `encrypted_content` in this mode and are sent back as opaque parts. |
+| Google | An interaction is stored (`store=true`): 55 days on the paid tier, 1 day on the free tier. | Sends `store: false` on every request and carries the whole conversation each time, with the model's `thought` steps as opaque parts, as the documentation requires for stateless use. |
+
+`store: false` is what the documentation offers. It is not a statement about
+what a provider logs for abuse monitoring or under its terms. The providers'
+terms of use and data-retention terms were not reviewed for this work; ADR-0004
+asks for that when an adapter is written, and it is still to be done before the
+consent text of section 8 is written.
+
+## 10. Configuration, spend and the command-line tool
+
+**Configuration.** `schemas/pax-provider-config.schema.json`; the loader
+`ProviderConfig::from_json` is authoritative. Fields: `schema_version`,
+`provider`, `base_url` (optional), `model`, `max_output_tokens`, `timeouts`,
+`retry`, `prices` (optional), `task_limit` (optional). `model` and
+`max_output_tokens` are required and have no default. There are no default
+prices. A test checks that no source file of the crate contains a model name.
+
+`base_url` is how the tests point an adapter at the fake server, and how a
+compatible gateway can be used.
+
+**Spend.** A `SpendMeter` adds up the usage of every request of a task and, if
+prices are configured, converts it to a cost. A stream read through
+`SpendMeter::meter` is cut, and finishes with `UOS-AI-PROVIDER-010`, when the
+task passes its limit; a task already over its limit sends nothing more.
+
+What this can and cannot do: the meter acts on the usage the provider reports.
+Anthropic reports input tokens at the start of a response and output tokens at
+the end; OpenAI and Google report both at the end. So the meter stops a task
+between responses, not in the middle of one. A single response is bounded by
+`max_output_tokens`, which is why that field is required. The cost is an
+estimate for display; the provider's invoice is the authority. The per-day
+limit of the design is the orchestrator's to keep: this layer has no state
+across tasks.
+
+**Command line.**
+
+```text
+tur-pax-providers check --config <file> [--ping] [--key-env <VARIABLE>]
+```
+
+`check` validates a configuration and prints the endpoint, the API and the
+capabilities the adapter declares. It makes no network call. With `--ping` it
+reads the key from an environment variable (`TUR_PAX_API_KEY` by default) and
+sends one request of at most 64 output tokens, which the provider bills. Exit
+status: 0 valid (and ping succeeded), 1 invalid configuration, 2 usage error,
+3 ping failed.
+
+## 11. Known gaps
+
+- **Not run against any real provider.** See the top of this document.
+- **Model discovery** is not implemented.
+- **Native computer control** is not implemented.
+- **Reasoning is not shown.** Thinking summaries are kept inside opaque parts
+  and are not surfaced as events.
+- **Server-side tools** (web search, code execution, provider-side MCP) are not
+  requested, and their blocks and items are ignored if they appear.
+- **Provider-side MCP is deliberately not used.** ADR-0008 makes MCP the tool
+  protocol with `uos-agent` as the gateway. All three providers also offer a
+  connector that lets the provider call an MCP server itself. That would bypass
+  the policy engine, so the adapters send tools as plain function definitions
+  built from the manifest. The translation is three field names per provider.
+- **Anthropic refusal fallback** (`fallbacks`, a beta) is not requested. A
+  refusal is reported as a refusal.
+- **Anthropic eager tool-input streaming** (`eager_input_streaming`) is not
+  set, because a gateway behind a custom base URL may reject the field. Tool
+  inputs are buffered by the API until each parameter is complete.
+- **History must stay append-only.** Anthropic checks that a thinking block is
+  sent back in the conversation that produced it; a request whose earlier turns
+  were edited is rejected on current models. An orchestrator that compacts or
+  rewrites history must drop the opaque parts of the turns it changes.
+- **Resuming a cut stream** is not attempted. The failure is reported and the
+  orchestrator decides.
+- **A request cannot be cancelled while it waits to retry.** Dropping the
+  stream closes the connection once the wait is over.
+- **Line endings.** The event-stream parser does not treat a bare carriage
+  return as a line ending. None of the three providers sends one.
+- **`retry-after` as a date** is not read; only the seconds form is.
+- **Tool schemas are sent unchanged.** Google documents that it supports "a
+  subset of the OpenAPI schema" for parameters. Whether every keyword of the
+  manifest's subset, `additionalProperties` among them, is accepted was not
+  verified.
+
+## 12. What was verified, and what was not
+
+All pages were read on **2026-11-12**.
+
+### Anthropic
+
+| Verified | Source |
+|---|---|
+| Event types and order; `ping`; the `error` event; unknown event types to be ignored; `text_delta`, `input_json_delta`, `thinking_delta`, `signature_delta`; cumulative usage in `message_delta`; raw stream examples for text and tool use | <https://platform.claude.com/docs/en/build-with-claude/streaming> |
+| Status codes and error types; the error body; `request-id`; which errors the SDK retries; `retry-after` | <https://platform.claude.com/docs/en/api/errors> |
+| `retry-after` in seconds; the spend-cap 429 and its `details.error_code`; the 400 for a user-set spend limit | <https://platform.claude.com/docs/en/api/rate-limits> |
+| The list of stop reasons | <https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons> (the first 100,000 characters of the page) |
+| The refusal response, `stop_details`, its categories; a refusal may arrive mid-stream and partial output is to be discarded | <https://platform.claude.com/docs/en/build-with-claude/refusals-and-fallback> |
+| `tool_use` and `tool_result` blocks; results first in the user turn; `is_error`; images in results; the warning about untrusted content | <https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls> |
+| Thinking blocks must be passed back unchanged with tool use; `redacted_thinking`; omitting `thinking` is valid | <https://platform.claude.com/docs/en/build-with-claude/thinking> |
+| The image block; media types; size limits | <https://platform.claude.com/docs/en/build-with-claude/vision> |
+| API version `2026-10-21`; sampling parameters rejected on it; the `x-api-key` header; the computer toolset | The curl examples on the pages above, and the reference material for the Claude API bundled with the development tooling, which cites <https://platform.claude.com/docs/en/api/migration-2026-10-21> |
+
+Not verified: where `stop_details` sits in a streamed refusal (the adapter
+reads it from the `delta` of `message_delta` and from the event itself); the
+exact events of a stream with a `redacted_thinking` block.
+
+### OpenAI
+
+`platform.openai.com/docs` redirects to `developers.openai.com/api/docs`. The
+API reference pages there are several megabytes each and were read only in
+part, so the official SDK's type definitions were used for field names.
+
+| Verified | Source |
+|---|---|
+| "Responses is recommended for all new projects"; `store`; replaying reasoning items when stateless | <https://developers.openai.com/api/docs/guides/migrate-to-responses> |
+| Function tools; `function_call` and `function_call_output` items; `call_id`; the streaming events for function calls with examples; reasoning items must be passed back with tool outputs | <https://developers.openai.com/api/docs/guides/function-calling> |
+| Streaming over server-sent events; events identified by `type` | <https://developers.openai.com/api/docs/guides/streaming-responses> |
+| Status codes; `Retry-After` on 429 and 503; `slow_down`, `server_is_overloaded`; quota errors do not clear by retrying | <https://developers.openai.com/api/docs/guides/error-codes>, <https://developers.openai.com/api/docs/guides/rate-limits> |
+| `encrypted_content` on reasoning items in stateless mode | <https://developers.openai.com/api/docs/guides/reasoning> |
+| The `computer` tool, `computer_call`, `computer_call_output` | <https://developers.openai.com/api/docs/guides/tools-computer-use> |
+| Input item shapes: `input_text`, `input_image` with a data URL, `function_call_output` with a list | <https://developers.openai.com/api/reference/resources/responses/methods/create> (the first 100,000 characters) |
+| Event types and their fields; the `error` event; `incomplete_details.reason`; the error codes of a failed response; usage fields; the refusal part; `store` "defaults to true"; `detail` required on `input_image`; a message as `{role, content}` | The type definitions of the official Python SDK, <https://github.com/openai/openai-python>, `src/openai/types/responses/`, branch `main` |
+
+Not verified: the raw framing of the stream (whether each event has an
+`event:` line; the adapter reads the `type` inside the data, so either works);
+the exact JSON nesting of an HTTP error body (the guide names the fields
+`message`, `type`, `param`, `code` under `error`); the `type` and `code` of a
+401, which is classified by status.
+
+### Google
+
+`ai.google.dev/gemini-api/docs` and `ai.google.dev/api` redirect to
+`aistudio.google.com/docs` and `aistudio.google.com/api-reference`.
+
+| Verified | Source |
+|---|---|
+| The Interactions API is generally available and recommended; `generateContent` is legacy and supported; storage, retention and `store=false` | <https://aistudio.google.com/docs/interactions> |
+| Event types and order; raw stream examples, the `[DONE]` marker included; `arguments_delta`; `thought_signature`; `requires_action`; the `error` event; unknown events to be ignored | <https://aistudio.google.com/docs/streaming> |
+| Function tools; `function_call` and `function_result`; stateless function calling with `store: false` and the model's steps sent back "exactly as received" | <https://aistudio.google.com/docs/function-calling> |
+| Error codes and statuses; the "generation blocked" and "generation error" codes; the error body; the error event | <https://aistudio.google.com/docs/api-errors> |
+| Thought steps and signatures | <https://aistudio.google.com/docs/thought-signatures>, <https://aistudio.google.com/docs/thinking> |
+| The image content block | <https://aistudio.google.com/docs/image-understanding> |
+| The `computer_use` tool | <https://aistudio.google.com/docs/computer-use> |
+| Request fields, `generation_config.max_output_tokens`, step types, statuses, usage fields, delta types | <https://aistudio.google.com/api-reference/interactions> |
+
+Not verified:
+
+- **How a blocked generation arrives in a stream.** The documentation lists the
+  codes and the error event but does not say which carries a block. The adapter
+  accepts a blocked code in an `error` event, in the `errors` of a failed
+  interaction, and in a failed status update. The script in the conformance
+  suite uses the `error` event.
+- **A `retry-after` header.** None is documented. The transport honours one if
+  it is sent.
+- **The delta for function arguments.** The reference and the raw examples say
+  type `arguments_delta` with the text in `arguments`; one SDK sample on the
+  streaming page reads `partial_arguments` from a delta of type `arguments`.
+  The adapter accepts both.
+- **Whether thought tokens are part of `total_output_tokens`.** The usage
+  example on the streaming page adds up only if they are counted beside it, so
+  the adapter adds them.
+- **`generateContent`** was not implemented and its current wire format was not
+  verified.
+
+## 13. Tests
+
+All tests run in CI and nowhere else. None contacts a provider.
+
+| Test | What it shows |
+|---|---|
+| `tests/conformance.rs` | The provider conformance suite of sections 10 and 12 of the design. Nineteen neutral-level tests, each run against all three adapters. |
+| `tests/secrets.rs` | The key is in no error, event or debug rendering, and is sent only in the documented header. |
+| `tests/config_and_schema.rs` | The schema and the loader agree; the examples load; no model name is compiled in. |
+| `tests/cli.rs` | The built binary: `check` makes no network call; `--ping` makes one; the key is never printed. |
+| Unit tests in each module | The request body of each adapter; error classification; the event-stream parser at every chunk boundary; retry and backoff; tool-call assembly; configuration rules. |
+
+The conformance suite uses a fake server in `tests/common/`: the standard
+library's `TcpListener`, one thread, one connection at a time. It answers each
+request with the next scripted reply, sending event streams with chunked
+transfer encoding in pieces of seven bytes, and records what it was sent. The
+scripts are in `tests/common/{anthropic,openai,google}.rs`, one set per
+provider, written by hand from the documentation listed above.
+
+| Conformance test | Asserts, for each adapter |
+|---|---|
+| Plain answer | The text, the usage and a normal finish; the request goes to the documented path with the key in the documented header and only the documented fields; a keep-alive comment and an unknown event type in the stream are ignored |
+| Tool call with split arguments | Start, at least two argument fragments that add up to the arguments, end; the reasoning content comes first, unchanged; the tools were offered |
+| Two tool calls in one turn | Both calls, in order, with distinct identifiers; one has no arguments |
+| Refusal | A `Refusal` finish with `UOS-AI-PROVIDER-005`; not retried |
+| Rate limit, then success | The second attempt succeeds; the same body was sent twice |
+| Rate limit beyond the ceiling | Not retried; the error carries the provider's delay |
+| Overload | Retried up to the configured number of attempts, then reported |
+| Authentication failure | `UOS-AI-PROVIDER-001`; sent once |
+| Rejected request | `UOS-AI-PROVIDER-004`; sent once |
+| Stream cut mid-way | The text so far, then a `Network` error; not sent again |
+| Garbage bytes | Five kinds of garbage, each a `MalformedResponse` |
+| Error event mid-stream | The text so far, then an `Overloaded` error |
+| Output limit | An `OutputLimit` finish |
+| Silence | A `TimedOut` error |
+| Unreachable provider | A `Network` error |
+| Tool result goes back as tool output | The follow-up request has the reasoning content unchanged, the tool result in the provider's tool-output position, the untrusted text exactly once, and the system field unchanged |
+| Spend limit | The stream is cut with `UOS-AI-PROVIDER-010`; the next request is not sent |
+| Spend under the limit | Usage and cost add up over two requests |
+| Capabilities | The adapter declares the required rows; nothing is sent |

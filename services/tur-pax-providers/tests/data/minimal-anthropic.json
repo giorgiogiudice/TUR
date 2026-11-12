@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "provider": "anthropic",
+  "model": "example-model-name",
+  "max_output_tokens": 4096
+}
