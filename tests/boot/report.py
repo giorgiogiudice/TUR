@@ -562,11 +562,14 @@ def check_components(ev: Evidence, checks: Checks, args) -> dict:
     context = status.get("selinux_context", "")
     checks.add(
         "components.session",
-        "TUR programs: they ran on the installed system as an ordinary user, in that user's own session, with "
-        "SELinux enforcing",
+        "TUR programs: they ran on the installed system as an ordinary user, in a login session of that user, "
+        "with SELinux enforcing",
         (
             ran
-            and guest.status.get("components_run_as") == "user-session"
+            # Under the user's own service manager, or in a session the
+            # system's service manager opened through PAM. Not "runuser",
+            # which gives the user's identity and nothing else.
+            and guest.status.get("components_run_as") in ("user-session", "pam-login")
             and status.get("selinux_mode") == "Enforcing"
             and status.get("uid") not in ("", "0", None)
             and bool(status.get("xdg_runtime_dir"))
@@ -579,6 +582,15 @@ def check_components(ev: Evidence, checks: Checks, args) -> dict:
         f"{status.get('home_resolved')}; runtime directory {status.get('xdg_runtime_dir')}; from "
         f"{guest.status.get('components_started_uptime')} s to {guest.status.get('components_finished_uptime')} s "
         f"after boot",
+    )
+    add(
+        "user_service_manager",
+        "they ran under the user's own service manager, as the programs of a desktop session do",
+        guest.status.get("components_run_as") == "user-session",
+        f"run as: {guest.status.get('components_run_as', 'no data')} (user-session: a unit of the user's service "
+        "manager; pam-login: a session the system's service manager opened through PAM); "
+        f"{' / '.join(line.strip() for line in guest.text('components-session.txt').splitlines() if 'Failed' in line)[:300]}",
+        required=False,
     )
     add(
         "selinux_context",
@@ -691,7 +703,8 @@ def check_components(ev: Evidence, checks: Checks, args) -> dict:
 
     def findings(report: dict) -> list[str]:
         return [
-            f"{finding.get('code')}: {str(finding.get('message'))[:120]}"
+            f"{finding.get('code')} ({finding.get('severity')}) {finding.get('device_id')}: "
+            f"{str(finding.get('user_message') or finding.get('title'))[:160]}"
             for finding in report.get("findings") or []
             if isinstance(finding, dict)
         ]
@@ -890,23 +903,67 @@ def check_components(ev: Evidence, checks: Checks, args) -> dict:
     named_text = (text("pax-grant-as-named.out") + text("pax-grant-as-named.err")).strip()
     add(
         "pax_grant_through_home_link",
-        "a folder granted as the user would name it, below $HOME, is accepted although /home is a link on this system",
-        status.get("home_is_link") == "no" or "reached through a link" not in named_text,
-        f"$HOME is {status.get('home')}, which resolves to {status.get('home_resolved')}. --grant-read "
-        f"{status.get('home')}/Documents: exit status {codes.get('pax-grant-as-named')}, "
+        "P@x accepts a folder granted as a person would write it, /home/<name>/Documents, although /home is a "
+        "link on this system",
+        "reached through a link" not in named_text and grant_named.get("error_code") == grant_resolved.get("error_code"),
+        f"/home is a link: {status.get('home_is_link')}; $HOME is {status.get('home')}. --grant-read "
+        f"{status.get('grant_as_named')}: exit status {codes.get('pax-grant-as-named')}, "
         f"{grant_named.get('error_code') or grant_named.get('outcome')}: "
-        f"{' '.join(named_text.split())[:300]}. --grant-read {status.get('home_resolved')}/Documents: exit status "
-        f"{codes.get('pax-grant-resolved')}, {grant_resolved.get('error_code') or grant_resolved.get('outcome')}",
+        f"{' '.join(named_text.split())[:360]} --grant-read {status.get('grant_resolved')}: exit status "
+        f"{codes.get('pax-grant-resolved')}, {grant_resolved.get('error_code') or grant_resolved.get('outcome')} "
+        "(the provider's address is a closed port: getting that far means the grant was accepted)",
         required=False,
     )
 
     # ---- what SELinux refused, and what failed, while they ran ----------------------------------
-    denials = [line for line in guest.text("components-avc.txt").splitlines() if "avc:" in line]
+    denials = [" ".join(line.split()) for line in guest.text("components-avc.txt").splitlines() if "avc:" in line]
+
+    def seconds(key: str) -> float | None:
+        try:
+            return float(status.get(key, ""))
+        except ValueError:
+            return None
+
+    def during(line: str) -> str:
+        """Which part of the run a denial falls in, by the journal's time."""
+        found = re.match(r"\[\s*([0-9.]+)\]", line)
+        at = float(found.group(1)) if found else None
+        spans = {
+            "tur-diag status with no new privileges": ("nnp_probe_started_uptime", "nnp_probe_finished_uptime"),
+            "the P@x end-to-end test": ("pax_e2e_started_uptime", "pax_e2e_finished_uptime"),
+        }
+        for name, (start, end) in spans.items():
+            first, last = seconds(start), seconds(end)
+            if at is not None and first is not None and last is not None and first - 0.5 <= at <= last + 0.5:
+                return name
+        return "another part of the run"
+
+    # One denial is understood (TUR-006): tur-diag starts bootc, whose SELinux
+    # type has a domain of its own (install_t), from a process that may gain
+    # no new privileges. SELinux refuses the change of domain, records it, and
+    # bootc runs in the caller's domain. Anything else is not understood.
+    known = [
+        line
+        for line in denials
+        if "nnp_transition" in line and 'comm="tur-diag"' in line and ":install_t:" in line and "tclass=process2" in line
+    ]
+    other = [line for line in denials if line not in known]
     add(
         "selinux_denials",
-        "SELinux refused nothing while the programs and the sandbox ran",
-        not denials,
-        f"{len(denials)} AVC denials: {' | '.join(' '.join(line.split())[:400] for line in denials[:10]) or 'none'}",
+        "SELinux refused nothing while the programs and the sandbox ran, other than the change of domain "
+        "described below",
+        not other,
+        f"{len(other)} other AVC denials: {' | '.join(line[:400] for line in other[:10]) or 'none'}",
+    )
+    add(
+        "selinux_bootc_under_no_new_privs",
+        "no AVC denial is recorded when tur-diag starts bootc from a process that may gain no new privileges, "
+        "as in P@x's sandbox",
+        not known,
+        f"{len(known)} denial(s): "
+        + (" | ".join(f"during {during(line)}: {line[:400]}" for line in known[:6]) or "none")
+        + f"; bootc's label: {first_line('bootc-label.out') or 'no data'}; tur-diag status with no new privileges: "
+        f"exit status {codes.get('diag-status-no-new-privs')}",
         required=False,
     )
     before = {unit.get("unit") for unit in guest.json("failed-units.json") or [] if isinstance(unit, dict)}

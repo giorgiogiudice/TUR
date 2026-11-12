@@ -117,15 +117,19 @@ build() {
     # The Rust standard library is linked into every program.
     rust_version="$(rustc --version | cut -d' ' -f2)"
     sysroot="$(rustc --print sysroot)"
-    rust_files=0
-    echo "== licence files of the toolchain: ${sysroot}/share/doc"
-    ls -la "${sysroot}/share/doc" "${sysroot}/share/doc/rust" 2>&1 || true
-    for file in "${sysroot}"/share/doc/rust/COPYRIGHT* "${sysroot}"/share/doc/rust/LICENSE*; do
-        if [ -f "${file}" ]; then
-            install -D -m 0644 "${file}" "${licences}/rust-std-${rust_version}/$(basename "${file}")"
-            rust_files=$((rust_files + 1))
-        fi
-    done
+    # The toolchain carries two notices: COPYRIGHT.html for all of it, the
+    # compiler included, and COPYRIGHT-library.html for the standard library
+    # and the crates it is built from, with their licence texts. The second
+    # is what a compiled program contains.
+    rust_notice="${sysroot}/share/doc/rust/COPYRIGHT-library.html"
+    echo "== licence files of the toolchain: ${sysroot}/share/doc/rust"
+    find "${sysroot}/share/doc/rust" -maxdepth 2 | LC_ALL=C sort | head -n 40
+    if [ ! -s "${rust_notice}" ]; then
+        echo "the toolchain has no ${rust_notice}: the standard library's notices cannot be shipped" >&2
+        exit 1
+    fi
+    install -D -m 0644 "${rust_notice}" "${licences}/rust-std-${rust_version}/COPYRIGHT-library.html"
+    rust_files=1
 
     while IFS="${tab}" read -r component program path; do
         echo "== cargo build: ${component} (${program})"

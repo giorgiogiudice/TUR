@@ -90,6 +90,14 @@ bundle_facts() {
 run diag-status tur-diag status
 run diag-status-json tur-diag status --json
 run diag-status-json-root sudo -n tur-diag status --json
+# tur-diag asks bootc for the deployment. bootc has an SELinux type of its
+# own, and a process that may gain no new privileges, as every process in
+# P@x's sandbox is, cannot change into it. This run stands alone, with its
+# times kept, so that a denial SELinux records for it can be told from others.
+put nnp_probe_started_uptime "$(cut -d' ' -f1 /proc/uptime)"
+run diag-status-no-new-privs setpriv --no-new-privs tur-diag status --json
+put nnp_probe_finished_uptime "$(cut -d' ' -f1 /proc/uptime)"
+run bootc-label ls -Z /usr/bin/bootc
 rm -f "${out}/bundle-user.tar.zst" "${out}/bundle-root.tar.zst"
 run diag-collect-user tur-diag collect --output "${out}/bundle-user.tar.zst"
 run diag-verify-user tur-diag verify-bundle "${out}/bundle-user.tar.zst"
@@ -177,9 +185,14 @@ mkdir -p "${real_home}/Documents"
 printf '%s\n' '{"schema_version": 1, "provider": "anthropic", "base_url": "http://127.0.0.1:9", "model": "none", "max_output_tokens": 64, "timeouts": {"connect_ms": 2000, "response_ms": 2000, "idle_ms": 2000}, "retry": {"max_attempts": 1, "initial_delay_ms": 10, "max_delay_ms": 100}}' \
     > "${out}/provider-closed.json"
 export TUR_PAX_API_KEY="sk-test-KEY-boot-0123456789abcdef"
-if [ "${HOME:-}" != "${real_home}" ]; then put home_is_link yes; else put home_is_link no; fi
+# The folder as a person would write it: /home/<name>/Documents. On this
+# system /home is a link to /var/home, whatever $HOME holds.
+if [ -L /home ]; then put home_is_link "yes: /home -> $(readlink /home)"; else put home_is_link no; fi
+named="/home/$(id -un)/Documents"
+put grant_as_named "${named}"
+put grant_resolved "${real_home}/Documents"
 run pax-grant-as-named tur-pax run "Say hello." --json --provider-config "${out}/provider-closed.json" \
-    --audit-log "${out}/pax-grant-as-named.audit.jsonl" --grant-read "${HOME:-}/Documents"
+    --audit-log "${out}/pax-grant-as-named.audit.jsonl" --grant-read "${named}"
 run pax-grant-resolved tur-pax run "Say hello." --json --provider-config "${out}/provider-closed.json" \
     --audit-log "${out}/pax-grant-resolved.audit.jsonl" --grant-read "${real_home}/Documents"
 unset TUR_PAX_API_KEY

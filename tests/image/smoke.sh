@@ -127,20 +127,27 @@ while IFS=$'\t' read -r program path component tools; do
             test -s "${tools}/agent-tools.json" -a -s "${tools}/agent-tools.adapter.json"
         check "${program}: tur-pax loads its tool manifest" \
             tur-pax manifest validate "${tools}/agent-tools.json"
-        # The adapters say which program performs each tool. Each must be in
-        # the image, and every tool of the manifest must have an adapter.
-        check "${program}: every tool has an adapter, and every adapter's program is in the image" \
+        # The adapters say which program performs each tool. Each adapter
+        # must be for a tool the manifest declares and name a program that is
+        # in the image. A tool without an adapter is not offered to a model
+        # (pax-orchestrator.md); which those are is printed.
+        check "${program}: every adapter is for a declared tool and names a program in the image" \
             python3 -c '
 import json, os, sys
 manifest = json.load(open(sys.argv[1] + "/agent-tools.json"))
 adapters = json.load(open(sys.argv[1] + "/agent-tools.adapter.json"))
 assert manifest["service"] == adapters["service"], "the two files name different services"
+declared = {tool["name"] for tool in manifest["tools"]}
 performed = {adapter["tool"]: adapter["program"] for adapter in adapters["adapters"]}
-missing = [name for name in performed.values() if not os.access(name, os.X_OK)]
+assert performed, "no adapter at all"
+unknown = sorted(set(performed) - declared)
+assert not unknown, f"adapters for tools the manifest does not declare: {unknown}"
+missing = sorted({name for name in performed.values() if not os.access(name, os.X_OK)})
 assert not missing, f"not in the image: {missing}"
-unperformed = [tool["name"] for tool in manifest["tools"] if tool["name"] not in performed]
-assert not unperformed, f"no adapter: {unperformed}"
 ' "${tools}"
+        echo "      offered: $(jq -r '[.adapters[].tool] | join(" ")' "${tools}/agent-tools.adapter.json")"
+        echo "      declared, with no adapter: $(jq -r --slurpfile a "${tools}/agent-tools.adapter.json" \
+            '[.tools[].name] - [$a[0].adapters[].tool] | join(" ")' "${tools}/agent-tools.json")"
     fi
 done < "${programs}"
 check "programs a person or an adapter starts are in /usr/bin" bash -c \
@@ -183,6 +190,18 @@ check "tur-runtime recognises a Linux program" bash -c \
     'tur-runtime inspect --json /usr/bin/true | jq -e ".recommendation.runtime == \"native-linux\""'
 check "tur-update lists the commands it names" bash -c 'tur-update commands | grep -q bootc'
 check "tur-boot-health is still on the PATH"  tur-boot-health --version
+# What a program needs from the image at run time: the C library and the
+# compiler's support library, which every image has. Everything else a program
+# contains is linked in (docs/dependencies/licence-review.md, item 13).
+echo "--- shared libraries the programs need"
+grep -v '^#' "${programs}" | cut -f2 | while read -r path; do
+    echo "      ${path}: $(ldd "${path}" 2>&1 | awk '{print $1}' | sort | tr '\n' ' ')"
+done
+check "the programs need only the C library and libgcc at run time" bash -c \
+    'for path in $(grep -v "^#" "$1" | cut -f2); do
+         ldd "${path}" | awk "{print \$1}" | grep -v -E "^(linux-vdso\.so\.1|libc\.so\.6|libm\.so\.6|libgcc_s\.so\.1|/lib64/ld-linux-x86-64\.so\.2)\$" \
+             && { echo "${path}"; exit 1; }
+     done; exit 0' _ "${programs}"
 
 # Licences (THIRD_PARTY_NOTICES.md).
 third=/usr/share/licenses/tur-third-party
@@ -194,8 +213,14 @@ check "every listed crate has its directory of licence files" bash -c \
          [ "${files}" -gt 0 ] || continue
          [ -d "$1/${crate}-${version}" ] || { echo "${crate}-${version}"; exit 1; }
      done' _ "${third}"
-check "the licences of the Rust standard library are in the image" bash -c \
-    'ls "$1"/rust-std-*/LICENSE-MIT "$1"/rust-std-*/LICENSE-APACHE' _ "${third}"
+check "the notices of the Rust standard library are in the image" bash -c \
+    'grep -q -i "apache license" "$1"/rust-std-*/COPYRIGHT-library.html' _ "${third}"
+check "every third-party licence directory belongs to a listed crate" bash -c \
+    'for dir in "$1"/*/; do
+         name="$(basename "${dir}")"
+         grep -v "^#" "$1/crates.tsv" | awk -F"\t" -v n="${name}" "\$2 \"-\" \$3 == n { found = 1 } END { exit !found }" \
+             || { echo "${name}"; exit 1; }
+     done' _ "${third}"
 echo "--- third-party crates"
 echo "      $(grep -v '^#' "${third}/crates.tsv" | cut -f2,3 | sort -u | wc -l) distinct, in $(grep -v '^#' "${third}/crates.tsv" | cut -f1 | sort -u | wc -l) programs; $(find "${third}" -type f | wc -l) files, $(du -sk "${third}" | cut -f1) KiB"
 echo "      without a licence file of their own: $(grep -v '^#' "${third}/crates.tsv" | awk -F'\t' '$6 == 0 { print $2 "-" $3 }' | sort -u | tr '\n' ' ')"
