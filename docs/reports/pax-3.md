@@ -9,7 +9,7 @@ Subsystem:        AI control layer: the session service org.tur.Agent1, the
                   the per-day spending limit, consent, and the runner that
                   makes reminders and scheduled tasks fire
 Build ID:         not applicable: this task builds no image
-Source revision:  11c63ce (the code; this report is the commit after it) (feat/pax-service, pull request 52)
+Source revision:  03c4505 (the code; this report is the commit after it) (feat/pax-service, pull request 52)
 
 SUMMARY
 - What changed: tur-pax gains a session service. `tur-pax serve` serves
@@ -30,8 +30,9 @@ SUMMARY
   keyring storage, the per-day limit), desktop task D-17 (a UI on
   org.tur.Agent1) and D-19 (P@x's settings pages).
 - What it does not show: NO REAL PROVIDER WAS CALLED, here or anywhere in the
-  development of this change. No key exists for CI. Every model is a script
-  on the runner.
+  development of this change. Every model in the workflows that ran is a
+  script on the runner. The owner's key for the manual workflow pax-live
+  exists as a repository secret; that workflow has not been started.
 
 FILES
 - Added: services/tur-pax/src/{bus,dbus,daemon,service,settings,consent,
@@ -63,14 +64,15 @@ BUILD
 - Warnings: none from the compiler or clippy on the head commit
 
 TESTS
-- Unit and integration tests, workflow "rust": pass. tur-pax 402 tests in 16 targets (219 unit, 171
-  integration, 12 doc), among them new tests/service.rs (15),
+- Unit and integration tests, workflow "rust": pass. tur-pax 405 tests in 16 targets (221 unit, 172
+  integration, 12 doc), among them new tests/service.rs (16),
   tests/scheduler.rs (8) and tests/agent1_interface.rs (4); tur-pax-memory
   153; tur-pax-providers 176. Every other component unchanged and passing
 - End to end, workflow "pax": the 17 scenarios of pax-1 and pax-2, unchanged
   (349 checks), then the session service (103 checks), on a
   hosted Ubuntu 24.04 runner.
-- Against a real provider: NOT RUN. No key exists.
+- Against a real provider: NOT RUN. pax-live is added and starts by hand
+  only; it was not started.
 - Against KWallet, Plasma's notification service, dbus-broker, Fedora or the
   TUR image: NOT RUN. The Secret Service was gnome-keyring, the bus
   dbus-daemon, the notification service a stand-in written in the test.
@@ -117,13 +119,27 @@ NEXT SAFE ACTION
 
 ## Runs
 
-For commit `11c63ce`, the code of this pull request. The commit that adds
-this report follows it and changes no code; its runs are on the pull request.
+For commit `03c4505`, the last code of this pull request. The commit that
+updates this report follows it and changes no code; its runs are on the
+pull request.
 
 | Workflow | Run | Result |
 |---|---|---|
-| `rust` | 43252232997 | Pass, every component. `tur-pax`: 402 tests in 16 targets (219 unit tests, 171 integration tests, 12 doc tests); the invariant sweep about four minutes. `tur-pax-memory`: 153. `tur-pax-providers`: 176 |
-| `pax` | 43252233003 | Pass: 349 checks of the 17 earlier scenarios, 0 failed; 103 checks of the session service, 0 failed. User service manager running: the wake timer was the service's own |
+| `rust` | 43259888409 | Pass, every component. `tur-pax`: 405 tests in 16 targets (221 unit tests, 172 integration tests, 12 doc tests); the invariant sweep 218 s. `tur-pax-memory`: 153. `tur-pax-providers`: 176 |
+| `pax` | 43259888572 | Pass: 349 checks of the 17 earlier scenarios, 0 failed; 103 checks of the session service, 0 failed; the service idle (under 0.05 s of processor time in 10 s) |
+| `gate` | 43259888459 | Pass (added to main by #55; waits for every other workflow on the commit) |
+| `pax-live` | not run | Starts by hand only |
+
+The commits of this pull request, after the rebase onto main:
+
+| Commit | What | `rust` | `pax` |
+|---|---|---|---|
+| `0110332` (`11c63ce` before the rebase) | The service, the key, the limit, consent, the runner | 43252232997 pass (on `11c63ce`) | 43252233003 pass (on `11c63ce`) |
+| `d5c2e33` (`d8bbc53` before the rebase) | This report | 43253272977 pass (on `d8bbc53`) | 43253272659 pass (on `d8bbc53`) |
+| `ee07737` | pax-live | not run alone | not run alone |
+| `8abc6a9` | Providers by identifier (ADR-0004 as amended) | 43256242047: one settings test of mine expected `"claude"` to be refused, which is now a valid identifier | 43256242301 pass |
+| `73dead7` | That test, with `"Claude!"` | 43258423411: every test passed (405); rustfmt only | 43258423446 pass |
+| `03c4505` | Formatting from CI | 43259888409 pass | 43259888572 pass |
 
 Earlier runs on the branch, before the history was squashed into one commit:
 
@@ -174,6 +190,10 @@ this change did not start it.
 - **Cost per run, worst case** at the prices of 2026-11-12: about 24 000
   input and 2 000 output tokens plus the first step's 23: under 0.005 USD
   with `claude-haiku-5-5`, under 0.07 USD with `claude-sonnet-5-5`.
+- **The gate:** `gate` (from #55) counts every workflow run on a commit.
+  A pax-live run started on a pull request's head commit is counted if
+  `gate` runs again on that commit; started on main after the merge, it
+  touches no pull request.
 
 ## What each part is, and what proves it
 
@@ -285,14 +305,15 @@ the model list. The text of the providers' terms was not read.
 
 ## Proposed text for ai-control-layer.md
 
-Not edited here. Proposed as section 23, "Resolutions from building the
+Not edited here. Section 23 now holds the owner's decisions of 12 November
+2026, so this is proposed as section 24, "Resolutions from building the
 session service":
 
 | # | Point | Resolution |
 |---|---|---|
 | 1 | Section 11 proposed `org.tur.Agent1` before the desktop design asked for more | The interface as built is pax-service.md, section 2: 29 methods, 9 signals, 3 read-only properties. `ConfirmationRequested` and `EndRepairSession` are left out until a trusted session exists. `ActionProposed` and `ActionCompleted` carry a step as JSON, not separate arguments |
 | 2 | Who may call `org.tur.Agent1` | Callers the bus reports as the same Unix user. Any program in the session passes; the rule keeps out other accounts only. What keeps the model out is that its commands have no session bus and no tool reaches the interface |
-| 3 | Section 17, item 5 puts the settings that loosen P@x under a separate component and the trusted screen | Until both exist, switching P@x on, choosing the provider, setting the key and raising a limit are methods of `org.tur.Agent1`, open to any program of the person. Standing approvals are not: no schedule created through the interface can hold one |
+| 3 | Section 17, item 5 puts the settings that loosen P@x under a separate component and the trusted screen | Until both exist, switching P@x on, choosing the provider, setting the key and raising a limit are methods of `org.tur.Agent1`, open to any program of the person. Standing approvals are not: no schedule created through the interface can hold one. Section 23, item 1 puts anything that loosens P@x's limits on the trusted screen; this is the interim, and moving those methods there is a follow-up |
 | 4 | Where the key lives (sections 7, 8) | The Secret Service of the session, one item per provider. Never a file. No store: a clear error, no fallback. The secret crosses the session bus unencrypted (the `plain` transfer), which protects as much as the encrypted one would on today's desktop |
 | 5 | The per-day limit (sections 7, 10) | Kept by the session service from reported usage and a model list that is configuration. Checked before every request; written after every response; a day is a calendar day in the computer's zone; a record that cannot be written uses the day up; `TUR-AI-SPEND-001` |
 | 6 | Consent (section 8) | Recorded with the version of the text and the provider; a new version or another provider needs a new acceptance. The text says that this build cannot see the screen, that scheduled tasks run while locked and send what they read, that kept content is re-sent, and that other programs in the session can see the screen |
