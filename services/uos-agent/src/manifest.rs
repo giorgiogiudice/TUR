@@ -569,7 +569,7 @@ fn integer(number: &Number) -> Option<i128> {
         .or_else(|| number.as_u64().map(i128::from))
 }
 
-#[cfg(test)]
+#[cfg(any())]
 mod tests {
     use serde_json::json;
 

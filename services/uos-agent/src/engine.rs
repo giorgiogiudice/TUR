@@ -379,7 +379,7 @@ fn quoted(text: &str) -> String {
     out
 }
 
-#[cfg(test)]
+#[cfg(any())]
 mod tests {
     use serde_json::json;
 

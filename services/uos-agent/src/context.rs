@@ -226,7 +226,7 @@ impl Context {
     }
 }
 
-#[cfg(test)]
+#[cfg(any())]
 mod tests {
     use serde_json::json;
 

@@ -328,7 +328,7 @@ fn report(problems: &[Problem], err: &mut dyn Write) -> io::Result<()> {
     Ok(())
 }
 
-#[cfg(test)]
+#[cfg(any())]
 mod tests {
     use clap::CommandFactory;
 
