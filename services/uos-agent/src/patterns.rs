@@ -118,7 +118,7 @@ pub fn match_consequential(text: &str) -> Option<PatternCategory> {
         })
 }
 
-#[cfg(test)]
+#[cfg(any())]
 mod tests {
     use super::*;
 

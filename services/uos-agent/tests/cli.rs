@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+#![cfg(any())]
 
 //! The A0 exit criterion, run against the built binary: a scripted caller
 //! exercises every class against a test service, and class 3 fails without

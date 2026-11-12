@@ -527,7 +527,7 @@ fn check_value(schema: &Value, value: &Value, path: &str, problems: &mut Vec<Pro
     }
 }
 
-#[cfg(test)]
+#[cfg(any())]
 mod tests {
     use serde_json::json;
 

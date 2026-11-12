@@ -15,17 +15,10 @@ publish = false
 [lib]
 name = "uos_agent"
 path = "src/lib.rs"
-test = false
 
 [[bin]]
 name = "uos-agent"
 path = "src/main.rs"
-test = false
-
-[[test]]
-name = "cli"
-path = "tests/cli.rs"
-test = false
 
 [dependencies]
 # Command-line parsing. Colour and suggestion features are left out to keep the

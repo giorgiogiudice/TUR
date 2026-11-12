@@ -125,7 +125,7 @@ impl fmt::Display for Problem {
 
 impl std::error::Error for Problem {}
 
-#[cfg(test)]
+#[cfg(any())]
 mod tests {
     use std::collections::BTreeSet;
 

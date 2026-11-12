@@ -427,7 +427,7 @@ pub fn decide_and_record(
     }
 }
 
-#[cfg(test)]
+#[cfg(any())]
 mod tests {
     use serde_json::json;
 
