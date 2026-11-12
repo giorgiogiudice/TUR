@@ -659,7 +659,11 @@ impl PhaseTable {
     /// Starts a phase, or retries one that failed or was cancelled.
     ///
     /// Returns the updated record.
-    pub fn begin(&mut self, phase: PhaseId, now: Timestamp) -> Result<PhaseRecord, TransitionError> {
+    pub fn begin(
+        &mut self,
+        phase: PhaseId,
+        now: Timestamp,
+    ) -> Result<PhaseRecord, TransitionError> {
         let state = self.get(phase).state;
         match state {
             PhaseState::Pending => {}
@@ -751,7 +755,11 @@ impl PhaseTable {
     }
 
     /// Sets the progress of the running phase `phase`.
-    pub fn set_progress(&mut self, phase: PhaseId, progress: Progress) -> Result<(), TransitionError> {
+    pub fn set_progress(
+        &mut self,
+        phase: PhaseId,
+        progress: Progress,
+    ) -> Result<(), TransitionError> {
         let record = &mut self.records[phase.index()];
         if record.state != PhaseState::Running {
             return Err(TransitionError::Illegal {
@@ -936,8 +944,14 @@ mod tests {
         assert_eq!(finished.duration_ms, Some(900));
         assert_eq!(finished.error_code, None);
         assert_eq!(finished.summary, "Session created on a slow medium");
-        assert_eq!(finished.technical_details.as_deref(), Some("fsync took 900 ms"));
-        assert_eq!(finished.log_reference.as_deref(), Some("logs/installer-ui.log"));
+        assert_eq!(
+            finished.technical_details.as_deref(),
+            Some("fsync took 900 ms")
+        );
+        assert_eq!(
+            finished.log_reference.as_deref(),
+            Some("logs/installer-ui.log")
+        );
         assert_eq!(finished.recovery_action.as_deref(), Some("None needed"));
         assert_eq!(table.get(PhaseId::Start), &finished);
         assert_eq!(table.running(), None);
@@ -1159,7 +1173,13 @@ mod tests {
                 Completion::failed(InstallCode::SessionIo.into(), "Failed"),
             )
             .unwrap();
-        assert_eq!(table.begin(PhaseId::ImageDeployment, at(2)).unwrap().attempt, 2);
+        assert_eq!(
+            table
+                .begin(PhaseId::ImageDeployment, at(2))
+                .unwrap()
+                .attempt,
+            2
+        );
     }
 
     #[test]
@@ -1240,7 +1260,10 @@ mod tests {
         }
         assert_eq!(table.first_incomplete(), Some(PhaseId::TargetSelection));
         assert_eq!(
-            table.begin(PhaseId::TargetSelection, at(0)).unwrap().attempt,
+            table
+                .begin(PhaseId::TargetSelection, at(0))
+                .unwrap()
+                .attempt,
             2
         );
         // Reopening where everything is already pending changes nothing.
@@ -1286,7 +1309,9 @@ mod tests {
     fn records_and_tables_round_trip_through_json() {
         let mut table = PhaseTable::new();
         advance_to(&mut table, PhaseId::StorageDiscovery);
-        table.begin(PhaseId::StorageDiscovery, at(1_794_464_220_123)).unwrap();
+        table
+            .begin(PhaseId::StorageDiscovery, at(1_794_464_220_123))
+            .unwrap();
         table
             .set_progress(
                 PhaseId::StorageDiscovery,

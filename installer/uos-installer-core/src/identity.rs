@@ -171,7 +171,10 @@ impl Identity {
     /// serial, WWN, stable path, connection and sector sizes.
     pub fn display_lines(&self) -> Vec<String> {
         let model = self.model.as_deref().unwrap_or("Unknown model");
-        let serial = self.serial.as_deref().unwrap_or("not reported by the drive");
+        let serial = self
+            .serial
+            .as_deref()
+            .unwrap_or("not reported by the drive");
         let wwn = self.wwn.as_deref().unwrap_or("not reported by the drive");
         let stable_path = self
             .by_id_path
@@ -355,11 +358,22 @@ pub struct AttributeSelector {
 
 impl AttributeSelector {
     fn matches(&self, device: &BlockDevice) -> bool {
-        self.model.as_ref().is_none_or(|model| device.model.as_ref() == Some(model))
-            && self.serial.as_ref().is_none_or(|serial| device.serial.as_ref() == Some(serial))
-            && self.wwn.as_ref().is_none_or(|wwn| device.wwn.as_ref() == Some(wwn))
+        self.model
+            .as_ref()
+            .is_none_or(|model| device.model.as_ref() == Some(model))
+            && self
+                .serial
+                .as_ref()
+                .is_none_or(|serial| device.serial.as_ref() == Some(serial))
+            && self
+                .wwn
+                .as_ref()
+                .is_none_or(|wwn| device.wwn.as_ref() == Some(wwn))
             && self.size_bytes.is_none_or(|size| device.size_bytes == size)
-            && self.by_path.as_deref().is_none_or(|path| has_link(&device.by_path, path))
+            && self
+                .by_path
+                .as_deref()
+                .is_none_or(|path| has_link(&device.by_path, path))
     }
 }
 
@@ -704,7 +718,10 @@ impl Fault for SelectError {
             }
             SelectError::NotFound { selector } => format!("selector: {selector}"),
             SelectError::Ambiguous { selector, devices } => {
-                format!("selector: {selector}; matching devices: {}", devices.join(", "))
+                format!(
+                    "selector: {selector}; matching devices: {}",
+                    devices.join(", ")
+                )
             }
             SelectError::NotWholeDisk { selector, kind } => {
                 format!("selector: {selector}; it names a {}", kind.label())
@@ -731,10 +748,7 @@ mod tests {
             .unwrap_or_else(|error| panic!("{text} did not parse: {error}"))
     }
 
-    fn select<'a>(
-        inventory: &'a Inventory,
-        text: &str,
-    ) -> Result<SelectedTarget<'a>, SelectError> {
+    fn select<'a>(inventory: &'a Inventory, text: &str) -> Result<SelectedTarget<'a>, SelectError> {
         select_target(inventory, &selector(text), WeakIdentityPolicy::Refuse)
     }
 
@@ -853,8 +867,12 @@ mod tests {
         let refused = select(&inventory, text).unwrap_err();
         assert_eq!(refused.code(), InstallCode::TargetWeakIdentity);
 
-        let accepted =
-            select_target(&inventory, &selector(text), WeakIdentityPolicy::Acknowledged).unwrap();
+        let accepted = select_target(
+            &inventory,
+            &selector(text),
+            WeakIdentityPolicy::Acknowledged,
+        )
+        .unwrap();
         assert!(accepted.weaker_identity_acknowledged());
         assert_eq!(accepted.identity().strength(), IdentityStrength::Weak);
         assert_eq!(accepted.identity().by_id_path, None);
@@ -1012,11 +1030,14 @@ mod tests {
     fn a_weak_identity_does_not_follow_a_disk_to_another_port() {
         let inventory = oddities();
         let text = "model=Generic Mass Storage,size=64023257088";
-        let identity =
-            select_target(&inventory, &selector(text), WeakIdentityPolicy::Acknowledged)
-                .unwrap()
-                .identity()
-                .clone();
+        let identity = select_target(
+            &inventory,
+            &selector(text),
+            WeakIdentityPolicy::Acknowledged,
+        )
+        .unwrap()
+        .identity()
+        .clone();
         assert!(revalidate(&identity, &inventory).is_ok());
 
         let mut moved = oddities();

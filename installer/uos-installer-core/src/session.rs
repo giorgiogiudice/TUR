@@ -302,9 +302,7 @@ impl fmt::Display for SessionError {
                 "The installer could not read or write its session directory. Check that \
                  the live environment has free space, then export the diagnostics."
             }
-            SessionError::NotFound { .. } => {
-                "There is no installer session in this directory."
-            }
+            SessionError::NotFound { .. } => "There is no installer session in this directory.",
             SessionError::AlreadyExists { .. } => {
                 "This directory already holds an installer session. Each installation \
                  needs a new, empty session directory."
@@ -398,7 +396,9 @@ impl Fault for SessionError {
             SessionError::InvalidSessionId { id } => format!("session id: \"{id}\""),
             SessionError::Transition(error) => error.technical_detail(),
             SessionError::ValidatedTargetRequired { phase } => {
-                format!("phase {phase} writes to the target and was begun without a ValidatedTarget")
+                format!(
+                    "phase {phase} writes to the target and was begun without a ValidatedTarget"
+                )
             }
             SessionError::TargetNotInPlan => {
                 "the ValidatedTarget was produced from a plan other than the session's".to_owned()
@@ -417,9 +417,8 @@ impl Fault for SessionError {
 }
 
 fn validate_session_id(id: &str) -> Result<(), SessionError> {
-    let allowed = |character: char| {
-        character.is_ascii_alphanumeric() || matches!(character, '.' | '-' | '_')
-    };
+    let allowed =
+        |character: char| character.is_ascii_alphanumeric() || matches!(character, '.' | '-' | '_');
     if id.is_empty()
         || id.len() > MAX_SESSION_ID_LENGTH
         || id.starts_with('.')
@@ -664,12 +663,14 @@ impl<'a> Session<'a> {
     ///
     /// `target` is proof that the confirmed plan's disk was found again,
     /// unchanged, in a fresh inventory. It must come from this session's
-    /// plan. Before the phase's first record is appended, `session.json` is
-    /// rewritten with `target_writes_started: true`.
+    /// plan. It is consumed: each phase that writes needs its own proof, so
+    /// the disk is revalidated immediately before every such phase. Before
+    /// the phase's first record is appended, `session.json` is rewritten
+    /// with `target_writes_started: true`.
     pub fn begin_destructive(
         &mut self,
         phase: PhaseId,
-        target: &ValidatedTarget<'_>,
+        target: ValidatedTarget<'_>,
     ) -> Result<(), SessionError> {
         self.ensure_usable()?;
         match &self.plan {
@@ -886,9 +887,7 @@ fn decide(meta: &SessionMeta, replay: &Replay) -> ResumeDecision {
     .into_iter()
     .flatten()
     .max();
-    let written = evidence.or(meta
-        .target_writes_started
-        .then_some(PhaseId::Partitioning));
+    let written = evidence.or(meta.target_writes_started.then_some(PhaseId::Partitioning));
 
     if let Some(phase) = written {
         if !untrusted && replay.table.is_complete() {
@@ -1320,9 +1319,6 @@ mod tests {
             return Ok(());
         }
         run_phase(&mut session, PhaseId::UserConfirmation)?;
-        let validated = confirmed
-            .revalidate(inventory)
-            .expect("the fixture revalidates");
         for phase in WRITING {
             if stop(phase) {
                 return Ok(());
@@ -1331,7 +1327,11 @@ mod tests {
                 session.skip(phase, "Encryption was not chosen")?;
                 continue;
             }
-            session.begin_destructive(phase, &validated)?;
+            // Each phase that writes needs its own fresh proof.
+            let validated = confirmed
+                .revalidate(inventory)
+                .expect("the fixture revalidates");
+            session.begin_destructive(phase, validated)?;
             reached.destructive_begun = true;
             session.finish(phase, Completion::succeeded("Done"))?;
         }
@@ -1364,7 +1364,12 @@ mod tests {
     }
 
     /// Appends the record of `phase` starting, as a crash would leave it.
-    fn leave_running(file_system: &MemFs, inventory: &Inventory, confirmed: &ConfirmedPlan, phase: PhaseId) {
+    fn leave_running(
+        file_system: &MemFs,
+        inventory: &Inventory,
+        confirmed: &ConfirmedPlan,
+        phase: PhaseId,
+    ) {
         let clock = ManualClock::new();
         let loaded = load(file_system, dir()).unwrap();
         let mut session = Session {
@@ -1380,7 +1385,7 @@ mod tests {
         };
         if phase.destructive() {
             let validated = confirmed.revalidate(inventory).unwrap();
-            session.begin_destructive(phase, &validated).unwrap();
+            session.begin_destructive(phase, validated).unwrap();
         } else {
             session.begin(phase).unwrap();
         }
@@ -1583,16 +1588,13 @@ mod tests {
         let validated = confirmed.revalidate(&inventory).unwrap();
         assert_eq!(
             session
-                .begin_destructive(PhaseId::Partitioning, &validated)
+                .begin_destructive(PhaseId::Partitioning, validated)
                 .unwrap_err(),
             SessionError::NoPlan
         );
 
         run_phase(&mut session, PhaseId::StorageDiscovery).unwrap();
-        assert_eq!(
-            session.phases().get(PhaseId::StorageDiscovery).attempt,
-            2
-        );
+        assert_eq!(session.phases().get(PhaseId::StorageDiscovery).attempt, 2);
         // The resumed log is still a valid log.
         let again = load(&file_system, dir()).unwrap();
         assert!(again.anomalies().is_empty(), "{:?}", again.anomalies());
@@ -1607,7 +1609,12 @@ mod tests {
     #[test]
     fn a_phase_interrupted_before_any_write_is_marked_failed_and_run_again() {
         let (file_system, inventory, confirmed) = recorded(Some(PhaseId::TargetSelection));
-        leave_running(&file_system, &inventory, &confirmed, PhaseId::TargetSelection);
+        leave_running(
+            &file_system,
+            &inventory,
+            &confirmed,
+            PhaseId::TargetSelection,
+        );
         let loaded = load(&file_system, dir()).unwrap();
         assert_eq!(
             loaded.phases().get(PhaseId::TargetSelection).state,
@@ -1634,7 +1641,11 @@ mod tests {
             .expect("the interruption is recorded");
         assert_eq!(interrupted.phase.phase_id, PhaseId::TargetSelection);
         assert_eq!(
-            interrupted.phase.error_code.as_ref().map(|code| code.as_str()),
+            interrupted
+                .phase
+                .error_code
+                .as_ref()
+                .map(|code| code.as_str()),
             Some("UOS-INSTALL-SESSION-005")
         );
     }
@@ -1819,11 +1830,11 @@ mod tests {
             assert_eq!(error.code(), InstallCode::SessionTargetNotValidated);
         }
 
-        // With a proof but no saved plan.
-        let validated = confirmed.revalidate(&inventory).unwrap();
+        // With a proof but no saved plan. A proof is used up by each attempt.
+        let proof = || confirmed.revalidate(&inventory).unwrap();
         assert_eq!(
             session
-                .begin_destructive(PhaseId::Partitioning, &validated)
+                .begin_destructive(PhaseId::Partitioning, proof())
                 .unwrap_err(),
             SessionError::NoPlan
         );
@@ -1832,25 +1843,35 @@ mod tests {
         session.save_plan(confirmed.plan()).unwrap();
         let wrong = other.revalidate(&inventory).unwrap();
         let error = session
-            .begin_destructive(PhaseId::Partitioning, &wrong)
+            .begin_destructive(PhaseId::Partitioning, wrong)
             .unwrap_err();
         assert_eq!(error, SessionError::TargetNotInPlan);
         assert_eq!(error.code(), InstallCode::SessionTargetNotValidated);
 
         // An illegal transition does not mark the target as written.
         let error = session
-            .begin_destructive(PhaseId::FilesystemCreation, &validated)
+            .begin_destructive(PhaseId::FilesystemCreation, proof())
             .unwrap_err();
         assert_eq!(error.code(), InstallCode::PhaseOutOfOrder);
         assert!(!session.meta().target_writes_started);
-        assert!(!load(&file_system, dir()).unwrap().meta().target_writes_started);
+        assert!(
+            !load(&file_system, dir())
+                .unwrap()
+                .meta()
+                .target_writes_started
+        );
 
         // With the right proof the phase starts, and the flag is durable.
         session
-            .begin_destructive(PhaseId::Partitioning, &validated)
+            .begin_destructive(PhaseId::Partitioning, proof())
             .unwrap();
         assert!(session.meta().target_writes_started);
-        assert!(load(&file_system, dir()).unwrap().meta().target_writes_started);
+        assert!(
+            load(&file_system, dir())
+                .unwrap()
+                .meta()
+                .target_writes_started
+        );
 
         // From here the plan is locked and nothing can be reopened.
         assert_eq!(
@@ -1936,10 +1957,17 @@ mod tests {
         let error = session.begin(PhaseId::StorageDiscovery).unwrap_err();
         assert_eq!(error.code(), InstallCode::PhaseOutOfOrder);
         assert_eq!(
-            session.skip(PhaseId::EnvironmentCheck, "x").unwrap_err().code(),
+            session
+                .skip(PhaseId::EnvironmentCheck, "x")
+                .unwrap_err()
+                .code(),
             InstallCode::PhaseNotOptional
         );
-        assert_eq!(file_system.operations().len(), before, "nothing was written");
+        assert_eq!(
+            file_system.operations().len(),
+            before,
+            "nothing was written"
+        );
         run_phase(&mut session, PhaseId::EnvironmentCheck).unwrap();
     }
 
@@ -2141,8 +2169,8 @@ mod tests {
             file_system.set_file(&dir().join(SESSION_FILE), meta);
             file_system.set_file(&dir().join(PLAN_FILE), &plan);
             file_system.set_file(&dir().join(PHASES_FILE), &log[..cut]);
-            let loaded = load(&file_system, dir())
-                .unwrap_or_else(|error| panic!("cut at {cut}: {error:?}"));
+            let loaded =
+                load(&file_system, dir()).unwrap_or_else(|error| panic!("cut at {cut}: {error:?}"));
             let kind = kind_of(loaded.decision());
             let context = format!("cut at {cut}: {:?}", loaded.decision());
 
@@ -2284,9 +2312,10 @@ mod tests {
         let huge_seq = String::from_utf8(first_line.clone())
             .unwrap()
             .replace("\"seq\":1,", "\"seq\":18446744073709551615,");
-        let writes = String::from_utf8(first_line)
-            .unwrap()
-            .replace("\"phase_id\":\"START\"", "\"phase_id\":\"FILESYSTEM_CREATION\"");
+        let writes = String::from_utf8(first_line).unwrap().replace(
+            "\"phase_id\":\"START\"",
+            "\"phase_id\":\"FILESYSTEM_CREATION\"",
+        );
         for contents in [
             b"\n\n\n".to_vec(),
             b"\xff\xfe\x00garbage".to_vec(),

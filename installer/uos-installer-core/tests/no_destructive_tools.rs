@@ -68,13 +68,7 @@ const FORBIDDEN_PROGRAMS: [&str; 44] = [
 
 /// Short program names that are also ordinary words, so they are matched
 /// only as a whole string literal.
-const FORBIDDEN_LITERALS: [&str; 5] = [
-    "\"dd\"",
-    "\"mount\"",
-    "\"umount\"",
-    "\"sh\"",
-    "\"bash\"",
-];
+const FORBIDDEN_LITERALS: [&str; 5] = ["\"dd\"", "\"mount\"", "\"umount\"", "\"sh\"", "\"bash\""];
 
 /// The one file allowed to start a process, and the only form it may take.
 const PROBE_FILE: &str = "system_probe.rs";
@@ -126,7 +120,11 @@ fn sources() -> Vec<(PathBuf, String)> {
     let mut files = Vec::new();
     source_files(&root, &mut files);
     files.sort();
-    assert!(files.len() >= 10, "expected the crate's sources under {}", root.display());
+    assert!(
+        files.len() >= 10,
+        "expected the crate's sources under {}",
+        root.display()
+    );
     files
         .into_iter()
         .map(|path| {
@@ -187,7 +185,11 @@ fn the_only_process_the_crate_starts_is_the_read_only_inventory_probe() {
             }
         }
     }
-    assert_eq!(spawns.len(), 1, "{PROBE_FILE} must start exactly one process: {spawns:?}");
+    assert_eq!(
+        spawns.len(),
+        1,
+        "{PROBE_FILE} must start exactly one process: {spawns:?}"
+    );
     assert!(
         spawns[0].contains(ALLOWED_SPAWN),
         "the one process must be lsblk, found: {}",

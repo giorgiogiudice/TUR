@@ -419,7 +419,11 @@ impl BlockDevice {
             Some(filesystem) => parts.push(filesystem.clone()),
             None => parts.push("no recognised filesystem".to_owned()),
         }
-        if let Some(label) = self.filesystem_label.as_ref().or(self.partition_label.as_ref()) {
+        if let Some(label) = self
+            .filesystem_label
+            .as_ref()
+            .or(self.partition_label.as_ref())
+        {
             parts.push(format!("label \"{label}\""));
         }
         parts.join(", ")
@@ -925,10 +929,7 @@ mod tests {
             nvme.preferred_by_id(),
             Some("/dev/disk/by-id/nvme-Samsung_SSD_980_PRO_1TB_S5GXNX0T123456A")
         );
-        assert_eq!(
-            nvme.by_path,
-            ["/dev/disk/by-path/pci-0000:01:00.0-nvme-1"]
-        );
+        assert_eq!(nvme.by_path, ["/dev/disk/by-path/pci-0000:01:00.0-nvme-1"]);
 
         let esp = &nvme.children[0];
         assert_eq!(esp.kind, BlockKind::Partition);
@@ -966,7 +967,11 @@ mod tests {
         assert_eq!(linux[0].family, OsFamily::Linux);
         assert_eq!(linux[0].confidence, Confidence::Likely);
 
-        assert!(disk(&inventory, "sdb").detected_operating_systems().is_empty());
+        assert!(
+            disk(&inventory, "sdb")
+                .detected_operating_systems()
+                .is_empty()
+        );
     }
 
     #[test]

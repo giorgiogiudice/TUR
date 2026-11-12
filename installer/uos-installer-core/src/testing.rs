@@ -271,7 +271,11 @@ mod tests {
         assert!(file_system.append_and_sync(&log, b"three\n").is_err());
         // Later operations fail without effect.
         assert!(file_system.append_and_sync(&log, b"four\n").is_err());
-        assert!(file_system.write_and_sync(&directory.join("x"), b"x").is_err());
+        assert!(
+            file_system
+                .write_and_sync(&directory.join("x"), b"x")
+                .is_err()
+        );
         assert!(file_system.sync_dir(directory).is_err());
         assert!(file_system.rename(&log, &directory.join("y")).is_err());
         assert_eq!(file_system.file(&log).unwrap(), b"one\ntwo\nth");

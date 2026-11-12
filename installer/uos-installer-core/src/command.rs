@@ -251,7 +251,12 @@ impl CommandRecord {
     }
 
     /// Records the end of the command.
-    pub fn finish(&mut self, now: Timestamp, exit_code: Option<i32>, output_reference: Option<&str>) {
+    pub fn finish(
+        &mut self,
+        now: Timestamp,
+        exit_code: Option<i32>,
+        output_reference: Option<&str>,
+    ) {
         self.finished_at = Some(now);
         self.duration_ms = Some(now.millis_since(self.started_at));
         self.exit_code = exit_code;
@@ -395,7 +400,10 @@ mod tests {
                 "prefix-<redacted>-suffix"
             ]
         );
-        assert_eq!(record.environment["EXTRA_OPTIONS"], "prefix-<redacted>-suffix");
+        assert_eq!(
+            record.environment["EXTRA_OPTIONS"],
+            "prefix-<redacted>-suffix"
+        );
         assert_no_leak(&record);
     }
 
@@ -478,7 +486,8 @@ mod tests {
             clock: 100,
             records: Vec::new(),
         };
-        let spec = CommandSpec::new(PhaseId::EncryptionSetup, "example-tool").secret_arg(PASSPHRASE);
+        let spec =
+            CommandSpec::new(PhaseId::EncryptionSetup, "example-tool").secret_arg(PASSPHRASE);
         let record = runner.run(&spec).unwrap();
         assert_eq!(record.sequence, 1);
         assert_eq!(record.duration_ms, Some(5));

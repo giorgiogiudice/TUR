@@ -763,7 +763,11 @@ mod tests {
             (None, CheckStatus::Warning),
         ] {
             environment.secure_boot = state;
-            assert_eq!(check_secure_boot(&environment).status, expected, "{state:?}");
+            assert_eq!(
+                check_secure_boot(&environment).status,
+                expected,
+                "{state:?}"
+            );
         }
     }
 

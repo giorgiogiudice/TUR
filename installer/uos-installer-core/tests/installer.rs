@@ -53,15 +53,15 @@ fn installer(arguments: &[&str]) -> (i32, String, String) {
 }
 
 fn workstation_plan_arguments<'a>(target: &'a str, lsblk: &'a str, links: &'a str) -> Vec<&'a str> {
-    vec!["plan", "--from", lsblk, "--links", links, "--target", target]
+    vec![
+        "plan", "--from", lsblk, "--links", links, "--target", target,
+    ]
 }
 
 /// A fresh, empty directory for one test.
 fn scratch(name: &str) -> PathBuf {
-    let directory = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
-        "uos-installer-{name}-{}",
-        std::process::id()
-    ));
+    let directory = Path::new(env!("CARGO_TARGET_TMPDIR"))
+        .join(format!("uos-installer-{name}-{}", std::process::id()));
     if directory.exists() {
         fs::remove_dir_all(&directory).expect("the old scratch directory can be removed");
     }
@@ -193,9 +193,11 @@ fn write_interrupted_session(directory: &Path, stop_before_writing: bool) {
     }
 
     let fresh = self::inventory("lsblk-workstation.json", "links-workstation.json");
-    let validated = confirmed.revalidate(&fresh).expect("the target revalidates");
+    let validated = confirmed
+        .revalidate(&fresh)
+        .expect("the target revalidates");
     session
-        .begin_destructive(PhaseId::Partitioning, &validated)
+        .begin_destructive(PhaseId::Partitioning, validated)
         .expect("the phase is recorded as started");
 }
 
@@ -218,7 +220,10 @@ fn inventory_json_describes_every_device() {
     assert_eq!(devices.len(), 6);
     assert_eq!(devices[0]["model"], "Samsung SSD 980 PRO 1TB");
     assert_eq!(devices[0]["children"].as_array().map(Vec::len), Some(4));
-    assert_eq!(devices[2]["children"][0]["mountpoints"][0], "/run/initramfs/live");
+    assert_eq!(
+        devices[2]["children"][0]["mountpoints"][0],
+        "/run/initramfs/live"
+    );
     // The binary's output is the library's inventory.
     let parsed: Inventory = serde_json::from_str(&stdout).expect("stdout is an inventory");
     assert_eq!(
@@ -248,7 +253,10 @@ fn inventory_text_shows_the_oddities() {
         "encrypted volume",
         "fedora-home",
     ] {
-        assert!(stdout.contains(needle), "missing \"{needle}\" in:\n{stdout}");
+        assert!(
+            stdout.contains(needle),
+            "missing \"{needle}\" in:\n{stdout}"
+        );
     }
 }
 
@@ -273,7 +281,10 @@ fn malformed_input_is_a_typed_error() {
     let (code, stdout, stderr) = installer(&["inventory", "--from", &path]);
     assert_eq!(code, 1);
     assert!(stdout.is_empty());
-    assert!(stderr.starts_with("error: UOS-INSTALL-INVENTORY-002\n"), "{stderr}");
+    assert!(
+        stderr.starts_with("error: UOS-INSTALL-INVENTORY-002\n"),
+        "{stderr}"
+    );
 
     let (code, _, stderr) = installer(&[
         "inventory",
@@ -283,7 +294,10 @@ fn malformed_input_is_a_typed_error() {
         &path,
     ]);
     assert_eq!(code, 1);
-    assert!(stderr.starts_with("error: UOS-INSTALL-INVENTORY-002\n"), "{stderr}");
+    assert!(
+        stderr.starts_with("error: UOS-INSTALL-INVENTORY-002\n"),
+        "{stderr}"
+    );
 }
 
 // --- plan --------------------------------------------------------------------
@@ -319,7 +333,10 @@ fn plan_text_shows_plan_preflight_and_consequences() {
         "Encryption: none.",
         "To confirm, type exactly: ERASE T123456A",
     ] {
-        assert!(stdout.contains(needle), "missing \"{needle}\" in:\n{stdout}");
+        assert!(
+            stdout.contains(needle),
+            "missing \"{needle}\" in:\n{stdout}"
+        );
     }
 }
 
@@ -329,18 +346,33 @@ fn plan_json_carries_the_plan_the_preflight_report_and_no_refusal() {
     let links = fixture("links-workstation.json");
     let facts = fixture("facts-uefi.json");
     let mut arguments = workstation_plan_arguments(NVME, &lsblk, &links);
-    arguments.extend(["--facts", facts.as_str(), "--encrypt", "--data-partition", "--json"]);
+    arguments.extend([
+        "--facts",
+        facts.as_str(),
+        "--encrypt",
+        "--data-partition",
+        "--json",
+    ]);
     let (code, stdout, stderr) = installer(&arguments);
     assert_eq!(code, 0, "{stderr}");
     let value: Value = serde_json::from_str(&stdout).expect("stdout is JSON");
     assert_eq!(value["dry_run"], true);
     assert_eq!(value["refusal"], Value::Null);
-    assert_eq!(value["preflight"]["results"].as_array().map(Vec::len), Some(13));
+    assert_eq!(
+        value["preflight"]["results"].as_array().map(Vec::len),
+        Some(13)
+    );
     assert_eq!(value["plan"]["encryption"], "luks2");
     assert_eq!(value["plan"]["scheme_verified"], false);
-    assert_eq!(value["plan"]["target"]["identity"]["serial"], "S5GXNX0T123456A");
+    assert_eq!(
+        value["plan"]["target"]["identity"]["serial"],
+        "S5GXNX0T123456A"
+    );
     assert_eq!(value["plan"]["target"]["identity"]["by_id_path"], NVME);
-    assert_eq!(value["plan"]["confirmation"]["required_phrase"], "ERASE T123456A");
+    assert_eq!(
+        value["plan"]["confirmation"]["required_phrase"],
+        "ERASE T123456A"
+    );
     let roles: Vec<&str> = value["plan"]["partitions"]
         .as_array()
         .expect("partitions is an array")
@@ -372,7 +404,10 @@ fn plan_without_host_facts_is_blocked_because_nothing_was_determined() {
         "Installation would not be allowed to proceed.",
         "To confirm, type exactly: ERASE M700001B",
     ] {
-        assert!(stdout.contains(needle), "missing \"{needle}\" in:\n{stdout}");
+        assert!(
+            stdout.contains(needle),
+            "missing \"{needle}\" in:\n{stdout}"
+        );
     }
 }
 
@@ -400,11 +435,17 @@ fn plan_on_a_legacy_bios_machine_is_blocked() {
 fn a_device_path_is_refused_as_a_target() {
     let lsblk = fixture("lsblk-workstation.json");
     let links = fixture("links-workstation.json");
-    for target in ["/dev/nvme0n1", "/dev/sda", "/dev/disk/by-path/pci-0000:01:00.0-nvme-1"] {
-        let (code, stdout, stderr) =
-            installer(&workstation_plan_arguments(target, &lsblk, &links));
+    for target in [
+        "/dev/nvme0n1",
+        "/dev/sda",
+        "/dev/disk/by-path/pci-0000:01:00.0-nvme-1",
+    ] {
+        let (code, stdout, stderr) = installer(&workstation_plan_arguments(target, &lsblk, &links));
         assert_eq!(code, 1, "{target}");
-        assert!(stderr.starts_with("error: UOS-INSTALL-TARGET-001\n"), "{stderr}");
+        assert!(
+            stderr.starts_with("error: UOS-INSTALL-TARGET-001\n"),
+            "{stderr}"
+        );
         assert!(stderr.contains(target), "{stderr}");
         assert!(stdout.contains("No plan was made."), "{stdout}");
         assert!(!stdout.contains("ERASE"), "{stdout}");
@@ -482,8 +523,14 @@ fn unsafe_and_unusable_targets_are_refused_with_their_codes() {
         &workstation.0,
         &workstation.1,
     ));
-    assert!(stdout.contains("[BLOCKING] UOS-INSTALL-PREFLIGHT-008"), "{stdout}");
-    assert!(stdout.contains("[BLOCKING] UOS-INSTALL-PREFLIGHT-007"), "{stdout}");
+    assert!(
+        stdout.contains("[BLOCKING] UOS-INSTALL-PREFLIGHT-008"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("[BLOCKING] UOS-INSTALL-PREFLIGHT-007"),
+        "{stdout}"
+    );
 }
 
 #[test]
@@ -492,14 +539,25 @@ fn a_weak_identity_needs_the_explicit_flag_and_is_recorded() {
     let links = fixture("links-oddities.json");
     let facts = fixture("facts-uefi.json");
     let mut arguments = workstation_plan_arguments(WEAK, &lsblk, &links);
-    arguments.extend(["--facts", facts.as_str(), "--acknowledge-weak-identity", "--json"]);
+    arguments.extend([
+        "--facts",
+        facts.as_str(),
+        "--acknowledge-weak-identity",
+        "--json",
+    ]);
     let (code, stdout, stderr) = installer(&arguments);
     assert_eq!(code, 0, "{stderr}");
     let value: Value = serde_json::from_str(&stdout).expect("stdout is JSON");
-    assert_eq!(value["plan"]["target"]["weaker_identity_acknowledged"], true);
+    assert_eq!(
+        value["plan"]["target"]["weaker_identity_acknowledged"],
+        true
+    );
     assert_eq!(value["plan"]["target"]["identity_strength"], "weak");
     assert_eq!(value["plan"]["target"]["identity"]["serial"], Value::Null);
-    assert_eq!(value["plan"]["confirmation"]["required_phrase"], "ERASE 64023257088");
+    assert_eq!(
+        value["plan"]["confirmation"]["required_phrase"],
+        "ERASE 64023257088"
+    );
     let identity_check = value["preflight"]["results"]
         .as_array()
         .expect("results is an array")
@@ -525,9 +583,15 @@ fn a_disk_that_is_too_small_is_refused() {
     let (code, stdout, stderr) =
         installer(&["plan", "--from", &path, "--target", "serial=SMALL0001"]);
     assert_eq!(code, 1);
-    assert!(stderr.starts_with("error: UOS-INSTALL-PLAN-001\n"), "{stderr}");
+    assert!(
+        stderr.starts_with("error: UOS-INSTALL-PLAN-001\n"),
+        "{stderr}"
+    );
     assert!(stderr.contains("required_bytes: 23624417280"), "{stderr}");
-    assert!(stdout.contains("[BLOCKING] UOS-INSTALL-PREFLIGHT-006"), "{stdout}");
+    assert!(
+        stdout.contains("[BLOCKING] UOS-INSTALL-PREFLIGHT-006"),
+        "{stdout}"
+    );
 }
 
 // --- session -----------------------------------------------------------------
@@ -540,15 +604,30 @@ fn a_session_on_disk_is_durable_private_and_shown_as_needing_reconciliation() {
     // Exactly the four files, no temporary leftovers, owner-only modes.
     let mut names: Vec<String> = fs::read_dir(&directory)
         .expect("the directory lists")
-        .map(|entry| entry.expect("entry").file_name().to_string_lossy().into_owned())
+        .map(|entry| {
+            entry
+                .expect("entry")
+                .file_name()
+                .to_string_lossy()
+                .into_owned()
+        })
         .collect();
     names.sort();
-    assert_eq!(names, [PLAN_FILE, PHASES_FILE, SESSION_FILE, INVENTORY_FILE]);
+    assert_eq!(
+        names,
+        [PLAN_FILE, PHASES_FILE, SESSION_FILE, INVENTORY_FILE]
+    );
     for name in &names {
-        let mode = fs::metadata(directory.join(name)).expect("metadata").permissions().mode();
+        let mode = fs::metadata(directory.join(name))
+            .expect("metadata")
+            .permissions()
+            .mode();
         assert_eq!(mode & 0o777, 0o600, "{name}");
     }
-    let directory_mode = fs::metadata(&directory).expect("metadata").permissions().mode();
+    let directory_mode = fs::metadata(&directory)
+        .expect("metadata")
+        .permissions()
+        .mode();
     assert_eq!(directory_mode & 0o777, 0o700);
 
     // The library refuses to resume it.
@@ -565,7 +644,10 @@ fn a_session_on_disk_is_durable_private_and_shown_as_needing_reconciliation() {
     ));
     let fresh = inventory("lsblk-workstation.json", "links-workstation.json");
     let reconciliation = loaded.reconcile(&fresh).expect("the target is still there");
-    assert_eq!(reconciliation.device.serial.as_deref(), Some("S4EWNX0M700001B"));
+    assert_eq!(
+        reconciliation.device.serial.as_deref(),
+        Some("S4EWNX0M700001B")
+    );
     assert!(reconciliation.fresh_confirmation_required());
     assert!(loaded.resume(&OsFileSystem, &SystemClock).is_err());
 
@@ -583,7 +665,10 @@ fn a_session_on_disk_is_durable_private_and_shown_as_needing_reconciliation() {
         "Needs reconciliation: phase PARTITIONING (non_repeatable) is recorded as running.",
         "Do not resume",
     ] {
-        assert!(stdout.contains(needle), "missing \"{needle}\" in:\n{stdout}");
+        assert!(
+            stdout.contains(needle),
+            "missing \"{needle}\" in:\n{stdout}"
+        );
     }
     let (code, stdout, _) = installer(&["session", "show", &path, "--json"]);
     assert_eq!(code, 0);
@@ -615,12 +700,17 @@ fn a_session_stopped_before_writing_can_be_resumed_from_disk() {
     fs::write(&log_path, &log).expect("the log is rewritten");
     let (code, stdout, _) = installer(&["session", "show", &path]);
     assert_eq!(code, 0);
-    assert!(stdout.contains("is incomplete: the installer stopped while writing it"), "{stdout}");
+    assert!(
+        stdout.contains("is incomplete: the installer stopped while writing it"),
+        "{stdout}"
+    );
 
     let loaded = load(&OsFileSystem, &directory).expect("the session loads");
     let clock = SystemClock;
     let file_system = OsFileSystem;
-    let mut session = loaded.resume(&file_system, &clock).expect("the session resumes");
+    let mut session = loaded
+        .resume(&file_system, &clock)
+        .expect("the session resumes");
     assert_eq!(session.meta().target, None);
     run_phase(&mut session, PhaseId::StorageDiscovery);
     let again = load(&OsFileSystem, &directory).expect("the session loads again");
@@ -646,7 +736,10 @@ fn showing_a_directory_without_a_session_is_a_typed_error() {
     let (code, stdout, stderr) = installer(&["session", "show", &path]);
     assert_eq!(code, 1);
     assert!(stdout.is_empty());
-    assert!(stderr.starts_with("error: UOS-INSTALL-SESSION-009\n"), "{stderr}");
+    assert!(
+        stderr.starts_with("error: UOS-INSTALL-SESSION-009\n"),
+        "{stderr}"
+    );
 }
 
 // --- schemas -----------------------------------------------------------------
@@ -743,7 +836,9 @@ fn validate(schema: &Value, root: &Value, instance: &Value, at: &str, errors: &m
             "additionalProperties" => {
                 let declared = keywords.get("properties").and_then(Value::as_object);
                 if value != &Value::Bool(false) {
-                    errors.push(format!("{at}: only additionalProperties: false is supported"));
+                    errors.push(format!(
+                        "{at}: only additionalProperties: false is supported"
+                    ));
                 } else if let Some(object) = instance.as_object() {
                     for name in object.keys() {
                         if !declared.is_some_and(|properties| properties.contains_key(name)) {
@@ -808,11 +903,18 @@ fn validate(schema: &Value, root: &Value, instance: &Value, at: &str, errors: &m
 fn assert_valid(schema: &Value, root: &Value, instance: &Value, what: &str) {
     let mut errors = Vec::new();
     validate(schema, root, instance, "$", &mut errors);
-    assert!(errors.is_empty(), "{what} does not match its schema:\n{}", errors.join("\n"));
+    assert!(
+        errors.is_empty(),
+        "{what} does not match its schema:\n{}",
+        errors.join("\n")
+    );
 }
 
 fn assert_invalid(schema: &Value, instance: &Value, what: &str) {
-    assert!(!is_valid(schema, schema, instance), "{what} was accepted by the schema");
+    assert!(
+        !is_valid(schema, schema, instance),
+        "{what} was accepted by the schema"
+    );
 }
 
 /// Every key the schema declares for an object must be required, because
@@ -857,9 +959,18 @@ fn the_plan_schema_accepts_every_plan_the_crate_writes() {
         data_partition: true,
     };
     let plans = [
-        ("NVMe, encrypted, with data", plan_for(&workstation, NVME, all)),
-        ("SATA, defaults", plan_for(&workstation, SATA, LayoutOptions::default())),
-        ("weak identity", plan_for(&oddities, WEAK, LayoutOptions::default())),
+        (
+            "NVMe, encrypted, with data",
+            plan_for(&workstation, NVME, all),
+        ),
+        (
+            "SATA, defaults",
+            plan_for(&workstation, SATA, LayoutOptions::default()),
+        ),
+        (
+            "weak identity",
+            plan_for(&oddities, WEAK, LayoutOptions::default()),
+        ),
     ];
     for (name, plan) in &plans {
         let value = serde_json::to_value(plan).expect("the plan serialises");
@@ -872,7 +983,10 @@ fn the_plan_schema_accepts_every_plan_the_crate_writes() {
     // The validator is not vacuous: damaged plans are rejected.
     let good = serde_json::to_value(&plans[0].1).expect("the plan serialises");
     let mut missing = good.clone();
-    missing.as_object_mut().expect("object").remove("consequences");
+    missing
+        .as_object_mut()
+        .expect("object")
+        .remove("consequences");
     assert_invalid(&schema, &missing, "a plan without consequences");
     let mut extra = good.clone();
     extra["commands"] = Value::Array(Vec::new());
@@ -913,16 +1027,32 @@ fn the_session_schema_accepts_the_files_a_session_writes() {
     let mut progress_kinds: Vec<String> = Vec::new();
     for (index, line) in log.lines().enumerate() {
         let record: Value = serde_json::from_str(line).expect("a log line is JSON");
-        assert_valid(record_schema, &schema, &record, &format!("log line {}", index + 1));
+        assert_valid(
+            record_schema,
+            &schema,
+            &record,
+            &format!("log line {}", index + 1),
+        );
         assert_eq!(record["seq"], index as u64 + 1);
         states.extend(record["phase"]["state"].as_str().map(str::to_owned));
-        progress_kinds.extend(record["phase"]["progress"]["kind"].as_str().map(str::to_owned));
+        progress_kinds.extend(
+            record["phase"]["progress"]["kind"]
+                .as_str()
+                .map(str::to_owned),
+        );
     }
     states.sort();
     states.dedup();
     assert_eq!(
         states,
-        ["cancelled", "failed", "pending", "running", "succeeded", "warning"]
+        [
+            "cancelled",
+            "failed",
+            "pending",
+            "running",
+            "succeeded",
+            "warning"
+        ]
     );
     progress_kinds.sort();
     progress_kinds.dedup();
@@ -935,7 +1065,10 @@ fn the_session_schema_accepts_the_files_a_session_writes() {
 
     // Damaged session files are rejected.
     let mut missing = session.clone();
-    missing.as_object_mut().expect("object").remove("target_writes_started");
+    missing
+        .as_object_mut()
+        .expect("object")
+        .remove("target_writes_started");
     assert_invalid(&schema, &missing, "a session without the write flag");
     let mut short = session.clone();
     short["phases"].as_array_mut().expect("array").pop();
@@ -1017,4 +1150,32 @@ fn schema_enumerations_are_exactly_the_rust_enumerations() {
     for filesystem in filesystems {
         serde_json::from_value::<Filesystem>(filesystem).expect("a schema filesystem parses");
     }
+}
+
+// --- design note -------------------------------------------------------------
+
+#[test]
+fn the_design_note_agrees_with_the_code_registry_and_the_phase_table() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/architecture/installer.md");
+    let note = fs::read_to_string(&path)
+        .unwrap_or_else(|error| panic!("{} cannot be read: {error}", path.display()));
+    for code in InstallCode::ALL {
+        let severity = serde_json::to_value(code.severity()).expect("a severity serialises");
+        let row = format!(
+            "| `{code}` | {} | {} |",
+            severity.as_str().expect("a severity is a string"),
+            code.title()
+        );
+        assert!(note.contains(&row), "the design note lacks the row: {row}");
+    }
+    for (index, phase) in PhaseId::ALL.into_iter().enumerate() {
+        let row = format!(
+            "| {} | `{phase}` | `{}` | {} |",
+            index + 1,
+            phase.class().as_str(),
+            if phase.destructive() { "yes" } else { "no" }
+        );
+        assert!(note.contains(&row), "the design note lacks the row: {row}");
+    }
+    assert!(note.contains("ERASE_DISK_SCHEME"));
 }

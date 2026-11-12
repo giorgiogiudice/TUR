@@ -606,7 +606,10 @@ fn render_inventory(inventory: &Inventory) -> Vec<String> {
     for disk in disks {
         lines.push(String::new());
         lines.push(format!("Disk: {}", disk.display_model()));
-        lines.push(format!("  Capacity:         {}", format_size_exact(disk.size_bytes)));
+        lines.push(format!(
+            "  Capacity:         {}",
+            format_size_exact(disk.size_bytes)
+        ));
         lines.push(format!(
             "  Serial:           {}",
             disk.serial.as_deref().unwrap_or("not reported")
@@ -622,7 +625,10 @@ fn render_inventory(inventory: &Inventory) -> Vec<String> {
         ));
         lines.push(format!(
             "  Port:             {}",
-            disk.by_path.first().map(String::as_str).unwrap_or("unknown")
+            disk.by_path
+                .first()
+                .map(String::as_str)
+                .unwrap_or("unknown")
         ));
         lines.push(format!(
             "  Sector size:      {} bytes logical, {} bytes physical",
@@ -723,7 +729,10 @@ mod tests {
             "cannot be chosen: the drive holds no medium",
             "not stable; never use it to choose a disk",
         ] {
-            assert!(stdout.contains(needle), "missing \"{needle}\" in:\n{stdout}");
+            assert!(
+                stdout.contains(needle),
+                "missing \"{needle}\" in:\n{stdout}"
+            );
         }
     }
 
@@ -732,7 +741,10 @@ mod tests {
         let (code, stdout, stderr) = run_with(&["inventory", "--from", "/nonexistent/lsblk.json"]);
         assert_eq!(code, EXIT_FAULT);
         assert!(stdout.is_empty());
-        assert!(stderr.starts_with("error: UOS-INSTALL-INVENTORY-001\n"), "{stderr}");
+        assert!(
+            stderr.starts_with("error: UOS-INSTALL-INVENTORY-001\n"),
+            "{stderr}"
+        );
         assert!(stderr.contains("Technical detail:"));
     }
 

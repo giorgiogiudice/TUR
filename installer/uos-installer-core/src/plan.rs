@@ -395,15 +395,33 @@ pub fn compute_layout(
         }
         let preferred = up(scheme.root_bytes_with_data, alignment)?.max(root_min);
         let root_size = preferred.min(sub(remaining, data_min)?);
-        partitions.push(planned(partitions.len(), &scheme.root, cursor, root_size, options));
+        partitions.push(planned(
+            partitions.len(),
+            &scheme.root,
+            cursor,
+            root_size,
+            options,
+        ));
         let data_offset = add(cursor, root_size)?;
         let data_size = sub(remaining, root_size)?;
-        partitions.push(planned(partitions.len(), &scheme.data, data_offset, data_size, options));
+        partitions.push(planned(
+            partitions.len(),
+            &scheme.data,
+            data_offset,
+            data_size,
+            options,
+        ));
     } else {
         if remaining < root_min {
             return Err(too_small);
         }
-        partitions.push(planned(partitions.len(), &scheme.root, cursor, remaining, options));
+        partitions.push(planned(
+            partitions.len(),
+            &scheme.root,
+            cursor,
+            remaining,
+            options,
+        ));
     }
     validate_layout(&partitions, disk_bytes, alignment)?;
     Ok(partitions)
@@ -748,11 +766,7 @@ pub fn destroyed_items(device: &BlockDevice) -> Vec<DestroyedItem> {
 }
 
 fn same_contents(left: &[DestroyedItem], right: &[DestroyedItem]) -> bool {
-    left.len() == right.len()
-        && left
-            .iter()
-            .zip(right)
-            .all(|(a, b)| a.same_content(b))
+    left.len() == right.len() && left.iter().zip(right).all(|(a, b)| a.same_content(b))
 }
 
 /// What carrying out the plan would do to what is on the disk now.
@@ -976,7 +990,9 @@ fn confirmation_text(
     if consequences.destroyed.is_empty() {
         lines.push("Existing partitions and filesystems: none recognised".to_owned());
     } else {
-        lines.push("Existing partitions and filesystems, all of which will be destroyed:".to_owned());
+        lines.push(
+            "Existing partitions and filesystems, all of which will be destroyed:".to_owned(),
+        );
         for item in &consequences.destroyed {
             lines.push(format!("  {}", item.description));
         }
@@ -996,9 +1012,7 @@ fn confirmation_text(
     for partition in partitions {
         lines.push(format!("  {}", describe_partition(partition)));
     }
-    lines.push(
-        "User data: nothing on this drive is preserved. This cannot be undone.".to_owned(),
-    );
+    lines.push("User data: nothing on this drive is preserved. This cannot be undone.".to_owned());
 
     let encryption_notice = match encryption {
         Some(EncryptionKind::Luks2) => {
@@ -1082,6 +1096,15 @@ impl Plan {
         if !self.target.identity.is_stable() && !self.target.weaker_identity_acknowledged {
             return Err(ConfirmError::WeakIdentityNotAcknowledged);
         }
+        let required_phrase = confirmation_phrase(&self.target.identity);
+        if self.confirmation.required_phrase != required_phrase {
+            // The screen would show one phrase while another is required:
+            // the plan was altered after it was built.
+            return Err(ConfirmError::Plan(PlanError::Invalid {
+                reason: "the confirmation phrase does not belong to the target identity"
+                    .to_owned(),
+            }));
+        }
         if preflight.target.as_ref() != Some(&self.target.identity) {
             return Err(ConfirmError::PreflightMismatch);
         }
@@ -1093,7 +1116,7 @@ impl Plan {
         if !blocking.is_empty() {
             return Err(ConfirmError::PreflightBlocked { codes: blocking });
         }
-        if typed_phrase.trim() != confirmation_phrase(&self.target.identity) {
+        if typed_phrase.trim() != required_phrase {
             return Err(ConfirmError::PhraseMismatch);
         }
         Ok(ConfirmedPlan {
@@ -1480,8 +1503,7 @@ mod tests {
                 .unwrap();
             assert_eq!(root.size_bytes, ERASE_DISK_SCHEME.root_min_bytes);
 
-            let error =
-                compute_layout(&ERASE_DISK_SCHEME, minimum - 1, 512, options).unwrap_err();
+            let error = compute_layout(&ERASE_DISK_SCHEME, minimum - 1, 512, options).unwrap_err();
             assert_eq!(
                 error,
                 PlanError::DiskTooSmall {
@@ -1532,7 +1554,17 @@ mod tests {
     #[test]
     fn extreme_sizes_never_panic() {
         for options in ALL_OPTIONS {
-            for disk in [0, 1, 511, MIB - 1, MIB, 2 * MIB, GIB, u64::MAX - 1, u64::MAX] {
+            for disk in [
+                0,
+                1,
+                511,
+                MIB - 1,
+                MIB,
+                2 * MIB,
+                GIB,
+                u64::MAX - 1,
+                u64::MAX,
+            ] {
                 let result = compute_layout(&ERASE_DISK_SCHEME, disk, 512, options);
                 if let Ok(partitions) = result {
                     assert_layout_invariants(&partitions, disk);
@@ -1559,8 +1591,8 @@ mod tests {
     #[test]
     fn unsupported_sector_sizes_are_refused() {
         for sector in [0, 513, 520, 3 * 1024, 2 * 1024 * 1024] {
-            let error = compute_layout(&ERASE_DISK_SCHEME, 500 * GIB, sector, NO_OPTIONS)
-                .unwrap_err();
+            let error =
+                compute_layout(&ERASE_DISK_SCHEME, 500 * GIB, sector, NO_OPTIONS).unwrap_err();
             assert_eq!(
                 error,
                 PlanError::UnsupportedSectorSize {
@@ -1712,7 +1744,10 @@ mod tests {
         let inventory = workstation();
         let plan = plan_for(&inventory, NVME_SELECTOR, NO_OPTIONS);
         let consequences = &plan.consequences;
-        assert_eq!(consequences.existing_partition_table.as_deref(), Some("gpt"));
+        assert_eq!(
+            consequences.existing_partition_table.as_deref(),
+            Some("gpt")
+        );
         assert!(!consequences.user_data_preserved);
         let paths: Vec<&str> = consequences
             .destroyed
@@ -1728,7 +1763,10 @@ mod tests {
                 "/dev/nvme0n1p4"
             ]
         );
-        assert_eq!(consequences.destroyed[2].filesystem.as_deref(), Some("ntfs"));
+        assert_eq!(
+            consequences.destroyed[2].filesystem.as_deref(),
+            Some("ntfs")
+        );
         assert!(consequences.destroyed[2].description.contains("ntfs"));
         assert_eq!(consequences.other_operating_systems.len(), 1);
         assert_eq!(
@@ -1747,7 +1785,11 @@ mod tests {
             .find(|device| device.name == "nvme1n1")
             .unwrap();
         let consequences = Consequences::of_erasing(nvme);
-        let kinds: Vec<BlockKind> = consequences.destroyed.iter().map(|item| item.kind).collect();
+        let kinds: Vec<BlockKind> = consequences
+            .destroyed
+            .iter()
+            .map(|item| item.kind)
+            .collect();
         assert_eq!(
             kinds,
             [
@@ -1933,10 +1975,39 @@ mod tests {
         plan.target.weaker_identity_acknowledged = false;
         let preflight = preflight_for(&inventory, selector);
         let error = plan
-            .confirm("ERASE 64023257088", &preflight, Timestamp::from_unix_millis(0))
+            .confirm(
+                "ERASE 64023257088",
+                &preflight,
+                Timestamp::from_unix_millis(0),
+            )
             .unwrap_err();
         assert_eq!(error, ConfirmError::WeakIdentityNotAcknowledged);
         assert_eq!(error.code(), InstallCode::ConfirmWeakIdentity);
+    }
+
+    #[test]
+    fn a_plan_whose_phrase_does_not_match_its_target_cannot_be_confirmed() {
+        let inventory = workstation();
+        let preflight = preflight_for(&inventory, SATA_SELECTOR);
+        let now = Timestamp::from_unix_millis(0);
+
+        // The text shown to the user was altered.
+        let mut relabelled = plan_for(&inventory, SATA_SELECTOR, NO_OPTIONS);
+        relabelled.confirmation.required_phrase = "ERASE".to_owned();
+        for typed in ["ERASE", "ERASE M700001B"] {
+            let error = relabelled.confirm(typed, &preflight, now).unwrap_err();
+            assert_eq!(error.code(), InstallCode::PlanInvalid, "{typed}");
+        }
+
+        // The target was altered but the text still names the old disk.
+        let mut retargeted = plan_for(&inventory, SATA_SELECTOR, NO_OPTIONS);
+        let nvme = plan_for(&inventory, NVME_SELECTOR, NO_OPTIONS);
+        retargeted.target.identity = nvme.target.identity;
+        let nvme_preflight = preflight_for(&inventory, NVME_SELECTOR);
+        for typed in ["ERASE M700001B", "ERASE T123456A"] {
+            let result = retargeted.confirm(typed, &nvme_preflight, now);
+            assert_eq!(result.unwrap_err().code(), InstallCode::PlanInvalid, "{typed}");
+        }
     }
 
     fn confirmed_sata_plan(inventory: &Inventory) -> ConfirmedPlan {
