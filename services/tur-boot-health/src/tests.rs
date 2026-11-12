@@ -1442,7 +1442,10 @@ fn the_gate_passes_in_the_boot_that_made_the_fallback_permanent() {
     assert_eq!(notice(&host).str_or_empty("kind"), "fallback");
     // Without `classify` the gate resolves the argument itself.
     let mut host = FakeHost::new();
-    assert_eq!(gate::run_gate(&mut host, &config(), "unknown").result, "passed");
+    assert_eq!(
+        gate::run_gate(&mut host, &config(), "unknown").result,
+        "passed"
+    );
 }
 
 #[test]
@@ -1454,7 +1457,10 @@ fn a_failed_gate_does_not_replace_the_notice_of_a_fallback() {
     record_failure(&mut host);
     assert!(!host.reboot_requested);
     assert_eq!(notice(&host).str_or_empty("kind"), "fallback");
-    assert_eq!(last_event(&host, "gate-failed").str_or_empty("failed_check"), "R7");
+    assert_eq!(
+        last_event(&host, "gate-failed").str_or_empty("failed_check"),
+        "R7"
+    );
 }
 
 #[test]

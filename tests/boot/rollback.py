@@ -821,17 +821,6 @@ def evaluate(name: str, spec: dict, seen: dict, out: pathlib.Path, guest_source:
             all(delay is not None and 29 <= delay <= 75 for delay in delays),
             f"seconds from the panic line to the next kernel start: {delays}; RESET events: {len(resets)}",
         )
-    if spec["failed_check"]:
-        pattern = re.compile(spec["failed_check"])
-        gate_lines = [hit for hit in seen["hits"] if hit["name"] == "gate failed"]
-        per_boot = {index: any(pattern.search(hit["line"]) for hit in gate_lines if hit["boot"] == first_trial + index - 1) for index in (1, 2, 3)}
-        checks.add(
-            "failed_check",
-            f"The gate named the intended check and its error code in all three attempts: {spec['failed_check']}",
-            all(per_boot.values()),
-            f"per attempt: {per_boot}; console: {[hit['line'] for hit in gate_lines][:3]}",
-        )
-
     # ---- the end state ----------------------------------------------------------------------
     outcome, final = spec["outcome"], spec["final"]
     if last is None:
@@ -1017,14 +1006,27 @@ def evaluate(name: str, spec: dict, seen: dict, out: pathlib.Path, guest_source:
             f"summary: {summary.relative_to(last.dir) if summary else 'none'}; exported journals: {len(exported)} (expected "
             f"{spec['journals']}); files: {[line.split('/')[-1] for line in files]}",
         )
+        # The failed attempts' own journals, read by the version that survived.
+        held = {}
+        for path in sorted(last.dir.glob("journal-minus-*.txt.gz")):
+            try:
+                held[path.name] = gzip.decompress(path.read_bytes()).decode("utf-8", errors="replace")
+            except (OSError, EOFError, ValueError):
+                continue
+        if spec["failed_check"]:
+            # From the journal of each attempt, not from the console: a kernel
+            # message can cut through a console line.
+            pattern = re.compile(r"Boot health gate failed: " + spec["failed_check"])
+            naming = {key: bool(pattern.search(text)) for key, text in held.items() if "Boot health gate failed" in text}
+            gate_lines = [hit["line"] for hit in seen["hits"] if hit["name"] == "gate failed"]
+            checks.add(
+                "failed_check",
+                f"The gate named the intended check and its error code in all three attempts: {spec['failed_check']}",
+                sum(naming.values()) >= 3,
+                f"journals of earlier boots in which the gate failed: {len(naming)}, of them naming the check: "
+                f"{sum(naming.values())}; on the console: {gate_lines[:3]}",
+            )
         if spec["journals"]:
-            # The failed attempts' own journals, read by the version that survived.
-            held = {}
-            for path in sorted(last.dir.glob("journal-minus-*.txt.gz")):
-                try:
-                    held[path.name] = gzip.decompress(path.read_bytes()).decode("utf-8", errors="replace")
-                except (OSError, EOFError, ValueError):
-                    continue
             marker = {
                 "emergency": r"emergency\.target|Emergency Mode",
                 "pid1-stops": r"tur-test-stop-pid1|Freezing execution|Caught <SEGV>",

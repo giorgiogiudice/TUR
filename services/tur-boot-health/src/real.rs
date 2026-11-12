@@ -223,6 +223,15 @@ impl SystemHost {
         if let Ok(directory) = fs::File::open("/boot/grub2") {
             let _ = directory.sync_all();
         }
+        // And it must be where GRUB will look. GRUB reads the filesystem
+        // without replaying its journal, and grub2-editenv moves the block
+        // when it rewrites it: after an fsync alone, GRUB still found the old
+        // block with the old content after a power cut. A sync of the whole
+        // filesystem also writes the metadata that locates the block to its
+        // place on disk (measured in CI; docs/reports/TUR-005.md, finding 1).
+        if let Err(error) = run("sync", &["--file-system", GRUBENV], seconds(60)) {
+            eprintln!("tur-boot-health: the filesystem under /boot was not synced: {error}");
+        }
         Ok(())
     }
 
