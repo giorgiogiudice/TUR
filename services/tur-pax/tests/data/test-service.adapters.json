@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "service": "org.tur.Test1",
+  "adapters": [
+    {
+      "tool": "test_observe",
+      "kind": "command",
+      "program": "/usr/bin/tur-pax-test-tool",
+      "arguments": [{ "literal": "observe" }]
+    },
+    {
+      "tool": "test_reversible",
+      "kind": "command",
+      "program": "/usr/bin/tur-pax-test-tool",
+      "arguments": [{ "literal": "set" }, { "literal": "--" }, { "input": "value" }]
+    },
+    {
+      "tool": "test_consequential",
+      "kind": "command",
+      "program": "/usr/bin/tur-pax-test-tool",
+      "arguments": [
+        { "literal": "send" },
+        { "option": "--subject", "input": "subject" },
+        { "literal": "--" },
+        { "input": "recipient" }
+      ]
+    },
+    {
+      "tool": "test_system_critical",
+      "kind": "command",
+      "program": "/usr/bin/tur-pax-test-tool",
+      "arguments": [{ "literal": "format" }, { "literal": "--" }, { "input": "volume_id" }]
+    }
+  ]
+}

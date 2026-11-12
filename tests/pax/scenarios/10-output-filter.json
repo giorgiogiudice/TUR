@@ -1,0 +1,13 @@
+{
+  "name": "output-filter",
+  "what": "A command prints a file that holds credential-like text: an access key identifier, a password assignment and a private-key block. The output is filtered before it goes to the provider, and the audit trail records that something was withheld and of what kind, never the text.",
+  "request": "Show me my settings file.",
+  "turns": [
+    {
+      "calls": [
+        { "id": "toolu_leak", "name": "run_readonly_command", "arguments": { "argv": ["/usr/bin/cat", "{{GRANTED}}/leak.txt"] } }
+      ]
+    },
+    { "text": "Parts of the file were withheld because they look like credentials." }
+  ]
+}

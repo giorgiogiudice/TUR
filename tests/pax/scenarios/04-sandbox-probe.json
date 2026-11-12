@@ -1,0 +1,20 @@
+{
+  "name": "sandbox-probe",
+  "what": "Commands that report what the sandbox looks like from inside: the environment, the privileges, the limits, what is in the home directory, in /run and in /tmp, the processes and the network interfaces.",
+  "request": "Look around the sandbox.",
+  "turns": [
+    {
+      "calls": [
+        { "id": "toolu_env", "name": "run_readonly_command", "arguments": { "argv": ["/usr/bin/python3", "-c", "import json, os; print(json.dumps({'names': sorted(os.environ), 'home': os.environ.get('HOME'), 'path': os.environ.get('PATH')}))"] } },
+        { "id": "toolu_privileges", "name": "run_readonly_command", "arguments": { "argv": ["/usr/bin/grep", "-E", "^(NoNewPrivs|CapEff|CapPrm|CapBnd):", "/proc/self/status"] } },
+        { "id": "toolu_limits", "name": "run_readonly_command", "arguments": { "argv": ["/usr/bin/prlimit", "--noheadings", "--raw", "--output", "RESOURCE,SOFT,HARD"] } },
+        { "id": "toolu_home", "name": "run_readonly_command", "arguments": { "argv": ["/usr/bin/ls", "-A", "{{HOME}}"] } },
+        { "id": "toolu_run", "name": "run_readonly_command", "arguments": { "argv": ["/usr/bin/find", "/run", "-maxdepth", "1"] } },
+        { "id": "toolu_tmp", "name": "run_readonly_command", "arguments": { "argv": ["/usr/bin/ls", "-A", "/tmp"] } },
+        { "id": "toolu_processes", "name": "run_readonly_command", "arguments": { "argv": ["/bin/sh", "-c", "ls /proc | grep -c '^[0-9]'"] } },
+        { "id": "toolu_network", "name": "run_readonly_command", "arguments": { "argv": ["/usr/bin/cat", "/proc/net/dev"] } }
+      ]
+    },
+    { "text": "I have looked around." }
+  ]
+}

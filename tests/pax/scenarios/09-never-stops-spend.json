@@ -1,0 +1,16 @@
+{
+  "name": "never-stops-spend",
+  "what": "Injection (e). The same model that never stops, with the step limit out of the way and a spend limit of 300 tokens for the task. Each response uses 70 tokens. The fifth response is cut when its input is reported.",
+  "request": "Read my report.",
+  "options": ["--max-steps", "1000"],
+  "repeat_last": true,
+  "task_limit": { "max_tokens": 300 },
+  "turns": [
+    {
+      "text": "Reading it again.",
+      "calls": [
+        { "id": "toolu_again", "name": "run_readonly_command", "arguments": { "argv": ["/usr/bin/cat", "{{GRANTED}}/report.txt"] } }
+      ]
+    }
+  ]
+}

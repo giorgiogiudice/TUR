@@ -1,0 +1,15 @@
+{
+  "name": "never-stops-steps",
+  "what": "Injection (e). A model that never stops: it reads the same file again and again. The step limit ends the task.",
+  "request": "Read my report.",
+  "options": ["--max-steps", "4"],
+  "repeat_last": true,
+  "turns": [
+    {
+      "text": "Reading it again.",
+      "calls": [
+        { "id": "toolu_again", "name": "run_readonly_command", "arguments": { "argv": ["/usr/bin/cat", "{{GRANTED}}/report.txt"] } }
+      ]
+    }
+  ]
+}

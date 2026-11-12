@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "service": "org.tur.Storage1",
+  "adapters": [
+    {
+      "tool": "storage_list_volumes",
+      "kind": "command",
+      "program": "/usr/bin/tur-storage",
+      "arguments": [
+        { "literal": "volumes" },
+        { "literal": "--from" },
+        { "literal": "/dev/stdin" },
+        { "literal": "--json" }
+      ],
+      "feed": {
+        "program": "/usr/bin/lsblk",
+        "arguments": ["--json", "--bytes", "--output-all"]
+      },
+      "max_output_bytes": 262144
+    }
+  ]
+}

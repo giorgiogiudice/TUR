@@ -1,0 +1,12 @@
+#!/bin/sh
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# The program behind the tools of the test service org.tur.Test1 in the P@x
+# end-to-end test. It changes nothing. It prints what it was asked to do, so
+# that the test can tell from what the provider was sent whether it ran.
+#
+#   tur-pax-test-tool observe
+#   tur-pax-test-tool set -- VALUE
+#   tur-pax-test-tool send [--subject=TEXT] -- RECIPIENT
+#   tur-pax-test-tool format -- VOLUME
+printf '{"tur_pax_test_tool_ran":"%s","argument_count":%d}\n' "$1" "$#"

@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "service": "org.tur.Catalogue1",
+  "tools": [
+    {
+      "name": "catalogue_search",
+      "description": "Find applications in the TUR application catalogue by name or alias. Returns the identifier, name, category and publisher of each match. Nothing is installed or started.",
+      "class": 0,
+      "method": "Search",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "The name of an application, or part of it.",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": ["query"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "catalogue_show",
+      "description": "Show the catalogue entry of one application, by the identifier that catalogue_search returned: what it is, who publishes it, and the ways it can be run on TUR with their ratings.",
+      "class": 0,
+      "method": "Show",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "An application identifier from catalogue_search, such as com.discord.discord.",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "catalogue_route",
+      "description": "Work out how one application can be run on this computer: the recommended route (native, Flatpak, Wine, Android, a Windows guest or the web), the other routes in order, and what would have to be installed or enabled first. Nothing is installed or started.",
+      "class": 0,
+      "method": "Route",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "An application identifier from catalogue_search, such as com.discord.discord.",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      }
+    }
+  ]
+}

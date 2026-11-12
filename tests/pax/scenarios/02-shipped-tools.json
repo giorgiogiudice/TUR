@@ -1,0 +1,19 @@
+{
+  "name": "shipped-tools",
+  "what": "Every tool that ships with an adapter, performed by its shipped adapter against the machine the test runs on: system status, hardware inventory and problems, volumes (lsblk fed to tur-storage), catalogue search and show, and the inspection of a file.",
+  "request": "Tell me about this computer.",
+  "turns": [
+    {
+      "calls": [
+        { "id": "toolu_status", "name": "diag_get_status", "arguments": {} },
+        { "id": "toolu_inventory", "name": "device_get_inventory", "arguments": {} },
+        { "id": "toolu_problems", "name": "device_list_problems", "arguments": {} },
+        { "id": "toolu_volumes", "name": "storage_list_volumes", "arguments": {} },
+        { "id": "toolu_search", "name": "catalogue_search", "arguments": { "query": "discord" } },
+        { "id": "toolu_show", "name": "catalogue_show", "arguments": { "id": "com.discord.discord" } },
+        { "id": "toolu_inspect", "name": "runtime_inspect_file", "arguments": { "path": "/usr/bin/true" } }
+      ]
+    },
+    { "text": "This is a test machine. I have its status, hardware, volumes and catalogue entries." }
+  ]
+}

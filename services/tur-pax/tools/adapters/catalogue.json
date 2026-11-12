@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "service": "org.tur.Catalogue1",
+  "adapters": [
+    {
+      "tool": "catalogue_search",
+      "kind": "command",
+      "program": "/usr/bin/tur-catalogue",
+      "arguments": [
+        { "literal": "--catalogue" },
+        { "literal": "/usr/share/tur/catalogue" },
+        { "literal": "search" },
+        { "literal": "--json" },
+        { "literal": "--" },
+        { "input": "query" }
+      ],
+      "success_exit_codes": [0, 6]
+    },
+    {
+      "tool": "catalogue_show",
+      "kind": "command",
+      "program": "/usr/bin/tur-catalogue",
+      "arguments": [
+        { "literal": "--catalogue" },
+        { "literal": "/usr/share/tur/catalogue" },
+        { "literal": "show" },
+        { "literal": "--json" },
+        { "literal": "--" },
+        { "input": "id" }
+      ],
+      "success_exit_codes": [0, 6]
+    },
+    {
+      "tool": "catalogue_route",
+      "kind": "command",
+      "program": "/usr/bin/tur-catalogue",
+      "arguments": [
+        { "literal": "--catalogue" },
+        { "literal": "/usr/share/tur/catalogue" },
+        { "literal": "route" },
+        { "literal": "--json" },
+        { "literal": "--" },
+        { "input": "id" }
+      ],
+      "success_exit_codes": [0, 3, 4, 6]
+    }
+  ]
+}
