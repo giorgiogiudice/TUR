@@ -254,10 +254,10 @@ of scope for this layer. What each provider documents today:
 All three can ask for several actions in one turn. Each action must still pass
 the policy engine one by one.
 
-**Model discovery** is not implemented. All three providers offer an endpoint
-that lists models; `GET /v1/models` was seen in the Anthropic and OpenAI
-documentation, and the Google one was not looked up. Model names remain
-configuration.
+**Model discovery** is not implemented. `GET /v1/models` is named in OpenAI's
+rate-limits guide and, for Anthropic, in the Claude API reference bundled with
+the development tooling. Neither endpoint's response was read, and Google's
+equivalent was not looked up. Model names remain configuration.
 
 ## 6. Errors
 
@@ -442,6 +442,11 @@ status: 0 valid (and ping succeeded), 1 invalid configuration, 2 usage error,
   built from the manifest. The translation is three field names per provider.
 - **Anthropic refusal fallback** (`fallbacks`, a beta) is not requested. A
   refusal is reported as a refusal.
+- **OpenAI's `phase` label is not carried.** The API may label an assistant
+  message `commentary` or `final_answer`, and the SDK's documentation asks for
+  the label to be sent back on later requests for some models, saying that
+  dropping it can degrade performance. The neutral model has no place for it,
+  so assistant text is sent back without it.
 - **Anthropic eager tool-input streaming** (`eager_input_streaming`) is not
   set, because a gateway behind a custom base URL may reject the field. Tool
   inputs are buffered by the API until each parameter is complete.
@@ -535,6 +540,8 @@ Not verified:
   type `arguments_delta` with the text in `arguments`; one SDK sample on the
   streaming page reads `partial_arguments` from a delta of type `arguments`.
   The adapter accepts both.
+- **A tool result with no content.** It is sent as an empty `result` list.
+  Whether the API accepts that was not verified.
 - **Whether thought tokens are part of `total_output_tokens`.** The usage
   example on the streaming page adds up only if they are counted beside it, so
   the adapter adds them.

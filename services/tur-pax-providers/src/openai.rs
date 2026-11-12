@@ -10,6 +10,11 @@
 //! projects. It is used statelessly: every request carries the whole
 //! conversation and sets `store` to `false`, so the provider keeps no copy of
 //! the conversation for later retrieval.
+//!
+//! Not carried: the `phase` label the API may put on an assistant message
+//! (`commentary` or `final_answer`). The SDK asks for it to be sent back on
+//! later requests for some models; the neutral model has no place for it, so
+//! assistant text goes back without it. It is listed as a known gap.
 
 use std::collections::VecDeque;
 use std::sync::Arc;
