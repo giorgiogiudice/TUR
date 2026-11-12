@@ -12,6 +12,9 @@ Companion documents:
   review.
 - [image-licences.csv](image-licences.csv) — every package in the image with its
   declared licence.
+- [image-crates.csv](image-crates.csv) — every third-party crate compiled into
+  TUR's own programs in the image, with its declared licence and the programs
+  that contain it.
 
 This inventory is input to a lawyer's review, which the specification requires
 before public distribution (§17.2). It is not legal advice.

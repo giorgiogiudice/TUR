@@ -13,8 +13,9 @@ ARG BASE_DIGEST
 
 # The toolchain that compiles TUR's own programs for the image: the official
 # Rust image, pinned by digest (the tag is for people). Its version must be
-# the one in rust-toolchain.toml; the build stage checks that. See
-# image/README.md, "Programs built into the image".
+# the one in rust-toolchain.toml; the build stage checks that. The programs
+# are listed in image/programs.tsv. See image/README.md, "Programs built into
+# the image".
 ARG RUST_IMAGE=docker.io/library/rust
 ARG RUST_TAG=1.99.1-slim-trixie
 ARG RUST_DIGEST=sha256:f6c4a35d21dbb3c89d7a8d056c193e94fc09037f2b58dd858b09c39a47dd02d7
@@ -22,23 +23,47 @@ ARG RUST_DIGEST=sha256:f6c4a35d21dbb3c89d7a8d056c193e94fc09037f2b58dd858b09c39a4
 # ---- build stage: TUR programs ------------------------------------------------
 FROM ${RUST_IMAGE}@${RUST_DIGEST} AS programs
 
-COPY rust-toolchain.toml /pin/rust-toolchain.toml
-COPY crates/ /src/crates/
-COPY services/tur-boot-health/ /src/services/tur-boot-health/
+# One target directory for every component, so that a crate two of them use
+# in the same version is compiled once. The release profile is fixed here,
+# for every program alike, so that two builds give the same bytes (the image
+# workflow compares them): one code generation unit, nothing incremental, no
+# debug information, symbols stripped. A component's own Cargo.toml need not
+# repeat it.
+ENV CARGO_TARGET_DIR=/build/target \
+    CARGO_INCREMENTAL=0 \
+    CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 \
+    CARGO_PROFILE_RELEASE_INCREMENTAL=false \
+    CARGO_PROFILE_RELEASE_DEBUG=false \
+    CARGO_PROFILE_RELEASE_STRIP=symbols \
+    CARGO_TERM_COLOR=never
 
-# No network: a program built into the image depends only on what is in this
-# repository and on the pinned toolchain. --locked refuses a lockfile that
+COPY rust-toolchain.toml /pin/rust-toolchain.toml
+COPY image/programs.tsv /src/image/programs.tsv
+COPY image/programs.sh /src/image/programs.sh
+COPY LICENSE.md NOTICE /src/
+COPY catalogue/ /src/catalogue/
+COPY crates/ /src/crates/
+COPY installer/tur-installer-core/ /src/installer/tur-installer-core/
+COPY services/tur-boot-health/ /src/services/tur-boot-health/
+COPY services/tur-catalogue/ /src/services/tur-catalogue/
+COPY services/tur-device-manager/ /src/services/tur-device-manager/
+COPY services/tur-diagnostics/ /src/services/tur-diagnostics/
+COPY services/tur-pax/ /src/services/tur-pax/
+COPY services/tur-pax-memory/ /src/services/tur-pax-memory/
+COPY services/tur-pax-providers/ /src/services/tur-pax-providers/
+COPY services/tur-runtime/ /src/services/tur-runtime/
+COPY services/tur-storage/ /src/services/tur-storage/
+COPY services/tur-update/ /src/services/tur-update/
+
+# The only step with network access. It downloads the crates the committed
+# lockfiles name, each checked against the SHA-256 its lockfile holds, and
+# refuses a lockfile that would have to change. Nothing is compiled here.
+RUN /bin/sh /src/image/programs.sh fetch
+
+# No network: the programs are compiled from this repository, the crates
+# fetched above and the pinned toolchain. --locked refuses a lockfile that
 # does not match; --offline refuses to fetch anything.
-RUN --network=none set -eu; \
-    want="$(sed -n 's/^channel = "\(.*\)"$/\1/p' /pin/rust-toolchain.toml)"; \
-    have="$(rustc --version | cut -d' ' -f2)"; \
-    if [ "${want}" != "${have}" ]; then \
-        echo "rust-toolchain.toml pins Rust ${want}, the build stage has ${have}" >&2; exit 1; \
-    fi; \
-    cd /src/services/tur-boot-health; \
-    cargo build --release --locked --offline; \
-    install -D -m 0755 target/release/tur-boot-health /out/usr/libexec/tur/tur-boot-health; \
-    sha256sum /out/usr/libexec/tur/tur-boot-health
+RUN --network=none /bin/sh /src/image/programs.sh build
 
 # ---- the image ------------------------------------------------------------------
 FROM ${BASE_IMAGE}@${BASE_DIGEST}
@@ -54,7 +79,11 @@ ARG TUR_SOURCE_REVISION
 # and /etc and /var belong to the installed system.
 COPY image/rootfs/ /
 
-# TUR programs, compiled above.
+# What the build stage made (image/programs.sh): the TUR programs, the
+# assistant tools of the components that ship them, the application
+# catalogue, the list of what was installed (/usr/lib/tur/programs.tsv), the
+# licence of TUR's own programs and the licence files of the third-party
+# crates compiled into them.
 COPY --from=programs /out/ /
 
 # Boot-attempt counting (ADR-0014). bootupd concatenates every *.cfg in
@@ -86,9 +115,16 @@ RUN set -eu; \
     # must be read before the fragment that builds the menu. Fail the build
     # if the base ever renames that fragment.
     test -f /usr/lib/bootupd/grub2-static/configs.d/10_blscfg.cfg; \
+    # The programs were linked against the C library of the toolchain image,
+    # which is older than this image's. Each runs once here, so that a
+    # program that cannot start stops the build and not a boot.
+    test "$(grep -c -v '^#' /usr/lib/tur/programs.tsv)" -ge 11; \
+    chmod 0755 /usr/share/licenses/tur-grub-boot-count; \
+    for path in $(grep -v '^#' /usr/lib/tur/programs.tsv | cut -f2); do \
+        "${path}" --version || { echo "${path} does not run in this image" >&2; exit 1; }; \
+    done; \
     # Boot health (ADR-0014; design section 10). The program is also on the
     # PATH, for `status` and `acknowledge`.
-    /usr/libexec/tur/tur-boot-health --version; \
     ln -s ../libexec/tur/tur-boot-health /usr/bin/tur-boot-health; \
     # An automatic update agent would undo a rollback: bootc's own timer is
     # masked whether or not the base enables it. GRUB's boot-success timer

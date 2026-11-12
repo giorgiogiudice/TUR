@@ -2,14 +2,29 @@
 # <Containerfile>.containerignore over the .containerignore at the root of the
 # build context, so this file replaces that one for the OS image.
 #
-# The image definition, and the sources of the TUR programs that are compiled
-# into the image (image/README.md, "Programs built into the image"). A
-# component that joins the image adds its directory here.
+# The image definition, and what the build stage compiles and installs
+# (image/README.md, "Programs built into the image"): the sources of the TUR
+# programs listed in image/programs.tsv, the shared crates, the application
+# catalogue, and the licence that goes with the programs. A component that
+# joins the image adds its directory here.
 *
 !image/
 !rust-toolchain.toml
+!LICENSE.md
+!NOTICE
+!catalogue/
 !crates/
+!installer/tur-installer-core/
 !services/tur-boot-health/
+!services/tur-catalogue/
+!services/tur-device-manager/
+!services/tur-diagnostics/
+!services/tur-pax/
+!services/tur-pax-memory/
+!services/tur-pax-providers/
+!services/tur-runtime/
+!services/tur-storage/
+!services/tur-update/
 
 # Never build output, whatever a working tree holds.
 **/target/

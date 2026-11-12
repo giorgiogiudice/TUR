@@ -23,15 +23,24 @@ upstream project, with sources) and [image-licences.csv](image-licences.csv)
 | Licence data | The licence each package declares in its RPM `License` tag. Nobody has audited the source of each package against its tag |
 | Date | 12 November 2026 |
 
-The image is the Fedora base plus TUR identity files. No TUR service, patch or
-additional package is in it yet, so everything below about the image is a
-statement about the Fedora Kinoite base as TUR would redistribute it.
+The image examined was the Fedora base plus TUR identity files. No patch and no
+additional package is in the image, so everything below about the packages is
+a statement about the Fedora Kinoite base as TUR would redistribute it.
 
-To regenerate the package list after a rebase:
+Since [TUR-006](../reports/TUR-006.md) the image also holds TUR's own
+programs, each a Rust binary with third-party crates linked in. They are not
+packages and are not in the figures of section 2. What they contain is listed
+in [image-crates.csv](image-crates.csv) and described in
+[`THIRD_PARTY_NOTICES.md`](../../THIRD_PARTY_NOTICES.md); items 3, 8 and 13 of
+section 3 say what that changed.
+
+To regenerate the package list after a rebase, and the list of crates after a
+change to a component's dependencies:
 
 ```sh
 scripts/dev/ci.py artifact RUN_ID tur-image-metadata /tmp/tur-meta
 scripts/sbom-licences.py /tmp/tur-meta/sbom.spdx.json > docs/dependencies/image-licences.csv
+cp /tmp/tur-meta/image-crates.csv docs/dependencies/image-crates.csv
 ```
 
 ## 2. Licences in the built image
@@ -117,17 +126,17 @@ first image is published to a registry or offered for download.
 |---|---|---|---|
 | 1 | Know what is shipped: an SPDX SBOM for every build | Done | CI produces `sbom.spdx.json` and `licences.txt` for every image. Keep them with each published image. |
 | 2 | A readable list of packages and licences | Done | [image-licences.csv](image-licences.csv), regenerated at each rebase. |
-| 3 | SBOM covers files TUR adds outside packages | Not done | Recorded as a limitation in the TUR-002 report. Needed once TUR services are in the image. |
+| 3 | SBOM covers files TUR adds outside packages | Partly done | Since TUR-006 the SBOM lists each TUR program, with version and SHA-256, and each crate linked into it (`scripts/sbom-programs.py`). TUR's units, configuration, the catalogue and the tool manifests are still not in it as files; the build manifest names the catalogue and the tool manifests by hash. |
 | 4 | Source for copyleft components (GPL, LGPL, AGPL, MPL and similar): at least 1,169 of the 1,750 packages, built from 1,114 source packages | Not applicable yet | Decide and build the mechanism. The conservative option is to publish, beside every image, the exact source packages it was built from (a source image or an archive), and to keep them for as long as the image is offered. The SBOM already names each package's source RPM. The alternative under GPL-2.0 is a written offer valid for three years. Relying on Fedora to keep every pinned version downloadable leaves compliance outside TUR's control. |
 | 5 | Source for TUR's own changes to copyleft components | Not applicable yet | No patch exists. When one does: publish it under the upstream licence, in a marked directory with its own licence file (ADR-0003), and include it in the source of item 4. |
 | 6 | Licence texts and copyright notices accompany the binaries | Not done (inherited from Fedora, untested) | Fedora packages install their licence files under `/usr/share/licenses`. Nothing in the `Containerfile` removes them, but no test checks it. Add a check to `tests/image/smoke.sh`. |
 | 7 | Third-party notice | Done | [`THIRD_PARTY_NOTICES.md`](../../THIRD_PARTY_NOTICES.md) at the repository root. Install a copy in the image with item 8. |
-| 8 | TUR's own licence and notice travel with TUR's files | Not done | The PolyForm licence requires that anyone who receives the software also receives the terms, or their URL, and the `Required Notice:` line in `NOTICE`. The image contains TUR files but not `LICENSE.md` or `NOTICE`. Install both, for example under `/usr/share/licenses/tur/`. |
+| 8 | TUR's own licence and notice travel with TUR's files | Done | The PolyForm licence requires that anyone who receives the software also receives the terms, or their URL, and the `Required Notice:` line in `NOTICE`. Since TUR-006 the image holds both in `/usr/share/licenses/tur/`, and the smoke test checks it. |
 | 9 | Remove Fedora's marks | Not done | Remove `fedora-logos` and the `fedora-release-*` packages and replace them with TUR's own or with Fedora's `generic-logos` and `generic-release`, which exist for this purpose. Review the other Fedora-branded packages in section 2.3. Display the notice the guidelines require: that the software is not provided or supported by the Fedora Project, and that official Fedora is available at https://fedoraproject.org/. Planned as part of the Phase 3 rebrand; it must not slip behind the first publication. |
 | 10 | Describe the licence of the image truthfully | Done in the repository; not done in the image | `README.md` and `THIRD_PARTY_NOTICES.md` say that the noncommercial terms cover TUR's own code only. The image has no `org.opencontainers.image.licenses` label; if one is added it must not name the PolyForm licence alone. Download pages must not impose noncommercial terms on the image as a whole. |
 | 11 | Firmware shipped unmodified with its licence files | Not applicable yet (inherited) | Do not strip, repack or modify the firmware packages. Legal review of the vendor terms (section 6). |
 | 12 | Codec and patent position | Not applicable yet | The image has only Fedora's set. Write down the rule that no codec package from outside Fedora is added without review. |
-| 13 | LGPL terms for TUR programs that link LGPL libraries | Not applicable yet | No such program exists; `crates/tur-core` has no dependencies. When one does: link dynamically, state that the library is used, and keep it replaceable by the user. Do not link an LGPL or GPL Rust crate statically into a noncommercial binary. A licence allow-list in CI for Rust dependencies would enforce this. |
+| 13 | LGPL terms for TUR programs that link LGPL libraries | Done for what exists | Since TUR-006 the image holds TUR programs. Each links the C library (glibc, LGPL-2.1-or-later) and `libgcc_s` dynamically, as every program of the distribution does, and the user can replace them. Everything linked statically is a Rust crate or the Rust standard library, and the `image` workflow fails if a crate's licence is not on the allow-list of permissive licences in `scripts/sbom-programs.py`: no LGPL or GPL crate can be linked in unnoticed. The crates' licence files are in the image ([`THIRD_PARTY_NOTICES.md`](../../THIRD_PARTY_NOTICES.md)). The allow-list judges the licence a crate declares, not its source. The desktop programs in C++ (Qt, LGPL-3.0) are not in the image yet; the rule for them is in `desktop/ALLOWED_IMPORTS`. |
 | 14 | SPDX identifier on every TUR source file, and a CI check that noncommercial code and upstream-licensed directories are not mixed | Partly done | Files carry the header. The CI check that ADR-0003 calls for does not exist. |
 | 15 | Installation information for GPL-3.0 and LGPL-3.0 components | Not applicable | Arises only if TUR is distributed inside a consumer device whose software the user cannot replace. TUR uses Fedora's signed boot chain unmodified and the user controls the machine. Revisit if TUR ever signs its own boot chain or ships on hardware. |
 | 16 | AGPL network clause | Not applicable | Ghostscript is unmodified. |

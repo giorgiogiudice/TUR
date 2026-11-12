@@ -46,4 +46,11 @@ echo "revision:  ${revision}"
     "$@" \
     .
 
+# The image ID and the layers TUR adds on top of the base. Two builds of one
+# commit must agree on all of them; when they do not, the first layer that
+# differs says where to look.
+echo "image id:  $("${podman[@]}" image inspect -f '{{.Id}}' "${tag}")"
+"${podman[@]}" image inspect -f '{{range .RootFS.Layers}}{{println .}}{{end}}' "${tag}" \
+    | grep . | tail -n 6 | sed 's/^/layer:     /'
+
 echo "${build_id}" > "${TUR_BUILD_ID_FILE:-/dev/null}"

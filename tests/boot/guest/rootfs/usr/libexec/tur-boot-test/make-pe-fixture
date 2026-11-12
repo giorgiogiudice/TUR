@@ -1,0 +1,47 @@
+#!/usr/bin/python3
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+"""Write a minimal Windows executable, byte by byte. Test image only.
+
+    make-pe-fixture FILE
+
+No third-party binary is stored in the repository. This writes the smallest
+structure tur-runtime's PE reader reads, with real field offsets: a DOS
+header, the PE signature, a COFF header for x86-64 and a PE32+ optional
+header that names the graphical Windows subsystem. It is the layout of
+`PeSpec::windows_gui_x86_64` in services/tur-runtime/src/testdata.rs. The
+file is a description of a program, not a program: it has no code and
+nothing could run it.
+"""
+
+import struct
+import sys
+
+
+def main():
+    out = bytearray(0x80)
+    out[0:2] = b"MZ"
+    out[0x3C:0x40] = struct.pack("<I", 0x80)  # e_lfanew: where the PE header is
+    out += b"PE\0\0"
+    optional_length = 240  # PE32+
+    out += struct.pack(
+        "<HHIIIHH",
+        0x8664,  # Machine: x86-64
+        0,  # NumberOfSections
+        0,  # TimeDateStamp
+        0,  # PointerToSymbolTable
+        0,  # NumberOfSymbols
+        optional_length,  # SizeOfOptionalHeader
+        0x0022,  # Characteristics: executable image, large address aware
+    )
+    optional = bytearray(optional_length)
+    optional[0:2] = struct.pack("<H", 0x20B)  # Magic: PE32+
+    optional[68:70] = struct.pack("<H", 2)  # Subsystem: Windows GUI
+    optional[108:112] = struct.pack("<I", 16)  # NumberOfRvaAndSizes
+    out += optional
+    with open(sys.argv[1], "wb") as handle:
+        handle.write(out)
+    print(f"{sys.argv[1]}: {len(out)} bytes")
+
+
+if __name__ == "__main__":
+    main()

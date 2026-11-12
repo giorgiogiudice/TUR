@@ -34,10 +34,36 @@ def main() -> int:
         ("SELinux", m["security"]["selinux"]),
         ("RPM packages", m["rpm_count"]),
     ]
+    size = m["image"].get("size_bytes")
+    if size:
+        rows.insert(5, ("Image size", f"{size} bytes ({size / 2**30:.2f} GiB)"))
+    catalogue = m.get("catalogue") or {}
+    crates = m.get("third_party_crates") or {}
+    rows += [
+        ("Application catalogue", f'{catalogue.get("entries")} entries in {catalogue.get("path")}'),
+        ("Third-party crates in TUR programs", f'{crates.get("count")}, compiled with Rust {crates.get("rust")}'),
+    ]
     print("| | |")
     print("|---|---|")
     for key, value in rows:
         print(f"| {key} | `{value}` |")
+
+    programs = m.get("programs") or []
+    if programs:
+        print()
+        print("### TUR programs in the image")
+        print()
+        print("| Program | Version | Path | Bytes | SHA-256 | Assistant tools |")
+        print("|---|---|---|---:|---|---|")
+        for program in programs:
+            tools = (program.get("assistant_tools") or {}).get("directory") or "none"
+            print(
+                f'| `{program["name"]}` | {program["version"]} | `{program["path"]}` | {program["size_bytes"]} '
+                f'| `{program["sha256"][:16]}…` | `{tools}` |'
+            )
+        total = sum(program["size_bytes"] for program in programs)
+        print()
+        print(f"{len(programs)} programs, {total} bytes ({total / 2**20:.1f} MiB).")
     return 0
 
 

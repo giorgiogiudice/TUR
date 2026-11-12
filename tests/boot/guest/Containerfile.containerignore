@@ -1,0 +1,9 @@
+# What is sent to the build of tests/boot/guest/Containerfile: the test agent,
+# and what the P@x end-to-end test reads (see that file).
+*
+!tests/boot/guest/
+!tests/pax/
+!services/tur-pax/tests/data/
+!services/*/agent-tools.json
+!services/*/agent-tools.adapter.json
+!services/tur-device-manager/tests/fixtures/laptop/

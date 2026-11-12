@@ -6,9 +6,23 @@ on:
     branches: [main]
     paths:
       - "image/**"
-      # Programs compiled into the image, and what they are compiled with.
+      # Programs compiled into the image (image/programs.tsv), what they are
+      # compiled with, and what is installed beside them.
       - "services/tur-boot-health/**"
+      - "services/tur-catalogue/**"
+      - "services/tur-device-manager/**"
+      - "services/tur-diagnostics/**"
+      - "services/tur-pax/**"
+      - "services/tur-pax-memory/**"
+      - "services/tur-pax-providers/**"
+      - "services/tur-runtime/**"
+      - "services/tur-storage/**"
+      - "services/tur-update/**"
+      - "installer/tur-installer-core/**"
+      - "catalogue/**"
       - "crates/**"
+      - "LICENSE.md"
+      - "NOTICE"
       - "rust-toolchain.toml"
       - "scripts/*.sh"
       - "scripts/*.py"
@@ -20,9 +34,23 @@ on:
   pull_request:
     paths:
       - "image/**"
-      # Programs compiled into the image, and what they are compiled with.
+      # Programs compiled into the image (image/programs.tsv), what they are
+      # compiled with, and what is installed beside them.
       - "services/tur-boot-health/**"
+      - "services/tur-catalogue/**"
+      - "services/tur-device-manager/**"
+      - "services/tur-diagnostics/**"
+      - "services/tur-pax/**"
+      - "services/tur-pax-memory/**"
+      - "services/tur-pax-providers/**"
+      - "services/tur-runtime/**"
+      - "services/tur-storage/**"
+      - "services/tur-update/**"
+      - "installer/tur-installer-core/**"
+      - "catalogue/**"
       - "crates/**"
+      - "LICENSE.md"
+      - "NOTICE"
       - "rust-toolchain.toml"
       - "scripts/*.sh"
       - "scripts/*.py"
@@ -54,8 +82,8 @@ jobs:
 
       - name: Lint scripts
         run: |
-          shellcheck -x scripts/*.sh tests/image/*.sh
-          python3 -m py_compile scripts/*.py
+          shellcheck -x scripts/*.sh tests/image/*.sh image/*.sh
+          python3 -m py_compile scripts/*.py tests/image/*.py
 
       - name: Runner environment
         run: |
@@ -71,33 +99,65 @@ jobs:
           df -h / | tail -1
 
       - name: Build image
+        id: build
         run: |
+          start=$(date +%s)
           TUR_BUILD_ID_FILE="$RUNNER_TEMP/build-id" scripts/build-image.sh "$IMAGE"
           echo "BUILD_ID=$(cat "$RUNNER_TEMP/build-id")" >> "$GITHUB_ENV"
+          echo "IMAGE_BUILD_SECONDS=$(( $(date +%s) - start ))" >> "$GITHUB_ENV"
+          echo "image build: $(( $(date +%s) - start )) s"
+          $PODMAN image inspect -f 'image id: {{.Id}}  size: {{.Size}} bytes' "$IMAGE"
 
+      # The steps below each look at the built image from another side. One
+      # that fails does not stop the others: a run then says everything that
+      # is wrong, not only the first thing.
       - name: Image smoke tests
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: tests/image/smoke.sh "$IMAGE" "$BUILD_ID"
 
       - name: Reproducibility check
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: |
+          start=$(date +%s)
           scripts/build-image.sh localhost/tur:repro --no-cache
+          echo "second build, without cache: $(( $(date +%s) - start )) s"
           a=$($PODMAN image inspect -f '{{.Id}}' "$IMAGE")
           b=$($PODMAN image inspect -f '{{.Id}}' localhost/tur:repro)
           echo "first:  $a"; echo "second: $b"
-          test "$a" = "$b"
+          if [ "$a" != "$b" ]; then
+            # Say which of the files TUR adds differ between the two builds.
+            list='cd / && find usr/bin/tur-* usr/libexec/tur usr/lib/tur usr/share/tur usr/share/licenses/tur usr/share/licenses/tur-third-party -type f | LC_ALL=C sort | xargs sha256sum'
+            $PODMAN run --rm --network none "$IMAGE" /bin/bash -c "$list" > "$RUNNER_TEMP/first.sha256"
+            $PODMAN run --rm --network none localhost/tur:repro /bin/bash -c "$list" > "$RUNNER_TEMP/second.sha256"
+            echo "files TUR adds that differ between the two builds:"
+            diff "$RUNNER_TEMP/first.sha256" "$RUNNER_TEMP/second.sha256" | head -n 60 || true
+            exit 1
+          fi
 
       - name: SBOM and licence summary
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: scripts/sbom.sh "$IMAGE" out
 
       - name: Build manifest
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: |
           sudo apt-get install -y --no-install-recommends python3-jsonschema >/dev/null
           scripts/gen-manifest.py "$IMAGE" out/build-manifest.json --sbom sbom.spdx.json >/dev/null
           scripts/validate-manifest.py out/build-manifest.json
 
+      # Informational: what it finds is for a person to judge (TUR-006).
+      - name: Built-in names of the policy engine, held against the image
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          python3 tests/image/identifiers.py "$IMAGE" out
+          cat out/identifiers.md >> "$GITHUB_STEP_SUMMARY"
+
       - name: Summary
         if: always()
-        run: scripts/manifest-summary.py out/build-manifest.json >> "$GITHUB_STEP_SUMMARY"
+        run: |
+          scripts/manifest-summary.py out/build-manifest.json >> "$GITHUB_STEP_SUMMARY"
+          echo >> "$GITHUB_STEP_SUMMARY"
+          echo "Image build: ${IMAGE_BUILD_SECONDS:-not measured} s." >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         if: always()
