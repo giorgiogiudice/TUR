@@ -375,6 +375,65 @@ fn the_audit_record_holds_no_argument_values() {
 }
 
 #[test]
+fn the_audit_record_says_whether_the_task_was_attended() {
+    let (_, document) = check(OBSERVE, &[]);
+    assert_eq!(document["audit"]["UOS_AI_ATTENDED"], "yes");
+    // A tool call runs in no sandbox, and is not a privileged request.
+    assert_eq!(document["audit"].get("UOS_AI_SANDBOX"), None);
+    assert_eq!(document["audit"].get("UOS_AI_REQUEST"), None);
+
+    let (_, document) = check(OBSERVE, &["--unattended"]);
+    assert_eq!(document["audit"]["UOS_AI_ATTENDED"], "no");
+
+    // A locked session does not make an attended task unattended.
+    let (_, document) = check(OBSERVE, &["--locked"]);
+    assert_eq!(document["audit"]["UOS_AI_ATTENDED"], "yes");
+    assert_eq!(document["audit"]["UOS_AI_DECISION"], "deferred");
+}
+
+#[test]
+fn a_repair_session_never_changes_the_decision_for_a_tool_call() {
+    for tool in [OBSERVE, REVERSIBLE, CONSEQUENTIAL, SYSTEM_CRITICAL] {
+        let (plain_status, plain) = check(tool, &["--trusted-path"]);
+        for session in [
+            // Open at the time of the check, by the default length and by an
+            // explicit opening time.
+            &["--repair-session-until", "1500"][..],
+            &[
+                "--repair-session-until",
+                "1500",
+                "--repair-session-opened",
+                "900",
+            ][..],
+            // Not open: too long, expired, not yet opened.
+            &[
+                "--repair-session-until",
+                "90000",
+                "--repair-session-opened",
+                "0",
+            ][..],
+            &["--repair-session-until", "1000"][..],
+            &[
+                "--repair-session-until",
+                "3000",
+                "--repair-session-opened",
+                "2000",
+            ][..],
+        ] {
+            let mut extra = vec!["--trusted-path", "--repair-session-purpose", "repair"];
+            extra.extend_from_slice(session);
+            let (status, document) = check(tool, &extra);
+            assert_eq!(status, plain_status, "{tool} {session:?}");
+            assert_eq!(
+                document["decision"], plain["decision"],
+                "{tool} {session:?}"
+            );
+            assert_eq!(document["reason"], plain["reason"], "{tool} {session:?}");
+        }
+    }
+}
+
+#[test]
 fn the_plain_output_states_the_decision() {
     let run = uos_agent(&[
         "policy",
@@ -403,8 +462,25 @@ fn the_plain_output_states_the_decision() {
 #[test]
 fn invalid_input_is_reported_with_a_code_and_decides_nothing() {
     let base = ["policy", "check", "--manifest", MANIFEST];
-    let cases: [(&[&str], &str); 8] = [
+    let repeated_approval = r#"{"service":"org.uos.Test1","tool":"test_consequential","arguments":{"recipient":"a@example.org","recipient":"b@example.org"}}"#;
+    let cases: [(&[&str], &str); 11] = [
         (&["--tool", "no_such_tool"], "UOS-AI-TOOL-001"),
+        // Tool names are compared exactly.
+        (&["--tool", "Test_observe"], "UOS-AI-TOOL-001"),
+        // A repeated key, in the arguments and in a standing approval.
+        (
+            &[
+                "--tool",
+                REVERSIBLE,
+                "--args",
+                r#"{"value":"a","value":"b"}"#,
+            ],
+            "UOS-AI-INPUT-002",
+        ),
+        (
+            &["--tool", OBSERVE, "--standing-approval", repeated_approval],
+            "UOS-AI-INPUT-002",
+        ),
         (&["--tool", CONSEQUENTIAL], "UOS-AI-TOOL-002"),
         (
             &["--tool", OBSERVE, "--args", r#"{"extra":true}"#],

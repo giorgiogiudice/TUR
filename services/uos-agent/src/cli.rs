@@ -25,11 +25,15 @@ use serde_json::{Value, json};
 use crate::action::Action;
 use crate::audit::{AuditMeta, AuditRecord};
 use crate::codes::{Code, Problem};
-use crate::context::{Context, Presence, RepairSession, StandingApproval, Timestamp};
+use crate::context::{
+    Context, DEFAULT_REPAIR_SESSION_SECONDS, Presence, RepairSession, StandingApproval, Timestamp,
+    WindowOwner,
+};
 use crate::decision::{Decision, Verdict};
 use crate::engine::decide;
 use crate::manifest::ToolManifest;
 use crate::policy::UserPolicy;
+use crate::strict;
 
 /// Exit status: the decision is `allow`, or the manifest is valid.
 pub const EXIT_ALLOW: u8 = 0;
@@ -114,9 +118,13 @@ pub struct CheckArgs {
     /// classes 0 and 1 can be allowed.
     #[arg(long)]
     pub trusted_path: bool,
-    /// A repair session is open until this time, in seconds since the Unix epoch.
+    /// A repair session expires at this time, in seconds since the Unix epoch.
     #[arg(long, requires = "repair_session_purpose")]
     pub repair_session_until: Option<u64>,
+    /// The time the repair session was opened. Without it, the session is
+    /// taken to have the default length of 15 minutes.
+    #[arg(long, requires = "repair_session_until")]
+    pub repair_session_opened: Option<u64>,
     /// The stated purpose of the repair session.
     #[arg(long, requires = "repair_session_until")]
     pub repair_session_purpose: Option<String>,
@@ -226,11 +234,13 @@ pub fn exit_status(decision: &Decision) -> u8 {
 fn evaluate(args: &CheckArgs) -> Result<(Decision, AuditRecord), Vec<Problem>> {
     let manifest = load_manifest(&args.manifest)?;
 
-    let arguments = match serde_json::from_str::<Value>(&args.args) {
-        Ok(Value::Object(arguments)) => arguments,
-        Ok(_) => return Err(invalid_input("--args must be a JSON object".to_owned())),
-        Err(error) => return Err(invalid_input(format!("--args is not valid JSON: {error}"))),
-    };
+    // A repeated key is an error: what is decided, shown and recorded must be
+    // one reading of the text.
+    let arguments = strict::object_from_str(&args.args).map_err(|error| {
+        invalid_input(format!(
+            "--args must be a JSON object with no repeated key: {error}"
+        ))
+    })?;
     let call = manifest.tool_call(&args.tool, arguments)?;
 
     let policy = match &args.policy {
@@ -248,7 +258,12 @@ fn evaluate(args: &CheckArgs) -> Result<(Decision, AuditRecord), Vec<Problem>> {
     let repair_session = match (&args.repair_session_purpose, args.repair_session_until) {
         (Some(purpose), Some(until)) => Some(RepairSession {
             purpose: purpose.clone(),
+            opened_at: Timestamp(
+                args.repair_session_opened
+                    .unwrap_or(until.saturating_sub(DEFAULT_REPAIR_SESSION_SECONDS)),
+            ),
             expires_at: Timestamp(until),
+            ended: false,
         }),
         _ => None,
     };
@@ -264,6 +279,8 @@ fn evaluate(args: &CheckArgs) -> Result<(Decision, AuditRecord), Vec<Problem>> {
         repair_session,
         standing_approvals,
         model_flags_consequential: args.model_flags_consequential,
+        // The command decides tool calls only, which have no target window.
+        target_window_owner: WindowOwner::Unknown,
     };
     let now = Timestamp(args.now.unwrap_or_else(clock_seconds));
 
@@ -273,7 +290,7 @@ fn evaluate(args: &CheckArgs) -> Result<(Decision, AuditRecord), Vec<Problem>> {
         task: &args.task,
         provider: "none",
     };
-    let record = AuditRecord::new(&meta, &action, &decision);
+    let record = AuditRecord::new(&meta, &action, &context, &decision);
     Ok((decision, record))
 }
 
@@ -375,6 +392,48 @@ mod tests {
             "fix",
         ]);
         assert!(Cli::try_parse_from(both).is_ok());
+    }
+
+    #[test]
+    fn a_repair_session_without_an_opening_time_has_the_default_length() {
+        let cli = Cli::try_parse_from([
+            "uos-agent",
+            "policy",
+            "check",
+            "--manifest",
+            "m.json",
+            "--tool",
+            "t",
+            "--repair-session-until",
+            "5000",
+            "--repair-session-purpose",
+            "fix",
+        ])
+        .expect("the command line is valid");
+        let TopCommand::Policy {
+            command: PolicyCommand::Check(args),
+        } = cli.command
+        else {
+            panic!("expected policy check");
+        };
+        assert_eq!(args.repair_session_until, Some(5000));
+        assert_eq!(args.repair_session_opened, None);
+
+        // The opening time needs an expiry.
+        assert!(
+            Cli::try_parse_from([
+                "uos-agent",
+                "policy",
+                "check",
+                "--manifest",
+                "m.json",
+                "--tool",
+                "t",
+                "--repair-session-opened",
+                "4000",
+            ])
+            .is_err()
+        );
     }
 
     #[test]

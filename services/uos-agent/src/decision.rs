@@ -68,6 +68,9 @@ pub enum Refusal {
     MalformedAction,
     /// The target application is excluded by the user.
     ExcludedApplication,
+    /// An accessibility or screen action was proposed on a window that belongs
+    /// to a process with administrator rights.
+    PrivilegedWindow,
     /// An accessibility or screen action was proposed while the session is locked.
     SessionLocked,
     /// The user policy is observe-only and the action is above class 0.
@@ -76,9 +79,10 @@ pub enum Refusal {
     TrustedPathUnavailable,
     /// A class 3 action was proposed with nobody present to authenticate.
     SystemCriticalUnattended,
-    /// A system-critical operation was proposed as a command.
+    /// A system-critical operation was proposed as a privileged request: a
+    /// command in the privileged sandbox, or a typed operation.
     SystemCriticalAsCommand,
-    /// A privileged command was proposed with nobody present.
+    /// A privileged request was proposed with nobody present.
     PrivilegedUnattended,
     /// The audit record could not be written.
     AuditUnavailable,
@@ -86,10 +90,11 @@ pub enum Refusal {
 
 impl Refusal {
     /// Every refusal.
-    pub const ALL: [Refusal; 10] = [
+    pub const ALL: [Refusal; 11] = [
         Refusal::Prohibited,
         Refusal::MalformedAction,
         Refusal::ExcludedApplication,
+        Refusal::PrivilegedWindow,
         Refusal::SessionLocked,
         Refusal::ObserveOnly,
         Refusal::TrustedPathUnavailable,
@@ -105,6 +110,7 @@ impl Refusal {
             Refusal::Prohibited => Code::PolicyProhibited,
             Refusal::MalformedAction => Code::PolicyMalformedAction,
             Refusal::ExcludedApplication => Code::PolicyExcludedApplication,
+            Refusal::PrivilegedWindow => Code::PolicyPrivilegedWindow,
             Refusal::SessionLocked => Code::PolicySessionLocked,
             Refusal::ObserveOnly => Code::PolicyObserveOnly,
             Refusal::TrustedPathUnavailable => Code::PolicyTrustedPathUnavailable,
@@ -121,6 +127,7 @@ impl Refusal {
             Refusal::Prohibited => "prohibited",
             Refusal::MalformedAction => "malformed_action",
             Refusal::ExcludedApplication => "excluded_application",
+            Refusal::PrivilegedWindow => "privileged_window",
             Refusal::SessionLocked => "session_locked",
             Refusal::ObserveOnly => "observe_only",
             Refusal::TrustedPathUnavailable => "trusted_path_unavailable",
@@ -143,20 +150,26 @@ pub enum Reason {
     StandingApprovalMatched,
     /// Allowed: class 2 UI action in an application the user relaxed.
     RelaxedByUserPolicy,
-    /// Allowed: privileged command inside an open repair session.
+    /// Allowed: typed privileged operation inside an open repair session.
     RepairSessionOpen,
     /// Ask: class 2 needs the user's confirmation.
     ConsequentialNeedsConfirmation,
     /// Ask: the user policy asks before every action.
     AskEveryActionMode,
+    /// Ask: a free-text privileged command is approved one at a time, inside
+    /// an open repair session too.
+    PrivilegedCommandNeedsApproval,
     /// Authenticate: class 3 needs its own authentication on the trusted path.
     SystemCriticalNeedsAuthentication,
-    /// Authenticate: a privileged command needs an open repair session.
+    /// Authenticate: a privileged request needs an open repair session.
     RepairSessionRequired,
     /// Defer: unattended class 2 action without a matching standing approval.
     UnattendedWithoutStandingApproval,
     /// Defer: unattended while the user policy asks before every action.
     UnattendedAskEveryActionMode,
+    /// Defer: while the session is locked an unattended task runs tools and
+    /// read-only commands only.
+    UnattendedCommandWhileLocked,
     /// Defer: an attended task is paused while the session is locked.
     PausedWhileLocked,
     /// Refused, for the stated reason.
@@ -164,6 +177,24 @@ pub enum Reason {
 }
 
 impl Reason {
+    /// Every reason that is not a refusal. The refusals are [`Refusal::ALL`].
+    pub const ALL_BUT_REFUSALS: [Reason; 14] = [
+        Reason::ObservePermitted,
+        Reason::ReversiblePermitted,
+        Reason::StandingApprovalMatched,
+        Reason::RelaxedByUserPolicy,
+        Reason::RepairSessionOpen,
+        Reason::ConsequentialNeedsConfirmation,
+        Reason::AskEveryActionMode,
+        Reason::PrivilegedCommandNeedsApproval,
+        Reason::SystemCriticalNeedsAuthentication,
+        Reason::RepairSessionRequired,
+        Reason::UnattendedWithoutStandingApproval,
+        Reason::UnattendedAskEveryActionMode,
+        Reason::UnattendedCommandWhileLocked,
+        Reason::PausedWhileLocked,
+    ];
+
     /// The machine-readable name of the reason.
     pub const fn as_str(self) -> &'static str {
         match self {
@@ -174,11 +205,13 @@ impl Reason {
             Reason::RepairSessionOpen => "repair_session_open",
             Reason::ConsequentialNeedsConfirmation => "consequential_needs_confirmation",
             Reason::AskEveryActionMode => "ask_every_action_mode",
+            Reason::PrivilegedCommandNeedsApproval => "privileged_command_needs_approval",
             Reason::SystemCriticalNeedsAuthentication => "system_critical_needs_authentication",
             Reason::RepairSessionRequired => "repair_session_required",
             Reason::UnattendedWithoutStandingApproval => "unattended_without_standing_approval",
             Reason::PausedWhileLocked => "paused_while_locked",
             Reason::UnattendedAskEveryActionMode => "unattended_ask_every_action_mode",
+            Reason::UnattendedCommandWhileLocked => "unattended_command_while_locked",
             Reason::Refused(refusal) => refusal.as_str(),
         }
     }
@@ -320,6 +353,27 @@ mod tests {
             .map(|refusal| refusal.as_str())
             .collect();
         assert_eq!(names.len(), Refusal::ALL.len());
+    }
+
+    #[test]
+    fn every_reason_has_its_own_name() {
+        let mut names: BTreeSet<&str> = Reason::ALL_BUT_REFUSALS
+            .iter()
+            .map(|reason| reason.as_str())
+            .collect();
+        assert_eq!(names.len(), Reason::ALL_BUT_REFUSALS.len());
+        for refusal in Refusal::ALL {
+            assert!(
+                names.insert(Reason::Refused(refusal).as_str()),
+                "{refusal:?}"
+            );
+        }
+        for name in names {
+            assert!(
+                name.bytes().all(|b| b.is_ascii_lowercase() || b == b'_'),
+                "{name}"
+            );
+        }
     }
 
     #[test]

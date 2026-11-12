@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/giorgiogiudice/UOS/schemas/agent-tool-manifest.schema.json",
   "title": "UOS agent tool manifest",
-  "description": "The assistant-facing operations a UOS service offers (AI control layer, section 11). The loader in services/uos-agent is authoritative. It also enforces two rules this schema cannot express: tool names are unique within a manifest, and every entry of a \"required\" list names a declared property.",
+  "description": "The assistant-facing operations a UOS service offers (AI control layer, section 11). The loader in services/uos-agent is authoritative. It also enforces rules this schema cannot express: tool names are unique within a manifest; a method is declared with one class, however many tools call it; every entry of a \"required\" list names a declared property; an integer is written without a fraction or an exponent; and no field, and no key inside an input schema, is given twice.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "service", "tools"],
@@ -32,11 +32,11 @@
           "pattern": "^[a-z][a-z0-9_]{0,63}$"
         },
         "description": {
-          "description": "What the tool does, for the model. No control characters.",
+          "description": "What the tool does, for the model. Not blank, and no control characters.",
           "type": "string",
           "minLength": 1,
           "maxLength": 1024,
-          "pattern": "^(?=[\\s\\S]*\\S)[^\\u0000-\\u001f\\u007f-\\u009f]+$"
+          "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]*[^\\s\\u0000-\\u001f\\u007f-\\u009f][^\\u0000-\\u001f\\u007f-\\u009f]*$"
         },
         "class": {
           "description": "The action class: 0 observe, 1 reversible, 2 consequential, 3 system-critical. Class 4 (prohibited) cannot be declared: a prohibited operation is not offered as a tool.",
@@ -45,7 +45,7 @@
           "maximum": 3
         },
         "method": {
-          "description": "The D-Bus method on the service that the tool calls.",
+          "description": "The D-Bus method on the service that the tool calls. Two tools may call one method only if they declare the same class.",
           "type": "string",
           "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,254}$"
         },

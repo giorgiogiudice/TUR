@@ -8,15 +8,18 @@
 //! * tool names are unique and use a safe character set;
 //! * the class is 0 to 3; class 4 cannot be declared, because a prohibited
 //!   operation is simply not offered as a tool;
+//! * a method is declared with one class, however many tools call it;
+//! * no field, and no key inside an input schema, is given twice;
 //! * the input schema is an object schema with `additionalProperties: false`,
 //!   written in the subset of JSON Schema that [`ToolSpec::check_arguments`]
 //!   enforces. A keyword outside that subset is rejected, so a manifest cannot
 //!   state a constraint the agent would silently ignore.
 
-use std::collections::BTreeSet;
+use std::cmp::Ordering;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value};
+use serde_json::{Map, Number, Value};
 
 use crate::action::ToolCall;
 use crate::class::ActionClass;
@@ -51,6 +54,7 @@ struct RawTool {
     description: String,
     class: i64,
     method: String,
+    #[serde(deserialize_with = "crate::strict::value")]
     input_schema: Value,
 }
 
@@ -104,6 +108,8 @@ impl ToolManifest {
         }
 
         let mut seen = BTreeSet::new();
+        // The class each method was first declared with.
+        let mut method_classes: BTreeMap<String, i64> = BTreeMap::new();
         let mut tools = Vec::with_capacity(raw.tools.len());
         for (index, tool) in raw.tools.into_iter().enumerate() {
             let before = problems.len();
@@ -136,6 +142,21 @@ impl ToolManifest {
                     Code::ManifestToolField,
                     format!("{at}.method must be a D-Bus member name such as ListVolumes"),
                 ));
+            } else {
+                // One method under two classes would let the lower class stand
+                // for the higher.
+                let declared = *method_classes
+                    .entry(tool.method.clone())
+                    .or_insert(tool.class);
+                if declared != tool.class {
+                    problems.push(Problem::new(
+                        Code::ManifestMethodClass,
+                        format!(
+                            "{at}.method {} is declared with class {declared} and with class {}",
+                            tool.method, tool.class
+                        ),
+                    ));
+                }
             }
 
             let class = u8::try_from(tool.class).ok().and_then(ActionClass::from_u8);
@@ -296,7 +317,11 @@ fn is_bus_name(name: &str) -> bool {
 }
 
 fn is_description(description: &str) -> bool {
-    !description.trim().is_empty()
+    // Not blank: a byte-order mark shows nothing either, and the published
+    // schema, whose \s is that of ECMA-262, counts it as white space.
+    description
+        .chars()
+        .any(|c| !c.is_whitespace() && c != '\u{feff}')
         && description.chars().count() <= DESCRIPTION_MAX
         && !description.chars().any(char::is_control)
 }
@@ -508,23 +533,40 @@ fn check_value(schema: &Value, value: &Value, path: &str, problems: &mut Vec<Pro
             }
         }
         Value::Number(number) => {
-            // Compared as 64-bit floats: exact up to 2^53, approximate beyond.
-            let number = number.as_f64();
-            let minimum = schema.get("minimum").and_then(Value::as_f64);
-            let maximum = schema.get("maximum").and_then(Value::as_f64);
-            if let (Some(number), Some(minimum)) = (number, minimum)
-                && number < minimum
+            if let Some(minimum) = schema.get("minimum").and_then(Value::as_number)
+                && compare_numbers(number, minimum) == Some(Ordering::Less)
             {
                 problems.push(argument_problem(path, "is below minimum"));
             }
-            if let (Some(number), Some(maximum)) = (number, maximum)
-                && number > maximum
+            if let Some(maximum) = schema.get("maximum").and_then(Value::as_number)
+                && compare_numbers(number, maximum) == Some(Ordering::Greater)
             {
                 problems.push(argument_problem(path, "is above maximum"));
             }
         }
         Value::Bool(_) | Value::Null => {}
     }
+}
+
+/// `number` compared with `bound`.
+///
+/// Two integers are compared exactly, over the whole range JSON integers are
+/// read in. If either has a fraction or an exponent, both are compared as
+/// 64-bit floating-point values, which is exact up to 2^53.
+fn compare_numbers(number: &Number, bound: &Number) -> Option<Ordering> {
+    match (integer(number), integer(bound)) {
+        (Some(number), Some(bound)) => Some(number.cmp(&bound)),
+        _ => number.as_f64()?.partial_cmp(&bound.as_f64()?),
+    }
+}
+
+/// The value of a JSON integer. `None` for a number with a fraction or an
+/// exponent.
+fn integer(number: &Number) -> Option<i128> {
+    number
+        .as_i64()
+        .map(i128::from)
+        .or_else(|| number.as_u64().map(i128::from))
 }
 
 #[cfg(test)]
@@ -684,6 +726,131 @@ mod tests {
     }
 
     #[test]
+    fn a_method_is_declared_with_one_class() {
+        let tool = |name: &str, class: u8, method: &str| {
+            tool_with(|tool| {
+                tool.insert("name".to_owned(), json!(name));
+                tool.insert("class".to_owned(), json!(class));
+                tool.insert("method".to_owned(), json!(method));
+            })
+        };
+        let manifest = |tools: Vec<Value>| {
+            json!({ "schema_version": 1, "service": "org.uos.Test1", "tools": tools }).to_string()
+        };
+
+        // The destructive method offered a second time as a harmless tool.
+        for (first, second) in [(3, 0), (3, 1), (3, 2), (2, 1), (1, 0), (0, 3)] {
+            let text = manifest(vec![
+                tool("storage_format", first, "Format"),
+                tool("storage_tidy", second, "Format"),
+            ]);
+            assert_eq!(
+                codes(&text),
+                [Code::ManifestMethodClass],
+                "{first} then {second}"
+            );
+        }
+        // Three tools: every later declaration is compared with the first.
+        let text = manifest(vec![
+            tool("a", 2, "Send"),
+            tool("b", 2, "Send"),
+            tool("c", 1, "Send"),
+        ]);
+        assert_eq!(codes(&text), [Code::ManifestMethodClass]);
+
+        // Two names for one method with one class, and two methods, are fine.
+        let text = manifest(vec![
+            tool("storage_format", 3, "Format"),
+            tool("storage_wipe", 3, "Format"),
+            tool("storage_list", 0, "List"),
+        ]);
+        assert!(ToolManifest::from_json(&text).is_ok());
+        // Method names are compared exactly, as D-Bus does.
+        let text = manifest(vec![
+            tool("storage_format", 3, "Format"),
+            tool("storage_tidy", 1, "format"),
+        ]);
+        assert!(ToolManifest::from_json(&text).is_ok());
+    }
+
+    #[test]
+    fn a_repeated_field_or_key_is_rejected() {
+        let tool = r#"{
+            "name": "test_tool",
+            "description": "A tool for tests.",
+            "class": 1,
+            "method": "Test",
+            "input_schema": { "type": "object", "additionalProperties": false }
+        }"#;
+        let manifest = |fields: &str, tool: &str| {
+            format!(
+                r#"{{ "schema_version": 1, "service": "org.uos.Test1"{fields}, "tools": [{tool}] }}"#
+            )
+        };
+        assert!(ToolManifest::from_json(&manifest("", tool)).is_ok());
+
+        // A field of the manifest.
+        for fields in [
+            r#", "schema_version": 1"#,
+            r#", "service": "org.uos.Other1""#,
+            r#", "tools": []"#,
+        ] {
+            assert_eq!(
+                codes(&manifest(fields, tool)),
+                [Code::ManifestParse],
+                "{fields}"
+            );
+        }
+        // A field of a tool: a class 3 tool that also says class 0.
+        for (field, first, second) in [
+            ("\"class\": 1", "\"class\": 3", "\"class\": 0"),
+            ("\"class\": 1", "\"class\": 0", "\"class\": 3"),
+            (
+                "\"method\": \"Test\"",
+                "\"method\": \"Format\"",
+                "\"method\": \"List\"",
+            ),
+            (
+                "\"name\": \"test_tool\"",
+                "\"name\": \"a\"",
+                "\"name\": \"b\"",
+            ),
+        ] {
+            let twice = tool.replace(field, &format!("{first}, {second}"));
+            assert_ne!(twice, tool);
+            assert_eq!(
+                codes(&manifest("", &twice)),
+                [Code::ManifestParse],
+                "{first}, {second}"
+            );
+        }
+        // A key inside an input schema, at any depth.
+        for schema in [
+            r#"{ "type": "object", "additionalProperties": true, "additionalProperties": false }"#,
+            r#"{ "type": "object", "additionalProperties": false, "additionalProperties": false }"#,
+            r#"{ "type": "string", "type": "object", "additionalProperties": false }"#,
+            r#"{ "type": "object", "additionalProperties": false,
+                 "properties": { "n": { "type": "integer", "maximum": 10, "maximum": 1000000 } } }"#,
+            r#"{ "type": "object", "additionalProperties": false,
+                 "properties": { "n": { "type": "integer" }, "n": { "type": "string" } } }"#,
+            r#"{ "type": "object", "additionalProperties": false,
+                 "properties": { "list": { "type": "array",
+                     "items": { "type": "string", "enum": ["safe"], "enum": ["safe", "reckless"] } } } }"#,
+        ] {
+            let twice = tool.replace(
+                r#"{ "type": "object", "additionalProperties": false }"#,
+                schema,
+            );
+            assert_ne!(twice, tool);
+            assert_eq!(
+                codes(&manifest("", &twice)),
+                [Code::ManifestParse],
+                "{schema}"
+            );
+        }
+    }
+
+    #[test]
     fn rejects_bad_versions_services_fields_and_empty_manifests() {
         let text = json!({ "schema_version": 2, "service": "org.uos.Test1", "tools": [tool_with(|_| {})] });
         assert_eq!(codes(&text.to_string()), [Code::ManifestVersion]);
@@ -713,6 +880,9 @@ mod tests {
         for (field, value) in [
             ("description", ""),
             ("description", "   "),
+            ("description", "\u{a0}"),
+            ("description", "\u{feff}"),
+            ("description", " \u{feff} "),
             ("description", "line\nbreak"),
             ("method", ""),
             ("method", "9Method"),
@@ -995,6 +1165,72 @@ mod tests {
                 "{arguments}"
             );
         }
+    }
+
+    #[test]
+    fn number_bounds_are_exact_for_integers() {
+        let text = manifest_with(tool_with(|tool| {
+            tool.insert(
+                "input_schema".to_owned(),
+                json!({
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "wide": {
+                            "type": "integer",
+                            "minimum": -9_007_199_254_740_992_i64,
+                            "maximum": 9_007_199_254_740_992_i64
+                        },
+                        "full": {
+                            "type": "integer",
+                            "minimum": i64::MIN,
+                            "maximum": u64::MAX - 1
+                        },
+                        "small": { "type": "integer", "minimum": 0, "maximum": 0 },
+                        "ratio": { "type": "number", "minimum": 0.5, "maximum": 1.5 },
+                        "whole_bound": { "type": "number", "minimum": 1, "maximum": 2 }
+                    }
+                }),
+            );
+        }));
+        let manifest = ToolManifest::from_json(&text).unwrap();
+        let accepted = |arguments: &str| {
+            let arguments: Value = serde_json::from_str(arguments).expect("valid JSON");
+            argument_codes(&manifest, arguments).is_empty()
+        };
+
+        // 2^53 is the bound; 2^53 + 1 is equal to it as a 64-bit float.
+        assert!(accepted(r#"{ "wide": 9007199254740992 }"#));
+        assert!(!accepted(r#"{ "wide": 9007199254740993 }"#));
+        assert!(accepted(r#"{ "wide": -9007199254740992 }"#));
+        assert!(!accepted(r#"{ "wide": -9007199254740993 }"#));
+        // The ends of the range JSON integers are read in.
+        assert!(accepted(r#"{ "full": -9223372036854775808 }"#));
+        assert!(accepted(r#"{ "full": 18446744073709551614 }"#));
+        assert!(!accepted(r#"{ "full": 18446744073709551615 }"#));
+        // Beyond that range a number is not an integer at all.
+        assert!(!accepted(r#"{ "full": 18446744073709551616 }"#));
+        assert!(!accepted(r#"{ "full": -9223372036854775809 }"#));
+        assert!(accepted(r#"{ "small": 0 }"#));
+        assert!(!accepted(r#"{ "small": 1 }"#));
+        assert!(!accepted(r#"{ "small": -1 }"#));
+        // An integer is not written with a fraction or an exponent.
+        assert!(!accepted(r#"{ "small": 0.0 }"#));
+        assert!(!accepted(r#"{ "small": 0e0 }"#));
+        // Numbers with a fraction, and an integer against a fractional bound.
+        assert!(accepted(r#"{ "ratio": 0.5 }"#));
+        assert!(accepted(r#"{ "ratio": 1 }"#));
+        assert!(accepted(r#"{ "ratio": 1.5 }"#));
+        assert!(!accepted(r#"{ "ratio": 0.4999 }"#));
+        assert!(!accepted(r#"{ "ratio": 1.5001 }"#));
+        assert!(!accepted(r#"{ "ratio": 2 }"#));
+        assert!(!accepted(r#"{ "ratio": 0 }"#));
+        assert!(!accepted(r#"{ "ratio": -1e308 }"#));
+        assert!(!accepted(r#"{ "ratio": 1e308 }"#));
+        assert!(accepted(r#"{ "whole_bound": 1.0 }"#));
+        assert!(accepted(r#"{ "whole_bound": 2 }"#));
+        assert!(!accepted(r#"{ "whole_bound": 2.5 }"#));
+        assert!(!accepted(r#"{ "whole_bound": 0.999 }"#));
     }
 
     #[test]
