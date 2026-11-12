@@ -29,6 +29,13 @@ the table as it happened; it is not retried and not hidden.
 
 The exit status is 1 when a result differs from the one apps.json expects,
 so that a regression, or an improvement nobody wrote down, is noticed.
+
+For the comparison of case-insensitive prefixes (issue #81) the same
+applications are installed again with options added to every `app install`
+(--install-option --casefold, or --no-casefold), and --expect-casefold says
+whether each prefix's drive_c must then carry the F attribute, as `lsattr`
+reads it. --downloads shares the downloaded installers between passes; each
+is checked against its pinned hash every time it is used.
 """
 
 from __future__ import annotations
@@ -96,14 +103,19 @@ def windows_path(path: pathlib.Path) -> str:
 class World:
     """The scratch world the applications are installed into."""
 
-    def __init__(self, tur: str, work: pathlib.Path, evidence: pathlib.Path) -> None:
+    def __init__(self, tur: str, work: pathlib.Path, evidence: pathlib.Path,
+                 downloads: pathlib.Path | None = None, install_options: list[str] | None = None,
+                 expect_casefold: str | None = None, title: str | None = None) -> None:
         self.tur = str(pathlib.Path(tur).resolve())
         self.work = work
         self.evidence = evidence
+        self.install_options = install_options or []
+        self.expect_casefold = expect_casefold
+        self.title = title or "Real applications through tur-runtime"
         self.data = work / "xdg-data"
         self.state = work / "xdg-state"
         self.shared = work / "shared"
-        self.downloads = work / "downloads"
+        self.downloads = downloads or work / "downloads"
         self.profiles = work / "profiles"
         for directory in (self.data, self.state, self.shared, self.downloads, self.profiles, evidence):
             directory.mkdir(parents=True, exist_ok=True)
@@ -588,6 +600,10 @@ def download(world: World, app: dict, result: dict) -> pathlib.Path | None:
     directory = world.downloads / app["id"]
     directory.mkdir(parents=True, exist_ok=True)
     target = directory / app["url"].rsplit("/", 1)[1]
+    if target.is_file() and target.stat().st_size == app["size"] and sha256_of(target) == app["sha256"]:
+        result["download"] = {"ok": True, "seconds": 0.0, "size": app["size"], "sha256": app["sha256"],
+                              "cached": True}
+        return target
     started = time.monotonic()
     try:
         request = urllib.request.Request(app["url"], headers={"User-Agent": "tur-ci/1.0"})
@@ -704,7 +720,7 @@ def test_application(world: World, app: dict) -> dict:
     started = time.monotonic()
     status, installed, stderr = world.tur_json(
         ["app", "install", str(installer), "--app-id", app_id, "--launcher", world.tur, "--timeout", "900",
-         "--json", *app.get("install_options", [])], timeout=1500)
+         "--json", *app.get("install_options", []), *world.install_options], timeout=1500)
     seconds = round(time.monotonic() - started, 1)
     (evidence / "install.json").write_text(json.dumps(installed, indent=2))
     copy_evidence(world.state / "tur/runtime/logs" / app_id, evidence / "logs")
@@ -728,6 +744,17 @@ def test_application(world: World, app: dict) -> dict:
         problems.append("the recorded SHA-256 is not the installer's")
     if json.loads((world.data / "tur/runtime/prefixes" / app_id / "application.json").read_text()) != record:
         problems.append("the record on disk is not the one reported")
+    # Case folding: what the record says, and what the directory says.
+    drive_c = world.data / "tur/runtime/prefixes" / app_id / "prefix/drive_c"
+    attributes = run(["lsattr", "-d", str(drive_c)], env=dict(os.environ, LC_ALL="C"), timeout=30)
+    folded = ("F" in attributes.stdout.split()[0]) if attributes.returncode == 0 and attributes.stdout.strip() else None
+    result["case_folding"] = {"record": record.get("case_folding"), "lsattr_casefolded": folded,
+                              "warnings": installed.get("warnings")}
+    if (record.get("case_folding") or {}).get("casefolded", False) != bool(folded):
+        problems.append(f"the record says {record.get('case_folding')} and lsattr says casefolded: {folded}")
+    if world.expect_casefold and bool(folded) != (world.expect_casefold == "yes"):
+        problems.append(f"drive_c is {'' if folded else 'not '}case-insensitive; this pass expects "
+                        f"{'it' if world.expect_casefold == 'yes' else 'the opposite'}")
 
     # The launcher entry and the icon.
     launcher: dict = {"desktop_entry": record["launcher"]["desktop_entry"], "icon": None}
@@ -897,7 +924,7 @@ def notes_for(result: dict, app: dict) -> str:
 
 
 def write_report(world: World, apps: list[dict], results: list[dict], environment: dict) -> list[str]:
-    lines = ["### Real applications through tur-runtime", "",
+    lines = [f"### {world.title}", "",
              f"Wine: `{environment['wine']}` from Ubuntu's archive, on a GitHub-hosted runner "
              f"({environment['os']}, kernel {environment['kernel']}). **This is not the TUR image**, which ships "
              "no Wine yet. No GPU: an X server without a screen (Xvfb), everything drawn in software. "
@@ -1010,12 +1037,21 @@ def main() -> int:
     parser.add_argument("--work-dir", required=True, type=pathlib.Path)
     parser.add_argument("--evidence", required=True, type=pathlib.Path)
     parser.add_argument("--only", default="", help="comma-separated application ids")
+    parser.add_argument("--install-option", action="append", default=[],
+                        help="an option added to every app install, such as --casefold")
+    parser.add_argument("--expect-casefold", choices=("yes", "no"),
+                        help="whether every prefix's drive_c must be case-insensitive")
+    parser.add_argument("--downloads", type=pathlib.Path, help="a directory of downloads shared between passes")
+    parser.add_argument("--title", help="the heading of the table")
     arguments = parser.parse_args()
 
     apps = json.loads(arguments.apps.read_text())["applications"]
     if arguments.only:
         apps = [app for app in apps if app["id"] in arguments.only.split(",")]
-    world = World(arguments.tur_runtime, arguments.work_dir.resolve(), arguments.evidence.resolve())
+    world = World(arguments.tur_runtime, arguments.work_dir.resolve(), arguments.evidence.resolve(),
+                  downloads=arguments.downloads.resolve() if arguments.downloads else None,
+                  install_options=arguments.install_option, expect_casefold=arguments.expect_casefold,
+                  title=arguments.title)
     environment = describe_environment()
     traces_before = host_traces()
     log(json.dumps(environment, indent=2))

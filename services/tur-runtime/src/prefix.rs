@@ -248,8 +248,9 @@ impl Planner<'_> {
     /// be given to an empty directory, and everything Wine then creates on
     /// drive C: inherits it. Wine leaves a `drive_c` that is already there
     /// as it is (`init_config_dir` in `dlls/ntdll/unix/server.c`). Proton
-    /// builds its prefix its own way, and that was never run here, so a
-    /// Proton prefix is left alone.
+    /// builds its prefix its own way, and its own script already sets the
+    /// attribute on the `drive_c` it creates (`set_dir_casefold_bit` in
+    /// Valve's `proton`), so a Proton prefix is left to it.
     pub(crate) fn create_steps(
         &self,
         metadata: &PrefixMetadata,
@@ -740,7 +741,8 @@ fn case_folding_note(case_folding: CaseFolding, runtime: RuntimeKind) -> String 
              ordinary directory, Wine emulates case-insensitivity, and the report says why."
             .to_owned(),
         (CaseFolding::Try, RuntimeKind::Proton) => {
-            "Drive C: is not made case-insensitive: that has not been tried with Proton."
+            "Drive C: is left to Proton, whose own script asks for case folding on the \
+             drive_c it creates; that was not run here."
                 .to_owned()
         }
         (CaseFolding::Off, _) => {
