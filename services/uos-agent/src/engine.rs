@@ -66,7 +66,7 @@ pub fn decide(action: &Action, context: &Context, policy: &UserPolicy, now: Time
 
     // 6. Class 3: its own authentication, every time. Never as a command,
     //    never without a person present, never covered by a repair session.
-    if class == ActionClass::SystemCritical && present {
+    if class == ActionClass::SystemCritical {
         if matches!(action, Action::Command(_)) {
             return Decision::refuse(class, Refusal::SystemCriticalAsCommand);
         }
@@ -166,7 +166,7 @@ pub fn classify(action: &Action, context: &Context, policy: &UserPolicy) -> Acti
         Action::Agent(operation) => operation.class(),
     };
     if context.model_flags_consequential {
-        base.max(ActionClass::Consequential)
+        ActionClass::Consequential
     } else {
         base
     }
