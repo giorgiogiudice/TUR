@@ -98,7 +98,9 @@ fn manifest_follows_the_addendum_format() {
         assert!(class <= 1, "{name}: class {class}");
         let method = tool["method"].as_str().expect("method is a string");
         let first_ok = method.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_');
-        let rest_ok = method.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
+        let rest_ok = method
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_');
         assert!(first_ok && rest_ok, "{name}: {method}");
 
         let input = &tool["input_schema"];
@@ -114,11 +116,17 @@ fn manifest_follows_the_addendum_format() {
             .as_object()
             .expect("properties is an object");
         for (property, schema) in properties {
-            assert!(keys(schema).is_subset(&BTreeSet::from(["type", "enum"])), "{name}");
+            assert!(
+                keys(schema).is_subset(&BTreeSet::from(["type", "enum"])),
+                "{name}"
+            );
             assert_eq!(schema["type"], "string", "{name}: {property}");
             if let Some(allowed) = schema.get("enum") {
                 let allowed = allowed.as_array().expect("enum is an array");
-                assert!(!allowed.is_empty() && allowed.iter().all(Value::is_string), "{name}");
+                assert!(
+                    !allowed.is_empty() && allowed.iter().all(Value::is_string),
+                    "{name}"
+                );
             }
         }
         for required in input["required"].as_array().into_iter().flatten() {
