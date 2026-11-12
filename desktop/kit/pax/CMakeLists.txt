@@ -4,7 +4,7 @@
 # own, so that a program that is not one of P@x's surfaces cannot use gold by
 # accident: it would have to import this, and the boundary check refuses.
 
-set_source_files_properties(PaxTheme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
+set_source_files_properties(PaxTheme.qml PaxCommands.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 
 qt_add_qml_module(turkitpax
     URI Tur.Kit.Pax
@@ -13,7 +13,9 @@ qt_add_qml_module(turkitpax
     NO_CACHEGEN
     QML_FILES
         PaxTheme.qml
+        PaxCommands.qml
         PaxMark.qml
+        PaxFlame.qml
         PaxName.qml
         PaxPill.qml
 )

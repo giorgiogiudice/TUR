@@ -122,9 +122,34 @@ allow cmake turkitpax             desktop/apps/tur-settings/**   LicenseRef-TUR-
 # Gold is P@x and nothing else (design, section 5.1). The gold tokens and the
 # components drawn in them are the module Tur.Kit.Pax; only P@x's surfaces,
 # the gallery and the tests may import it.
-allow qml Tur.Kit.Pax             desktop/kit/pax/**,desktop/kit/gallery/**,desktop/kit/tests/**,desktop/apps/pax-ui/**,desktop/apps/pax-overlay/**,desktop/apps/pax-approve/**   LicenseRef-TUR-Noncommercial-1.0.0
-allow cmake turkitpax             desktop/kit/**,desktop/apps/pax-ui/**,desktop/apps/pax-overlay/**,desktop/apps/pax-approve/**   LicenseRef-TUR-Noncommercial-1.0.0
+allow qml Tur.Kit.Pax             desktop/kit/pax/**,desktop/kit/gallery/**,desktop/kit/tests/**,desktop/apps/pax-ui/**,desktop/apps/pax-overlay/**,desktop/apps/tur-pax-overlay/**,desktop/apps/pax-approve/**   LicenseRef-TUR-Noncommercial-1.0.0
+allow cmake turkitpax             desktop/kit/**,desktop/apps/pax-ui/**,desktop/apps/pax-overlay/**,desktop/apps/tur-pax-overlay/**,desktop/apps/pax-approve/**   LicenseRef-TUR-Noncommercial-1.0.0
 allow soname libturkitpax.so*     *                            LicenseRef-TUR-Noncommercial-1.0.0
+
+# P@x's overlay, tur-pax-overlay (design, sections 9.3 to 9.6; task D-15):
+# its own QML module and library, under the project licence, and two
+# libraries of KDE's, linked dynamically by the program (not by its module),
+# whose licences were read file by file at the Plasma/6.8 tags (v6.8.2) on
+# 12 November 2026 (docs/architecture/tur-pax-overlay.md, section 8):
+#  - LayerShellQt: every source file of src/ is "LGPL-2.1-only OR
+#    LGPL-3.0-only OR LicenseRef-KDE-Accepted-LGPL"; its protocol file is MIT;
+#    its build files BSD-3-Clause. For the overlay's layer-shell surfaces.
+#  - KWayland's client library: all 75 files of src/client are "LGPL-2.1-only
+#    OR LGPL-3.0-only OR LicenseRef-KDE-Accepted-LGPL"; the protocol files it
+#    is generated from (plasma-wayland-protocols 1.23.0,
+#    plasma-window-management.xml and fake-input.xml) are LGPL-2.1-or-later.
+#    For the Plasma window-management protocol: where other programs' windows
+#    are. The compositor tests also use its fake-input protocol to inject
+#    input; the overlay never does.
+allow qml Tur.PaxOverlay          desktop/apps/tur-pax-overlay/**   LicenseRef-TUR-Noncommercial-1.0.0
+allow cmake turpaxoverlay         desktop/apps/tur-pax-overlay/**,desktop/tests/compositor/**   LicenseRef-TUR-Noncommercial-1.0.0
+allow soname libturpaxoverlay.so* *                            LicenseRef-TUR-Noncommercial-1.0.0
+allow cmake LayerShellQt          desktop/apps/tur-pax-overlay/CMakeLists.txt   LGPL-2.1-only OR LGPL-3.0-only
+allow cmake LayerShellQt::Interface desktop/apps/tur-pax-overlay/CMakeLists.txt LGPL-2.1-only OR LGPL-3.0-only
+allow soname libLayerShellQtInterface.so.6 *                   LGPL-2.1-only OR LGPL-3.0-only
+allow cmake KWayland              desktop/apps/tur-pax-overlay/CMakeLists.txt   LGPL-2.1-only OR LGPL-3.0-only
+allow cmake Plasma::KWaylandClient desktop/apps/tur-pax-overlay/CMakeLists.txt,desktop/tests/compositor/CMakeLists.txt   LGPL-2.1-only OR LGPL-3.0-only
+allow soname libKWaylandClient.so.6 *                          LGPL-2.1-only OR LGPL-3.0-only
 
 # And blue is the system: what is drawn in P@x's module does not use the
 # system's accent.
@@ -137,7 +162,7 @@ deny-text desktop/kit/pax/*.qml  Theme\.(accent|selection)  blue is the system's
 
 allow qml QtTest                  desktop/**/tests/**,desktop/ci/probe/tst_*.qml   LGPL-3.0-only
 allow qml Tur.Kit.Testing         desktop/**/tests/**,desktop/ci/probe/tst_*.qml   LicenseRef-TUR-Noncommercial-1.0.0
-allow cmake Qt6::Test             desktop/**/tests/**,desktop/CMakeLists.txt       LGPL-3.0-only
+allow cmake Qt6::Test             desktop/**/tests/**,desktop/tests/**,desktop/CMakeLists.txt       LGPL-3.0-only
 allow cmake Qt6::QuickTest        desktop/**/tests/**,desktop/CMakeLists.txt       LGPL-3.0-only
 allow cmake turkittesting         desktop/**/tests/**,desktop/kit/a11y/**          LicenseRef-TUR-Noncommercial-1.0.0
 allow soname libQt6Test.so.6      */tst_*                      LGPL-3.0-only
@@ -237,7 +262,18 @@ forbid cmake   KF6KIO*                   parts of KIO are GPL-only
 forbid cmake   KF6::KIO*                 parts of KIO are GPL-only
 forbid soname  libKF6KIO*                parts of KIO are GPL-only
 forbid qml     org.kde.plasma*           libplasma and Plasma's QML modules run inside a GPL host
-forbid cmake   Plasma*                   libplasma is not for TUR's programs (GPL parts)
+# libplasma and the libraries of Plasma's shell, by name. Not "Plasma*" or
+# "Plasma::*": KWayland's client library is exported as
+# Plasma::KWaylandClient and is allowed above, by name, for the overlay
+# (ADR-0020). Anything of Plasma's not allowed by name is refused anyway.
+forbid cmake   Plasma                    libplasma is not for TUR's programs (GPL parts)
+forbid cmake   Plasma::Plasma*           libplasma is not for TUR's programs (GPL parts)
+forbid cmake   PlasmaQuick*              libplasma is not for TUR's programs (GPL parts)
+forbid cmake   Plasma::PlasmaQuick*      libplasma is not for TUR's programs (GPL parts)
+forbid cmake   Plasma5Support*           Plasma5Support is part of Plasma's shell, not for TUR's programs
+forbid cmake   Plasma::Plasma5Support*   Plasma5Support is part of Plasma's shell, not for TUR's programs
+forbid cmake   PlasmaActivities*         Plasma's activities are not for TUR's programs
+forbid cmake   Plasma::Activities*       Plasma's activities are not for TUR's programs
 forbid cmake   KF6Plasma*                libplasma is not for TUR's programs (GPL parts)
 forbid soname  libPlasma*                libplasma is not for TUR's programs (GPL parts)
 forbid qml     org.kde.purpose*          Purpose contains GPL-only files
