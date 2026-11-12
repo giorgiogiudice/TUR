@@ -313,7 +313,9 @@ pub fn recommend(
                 "Engine: one processor build without the fast kernels, which answers several \
                  times more slowly; the budget is set as for a processor without them."
             }
-            EngineCpu::Unknown => "Engine: not found; the budget assumes a build with the fast kernels.",
+            EngineCpu::Unknown => {
+                "Engine: not found; the budget assumes a build with the fast kernels."
+            }
         }
         .to_owned(),
         "Graphics: not used yet; the engine TUR installs runs models on the processor.".to_owned(),
