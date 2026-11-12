@@ -164,7 +164,9 @@ address ─▶ SettingsHost.perform()
 6. if asked, marks the row: `RowHighlight` is a child of the row, so the line
    stays on it while the page scrolls or the window changes size;
 7. gives the keyboard to the row's control, or to the row itself when it has
-   none that can be used;
+   none that can be used; what already has the keyboard keeps it (a card is a
+   focus scope: a row that let go for a moment would hand the keyboard to its
+   card, and the page would scroll to show the whole card);
 8. returns the row's rectangle in the window.
 
 **The highlight** (design, 9.5): a rounded line 3 px wide, 4 px clear of the
@@ -355,7 +357,7 @@ Each of these is a place where what was built is not what
 | Options of `Reveal`: `highlight`, `duration`, `dim` (10.3) | And `pax` | The row above |
 | `org.tur.Settings1`: `Open`, `Reveal`, `Resolve`, `Search` (10.3) | And `ClearHighlight`, and the property `Address` | The tool `settings_clear` needs a method on the entry point; `Address` lets a caller, and a test, see where the window is |
 | `Open(s address)` | An empty address brings the window forward where it is | What a second start with no address needs |
-| "A row without an `address` does not compile into a page" (10.3) | The property is required: a page with such a row does not load, and the tests of every page fail | QML is not compiled ahead of time (desktop/README.md); `qmllint` reports a missing required property in the build job |
+| "A row without an `address` does not compile into a page" (10.3) | The property is required: a page with such a row does not load, and the tests of every page fail | QML is not compiled ahead of time (desktop/README.md). Whether `qmllint` reports a missing required property was not tried |
 | A removed address: "unknown address, removed address (with its successor), page not available" (10.3) | Those three, and three more codes (section 3) | Something that is not an address, an owner that does not answer, and a row that is registered and not shown are different faults |
 | `kde.<module>` for every module; rows by a locator (10.4) | Four pages of KDE's, no rows; a row of a KDE page is opened at its page and reported as not located | D-20 |
 | The side list ends with "Displays, sound, network and more →" (10.2) | The same words, with "Opens System Settings" under them and no arrow | The kit's row has a second line and no trailing sign; the words say what happens |
@@ -416,6 +418,11 @@ confirm or replace.
   program installs later is seen at the next start.
 - **`RowChanged` is sent for the page on screen only.**
 - **The fixtures were written by hand** and are not held to a built image.
+- **Dimming can hardly be seen in the dark variant**: a fifth of the darkest
+  tone over a dark window.
+- **A match pressed before the first frame** after the matches appear reaches
+  the last match: until a layout has placed them, they lie on top of one
+  another. A person cannot press that fast; a test did.
 
 ## 8. Tools for P@x
 
@@ -512,7 +519,7 @@ All in CI, in the `desktop` workflow.
 | `tst_settings_bus` | | **The addressing over D-Bus**, on a session bus of the test's own (section 9.1) |
 | `tst_shell`, `tst_pages` | `tests/` | The list, the search, the way into System Settings, developer mode; each page, with the exact words on screen and what it says about what it cannot read |
 | `tst_registry_pages` | | **The registry and the pages, in both directions**: every row a page shows is registered under that page, and every registered row is shown; its title, kind, section and availability are the registry's |
-| `tst_addressing` | | **Every registered row** is revealed in a window too low to show it, and is then where the program said, in sight, focused and marked; the line's pixels, in blue and in gold, in both variants; dimming; duration; a closed group; pages; the link; every refusal with its code |
+| `tst_addressing` | | **Every registered row** is revealed in a window too low to show it, and is then where the program said, in sight, focused and marked; asked for again, it does not move; the line's pixels, in blue and in gold, in both variants; dimming; duration; a closed group; pages; the link; every refusal with its code |
 | `tst_walks` | | The kit's contrast walk (both variants), accessibility walk (both directions) and text-size test (200 %, right-to-left with longer strings, both), over each of the ten states the pictures are taken of |
 | Screenshots | `tests/shots/render_settings.qml`, `desktop/tests/screenshots/settings-*.png` | Each state looks as approved, in the kit's matrix |
 | `settings-starts*`, `settings-refuses*`, `settings-answers*`, `settings-desktop-files` | `CMakeLists.txt` | The program itself starts on a page, a row and a link with no QML warning; refuses what it cannot open, with the code; answers `--search`, `--resolve` and `--list` with no display at all; its desktop files are valid |
