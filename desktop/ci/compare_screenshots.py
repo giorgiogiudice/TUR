@@ -3,6 +3,7 @@
 """Compare rendered pictures with their reference images.
 
     compare_screenshots.py --actual DIR --repeat DIR --reference DIR --out DIR
+    compare_screenshots.py --self-test     prove that it tells a match from a difference
 
 Runs in the builder image (it needs Pillow), from desktop/ci/screenshots.sh.
 
@@ -38,10 +39,10 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import pathlib
 import shutil
 import sys
+import tempfile
 
 from PIL import Image, ImageChops, ImageDraw
 
@@ -109,14 +110,8 @@ def contact_sheets(directory: pathlib.Path, names: list[str], out: pathlib.Path)
     return written
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--actual", required=True, type=pathlib.Path)
-    parser.add_argument("--repeat", required=True, type=pathlib.Path)
-    parser.add_argument("--reference", required=True, type=pathlib.Path)
-    parser.add_argument("--out", required=True, type=pathlib.Path)
-    args = parser.parse_args()
-
+def compare(args: argparse.Namespace, quiet: bool = False) -> int:
+    """Compare the pictures and write the results; 0 if every picture matches."""
     for name in ("reference", "diff", "proposed"):
         (args.out / name).mkdir(parents=True, exist_ok=True)
 
@@ -213,18 +208,103 @@ def main() -> int:
         lines.append("")
     text = "\n".join(lines)
     (args.out / "report.md").write_text(text, encoding="utf-8")
-    print(text)
-    summary = os.environ.get("GITHUB_STEP_SUMMARY")
-    if summary:
-        with open(summary, "a", encoding="utf-8") as handle:
-            handle.write(text + "\n")
+    if not quiet:
+        print(text)
+        for row in failed:
+            print(f"::error::screenshot {row['name']}: {row['status']}: {row['detail']}")
+        if not actual:
+            print("::error::no picture was rendered")
+    return 1 if failed or not actual else 0
 
-    for row in failed:
-        print(f"::error::screenshot {row['name']}: {row['status']}: {row['detail']}")
-    if not actual:
-        print("::error::no picture was rendered")
+
+def self_test() -> int:
+    """Make pictures that match and pictures that do not, and require each verdict."""
+    with tempfile.TemporaryDirectory(prefix="tur-compare-") as holder:
+        root = pathlib.Path(holder)
+        args = argparse.Namespace(actual=root / "actual", repeat=root / "repeat",
+                                  reference=root / "reference", out=root / "out")
+        for directory in (args.actual, args.repeat, args.reference):
+            directory.mkdir()
+
+        def page() -> Image.Image:
+            image = Image.new("RGB", (200, 120), (11, 15, 23))
+            draw = ImageDraw.Draw(image)
+            draw.rectangle((20, 20, 120, 56), fill=(42, 169, 248))
+            draw.line((20, 80, 180, 80), fill=(107, 122, 149), width=1)
+            return image
+
+        def put(name: str, actual, repeat, reference) -> None:
+            for directory, image in ((args.actual, actual), (args.repeat, repeat), (args.reference, reference)):
+                if image is not None:
+                    image.save(directory / name)
+
+        base = page()
+        # The same picture three times.
+        put("same.png", base, base, base)
+        # Rounding at an edge: every channel of some pixels off by a little.
+        nudged = base.copy()
+        for x in range(20, 121):
+            nudged.putpixel((x, 20), (42 + 6, 169 - 6, 248 - 5))
+        put("within.png", nudged, nudged, base)
+        # One missing hairline: the kind of change a loose tolerance would hide.
+        no_line = base.copy()
+        ImageDraw.Draw(no_line).line((20, 80, 180, 80), fill=(11, 15, 23), width=1)
+        put("line.png", no_line, no_line, base)
+        # A single pixel in another colour.
+        dot = base.copy()
+        dot.putpixel((150, 100), (255, 122, 122))
+        put("dot.png", dot, dot, base)
+        # Another size.
+        put("size.png", base.resize((200, 121)), base.resize((200, 121)), base)
+        # Two runs that disagree, by the smallest amount there is.
+        flicker = base.copy()
+        flicker.putpixel((5, 5), (11, 15, 24))
+        put("flicker.png", base, flicker, base)
+        # No reference yet; and a reference nothing renders any more.
+        put("new.png", base, base, None)
+        put("stale.png", None, None, base)
+
+        status = compare(args, quiet=True)
+        report = json.loads((args.out / "report.json").read_text(encoding="utf-8"))
+        got = {row["name"]: row["status"] for row in report["rows"]}
+        proposed = sorted(path.name for path in (args.out / "proposed").glob("*.png"))
+        diffs = sorted(path.name for path in (args.out / "diff").glob("*.png"))
+
+    want = {
+        "same.png": "match", "within.png": "match", "line.png": "different", "dot.png": "different",
+        "size.png": "different", "flicker.png": "not repeatable", "new.png": "no reference",
+        "stale.png": "stale reference",
+    }
+    failures = [f"{name}: expected {verdict!r}, got {got.get(name)!r}" for name, verdict in want.items()
+                if got.get(name) != verdict]
+    if status != 1:
+        failures.append(f"the comparison returned {status}; with failing pictures it must return 1")
+    if proposed != ["dot.png", "flicker.png", "line.png", "new.png", "size.png"]:
+        failures.append(f"proposed/ holds {proposed}")
+    if diffs != ["dot.png", "line.png"]:
+        failures.append(f"diff/ holds {diffs}")
+    if failures:
+        for failure in failures:
+            print(f"::error::screenshot comparison self-test: {failure}")
         return 1
-    return 1 if failed else 0
+    print(f"screenshot comparison self-test: {len(want)} made-up pictures judged as expected "
+          "(a missing hairline and a single wrong pixel are caught; rounding within the tolerance is not)")
+    return 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--self-test", action="store_true")
+    parser.add_argument("--actual", type=pathlib.Path)
+    parser.add_argument("--repeat", type=pathlib.Path)
+    parser.add_argument("--reference", type=pathlib.Path)
+    parser.add_argument("--out", type=pathlib.Path)
+    args = parser.parse_args()
+    if args.self_test:
+        return self_test()
+    if not (args.actual and args.repeat and args.reference and args.out):
+        parser.error("--actual, --repeat, --reference and --out are all needed")
+    return compare(args)
 
 
 if __name__ == "__main__":

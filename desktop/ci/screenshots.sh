@@ -26,6 +26,10 @@ export XDG_CONFIG_HOME="$out/empty-config" XDG_CONFIG_DIRS="$out/empty-config"
 
 status=0
 
+# First prove that the comparison can fail: a green check must mean the
+# pictures matched.
+python3 desktop/ci/compare_screenshots.py --self-test
+
 # render DIRECTORY SCALE INPUT
 render() {
     name=$(basename "$3" .qml)-$2-$(basename "$1")
