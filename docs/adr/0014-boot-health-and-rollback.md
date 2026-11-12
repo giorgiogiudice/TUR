@@ -184,3 +184,38 @@ implementation brief: whether a kernel argument written as a GRUB variable
 survives bootc and OSTree and is expanded at boot. If that step fails, this
 record is revisited before anything further is built on it.
 
+## Result and amendments (12 November 2026, after implementation)
+
+Step 2 passed: the kernel argument written as a GRUB variable survives bootc
+and OSTree and is expanded at boot. The mechanism is built and proven in a
+virtual machine: 26 of 26 scenarios pass in the `rollback` workflow
+([TUR-005](../reports/TUR-005.md); measurements in
+[section 17 of the design](../architecture/boot-health-and-rollback.md#17-measured-tur-005)).
+All of it was measured in QEMU/KVM with OVMF, without Secure Boot. Nothing has
+been shown on real firmware, a real drive or a real watchdog.
+
+Implementation changed or added these points:
+
+1. **GRUB can act on an out-of-date environment block after an unclean stop.**
+   `grub2-editenv` moves the block when it rewrites it, and GRUB reads ext4
+   without replaying the journal. The program now syncs the whole filesystem
+   after each write, and with that the power-cut scenarios behave as designed.
+   **Decision:** the block is to be written in place (same blocks, same
+   length, synchronous write) instead of through `grub2-editenv`, which closes
+   the window between rewrite and sync. Until that is built and the power-cut
+   scenarios pass with it, the sync stays.
+2. **A further state.** A power cut between arming and finalisation leaves a
+   trial record, a counter in the block and no trial argument. It is
+   classified `stale`: the update was not applied.
+3. **`/boot` is an automount that expires when idle.** No unit may require the
+   `/boot` mount; units are ordered after it.
+4. **A kernel image cut short** is started by GRUB without Secure Boot and
+   hangs in firmware; GRUB's fallback covers only a kernel it refuses to load.
+   Recovery from that case is manual (a reset), and the case is to be
+   re-measured under Secure Boot.
+5. **bootc 1.17.1 logs its rollback without a message ID**, so nothing relies
+   on one.
+6. Start-up as `systemd-analyze` reports it roughly doubles, because the
+   health gate's 15-second hold is a boot job. Accepted for now; to be
+   revisited with the desktop's start-up budget.
+

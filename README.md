@@ -162,7 +162,8 @@ becomes.
 | Devices, P@x's connections to AI providers, P@x's memory and schedules, application catalogue and router | First versions written and tested; not yet part of the image |
 | Running Windows programs | A Windows program built in continuous integration runs under Wine through TUR's launcher, inside a sandbox that keeps it out of the user's files ([report](docs/reports/windows-runtime-1.md)). Tested on Ubuntu, not yet on the TUR image; no real application tried |
 | Desktop and application centre | The shared interface kit and the first part of the application centre (search, how an application will run and who says so, and a plain answer when it cannot) are built and checked by screenshot tests in both themes ([kit](docs/reports/desktop-1.md), [centre](docs/reports/desktop-2.md)). Not yet run in a real desktop session; cannot install anything yet |
-| Updates and rollback, the Windows guest | [Designed](docs/adr/README.md); rollback is being built |
+| Rollback of a bad update | **Built and proven in a virtual machine**: a new version that fails its health check, crashes the login screen, cannot mount its disk, panics or hangs is replaced by the previous version within three attempts, and power cuts during an update leave one whole version (26 scenarios on every change; [report](docs/reports/TUR-005.md)). Not yet shown on real hardware or with Secure Boot; nothing tells the user on screen yet |
+| Updates, the Windows guest | [Designed](docs/adr/README.md); the update manager is being built |
 | Desktop, application centre, Windows and Android running | Not started |
 | Anything you can install | Not yet |
 
