@@ -1,12 +1,12 @@
 # AI control layer
 
-**Specification addendum A — Revision 2 (12 November 2026)**
+**Specification addendum A — Revision 3 (12 November 2026)**
 **Applies to:** specification revision 1.0
 **Related decision:** [ADR-0004](../adr/0004-ai-provider-model.md)
 
 This addendum specifies the optional layer that lets a person operate UOS through
-an AI assistant: by voice or text, with the assistant able to see and control
-applications from every runtime. It adds a subsystem to the specification and
+an AI assistant, **P@x**: by voice or text, with the assistant able to see and
+control applications from every runtime. "The assistant" below means P@x. It adds a subsystem to the specification and
 lists the amendments it requires in [section 14](#14-amendments-to-specification-revision-10).
 
 Revision 2 extends the assistant from a way of operating applications into a full
@@ -14,6 +14,9 @@ assistant: it runs commands to troubleshoot and repair the system, keeps a memor
 and runs reminders and scheduled tasks. The additions are in sections 4, 5.4 to
 5.6, 7 and [16](#16-assistant-capabilities). Section numbers from revision 1 are
 unchanged.
+
+Revision 3 names the assistant **P@x**, gives it its own pointer and a guide
+mode (section 16.6), and settles how spoken approval is handled (section 5.2).
 
 Statements about what KWin, the desktop portals or a provider's API support are
 design assumptions. Each must be verified against current upstream state before
@@ -191,8 +194,11 @@ Every action belongs to one class. The class, not the model, decides what happen
 ### 5.2 Confirmation
 
 - **Class 2:** the assistant states what it is about to do, and the user approves
-  on screen or by voice. A voice approval is accepted only under the conditions in
-  section 9.
+  **on screen**. This is the default and the owner's decision. A system setting
+  lets the user allow spoken approval of class 2 actions instead; when it is on,
+  a spoken approval is accepted only under the conditions in section 9. The
+  setting is changed by the user, in system settings, and never by the assistant
+  (class 4).
 - **Class 3:** approval is given only on the trusted confirmation path, with
   physical input and the user's authentication. A spoken "yes" is never enough.
 - An approval covers one stated action. It does not carry over to the next, and
@@ -357,10 +363,11 @@ bundles unless the user attaches one.
   option the user turns on.
 - **Barge-in.** Speaking or pressing the stop control interrupts speech and pauses
   the task.
-- **Spoken confirmation.** A class 2 action may be approved by voice only when the
-  request was started by push-to-talk or wake word in the same exchange and the
-  system is not itself playing the audio being heard. Otherwise the approval is
-  asked for on screen.
+- **Spoken confirmation.** Off by default: class 2 actions are approved on screen.
+  If the user turns spoken approval on in system settings, a class 2 action may
+  be approved by voice only when the request was started by push-to-talk or wake
+  word in the same exchange and the system is not itself playing the audio being
+  heard. Otherwise the approval is asked for on screen.
 - **Without a microphone or speakers** the same assistant is available through a
   text interface.
 - **Accessibility.** The voice interface is designed as assistive technology too,
@@ -505,6 +512,7 @@ The AI layer is built alongside the existing phases, not after them.
 | **A2 Screen and input** | 3 | Compositor capture and input harness; scripted GUI test driver | CI drives the desktop in a VM without an API key |
 | **A3 Trusted path** | 3 | The five compositor guarantees of section 6 | Trusted-path tests pass; until then the assistant is limited to classes 0 and 1 |
 | **A4 Providers and text interface** | after 3 | Anthropic, OpenAI and Google adapters; text command interface | Conformance suite passes on each; injection suite passes |
+| **A4b Guide mode** | after A4 | P@x's own pointer, highlighting, addressable settings | P@x opens the right settings page and points at the exact row in a VM test; its pointer cannot enter a protected surface |
 | **A5 Commands and repair** | after A4 | Sandboxed command runner, privileged helper, repair sessions | Sandbox and repair-session tests pass; scripted faults in a VM are diagnosed and fixed |
 | **A6 Memory** | after A4 | Local memory store with provenance, review and forgetting | Memory tests pass, including the poisoning cases |
 | **A7 Reminders and schedules** | after A6 | Scheduler, standing approvals, deferred actions | Unattended tests pass |
@@ -536,8 +544,8 @@ The AI layer is built alongside the existing phases, not after them.
    today, and which need upstream work? This decides when A3 can be met.
 2. **Accessibility of Wine applications.** Is there any usable bridge from Windows
    accessibility interfaces to AT-SPI? The design assumes there is not.
-3. **Voice approval for class 2.** Are the conditions in section 9 strong enough,
-   or should class 2 always be confirmed on screen?
+3. **Voice approval for class 2.** Settled: confirmed on screen by default, with a
+   system setting to allow spoken approval (section 5.2).
 4. **Home snapshots.** Does the chosen filesystem layout make per-task snapshots
    cheap enough to be a default?
 5. **Local models.** When is a local adapter worth adding, and for which tiers?
@@ -639,3 +647,37 @@ The assistant may notice that something failed — a `UOS-*` error, a failed
 update, a crashed application — and offer to look into it. Noticing and offering
 is all it does on its own initiative. It reads nothing beyond class 0, and acts
 only when asked.
+
+### 16.6 P@x's pointer and guide mode
+
+P@x has **its own pointer**, separate from the user's, drawn by the compositor and
+visibly different from the user's cursor.
+
+- **It shows where P@x is acting.** When P@x operates an application, its own
+  pointer moves; the user's cursor is not taken away. The pointer is part of the
+  activity indicator of section 8: if it is on screen, P@x is acting or pointing.
+- **It can point without acting.** P@x can move its pointer to a control,
+  highlight a region or a single line, and keep the highlight there while it
+  explains. Pointing and highlighting change nothing: class 0.
+- **It cannot enter a protected surface** (section 6). Authentication and
+  confirmation prompts are out of its reach in every sense.
+
+Guide mode is how P@x helps someone find and understand things:
+
+- **"Show me."** P@x opens the right place and points at each step; the user does
+  the clicking. Nothing is changed by P@x beyond opening windows (class 1).
+- **"Do it for me."** P@x performs the steps itself, under the usual rules.
+- The user can switch between the two at any point, and can ask P@x to slow down,
+  repeat a step or go back.
+
+For system settings this needs one thing from the desktop: **every setting is
+addressable.** Each settings page and each row on it has a stable identifier, so
+that P@x can open exactly the page and highlight exactly the row it is talking
+about, including the settings that govern P@x itself. Changing a setting is an
+ordinary action with its own class; pointing at it is not.
+
+P@x's abilities will grow. The rule for growth is fixed: a new ability arrives as
+a tool or a way of acting with a declared class, added by a system update or
+enabled by the user in settings. P@x never grants itself an ability, and no
+ability removes the limits of classes 3 and 4.
+

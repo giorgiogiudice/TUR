@@ -19,11 +19,14 @@ the [specification](../architecture/specification.md).
 |---|---|---|
 | [0001](0001-base-distribution.md) | Base distribution: Fedora Kinoite on bootc | Accepted |
 | [0002](0002-ci-and-build-infrastructure.md) | CI and build infrastructure: GitHub Actions first | Accepted |
-| [0003](0003-licence.md) | Licence: PolyForm Noncommercial 1.0.0 | Accepted |
+| [0003](0003-licence.md) | Licence: PolyForm Noncommercial 1.0.0 | Accepted; licence text superseded by 0010 |
 | [0004](0004-ai-provider-model.md) | AI layer: optional, provider-agnostic, user-supplied key | Accepted |
 | [0005](0005-languages-and-workspace.md) | Implementation languages and workspace layout | Accepted |
 | [0007](0007-app-centric-routing.md) | App-centric routing with a seamless real-OS tier | Accepted |
 | [0008](0008-assistant-tool-protocol.md) | Assistant tools use the Model Context Protocol | Accepted |
+| [0009](0009-project-name.md) | The project is TUR, The Unified Realm; the assistant is P@x | Accepted |
+| [0010](0010-licence-excludes-government.md) | Licence: noncommercial, and not for government use | Accepted |
+| [0011](0011-application-centre-and-stores.md) | One application centre, integrating every store | Accepted |
 
 ## Open questions from the specification
 
