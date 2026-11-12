@@ -30,7 +30,7 @@ are regenerated and looked at; the tolerance is not loosened.
 
 Written to --out: reference/ (copies), diff/ (reference in grey, differing
 pixels in magenta), proposed/ (every picture that is new or different, under
-the name it would have as a reference), sheet-*.png (contact sheets),
+the name it would have as a reference), contact-*.png (contact sheets),
 report.json and report.md.
 """
 
@@ -103,7 +103,7 @@ def contact_sheets(directory: pathlib.Path, names: list[str], out: pathlib.Path)
             draw.text((x, 4), name, fill=(255, 255, 255))
             sheet.paste(tile, (x, SHEET_GAP + 6))
             x += SHEET_WIDTH + SHEET_GAP
-        target = out / f"sheet-{group}.png"
+        target = out / f"contact-{group}.png"
         sheet.save(target, optimize=True)
         written.append(target.name)
     return written

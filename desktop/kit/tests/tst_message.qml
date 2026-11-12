@@ -132,6 +132,10 @@ Item {
             verify(!ask.visible, "P@x is not offered unless the program says P@x is on")
             message.paxAvailable = true
             verify(ask.visible)
+            // The row of buttons is laid out again when the scene is next
+            // drawn; a grab draws it.
+            wait(50)
+            grabImage(message)
             watch(message, "paxRequested")
             mouseClick(ask)
             compare(spy.count, 1)

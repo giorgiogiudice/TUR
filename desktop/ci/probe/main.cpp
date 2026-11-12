@@ -78,6 +78,10 @@ int main(int argc, char *argv[])
     int warnings = 0;
     QObject::connect(view.engine(), &QQmlEngine::warnings, &app, [&warnings](const QList<QQmlError> &list) {
         warnings += int(list.size());
+        // Connecting to the signal replaces the engine's own printing.
+        QTextStream err(stderr);
+        for (const QQmlError &error : list)
+            err << "tur-probe: QML warning: " << error.toString() << '\n';
     });
     view.loadFromModule("Tur.Probe", parser.value(page));
     if (view.status() != QQuickView::Ready) {

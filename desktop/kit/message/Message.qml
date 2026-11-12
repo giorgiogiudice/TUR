@@ -172,6 +172,7 @@ T.Control {
                     Layout.fillWidth: true
                     Layout.maximumWidth: control.measure
                     text: control.reason
+                    paragraph: true
                 }
             }
 
@@ -192,6 +193,7 @@ T.Control {
                     Layout.fillWidth: true
                     Layout.maximumWidth: control.measure
                     text: control.whatToDo
+                    paragraph: true
                 }
             }
 

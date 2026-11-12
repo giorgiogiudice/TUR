@@ -136,16 +136,19 @@ Item {
             watch(button, "clicked")
             mouseClick(button)
             compare(spy.count, 1)
+            verify(!button.visualFocus, "a button focused by a click does not show a keyboard focus ring")
 
-            button.forceActiveFocus(Qt.TabFocusReason)
-            verify(button.activeFocus)
-            verify(button.visualFocus, "a button focused from the keyboard shows it")
+            const second = createTemporaryObject(buttonComponent, root, { y: 100 })
+            watch(second, "clicked")
+            second.forceActiveFocus(Qt.TabFocusReason)
+            verify(second.activeFocus)
+            verify(second.visualFocus, "a button focused from the keyboard shows it")
             keyClick(Qt.Key_Space)
-            compare(spy.count, 2, "Space presses the focused button")
+            compare(spy.count, 1, "Space presses the focused button")
 
-            button.enabled = false
-            mouseClick(button)
-            compare(spy.count, 2, "an unavailable button does nothing")
+            second.enabled = false
+            mouseClick(second)
+            compare(spy.count, 1, "an unavailable button does nothing")
         }
 
         function test_button_sizes_and_colours_data() {

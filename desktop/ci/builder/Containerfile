@@ -19,7 +19,7 @@ ARG BASE
 FROM ${BASE}
 
 RUN dnf -y --setopt=install_weak_deps=False --setopt=tsflags=nodocs install \
-        cmake ninja-build gcc-c++ ccache binutils \
+        cmake ninja-build gcc-c++ libasan libubsan ccache binutils \
         qt6-qtbase-devel qt6-qtbase-private-devel qt6-qtdeclarative-devel \
         qt6-qtsvg-devel qt6-qttools-devel qt6-linguist qt6-qtwayland-devel \
         extra-cmake-modules kf6-kirigami-devel kf6-kcolorscheme-devel \

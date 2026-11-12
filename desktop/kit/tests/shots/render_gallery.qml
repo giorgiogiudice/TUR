@@ -84,15 +84,17 @@ Item {
             // The first grab makes the scene lay itself out; the page's
             // height is final only after it.
             wait(50)
-            grabImage(page)
+            Testing.Harness.grab(page, "")
             wait(50)
             verify(page.height > 0)
             verify(page.height <= root.height, "the page (" + page.height + " px) fits in the test window")
 
-            const image = grabImage(page)
-            compare(image.width, Math.round(page.width * Testing.Harness.devicePixelRatio))
             const file = Testing.Harness.outputDir + "/" + data.tag + ".png"
-            image.save(file)
+            const shot = Testing.Harness.grab(page, file)
+            verify(shot.saved, "the picture was saved to " + file)
+            fuzzyCompare(shot.ratio, Testing.Harness.devicePixelRatio, 0.01,
+                         "the window was drawn at the scale asked for (window " + shot.windowWidth + " px wide)")
+            compare(shot.width, Math.round(page.width * shot.ratio))
         }
     }
 }

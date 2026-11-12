@@ -20,13 +20,13 @@ status=0
 ctest --preset "$preset" --verbose --output-junit "$out/test-$preset.xml" > "$log" 2>&1 || status=$?
 
 # What the tests ran on, and what the walks covered.
-grep -E 'TUR-(ENV|A11Y|CONTRAST) ' "$log" | sed -E 's/^[0-9]+: //; s/^QINFO +: [^ ]+ //' | sort -u || true
-echo "Test functions: $(grep -c -E '^[0-9]+: PASS ' "$log" || true) passed, $(grep -c -E '^[0-9]+: FAIL! ' "$log" || true) failed, $(grep -c -E '^[0-9]+: SKIP ' "$log" || true) skipped"
-grep -E '^[0-9]+: SKIP ' "$log" || true
+grep -a -E 'TUR-(ENV|A11Y|CONTRAST) ' "$log" | sed -E 's/^[0-9]+: //; s/^QINFO +: [^ ]+ //' | sort -u || true
+echo "Test functions: $(grep -a -c -E '^[0-9]+: PASS ' "$log" || true) passed, $(grep -a -c -E '^[0-9]+: FAIL! ' "$log" || true) failed, $(grep -a -c -E '^[0-9]+: SKIP ' "$log" || true) skipped"
+grep -a -E '^[0-9]+: SKIP ' "$log" || true
 sed -n '/tests passed,/,$p' "$log"
 
 if [ "$status" -ne 0 ]; then
     echo "Tests failed (the whole log is in the artifact, logs/test-$preset.log):"
-    grep -n -E -A 8 '^[0-9]+: (FAIL!|QFATAL|QWARN|XPASS)|Sanitizer|runtime error:|Segmentation|\*\*\*Failed|\*\*\*Exception|\*\*\*Timeout' "$log" | head -n 400 || tail -n 100 "$log"
+    grep -a -n -E -A 8 '^[0-9]+: (FAIL!|QFATAL|QWARN|XPASS)|Sanitizer|runtime error:|Segmentation|\*\*\*Failed|\*\*\*Exception|\*\*\*Timeout' "$log" | head -n 400 || tail -n 100 "$log"
     exit "$status"
 fi

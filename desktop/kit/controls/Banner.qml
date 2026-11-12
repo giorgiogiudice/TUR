@@ -94,6 +94,7 @@ T.Control {
             Layout.fillWidth: true
             Layout.alignment: Qt.AlignVCenter
             text: control.text
+            paragraph: true
             Accessible.ignored: true
         }
 

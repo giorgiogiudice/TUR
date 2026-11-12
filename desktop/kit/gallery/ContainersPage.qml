@@ -30,6 +30,7 @@ GalleryPage {
                     Layout.fillWidth: true
                     text: qsTr("TUR 0.3.2, installed on 4 November. The system is up to date and the last start was normal.")
                     tone: Kit.Label.Secondary
+                    paragraph: true
                 }
             }
         }

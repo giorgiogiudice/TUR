@@ -92,7 +92,7 @@ def main() -> int:
     if accepted or removed:
         print("Look at each picture before committing it. `git status` shows what changed.")
     if args.keep:
-        print(f"The artifact is in {directory}: actual/, reference/, diff/, proposed/, sheet-*.png")
+        print(f"The artifact is in {directory}: actual/, reference/, diff/, proposed/, contact-*.png")
     if holder:
         holder.cleanup()
     return 0

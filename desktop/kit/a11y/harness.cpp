@@ -9,6 +9,7 @@
 #include <QFont>
 #include <QFontInfo>
 #include <QGuiApplication>
+#include <QImage>
 #include <QJsonDocument>
 #include <QJsonParseError>
 #include <QList>
@@ -17,6 +18,7 @@
 #include <QQmlEngine>
 #include <QQuickStyle>
 #include <QQuickWindow>
+#include <QRect>
 #include <QRectF>
 #include <QScreen>
 
@@ -176,7 +178,13 @@ void collectClipped(QQuickItem *item, QStringList &out)
             if (truncated || tooWide || tooTall) {
                 out.append(pathOf(item) + QLatin1String(" \"") + shortened(text) + QLatin1String("\": ")
                            + (truncated ? QLatin1String("elided") : tooWide ? QLatin1String("wider than its room")
-                                                                             : QLatin1String("taller than its room")));
+                                                                             : QLatin1String("taller than its room"))
+                           + QStringLiteral(" (text %1 by %2 px in %3 by %4 px, %5 line(s))")
+                                 .arg(item->property("contentWidth").toReal())
+                                 .arg(item->property("contentHeight").toReal())
+                                 .arg(item->width())
+                                 .arg(item->height())
+                                 .arg(item->property("lineCount").toInt()));
             }
         }
     }
@@ -406,6 +414,39 @@ QVariantMap Harness::sceneRect(QQuickItem *item) const
     out.insert(QStringLiteral("y"), rect.y());
     out.insert(QStringLiteral("width"), rect.width());
     out.insert(QStringLiteral("height"), rect.height());
+    return out;
+}
+
+QVariantMap Harness::grab(QQuickItem *item, const QString &file) const
+{
+    QVariantMap out;
+    out.insert(QStringLiteral("saved"), false);
+    QQuickWindow *window = item ? item->window() : nullptr;
+    if (!window || window->width() <= 0)
+        return out;
+
+    const QImage whole = window->grabWindow();
+    if (whole.isNull())
+        return out;
+
+    // The picture is in device pixels. The software renderer does not tell
+    // the image its pixel ratio, so take it from the sizes.
+    const qreal ratio = qreal(whole.width()) / qreal(window->width());
+    const QRectF logical = sceneRectOf(item);
+    const QRect pixels = QRectF(logical.x() * ratio, logical.y() * ratio, logical.width() * ratio,
+                                logical.height() * ratio)
+                             .toAlignedRect()
+                             .intersected(whole.rect());
+    QImage picture = whole.copy(pixels);
+    picture.setDevicePixelRatio(1.0);
+
+    out.insert(QStringLiteral("ratio"), ratio);
+    out.insert(QStringLiteral("width"), picture.width());
+    out.insert(QStringLiteral("height"), picture.height());
+    out.insert(QStringLiteral("windowWidth"), whole.width());
+    out.insert(QStringLiteral("windowHeight"), whole.height());
+    if (!file.isEmpty())
+        out.insert(QStringLiteral("saved"), picture.save(file));
     return out;
 }
 

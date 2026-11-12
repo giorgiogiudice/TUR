@@ -64,6 +64,11 @@ T.Dialog {
     contentItem: ColumnLayout {
         spacing: Theme.spaceGroup
 
+        // A popup lives in the window's overlay, not in the page that
+        // declares it, so it does not inherit the page's mirroring.
+        LayoutMirroring.enabled: Application.layoutDirection === Qt.RightToLeft
+        LayoutMirroring.childrenInherit: true
+
         Accessible.role: Accessible.Dialog
         Accessible.name: control.title
 

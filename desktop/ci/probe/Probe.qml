@@ -37,6 +37,7 @@ Rectangle {
             Layout.fillWidth: true
             text: qsTr("If this page matches its reference image, the build, the software renderer and the fonts are the ones intended.")
             tone: Kit.Label.Secondary
+            paragraph: true
         }
 
         RowLayout {

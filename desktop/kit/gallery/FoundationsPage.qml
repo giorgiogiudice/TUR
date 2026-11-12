@@ -95,6 +95,7 @@ GalleryPage {
             Kit.Label {
                 Layout.fillWidth: true
                 text: qsTr("Body: TUR went back to the version that worked. Your files are unchanged, and nothing else needs to be done now.")
+                paragraph: true
             }
 
             Kit.Label {

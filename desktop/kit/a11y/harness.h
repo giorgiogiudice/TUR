@@ -107,6 +107,15 @@ public:
     // wider or taller than the room they were given.
     Q_INVOKABLE QStringList clippedText(QQuickItem *root) const;
 
+    // A picture of the item as the window draws it, in device pixels, saved
+    // to `file` as PNG (not saved if `file` is empty). Returns saved, width,
+    // height and ratio, the number of device pixels to one logical pixel.
+    //
+    // Qt Quick Test's own grabImage() is right at a scale of 1. At a
+    // fractional scale under the software renderer it cuts the item out of
+    // the window's picture as if the scale were 1; this does not.
+    Q_INVOKABLE QVariantMap grab(QQuickItem *item, const QString &file) const;
+
     // The item's rectangle in the window, as x, y, width, height.
     Q_INVOKABLE QVariantMap sceneRect(QQuickItem *item) const;
 

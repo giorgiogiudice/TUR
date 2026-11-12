@@ -49,6 +49,10 @@ int main(int argc, char *argv[])
     int warnings = 0;
     QObject::connect(&engine, &QQmlEngine::warnings, &app, [&warnings](const QList<QQmlError> &list) {
         warnings += int(list.size());
+        // Connecting to the signal replaces the engine's own printing.
+        QTextStream err(stderr);
+        for (const QQmlError &error : list)
+            err << "tur-kit-gallery: QML warning: " << error.toString() << '\n';
     });
     engine.setInitialProperties(QVariantMap { { QStringLiteral("variant"), parser.value(variant) } });
     engine.loadFromModule("Tur.Kit.Gallery", "Main");

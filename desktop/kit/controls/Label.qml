@@ -38,6 +38,15 @@ Text {
     // the same width, so the text does not shift.
     property bool tabular: false
 
+    // Running text: a sentence or more that may wrap. Its lines are 1.4 times
+    // the font's height apart (desktop-experience.md, 5.3), with the extra
+    // space shared above and below each line, so that one line of it still
+    // sits level with what is beside it.
+    property bool paragraph: false
+
+    readonly property real halfLeading: label.paragraph
+                                        ? Math.round(metrics.height * (Theme.lineHeight - 1) / 2) : 0
+
     readonly property real typeSize: {
         switch (label.kind) {
         case Label.Small:
@@ -111,9 +120,17 @@ Text {
     // "Left" is the start of the line: it becomes the right in a
     // right-to-left layout, whatever script the text is in.
     horizontalAlignment: Text.AlignLeft
-    lineHeight: label.lineCount > 1 ? Theme.lineHeight : 1.0
+    lineHeight: label.paragraph ? Theme.lineHeight : 1.0
+    topPadding: label.halfLeading
+    bottomPadding: -label.halfLeading
 
     Accessible.role: label.kind === Label.Heading || label.kind === Label.Title || label.kind === Label.Display
                      ? Accessible.Heading : Accessible.StaticText
     Accessible.name: label.text
+
+    FontMetrics {
+        id: metrics
+
+        font: label.font
+    }
 }

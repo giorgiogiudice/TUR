@@ -41,6 +41,7 @@ GalleryPage {
                     Layout.fillWidth: true
                     text: qsTr("TUR will be installed on the disk you chose. Nothing has been changed yet.")
                     tone: Kit.Label.Secondary
+                    paragraph: true
                 }
 
                 Kit.Button {
@@ -48,6 +49,10 @@ GalleryPage {
                 }
             }
         }
+    }
+
+    Item {
+        Layout.fillHeight: true
     }
 
     Kit.Sheet {
@@ -58,6 +63,7 @@ GalleryPage {
         Kit.Label {
             Layout.fillWidth: true
             text: qsTr("Everything on this disk will be removed, including Windows and the files stored on it. This cannot be undone.")
+            paragraph: true
         }
 
         Kit.Label {

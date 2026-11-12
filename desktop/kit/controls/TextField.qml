@@ -31,8 +31,11 @@ T.TextField {
     implicitHeight: Math.max(implicitBackgroundHeight + topInset + bottomInset,
                              contentHeight + topPadding + bottomPadding)
 
-    topInset: control.captioned ? caption.implicitHeight + Theme.spaceGrid : 0
-    bottomInset: control.supported ? support.implicitHeight + Theme.spaceGrid : 0
+    // Room for the focus ring between the field and the lines around it.
+    readonly property real ringRoom: Theme.lineFocusGap + 2 * Theme.lineFocusWidth
+
+    topInset: control.captioned ? caption.implicitHeight + control.ringRoom : 0
+    bottomInset: control.supported ? support.implicitHeight + control.ringRoom : 0
     leftPadding: control.fieldPadding
     rightPadding: control.fieldPadding
     topPadding: control.topInset + Theme.spaceRelated
@@ -110,6 +113,7 @@ T.TextField {
             text: control.invalid ? control.errorText : control.helperText
             kind: Label.Small
             tone: control.invalid ? Label.Negative : Label.Secondary
+            paragraph: true
             Accessible.ignored: true
         }
     }
