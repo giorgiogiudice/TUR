@@ -325,13 +325,18 @@ Only 64-bit prefixes are created. Wine 11.0 deprecates prefixes created with
 `WINEARCH=win32`; a 64-bit prefix hosts 32-bit programs where the Wine build
 can. Whether a given 32-bit program runs was not tested.
 
+The metadata is read with the same discipline as an inspected file: at most
+256 KiB, at most 64 grants and 32 remembered migrations, every path an absolute
+path without `..` or control characters, every version a version token. A
+launch takes at most 1024 arguments and 64 extra variables.
+
 ### Prefix operations
 
 | Operation | Plan |
 |---|---|
 | create | Create the directories; run `wine wineboot --init` (or `umu-run ""`) in the sandbox; require `system.reg`; switch off Wine's own prefix updating; write the metadata. The metadata is written last, so a failed creation leaves no valid prefix behind |
 | verify | Checks only: the directories exist and are not links, the prefix belongs to the user, `system.reg` and `user.reg` exist, `drive_c/windows` exists, the registry's `#arch` line matches, Wine's own updating is still off. Exit status 8 when a check fails |
-| repair | `wine wineboot --update` with the runtime the prefix is on. Refused when another version is installed: that would be a migration |
+| repair | `wine wineboot --update` with the runtime the prefix is on. Refused when another version is installed: that would be a migration. It restores system files Wine can start without; when Wine cannot start in the prefix at all (a missing `kernel32.dll`, measured in CI), only a restore or a reset helps |
 | back up | `tar --create --gzip` of `metadata.json`, `prefix/` and `home/` into `backups/<app-id>/` |
 | restore | Unpack into `staging/`; require that the archive's metadata names this application and that it holds a prefix; only then move the current prefix aside and the unpacked one into place |
 | reset | Back up (unless `--no-backup`), delete `prefix/` and `home/`, create again with the same settings and grants |
@@ -557,7 +562,7 @@ For untrusted Windows software a guest is the stronger boundary (ADR-0007).
 
 The sandbox is tested as a boundary, not as a list of options. Unit tests build
 a scratch home with keys, browser profiles, a keyring and another application's
-prefix; put some seventy grant requests to it, among them `/`, the home
+prefix; put over a hundred grant requests to it, among them `/`, the home
 directory, paths with `..`, and links that lead to protected places; and for
 every sandbox that is built read the bubblewrap arguments back and assert that
 no mounted host path is, contains or lies inside a secret, that nothing from the
@@ -700,12 +705,43 @@ the report, or the error, is JSON on standard output.
 
 ## Not done yet
 
-- **Launching.** No launch, stop, repair, reset, backup or rollback operation.
-- **Prefix management.** No Wine prefix or Darling environment is created; a
-  profile only names a prefix.
+- **Running on the TUR image.** Everything that has run, ran on a hosted Ubuntu
+  runner with Ubuntu's Wine ([report](../reports/windows-runtime-1.md)). Wine is
+  not in the image yet, and nothing here has run on Fedora, under SELinux, on
+  Plasma or with a GPU.
+- **Real applications.** Two test programs prove the launch path. No
+  application has been tried and nothing is claimed about compatibility.
+- **Proton.** The `umu-run` path is planned and unit-tested only. It has never
+  been run: not the download of a Proton build, not the Steam Linux Runtime
+  inside the sandbox, not a game. Each application would fetch its own copy of
+  the runtime into its private home; a shared, read-only runtime store is not
+  built.
+- **Installers and dependency recipes.** An `msi` profile is refused. There is
+  no handling of `.exe` installers, no winetricks-style recipes, no Mono or
+  Gecko.
+- **DXVK and VKD3D-Proton packaging.** The overrides are set; the DLLs are not
+  installed into a prefix, and nothing checks that a prefix has them.
+- **Several runtime versions side by side.** A pin is honoured by refusing; no
+  second Wine can be selected.
+- **Wayland-native driver evaluation.** Both display sockets are passed to
+  Wine and the choice is left to it.
+- **File associations, icons, window matching, installing desktop entries.**
+  Only the entry's text is produced.
+- **seccomp, Landlock, resource limits.** The sandbox is namespaces and mounts
+  only. The `isolation_profile` field of a profile is not interpreted: there is
+  one isolation profile, the one described above.
+- **Stop.** There is no way to stop a running application other than ending
+  `uos-runtime`, which kills the sandbox without letting the Wine server write
+  the registry. Rollback of a failed migration is a manual `prefix restore`.
+- **32-bit programs.** Not run. On the CI runner Wine had no 32-bit support
+  installed.
+- **A portal-like grant flow.** Grants are made on the command line.
+- **Darling.** No environment is created; the macOS route is still
+  recommendation only.
 - **Application database.** No known-application lookup, so the recommendation
   uses the file's format and architecture and the host's runtimes only. User
-  preferences and security policy (§7.4) are not inputs yet.
+  preferences and security policy (§7.4) are not inputs yet. Proton is never
+  recommended, and `GAMEID` is always `umu-default`.
 - **D-Bus.** No service and no interface. The library is linked directly by the
   command-line tool.
 - **Deeper inspection.** No PE import tables (so no detection of a user-mode
@@ -714,7 +750,11 @@ the report, or the error, is JSON on standard output.
   binary property lists, no installer-framework detection for `.exe` installers.
 - **Other formats.** DMG, PKG, Flatpak and Snap bundles, Java archives and
   Windows shortcuts are reported as `unknown` or as a plain zip.
-- **Desktop entries, file associations, diagnostics.** Not started.
-- **Schema validation in CI.** A unit test keeps the schema's enumerations,
-  required fields and property names in step with the Rust types. The schema
-  itself is not run through a JSON Schema validator in CI.
+- **Diagnostics.** Launch logs and an operations log are kept per application;
+  nothing collects them into a diagnostic bundle (§6.4).
+- **Schema validation in CI.** A unit test for each schema keeps its
+  enumerations, required fields and property names in step with the Rust types.
+  Neither schema is run through a JSON Schema validator in CI.
+- **Error-code registry.** The codes above are not yet registry entries in the
+  sense of §29.3, and the `RUNTIME` family that issue #12 asks for does not
+  exist; the new codes use `WINDOWS`, `SECURITY` and `DESKTOP`.

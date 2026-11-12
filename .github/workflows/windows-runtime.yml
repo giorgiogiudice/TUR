@@ -119,7 +119,9 @@ jobs:
         run: |
           mkdir -p "$WORK/evidence"
           cp -r "$WORK/run/xdg-state/uos/runtime/logs" "$WORK/evidence/logs" 2>/dev/null || true
-          cp -r "$WORK/run/kept" "$WORK/evidence/removed-application" 2>/dev/null || true
+          # What the driver set aside: the control run's output, and the logs
+          # and metadata of the application it removed at the end.
+          cp -r "$WORK/run/kept" "$WORK/evidence/kept" 2>/dev/null || true
           mkdir -p "$WORK/evidence/metadata"
           for file in "$WORK"/run/xdg-data/uos/runtime/prefixes/*/metadata.json; do
             if [ -f "$file" ]; then

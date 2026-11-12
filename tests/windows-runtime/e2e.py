@@ -375,7 +375,11 @@ def control_run(bench: Bench) -> None:
     env = dict(os.environ)
     env.pop("DISPLAY", None)
     env["WINEPREFIX"] = str(bench.work / "control-prefix")
-    env["WINEDEBUG"] = "-all"
+    # The same Wine settings uos-runtime uses when it creates a prefix, so
+    # that what Wine prints here can be compared with what it prints inside
+    # the sandbox.
+    env["WINEDEBUG"] = "fixme-all"
+    env["WINEDLLOVERRIDES"] = "mscoree,mshtml=;winemenubuilder.exe="
     env["UOS_TEST_HOST_CANARY"] = HOST_CANARY
     # The file inside the uos-runtime prefix does not exist yet; use the
     # others.
@@ -385,6 +389,11 @@ def control_run(bench: Bench) -> None:
     done = run(["wine", str(bench.build / "console64.exe"), "0"], env=env, timeout=600)
     run(["wineserver", "--wait"], env=env, timeout=120)
     R.fact("control run time", f"{time.time() - started:.0f} s (includes creating a prefix)")
+    kept = bench.work / "kept"
+    kept.mkdir(parents=True, exist_ok=True)
+    (kept / "control-run-stderr.txt").write_text(done.stderr)
+    R.fact("Wine error lines while creating a prefix without the sandbox",
+           str(sum(1 for line in done.stderr.splitlines() if ":err:" in line)))
     lines = tagged(done.stdout)
     R.check("control: the program runs under plain Wine", "hello from a Windows process" in lines,
             tail(done.stdout + done.stderr))
@@ -410,6 +419,10 @@ def check_prefix_and_launch(bench: Bench) -> None:
         operations = bench.state / "uos/runtime/logs" / APP / "operations.log"
         if operations.exists():
             print("--- operations.log ---\n" + tail(operations.read_text(errors="replace"), 60))
+    operations = bench.state / "uos/runtime/logs" / APP / "operations.log"
+    if operations.exists():
+        R.fact("Wine error lines while creating a prefix inside the sandbox",
+               str(sum(1 for line in operations.read_text(errors="replace").splitlines() if ":err:" in line)))
     prefix = bench.app_dir() / "prefix"
     R.check("prefix create: the registry exists", (prefix / "system.reg").is_file())
     R.check("prefix create: drive_c exists", (prefix / "drive_c/windows").is_dir())
