@@ -140,14 +140,22 @@ ls -la /usr/share/wallpapers/ /usr/share/wallpapers/Tur/contents/ > "${out}/wall
 cat /var/lib/plasmalogin/.config/kdedefaults/package > "${out}/login-screen-package.txt" 2>&1
 # plasma-setup's light/dark switch: the global themes its program names
 # (compiled in; the switch cannot be pointed elsewhere by configuration).
-{
-    for f in $(rpm -ql plasma-setup 2> /dev/null | grep -E '\.so|plasma-setup$'); do
-        if [ -f "${f}" ] && grep -a -q 'plasma-apply-lookandfeel' "${f}"; then
-            printf '### %s\n' "${f}"
-            grep -a -o -E 'org\.[A-Za-z0-9.]+\.desktop' "${f}" | LC_ALL=C sort -u
-        fi
-    done
-} > "${out}/plasma-setup-themes.txt" 2>&1
+# Qt keeps such strings in UTF-16, so both encodings are searched.
+# shellcheck disable=SC2016  # the program is Python's
+rpm -ql plasma-setup 2> /dev/null | python3 -c '
+import re, sys
+for path in sys.stdin.read().split():
+    try:
+        data = open(path, "rb").read()
+    except OSError:
+        continue
+    texts = [data.decode("latin-1"), data.decode("utf-16-le", "replace"), data[1:].decode("utf-16-le", "replace")]
+    if not any("plasma-apply-lookandfeel" in t for t in texts):
+        continue
+    print("###", path)
+    for name in sorted({m for t in texts for m in re.findall(r"org\.[A-Za-z0-9.]+\.desktop", t)}):
+        print(name)
+' > "${out}/plasma-setup-themes.txt" 2>&1
 put dark_facts_uptime "$(uptime_s)"
 say "DESKTOP-CHECK dark facts recorded uptime=$(uptime_s)"
 

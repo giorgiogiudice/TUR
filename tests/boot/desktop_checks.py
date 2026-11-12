@@ -274,11 +274,12 @@ def judge(out: pathlib.Path) -> list[dict]:
           "plasma-welcome" not in processes and "Launching Welcome Center" not in journal
           and bool(dark.get("plasma-welcomerc/General/LastSeenVersion")),
           f"processes: {processes or 'none'}; LastSeenVersion {dark.get('plasma-welcomerc/General/LastSeenVersion')!r}")
-    ksplash = props(facts / "ksplash-unit.txt")
+    # The splash is a user service; the account's journal says whether it ran.
+    splash_lines = [line for line in journal.splitlines() if "plasma-ksplash.service" in line or "ksplashqml" in line]
     check("Plasma's sign-in splash did not run", True,
-          dark.get("ksplashrc/KSplash/Engine") == "none" and ksplash.get("ExecMainStartTimestampMonotonic") in ("0", "")
-          and "ksplashqml" not in processes,
-          f"Engine {dark.get('ksplashrc/KSplash/Engine')}; plasma-ksplash.service {ksplash}")
+          dark.get("ksplashrc/KSplash/Engine") == "none" and not splash_lines and "ksplashqml" not in processes,
+          f"Engine {dark.get('ksplashrc/KSplash/Engine')}; journal: {splash_lines[:3] or 'no plasma-ksplash.service, '
+                                                                     'no ksplashqml'}")
 
     # The themes offered.
     offered = (facts / "lookandfeel-list.txt").read_text().split() if (facts / "lookandfeel-list.txt").exists() else []

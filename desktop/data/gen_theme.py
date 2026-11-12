@@ -133,10 +133,11 @@ FRAME_CONTRAST = 4
 # The keys of contents/defaults that KLookAndFeelManager::save applies
 # (plasma-workspace v6.8.2, libklookandfeel/klookandfeelmanager.cpp), and
 # [Wallpaper] Image, which wallpapers/defaultwallpaper.cpp reads for a desktop
-# with no picture of its own. Nothing else in the file is read. In particular
-# [ksplashrc] is applied only when the package has a splash QML file
-# (packageContents: "splashmainscript"); TUR's has none, so the splash is
-# turned off in the system's ksplashrc instead.
+# with no picture of its own. Nothing else in the file is read. [ksplashrc]
+# can only choose a splash: KLookAndFeelManager::setSplashScreen always
+# writes Engine=KSplashQML, and a package without a splash QML file of its
+# own falls back to Breeze's (seen in the boot test, run 43320682140). So it
+# is not used; the splash is turned off, and locked, in the system's ksplashrc.
 LNF_KEYS = {
     "kdeglobals][KDE": {"widgetStyle"},
     "kdeglobals][General": {"ColorScheme", "font", "fixed", "smallestReadableFont", "toolBarFont", "menuFont"},
@@ -183,7 +184,9 @@ XDG_SOURCE = "usr/share/tur/xdg"
 XDG_EXPECTED = {
     "kdeglobals": {"KDE": {"LookAndFeelPackage": "org.tur.dark", "DefaultDarkLookAndFeel": "org.tur.dark",
                            "DefaultLightLookAndFeel": "org.tur.light", "SingleClick": "false"}},
-    "ksplashrc": {"KSplash": {"Engine": "none"}},
+    # Locked ([$i]): otherwise the account's defaults, which a global theme
+    # writes at every sign-in with Engine=KSplashQML, come first.
+    "ksplashrc": {"KSplash][$i": {"Engine": "none"}},
     "plasma-welcomerc": {"General": {"ShowUpdatePage": "false"}},
     "kicker-extra-favoritesrc": {"General": {"IgnoreDefaults": "true",
                                              "Prepend": ";".join(l.split(":", 1)[1] for l in LAUNCHERS)}},
@@ -602,8 +605,8 @@ def check_lnf(rootfs: pathlib.Path) -> list[str]:
             continue
         for group, keys in defaults.items():
             if group == "ksplashrc][KSplash":
-                errors.append(f"{where}/contents/defaults: [ksplashrc] is not applied by Plasma 6.8 without a splash "
-                              "QML file; the splash is off in the system's ksplashrc")
+                errors.append(f"{where}/contents/defaults: [ksplashrc] in a global theme can only choose a splash, "
+                              "never turn it off (Plasma 6.8); the splash is off, locked, in the system's ksplashrc")
                 continue
             if group not in LNF_KEYS:
                 errors.append(f"{where}/contents/defaults: [{group}] is not read by KLookAndFeelManager")

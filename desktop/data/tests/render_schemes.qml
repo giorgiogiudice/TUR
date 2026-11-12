@@ -21,10 +21,10 @@ Item {
     width: 1280
     height: 520
 
-    readonly property var data: Testing.Harness.readJson(
+    readonly property var table: Testing.Harness.readJson(
         decodeURIComponent(Qt.resolvedUrl("../schemes.json").toString().replace(/^file:\/\//, "")))
     property string variant: "dark"
-    readonly property var scheme: root.data ? root.data.schemes[root.variant] : null
+    readonly property var scheme: root.table ? root.table.schemes[root.variant] : null
 
     function colour(group, key) {
         return root.scheme.groups[group][key].colour
@@ -60,7 +60,7 @@ Item {
                 spacing: 8
 
                 Repeater {
-                    model: root.scheme ? root.data.sets : []
+                    model: root.scheme ? root.table.sets : []
 
                     delegate: Rectangle {
                         id: set
@@ -89,7 +89,7 @@ Item {
                             }
 
                             Repeater {
-                                model: root.data.foregrounds
+                                model: root.table.foregrounds
 
                                 delegate: Text {
                                     required property string modelData
@@ -124,7 +124,7 @@ Item {
                                 spacing: 6
 
                                 Repeater {
-                                    model: root.data.decorations
+                                    model: root.table.decorations
 
                                     delegate: Rectangle {
                                         required property string modelData
@@ -197,7 +197,7 @@ Item {
 
         function initTestCase() {
             verify(Testing.Harness.outputDir.length > 0, "TUR_SCREENSHOT_DIR says where the pictures go")
-            verify(root.data !== undefined && root.data !== null, "desktop/data/schemes.json was read")
+            verify(root.table !== undefined && root.table !== null, "desktop/data/schemes.json was read")
             console.info("TUR-ENV " + JSON.stringify(Testing.Harness.environment()))
         }
 
