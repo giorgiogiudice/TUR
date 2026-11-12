@@ -113,6 +113,16 @@ impl FileSystem for StdFs {
     }
 
     fn read(&self, path: &Path) -> io::Result<Option<Vec<u8>>> {
+        // A symbolic link, a directory or a device where a record should be is
+        // not read.
+        let metadata = match fs::symlink_metadata(path) {
+            Ok(metadata) => metadata,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(None),
+            Err(err) => return Err(err),
+        };
+        if !metadata.file_type().is_file() {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "not a regular file"));
+        }
         let file = match File::open(path) {
             Ok(file) => file,
             Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(None),
@@ -124,10 +134,18 @@ impl FileSystem for StdFs {
     }
 
     fn write_synced(&self, path: &Path, bytes: &[u8]) -> io::Result<()> {
+        // Whatever is at the path is removed and the file created anew.
+        // Creating with `create_new` fails rather than write through a
+        // symbolic link, so a link planted at the path cannot redirect the
+        // write.
+        match fs::remove_file(path) {
+            Ok(()) => {}
+            Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+            Err(err) => return Err(err),
+        }
         let mut file = OpenOptions::new()
             .write(true)
-            .create(true)
-            .truncate(true)
+            .create_new(true)
             .mode(0o600)
             .open(path)?;
         file.write_all(bytes)?;

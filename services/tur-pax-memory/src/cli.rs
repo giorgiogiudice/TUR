@@ -372,11 +372,23 @@ fn pretty<T: serde::Serialize>(value: &T) -> String {
     serde_json::to_string_pretty(value).unwrap_or_else(|_| "null".to_owned())
 }
 
-/// Text made safe for a terminal: control characters other than a line break
-/// become spaces.
+// Characters a terminal acts on rather than shows: control characters, and the
+// bidirectional overrides and isolates, which reorder what is displayed.
+fn acts_on_terminal(c: char) -> bool {
+    c.is_control() || matches!(c, '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}')
+}
+
+/// Text made safe for a terminal: control characters other than a line break,
+/// and bidirectional overrides, become spaces.
 pub fn printable(text: &str) -> String {
     text.chars()
-        .map(|c| if c.is_control() && c != '\n' { ' ' } else { c })
+        .map(|c| {
+            if acts_on_terminal(c) && c != '\n' {
+                ' '
+            } else {
+                c
+            }
+        })
         .collect()
 }
 
@@ -384,7 +396,7 @@ pub fn printable(text: &str) -> String {
 pub fn one_line(text: &str, max_chars: usize) -> String {
     let flat: String = text
         .chars()
-        .map(|c| if c.is_control() { ' ' } else { c })
+        .map(|c| if acts_on_terminal(c) { ' ' } else { c })
         .collect();
     if flat.chars().count() <= max_chars {
         return flat;
@@ -702,6 +714,9 @@ mod tests {
         assert_eq!(one_line("abcdefghij", 10), "abcdefghij");
         assert_eq!(one_line("abcdefghijk", 10), "abcdefg...");
         assert_eq!(one_line("abc", 0), "...");
+        // A right-to-left override would show the rest of the line reversed.
+        assert_eq!(one_line("a\u{202e}b\u{2066}c", 80), "a b c");
+        assert_eq!(printable("a\u{202e}b"), "a b");
     }
 
     #[test]

@@ -705,3 +705,35 @@ fn files_on_the_real_file_system_are_private_and_leave_no_temporaries() {
     assert_eq!(store.get(Collection::MemoryEntries, "m-00000001"), Ok(None));
     let _ = fs::remove_dir_all(store.root());
 }
+
+#[test]
+fn a_symbolic_link_in_the_store_is_not_followed() {
+    let dir = std::env::temp_dir().join(format!("tur-pax-memory-links-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).expect("creates");
+    let outside = dir.join("outside.txt");
+    fs::write(&outside, b"untouched").expect("writes");
+    let mut store = FileStore::new(dir.join("store"), StdFs);
+    let entries = Collection::MemoryEntries;
+    store.put(entries, "m-00000001", b"one").expect("writes");
+
+    // A link where the temporary file of the next write will go: the write
+    // replaces the link and does not reach what it points at.
+    let temporary = store.temporary_path(entries, "m-00000002");
+    std::os::unix::fs::symlink(&outside, temporary).expect("links");
+    store.put(entries, "m-00000002", b"two").expect("writes");
+    assert_eq!(fs::read(&outside).expect("reads"), b"untouched");
+    assert_eq!(store.get(entries, "m-00000002"), Ok(Some(b"two".to_vec())));
+
+    // A link in place of a record is not listed and not read.
+    let record = store.record_path(entries, "m-00000003");
+    std::os::unix::fs::symlink(&outside, record).expect("links");
+    assert_eq!(store.ids(entries), Ok(vec!["m-00000001".to_owned(), "m-00000002".to_owned()]));
+    assert!(store.get(entries, "m-00000003").is_err());
+
+    // Writing the record replaces the link, not the file it points at.
+    store.put(entries, "m-00000003", b"three").expect("writes");
+    assert_eq!(fs::read(&outside).expect("reads"), b"untouched");
+    assert_eq!(store.get(entries, "m-00000003"), Ok(Some(b"three".to_vec())));
+    let _ = fs::remove_dir_all(dir);
+}

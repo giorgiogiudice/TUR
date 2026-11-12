@@ -124,6 +124,13 @@ no type in this crate can stop a caller from mishandling a string. The orchestra
 must use `recall` for the model and must build the engine's context only from the
 sources the policy document lists.
 
+Nor do the types protect the files. The `Store` trait takes bytes, and any process
+of the same user can write a file into the directory. A file written that way is
+still checked on reading (an entry cannot claim more trust than its kind gives, or
+be active from content without a confirmation time), but a well-formed forgery is
+accepted. For memory that costs little, since an entry carries no authority. For
+schedules it matters: see [section 15](#15-findings-on-the-design), item 1.
+
 The frame is defence in depth, not the safeguard. A model may still be swayed by a
 quoted note. The safeguard is unchanged: classes 2 and 3 need confirmation outside
 the model, and an unattended task cannot exceed its standing approvals.
@@ -199,8 +206,12 @@ unset or not absolute.
 
 Files are created with mode 0600 and directories with mode 0700. Identifiers are
 lower-case letters, digits and hyphens, checked wherever one is read, so an
-identifier cannot name another directory. Symbolic links in the store are not
-followed.
+identifier cannot name another directory. A symbolic link inside the store is not
+listed as a record, not read as one, and not written through: a write removes
+whatever is at the temporary path and creates the file anew, and the rename
+replaces a link rather than its target
+(`a_symbolic_link_in_the_store_is_not_followed`). The store directory itself and
+its parents are trusted.
 
 The `Store` trait has two implementations: `FileStore`, over a small `FileSystem`
 trait, and `MemoryStore`. `FileSystem` in turn has the real file system (`StdFs`)

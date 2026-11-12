@@ -521,7 +521,7 @@ impl<S: Store> Memory<S> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::entry::Trust;
+    use crate::entry::{Procedure, ProcedureStep, Trust};
     use crate::store::MemoryStore;
     use crate::testing::TestUser;
 
@@ -738,6 +738,43 @@ mod tests {
                 .add(NewEntry::observed(text, "task"), Timestamp(5))
                 .unwrap_or_else(|problem| panic!("{text}: {problem}"));
         }
+    }
+
+    #[test]
+    fn a_commit_hash_in_a_procedure_is_kept_and_a_token_is_not() {
+        let mut memory = memory();
+        let hash = "3f786850e387550fdab836ed7e6dc881de23001b";
+        let step = |arguments: Value| ProcedureStep {
+            service: "org.uos.Build1".to_owned(),
+            tool: "build_checkout".to_owned(),
+            arguments: arguments.as_object().cloned().unwrap_or_default(),
+        };
+        let procedure = Procedure {
+            name: "Return to the last good build".to_owned(),
+            steps: vec![
+                step(json!({ "commit": hash })),
+                step(json!({ "command": format!("git checkout {hash}") })),
+            ],
+        };
+        let entry = memory
+            .add(
+                NewEntry::procedure("Checks out commit 29a020e and rebuilds.", procedure, "task"),
+                Timestamp(5),
+            )
+            .expect("a commit hash is not a secret");
+        assert_eq!(entry.kind(), EntryKind::Procedure);
+
+        // A token in a step's arguments is refused, wherever it sits.
+        let token = ["q7Zr2LmX9vB4tKc8NpW3", "yHd6JfS1gAe5UoT0iRbM"].concat();
+        let leaking = Procedure {
+            name: "Call the build service".to_owned(),
+            steps: vec![step(json!({ "headers": [format!("Authorization: Bearer {token}")] }))],
+        };
+        let refused = memory
+            .add(NewEntry::procedure("Starts a build.", leaking, "task"), Timestamp(5))
+            .expect_err("a token");
+        assert_eq!(refused.code, Code::MemorySecretKnownToken);
+        assert!(!refused.detail.contains(&token), "{}", refused.detail);
     }
 
     #[test]
