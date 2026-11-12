@@ -1,0 +1,69 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR application catalogue entry. Format: schemas/app-catalogue-entry.schema.json.
+# How entries are written and sourced: catalogue/README.md.
+# TUR has not tested this application. Every rating below is reported by the
+# named source, which was checked on the date given; no record means unknown.
+
+schema_version = 1
+id = "com.microsoft.vscode"
+name = "Visual Studio Code"
+aliases = ["VS Code"]
+publisher = "Microsoft"
+category = "development"
+summary = "Source code editor."
+homepage = "https://code.visualstudio.com/"
+
+[[editions]]
+kind = "flatpak"
+flatpak_id = "com.visualstudio.code"
+licence = "proprietary"
+packaging = "community"
+
+[[editions.references]]
+title = "Flathub listing; not verified by Flathub as coming from the publisher"
+url = "https://flathub.org/apps/com.visualstudio.code"
+checked = "2026-11-12"
+
+[[editions]]
+kind = "linux-native"
+obtain = "publisher-page"
+download_page = "https://code.visualstudio.com/download"
+licence = "proprietary"
+packaging = "publisher"
+
+[[editions.references]]
+title = "Visual Studio Code download page: Linux .deb, .rpm, .tar.gz, Snap"
+url = "https://code.visualstudio.com/download"
+checked = "2026-11-12"
+
+[[editions]]
+kind = "web"
+url = "https://vscode.dev/"
+licence = "proprietary"
+
+[[editions.references]]
+title = "Visual Studio Code for the Web"
+url = "https://vscode.dev/"
+checked = "2026-11-12"
+
+[[editions]]
+kind = "windows"
+obtain = "publisher-page"
+download_page = "https://code.visualstudio.com/download"
+licence = "proprietary"
+
+[[editions.references]]
+title = "Visual Studio Code download page"
+url = "https://code.visualstudio.com/download"
+checked = "2026-11-12"
+
+[[editions]]
+kind = "macos"
+obtain = "publisher-page"
+download_page = "https://code.visualstudio.com/download"
+licence = "proprietary"
+
+[[editions.references]]
+title = "Visual Studio Code download page"
+url = "https://code.visualstudio.com/download"
+checked = "2026-11-12"

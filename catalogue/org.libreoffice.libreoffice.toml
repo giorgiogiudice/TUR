@@ -1,0 +1,58 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR application catalogue entry. Format: schemas/app-catalogue-entry.schema.json.
+# How entries are written and sourced: catalogue/README.md.
+# TUR has not tested this application. Every rating below is reported by the
+# named source, which was checked on the date given; no record means unknown.
+
+schema_version = 1
+id = "org.libreoffice.libreoffice"
+name = "LibreOffice"
+publisher = "The Document Foundation"
+category = "productivity"
+summary = "Office suite."
+homepage = "https://www.libreoffice.org/"
+
+[[editions]]
+kind = "flatpak"
+flatpak_id = "org.libreoffice.LibreOffice"
+licence = "open-source"
+packaging = "publisher"
+
+[[editions.references]]
+title = "Flathub listing; verified by Flathub as published by the application's own project (libreoffice.org); licence MPL-2.0"
+url = "https://flathub.org/apps/org.libreoffice.LibreOffice"
+checked = "2026-11-12"
+
+[[editions]]
+kind = "linux-native"
+obtain = "fedora-package"
+package = "libreoffice"
+licence = "open-source"
+packaging = "community"
+
+[[editions.references]]
+title = "Fedora Packages: libreoffice"
+url = "https://packages.fedoraproject.org/pkgs/libreoffice/libreoffice/"
+checked = "2026-11-12"
+
+[[editions]]
+kind = "windows"
+obtain = "publisher-page"
+download_page = "https://www.libreoffice.org/download/download-libreoffice/"
+licence = "open-source"
+
+[[editions.references]]
+title = "LibreOffice download page"
+url = "https://www.libreoffice.org/download/download-libreoffice/"
+checked = "2026-11-12"
+
+[[editions]]
+kind = "macos"
+obtain = "publisher-page"
+download_page = "https://www.libreoffice.org/download/download-libreoffice/"
+licence = "open-source"
+
+[[editions.references]]
+title = "LibreOffice download page"
+url = "https://www.libreoffice.org/download/download-libreoffice/"
+checked = "2026-11-12"

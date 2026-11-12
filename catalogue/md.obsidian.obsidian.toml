@@ -1,0 +1,80 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR application catalogue entry. Format: schemas/app-catalogue-entry.schema.json.
+# How entries are written and sourced: catalogue/README.md.
+# TUR has not tested this application. Every rating below is reported by the
+# named source, which was checked on the date given; no record means unknown.
+
+schema_version = 1
+id = "md.obsidian.obsidian"
+name = "Obsidian"
+publisher = "Obsidian"
+category = "productivity"
+summary = "Note-taking application that works on local Markdown files."
+homepage = "https://obsidian.md/"
+
+[[editions]]
+kind = "flatpak"
+flatpak_id = "md.obsidian.Obsidian"
+licence = "proprietary"
+packaging = "community"
+
+[[editions.references]]
+title = "Flathub listing; Flathub marks it verified for obsidian.md, while the publisher's download page labels the Flatpak community maintained"
+url = "https://flathub.org/apps/md.obsidian.Obsidian"
+checked = "2026-11-12"
+
+[[editions.references]]
+title = "Obsidian download page: Linux AppImage, Snap, Deb; Flatpak, community maintained"
+url = "https://obsidian.md/download"
+checked = "2026-11-12"
+
+[[editions]]
+kind = "linux-native"
+obtain = "publisher-page"
+download_page = "https://obsidian.md/download"
+licence = "proprietary"
+packaging = "publisher"
+
+[[editions.references]]
+title = "Obsidian download page: Linux AppImage, Snap, Deb"
+url = "https://obsidian.md/download"
+checked = "2026-11-12"
+
+[[editions]]
+kind = "windows"
+obtain = "publisher-page"
+download_page = "https://obsidian.md/download"
+licence = "proprietary"
+
+[[editions.references]]
+title = "Obsidian download page"
+url = "https://obsidian.md/download"
+checked = "2026-11-12"
+
+[[editions]]
+kind = "macos"
+obtain = "publisher-page"
+download_page = "https://obsidian.md/download"
+licence = "proprietary"
+
+[[editions.references]]
+title = "Obsidian download page"
+url = "https://obsidian.md/download"
+checked = "2026-11-12"
+
+[[editions]]
+kind = "android"
+package = "md.obsidian"
+download_page = "https://obsidian.md/download"
+stores = ["google-play", "publisher-page"]
+licence = "proprietary"
+
+[[editions.references]]
+title = "Google Play listing"
+url = "https://play.google.com/store/apps/details?id=md.obsidian&hl=en"
+checked = "2026-11-12"
+
+[[editions.references]]
+title = "Obsidian download page: Android, Google Play and APK"
+url = "https://obsidian.md/download"
+checked = "2026-11-12"

@@ -1,0 +1,70 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR application catalogue entry. Format: schemas/app-catalogue-entry.schema.json.
+# How entries are written and sourced: catalogue/README.md.
+# TUR has not tested this application. Every rating below is reported by the
+# named source, which was checked on the date given; no record means unknown.
+
+schema_version = 1
+id = "org.mozilla.firefox"
+name = "Firefox"
+aliases = ["Mozilla Firefox"]
+publisher = "Mozilla"
+category = "internet"
+summary = "Web browser."
+homepage = "https://www.mozilla.org/firefox/"
+
+[[editions]]
+kind = "flatpak"
+flatpak_id = "org.mozilla.firefox"
+licence = "open-source"
+packaging = "publisher"
+
+[[editions.references]]
+title = "Flathub listing; verified by Flathub as published by the application's own project; licence MPL-2.0"
+url = "https://flathub.org/apps/org.mozilla.firefox"
+checked = "2026-11-12"
+
+[[editions]]
+kind = "linux-native"
+obtain = "fedora-package"
+package = "firefox"
+licence = "open-source"
+packaging = "community"
+
+[[editions.references]]
+title = "Fedora Packages: firefox"
+url = "https://packages.fedoraproject.org/pkgs/firefox/firefox/"
+checked = "2026-11-12"
+
+[[editions]]
+kind = "windows"
+obtain = "publisher-page"
+download_page = "https://www.mozilla.org/en-US/firefox/new/"
+licence = "open-source"
+
+[[editions.references]]
+title = "Firefox download page"
+url = "https://www.mozilla.org/en-US/firefox/new/"
+checked = "2026-11-12"
+
+[[editions]]
+kind = "macos"
+obtain = "publisher-page"
+download_page = "https://www.mozilla.org/en-US/firefox/new/"
+licence = "open-source"
+
+[[editions.references]]
+title = "Firefox download page"
+url = "https://www.mozilla.org/en-US/firefox/new/"
+checked = "2026-11-12"
+
+[[editions]]
+kind = "android"
+package = "org.mozilla.firefox"
+stores = ["google-play"]
+licence = "open-source"
+
+[[editions.references]]
+title = "Google Play listing"
+url = "https://play.google.com/store/apps/details?id=org.mozilla.firefox&hl=en"
+checked = "2026-11-12"

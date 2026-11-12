@@ -1,0 +1,35 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR application catalogue entry. Format: schemas/app-catalogue-entry.schema.json.
+# How entries are written and sourced: catalogue/README.md.
+# TUR has not tested this application. Every rating below is reported by the
+# named source, which was checked on the date given; no record means unknown.
+
+schema_version = 1
+id = "org.kde.krita"
+name = "Krita"
+publisher = "Krita Foundation"
+category = "creative"
+summary = "Digital painting application."
+homepage = "https://www.krita.org/"
+
+[[editions]]
+kind = "flatpak"
+flatpak_id = "org.kde.krita"
+licence = "open-source"
+
+[[editions.references]]
+title = "Flathub listing; marked verified by Flathub; licence GPL-3.0-only"
+url = "https://flathub.org/apps/org.kde.krita"
+checked = "2026-11-12"
+
+[[editions]]
+kind = "linux-native"
+obtain = "fedora-package"
+package = "krita"
+licence = "open-source"
+packaging = "community"
+
+[[editions.references]]
+title = "Fedora Packages: krita"
+url = "https://packages.fedoraproject.org/pkgs/krita/krita/"
+checked = "2026-11-12"

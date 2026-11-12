@@ -1,0 +1,40 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR application catalogue entry. Format: schemas/app-catalogue-entry.schema.json.
+# How entries are written and sourced: catalogue/README.md.
+# TUR has not tested this application. Every rating below is reported by the
+# named source, which was checked on the date given; no record means unknown.
+
+schema_version = 1
+id = "com.microsoft.visualstudio"
+name = "Visual Studio"
+aliases = ["Microsoft Visual Studio", "VS"]
+publisher = "Microsoft"
+category = "development"
+summary = "Integrated development environment for Windows."
+
+[[editions]]
+kind = "windows"
+obtain = "publisher-page"
+download_page = "https://visualstudio.microsoft.com/vs/"
+licence = "proprietary"
+
+[[editions.records]]
+route = "wine"
+rating = "broken"
+reported_by = "external"
+source_name = "WineHQ AppDB"
+source_url = "https://appdb.winehq.org/objectManager.php?sClass=application&iId=892"
+source_rating = "Garbage"
+version_tested = "2026"
+date = "2026-11-12"
+notes = "Latest Wine version tested for this release: 11.7. Release 2022 is also rated Garbage (Wine 9.16)."
+
+[[editions.references]]
+title = "WineHQ AppDB: Visual Studio"
+url = "https://appdb.winehq.org/objectManager.php?sClass=application&iId=892"
+checked = "2026-11-12"
+
+[[editions.references]]
+title = "Visual Studio product page"
+url = "https://visualstudio.microsoft.com/vs/"
+checked = "2026-11-12"

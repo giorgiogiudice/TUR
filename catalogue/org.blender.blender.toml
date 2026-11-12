@@ -1,0 +1,57 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR application catalogue entry. Format: schemas/app-catalogue-entry.schema.json.
+# How entries are written and sourced: catalogue/README.md.
+# TUR has not tested this application. Every rating below is reported by the
+# named source, which was checked on the date given; no record means unknown.
+
+schema_version = 1
+id = "org.blender.blender"
+name = "Blender"
+publisher = "Blender Foundation"
+category = "creative"
+summary = "3D creation suite."
+
+[[editions]]
+kind = "flatpak"
+flatpak_id = "org.blender.Blender"
+licence = "open-source"
+
+[[editions.references]]
+title = "Flathub listing; not verified by Flathub as coming from the publisher; licence GPL-3.0"
+url = "https://flathub.org/apps/org.blender.Blender"
+checked = "2026-11-12"
+
+[[editions]]
+kind = "linux-native"
+obtain = "fedora-package"
+package = "blender"
+licence = "open-source"
+packaging = "community"
+
+[[editions.references]]
+title = "Fedora Packages: blender"
+url = "https://packages.fedoraproject.org/pkgs/blender/blender/"
+checked = "2026-11-12"
+
+[[editions]]
+kind = "linux-native"
+obtain = "steam"
+store_id = "365670"
+licence = "open-source"
+packaging = "publisher"
+
+[[editions.references]]
+title = "Steam store listing; platforms listed by the store's public API: Windows, macOS and Linux"
+url = "https://store.steampowered.com/app/365670/"
+checked = "2026-11-12"
+
+[[editions]]
+kind = "windows"
+obtain = "steam"
+store_id = "365670"
+licence = "open-source"
+
+[[editions.references]]
+title = "Steam store listing; platforms listed by the store's public API: Windows, macOS and Linux"
+url = "https://store.steampowered.com/app/365670/"
+checked = "2026-11-12"
