@@ -5,7 +5,7 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.99"
 license = "LicenseRef-TUR-Noncommercial-1.0.0"
-description = "TUR AI control layer: tool manifests, the policy engine and the audit record."
+description = "TUR AI control layer: tool manifests, the policy engine, the audit record and the P@x orchestrator."
 repository = "https://github.com/giorgiogiudice/TUR"
 publish = false
 
@@ -28,6 +28,12 @@ clap = { version = "4.5", default-features = false, features = ["std", "derive",
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tur-core = { path = "../../crates/tur-core" }
+# The neutral conversation model, the provider adapters, spend accounting and
+# the key type. The orchestrator talks to a model only through this crate.
+tur-pax-providers = { path = "../tur-pax-providers" }
+# Recall in its "notes, not instructions" frame, and the secret detectors the
+# output filter reuses.
+tur-pax-memory = { path = "../tur-pax-memory" }
 
 [lints.rust]
 unsafe_code = "forbid"

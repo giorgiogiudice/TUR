@@ -6,7 +6,12 @@
 //! tur-pax manifest validate <file>
 //! tur-pax policy check --manifest <file> --tool <name> [--args <json>]
 //!                        [--policy <file>] [context flags] [--json]
+//! tur-pax run "<request>" [options] [--json]
+//! tur-pax chat [options]
 //! ```
+//!
+//! `run` and `chat` are the text interface of the orchestrator; their options
+//! and exit statuses are described in [`crate::textui`].
 //!
 //! `policy check` exits with 0 only when the decision is `allow`, so a script
 //! that tests the exit status fails closed. The other decisions have their own
@@ -73,6 +78,11 @@ pub enum TopCommand {
         #[command(subcommand)]
         command: PolicyCommand,
     },
+    /// Run one task and print what P@x did: every proposed action with its
+    /// class and decision, and the final answer.
+    Run(crate::textui::RunArgs),
+    /// Talk to P@x on a terminal, one request per line.
+    Chat(crate::textui::ChatArgs),
 }
 
 /// The `manifest` subcommands.
@@ -158,6 +168,8 @@ pub fn run(cli: &Cli, out: &mut dyn Write, err: &mut dyn Write) -> io::Result<u8
         TopCommand::Policy {
             command: PolicyCommand::Check(args),
         } => policy_check(args, out, err),
+        TopCommand::Run(args) => crate::textui::run_task(args, out, err),
+        TopCommand::Chat(args) => crate::textui::run_chat(args, out, err),
     }
 }
 
