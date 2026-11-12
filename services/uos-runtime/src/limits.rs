@@ -59,3 +59,38 @@ pub const MAX_BUNDLE_DIR_ENTRIES: usize = 256;
 
 /// Largest application profile accepted, in bytes.
 pub const MAX_PROFILE_BYTES: usize = 1024 * 1024;
+
+/// Largest prefix metadata file accepted, in bytes.
+pub const MAX_METADATA_BYTES: usize = 256 * 1024;
+
+/// Host directories one application may be granted.
+pub const MAX_GRANTS: usize = 64;
+
+/// Runtime migrations remembered in a prefix's metadata; older ones are
+/// dropped.
+pub const MAX_MIGRATIONS: usize = 32;
+
+/// Longest path accepted for a grant, a binary or a runtime directory, in
+/// bytes.
+pub const MAX_PATH_BYTES: usize = 4096;
+
+/// Arguments passed on to an application in one launch.
+pub const MAX_LAUNCH_ARGUMENTS: usize = 1024;
+
+/// Extra environment variables accepted for one launch.
+pub const MAX_EXTRA_ENVIRONMENT: usize = 64;
+
+/// Longest value of one environment variable, in bytes.
+pub const MAX_ENVIRONMENT_VALUE_BYTES: usize = 8192;
+
+/// Bytes of a runtime's `--version` output examined.
+pub const MAX_VERSION_OUTPUT_BYTES: usize = 512;
+
+/// Bytes of a file examined by a verification check.
+pub const MAX_CHECK_BYTES: usize = 64 * 1024;
+
+/// Bytes of an application's output kept in the log of one launch.
+pub const MAX_LOG_BYTES: usize = 64 * 1024 * 1024;
+
+/// Bytes of a failed command's output kept in the error message.
+pub const MAX_ERROR_OUTPUT_BYTES: usize = 2000;

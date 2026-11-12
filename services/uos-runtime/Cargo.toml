@@ -5,7 +5,7 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.99"
 license = "PolyForm-Noncommercial-1.0.0"
-description = "UOS Universal Runtime Manager: inspects executables and packages and recommends a runtime. It never runs them."
+description = "UOS Universal Runtime Manager: inspects executables and packages, recommends a runtime, and runs Windows programs under Wine or Proton in a per-application prefix and sandbox."
 repository = "https://github.com/giorgiogiudice/UOS"
 publish = false
 

@@ -593,7 +593,7 @@ fn is_token(text: &str, max: usize, first: fn(u8) -> bool, rest: fn(u8) -> bool)
 }
 
 /// `^[a-z0-9][a-z0-9-]{0,63}$`
-fn is_slug(text: &str) -> bool {
+pub(crate) fn is_slug(text: &str) -> bool {
     is_token(text, 64, lower_or_digit, |byte| {
         lower_or_digit(byte) || byte == b'-'
     })
@@ -607,7 +607,7 @@ fn is_requirement(text: &str) -> bool {
 }
 
 /// `^[A-Za-z0-9][A-Za-z0-9._+-]{0,99}$`
-fn is_version(text: &str) -> bool {
+pub(crate) fn is_version(text: &str) -> bool {
     is_token(
         text,
         100,
@@ -617,7 +617,7 @@ fn is_version(text: &str) -> bool {
 }
 
 /// `^[a-z0-9][a-z0-9_-]*(\.[a-z0-9][a-z0-9_-]*)+$`, at most 255 bytes.
-fn is_app_id(text: &str) -> bool {
+pub(crate) fn is_app_id(text: &str) -> bool {
     let segment = |part: &str| {
         is_token(part, 255, lower_or_digit, |byte| {
             lower_or_digit(byte) || matches!(byte, b'_' | b'-')
@@ -626,7 +626,7 @@ fn is_app_id(text: &str) -> bool {
     text.len() <= 255 && text.split('.').count() >= 2 && text.split('.').all(segment)
 }
 
-fn is_display_name(text: &str) -> bool {
+pub(crate) fn is_display_name(text: &str) -> bool {
     let length = text.chars().count();
     (1..=200).contains(&length) && !text.chars().any(char::is_control)
 }
@@ -773,7 +773,7 @@ fn macho_arch(macho: &MachOInfo) -> Result<ProfileArch, ProfileError> {
 
 /// A lower-case identifier made from a file name: letters and digits kept,
 /// every run of anything else turned into one hyphen.
-fn slug(text: &str) -> String {
+pub(crate) fn slug(text: &str) -> String {
     let mut out = String::new();
     for character in text.chars() {
         if out.len() >= 64 {
