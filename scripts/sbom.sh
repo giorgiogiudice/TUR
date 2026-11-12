@@ -48,8 +48,8 @@ cp "${work}/root/usr/lib/os-release" "${work}/root/etc/os-release"
 # (image/branding/branding.sh), so Syft is shown the base's identity, as the
 # image recorded it before the change: the packages keep identifiers that
 # vulnerability databases know (pkg:rpm/fedora/...?distro=fedora-45).
-base_id="$(. "${work}/root/usr/lib/tur/release"; printf '%s' "${TUR_BASE_OS_ID:-}")"
-base_version="$(. "${work}/root/usr/lib/tur/release"; printf '%s' "${TUR_BASE_OS_VERSION_ID:-}")"
+base_id="$(sed -n 's/^TUR_BASE_OS_ID=//p' "${work}/root/usr/lib/tur/release")"
+base_version="$(sed -n 's/^TUR_BASE_OS_VERSION_ID=//p' "${work}/root/usr/lib/tur/release")"
 if [ -n "${base_id}" ] && [ -n "${base_version}" ]; then
     printf 'ID=%s\nVERSION_ID=%s\n' "${base_id}" "${base_version}" > "${work}/root/etc/os-release"
     cp "${work}/root/etc/os-release" "${work}/root/usr/lib/os-release"
