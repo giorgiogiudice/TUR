@@ -194,3 +194,18 @@ jobs:
           name: reports-e2e
           path: out/reports/
           if-no-files-found: warn
+
+      - name: Save the tested image
+        # The image that passed the test above, for deployment
+        # (docs/guides/deploy-report-receiver.md). Kept for 14 days.
+        run: |
+          docker save tur-report-receiver:ci | gzip -9 > "$WORK/tur-report-receiver-image.tar.gz"
+          sha256sum "$WORK/tur-report-receiver-image.tar.gz" | tee "$WORK/tur-report-receiver-image.tar.gz.sha256"
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: tur-report-receiver-image
+          path: |
+            ${{ env.WORK }}/tur-report-receiver-image.tar.gz
+            ${{ env.WORK }}/tur-report-receiver-image.tar.gz.sha256
+          retention-days: 14

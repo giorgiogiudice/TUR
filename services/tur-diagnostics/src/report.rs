@@ -36,8 +36,8 @@ use serde_json::Value;
 use tur_core::ErrorCode;
 
 use crate::bundle::{
-    CollectRequest, ExtraDocument, MANIFEST_PATH, Member, REDACTION_REPORT_PATH,
-    build_bundle_with, sha256_hex, verify_members,
+    CollectRequest, ExtraDocument, MANIFEST_PATH, Member, REDACTION_REPORT_PATH, build_bundle_with,
+    sha256_hex, verify_members,
 };
 use crate::collectors::{COLLECTORS, Collector, Source};
 use crate::error::{DiagError, ErrorKind};
@@ -105,7 +105,8 @@ pub const NOTICE_KINDS: &[&str] = &["fallback", "not-applied", "refused", "unhea
 /// The journal arguments of a report: the newest 5 000 entries of each boot,
 /// instead of the 50 000 and 20 000 of `tur-diag collect`, so that a report
 /// stays well below [`MAX_UPLOAD_BYTES`].
-const REPORT_CURRENT_JOURNAL: &[&str] = &["--boot=0", "--output=json", "--no-pager", "--lines=5000"];
+const REPORT_CURRENT_JOURNAL: &[&str] =
+    &["--boot=0", "--output=json", "--no-pager", "--lines=5000"];
 const REPORT_PREVIOUS_JOURNAL: &[&str] =
     &["--boot=-1", "--output=json", "--no-pager", "--lines=5000"];
 
@@ -256,7 +257,10 @@ impl ReportRequest {
         if let Some(version) = &self.affected_version
             && !is_version(version)
         {
-            return Err("affected_version is not a version (letters, digits, . + _ ~ -; at most 64)".to_owned());
+            return Err(
+                "affected_version is not a version (letters, digits, . + _ ~ -; at most 64)"
+                    .to_owned(),
+            );
         }
         if let Some(evidence) = &self.boot_health {
             if !NOTICE_KINDS.contains(&evidence.notice_kind.as_str()) {
@@ -423,7 +427,11 @@ fn error_category(error: &serde_json::Error) -> String {
         serde_json::error::Category::Data => "a field is missing, unknown or of the wrong type",
         serde_json::error::Category::Eof => "cut short",
     };
-    format!("{category} (line {}, column {})", error.line(), error.column())
+    format!(
+        "{category} (line {}, column {})",
+        error.line(),
+        error.column()
+    )
 }
 
 /// Checks that `archive` is a problem report a receiver will accept: within
@@ -437,17 +445,16 @@ pub fn inspect_archive(archive: &[u8]) -> Result<InspectedReport, DiagError> {
             format!("the bundle is {bytes} bytes; the limit is {MAX_UPLOAD_BYTES}"),
         ));
     }
-    let (verified, members) =
-        verify_members(archive, MAX_UNPACKED_BYTES).map_err(|error| {
-            if error.kind() == ErrorKind::BundleTooLarge {
-                DiagError::new(ErrorKind::ReportTooLarge, error.detail().to_owned())
-            } else {
-                DiagError::new(
-                    ErrorKind::ReportNotPrepared,
-                    format!("{}: {}", error.code(), error.detail()),
-                )
-            }
-        })?;
+    let (verified, members) = verify_members(archive, MAX_UNPACKED_BYTES).map_err(|error| {
+        if error.kind() == ErrorKind::BundleTooLarge {
+            DiagError::new(ErrorKind::ReportTooLarge, error.detail().to_owned())
+        } else {
+            DiagError::new(
+                ErrorKind::ReportNotPrepared,
+                format!("{}: {}", error.code(), error.detail()),
+            )
+        }
+    })?;
     if verified.manifest.redaction_profile != Profile::Default {
         return Err(DiagError::new(
             ErrorKind::ReportNotPrepared,
@@ -750,9 +757,8 @@ pub fn request_from_boot_health(
     status_json: &str,
     prepared_by: PreparedBy,
 ) -> Result<ReportRequest, DiagError> {
-    let nothing = |detail: &str| {
-        DiagError::new(ErrorKind::ReportNothingFromBootHealth, detail.to_owned())
-    };
+    let nothing =
+        |detail: &str| DiagError::new(ErrorKind::ReportNothingFromBootHealth, detail.to_owned());
     let status: Value = serde_json::from_str(status_json)
         .map_err(|_| nothing("tur-boot-health status --json did not print JSON"))?;
     let notice = status
@@ -822,7 +828,9 @@ pub fn request_from_boot_health(
     };
     let mut description = format!("Boot health recorded a '{notice_kind}' notice.");
     if let Some(check) = &failed_check {
-        description.push_str(&format!(" The first required check that failed was {check}."));
+        description.push_str(&format!(
+            " The first required check that failed was {check}."
+        ));
     }
     Ok(ReportRequest {
         schema_version: REPORT_SCHEMA_VERSION,
@@ -871,8 +879,7 @@ pub fn load_config(explicit: Option<&Path>) -> Result<ReportConfig, DiagError> {
     for path in candidates {
         match fs::read_to_string(&path) {
             Ok(text) => {
-                let receiver_url =
-                    parse_config(&text).map_err(|detail| invalid(&path, detail))?;
+                let receiver_url = parse_config(&text).map_err(|detail| invalid(&path, detail))?;
                 return Ok(ReportConfig {
                     receiver_url,
                     source: Some(path),
@@ -969,7 +976,10 @@ pub fn normalise_receiver_url(url: &str) -> Result<String, String> {
         "http" => return Err("must use https".to_owned()),
         _ => return Err("must start with https://".to_owned()),
     }
-    Ok(format!("{scheme}://{authority}{}", path.trim_end_matches('/')))
+    Ok(format!(
+        "{scheme}://{authority}{}",
+        path.trim_end_matches('/')
+    ))
 }
 
 // ------------------------------------------------------------ local state
@@ -1109,7 +1119,9 @@ pub fn read_records(state_dir: &Path) -> Result<(Vec<SentRecord>, usize), DiagEr
     let mut records = Vec::new();
     let mut unreadable = 0;
     for entry in entries {
-        let path = entry.map_err(|error| records_error(&directory, error))?.path();
+        let path = entry
+            .map_err(|error| records_error(&directory, error))?
+            .path();
         let is_record = path
             .file_name()
             .and_then(|name| name.to_str())
@@ -1368,11 +1380,13 @@ fn curl(host: &dyn Host, url: &str, args: &[String]) -> Result<HttpReply, DiagEr
         timeout: Duration::from_secs(UPLOAD_SECONDS + 30),
         max_bytes: 1024 * 1024,
     };
-    let output = host.run("curl", &refs, limits).map_err(|error| match error {
-        RunError::NotFound => unreachable("curl is not installed".to_owned()),
-        RunError::TimedOut => unreachable("the receiver did not answer in time".to_owned()),
-        other => unreachable(format!("curl could not be run: {other:?}")),
-    })?;
+    let output = host
+        .run("curl", &refs, limits)
+        .map_err(|error| match error {
+            RunError::NotFound => unreachable("curl is not installed".to_owned()),
+            RunError::TimedOut => unreachable("the receiver did not answer in time".to_owned()),
+            other => unreachable(format!("curl could not be run: {other:?}")),
+        })?;
     if !output.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         let first: String = stderr
@@ -1413,7 +1427,10 @@ fn refused_or_unreachable(reply: &HttpReply) -> DiagError {
         }
         _ => DiagError::new(
             ErrorKind::ReportUnreachable,
-            format!("the receiver answered HTTP {} without a TUR code", reply.status),
+            format!(
+                "the receiver answered HTTP {} without a TUR code",
+                reply.status
+            ),
         ),
     }
 }

@@ -53,7 +53,10 @@ fn credentials_tokens_and_secrets() {
         "token ghp_abcdefghijklmnopqrstuvwxyz0123456789 leaked",
         "token <token> leaked",
     );
-    check("key sk-ant-api03-AbCdEf0123456789AbCd end", "key <token> end");
+    check(
+        "key sk-ant-api03-AbCdEf0123456789AbCd end",
+        "key <token> end",
+    );
     check("aws AKIAIOSFODNN7EXAMPLE end", "aws <token> end");
     check(
         "jwt eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0In0.dozjgNryP4J3jVmNHl0w5N end",
@@ -65,7 +68,10 @@ fn credentials_tokens_and_secrets() {
     );
     check("curl -H Bearer abcDEF123456ghi", "curl -H Bearer <secret>");
     check("password=hunter2-Correct next", "password=<secret> next");
-    check(r#"{"wifi_psk": "verysecret", "x": 1}"#, r#"{"wifi_psk": "<secret>", "x": 1}"#);
+    check(
+        r#"{"wifi_psk": "verysecret", "x": 1}"#,
+        r#"{"wifi_psk": "<secret>", "x": 1}"#,
+    );
     check("status_token=0123 done", "status_token=<secret> done");
     // A systemd unit is not a secret.
     kept("gnome-keyring-secrets.service: Started");
@@ -91,7 +97,10 @@ fn home_and_profile_paths() {
         "open /home/jdoe-private/Documents/taxes.pdf and /var/home/jdoe-private/x",
         "open /home/<user>/Documents/taxes.pdf and /var/home/<user>/x",
     );
-    check("mounted /run/media/anna/USB", "mounted /run/media/<user>/USB");
+    check(
+        "mounted /run/media/anna/USB",
+        "mounted /run/media/<user>/USB",
+    );
     check(
         r"wine: C:\Users\Giulia Rossi\AppData\Local",
         r"wine: C:\Users\<user>\AppData\Local",
@@ -116,8 +125,14 @@ fn user_names_after_their_labels() {
         "pam_unix(login:session): session opened for user mweber(uid=1001) by (uid=0)",
         "pam_unix(login:session): session opened for user <user>(uid=1001) by (uid=0)",
     );
-    check("id: uid=1001(mweber) gid=1001", "id: uid=1001(<user>) gid=1001");
-    check("Accepted publickey for mweber from", "Accepted publickey for <user> from");
+    check(
+        "id: uid=1001(mweber) gid=1001",
+        "id: uid=1001(<user>) gid=1001",
+    );
+    check(
+        "Accepted publickey for mweber from",
+        "Accepted publickey for <user> from",
+    );
     check(
         "Failed password for invalid user bob42 from",
         "Failed password for invalid user <user> from",
@@ -132,12 +147,18 @@ fn host_names() {
         r#"{"_HOSTNAME":"kitchen-pc-7731","MESSAGE":"kitchen-pc-7731 is up"}"#,
         r#"{"_HOSTNAME":"<host>","MESSAGE":"<host> is up"}"#,
     );
-    check("Static hostname: kitchen-pc-7731", "Static hostname: <host>");
+    check(
+        "Static hostname: kitchen-pc-7731",
+        "Static hostname: <host>",
+    );
     check(
         "Linux kitchen-pc-7731 6.17.1-300.fc45.x86_64 #1 SMP",
         "Linux <host> 6.17.1-300.fc45.x86_64 #1 SMP",
     );
-    check("printer at mybox.local and nas-4471.lan", "printer at <host> and <host>");
+    check(
+        "printer at mybox.local and nas-4471.lan",
+        "printer at <host> and <host>",
+    );
     // The first line of the kernel log is not a host name.
     kept("Linux version 6.17.1-300.fc45.x86_64 (gcc 15.1.1)");
     // pam's service:type pair is not a user name.

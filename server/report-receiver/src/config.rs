@@ -216,7 +216,9 @@ impl Config {
             }
         }
         if within(&self.keys_dir, &self.data_dir) || within(&self.data_dir, &self.keys_dir) {
-            return Err("keys_dir must be outside data_dir, and data_dir outside keys_dir".to_owned());
+            return Err(
+                "keys_dir must be outside data_dir, and data_dir outside keys_dir".to_owned(),
+            );
         }
         if within(&self.github.token_file, &self.data_dir) {
             return Err("github.token_file must be outside data_dir".to_owned());
@@ -258,7 +260,10 @@ impl Config {
             || limits.max_unpacked_bytes == 0
             || limits.max_unpacked_bytes > 512 * 1024 * 1024
         {
-            return Err("limits: sizes must be above 0, at most 64 MiB sent and 512 MiB unpacked".to_owned());
+            return Err(
+                "limits: sizes must be above 0, at most 64 MiB sent and 512 MiB unpacked"
+                    .to_owned(),
+            );
         }
         if limits.uploads_per_address_per_hour == 0
             || limits.uploads_per_hour == 0
@@ -274,7 +279,9 @@ impl Config {
             || timing.sweep_interval_seconds == 0
             || timing.upload_timeout_seconds == 0
         {
-            return Err("timing: intervals must be above 0, retry_max at least retry_initial".to_owned());
+            return Err(
+                "timing: intervals must be above 0, retry_max at least retry_initial".to_owned(),
+            );
         }
         Ok(())
     }
@@ -317,7 +324,9 @@ mod tests {
         // The key must not live in the data directory.
         assert!(with(|v| v["keys_dir"] = "/var/lib/tur-report-receiver/keys".into()).is_err());
         assert!(with(|v| v["data_dir"] = "/etc/tur-report-receiver/keys/data".into()).is_err());
-        assert!(with(|v| v["github"]["token_file"] = "/var/lib/tur-report-receiver/t".into()).is_err());
+        assert!(
+            with(|v| v["github"]["token_file"] = "/var/lib/tur-report-receiver/t".into()).is_err()
+        );
         assert!(with(|v| v["data_dir"] = "relative/dir".into()).is_err());
         assert!(with(|v| v["data_dir"] = "/var/lib/../etc".into()).is_err());
         // Only https, except on this machine.

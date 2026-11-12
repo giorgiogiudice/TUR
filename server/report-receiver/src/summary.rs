@@ -190,12 +190,15 @@ fn client_replacements(members: &[Member]) -> u64 {
     member(members, REDACTION_REPORT_PATH)
         .and_then(|data| serde_json::from_slice::<Value>(data).ok())
         .and_then(|report| {
-            report.get("categories").and_then(Value::as_object).map(|categories| {
-                categories
-                    .values()
-                    .filter_map(|category| category.get("replacements").and_then(Value::as_u64))
-                    .sum()
-            })
+            report
+                .get("categories")
+                .and_then(Value::as_object)
+                .map(|categories| {
+                    categories
+                        .values()
+                        .filter_map(|category| category.get("replacements").and_then(Value::as_u64))
+                        .sum()
+                })
         })
         .unwrap_or(0)
 }
@@ -238,10 +241,10 @@ pub fn build(
         .boot_health
         .as_ref()
         .map(|evidence| scrubber.scrub(&evidence.text));
-    let kernel = manifest
-        .kernel_release
-        .as_deref()
-        .map_or_else(|| "unknown".to_owned(), |kernel| cut(&scrubber.scrub(kernel), 80));
+    let kernel = manifest.kernel_release.as_deref().map_or_else(
+        || "unknown".to_owned(),
+        |kernel| cut(&scrubber.scrub(kernel), 80),
+    );
     let units = scrub_lines(
         &mut scrubber,
         &failed_units(member(members, "system/failed-units.txt")),
@@ -294,7 +297,13 @@ pub fn build(
     );
     body.push_str("| | |\n|---|---|\n");
     let rows = [
-        ("Signature", format!("`{}` (error code, component, version)", inline(facts.signature))),
+        (
+            "Signature",
+            format!(
+                "`{}` (error code, component, version)",
+                inline(facts.signature)
+            ),
+        ),
         ("Error code", format!("`{}`", inline(code))),
         ("Component", format!("`{}`", inline(&report.component))),
         ("Version", format!("`{}`", inline(facts.version))),
@@ -440,13 +449,20 @@ mod tests {
                      {\"MESSAGE\":\"just info\",\"PRIORITY\":\"6\"}\n\
                      {\"MESSAGE\":[104,105],\"PRIORITY\":2}\n",
                 ),
-                ("system/failed-units.txt", "audio.service loaded failed failed Audio\n"),
+                (
+                    "system/failed-units.txt",
+                    "audio.service loaded failed failed Audio\n",
+                ),
             ],
             Profile::Default,
         );
         let manifest = testing::manifest(&members);
         let summary = build(&manifest, &report, &members, &facts());
-        assert!(summary.title.starts_with("[TUR-AUDIO-RESUME-001] audio 0.2.0: No sound"));
+        assert!(
+            summary
+                .title
+                .starts_with("[TUR-AUDIO-RESUME-001] audio 0.2.0: No sound")
+        );
         assert!(!summary.title.contains('@'));
         assert!(!summary.title.contains('`'));
         let body = &summary.issue_body;
@@ -467,14 +483,22 @@ mod tests {
             }
         }
         assert!(!body.contains("```\n!["));
-        assert!(summary.comment_body.contains("Another report with this signature"));
+        assert!(
+            summary
+                .comment_body
+                .contains("Another report with this signature")
+        );
         assert!(summary.comment_body.contains("R-0123456789abcdef"));
     }
 
     #[test]
     fn values_of_the_wrong_form_are_shown_as_unknown() {
         let report = report("t", "");
-        let members = testing::members(Some(&serde_json::to_string(&report).unwrap()), &[], Profile::Default);
+        let members = testing::members(
+            Some(&serde_json::to_string(&report).unwrap()),
+            &[],
+            Profile::Default,
+        );
         let mut manifest = testing::manifest(&members);
         manifest.architecture = "x86_64 | evil `code`".to_owned();
         manifest.tur.build_id = Some("../../etc".to_owned());

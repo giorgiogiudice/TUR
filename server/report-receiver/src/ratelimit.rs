@@ -110,7 +110,10 @@ impl RateLimiter {
         let mut window = *inner
             .addresses
             .entry(key)
-            .or_insert(Window { start: now, count: 0 })
+            .or_insert(Window {
+                start: now,
+                count: 0,
+            })
             .current(now);
         if window.count >= self.per_address {
             return Verdict::AddressLimited(window.retry_after(now));
@@ -145,9 +148,15 @@ mod tests {
         assert_eq!(limiter.check(v4(1), 101), Verdict::Allowed);
         assert_eq!(limiter.check(v4(1), 102), Verdict::AddressLimited(3598));
         assert_eq!(limiter.check(v4(2), 103), Verdict::Allowed);
-        assert!(matches!(limiter.check(v4(3), 104), Verdict::GlobalLimited(_)));
+        assert!(matches!(
+            limiter.check(v4(3), 104),
+            Verdict::GlobalLimited(_)
+        ));
         // A refused request is not counted.
-        assert!(matches!(limiter.check(v4(2), 105), Verdict::GlobalLimited(_)));
+        assert!(matches!(
+            limiter.check(v4(2), 105),
+            Verdict::GlobalLimited(_)
+        ));
         // A new window starts after an hour.
         assert_eq!(limiter.check(v4(1), 100 + WINDOW_SECONDS), Verdict::Allowed);
         assert_eq!(limiter.check(v4(3), 100 + WINDOW_SECONDS), Verdict::Allowed);

@@ -84,7 +84,7 @@ pub fn hex(bytes: &[u8]) -> String {
 }
 
 fn unhex(text: &str) -> Option<Vec<u8>> {
-    if text.len() % 2 != 0 {
+    if !text.len().is_multiple_of(2) {
         return None;
     }
     (0..text.len())
@@ -135,8 +135,8 @@ impl Keyring {
                 return Err(format!("{}: not a valid key name", path.display()));
             }
             check_private(&path)?;
-            let text =
-                fs::read_to_string(&path).map_err(|error| format!("{}: {error}", path.display()))?;
+            let text = fs::read_to_string(&path)
+                .map_err(|error| format!("{}: {error}", path.display()))?;
             let bytes = unhex(text.trim())
                 .filter(|bytes| bytes.len() == 32)
                 .ok_or_else(|| format!("{}: not 64 hexadecimal digits", path.display()))?;
@@ -177,7 +177,12 @@ impl Keyring {
     }
 
     /// Encrypts `plaintext` with the current key.
-    pub fn seal(&self, purpose: Purpose, report_id: &str, plaintext: &[u8]) -> Result<Vec<u8>, String> {
+    pub fn seal(
+        &self,
+        purpose: Purpose,
+        report_id: &str,
+        plaintext: &[u8],
+    ) -> Result<Vec<u8>, String> {
         let key = self
             .keys
             .get(&self.current)
@@ -196,7 +201,8 @@ impl Keyring {
             )
             .map_err(|_| "encryption failed".to_owned())?;
         let id = self.current.as_bytes();
-        let mut blob = Vec::with_capacity(MAGIC.len() + 1 + id.len() + NONCE_BYTES + ciphertext.len());
+        let mut blob =
+            Vec::with_capacity(MAGIC.len() + 1 + id.len() + NONCE_BYTES + ciphertext.len());
         blob.extend_from_slice(MAGIC);
         blob.push(u8::try_from(id.len()).map_err(|_| "key id too long".to_owned())?);
         blob.extend_from_slice(id);
@@ -238,7 +244,9 @@ impl Keyring {
                     aad: &aad,
                 },
             )
-            .map_err(|_| "the blob does not decrypt: wrong key, report or purpose, or damaged".to_owned())
+            .map_err(|_| {
+                "the blob does not decrypt: wrong key, report or purpose, or damaged".to_owned()
+            })
     }
 }
 
@@ -253,20 +261,38 @@ mod tests {
     #[test]
     fn sealed_data_opens_only_for_its_purpose_and_report() {
         let ring = ring();
-        let blob = ring.seal(Purpose::Bundle, "R-0123456789abcdef", b"secret bundle").expect("sealed");
+        let blob = ring
+            .seal(Purpose::Bundle, "R-0123456789abcdef", b"secret bundle")
+            .expect("sealed");
         assert!(!blob.windows(13).any(|window| window == b"secret bundle"));
         assert_eq!(
-            ring.open(Purpose::Bundle, "R-0123456789abcdef", &blob).expect("opens"),
+            ring.open(Purpose::Bundle, "R-0123456789abcdef", &blob)
+                .expect("opens"),
             b"secret bundle"
         );
-        assert!(ring.open(Purpose::Summary, "R-0123456789abcdef", &blob).is_err());
-        assert!(ring.open(Purpose::Bundle, "R-fedcba9876543210", &blob).is_err());
+        assert!(
+            ring.open(Purpose::Summary, "R-0123456789abcdef", &blob)
+                .is_err()
+        );
+        assert!(
+            ring.open(Purpose::Bundle, "R-fedcba9876543210", &blob)
+                .is_err()
+        );
         let mut damaged = blob.clone();
         let last = damaged.len() - 1;
         damaged[last] ^= 1;
-        assert!(ring.open(Purpose::Bundle, "R-0123456789abcdef", &damaged).is_err());
-        assert!(ring.open(Purpose::Bundle, "R-0123456789abcdef", b"TURR1").is_err());
-        assert!(ring.open(Purpose::Bundle, "R-0123456789abcdef", b"junk").is_err());
+        assert!(
+            ring.open(Purpose::Bundle, "R-0123456789abcdef", &damaged)
+                .is_err()
+        );
+        assert!(
+            ring.open(Purpose::Bundle, "R-0123456789abcdef", b"TURR1")
+                .is_err()
+        );
+        assert!(
+            ring.open(Purpose::Bundle, "R-0123456789abcdef", b"junk")
+                .is_err()
+        );
     }
 
     #[test]
@@ -283,9 +309,14 @@ mod tests {
         let blob = old.seal(Purpose::Bundle, "R-1", b"old").expect("sealed");
         let rotated = ring();
         assert_eq!(rotated.current(), "k2");
-        assert_eq!(rotated.open(Purpose::Bundle, "R-1", &blob).expect("opens"), b"old");
+        assert_eq!(
+            rotated.open(Purpose::Bundle, "R-1", &blob).expect("opens"),
+            b"old"
+        );
         let new_only = Keyring::from_keys("k2", &[("k2", [2u8; 32])]);
-        let error = new_only.open(Purpose::Bundle, "R-1", &blob).expect_err("k1 is gone");
+        let error = new_only
+            .open(Purpose::Bundle, "R-1", &blob)
+            .expect_err("k1 is gone");
         assert!(error.contains("k1"));
     }
 
@@ -297,7 +328,11 @@ mod tests {
         let key = dir.join("k1.key");
         fs::write(&key, format!("{}\n", generate_key_hex().expect("a key"))).expect("written");
         fs::set_permissions(&key, fs::Permissions::from_mode(0o644)).expect("chmod");
-        assert!(Keyring::load(&dir, "k1").expect_err("world-readable").contains("mode"));
+        assert!(
+            Keyring::load(&dir, "k1")
+                .expect_err("world-readable")
+                .contains("mode")
+        );
         fs::set_permissions(&key, fs::Permissions::from_mode(0o400)).expect("chmod");
         let ring = Keyring::load(&dir, "k1").expect("loads");
         assert!(!format!("{ring:?}").contains(&fs::read_to_string(&key).expect("read")[..16]));

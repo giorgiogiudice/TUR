@@ -143,7 +143,12 @@ fn other(detail: String) -> io::Error {
 
 /// Writes `data` to the new file `temporary`, syncs it, renames it to
 /// `target` and syncs `directory`.
-fn write_then_rename(temporary: &Path, target: &Path, directory: &Path, data: &[u8]) -> io::Result<()> {
+fn write_then_rename(
+    temporary: &Path,
+    target: &Path,
+    directory: &Path,
+    data: &[u8],
+) -> io::Result<()> {
     let mut file = OpenOptions::new()
         .write(true)
         .create_new(true)
@@ -253,7 +258,8 @@ impl Store {
         if !is_report_id(&record.report_id) {
             return Err(other("a malformed report id".to_owned()));
         }
-        let mut data = serde_json::to_vec_pretty(record).map_err(|error| other(error.to_string()))?;
+        let mut data =
+            serde_json::to_vec_pretty(record).map_err(|error| other(error.to_string()))?;
         data.push(b'\n');
         self.write("reports", &format!("{}.json", record.report_id), &data)
     }
@@ -290,7 +296,11 @@ impl Store {
     }
 
     /// The report a status token's hash belongs to.
-    pub fn report_for_token(&self, _lock: &Locked, token_sha256: &str) -> io::Result<Option<String>> {
+    pub fn report_for_token(
+        &self,
+        _lock: &Locked,
+        token_sha256: &str,
+    ) -> io::Result<Option<String>> {
         if !is_hex64(token_sha256) {
             return Ok(None);
         }
@@ -443,14 +453,27 @@ mod tests {
         assert_eq!(mode, 0o700);
         let lock = store.lock().expect("locks");
         let first = record("R-0123456789abcdef", 10);
-        store.put_report(&lock, &first, b"sealed bundle", b"sealed summary").expect("stored");
+        store
+            .put_report(&lock, &first, b"sealed bundle", b"sealed summary")
+            .expect("stored");
         let file = root.join("bundles/R-0123456789abcdef.bin");
-        assert_eq!(fs::metadata(file).expect("metadata").permissions().mode() & 0o777, 0o600);
         assert_eq!(
-            store.report_for_token(&lock, &"a".repeat(64)).expect("read").as_deref(),
+            fs::metadata(file).expect("metadata").permissions().mode() & 0o777,
+            0o600
+        );
+        assert_eq!(
+            store
+                .report_for_token(&lock, &"a".repeat(64))
+                .expect("read")
+                .as_deref(),
             Some("R-0123456789abcdef")
         );
-        assert_eq!(store.report_for_token(&lock, "../../etc/passwd").expect("read"), None);
+        assert_eq!(
+            store
+                .report_for_token(&lock, "../../etc/passwd")
+                .expect("read"),
+            None
+        );
         assert_eq!(store.record(&lock, "../reports/x").expect("read"), None);
         assert_eq!(store.records(&lock).expect("read"), vec![first.clone()]);
         assert!(store.list("tmp").expect("listed").is_empty());
@@ -463,7 +486,12 @@ mod tests {
         // A crash after the bundle was written but before the record.
         fs::write(root.join("bundles/R-fedcba9876543210.bin"), b"orphan").expect("written");
         assert_eq!(store.remove_orphans(&lock).expect("swept"), 1);
-        assert!(store.bundle(&lock, "R-0123456789abcdef").expect("read").is_some());
+        assert!(
+            store
+                .bundle(&lock, "R-0123456789abcdef")
+                .expect("read")
+                .is_some()
+        );
 
         store.remove_report(&lock, &first).expect("removed");
         assert!(store.records(&lock).expect("read").is_empty());

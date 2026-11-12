@@ -39,7 +39,8 @@ pub enum TrackerError {
 /// A place summaries can be filed.
 pub trait Tracker: Send + Sync {
     /// Opens an issue and returns its number.
-    fn create_issue(&self, title: &str, body: &str, labels: &[String]) -> Result<u64, TrackerError>;
+    fn create_issue(&self, title: &str, body: &str, labels: &[String])
+    -> Result<u64, TrackerError>;
 
     /// Adds a comment to an issue.
     fn comment(&self, issue: u64, body: &str) -> Result<(), TrackerError>;
@@ -120,7 +121,12 @@ impl GitHub {
 }
 
 impl Tracker for GitHub {
-    fn create_issue(&self, title: &str, body: &str, labels: &[String]) -> Result<u64, TrackerError> {
+    fn create_issue(
+        &self,
+        title: &str,
+        body: &str,
+        labels: &[String],
+    ) -> Result<u64, TrackerError> {
         let (status, answer) = self.post(
             "/issues",
             &json!({ "title": title, "body": body, "labels": labels }),
@@ -135,7 +141,10 @@ impl Tracker for GitHub {
     }
 
     fn comment(&self, issue: u64, body: &str) -> Result<(), TrackerError> {
-        let (status, _) = self.post(&format!("/issues/{issue}/comments"), &json!({ "body": body }))?;
+        let (status, _) = self.post(
+            &format!("/issues/{issue}/comments"),
+            &json!({ "body": body }),
+        )?;
         match status {
             201 => Ok(()),
             404 | 410 => Err(TrackerError::Gone),
@@ -196,16 +205,27 @@ impl RecordingTracker {
 
     /// Every call so far.
     pub fn calls(&self) -> Vec<Call> {
-        self.calls.lock().map(|calls| calls.clone()).unwrap_or_default()
+        self.calls
+            .lock()
+            .map(|calls| calls.clone())
+            .unwrap_or_default()
     }
 }
 
 impl Tracker for RecordingTracker {
-    fn create_issue(&self, title: &str, body: &str, labels: &[String]) -> Result<u64, TrackerError> {
+    fn create_issue(
+        &self,
+        title: &str,
+        body: &str,
+        labels: &[String],
+    ) -> Result<u64, TrackerError> {
         if self.down.load(Ordering::SeqCst) {
             return Err(TrackerError::Unavailable("network".to_owned()));
         }
-        let mut issues = self.issues.lock().map_err(|_| TrackerError::Unavailable("poisoned".to_owned()))?;
+        let mut issues = self
+            .issues
+            .lock()
+            .map_err(|_| TrackerError::Unavailable("poisoned".to_owned()))?;
         let number = u64::try_from(issues.len()).unwrap_or(u64::MAX) + 1;
         issues.insert(number, true);
         if let Ok(mut calls) = self.calls.lock() {

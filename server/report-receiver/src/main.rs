@@ -107,16 +107,18 @@ fn run(command: Command) -> Result<(), String> {
         Command::Serve { config } => {
             let receiver = open(&config, Arc::new(SystemClock))?;
             let tracker = GitHub::new(&receiver.config().github);
-            tracker
-                .token()
-                .map_err(|_| "the GitHub token file is missing, empty or readable by others".to_owned())?;
+            tracker.token().map_err(|_| {
+                "the GitHub token file is missing, empty or readable by others".to_owned()
+            })?;
             http::serve(Arc::new(receiver), Arc::new(tracker))
         }
         Command::CheckConfig { config } => {
             let receiver = open(&config, Arc::new(SystemClock))?;
             GitHub::new(&receiver.config().github)
                 .token()
-                .map_err(|_| "the GitHub token file is missing, empty or readable by others".to_owned())?;
+                .map_err(|_| {
+                    "the GitHub token file is missing, empty or readable by others".to_owned()
+                })?;
             println!("configuration, keys and token file are usable");
             Ok(())
         }
@@ -126,7 +128,9 @@ fn run(command: Command) -> Result<(), String> {
                 None => Arc::new(SystemClock),
             };
             let receiver = open(&config, clock)?;
-            let round = receiver.sweep().map_err(|error| format!("sweep: {error}"))?;
+            let round = receiver
+                .sweep()
+                .map_err(|error| format!("sweep: {error}"))?;
             println!(
                 "{}",
                 serde_json::to_string(&round).map_err(|error| error.to_string())?
@@ -184,6 +188,8 @@ mod tests {
     fn command_line_definition_is_consistent() {
         Cli::command().debug_assert();
         assert!(Cli::try_parse_from(["tur-report-receiver", "sweep", "--now", "5"]).is_ok());
-        assert!(Cli::try_parse_from(["tur-report-receiver", "decrypt", "--report", "R-1"]).is_err());
+        assert!(
+            Cli::try_parse_from(["tur-report-receiver", "decrypt", "--report", "R-1"]).is_err()
+        );
     }
 }

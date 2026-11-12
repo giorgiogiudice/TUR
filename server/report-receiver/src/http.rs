@@ -70,7 +70,10 @@ pub fn respond(answer: Answer) -> Response<Full<Bytes>> {
     let headers = response.headers_mut();
     headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
     headers.insert(CACHE_CONTROL, HeaderValue::from_static("no-store"));
-    headers.insert("x-content-type-options", HeaderValue::from_static("nosniff"));
+    headers.insert(
+        "x-content-type-options",
+        HeaderValue::from_static("nosniff"),
+    );
     if let Some(after) = answer.retry_after
         && let Ok(value) = HeaderValue::from_str(&after.to_string())
     {
@@ -99,7 +102,11 @@ fn media_type(value: Option<&str>) -> Option<String> {
 /// was read is not cut off by a connection reset. A large body is not read:
 /// clients that send one wait for `100 Continue` first.
 async fn discard(body: Incoming) {
-    let _ = tokio::time::timeout(Duration::from_secs(2), Limited::new(body, 64 * 1024).collect()).await;
+    let _ = tokio::time::timeout(
+        Duration::from_secs(2),
+        Limited::new(body, 64 * 1024).collect(),
+    )
+    .await;
 }
 
 async fn upload(request: Request<Incoming>, client: IpAddr, shared: &Shared) -> Answer {
@@ -147,7 +154,10 @@ async fn upload(request: Request<Incoming>, client: IpAddr, shared: &Shared) -> 
         Ok(Ok(collected)) => collected.to_bytes(),
     };
     let worker = Arc::clone(receiver);
-    let answer = blocking(receiver, move || worker.submit(content_type.as_deref(), &body)).await;
+    let answer = blocking(receiver, move || {
+        worker.submit(content_type.as_deref(), &body)
+    })
+    .await;
     drop(permit);
     answer
 }
@@ -162,7 +172,7 @@ async fn handle(
         .headers()
         .get_all("x-forwarded-for")
         .iter()
-        .last()
+        .next_back()
         .and_then(|value| value.to_str().ok())
         .map(str::to_owned);
     let client = client_address(peer, forwarded.as_deref(), &receiver.config().proxy.trusted);
@@ -233,9 +243,13 @@ async fn accept_loop(receiver: Arc<Receiver>) -> Result<(), String> {
     let mut terminate =
         signal(SignalKind::terminate()).map_err(|error| format!("signals: {error}"))?;
     let shown = address.to_string();
-    receiver.log().info("listening", &[("address", shown.as_str())]);
+    receiver
+        .log()
+        .info("listening", &[("address", shown.as_str())]);
     let shared = Arc::new(Shared {
-        uploads: Arc::new(Semaphore::new(receiver.config().limits.max_concurrent_uploads)),
+        uploads: Arc::new(Semaphore::new(
+            receiver.config().limits.max_concurrent_uploads,
+        )),
         receiver: Arc::clone(&receiver),
     });
     loop {
@@ -320,6 +334,9 @@ mod tests {
         assert_eq!(headers[CONTENT_TYPE], "application/json");
         assert_eq!(headers[CACHE_CONTROL], "no-store");
         assert_eq!(headers[RETRY_AFTER], "60");
-        assert_eq!(media_type(Some("Application/Vnd.Tur.Diag-Bundle+Zstd; x=1")).as_deref(), Some("application/vnd.tur.diag-bundle+zstd"));
+        assert_eq!(
+            media_type(Some("Application/Vnd.Tur.Diag-Bundle+Zstd; x=1")).as_deref(),
+            Some("application/vnd.tur.diag-bundle+zstd")
+        );
     }
 }

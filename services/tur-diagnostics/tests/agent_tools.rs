@@ -268,7 +268,11 @@ fn every_tool_has_the_class_the_design_gives_it() {
         .collect();
     assert_eq!(declared_classes(NEXT_MANIFEST), expected);
     // Whatever is offered only observes.
-    for tool in registry().offered().iter().chain(next_registry().offered().iter()) {
+    for tool in registry()
+        .offered()
+        .iter()
+        .chain(next_registry().offered().iter())
+    {
         assert_eq!(tool.class, ActionClass::Observe, "{}", tool.name);
     }
 }
@@ -289,7 +293,10 @@ fn the_next_manifest_only_adds_to_the_shipped_one() {
     let next: Value = serde_json::from_str(NEXT_ADAPTERS).expect("JSON");
     for adapter in shipped["adapters"].as_array().expect("adapters") {
         assert!(
-            next["adapters"].as_array().expect("adapters").contains(adapter),
+            next["adapters"]
+                .as_array()
+                .expect("adapters")
+                .contains(adapter),
             "{} changed",
             adapter["tool"]
         );
@@ -313,7 +320,10 @@ fn no_tool_can_send_a_report() {
         let line = command_line(&registry, tool, arguments);
         assert!(!line.iter().any(|argument| argument == "send"), "{tool}");
         if line.iter().any(|argument| argument == "prepare") {
-            assert!(line.iter().any(|argument| argument == "--preview"), "{tool}");
+            assert!(
+                line.iter().any(|argument| argument == "--preview"),
+                "{tool}"
+            );
         }
     }
     // A model cannot slip an option in through an input.

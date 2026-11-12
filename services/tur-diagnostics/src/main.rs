@@ -553,10 +553,10 @@ fn send(
     places: &Places,
 ) -> Result<(), DiagError> {
     let config = report::load_config(places.config.as_deref())?;
-    let source = config
-        .source
-        .as_ref()
-        .map_or_else(|| "no configuration file".to_owned(), |path| path.display().to_string());
+    let source = config.source.as_ref().map_or_else(
+        || "no configuration file".to_owned(),
+        |path| path.display().to_string(),
+    );
     let Some(receiver) = config.receiver_url else {
         return Err(DiagError::new(
             ErrorKind::ReportNoReceiver,
@@ -640,7 +640,12 @@ fn send(
     }
 }
 
-fn status(host: &SystemHost, report_id: &str, json: bool, places: &Places) -> Result<(), DiagError> {
+fn status(
+    host: &SystemHost,
+    report_id: &str,
+    json: bool,
+    places: &Places,
+) -> Result<(), DiagError> {
     let directory = state_dir(places)?;
     let (records, _) = report::read_records(&directory)?;
     let Some(mut record) = records
@@ -821,8 +826,16 @@ mod tests {
         // A preview saves nothing, so it has no output file.
         assert!(
             Cli::try_parse_from([
-                "tur-diag", "report", "prepare", "--preview", "--output", "x", "--title", "t",
-                "--component", "audio"
+                "tur-diag",
+                "report",
+                "prepare",
+                "--preview",
+                "--output",
+                "x",
+                "--title",
+                "t",
+                "--component",
+                "audio"
             ])
             .is_err()
         );

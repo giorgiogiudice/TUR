@@ -140,8 +140,14 @@ fn every_field_rule_is_enforced_and_names_the_field_not_the_value() {
     let secret_title = "x".repeat(MAX_TITLE_CHARS + 1);
     let cases: Vec<(Change, &str)> = vec![
         (Box::new(|r| r.title = "   ".to_owned()), "title is empty"),
-        (Box::new(move |r| r.title = secret_title.clone()), "title is longer"),
-        (Box::new(|r| r.title = "two\nlines".to_owned()), "title has a control"),
+        (
+            Box::new(move |r| r.title = secret_title.clone()),
+            "title is longer",
+        ),
+        (
+            Box::new(|r| r.title = "two\nlines".to_owned()),
+            "title has a control",
+        ),
         (
             Box::new(|r| r.description = "y".repeat(MAX_DESCRIPTION_CHARS + 1)),
             "description is longer",
@@ -235,8 +241,16 @@ fn a_prepared_report_carries_its_redacted_report_and_verifies() {
     let prepared = prepared();
     let report = &prepared.inspected.report;
     // The person's text went through the same redaction as the files.
-    assert!(!report.description.contains("alice"), "{}", report.description);
-    assert!(report.description.contains("<user-"), "{}", report.description);
+    assert!(
+        !report.description.contains("alice"),
+        "{}",
+        report.description
+    );
+    assert!(
+        report.description.contains("<user-"),
+        "{}",
+        report.description
+    );
     assert_eq!(report.title, request().title);
     assert_eq!(report.error_code, request().error_code);
     assert_eq!(report.component, "audio");
@@ -256,7 +270,10 @@ fn a_prepared_report_carries_its_redacted_report_and_verifies() {
         assert!(!text.contains("alice"), "{path} names the user");
         assert!(!text.contains("workstation-7"), "{path} names the host");
     }
-    assert_eq!(prepared.inspected.manifest.redaction_profile, Profile::Default);
+    assert_eq!(
+        prepared.inspected.manifest.redaction_profile,
+        Profile::Default
+    );
     assert!(prepared.inspected.bytes <= MAX_UPLOAD_BYTES);
     // The same check passes on the archive alone.
     let again = inspect_archive(&prepared.archive).expect("the archive is a report");
@@ -321,7 +338,11 @@ fn what_is_not_a_prepared_report_is_refused() {
     damaged[middle] ^= 0xff;
     let error = inspect_archive(&damaged).expect_err("damaged");
     assert_eq!(error.kind(), ErrorKind::ReportNotPrepared);
-    assert!(error.detail().starts_with("TUR-DIAG-BUNDLE-"), "{}", error.detail());
+    assert!(
+        error.detail().starts_with("TUR-DIAG-BUNDLE-"),
+        "{}",
+        error.detail()
+    );
 
     // A report.json that is not a report.
     let mut members = unpack(&prepared().archive).expect("unpacks");
@@ -355,7 +376,13 @@ fn a_bundle_over_the_size_limits_is_refused() {
 
 #[test]
 fn an_extra_document_cannot_replace_a_bundle_member() {
-    for path in ["manifest.json", "checksums.sha256", "system/kernel.txt", "../x", "/abs"] {
+    for path in [
+        "manifest.json",
+        "checksums.sha256",
+        "system/kernel.txt",
+        "../x",
+        "/abs",
+    ] {
         let result = build_bundle_with(
             &host(),
             &CollectRequest {
@@ -384,7 +411,13 @@ fn the_preview_shows_every_file_and_the_report() {
     assert!(!preview.sent);
     assert_eq!(preview.prepared_file, None);
     assert_eq!(preview.bundle.files.len(), prepared.inspected.members.len());
-    assert!(preview.bundle.files.iter().any(|file| file.path == REPORT_PATH));
+    assert!(
+        preview
+            .bundle
+            .files
+            .iter()
+            .any(|file| file.path == REPORT_PATH)
+    );
     let text = render_preview(&preview);
     assert!(text.contains("NOT sent"));
     assert!(text.contains("none configured"));
@@ -398,7 +431,9 @@ fn the_preview_shows_every_file_and_the_report() {
         Some(RECEIVER),
         Some(Path::new("/tmp/r.tar.zst")),
     ));
-    assert!(with_file.contains("tur-diag report send --to https://reports.tur.example /tmp/r.tar.zst"));
+    assert!(
+        with_file.contains("tur-diag report send --to https://reports.tur.example /tmp/r.tar.zst")
+    );
 }
 
 // ------------------------------------------------------------ boot health
@@ -548,7 +583,10 @@ fn an_explicit_configuration_file_must_exist() {
     let file = dir.0.join("reports.conf");
     fs::write(&file, "RECEIVER_URL=http://127.0.0.1:8080/\n").expect("written");
     let config = load_config(Some(&file)).expect("read");
-    assert_eq!(config.receiver_url.as_deref(), Some("http://127.0.0.1:8080"));
+    assert_eq!(
+        config.receiver_url.as_deref(),
+        Some("http://127.0.0.1:8080")
+    );
     assert_eq!(config.source.as_deref(), Some(file.as_path()));
 }
 
@@ -585,7 +623,10 @@ fn records_are_private_and_the_list_never_shows_the_status_token() {
     let shown = serde_json::to_string(&list).expect("JSON") + &render_list(&list);
     assert!(!shown.contains(TOKEN), "the status token is listed");
     assert!(!shown.contains("status_url"));
-    assert!(!shown.contains(&dir.0.display().to_string()), "the directory is listed");
+    assert!(
+        !shown.contains(&dir.0.display().to_string()),
+        "the directory is listed"
+    );
 
     let nowhere = list_reports(Some(&dir.0.join("absent"))).expect("listed");
     assert!(!nowhere.directory_found);
@@ -653,10 +694,15 @@ fn refusals_and_failures_carry_their_codes() {
     let host = FakeHost::new().with_command_result("curl", Ok(reply(&refusal, 429)));
     let error = send_prepared(&host, RECEIVER, file).expect_err("refused");
     assert_eq!(error.kind(), ErrorKind::ReportRefused);
-    assert!(error.detail().contains("TUR-DIAG-RECEIVER-008"), "{}", error.detail());
+    assert!(
+        error.detail().contains("TUR-DIAG-RECEIVER-008"),
+        "{}",
+        error.detail()
+    );
     assert!(error.detail().contains("429"));
 
-    let host = FakeHost::new().with_command_result("curl", Ok(reply("<html>bad gateway</html>", 502)));
+    let host =
+        FakeHost::new().with_command_result("curl", Ok(reply("<html>bad gateway</html>", 502)));
     let error = send_prepared(&host, RECEIVER, file).expect_err("not a receiver");
     assert_eq!(error.kind(), ErrorKind::ReportUnreachable);
 
@@ -712,7 +758,11 @@ fn required(node: &Value) -> BTreeSet<String> {
 /// is required, and nothing else is allowed.
 fn same_shape(node: &Value, instance: &Value, what: &str) {
     assert_eq!(node["additionalProperties"], false, "{what}");
-    assert_eq!(keys(&node["properties"]), keys(instance), "{what}: properties");
+    assert_eq!(
+        keys(&node["properties"]),
+        keys(instance),
+        "{what}: properties"
+    );
     assert_eq!(required(node), keys(instance), "{what}: required");
 }
 
@@ -773,7 +823,11 @@ fn the_preview_schema_and_the_rust_type_agree() {
     let schema: Value = serde_json::from_str(PREVIEW_SCHEMA).expect("JSON");
     let instance = serde_json::to_value(preview(&prepared(), Some(RECEIVER), None)).expect("JSON");
     same_shape(&schema, &instance, "preview");
-    same_shape(&schema["properties"]["bundle"], &instance["bundle"], "bundle");
+    same_shape(
+        &schema["properties"]["bundle"],
+        &instance["bundle"],
+        "bundle",
+    );
     same_shape(
         &schema["properties"]["bundle"]["properties"]["files"]["items"],
         &instance["bundle"]["files"][0],

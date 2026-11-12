@@ -106,11 +106,11 @@ impl Refusal {
             Refusal::NotAReport => {
                 "The bundle is not a problem report: report.json is missing or not valid."
             }
-            Refusal::TechnicalProfile => {
-                "Reports must be made with the default redaction profile."
-            }
+            Refusal::TechnicalProfile => "Reports must be made with the default redaction profile.",
             Refusal::AddressLimit => "Too many reports from this address. Try again later.",
-            Refusal::GlobalLimit => "The receiver is taking no more reports for now. Try again later.",
+            Refusal::GlobalLimit => {
+                "The receiver is taking no more reports for now. Try again later."
+            }
             Refusal::Busy => "The receiver is busy. Try again in a minute.",
             Refusal::UnknownToken => "No report has this status token.",
             Refusal::Internal => "The receiver could not store the report. Nothing was kept.",
@@ -193,10 +193,9 @@ mod tests {
 
     #[test]
     fn the_error_body_matches_the_schema() {
-        let schema: serde_json::Value = serde_json::from_str(include_str!(
-            "../../../schemas/report-receiver.schema.json"
-        ))
-        .expect("JSON");
+        let schema: serde_json::Value =
+            serde_json::from_str(include_str!("../../../schemas/report-receiver.schema.json"))
+                .expect("JSON");
         let body = serde_json::to_value(ErrorBody::new(Refusal::NotABundle, None)).expect("JSON");
         let node = &schema["$defs"]["error"];
         let properties: BTreeSet<&String> = node["properties"]

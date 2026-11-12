@@ -115,7 +115,10 @@ mod tests {
             "received",
             &[
                 ("report", "R-0123456789abcdef"),
-                ("note", "alice@example.org lives at /home/alice and said \"hi\"\nlevel=error"),
+                (
+                    "note",
+                    "alice@example.org lives at /home/alice and said \"hi\"\nlevel=error",
+                ),
             ],
         );
         let text = String::from_utf8(memory.lock().expect("lock").clone()).expect("text");

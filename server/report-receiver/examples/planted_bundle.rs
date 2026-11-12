@@ -53,7 +53,11 @@ fn main() -> ExitCode {
         ),
         (
             "unsigned.tar.zst",
-            testing::bundle(None, &[("system/kernel.txt", "Linux x 6.17\n")], Profile::Default),
+            testing::bundle(
+                None,
+                &[("system/kernel.txt", "Linux x 6.17\n")],
+                Profile::Default,
+            ),
         ),
         (
             "technical.tar.zst",
@@ -61,11 +65,19 @@ fn main() -> ExitCode {
         ),
         (
             "duplicate-a.tar.zst",
-            testing::bundle(Some(&duplicate), &[("system/kernel.txt", "a\n")], Profile::Default),
+            testing::bundle(
+                Some(&duplicate),
+                &[("system/kernel.txt", "a\n")],
+                Profile::Default,
+            ),
         ),
         (
             "duplicate-b.tar.zst",
-            testing::bundle(Some(&duplicate), &[("system/kernel.txt", "b\n")], Profile::Default),
+            testing::bundle(
+                Some(&duplicate),
+                &[("system/kernel.txt", "b\n")],
+                Profile::Default,
+            ),
         ),
     ];
     for (name, data) in files {

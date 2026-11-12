@@ -98,7 +98,12 @@ fn random_hex(bytes: usize) -> Result<String, String> {
 
 impl Receiver {
     /// A receiver with the given keys, clock and log.
-    pub fn new(config: Config, keyring: Keyring, clock: Arc<dyn Clock>, log: Log) -> io::Result<Self> {
+    pub fn new(
+        config: Config,
+        keyring: Keyring,
+        clock: Arc<dyn Clock>,
+        log: Log,
+    ) -> io::Result<Self> {
         let store = Store::open(&config.data_dir)?;
         let uploads = RateLimiter::new(
             config.limits.uploads_per_address_per_hour,
@@ -209,7 +214,8 @@ impl Receiver {
         match self.store_report(body, &verified.manifest, &report, &members) {
             Ok(answer) => answer,
             Err(problem) => {
-                self.log.warn("store-failed", &[("reason", problem.as_str())]);
+                self.log
+                    .warn("store-failed", &[("reason", problem.as_str())]);
                 self.refuse(Refusal::Internal, None)
             }
         }
@@ -238,7 +244,9 @@ impl Receiver {
         let summary = summary::build(manifest, report, members, &facts);
         let summary_bytes = serde_json::to_vec(&summary).map_err(|error| error.to_string())?;
         let sealed_bundle = self.keyring.seal(Purpose::Bundle, &report_id, archive)?;
-        let sealed_summary = self.keyring.seal(Purpose::Summary, &report_id, &summary_bytes)?;
+        let sealed_summary = self
+            .keyring
+            .seal(Purpose::Summary, &report_id, &summary_bytes)?;
         let record = Record {
             schema_version: 1,
             report_id: report_id.clone(),
@@ -316,7 +324,10 @@ impl Receiver {
             return self.refuse(Refusal::UnknownToken, None);
         }
         let found = self.lock().and_then(|lock| {
-            let Some(id) = self.store.report_for_token(&lock, &sha256_hex(token.as_bytes()))? else {
+            let Some(id) = self
+                .store
+                .report_for_token(&lock, &sha256_hex(token.as_bytes()))?
+            else {
                 return Ok(None);
             };
             self.store.record(&lock, &id)
@@ -386,7 +397,11 @@ impl Receiver {
                 return Ok(None);
             }
             let sealed = self.store.summary(&lock, id)?;
-            let issue = self.store.signatures(&lock)?.get(&record.signature).copied();
+            let issue = self
+                .store
+                .signatures(&lock)?
+                .get(&record.signature)
+                .copied();
             Ok(Some((record, sealed, issue)))
         });
         let (record, sealed, issue) = match prepared {
@@ -555,7 +570,11 @@ impl Receiver {
         }
         let lock = self.lock().map_err(|error| error.to_string())?;
         let mut marked = 0;
-        for mut record in self.store.records(&lock).map_err(|error| error.to_string())? {
+        for mut record in self
+            .store
+            .records(&lock)
+            .map_err(|error| error.to_string())?
+        {
             if record.issue == Some(issue) {
                 record.state = State::Fixed;
                 record.fixed_in = Some(version.to_owned());

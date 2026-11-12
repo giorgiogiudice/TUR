@@ -580,7 +580,10 @@ mod tests {
             (ErrorKind::ReportUnreachable, "TUR-DIAG-REPORT-006"),
             (ErrorKind::ReportRefused, "TUR-DIAG-REPORT-007"),
             (ErrorKind::ReportConfigInvalid, "TUR-DIAG-REPORT-008"),
-            (ErrorKind::ReportNothingFromBootHealth, "TUR-DIAG-REPORT-009"),
+            (
+                ErrorKind::ReportNothingFromBootHealth,
+                "TUR-DIAG-REPORT-009",
+            ),
             (ErrorKind::ReportRecordsUnavailable, "TUR-DIAG-REPORT-010"),
             (ErrorKind::ReportUnknown, "TUR-DIAG-REPORT-011"),
             (ErrorKind::ReportTooLarge, "TUR-DIAG-REPORT-012"),

@@ -80,25 +80,96 @@ impl Tag {
 
 /// Names that are not personal and must stay readable.
 const GENERIC: &[&str] = &[
-    "admin", "all users", "android", "audio", "avahi", "bin", "card", "chrony", "colord",
-    "credentials", "daemon", "dbus", "default", "default user", "dnsmasq", "email", "fedora",
-    "flatpak", "gdm", "geoclue", "guest", "home", "host", "id", "invalid", "ipv4", "ipv6",
-    "kinoite", "linux", "localhost", "localhost.localdomain", "lp", "mac", "mail", "network",
-    "nobody", "none", "null", "pipewire", "polkitd", "private-key", "public", "root", "rpc",
-    "rtkit", "sddm", "secret", "serial", "ssh-key", "sshd", "sssd", "system", "systemd", "token",
-    "tss", "tur", "unknown", "user", "users", "uuid", "version", "wifi",
+    "admin",
+    "all users",
+    "android",
+    "audio",
+    "avahi",
+    "bin",
+    "card",
+    "chrony",
+    "colord",
+    "credentials",
+    "daemon",
+    "dbus",
+    "default",
+    "default user",
+    "dnsmasq",
+    "email",
+    "fedora",
+    "flatpak",
+    "gdm",
+    "geoclue",
+    "guest",
+    "home",
+    "host",
+    "id",
+    "invalid",
+    "ipv4",
+    "ipv6",
+    "kinoite",
+    "linux",
+    "localhost",
+    "localhost.localdomain",
+    "lp",
+    "mac",
+    "mail",
+    "network",
+    "nobody",
+    "none",
+    "null",
+    "pipewire",
+    "polkitd",
+    "private-key",
+    "public",
+    "root",
+    "rpc",
+    "rtkit",
+    "sddm",
+    "secret",
+    "serial",
+    "ssh-key",
+    "sshd",
+    "sssd",
+    "system",
+    "systemd",
+    "token",
+    "tss",
+    "tur",
+    "unknown",
+    "user",
+    "users",
+    "uuid",
+    "version",
+    "wifi",
 ];
 
 /// The prefixes of systemd template units, which look like `user@host`.
 const UNIT_PREFIXES: &[&str] = &[
-    "autovt", "container-getty", "dbus", "getty", "modprobe", "serial-getty", "systemd-fsck",
-    "user", "user-runtime-dir",
+    "autovt",
+    "container-getty",
+    "dbus",
+    "getty",
+    "modprobe",
+    "serial-getty",
+    "systemd-fsck",
+    "user",
+    "user-runtime-dir",
 ];
 
 /// The suffixes of systemd unit names.
 const UNIT_SUFFIXES: &[&str] = &[
-    ".service", ".socket", ".target", ".timer", ".mount", ".automount", ".path", ".slice",
-    ".scope", ".device", ".swap",
+    ".service",
+    ".socket",
+    ".target",
+    ".timer",
+    ".mount",
+    ".automount",
+    ".path",
+    ".slice",
+    ".scope",
+    ".device",
+    ".swap",
 ];
 
 /// How many learnt values go into one pattern.
@@ -139,10 +210,7 @@ rule!(
     AUTHORIZATION,
     r"(?im)\b((?:proxy-)?authorization)(\s*[:=]\s*)[^\n]*"
 );
-rule!(
-    BEARER,
-    r"(?i)\b(bearer|basic)\s+[A-Za-z0-9._~+/=-]{8,}"
-);
+rule!(BEARER, r"(?i)\b(bearer|basic)\s+[A-Za-z0-9._~+/=-]{8,}");
 rule!(
     LABELLED_SECRET,
     r#"(?i)([A-Za-z0-9_.-]*(?:password|passwd|passphrase|psk|secret|token|api[_-]?key|apikey|access[_-]?key|private[_-]?key|credentials?|session[_-]?id|cookie)[A-Za-z0-9_.-]*)(["']?\s*[:=]\s*)("[^"\n]*"|'[^'\n]*'|[^\s,;&"'<>]+)"#
@@ -312,7 +380,7 @@ fn luhn(digits: &[u32]) -> bool {
             }
         })
         .sum();
-    sum % 10 == 0
+    sum.is_multiple_of(10)
 }
 
 /// The second pass of redaction.
@@ -354,8 +422,8 @@ impl Scrubber {
             return;
         }
         let key = value.to_lowercase();
-        if !self.learnt.contains_key(&key) {
-            self.learnt.insert(key, tag);
+        if let std::collections::btree_map::Entry::Vacant(entry) = self.learnt.entry(key) {
+            entry.insert(tag);
             self.literal.clear();
         }
     }
@@ -407,14 +475,12 @@ impl Scrubber {
         mut replace: impl FnMut(&Captures<'_>, &str) -> Option<String>,
     ) -> String {
         let mut count = 0u64;
-        let result = regex.replace_all(text, |caps: &Captures<'_>| {
-            match replace(caps, text) {
-                Some(replacement) => {
-                    count += 1;
-                    replacement
-                }
-                None => caps[0].to_owned(),
+        let result = regex.replace_all(text, |caps: &Captures<'_>| match replace(caps, text) {
+            Some(replacement) => {
+                count += 1;
+                replacement
             }
+            None => caps[0].to_owned(),
         });
         let result = result.into_owned();
         self.replacements += count;
@@ -456,7 +522,9 @@ impl Scrubber {
         out = self.apply(&AUTHORIZATION, &out, |caps, _| {
             Some(format!("{}{}<secret>", &caps[1], &caps[2]))
         });
-        out = self.apply(&BEARER, &out, |caps, _| Some(format!("{} <secret>", &caps[1])));
+        out = self.apply(&BEARER, &out, |caps, _| {
+            Some(format!("{} <secret>", &caps[1]))
+        });
         out = self.apply(&LABELLED_SECRET, &out, |caps, _| {
             if is_unit_name(&caps[1]) || is_placeholder(strip_quotes(&caps[3])) {
                 return None;
@@ -523,7 +591,8 @@ impl Scrubber {
         });
         out = self.apply(&MAC, &out, |caps, _| {
             let digits: String = caps[0].chars().filter(char::is_ascii_hexdigit).collect();
-            let all_same = digits.chars().all(|c| c == '0') || digits.chars().all(|c| c == 'f' || c == 'F');
+            let all_same =
+                digits.chars().all(|c| c == '0') || digits.chars().all(|c| c == 'f' || c == 'F');
             (!all_same).then(|| "<mac>".to_owned())
         });
         out = self.apply(&MAC_DOTTED, &out, |_, _| Some("<mac>".to_owned()));
@@ -534,7 +603,11 @@ impl Scrubber {
             let whole = caps.get(0)?;
             let before = char_before(text, whole.start());
             let after = char_after(text, whole.end());
-            if is_word_char(before) || before == Some(':') || is_word_char(after) || after == Some(':') {
+            if is_word_char(before)
+                || before == Some(':')
+                || is_word_char(after)
+                || after == Some(':')
+            {
                 return None;
             }
             let address = whole.as_str().split('%').next().unwrap_or("");
@@ -546,7 +619,9 @@ impl Scrubber {
         });
         out = self.apply(&IPV4, &out, |caps, text| {
             let whole = caps.get(0)?;
-            let octets: Vec<u16> = (1..=4).filter_map(|group| caps[group].parse().ok()).collect();
+            let octets: Vec<u16> = (1..=4)
+                .filter_map(|group| caps[group].parse().ok())
+                .collect();
             if octets.len() != 4 || octets.iter().any(|octet| *octet > 255) {
                 return None;
             }
