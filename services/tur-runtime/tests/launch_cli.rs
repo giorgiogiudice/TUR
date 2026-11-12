@@ -277,6 +277,74 @@ fn create_dry_run_prints_the_plan_and_changes_nothing() {
 }
 
 #[test]
+fn case_folding_is_planned_on_request_and_left_out_on_request() {
+    let home = Home::new("create-casefold");
+    let outcome = home.run_named(&[
+        "prefix",
+        "create",
+        APP,
+        "--casefold",
+        "--dry-run",
+        "--json",
+    ]);
+    assert_eq!(outcome.status, 0, "{}", outcome.stderr);
+    let plan = &outcome.json()["plan"];
+    assert_eq!(
+        step_kinds(plan),
+        [
+            "create-dir",
+            "create-dir",
+            "create-dir",
+            "case-fold",
+            "run",
+            "require",
+            "write-file",
+            "write-file"
+        ]
+    );
+    // drive C: is made, empty, before Wine is started in the prefix.
+    let step = &plan["steps"][3];
+    let drive_c = home.app_dir().join("prefix/drive_c");
+    assert_eq!(step["path"], drive_c.to_str().unwrap());
+    // chattr is looked for in the system directories; where it is
+    // installed, the step names it.
+    if !step["command"].is_null() {
+        assert_eq!(step["command"]["arguments"][0], "+F");
+        assert_eq!(step["command"]["environment"]["LC_ALL"], "C");
+    }
+
+    let outcome = home.run_named(&[
+        "prefix",
+        "create",
+        APP,
+        "--no-casefold",
+        "--dry-run",
+        "--json",
+    ]);
+    assert_eq!(outcome.status, 0, "{}", outcome.stderr);
+    assert!(!step_kinds(&outcome.json()["plan"]).contains(&"case-fold".to_owned()));
+
+    // Text form.
+    let outcome = home.run_named(&["prefix", "create", APP, "--casefold", "--dry-run"]);
+    assert_eq!(outcome.status, 0, "{}", outcome.stderr);
+    assert!(outcome.stdout.contains("case-insensitive"), "{}", outcome.stdout);
+
+    // Both at once is a mistake on the command line.
+    let outcome = home.run_named(&[
+        "prefix",
+        "create",
+        APP,
+        "--casefold",
+        "--no-casefold",
+        "--dry-run",
+    ]);
+    assert_eq!(outcome.status, 2, "{}", outcome.stderr);
+
+    // Nothing was created.
+    assert!(!home.root.join("data").exists());
+}
+
+#[test]
 fn refusals_have_codes_and_exit_status_six() {
     let home = Home::new("refusals");
 

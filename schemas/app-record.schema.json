@@ -127,6 +127,33 @@
         }
       }
     },
+    "case_folding": {
+      "description": "Whether the prefix's drive C: is case-insensitive because its file system folds case (ext4 with the casefold feature, and the directory's F attribute), and why or why not. Where it is not, Wine emulates case-insensitivity in user space, as on any Linux file system. Case folding is asked for when the prefix is created and never changes the file system itself.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requested", "casefolded", "reason"],
+      "properties": {
+        "requested": {
+          "description": "Whether case folding was asked for when the prefix was created.",
+          "type": "boolean"
+        },
+        "casefolded": {
+          "description": "Whether drive C: is case-insensitive.",
+          "type": "boolean"
+        },
+        "reason": {
+          "description": "casefolded: it is. not-requested: it was not asked for. no-casefold-feature: the file system refused the attribute as not supported (an ext4 file system made without the casefold feature, or another file system). no-attributes: the file system has no attributes chattr can set. not-permitted, not-empty, read-only: the attribute could not be set for that reason. tool-missing: chattr is not installed. failed: anything else; the detail says what.",
+          "enum": ["casefolded", "not-requested", "no-casefold-feature", "no-attributes", "not-permitted", "not-empty", "read-only", "tool-missing", "failed"]
+        },
+        "detail": {
+          "description": "What chattr said when it refused.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$"
+        }
+      }
+    },
     "shortcut": {
       "description": "A shortcut the installer created in the Start menu or on the desktop.",
       "type": "object",
@@ -210,6 +237,7 @@
       "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,99}$"
     },
     "installed_at": { "$ref": "#/$defs/timestamp" },
+    "case_folding": { "$ref": "#/$defs/case_folding" },
     "install": { "$ref": "#/$defs/install" },
     "uninstall": { "$ref": "#/$defs/uninstall" },
     "launcher": { "$ref": "#/$defs/launcher" },
