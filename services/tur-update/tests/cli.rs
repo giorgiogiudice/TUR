@@ -350,12 +350,20 @@ fn every_report_of_every_machine_matches_the_schema() {
             (with(&["plan", "rollback"], &from, &["--json"]), "plan"),
             (with(&["plan", "pin"], &from, &["--json"]), "plan"),
             (
-                with(&["plan", "pin"], &from, &["--json", "--deployment", "rollback"]),
+                with(
+                    &["plan", "pin"],
+                    &from,
+                    &["--json", "--deployment", "rollback"],
+                ),
                 "plan",
             ),
             (with(&["plan", "unpin"], &from, &["--json"]), "plan"),
             (
-                with(&["plan", "unpin"], &from, &["--json", "--deployment", "rollback"]),
+                with(
+                    &["plan", "unpin"],
+                    &from,
+                    &["--json", "--deployment", "rollback"],
+                ),
                 "plan",
             ),
         ];
@@ -413,9 +421,7 @@ fn the_validator_rejects_what_the_schema_forbids() {
     // A plan that claims to have been carried out.
     assert!(!spoil(&|d| d["plan"]["executed"] = Value::Bool(true)).is_empty());
     // A code of another family, an outcome and a step that do not exist.
-    assert!(
-        !spoil(&|d| d["plan"]["decision"]["code"] = "TUR-STORAGE-NTFS-004".into()).is_empty()
-    );
+    assert!(!spoil(&|d| d["plan"]["decision"]["code"] = "TUR-STORAGE-NTFS-004".into()).is_empty());
     assert!(!spoil(&|d| d["plan"]["decision"]["outcome"] = "force".into()).is_empty());
     assert!(!spoil(&|d| d["plan"]["steps"][0]["id"] = "reboot".into()).is_empty());
     // A member too many, and a member missing.
@@ -493,7 +499,10 @@ Boot health
   Failed to start:    1 version(s)
 ";
     assert!(text.starts_with(expected), "{text}");
-    assert!(text.contains("  Notice:             The update to TUR 0.1.0-dev"), "{text}");
+    assert!(
+        text.contains("  Notice:             The update to TUR 0.1.0-dev"),
+        "{text}"
+    );
     assert!(text.trim_end().ends_with("(TUR-BOOT-TRIAL-003)"), "{text}");
 
     // Without the boot-health state, nothing is claimed about it.
@@ -501,7 +510,10 @@ Boot health
     assert!(report["boot_health"].is_null());
     assert!(report["versions"][1]["failed_to_start"].is_null());
     let text = ok(&["status", "--from", path(machine.0)]);
-    assert!(text.ends_with("Boot health: not known (give --boot-health)\n"), "{text}");
+    assert!(
+        text.ends_with("Boot health: not known (give --boot-health)\n"),
+        "{text}"
+    );
     assert!(!text.contains("failed to start here"), "{text}");
 }
 
@@ -510,25 +522,52 @@ fn status_shows_what_is_waiting_kept_and_held() {
     let text = ok(&["status", "--from", path("bootc/tur-staged.json")]);
     assert!(text.starts_with("TUR 0.1.0-dev is ready. Restart to use it.\nState:    ready\n"));
     assert!(text.contains("Follows:  /run/tur-test/images:check-fails (oci), signature: none\n"));
-    assert!(text.contains("\n  waiting   TUR 0.1.0-dev  sha256:d726caf08260…"), "{text}");
-    assert!(text.contains("\n  in use    TUR 0.1.0-dev  sha256:864f59815ad6…"), "{text}");
+    assert!(
+        text.contains("\n  waiting   TUR 0.1.0-dev  sha256:d726caf08260…"),
+        "{text}"
+    );
+    assert!(
+        text.contains("\n  in use    TUR 0.1.0-dev  sha256:864f59815ad6…"),
+        "{text}"
+    );
 
-    let text = ok(&["status", "--from", path("bootc-upstream/booted-pinned.json")]);
+    let text = ok(&[
+        "status",
+        "--from",
+        path("bootc-upstream/booted-pinned.json"),
+    ]);
     assert!(text.contains("\n  in use    TUR stream9.20240807.0  sha256:47e5ed613a97…  [kept]\n"));
     assert!(text.contains("\n  other     TUR stream9.20240807.0  sha256:47e5ed613a97…  [kept]\n"));
 
-    let text = ok(&["status", "--from", path("bootc-upstream/staged-download-only.json")]);
+    let text = ok(&[
+        "status",
+        "--from",
+        path("bootc-upstream/staged-download-only.json"),
+    ]);
     assert!(text.starts_with("TUR nightly has been downloaded and is waiting to be released.\n"));
     assert!(text.contains("State:    held\n"), "{text}");
     assert!(text.contains("signature: insecure\n"), "{text}");
     assert!(text.contains("[held]\n"), "{text}");
 
-    let text = ok(&["status", "--from", path("bootc-upstream/booted-usroverlay.json")]);
-    assert!(text.contains("An overlay is mounted on /usr (transient, readWrite).\n"), "{text}");
+    let text = ok(&[
+        "status",
+        "--from",
+        path("bootc-upstream/booted-usroverlay.json"),
+    ]);
+    assert!(
+        text.contains("An overlay is mounted on /usr (transient, readWrite).\n"),
+        "{text}"
+    );
 
-    let text = ok(&["status", "--from", path("bootc-upstream/rfe-ostree-deployment.json")]);
+    let text = ok(&[
+        "status",
+        "--from",
+        path("bootc-upstream/rfe-ostree-deployment.json"),
+    ]);
     assert!(text.contains("Follows:  no image\n"), "{text}");
-    assert!(text.contains("  in use    a version that is not an image (f9fa3a553cea)  not an image\n"));
+    assert!(
+        text.contains("  in use    a version that is not an image (f9fa3a553cea)  not an image\n")
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -542,8 +581,19 @@ fn check_previews_the_check_and_what_follows_it() {
         Some("boot-health/normal.json"),
     );
     let from = source(&machine);
-    let favourable = ["--power", "mains", "--network", "online", "--free-bytes", "99999999999"];
-    let report = json(&with(&["check"], &from, &with(&["--json"], &favourable, &[])));
+    let favourable = [
+        "--power",
+        "mains",
+        "--network",
+        "online",
+        "--free-bytes",
+        "99999999999",
+    ];
+    let report = json(&with(
+        &["check"],
+        &from,
+        &with(&["--json"], &favourable, &[]),
+    ));
     assert_eq!(report["state"], "available");
     assert_eq!(report["update"]["status"], "available");
     assert_eq!(report["update"]["image"]["version"], "stream9.20240901.0");
@@ -566,7 +616,15 @@ fn check_previews_the_check_and_what_follows_it() {
     let report = json(&with(
         &["check"],
         &from,
-        &["--json", "--power", "battery", "--battery-percent", "30", "--network", "online"],
+        &[
+            "--json",
+            "--power",
+            "battery",
+            "--battery-percent",
+            "30",
+            "--network",
+            "online",
+        ],
     ));
     assert_eq!(report["automatic_action"], "wait");
     assert_eq!(report["automatic_stage"]["code"], "TUR-UPDATE-POWER-001");
@@ -581,8 +639,14 @@ fn check_previews_the_check_and_what_follows_it() {
         ),
         "{text}"
     );
-    assert!(text.contains("By itself, the update manager would now: wait\n"), "{text}");
-    assert!(text.contains("  A check would run: /usr/bin/bootc upgrade --check\n"), "{text}");
+    assert!(
+        text.contains("By itself, the update manager would now: wait\n"),
+        "{text}"
+    );
+    assert!(
+        text.contains("  A check would run: /usr/bin/bootc upgrade --check\n"),
+        "{text}"
+    );
     assert!(text.contains("  This command does not run it.\n"), "{text}");
 
     // Without boot health an update is not staged, by anyone.
@@ -606,7 +670,14 @@ fn plan_stage_prints_the_commands_and_runs_none() {
         Some("boot-health/normal.json"),
     );
     let from = source(&machine);
-    let conditions = ["--power", "mains", "--network", "online", "--free-bytes", "99999999999"];
+    let conditions = [
+        "--power",
+        "mains",
+        "--network",
+        "online",
+        "--free-bytes",
+        "99999999999",
+    ];
     let text = ok(&with(&["plan", "stage"], &from, &conditions));
     let expected_head = "\
 Plan: stage (request: automatic)
@@ -619,10 +690,22 @@ This command runs nothing. These commands would be run, as administrator, in thi
   1. /usr/bin/bootc upgrade --download-only --quiet
 ";
     assert!(text.starts_with(expected_head), "{text}");
-    assert!(text.contains("\n  2. /usr/bin/bootc status --format=json\n"), "{text}");
-    assert!(text.contains("\n  3. /usr/bin/bootc upgrade --from-downloaded\n"), "{text}");
-    assert!(text.contains("\nWhat would happen\n  - TUR stream9.20240901.0 is downloaded"), "{text}");
-    assert!(text.contains("It gets 3 attempts to start properly"), "{text}");
+    assert!(
+        text.contains("\n  2. /usr/bin/bootc status --format=json\n"),
+        "{text}"
+    );
+    assert!(
+        text.contains("\n  3. /usr/bin/bootc upgrade --from-downloaded\n"),
+        "{text}"
+    );
+    assert!(
+        text.contains("\nWhat would happen\n  - TUR stream9.20240901.0 is downloaded"),
+        "{text}"
+    );
+    assert!(
+        text.contains("It gets 3 attempts to start properly"),
+        "{text}"
+    );
     assert!(
         text.ends_with(
             "\nThe change takes effect at a restart. No command here restarts the computer.\n"
@@ -630,12 +713,19 @@ This command runs nothing. These commands would be run, as administrator, in thi
         "{text}"
     );
 
-    let report = json(&with(&["plan", "stage"], &from, &with(&["--json"], &conditions, &[])));
+    let report = json(&with(
+        &["plan", "stage"],
+        &from,
+        &with(&["--json"], &conditions, &[]),
+    ));
     assert_eq!(report["requester"], "automatic");
     assert_eq!(report["plan"]["operation"], "stage");
     assert_eq!(report["plan"]["restart_required"], true);
     let steps = report["plan"]["steps"].as_array().expect("steps");
-    let ids: Vec<&str> = steps.iter().filter_map(|step| step["id"].as_str()).collect();
+    let ids: Vec<&str> = steps
+        .iter()
+        .filter_map(|step| step["id"].as_str())
+        .collect();
     assert_eq!(ids, ["stage-held", "read-status", "release"]);
     assert_eq!(steps[0]["changes"], "system");
     assert_eq!(steps[1]["changes"], "nothing");
@@ -644,11 +734,21 @@ This command runs nothing. These commands would be run, as administrator, in thi
     let report = json(&with(
         &["plan", "stage"],
         &from,
-        &["--json", "--requested", "--network", "online", "--metered", "yes"],
+        &[
+            "--json",
+            "--requested",
+            "--network",
+            "online",
+            "--metered",
+            "yes",
+        ],
     ));
     assert_eq!(report["requester"], "person");
     assert_eq!(report["plan"]["decision"]["outcome"], "proceed");
-    assert_eq!(report["plan"]["decision"]["notes"][0], "The connection is metered.");
+    assert_eq!(
+        report["plan"]["decision"]["notes"][0],
+        "The connection is metered."
+    );
 
     // Held back: the reason, what to do, everything else in the way, and no
     // command.
@@ -667,15 +767,24 @@ This command runs nothing. These commands would be run, as administrator, in thi
             "--repair-session",
         ],
     ));
-    assert!(text.contains("Decision: refuse (TUR-UPDATE-SPACE-001)\n"), "{text}");
+    assert!(
+        text.contains("Decision: refuse (TUR-UPDATE-SPACE-001)\n"),
+        "{text}"
+    );
     assert!(
         text.contains(
             "  The update was not applied. There is not enough free space on this computer.\n"
         ),
         "{text}"
     );
-    assert!(text.contains("  Reason: 1000 bytes are free on the system disk; "), "{text}");
-    assert!(text.contains("  What to do: Free some space, or release a version"), "{text}");
+    assert!(
+        text.contains("  Reason: 1000 bytes are free on the system disk; "),
+        "{text}"
+    );
+    assert!(
+        text.contains("  What to do: Free some space, or release a version"),
+        "{text}"
+    );
     assert!(
         text.contains(
             "  Also: TUR-UPDATE-SESSION-001, TUR-UPDATE-NETWORK-001, TUR-UPDATE-POWER-001\n"
@@ -707,7 +816,10 @@ fn plan_rollback_refuses_the_version_that_failed_and_allows_the_one_that_worked(
         Some("boot-health/after-update.json"),
     );
     let text = ok(&with(&["plan", "rollback"], &source(&worked), &[]));
-    assert!(text.contains("Decision: proceed (TUR-UPDATE-ROLLBACK-001)\n"), "{text}");
+    assert!(
+        text.contains("Decision: proceed (TUR-UPDATE-ROLLBACK-001)\n"),
+        "{text}"
+    );
     assert!(text.contains("\n  1. /usr/bin/bootc rollback\n"), "{text}");
     assert!(text.contains("each version has its own /etc"), "{text}");
     assert!(!text.contains("\n  2. "), "{text}");
@@ -719,8 +831,17 @@ fn plan_rollback_refuses_the_version_that_failed_and_allows_the_one_that_worked(
     );
 
     // No previous version at all.
-    let report = json(&["plan", "rollback", "--from", path("bootc/tur-booted.json"), "--json"]);
-    assert_eq!(report["plan"]["decision"]["code"], "TUR-UPDATE-ROLLBACK-002");
+    let report = json(&[
+        "plan",
+        "rollback",
+        "--from",
+        path("bootc/tur-booted.json"),
+        "--json",
+    ]);
+    assert_eq!(
+        report["plan"]["decision"]["code"],
+        "TUR-UPDATE-ROLLBACK-002"
+    );
     assert_eq!(report["plan"]["steps"], serde_json::json!([]));
 }
 
@@ -728,11 +849,20 @@ fn plan_rollback_refuses_the_version_that_failed_and_allows_the_one_that_worked(
 fn plan_pin_and_unpin_name_the_deployment_by_its_role() {
     let updated = path("bootc/tur-after-update.json");
     let text = ok(&["plan", "pin", "--from", updated]);
-    assert!(text.starts_with("Plan: pin\nDecision: proceed (TUR-UPDATE-PIN-001)\n"), "{text}");
-    assert!(text.contains("\n  1. /usr/bin/ostree admin pin booted\n"), "{text}");
+    assert!(
+        text.starts_with("Plan: pin\nDecision: proceed (TUR-UPDATE-PIN-001)\n"),
+        "{text}"
+    );
+    assert!(
+        text.contains("\n  1. /usr/bin/ostree admin pin booted\n"),
+        "{text}"
+    );
     assert!(!text.contains("restart"), "{text}");
     let text = ok(&["plan", "pin", "--from", updated, "--deployment", "rollback"]);
-    assert!(text.contains("\n  1. /usr/bin/ostree admin pin rollback\n"), "{text}");
+    assert!(
+        text.contains("\n  1. /usr/bin/ostree admin pin rollback\n"),
+        "{text}"
+    );
     let report = json(&["plan", "unpin", "--from", updated, "--json"]);
     assert_eq!(report["plan"]["decision"]["code"], "TUR-UPDATE-PIN-005");
     assert_eq!(report["plan"]["decision"]["outcome"], "nothing");
@@ -745,7 +875,15 @@ fn plan_pin_and_unpin_name_the_deployment_by_its_role() {
     );
     let report = json(&["plan", "pin", "--from", kept, "--json"]);
     assert_eq!(report["plan"]["decision"]["code"], "TUR-UPDATE-PIN-002");
-    let report = json(&["plan", "pin", "--from", kept, "--json", "--deployment", "rollback"]);
+    let report = json(&[
+        "plan",
+        "pin",
+        "--from",
+        kept,
+        "--json",
+        "--deployment",
+        "rollback",
+    ]);
     assert_eq!(report["plan"]["decision"]["code"], "TUR-UPDATE-PIN-003");
 }
 
@@ -769,7 +907,9 @@ fn commands_lists_everything_the_tool_names_and_what_it_runs() {
     assert_eq!(run[0]["subcommand"], serde_json::json!(["status"]));
     assert_eq!(run[0]["options"], serde_json::json!(["--format=json"]));
     let text = ok(&["commands"]);
-    assert!(text.contains("/usr/bin/bootc status --format=json\n  read-status: changes nothing; run by tur-update\n"));
+    assert!(text.contains(
+        "/usr/bin/bootc status --format=json\n  read-status: changes nothing; run by tur-update\n"
+    ));
     assert!(text.contains("/usr/bin/ostree admin pin --unpin <booted|rollback>\n  unpin: changes system; never run by tur-update\n"));
     assert_eq!(text.matches("never run by tur-update").count(), 6);
 }
@@ -845,7 +985,13 @@ fn input_that_cannot_be_read_is_a_coded_failure_and_nothing_is_printed() {
         (vec!["status", "--from", FIXTURES], "TUR-UPDATE-STATE-001"),
         // The boot-health file is missing, or is not a boot-health document.
         (
-            vec!["status", "--from", good, "--boot-health", "/nonexistent/h.json"],
+            vec![
+                "status",
+                "--from",
+                good,
+                "--boot-health",
+                "/nonexistent/h.json",
+            ],
             "TUR-UPDATE-STATE-007",
         ),
         (
@@ -877,7 +1023,10 @@ fn input_that_cannot_be_read_is_a_coded_failure_and_nothing_is_printed() {
             "{arguments:?}: {}",
             result.stderr
         );
-        assert!(result.stderr.contains("\nTechnical detail:\n"), "{arguments:?}");
+        assert!(
+            result.stderr.contains("\nTechnical detail:\n"),
+            "{arguments:?}"
+        );
     }
 }
 
@@ -891,7 +1040,15 @@ fn usage_errors_exit_with_two() {
         vec!["check", "--from", good, "--power", "solar"],
         vec!["check", "--from", good, "--battery-percent", "101"],
         vec!["check", "--from", good, "--battery-percent", "50"],
-        vec!["check", "--from", good, "--network", "offline", "--metered", "yes"],
+        vec![
+            "check",
+            "--from",
+            good,
+            "--network",
+            "offline",
+            "--metered",
+            "yes",
+        ],
         vec!["check", "--from", good, "--free-bytes", "-1"],
         vec!["plan"],
         vec!["plan", "stage"],
@@ -916,7 +1073,10 @@ fn help_and_version_say_that_nothing_is_changed() {
     // Whatever width the help is wrapped to.
     let flat = |text: &str| text.split_whitespace().collect::<Vec<_>>().join(" ");
     let help = ok(&["--help"]);
-    assert!(flat(&help).contains("It never changes the system."), "{help}");
+    assert!(
+        flat(&help).contains("It never changes the system."),
+        "{help}"
+    );
     for subcommand in ["status", "check", "plan", "commands", "codes"] {
         assert!(
             help.lines()

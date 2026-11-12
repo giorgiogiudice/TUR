@@ -110,7 +110,11 @@ fn every_fixture_has_a_recorded_source() {
                 assert_eq!(source["tag"], "v1.17.1", "{file}");
                 let path = source["path"].as_str().expect("a path");
                 assert!(path.starts_with("crates/lib/src/fixtures/spec-"), "{file}");
-                assert_eq!(source["blob_sha"].as_str().map(str::len), Some(40), "{file}");
+                assert_eq!(
+                    source["blob_sha"].as_str().map(str::len),
+                    Some(40),
+                    "{file}"
+                );
                 assert_eq!(source["licence"], "MIT OR Apache-2.0", "{file}");
                 assert!(file.starts_with("bootc-upstream/"), "{file}");
             }
@@ -258,7 +262,10 @@ fn the_installed_test_image_has_one_version_and_has_never_checked() {
         ostree.checksum,
         "24d79b42bb184000a57439f528f9078dce8d9465352d84bf6bf5bef8a20e9a69"
     );
-    assert_eq!((ostree.deploy_serial, ostree.stateroot.as_str()), (0, "default"));
+    assert_eq!(
+        (ostree.deploy_serial, ostree.stateroot.as_str()),
+        (0, "default")
+    );
     // No signature verification is configured for the test image.
     let follows = state.follows.as_ref().expect("an image to follow");
     assert_eq!(follows.reference, "localhost/tur-boot-test:ci");
@@ -289,7 +296,10 @@ fn a_staged_version_is_ready_and_boot_health_agrees() {
     assert_eq!(image.reference, "/run/tur-test/images:check-fails");
     // What the system follows is the staged image's reference.
     assert_eq!(
-        state.follows.as_ref().map(|follows| follows.reference.as_str()),
+        state
+            .follows
+            .as_ref()
+            .map(|follows| follows.reference.as_str()),
         Some("/run/tur-test/images:check-fails")
     );
     assert_eq!(state.update_state(), UpdateState::Ready);
@@ -349,7 +359,11 @@ fn after_a_fallback_the_failed_version_is_never_gone_back_to() {
         (decision.outcome, decision.code),
         (Outcome::Refuse, UpdateCode::PreviousVersionRejected)
     );
-    assert!(decision.reason.contains("sha256:d726caf08260…"), "{}", decision.reason);
+    assert!(
+        decision.reason.contains("sha256:d726caf08260…"),
+        "{}",
+        decision.reason
+    );
     // The update manager keeps checking for a corrected update.
     assert_eq!(next_step(&state, &conditions).action, Action::Check);
 }
@@ -362,7 +376,10 @@ fn after_a_good_update_the_previous_version_can_be_returned_to() {
     assert!(health.rejected.is_empty());
     let previous = state.rollback.as_ref().expect("the previous version");
     assert_eq!(
-        previous.image.as_ref().map(|image| image.reference.as_str()),
+        previous
+            .image
+            .as_ref()
+            .map(|image| image.reference.as_str()),
         Some("localhost/tur-boot-test:ci")
     );
     assert_eq!(state.update_state(), UpdateState::NotChecked);
@@ -386,7 +403,9 @@ fn an_update_that_was_not_applied_leaves_a_notice() {
     assert_eq!(notice.kind, "not-applied");
     assert_eq!(notice.error_code, "TUR-BOOT-TRIAL-001");
     assert!(
-        notice.text.starts_with("The update was not applied. TUR is still on "),
+        notice
+            .text
+            .starts_with("The update was not applied. TUR is still on "),
         "{}",
         notice.text
     );
@@ -421,10 +440,7 @@ fn in_a_container_bootc_reports_no_booted_deployment() {
     assert!(host.status.staged.is_none() && host.status.rollback.is_none());
     assert!(host.status.host_type.is_none());
     assert!(!host.status.read_only && !host.status.rollback_queued);
-    assert_eq!(
-        SystemState::from_host(&host),
-        Err(StateError::NotBootcHost)
-    );
+    assert_eq!(SystemState::from_host(&host), Err(StateError::NotBootcHost));
 }
 
 // ---------------------------------------------------------------------------
@@ -439,7 +455,10 @@ fn a_cached_update_is_an_available_update_unless_it_is_what_runs() {
     assert_eq!(image.version.as_deref(), Some("stream9.20240901.0"));
     assert_eq!(image.timestamp.as_deref(), Some("2024-09-01T12:00:00Z"));
     assert_eq!(newer.update_state(), UpdateState::Available);
-    assert_eq!(newer.update_message(), "TUR stream9.20240901.0 is available.");
+    assert_eq!(
+        newer.update_message(),
+        "TUR stream9.20240901.0 is available."
+    );
     let decision = decide_stage(&newer, &conditions, Requester::Automatic);
     assert_eq!(
         (decision.outcome, decision.code),
@@ -479,7 +498,11 @@ fn a_held_deployment_is_told_from_a_ready_one() {
         UpdateCode::AlreadyStaged
     );
     let held = state("bootc-upstream/staged-download-only.json");
-    assert!(held.staged.as_ref().is_some_and(|staged| staged.download_only));
+    assert!(
+        held.staged
+            .as_ref()
+            .is_some_and(|staged| staged.download_only)
+    );
     assert_eq!(held.update_state(), UpdateState::Held);
     assert_eq!(
         held.update_message(),
@@ -535,11 +558,21 @@ fn a_system_that_is_not_a_plain_image_is_not_updated() {
     let layered = state("bootc-upstream/rfe-ostree-deployment.json");
     assert!(layered.booted.image.is_none() && !layered.booted.managed());
     assert!(layered.follows.is_none());
-    assert!(layered.staged.as_ref().is_some_and(|staged| staged.incompatible));
+    assert!(
+        layered
+            .staged
+            .as_ref()
+            .is_some_and(|staged| staged.incompatible)
+    );
     // Booted from such a commit, with an image staged to move to.
     let moving = state("bootc-upstream/ostree-to-bootc.json");
     assert!(moving.booted.image.is_none());
-    assert!(moving.staged.as_ref().is_some_and(|staged| staged.managed()));
+    assert!(
+        moving
+            .staged
+            .as_ref()
+            .is_some_and(|staged| staged.managed())
+    );
     for state in [&layered, &moving] {
         let conditions = Conditions::favourable();
         assert_eq!(

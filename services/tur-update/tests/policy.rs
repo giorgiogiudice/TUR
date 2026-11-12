@@ -402,7 +402,12 @@ fn each_rule_alone_gives_its_code() {
     assert_eq!(rows.len(), 26);
     for (name, conditions, automatic, person) in rows {
         let decision = decide_stage(&state, &conditions, Requester::Automatic);
-        assert_decision(&decision, automatic.0, automatic.1, &format!("{name}, automatic"));
+        assert_decision(
+            &decision,
+            automatic.0,
+            automatic.1,
+            &format!("{name}, automatic"),
+        );
         assert!(decision.also.is_empty(), "{name}: {:?}", decision.also);
         let decision = decide_stage(&state, &conditions, Requester::Person);
         assert_decision(&decision, person.0, person.1, &format!("{name}, person"));
@@ -478,7 +483,11 @@ fn notes_say_what_was_not_checked_and_what_a_person_overrode() {
     );
     assert_eq!(retry.severity, Severity::Warning);
     assert_eq!(retry.notes.len(), 1);
-    assert!(retry.notes[0].contains("It stays there."), "{:?}", retry.notes);
+    assert!(
+        retry.notes[0].contains("It stays there."),
+        "{:?}",
+        retry.notes
+    );
     // A kept version is not removed to make room.
     let mut kept = available();
     kept.booted.pinned = true;
@@ -577,18 +586,38 @@ fn with_nothing_to_stage_that_is_the_answer() {
     for conditions in [favourable(), worst] {
         for requester in [Requester::Automatic, Requester::Person] {
             let decision = decide_stage(&not_checked(), &conditions, requester);
-            assert_decision(&decision, Outcome::Nothing, UpdateCode::NotChecked, "unchecked");
+            assert_decision(
+                &decision,
+                Outcome::Nothing,
+                UpdateCode::NotChecked,
+                "unchecked",
+            );
             let decision = decide_stage(&up_to_date(), &conditions, requester);
-            assert_decision(&decision, Outcome::Nothing, UpdateCode::UpToDate, "up to date");
+            assert_decision(
+                &decision,
+                Outcome::Nothing,
+                UpdateCode::UpToDate,
+                "up to date",
+            );
             assert!(decision.reason.contains("TUR 0.3.2"), "{}", decision.reason);
             let decision = decide_stage(&staged_ready(), &conditions, requester);
-            assert_decision(&decision, Outcome::Nothing, UpdateCode::AlreadyStaged, "staged");
+            assert_decision(
+                &decision,
+                Outcome::Nothing,
+                UpdateCode::AlreadyStaged,
+                "staged",
+            );
             assert!(decision.reason.contains("TUR 0.4.0"), "{}", decision.reason);
             // Staged by someone, with no check on record.
             let mut by_hand = staged_ready();
             by_hand.update = UpdateKnowledge::NotChecked;
             let decision = decide_stage(&by_hand, &conditions, requester);
-            assert_decision(&decision, Outcome::Nothing, UpdateCode::AlreadyStaged, "by hand");
+            assert_decision(
+                &decision,
+                Outcome::Nothing,
+                UpdateCode::AlreadyStaged,
+                "by hand",
+            );
         }
     }
 }
@@ -683,7 +712,12 @@ fn a_newer_update_replaces_the_staged_one() {
         &with(|c| c.network = Network::Offline),
         Requester::Automatic,
     );
-    assert_decision(&decision, Outcome::Wait, UpdateCode::Offline, "superseded, offline");
+    assert_decision(
+        &decision,
+        Outcome::Wait,
+        UpdateCode::Offline,
+        "superseded, offline",
+    );
 }
 
 #[test]
@@ -739,7 +773,12 @@ fn a_system_bootc_cannot_update_is_refused_before_anything_else() {
 fn a_check_needs_only_a_network() {
     let state = not_checked();
     let decision = decide_check(&state, &favourable());
-    assert_decision(&decision, Outcome::Proceed, UpdateCode::CheckAllowed, "favourable");
+    assert_decision(
+        &decision,
+        Outcome::Proceed,
+        UpdateCode::CheckAllowed,
+        "favourable",
+    );
     assert_eq!(
         decision.reason,
         "the system follows example.org/tur:stable (registry)"
@@ -747,7 +786,12 @@ fn a_check_needs_only_a_network() {
     assert!(decision.notes.is_empty());
     // Nothing known about the conditions at all: a check may run.
     let decision = decide_check(&state, &Conditions::default());
-    assert_decision(&decision, Outcome::Proceed, UpdateCode::CheckAllowed, "unknown");
+    assert_decision(
+        &decision,
+        Outcome::Proceed,
+        UpdateCode::CheckAllowed,
+        "unknown",
+    );
     // On a dying battery, in a repair session, with a full disk and a
     // metered connection, with boot health unknown: a check may run.
     let harsh = with(|c| {
@@ -759,9 +803,18 @@ fn a_check_needs_only_a_network() {
         c.settings.automatic_download = false;
     });
     let decision = decide_check(&state, &harsh);
-    assert_decision(&decision, Outcome::Proceed, UpdateCode::CheckAllowed, "harsh");
+    assert_decision(
+        &decision,
+        Outcome::Proceed,
+        UpdateCode::CheckAllowed,
+        "harsh",
+    );
     assert_eq!(decision.notes.len(), 1);
-    assert!(decision.notes[0].contains("a few kilobytes"), "{:?}", decision.notes);
+    assert!(
+        decision.notes[0].contains("a few kilobytes"),
+        "{:?}",
+        decision.notes
+    );
     // Offline: the desktop's sentence, word for word.
     let decision = decide_check(&state, &with(|c| c.network = Network::Offline));
     assert_decision(&decision, Outcome::Wait, UpdateCode::Offline, "offline");
@@ -804,7 +857,10 @@ fn the_update_manager_checks_stages_or_waits() {
     assert_eq!(next.action, Action::Nothing);
     assert_eq!(next.stage.code, UpdateCode::AlreadyStaged);
     // Held: release it.
-    assert_eq!(next_step(&staged_held(), &favourable()).action, Action::Stage);
+    assert_eq!(
+        next_step(&staged_held(), &favourable()).action,
+        Action::Stage
+    );
     // The known update failed here: keep checking for a corrected one, and
     // do not stage this one.
     let rejected = with(|c| c.boot_health = Some(rejecting('b')));
@@ -864,7 +920,12 @@ fn going_back_needs_a_previous_version_that_worked() {
     let mut queued = updated();
     queued.rollback_queued = true;
     let decision = decide_rollback(&queued, &favourable());
-    assert_decision(&decision, Outcome::Nothing, UpdateCode::RollbackQueued, "queued");
+    assert_decision(
+        &decision,
+        Outcome::Nothing,
+        UpdateCode::RollbackQueued,
+        "queued",
+    );
     // The previous version is the one that failed here.
     let decision = decide_rollback(&updated(), &with(|c| c.boot_health = Some(rejecting('a'))));
     assert_decision(
@@ -902,7 +963,12 @@ fn going_back_needs_a_previous_version_that_worked() {
         health(|h| h.verdict = None),
     ] {
         let decision = decide_rollback(&updated(), &with(|c| c.boot_health = change));
-        assert_decision(&decision, Outcome::Wait, UpdateCode::TrialInProgress, "trial");
+        assert_decision(
+            &decision,
+            Outcome::Wait,
+            UpdateCode::TrialInProgress,
+            "trial",
+        );
     }
     // The running version failed its checks: that is a reason to go back.
     let failed = with(|c| c.boot_health = health(|h| h.verdict = Some(Verdict::Failed)));
@@ -911,10 +977,20 @@ fn going_back_needs_a_previous_version_that_worked() {
     let mut live_media = updated();
     live_media.read_only = true;
     let decision = decide_rollback(&live_media, &favourable());
-    assert_decision(&decision, Outcome::Refuse, UpdateCode::ReadOnlyMedium, "read-only");
+    assert_decision(
+        &decision,
+        Outcome::Refuse,
+        UpdateCode::ReadOnlyMedium,
+        "read-only",
+    );
     live_media.rollback = None;
     let decision = decide_rollback(&live_media, &favourable());
-    assert_decision(&decision, Outcome::Refuse, UpdateCode::ReadOnlyMedium, "read-only");
+    assert_decision(
+        &decision,
+        Outcome::Refuse,
+        UpdateCode::ReadOnlyMedium,
+        "read-only",
+    );
     assert_eq!(decision.also, [UpdateCode::NoPreviousVersion]);
     // Rejected and on trial at once: the refusal comes first.
     let both = with(|c| {
@@ -942,7 +1018,12 @@ fn going_back_does_not_depend_on_power_network_space_or_settings() {
         c.settings.automatic_download = false;
     });
     let decision = decide_rollback(&updated(), &harsh);
-    assert_decision(&decision, Outcome::Proceed, UpdateCode::RollbackAllowed, "harsh");
+    assert_decision(
+        &decision,
+        Outcome::Proceed,
+        UpdateCode::RollbackAllowed,
+        "harsh",
+    );
     assert!(decision.notes.is_empty());
     // What it says besides: boot health unknown, a staged update, a session.
     let mut state = updated();
@@ -990,14 +1071,24 @@ fn keeping_and_releasing_name_the_version_in_use_or_the_previous_one() {
         let decision = decide_pin(&kept, slot);
         assert_decision(&decision, Outcome::Nothing, UpdateCode::AlreadyKept, "pin");
         let decision = decide_unpin(&kept, slot);
-        assert_decision(&decision, Outcome::Proceed, UpdateCode::UnpinAllowed, "unpin");
+        assert_decision(
+            &decision,
+            Outcome::Proceed,
+            UpdateCode::UnpinAllowed,
+            "unpin",
+        );
     }
     // There is no previous version.
     for decision in [
         decide_pin(&available(), Slot::Rollback),
         decide_unpin(&available(), Slot::Rollback),
     ] {
-        assert_decision(&decision, Outcome::Refuse, UpdateCode::NoSuchVersion, "none");
+        assert_decision(
+            &decision,
+            Outcome::Refuse,
+            UpdateCode::NoSuchVersion,
+            "none",
+        );
         assert_eq!(decision.reason, "bootc reports no rollback deployment");
     }
     // A staged version, or any other, cannot be named.
@@ -1006,7 +1097,12 @@ fn keeping_and_releasing_name_the_version_in_use_or_the_previous_one() {
             decide_pin(&staged_ready(), slot),
             decide_unpin(&staged_ready(), slot),
         ] {
-            assert_decision(&decision, Outcome::Refuse, UpdateCode::NoSuchVersion, "slot");
+            assert_decision(
+                &decision,
+                Outcome::Refuse,
+                UpdateCode::NoSuchVersion,
+                "slot",
+            );
         }
     }
     assert!(
@@ -1041,7 +1137,10 @@ fn keeping_and_releasing_name_the_version_in_use_or_the_previous_one() {
 // ---------------------------------------------------------------------------
 
 fn lines(plan: &tur_update::Plan) -> Vec<String> {
-    plan.steps.iter().map(|step| step.command.join(" ")).collect()
+    plan.steps
+        .iter()
+        .map(|step| step.command.join(" "))
+        .collect()
 }
 
 #[test]
@@ -1059,7 +1158,11 @@ fn the_plan_for_staging_downloads_held_verifies_and_releases() {
             "/usr/bin/bootc upgrade --from-downloaded",
         ]
     );
-    assert!(plan.steps[1].effect.contains(&digest('b')), "{}", plan.steps[1].effect);
+    assert!(
+        plan.steps[1].effect.contains(&digest('b')),
+        "{}",
+        plan.steps[1].effect
+    );
     assert_eq!(
         plan.effects,
         [
@@ -1174,8 +1277,16 @@ fn the_plans_for_keeping_and_releasing() {
 fn a_plan_has_steps_only_when_the_decision_is_to_proceed() {
     let state = updated();
     let empty = [
-        plan_stage(&available(), &with(|c| c.boot_health = None), Requester::Person),
-        plan_stage(&available(), &with(|c| c.network = Network::Offline), Requester::Person),
+        plan_stage(
+            &available(),
+            &with(|c| c.boot_health = None),
+            Requester::Person,
+        ),
+        plan_stage(
+            &available(),
+            &with(|c| c.network = Network::Offline),
+            Requester::Person,
+        ),
         plan_stage(&up_to_date(), &favourable(), Requester::Automatic),
         plan_stage(&staged_ready(), &favourable(), Requester::Automatic),
         plan_rollback(&available(), &favourable()),
@@ -1430,7 +1541,10 @@ fn every_combination_keeps_the_promises_of_the_policy() {
                     let known = COMMANDS.iter().find(|command| command.id == step.id);
                     let known = known.unwrap_or_else(|| panic!("{context}: {}", step.id));
                     assert_eq!(step.command, known.argv(None), "{context}");
-                    assert!(!step.command.iter().any(|word| word == "--apply"), "{context}");
+                    assert!(
+                        !step.command.iter().any(|word| word == "--apply"),
+                        "{context}"
+                    );
                 }
                 if !decision.proceeds() {
                     continue;
@@ -1460,7 +1574,11 @@ fn every_combination_keeps_the_promises_of_the_policy() {
                 // release downloads nothing.
                 assert_eq!(
                     plan.steps[0].id,
-                    if downloads { "stage-held" } else { "read-status" },
+                    if downloads {
+                        "stage-held"
+                    } else {
+                        "read-status"
+                    },
                     "{context}"
                 );
                 assert_eq!(plan.steps.last().map(|step| step.id), Some("release"));

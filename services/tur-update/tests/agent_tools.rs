@@ -196,7 +196,10 @@ fn every_tool_only_observes() {
     ];
     for tool in tools {
         assert_eq!(tool["input_schema"]["properties"], json!({}), "{tool}");
-        assert_eq!(tool["input_schema"]["additionalProperties"], false, "{tool}");
+        assert_eq!(
+            tool["input_schema"]["additionalProperties"], false,
+            "{tool}"
+        );
         let name = tool["name"].as_str().expect("a name");
         assert!(name.starts_with("update_"), "{name}");
         for field in ["name", "method"] {

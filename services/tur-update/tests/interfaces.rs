@@ -91,7 +91,10 @@ fn dbus_interface_has_the_documented_members() {
     for method in xml_names(&xml, "method") {
         let lowered = method.to_lowercase();
         for word in ["reboot", "restart", "apply", "shutdown", "poweroff"] {
-            assert!(!lowered.contains(word), "D-Bus method {method} offers {word}");
+            assert!(
+                !lowered.contains(word),
+                "D-Bus method {method} offers {word}"
+            );
         }
     }
 }
@@ -249,7 +252,13 @@ fn the_sources_read_no_environment_write_no_file_and_start_only_bootc_status() {
             assert!(!text.contains(forbidden), "{name} contains {forbidden}");
         }
         // No clock, no network, no thread.
-        for forbidden in ["SystemTime", "Instant", "TcpStream", "UdpSocket", "thread::"] {
+        for forbidden in [
+            "SystemTime",
+            "Instant",
+            "TcpStream",
+            "UdpSocket",
+            "thread::",
+        ] {
             assert!(!text.contains(forbidden), "{name} contains {forbidden}");
         }
         if !is_probe {
@@ -271,7 +280,10 @@ fn the_sources_read_no_environment_write_no_file_and_start_only_bootc_status() {
         assert_eq!(text.matches(".env_clear()").count(), 1, "{name}");
         assert_eq!(text.matches(".env(").count(), 2, "{name}");
         assert!(text.contains(".env(\"LC_ALL\", \"C.UTF-8\")"), "{name}");
-        assert!(text.contains(".env(\"PATH\", \"/usr/sbin:/usr/bin\")"), "{name}");
+        assert!(
+            text.contains(".env(\"PATH\", \"/usr/sbin:/usr/bin\")"),
+            "{name}"
+        );
         assert_eq!(
             text.matches(".stdin(std::process::Stdio::null())").count(),
             1
@@ -292,8 +304,9 @@ fn the_sources_read_no_environment_write_no_file_and_start_only_bootc_status() {
         // And the command line is the one that prints the deployments.
         assert!(shipped.contains("pub const STATUS_PROGRAM: &str = \"/usr/bin/bootc\";"));
         assert!(
-            shipped
-                .contains("pub const STATUS_ARGUMENTS: [&str; 2] = [\"status\", \"--format=json\"];")
+            shipped.contains(
+                "pub const STATUS_ARGUMENTS: [&str; 2] = [\"status\", \"--format=json\"];"
+            )
         );
     }
     assert_eq!(probes, 1);
@@ -315,7 +328,11 @@ fn commands_that_change_the_system_are_named_in_one_file_only() {
         "/usr/bin/ostree",
     ];
     for file in rust_files("src") {
-        let base = file.file_name().expect("a name").to_string_lossy().into_owned();
+        let base = file
+            .file_name()
+            .expect("a name")
+            .to_string_lossy()
+            .into_owned();
         if base == "plan.rs" {
             continue;
         }
