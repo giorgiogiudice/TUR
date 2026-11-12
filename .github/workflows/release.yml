@@ -235,6 +235,7 @@ jobs:
 
       - name: Re-chunk
         run: |
+          set -o pipefail
           previous=""
           if [ "$PUBLISH" = 1 ] && skopeo inspect --raw "docker://$PUBLISHED_REPOSITORY:testing" > /dev/null 2>&1; then
             previous="docker://$PUBLISHED_REPOSITORY:testing"

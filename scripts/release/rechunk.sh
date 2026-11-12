@@ -55,6 +55,7 @@ out="$(cd "$(dirname "${out}")" && pwd)/$(basename "${out}")"
 # ID, the revision and the base it was built on stay readable from the
 # registry.
 labels=()
+# shellcheck disable=SC2016  # a Go template, for podman
 while IFS= read -r label; do
     [ -n "${label}" ] && labels+=(--label "${label}")
 done < <("${podman[@]}" image inspect "${tool}" \
@@ -73,6 +74,7 @@ echo "input:     ${archive} (image sha256:${image_id})"
 echo "labels:    $(( ${#labels[@]} / 2 )) carried over"
 echo "plan from: ${previous:-none (first layout)}"
 started="$(date +%s)"
+# shellcheck disable=SC2016  # expanded by the shell in the container
 "${podman[@]}" run --rm --privileged --security-opt label=disable \
     -v "${store}:/var/lib/containers" \
     -v "${archive}:/run/tur-input.oci.tar:ro" \

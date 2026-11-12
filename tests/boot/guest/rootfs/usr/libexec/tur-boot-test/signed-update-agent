@@ -132,6 +132,7 @@ put mark_good_before "$(systemctl show -p ActiveState --value tur-boot-mark-good
 cap bootc-status-before.json bootc status --format=json
 cap policy.json cat /usr/share/containers/policy.json
 cap etc-policy.txt ls -la /etc/containers/policy.json
+# shellcheck disable=SC2016  # expanded by the inner shell
 cap registries-d.txt bash -c 'for f in /usr/share/containers/registries.d/*.yaml /etc/containers/registries.d/*.yaml; do echo "### $f"; cat "$f"; done'
 cap signing-shipped.txt bash -c "ls -la ${signing}; sha256sum ${signing}/*"
 cap versions.txt bash -c 'bootc --version; skopeo --version; rpm -q containers-common skopeo bootc ostree'
