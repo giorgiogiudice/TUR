@@ -1,0 +1,3 @@
+# Only the image definition is sent to the build.
+*
+!image/

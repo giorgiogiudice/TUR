@@ -80,7 +80,42 @@ failures and skipped steps plainly.
 
 ## Build environment
 
-- CI runs on GitHub Actions. Image builds and VM boot tests run there, not on
-  developer machines ([ADR-0002](docs/adr/0002-ci-and-build-infrastructure.md)).
-- Tests that need real hardware are recorded as **not run** until a hardware runner
-  exists. Do not substitute a VM result for a bare-metal result.
+**Nothing is compiled, built or booted on a development machine.** The machines
+agents run on are shared and small. CI is the only compiler and the only place an
+image is built or a VM is started
+([ADR-0002](docs/adr/0002-ci-and-build-infrastructure.md),
+[ADR-0005](docs/adr/0005-languages-and-workspace.md)).
+
+- Do not install a Rust toolchain, and do not run `cargo`, `podman build`,
+  `docker build` or `qemu` locally.
+- Work on a branch, push, and let CI judge:
+
+  ```sh
+  git push -u origin HEAD
+  scripts/dev/ci.py wait            # waits for every run on HEAD; prints failures
+  scripts/dev/ci.py fixes RUN DIR   # applies CI's Cargo.lock and rustfmt patch
+  scripts/dev/ci.py pr --title "..." --body-file body.md
+  ```
+
+- A pull request is ready when every workflow on its head commit is green.
+- Do not merge your own pull request. Do not push to `main`.
+- Tests that need real hardware are recorded as **not run** until a hardware
+  runner exists. Do not substitute a VM result for a bare-metal result.
+
+## Layout
+
+| Path | Content | Language |
+|---|---|---|
+| `image/` | OS image definition | Containerfile, shell |
+| `crates/` | Shared Rust libraries | Rust |
+| `services/` | UOS services and their command-line tools | Rust |
+| `installer/` | Installer | Rust, QML |
+| `desktop/` | Desktop UI | QML |
+| `schemas/` | Versioned JSON schemas for every interchange format | JSON Schema |
+| `tests/` | Image, boot, installer and integration tests | shell, Python |
+| `scripts/` | Build and CI scripts; `scripts/dev/` for developer helpers | shell, Python |
+| `docs/` | Specification, subsystem designs, ADRs | Markdown |
+
+Each Rust component is its own Cargo workspace (its `Cargo.toml` has a
+`[workspace]` table) and depends on shared code by path. Every source file starts
+with an SPDX licence identifier.

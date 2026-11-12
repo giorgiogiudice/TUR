@@ -21,6 +21,7 @@ the [specification](../architecture/specification.md).
 | [0002](0002-ci-and-build-infrastructure.md) | CI and build infrastructure: GitHub Actions first | Accepted |
 | [0003](0003-licence.md) | Licence: PolyForm Noncommercial 1.0.0 | Accepted |
 | [0004](0004-ai-provider-model.md) | AI layer: optional, provider-agnostic, user-supplied key | Accepted |
+| [0005](0005-languages-and-workspace.md) | Implementation languages and workspace layout | Accepted |
 
 ## Open questions from the specification
 

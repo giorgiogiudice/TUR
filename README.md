@@ -21,10 +21,11 @@ image-based, recoverable by design, and optionally driven end to end by AI.**
 ---
 
 > [!IMPORTANT]
-> **UOS is at the specification stage. There is nothing to install yet.**
-> This repository currently holds the architecture, the engineering rules and the
-> decision records. The first build milestone is an image that boots in a virtual
-> machine and proves automatic rollback. See [Project status](#project-status).
+> **UOS is pre-alpha. There is nothing to install yet.**
+> The architecture, engineering rules and decision records are in place and the
+> first components are being built. The first milestone is an image that boots in
+> a virtual machine and proves automatic rollback. See
+> [Project status](#project-status).
 
 ## What UOS is
 
@@ -94,8 +95,8 @@ firmware and encryption always require confirmation from a person through a prom
 that the assistant cannot operate. Every action is logged, and a visible indicator
 shows whenever the assistant is observing or controlling the session.
 
-The detailed design and threat model are under review in
-[pull request #1](https://github.com/giorgiogiudice/UOS/pull/1).
+The detailed design and threat model are in
+[`docs/architecture/ai-control-layer.md`](docs/architecture/ai-control-layer.md).
 
 ## Architecture
 
@@ -184,14 +185,15 @@ lists each project and how it is used.
 
 ## Project status
 
-**Pre-alpha — specification and repository foundation.** No image has been built.
+**Pre-alpha.** An image builds in CI; nothing is installable yet.
 
 | Area | State |
 |---|---|
 | Architecture specification | Revision 1.0 published |
 | Foundational decisions | Recorded in [`docs/adr`](docs/adr/README.md) |
-| AI control layer design | Draft under review |
-| OS image, services, installer | Not started |
+| AI control layer design | Addendum A accepted; revision in progress |
+| OS image | Builds in CI from a pinned base; not yet boot-tested |
+| Services, installer | In development |
 
 ## Roadmap
 

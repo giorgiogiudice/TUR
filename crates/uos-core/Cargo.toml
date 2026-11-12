@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+[package]
+name = "uos-core"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+license = "PolyForm-Noncommercial-1.0.0"
+description = "Types shared by every UOS component: stable error codes and schema versions."
+repository = "https://github.com/giorgiogiudice/UOS"
+publish = false
+
+# Each component is its own workspace with its own lockfile. See ADR-0005.
+[workspace]
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"

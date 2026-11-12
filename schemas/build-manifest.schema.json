@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/giorgiogiudice/UOS/schemas/build-manifest.schema.json",
+  "title": "UOS build manifest",
+  "description": "Machine-readable record of what a UOS image was built from and what it contains. Every value is read from the build; null means the value could not be determined or the component is absent.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "uos_version", "build_id", "source_revision", "source_date_epoch",
+    "architecture", "image", "base", "kernel_release", "kernel_config_sha256",
+    "kernel_config", "bootloader", "desktop", "security", "packages", "rpm_count",
+    "runtime_versions", "sbom"
+  ],
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "version_or_absent": { "type": ["string", "null"], "minLength": 1 }
+  },
+  "properties": {
+    "schema_version": { "const": 1 },
+    "uos_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.-]+)?$" },
+    "build_id": { "type": "string", "pattern": "^[0-9]{8}\\.g[0-9a-f]{12}(\\.dirty)?$" },
+    "source_revision": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "source_date_epoch": { "type": "integer", "minimum": 1 },
+    "architecture": { "enum": ["x86_64"] },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "digest"],
+      "properties": {
+        "id": { "$ref": "#/$defs/sha256" },
+        "digest": { "oneOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }] }
+      }
+    },
+    "base": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["image", "tag", "digest", "version", "os_id", "os_version_id", "variant_id"],
+      "properties": {
+        "image": { "type": "string", "minLength": 1 },
+        "tag": { "type": "string", "minLength": 1 },
+        "digest": { "$ref": "#/$defs/digest" },
+        "version": { "type": "string", "minLength": 1 },
+        "os_id": { "type": "string", "minLength": 1 },
+        "os_version_id": { "type": "string", "minLength": 1 },
+        "variant_id": { "type": ["string", "null"] }
+      }
+    },
+    "kernel_release": { "type": "string", "minLength": 1 },
+    "kernel_config_sha256": { "$ref": "#/$defs/sha256" },
+    "initramfs_sha256": { "oneOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }] },
+    "kernel_config": {
+      "type": "object",
+      "additionalProperties": { "type": "string", "minLength": 1 }
+    },
+    "bootloader": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["grub2_efi", "shim", "systemd_boot"],
+      "properties": {
+        "grub2_efi": { "$ref": "#/$defs/version_or_absent" },
+        "shim": { "$ref": "#/$defs/version_or_absent" },
+        "systemd_boot": { "$ref": "#/$defs/version_or_absent" }
+      }
+    },
+    "desktop": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "plasma_workspace", "kwin", "qt6", "display_manager", "default_target"],
+      "properties": {
+        "name": { "const": "KDE Plasma" },
+        "plasma_workspace": { "type": "string", "minLength": 1 },
+        "kwin": { "type": "string", "minLength": 1 },
+        "qt6": { "$ref": "#/$defs/version_or_absent" },
+        "display_manager": { "type": ["string", "null"] },
+        "default_target": { "type": "string", "minLength": 1 }
+      }
+    },
+    "security": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["selinux"],
+      "properties": { "selinux": { "type": "string", "minLength": 1 } }
+    },
+    "packages": {
+      "type": "object",
+      "minProperties": 10,
+      "additionalProperties": { "type": "string", "minLength": 1 }
+    },
+    "rpm_count": { "type": "integer", "minimum": 500 },
+    "runtime_versions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["wine", "proton", "darling", "dxvk", "vkd3d_proton"],
+      "properties": {
+        "wine": { "$ref": "#/$defs/version_or_absent" },
+        "proton": { "$ref": "#/$defs/version_or_absent" },
+        "darling": { "$ref": "#/$defs/version_or_absent" },
+        "dxvk": { "$ref": "#/$defs/version_or_absent" },
+        "vkd3d_proton": { "$ref": "#/$defs/version_or_absent" }
+      }
+    },
+    "sbom": { "type": ["string", "null"] }
+  }
+}

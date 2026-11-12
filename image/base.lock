@@ -1,0 +1,8 @@
+# Pinned base image for UOS. See ADR-0001 and image/README.md.
+# Update only through scripts/update-base-pin.sh, in its own change, so CI
+# proves the new base builds and passes the image tests.
+BASE_IMAGE=quay.io/fedora/fedora-kinoite
+BASE_TAG=45
+BASE_DIGEST=sha256:f857f6c5da48a7c39721e40de51d9c0fef446a25e0360be4fb8964cbdf48f537
+BASE_VERSION=45.20261112.0
+BASE_VERIFIED=2026-11-12
