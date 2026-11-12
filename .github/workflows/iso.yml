@@ -1,0 +1,528 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Installer medium (TUR-007, ADR-0018): build the bootable USB/ISO image that
+# installs TUR onto a whole disk, and prove it in a virtual machine: start the
+# medium under UEFI with no network, install the way a person would, remove
+# the medium, start the installed disk. See installer/iso, tests/iso and
+# docs/reports/TUR-007.md.
+#
+# Two jobs build the image from this commit with scripts/build-image.sh, as
+# the `image` workflow does:
+#
+#   product   the medium that carries the product image: what a person writes
+#             to a USB stick. Refusal tests, installations, first start.
+#   proof     a medium built the same way that carries the boot-test image, so
+#             that the boot test's checks and boot-health scenarios can run on
+#             a disk installed from a medium.
+#
+# THE MEDIUM IS NOT UPLOADED BY DEFAULT. This repository is public and the
+# image still contains Fedora's logos and release packages, which may not be
+# distributed in a derived system (issue 11). Every run uploads the manifest,
+# checksums, logs and screenshots. The medium itself is uploaded only when the
+# workflow is started by hand with `upload_medium` set, for the project's own
+# test machines, and is deleted after three days.
+name: iso
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "installer/iso/**"
+      - "tests/iso/**"
+      - "image/**"
+      # Programs compiled into the image, and what they are compiled with.
+      - "services/tur-boot-health/**"
+      - "crates/**"
+      - "rust-toolchain.toml"
+      # The boot test's harness, which tests/iso builds on.
+      - "tests/boot/**"
+      - "scripts/build-image.sh"
+      - "VERSION"
+      - ".github/workflows/iso.yml"
+  pull_request:
+    paths:
+      - "installer/iso/**"
+      - "tests/iso/**"
+      - "image/**"
+      # Programs compiled into the image, and what they are compiled with.
+      - "services/tur-boot-health/**"
+      - "crates/**"
+      - "rust-toolchain.toml"
+      # The boot test's harness, which tests/iso builds on.
+      - "tests/boot/**"
+      - "scripts/build-image.sh"
+      - "VERSION"
+      - ".github/workflows/iso.yml"
+  workflow_dispatch:
+    inputs:
+      upload_medium:
+        description: >-
+          Upload the installer medium as an artifact (three days). Only for the
+          project's own test machines: the image still carries Fedora's marks
+          and must not be passed on (issue 11).
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: iso-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PODMAN: sudo podman
+  SKOPEO: sudo skopeo
+  IMAGE: localhost/tur:ci
+
+jobs:
+  lint:
+    name: Lint the medium's scripts and tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Lint
+        run: |
+          shellcheck --version | sed -n 2p
+          shellcheck -x installer/iso/*.sh tests/iso/*.sh \
+            installer/iso/rootfs/usr/libexec/tur-installer/tur-install
+          python3 -m py_compile installer/iso/*.py tests/iso/*.py
+
+  product:
+    name: Product medium - build, install, first start
+    needs: lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 110
+    env:
+      OUT: out/iso
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Runner environment
+        run: |
+          echo "podman: $(podman --version)"
+          echo "skopeo: $(skopeo --version)"
+          echo "kernel: $(uname -r)"
+          echo "cpus:   $(nproc) ($(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2 | xargs))"
+          free -g | sed -n 2p
+          df -h / /mnt 2>/dev/null || df -h /
+          mkdir -p "$OUT/host"
+
+      # Hosted runners expose /dev/kvm but not to the runner user. The udev rule
+      # is the method GitHub documents (see .github/workflows/boot.yml).
+      - name: Enable KVM for the runner user
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          sudo udevadm settle
+          ls -la /dev/kvm
+
+      # No software-emulation fallback (ADR-0002): without KVM the job stops here.
+      - name: Verify KVM
+        run: python3 tests/boot/check-kvm.py "$OUT/host/kvm.json"
+
+      # The image, the installer environment, the medium (twice while it is
+      # assembled) and three installed disks need about 50 GB.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache/CodeQL
+          df -h / /mnt 2>/dev/null || df -h /
+
+      - name: Choose a work directory
+        run: |
+          work="$RUNNER_TEMP/tur-iso"
+          here=$(df --output=avail -B1G "$RUNNER_TEMP" | tail -1 | tr -d ' G')
+          if [ -d /mnt ]; then
+            there=$(df --output=avail -B1G /mnt | tail -1 | tr -d ' G')
+            if [ "$there" -gt "$here" ]; then
+              sudo mkdir -p /mnt/tur-iso
+              sudo chown "$(id -u):$(id -g)" /mnt/tur-iso
+              work=/mnt/tur-iso
+            fi
+          fi
+          mkdir -p "$work"
+          echo "work directory: $work ($(df --output=avail -h "$work" | tail -1 | xargs) free)"
+          echo "WORK=$work" >> "$GITHUB_ENV"
+
+      - name: Install QEMU, UEFI firmware and the tools that assemble the medium
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils ovmf \
+            xorriso squashfs-tools mtools dosfstools
+          qemu-system-x86_64 --version | head -1
+          dpkg-query -W -f='${Package} ${Version}\n' qemu-system-x86 ovmf xorriso squashfs-tools mtools dosfstools \
+            | tee "$OUT/host/tool-packages.txt"
+          ls -la /usr/share/OVMF/ | tee "$OUT/host/ovmf-files.txt"
+
+      - name: Build image
+        run: |
+          start=$(date +%s)
+          TUR_BUILD_ID_FILE="$RUNNER_TEMP/build-id" scripts/build-image.sh "$IMAGE" \
+            --ignorefile image/Containerfile.containerignore
+          echo "BUILD_ID=$(cat "$RUNNER_TEMP/build-id")" >> "$GITHUB_ENV"
+          echo "IMAGE_BUILD_SECONDS=$(( $(date +%s) - start ))" >> "$GITHUB_ENV"
+          sudo podman image inspect -f 'image id: {{.Id}}' "$IMAGE" | tee "$OUT/host/image-id.txt"
+          df -h / | tail -1
+
+      - name: Build the installer medium
+        run: |
+          start=$(date +%s)
+          installer/iso/build-medium.sh "$IMAGE" "$WORK" "$OUT/medium"
+          echo "MEDIUM=$WORK/medium/tur-installer.iso" >> "$GITHUB_ENV"
+          echo "MEDIUM_BUILD_SECONDS=$(( $(date +%s) - start ))" >> "$GITHUB_ENV"
+          df -h / "$WORK"
+
+      # The shortest run first: it shows whether the medium starts at all. If
+      # it does not, the installations below would only wait for their timeouts.
+      - name: "Refusal: a disk that is too small (medium as an optical drive)"
+        if: ${{ !cancelled() && env.MEDIUM != '' }}
+        run: |
+          truncate -s 8G "$WORK/small.raw"
+          status=0
+          python3 tests/iso/install.py too-small --medium "$MEDIUM" --medium-as cdrom \
+            --disk "$WORK/small.raw" --work "$WORK/vm" --out "$OUT/too-small" || status=$?
+          rm -f "$WORK/small.raw"
+          if grep -q '"installer_started_seconds"' "$OUT/too-small/result.json"; then
+            echo "MEDIUM_STARTS=yes" >> "$GITHUB_ENV"
+          fi
+          exit "$status"
+
+      - name: "Refusal: a disk that holds data, not confirmed (medium as an optical drive)"
+        if: ${{ !cancelled() && env.MEDIUM_STARTS == 'yes' }}
+        run: |
+          tests/iso/make-data-disk.sh "$WORK/data.raw" 20G
+          python3 tests/iso/install.py refuse --medium "$MEDIUM" --medium-as cdrom \
+            --disk "$WORK/data.raw" --work "$WORK/vm" --out "$OUT/refuse"
+
+      - name: "Install onto a blank disk (medium as a USB stick), then start the disk without the medium"
+        if: ${{ !cancelled() && env.MEDIUM_STARTS == 'yes' }}
+        run: |
+          truncate -s 20G "$WORK/blank.raw"
+          status=0
+          python3 tests/iso/install.py install --medium "$MEDIUM" --medium-as usb \
+            --disk "$WORK/blank.raw" --work "$WORK/vm" --out "$OUT/install" || status=$?
+          sudo python3 tests/boot/inspect-disk.py installed "$WORK/blank.raw" "$OUT/install" || status=$?
+          if [ "$status" -eq 0 ]; then
+            python3 tests/iso/boot-installed.py --disk "$WORK/blank.raw" --work "$WORK/vm" \
+              --out "$OUT/install/first-start" || status=$?
+            sudo python3 tests/boot/inspect-disk.py postmortem "$WORK/blank.raw" "$OUT/install/first-start"
+          fi
+          rm -f "$WORK/blank.raw"
+          exit "$status"
+
+      - name: "Install onto the disk that holds data, confirmed (medium as an optical drive), then start it"
+        if: ${{ !cancelled() && env.MEDIUM_STARTS == 'yes' }}
+        run: |
+          if [ ! -f "$WORK/data.raw" ]; then tests/iso/make-data-disk.sh "$WORK/data.raw" 20G; fi
+          status=0
+          python3 tests/iso/install.py install --medium "$MEDIUM" --medium-as cdrom \
+            --disk "$WORK/data.raw" --work "$WORK/vm" --out "$OUT/install-over-data" || status=$?
+          sudo python3 tests/boot/inspect-disk.py installed "$WORK/data.raw" "$OUT/install-over-data" || status=$?
+          if [ "$status" -eq 0 ]; then
+            python3 tests/iso/boot-installed.py --disk "$WORK/data.raw" --work "$WORK/vm" \
+              --out "$OUT/install-over-data/first-start" || status=$?
+            sudo python3 tests/boot/inspect-disk.py postmortem "$WORK/data.raw" "$OUT/install-over-data/first-start"
+          fi
+          rm -f "$WORK/data.raw"
+          exit "$status"
+
+      # Informational. Nothing in TUR has been verified by firmware with
+      # Secure Boot enforced before; a failure here is a finding, not a
+      # regression, and does not fail the job.
+      - name: "Secure Boot enforced: install and first start (informational)"
+        if: ${{ !cancelled() && env.MEDIUM_STARTS == 'yes' }}
+        continue-on-error: true
+        run: |
+          truncate -s 20G "$WORK/secure.raw"
+          status=0
+          python3 tests/iso/install.py install --medium "$MEDIUM" --medium-as usb --secure-boot \
+            --disk "$WORK/secure.raw" --work "$WORK/vm" --out "$OUT/secure-boot" || status=$?
+          sudo python3 tests/boot/inspect-disk.py installed "$WORK/secure.raw" "$OUT/secure-boot" || status=$?
+          if [ "$status" -eq 0 ]; then
+            python3 tests/iso/boot-installed.py --secure-boot --disk "$WORK/secure.raw" --work "$WORK/vm" \
+              --out "$OUT/secure-boot/first-start" || status=$?
+            sudo python3 tests/boot/inspect-disk.py postmortem "$WORK/secure.raw" "$OUT/secure-boot/first-start"
+          fi
+          rm -f "$WORK/secure.raw"
+          exit "$status"
+
+      - name: Report
+        if: always()
+        run: |
+          python3 tests/iso/report.py --job product --out "$OUT" \
+            --expected-build-id "${BUILD_ID:-}" \
+            --timing "image_build_seconds=${IMAGE_BUILD_SECONDS:-}" \
+            --timing "medium_build_seconds=${MEDIUM_BUILD_SECONDS:-}"
+
+      - name: Summary
+        if: always()
+        run: |
+          if [ -f "$OUT/summary.md" ]; then cat "$OUT/summary.md" >> "$GITHUB_STEP_SUMMARY"; fi
+
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          show() { echo "::group::$1"; if [ -f "$1" ]; then tail -n "${2:-200}" "$1"; else echo "(absent)"; fi; echo "::endgroup::"; }
+          show "$OUT/medium/facts/medium.env"
+          show "$OUT/medium/facts/environment-package-changes.json"
+          show "$OUT/medium/facts/xorriso-report.txt"
+          for run in too-small refuse install install-over-data secure-boot; do
+            show "$OUT/$run/result.json" 120
+            show "$OUT/$run/installer-screens.txt" 150
+            show "$OUT/$run/host/qemu.log" 30
+            show "$OUT/$run/first-start/first-start.json" 80
+            show "$OUT/$run/first-start/boot-state-disk.txt" 60
+            if [ -f "$OUT/$run/serial.log" ]; then
+              echo "::group::$run: serial console, last 150 lines"
+              sed 's/\x1b\[[0-9;?]*[A-Za-z]//g; s/\r//g' "$OUT/$run/serial.log" | tail -n 150
+              echo "::endgroup::"
+            fi
+          done
+          ls -laR "$OUT" | head -200
+          df -h / "${WORK:-/}"
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: tur-installer-medium-test
+          path: out/iso/
+          if-no-files-found: warn
+
+      # Only on request, only for the project's own test machines (issue 11).
+      - name: Stage the medium for upload
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_medium && env.MEDIUM != '' }}
+        run: |
+          mkdir -p "$WORK/upload"
+          mv "$MEDIUM" "$WORK/upload/"
+          cp "$OUT"/medium/*.manifest.json "$OUT"/medium/*.SHA256SUMS "$WORK/upload/"
+          cat > "$WORK/upload/DO-NOT-REDISTRIBUTE.txt" <<'EOF'
+          TUR installer medium: a pre-alpha test build for the project's own
+          test machines. Do not pass it on or publish it. The system on it
+          still contains Fedora's logos and release packages, which Fedora's
+          terms do not allow in a derived system (issue 11).
+
+          Check the file before use:  sha256sum -c tur-installer.SHA256SUMS
+          Instructions: docs/guides/install-on-a-test-pc.md
+          EOF
+          ls -la "$WORK/upload"
+          echo "UPLOAD_DIR=$WORK/upload" >> "$GITHUB_ENV"
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_medium && env.UPLOAD_DIR != '' }}
+        with:
+          name: tur-installer-medium-DO-NOT-REDISTRIBUTE
+          path: ${{ env.UPLOAD_DIR }}
+          retention-days: 3
+          compression-level: 0
+          if-no-files-found: error
+
+  proof:
+    name: Proof medium - boot checks and rollback on a disk installed from a medium
+    needs: lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 110
+    env:
+      OUT: out/iso-proof
+      TEST_IMAGE: localhost/tur-boot-test:ci
+      PAYLOAD: localhost/tur-iso-test:ci
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Runner environment
+        run: |
+          echo "podman: $(podman --version)"
+          echo "skopeo: $(skopeo --version)"
+          echo "kernel: $(uname -r)"
+          echo "cpus:   $(nproc) ($(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2 | xargs))"
+          free -g | sed -n 2p
+          df -h / /mnt 2>/dev/null || df -h /
+          mkdir -p "$OUT/host" "$OUT/boot/host"
+
+      - name: Enable KVM for the runner user
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          sudo udevadm settle
+          ls -la /dev/kvm
+
+      # No software-emulation fallback (ADR-0002): without KVM the job stops here.
+      - name: Verify KVM
+        run: python3 tests/boot/check-kvm.py "$OUT/boot/host/kvm.json"
+
+      # The image, the medium, two installed disks, the scenario images and
+      # their disk need about 55 GB.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache/CodeQL
+          df -h / /mnt 2>/dev/null || df -h /
+
+      - name: Choose a work directory
+        run: |
+          work="$RUNNER_TEMP/tur-iso"
+          here=$(df --output=avail -B1G "$RUNNER_TEMP" | tail -1 | tr -d ' G')
+          if [ -d /mnt ]; then
+            there=$(df --output=avail -B1G /mnt | tail -1 | tr -d ' G')
+            if [ "$there" -gt "$here" ]; then
+              sudo mkdir -p /mnt/tur-iso
+              sudo chown "$(id -u):$(id -g)" /mnt/tur-iso
+              work=/mnt/tur-iso
+            fi
+          fi
+          mkdir -p "$work"
+          echo "work directory: $work ($(df --output=avail -h "$work" | tail -1 | xargs) free)"
+          echo "WORK=$work" >> "$GITHUB_ENV"
+
+      - name: Install QEMU, UEFI firmware and the tools that assemble the medium
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils ovmf \
+            xorriso squashfs-tools mtools dosfstools
+          qemu-system-x86_64 --version | head -1
+          qemu-img --version | head -1
+
+      - name: Build image
+        run: |
+          TUR_BUILD_ID_FILE="$RUNNER_TEMP/build-id" scripts/build-image.sh "$IMAGE" \
+            --ignorefile image/Containerfile.containerignore
+          echo "BUILD_ID=$(cat "$RUNNER_TEMP/build-id")" >> "$GITHUB_ENV"
+          sudo podman image inspect -f 'image id: {{.Id}}' "$IMAGE" | tee "$OUT/host/image-id.txt"
+
+      # The reference: the disk the boot test installs today, with the
+      # installer run from the build host. Only measured, never started.
+      - name: "Reference: install the boot-test image to a disk as the boot test does"
+        run: |
+          tests/boot/build-disk.sh "$IMAGE" "$WORK/reference" "$OUT/reference"
+          sudo python3 tests/boot/inspect-disk.py installed "$WORK/reference/disk.raw" "$OUT/reference"
+          rm -f "$WORK/reference/disk.raw"
+
+      # The same boot-test image with its kernel arguments inside the image
+      # (tests/iso/guest): the installer medium takes no test options.
+      - name: Build the payload of the proof medium
+        run: |
+          sudo podman build --file tests/iso/guest/Containerfile --build-arg "BASE=$TEST_IMAGE" \
+            --pull=never --tag "$PAYLOAD" tests/iso/guest
+          sudo podman image inspect -f 'image id: {{.Id}}' "$PAYLOAD"
+
+      - name: Build the proof medium
+        run: |
+          TUR_MEDIUM_NAME=tur-installer-boot-test TUR_MEDIUM_TARGET_IMGREF="$PAYLOAD" \
+            installer/iso/build-medium.sh "$PAYLOAD" "$WORK" "$OUT/medium"
+          echo "MEDIUM=$WORK/medium/tur-installer-boot-test.iso" >> "$GITHUB_ENV"
+          df -h / "$WORK"
+
+      - name: Install from the medium onto a blank disk (medium as a USB stick, no network)
+        run: |
+          truncate -s 20G "$WORK/disk.raw"
+          python3 tests/iso/install.py install --medium "$MEDIUM" --medium-as usb \
+            --disk "$WORK/disk.raw" --work "$WORK/vm" --out "$OUT/install"
+
+      - name: Inspect the installed disk and compare it with the reference
+        run: |
+          sudo python3 tests/boot/inspect-disk.py installed "$WORK/disk.raw" "$OUT/install"
+          sudo python3 tests/boot/inspect-disk.py installed "$WORK/disk.raw" "$OUT/boot" > /dev/null
+          python3 tests/iso/compare-layout.py "$OUT/reference" "$OUT/install" "$OUT/layout-comparison.json"
+          python3 tests/iso/disk-info.py "$OUT/install/result.json" "$OUT"/medium/*.manifest.json \
+            "$WORK/disk.raw" "$OUT/boot/host/disk-info.env"
+          # The boot-health scenarios start from a copy of the disk as installed.
+          mkdir -p "$WORK/prepared"
+          cp --sparse=always "$WORK/disk.raw" "$WORK/prepared/disk.raw"
+          echo "INSTALLED=yes" >> "$GITHUB_ENV"
+          rm -f "$MEDIUM"
+          df -h / "$WORK"
+
+      # The boot test, unchanged, on the disk the medium installed.
+      - name: Boot the installed disk three times (tests/boot/run-vm.py)
+        run: python3 tests/boot/run-vm.py --disk "$WORK/disk.raw" --work "$WORK/boot" --out "$OUT/boot" --timeout 1500
+
+      - name: Recover the journal from the disk
+        if: always()
+        run: |
+          if [ -f "$WORK/disk.raw" ]; then
+            sudo python3 tests/boot/inspect-disk.py postmortem "$WORK/disk.raw" "$OUT/boot"
+            rm -f "$WORK/disk.raw"
+          else
+            echo "no disk image was produced"
+          fi
+
+      - name: Boot report (tests/boot/report.py)
+        if: always()
+        run: |
+          python3 tests/boot/report.py --work "${WORK:-$RUNNER_TEMP}/boot" --out "$OUT/boot" \
+            --expected-build-id "${BUILD_ID:-}" \
+            --expected-failed-units tests/boot/expected-failed-units.txt
+
+      # Boot health on a disk installed from a medium (ADR-0014): one update
+      # that fails its health gate and must be undone, one good update that
+      # must be kept. The harness and the scenario images are the rollback
+      # workflow's, built FROM the proof medium's payload.
+      - name: Build the scenario images and their disk
+        if: ${{ !cancelled() && env.INSTALLED == 'yes' }}
+        run: tests/boot/build-scenarios.sh "$PAYLOAD" "$WORK/prepared" "$OUT/rollback/prepare" check-fails good
+
+      - name: Prepare the disk (two boots)
+        if: ${{ !cancelled() && env.INSTALLED == 'yes' }}
+        run: |
+          python3 tests/boot/run-vm.py --disk "$WORK/prepared/disk.raw" --work "$WORK/prepared" \
+            --out "$OUT/rollback/prepare" --timeout 900 --prepare-only
+
+      - name: "Scenarios: a failing update is undone, a good update is kept"
+        if: ${{ !cancelled() && env.INSTALLED == 'yes' }}
+        run: |
+          python3 tests/boot/rollback.py --disk "$WORK/prepared/disk.raw" --images "$WORK/prepared/images.img" \
+            --work "$WORK/prepared" --out "$OUT/rollback" check-fails good
+
+      - name: Report
+        if: always()
+        run: python3 tests/iso/report.py --job proof --out "$OUT" --expected-build-id "${BUILD_ID:-}"
+
+      - name: Summary
+        if: always()
+        run: |
+          for file in "$OUT/summary.md" "$OUT/boot/summary.md" "$OUT/rollback/summary.md"; do
+            if [ -f "$file" ]; then cat "$file" >> "$GITHUB_STEP_SUMMARY"; echo >> "$GITHUB_STEP_SUMMARY"; fi
+          done
+
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          show() { echo "::group::$1"; if [ -f "$1" ]; then tail -n "${2:-200}" "$1"; else echo "(absent)"; fi; echo "::endgroup::"; }
+          show "$OUT/medium/facts/medium.env"
+          show "$OUT/medium/facts/environment-package-changes.json"
+          show "$OUT/install/result.json" 120
+          show "$OUT/install/installer-screens.txt" 150
+          show "$OUT/install/host/qemu.log" 30
+          show "$OUT/layout-comparison.json"
+          show "$OUT/boot/host/vm-result.json"
+          show "$OUT/boot/boot-state-disk.txt"
+          for boot in first-boot second-boot third-boot; do
+            show "$OUT/boot/guest/$boot/status"
+            show "$OUT/boot/guest/$boot/cmdline-early.txt"
+            show "$OUT/boot/guest/$boot/failed-units-status.txt"
+          done
+          show "$OUT/rollback/prepare/host/vm-result.json"
+          for dir in "$OUT"/rollback/*/; do
+            show "${dir}summary.md"
+            show "${dir}disk/boot-state-disk.txt"
+          done
+          for log in "$OUT/install/serial.log" "$OUT/boot/serial.log"; do
+            if [ -f "$log" ]; then
+              echo "::group::$log, last 150 lines"
+              sed 's/\x1b\[[0-9;?]*[A-Za-z]//g; s/\r//g' "$log" | tail -n 150
+              echo "::endgroup::"
+            fi
+          done
+          ls -laR "$OUT" | head -200
+          df -h / "${WORK:-/}"
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: tur-installer-medium-proof
+          path: out/iso-proof/
+          if-no-files-found: warn

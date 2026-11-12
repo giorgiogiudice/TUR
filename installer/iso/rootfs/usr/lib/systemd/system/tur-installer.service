@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# The installer of the first installer medium (ADR-0018), on the first
+# console. Present only in the installer environment.
+
+[Unit]
+Description=TUR installer
+Documentation=https://github.com/giorgiogiudice/TUR/blob/main/docs/guides/install-on-a-test-pc.md
+# Inert unless the kernel was started by the medium's boot menu.
+ConditionKernelCommandLine=tur.installer
+After=basic.target systemd-vconsole-setup.service
+# Nothing else may own the first console.
+Conflicts=getty@tty1.service
+Before=getty@tty1.service
+
+[Service]
+Type=simple
+Environment=HOME=/run/tur-installer TERM=linux LANG=C.UTF-8
+WorkingDirectory=/
+ExecStart=/usr/libexec/tur-installer/tur-install
+StandardInput=tty-force
+StandardOutput=tty
+StandardError=journal
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+# The installer ends only by powering the machine off. If it stops for any
+# other reason, start it again at its first screen: it keeps no state, and it
+# asks for the confirmation again before it writes anything.
+Restart=always
+RestartSec=3
+# An installation in progress must not be cut short by a restart of this unit.
+KillMode=process
+TimeoutStopSec=30

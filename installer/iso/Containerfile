@@ -1,0 +1,86 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Installer environment: the root filesystem the installer medium starts
+# (ADR-0018). It is the image that will be installed (the payload) plus:
+#
+#   - Fedora's dracut-live package, and an initramfs built with it that can
+#     start a root filesystem stored on the medium;
+#   - the installer program, its two systemd units and a description of the
+#     payload that travels on the medium beside this root filesystem.
+#
+# Nothing else may differ from the payload: `bootc install` takes the
+# bootloader files, GRUB configuration fragments and installation settings
+# from the root it runs in, so that root has to be the image being installed.
+# installer/iso/build-medium.sh checks the package lists of both and stops if
+# anything but the dracut family changed.
+#
+# Build it through installer/iso/build-medium.sh, in CI only.
+
+ARG PAYLOAD_IMAGE
+FROM ${PAYLOAD_IMAGE}
+
+# Packages come from Fedora's own repositories, named explicitly. Their exact
+# versions are recorded in the medium's manifest.
+RUN set -eu; \
+    dnf --version | head -n 2; \
+    dnf -y --repo=fedora --repo=updates --setopt=install_weak_deps=False install dracut-live; \
+    dnf clean all; \
+    rm -rf /var/cache/dnf /var/cache/libdnf5 /var/lib/dnf /var/log/dnf*.log; \
+    rpm -q dracut dracut-live
+
+# The initramfs of the medium. The image's own initramfs is left untouched:
+# it is what the installed system boots with. dmsquash-live finds the medium
+# by its volume label and mounts LiveOS/squashfs.img from it with a
+# copy-on-write layer in memory.
+RUN set -eu; \
+    kver="$(ls /usr/lib/modules)"; \
+    test -f "/usr/lib/modules/${kver}/vmlinuz"; \
+    mkdir -p /usr/lib/tur-installer/boot; \
+    env DRACUT_NO_XATTR=1 dracut --force --no-hostonly --no-hostonly-cmdline \
+        --add "dmsquash-live overlayfs" \
+        --add-drivers "squashfs loop iso9660 overlay" \
+        /usr/lib/tur-installer/boot/initrd.img "${kver}"; \
+    lsinitrd -m /usr/lib/tur-installer/boot/initrd.img > /usr/lib/tur-installer/boot/initrd-modules.txt; \
+    grep -qx 'dmsquash-live' /usr/lib/tur-installer/boot/initrd-modules.txt; \
+    lsinitrd /usr/lib/tur-installer/boot/initrd.img | grep -q 'dmsquash-live-root'; \
+    printf '%s\n' "${kver}" > /usr/lib/tur-installer/boot/kernel-version; \
+    ls -la /usr/lib/tur-installer/boot
+
+COPY rootfs/ /
+
+# What the medium carries beside this root filesystem, fixed by hash, so that
+# the installer can refuse a medium whose payload is not the one it was built
+# with. The values are computed by build-medium.sh.
+ARG PAYLOAD_TARGET_IMGREF
+ARG PAYLOAD_IMAGE_ID
+ARG PAYLOAD_INDEX_SHA256
+ARG PAYLOAD_BLOB_COUNT
+ARG PAYLOAD_BLOB_BYTES
+ARG PAYLOAD_INSTALL_ARGS
+ARG MIN_TARGET_BYTES
+ARG MEDIUM_LABEL
+
+RUN set -eu; \
+    chmod 0755 /usr/libexec/tur-installer/tur-install; \
+    test -n "${PAYLOAD_TARGET_IMGREF}"; test -n "${PAYLOAD_IMAGE_ID}"; \
+    test -n "${PAYLOAD_INDEX_SHA256}"; test -n "${PAYLOAD_BLOB_COUNT}"; \
+    test -n "${MIN_TARGET_BYTES}"; test -n "${MEDIUM_LABEL}"; \
+    printf '%s\n' \
+        "PAYLOAD_OCI_REF=payload" \
+        "PAYLOAD_TARGET_IMGREF=${PAYLOAD_TARGET_IMGREF}" \
+        "PAYLOAD_IMAGE_ID=${PAYLOAD_IMAGE_ID}" \
+        "PAYLOAD_INDEX_SHA256=${PAYLOAD_INDEX_SHA256}" \
+        "PAYLOAD_BLOB_COUNT=${PAYLOAD_BLOB_COUNT}" \
+        "PAYLOAD_BLOB_BYTES=${PAYLOAD_BLOB_BYTES}" \
+        "PAYLOAD_INSTALL_ARGS=${PAYLOAD_INSTALL_ARGS}" \
+        "MIN_TARGET_BYTES=${MIN_TARGET_BYTES}" \
+        "MEDIUM_LABEL=${MEDIUM_LABEL}" \
+        > /usr/lib/tur-installer/payload.env; \
+    cat /usr/lib/tur-installer/payload.env; \
+    # The medium starts the installer and nothing else: no desktop, no
+    # network services, no boot-health units (they belong to an installed
+    # system).
+    ln -sf /usr/lib/systemd/system/tur-installer.target /etc/systemd/system/default.target; \
+    systemd-analyze verify --recursive-errors=no tur-installer.target tur-installer.service 2>&1 | tail -n 20 || true
+
+LABEL org.tur.installer-environment="1"

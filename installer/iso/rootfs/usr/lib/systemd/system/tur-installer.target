@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# What the installer medium starts instead of the desktop (ADR-0018): the
+# basic system and the installer on the first console. No display manager, no
+# network services, none of the units of an installed TUR system.
+# installer/iso/Containerfile makes this the default target of the installer
+# environment; it exists nowhere else.
+
+[Unit]
+Description=TUR installer environment
+Documentation=https://github.com/giorgiogiudice/TUR/blob/main/docs/adr/0018-first-installer-medium.md
+Requires=basic.target
+After=basic.target
+Wants=tur-installer.service
+AllowIsolate=yes
