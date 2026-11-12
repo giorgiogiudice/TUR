@@ -45,10 +45,14 @@ echo "v:kernel_config_sha256=$(sha256sum "$cfg" | cut -d' ' -f1)"
 if [ -s "/usr/lib/modules/$k/initramfs.img" ]; then
     echo "v:initramfs_sha256=$(sha256sum "/usr/lib/modules/$k/initramfs.img" | cut -d' ' -f1)"
 fi
-for opt in CONFIG_NTSYNC CONFIG_ANDROID_BINDER_IPC CONFIG_ANDROID_BINDERFS CONFIG_KVM CONFIG_SECURITY_SELINUX; do
+for opt in CONFIG_NTSYNC CONFIG_KVM CONFIG_SECURITY_SELINUX CONFIG_ANDROID_BINDER_IPC CONFIG_ANDROID_BINDERFS; do
     val=$(grep -E "^${opt}=" "$cfg" | cut -d= -f2)
     echo "k:${opt}=${val:-absent}"
 done
+# Every binder-related option under whatever name this kernel uses, set or not.
+grep -E "CONFIG_[A-Z0-9_]*BINDER[A-Z0-9_]*(=| is not set)" "$cfg" \
+    | sed -E 's/^# (CONFIG_[A-Z0-9_]+) is not set$/\1=n/' | sed 's/^/k:/'
+ls /usr/lib/modules/"$k"/kernel/drivers/android 2>/dev/null | sed 's/^/v:android_module=/' | head -n 5
 echo "v:rpm_count=$(rpm -qa | wc -l)"
 for p in __PACKAGES__; do
     if v=$(rpm -q --qf '%{EVR}' "$p" 2>/dev/null); then echo "p:$p=$v"; fi
@@ -129,7 +133,7 @@ def main() -> int:
         "kernel_release": values.get("kernel_release"),
         "kernel_config_sha256": values.get("kernel_config_sha256"),
         "initramfs_sha256": values.get("initramfs_sha256"),
-        "kernel_config": kconfig,
+        "kernel_config": dict(sorted(kconfig.items())),
         "bootloader": {
             "grub2_efi": pkg("grub2-efi-x64"),
             "shim": pkg("shim-x64"),

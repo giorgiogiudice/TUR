@@ -72,17 +72,24 @@ communities. What UOS adds is the layer that makes them behave like one system:
 The AI layer is optional and **off by default**. UOS is fully usable without it and
 never requires an account or a network connection to boot, install or recover.
 
-When enabled, the assistant works through three levels of control, preferring the
+When enabled, the assistant works through four ways of acting, preferring the
 most reliable one available:
 
 1. **System tools.** UOS services expose typed operations (launch an application,
    mount a volume, check an update, collect diagnostics), so common tasks do not
    depend on reading the screen.
-2. **Accessibility tree.** Native applications are driven through their semantic
+2. **Commands.** It runs commands in a sandbox to inspect, troubleshoot and repair
+   the system, as a support engineer would at a terminal.
+3. **Accessibility tree.** Native applications are driven through their semantic
    UI structure.
-3. **Screen and input.** For everything else, including Windows and macOS
+4. **Screen and input.** For everything else, including Windows and macOS
    applications, the assistant sees the screen and operates keyboard and pointer
    through the compositor.
+
+It is a full assistant, not only a remote control. It keeps a local memory of
+what it has been told and what worked, runs reminders and scheduled tasks, and
+when something breaks it investigates, explains the cause, fixes it and checks
+that the fix held.
 
 It is **provider-agnostic**. The first supported providers are Anthropic (Claude),
 OpenAI and Google (Gemini), behind one interface, using a key that you supply and
@@ -90,9 +97,10 @@ that is held in the system keyring.
 
 An assistant that can read the screen can also be misled by what is on it, so
 authority is tiered. Reversible actions run freely. Consequential ones, such as
-sending, purchasing, deleting or installing, ask first. Operations on disks, boot,
-firmware and encryption always require confirmation from a person through a prompt
-that the assistant cannot operate. Every action is logged, and a visible indicator
+sending, purchasing, deleting or installing, ask first. A repair that needs
+administrator rights runs in a short session the user opens once. Operations on
+disks, boot, firmware and encryption always require confirmation from a person
+through a prompt that the assistant cannot operate. Every action is logged, and a visible indicator
 shows whenever the assistant is observing or controlling the session.
 
 The detailed design and threat model are in
@@ -191,8 +199,8 @@ lists each project and how it is used.
 |---|---|
 | Architecture specification | Revision 1.0 published |
 | Foundational decisions | Recorded in [`docs/adr`](docs/adr/README.md) |
-| AI control layer design | Addendum A accepted; revision in progress |
-| OS image | Builds in CI from a pinned base; not yet boot-tested |
+| AI control layer design | Addendum A, revision 2 |
+| OS image | Builds reproducibly in CI from a pinned base ([report](docs/reports/UOS-002.md)); not yet boot-tested |
 | Services, installer | In development |
 
 ## Roadmap
