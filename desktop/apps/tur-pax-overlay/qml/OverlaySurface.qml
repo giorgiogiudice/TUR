@@ -59,8 +59,10 @@ Item {
             area: modelData.dimWidth > 0
                   ? surface.local(modelData.dimX, modelData.dimY, modelData.dimWidth, modelData.dimHeight)
                   : Qt.rect(0, 0, surface.width, surface.height)
-            // The hole is the highlight's outer edge (HighlightMark.reach).
-            hole: surface.local(modelData.x - 8, modelData.y - 8, modelData.width + 16, modelData.height + 16)
+            // The hole is what is inside the highlight's line (4 px clear of
+            // the target); the line itself is drawn over the dimming, so its
+            // rounded corners leave nothing undimmed outside them.
+            hole: surface.local(modelData.x - 4, modelData.y - 4, modelData.width + 8, modelData.height + 8)
             shown: modelData.shown
         }
     }

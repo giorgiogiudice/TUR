@@ -144,8 +144,10 @@ private:
     QDBusServiceWatcher *m_watcher = nullptr;
     QHash<QString, Lease> m_leases;
     QHash<uint, TrackedHighlight> m_tracked;
-    // The lease whose pointer journey is under way.
+    // The lease whose pointer journey is under way, and the lease that last
+    // sent the pointer anywhere (whose pointer it is until hidden).
     QString m_pointerLease;
+    QString m_pointerHolder;
     QMap<QString, QRectF> m_outputs;
     QStringList m_drawn;
     bool m_shown = false;

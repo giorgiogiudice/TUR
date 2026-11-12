@@ -281,6 +281,7 @@ void OverlayService::showLoudest()
 void OverlayService::sendPointer(Lease &lease, const QPointF &target, const QVariantMap &options)
 {
     m_pointerLease = lease.token;
+    m_pointerHolder = lease.token;
     m_state->movePointer(target, options.value(QStringLiteral("slow")).toBool());
 }
 
@@ -351,6 +352,7 @@ OverlayService::Outcome OverlayService::hidePointer(const QString &caller, const
     if (!leaseOf(caller, token))
         return refuse(NoLease, QStringLiteral("This connection holds no such lease."));
     m_pointerLease.clear();
+    m_pointerHolder.clear();
     m_state->hidePointer();
     return {};
 }
@@ -474,6 +476,7 @@ void OverlayService::hide()
     for (const QString &token : tokens)
         endLease(token, QStringLiteral("hidden"));
     m_pointerLease.clear();
+    m_pointerHolder.clear();
     m_tracked.clear();
     m_state->clear();
     updateShown();
@@ -492,8 +495,9 @@ void OverlayService::endLease(const QString &token, const QString &reason)
         m_tracked.remove(id);
         m_state->removeHighlight(id);
     }
-    if (m_pointerLease == token || m_leases.isEmpty()) {
+    if (m_pointerHolder == token || m_pointerLease == token || m_leases.isEmpty()) {
         m_pointerLease.clear();
+        m_pointerHolder.clear();
         m_state->hidePointer();
     }
     if (m_leases.isEmpty())

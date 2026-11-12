@@ -30,6 +30,12 @@ Item {
         width: 720
         height: 320
 
+        // The desktop under the window, in the variant being drawn.
+        Rectangle {
+            anchors.fill: parent
+            color: Kit.Theme.surfaceSunken
+        }
+
         // A window under the overlay, in the variant being drawn.
         Rectangle {
             id: window
