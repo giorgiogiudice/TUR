@@ -407,7 +407,7 @@ impl UserPolicy {
                 .any(|entry| same_application(entry, application))
             || DEFAULT_SENSITIVE_APPLICATIONS
                 .iter()
-                .any(|entry| same_application(entry, ""))
+                .any(|entry| same_application(entry, application))
     }
 
     /// The relaxation for the application, if any.
