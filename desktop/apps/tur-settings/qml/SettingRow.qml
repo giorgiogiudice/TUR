@@ -64,10 +64,13 @@ T.Control {
     function takeFocus(): void {
         const target = row.focusTarget !== null && row.focusTarget.enabled && row.focusTarget.visible
                        ? row.focusTarget : row
-        // Qt draws a focus ring only when focus arrives from the keyboard,
-        // so focus that is already there is taken away first.
+        // What already has the keyboard keeps it. Taking it away first, to
+        // give it back "from the keyboard", would hand it for a moment to
+        // the card the row stands on, and the page would scroll to show the
+        // whole card: a row asked for twice would move.
         if (target.activeFocus)
-            target.focus = false
+            return
+        // As from the keyboard, so that the control draws its focus ring.
         target.forceActiveFocus(Qt.TabFocusReason)
     }
 

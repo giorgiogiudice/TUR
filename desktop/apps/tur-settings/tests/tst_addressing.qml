@@ -169,6 +169,29 @@ Item {
             compare(grabImage(shell).pixel(left - 6, middleY), ground)
         }
 
+        // Asked for a second time, a row that is already in sight, with the
+        // keyboard, stays where it is: the page does not scroll.
+        function test_a_row_asked_for_again_does_not_move_data() {
+            return everyRow()
+        }
+
+        function test_a_row_asked_for_again_does_not_move(data) {
+            const shell = host.start("default")
+            const first = host.service.reveal(data.address, {})
+            verify(first.ok)
+            drawn(shell)
+            for (const options of [{}, { pax: true }, { highlight: false }]) {
+                const again = host.service.reveal(data.address, options)
+                verify(again.ok)
+                compare(again.y, first.y)
+                compare(again.x, first.x)
+                compare(again.focused, true)
+                drawn(shell)
+                const rect = Testing.Harness.sceneRect(host.service.findRow(view(shell), data.address))
+                compare(rect.y, first.y, "where it is after the window has drawn")
+            }
+        }
+
         function test_asking_for_another_row_moves_the_highlight() {
             const shell = host.start("default")
             verify(host.service.reveal("tur.appearance#current", {}).ok)

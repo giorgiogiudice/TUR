@@ -628,6 +628,8 @@ private Q_SLOTS:
         // Asked for by the assistant, the line is P@x's gold.
         const QVariantMap byPax = mapOf(reveal(address, { { QStringLiteral("pax"), true } }));
         QCOMPARE(byPax.value(QStringLiteral("highlighted")).toBool(), true);
+        // A row that is asked for again stays where it is.
+        QVERIFY2(sameRect(rectOf(byPax), rect), qPrintable(describe(rectOf(byPax))));
         drawn();
         const QColor gold = QQmlProperty(mark, QStringLiteral("border.color")).read().value<QColor>();
         QVERIFY(gold != blue);
