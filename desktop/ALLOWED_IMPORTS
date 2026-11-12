@@ -101,6 +101,24 @@ allow qml Tur.Centre              desktop/apps/tur-centre/**   LicenseRef-TUR-No
 allow cmake turcentre             desktop/apps/tur-centre/**   LicenseRef-TUR-Noncommercial-1.0.0
 allow soname libturcentre.so*     *                            LicenseRef-TUR-Noncommercial-1.0.0
 
+# TUR's settings, tur-settings (design, section 10; task D-07): its own QML
+# module and library, under the project licence. It adds one dependency that
+# was already allowed above and not yet used: Qt D-Bus (LGPL-3.0-only), for
+# org.tur.Settings1 and org.tur.Addressable1 on the session bus. It starts
+# KDE System Settings as a separate program (QProcess, in Qt Core) and links
+# nothing of KDE's.
+allow qml Tur.Settings            desktop/apps/tur-settings/** LicenseRef-TUR-Noncommercial-1.0.0
+allow cmake tursettings           desktop/apps/tur-settings/** LicenseRef-TUR-Noncommercial-1.0.0
+allow soname libtursettings.so*   *                            LicenseRef-TUR-Noncommercial-1.0.0
+
+# The highlight that tur-settings draws round a row is gold when the
+# assistant asked for the row, and only then (design, sections 5.1 and 9.5:
+# TUR's own programs draw P@x's highlight themselves). One file may import
+# the gold tokens for that, and the program links the module that holds them.
+# Its tests read the same token, to check the colour of the line.
+allow qml Tur.Kit.Pax             desktop/apps/tur-settings/qml/RowHighlight.qml,desktop/apps/tur-settings/tests/**   LicenseRef-TUR-Noncommercial-1.0.0
+allow cmake turkitpax             desktop/apps/tur-settings/**   LicenseRef-TUR-Noncommercial-1.0.0
+
 # Gold is P@x and nothing else (design, section 5.1). The gold tokens and the
 # components drawn in them are the module Tur.Kit.Pax; only P@x's surfaces,
 # the gallery and the tests may import it.

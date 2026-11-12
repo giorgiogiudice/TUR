@@ -1,0 +1,66 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+ "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<!-- SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0 -->
+<!--
+  org.tur.Settings1: the single entry point for every settings address, TUR's
+  or KDE's (docs/architecture/desktop-experience.md, section 10.3;
+  docs/architecture/tur-settings.md, section 4). Implemented by tur-settings,
+  which is started on demand.
+
+  Session bus. Well-known name org.tur.Settings1. Object path
+  /org/tur/Settings1.
+
+  An address is resolved from the merged settings registries. One of
+  tur-settings' own pages is shown by tur-settings. One of another TUR program
+  is passed on to that program's org.tur.Addressable1. A page of KDE System
+  Settings is opened by starting System Settings at its module; a row of one
+  cannot be located yet, and the result says so (located is false, and there is
+  no rect).
+
+  Errors are D-Bus errors whose message begins with a code and a colon:
+    org.tur.Settings1.Error.UnknownAddress    TUR-DESKTOP-SETTINGS-001
+    org.tur.Settings1.Error.RemovedAddress    TUR-DESKTOP-SETTINGS-002  (names the successor)
+    org.tur.Settings1.Error.PageNotAvailable  TUR-DESKTOP-SETTINGS-003
+    org.tur.Settings1.Error.NotAnAddress      TUR-DESKTOP-SETTINGS-004
+    org.tur.Settings1.Error.OwnerUnreachable  TUR-DESKTOP-SETTINGS-005
+    org.tur.Settings1.Error.RowNotShown       TUR-DESKTOP-SETTINGS-006
+
+  Proposed; not frozen. The adaptor in src/busadaptors.h is written by hand and
+  a test (tests/unit/tst_bus.cpp) holds what the program really offers to this
+  file.
+-->
+<node>
+  <interface name="org.tur.Settings1">
+    <!-- Opens the page of the address; no highlight. An empty address brings
+         the Settings window forward where it is. -->
+    <method name="Open">
+      <arg name="address" type="s" direction="in"/>
+    </method>
+    <!-- As org.tur.Addressable1.Reveal, for any address. -->
+    <method name="Reveal">
+      <arg name="address" type="s" direction="in"/>
+      <arg name="options" type="a{sv}" direction="in"/>
+      <arg name="result" type="a{sv}" direction="out"/>
+    </method>
+    <!-- Removes the highlight in the Settings window, if there is one. -->
+    <method name="ClearHighlight"/>
+    <!-- The registry entry of an address, as JSON: address, program (the
+         owner), page (the page's entry without its rows) and, for a row, row.
+         An address that was removed resolves to its entry, which says so. -->
+    <method name="Resolve">
+      <arg name="address" type="s" direction="in"/>
+      <arg name="entry" type="s" direction="out"/>
+    </method>
+    <!-- The pages and rows that match some words, best first: address, title
+         (the source string) and a score from 0 to 1. limit 0 means 20; at
+         most 100 are returned. -->
+    <method name="Search">
+      <arg name="text" type="s" direction="in"/>
+      <arg name="limit" type="u" direction="in"/>
+      <arg name="matches" type="a(ssd)" direction="out"/>
+    </method>
+    <!-- Where the Settings window is: the row that is highlighted, else the
+         page that is shown; empty while the matches of a search are shown. -->
+    <property name="Address" type="s" access="read"/>
+  </interface>
+</node>

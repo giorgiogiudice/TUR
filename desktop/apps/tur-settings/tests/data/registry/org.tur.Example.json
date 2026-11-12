@@ -1,0 +1,35 @@
+{
+  "licence": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+  "schema_version": 1,
+  "program": "org.tur.Example",
+  "pages": [
+    {
+      "page": "tur.example",
+      "title": "Example",
+      "path": ["Example"],
+      "keywords": ["sample"],
+      "rows": [
+        {
+          "id": "thing",
+          "title": "A thing of another program",
+          "keywords": ["widget"],
+          "kind": "switch",
+          "source": { "type": "dbus", "available": true, "bus": "session", "service": "org.tur.Example" },
+          "change": { "class": 1, "tool": "example_set_thing" }
+        },
+        {
+          "id": "old-thing",
+          "title": "A thing that was taken away",
+          "status": "removed",
+          "replaced_by": "tur.example#thing"
+        }
+      ]
+    },
+    {
+      "page": "tur.example.gone",
+      "title": "A page that was taken away",
+      "path": ["A page that was taken away"],
+      "status": "removed"
+    }
+  ]
+}

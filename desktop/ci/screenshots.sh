@@ -2,8 +2,8 @@
 # SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
 #
 # Render every page of the gallery, the toolchain proof and every state of
-# the application centre, twice, and compare the pictures with the references
-# in desktop/tests/screenshots.
+# the application centre and of the settings, twice, and compare the pictures
+# with the references in desktop/tests/screenshots.
 # Runs inside the builder, after build.sh.
 #
 #   screenshots.sh PRESET
@@ -19,6 +19,7 @@ build=$PWD/desktop/build/$preset
 out=$PWD/${OUT:-out/desktop}/screenshots
 runner=$build/kit/tests/tst_kit
 centre=$build/apps/tur-centre/tests/tst_centre
+settings=$build/apps/tur-settings/tests/tst_settings
 rm -rf "$out"
 mkdir -p "$out/actual" "$out/repeat" "$out/logs" "$out/empty-config"
 
@@ -49,6 +50,8 @@ for pass in actual repeat; do
     render "$out/$pass" 1.5 desktop/kit/tests/shots/render_gallery.qml
     render "$out/$pass" 1 desktop/apps/tur-centre/tests/shots/render_centre.qml "$centre"
     render "$out/$pass" 1.5 desktop/apps/tur-centre/tests/shots/render_centre.qml "$centre"
+    render "$out/$pass" 1 desktop/apps/tur-settings/tests/shots/render_settings.qml "$settings"
+    render "$out/$pass" 1.5 desktop/apps/tur-settings/tests/shots/render_settings.qml "$settings"
 done
 
 python3 desktop/ci/compare_screenshots.py \
