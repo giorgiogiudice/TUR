@@ -68,7 +68,13 @@ fn context(cli: &Cli) -> Result<Context, Failure> {
     };
     Ok(Context {
         catalogue: cli.catalogue.clone(),
-        dirs: Dirs::current()?,
+        dirs: {
+            let mut dirs = Dirs::current()?;
+            if let Some(root) = &cli.download_dir {
+                dirs.download_root = root.clone();
+            }
+            dirs
+        },
         flatpak: program("flatpak", &cli.flatpak_program, &["/usr/bin/flatpak"]),
         curl: program("curl", &cli.curl_program, &["/usr/bin/curl"]),
         tur_runtime: program(

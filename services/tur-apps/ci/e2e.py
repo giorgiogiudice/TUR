@@ -389,6 +389,11 @@ def run_flatpak(world: World, checks: Checks) -> None:
 WINDOWS_ID = "org.notepad-plus-plus.notepad-plus-plus"
 
 
+def downloads_left() -> list[str]:
+    """What tur-apps left in its download root, /var/tmp."""
+    return sorted(str(path) for path in pathlib.Path("/var/tmp").glob("tur-apps-*"))
+
+
 def runtime_apps(world: World) -> list[str]:
     done = world.run([str(pathlib.Path(world.args.tur_runtime).resolve()), "app", "list", "--json"])
     return [a.get("app_id") for a in json_of(done.stdout).get("applications", [])]
@@ -434,7 +439,7 @@ def run_windows(world: World, checks: Checks) -> None:
     checks.check("nothing ran: tur-runtime has no application and no prefix",
                  runtime_apps(world) == [] and nothing_under(runtime / "prefixes") == [])
     checks.check("nothing is kept of the refused download",
-                 nothing_under(world.home / ".cache/tur/apps/downloads") == [])
+                 downloads_left() == [])
 
     code, out, _ = world.apps(["install", WINDOWS_ID, "--yes", "--events"], "install")
     events = events_of(out)
@@ -457,7 +462,7 @@ def run_windows(world: World, checks: Checks) -> None:
                  and result.get("source", {}).get("sha256", "").startswith("ce3267f5"))
     checks.check("tur-runtime holds it under the catalogue's identifier", WINDOWS_ID in runtime_apps(world),
                  runtime_apps(world))
-    checks.check("the downloaded installer was deleted", nothing_under(world.home / ".cache/tur/apps/downloads") == [])
+    checks.check("the downloaded installer was deleted", downloads_left() == [])
 
     code, out, _ = world.apps(["list", "--json", "--check-updates"], "list")
     mine = next((a for a in json_of(out).get("applications", []) if a.get("id") == WINDOWS_ID), {})

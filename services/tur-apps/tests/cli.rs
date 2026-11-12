@@ -65,7 +65,7 @@ impl World {
             std::process::id()
         ));
         let _ = fs::remove_dir_all(&root);
-        for directory in ["home", "state", "bin", "catalogue"] {
+        for directory in ["home", "state", "bin", "catalogue", "downloads"] {
             fs::create_dir_all(root.join(directory)).unwrap();
         }
         for (name, text) in [
@@ -120,6 +120,8 @@ impl World {
             .arg(bin.join("curl"))
             .arg("--tur-runtime-program")
             .arg(bin.join("tur-runtime"))
+            .arg("--download-dir")
+            .arg(self.root.join("downloads"))
             .args(arguments)
             .env_clear()
             .env("PATH", "/usr/bin:/bin")
@@ -132,6 +134,11 @@ impl World {
             stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
             stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
         }
+    }
+
+    /// Whether nothing is left where installers are downloaded.
+    fn no_download_left(&self) -> bool {
+        fs::read_dir(self.root.join("downloads")).unwrap().count() == 0
     }
 
     fn log(&self, name: &str) -> String {
@@ -476,12 +483,7 @@ fn a_windows_application_is_downloaded_checked_installed_and_removed_keeping_doc
     );
     assert_eq!(fs::read(world.state("installed-file")).unwrap(), BODY);
     // The download is gone; the record keeps its digest.
-    assert!(
-        !world
-            .home()
-            .join(".cache/tur/apps/downloads/org.example.tool")
-            .exists()
-    );
+    assert!(world.no_download_left());
     let result = &events.last().unwrap()["result"];
     assert_eq!(result["source"]["pinned"], true);
     assert_eq!(result["source"]["size"], BODY.len());
@@ -592,10 +594,7 @@ fn a_corrupted_download_is_refused_before_anything_runs() {
             .log("curl.log")
             .contains("https://downloads.example.org/1.0/tool-1.0-setup.exe")
     );
-    let downloads = world
-        .home()
-        .join(".cache/tur/apps/downloads/org.example.tool");
-    assert!(!downloads.exists() || fs::read_dir(&downloads).unwrap().count() == 0);
+    assert!(world.no_download_left());
     assert!(
         !world
             .data()

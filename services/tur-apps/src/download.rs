@@ -107,15 +107,43 @@ pub struct Fetched {
     pub final_url: Option<String>,
 }
 
-/// Downloads the installer the catalogue pins into `directory`, checks it,
-/// and returns it.
+/// Creates a new directory readable by the user only, at `base` or, when
+/// that exists, at `base-1`, `base-2` and so on. An existing directory is
+/// never used: someone else may have made it.
+pub fn private_directory(base: &Path) -> Result<PathBuf, Failure> {
+    use std::os::unix::fs::DirBuilderExt;
+    for attempt in 0..100u32 {
+        let candidate = if attempt == 0 {
+            base.to_path_buf()
+        } else {
+            PathBuf::from(format!("{}-{attempt}", base.display()))
+        };
+        match fs::DirBuilder::new().mode(0o700).create(&candidate) {
+            Ok(()) => return Ok(candidate),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+            Err(error) => {
+                return Err(Failure::new(
+                    Code::StepFailed,
+                    format!("cannot create {}: {error}", candidate.display()),
+                ));
+            }
+        }
+    }
+    Err(Failure::new(
+        Code::StepFailed,
+        format!("cannot create a new directory beside {}", base.display()),
+    ))
+}
+
+/// Downloads the installer the catalogue pins into a new private directory
+/// made from `base` (see [`private_directory`]), checks it, and returns it.
 ///
 /// `on_progress` is called about twice a second with the bytes written so
-/// far. A failure leaves nothing in `directory`.
+/// far. A failure removes the directory: nothing is left.
 pub fn fetch_installer(
     curl: &Path,
     installer: &Installer,
-    directory: &Path,
+    base: &Path,
     on_progress: &mut dyn FnMut(u64),
 ) -> Result<Fetched, Failure> {
     let name = installer.file_name();
@@ -125,16 +153,23 @@ pub fn fetch_installer(
             format!("{} does not end in a file name", installer.url),
         ));
     }
-    fs::create_dir_all(directory).map_err(|error| {
-        Failure::new(
-            Code::StepFailed,
-            format!("cannot create {}: {error}", directory.display()),
-        )
-    })?;
+    let directory = private_directory(base)?;
+    let fetched = fetch_into(curl, installer, &directory, name, on_progress);
+    if fetched.is_err() {
+        let _ = fs::remove_dir_all(&directory);
+    }
+    fetched
+}
+
+fn fetch_into(
+    curl: &Path,
+    installer: &Installer,
+    directory: &Path,
+    name: &str,
+    on_progress: &mut dyn FnMut(u64),
+) -> Result<Fetched, Failure> {
     let target = directory.join(name);
     let partial = directory.join(format!(".{name}.part"));
-    let _ = fs::remove_file(&partial);
-    let _ = fs::remove_file(&target);
 
     let mut command = Command::new(curl);
     command
@@ -378,8 +413,26 @@ mod tests {
         .unwrap_err();
         assert_eq!(failure.code, Code::NotVerified);
         assert!(failure.message.contains("not the one the catalogue pins"));
-        assert_eq!(std::fs::read_dir(&target).unwrap().count(), 0);
+        // The private directory went with the file.
+        assert!(!target.exists());
         // The last progress report is what was written: four bytes.
         assert!(progress.iter().all(|bytes| *bytes <= 4));
+    }
+
+    #[test]
+    fn a_private_directory_is_new_and_the_user_s_alone() {
+        use std::os::unix::fs::PermissionsExt;
+        let base = std::env::temp_dir().join(format!("tur-apps-private-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        let first = private_directory(&base).unwrap();
+        assert_eq!(first, base);
+        let mode = std::fs::metadata(&first).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o700);
+        // One that exists is never used again.
+        let second = private_directory(&base).unwrap();
+        assert_ne!(second, first);
+        assert!(second.display().to_string().ends_with("-1"));
+        let _ = std::fs::remove_dir_all(&first);
+        let _ = std::fs::remove_dir_all(&second);
     }
 }

@@ -8,7 +8,7 @@
 # file. The real flatpak is exercised by the apps workflow.
 set -eu
 state="${FAKE_STATE:?}"
-user_dir="${FLATPAK_USER_DIR:-${XDG_DATA_HOME:?}/flatpak}"
+user_dir="${FLATPAK_USER_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/flatpak}"
 tab="$(printf '\t')"
 runtime="org.example.Platform/x86_64/1"
 touch "$state/remotes" "$state/refs"

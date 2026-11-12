@@ -39,6 +39,10 @@ pub struct Cli {
     /// The wine program, whose presence the router is told about.
     #[arg(long, global = true, value_name = "PATH")]
     pub wine_program: Option<PathBuf>,
+    /// Where installers are downloaded, each into a new private directory.
+    /// /var/tmp by default.
+    #[arg(long, global = true, value_name = "DIR")]
+    pub download_dir: Option<PathBuf>,
     /// What to do.
     #[command(subcommand)]
     pub command: Command,
@@ -126,7 +130,7 @@ pub enum Command {
         #[command(subcommand)]
         action: Option<SourceAction>,
         /// Print JSON instead of text.
-        #[arg(long)]
+        #[arg(long, global = true)]
         json: bool,
     },
 }

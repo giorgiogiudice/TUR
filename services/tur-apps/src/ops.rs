@@ -228,6 +228,8 @@ fn install_windows(
 ) -> Result<Record, Failure> {
     let dirs = &context.dirs;
     let downloads = dirs.downloads(&plan.application.id);
+    // The private directory the download went into, removed afterwards.
+    let mut download_directory: Option<std::path::PathBuf> = None;
     let (path, source) = match file {
         WindowsFile::Download(pin) => {
             context.curl.require("to download the installer")?;
@@ -246,12 +248,12 @@ fn install_windows(
             let fetched = match fetched {
                 Ok(fetched) => fetched,
                 Err(failure) => {
-                    let _ = fs::remove_dir_all(&downloads);
                     emitter.finished("download", false);
                     return Err(failure);
                 }
             };
             emitter.finished("download", true);
+            download_directory = fetched.path.parent().map(std::path::Path::to_path_buf);
             emitter.started(
                 "verify",
                 format!("SHA-256 {} matches the catalogue", fetched.hashed.sha256),
@@ -318,8 +320,8 @@ fn install_windows(
         let mut forward = forward_lines(emitter, "install", false);
         context.tur_runtime.run_streaming(&arguments, &mut forward)
     };
-    if matches!(file, WindowsFile::Download(_)) {
-        let _ = fs::remove_dir_all(&downloads);
+    if let Some(directory) = &download_directory {
+        let _ = fs::remove_dir_all(directory);
     }
     let outcome = outcome?;
     if !outcome.success() {

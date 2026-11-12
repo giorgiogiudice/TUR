@@ -22,7 +22,16 @@ pub struct Dirs {
     /// The per-user Flatpak installation: `$FLATPAK_USER_DIR`, or
     /// `$XDG_DATA_HOME/flatpak` (flatpak(1), "ENVIRONMENT").
     pub flatpak_user_dir: PathBuf,
+    /// Where installers are downloaded, each into a private directory of its
+    /// own: `/var/tmp`. Not under the home directory's hidden folders, where
+    /// `tur-runtime` refuses to take a program from (they hold credentials
+    /// and profiles); not `/tmp`, which is held in memory on Fedora; not the
+    /// user's runtime directory, which `tur-runtime` protects.
+    pub download_root: PathBuf,
 }
+
+/// The default [`Dirs::download_root`].
+pub const DOWNLOAD_ROOT: &str = "/var/tmp";
 
 impl Dirs {
     /// The directories from the environment, read through `lookup`.
@@ -50,6 +59,7 @@ impl Dirs {
             data_home,
             cache_home,
             flatpak_user_dir,
+            download_root: PathBuf::from(DOWNLOAD_ROOT),
         })
     }
 
@@ -79,9 +89,13 @@ impl Dirs {
         self.apps_root().join("kept").join(id)
     }
 
-    /// Where an installer is downloaded to, until it has been installed.
+    /// The private directory an installer is downloaded into, until it has
+    /// been installed: `<download root>/tur-apps-<id>-<process>`. It is
+    /// created new, readable by the user only, and never reused (see
+    /// `download::fetch_installer`).
     pub fn downloads(&self, id: &str) -> PathBuf {
-        self.cache_home.join("tur/apps/downloads").join(id)
+        self.download_root
+            .join(format!("tur-apps-{id}-{}", std::process::id()))
     }
 
     /// A Flatpak application's data directory, which Flatpak keeps unless

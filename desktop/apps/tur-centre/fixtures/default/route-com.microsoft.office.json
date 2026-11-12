@@ -62,11 +62,25 @@
                 "code": "reported-inadequate",
                 "severity": "warning",
                 "requirement": null,
-                "text": "Reported broken by WineHQ AppDB (\"Garbage\"), checked 2026-11-12. Not tested by TUR."
+                "text": "Reported broken by WineHQ AppDB (\"Garbage\"), checked 2026-11-12. Not tested by TUR.",
+                "text_id": "reported-inadequate.external",
+                "params": {
+                  "date": "2026-11-12",
+                  "rating": "broken",
+                  "source": "WineHQ AppDB",
+                  "source_rating": "Garbage"
+                }
               }
             ],
             "prerequisites": [],
-            "alternative": null
+            "alternative": null,
+            "reason_code": "windows-wine",
+            "reason_parts": [
+              {
+                "code": "windows-wine",
+                "params": {}
+              }
+            ]
           },
           {
             "route": "windows-guest",
@@ -86,7 +100,11 @@
                 "code": "guest-memory",
                 "severity": "note",
                 "requirement": null,
-                "text": "Needs about 16 GB of memory while the Windows guest runs; this machine has that much."
+                "text": "Needs about 16 GB of memory while the Windows guest runs; this machine has that much.",
+                "text_id": "guest-memory.enough",
+                "params": {
+                  "needed_gb": "16"
+                }
               }
             ],
             "prerequisites": [
@@ -99,7 +117,16 @@
                 "text": "You must supply a Windows licence: TUR does not include one."
               }
             ],
-            "alternative": null
+            "alternative": null,
+            "reason_code": "guest-layer-rated",
+            "reason_parts": [
+              {
+                "code": "guest-layer-rated",
+                "params": {
+                  "rating": "broken"
+                }
+              }
+            ]
           },
           {
             "route": "web",
@@ -116,7 +143,14 @@
             "reason": "A web edition exists, and no better route is free of known obstacles.",
             "caveats": [],
             "prerequisites": [],
-            "alternative": null
+            "alternative": null,
+            "reason_code": "web-nothing-better",
+            "reason_parts": [
+              {
+                "code": "web-nothing-better",
+                "params": {}
+              }
+            ]
           }
         ]
       }

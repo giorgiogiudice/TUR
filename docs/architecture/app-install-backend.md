@@ -184,7 +184,7 @@ Notepad++ 8.9.9.1, PuTTY 0.85 and VLC 3.0.24.
 
 | Case | What happens |
 |---|---|
-| A pin, no file given | Downloaded by `curl` to `<name>.part` in `$XDG_CACHE_HOME/tur/apps/downloads/<id>/`; size and SHA-256 checked; only then renamed; deleted after installing |
+| A pin, no file given | Downloaded by `curl` to `<name>.part` in a new directory `/var/tmp/tur-apps-<id>-<process>`, mode 0700, never an existing one; size and SHA-256 checked; only then renamed; the directory is deleted after installing, and on any failure |
 | A pin, and the user's file | The file is hashed in the plan; it must be the pinned file, or TUR-DESKTOP-APPS-006; hashed again just before it is used |
 | No pin, the user's file | "The same flow from the hash check on": the digest is shown in the plan and recorded; the plan says plainly that it cannot be checked against the publisher |
 | No pin, no file | TUR-DESKTOP-APPS-005, with the publisher's page or the store and the command to give a file |
@@ -201,6 +201,13 @@ curl -q --proto =https --proto-redir =https --location --max-redirs 10 --fail
      --max-filesize <pinned size> --output <dir>/.<name>.part
      --write-out '%{url_effective}\n%{http_code}\n' -- <pinned URL>
 ```
+
+Why `/var/tmp`: `tur-runtime` refuses to take a program from a hidden folder
+of the home directory (`TUR-SECURITY-SANDBOX-006`: "it is in a hidden part of
+the home directory, where credentials and application profiles are kept"),
+which rules out `~/.cache`, as the first CI run showed; it protects the
+user's runtime directory; and `/tmp` is held in memory on Fedora.
+`--download-dir` names another root.
 
 `-q` first, so no `~/.curlrc` is read; `https` on the first request and on
 every redirect; the URL after `--`. Only an `Installer` from the catalogue
@@ -314,7 +321,7 @@ level and installs those into `/usr/share/tur/pax/tools/`. Adding `tur-apps`
 ## Command line
 
 ```
-tur-apps [--catalogue DIR] [--host FILE] [--prefs FILE]
+tur-apps [--catalogue DIR] [--host FILE] [--prefs FILE] [--download-dir DIR]
          [--flatpak-program P] [--curl-program P] [--tur-runtime-program P] [--wine-program P]
 tur-apps plan <id> [--route flatpak|wine] [--installer FILE] [--offline] [--json]
 tur-apps install <id> [--route R] [--installer FILE] [--yes] [--events]

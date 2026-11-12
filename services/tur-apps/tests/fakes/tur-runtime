@@ -10,7 +10,7 @@
 set -eu
 state="${FAKE_STATE:?}"
 echo "$*" >> "$state/runtime.log"
-root="${XDG_DATA_HOME:?}/tur/runtime"
+root="${XDG_DATA_HOME:-$HOME/.local/share}/tur/runtime"
 [ "$1" = app ] || exit 2
 command="$2"
 shift 2

@@ -31,8 +31,9 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use serde::Serialize;
 use serde_json::Value;
 use tur_catalogue::{
-    AlternativeKind, Catalogue, Category, CaveatCode, Code, Date, EditionKind, MatchKind, Obtain,
-    Outlook, PrerequisiteCode, Rating, RatingSource, Reporter, Requirement, Route, Severity,
+    ALTERNATIVE_TEXT_IDS, AlternativeKind, CAVEAT_TEXT_IDS, Catalogue, Category, CaveatCode, Code,
+    Date, EditionKind, MatchKind, Obtain, Outlook, PrerequisiteCode, Rating, RatingSource,
+    ReasonCode, Reporter, Requirement, Route, Severity,
 };
 
 /// The identifier every file under `desktop/` carries in its first lines.
@@ -417,7 +418,15 @@ fn vocabulary() -> String {
         .map(|code| code.as_str().to_owned())
         .collect();
 
-    let lists: [(&str, Vec<String>); 14] = [
+    // The identifiers of the router's sentences (issue #41), for the
+    // application centre's translations. Additive: the centre reads the
+    // lists it knows and ignores the others.
+    let text_ids = |ids: &[&str]| -> Vec<String> { ids.iter().map(|id| (*id).to_owned()).collect() };
+
+    let lists: [(&str, Vec<String>); 17] = [
+        ("reason_codes", names_of(&ReasonCode::ALL)),
+        ("caveat_text_ids", text_ids(&CAVEAT_TEXT_IDS)),
+        ("alternative_text_ids", text_ids(&ALTERNATIVE_TEXT_IDS)),
         ("routes", names_of(&Route::ALL)),
         ("ratings", names_of(&Rating::ALL)),
         ("reporters", names_of(&Reporter::ALL)),
