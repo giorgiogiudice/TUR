@@ -323,7 +323,8 @@ def run_flatpak(world: World, checks: Checks) -> None:
                  any(e.get("event") == "activity" and "installing app/" in str(e.get("text")) for e in events))
     refs = flatpak_user_refs(world)
     (world.evidence / "refs-installed.txt").write_text("\n".join(refs) + "\n")
-    checks.check("flatpak lists the application per user", f"app/{FLATPAK_APP}/x86_64/stable" in refs, refs)
+    # flatpak list prints references without their kind.
+    checks.check("flatpak lists the application per user", f"{FLATPAK_APP}/x86_64/stable" in refs, refs)
     checks.check("nothing was installed system-wide by the test",
                  FLATPAK_APP not in world.run(["flatpak", "list", "--system", "--columns=application"]).stdout)
 
@@ -372,8 +373,11 @@ def run_flatpak(world: World, checks: Checks) -> None:
     checks.check("no reference is left installed", flatpak_user_refs(world) == [])
     deployed = nothing_under(world.data / "flatpak/app") + nothing_under(world.data / "flatpak/runtime")
     checks.check("no deployment is left under ~/.local/share/flatpak/app or runtime", deployed == [], deployed[:20])
-    exports = [p for p in nothing_under(world.data / "flatpak/exports") if not p.endswith(("share", "applications", "icons", "hicolor"))]
-    checks.check("no exported launcher entry or icon is left", exports == [], exports[:20])
+    exports = nothing_under(world.data / "flatpak/exports")
+    checks.check("no exported launcher entry, icon or metadata of the application is left",
+                 not [p for p in exports if FLATPAK_APP in p], [p for p in exports if FLATPAK_APP in p])
+    checks.measure("what flatpak keeps in its exports directory after the last removal (not the application's)",
+                   ", ".join(exports) or "nothing")
     repo = world.data / "flatpak/repo"
     repo_bytes = sum(p.stat().st_size for p in repo.rglob("*") if p.is_file()) if repo.exists() else 0
     checks.measure("bytes left in the user's flatpak repository (objects, remote config)", repo_bytes)

@@ -71,8 +71,16 @@ install)
     ;;
 list)
     case "$*" in
+    *--columns=ref*)
+        # flatpak prints the reference without its kind.
+        case "$*" in
+        *--app*) grep '^app/' "$state/refs" | cut -d/ -f2- || true ;;
+        *--runtime*) grep '^runtime/' "$state/refs" | cut -d/ -f2- || true ;;
+        *) cut -d/ -f2- "$state/refs" ;;
+        esac
+        ;;
     *--app*)
-        grep '^app/' "$state/refs" | while read -r ref; do
+        { grep '^app/' "$state/refs" || true; } | while read -r ref; do
             printf '%s\t1.0\tstable\tflathub\t%s\n' "$(app_of "$ref")" "$runtime"
         done
         ;;

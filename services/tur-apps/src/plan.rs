@@ -609,13 +609,7 @@ fn flatpak_plan(
         }
         if let Some(runtime) = &read.runtime {
             let runtime_ref = format!("runtime/{runtime}");
-            let installed = context
-                .flatpak
-                .run(&flatpak::list_refs_arguments())
-                .ok()
-                .filter(|outcome| outcome.success())
-                .map(|outcome| flatpak::parse_refs(&outcome.stdout))
-                .unwrap_or_default();
+            let installed = flatpak::installed_refs(&context.flatpak).unwrap_or_default();
             if !installed.contains(&runtime_ref) {
                 let mut parts = runtime.split('/');
                 let runtime_id = parts.next().unwrap_or_default().to_owned();

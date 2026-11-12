@@ -139,10 +139,28 @@ pub fn uninstall_arguments(references: &[String], delete_data: bool) -> Vec<Stri
     arguments
 }
 
-/// `flatpak list` of everything installed per user, applications and
-/// runtimes, by reference.
-pub fn list_refs_arguments() -> Vec<String> {
-    strings(&["list", "--user", "--columns=ref"])
+/// `flatpak list` of one kind of what is installed per user, `app` or
+/// `runtime`, by reference.
+pub fn list_refs_arguments(kind: &str) -> Vec<String> {
+    let only = if kind == "app" { "--app" } else { "--runtime" };
+    strings(&["list", "--user", only, "--columns=ref"])
+}
+
+/// Every reference installed per user, applications and runtimes, each
+/// with its kind: `app/<id>/<arch>/<branch>`, `runtime/...`.
+pub fn installed_refs(flatpak: &crate::exec::Program) -> Result<Vec<String>, crate::codes::Failure> {
+    let mut refs = Vec::new();
+    for kind in ["app", "runtime"] {
+        let outcome = flatpak.run(&list_refs_arguments(kind))?;
+        if !outcome.success() {
+            return Err(crate::codes::Failure::new(
+                crate::codes::Code::StepFailed,
+                format!("flatpak could not list what is installed: {}", outcome.tail()),
+            ));
+        }
+        refs.extend(parse_refs(&outcome.stdout, kind));
+    }
+    Ok(refs)
 }
 
 /// `flatpak list` of the per-user applications with what this program
@@ -265,12 +283,22 @@ pub fn parse_apps(text: &str) -> Vec<ListedApp> {
         .collect()
 }
 
-/// Reads `flatpak list --columns=ref`: every installed reference.
-pub fn parse_refs(text: &str) -> Vec<String> {
+/// Reads `flatpak list --app|--runtime --columns=ref`. The column holds the
+/// reference without its kind, `<id>/<arch>/<branch>`
+/// (`flatpak_decomposed_get_pref` in `app/flatpak-builtins-list.c`, 1.14.6
+/// and 1.18.4); `kind` is put in front.
+pub fn parse_refs(text: &str, kind: &str) -> Vec<String> {
     parse_table(text)
         .into_iter()
         .filter_map(|row| row.into_iter().next())
         .filter(|reference| reference.contains('/'))
+        .map(|reference| {
+            if reference.starts_with("app/") || reference.starts_with("runtime/") {
+                reference
+            } else {
+                format!("{kind}/{reference}")
+            }
+        })
         .collect()
 }
 
@@ -525,7 +553,8 @@ mod tests {
             install_arguments("flathub", reference),
             update_arguments(reference),
             uninstall_arguments(&[reference.to_owned()], true),
-            list_refs_arguments(),
+            list_refs_arguments("app"),
+            list_refs_arguments("runtime"),
             list_apps_arguments(),
             size_arguments(reference),
             commit_arguments(reference),
@@ -580,10 +609,22 @@ mod tests {
         );
         assert_eq!(apps[1].version, None);
 
-        let refs =
-            parse_refs("app/a.b.C/x86_64/stable\nruntime/org.freedesktop.Platform/x86_64/24.08\n");
-        assert_eq!(refs.len(), 2);
-        assert_eq!(ref_id(&refs[1]), "org.freedesktop.Platform");
+        // flatpak prints the reference without its kind.
+        let refs = parse_refs(
+            "org.freedesktop.Platform/x86_64/24.08\norg.freedesktop.Platform.GL.default/x86_64/24.08\n",
+            "runtime",
+        );
+        assert_eq!(
+            refs,
+            [
+                "runtime/org.freedesktop.Platform/x86_64/24.08",
+                "runtime/org.freedesktop.Platform.GL.default/x86_64/24.08"
+            ]
+        );
+        assert_eq!(ref_id(&refs[1]), "org.freedesktop.Platform.GL.default");
+        assert_eq!(parse_refs("a.b.C/x86_64/stable\n", "app"), ["app/a.b.C/x86_64/stable"]);
+        assert_eq!(list_refs_arguments("app")[2], "--app");
+        assert_eq!(list_refs_arguments("runtime")[2], "--runtime");
         assert_eq!(parse_size("2523136\n"), Some(2_523_136));
         assert_eq!(parse_size("2.5 MB"), None);
         let commit = "a".repeat(64);

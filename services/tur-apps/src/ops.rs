@@ -50,17 +50,7 @@ pub fn show_plan(emitter: &mut Emitter, plan: &Plan) {
 }
 
 fn flatpak_refs(flatpak: &Program) -> Result<Vec<String>, Failure> {
-    let outcome = flatpak.run(&flatpak::list_refs_arguments())?;
-    if !outcome.success() {
-        return Err(Failure::new(
-            Code::StepFailed,
-            format!(
-                "flatpak could not list what is installed: {}",
-                outcome.tail()
-            ),
-        ));
-    }
-    Ok(flatpak::parse_refs(&outcome.stdout))
+    flatpak::installed_refs(flatpak)
 }
 
 fn flatpak_apps(flatpak: &Program) -> Vec<flatpak::ListedApp> {
