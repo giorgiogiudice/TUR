@@ -1,0 +1,11 @@
+# systemd units that are allowed to fail when UOS boots in the CI virtual machine.
+#
+# One unit per line, followed by the reason. A unit belongs here only when its
+# failure is understood, is not caused by a UOS change, and does not affect
+# reaching the graphical session. Each entry says whether it is a limit of the
+# test machine or a known defect, and a known defect is also recorded as an
+# open item in a report. Any failed unit that is not listed fails the boot test.
+#
+# unit-name.service  reason
+
+mcelog.service  Known base-distribution defect, not a virtual-machine effect. mcelog exits with "does not support this processor" on AMD CPUs; hosted runners with AMD EPYC CPUs pass the CPU through to the guest. Seen on both AMD runners (family 25) and not on the Intel runner; it would fail the same way on AMD hardware. Open item in docs/reports/UOS-003.md.
