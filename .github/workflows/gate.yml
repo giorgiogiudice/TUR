@@ -1,0 +1,65 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# One check that always runs on a pull request and passes only when every
+# other workflow started for the same commit has finished successfully.
+# The other workflows run only when their paths change, so they cannot be
+# required one by one: a required check that never starts blocks a merge
+# forever. This one can be required instead.
+name: gate
+
+on:
+  pull_request:
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: gate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  all-checks-passed:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    steps:
+      - name: Wait for every workflow on this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+          SELF_RUN: ${{ github.run_id }}
+        run: |
+          python3 - <<'PY'
+          import json, os, sys, time, urllib.request
+          repo, sha, me = os.environ["REPO"], os.environ["SHA"], int(os.environ["SELF_RUN"])
+          def runs():
+              req = urllib.request.Request(
+                  f"https://api.github.com/repos/{repo}/actions/runs?head_sha={sha}&per_page=100",
+                  headers={"Authorization": f"Bearer {os.environ['GH_TOKEN']}",
+                           "Accept": "application/vnd.github+json"})
+              with urllib.request.urlopen(req, timeout=30) as r:
+                  return [x for x in json.load(r)["workflow_runs"]
+                          if x["id"] != me and x["name"] != "gate"]
+          # Give the other workflows a moment to be created.
+          time.sleep(30)
+          deadline = time.time() + 140 * 60
+          while True:
+              rs = runs()
+              # Keep the latest attempt of each workflow only.
+              latest = {}
+              for r in rs:
+                  if r["name"] not in latest or r["id"] > latest[r["name"]]["id"]:
+                      latest[r["name"]] = r
+              pending = [n for n, r in latest.items() if r["status"] != "completed"]
+              failed = [f"{n}: {r['conclusion']}" for n, r in latest.items()
+                        if r["status"] == "completed" and r["conclusion"] not in ("success", "skipped", "neutral")]
+              if failed:
+                  print("Not passed:", *failed, sep="\n  "); sys.exit(1)
+              if not pending:
+                  print("All passed:", ", ".join(sorted(latest)) or "(no other workflow ran)"); sys.exit(0)
+              if time.time() > deadline:
+                  print("Timed out waiting for:", ", ".join(pending)); sys.exit(1)
+              print("Waiting for:", ", ".join(sorted(pending)), flush=True)
+              time.sleep(60)
+          PY
