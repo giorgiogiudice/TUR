@@ -184,6 +184,9 @@ private:
     QString m_lease;
     int m_arrivals = 0;
     int m_shots = 0;
+    // Gold pixels on each output before the overlay drew anything: KWin's
+    // decoration shows Wayland's generic window icon, which is gold.
+    QMap<QString, int> m_baseline;
 
     static QDBusConnection bus() { return QDBusConnection::sessionBus(); }
 
@@ -469,6 +472,15 @@ private Q_SLOTS:
 
         const QString problem = startSettings();
         QVERIFY2(problem.isEmpty(), qPrintable(problem));
+
+        QTest::qWait(500);
+        for (QScreen *screen : QGuiApplication::screens()) {
+            const QImage picture = capture(screen);
+            QVERIFY2(!picture.isNull(), "KWin took a screenshot");
+            m_baseline.insert(screen->name(), goldCount(picture));
+            report(QStringLiteral("output %1: %2 gold pixels before the overlay started (window icons)")
+                       .arg(screen->name()).arg(m_baseline.value(screen->name())));
+        }
 
         QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
         environment.insert(QStringLiteral("QT_QPA_PLATFORM"), QStringLiteral("wayland"));
@@ -886,19 +898,22 @@ private Q_SLOTS:
         QTest::qWait(200);
         const qint64 waited = clock.elapsed();
         int after = 0;
+        int baseline = 0;
         for (QScreen *screen : screens) {
             const QImage picture = capture(screen);
             keep(picture, QStringLiteral("after-hide-") + screen->name());
             after += goldCount(picture);
+            baseline += m_baseline.value(screen->name());
         }
-        report(QStringLiteral("Hide: gold pixels %1 before, %2 after, screenshots begun %3 ms after the call")
-                   .arg(before).arg(after).arg(waited));
+        report(QStringLiteral("Hide: gold pixels %1 before, %2 after (%3 before the overlay started), screenshots "
+                              "begun %4 ms after the call")
+                   .arg(before).arg(after).arg(baseline).arg(waited));
         // The lease ended with Hide; a new one for what follows.
         const QDBusMessage lease = overlay(QStringLiteral("Acquire"), { QStringLiteral("compositor test, again") });
         QCOMPARE(lease.type(), QDBusMessage::ReplyMessage);
         m_lease = lease.arguments().value(0).toString();
         QVERIFY(before > 1000);
-        QCOMPARE(after, 0);
+        QVERIFY2(after <= baseline, "no gold of the overlay's is left");
     }
 
     // Its owner dies: it goes.
@@ -922,7 +937,7 @@ private Q_SLOTS:
         QTest::qWait(200);
         const QImage picture = capture(screens.constFirst());
         keep(picture, QStringLiteral("after-owner-died"));
-        QCOMPARE(goldCount(picture), 0);
+        QVERIFY(goldCount(picture) <= m_baseline.value(screens.constFirst()->name()));
 
         const QDBusMessage lease = overlay(QStringLiteral("Acquire"), { QStringLiteral("compositor test, last") });
         QCOMPARE(lease.type(), QDBusMessage::ReplyMessage);
@@ -946,7 +961,7 @@ private Q_SLOTS:
         QTest::qWait(500);
         const QImage picture = capture(screens.constFirst());
         keep(picture, QStringLiteral("after-overlay-killed"));
-        QCOMPARE(goldCount(picture), 0);
+        QVERIFY(goldCount(picture) <= m_baseline.value(screens.constFirst()->name()));
     }
 };
 

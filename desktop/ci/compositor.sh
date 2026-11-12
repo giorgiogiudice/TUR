@@ -62,6 +62,43 @@ run() {
         tries=$((tries + 1))
     done
 
+    # The scale. kwin_wayland's --scale is not what an output ends up with:
+    # KWin 6.8 takes each output's scale from its own output configuration
+    # (src/outputconfigurationstore.cpp), choosing one from the physical size
+    # where it has none, and a virtual output has no physical size, so 1. So
+    # KWin is started once to write its configuration, which then gets the
+    # scale asked for, and is started again.
+    if [ "$scale" != 1 ]; then
+        XDG_RUNTIME_DIR=$runtime XDG_CONFIG_HOME=$runtime/config DBUS_SESSION_BUS_ADDRESS=$bus \
+            "$kwin" --virtual --width 1280 --height 800 --output-count "$outputs" \
+            --socket wayland-first --no-lockscreen --no-global-shortcuts --no-kactivities \
+            > "$out/$label-kwin-first.log" 2>&1 &
+        first=$!
+        tries=0
+        while [ ! -f "$runtime/config/kwinoutputconfig.json" ] && [ "$tries" -lt 100 ]; do
+            sleep 0.1
+            tries=$((tries + 1))
+        done
+        sleep 1
+        kill "$first" 2>/dev/null || true
+        wait "$first" 2>/dev/null || true
+        if [ -f "$runtime/config/kwinoutputconfig.json" ]; then
+            python3 - "$runtime/config/kwinoutputconfig.json" "$scale" <<'PY'
+import json, sys
+path, scale = sys.argv[1], float(sys.argv[2])
+config = json.load(open(path))
+for section in config:
+    if section.get("name") == "outputs":
+        for output in section["data"]:
+            output["scale"] = scale
+json.dump(config, open(path, "w"), indent=4)
+print(f"kwinoutputconfig.json: every output at scale {scale}")
+PY
+        else
+            echo "::warning::$label: KWin wrote no output configuration; the scale stays KWin's choice"
+        fi
+    fi
+
     # Nothing of the machine's or the runner's configuration: an empty
     # configuration directory, and only what is set here.
     XDG_RUNTIME_DIR=$runtime XDG_CONFIG_HOME=$runtime/config DBUS_SESSION_BUS_ADDRESS=$bus \

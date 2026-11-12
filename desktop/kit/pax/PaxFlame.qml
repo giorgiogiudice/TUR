@@ -28,7 +28,7 @@ Item {
 
     // The outer flame, the inner flame and the core, on the 32 grid.
     readonly property string outerPath: "M 16 0 C 19 7 27 13 27 21 A 11 11 0 0 1 5 21 C 5 13 13 7 16 0 Z"
-    readonly property string innerPath: "M 16 12 C 18 15 21 18 21 22.5 A 5 5 0 0 1 11 22.5 C 11 18 14 15 16 12 Z"
+    readonly property string innerPath: "M 16 14 C 17.5 16.5 20 19 20 22.5 A 4 4 0 0 1 12 22.5 C 12 19 14.5 16.5 16 14 Z"
     readonly property string corePath: "M 16 20.5 A 2.5 2.5 0 1 1 15.99 20.5 Z"
 
     implicitWidth: flame.size

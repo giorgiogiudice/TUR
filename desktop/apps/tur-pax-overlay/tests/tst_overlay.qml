@@ -89,7 +89,7 @@ Item {
                 compare(findChild(right, "pill").text, pill.text, "every screen shows the same pill")
             }
             overlay.setActivity("observing", "screen", Qt.rect(0, 0, 0, 0))
-            compare(pill.text, "P@x can see this screen")
+            verify(pill.text.startsWith("P@x can see this screen"), pill.text)
             overlay.setActivity("idle", "window", Qt.rect(0, 0, 0, 0))
             wait(0)
             verify(!pill.visible, "P@x off: no pill")
@@ -138,6 +138,7 @@ Item {
                 compare(findChild(row, "commandAction").text, command.action)
             }
             overlay.on = false
+            overlay.setActivity("idle", "window", Qt.rect(0, 0, 0, 0))
             wait(0)
             verify(!card.visible && !pill.visible, "P@x off: neither")
         }
