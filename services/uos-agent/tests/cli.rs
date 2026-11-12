@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
-#![cfg(any())]
 
 //! The A0 exit criterion, run against the built binary: a scripted caller
 //! exercises every class against a test service, and class 3 fails without
@@ -8,6 +7,8 @@
 //! The test service is the manifest in `tests/data/`. No service runs: the
 //! binary only decides. That a class 3 call also fails inside the service,
 //! through polkit, is a test of each service (milestone A1).
+
+#![cfg(any())]
 
 use std::process::Command;
 
