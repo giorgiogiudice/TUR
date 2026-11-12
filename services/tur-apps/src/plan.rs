@@ -924,8 +924,8 @@ fn windows_plan(
     let mut notes = Vec::new();
     if matches!(file, WindowsFile::Download(_)) {
         notes.push(format!(
-            "The downloaded installer is deleted after the installation; its SHA-256 is kept in the record. Downloads go to {}.",
-            display(&dirs.downloads(&app_id), dirs)
+            "The installer is downloaded into a new directory under {} that only you can read, and deleted with it after the installation; its SHA-256 is kept in the record.",
+            display(&dirs.download_root, dirs)
         ));
     }
     notes.push(

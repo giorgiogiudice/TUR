@@ -271,8 +271,8 @@ def nothing_under(path: pathlib.Path) -> list[str]:
 # ------------------------------------------------------------------ flatpak
 
 
-FLATPAK_ID = "net.sourceforge.klavaro"
-FLATPAK_APP = "net.sourceforge.Klavaro"
+FLATPAK_ID = "net.sourceforge.chromium-bsu"
+FLATPAK_APP = "net.sourceforge.chromium-bsu"
 
 
 def flatpak_user_refs(world: World) -> list[str]:
@@ -314,7 +314,7 @@ def run_flatpak(world: World, checks: Checks) -> None:
     code, out, _ = world.apps(["install", FLATPAK_ID, "--yes", "--events"], "install")
     events = events_of(out)
     (world.evidence / "flatpak-install-events.jsonl").write_text(out)
-    checks.measure("Flatpak install, seconds (Klavaro and its runtime)", round(world.last_seconds, 1))
+    checks.measure("Flatpak install, seconds (the application and its runtime)", round(world.last_seconds, 1))
     checks.check("installed per user from Flathub", code == 0 and events and events[-1].get("event") == "result",
                  events[-1] if events else None)
     checks.check("the event stream starts with the plan and every line is an event",
@@ -336,7 +336,7 @@ def run_flatpak(world: World, checks: Checks) -> None:
                  mine.get("route") == "flatpak" and mine.get("version") and isinstance(mine.get("size"), int),
                  mine)
 
-    launch_and_find(world, checks, FLATPAK_ID, r"(?i)klavaro", "flatpak-klavaro")
+    launch_and_find(world, checks, FLATPAK_ID, r"(?i)chromium", "flatpak-chromium-bsu")
 
     code, out, _ = world.apps(["list", "--check-updates", "--json"], "check-updates")
     mine = next((a for a in json_of(out).get("applications", []) if a.get("id") == FLATPAK_ID), {})

@@ -169,7 +169,7 @@ is entered on an edition without a reference
 check that a reference really supports a fact; a reviewer has to.
 
 The seed catalogue holds 35 entries: the 32 of the first slice, and
-Notepad++, PuTTY and Klavaro, added with `tur-apps`. Twelve records carry a
+Notepad++, PuTTY and Chromium B.S.U., added with `tur-apps`. Twelve records carry a
 rating, each from one of four sources; every other route is unknown. Four
 further records are TUR's own tests, all `unknown` (see [Not
 built](#not-built)). The sources, all checked on 12 November 2026:

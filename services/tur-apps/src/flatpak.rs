@@ -148,14 +148,19 @@ pub fn list_refs_arguments(kind: &str) -> Vec<String> {
 
 /// Every reference installed per user, applications and runtimes, each
 /// with its kind: `app/<id>/<arch>/<branch>`, `runtime/...`.
-pub fn installed_refs(flatpak: &crate::exec::Program) -> Result<Vec<String>, crate::codes::Failure> {
+pub fn installed_refs(
+    flatpak: &crate::exec::Program,
+) -> Result<Vec<String>, crate::codes::Failure> {
     let mut refs = Vec::new();
     for kind in ["app", "runtime"] {
         let outcome = flatpak.run(&list_refs_arguments(kind))?;
         if !outcome.success() {
             return Err(crate::codes::Failure::new(
                 crate::codes::Code::StepFailed,
-                format!("flatpak could not list what is installed: {}", outcome.tail()),
+                format!(
+                    "flatpak could not list what is installed: {}",
+                    outcome.tail()
+                ),
             ));
         }
         refs.extend(parse_refs(&outcome.stdout, kind));
@@ -622,7 +627,10 @@ mod tests {
             ]
         );
         assert_eq!(ref_id(&refs[1]), "org.freedesktop.Platform.GL.default");
-        assert_eq!(parse_refs("a.b.C/x86_64/stable\n", "app"), ["app/a.b.C/x86_64/stable"]);
+        assert_eq!(
+            parse_refs("a.b.C/x86_64/stable\n", "app"),
+            ["app/a.b.C/x86_64/stable"]
+        );
         assert_eq!(list_refs_arguments("app")[2], "--app");
         assert_eq!(list_refs_arguments("runtime")[2], "--runtime");
         assert_eq!(parse_size("2523136\n"), Some(2_523_136));

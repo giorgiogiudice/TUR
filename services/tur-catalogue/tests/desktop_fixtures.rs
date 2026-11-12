@@ -421,7 +421,8 @@ fn vocabulary() -> String {
     // The identifiers of the router's sentences (issue #41), for the
     // application centre's translations. Additive: the centre reads the
     // lists it knows and ignores the others.
-    let text_ids = |ids: &[&str]| -> Vec<String> { ids.iter().map(|id| (*id).to_owned()).collect() };
+    let text_ids =
+        |ids: &[&str]| -> Vec<String> { ids.iter().map(|id| (*id).to_owned()).collect() };
 
     let lists: [(&str, Vec<String>); 17] = [
         ("reason_codes", names_of(&ReasonCode::ALL)),
