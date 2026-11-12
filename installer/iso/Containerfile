@@ -37,7 +37,7 @@ RUN set -eu; \
     test -f "/usr/lib/modules/${kver}/vmlinuz"; \
     mkdir -p /usr/lib/tur-installer/boot; \
     env DRACUT_NO_XATTR=1 dracut --force --no-hostonly --no-hostonly-cmdline \
-        --add "dmsquash-live overlayfs" \
+        --add "dmsquash-live overlayfs" --omit "plymouth" \
         --add-drivers "squashfs loop iso9660 overlay" \
         /usr/lib/tur-installer/boot/initrd.img "${kver}"; \
     lsinitrd -m /usr/lib/tur-installer/boot/initrd.img > /usr/lib/tur-installer/boot/initrd-modules.txt; \
@@ -78,9 +78,16 @@ RUN set -eu; \
         > /usr/lib/tur-installer/payload.env; \
     cat /usr/lib/tur-installer/payload.env; \
     # The medium starts the installer and nothing else: no desktop, no
-    # network services, no boot-health units (they belong to an installed
-    # system).
+    # boot-health units (they belong to an installed system), no boot splash
+    # (it would hold the console's keyboard), and nothing that uses a network.
+    # This is the installer environment's /etc only; the installed system
+    # comes from the payload on the medium.
     ln -sf /usr/lib/systemd/system/tur-installer.target /etc/systemd/system/default.target; \
+    for unit in NetworkManager.service NetworkManager-wait-online.service NetworkManager-dispatcher.service \
+        avahi-daemon.service avahi-daemon.socket cups.service cups.socket cups.path sshd.service \
+        plymouth-start.service plymouth-read-write.service plymouth-quit.service plymouth-quit-wait.service; do \
+        ln -sf /dev/null "/etc/systemd/system/${unit}"; \
+    done; \
     systemd-analyze verify --recursive-errors=no tur-installer.target tur-installer.service 2>&1 | tail -n 20 || true
 
 LABEL org.tur.installer-environment="1"

@@ -64,10 +64,12 @@ env_image="${TUR_MEDIUM_ENV_IMAGE:-localhost/tur-installer-env:${name}}"
 #                         policy, the path the boot test takes on every run
 #                         (its build host has no SELinux either)
 #   systemd.firstboot=off no first-boot questions on the console
+#   plymouth.enable=0     no boot splash: it would hold the console's keyboard
+#   loglevel=3 audit=0    no kernel or audit messages written over the screens
 #   tur.installer=1       starts tur-installer.service
 #   console=...           the kernel also writes to the first serial port when
 #                         the machine has one; the screen is the last console
-kernel_arguments="root=live:CDLABEL=${label} rd.live.image selinux=0 systemd.firstboot=off tur.installer=1 console=ttyS0,115200n8 console=tty0"
+kernel_arguments="root=live:CDLABEL=${label} rd.live.image selinux=0 systemd.firstboot=off plymouth.enable=0 rd.plymouth=0 loglevel=3 audit=0 tur.installer=1 console=ttyS0,115200n8 console=tty0"
 
 for tool in xorriso mksquashfs mkfs.vfat mmd mcopy python3 sha256sum sfdisk; do
     command -v "${tool}" > /dev/null || { echo "missing tool: ${tool}" >&2; exit 1; }
@@ -342,6 +344,12 @@ mcopy -i "${work}/efiboot.img" "${esp}/mmx64.efi" ::/EFI/BOOT/mmx64.efi
 mcopy -i "${work}/efiboot.img" "${esp}/grub.cfg" ::/EFI/BOOT/grub.cfg
 mcopy -i "${work}/efiboot.img" "${esp}/grub.cfg" "::/EFI/${vendor}/grub.cfg"
 mdir -i "${work}/efiboot.img" -/ ::/ | tee "${facts}/esp-listing.txt"
+# The menu a second time, in the ISO 9660 filesystem. Started from an optical
+# drive, GRUB takes the disc itself as its device, not the EFI system
+# partition image the firmware loaded it from, and looks for its menu there.
+mkdir -p "${iso}/EFI/BOOT" "${iso}/EFI/${vendor}"
+cp "${esp}/grub.cfg" "${iso}/EFI/BOOT/grub.cfg"
+cp "${esp}/grub.cfg" "${iso}/EFI/${vendor}/grub.cfg"
 
 # ---- the installer environment as a compressed, read-only filesystem ----------------
 step squashfs_seconds "installer environment -> LiveOS/squashfs.img (zstd level ${level})"

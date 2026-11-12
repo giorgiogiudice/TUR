@@ -178,12 +178,12 @@ jobs:
 
       # The shortest run first: it shows whether the medium starts at all. If
       # it does not, the installations below would only wait for their timeouts.
-      - name: "Refusal: a disk that is too small (medium as an optical drive)"
+      - name: "Refusal: a disk that is too small (medium as a USB stick)"
         if: ${{ !cancelled() && env.MEDIUM != '' }}
         run: |
           truncate -s 8G "$WORK/small.raw"
           status=0
-          python3 tests/iso/install.py too-small --medium "$MEDIUM" --medium-as cdrom \
+          python3 tests/iso/install.py too-small --medium "$MEDIUM" --medium-as usb \
             --disk "$WORK/small.raw" --work "$WORK/vm" --out "$OUT/too-small" || status=$?
           rm -f "$WORK/small.raw"
           if grep -q '"installer_started_seconds"' "$OUT/too-small/result.json"; then
