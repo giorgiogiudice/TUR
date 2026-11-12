@@ -24,7 +24,9 @@
 //! * [`codes`]: the `TUR-UPDATE-*` error-code registry (specification §29.3).
 //! * [`cli`]: the `tur-update` command line.
 //!
-//! The design is in `docs/architecture/update-manager.md`.
+//! The design is in `docs/architecture/update-manager.md`. What was built and
+//! measured for this slice, and what was not run, is in
+//! `docs/reports/update-1.md`.
 
 #![forbid(unsafe_code)]
 
