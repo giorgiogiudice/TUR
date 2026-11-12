@@ -57,7 +57,7 @@ pub fn decide(action: &Action, context: &Context, policy: &UserPolicy, now: Time
 
     // 5. Without the trusted path, nothing above class 1, and no request to
     //    authenticate, because it could not be answered safely.
-    if !context.trusted_path_available && class > ActionClass::Consequential {
+    if !context.trusted_path_available && class >= ActionClass::Consequential {
         return Decision::refuse(class, Refusal::TrustedPathUnavailable);
     }
 
@@ -176,7 +176,7 @@ pub fn classify(action: &Action, context: &Context, policy: &UserPolicy) -> Acti
 ///
 /// Never above class 2: privileged prompts reject emulated input.
 fn ui_class(ui: &UiAction, policy: &UserPolicy) -> ActionClass {
-    if policy.is_sensitive(&ui.application) {
+    if policy.is_sensitive("") {
         return ActionClass::Consequential;
     }
     match ui.kind {
