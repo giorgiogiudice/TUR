@@ -805,7 +805,9 @@ for x86-64 or i386.
 `prefixes/<app-id>/application.json`, schema version 1,
 `schemas/app-record.schema.json`. Unknown fields are refused, and a unit test
 keeps the schema and the Rust types in step. It is read back with a 256 KiB
-cap and must name the application and the prefix of the directory it is in.
+cap and must name the application, the prefix and the profile of the
+directory it is in: a record cannot start something else in an application's
+name.
 
 | Field | Meaning |
 |---|---|
@@ -860,6 +862,13 @@ no compressor is a dependency this way. A program without an icon that can be
 read gets the icon theme's generic one. The program file is untrusted input:
 sizes are capped (2 MiB per image), every index is checked, and a PNG taken
 from a program is copied, never decoded.
+
+That last point has a cost. An icon that is a PNG inside the program reaches
+the desktop's image decoder exactly as the application supplied it, and the
+desktop is outside the sandbox. Every packaging format that lets an
+application bring its own icon has this exposure. Closing it means decoding
+the PNG here and writing the pixels out again, which needs a PNG decoder in
+this component; that is not built.
 
 `tur-runtime app launch <app-id>` is `tur-runtime launch` with the
 application's profile.
