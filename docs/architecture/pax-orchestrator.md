@@ -63,8 +63,10 @@ there is no `org.tur.Agent1`, no indicator and no stop key
 | `faults` | The orchestrator's `TUR-AI-*` codes |
 | `textui` | `tur-pax run` and `tur-pax chat` |
 
-The policy engine's own modules are unchanged; see
-[section 11](#11-changes-to-the-policy-engine).
+The policy engine's own modules were unchanged when the orchestrator was built
+([section 11](#11-changes-to-the-policy-engine)). What changed in them since,
+and in the other components, to close the gaps this document recorded is in
+[docs/reports/pax-2.md](../reports/pax-2.md).
 
 ## 2. The loop
 
@@ -671,7 +673,7 @@ change: they were accepted when the two components were added.
 | `tur-pax-providers` | Done: tool-call arguments are parsed strictly and the argument text comes with the call (`ToolCallEnd.arguments_text`). | – |
 | `tur-diagnostics`, `tur-catalogue`, `tur-runtime` | Done: each ships `agent-tools.json` and `agent-tools.adapter.json`, as `tur-storage` and `tur-device-manager` do. | – |
 | `tur-storage` | Done: `volumes --live` and `decide --live` ask `lsblk` about this machine; access is spelled `read-only` and `read-write` on the command line as in the manifest; `storage_preview_mount` has an adapter. | – |
-| `tur-device-manager` | Command-line forms for `device_list` (with categories) and `device_get`. | Not offered. |
+| `tur-device-manager` | Done: `tur-device list [--category C]...` and `tur-device get <id>`, with adapters for `device_list` and `device_get`. | – |
 | The image | Install each component's two tool files to `/usr/share/tur/pax/tools/<component>/`, the catalogue to `/usr/share/tur/catalogue`; make sure `bubblewrap` and `prlimit` are present. | `tur-pax run --tools DIR`. |
 | `agent-policy.md` | Done: section 9 points here for `run` and `chat`. | – |
 

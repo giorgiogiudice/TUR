@@ -9,12 +9,11 @@ This document describes the policy engine as implemented: what it takes as input
 what it decides, which properties are guaranteed and by which test, the two file
 formats, and what the engine cannot guarantee by itself.
 
-The engine implements sections 5, 6, 11 and 17 of the AI control layer design
-("addendum A") as of **revision 4**. Where those leave a case undefined, the
-stricter behaviour was chosen. Every such choice is listed in
-[section 10](#10-interpretations). Revisions 5 and 6 of the addendum were merged
-while this revision of the engine was in review; the points where they bear on
-the engine are listed in [section 11](#11-known-limits), limit 16.
+The engine implements sections 5, 6, 11 and 17 to 21 of the AI control layer
+design ("addendum A") as of **revision 8**. Where those leave a case undefined,
+the stricter behaviour was chosen. Every such choice is listed in
+[section 10](#10-interpretations). What sections 18 to 21 changed in the engine,
+and what is left, is in [section 11](#11-known-limits), limit 16.
 
 A0 contains no model, no network code and no D-Bus code. Nothing here executes an
 action. The engine decides; other components act on the decision.
@@ -189,7 +188,7 @@ session is locked or the task is unattended, whatever the record says. The owner
 of the record sets the "ended" mark when the user ends the session, when the task
 finishes and when the session locks, so that a session does not reopen on unlock.
 
-**Trusted session proven.** Until revision 8 of this document the field was
+**Trusted session proven.** Until the engine followed revision 8 of addendum A the field was
 called "trusted path available" and meant the five compositor guarantees of
 addendum A section 6. Section 19 of the addendum found that the compositor in
 the image provides none of them: it has no surface that ignores emulated input
