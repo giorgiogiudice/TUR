@@ -951,7 +951,11 @@ mod tests {
         let end = options.len();
         assert_eq!(options[end - 1], "--", "{context}");
         assert_eq!(options[end - 3..end - 1], ["--chdir", "/"], "{context}");
-        assert_eq!(options[end - 5..end - 3], ["--remount-ro", "/"], "{context}");
+        assert_eq!(
+            options[end - 5..end - 3],
+            ["--remount-ro", "/"],
+            "{context}"
+        );
         assert_eq!(
             options.iter().filter(|argument| *argument == "--").count(),
             1,
@@ -1101,7 +1105,9 @@ mod tests {
 
     #[test]
     fn a_home_directory_that_would_widen_the_rules_is_not_used() {
-        for home in ["/", "/home", "/var", "/root", "/usr", "relative", "/a/../b", ""] {
+        for home in [
+            "/", "/home", "/var", "/root", "/usr", "relative", "/a/../b", "",
+        ] {
             let rules = GrantRules::for_home(home);
             assert!(rules.homes().is_empty(), "{home:?} was accepted as a home");
             // With no home known, nothing among the home directories passes.
@@ -1122,7 +1128,10 @@ mod tests {
                 what: "the SSH directory"
             })
         );
-        assert_eq!(rules.judge("/export/people"), Err(GrantRefusal::ContainsHome));
+        assert_eq!(
+            rules.judge("/export/people"),
+            Err(GrantRefusal::ContainsHome)
+        );
     }
 
     #[test]
@@ -1178,8 +1187,14 @@ mod tests {
         assert_eq!(
             plan.command[..8],
             [
-                PRLIMIT, "--cpu=2", "--as=1024", "--nproc=4", "--nofile=16", "--fsize=0",
-                "--core=0", "--"
+                PRLIMIT,
+                "--cpu=2",
+                "--as=1024",
+                "--nproc=4",
+                "--nofile=16",
+                "--fsize=0",
+                "--core=0",
+                "--"
             ]
         );
         assert_eq!(plan.limits, limits);
@@ -1210,7 +1225,10 @@ mod tests {
         ] {
             assert!(!is_plain_absolute(other), "{other:?}");
         }
-        assert!(!is_plain_absolute(&format!("/{}", "a".repeat(MAX_PATH_BYTES))));
+        assert!(!is_plain_absolute(&format!(
+            "/{}",
+            "a".repeat(MAX_PATH_BYTES)
+        )));
         assert!(is_system_visible("/usr/bin/tur-device"));
         assert!(is_system_visible("/etc/os-release"));
         assert!(!is_system_visible("/usr/../home/ada"));

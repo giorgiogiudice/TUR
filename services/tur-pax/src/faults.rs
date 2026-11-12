@@ -338,7 +338,10 @@ mod tests {
     fn a_fault_shows_its_code_then_its_detail() {
         let fault = Fault::new(TaskCode::TaskStepLimit, "after 3 steps");
         assert_eq!(fault.to_string(), "TUR-AI-TASK-001: after 3 steps");
-        let from_engine = Fault::from(Problem::new(crate::codes::Code::ToolUnknown, "no such tool"));
+        let from_engine = Fault::from(Problem::new(
+            crate::codes::Code::ToolUnknown,
+            "no such tool",
+        ));
         assert_eq!(from_engine.to_string(), "TUR-AI-TOOL-001: no such tool");
         assert_eq!(
             TaskCode::TaskApprovalUnavailable.user_message(),

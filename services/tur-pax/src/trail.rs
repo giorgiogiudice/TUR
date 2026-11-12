@@ -388,7 +388,11 @@ mod tests {
         for bad in ["", "a b", "a\nb", "tool;rm", "ünïcode", long.as_str()] {
             assert_eq!(identifier(bad), "<invalid>", "{bad:?}");
         }
-        for good in ["task-1", "org.tur.Test1:test_observe", "run_readonly_command"] {
+        for good in [
+            "task-1",
+            "org.tur.Test1:test_observe",
+            "run_readonly_command",
+        ] {
             assert_eq!(identifier(good), good);
         }
         let event = TrailEvent::new(EventKind::TaskStarted, "task 1\nINJECTED=1", "x y");
@@ -400,7 +404,10 @@ mod tests {
     fn a_decision_is_marked_as_one_and_keeps_its_fields() {
         let entry = TrailEntry::Decision(record());
         assert_eq!(entry.field("TUR_AI_EVENT").as_deref(), Some(DECISION_EVENT));
-        assert_eq!(entry.field("TUR_AI_ACTION").as_deref(), Some("agent:memory_read"));
+        assert_eq!(
+            entry.field("TUR_AI_ACTION").as_deref(),
+            Some("agent:memory_read")
+        );
         assert_eq!(entry.field("TUR_AI_DECISION").as_deref(), Some("allowed"));
         assert_eq!(entry.field("TUR_AI_TIER").as_deref(), Some("0"));
         let json = entry.to_json();
@@ -417,7 +424,11 @@ mod tests {
         trail.event(&started).expect("written");
         DecisionSink(&mut trail).write(&record()).expect("written");
         trail
-            .event(&TrailEvent::new(EventKind::TaskFinished, "task-1", "anthropic"))
+            .event(&TrailEvent::new(
+                EventKind::TaskFinished,
+                "task-1",
+                "anthropic",
+            ))
             .expect("written");
         assert_eq!(trail.entries().len(), 3);
         assert_eq!(trail.decisions().len(), 1);
@@ -434,7 +445,11 @@ mod tests {
         {
             let mut trail = FileTrail::open(&path).expect("the file opens");
             trail
-                .event(&TrailEvent::new(EventKind::TaskStarted, "task-1", "anthropic"))
+                .event(&TrailEvent::new(
+                    EventKind::TaskStarted,
+                    "task-1",
+                    "anthropic",
+                ))
                 .expect("written");
             trail.decision(&record()).expect("written");
         }
@@ -442,7 +457,11 @@ mod tests {
             // Opening again appends.
             let mut trail = FileTrail::open(&path).expect("the file opens");
             trail
-                .event(&TrailEvent::new(EventKind::TaskFinished, "task-1", "anthropic"))
+                .event(&TrailEvent::new(
+                    EventKind::TaskFinished,
+                    "task-1",
+                    "anthropic",
+                ))
                 .expect("written");
         }
         let text = std::fs::read_to_string(&path).expect("the file reads");

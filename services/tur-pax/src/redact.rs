@@ -203,7 +203,10 @@ mod tests {
     #[test]
     fn the_marker_is_not_itself_taken_for_a_secret() {
         assert_eq!(detect(WITHHELD), None);
-        assert_eq!(detect(&format!("{WITHHELD}\n{WITHHELD}\n2026 0001 123456")), None);
+        assert_eq!(
+            detect(&format!("{WITHHELD}\n{WITHHELD}\n2026 0001 123456")),
+            None
+        );
         assert_eq!(detect_in_json(&json!({ "password": WITHHELD })), None);
     }
 
@@ -224,7 +227,10 @@ mod tests {
     fn each_kind_of_secret_is_withheld_from_text_and_the_rest_is_kept() {
         let cases = [
             (format!("token {TOKEN}"), SecretKind::KnownToken),
-            (format!("aws_access_key_id = {AWS_KEY}"), SecretKind::KnownToken),
+            (
+                format!("aws_access_key_id = {AWS_KEY}"),
+                SecretKind::KnownToken,
+            ),
             (format!("card {CARD}"), SecretKind::PaymentCard),
             ("password: hunter2".to_owned(), SecretKind::Password),
             (
@@ -318,8 +324,10 @@ mod tests {
 
     #[test]
     fn every_kind_has_its_own_name() {
-        let names: std::collections::BTreeSet<&str> =
-            SecretKind::ALL.iter().map(|kind| kind_name(*kind)).collect();
+        let names: std::collections::BTreeSet<&str> = SecretKind::ALL
+            .iter()
+            .map(|kind| kind_name(*kind))
+            .collect();
         assert_eq!(names.len(), SecretKind::ALL.len());
     }
 }

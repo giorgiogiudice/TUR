@@ -189,8 +189,12 @@ fn input_fault(code: Code, detail: String) -> Fault {
 }
 
 fn read_file(path: &Path) -> Result<String, Fault> {
-    fs::read_to_string(path)
-        .map_err(|error| input_fault(Code::InputUnreadable, format!("{}: {error}", path.display())))
+    fs::read_to_string(path).map_err(|error| {
+        input_fault(
+            Code::InputUnreadable,
+            format!("{}: {error}", path.display()),
+        )
+    })
 }
 
 /// The texts of the `.json` files of a directory, in name order.
@@ -211,7 +215,10 @@ fn read_json_dir(named: Option<&Path>, default: &str) -> Result<Vec<String>, Fau
     let mut paths: Vec<PathBuf> = entries
         .filter_map(Result::ok)
         .map(|entry| entry.path())
-        .filter(|path| path.extension().is_some_and(|extension| extension == "json"))
+        .filter(|path| {
+            path.extension()
+                .is_some_and(|extension| extension == "json")
+        })
         .filter(|path| path.is_file())
         .collect();
     paths.sort();
@@ -234,7 +241,9 @@ fn build(args: &TaskArgs, err: &mut dyn Write) -> io::Result<Result<Setup, Vec<F
     // The provider: configuration, key, adapter.
     let config_path = match &args.provider_config {
         Some(path) => Some(path.clone()),
-        None => base_dir("XDG_CONFIG_HOME", ".config").map(|base| base.join("tur/pax/provider.json")),
+        None => {
+            base_dir("XDG_CONFIG_HOME", ".config").map(|base| base.join("tur/pax/provider.json"))
+        }
     };
     let Some(config_path) = config_path else {
         return Ok(Err(vec![input_fault(
@@ -281,10 +290,12 @@ fn build(args: &TaskArgs, err: &mut dyn Write) -> io::Result<Result<Setup, Vec<F
     let policy = match &args.policy {
         None => UserPolicy::default(),
         Some(path) => {
-            let loaded = read_file(path).map_err(|fault| vec![fault]).and_then(|text| {
-                UserPolicy::from_json(&text)
-                    .map_err(|problems| problems.into_iter().map(Fault::from).collect())
-            });
+            let loaded = read_file(path)
+                .map_err(|fault| vec![fault])
+                .and_then(|text| {
+                    UserPolicy::from_json(&text)
+                        .map_err(|problems| problems.into_iter().map(Fault::from).collect())
+                });
             match loaded {
                 Ok(policy) => policy,
                 Err(problems) => {
@@ -323,7 +334,9 @@ fn build(args: &TaskArgs, err: &mut dyn Write) -> io::Result<Result<Setup, Vec<F
     // The audit trail. No trail, no task.
     let audit_path = match &args.audit_log {
         Some(path) => Some(path.clone()),
-        None => base_dir("XDG_STATE_HOME", ".local/state").map(|base| base.join("tur/pax/audit.jsonl")),
+        None => {
+            base_dir("XDG_STATE_HOME", ".local/state").map(|base| base.join("tur/pax/audit.jsonl"))
+        }
     };
     let Some(audit_path) = audit_path else {
         return Ok(Err(vec![input_fault(
@@ -540,7 +553,13 @@ pub fn run_task(args: &RunArgs, out: &mut dyn Write, err: &mut dyn Write) -> io:
     let mut history = Vec::new();
 
     if args.json {
-        let report = setup.run_one(&task, &args.request, &recalled, &mut history, &mut NoObserver);
+        let report = setup.run_one(
+            &task,
+            &args.request,
+            &recalled,
+            &mut history,
+            &mut NoObserver,
+        );
         let mut document = report.to_json();
         document["task"] = json!(task);
         document["provider"] = json!(setup.config.provider.as_str());
@@ -652,7 +671,11 @@ mod tests {
     fn only_a_completed_task_exits_with_zero() {
         for outcome in TaskOutcome::ALL {
             let status = exit_status(outcome);
-            assert_eq!(status == 0, outcome == TaskOutcome::Completed, "{outcome:?}");
+            assert_eq!(
+                status == 0,
+                outcome == TaskOutcome::Completed,
+                "{outcome:?}"
+            );
             // None of the statuses of `policy check` is reused.
             assert!(!(10..=13).contains(&status), "{outcome:?}");
         }
@@ -667,7 +690,10 @@ mod tests {
             DEFAULT_MANIFEST_DIR,
         );
         assert_eq!(
-            named.expect_err("a named directory must exist").code.as_str(),
+            named
+                .expect_err("a named directory must exist")
+                .code
+                .as_str(),
             "TUR-AI-INPUT-001"
         );
     }

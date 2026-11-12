@@ -643,8 +643,10 @@ fn one_reading(parsed: &Map<String, Value>, raw: Option<&str>) -> Result<(), &'s
         return if parsed.is_empty() {
             Ok(())
         } else {
-            Err("the arguments arrived without their text, so one reading of them could not be \
-                 confirmed")
+            Err(
+                "the arguments arrived without their text, so one reading of them could not be \
+                 confirmed",
+            )
         };
     }
     match strict::object_from_str(raw) {
@@ -1188,10 +1190,7 @@ impl Orchestrator<'_> {
                 let performed = self.perform(&proposal.performer);
                 let mut event =
                     TrailEvent::new(EventKind::Executed, session.task, session.provider)
-                        .with(
-                            "TUR_AI_ACTION",
-                            identifier(&action_label(&proposal.action)),
-                        )
+                        .with("TUR_AI_ACTION", identifier(&action_label(&proposal.action)))
                         .with("TUR_AI_RESULT", performed.state)
                         .with(
                             "TUR_AI_EXIT",
@@ -1206,8 +1205,11 @@ impl Orchestrator<'_> {
                         )
                         .with("TUR_AI_WITHHELD", performed.withheld.len().to_string());
                 if !performed.withheld.is_empty() {
-                    let mut kinds: Vec<&str> =
-                        performed.withheld.iter().map(|kind| kind_name(*kind)).collect();
+                    let mut kinds: Vec<&str> = performed
+                        .withheld
+                        .iter()
+                        .map(|kind| kind_name(*kind))
+                        .collect();
                     kinds.sort_unstable();
                     kinds.dedup();
                     event = event.with("TUR_AI_WITHHELD_KINDS", kinds.join(","));
@@ -1270,12 +1272,8 @@ impl Orchestrator<'_> {
                 )
             }
             Verdict::Refuse => {
-                let code = decision
-                    .code()
-                    .map_or("", |code| code.as_str());
-                let message = decision
-                    .code()
-                    .map_or("", |code| code.entry().user_message);
+                let code = decision.code().map_or("", |code| code.as_str());
+                let message = decision.code().map_or("", |code| code.entry().user_message);
                 ToolResult::error(
                     call.id.clone(),
                     call.name.clone(),
@@ -1556,8 +1554,10 @@ mod tests {
             assert!(SYSTEM_TEXT.contains(phrase), "{phrase}");
         }
         assert!(!SYSTEM_TEXT.contains('{'));
-        let names: std::collections::BTreeSet<&str> =
-            TaskOutcome::ALL.iter().map(|outcome| outcome.as_str()).collect();
+        let names: std::collections::BTreeSet<&str> = TaskOutcome::ALL
+            .iter()
+            .map(|outcome| outcome.as_str())
+            .collect();
         assert_eq!(names.len(), TaskOutcome::ALL.len());
     }
 

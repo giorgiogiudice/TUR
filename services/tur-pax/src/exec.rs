@@ -139,7 +139,9 @@ impl Executor for BwrapExecutor {
         let mut child = match command.spawn() {
             Ok(child) => child,
             Err(error) => {
-                return ExecOutput::not_started(format!("the sandbox could not be started: {error}"));
+                return ExecOutput::not_started(format!(
+                    "the sandbox could not be started: {error}"
+                ));
             }
         };
 
@@ -271,9 +273,13 @@ mod tests {
     #[test]
     fn nothing_runs_when_the_sandbox_program_is_missing() {
         let argv = vec!["/usr/bin/true".to_owned()];
-        let mut plan =
-            SandboxPlan::read_only(&GrantRules::for_home("/home/ada"), &[], &argv, Limits::default())
-                .expect("a plan");
+        let mut plan = SandboxPlan::read_only(
+            &GrantRules::for_home("/home/ada"),
+            &[],
+            &argv,
+            Limits::default(),
+        )
+        .expect("a plan");
         plan.program = "/nonexistent/tur-pax-test/bwrap".to_owned();
         let output = BwrapExecutor::new().run(&plan);
         assert_eq!(

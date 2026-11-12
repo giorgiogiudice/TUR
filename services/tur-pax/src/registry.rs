@@ -282,11 +282,11 @@ impl ToolRegistry {
             let definition =
                 ToolDefinition::new(tool.name(), tool.description(), tool.input_schema().clone())
                     .map_err(|error| {
-                        Fault::from(Problem::new(
-                            Code::ManifestToolField,
-                            format!("{} cannot be offered to a provider: {error}", tool.name()),
-                        ))
-                    })?;
+                    Fault::from(Problem::new(
+                        Code::ManifestToolField,
+                        format!("{} cannot be offered to a provider: {error}", tool.name()),
+                    ))
+                })?;
             definitions.push(definition);
         }
         Ok(definitions)
@@ -434,8 +434,8 @@ mod tests {
             assert_eq!(definition.input_schema(), tool.input_schema());
         }
 
-        let without = ToolRegistry::load(&[TEST_MANIFEST.to_owned()], &[], false)
-            .expect("a valid tool set");
+        let without =
+            ToolRegistry::load(&[TEST_MANIFEST.to_owned()], &[], false).expect("a valid tool set");
         assert!(without.offered().is_empty());
         assert_eq!(without.unavailable().len(), 4);
         assert!(!without.has_command_tier());

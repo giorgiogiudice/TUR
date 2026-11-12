@@ -455,9 +455,7 @@ impl Adapter {
                 ArgumentTemplate::Input(input) | ArgumentTemplate::Option { input, .. } => {
                     matches!(kind_of(properties, input), Some("string" | "integer"))
                 }
-                ArgumentTemplate::Flag { when, .. } => {
-                    kind_of(properties, when) == Some("boolean")
-                }
+                ArgumentTemplate::Flag { when, .. } => kind_of(properties, when) == Some("boolean"),
             };
             if !fits {
                 problems.push(fault(
@@ -494,7 +492,10 @@ impl Adapter {
                         argv.push(value);
                     }
                 }
-                ArgumentTemplate::Option { option, input: name } => {
+                ArgumentTemplate::Option {
+                    option,
+                    input: name,
+                } => {
                     if let Some(value) = text_of(input.get(name))? {
                         argv.push(format!("{option}={value}"));
                     }
@@ -542,9 +543,7 @@ fn text_of(value: Option<&Value>) -> Result<Option<String>, Fault> {
         return Err(refused("a value that is too long was refused"));
     }
     if text.chars().any(char::is_control) {
-        return Err(refused(
-            "a value with a control character was refused",
-        ));
+        return Err(refused("a value with a control character was refused"));
     }
     Ok(Some(text))
 }
@@ -738,7 +737,11 @@ mod tests {
             let file = AdapterFile::from_json(&text).expect("a well-formed adapter file");
             let problems = file.adapters()[0].check_against(tool);
             assert_eq!(problems.len(), 1, "{argument}");
-            assert_eq!(problems[0].code.as_str(), "TUR-AI-ADAPTER-004", "{argument}");
+            assert_eq!(
+                problems[0].code.as_str(),
+                "TUR-AI-ADAPTER-004",
+                "{argument}"
+            );
         }
     }
 
@@ -771,13 +774,13 @@ mod tests {
             (with(r#","timeout_seconds":0"#), "TUR-AI-ADAPTER-001"),
             (with(r#","timeout_seconds":121"#), "TUR-AI-ADAPTER-001"),
             (with(r#","max_output_bytes":10"#), "TUR-AI-ADAPTER-001"),
-            (with(r#","max_output_bytes":99999999"#), "TUR-AI-ADAPTER-001"),
+            (
+                with(r#","max_output_bytes":99999999"#),
+                "TUR-AI-ADAPTER-001",
+            ),
             (with(r#","reads":["relative"]"#), "TUR-AI-ADAPTER-005"),
             (with(r#","reads":["/a/../b"]"#), "TUR-AI-ADAPTER-005"),
-            (
-                with(r#","feed":{"program":"lsblk"}"#),
-                "TUR-AI-ADAPTER-005",
-            ),
+            (with(r#","feed":{"program":"lsblk"}"#), "TUR-AI-ADAPTER-005"),
             (
                 with(r#","arguments":[{"literal":"a","input":"b"}]"#),
                 "TUR-AI-ADAPTER-004",
@@ -803,7 +806,9 @@ mod tests {
         for (text, code) in cases {
             let problems = AdapterFile::from_json(text).expect_err(text);
             assert!(
-                problems.iter().any(|problem| problem.code.as_str() == *code),
+                problems
+                    .iter()
+                    .any(|problem| problem.code.as_str() == *code),
                 "{text}: {problems:?}"
             );
         }
