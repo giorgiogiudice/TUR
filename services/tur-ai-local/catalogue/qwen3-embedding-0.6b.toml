@@ -1,0 +1,78 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR local model catalogue entry. Format: schemas/local-model.schema.json.
+# How entries are written and sourced: services/tur-ai-local/catalogue/README.md.
+#
+# Sources read on 2026-11-12: the Hugging Face API for
+# Qwen/Qwen3-Embedding-0.6B-GGUF (revision, file list, sizes and LFS SHA-256
+# digests) and its README.md at the pinned revision, which gives the
+# llama-server options "--embedding --pooling last".
+
+schema_version = 1
+id = "qwen3-embedding-0.6b"
+name = "Qwen3 Embedding 0.6B"
+publisher = "Qwen (Alibaba Cloud)"
+repository = "https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF"
+revision = "370f27d7550e0def9b39c1f16d3fbaa13aa67728"
+format = "gguf"
+quantisation = "Q8_0"
+parameters = "0.6B"
+# The model card: "Context Length: 32k".
+context_length = 32768
+# Estimate: the file, the 16-bit context cache at 8192 tokens
+# (28 layers x 8 KV heads x 128 x 2 x 2 bytes = 114,688 bytes per token)
+# and 512 MiB for the engine's working memory. The peaks measured in CI
+# run 43277339192 stayed below it: see [[tested]].
+memory_bytes = 2150000000
+memory_context = 8192
+kv_bytes_per_token = 114688
+capabilities = ["embeddings"]
+thinking = "none"
+pooling = "last"
+languages = ["mul"]
+languages_note = "The publisher states support for over 100 languages, programming languages included; embeddings of up to 1024 dimensions."
+good_for = [
+  "Search by meaning in documents and notes, on this computer.",
+]
+checked = "2026-11-12"
+
+[file]
+name = "Qwen3-Embedding-0.6B-Q8_0.gguf"
+url = "https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF/resolve/370f27d7550e0def9b39c1f16d3fbaa13aa67728/Qwen3-Embedding-0.6B-Q8_0.gguf"
+size_bytes = 639150592
+sha256 = "06507c7b42688469c4e7298b0a1e16deff06caf291cf0a5b278c308249c3e439"
+
+[licence]
+id = "Apache-2.0"
+url = "https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF"
+summary = "Apache License 2.0. You may use, copy, change and share the model for any purpose, commercial use included. If you pass it on, include the licence and keep its notices."
+restrictions = "none"
+evidence = "The GGUF repository's card header at the pinned revision declares apache-2.0, as does the base model Qwen/Qwen3-Embedding-0.6B. Neither repository holds a licence file."
+checked = "2026-11-12"
+
+[[tested]]
+date = "2026-11-12"
+report = "docs/reports/local-ai-1.md"
+run = "https://github.com/giorgiogiudice/TUR/actions/runs/43277339192"
+engine = "llama-server b9840 from Fedora 45's llama-cpp-b9840-2.fc45, in a Fedora 45 container (one baseline processor build, no AVX2 kernels)"
+hardware = "GitHub-hosted ubuntu-24.04 runner: AMD EPYC 7763, 4 logical processors (2 cores), AVX2 and FMA, 16.8 GB of memory, no graphics processor"
+context = 8192
+# generation_tokens_per_second: not applicable
+peak_memory_bytes = 1721053184
+tool_call = "not-tested"
+image_input = "not-tested"
+embeddings = "yes"
+notes = "1024 dimensions."
+
+[[tested]]
+date = "2026-11-12"
+report = "docs/reports/local-ai-1.md"
+run = "https://github.com/giorgiogiudice/TUR/actions/runs/43277339192"
+engine = "llama-server b9840 from llama.cpp's own release llama-b9840-bin-ubuntu-x64 (processor variants, AVX2 kernels used)"
+hardware = "GitHub-hosted ubuntu-24.04 runner: AMD EPYC 7763, 4 logical processors (2 cores), AVX2 and FMA, 16.8 GB of memory, no graphics processor"
+context = 8192
+# generation_tokens_per_second: not applicable
+peak_memory_bytes = 1651818496
+tool_call = "not-tested"
+image_input = "not-tested"
+embeddings = "yes"
+notes = "1024 dimensions."

@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "service": "org.tur.AiLocal1",
+  "tools": [
+    {
+      "name": "ai_local_status",
+      "description": "Show whether local AI is running a model on this computer, where it listens and how much memory it uses, and whether the inference engine is installed. From the assistant's sandbox the running state may not be visible; the answer says so. Reads only.",
+      "class": 0,
+      "method": "GetStatus",
+      "input_schema": { "type": "object", "properties": {}, "additionalProperties": false }
+    },
+    {
+      "name": "ai_local_models",
+      "description": "List the AI models TUR offers to run on this computer: what each is good for, whether it can call tools or see images, its download size, the memory it needs and whether it fits this computer, and its licence in plain words. Says nothing about which models are downloaded. Reads only.",
+      "class": 0,
+      "method": "ListModels",
+      "input_schema": { "type": "object", "properties": {}, "additionalProperties": false }
+    },
+    {
+      "name": "ai_local_recommend",
+      "description": "Recommend the local AI model that fits this computer best, from its memory and processor, and say why; also name a model for questions about images and one for search by meaning when one fits. Reads only.",
+      "class": 0,
+      "method": "Recommend",
+      "input_schema": { "type": "object", "properties": {}, "additionalProperties": false }
+    }
+  ]
+}

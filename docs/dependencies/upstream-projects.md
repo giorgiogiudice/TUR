@@ -102,6 +102,20 @@ row here is **proposed**.
 | Microsoft Windows | Guest operating system for the seamless tier (proposed) and dual boot | Microsoft | Proprietary. Licence terms unverified | Supplied by the user | No | Never shipped (AGENTS.md). Whether a user's licence permits use in a guest is to be confirmed (ADR-0007, Verification). |
 | Apple macOS and frameworks | None | Apple | Proprietary. Licence terms unverified here; ADR-0007 records that macOS guests are allowed only on Apple hardware | Not shipped, not used | No | Never shipped (AGENTS.md). |
 
+## Local AI (ADR-0021)
+
+Read on 12 November 2026. The engine decision and its evidence are in
+[local-ai.md](../architecture/local-ai.md), section 6; the measurements in
+[report local-ai-1](../reports/local-ai-1.md).
+
+| Project | Role in TUR | Source | Licence | Route | In image | Boundary |
+|---|---|---|---|---|---|---|
+| llama.cpp (`llama-server`) | The local inference engine (chosen) | https://github.com/ggml-org/llama.cpp | `MIT` (`LICENSE` at tag b9840). Bundled: cpp-httplib `MIT`, nlohmann/json `MIT`, stb_image `MIT` or public domain, miniaudio public domain or `MIT-0`, sheredom/subprocess.h `Unlicense`. Fedora's tag: `MIT AND Apache-2.0 AND LicenseRef-Fedora-Public-Domain` [S46] [S47] | Fedora package `llama-cpp-b9840-2.fc45`, pinned; a TUR build of the same version is the fallback (local-ai.md §6.2) | No | Started by `tur-ai-local` as a separate process and reached over HTTP on the loopback interface: no constraint. Never ship llama.cpp's `cudart-*` archives or any CUDA build (proprietary NVIDIA libraries). |
+| ROCm hipBLAS and rocBLAS | Pulled in by Fedora's `llama-cpp` (hard `Requires`) for AMD graphics cards | https://github.com/ROCm/rocBLAS, https://github.com/ROCm/hipBLAS | Licences as Fedora tags them: recorded per package by the `local-ai` workflow (`fedora-llama-cpp-added-packages.tsv`); not read at the source [S48] | Fedora package, with `llama-cpp` | No | Libraries loaded by the engine, not by TUR code: no constraint. Open source (ROCm), so allowed by ADR-0021; they are size, not a licence problem. |
+| Ollama | Evaluated as the engine; not chosen | https://github.com/ollama/ollama | `MIT`. Fedora's tag for the vendored Go modules: `Apache-2.0 AND BSD-2-Clause AND BSD-3-Clause AND BSD-3-Clause-HP AND BSL-1.0 AND CC-BY-3.0 AND CC-BY-4.0 AND CC0-1.0 AND ISC AND LicenseRef-Fedora-Public-Domain AND LicenseRef-scancode-protobuf AND MIT AND NCSA AND NTP AND OpenSSL AND ZPL-2.1 AND Zlib` [S49] | Not shipped (evaluation): Fedora's `ollama-base-0.24.0-4.fc45` measured in CI | No | Separate process: no constraint. **Upstream's Linux release bundles NVIDIA's CUDA libraries and must never be redistributed.** Cloud forwarding is on by default (`OLLAMA_NO_CLOUD`). |
+| Qwen3 0.6B, Qwen3 4B, Qwen3-VL 2B Instruct, Qwen3 Embedding 0.6B (GGUF) | Models in TUR's catalogue | https://huggingface.co/Qwen | `Apache-2.0`: the 0.6B and 4B repositories hold the Apache-2.0 text (copyright line "2025 Alibaba Cloud"); the VL and Embedding repositories declare `apache-2.0` in their card metadata only, with no licence file [S50] | Fetched by user (on request, from the pinned revision) | No | TUR does not ship model files. Restrictions: none. |
+| Granite 4.0 1B (GGUF) | Model in TUR's catalogue | https://huggingface.co/ibm-granite/granite-4.0-1b-GGUF | `Apache-2.0` in the card metadata and the base model's card; no licence file in either repository; the publisher's GitHub repository is `Apache-2.0` [S51] | Fetched by user | No | As above. |
+
 ## Corrections the specification needs
 
 These are observations for whoever next edits §17; this change does not edit the
@@ -167,6 +181,12 @@ quotes a package version or a Fedora licence tag, the source is the image SBOM
 | S43 | virtio-win | `LICENSE` of the driver source; packaging `README.md` | https://github.com/virtio-win/kvm-guest-drivers-windows/blob/master/LICENSE ; https://github.com/virtio-win/virtio-win-pkg-scripts/blob/master/README.md |
 | S44 | Flatpak | `COPYING`; Fedora 45 spec (`Version: 1.19.0^really1.18.4`, `Source0: flatpak-1.18.4.tar.xz`); the image's SBOM | https://github.com/flatpak/flatpak ; https://src.fedoraproject.org/rpms/flatpak/raw/f45/f/flatpak.spec |
 | S45 | curl | The licence page; the image's SBOM | https://curl.se/docs/copyright.html |
+| S46 | llama.cpp | `LICENSE` and the `vendor/` and `licenses/` trees at tag b9840; `tools/server/README.md` at b9840 (options, endpoints, sleeping on idle, router mode); the release workflow (`.github/workflows/release.yml`, CPU build options); GitHub releases API (b9840 assets and SHA-256, latest b12319 and v0.9.0) | https://github.com/ggml-org/llama.cpp/tree/b9840 ; https://github.com/ggml-org/llama.cpp/blob/b9840/tools/server/README.md |
+| S47 | Fedora `llama-cpp` | mdapi for f45 and rawhide; the f45 spec; Koji build `llama-cpp-b9840-2.fc45` (RPM sizes, `build.log` for x86_64) | https://src.fedoraproject.org/rpms/llama-cpp/blob/f45/f/llama-cpp.spec ; https://koji.fedoraproject.org/koji/buildinfo?buildID=3043549 |
+| S48 | ROCm in Fedora 45 | mdapi requirements of `rocblas`, `hipblas`; Koji `rocblas-7.2.0-9.fc45` RPM size | https://koji.fedoraproject.org/koji/search?match=exact&type=package&terms=rocblas |
+| S49 | Ollama | Repository licence; `docs/api/openai-compatibility.mdx`, `docs/api/authentication.mdx`, `envconfig/config.go` at v0.24.0; the f45 spec and `ollama.service`; Koji build `ollama-0.24.0-4.fc45`; GitHub releases API (v0.40.16 assets) | https://github.com/ollama/ollama/blob/v0.24.0/docs/api/openai-compatibility.mdx ; https://src.fedoraproject.org/rpms/ollama/blob/f45/f/ollama.spec |
+| S50 | Qwen models | Hugging Face API (revisions, file sizes, LFS SHA-256); `README.md` and `LICENSE` at the pinned revisions; GitHub repository licence of QwenLM/Qwen3-VL | https://huggingface.co/Qwen/Qwen3-0.6B-GGUF ; https://huggingface.co/Qwen/Qwen3-4B-GGUF ; https://huggingface.co/Qwen/Qwen3-VL-2B-Instruct-GGUF ; https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF |
+| S51 | Granite models | Hugging Face API; `README.md` of the GGUF repository at the pinned revision and of the base model; `config.json`; GitHub repository licence of ibm-granite/granite-4.0-language-models | https://huggingface.co/ibm-granite/granite-4.0-1b-GGUF ; https://huggingface.co/ibm-granite/granite-4.0-1b |
 
 ### Not verified
 

@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "service": "org.tur.AiLocal1",
+  "adapters": [
+    {
+      "tool": "ai_local_status",
+      "kind": "command",
+      "program": "/usr/bin/tur-ai-local",
+      "arguments": [
+        { "literal": "status" },
+        { "literal": "--json" }
+      ],
+      "max_output_bytes": 65536
+    },
+    {
+      "tool": "ai_local_models",
+      "kind": "command",
+      "program": "/usr/bin/tur-ai-local",
+      "arguments": [
+        { "literal": "models" },
+        { "literal": "--json" },
+        { "literal": "--catalogue-only" }
+      ],
+      "max_output_bytes": 262144
+    },
+    {
+      "tool": "ai_local_recommend",
+      "kind": "command",
+      "program": "/usr/bin/tur-ai-local",
+      "arguments": [
+        { "literal": "recommend" },
+        { "literal": "--json" }
+      ],
+      "max_output_bytes": 262144
+    }
+  ]
+}

@@ -1,0 +1,176 @@
+processor	: 0
+vendor_id	: AuthenticAMD
+cpu family	: 25
+model		: 97
+model name	: Constructed AMD desktop processor (test fixture)
+physical id	: 0
+siblings	: 16
+core id		: 0
+cpu cores	: 8
+flags		: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good nopl pni pclmulqdq ssse3 fma cx16 sse4_1 sse4_2 movbe popcnt aes xsave avx f16c rdrand lahf_lm abm sse4a bmi1 avx2 bmi2 avx512f avx512dq avx512cd avx512bw avx512vl avx512_bf16 avx512vbmi avx512_vnni sha_ni
+
+processor	: 1
+vendor_id	: AuthenticAMD
+cpu family	: 25
+model		: 97
+model name	: Constructed AMD desktop processor (test fixture)
+physical id	: 0
+siblings	: 16
+core id		: 0
+cpu cores	: 8
+flags		: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good nopl pni pclmulqdq ssse3 fma cx16 sse4_1 sse4_2 movbe popcnt aes xsave avx f16c rdrand lahf_lm abm sse4a bmi1 avx2 bmi2 avx512f avx512dq avx512cd avx512bw avx512vl avx512_bf16 avx512vbmi avx512_vnni sha_ni
+
+processor	: 2
+vendor_id	: AuthenticAMD
+cpu family	: 25
+model		: 97
+model name	: Constructed AMD desktop processor (test fixture)
+physical id	: 0
+siblings	: 16
+core id		: 1
+cpu cores	: 8
+flags		: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good nopl pni pclmulqdq ssse3 fma cx16 sse4_1 sse4_2 movbe popcnt aes xsave avx f16c rdrand lahf_lm abm sse4a bmi1 avx2 bmi2 avx512f avx512dq avx512cd avx512bw avx512vl avx512_bf16 avx512vbmi avx512_vnni sha_ni
+
+processor	: 3
+vendor_id	: AuthenticAMD
+cpu family	: 25
+model		: 97
+model name	: Constructed AMD desktop processor (test fixture)
+physical id	: 0
+siblings	: 16
+core id		: 1
+cpu cores	: 8
+flags		: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good nopl pni pclmulqdq ssse3 fma cx16 sse4_1 sse4_2 movbe popcnt aes xsave avx f16c rdrand lahf_lm abm sse4a bmi1 avx2 bmi2 avx512f avx512dq avx512cd avx512bw avx512vl avx512_bf16 avx512vbmi avx512_vnni sha_ni
+
+processor	: 4
+vendor_id	: AuthenticAMD
+cpu family	: 25
+model		: 97
+model name	: Constructed AMD desktop processor (test fixture)
+physical id	: 0
+siblings	: 16
+core id		: 2
+cpu cores	: 8
+flags		: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good nopl pni pclmulqdq ssse3 fma cx16 sse4_1 sse4_2 movbe popcnt aes xsave avx f16c rdrand lahf_lm abm sse4a bmi1 avx2 bmi2 avx512f avx512dq avx512cd avx512bw avx512vl avx512_bf16 avx512vbmi avx512_vnni sha_ni
+
+processor	: 5
+vendor_id	: AuthenticAMD
+cpu family	: 25
+model		: 97
+model name	: Constructed AMD desktop processor (test fixture)
+physical id	: 0
+siblings	: 16
+core id		: 2
+cpu cores	: 8
+flags		: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good nopl pni pclmulqdq ssse3 fma cx16 sse4_1 sse4_2 movbe popcnt aes xsave avx f16c rdrand lahf_lm abm sse4a bmi1 avx2 bmi2 avx512f avx512dq avx512cd avx512bw avx512vl avx512_bf16 avx512vbmi avx512_vnni sha_ni
+
+processor	: 6
+vendor_id	: AuthenticAMD
+cpu family	: 25
+model		: 97
+model name	: Constructed AMD desktop processor (test fixture)
+physical id	: 0
+siblings	: 16
+core id		: 3
+cpu cores	: 8
+flags		: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good nopl pni pclmulqdq ssse3 fma cx16 sse4_1 sse4_2 movbe popcnt aes xsave avx f16c rdrand lahf_lm abm sse4a bmi1 avx2 bmi2 avx512f avx512dq avx512cd avx512bw avx512vl avx512_bf16 avx512vbmi avx512_vnni sha_ni
+
+processor	: 7
+vendor_id	: AuthenticAMD
+cpu family	: 25
+model		: 97
+model name	: Constructed AMD desktop processor (test fixture)
+physical id	: 0
+siblings	: 16
+core id		: 3
+cpu cores	: 8
+flags		: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good nopl pni pclmulqdq ssse3 fma cx16 sse4_1 sse4_2 movbe popcnt aes xsave avx f16c rdrand lahf_lm abm sse4a bmi1 avx2 bmi2 avx512f avx512dq avx512cd avx512bw avx512vl avx512_bf16 avx512vbmi avx512_vnni sha_ni
+
+processor	: 8
+vendor_id	: AuthenticAMD
+cpu family	: 25
+model		: 97
+model name	: Constructed AMD desktop processor (test fixture)
+physical id	: 0
+siblings	: 16
+core id		: 4
+cpu cores	: 8
+flags		: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good nopl pni pclmulqdq ssse3 fma cx16 sse4_1 sse4_2 movbe popcnt aes xsave avx f16c rdrand lahf_lm abm sse4a bmi1 avx2 bmi2 avx512f avx512dq avx512cd avx512bw avx512vl avx512_bf16 avx512vbmi avx512_vnni sha_ni
+
+processor	: 9
+vendor_id	: AuthenticAMD
+cpu family	: 25
+model		: 97
+model name	: Constructed AMD desktop processor (test fixture)
+physical id	: 0
+siblings	: 16
+core id		: 4
+cpu cores	: 8
+flags		: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good nopl pni pclmulqdq ssse3 fma cx16 sse4_1 sse4_2 movbe popcnt aes xsave avx f16c rdrand lahf_lm abm sse4a bmi1 avx2 bmi2 avx512f avx512dq avx512cd avx512bw avx512vl avx512_bf16 avx512vbmi avx512_vnni sha_ni
+
+processor	: 10
+vendor_id	: AuthenticAMD
+cpu family	: 25
+model		: 97
+model name	: Constructed AMD desktop processor (test fixture)
+physical id	: 0
+siblings	: 16
+core id		: 5
+cpu cores	: 8
+flags		: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good nopl pni pclmulqdq ssse3 fma cx16 sse4_1 sse4_2 movbe popcnt aes xsave avx f16c rdrand lahf_lm abm sse4a bmi1 avx2 bmi2 avx512f avx512dq avx512cd avx512bw avx512vl avx512_bf16 avx512vbmi avx512_vnni sha_ni
+
+processor	: 11
+vendor_id	: AuthenticAMD
+cpu family	: 25
+model		: 97
+model name	: Constructed AMD desktop processor (test fixture)
+physical id	: 0
+siblings	: 16
+core id		: 5
+cpu cores	: 8
+flags		: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good nopl pni pclmulqdq ssse3 fma cx16 sse4_1 sse4_2 movbe popcnt aes xsave avx f16c rdrand lahf_lm abm sse4a bmi1 avx2 bmi2 avx512f avx512dq avx512cd avx512bw avx512vl avx512_bf16 avx512vbmi avx512_vnni sha_ni
+
+processor	: 12
+vendor_id	: AuthenticAMD
+cpu family	: 25
+model		: 97
+model name	: Constructed AMD desktop processor (test fixture)
+physical id	: 0
+siblings	: 16
+core id		: 6
+cpu cores	: 8
+flags		: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good nopl pni pclmulqdq ssse3 fma cx16 sse4_1 sse4_2 movbe popcnt aes xsave avx f16c rdrand lahf_lm abm sse4a bmi1 avx2 bmi2 avx512f avx512dq avx512cd avx512bw avx512vl avx512_bf16 avx512vbmi avx512_vnni sha_ni
+
+processor	: 13
+vendor_id	: AuthenticAMD
+cpu family	: 25
+model		: 97
+model name	: Constructed AMD desktop processor (test fixture)
+physical id	: 0
+siblings	: 16
+core id		: 6
+cpu cores	: 8
+flags		: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good nopl pni pclmulqdq ssse3 fma cx16 sse4_1 sse4_2 movbe popcnt aes xsave avx f16c rdrand lahf_lm abm sse4a bmi1 avx2 bmi2 avx512f avx512dq avx512cd avx512bw avx512vl avx512_bf16 avx512vbmi avx512_vnni sha_ni
+
+processor	: 14
+vendor_id	: AuthenticAMD
+cpu family	: 25
+model		: 97
+model name	: Constructed AMD desktop processor (test fixture)
+physical id	: 0
+siblings	: 16
+core id		: 7
+cpu cores	: 8
+flags		: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good nopl pni pclmulqdq ssse3 fma cx16 sse4_1 sse4_2 movbe popcnt aes xsave avx f16c rdrand lahf_lm abm sse4a bmi1 avx2 bmi2 avx512f avx512dq avx512cd avx512bw avx512vl avx512_bf16 avx512vbmi avx512_vnni sha_ni
+
+processor	: 15
+vendor_id	: AuthenticAMD
+cpu family	: 25
+model		: 97
+model name	: Constructed AMD desktop processor (test fixture)
+physical id	: 0
+siblings	: 16
+core id		: 7
+cpu cores	: 8
+flags		: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good nopl pni pclmulqdq ssse3 fma cx16 sse4_1 sse4_2 movbe popcnt aes xsave avx f16c rdrand lahf_lm abm sse4a bmi1 avx2 bmi2 avx512f avx512dq avx512cd avx512bw avx512vl avx512_bf16 avx512vbmi avx512_vnni sha_ni
+

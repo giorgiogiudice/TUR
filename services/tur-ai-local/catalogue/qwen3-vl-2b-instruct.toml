@@ -1,0 +1,86 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR local model catalogue entry. Format: schemas/local-model.schema.json.
+# How entries are written and sourced: services/tur-ai-local/catalogue/README.md.
+#
+# Sources read on 2026-11-12: the Hugging Face API for
+# Qwen/Qwen3-VL-2B-Instruct-GGUF (revision, file list, sizes and LFS SHA-256
+# digests), its README.md at the pinned revision, the base model's
+# config.json, and the GitHub API for QwenLM/Qwen3-VL.
+
+schema_version = 1
+id = "qwen3-vl-2b-instruct"
+name = "Qwen3-VL 2B Instruct"
+publisher = "Qwen (Alibaba Cloud)"
+repository = "https://huggingface.co/Qwen/Qwen3-VL-2B-Instruct-GGUF"
+revision = "52d6c8ffea26cc873ac5ad116f8631268d7eb503"
+format = "gguf"
+quantisation = "Q4_K_M"
+parameters = "2B"
+# The model card: "Native 256K context, expandable to 1M".
+context_length = 262144
+# Estimate: the model and projector files, the 16-bit context cache at 8192
+# tokens (28 layers x 8 KV heads x 128 x 2 x 2 bytes = 114,688 bytes per
+# token), 512 MiB for the engine's working memory and about 300 MB for
+# encoding one image, was 3.35 GB. Raised to 3.65 GB: llama.cpp's own
+# build peaked at 3.28 GB in CI run 43277339192 (Fedora's at 2.68 GB).
+# 10 % above the higher peak.
+memory_bytes = 3650000000
+memory_context = 8192
+kv_bytes_per_token = 114688
+capabilities = ["chat", "tools", "vision"]
+thinking = "none"
+languages = ["mul"]
+languages_note = "The publisher states text recognition (OCR) in 32 languages; the languages of conversation are not listed."
+good_for = [
+  "Questions about images and screenshots.",
+  "Reading text in images.",
+]
+checked = "2026-11-12"
+
+[file]
+name = "Qwen3VL-2B-Instruct-Q4_K_M.gguf"
+url = "https://huggingface.co/Qwen/Qwen3-VL-2B-Instruct-GGUF/resolve/52d6c8ffea26cc873ac5ad116f8631268d7eb503/Qwen3VL-2B-Instruct-Q4_K_M.gguf"
+size_bytes = 1107409952
+sha256 = "089d75c52f4b7ffc56ba998ffc50aae89fcafc755f9e7208aacca281dca6c2ae"
+
+[projector]
+name = "mmproj-Qwen3VL-2B-Instruct-Q8_0.gguf"
+url = "https://huggingface.co/Qwen/Qwen3-VL-2B-Instruct-GGUF/resolve/52d6c8ffea26cc873ac5ad116f8631268d7eb503/mmproj-Qwen3VL-2B-Instruct-Q8_0.gguf"
+size_bytes = 445053216
+sha256 = "f9a68fabba69c3b81e153367b2c7521030b0fa8bb0de400c9599c8e6725f9c82"
+
+[licence]
+id = "Apache-2.0"
+url = "https://huggingface.co/Qwen/Qwen3-VL-2B-Instruct-GGUF"
+summary = "Apache License 2.0. You may use, copy, change and share the model for any purpose, commercial use included. If you pass it on, include the licence and keep its notices."
+restrictions = "none"
+evidence = "The GGUF repository's card header at the pinned revision declares apache-2.0, as does the base model Qwen/Qwen3-VL-2B-Instruct. Neither repository holds a licence file. The publisher's GitHub repository QwenLM/Qwen3-VL is declared Apache-2.0."
+checked = "2026-11-12"
+
+[[tested]]
+date = "2026-11-12"
+report = "docs/reports/local-ai-1.md"
+run = "https://github.com/giorgiogiudice/TUR/actions/runs/43277339192"
+engine = "llama-server b9840 from Fedora 45's llama-cpp-b9840-2.fc45, in a Fedora 45 container (one baseline processor build, no AVX2 kernels)"
+hardware = "GitHub-hosted ubuntu-24.04 runner: AMD EPYC 7763, 4 logical processors (2 cores), AVX2 and FMA, 16.8 GB of memory, no graphics processor"
+context = 8192
+generation_tokens_per_second = 3.72
+peak_memory_bytes = 2681372672
+tool_call = "yes"
+image_input = "yes"
+embeddings = "not-tested"
+notes = "128 tokens generated in 34.67 s wall time; prompt speed not recorded: this run reused the prompt cache between the two measuring requests; answer after the tool result used it: yes; streamed tool call: yes."
+
+[[tested]]
+date = "2026-11-12"
+report = "docs/reports/local-ai-1.md"
+run = "https://github.com/giorgiogiudice/TUR/actions/runs/43277339192"
+engine = "llama-server b9840 from llama.cpp's own release llama-b9840-bin-ubuntu-x64 (processor variants, AVX2 kernels used)"
+hardware = "GitHub-hosted ubuntu-24.04 runner: AMD EPYC 7763, 4 logical processors (2 cores), AVX2 and FMA, 16.8 GB of memory, no graphics processor"
+context = 8192
+generation_tokens_per_second = 32.87
+peak_memory_bytes = 3284996096
+tool_call = "yes"
+image_input = "yes"
+embeddings = "not-tested"
+notes = "128 tokens generated in 3.93 s wall time; prompt speed not recorded: this run reused the prompt cache between the two measuring requests; answer after the tool result used it: yes; streamed tool call: yes."

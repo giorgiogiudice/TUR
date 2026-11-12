@@ -1,0 +1,457 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Local AI (ADR-0021) against a real engine and real models, on the
+# runner's processor. See docs/architecture/local-ai.md and
+# docs/reports/local-ai-1.md.
+#
+# fedora:  Fedora 45's own llama-cpp package (what the image would install)
+#          in a Fedora 45 container, driven by tur-ai-local: the proof with
+#          the smallest model (download, refusal of changed files, serving
+#          on the loopback interface only, chat, streaming, a tool call,
+#          idle stop), then every catalogue model measured.
+# compare: the engine comparison on the same runner: llama.cpp's own
+#          release build of the same version, and Fedora 45's Ollama.
+# pax:     P@x's own provider adapters (tur-pax run) and a minimal Chat
+#          Completions harness against the local server, with TUR's tools.
+#
+# Checks about TUR fail the workflow. What a model answers is measured and
+# recorded, and never fails it. Nothing runs on a graphics processor: the
+# runner has none.
+name: local-ai
+
+on:
+  pull_request:
+    paths:
+      - "services/tur-ai-local/**"
+      - "schemas/local-model.schema.json"
+      - "schemas/ai-local-report.schema.json"
+      - "crates/tur-core/**"
+      - "rust-toolchain.toml"
+      - ".github/workflows/local-ai.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: local-ai-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # quay.io/fedora/fedora:45, read on 2026-11-12. The tag is a manifest list.
+  FEDORA_IMAGE: quay.io/fedora/fedora:45@sha256:fa773d10382c082ff2cccaf7982a5c162f11f296f91274b994357f2d3d473770
+  # The engine as Fedora 45 packages it (f45 and f45-updates, 2026-11-12).
+  LLAMA_CPP_RPM: llama-cpp-b9840-2.fc45
+  OLLAMA_RPM: ollama-base-0.24.0-4.fc45
+  # llama.cpp's own release of the same version, CPU build for x86-64
+  # (GGML_BACKEND_DL, GGML_CPU_ALL_VARIANTS), and its SHA-256 as GitHub
+  # reports it for the release asset.
+  UPSTREAM_URL: https://github.com/ggml-org/llama.cpp/releases/download/b9840/llama-b9840-bin-ubuntu-x64.tar.gz
+  UPSTREAM_SHA256: 7a8a02089076eb6bd86e6a5d23ea99b91ce0d13f8d43b01fa3ad5aa4e02e7e92
+  CARGO_TERM_COLOR: never
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  fedora:
+    name: Fedora 45 llama-server, driven by tur-ai-local
+    runs-on: ubuntu-24.04
+    timeout-minutes: 170
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Room on the disk
+        run: |
+          WORK="$RUNNER_TEMP/local-ai"
+          echo "WORK=$WORK" >> "$GITHUB_ENV"
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache/CodeQL
+          df -h / | tail -1
+          mkdir -p "$WORK/bin" "$WORK/data" "$WORK/run" "$WORK/evidence"
+          python3 -m py_compile services/tur-ai-local/ci/local_ai_ci.py
+
+      - name: Toolchain
+        working-directory: services/tur-ai-local
+        run: |
+          rustup show active-toolchain || rustup toolchain install
+          rustc --version; cargo --version
+
+      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            services/tur-ai-local/target
+          key: local-ai-release-${{ hashFiles('rust-toolchain.toml', 'services/tur-ai-local/Cargo.toml', 'services/tur-ai-local/Cargo.lock') }}
+          restore-keys: local-ai-release-
+
+      - name: Build tur-ai-local
+        working-directory: services/tur-ai-local
+        run: |
+          if [ -f Cargo.lock ]; then cargo build --release --locked; else cargo build --release; fi
+          install -m 0755 target/release/tur-ai-local "$WORK/bin/tur-ai-local"
+
+      - name: The runner's hardware, with Vulkan's software device
+        # The runner has no graphics processor. Mesa's llvmpipe gives
+        # vulkaninfo one device of type CPU, which tur-ai-local must not
+        # count as usable.
+        run: |
+          sudo apt-get install -y --no-install-recommends vulkan-tools mesa-vulkan-drivers >/dev/null
+          vulkaninfo --summary > "$WORK/evidence/vulkaninfo-summary.txt" 2>/dev/null || true
+          "$WORK/bin/tur-ai-local" hardware --json --engine /nonexistent/llama-server > "$WORK/evidence/hardware-runner.json"
+          python3 - "$WORK/evidence/hardware-runner.json" "$WORK/evidence/vulkaninfo-summary.txt" <<'PY'
+          import json, sys
+          report = json.load(open(sys.argv[1]))
+          hardware = report["hardware"]
+          print(json.dumps(hardware["cpu"], indent=1), json.dumps(hardware["memory"]), json.dumps(hardware["vulkan"], indent=1), sep="\n")
+          devices = hardware["vulkan"]["devices"]
+          summary = open(sys.argv[2]).read()
+          if "GPU0:" in summary:
+              assert hardware["vulkan"]["status"] == "listed", hardware["vulkan"]
+              assert all(d["device_type"] == "cpu" and not d["usable"] for d in devices), devices
+              assert hardware["usable_open_backend"] is False
+              print("vulkaninfo read: only a software device, not usable")
+          else:
+              print("vulkaninfo printed no device here; status", hardware["vulkan"]["status"])
+          PY
+
+      - name: The smallest model, from the cache when it is there
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: ${{ runner.temp }}/local-ai/data/tur/models/qwen3-0.6b
+          key: local-ai-model-qwen3-0.6b-9465e63a22add5354d9bb4b99e90117043c7124007664907259bd16d043bb031
+
+      - name: A Fedora 45 container with Fedora's llama-cpp
+        run: |
+          docker run -d --name fedora --network host \
+            -v "$GITHUB_WORKSPACE:/w:ro" -v "$WORK:$WORK" "$FEDORA_IMAGE" sleep infinity
+          docker exec fedora bash -c 'rpm -qa --qf "%{NAME}-%{VERSION}-%{RELEASE}.%{ARCH}\t%{SIZE}\n" | sort > /tmp/before'
+          docker exec fedora dnf -y --setopt=install_weak_deps=False install \
+            "$LLAMA_CPP_RPM" python3 util-linux procps-ng 2>&1 | tail -n 40 | tee "$WORK/evidence/dnf-llama-cpp.txt"
+          docker exec fedora bash -c '
+            rpm -qa --qf "%{NAME}-%{VERSION}-%{RELEASE}.%{ARCH}\t%{SIZE}\n" | sort > /tmp/after
+            comm -13 /tmp/before /tmp/after > /tmp/added
+            echo "packages added: $(wc -l < /tmp/added)"
+            awk -F"\t" "{s+=\$2} END {printf \"installed size of the added packages: %.0f MB\n\", s/1e6}" /tmp/added
+            sort -k2 -n -r /tmp/added | head -n 15
+            rpm -q llama-cpp; rpm -q --qf "%{LICENSE}\n" llama-cpp
+            ls -la /usr/lib64/libggml* /usr/bin/llama-server
+            llama-server --version 2>&1 | tail -n 3 || true
+            cat /etc/os-release | head -n 3' | tee "$WORK/evidence/fedora-llama-cpp.txt"
+          docker exec fedora bash -c 'rpm -q --qf "%{NAME}\t%{VERSION}-%{RELEASE}\t%{SIZE}\t%{LICENSE}\n" $(cut -f1 /tmp/added)' \
+            > "$WORK/evidence/fedora-llama-cpp-added-packages.tsv"
+
+      - name: The proof, with the smallest model
+        run: |
+          docker exec fedora setpriv --reuid="$(id -u)" --regid="$(id -g)" --clear-groups -- \
+            python3 /w/services/tur-ai-local/ci/local_ai_ci.py proof \
+              --tal "$WORK/bin/tur-ai-local" --catalogue /w/services/tur-ai-local/catalogue \
+              --data "$WORK/data" --runtime "$WORK/run" --evidence "$WORK/evidence/fedora" \
+              --model qwen3-0.6b --idle 30
+
+      - name: Every catalogue model
+        if: ${{ !cancelled() }}
+        run: |
+          docker exec fedora setpriv --reuid="$(id -u)" --regid="$(id -g)" --clear-groups -- \
+            python3 /w/services/tur-ai-local/ci/local_ai_ci.py table \
+              --tal "$WORK/bin/tur-ai-local" --catalogue /w/services/tur-ai-local/catalogue \
+              --data "$WORK/data" --runtime "$WORK/run" --evidence "$WORK/evidence/fedora" \
+              --label fedora-llama-cpp-b9840 --remove-after --keep qwen3-0.6b
+
+      - name: Summary
+        if: always()
+        run: |
+          python3 services/tur-ai-local/ci/local_ai_ci.py summary --evidence "$WORK/evidence" --out "$WORK/evidence/summary.md" >/dev/null || true
+          cat "$WORK/evidence/summary.md" >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+          docker exec fedora bash -c "cat $WORK/run/tur-ai-local/engine.log 2>/dev/null | tail -n 80" > "$WORK/evidence/engine-log-tail.txt" || true
+          docker rm -f fedora >/dev/null 2>&1 || true
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: local-ai-fedora-evidence
+          path: ${{ runner.temp }}/local-ai/evidence/
+          if-no-files-found: warn
+
+  compare:
+    name: Engine comparison — llama.cpp's own build and Fedora's Ollama
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Room on the disk
+        run: |
+          WORK="$RUNNER_TEMP/local-ai"
+          echo "WORK=$WORK" >> "$GITHUB_ENV"
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache/CodeQL
+          mkdir -p "$WORK/bin" "$WORK/data" "$WORK/run" "$WORK/evidence"
+
+      - name: Toolchain
+        working-directory: services/tur-ai-local
+        run: rustup show active-toolchain || rustup toolchain install
+
+      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            services/tur-ai-local/target
+          key: local-ai-release-${{ hashFiles('rust-toolchain.toml', 'services/tur-ai-local/Cargo.toml', 'services/tur-ai-local/Cargo.lock') }}
+          restore-keys: local-ai-release-
+
+      - name: Build tur-ai-local
+        working-directory: services/tur-ai-local
+        run: |
+          if [ -f Cargo.lock ]; then cargo build --release --locked; else cargo build --release; fi
+          install -m 0755 target/release/tur-ai-local "$WORK/bin/tur-ai-local"
+
+      - name: The smallest model, from the cache when it is there
+        uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: ${{ runner.temp }}/local-ai/data/tur/models/qwen3-0.6b
+          key: local-ai-model-qwen3-0.6b-9465e63a22add5354d9bb4b99e90117043c7124007664907259bd16d043bb031
+
+      - name: llama.cpp's own release build, checked
+        run: |
+          curl -fsSL -o "$WORK/llama.tar.gz" "$UPSTREAM_URL"
+          echo "$UPSTREAM_SHA256  $WORK/llama.tar.gz" | sha256sum -c -
+          mkdir -p "$WORK/upstream" && tar -xzf "$WORK/llama.tar.gz" -C "$WORK/upstream"
+          server="$(find "$WORK/upstream" -name llama-server -type f | head -n 1)"
+          echo "UPSTREAM_SERVER=$server" >> "$GITHUB_ENV"
+          ls -la "$(dirname "$server")" | tee "$WORK/evidence/upstream-files.txt"
+          "$server" --version 2>&1 | tail -n 3 | tee -a "$WORK/evidence/upstream-files.txt"
+
+      - name: Every catalogue model with llama.cpp's own build
+        run: |
+          python3 services/tur-ai-local/ci/local_ai_ci.py table \
+            --tal "$WORK/bin/tur-ai-local" --catalogue services/tur-ai-local/catalogue \
+            --data "$WORK/data" --runtime "$WORK/run" --evidence "$WORK/evidence/upstream" \
+            --engine "$UPSTREAM_SERVER" --label upstream-llama-cpp-b9840-cpu --remove-after --keep qwen3-0.6b
+
+      - name: Fedora 45's Ollama, with the same model file
+        if: ${{ !cancelled() }}
+        run: |
+          "$WORK/bin/tur-ai-local" pull qwen3-0.6b --catalogue services/tur-ai-local/catalogue --models-dir "$WORK/data/tur/models"
+          docker run -d --name fedora --network host -v "$WORK:$WORK" "$FEDORA_IMAGE" sleep infinity
+          docker exec fedora bash -c 'rpm -qa --qf "%{NAME}-%{VERSION}-%{RELEASE}.%{ARCH}\t%{SIZE}\n" | sort > /tmp/before'
+          docker exec fedora dnf -y --setopt=install_weak_deps=False install "$OLLAMA_RPM" 2>&1 | tail -n 30 | tee "$WORK/evidence/dnf-ollama.txt"
+          docker exec fedora bash -c '
+            rpm -qa --qf "%{NAME}-%{VERSION}-%{RELEASE}.%{ARCH}\t%{SIZE}\n" | sort > /tmp/after
+            comm -13 /tmp/before /tmp/after > /tmp/added
+            echo "packages added: $(wc -l < /tmp/added)"
+            awk -F"\t" "{s+=\$2} END {printf \"installed size of the added packages: %.0f MB\n\", s/1e6}" /tmp/added
+            cat /tmp/added; rpm -q --qf "%{LICENSE}\n" ollama-base; ls -la /usr/lib/ollama; ollama --version 2>&1 | tail -n 2' \
+            | tee "$WORK/evidence/fedora-ollama.txt"
+          docker exec fedora bash -c 'rpm -q --qf "%{NAME}\t%{VERSION}-%{RELEASE}\t%{SIZE}\t%{LICENSE}\n" $(cut -f1 /tmp/added)' \
+            > "$WORK/evidence/fedora-ollama-added-packages.tsv"
+          docker exec -d -e OLLAMA_HOST=127.0.0.1:11434 -e OLLAMA_MODELS=/tmp/ollama-models -e OLLAMA_NO_CLOUD=1 \
+            -e OLLAMA_KEEP_ALIVE=10m fedora bash -c 'ollama serve > /tmp/ollama.log 2>&1'
+          for _ in $(seq 1 60); do curl -fsS http://127.0.0.1:11434/api/version && break; sleep 1; done
+          echo
+          model="$WORK/data/tur/models/qwen3-0.6b/Qwen3-0.6B-Q8_0.gguf"
+          printf 'FROM %s\nPARAMETER num_ctx 8192\n' "$model" > "$WORK/Modelfile"
+          docker exec -e OLLAMA_HOST=127.0.0.1:11434 fedora ollama create qwen3-local -f "$WORK/Modelfile" 2>&1 | tail -n 5
+          docker exec -e OLLAMA_HOST=127.0.0.1:11434 fedora ollama show qwen3-local 2>&1 | tee "$WORK/evidence/ollama-show.txt"
+          python3 - <<'PY' | tee "$WORK/evidence/ollama-listening.txt"
+          from pathlib import Path
+          import socket
+          for line in Path("/proc/net/tcp").read_text().splitlines()[1:]:
+              fields = line.split()
+              address, port = fields[1].split(":")
+              if fields[3] == "0A" and int(port, 16) == 11434:
+                  print("Ollama listens on", socket.inet_ntoa(bytes.fromhex(address)[::-1]), 11434)
+          PY
+          python3 services/tur-ai-local/ci/local_ai_ci.py ollama --ollama-url http://127.0.0.1:11434 \
+            --ollama-model qwen3-local --evidence "$WORK/evidence/ollama"
+          docker exec fedora tail -n 60 /tmp/ollama.log > "$WORK/evidence/ollama-log-tail.txt" || true
+
+      - name: Summary
+        if: always()
+        run: |
+          python3 services/tur-ai-local/ci/local_ai_ci.py summary --evidence "$WORK/evidence" --out "$WORK/evidence/summary.md" >/dev/null || true
+          cat "$WORK/evidence/summary.md" >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+          docker rm -f fedora >/dev/null 2>&1 || true
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: local-ai-compare-evidence
+          path: ${{ runner.temp }}/local-ai/evidence/
+          if-no-files-found: warn
+
+  pax:
+    name: P@x against the local model
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    env:
+      DEBIAN_FRONTEND: noninteractive
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Room on the disk
+        run: |
+          WORK="$RUNNER_TEMP/local-ai"
+          echo "WORK=$WORK" >> "$GITHUB_ENV"
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache/CodeQL
+          mkdir -p "$WORK/bin" "$WORK/data" "$WORK/run" "$WORK/evidence" "$WORK/pax"
+
+      - name: Install bubblewrap
+        run: |
+          sudo apt-get update >/dev/null
+          sudo apt-get install -y bubblewrap util-linux >/dev/null
+
+      - name: Sandbox preflight
+        # P@x's own preflight: the sandbox is not optional.
+        run: tests/pax/sandbox-preflight.sh "$WORK/evidence/sandbox-preflight.txt"
+
+      - name: Toolchain
+        working-directory: services/tur-pax
+        run: rustup show active-toolchain || rustup toolchain install
+
+      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            services/tur-ai-local/target
+            services/tur-pax/target
+            services/tur-catalogue/target
+            services/tur-device-manager/target
+          key: local-ai-pax-${{ hashFiles('rust-toolchain.toml', 'services/tur-ai-local/Cargo.lock', 'services/tur-pax/Cargo.lock', 'services/tur-catalogue/Cargo.lock', 'services/tur-device-manager/Cargo.lock') }}
+          restore-keys: local-ai-pax-
+
+      - name: Build tur-pax, its tool programs and tur-ai-local
+        run: |
+          for component in tur-pax tur-catalogue tur-device-manager; do
+            (cd "services/$component" && cargo build --locked)
+          done
+          (cd services/tur-ai-local && if [ -f Cargo.lock ]; then cargo build --release --locked; else cargo build --release; fi)
+          install -m 0755 services/tur-ai-local/target/release/tur-ai-local "$WORK/bin/tur-ai-local"
+
+      - name: Put the programs, the catalogues and the tools in place
+        # Where the shipped adapters expect them. The tool sets are the
+        # components' own files; the fixture tool is P@x's test fixture.
+        run: |
+          sudo install -m 0755 services/tur-catalogue/target/debug/tur-catalogue /usr/bin/tur-catalogue
+          sudo install -m 0755 services/tur-device-manager/target/debug/tur-device /usr/bin/tur-device
+          sudo install -m 0755 "$WORK/bin/tur-ai-local" /usr/bin/tur-ai-local
+          sudo mkdir -p /usr/share/tur/ai-local /usr/share/tur-pax-e2e
+          sudo cp -r catalogue /usr/share/tur/catalogue
+          sudo cp -r services/tur-ai-local/catalogue /usr/share/tur/ai-local/models
+          sudo cp -r services/tur-device-manager/tests/fixtures/laptop /usr/share/tur-pax-e2e/laptop
+          tools="$WORK/pax/tools"
+          for component in tur-catalogue tur-device-manager; do
+            install -D -m 0644 "services/$component/agent-tools.json" "$tools/$component/agent-tools.json"
+            install -D -m 0644 "services/$component/agent-tools.adapter.json" "$tools/$component/agent-tools.adapter.json"
+          done
+          install -D -m 0644 services/tur-ai-local/pax/agent-tools.json "$tools/tur-ai-local/agent-tools.json"
+          install -D -m 0644 services/tur-ai-local/pax/agent-tools.adapter.json "$tools/tur-ai-local/agent-tools.adapter.json"
+          mkdir -p "$WORK/pax/manifests" "$WORK/pax/adapters"
+          cp tests/pax/manifests/fixture.json "$WORK/pax/manifests/fixture.json"
+          cp tests/pax/adapters/fixture.json "$WORK/pax/adapters/fixture.json"
+          uid="$(id -u)"
+          sudo mkdir -p "/run/user/$uid" && sudo chown "$uid" "/run/user/$uid" && sudo chmod 0700 "/run/user/$uid"
+          find "$tools" "$WORK/pax/manifests" "$WORK/pax/adapters" -type f | sort
+
+      - name: The smallest model, from the cache when it is there
+        uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: ${{ runner.temp }}/local-ai/data/tur/models/qwen3-0.6b
+          key: local-ai-model-qwen3-0.6b-9465e63a22add5354d9bb4b99e90117043c7124007664907259bd16d043bb031
+
+      - name: The models, through tur-ai-local
+        run: |
+          for model in qwen3-0.6b qwen3-4b; do
+            "$WORK/bin/tur-ai-local" pull "$model" --catalogue services/tur-ai-local/catalogue --models-dir "$WORK/data/tur/models"
+          done
+
+      - name: Fedora 45's llama-server in a container on the host network
+        run: |
+          docker run -d --name fedora --network host -v "$GITHUB_WORKSPACE:/w:ro" -v "$WORK:$WORK" "$FEDORA_IMAGE" sleep infinity
+          docker exec fedora dnf -y --setopt=install_weak_deps=False install "$LLAMA_CPP_RPM" util-linux >/dev/null
+          docker exec fedora rpm -q llama-cpp
+
+      - name: llama.cpp's own release build, checked
+        # For the 4B model: with Fedora's build it processed prompts at
+        # 1.5 to 1.8 tokens per second in run 43277339192, so one P@x
+        # request of 1 000 to 3 000 tokens took 10 to 30 minutes.
+        run: |
+          curl -fsSL -o "$WORK/llama.tar.gz" "$UPSTREAM_URL"
+          echo "$UPSTREAM_SHA256  $WORK/llama.tar.gz" | sha256sum -c -
+          mkdir -p "$WORK/upstream" && tar -xzf "$WORK/llama.tar.gz" -C "$WORK/upstream"
+          echo "UPSTREAM_SERVER=$(find "$WORK/upstream" -name llama-server -type f | head -n 1)" >> "$GITHUB_ENV"
+
+      - name: P@x and the harness, with each model
+        # qwen3-0.6b with Fedora's llama-server in the container; qwen3-4b
+        # with llama.cpp's own build on the runner. tur-pax runs with
+        # --no-commands: the read-only command tool's schema (argv items of
+        # up to 4 096 characters) makes llama-server's tool grammar fail
+        # ("number of repetitions exceeds sane defaults"), and every request
+        # that offers it is rejected (run 43277339192).
+        run: |
+          set +e
+          status=0
+          scenario=tests/pax/scenarios/01-two-tools.json
+          local_request="Which AI model could run locally on this computer, and why?"
+          two_tools_request="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["request"])' "$scenario")"
+          ci=services/tur-ai-local/ci/local_ai_ci.py
+          base=http://127.0.0.1:39281
+          key="$WORK/run/tur-ai-local/api-key"
+          for model in qwen3-0.6b qwen3-4b; do
+            echo "::group::$model"
+            log="$WORK/run/serve-$model.log"
+            if [ "$model" = qwen3-0.6b ]; then
+              engine=fedora-llama-cpp-b9840
+              docker exec -d fedora setpriv --reuid="$(id -u)" --regid="$(id -g)" --clear-groups -- bash -c \
+                "$WORK/bin/tur-ai-local serve $model --json --port 39281 --idle-stop 3600 --catalogue /w/services/tur-ai-local/catalogue --models-dir $WORK/data/tur/models --runtime-dir $WORK/run > $log 2> $log.err"
+            else
+              engine=upstream-llama-cpp-b9840-cpu
+              "$WORK/bin/tur-ai-local" serve "$model" --json --port 39281 --idle-stop 3600 --engine "$UPSTREAM_SERVER" \
+                --catalogue services/tur-ai-local/catalogue --models-dir "$WORK/data/tur/models" --runtime-dir "$WORK/run" \
+                > "$log" 2> "$log.err" &
+            fi
+            for _ in $(seq 1 600); do grep -q '"event":"ready"' "$log" 2>/dev/null && break; sleep 1; done
+            if ! grep -q '"event":"ready"' "$log"; then
+              echo "::error::the engine did not become ready with $model"; cat "$log.err"; status=1; continue
+            fi
+            python3 "$ci" harness --base-url "$base" --key-file "$key" --model "$model" --scenario "$scenario" \
+              --tools "$WORK/pax/tools" "$WORK/pax/manifests" "$WORK/pax/adapters" --evidence "$WORK/evidence/pax/$engine"
+            python3 "$ci" harness --base-url "$base" --key-file "$key" --model "$model" --scenario "$scenario" \
+              --name local-ai --request "$local_request" --expect ai_local_recommend \
+              --tools "$WORK/pax/tools" --evidence "$WORK/evidence/pax/$engine"
+            for wire in openai anthropic; do
+              python3 "$ci" pax --tur-pax services/tur-pax/target/debug/tur-pax --wire "$wire" --base-url "$base" \
+                --key-file "$key" --model "$model" --name two-tools --request "$two_tools_request" \
+                --tools "$WORK/pax/tools" --manifests "$WORK/pax/manifests" --adapters "$WORK/pax/adapters" \
+                --work "$WORK/pax/work" --evidence "$WORK/evidence/pax/$engine"
+              python3 "$ci" pax --tur-pax services/tur-pax/target/debug/tur-pax --wire "$wire" --base-url "$base" \
+                --key-file "$key" --model "$model" --name local-ai --request "$local_request" \
+                --tools "$WORK/pax/tools" --work "$WORK/pax/work" --evidence "$WORK/evidence/pax/$engine"
+            done
+            cp "$WORK/run/tur-ai-local/engine.log" "$WORK/evidence/pax/$engine/engine-$model.log" 2>/dev/null || true
+            if [ "$model" = qwen3-0.6b ]; then
+              docker exec fedora setpriv --reuid="$(id -u)" --regid="$(id -g)" --clear-groups -- \
+                "$WORK/bin/tur-ai-local" stop --runtime-dir "$WORK/run"
+            else
+              "$WORK/bin/tur-ai-local" stop --runtime-dir "$WORK/run"
+            fi
+            echo "::endgroup::"
+          done
+          exit $status
+
+      - name: Summary
+        if: always()
+        run: |
+          python3 services/tur-ai-local/ci/local_ai_ci.py summary --evidence "$WORK/evidence" --out "$WORK/evidence/summary.md" >/dev/null || true
+          cat "$WORK/evidence/summary.md" >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+          cp "$WORK"/run/serve-*.log "$WORK"/run/serve-*.err "$WORK/evidence/" 2>/dev/null || true
+          docker rm -f fedora >/dev/null 2>&1 || true
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: local-ai-pax-evidence
+          path: ${{ runner.temp }}/local-ai/evidence/
+          if-no-files-found: warn

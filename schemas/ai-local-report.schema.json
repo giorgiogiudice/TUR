@@ -1,0 +1,443 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/giorgiogiudice/TUR/schemas/ai-local-report.schema.json",
+  "title": "TUR local AI documents",
+  "description": "JSON documents emitted by tur-ai-local with --json: the hardware (hardware), the model catalogue with what is downloaded and what fits (models), the recommendation (recommend), the judgement on one model (check), the result of a download or import (pull), of a check of downloaded files (verify), of a removal (remove), the events of serving a model, one object per line (serve), the state of the service (status), the result of a stop (stop) and the TUR-AI-LOCAL-* registry (codes). A failure is not a document: it is printed on standard error with its code and the exit status is 1. null means absent or not known.",
+  "oneOf": [
+    { "$ref": "#/$defs/hardware_report" },
+    { "$ref": "#/$defs/models_report" },
+    { "$ref": "#/$defs/recommend_report" },
+    { "$ref": "#/$defs/check_report" },
+    { "$ref": "#/$defs/pull_report" },
+    { "$ref": "#/$defs/verify_report" },
+    { "$ref": "#/$defs/remove_report" },
+    { "$ref": "#/$defs/serve_event" },
+    { "$ref": "#/$defs/status_report" },
+    { "$ref": "#/$defs/stop_report" },
+    { "$ref": "#/$defs/code_report" }
+  ],
+  "$defs": {
+    "code": {
+      "description": "A stable TUR local AI code.",
+      "type": "string",
+      "pattern": "^TUR-AI-LOCAL-[0-9]{3}$"
+    },
+    "schema_version": { "const": 1 },
+    "bytes": { "type": "integer", "minimum": 0 },
+    "nullable_bytes": { "type": ["integer", "null"], "minimum": 0 },
+    "nullable_string": { "type": ["string", "null"] },
+    "nullable_boolean": { "type": ["boolean", "null"] },
+    "string_list": { "type": "array", "items": { "type": "string" } },
+    "severity": { "enum": ["info", "notice", "warning", "error"] },
+    "capability": { "enum": ["chat", "tools", "vision", "embeddings"] },
+    "outcome": { "enum": ["yes", "no", "malformed", "not-tested"] },
+    "memory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["total_bytes", "available_bytes", "swap_total_bytes"],
+      "properties": {
+        "total_bytes": { "$ref": "#/$defs/bytes" },
+        "available_bytes": { "description": "MemAvailable: what a new program can have without swapping.", "$ref": "#/$defs/bytes" },
+        "swap_total_bytes": { "$ref": "#/$defs/nullable_bytes" }
+      }
+    },
+    "cpu": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model", "architecture", "logical_cpus", "physical_cores", "features", "fast_matrix_instructions"],
+      "properties": {
+        "model": { "$ref": "#/$defs/nullable_string" },
+        "architecture": { "type": "string" },
+        "logical_cpus": { "type": "integer", "minimum": 1 },
+        "physical_cores": { "type": ["integer", "null"], "minimum": 1 },
+        "features": { "description": "The processor features relevant to inference that are present.", "$ref": "#/$defs/string_list" },
+        "fast_matrix_instructions": { "description": "AVX2 and FMA on x86, or the dot-product instructions on Arm.", "type": "boolean" }
+      }
+    },
+    "gpu": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["card", "vendor_id", "vendor", "device_id", "driver", "vram_bytes", "boot_vga"],
+      "properties": {
+        "card": { "type": "string" },
+        "vendor_id": { "$ref": "#/$defs/nullable_string" },
+        "vendor": { "enum": ["amd", "intel", "nvidia", "other"] },
+        "device_id": { "$ref": "#/$defs/nullable_string" },
+        "driver": { "$ref": "#/$defs/nullable_string" },
+        "vram_bytes": { "$ref": "#/$defs/nullable_bytes" },
+        "boot_vga": { "$ref": "#/$defs/nullable_boolean" }
+      }
+    },
+    "vulkan_device": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["index", "name", "device_type", "driver_name", "driver_id", "api_version", "open_source_driver", "usable"],
+      "properties": {
+        "index": { "type": "integer", "minimum": 0 },
+        "name": { "$ref": "#/$defs/nullable_string" },
+        "device_type": { "enum": ["integrated-gpu", "discrete-gpu", "virtual-gpu", "cpu", "other"] },
+        "driver_name": { "$ref": "#/$defs/nullable_string" },
+        "driver_id": { "$ref": "#/$defs/nullable_string" },
+        "api_version": { "$ref": "#/$defs/nullable_string" },
+        "open_source_driver": { "$ref": "#/$defs/nullable_boolean" },
+        "usable": { "description": "A real graphics processor, not the software rasteriser.", "type": "boolean" }
+      }
+    },
+    "hardware": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["memory", "cpu", "gpus", "vulkan", "usable_open_backend"],
+      "properties": {
+        "memory": { "$ref": "#/$defs/memory" },
+        "cpu": { "$ref": "#/$defs/cpu" },
+        "gpus": { "type": "array", "items": { "$ref": "#/$defs/gpu" } },
+        "vulkan": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "devices"],
+          "properties": {
+            "status": { "enum": ["listed", "not-installed", "failed", "not-checked"] },
+            "devices": { "type": "array", "items": { "$ref": "#/$defs/vulkan_device" } }
+          }
+        },
+        "usable_open_backend": { "description": "A usable Vulkan device is present; null when Vulkan was not checked.", "$ref": "#/$defs/nullable_boolean" }
+      }
+    },
+    "engine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["program", "present", "backends", "vulkan_backend"],
+      "properties": {
+        "program": { "type": "string" },
+        "present": { "type": "boolean" },
+        "backends": { "description": "The engine's backend libraries found beside it, for example cpu, cpu-haswell, vulkan, hip.", "$ref": "#/$defs/string_list" },
+        "vulkan_backend": { "type": "boolean" }
+      }
+    },
+    "fit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model", "context", "need_bytes", "reserve_bytes", "available_bytes", "total_bytes", "verdict", "code", "message"],
+      "properties": {
+        "model": { "type": "string" },
+        "context": { "type": "integer", "minimum": 1 },
+        "need_bytes": { "$ref": "#/$defs/bytes" },
+        "reserve_bytes": { "description": "Kept free for the rest of the system: the larger of 1 GiB and a tenth of the total.", "$ref": "#/$defs/bytes" },
+        "available_bytes": { "$ref": "#/$defs/bytes" },
+        "total_bytes": { "$ref": "#/$defs/bytes" },
+        "verdict": {
+          "description": "fits: need plus reserve fit in the memory available now. not-now: only in the total. too-large: not even in the total. Only fits may be started.",
+          "enum": ["fits", "not-now", "too-large"]
+        },
+        "code": { "$ref": "#/$defs/code" },
+        "message": { "type": "string" }
+      }
+    },
+    "file_view": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "url", "size_bytes", "sha256"],
+      "properties": {
+        "name": { "type": "string" },
+        "url": { "type": "string" },
+        "size_bytes": { "$ref": "#/$defs/bytes" },
+        "sha256": { "type": "string" }
+      }
+    },
+    "licence_view": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "url", "summary", "restrictions", "restricts_use"],
+      "properties": {
+        "id": { "type": "string" },
+        "url": { "type": "string" },
+        "summary": { "type": "string" },
+        "restrictions": { "description": "\"none\", or the use restrictions in plain sentences.", "type": "string" },
+        "restricts_use": { "type": "boolean" }
+      }
+    },
+    "tested": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "date", "report", "run", "engine", "hardware", "context", "generation_tokens_per_second",
+        "prompt_tokens_per_second", "peak_memory_bytes", "tool_call", "image_input", "embeddings", "notes"
+      ],
+      "properties": {
+        "date": { "type": "string" },
+        "report": { "type": "string" },
+        "run": { "type": "string" },
+        "engine": { "type": "string" },
+        "hardware": { "type": "string" },
+        "context": { "type": "integer", "minimum": 1 },
+        "generation_tokens_per_second": { "type": ["number", "null"] },
+        "prompt_tokens_per_second": { "type": ["number", "null"] },
+        "peak_memory_bytes": { "$ref": "#/$defs/nullable_bytes" },
+        "tool_call": { "$ref": "#/$defs/outcome" },
+        "image_input": { "$ref": "#/$defs/outcome" },
+        "embeddings": { "$ref": "#/$defs/outcome" },
+        "notes": { "type": "string" }
+      }
+    },
+    "model_view": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id", "name", "publisher", "repository", "revision", "quantisation", "parameters",
+        "capabilities", "thinking", "context_length", "download_bytes", "memory_bytes", "files",
+        "languages", "languages_note", "good_for", "licence", "installed", "install_problem", "fit", "tested"
+      ],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "publisher": { "type": "string" },
+        "repository": { "type": "string" },
+        "revision": { "type": "string" },
+        "quantisation": { "type": "string" },
+        "parameters": { "type": "string" },
+        "capabilities": { "type": "array", "items": { "$ref": "#/$defs/capability" } },
+        "thinking": { "enum": ["none", "hybrid", "always"] },
+        "context_length": { "type": "integer", "minimum": 1 },
+        "download_bytes": { "$ref": "#/$defs/bytes" },
+        "memory_bytes": { "description": "The memory needed at the report's context.", "$ref": "#/$defs/bytes" },
+        "files": { "type": "array", "items": { "$ref": "#/$defs/file_view" } },
+        "languages": { "$ref": "#/$defs/string_list" },
+        "languages_note": { "$ref": "#/$defs/nullable_string" },
+        "good_for": { "$ref": "#/$defs/string_list" },
+        "licence": { "$ref": "#/$defs/licence_view" },
+        "installed": {
+          "description": "null when the models folder was not looked at (models --catalogue-only).",
+          "type": ["string", "null"],
+          "enum": ["installed", "absent", "damaged", null]
+        },
+        "install_problem": { "$ref": "#/$defs/nullable_string" },
+        "fit": { "description": "null when the memory could not be read.", "oneOf": [{ "$ref": "#/$defs/fit" }, { "type": "null" }] },
+        "tested": { "type": "array", "items": { "$ref": "#/$defs/tested" } }
+      }
+    },
+    "recommendation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model", "code", "message", "reasons", "cpu_budget_bytes", "engine_cpu", "vision_model", "embeddings_model", "fits"],
+      "properties": {
+        "model": { "description": "The model recommended for conversation with P@x (chat and tools); null when none fits.", "$ref": "#/$defs/nullable_string" },
+        "code": { "$ref": "#/$defs/code" },
+        "message": { "type": "string" },
+        "reasons": { "$ref": "#/$defs/string_list" },
+        "cpu_budget_bytes": { "description": "The largest model file expected to answer at a usable speed on this processor.", "$ref": "#/$defs/bytes" },
+        "engine_cpu": {
+          "description": "The engine's processor build, from its libraries: variants (chosen at run time, fast kernels used), single (one library; Fedora 45's build has no AVX2 kernels and counts as slow), unknown (engine not found).",
+          "enum": ["variants", "single", "unknown"]
+        },
+        "vision_model": { "$ref": "#/$defs/nullable_string" },
+        "embeddings_model": { "$ref": "#/$defs/nullable_string" },
+        "fits": { "type": "array", "items": { "$ref": "#/$defs/fit" } }
+      }
+    },
+    "file_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "path", "size_bytes", "sha256", "action"],
+      "properties": {
+        "name": { "type": "string" },
+        "path": { "type": "string" },
+        "size_bytes": { "$ref": "#/$defs/bytes" },
+        "sha256": { "type": "string" },
+        "action": { "enum": ["downloaded", "imported", "already-present", "verified"] }
+      }
+    },
+    "state": {
+      "description": "The service's state file while a model is served ($XDG_RUNTIME_DIR/tur-ai-local/state.json).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version", "supervisor_pid", "engine_pid", "model", "engine", "address", "port", "socket",
+        "base_url", "network_allowed", "api_key_file", "log_file", "context", "started_at",
+        "idle_stop_seconds", "last_activity"
+      ],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "supervisor_pid": { "type": "integer", "minimum": 1 },
+        "engine_pid": { "type": "integer", "minimum": 1 },
+        "model": { "type": "string" },
+        "engine": { "type": "string" },
+        "address": { "$ref": "#/$defs/nullable_string" },
+        "port": { "type": ["integer", "null"], "minimum": 1 },
+        "socket": { "$ref": "#/$defs/nullable_string" },
+        "base_url": { "description": "The base URL of the OpenAI-compatible API (append /v1/chat/completions).", "$ref": "#/$defs/nullable_string" },
+        "network_allowed": { "type": "boolean" },
+        "api_key_file": { "description": "The file holding the access key, readable by the person only. The key itself is never in a report.", "type": "string" },
+        "log_file": { "type": "string" },
+        "context": { "type": "integer", "minimum": 1 },
+        "started_at": { "$ref": "#/$defs/bytes" },
+        "idle_stop_seconds": { "$ref": "#/$defs/bytes" },
+        "last_activity": { "$ref": "#/$defs/bytes" }
+      }
+    },
+    "process_memory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rss_bytes", "peak_rss_bytes"],
+      "properties": {
+        "rss_bytes": { "$ref": "#/$defs/nullable_bytes" },
+        "peak_rss_bytes": { "$ref": "#/$defs/nullable_bytes" }
+      }
+    },
+    "code_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "title", "severity", "detection", "user_message", "technical_explanation", "recovery_action"],
+      "properties": {
+        "code": { "$ref": "#/$defs/code" },
+        "title": { "type": "string" },
+        "severity": { "$ref": "#/$defs/severity" },
+        "detection": { "type": "string" },
+        "user_message": { "type": "string" },
+        "technical_explanation": { "type": "string" },
+        "recovery_action": { "type": "string" }
+      }
+    },
+    "hardware_report": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "kind", "hardware", "engine"],
+      "properties": {
+        "schema_version": { "$ref": "#/$defs/schema_version" },
+        "kind": { "const": "hardware" },
+        "hardware": { "$ref": "#/$defs/hardware" },
+        "engine": { "$ref": "#/$defs/engine" }
+      }
+    },
+    "models_report": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "kind", "catalogue", "models_dir", "context", "models", "other_folders"],
+      "properties": {
+        "schema_version": { "$ref": "#/$defs/schema_version" },
+        "kind": { "const": "models" },
+        "catalogue": { "type": "string" },
+        "models_dir": { "$ref": "#/$defs/nullable_string" },
+        "context": { "type": "integer", "minimum": 1 },
+        "models": { "type": "array", "items": { "$ref": "#/$defs/model_view" } },
+        "other_folders": { "description": "Folders in the models folder the catalogue does not know: not reviewed by TUR.", "$ref": "#/$defs/string_list" }
+      }
+    },
+    "recommend_report": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "kind", "context", "recommendation"],
+      "properties": {
+        "schema_version": { "$ref": "#/$defs/schema_version" },
+        "kind": { "const": "recommend" },
+        "context": { "type": "integer", "minimum": 1 },
+        "recommendation": { "$ref": "#/$defs/recommendation" }
+      }
+    },
+    "check_report": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "kind", "fit"],
+      "properties": {
+        "schema_version": { "$ref": "#/$defs/schema_version" },
+        "kind": { "const": "check" },
+        "fit": { "$ref": "#/$defs/fit" }
+      }
+    },
+    "pull_report": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "kind", "model", "code", "message", "licence", "files"],
+      "properties": {
+        "schema_version": { "$ref": "#/$defs/schema_version" },
+        "kind": { "const": "pull" },
+        "model": { "type": "string" },
+        "code": { "$ref": "#/$defs/code" },
+        "message": { "type": "string" },
+        "licence": { "$ref": "#/$defs/licence_view" },
+        "files": { "type": "array", "items": { "$ref": "#/$defs/file_result" } }
+      }
+    },
+    "verify_report": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "kind", "model", "code", "message", "files"],
+      "properties": {
+        "schema_version": { "$ref": "#/$defs/schema_version" },
+        "kind": { "const": "verify" },
+        "model": { "type": "string" },
+        "code": { "$ref": "#/$defs/code" },
+        "message": { "type": "string" },
+        "files": { "type": "array", "items": { "$ref": "#/$defs/file_result" } }
+      }
+    },
+    "remove_report": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "kind", "model", "code", "message", "freed_bytes"],
+      "properties": {
+        "schema_version": { "$ref": "#/$defs/schema_version" },
+        "kind": { "const": "remove" },
+        "model": { "type": "string" },
+        "code": { "$ref": "#/$defs/code" },
+        "message": { "type": "string" },
+        "freed_bytes": { "$ref": "#/$defs/bytes" }
+      }
+    },
+    "serve_event": {
+      "description": "One line of serve --json: ready when the engine answers and the state file is written; stopped when it was stopped for being idle or on request. A failure is printed on standard error.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "kind", "event", "code", "message", "model", "state", "peak_memory_bytes"],
+      "properties": {
+        "schema_version": { "$ref": "#/$defs/schema_version" },
+        "kind": { "const": "serve-event" },
+        "event": { "enum": ["ready", "stopped"] },
+        "code": { "$ref": "#/$defs/code" },
+        "message": { "type": "string" },
+        "model": { "type": "string" },
+        "state": { "oneOf": [{ "$ref": "#/$defs/state" }, { "type": "null" }] },
+        "peak_memory_bytes": { "description": "The engine's peak resident memory, on the stopped event.", "$ref": "#/$defs/nullable_bytes" }
+      }
+    },
+    "status_report": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "kind", "running", "code", "message", "stale", "state", "idle_seconds", "memory", "health", "engine"],
+      "properties": {
+        "schema_version": { "$ref": "#/$defs/schema_version" },
+        "kind": { "const": "status" },
+        "running": { "description": "null when the state cannot be seen from here, as in the assistant's sandbox.", "$ref": "#/$defs/nullable_boolean" },
+        "code": { "$ref": "#/$defs/code" },
+        "message": { "type": "string" },
+        "stale": { "description": "A state file was left by a supervisor that no longer runs.", "type": "boolean" },
+        "state": { "oneOf": [{ "$ref": "#/$defs/state" }, { "type": "null" }] },
+        "idle_seconds": { "$ref": "#/$defs/nullable_bytes" },
+        "memory": { "oneOf": [{ "$ref": "#/$defs/process_memory" }, { "type": "null" }] },
+        "health": { "enum": ["ok", "loading", "unreachable", "not-checked"] },
+        "engine": { "$ref": "#/$defs/engine" }
+      }
+    },
+    "stop_report": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "kind", "code", "message", "model"],
+      "properties": {
+        "schema_version": { "$ref": "#/$defs/schema_version" },
+        "kind": { "const": "stop" },
+        "code": { "$ref": "#/$defs/code" },
+        "message": { "type": "string" },
+        "model": { "$ref": "#/$defs/nullable_string" }
+      }
+    },
+    "code_report": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "kind", "codes"],
+      "properties": {
+        "schema_version": { "$ref": "#/$defs/schema_version" },
+        "kind": { "const": "codes" },
+        "codes": { "type": "array", "items": { "$ref": "#/$defs/code_entry" } }
+      }
+    }
+  }
+}

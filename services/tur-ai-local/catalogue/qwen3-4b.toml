@@ -1,0 +1,81 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR local model catalogue entry. Format: schemas/local-model.schema.json.
+# How entries are written and sourced: services/tur-ai-local/catalogue/README.md.
+#
+# Sources read on 2026-11-12: the Hugging Face API for Qwen/Qwen3-4B-GGUF
+# (revision, file list, sizes and LFS SHA-256 digests), the model card
+# README.md and the LICENSE file at the pinned revision.
+
+schema_version = 1
+id = "qwen3-4b"
+name = "Qwen3 4B"
+publisher = "Qwen (Alibaba Cloud)"
+repository = "https://huggingface.co/Qwen/Qwen3-4B-GGUF"
+revision = "bc640142c66e1fdd12af0bd68f40445458f3869b"
+format = "gguf"
+quantisation = "Q4_K_M"
+parameters = "4.0B"
+# The model card: "Context Length: 32,768 natively and 131,072 tokens with
+# YaRN". The native length is entered.
+context_length = 32768
+# Estimate: the file, the 16-bit context cache at 8192 tokens
+# (36 layers x 8 KV heads x 128 x 2 x 2 bytes = 147,456 bytes per token)
+# and 512 MiB for the engine's working memory, was 4.25 GB. Raised to
+# 6.15 GB: llama.cpp's own build peaked at 5.56 GB in CI run 43277339192
+# (its processor kernels keep a repacked copy of the weights); Fedora's at
+# 3.87 GB. 10 % above the higher peak.
+memory_bytes = 6150000000
+memory_context = 8192
+kv_bytes_per_token = 147456
+capabilities = ["chat", "tools"]
+thinking = "hybrid"
+languages = ["mul"]
+languages_note = "The publisher states support for 100+ languages and dialects, with multilingual instruction following and translation."
+good_for = [
+  "Writing, summarising and explaining on a computer with 8 GB of memory or more.",
+  "Tool calls for an assistant that acts.",
+  "Help with code.",
+]
+checked = "2026-11-12"
+
+[file]
+name = "Qwen3-4B-Q4_K_M.gguf"
+url = "https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/bc640142c66e1fdd12af0bd68f40445458f3869b/Qwen3-4B-Q4_K_M.gguf"
+size_bytes = 2497280256
+sha256 = "7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5"
+
+[licence]
+id = "Apache-2.0"
+url = "https://huggingface.co/Qwen/Qwen3-4B-GGUF/blob/bc640142c66e1fdd12af0bd68f40445458f3869b/LICENSE"
+summary = "Apache License 2.0. You may use, copy, change and share the model for any purpose, commercial use included. If you pass it on, include the licence and keep its notices."
+restrictions = "none"
+evidence = "The repository's LICENSE file at the pinned revision was read: it is the Apache License 2.0 text, word for word, with the appendix's copyright line filled in as \"Copyright 2025 Alibaba Cloud\" (byte for byte the file of Qwen/Qwen3-0.6B-GGUF). The model card header declares apache-2.0."
+checked = "2026-11-12"
+
+[[tested]]
+date = "2026-11-12"
+report = "docs/reports/local-ai-1.md"
+run = "https://github.com/giorgiogiudice/TUR/actions/runs/43277339192"
+engine = "llama-server b9840 from Fedora 45's llama-cpp-b9840-2.fc45, in a Fedora 45 container (one baseline processor build, no AVX2 kernels)"
+hardware = "GitHub-hosted ubuntu-24.04 runner: AMD EPYC 7763, 4 logical processors (2 cores), AVX2 and FMA, 16.8 GB of memory, no graphics processor"
+context = 8192
+generation_tokens_per_second = 1.61
+peak_memory_bytes = 3873603584
+tool_call = "yes"
+image_input = "not-tested"
+embeddings = "not-tested"
+notes = "128 tokens generated in 79.95 s wall time; prompt speed not recorded: this run reused the prompt cache between the two measuring requests; answer after the tool result used it: yes; streamed tool call: yes."
+
+[[tested]]
+date = "2026-11-12"
+report = "docs/reports/local-ai-1.md"
+run = "https://github.com/giorgiogiudice/TUR/actions/runs/43277339192"
+engine = "llama-server b9840 from llama.cpp's own release llama-b9840-bin-ubuntu-x64 (processor variants, AVX2 kernels used)"
+hardware = "GitHub-hosted ubuntu-24.04 runner: AMD EPYC 7763, 4 logical processors (2 cores), AVX2 and FMA, 16.8 GB of memory, no graphics processor"
+context = 8192
+generation_tokens_per_second = 14.85
+peak_memory_bytes = 5556752384
+tool_call = "yes"
+image_input = "not-tested"
+embeddings = "not-tested"
+notes = "128 tokens generated in 8.69 s wall time; prompt speed not recorded: this run reused the prompt cache between the two measuring requests; answer after the tool result used it: yes; streamed tool call: yes."

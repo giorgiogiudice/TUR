@@ -1,0 +1,128 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/giorgiogiudice/TUR/schemas/local-model.schema.json",
+  "title": "TUR local model catalogue entry",
+  "description": "One AI model TUR offers to run on the person's own computer (ADR-0021). Written in TOML, one file per model, in services/tur-ai-local/catalogue/<id>.toml; this schema describes the document the TOML parses to. The loader in services/tur-ai-local (src/catalogue.rs) is authoritative and also enforces rules this schema cannot express: the file is named <id>.toml; every file URL names the pinned revision and ends with the file's name; a projector is given exactly for models with the vision capability; pooling is given exactly for embeddings models, which have no other capability and do not think; tools and vision need chat; memory_bytes is at least the files plus kv_bytes_per_token times memory_context; memory_context is at most context_length; a licence with restrictions states them in sentences; ids and file names are unique across the catalogue.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "id", "name", "publisher", "repository", "revision", "format",
+    "quantisation", "parameters", "context_length", "memory_bytes", "memory_context",
+    "kv_bytes_per_token", "capabilities", "thinking", "languages", "good_for", "checked",
+    "file", "licence"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "id": {
+      "description": "Stable identifier: lower-case letters, digits, '.' and '-'. Never changes.",
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9.-]{0,63}$"
+    },
+    "name": { "description": "The name shown to a person.", "type": "string", "minLength": 1 },
+    "publisher": { "description": "Who makes and publishes the model.", "type": "string", "minLength": 1 },
+    "repository": { "description": "The publisher's own repository the files come from.", "$ref": "#/$defs/https_url" },
+    "revision": {
+      "description": "The commit of that repository every URL is pinned to. Never a branch.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "format": { "const": "gguf" },
+    "quantisation": { "description": "The quantisation of the model file, as the publisher names it, for example Q8_0 or Q4_K_M.", "type": "string", "minLength": 1 },
+    "parameters": { "description": "The number of parameters as the publisher states it, for example 0.6B.", "type": "string", "minLength": 1 },
+    "context_length": { "description": "The longest context the model supports natively, in tokens.", "type": "integer", "minimum": 1 },
+    "memory_bytes": { "description": "The memory needed at memory_context: the files, the 16-bit context cache and the engine's working memory. An estimate until measured.", "type": "integer", "minimum": 1 },
+    "memory_context": { "description": "The context size memory_bytes is given for, in tokens.", "type": "integer", "minimum": 1 },
+    "kv_bytes_per_token": { "description": "The size of the 16-bit context cache per token: layers x KV heads x head size x 2 (keys and values) x 2 bytes.", "type": "integer", "minimum": 1 },
+    "capabilities": {
+      "description": "chat: conversation. tools: OpenAI-style tool calling. vision: image input (needs the projector). embeddings: text embeddings only.",
+      "type": "array",
+      "minItems": 1,
+      "items": { "enum": ["chat", "tools", "vision", "embeddings"] }
+    },
+    "thinking": {
+      "description": "none: answers directly. hybrid: can think first or answer directly; tur-ai-local decides (--reasoning). always: thinks first.",
+      "enum": ["none", "hybrid", "always"]
+    },
+    "pooling": { "description": "For embeddings models: how token vectors become one vector (llama-server --pooling).", "enum": ["mean", "cls", "last"] },
+    "languages": {
+      "description": "BCP 47 tags as the publisher states them; mul means many languages.",
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1, "maxLength": 16 }
+    },
+    "languages_note": { "description": "The publisher's claim about further languages, in its words.", "type": "string", "minLength": 1 },
+    "good_for": {
+      "description": "What the model is good for, in plain sentences.",
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "checked": { "description": "When the entry was last checked against its sources.", "$ref": "#/$defs/date" },
+    "file": { "$ref": "#/$defs/model_file" },
+    "projector": { "description": "The image projector of a model with image input (llama-server --mmproj).", "$ref": "#/$defs/model_file" },
+    "licence": { "$ref": "#/$defs/licence" },
+    "tested": {
+      "description": "What TUR measured with the model. Only from a real run with a report in this repository.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/tested" }
+    }
+  },
+  "$defs": {
+    "https_url": { "type": "string", "pattern": "^https://" },
+    "date": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+    "outcome": {
+      "description": "yes: it worked. no: it did not happen (for a tool call: the model answered in text). malformed: it happened but was not well formed. not-tested.",
+      "enum": ["yes", "no", "malformed", "not-tested"]
+    },
+    "model_file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "url", "size_bytes", "sha256"],
+      "properties": {
+        "name": { "description": "The publisher's file name, also the stored name.", "type": "string", "minLength": 1 },
+        "url": { "description": "The publisher's download URL, pinned to the revision.", "$ref": "#/$defs/https_url" },
+        "size_bytes": { "description": "The exact size; a file of another size is refused.", "type": "integer", "minimum": 1 },
+        "sha256": {
+          "description": "The SHA-256 of the whole file; a file with another digest is refused.",
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "licence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "url", "summary", "restrictions", "evidence", "checked"],
+      "properties": {
+        "id": { "description": "SPDX identifier, or LicenseRef- for a licence SPDX does not list.", "type": "string", "minLength": 1 },
+        "url": { "description": "The licence text, or the publisher's statement of it.", "$ref": "#/$defs/https_url" },
+        "summary": { "description": "What the licence lets a person do, in plain sentences.", "type": "string", "minLength": 1 },
+        "restrictions": { "description": "Exactly \"none\", or the use restrictions in plain sentences. Shown before download, never hidden.", "type": "string", "minLength": 1 },
+        "evidence": { "description": "What was read to establish the licence, and what could not be found.", "type": "string", "minLength": 1 },
+        "checked": { "$ref": "#/$defs/date" }
+      }
+    },
+    "tested": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "date", "report", "run", "engine", "hardware", "context", "tool_call", "image_input", "embeddings", "notes"
+      ],
+      "properties": {
+        "date": { "$ref": "#/$defs/date" },
+        "report": { "description": "The report in this repository, under docs/reports/.", "type": "string", "minLength": 1 },
+        "run": { "description": "The CI run.", "$ref": "#/$defs/https_url" },
+        "engine": { "description": "The engine and its build.", "type": "string", "minLength": 1 },
+        "hardware": { "description": "The machine.", "type": "string", "minLength": 1 },
+        "context": { "type": "integer", "minimum": 1 },
+        "generation_tokens_per_second": { "description": "Left out when not measured.", "type": "number", "minimum": 0 },
+        "prompt_tokens_per_second": { "description": "Left out when not measured.", "type": "number", "minimum": 0 },
+        "peak_memory_bytes": { "description": "The engine's peak resident memory. Left out when not measured.", "type": "integer", "minimum": 0 },
+        "tool_call": { "$ref": "#/$defs/outcome" },
+        "image_input": { "$ref": "#/$defs/outcome" },
+        "embeddings": { "$ref": "#/$defs/outcome" },
+        "notes": { "type": "string" }
+      }
+    }
+  }
+}

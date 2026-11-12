@@ -247,6 +247,8 @@ record the interface in an ADR when a new one is needed.
 | Proprietary kernel modules and drivers | Proprietary, and the kernel marks itself tainted when one is loaded. AGENTS.md keeps the Fedora kernel as the single authority and requires an ADR for anything added to it. | The user may install them. |
 | WinApps, or code derived from it | Section 4.4, F3. | The user may install it. |
 | Signed virtio-win driver images, until their terms are confirmed | Unverified. | Downloaded by the user from the publisher. |
+| Vendor GPU compute libraries: NVIDIA's CUDA runtime, cuBLAS and the like, as bundled in Ollama's upstream Linux release (`ollama-linux-amd64.tar.zst`, 1.5 GB) and in llama.cpp's `cudart-*` release archives | Proprietary; ADR-0021 forbids shipping them. TUR's local AI uses Fedora's builds, which contain none ([local-ai.md](../architecture/local-ai.md), section 6). | The person may install them from the vendor; the engine uses them where a build supports it. |
+| AI model files | ADR-0021: models are not in the image. Their licences differ and some restrict use. | Downloaded on the person's request from the publisher's own repository, with the licence shown first ([local-ai.md](../architecture/local-ai.md), section 7). |
 | Any application, game or Flatpak that is not free software | TUR provides compatibility infrastructure; the user supplies software they are entitled to use (§17.2). | The publisher or the user's own media. |
 
 "Fetched on the user's machine" is not a loophole to be relied on without
@@ -303,6 +305,13 @@ court may see TUR as taking part in the distribution. That is question 6 below.
     to offer commercial licences?
 14. **Export control.** The image contains cryptographic software. Does
     publishing it create notification or other duties for the publisher?
+15. **AI models (ADR-0021).** TUR's model catalogue names models whose
+    publishers declare Apache-2.0, three of them only in the metadata of the
+    model card, with no licence file in the repository. Is a declaration in
+    metadata enough to offer the model? When TUR downloads a model on the
+    person's request and runs it, is TUR a distributor of the model (as in
+    question 6)? Do licences that restrict the use of a model's output or of
+    the model itself bind the person, TUR, or both?
 
 ## 7. Sources
 
