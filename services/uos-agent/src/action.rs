@@ -349,7 +349,7 @@ impl AgentOperation {
     }
 }
 
-#[cfg(any())]
+#[cfg(test)]
 mod tests {
     use super::*;
 

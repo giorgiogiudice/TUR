@@ -249,7 +249,7 @@ fn same_application(left: &str, right: &str) -> bool {
     left.trim().eq_ignore_ascii_case(right.trim())
 }
 
-#[cfg(any())]
+#[cfg(test)]
 mod tests {
     use super::*;
 

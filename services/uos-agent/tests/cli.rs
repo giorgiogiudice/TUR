@@ -8,8 +8,6 @@
 //! binary only decides. That a class 3 call also fails inside the service,
 //! through polkit, is a test of each service (milestone A1).
 
-#![cfg(any())]
-
 use std::process::Command;
 
 use serde_json::Value;

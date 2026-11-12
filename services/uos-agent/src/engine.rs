@@ -176,7 +176,7 @@ pub fn classify(action: &Action, context: &Context, policy: &UserPolicy) -> Acti
 ///
 /// Never above class 2: privileged prompts reject emulated input.
 fn ui_class(ui: &UiAction, policy: &UserPolicy) -> ActionClass {
-    if policy.is_sensitive("") {
+    if policy.is_sensitive(&ui.application) {
         return ActionClass::Consequential;
     }
     match ui.kind {
@@ -320,7 +320,7 @@ fn quoted(text: &str) -> String {
     out
 }
 
-#[cfg(any())]
+#[cfg(test)]
 mod tests {
     use serde_json::json;
 

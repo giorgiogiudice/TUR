@@ -109,7 +109,7 @@ impl TryFrom<u8> for ActionClass {
     }
 }
 
-#[cfg(any())]
+#[cfg(test)]
 mod tests {
     use super::*;
 
