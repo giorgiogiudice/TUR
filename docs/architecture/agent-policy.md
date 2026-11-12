@@ -12,8 +12,8 @@ formats, and what the engine cannot guarantee by itself.
 The engine implements sections 5, 6, 11 and 17 of the AI control layer design
 ("addendum A") as of **revision 4**. Where those leave a case undefined, the
 stricter behaviour was chosen. Every such choice is listed in
-[section 10](#10-interpretations). Revision 5 of the addendum was merged while
-this revision of the engine was in review; the three points where it bears on
+[section 10](#10-interpretations). Revisions 5 and 6 of the addendum were merged
+while this revision of the engine was in review; the points where they bear on
 the engine are listed in [section 11](#11-known-limits), limit 16.
 
 A0 contains no model, no network code and no D-Bus code. Nothing here executes an
@@ -829,15 +829,20 @@ What this engine cannot guarantee by itself.
     schemas use. It is not a general JSON Schema validator and has not been
     compared with one.
 
-16. **Revision 5 of addendum A.** Section 18 of the addendum was merged while this
-    revision of the engine was in review. Three of its items bear on the engine
-    and are not implemented here. (a) Item 1: until the component that owns
+16. **Revisions 5 and 6 of addendum A.** Sections 18 and 19 of the addendum were
+    merged while this revision of the engine was in review. Three items of
+    section 18 bear on the engine and are not implemented here. (a) Item 1: until the component that owns
     standing approvals exists, they are not honoured. The engine honours whatever
     approvals the context holds, so the orchestrator must pass none. (b) Item 3:
     P@x proposes a schedule (class 1) and the user creates it; the engine still
     has a class 2 "schedule write" (interpretation 26), which is stricter. (c)
     Item 4: an unattended task records only observed memory entries; the engine
-    has one "memory write" operation and cannot tell the kinds apart.
+    has one "memory write" operation and cannot tell the kinds apart. Section 19
+    reports that the compositor in the image provides none of the protected
+    surfaces of section 6, and moves class 3 confirmation and the opening of a
+    repair session to a separate trusted session. The engine's rules do not
+    change, but what its "trusted path available" input must mean does: it has to
+    be redefined against that session before it may be set to true.
 
 ## 12. Not in A0
 

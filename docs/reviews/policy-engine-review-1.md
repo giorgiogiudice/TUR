@@ -558,8 +558,9 @@ In summary:
   reviewer and reviewed by nobody else. The new sweep found no disagreement with
   them, and section 4 shows three of the new rules are guarded; that is evidence,
   not a second review.
-- **Revision 5 of the design.** It was merged during the review. The engine was
-  not reviewed against it. Three items of its section 18 bear on the engine and
+- **Revisions 5 and 6 of the design.** Both were merged during the review. The
+  engine was not reviewed against them. Three items of section 18 bear on the
+  engine, and section 19 changes what "trusted path available" has to mean; both
   are listed in agent-policy.md, limit 16.
 - **Other components.** `crates/uos-core` was changed only to add the constant
   constructor issue #8 asks for. No other component was read beyond checking that
