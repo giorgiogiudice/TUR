@@ -45,7 +45,7 @@ echo "v:kernel_config_sha256=$(sha256sum "$cfg" | cut -d' ' -f1)"
 if [ -s "/usr/lib/modules/$k/initramfs.img" ]; then
     echo "v:initramfs_sha256=$(sha256sum "/usr/lib/modules/$k/initramfs.img" | cut -d' ' -f1)"
 fi
-for opt in CONFIG_NTSYNC CONFIG_KVM CONFIG_SECURITY_SELINUX CONFIG_ANDROID_BINDER_IPC CONFIG_ANDROID_BINDERFS; do
+for opt in CONFIG_NTSYNC CONFIG_KVM CONFIG_SECURITY_SELINUX CONFIG_ANDROID_BINDER_IPC_RUST; do
     val=$(grep -E "^${opt}=" "$cfg" | cut -d= -f2)
     echo "k:${opt}=${val:-absent}"
 done
