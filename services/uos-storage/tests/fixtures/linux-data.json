@@ -1,0 +1,116 @@
+{
+  "blockdevices": [
+    {
+      "name": "sda", "path": "/dev/sda", "type": "disk", "size": 4000787030016, "rm": false,
+      "hotplug": false, "ro": false, "tran": "sata", "model": "Example HDD 4TB",
+      "serial": "SATA0001", "wwn": "0x5000c500a1b2c301", "fstype": null,
+      "mountpoints": [null], "fsroots": [null],
+      "children": [
+        {
+          "name": "sda1", "path": "/dev/sda1", "type": "part", "size": 2000000000000,
+          "start": 2048, "rm": false, "hotplug": false, "ro": false, "tran": null,
+          "fstype": "xfs", "fsver": null, "label": "data",
+          "uuid": "a1a1a1a1-0101-4bbb-8ccc-000000000101",
+          "partuuid": "aaaa0001-0001-4000-8000-000000000101",
+          "parttypename": "Linux filesystem", "mountpoints": [null], "fsroots": [null]
+        },
+        {
+          "name": "sda2", "path": "/dev/sda2", "type": "part", "size": 2000785981440,
+          "start": 3906252800, "rm": false, "hotplug": false, "ro": false, "tran": null,
+          "fstype": "LVM2_member", "fsver": "LVM2 001", "label": null,
+          "uuid": "Qw3rTy-Ab12-Cd34-Ef56-Gh78-Ij90-KlMnOp",
+          "partuuid": "aaaa0001-0002-4000-8000-000000000101",
+          "parttypename": "Linux LVM", "mountpoints": [null], "fsroots": [null],
+          "children": [
+            {
+              "name": "vg0-media", "kname": "dm-3", "path": "/dev/mapper/vg0-media",
+              "type": "lvm", "size": 1500000000000, "rm": false, "hotplug": false, "ro": false,
+              "tran": null, "fstype": "ext4", "fsver": "1.0", "label": "media",
+              "uuid": "a2a2a2a2-0202-4bbb-8ccc-000000000102", "partuuid": null,
+              "mountpoints": [null], "fsroots": [null]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "sdb", "path": "/dev/sdb", "type": "disk", "size": 8001563222016, "rm": false,
+      "hotplug": false, "ro": false, "tran": "sata", "model": "Example HDD 8TB",
+      "serial": "SATA0002", "fstype": "btrfs", "fsver": null, "label": "pool",
+      "uuid": "b0b0b0b0-0303-4bbb-8ccc-000000000103",
+      "mountpoints": [null], "fsroots": [null]
+    },
+    {
+      "name": "sdc", "path": "/dev/sdc", "type": "disk", "size": 8001563222016, "rm": false,
+      "hotplug": false, "ro": false, "tran": "sata", "model": "Example HDD 8TB",
+      "serial": "SATA0003", "fstype": "btrfs", "fsver": null, "label": "pool",
+      "uuid": "b0b0b0b0-0303-4bbb-8ccc-000000000103",
+      "mountpoints": [null], "fsroots": [null]
+    },
+    {
+      "name": "nvme1n1", "path": "/dev/nvme1n1", "type": "disk", "size": 512110190592,
+      "rm": false, "hotplug": false, "ro": false, "tran": "nvme", "model": "Example NVMe 512GB",
+      "serial": "NVME0002", "fstype": null, "mountpoints": [null], "fsroots": [null],
+      "children": [
+        {
+          "name": "nvme1n1p1", "path": "/dev/nvme1n1p1", "type": "part", "size": 512109142016,
+          "start": 2048, "rm": false, "hotplug": false, "ro": false, "tran": null,
+          "fstype": "btrfs", "fsver": null, "label": "scratch",
+          "uuid": "c4c4c4c4-0404-4bbb-8ccc-000000000104",
+          "partuuid": "cccc0004-0001-4000-8000-000000000104",
+          "parttypename": "Linux filesystem",
+          "mountpoints": ["/var/mnt/scratch", "/var/mnt/snapshots"],
+          "fsroots": ["/@data", "/@snapshots"]
+        }
+      ]
+    },
+    {
+      "name": "sdd", "path": "/dev/sdd", "type": "disk", "size": 1000204886016, "rm": false,
+      "hotplug": false, "ro": false, "tran": "sata", "model": "Example SSD 1TB",
+      "serial": "SATA0004", "fstype": null, "mountpoints": [null], "fsroots": [null],
+      "children": [
+        {
+          "name": "sdd1", "path": "/dev/sdd1", "type": "part", "size": 1000203091968,
+          "start": 2048, "rm": false, "hotplug": false, "ro": false, "tran": null,
+          "fstype": "linux_raid_member", "fsver": "1.2", "label": "host:0",
+          "uuid": "d5d5d5d5-0505-4bbb-8ccc-000000000105",
+          "partuuid": "dddd0005-0001-4000-8000-000000000105",
+          "parttypename": "Linux RAID", "mountpoints": [null], "fsroots": [null],
+          "children": [
+            {
+              "name": "md0", "path": "/dev/md0", "type": "raid1", "size": 1000068874240,
+              "rm": false, "hotplug": false, "ro": false, "tran": null, "fstype": "ext4",
+              "fsver": "1.0", "label": "mirror",
+              "uuid": "e6e6e6e6-0606-4bbb-8ccc-000000000106", "partuuid": null,
+              "mountpoints": [null], "fsroots": [null]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "sde", "path": "/dev/sde", "type": "disk", "size": 1000204886016, "rm": false,
+      "hotplug": false, "ro": false, "tran": "sata", "model": "Example SSD 1TB",
+      "serial": "SATA0005", "fstype": null, "mountpoints": [null], "fsroots": [null],
+      "children": [
+        {
+          "name": "sde1", "path": "/dev/sde1", "type": "part", "size": 1000203091968,
+          "start": 2048, "rm": false, "hotplug": false, "ro": false, "tran": null,
+          "fstype": "linux_raid_member", "fsver": "1.2", "label": "host:0",
+          "uuid": "d5d5d5d5-0505-4bbb-8ccc-000000000105",
+          "partuuid": "eeee0006-0001-4000-8000-000000000106",
+          "parttypename": "Linux RAID", "mountpoints": [null], "fsroots": [null],
+          "children": [
+            {
+              "name": "md0", "path": "/dev/md0", "type": "raid1", "size": 1000068874240,
+              "rm": false, "hotplug": false, "ro": false, "tran": null, "fstype": "ext4",
+              "fsver": "1.0", "label": "mirror",
+              "uuid": "e6e6e6e6-0606-4bbb-8ccc-000000000106", "partuuid": null,
+              "mountpoints": [null], "fsroots": [null]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
