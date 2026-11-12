@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/giorgiogiudice/UOS/schemas/app-profile.schema.json",
+  "title": "UOS application profile",
+  "description": "How one application is run under UOS: its binary, format, architecture, runtime and the runtime's settings (specification section 7.3). A profile must never hold a secret. The uos-runtime validator additionally rejects any key that looks like the name of a credential and any value that looks like a private key or a URL with a password in it; unknown keys are rejected by this schema in any case.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "app_id", "display_name", "binary", "format", "architecture",
+    "runtime", "isolation_profile", "fallback", "test_status"
+  ],
+  "$defs": {
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+    }
+  },
+  "properties": {
+    "schema_version": {
+      "description": "The version of this schema. Readers refuse a version they do not know.",
+      "const": 1
+    },
+    "app_id": {
+      "description": "A stable identifier in reverse-DNS style, lower case. Profiles drafted from a file without an identifier of its own use the local. namespace.",
+      "type": "string",
+      "maxLength": 255,
+      "pattern": "^[a-z0-9][a-z0-9_-]*(\\.[a-z0-9][a-z0-9_-]*)+$"
+    },
+    "display_name": {
+      "description": "The name shown to the user.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$"
+    },
+    "binary": {
+      "description": "The absolute path of the program, package or application bundle.",
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 4096,
+      "pattern": "^/[^\\u0000-\\u001f\\u007f-\\u009f]+$"
+    },
+    "format": {
+      "description": "The container format of the binary.",
+      "enum": ["elf", "script", "pe", "msi", "mach-o", "app-bundle", "apk", "apk-set"]
+    },
+    "architecture": {
+      "description": "The processor architecture of the application's code. universal is a Mach-O file holding several architectures; any is for scripts, installers and Android packages.",
+      "enum": ["x86_64", "i386", "aarch64", "arm", "universal", "any"]
+    },
+    "runtime": {
+      "description": "The runtime that hosts the application.",
+      "enum": ["native", "wine", "proton", "darling", "android", "windows-vm"]
+    },
+    "runtime_channel": {
+      "description": "The release channel of the runtime.",
+      "enum": ["stable", "testing", "experimental"]
+    },
+    "runtime_version": {
+      "description": "The runtime version the profile is pinned to.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,99}$"
+    },
+    "prefix_id": {
+      "description": "The application's own prefix. Required for wine and proton: each application has an independent prefix (specification section 12.2).",
+      "$ref": "#/$defs/slug"
+    },
+    "graphics_backend": {
+      "description": "The Direct3D translation to use.",
+      "enum": ["auto", "dxvk", "vkd3d-proton", "wined3d", "native"]
+    },
+    "sync_backend": {
+      "description": "The implementation of Windows synchronisation primitives to use.",
+      "enum": ["auto", "ntsync", "esync", "fsync"]
+    },
+    "isolation_profile": {
+      "description": "The name of the isolation profile applied to the application.",
+      "$ref": "#/$defs/slug"
+    },
+    "known_requirements": {
+      "description": "Things the application is known to need, as short tokens such as win32, dotnet or arm-translation.",
+      "type": "array",
+      "maxItems": 64,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+      }
+    },
+    "fallback": {
+      "description": "What to offer when the runtime cannot run the application. A Windows virtual machine can only be offered for Windows software.",
+      "enum": ["none", "windows-vm-offer"]
+    },
+    "test_status": {
+      "description": "Whether the application has been tested with this profile. Compatibility claims need evidence (specification section 2.3).",
+      "enum": ["untested", "works", "partial", "broken"]
+    }
+  },
+  "allOf": [
+    {
+      "if": { "required": ["format"], "properties": { "format": { "enum": ["elf", "script"] } } },
+      "then": { "properties": { "runtime": { "const": "native" } } }
+    },
+    {
+      "if": { "required": ["format"], "properties": { "format": { "enum": ["pe", "msi"] } } },
+      "then": { "properties": { "runtime": { "enum": ["wine", "proton", "windows-vm"] } } },
+      "else": { "properties": { "fallback": { "const": "none" } } }
+    },
+    {
+      "if": { "required": ["format"], "properties": { "format": { "enum": ["mach-o", "app-bundle"] } } },
+      "then": { "properties": { "runtime": { "const": "darling" } } }
+    },
+    {
+      "if": { "required": ["format"], "properties": { "format": { "enum": ["apk", "apk-set"] } } },
+      "then": { "properties": { "runtime": { "const": "android" } } }
+    },
+    {
+      "if": { "required": ["runtime"], "properties": { "runtime": { "enum": ["wine", "proton"] } } },
+      "then": { "required": ["prefix_id"] }
+    }
+  ]
+}
