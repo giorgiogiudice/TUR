@@ -783,7 +783,9 @@ mod tests {
             "input_schema": { "type": "object", "additionalProperties": false }
         }"#;
         let manifest = |fields: &str, tool: &str| {
-            format!(r#"{{ "schema_version": 1, "service": "org.uos.Test1"{fields}, "tools": [{tool}] }}"#)
+            format!(
+                r#"{{ "schema_version": 1, "service": "org.uos.Test1"{fields}, "tools": [{tool}] }}"#
+            )
         };
         assert!(ToolManifest::from_json(&manifest("", tool)).is_ok());
 
@@ -803,8 +805,16 @@ mod tests {
         for (field, first, second) in [
             ("\"class\": 1", "\"class\": 3", "\"class\": 0"),
             ("\"class\": 1", "\"class\": 0", "\"class\": 3"),
-            ("\"method\": \"Test\"", "\"method\": \"Format\"", "\"method\": \"List\""),
-            ("\"name\": \"test_tool\"", "\"name\": \"a\"", "\"name\": \"b\""),
+            (
+                "\"method\": \"Test\"",
+                "\"method\": \"Format\"",
+                "\"method\": \"List\"",
+            ),
+            (
+                "\"name\": \"test_tool\"",
+                "\"name\": \"a\"",
+                "\"name\": \"b\"",
+            ),
         ] {
             let twice = tool.replace(field, &format!("{first}, {second}"));
             assert_ne!(twice, tool);

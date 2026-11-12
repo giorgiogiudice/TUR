@@ -424,7 +424,10 @@ fn a_repair_session_never_changes_the_decision_for_a_tool_call() {
             extra.extend_from_slice(session);
             let (status, document) = check(tool, &extra);
             assert_eq!(status, plain_status, "{tool} {session:?}");
-            assert_eq!(document["decision"], plain["decision"], "{tool} {session:?}");
+            assert_eq!(
+                document["decision"], plain["decision"],
+                "{tool} {session:?}"
+            );
             assert_eq!(document["reason"], plain["reason"], "{tool} {session:?}");
         }
     }

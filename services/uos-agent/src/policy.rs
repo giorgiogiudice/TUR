@@ -473,9 +473,7 @@ fn canonical(application: &str) -> &str {
 /// `.desktop`.
 fn same_application(left: &str, right: &str) -> bool {
     let (left, right) = (left.trim(), right.trim());
-    left.eq_ignore_ascii_case(right)
-        || is_desktop_form(left, right)
-        || is_desktop_form(right, left)
+    left.eq_ignore_ascii_case(right) || is_desktop_form(left, right) || is_desktop_form(right, left)
 }
 
 /// Whether `longer` is `shorter` followed by `.desktop`.
@@ -819,7 +817,10 @@ mod tests {
 
     #[test]
     fn the_built_in_lists_are_plain_and_free_of_duplicates() {
-        for list in [DEFAULT_SENSITIVE_APPLICATIONS, DEFAULT_EXCLUDED_APPLICATIONS] {
+        for list in [
+            DEFAULT_SENSITIVE_APPLICATIONS,
+            DEFAULT_EXCLUDED_APPLICATIONS,
+        ] {
             let mut seen = BTreeSet::new();
             for application in list {
                 assert!(is_plain_application_id(application), "{application}");

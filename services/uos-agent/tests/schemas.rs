@@ -120,20 +120,14 @@ impl CharSet {
             SetItem::Range(low, high) => (*low..=*high).contains(&c),
             SetItem::Space => matches!(
                 c,
-                '\t' | '\n'
-                    | '\u{b}'
-                    | '\u{c}'
-                    | '\r'
-                    | ' '
-                    | '\u{a0}'
-                    | '\u{1680}'
-                    | '\u{2000}'..='\u{200a}'
-                    | '\u{2028}'
-                    | '\u{2029}'
-                    | '\u{202f}'
-                    | '\u{205f}'
-                    | '\u{3000}'
-                    | '\u{feff}'
+                '\t' | '\n' | '\u{b}' | '\u{c}' | '\r' | ' ' | '\u{a0}' | '\u{1680}' | '\u{2000}'
+                    ..='\u{200a}'
+                        | '\u{2028}'
+                        | '\u{2029}'
+                        | '\u{202f}'
+                        | '\u{205f}'
+                        | '\u{3000}'
+                        | '\u{feff}'
             ),
         });
         listed != self.negated
@@ -173,7 +167,11 @@ impl PatternParser {
                 '^' => Node::Start,
                 '$' => Node::End,
                 '(' => {
-                    assert_ne!(self.peek(), Some('?'), "group syntax (?...) is not supported");
+                    assert_ne!(
+                        self.peek(),
+                        Some('?'),
+                        "group syntax (?...) is not supported"
+                    );
                     let inner = self.sequence();
                     assert_eq!(self.take(), ')', "a group is not closed");
                     Node::Group(inner)
@@ -353,10 +351,7 @@ fn match_node(node: &Node, text: &[char], at: usize, rest: &dyn Fn(usize) -> boo
             // that a long text does not use up the stack: take as many as
             // there are, then give them back one at a time.
             Node::Set(set) => {
-                let available = text[at..]
-                    .iter()
-                    .take_while(|c| set.contains(**c))
-                    .count();
+                let available = text[at..].iter().take_while(|c| set.contains(**c)).count();
                 let most = max.map_or(available, |max| available.min(max));
                 *min <= most && (*min..=most).rev().any(|count| rest(at + count))
             }
@@ -417,12 +412,10 @@ const KEYWORDS: &[&str] = &[
 /// mathematical value, so `1` equals `1.0`.
 fn json_equal(left: &Value, right: &Value) -> bool {
     match (left, right) {
-        (Value::Number(left), Value::Number(right)) => {
-            match (integer(left), integer(right)) {
-                (Some(left), Some(right)) => left == right,
-                _ => left.as_f64() == right.as_f64(),
-            }
-        }
+        (Value::Number(left), Value::Number(right)) => match (integer(left), integer(right)) {
+            (Some(left), Some(right)) => left == right,
+            _ => left.as_f64() == right.as_f64(),
+        },
         (Value::Array(left), Value::Array(right)) => {
             left.len() == right.len()
                 && left
@@ -432,11 +425,9 @@ fn json_equal(left: &Value, right: &Value) -> bool {
         }
         (Value::Object(left), Value::Object(right)) => {
             left.len() == right.len()
-                && left.iter().all(|(key, left)| {
-                    right
-                        .get(key)
-                        .is_some_and(|right| json_equal(left, right))
-                })
+                && left
+                    .iter()
+                    .all(|(key, left)| right.get(key).is_some_and(|right| json_equal(left, right)))
         }
         _ => left == right,
     }
@@ -461,7 +452,9 @@ fn has_type(instance: &Value, name: &str) -> bool {
         "integer" => {
             instance.is_i64()
                 || instance.is_u64()
-                || instance.as_f64().is_some_and(|number| number.fract() == 0.0)
+                || instance
+                    .as_f64()
+                    .is_some_and(|number| number.fract() == 0.0)
         }
         other => panic!("the validator does not know the type {other:?}"),
     }
@@ -656,11 +649,17 @@ fn the_pattern_matcher_matches_what_the_schemas_ask_of_it() {
         (
             "^[^\\u0000-\\u001f\\u007f-\\u009f]*[^\\s\\u0000-\\u001f\\u007f-\\u009f][^\\u0000-\\u001f\\u007f-\\u009f]*$",
             &["x", " x ", "List volumes.", "\u{e9}", "a\u{a0}b"],
-            &["", " ", "\u{a0}", "\u{feff}", "a\nb", "a\tb", "a\u{7f}", "a\u{85}b"],
+            &[
+                "", " ", "\u{a0}", "\u{feff}", "a\nb", "a\tb", "a\u{7f}", "a\u{85}b",
+            ],
         ),
         // Without anchors a pattern matches anywhere in the text.
         ("b+", &["b", "abbbc", "ab"], &["", "a", "ac"]),
-        ("^a{2}b{1,}c?$", &["aab", "aabbc"], &["ab", "aaab", "aabcc", "aac"]),
+        (
+            "^a{2}b{1,}c?$",
+            &["aab", "aabbc"],
+            &["ab", "aaab", "aabcc", "aac"],
+        ),
         ("^(ab)*\\S$", &["x", "abx", "ababb"], &["", "ab ", "ab"]),
     ];
     for (pattern, matching, failing) in cases {
@@ -669,7 +668,10 @@ fn the_pattern_matcher_matches_what_the_schemas_ask_of_it() {
             assert!(compiled.is_match(text), "{pattern} must match {text:?}");
         }
         for text in failing {
-            assert!(!compiled.is_match(text), "{pattern} must not match {text:?}");
+            assert!(
+                !compiled.is_match(text),
+                "{pattern} must not match {text:?}"
+            );
         }
     }
     // The longest strings the schemas bound, without running out of stack.
@@ -681,25 +683,8 @@ fn the_pattern_matcher_matches_what_the_schemas_ask_of_it() {
 #[test]
 fn the_pattern_matcher_refuses_syntax_it_does_not_implement() {
     for pattern in [
-        "a|b",
-        "(?=a)b",
-        "(?!a)b",
-        "(?:a)",
-        "a.b",
-        "\\d+",
-        "\\w",
-        "\\bword",
-        "a*?",
-        "a**",
-        "^*",
-        "[a",
-        "(a",
-        "a)",
-        "a{x}",
-        "a{2,1}",
-        "[z-a]",
-        "[\\S]",
-        "\\u12",
+        "a|b", "(?=a)b", "(?!a)b", "(?:a)", "a.b", "\\d+", "\\w", "\\bword", "a*?", "a**", "^*",
+        "[a", "(a", "a)", "a{x}", "a{2,1}", "[z-a]", "[\\S]", "\\u12",
     ] {
         let result = std::panic::catch_unwind(|| Pattern::new(pattern));
         assert!(result.is_err(), "{pattern:?} was accepted");
@@ -738,7 +723,10 @@ fn the_validator_implements_the_keywords_as_json_schema_defines_them() {
     assert!(!check(json!({ "$ref": "#/$defs/name" }), json!("a")));
     assert!(!check(json!({ "$ref": "#/$defs/name" }), json!("abcd")));
     assert!(!check(json!({ "$ref": "#/$defs/name" }), json!("AB")));
-    assert!(check(json!({ "$ref": "#/$defs/pair" }), json!(["ab", "cd"])));
+    assert!(check(
+        json!({ "$ref": "#/$defs/pair" }),
+        json!(["ab", "cd"])
+    ));
     assert!(!check(json!({ "$ref": "#/$defs/pair" }), json!(["ab"])));
     assert!(!check(json!({ "$ref": "#/$defs/pair" }), json!(["ab", 1])));
 
@@ -808,7 +796,10 @@ fn every_valid_example_is_accepted_by_the_schema_and_by_the_loader() {
         ("observe only", OBSERVE_ONLY_POLICY),
         ("ask every action", ASK_EVERY_ACTION_POLICY),
         ("the example of agent-policy.md", DOCUMENTED_POLICY),
-        ("the shortest", r#"{ "schema_version": 1, "mode": "normal" }"#),
+        (
+            "the shortest",
+            r#"{ "schema_version": 1, "mode": "normal" }"#,
+        ),
     ] {
         let document = parse(text);
         assert!(policy_schema_accepts(&document), "{name}");
@@ -907,26 +898,77 @@ fn the_manifest_schema_and_the_loader_agree_on_every_example() {
     let examples: Vec<(&str, Value)> = vec![
         ("unchanged", manifest_with(|_| {})),
         // The manifest itself.
-        ("no schema_version", without(manifest_with(|_| {}), "", "schema_version")),
+        (
+            "no schema_version",
+            without(manifest_with(|_| {}), "", "schema_version"),
+        ),
         ("no service", without(manifest_with(|_| {}), "", "service")),
         ("no tools", without(manifest_with(|_| {}), "", "tools")),
-        ("unknown field", manifest_with(|d| d["confirm"] = json!(false))),
-        ("version 0", manifest_with(|d| d["schema_version"] = json!(0))),
-        ("version 2", manifest_with(|d| d["schema_version"] = json!(2))),
-        ("version as text", manifest_with(|d| d["schema_version"] = json!("1"))),
-        ("version null", manifest_with(|d| d["schema_version"] = json!(null))),
+        (
+            "unknown field",
+            manifest_with(|d| d["confirm"] = json!(false)),
+        ),
+        (
+            "version 0",
+            manifest_with(|d| d["schema_version"] = json!(0)),
+        ),
+        (
+            "version 2",
+            manifest_with(|d| d["schema_version"] = json!(2)),
+        ),
+        (
+            "version as text",
+            manifest_with(|d| d["schema_version"] = json!("1")),
+        ),
+        (
+            "version null",
+            manifest_with(|d| d["schema_version"] = json!(null)),
+        ),
         ("service empty", manifest_with(|d| d["service"] = json!(""))),
-        ("service one element", manifest_with(|d| d["service"] = json!("nodots"))),
-        ("service empty element", manifest_with(|d| d["service"] = json!("org..uos"))),
-        ("service trailing dot", manifest_with(|d| d["service"] = json!("org.uos."))),
-        ("service leading dot", manifest_with(|d| d["service"] = json!(".org.uos"))),
-        ("service digit first", manifest_with(|d| d["service"] = json!("org.9uos"))),
-        ("service with space", manifest_with(|d| d["service"] = json!("org.uos x"))),
-        ("service with slash", manifest_with(|d| d["service"] = json!("org.uos/x"))),
-        ("service with hyphen", manifest_with(|d| d["service"] = json!("org.uos-x"))),
-        ("service not text", manifest_with(|d| d["service"] = json!(1))),
-        ("service shortest", manifest_with(|d| d["service"] = json!("a.b"))),
-        ("service underscores", manifest_with(|d| d["service"] = json!("_a._b"))),
+        (
+            "service one element",
+            manifest_with(|d| d["service"] = json!("nodots")),
+        ),
+        (
+            "service empty element",
+            manifest_with(|d| d["service"] = json!("org..uos")),
+        ),
+        (
+            "service trailing dot",
+            manifest_with(|d| d["service"] = json!("org.uos.")),
+        ),
+        (
+            "service leading dot",
+            manifest_with(|d| d["service"] = json!(".org.uos")),
+        ),
+        (
+            "service digit first",
+            manifest_with(|d| d["service"] = json!("org.9uos")),
+        ),
+        (
+            "service with space",
+            manifest_with(|d| d["service"] = json!("org.uos x")),
+        ),
+        (
+            "service with slash",
+            manifest_with(|d| d["service"] = json!("org.uos/x")),
+        ),
+        (
+            "service with hyphen",
+            manifest_with(|d| d["service"] = json!("org.uos-x")),
+        ),
+        (
+            "service not text",
+            manifest_with(|d| d["service"] = json!(1)),
+        ),
+        (
+            "service shortest",
+            manifest_with(|d| d["service"] = json!("a.b")),
+        ),
+        (
+            "service underscores",
+            manifest_with(|d| d["service"] = json!("_a._b")),
+        ),
         (
             "service longest",
             manifest_with(|d| d["service"] = json!(format!("a.{}", long(253)))),
@@ -936,14 +978,35 @@ fn the_manifest_schema_and_the_loader_agree_on_every_example() {
             manifest_with(|d| d["service"] = json!(format!("a.{}", long(254)))),
         ),
         ("tools empty", manifest_with(|d| d["tools"] = json!([]))),
-        ("tools not a list", manifest_with(|d| d["tools"] = json!({}))),
-        ("tool not an object", manifest_with(|d| d["tools"] = json!(["x"]))),
+        (
+            "tools not a list",
+            manifest_with(|d| d["tools"] = json!({})),
+        ),
+        (
+            "tool not an object",
+            manifest_with(|d| d["tools"] = json!(["x"])),
+        ),
         // A tool.
-        ("no name", without(manifest_with(|_| {}), "/tools/0", "name")),
-        ("no description", without(manifest_with(|_| {}), "/tools/0", "description")),
-        ("no class", without(manifest_with(|_| {}), "/tools/0", "class")),
-        ("no method", without(manifest_with(|_| {}), "/tools/0", "method")),
-        ("no input_schema", without(manifest_with(|_| {}), "/tools/0", "input_schema")),
+        (
+            "no name",
+            without(manifest_with(|_| {}), "/tools/0", "name"),
+        ),
+        (
+            "no description",
+            without(manifest_with(|_| {}), "/tools/0", "description"),
+        ),
+        (
+            "no class",
+            without(manifest_with(|_| {}), "/tools/0", "class"),
+        ),
+        (
+            "no method",
+            without(manifest_with(|_| {}), "/tools/0", "method"),
+        ),
+        (
+            "no input_schema",
+            without(manifest_with(|_| {}), "/tools/0", "input_schema"),
+        ),
         ("unknown tool field", tool_with("confirm", json!(false))),
         ("name empty", tool_with("name", json!(""))),
         ("name upper case", tool_with("name", json!("Storage"))),
@@ -960,18 +1023,45 @@ fn the_manifest_schema_and_the_loader_agree_on_every_example() {
         ("name too long", tool_with("name", json!(long(65)))),
         ("description empty", tool_with("description", json!(""))),
         ("description blank", tool_with("description", json!("   "))),
-        ("description no-break space", tool_with("description", json!("\u{a0}"))),
-        ("description byte-order mark", tool_with("description", json!("\u{feff}"))),
-        ("description with newline", tool_with("description", json!("line\nbreak"))),
-        ("description with tab", tool_with("description", json!("tab\there"))),
-        ("description with DEL", tool_with("description", json!("a\u{7f}"))),
-        ("description with C1 control", tool_with("description", json!("a\u{85}b"))),
+        (
+            "description no-break space",
+            tool_with("description", json!("\u{a0}")),
+        ),
+        (
+            "description byte-order mark",
+            tool_with("description", json!("\u{feff}")),
+        ),
+        (
+            "description with newline",
+            tool_with("description", json!("line\nbreak")),
+        ),
+        (
+            "description with tab",
+            tool_with("description", json!("tab\there")),
+        ),
+        (
+            "description with DEL",
+            tool_with("description", json!("a\u{7f}")),
+        ),
+        (
+            "description with C1 control",
+            tool_with("description", json!("a\u{85}b")),
+        ),
         ("description not text", tool_with("description", json!(1))),
         ("description shortest", tool_with("description", json!("x"))),
         ("description padded", tool_with("description", json!(" x "))),
-        ("description not ASCII", tool_with("description", json!("\u{e9} \u{5220}\u{9664}"))),
-        ("description longest", tool_with("description", json!(long(1024)))),
-        ("description too long", tool_with("description", json!(long(1025)))),
+        (
+            "description not ASCII",
+            tool_with("description", json!("\u{e9} \u{5220}\u{9664}")),
+        ),
+        (
+            "description longest",
+            tool_with("description", json!(long(1024))),
+        ),
+        (
+            "description too long",
+            tool_with("description", json!(long(1025))),
+        ),
         ("class -1", tool_with("class", json!(-1))),
         ("class 0", tool_with("class", json!(0))),
         ("class 2", tool_with("class", json!(2))),
@@ -1004,7 +1094,10 @@ fn the_manifest_schema_and_the_loader_agree_on_every_example() {
             "schema open to a schema",
             input_schema(json!({ "type": "object", "additionalProperties": { "type": "string" } })),
         ),
-        ("schema not an object schema", input_schema(json!({ "type": "string" }))),
+        (
+            "schema not an object schema",
+            input_schema(json!({ "type": "string" })),
+        ),
         (
             "schema with a list of types",
             input_schema(json!({ "type": ["object", "null"], "additionalProperties": false })),
@@ -1030,63 +1123,161 @@ fn the_manifest_schema_and_the_loader_agree_on_every_example() {
         ),
         (
             "properties a list",
-            input_schema(json!({ "type": "object", "additionalProperties": false, "properties": [] })),
+            input_schema(
+                json!({ "type": "object", "additionalProperties": false, "properties": [] }),
+            ),
         ),
         (
             "required a string",
-            input_schema(json!({ "type": "object", "additionalProperties": false, "required": "x" })),
+            input_schema(
+                json!({ "type": "object", "additionalProperties": false, "required": "x" }),
+            ),
         ),
         (
             "required a number",
-            input_schema(json!({ "type": "object", "additionalProperties": false, "required": [1] })),
+            input_schema(
+                json!({ "type": "object", "additionalProperties": false, "required": [1] }),
+            ),
         ),
         (
             "unsupported keyword at the top",
-            input_schema(json!({ "type": "object", "additionalProperties": false, "minProperties": 1 })),
+            input_schema(
+                json!({ "type": "object", "additionalProperties": false, "minProperties": 1 }),
+            ),
         ),
         ("property a string", property(json!({ "type": "string" }))),
         ("property without a type", property(json!({}))),
         ("property not a schema", property(json!("string"))),
-        ("property of an unknown type", property(json!({ "type": "text" }))),
-        ("property with a list of types", property(json!({ "type": ["string", "null"] }))),
-        ("property with anyOf", property(json!({ "type": "string", "anyOf": [{ "type": "string" }] }))),
-        ("property with oneOf", property(json!({ "type": "string", "oneOf": [{ "type": "string" }] }))),
-        ("property with $ref", property(json!({ "type": "string", "$ref": "#/x" }))),
-        ("property with pattern", property(json!({ "type": "string", "pattern": "^a$" }))),
-        ("property with format", property(json!({ "type": "string", "format": "uri" }))),
-        ("property with default", property(json!({ "type": "string", "default": "x" }))),
-        ("property with const", property(json!({ "type": "string", "const": "x" }))),
-        ("string with minimum", property(json!({ "type": "string", "minimum": 1 }))),
-        ("integer with maxLength", property(json!({ "type": "integer", "maxLength": 1 }))),
-        ("boolean with minimum", property(json!({ "type": "boolean", "minimum": 0 }))),
-        ("string with items", property(json!({ "type": "string", "items": { "type": "string" } }))),
-        ("object with items", property(json!({
-            "type": "object", "additionalProperties": false, "items": { "type": "string" }
-        }))),
+        (
+            "property of an unknown type",
+            property(json!({ "type": "text" })),
+        ),
+        (
+            "property with a list of types",
+            property(json!({ "type": ["string", "null"] })),
+        ),
+        (
+            "property with anyOf",
+            property(json!({ "type": "string", "anyOf": [{ "type": "string" }] })),
+        ),
+        (
+            "property with oneOf",
+            property(json!({ "type": "string", "oneOf": [{ "type": "string" }] })),
+        ),
+        (
+            "property with $ref",
+            property(json!({ "type": "string", "$ref": "#/x" })),
+        ),
+        (
+            "property with pattern",
+            property(json!({ "type": "string", "pattern": "^a$" })),
+        ),
+        (
+            "property with format",
+            property(json!({ "type": "string", "format": "uri" })),
+        ),
+        (
+            "property with default",
+            property(json!({ "type": "string", "default": "x" })),
+        ),
+        (
+            "property with const",
+            property(json!({ "type": "string", "const": "x" })),
+        ),
+        (
+            "string with minimum",
+            property(json!({ "type": "string", "minimum": 1 })),
+        ),
+        (
+            "integer with maxLength",
+            property(json!({ "type": "integer", "maxLength": 1 })),
+        ),
+        (
+            "boolean with minimum",
+            property(json!({ "type": "boolean", "minimum": 0 })),
+        ),
+        (
+            "string with items",
+            property(json!({ "type": "string", "items": { "type": "string" } })),
+        ),
+        (
+            "object with items",
+            property(json!({
+                "type": "object", "additionalProperties": false, "items": { "type": "string" }
+            })),
+        ),
         ("array without items", property(json!({ "type": "array" }))),
-        ("array with minItems", property(json!({
-            "type": "array", "items": { "type": "string" }, "minItems": 1
-        }))),
-        ("array of arrays", property(json!({
-            "type": "array", "items": { "type": "array", "items": { "type": "null" } }
-        }))),
-        ("array of open objects", property(json!({ "type": "array", "items": { "type": "object" } }))),
-        ("array of closed objects", property(json!({
-            "type": "array", "items": { "type": "object", "additionalProperties": false }
-        }))),
+        (
+            "array with minItems",
+            property(json!({
+                "type": "array", "items": { "type": "string" }, "minItems": 1
+            })),
+        ),
+        (
+            "array of arrays",
+            property(json!({
+                "type": "array", "items": { "type": "array", "items": { "type": "null" } }
+            })),
+        ),
+        (
+            "array of open objects",
+            property(json!({ "type": "array", "items": { "type": "object" } })),
+        ),
+        (
+            "array of closed objects",
+            property(json!({
+                "type": "array", "items": { "type": "object", "additionalProperties": false }
+            })),
+        ),
         ("nested open object", property(json!({ "type": "object" }))),
-        ("nested closed object", property(json!({ "type": "object", "additionalProperties": false }))),
-        ("minLength negative", property(json!({ "type": "string", "minLength": -1 }))),
-        ("minLength as text", property(json!({ "type": "string", "minLength": "1" }))),
-        ("maxLength with a fraction", property(json!({ "type": "string", "maxLength": 1.5 }))),
-        ("minimum as text", property(json!({ "type": "integer", "minimum": "1" }))),
-        ("minimum with a fraction", property(json!({ "type": "number", "minimum": 0.5 }))),
-        ("enum empty", property(json!({ "type": "string", "enum": [] }))),
-        ("enum not a list", property(json!({ "type": "string", "enum": "a" }))),
-        ("enum of anything", property(json!({ "type": "string", "enum": ["a", 1, null, [], {}] }))),
-        ("title not text", property(json!({ "type": "string", "title": 1 }))),
-        ("description not text", property(json!({ "type": "string", "description": 1 }))),
-        ("null with an enum", property(json!({ "type": "null", "enum": [null] }))),
+        (
+            "nested closed object",
+            property(json!({ "type": "object", "additionalProperties": false })),
+        ),
+        (
+            "minLength negative",
+            property(json!({ "type": "string", "minLength": -1 })),
+        ),
+        (
+            "minLength as text",
+            property(json!({ "type": "string", "minLength": "1" })),
+        ),
+        (
+            "maxLength with a fraction",
+            property(json!({ "type": "string", "maxLength": 1.5 })),
+        ),
+        (
+            "minimum as text",
+            property(json!({ "type": "integer", "minimum": "1" })),
+        ),
+        (
+            "minimum with a fraction",
+            property(json!({ "type": "number", "minimum": 0.5 })),
+        ),
+        (
+            "enum empty",
+            property(json!({ "type": "string", "enum": [] })),
+        ),
+        (
+            "enum not a list",
+            property(json!({ "type": "string", "enum": "a" })),
+        ),
+        (
+            "enum of anything",
+            property(json!({ "type": "string", "enum": ["a", 1, null, [], {}] })),
+        ),
+        (
+            "title not text",
+            property(json!({ "type": "string", "title": 1 })),
+        ),
+        (
+            "description not text",
+            property(json!({ "type": "string", "description": 1 })),
+        ),
+        (
+            "null with an enum",
+            property(json!({ "type": "null", "enum": [null] })),
+        ),
         ("property name empty", named_property("")),
         ("property name with space", named_property("has space")),
         ("property name digit first", named_property("9x")),
@@ -1158,28 +1349,82 @@ fn the_policy_schema_and_the_loader_agree_on_every_example() {
 
     let mut examples: Vec<(String, Value)> = vec![
         ("unchanged".to_owned(), policy_with(|_| {})),
-        ("only the required fields".to_owned(), json!({ "schema_version": 1, "mode": "normal" })),
-        ("no schema_version".to_owned(), without(policy_with(|_| {}), "", "schema_version")),
-        ("no mode".to_owned(), without(policy_with(|_| {}), "", "mode")),
-        ("unknown field".to_owned(), policy_with(|d| d["allow_everything"] = json!(true))),
-        ("version 0".to_owned(), policy_with(|d| d["schema_version"] = json!(0))),
-        ("version 2".to_owned(), policy_with(|d| d["schema_version"] = json!(2))),
-        ("version as text".to_owned(), policy_with(|d| d["schema_version"] = json!("1"))),
-        ("mode unknown".to_owned(), policy_with(|d| d["mode"] = json!("relaxed"))),
-        ("mode in upper case".to_owned(), policy_with(|d| d["mode"] = json!("Normal"))),
-        ("mode empty".to_owned(), policy_with(|d| d["mode"] = json!(""))),
-        ("mode null".to_owned(), policy_with(|d| d["mode"] = json!(null))),
-        ("mode a number".to_owned(), policy_with(|d| d["mode"] = json!(1))),
-        ("excluded not a list".to_owned(), policy_with(|d| d["excluded_applications"] = json!("x"))),
-        ("sensitive not a list".to_owned(), policy_with(|d| d["sensitive_applications"] = json!({}))),
-        ("empty lists".to_owned(), policy_with(|d| {
-            d["excluded_applications"] = json!([]);
-            d["sensitive_applications"] = json!([]);
-            d["relaxations"] = json!([]);
-        })),
-        ("relaxations not a list".to_owned(), policy_with(|d| d["relaxations"] = json!({}))),
-        ("relaxation not an object".to_owned(), policy_with(|d| d["relaxations"] = json!(["x"]))),
-        ("relaxation empty".to_owned(), policy_with(|d| d["relaxations"] = json!([{}]))),
+        (
+            "only the required fields".to_owned(),
+            json!({ "schema_version": 1, "mode": "normal" }),
+        ),
+        (
+            "no schema_version".to_owned(),
+            without(policy_with(|_| {}), "", "schema_version"),
+        ),
+        (
+            "no mode".to_owned(),
+            without(policy_with(|_| {}), "", "mode"),
+        ),
+        (
+            "unknown field".to_owned(),
+            policy_with(|d| d["allow_everything"] = json!(true)),
+        ),
+        (
+            "version 0".to_owned(),
+            policy_with(|d| d["schema_version"] = json!(0)),
+        ),
+        (
+            "version 2".to_owned(),
+            policy_with(|d| d["schema_version"] = json!(2)),
+        ),
+        (
+            "version as text".to_owned(),
+            policy_with(|d| d["schema_version"] = json!("1")),
+        ),
+        (
+            "mode unknown".to_owned(),
+            policy_with(|d| d["mode"] = json!("relaxed")),
+        ),
+        (
+            "mode in upper case".to_owned(),
+            policy_with(|d| d["mode"] = json!("Normal")),
+        ),
+        (
+            "mode empty".to_owned(),
+            policy_with(|d| d["mode"] = json!("")),
+        ),
+        (
+            "mode null".to_owned(),
+            policy_with(|d| d["mode"] = json!(null)),
+        ),
+        (
+            "mode a number".to_owned(),
+            policy_with(|d| d["mode"] = json!(1)),
+        ),
+        (
+            "excluded not a list".to_owned(),
+            policy_with(|d| d["excluded_applications"] = json!("x")),
+        ),
+        (
+            "sensitive not a list".to_owned(),
+            policy_with(|d| d["sensitive_applications"] = json!({})),
+        ),
+        (
+            "empty lists".to_owned(),
+            policy_with(|d| {
+                d["excluded_applications"] = json!([]);
+                d["sensitive_applications"] = json!([]);
+                d["relaxations"] = json!([]);
+            }),
+        ),
+        (
+            "relaxations not a list".to_owned(),
+            policy_with(|d| d["relaxations"] = json!({})),
+        ),
+        (
+            "relaxation not an object".to_owned(),
+            policy_with(|d| d["relaxations"] = json!(["x"])),
+        ),
+        (
+            "relaxation empty".to_owned(),
+            policy_with(|d| d["relaxations"] = json!([{}])),
+        ),
         (
             "relaxation without a class".to_owned(),
             policy_with(|d| d["relaxations"] = json!([{ "application": "org.example.Mail" }])),
@@ -1199,7 +1444,17 @@ fn the_policy_schema_and_the_loader_agree_on_every_example() {
             policy_with(|d| d["mode"] = json!(mode.as_str())),
         ));
     }
-    for class in [json!(-1), json!(0), json!(1), json!(2), json!(3), json!(4), json!("2"), json!(null), json!(2.5)] {
+    for class in [
+        json!(-1),
+        json!(0),
+        json!(1),
+        json!(2),
+        json!(3),
+        json!(4),
+        json!("2"),
+        json!(null),
+        json!(2.5),
+    ] {
         examples.push((
             format!("relaxation of class {class}"),
             policy_with(|d| d["relaxations"][0]["class"] = class.clone()),
@@ -1253,9 +1508,8 @@ fn what_the_schemas_cannot_express_is_listed_and_nothing_else() {
             "input_schema": { "type": "object", "additionalProperties": false }
         })
     };
-    let manifest = |tools: Value| {
-        json!({ "schema_version": 1, "service": "org.uos.Test1", "tools": tools })
-    };
+    let manifest =
+        |tools: Value| json!({ "schema_version": 1, "service": "org.uos.Test1", "tools": tools });
 
     let manifests: Vec<(&str, Value)> = vec![
         (
@@ -1274,7 +1528,10 @@ fn what_the_schemas_cannot_express_is_listed_and_nothing_else() {
         ),
         // JSON Schema counts 1.0 as an integer; the loader wants an integer
         // written as one.
-        ("a class written with a fraction", tool_with("class", json!(1.0))),
+        (
+            "a class written with a fraction",
+            tool_with("class", json!(1.0)),
+        ),
         (
             "a schema version written with a fraction",
             manifest_with(|d| d["schema_version"] = json!(1.0)),
@@ -1325,11 +1582,8 @@ fn what_the_schemas_cannot_express_is_listed_and_nothing_else() {
     // A repeated key is not a property of the document a schema sees: a
     // parser has already kept one of the two values. The loaders read the
     // text and refuse it.
-    let repeated_manifest = TEST_SERVICE_MANIFEST.replacen(
-        "\"class\": 3,",
-        "\"class\": 3, \"class\": 0,",
-        1,
-    );
+    let repeated_manifest =
+        TEST_SERVICE_MANIFEST.replacen("\"class\": 3,", "\"class\": 3, \"class\": 0,", 1);
     assert_ne!(repeated_manifest, TEST_SERVICE_MANIFEST);
     assert!(manifest_schema_accepts(&parse(&repeated_manifest)));
     assert!(ToolManifest::from_json(&repeated_manifest).is_err());
@@ -1459,8 +1713,8 @@ fn the_policy_schema_agrees_with_the_loader() {
 
 #[test]
 fn the_test_fixtures_load() {
-    let manifest = ToolManifest::from_json(TEST_SERVICE_MANIFEST)
-        .expect("the test service manifest is valid");
+    let manifest =
+        ToolManifest::from_json(TEST_SERVICE_MANIFEST).expect("the test service manifest is valid");
     let classes: Vec<u8> = manifest
         .tools()
         .iter()

@@ -491,11 +491,7 @@ mod tests {
                     control: text.to_owned(),
                     kind: UiActionKind::Act,
                 }),
-                typed(
-                    TypedOperationKind::NetworkProfileReset,
-                    text,
-                    None,
-                ),
+                typed(TypedOperationKind::NetworkProfileReset, text, None),
                 typed(
                     TypedOperationKind::ConfigurationFileChange,
                     "/etc/cups/cupsd.conf",

@@ -1655,8 +1655,9 @@ fn a_refusal_and_only_a_refusal_carries_an_error_code() {
         );
         assert_eq!(decision.prompt().is_some(), prompts, "{explain}");
         assert!(
-            decision.prompt().is_none_or(|prompt| !prompt.is_empty()
-                && prompt.chars().all(|c| matches!(c, ' '..='~'))),
+            decision.prompt().is_none_or(
+                |prompt| !prompt.is_empty() && prompt.chars().all(|c| matches!(c, ' '..='~'))
+            ),
             "{explain}"
         );
     });
@@ -1866,7 +1867,8 @@ fn hostile_text_on_the_screen_never_lowers_a_decision() {
         // As the name of a control or the title of a window: never more
         // permissive than an ordinary control in an ordinary window.
         for application in [APP_PLAIN, APP_RELAXED, APP_TERMINAL] {
-            let plain = Action::ScreenInput(ui(application, "Document 1", "Bold", UiActionKind::Act));
+            let plain =
+                Action::ScreenInput(ui(application, "Document 1", "Bold", UiActionKind::Act));
             for (window_title, control) in [
                 ("Document 1", text.as_str()),
                 (text.as_str(), "Bold"),
