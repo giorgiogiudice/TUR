@@ -1,0 +1,75 @@
+{
+  "name": "openai-chat-adapter",
+  "what": "The task loop through the OpenAI-compatible family (Chat Completions), configured as the DeepSeek preset is: the scripted service streams reasoning in reasoning_content, which must go back with every assistant turn and never be the answer. Two real tool programs and a real command run in the sandbox from arguments streamed in deltas; then four tools of the test service, one of each class 0 to 3, whose calls arrive whole in one delta each.",
+  "check": "openai-chat-adapter",
+  "wire": "openai-chat",
+  "config": {
+    "send_back_reasoning": true
+  },
+  "request": "What is wrong with my laptop, how would I run Discord, and which system is this? Then try the test service.",
+  "turns": [
+    {
+      "text": "I will check the hardware, the catalogue and the system.",
+      "calls": [
+        {
+          "id": "call_problems",
+          "name": "fixture_device_problems",
+          "arguments": {}
+        },
+        {
+          "id": "call_route",
+          "name": "catalogue_route",
+          "arguments": {
+            "id": "com.discord.discord"
+          }
+        },
+        {
+          "id": "call_release",
+          "name": "run_readonly_command",
+          "arguments": {
+            "argv": [
+              "/usr/bin/cat",
+              "/etc/os-release"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "text": "Now the test service.",
+      "calls": [
+        {
+          "id": "call_observe",
+          "name": "test_observe",
+          "arguments": {}
+        },
+        {
+          "id": "call_set",
+          "name": "test_reversible",
+          "arguments": {
+            "value": "night"
+          }
+        },
+        {
+          "id": "call_format",
+          "name": "test_system_critical",
+          "arguments": {
+            "volume_id": "vol-1"
+          }
+        },
+        {
+          "id": "call_send",
+          "name": "test_consequential",
+          "arguments": {
+            "recipient": "someone@example.net",
+            "subject": "done"
+          }
+        }
+      ],
+      "whole": true
+    },
+    {
+      "text": "The hardware, the route and the system are above. Formatting and sending were refused."
+    }
+  ]
+}

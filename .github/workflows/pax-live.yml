@@ -1,37 +1,52 @@
 # SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
 #
-# P@x against the real Anthropic API. Started by hand only, never by a pull
+# P@x against a real provider. Started by hand only, never by a pull
 # request or a push (ai-control-layer.md section 23, item 4).
 #
 # It sends the requests of three existing scenarios to a real model through
-# the real Anthropic adapter, with the real tool programs in the real
-# sandbox, and checks what must hold whatever the model does: nothing above
-# class 1 allowed or performed, the key in no output or file. The cap on
-# requests and tokens of one run is in tests/pax/live.py, enforced in code:
-# at most 5 requests and 16 000 tokens (plus one response), 400 output
-# tokens a response. Worst case at the prices of 2026-11-12: under 0.005 USD
-# with claude-haiku-5-5, under 0.07 USD with claude-sonnet-5-5.
+# the real adapter of the chosen provider (anthropic: the Messages family;
+# deepseek: the OpenAI-compatible family, configured as the DeepSeek preset),
+# with the real tool programs in the real sandbox, and checks what must hold
+# whatever the model does: nothing above class 1 allowed or performed, the
+# key in no output or file. The cap on requests and tokens of one run is in
+# tests/pax/live.py, enforced in code: at most 8 requests and 24 000 tokens
+# (plus one response), 400 output tokens a response for Anthropic and 1200
+# for DeepSeek. Worst case at the prices of 2026-11-12: under 0.005 USD with
+# claude-haiku-5-5, under 0.10 USD with claude-sonnet-5-5, under 0.03 USD
+# with deepseek-flash, under 0.09 USD with deepseek-v4-pro.
 #
-# The key is the repository secret CLAUDE_KEY. It reaches the
-# test only in its environment, never on a command line, and is never
-# printed. Without the secret the job says so and ends without calling
-# anything. The first step sends one minimal request; if the API rejects the
-# key, it reports the HTTP status and error type and the job stops.
+# The key is the repository secret of the chosen provider: CLAUDE_KEY or
+# DEEPSEEK_KEY. Only that one is read, and it reaches the test only in its
+# environment, never on a command line, and is never printed. Without the
+# secret the job says so and ends without calling anything. The first step
+# sends one minimal request; if the API rejects the key, it reports the HTTP
+# status and error type and the job stops.
 #
 # Start it from the Actions tab ("pax-live", "Run workflow"), or with
-#   gh workflow run pax-live.yml -f model=claude-haiku-5-5
+#   gh workflow run pax-live.yml -f provider=anthropic -f model=claude-haiku-5-5
+#   gh workflow run pax-live.yml -f provider=deepseek
 name: pax-live
 
 on:
   workflow_dispatch:
     inputs:
-      model:
-        description: "The Anthropic model (current API identifiers, read 2026-11-12)"
+      provider:
+        description: "The provider: anthropic (secret CLAUDE_KEY) or deepseek (secret DEEPSEEK_KEY)"
         type: choice
         options:
+          - anthropic
+          - deepseek
+        default: anthropic
+      model:
+        description: "The model, one of the provider's (API identifiers read 2026-11-12); default: the provider's first"
+        type: choice
+        options:
+          - default
           - claude-haiku-5-5
           - claude-sonnet-5-5
-        default: claude-haiku-5-5
+          - deepseek-flash
+          - deepseek-v4-pro
+        default: default
 
 permissions:
   contents: read
@@ -42,25 +57,44 @@ concurrency:
 
 jobs:
   live:
-    name: Three scenarios against the real Anthropic API, capped
+    name: Three scenarios against a real provider, capped
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
       CARGO_TERM_COLOR: never
       CARGO_INCREMENTAL: "0"
       DEBIAN_FRONTEND: noninteractive
+      PROVIDER: ${{ inputs.provider }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: The model
+        # "default" is the provider's first model. A model of another
+        # provider is refused here, before anything is called.
+        id: model
+        env:
+          CHOSEN: ${{ inputs.model }}
+        run: |
+          case "$PROVIDER:$CHOSEN" in
+            anthropic:default) model=claude-haiku-5-5 ;;
+            deepseek:default) model=deepseek-flash ;;
+            anthropic:claude-*|deepseek:deepseek-*) model="$CHOSEN" ;;
+            *) echo "::error::$CHOSEN is not a model of $PROVIDER. Nothing was called."; exit 1 ;;
+          esac
+          echo "name=$model" >> "$GITHUB_OUTPUT"
+          echo "provider: $PROVIDER, model: $model"
 
       - name: Is there a key, and does the API accept it?
         # One minimal request: one short message, at most 8 output tokens.
         # No key: a notice, and the job ends without calling anything.
         # Rejected: the HTTP status and the error type, and the job stops.
+        # Only the chosen provider's secret is read: the expression gives
+        # an empty value, never another provider's key, when it is not set.
         id: key
         env:
-          TUR_PAX_API_KEY: ${{ secrets.CLAUDE_KEY }}
-          MODEL: ${{ inputs.model }}
-        run: python3 tests/pax/live_ping.py "$MODEL"
+          TUR_PAX_API_KEY: ${{ (inputs.provider == 'deepseek' && secrets.DEEPSEEK_KEY) || (inputs.provider == 'anthropic' && secrets.CLAUDE_KEY) || '' }}
+          MODEL: ${{ steps.model.outputs.name }}
+        run: python3 tests/pax/live_ping.py "$PROVIDER" "$MODEL"
 
       - name: Scratch directory, bubblewrap
         if: steps.key.outputs.present == 'true'
@@ -105,12 +139,13 @@ jobs:
       - name: Run against the real provider
         if: steps.key.outputs.present == 'true'
         env:
-          TUR_PAX_API_KEY: ${{ secrets.CLAUDE_KEY }}
-          MODEL: ${{ inputs.model }}
+          TUR_PAX_API_KEY: ${{ (inputs.provider == 'deepseek' && secrets.DEEPSEEK_KEY) || (inputs.provider == 'anthropic' && secrets.CLAUDE_KEY) || '' }}
+          MODEL: ${{ steps.model.outputs.name }}
         shell: bash
         run: |
           python3 tests/pax/live.py \
             --tur-pax services/tur-pax/target/debug/tur-pax \
+            --provider "$PROVIDER" \
             --model "$MODEL" \
             --work-dir "$WORK/work" \
             --evidence "$WORK/evidence" 2>&1 | tee "$WORK/live-log.txt"
@@ -122,7 +157,7 @@ jobs:
         id: scan
         if: always() && steps.key.outputs.present == 'true'
         env:
-          TUR_PAX_API_KEY: ${{ secrets.CLAUDE_KEY }}
+          TUR_PAX_API_KEY: ${{ (inputs.provider == 'deepseek' && secrets.DEEPSEEK_KEY) || (inputs.provider == 'anthropic' && secrets.CLAUDE_KEY) || '' }}
         shell: bash
         run: |
           python3 - "$WORK" <<'PYTHON'

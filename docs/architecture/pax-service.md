@@ -91,7 +91,7 @@ model wrote.
 | `Disable` | | | Switches P@x off: a running task is cancelled and no timer is left set | `-009` |
 | `SetProvider` | `s provider`, `s model` | | Chooses a provider by its identifier ([section 9](#9-consent-provider-model-and-the-limit-of-a-day)) and a model name. Another provider withdraws the consent and switches P@x off | `-006`, `-009` |
 | `SetLimits` | `s limits` | | JSON with any of `task_cost`, `day_cost`, `task_tokens`, `day_tokens`; `null` restores a default | `-006`, `-009` |
-| `ListModels` | | `s models` | Every provider by identifier: its adapter family, name, origin (`listed`, `by_hand`, `implicit`), address, keyring item, declared capabilities, terms and key pages, models and prices; the list's date and status | never |
+| `ListModels` | | `s models` | Every provider by identifier: its adapter family, name, origin (`listed`, `by_hand`, `implicit`), address, keyring item, `key_required`, declared capabilities, `data_terms` as TUR read them (`null` when not reviewed or added by hand), `data_terms_reviewed`, `runs_locally`, terms and key pages, models with their prices, declared capabilities, `can_act`, `can_see` and `notices`; the list's date and status | never |
 | `SetKey` | `s provider`, `s key` | | Stores the key under the provider's keyring item (its identifier unless its entry names another), in place of any key there. An identifier no entry has yet is accepted | `SERVICE-006`, `KEY-001`, `-003`, `-004`, `-005` |
 | `RemoveKey` | `s provider` | `b removed` | Removes it | as above |
 | `HasKey` | `s provider` | `b set` | Whether one is stored. Never makes the store prompt | as above |
@@ -161,7 +161,10 @@ decided).
 `message`: why a task cannot start, if it cannot), `consent` (`current`,
 `text_version`, `accepted_version`, `accepted_for`, `accepted_at`), `provider`
 (the identifier), `provider_name`, `adapter`, `provider_origin`, `model`, `model_listed`, `model_tested`, `price_known`, `key`
-(`set`, `not_set`, `unknown`), `session_locked`, `running`, `spending`
+(`set`, `not_set`, `unknown`, `not_needed` for a server that takes no key),
+`abilities` (`act`, `see`: what the model's entry declares, `null` when
+nothing is; `notices`: the plain sentences that say what P@x will not
+attempt with it), `session_locked`, `running`, `spending`
 (`currency`, `today` and `month` each with `cost`, `input_tokens`,
 `output_tokens`, `responses`; `day`; `day_limit` and `task_limit` each with
 `cost` and `tokens`; `day_limit_reached`; `prices_as_of`; `prices_status`),
@@ -344,24 +347,49 @@ never to the trail.
 
 **Consent.** P@x is off until switched on. `Enable` takes the version of the
 consent text the person read; it must be the current one
-(`consent::CONSENT_TEXT_VERSION`, now `1`). The acceptance is recorded with
+(`consent::CONSENT_TEXT_VERSION`, now `2`: version 2 added what each
+provider's terms say). The acceptance is recorded with
 that version, the provider the text named and the time. A task is refused
 while P@x is off (`SERVICE-001`), when the text has a newer version or the
 provider changed (`SERVICE-002`), or when nothing is chosen (`SERVICE-003`).
 The text is the desktop design's consent screen (9.12, step 3) with what
 addendum A sections 18.5, 19.1 and 21.6 require it to say, one paragraph of
 this build's own ("P@x cannot see or use the screen yet"), and the stop key
-sentence left out because there is no stop key. The providers' terms have not
-been reviewed by the project (ADR-0004); the text points at them and says
-nothing of what they say.
+sentence left out because there is no stop key.
+
+**What each provider keeps** is said per provider (ADR-0004, amended), from
+the `data_terms` of its entry: whether it keeps what it is sent, for how
+long, whether it trains on it, and where it processes it, "as TUR read them
+on" the date, with a line that its own terms govern. A statement the pages
+did not make reads "not stated in what TUR read". An entry without reviewed
+terms (Anthropic's, OpenAI's and Google's in the example list among them)
+reads "<name>'s terms are not reviewed by TUR"; so does **every provider the
+person added by hand, whatever its entry claims**, and a listed provider
+reached through a gateway address of the settings, because the review was
+of the entry's own address. A preset that runs on this computer at a
+loopback address says so instead: nothing goes to a company. The
+OpenAI-compatible family's paragraph on storing says that its interface has
+no setting that asks a service not to store a conversation. Consent is
+recorded per provider identifier: choosing another provider withdraws it.
 
 **Provider and model.** A provider is an identifier with an entry
 (ADR-0004, amended 12 November 2026): the adapter family that speaks its
-interface (today `anthropic`, `openai`, `google`), its name, its address if it
-is not the family's public one, the password store item of its key (its
-identifier unless named), declared capabilities (tool calling, streamed tool
-calls, image input, context size: recorded and reported, not yet checked),
-its terms and key pages, and its models with their prices. Entries come from
+interface (`anthropic`, `openai`, `google`, or `openai-chat` for any
+OpenAI-compatible service), its name, its address if it is not the family's
+public one (`openai-chat` has none and needs one), the password store item of
+its key (its identifier unless named), whether it needs a key at all
+(`key_required: false` for a server that takes none, `openai-chat` only),
+whether the model's reasoning is sent back (`send_back_reasoning`,
+`openai-chat` only, for DeepSeek), declared capabilities for the provider and
+for each model (tool calling, streamed tool calls, image input, context
+size), its data terms, its terms and key pages, and its models with their
+prices. **Capabilities are acted on:** a model that declares no tool calling
+is offered no tools or commands, and the task says why
+([pax-providers.md](pax-providers.md), section 14.4). **Keyring items**
+may be any provider identifier, or 1 to 64 lower-case letters, digits, `.`,
+`-` and `_`, starting with a letter or a digit, with no two dots in a row.
+The presets of the OpenAI-compatible family are in the model list
+([pax-providers.md](pax-providers.md), section 14.8). Entries come from
 the model list, or from the person's own `providers` in the settings file
 (added by editing the file in this build; the consent text then says TUR has
 reviewed nothing of the service). The three companies the families are

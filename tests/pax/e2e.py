@@ -255,6 +255,12 @@ def tool_results(body):
             found.append(
                 {"id": block.get("tool_use_id"), "is_error": bool(block.get("is_error")), "frame": frame}
             )
+    # Chat Completions: a `tool` message tied to the call, whose content is
+    # the text (the interface has no field for a failed call either).
+    for message in body.get("messages", []):
+        if message.get("role") == "tool" and isinstance(message.get("content"), str):
+            frame = json.loads(message["content"])["tur_pax_tool_result"]
+            found.append({"id": message.get("tool_call_id"), "is_error": None, "frame": frame})
     items = body.get("input")
     for item in items if isinstance(items, list) else []:
         if item.get("type") == "function_call_output" and isinstance(item.get("output"), str):
@@ -274,14 +280,24 @@ def system_text(body):
     for field in ("system", "instructions", "system_instruction"):
         if field in body:
             return body[field]
+    # Chat Completions: the first message, in the system role.
+    messages = body.get("messages") or [{}]
+    if messages[0].get("role") == "system":
+        return messages[0].get("content")
     return None
 
 
 # The directory of tool sets tur-pax reads when it is not told another.
 INSTALLED_TOOLS = Path("/usr/share/tur/pax/tools")
 
-# Where each adapter sends its requests.
-ENDPOINTS = {"anthropic": "/v1/messages", "openai": "/v1/responses", "google": "/v1beta/interactions"}
+# Where each adapter sends its requests. The compatible family is configured
+# with a base URL that holds the version, as the services document it.
+ENDPOINTS = {
+    "anthropic": "/v1/messages",
+    "openai": "/v1/responses",
+    "google": "/v1beta/interactions",
+    "openai-chat": "/v1/chat/completions",
+}
 
 
 class Outcome:
@@ -487,7 +503,7 @@ class Test:
         config = {
             "schema_version": 1,
             "provider": wire,
-            "base_url": provider.base_url,
+            "base_url": provider.base_url + ("/v1" if wire == "openai-chat" else ""),
             "model": "scripted-model",
             "max_output_tokens": 1024,
             "timeouts": {"connect_ms": 5000, "response_ms": 30000, "idle_ms": 30000},
@@ -495,6 +511,7 @@ class Test:
         }
         if "task_limit" in scenario:
             config["task_limit"] = scenario["task_limit"]
+        config.update(scenario.get("config", {}))
         config_path = self.work / f"{name}.provider.json"
         config_path.write_text(json.dumps(config, indent=2))
         audit_path = self.evidence / f"{name}.audit.jsonl"
@@ -1283,6 +1300,39 @@ class Test:
             len(returned) > 0 and all("Untrusted data" in result["frame"].get("notice", "") for result in returned),
         )
 
+    def check_openai_chat_adapter(self, outcome):
+        """The same loop through the OpenAI-compatible family, configured as
+        DeepSeek is: its reasoning goes back, and is never the answer."""
+        self.check_other_adapter(outcome)
+        name = outcome.name
+        self.checks.check(
+            name,
+            "every request asked for usage in the stream",
+            all(body.get("stream_options") == {"include_usage": True} for body in outcome.bodies),
+        )
+        later = outcome.bodies[1:]
+        returned = [
+            message.get("reasoning_content")
+            for body in later
+            for message in body.get("messages", [])
+            if message.get("role") == "assistant"
+        ]
+        self.checks.check(
+            name,
+            "the model's reasoning went back with every assistant turn, as DeepSeek requires",
+            len(returned) >= 3 and all(text == "Thinking it over." for text in returned),
+            returned,
+        )
+        self.checks.check(
+            name,
+            "the reasoning is never P@x's words: not in the answer, the transcript or the trail",
+            "Thinking it over." not in outcome.stdout and "Thinking it over." not in json.dumps(outcome.audit),
+        )
+        usage = outcome.transcript.get("usage") or {}
+        self.checks.check(
+            name, "the usage is the service's, not an estimate", usage.get("estimated") in (None, False), usage
+        )
+
     def never_stops(self, outcome, expected_outcome, code, requests, performed):
         name = outcome.name
         self.checks.equal(name, "exit status", outcome.status, 20)
@@ -1416,9 +1466,9 @@ class Test:
         )
         self.checks.equal(
             name,
-            "the loop was run through all three adapters",
+            "the loop was run through all four adapter families",
             sorted({outcome.wire for outcome in self.outcomes}),
-            ["anthropic", "google", "openai"],
+            ["anthropic", "google", "openai", "openai-chat"],
         )
 
     # ------------------------------------------------------------ report

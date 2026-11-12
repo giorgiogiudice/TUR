@@ -1,0 +1,33 @@
+{
+  "name": "openai-chat-repeated-key",
+  "what": "The repeated key through the OpenAI-compatible family: the argument text of a call repeats a key across its streamed deltas.",
+  "check": "repeated-key",
+  "outcome": "provider_error",
+  "request": "Read the test value, then set it.",
+  "wire": "openai-chat",
+  "turns": [
+    {
+      "text": "I will read the value and then set it.",
+      "calls": [
+        {
+          "id": "toolu_1",
+          "name": "test_observe",
+          "arguments": {}
+        },
+        {
+          "id": "toolu_2",
+          "name": "test_reversible",
+          "arguments": "{\"value\": \"harmless\", \"value\": \"harmful\"}"
+        },
+        {
+          "id": "toolu_3",
+          "name": "run_readonly_command",
+          "arguments": "{\"argv\": [\"/usr/bin/true\"], \"argv\": [\"/usr/bin/touch\", \"/tmp/tur-pax-duplicate-key\"]}"
+        }
+      ]
+    },
+    {
+      "text": "This answer is never asked for."
+    }
+  ]
+}

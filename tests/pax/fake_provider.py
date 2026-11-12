@@ -3,11 +3,12 @@
 """A scripted model provider for the P@x end-to-end test.
 
 It is a local HTTP server that answers each request with the next response of
-a script, in the streaming format of one of the three providers P@x has an
-adapter for (the Anthropic Messages API, the OpenAI Responses API or the
-Google Interactions API), and records every request it receives. It is not a
+a script, in the streaming format of one of the four API families P@x has an
+adapter for (the Anthropic Messages API, the OpenAI Responses API, the
+Google Interactions API, or the OpenAI-compatible Chat Completions API of
+DeepSeek and others), and records every request it receives. It is not a
 model and it calls none: a script says what the model "does", turn by turn.
-The three formats are written by hand from the providers' documentation, the
+The formats are written by hand from the providers' documentation, the
 same way as the conformance scripts of services/tur-pax-providers; they are
 not recordings of a real provider.
 
@@ -42,7 +43,7 @@ def _event(name, data):
     return f"event: {name}\ndata: {json.dumps(data, separators=(',', ':'))}\n\n"
 
 
-WIRES = ("anthropic", "openai", "google")
+WIRES = ("anthropic", "openai", "google", "openai-chat")
 
 
 def _raw_event(name, data):
@@ -63,7 +64,78 @@ def render(turn, wire="anthropic"):
         return render_openai(turn)
     if wire == "google":
         return render_google(turn)
+    if wire == "openai-chat":
+        return render_openai_chat(turn)
     return render_anthropic(turn)
+
+
+def render_openai_chat(turn):
+    """The turn as a stream of the OpenAI-compatible Chat Completions API.
+
+    Written by hand from OpenAI's Chat Completions reference and DeepSeek's
+    API documentation: data-only chunks, reasoning in `reasoning_content`
+    (DeepSeek's thinking mode), a streamed call that starts with its id and
+    name and whose argument text follows in two deltas, or a call whose
+    arguments arrive whole in one delta; the finish, a usage chunk with no
+    choices, then `[DONE]`.
+    """
+
+    def chunk(choices, usage=None):
+        data = {
+            "id": "chatcmpl-scripted",
+            "object": "chat.completion.chunk",
+            "created": 1794477600,
+            "model": "scripted-model",
+            "choices": choices,
+            "usage": usage,
+        }
+        return f"data: {json.dumps(data, separators=(',', ':'))}\n\n"
+
+    def delta(fields):
+        return [{"index": 0, "delta": fields, "finish_reason": None}]
+
+    def raw_delta(fields_text):
+        """A delta written by hand: the argument text exactly as scripted."""
+        return (
+            '{"id":"chatcmpl-scripted","object":"chat.completion.chunk","created":1794477600,'
+            '"model":"scripted-model","choices":[{"index":0,"delta":%s,"finish_reason":null}],'
+            '"usage":null}' % fields_text
+        )
+
+    stream = chunk(delta({"role": "assistant", "content": "", "reasoning_content": "Thinking it over."}))
+    text = turn.get("text", "")
+    if text:
+        stream += chunk(delta({"content": text}))
+    for index, call in enumerate(turn.get("calls", [])):
+        arguments = _argument_text(call)
+        start = {"index": index, "id": call["id"], "type": "function", "function": {"name": call["name"]}}
+        if turn.get("whole"):
+            start["function"]["arguments"] = arguments
+            stream += f"data: {raw_delta(json.dumps({'tool_calls': [start]}))}\n\n"
+            continue
+        start["function"]["arguments"] = ""
+        stream += chunk(delta({"tool_calls": [start]}))
+        middle = len(arguments) // 2
+        for fragment in (arguments[:middle], arguments[middle:]):
+            stream += chunk(delta({"tool_calls": [{"index": index, "function": {"arguments": fragment}}]}))
+    stop = turn.get("stop") or ("tool_use" if turn.get("calls") else "end_turn")
+    if stop == "refusal":
+        stream += chunk(delta({"refusal": "The scripted model declined."}))
+    finish = {"max_tokens": "length", "refusal": "stop", "tool_use": "tool_calls"}.get(stop, "stop")
+    stream += chunk([{"index": 0, "delta": {}, "finish_reason": finish}])
+    input_tokens = turn.get("input_tokens", 40)
+    output_tokens = turn.get("output_tokens", 30)
+    stream += chunk(
+        [],
+        {
+            "prompt_tokens": input_tokens,
+            "completion_tokens": output_tokens,
+            "total_tokens": input_tokens + output_tokens,
+            "prompt_tokens_details": {"cached_tokens": 0},
+            "completion_tokens_details": {"reasoning_tokens": 3},
+        },
+    )
+    return stream + "data: [DONE]\n\n"
 
 
 def render_openai(turn):
