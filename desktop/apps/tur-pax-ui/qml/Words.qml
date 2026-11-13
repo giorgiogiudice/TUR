@@ -36,7 +36,8 @@ QtObject {
     // --- P@x's state (design 9.1) ----------------------------------------------
     readonly property string looking: qsTr("Looking for P@x…")
     readonly property string absentTitle: qsTr("P@x is not on this computer")
-    readonly property string absentText: qsTr("P@x's service, tur-pax, is not installed or cannot be started. Nothing you type here goes anywhere.")
+    readonly property string absentWhy: qsTr("P@x's service, tur-pax, is not installed or cannot be started.")
+    readonly property string absentText: qsTr("Nothing you type here goes anywhere.")
     readonly property string offTitle: qsTr("P@x is off")
     readonly property string offText: qsTr("P@x is TUR's assistant. It can do things on this computer for you and show you how to do them yourself. It needs an AI that you choose: one on this computer, or a provider's, with a key from them.")
     readonly property string switchedOffTitle: qsTr("P@x is switched off")
@@ -161,9 +162,10 @@ QtObject {
                 return qsTr("Allowed.")
             }
         case "refused":
-            return said.length > 0 ? qsTr("Refused: %1").arg(said) : qsTr("Refused by P@x's rules.")
+            // The step's state already says "Refused"; the reason follows it.
+            return said.length > 0 ? said : qsTr("P@x's rules do not allow it.")
         case "rejected":
-            return said.length > 0 ? qsTr("Not done: %1").arg(said) : qsTr("Not done: P@x asked for something it does not have.")
+            return said.length > 0 ? said : qsTr("P@x asked for something it does not have.")
         case "confirmation_required":
             return qsTr("Needs your approval, which this version cannot ask for. Not done.")
         case "authentication_required":

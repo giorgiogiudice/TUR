@@ -1,0 +1,70 @@
+{
+  "licence": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+  "generated_by": "services/tur-catalogue/tests/desktop_fixtures.rs writes this from the output of tur-catalogue for the seed catalogue; do not edit",
+  "invocations": [
+    {
+      "command": "route",
+      "subject": "net.sourceforge.chromium-bsu",
+      "host": "stated",
+      "arguments": ["route", "--json", "--host", "<host-facts>", "--", "net.sourceforge.chromium-bsu"],
+      "exit_status": 0,
+      "stderr": "",
+      "stdout": {
+        "application": {
+          "id": "net.sourceforge.chromium-bsu",
+          "name": "Chromium B.S.U.",
+          "category": "game"
+        },
+        "host": {
+          "arch": "x86_64",
+          "flatpak": true,
+          "distro_containers": true,
+          "wine": true,
+          "proton": true,
+          "android_runtime": false,
+          "arm_translation": false,
+          "google_play": false,
+          "windows_guest": false,
+          "windows_licence": false,
+          "darling_enabled": false,
+          "gpu": "integrated",
+          "memory_mib": 32768
+        },
+        "host_assumed": false,
+        "preferences": {
+          "never_use_virtual_machine": false,
+          "prefer_open_source": false,
+          "pinned_routes": {}
+        },
+        "offer_windows_guest": false,
+        "recommended": "flatpak",
+        "options": [
+          {
+            "route": "flatpak",
+            "edition_index": 0,
+            "edition_kind": "flatpak",
+            "edition": "Flatpak edition: net.sourceforge.chromium-bsu from flathub",
+            "rating": "unknown",
+            "rating_source": {
+              "kind": "unrated"
+            },
+            "outlook": "clear",
+            "recommended": true,
+            "pinned": false,
+            "reason": "A Linux edition exists as a Flatpak: a native Linux edition comes first.",
+            "caveats": [],
+            "prerequisites": [],
+            "alternative": null,
+            "reason_code": "linux-flatpak",
+            "reason_parts": [
+              {
+                "code": "linux-flatpak",
+                "params": {}
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -261,6 +261,11 @@ void TestAnswers::every_recorded_answer_is_read()
                 read = Answers::readRoutes(answer, &report, &failure);
                 break;
             }
+            case CatalogueRequest::Validate:
+                // The counts Home reads (Catalogue::checkStatistics).
+                read = answer.exitStatus == 0
+                       && QJsonDocument::fromJson(answer.output).object().value(QLatin1String("valid")).toBool();
+                break;
             }
             if (read) {
                 ++answers;

@@ -108,8 +108,18 @@ impl World {
     }
 
     fn run(&self, arguments: &[&str]) -> Run {
+        let output = self.command(arguments).output().expect("the program runs");
+        Run {
+            status: output.status.code().unwrap_or(-1),
+            stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+        }
+    }
+
+    fn command(&self, arguments: &[&str]) -> Command {
         let bin = self.root.join("bin");
-        let output = Command::new(PROGRAM)
+        let mut command = Command::new(PROGRAM);
+        command
             .arg("--catalogue")
             .arg(&self.catalogue)
             .arg("--host")
@@ -126,14 +136,8 @@ impl World {
             .env_clear()
             .env("PATH", "/usr/bin:/bin")
             .env("HOME", self.home())
-            .env("FAKE_STATE", self.root.join("state"))
-            .output()
-            .expect("the program runs");
-        Run {
-            status: output.status.code().unwrap_or(-1),
-            stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
-            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-        }
+            .env("FAKE_STATE", self.root.join("state"));
+        command
     }
 
     /// Whether nothing is left where installers are downloaded.
@@ -449,6 +453,79 @@ fn a_failed_flatpak_installation_takes_back_what_it_added() {
 }
 
 #[test]
+fn a_cancelled_flatpak_installation_is_stopped_and_takes_back_what_it_added() {
+    use std::io::{BufRead, BufReader, Write};
+    use std::process::Stdio;
+
+    let world = test_world("flatpak-cancelled");
+    switch_flathub_on(&world);
+    // The stand-in installs the runtime, then waits a minute before the
+    // application: long enough to be cancelled half-way.
+    fs::write(world.state("slow-install"), b"").unwrap();
+    let started = std::time::Instant::now();
+    let mut child = world
+        .command(&["install", "org.example.viewer", "--yes", "--events"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("the program runs");
+    let mut stdin = child.stdin.take().unwrap();
+    let stdout = BufReader::new(child.stdout.take().unwrap());
+    let mut events = Vec::new();
+    for line in stdout.lines() {
+        let line = line.unwrap();
+        let event: Value = serde_json::from_str(&line).unwrap();
+        // The runtime is in ("installing runtime/..."): cancel now.
+        if event["event"] == "activity"
+            && event["text"]
+                .as_str()
+                .unwrap_or("")
+                .starts_with("installing runtime/")
+        {
+            writeln!(stdin, "cancel").unwrap();
+            stdin.flush().unwrap();
+        }
+        events.push(event);
+    }
+    let status = child.wait().unwrap();
+    assert_eq!(status.code(), Some(3), "{events:#?}");
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(40),
+        "flatpak was not stopped: {:?}",
+        started.elapsed()
+    );
+    let last = events.last().unwrap();
+    assert_eq!(last["event"], "error");
+    assert_eq!(last["error"]["code"], "TUR-DESKTOP-APPS-013");
+    assert!(
+        last["error"]["message"]
+            .as_str()
+            .unwrap()
+            .starts_with("Cancelled. Nothing was installed."),
+        "{last}"
+    );
+    assert!(
+        events
+            .iter()
+            .any(|event| event["event"] == "step-finished" && event["ok"] == false)
+    );
+    // The runtime it had added is gone again, and nothing is recorded.
+    assert_eq!(fs::read_to_string(world.state("refs")).unwrap().trim(), "");
+    assert!(
+        !world
+            .data()
+            .join("tur/apps/installed/org.example.viewer.json")
+            .exists()
+    );
+    // Without a cancel, the same program installs: the input it was given
+    // and closed means nothing.
+    fs::remove_file(world.state("slow-install")).unwrap();
+    let run = world.run(&["install", "org.example.viewer", "--yes", "--events"]);
+    assert_eq!(run.status, 0, "{}{}", run.stdout, run.stderr);
+}
+
+#[test]
 fn a_windows_application_is_downloaded_checked_installed_and_removed_keeping_documents() {
     let world = test_world("windows");
     fs::write(world.state("download"), BODY).unwrap();
@@ -712,6 +789,7 @@ fn updates_are_found_and_applied_for_a_flatpak_and_refused_for_windows() {
     let update = &run.json()["applications"][0]["update"];
     assert_eq!(update["available"], true);
     assert_eq!(update["version"], "2.0");
+    // Nothing new: the commit stays, and the result says so.
     let run = world.run(&["update", "org.example.viewer", "--events"]);
     assert_eq!(run.status, 0, "{}{}", run.stdout, run.stderr);
     assert!(
@@ -719,6 +797,26 @@ fn updates_are_found_and_applied_for_a_flatpak_and_refused_for_windows() {
             .log("flatpak.log")
             .contains("update --user --noninteractive app/org.example.Viewer/x86_64/stable")
     );
+    assert_eq!(run.events().last().unwrap()["result"]["updated"], false);
+    // Moved to an earlier commit with flatpak itself, then updated: the
+    // update is measured against what is installed, not against the
+    // record; and a runtime the update brings in is removed with the
+    // application.
+    let earlier = "c".repeat(64);
+    let later = "d".repeat(64);
+    fs::write(world.state("commit"), format!("{earlier}\n")).unwrap();
+    fs::write(world.state("update-to"), format!("{later}\n")).unwrap();
+    fs::write(
+        world.state("update-adds"),
+        "runtime/org.example.Platform/x86_64/2\n",
+    )
+    .unwrap();
+    let run = world.run(&["update", "org.example.viewer", "--events"]);
+    assert_eq!(run.status, 0, "{}{}", run.stdout, run.stderr);
+    assert_eq!(run.events().last().unwrap()["result"]["updated"], true);
+    let run = world.run(&["remove", "org.example.viewer", "--events"]);
+    assert_eq!(run.status, 0, "{}{}", run.stdout, run.stderr);
+    assert_eq!(fs::read_to_string(world.state("refs")).unwrap().trim(), "");
 
     fs::write(world.state("download"), BODY).unwrap();
     assert_eq!(

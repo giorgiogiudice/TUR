@@ -79,15 +79,20 @@ Item {
         function test_contrast(data) {
             Kit.Theme.light = data.light
             const shell = enter(data.state)
-            // The search field has the keyboard, as when the window opens,
-            // so that the focus ring is judged too.
-            shell.focusSearch()
+            // A state that shows a sheet is judged on the sheet, which is
+            // what the person sees and can use; otherwise the search field
+            // has the keyboard, as when the window opens, so that the focus
+            // ring is judged too.
+            const sheet = host.sheetOf(data.state)
+            if (sheet === null)
+                shell.focusSearch()
             wait(50)
+            const target = sheet !== null ? sheet.sheetItem : shell
             // A grab makes the scene lay itself out as it will be painted.
-            grabImage(shell)
+            grabImage(target)
 
             // line.subtle is decoration: nothing is understood through it.
-            const findings = Testing.Harness.contrastFindings(shell, [Kit.Theme.lineSubtle])
+            const findings = Testing.Harness.contrastFindings(target, [Kit.Theme.lineSubtle])
             const failures = []
             let texts = 0
             let boundaries = 0
@@ -148,6 +153,27 @@ Item {
         function test_keyboard(data) {
             Testing.Harness.rightToLeft = data.rtl
             const shell = enter(data.state)
+
+            // A sheet holds the keyboard (13.1, X1): its controls have names
+            // and roles, and Tab goes round them without leaving it.
+            const sheet = host.sheetOf(data.state)
+            if (sheet !== null) {
+                verify(sheet.opened)
+                const inside = Testing.Harness.tabStops(sheet.sheetItem)
+                console.info("TUR-A11Y centre-" + data.tag + ": " + inside.length + " tab stops in the sheet")
+                verify(inside.length >= 2)
+                for (const stop of inside) {
+                    const seen = Testing.Harness.accessible(stop)
+                    verify(seen.valid && seen.name.trim().length > 0 && seen.role !== Accessible.NoRole,
+                           Testing.Harness.describe(stop) + " has a name and a role")
+                }
+                for (let press = 0; press < inside.length + 1; press++) {
+                    keyClick(Qt.Key_Tab)
+                    verify(stopOf(root.Window.activeFocusItem, inside) !== null,
+                           "Tab stays in the sheet: " + Testing.Harness.describe(root.Window.activeFocusItem))
+                }
+                return
+            }
 
             const stops = Testing.Harness.tabStops(shell)
             console.info("TUR-A11Y centre-" + data.tag + ": " + stops.length + " tab stops")
@@ -222,10 +248,13 @@ Item {
             Testing.Harness.rightToLeft = data.rtl
             Testing.Harness.pseudo = data.rtl ? Testing.Harness.RtlLong : Testing.Harness.None
             const shell = enter(data.state)
+            const sheet = host.sheetOf(data.state)
             grabImage(shell)
             wait(0)
 
             const clipped = Testing.Harness.clippedText(shell)
+            if (sheet !== null)
+                clipped.push(...Testing.Harness.clippedText(sheet.sheetItem))
             compare(clipped.join("\n"), "", "no text is elided or cut off")
             verify(shell.naturalHeight <= root.height,
                    "the state (" + shell.naturalHeight + " px) fits in the test window, so all of it was looked at")

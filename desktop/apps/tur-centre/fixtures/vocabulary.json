@@ -6,7 +6,7 @@
   "alternative_text_ids": ["dual-boot.only-way", "another-computer.x86-64", "dual-boot.or-another-computer", "certified-android-device", "mac", "another-computer.processor", "none-known"],
   "routes": ["flatpak", "native", "distro-container", "proton", "wine", "windows-guest", "android-runtime", "darling", "web", "no-route"],
   "ratings": ["good", "usable", "poor", "broken", "unknown"],
-  "reporters": ["nobody", "external", "tur-test"],
+  "reporters": ["nobody", "external", "tur-test", "tur-autopilot"],
   "rating_source_kinds": ["unrated", "external", "tur-test"],
   "outlooks": ["clear", "doubtful", "blocked"],
   "severities": ["note", "warning", "obstacle", "blocker"],

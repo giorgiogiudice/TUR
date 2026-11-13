@@ -1,9 +1,8 @@
 # SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
 #
-# Desktop (D-01, D-02, D-04, D-15, D-17): the licence boundary, the settings
-# registries, the build and tests of the Qt programs under desktop/, their
-# screenshots, the tests that run them under a real KWin, and P@x's window
-# against the real P@x session service.
+# Desktop (D-01, D-02, D-04, D-15, D-17): the licence boundary, the settings registries,
+# the build and tests of the Qt programs under desktop/, their screenshots,
+# and the tests that run them under a real KWin.
 # Nothing under desktop/ is ever compiled or run anywhere else. See
 # desktop/README.md, docs/architecture/desktop-kit.md and
 # docs/architecture/desktop-experience.md, section 15.3.
@@ -17,6 +16,7 @@ on:
       - "installer/gui/**"
       - "schemas/settings-registry.schema.json"
       - ".github/workflows/desktop.yml"
+      - "services/tur-apps/**"
       # P@x's window is tested against the real service (pax-ui-end-to-end)
       # and its fixture is checked against what the service says.
       - "services/tur-pax/**"
@@ -27,6 +27,8 @@ on:
       - "installer/gui/**"
       - "schemas/settings-registry.schema.json"
       - ".github/workflows/desktop.yml"
+      # The application centre's end-to-end job runs the real tur-apps.
+      - "services/tur-apps/**"
       # P@x's window is tested against the real service (pax-ui-end-to-end)
       # and its fixture is checked against what the service says.
       - "services/tur-pax/**"
@@ -314,6 +316,89 @@ jobs:
         with:
           name: desktop-compositor
           path: ${{ env.OUT }}/compositor
+          if-no-files-found: warn
+
+  # The application centre, end to end (task D-11; docs/architecture/
+  # tur-centre.md, section 5): the real tur-centre, built in the builder,
+  # against the real tur-apps and tur-catalogue, built here, installing per
+  # user from Flathub with Fedora 45's flatpak, in a privileged container of
+  # the builder image with the network and an X server. Driven through the
+  # centre's own controls; pictures of each step and of the opened
+  # application. It also records the runs of tur-apps the centre's fixtures
+  # are made from (desktop/apps/tur-centre/fixtures/apps/update.py).
+  centre-e2e:
+    name: Application centre, end to end
+    needs: builder
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      CARGO_TERM_COLOR: never
+      CARGO_INCREMENTAL: "0"
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Lint the job's scripts
+        run: |
+          shellcheck -x --severity=warning desktop/ci/centre-e2e/*.sh
+          python3 -m py_compile desktop/ci/centre-e2e/*.py desktop/apps/tur-centre/fixtures/apps/update.py
+
+      - name: Fetch the builder image
+        uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: ${{ env.BUILDER_DIR }}
+          key: ${{ needs.builder.outputs.key }}
+          fail-on-cache-miss: true
+
+      - name: Load the builder image
+        run: desktop/ci/load-builder.sh "$BUILDER_DIR"
+
+      - name: Toolchain
+        working-directory: services/tur-apps
+        run: |
+          rustup show active-toolchain || rustup toolchain install
+          rustc --version; cargo --version
+
+      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            services/tur-apps/target
+            services/tur-catalogue/target
+          key: centre-e2e-${{ hashFiles('rust-toolchain.toml', 'services/tur-apps/Cargo.lock', 'services/tur-catalogue/Cargo.lock') }}
+          restore-keys: centre-e2e-
+
+      - name: Build tur-apps and tur-catalogue
+        run: |
+          (cd services/tur-apps && cargo build --locked)
+          (cd services/tur-catalogue && cargo build --locked)
+
+      - name: Configure and build the desktop programs
+        run: desktop/ci/in-builder.sh desktop/ci/build.sh ci
+
+      - name: Let bubblewrap create user namespaces
+        # As the apps workflow does, and flatpak's own CI on ubuntu-24.04.
+        run: |
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          sudo systemctl reload apparmor || true
+
+      - name: End to end
+        run: |
+          desktop/ci/centre-e2e/run.sh services/tur-apps/target/debug/tur-apps \
+            services/tur-catalogue/target/debug/tur-catalogue
+
+      - name: Summary
+        if: always()
+        run: |
+          cat "$OUT/centre-e2e/summary.md" >> "$GITHUB_STEP_SUMMARY" 2>/dev/null \
+            || echo "### Application centre, end to end: no summary was written" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: desktop-centre-e2e
+          path: ${{ env.OUT }}/centre-e2e
           if-no-files-found: warn
 
   # P@x's window, tur-pax-ui (task D-17; docs/architecture/tur-pax-ui.md,

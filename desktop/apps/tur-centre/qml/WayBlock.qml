@@ -96,7 +96,7 @@ ColumnLayout {
         objectName: "wayReason"
         Layout.fillWidth: true
         visible: text.length > 0
-        text: block.option.reason ?? ""
+        text: RouterWords.reason(block.option)
         tone: Kit.Label.Secondary
         paragraph: true
     }
@@ -120,9 +120,42 @@ ColumnLayout {
             // of running it. It may still work." would end with something
             // untrue. "No reports" stands alone there.
             visible: !(block.blocked && block.option.rating_source.kind === "unrated")
-            text: Words.sourceSentence(block.option.rating_source)
+            text: Words.sourceSentence(block.option.rating_source, block.option.rating)
             tone: Kit.Label.Secondary
             paragraph: true
+        }
+
+        // Works with these settings: what TUR's compatibility autopilot
+        // found the application to start with. Never a rating.
+        ColumnLayout {
+            objectName: "waySettings"
+            Layout.fillWidth: true
+            Layout.topMargin: Kit.Theme.spaceGrid
+            visible: !!block.option.settings
+            spacing: Kit.Theme.spaceGrid / 2
+
+            Kit.Label {
+                Layout.fillWidth: true
+                text: qsTr("Works with these settings")
+                kind: Kit.Label.Strong
+            }
+
+            Kit.Label {
+                objectName: "waySettingsRemedies"
+                Layout.fillWidth: true
+                // The remedies' names, as tur-runtime names them.
+                text: block.option.settings ? block.option.settings.remedies.join(", ") : ""
+                kind: Kit.Label.Mono
+                wrapMode: Text.WrapAnywhere
+            }
+
+            Kit.Label {
+                objectName: "waySettingsSource"
+                Layout.fillWidth: true
+                text: Words.settingsSentence(block.option.settings)
+                tone: Kit.Label.Secondary
+                paragraph: true
+            }
         }
 
         // TUR's own test names its report. A path in the project's
@@ -177,7 +210,7 @@ ColumnLayout {
                     Kit.Label {
                         objectName: "reportSource"
                         Layout.fillWidth: true
-                        text: Words.sourceSentence(Words.recordSource(report.modelData))
+                        text: Words.sourceSentence(Words.recordSource(report.modelData), report.modelData.rating)
                         tone: Kit.Label.Secondary
                         paragraph: true
                     }
@@ -231,7 +264,7 @@ ColumnLayout {
 
                     objectName: "wayPrerequisite"
                     Layout.fillWidth: true
-                    text: prerequisite.modelData.text
+                    text: RouterWords.prerequisite(prerequisite.modelData)
                     paragraph: true
                 }
             }

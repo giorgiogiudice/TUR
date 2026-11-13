@@ -39,7 +39,7 @@ Item {
             verify(view.tasks.length > 0, "the recording has tasks")
             const asked = fixture.calls().filter(call => call.method === "ListActivity")
             compare(asked.length, 1)
-            compare(asked[0].args[0], 20, "the last twenty")
+            compare(String(asked[0].args[0]), "20", "the last twenty")
             const first = findChild(view, "activityTask-0")
             verify(first !== null)
             const record = view.tasks[0]

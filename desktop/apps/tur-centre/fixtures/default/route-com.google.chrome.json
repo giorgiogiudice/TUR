@@ -1,0 +1,103 @@
+{
+  "licence": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+  "generated_by": "services/tur-catalogue/tests/desktop_fixtures.rs writes this from the output of tur-catalogue for the seed catalogue; do not edit",
+  "invocations": [
+    {
+      "command": "route",
+      "subject": "com.google.chrome",
+      "host": "stated",
+      "arguments": ["route", "--json", "--host", "<host-facts>", "--", "com.google.chrome"],
+      "exit_status": 0,
+      "stderr": "",
+      "stdout": {
+        "application": {
+          "id": "com.google.chrome",
+          "name": "Google Chrome",
+          "category": "internet"
+        },
+        "host": {
+          "arch": "x86_64",
+          "flatpak": true,
+          "distro_containers": true,
+          "wine": true,
+          "proton": true,
+          "android_runtime": false,
+          "arm_translation": false,
+          "google_play": false,
+          "windows_guest": false,
+          "windows_licence": false,
+          "darling_enabled": false,
+          "gpu": "integrated",
+          "memory_mib": 32768
+        },
+        "host_assumed": false,
+        "preferences": {
+          "never_use_virtual_machine": false,
+          "prefer_open_source": false,
+          "pinned_routes": {}
+        },
+        "offer_windows_guest": false,
+        "recommended": "flatpak",
+        "options": [
+          {
+            "route": "flatpak",
+            "edition_index": 0,
+            "edition_kind": "flatpak",
+            "edition": "Flatpak edition: com.google.Chrome from flathub",
+            "rating": "unknown",
+            "rating_source": {
+              "kind": "unrated"
+            },
+            "outlook": "clear",
+            "recommended": true,
+            "pinned": false,
+            "reason": "A Linux edition exists as a Flatpak: a native Linux edition comes first.",
+            "caveats": [
+              {
+                "code": "community-package",
+                "severity": "note",
+                "requirement": null,
+                "text": "This package is maintained by its packagers, not by the application's publisher.",
+                "text_id": "community-package",
+                "params": {}
+              }
+            ],
+            "prerequisites": [],
+            "alternative": null,
+            "reason_code": "linux-flatpak",
+            "reason_parts": [
+              {
+                "code": "linux-flatpak",
+                "params": {}
+              }
+            ]
+          },
+          {
+            "route": "wine",
+            "edition_index": 1,
+            "edition_kind": "windows",
+            "edition": "Windows edition: the publisher's page https://www.google.com/chrome/",
+            "rating": "unknown",
+            "rating_source": {
+              "kind": "unrated"
+            },
+            "outlook": "clear",
+            "recommended": false,
+            "pinned": false,
+            "reason": "A Windows edition exists: Wine, a compatibility layer, comes before a virtual machine.",
+            "caveats": [],
+            "prerequisites": [],
+            "alternative": null,
+            "reason_code": "windows-wine",
+            "reason_parts": [
+              {
+                "code": "windows-wine",
+                "params": {}
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

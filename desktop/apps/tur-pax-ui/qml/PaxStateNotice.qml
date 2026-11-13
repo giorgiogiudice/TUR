@@ -74,7 +74,10 @@ ColumnLayout {
         text: {
             switch (notice.situation) {
             case "absent":
-                return Words.absentText + (notice.client.presenceDetail.length > 0 ? " " + notice.client.presenceDetail : "")
+                // Why, as the client found it (no bus, not running, not
+                // installed), then what that means here.
+                return (notice.client.presenceDetail.length > 0 ? notice.client.presenceDetail : Words.absentWhy)
+                       + " " + Words.absentText
             case "off":
                 return Words.offText
             case "switched-off":

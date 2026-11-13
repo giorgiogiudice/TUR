@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
 //
 // tur-centre: the application centre (docs/architecture/desktop-experience.md,
-// section 8; docs/architecture/tur-centre.md). Part 1, "find": the shell,
-// search, an application's page and the "no route" page. It reads the
-// catalogue and the router and installs nothing.
+// section 8; docs/architecture/tur-centre.md). It reads the catalogue and the
+// router (part 1, D-10), and installs, updates and removes applications per
+// user through tur-apps, which it runs as a program of the session (part 2,
+// D-11).
 
 #include "turkit.h"
 
@@ -30,13 +31,14 @@ int main(int argc, char *argv[])
 
     QCommandLineParser parser;
     parser.setApplicationDescription(
-        QStringLiteral("The TUR application centre. It finds applications and says how each will run on this "
-                       "computer. This version installs nothing."));
+        QStringLiteral("The TUR application centre. It finds applications, says how each will run on this "
+                       "computer, and installs, updates and removes them for you through tur-apps."));
     parser.addHelpOption();
     parser.addVersionOption();
     parser.addPositionalArgument(
         QStringLiteral("address"),
-        QStringLiteral("What to open: tur-centre:home, tur-centre:search?q=WORDS or tur-centre:app/ID."),
+        QStringLiteral("What to open: tur-centre:home, tur-centre:search?q=WORDS, tur-centre:app/ID, "
+                       "tur-centre:installed, tur-centre:updates or tur-centre:sources."),
         QStringLiteral("[address]"));
 
     const QCommandLineOption fixture(
@@ -59,6 +61,15 @@ int main(int argc, char *argv[])
                                          QStringLiteral("A JSON file of routing preferences, passed to the router as "
                                                         "--prefs."),
                                          QStringLiteral("FILE"));
+    const QCommandLineOption appsProgram(
+        QStringLiteral("apps-program"),
+        QStringLiteral("The install backend to run. Default: tur-apps, on the PATH. It installs per user."),
+        QStringLiteral("PROGRAM"), QStringLiteral("tur-apps"));
+    const QCommandLineOption appsFixture(
+        QStringLiteral("apps-fixture"),
+        QStringLiteral("Answer installing, listing and sources from recorded runs of tur-apps in DIR instead of "
+                       "running it. Nothing is installed."),
+        QStringLiteral("DIR"));
     const QCommandLineOption standalone(QStringLiteral("standalone"),
                                         QStringLiteral("Use the look of TUR's programs outside a session: the "
                                                        "Basic style and the Inter font, whatever the desktop says."));
@@ -69,7 +80,8 @@ int main(int argc, char *argv[])
     const QCommandLineOption rightToLeft(QStringLiteral("rtl"), QStringLiteral("Lay the window out right to left."));
     const QCommandLineOption check(QStringLiteral("check"),
                                    QStringLiteral("Load the window, report any QML warning, and exit. For tests."));
-    parser.addOptions({ fixture, program, catalogue, hostFacts, preferences, standalone, variant, rightToLeft, check });
+    parser.addOptions({ fixture, program, catalogue, hostFacts, preferences, appsProgram, appsFixture, standalone,
+                        variant, rightToLeft, check });
     parser.process(app);
 
     if (parser.isSet(standalone))
@@ -95,6 +107,8 @@ int main(int argc, char *argv[])
         { QStringLiteral("catalogueDirectory"), parser.value(catalogue) },
         { QStringLiteral("hostFacts"), parser.value(hostFacts) },
         { QStringLiteral("preferences"), parser.value(preferences) },
+        { QStringLiteral("appsProgram"), parser.value(appsProgram) },
+        { QStringLiteral("appsFixture"), parser.value(appsFixture) },
         { QStringLiteral("address"), positional.isEmpty() ? QString() : positional.first() },
     });
     engine.loadFromModule("Tur.Centre", "Main");

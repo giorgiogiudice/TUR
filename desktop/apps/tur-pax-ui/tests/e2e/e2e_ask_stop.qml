@@ -20,6 +20,17 @@ Item {
     width: 900
     height: 2200
 
+    // The number of rows each time a row came.
+    property var growth: []
+
+    Connections {
+        target: conversation
+
+        function onCountChanged() {
+            root.growth = root.growth.concat([conversation.count])
+        }
+    }
+
     AgentClient {
         id: client
 
@@ -82,25 +93,18 @@ Item {
             field.forceActiveFocus()
             field.text = "Set the value for the night."
             keyClick(Qt.Key_Return)
-            tryVerify(() => conversation.running, 30000, "the task started")
-            // Each step is on screen while it is not yet done, or the moment
-            // it is: the panel follows the service's signals.
-            const seen = []
-            tryVerify(() => {
-                for (const step of conversation.entriesOf("step")) {
-                    const mark = step.step.index + ":" + step.phase
-                    if (seen.indexOf(mark) < 0)
-                        seen.push(mark)
-                }
-                return !conversation.running
-            }, 60000, "the task ended")
+            // The task may be over between two looks: what came, and in which
+            // order, is in `growth`, which follows the conversation's rows.
+            tryVerify(() => conversation.lastOutcome.length > 0, 60000, "the task ran and ended")
             compare(conversation.lastOutcome, "completed")
             compare(kinds(), ["you", "pax", "step", "step", "pax", "summary"])
             const steps = conversation.entriesOf("step")
             compare(steps.map(step => step.step.tool), ["test_observe", "test_reversible"])
             compare(steps.map(step => step.phase), ["done", "done"])
-            verify(seen.length >= 2, "the steps were seen as they came: " + seen.join(", "))
-            console.info("TUR-E2E steps as seen: " + seen.join(", "))
+            // One row at a time, as the service signalled: the person's words,
+            // P@x's words, each step, the answer, the end.
+            console.info("TUR-E2E rows as they came: " + root.growth.join(", "))
+            compare(root.growth.slice(0, 6), [1, 2, 3, 4, 5, 6], "the rows came one by one")
             wait(100)
             picture("done")
 

@@ -1,0 +1,113 @@
+{
+  "licence": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+  "generated_by": "services/tur-catalogue/tests/desktop_fixtures.rs writes this from the output of tur-catalogue for the seed catalogue; do not edit",
+  "invocations": [
+    {
+      "command": "show",
+      "subject": "com.google.chrome",
+      "host": "not used",
+      "arguments": ["show", "--json", "--", "com.google.chrome"],
+      "exit_status": 0,
+      "stderr": "",
+      "stdout": {
+        "schema_version": 1,
+        "id": "com.google.chrome",
+        "entry_kind": "application",
+        "name": "Google Chrome",
+        "aliases": [
+          "Chrome",
+          "Chrome browser"
+        ],
+        "publisher": "Google",
+        "category": "internet",
+        "summary": "Google's web browser.",
+        "homepage": "https://www.google.com/chrome/",
+        "editions": [
+          {
+            "kind": "flatpak",
+            "flatpak_id": "com.google.Chrome",
+            "remote": null,
+            "obtain": null,
+            "package": null,
+            "distribution": null,
+            "store_id": null,
+            "download_page": null,
+            "installer": null,
+            "stores": [],
+            "url": null,
+            "primary": false,
+            "licence": "proprietary",
+            "packaging": "community",
+            "requirements": [],
+            "records": [],
+            "references": [
+              {
+                "title": "Flathub listing and API: com.google.Chrome, licence LicenseRef-proprietary, not verified; extra data from dl.google.com",
+                "url": "https://flathub.org/apps/com.google.Chrome",
+                "checked": "2026-11-13"
+              },
+              {
+                "title": "The Flathub manifest of com.google.Chrome (the package, maintained by Flathub volunteers)",
+                "url": "https://github.com/flathub/com.google.Chrome",
+                "checked": "2026-11-13"
+              }
+            ],
+            "notes": "Flathub's package is maintained by Flathub volunteers and is not verified by Flathub as coming from Google. It does not contain Chrome: at installation, Flatpak downloads Google's Debian package of Chrome from dl.google.com (157.0.8103.78 on the day checked, 147 497 676 bytes) and checks it against the SHA-256 in Flathub's manifest. Google's terms apply to Chrome. Google's own Linux packages are an RPM repository, which on an atomic system would mean layering a system package for every user; the per-user Flatpak is used instead."
+          },
+          {
+            "kind": "windows",
+            "flatpak_id": null,
+            "remote": null,
+            "obtain": "publisher-page",
+            "package": null,
+            "distribution": null,
+            "store_id": null,
+            "download_page": "https://www.google.com/chrome/",
+            "installer": null,
+            "stores": [],
+            "url": null,
+            "primary": false,
+            "licence": "proprietary",
+            "packaging": null,
+            "requirements": [],
+            "records": [],
+            "references": [
+              {
+                "title": "Google Chrome download page",
+                "url": "https://www.google.com/chrome/",
+                "checked": "2026-11-13"
+              }
+            ],
+            "notes": null
+          },
+          {
+            "kind": "macos",
+            "flatpak_id": null,
+            "remote": null,
+            "obtain": "publisher-page",
+            "package": null,
+            "distribution": null,
+            "store_id": null,
+            "download_page": "https://www.google.com/chrome/",
+            "installer": null,
+            "stores": [],
+            "url": null,
+            "primary": false,
+            "licence": "proprietary",
+            "packaging": null,
+            "requirements": [],
+            "records": [],
+            "references": [
+              {
+                "title": "Google Chrome download page",
+                "url": "https://www.google.com/chrome/",
+                "checked": "2026-11-13"
+              }
+            ],
+            "notes": null
+          }
+        ]
+      }
+    }
+  ]
+}

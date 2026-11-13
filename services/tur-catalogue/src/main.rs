@@ -75,6 +75,10 @@ enum Command {
         /// test must point at a report file that exists under it.
         #[arg(long, value_name = "DIR")]
         repository: Option<PathBuf>,
+        /// Print the counts as JSON instead of text, when the catalogue is
+        /// valid. The application centre reads `rated_by_tur_tests` from it.
+        #[arg(long)]
+        json: bool,
     },
     /// Find applications by name or alias. Tolerant of case, punctuation,
     /// spacing and small typos. Uses the catalogue only, never the network.
@@ -157,9 +161,13 @@ struct RouteReport<'a> {
 fn main() -> ExitCode {
     let cli = Cli::parse();
     let status = match cli.command {
-        Command::Validate { dir, repository } => {
+        Command::Validate {
+            dir,
+            repository,
+            json,
+        } => {
             let directory = dir.unwrap_or(cli.catalogue);
-            run_validate(&directory, repository.as_deref())
+            run_validate(&directory, repository.as_deref(), json)
         }
         Command::Search { query, json } => run_search(&cli.catalogue, &query.join(" "), json),
         Command::Show { id, json } => run_show(&cli.catalogue, &id, json),
@@ -244,7 +252,14 @@ fn load(directory: &Path) -> Result<Catalogue, u8> {
     Catalogue::load(directory, Date::today_utc()).map_err(|problems| report_problems(&problems))
 }
 
-fn run_validate(directory: &Path, repository: Option<&Path>) -> u8 {
+/// What `validate --json` prints for a valid catalogue.
+#[derive(Serialize)]
+struct ValidateReport {
+    valid: bool,
+    statistics: tur_catalogue::Statistics,
+}
+
+fn run_validate(directory: &Path, repository: Option<&Path>, json: bool) -> u8 {
     let catalogue = match load(directory) {
         Ok(catalogue) => catalogue,
         Err(status) => return status,
@@ -255,6 +270,12 @@ fn run_validate(directory: &Path, repository: Option<&Path>) -> u8 {
         if !missing.is_empty() {
             return report_problems(&missing);
         }
+    }
+    if json {
+        return print_json(&ValidateReport {
+            valid: true,
+            statistics,
+        });
     }
     print_line(&render_statistics(&statistics));
     if repository.is_none() && statistics.rated_by_tur_tests > 0 {
