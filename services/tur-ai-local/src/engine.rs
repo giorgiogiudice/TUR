@@ -294,8 +294,11 @@ mod tests {
         ] {
             fs::write(real.join(name), b"").expect("a file");
         }
-        std::os::unix::fs::symlink("../libexec/llama.cpp/llama-server", bin.join("llama-server"))
-            .expect("a link");
+        std::os::unix::fs::symlink(
+            "../libexec/llama.cpp/llama-server",
+            bin.join("llama-server"),
+        )
+        .expect("a link");
         let expected = ["cpu-haswell", "cpu-x64", "vulkan"];
         assert_eq!(backends(&bin.join("llama-server")), expected);
         assert_eq!(backends(&real.join("llama-server")), expected);

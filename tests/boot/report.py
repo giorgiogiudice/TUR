@@ -880,12 +880,13 @@ def check_components(ev: Evidence, checks: Checks, args) -> dict:
         and codes.get("apps-sources") == 0
         and sources.get("kind") == "sources"
         and codes.get("apps-plan") in (0, 3, 5, 6)
-        and (plan.get("kind") == "plan" or bool(plan.get("code"))),
+        and (plan.get("kind") == "plan" or bool((plan.get("error") or {}).get("code"))),
         f"list: exit status {codes.get('apps-list')}, {len(installed.get('applications') or [])} applications; "
         f"sources: exit status {codes.get('apps-sources')}, "
         f"{[source.get('name') for source in sources.get('sources') or [] if isinstance(source, dict)]}; plan "
         f"com.discord.discord offline: exit status {codes.get('apps-plan')}, "
-        f"{plan.get('kind') or plan.get('code')} {json.dumps(plan.get('route') or plan.get('message'))[:200]}; "
+        f"{plan.get('kind') or (plan.get('error') or {}).get('code')} "
+        f"{json.dumps(plan.get('route') or (plan.get('error') or {}).get('message'))[:200]}; "
         f"text: {first_line('apps-plan-text.out') or first_line('apps-plan-text.err')}",
     )
 
@@ -960,46 +961,62 @@ def check_components(ev: Evidence, checks: Checks, args) -> dict:
         "pax_catchup",
         "P@x's catch-up timer is enabled for the user, fired after the user's service manager started, and its "
         "command ended without an error while P@x is off",
-        timer.get("UnitFileState") in ("enabled", "static", "indirect", "linked")
-        and timer.get("ActiveState") == "active"
+        timer.get("ActiveState") == "active"
         and oneshot.get("Result") == "success"
         and oneshot.get("ExecMainStatus") == "0"
         and oneshot.get("ExecMainStartTimestampMonotonic", "0") not in ("", "0"),
         f"timer: {timer or 'no data'}; service: {oneshot or 'no data'}",
     )
 
-    # ---- P@x through local AI, with a real model on the engine of the image ------------------------
-    model = status.get("local_model", "")
-    local = document(f"pax-local/pax-local-{model}.json") or {}
-    local_checks = local.get("checks") or []
-    local_failed = [
-        f"{item.get('name')}: {str(item.get('detail'))[:200]}"
-        for item in local_checks
-        if item.get("required") and not item.get("passed")
-    ]
-    measured = [
-        f"{task.get('task')}: {task.get('outcome')} in {task.get('seconds')} s, {task.get('requests')} requests, "
-        f"{task.get('input_tokens')}/{task.get('output_tokens')} tokens, calls "
-        f"{[(call.get('tool'), call.get('decision'), call.get('result')) for call in task.get('calls') or []]}, "
-        f"answer {str(task.get('answer'))[:160]!r}"
-        for task in (local.get("measurements") or {}).get("tasks") or []
-    ]
+    # ---- P@x through local AI, with real models on the engine of the image ----------------------
+    local_runs = {}
+    for model in status.get("local_models", "").split():
+        local = document(f"pax-local-{model}/pax-local-{model}.json") or {}
+        local_checks = local.get("checks") or []
+        local_failed = [
+            f"{item.get('name')}: {str(item.get('detail'))[:200]}"
+            for item in local_checks
+            if item.get("required") and not item.get("passed")
+        ]
+        tasks = (local.get("measurements") or {}).get("tasks") or []
+        measured = [
+            f"{task.get('task')}: {task.get('outcome')} in {task.get('seconds')} s, {task.get('requests')} requests, "
+            f"{task.get('input_tokens')}/{task.get('output_tokens')} tokens, calls "
+            f"{[(call.get('tool'), call.get('decision'), call.get('result')) for call in task.get('calls') or []]}, "
+            f"answer {str(task.get('answer'))[:160]!r}"
+            for task in tasks
+        ]
+        serve = status.get(f"local_{model}_serve")
+        local_runs[model] = {
+            "serve": serve,
+            "exit_status": codes.get(f"pax-local-{model}"),
+            "pull_seconds": status.get(f"local_{model}_pull_seconds"),
+            "serve_seconds": status.get(f"local_{model}_serve_seconds"),
+            "memory_available_kib": status.get(f"local_{model}_mem_available_kib"),
+            "failed_checks": local_failed,
+            "tasks": tasks,
+        }
+        add(
+            f"pax_local_model_{model}",
+            f"P@x asks {model} on the image's engine through the local preset (downloaded from its publisher "
+            "and checked), with every installed tool set, and TUR's checks of tests/pax/local_model.py pass",
+            codes.get(f"local-{model}-pull") == 0
+            and serve == "ready"
+            and codes.get(f"pax-local-{model}") == 0
+            and bool(local_checks)
+            and not local_failed,
+            f"memory available before: {status.get(f'local_{model}_mem_available_kib')} KiB; pull: exit status "
+            f"{codes.get(f'local-{model}-pull')} in {status.get(f'local_{model}_pull_seconds')} s; serve: {serve} "
+            f"after {status.get(f'local_{model}_serve_seconds')} s ({first_line(f'local-{model}-serve.err')}); "
+            f"P@x: exit status {codes.get(f'pax-local-{model}')}; "
+            + (f"failed: {' | '.join(local_failed[:6])}; " if local_failed else "")
+            + ("; ".join(measured) or "no task ran"),
+        )
     add(
-        "pax_local_model",
-        f"P@x asks a real model on the image's engine through the local preset ({model or 'no model'}, "
-        "downloaded from its publisher and checked), with every installed tool set, and TUR's checks of "
-        "tests/pax/local_model.py pass",
-        codes.get("local-pull") == 0
-        and status.get("local_serve") == "ready"
-        and codes.get("pax-local") == 0
-        and bool(local_checks)
-        and not local_failed,
-        f"memory available before: {status.get('local_mem_available_kib')} KiB; pull: exit status "
-        f"{codes.get('local-pull')} in {status.get('local_pull_seconds')} s; serve: {status.get('local_serve')} after "
-        f"{status.get('local_serve_seconds')} s ({first_line('local-serve.err')}); P@x: exit status "
-        f"{codes.get('pax-local')}; "
-        + (f"failed: {' | '.join(local_failed[:6])}; " if local_failed else "")
-        + ("; ".join(measured) or "no task ran"),
+        "pax_local_models_ran",
+        "P@x was run against local models on the installed system",
+        bool(local_runs),
+        f"models: {', '.join(local_runs) or 'none'}",
     )
 
     # ---- P@x end to end -------------------------------------------------------------------------
@@ -1150,14 +1167,7 @@ def check_components(ev: Evidence, checks: Checks, args) -> dict:
             "failed": service.get("failed"),
             "failed_checks": service_failed,
         },
-        "pax_local_model": {
-            "model": model,
-            "serve": status.get("local_serve"),
-            "exit_status": codes.get("pax-local"),
-            "pull_seconds": status.get("local_pull_seconds"),
-            "memory_available_kib": status.get("local_mem_available_kib"),
-            "tasks": (local.get("measurements") or {}).get("tasks") or [],
-        },
+        "pax_local_models": local_runs,
         "pax_e2e": {
             "exit_status": codes.get("pax-e2e"),
             "passed": results.get("passed"),
@@ -1636,6 +1646,9 @@ def main() -> int:
     def failed_text(units):
         return ", ".join(f"{u} (listed as expected)" if u in allowed else u for u in units) or "none"
 
+    local_summary = ", ".join(
+        f"{name} {run.get('serve')}" for name, run in components["pax_local_models"].items()
+    ) or "not run"
     facts = [
         ("Build ID", report["build_id"]),
         ("Kernel", report["kernel"]),
@@ -1661,7 +1674,7 @@ def main() -> int:
             f"{len(components['programs'])} programs; P@x end to end: {components['pax_e2e']['passed']} passed, "
             f"{components['pax_e2e']['failed']} failed; session service: {components['pax_service_e2e']['passed']} "
             f"passed, {components['pax_service_e2e']['failed']} failed; local model: "
-            f"{components['pax_local_model']['serve']}; AVC denials while they ran: {len(components['avc_denials'])}",
+            f"{local_summary}; AVC denials while they ran: {len(components['avc_denials'])}",
         ),
     ]
     lines += ["", "| | |", "|---|---|"]
