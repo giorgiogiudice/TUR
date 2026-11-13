@@ -1,0 +1,12 @@
+// SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+// The resources of codepage.c, in Japanese: what tells the autopilot that
+// the program was written for a Japanese Windows. ASCII text only, so that
+// the file needs no encoding.
+#include <windows.h>
+
+LANGUAGE LANG_JAPANESE, SUBLANG_DEFAULT
+
+STRINGTABLE
+BEGIN
+    1 "TUR autopilot code page test"
+END

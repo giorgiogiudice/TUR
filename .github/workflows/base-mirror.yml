@@ -1,0 +1,352 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Keeps every pinned base image pullable. See image/README.md, "The base image
+# and its mirror", and docs/reports/base-mirror-1.md.
+#
+# Fedora moves quay.io/fedora/fedora-kinoite:45 every day, and quay.io removes
+# the manifest the tag pointed to about a day later. A pin in image/base.lock
+# therefore stops resolving within a day or two. This workflow copies the
+# pinned digest, unchanged (skopeo copy --all --preserve-digests), to a
+# package in GitHub's registry, ghcr.io/giorgiogiudice/tur-base, while quay.io
+# still has it. The workflows that build the image declare that package as a
+# digest-only mirror of quay.io/fedora/fedora-kinoite
+# (.github/actions/use-base-mirror), so they keep building FROM the same
+# reference after quay.io has dropped it.
+#
+# Jobs:
+#   mirror          copy the pin and check the copy (pull requests from this
+#                   repository, pushes to main, by hand)
+#   through-mirror  build the image with quay.io unreachable, from the mirror
+#                   alone; show that a digest never mirrored fails clearly
+#   pin-age         weekly: open or update an issue when the pin is more than
+#                   seven days older than Fedora's current :45 (on a pull
+#                   request it only reports)
+name: base-mirror
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "image/base.lock"
+      - ".github/workflows/base-mirror.yml"
+      - ".github/actions/use-base-mirror/**"
+  pull_request:
+    paths:
+      - "image/base.lock"
+      - ".github/workflows/base-mirror.yml"
+      - ".github/actions/use-base-mirror/**"
+  schedule:
+    - cron: "23 7 * * 1"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: base-mirror-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  MIRROR: ghcr.io/giorgiogiudice/tur-base
+  # A digest of the base that quay.io removed on 13 November 2026 and that was
+  # never mirrored. It must keep failing, with a message that says why.
+  NEVER_MIRRORED: quay.io/fedora/fedora-kinoite@sha256:f857f6c5da48a7c39721e40de51d9c0fef446a25e0360be4fb8964cbdf48f537
+
+jobs:
+  mirror:
+    name: Copy the pinned base to the mirror
+    if: >-
+      github.event_name == 'push' || github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' &&
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Lint
+        run: |
+          shellcheck -x .github/actions/use-base-mirror/*.sh
+          python3 -m py_compile .github/actions/use-base-mirror/upstream.py
+
+      - name: Log in to the mirror's registry
+        env:
+          TOKEN: ${{ github.token }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          skopeo --version
+          printf '%s' "$TOKEN" | skopeo login --username "$ACTOR" --password-stdin "${MIRROR%%/*}"
+
+      - name: Copy the pinned digest
+        run: |
+          # shellcheck source=/dev/null
+          . image/base.lock
+          hex="${BASE_DIGEST#sha256:}"
+          upstream="docker://${BASE_IMAGE}@${BASE_DIGEST}"
+          mirror="docker://${MIRROR}@${BASE_DIGEST}"
+          echo "pin:    ${BASE_IMAGE}@${BASE_DIGEST} (${BASE_VERSION})"
+          # The copy is made from quay.io while it has the digest, and from
+          # the mirror itself (to add a missing tag) when it no longer does.
+          if skopeo inspect --raw --retry-times 3 "$upstream" >/dev/null; then
+            src="$upstream"
+          elif skopeo inspect --raw --retry-times 3 "$mirror" >/dev/null; then
+            src="$mirror"
+            echo "::notice::${BASE_IMAGE} no longer has ${BASE_DIGEST}; the mirror does."
+          else
+            echo "::error title=Base image unavailable::${BASE_IMAGE}@${BASE_DIGEST} is in neither ${BASE_IMAGE} nor ${MIRROR}: quay.io removed it before it was mirrored. Pin the current base in image/base.lock."
+            exit 1
+          fi
+          echo "source: ${src}"
+          # Two tags: the version, for people, and one per digest, so that a
+          # digest stays tagged when a later pin reuses the version.
+          for tag in "${BASE_VERSION}" "sha256-${hex}"; do
+            start=$(date +%s)
+            skopeo copy --all --preserve-digests --retry-times 3 \
+              "$src" "docker://${MIRROR}:${tag}"
+            echo "copied to ${MIRROR}:${tag} in $(( $(date +%s) - start )) s"
+          done
+
+      - name: The mirror has the same bytes
+        run: |
+          # shellcheck source=/dev/null
+          . image/base.lock
+          hex="${BASE_DIGEST#sha256:}"
+          fail=0
+          check() {  # REF EXPECTED-DIGEST
+            local got
+            got="sha256:$(skopeo inspect --raw --retry-times 3 "docker://$1" | sha256sum | cut -d' ' -f1)"
+            if [ "$got" = "$2" ]; then echo "ok    $1 -> $got"; else echo "FAIL  $1 -> $got, expected $2"; fail=1; fi
+          }
+          check "${MIRROR}@${BASE_DIGEST}" "${BASE_DIGEST}"
+          check "${MIRROR}:${BASE_VERSION}" "${BASE_DIGEST}"
+          check "${MIRROR}:sha256-${hex}" "${BASE_DIGEST}"
+          # Every platform the index names, as copied by --all.
+          for child in $(skopeo inspect --raw "docker://${MIRROR}@${BASE_DIGEST}" \
+                         | python3 -c 'import json,sys; [print(m["digest"]) for m in json.load(sys.stdin).get("manifests", [])]'); do
+            check "${MIRROR}@${child}" "${child}"
+          done
+          echo "version label (amd64): $(skopeo --override-os linux --override-arch amd64 inspect \
+            --format '{{index .Labels "org.opencontainers.image.version"}}' "docker://${MIRROR}@${BASE_DIGEST}")"
+          exit "$fail"
+
+      # The package was meant to be private; GitHub created it public (see
+      # docs/reports/base-mirror-1.md). This step records which it is.
+      - name: Can the mirror be read without credentials?
+        run: |
+          # shellcheck source=/dev/null
+          . image/base.lock
+          if out=$(skopeo inspect --raw --no-creds "docker://${MIRROR}@${BASE_DIGEST}" 2>&1 >/dev/null); then
+            echo "::warning title=Base image mirror is public::${MIRROR} can be read without credentials."
+          else
+            echo "an anonymous read is refused (the package is private): ${out##*$'\n'}"
+          fi
+
+      - name: Summary
+        if: always()
+        run: |
+          # shellcheck source=/dev/null
+          . image/base.lock
+          {
+            echo "### Base image mirror"
+            echo
+            echo "- pin: \`${BASE_IMAGE}@${BASE_DIGEST}\` (${BASE_VERSION})"
+            echo "- mirror: \`${MIRROR}:${BASE_VERSION}\`, \`${MIRROR}:sha256-${BASE_DIGEST#sha256:}\`"
+            echo "- result: ${{ job.status }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  through-mirror:
+    name: Build from the mirror with quay.io unreachable
+    needs: mirror
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: read
+    env:
+      PODMAN: sudo podman
+      IMAGE: localhost/tur:through-mirror
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - uses: ./.github/actions/use-base-mirror
+
+      - name: A digest that was never mirrored fails, and says why
+        run: |
+          echo "--- check.sh ${NEVER_MIRRORED}"
+          status=0
+          .github/actions/use-base-mirror/check.sh "$NEVER_MIRRORED" || status=$?
+          if [ "$status" -ne 1 ]; then echo "expected check.sh to fail with 1, got ${status}"; exit 1; fi
+          echo "--- sudo podman pull ${NEVER_MIRRORED}"
+          if sudo podman pull "$NEVER_MIRRORED"; then
+            echo "the pull of a digest that was never mirrored succeeded: unexpected"; exit 1
+          fi
+          echo "failed as expected"
+
+      - name: Make quay.io unreachable
+        run: |
+          echo "0.0.0.0 quay.io cdn.quay.io cdn01.quay.io cdn02.quay.io cdn03.quay.io" | sudo tee -a /etc/hosts
+          if curl -sS --max-time 15 -o /dev/null https://quay.io/v2/; then
+            echo "quay.io is still reachable"; exit 1
+          fi
+          # shellcheck source=/dev/null
+          . image/base.lock
+          echo "--- quay.io asked directly for the pin (must fail):"
+          if python3 -I .github/actions/use-base-mirror/upstream.py "${BASE_IMAGE}@${BASE_DIGEST}"; then
+            echo "quay.io answered"; exit 1
+          fi
+
+      - name: The pin resolves through the mirror, as root and as the runner user
+        env:
+          LOCK: image/base.lock
+        run: |
+          .github/actions/use-base-mirror/check.sh
+          AS_ROOT=no .github/actions/use-base-mirror/check.sh
+          # shellcheck source=/dev/null
+          . image/base.lock
+          echo "--- where skopeo looks for ${BASE_IMAGE}@${BASE_DIGEST}:"
+          sudo skopeo --debug inspect --raw "docker://${BASE_IMAGE}@${BASE_DIGEST}" 2>&1 >/dev/null \
+            | grep -E 'Trying to access|Looking for TLS|reference rewritten|Returning credentials' | sed 's/^/  /' || true
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache/CodeQL
+          df -h / | tail -1
+
+      - name: Build the image (quay.io unreachable)
+        run: |
+          start=$(date +%s)
+          TUR_BUILD_ID_FILE="$RUNNER_TEMP/build-id" scripts/build-image.sh "$IMAGE"
+          echo "BUILD_ID=$(cat "$RUNNER_TEMP/build-id")" >> "$GITHUB_ENV"
+          echo "image build: $(( $(date +%s) - start )) s"
+
+      - name: The image was built FROM the pinned digest, under its quay.io name
+        run: |
+          # shellcheck source=/dev/null
+          . image/base.lock
+          ref="${BASE_IMAGE}@${BASE_DIGEST}"
+          fail=0
+          label() { $PODMAN image inspect --format "{{index .Labels \"$1\"}}" "$IMAGE"; }
+          expect() { if [ "$2" = "$3" ]; then echo "ok    $1: $2"; else echo "FAIL  $1: $2, expected $3"; fail=1; fi; }
+          expect "label org.tur.base.image" "$(label org.tur.base.image)" "$BASE_IMAGE"
+          expect "label org.tur.base.digest" "$(label org.tur.base.digest)" "$BASE_DIGEST"
+          echo "base in local storage: $($PODMAN image inspect --format '{{.Id}} {{.RepoDigests}}' "$ref")"
+          if $PODMAN image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$ref" | grep -qxF "$ref"; then
+            echo "ok    the base is stored as ${ref}"
+          else
+            echo "FAIL  the base is not stored as ${ref}"; fail=1
+          fi
+          exit "$fail"
+
+      - name: Image smoke tests
+        run: tests/image/smoke.sh "$IMAGE" "$BUILD_ID"
+
+  pin-age:
+    name: Is the base pin more than seven days old?
+    if: github.event_name != 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Compare the pin with the upstream tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          # Only the weekly run and a run by hand write to the issue tracker.
+          WRITE: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+          MAX_AGE_DAYS: "7"
+        run: |
+          python3 - <<'PY'
+          import datetime, hashlib, json, os, re, subprocess, urllib.request
+
+          lock = dict(line.split("=", 1) for line in open("image/base.lock").read().splitlines()
+                      if "=" in line and not line.startswith("#"))
+          image, tag = lock["BASE_IMAGE"], lock["BASE_TAG"]
+          pinned, pinned_version = lock["BASE_DIGEST"], lock["BASE_VERSION"]
+
+          def skopeo(*args):
+              return subprocess.run(["skopeo", *args], check=True, capture_output=True).stdout
+
+          raw = skopeo("inspect", "--raw", "--retry-times", "3", f"docker://{image}:{tag}")
+          current = "sha256:" + hashlib.sha256(raw).hexdigest()
+          info = json.loads(skopeo("--override-os", "linux", "--override-arch", "amd64",
+                                   "inspect", "--retry-times", "3", f"docker://{image}@{current}"))
+          current_version = (info.get("Labels") or {}).get("org.opencontainers.image.version", "unknown")
+          created = info.get("Created", "unknown")
+
+          today = datetime.datetime.now(datetime.timezone.utc).date()
+          m = re.match(r"^\d+\.(\d{8})\.", pinned_version)
+          if m:
+              born = datetime.datetime.strptime(m.group(1), "%Y%m%d").date()
+          else:
+              born = datetime.date.fromisoformat(lock["BASE_VERIFIED"])
+          age = (today - born).days
+          limit = int(os.environ["MAX_AGE_DAYS"])
+          stale = current != pinned and age > limit
+          print(f"pinned:  {image}@{pinned} ({pinned_version}), {age} day{'s' if age != 1 else ''} old")
+          print(f"current: {image}:{tag} = {current} ({current_version}, created {created})")
+          print("verdict:", "re-pin" if stale else ("up to date" if current == pinned else f"within {limit} days"))
+
+          write = os.environ["WRITE"] == "true"
+          repo = os.environ["REPO"]
+          def api(method, path, body=None):
+              req = urllib.request.Request(
+                  f"https://api.github.com/repos/{repo}{path}", method=method,
+                  data=json.dumps(body).encode() if body is not None else None,
+                  headers={"Authorization": f"Bearer {os.environ['GH_TOKEN']}",
+                           "Accept": "application/vnd.github+json"})
+              with urllib.request.urlopen(req, timeout=30) as r:
+                  return json.load(r)
+
+          prefix = "Base image pin is "
+          open_issues = [i for i in api("GET", "/issues?state=open&creator=github-actions%5Bbot%5D&per_page=100")
+                         if "pull_request" not in i and i["title"].startswith(prefix)]
+          for i in open_issues:
+              print(f"open reminder: #{i['number']} {i['title']}")
+
+          title = f"{prefix}{age} days old"
+          body = f"""The base image pinned in `image/base.lock` is {age} days old. Fedora moves `{image}:{tag}` every day, mostly with security updates.
+
+          | | digest | version |
+          |---|---|---|
+          | pinned | `{pinned}` | {pinned_version} |
+          | `{image}:{tag}` now | `{current}` | {current_version} (created {created}) |
+
+          To re-pin, change `image/base.lock` in a pull request of its own:
+
+          ```
+          BASE_DIGEST={current}
+          BASE_VERSION={current_version}
+          BASE_VERIFIED={today.isoformat()}
+          ```
+
+          The pull request runs `base-mirror`, which copies the new digest to the mirror, and the image, boot, rollback and update workflows, which prove it. Merge it within a day or so: quay.io removes a digest about a day after the tag moves on, and only a mirrored digest outlives that.
+
+          Checked by {os.environ['RUN_URL']}. The weekly check updates this issue and closes it once the pin is at most {limit} days old.
+          """
+          if not write:
+              # A pull request only reports, and shows the issue a weekly run
+              # would write if the pin were stale.
+              print("dry run: the issue tracker is not changed")
+              print(f"if stale, the issue would read:\n--- {title}\n{body}---")
+          if not stale:
+              for i in open_issues:
+                  print(f"would close #{i['number']}" if not write else f"closing #{i['number']}")
+                  if write:
+                      api("POST", f"/issues/{i['number']}/comments",
+                          {"body": f"The pin is now {pinned_version} ({age} days old). Closing. ({os.environ['RUN_URL']})"})
+                      api("PATCH", f"/issues/{i['number']}", {"state": "closed", "state_reason": "completed"})
+          elif not write:
+              print(f"would {'update #' + str(open_issues[0]['number']) if open_issues else 'open an issue'}: {title}")
+          elif open_issues:
+              api("PATCH", f"/issues/{open_issues[0]['number']}", {"title": title, "body": body})
+              print(f"updated #{open_issues[0]['number']}: {title}")
+          else:
+              print(f"opened #{api('POST', '/issues', {'title': title, 'body': body})['number']}: {title}")
+          PY

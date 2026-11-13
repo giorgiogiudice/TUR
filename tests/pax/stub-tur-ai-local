@@ -1,0 +1,139 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+"""A stand-in for tur-ai-local, for the pax workflow's service scenarios.
+
+It answers the four commands P@x's session service runs (models --json,
+recommend --json, ensure MODEL --json ..., cancel --json) in the formats of
+schemas/ai-local-report.schema.json, without a model, an engine or a
+download. Every command line it is given is appended to calls.log in
+$XDG_DATA_HOME/stub-tur-ai-local/, which the test reads.
+
+  qwen3-0.6b      not downloaded, Apache-2.0: ensure goes plan, progress,
+                  verified, installed, starting, ready.
+  ministral-3-3b  not downloaded, a licence with a restriction.
+  gemma-4-e2b     downloaded: ensure waits after its plan until cancel is
+                  asked, then reports cancelled (TUR-AI-LOCAL-029).
+
+The real program is tested in services/tur-ai-local (tests/ensure.rs) and
+in the local-ai workflow.
+"""
+
+import json
+import os
+import sys
+import time
+from pathlib import Path
+
+STATE = Path(os.environ.get("XDG_DATA_HOME", "/tmp")) / "stub-tur-ai-local"
+
+MODELS = [
+    {
+        "id": "qwen3-0.6b",
+        "name": "Qwen3 0.6B",
+        "publisher": "Qwen (Alibaba Cloud)",
+        "repository": "https://huggingface.co/Qwen/Qwen3-0.6B-GGUF",
+        "capabilities": ["chat", "tools"],
+        "thinking": "hybrid",
+        "download_bytes": 639446688,
+        "installed": "absent",
+        "licence": {"id": "Apache-2.0", "restricts_use": False, "restrictions": "none", "summary": "Apache License 2.0."},
+        "tier": {"model": "qwen3-0.6b", "tier": "runs-well", "message": "Qwen3 0.6B fits and runs well.", "reasons": []},
+    },
+    {
+        "id": "ministral-3-3b",
+        "name": "Ministral 3 3B Instruct",
+        "publisher": "Mistral AI",
+        "repository": "https://huggingface.co/mistralai/Ministral-3-3B-Instruct-2512-GGUF",
+        "capabilities": ["chat", "tools", "vision"],
+        "thinking": "none",
+        "download_bytes": 2988524864,
+        "installed": "absent",
+        "licence": {
+            "id": "Apache-2.0",
+            "restricts_use": True,
+            "restrictions": "The publisher's model card adds one sentence under its licence.",
+            "summary": "Apache License 2.0.",
+        },
+        "tier": {"model": "ministral-3-3b", "tier": "runs-well", "message": "Ministral 3 3B Instruct fits and runs well.", "reasons": []},
+    },
+    {
+        "id": "gemma-4-e2b",
+        "name": "Gemma 4 E2B",
+        "publisher": "Google DeepMind",
+        "repository": "https://huggingface.co/google/gemma-4-E2B-it-qat-q4_0-gguf",
+        "capabilities": ["chat", "tools", "vision"],
+        "thinking": "hybrid",
+        "download_bytes": 4336349920,
+        "installed": "installed",
+        "licence": {"id": "Apache-2.0", "restricts_use": False, "restrictions": "none", "summary": "Apache License 2.0."},
+        "tier": {"model": "gemma-4-e2b", "tier": "slow", "message": "Gemma 4 E2B fits but will be slow.", "reasons": []},
+    },
+    {"id": "qwen3-embedding-0.6b", "name": "Qwen3 Embedding 0.6B", "capabilities": ["embeddings"]},
+]
+
+
+def event(name, model, **extra):
+    document = {
+        "schema_version": 1,
+        "kind": "ensure-event",
+        "event": name,
+        "model": model,
+        "code": None,
+        "message": f"{name} {model}",
+        "file": None,
+        "bytes_done": None,
+        "bytes_total": None,
+        "bytes_to_download": None,
+        "free_bytes": None,
+        "state": None,
+    }
+    document.update(extra)
+    print(json.dumps(document), flush=True)
+
+
+def main():
+    STATE.mkdir(parents=True, exist_ok=True)
+    arguments = sys.argv[1:]
+    with open(STATE / "calls.log", "a") as log:
+        log.write(" ".join(arguments) + "\n")
+    command = arguments[0] if arguments else ""
+    if command == "models":
+        print(json.dumps({"schema_version": 1, "kind": "models", "models": MODELS}))
+        return 0
+    if command == "recommend":
+        print(json.dumps({"schema_version": 1, "kind": "recommend", "recommendation": {
+            "model": "qwen3-0.6b", "message": "Qwen3 0.6B is the best fit for this computer.",
+            "reasons": ["Memory: enough."], "vision_model": None}}))
+        return 0
+    if command == "cancel":
+        (STATE / "cancel-request").write_text("cancel\n")
+        print(json.dumps({"schema_version": 1, "kind": "cancel", "code": "TUR-AI-LOCAL-029", "message": "asked"}))
+        return 0
+    if command == "ensure":
+        model = arguments[1]
+        known = [entry for entry in MODELS if entry["id"] == model]
+        if not known:
+            print("TUR-AI-LOCAL-003\nTUR does not know this model.", file=sys.stderr)
+            return 1
+        total = known[0]["download_bytes"]
+        event("plan", model, bytes_done=0, bytes_total=total, bytes_to_download=total, free_bytes=10**12)
+        if model == "gemma-4-e2b":
+            (STATE / "cancel-request").unlink(missing_ok=True)
+            deadline = time.time() + 60
+            while not (STATE / "cancel-request").exists() and time.time() < deadline:
+                time.sleep(0.05)
+            event("cancelled", model, code="TUR-AI-LOCAL-029")
+            print("TUR-AI-LOCAL-029\nThe download was stopped as you asked.", file=sys.stderr)
+            return 1
+        event("progress", model, bytes_done=total // 2, bytes_total=total)
+        event("verified", model, file=f"{model}.gguf", bytes_done=total, bytes_total=total)
+        event("installed", model, code="TUR-AI-LOCAL-023", bytes_done=total, bytes_total=total)
+        event("starting", model)
+        event("ready", model, code="TUR-AI-LOCAL-026")
+        return 0
+    print(f"error: the stand-in does not know {command!r}", file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())

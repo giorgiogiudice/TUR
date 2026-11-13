@@ -12,6 +12,11 @@
 //!               [--adapters <dir>] [--models <file>]
 //! tur-pax schedule wake [--bus <address>]
 //! tur-pax key set|remove|status <provider> [--bus <address>]
+//! tur-pax models list [<provider>] [--refresh] [--json] [--bus <address>]
+//! tur-pax models use <provider>:<model> [--yes] [--accept-licence] [--bus <address>]
+//! tur-pax models cancel [--bus <address>]
+//! tur-pax models settings <provider>:<model> [--set NAME=VALUE]... [--clear NAME]...
+//!                         [--json] [--bus <address>]
 //! ```
 //!
 //! `serve`, `schedule` and `key` are described in [`crate::daemon`].
@@ -104,6 +109,13 @@ pub enum TopCommand {
         /// What to do with the key.
         #[command(subcommand)]
         command: crate::daemon::KeyCommand,
+    },
+    /// The models P@x can use: list them, choose one (a local model is
+    /// downloaded and started first), and their generation settings.
+    Models {
+        /// What to do.
+        #[command(subcommand)]
+        command: crate::daemon::ModelsCommand,
     },
 }
 
@@ -201,6 +213,7 @@ pub fn run(cli: &Cli, out: &mut dyn Write, err: &mut dyn Write) -> io::Result<u8
         TopCommand::Serve(args) => crate::daemon::run_serve(args, err),
         TopCommand::Schedule { command } => crate::daemon::run_schedule(command, out, err),
         TopCommand::Key { command } => crate::daemon::run_key(command, out, err),
+        TopCommand::Models { command } => crate::daemon::run_models(command, out, err),
     }
 }
 

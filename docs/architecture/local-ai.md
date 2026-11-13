@@ -1,10 +1,13 @@
 # Local AI
 
-**Status:** first slice built, 12 November 2026. Decision: [ADR-0021](../adr/0021-local-ai.md).
+**Status:** first slice built, 12 November 2026; models by hardware and
+`ensure`, 13 November 2026 (issue #84). Decision: [ADR-0021](../adr/0021-local-ai.md).
 Sections 1 to 5 are the design. Section 6 records the engine decision and its
 evidence, section 7 what is built (`services/tur-ai-local`), section 8 what
-deviates from the design and what is open, and section 9 what the image needs.
-Measurements: [report local-ai-1](../reports/local-ai-1.md).
+deviates from the design and what is open, section 9 what the image needs,
+section 10 the second list of models and the tiers, section 11 `ensure`.
+Measurements: [report local-ai-1](../reports/local-ai-1.md),
+[report pax-6](../reports/pax-6.md).
 
 TUR runs AI models on the computer itself, for anyone who wants AI without an
 account, a key, a bill or sending anything to a company. P@x can use a local
@@ -152,7 +155,7 @@ with `--json` in the format of `schemas/ai-local-report.schema.json`.
 |---|---|
 | `hardware` | Memory (MemTotal, MemAvailable), the processor and the features that decide inference speed (AVX2, FMA, AVX-512, AMX; Arm's dot product, SVE, i8mm), the DRM graphics cards with vendor, driver and own memory where the driver publishes it, the Vulkan devices from `vulkaninfo --summary` (a software device such as llvmpipe does not count), and the engine's backend libraries. Read-only: `/proc`, `/sys` and `vulkaninfo`. |
 | `models` | The catalogue, with download size, memory needed at the context, whether it fits, whether it is downloaded, and the licence in plain words. `--catalogue-only` says nothing about downloads, for P@x's sandbox, which cannot see the person's data folder. |
-| `recommend` | The model for conversation with P@x that fits best (rules in `src/fit.rs`): it fits in the memory free now plus a reserve (the larger of 1 GiB and a tenth of the memory), converses and calls tools, and its file is within a speed budget set from the processor and the engine's build (an engine with one processor library and no variants, like Fedora 45's, gets the budget of a processor without the fast kernels: it answered 6 to 9 times more slowly in CI). Also a model for images and one for embeddings. |
+| `recommend` | Every model that converses in a tier, with its reasons (section 10), and the model for conversation with P@x that fits best (rules in `src/fit.rs`): among the models that fit in the memory free now plus a reserve (the larger of 1 GiB and a tenth of the memory), converse and call tools, and run well, the largest; without one that runs well, the smallest that fits, said to be slow. Also a model for images and one for embeddings. `models` gives each model's tier too. |
 | `check MODEL` | Whether one model fits: `TUR-AI-LOCAL-004` fits, `-006` not in the memory free now, `-005` too large for this computer. |
 | `pull MODEL` | Downloads each file from the catalogue's URL (https only, redirects too) to `<name>.part`, counting and hashing; refuses a file whose announced or received size, or whose SHA-256, differs (`-009`, `-010`) and deletes it; writes `verified.json` only when every file matches. `--from-file` imports a file the person has, with the same checks. A model too large for this computer is not downloaded. A licence with use restrictions needs `--accept-licence`. |
 | `verify MODEL` | Hashes the downloaded files again. |
@@ -160,7 +163,9 @@ with `--json` in the format of `schemas/ai-local-report.schema.json`.
 | `serve MODEL` | Refuses a non-loopback address without `--allow-network` (`-016`), a model not downloaded or changed (`-012`, `-025`), one that does not fit now (`-005`, `-006`), a second server (`-018`), a busy port (`-017`). Writes a random 256-bit access key to `$XDG_RUNTIME_DIR/tur-ai-local/api-key` (mode 0600) and starts `llama-server` with the model, `--host 127.0.0.1 --port 39281` (or a Unix socket), `--api-key-file`, `--ctx-size 8192`, `--parallel 1`, `--cache-ram 0`, `--metrics`, `--no-webui`, `--no-slots`, `--offline`, `--reasoning off` (`--reasoning on` lets a model think first) and, for an embeddings model, `--embedding --pooling …`, with its environment cleared. With `setpriv` installed the kernel stops the engine if the supervisor dies. It writes `state.json` once the engine answers `/health`, then reads the engine's own counters (`/metrics`) and stops it after `--idle-stop` seconds (default 600) without activity (`-020`), or when asked (`-021`). |
 | `status` | Whether a model is served, the address and port, the key file (never the key), the engine's resident and peak memory, idle time and health. In P@x's sandbox the runtime folder is invisible and `status` says so (`-027`) instead of claiming that nothing runs. |
 | `stop` | Asks the supervisor to stop and waits for it. |
-| `codes` | The registry: `TUR-AI-LOCAL-001` to `-027`, in the existing AI family of `tur-core` (no new family was needed). |
+| `ensure` | Everything a person's choice of a model needs, in one step (section 11): licence, memory, disk space, a resumable checked download from the publisher, the engine started; its progress as JSON lines. |
+| `cancel` | Asks a running `ensure` to stop; what it downloaded is kept. |
+| `codes` | The registry: `TUR-AI-LOCAL-001` to `-029`, in the existing AI family of `tur-core` (no new family was needed). `-028` not enough disk space, `-029` stopped on request. |
 
 **The Settings switch.** "Let other devices on my network use local AI"
 (Settings → AI → Local models) maps to `serve --allow-network --host
@@ -169,9 +174,10 @@ the running session only and is shown while it is on. Without it
 `tur-ai-local` refuses every address that is not loopback, `0.0.0.0` and `::`
 included. The access key is required on every address.
 
-**Models.** `services/tur-ai-local/catalogue/`: five entries, all Apache-2.0,
-each pinned to a commit of the publisher's own Hugging Face repository, with
-the publisher's size and SHA-256.
+**Models.** `services/tur-ai-local/catalogue/`: the first list of five
+entries below, and the second list of section 10; all Apache-2.0, each
+pinned to a commit of the publisher's own Hugging Face repository, with the
+publisher's size and SHA-256.
 
 | Id | Publisher | File | Size | Can do |
 |---|---|---|---|---|
@@ -227,8 +233,14 @@ models that call tools, data terms "runs on this computer".
 5. **Battery and foreground** (ADR-0021, item 9) are not implemented in this
    slice. **Permissions per application** (item 8): the access key is the
    mechanism; giving it to an application is not built.
-6. **The recommendation's speed budget** is a rule of thumb until the test
-   PC's measurements replace it; graphics processors are reported, not used.
+6. **The tiers' speeds** are measurements of the 4-processor CI runner
+   scaled by a rule, or the rule alone (section 10), until the test PC's
+   measurements replace them. A graphics card is counted only for an
+   engine with the Vulkan backend, which Fedora 45's has not; nothing was
+   measured on a graphics processor.
+7. **The second list's memory needs** are estimates (section 10); only
+   Ministral 3 3B is run by the local-ai workflow, and Gemma 4 E2B measured
+   in its comparison job.
 
 ## 9. What the image needs
 
@@ -250,3 +262,143 @@ Nothing of this change is in the image (`image/` was not touched). To ship it:
 - a systemd user unit, started on request and not at login, once the D-Bus
   interface exists;
 - no model: models are downloaded at the person's request.
+- `df` (coreutils, already in the image) for the free-space check of
+  `ensure`.
+
+## 10. The second list, and the tiers
+
+Added on 13 November 2026 (issue #84): the owner asked for Gemma 4 E2B and
+other models, offered by what the computer can run, for privacy.
+
+| Id | Publisher, repository at the pinned revision | File(s) | Size | SHA-256 | Quantisation, context | Can do | Memory needed at 8 192 (estimate) |
+|---|---|---|---|---|---|---|---|
+| `gemma-4-e2b` | Google DeepMind, `google/gemma-4-E2B-it-qat-q4_0-gguf` @ `675cff42a74c774d6cb76f76d8eacb49b48c9b93` | `gemma-4-E2B_q4_0-it.gguf`, `gemma-4-E2B-it-mmproj.gguf` | 3 349 516 256 + 986 833 664 | `fa401b55…dec6634`, `021059cc…e6beb14` | Q4_0 (QAT), 131 072 | chat, tools, image input; thinking switchable | 7.41 GB |
+| `gemma-4-e4b` | Google DeepMind, `google/gemma-4-E4B-it-qat-q4_0-gguf` @ `4b4a2c1d584be7264f87aac328a1bc739ce81b6c` | `gemma-4-E4B_q4_0-it.gguf`, `gemma-4-E4B-it-mmproj.gguf` | 5 154 941 280 + 991 552 256 | `676c3507…53fbaee`, `7498a37c…d65578` | Q4_0 (QAT), 131 072 | chat, tools, image input; thinking switchable | 10.11 GB |
+| `ministral-3-3b` | Mistral AI, `mistralai/Ministral-3-3B-Instruct-2512-GGUF` @ `eb599d408350ea2bb60452cb86be7c7b2fc28227` | `Ministral-3-3B-Instruct-2512-Q4_K_M.gguf`, `…-BF16-mmproj.gguf` | 2 147 023 008 + 841 501 856 | `9ed150d4…3fc5f8`, `70ca26e4…519ee0` | Q4_K_M, 262 144 | chat, tools, image input | 6.58 GB |
+| `gemma-4-26b-a4b` | Google DeepMind, `google/gemma-4-26B-A4B-it-qat-q4_0-gguf` @ `d1c082be9cf3c8a514acf63b8761f4b41935842e` | `gemma-4-26B_q4_0-it.gguf`, `gemma-4-26B-it-mmproj.gguf` | 14 439 363 584 + 1 194 828 160 | `3eca3b8f…eca51d`, `a359953a…dd4f3b` | Q4_0 (QAT), 262 144; mixture of experts, 3.8B active | chat, tools, image input; thinking switchable | 23.59 GB |
+| `qwen3-30b-a3b` | Qwen, `Qwen/Qwen3-30B-A3B-GGUF` @ `e4d4bafdfb96a411a163846265362aceb0b9c63a` | `Qwen3-30B-A3B-Q4_K_M.gguf` | 18 556 685 824 | `0d003f66…aa8f5` | Q4_K_M, 32 768; mixture of experts, 3.3B active | chat, tools; thinking switchable | 27.86 GB |
+
+The full digests are in the entries. Sizes and digests are the
+repositories' own metadata (the Hugging Face API's file list with LFS
+SHA-256; the pinned `resolve` URLs answered with the same size and digest in
+`x-linked-size` and `x-linked-etag`); nothing was downloaded to read them.
+
+**Licences, read for this list.** Gemma 4 is under the **Apache License
+2.0 alone**: the cards declare `apache-2.0` with the link
+`ai.google.dev/gemma/docs/gemma_4_license`, which redirects to the Apache
+2.0 text; Google's Gemma Terms of Use (last modified 2026-04-01) say they
+apply to the models in their appendix and "For Gemma 4 terms, see the Gemma
+4 license", so the Gemma Prohibited Use Policy, part of those terms, does not
+apply to Gemma 4. Restrictions: none. Ministral 3 3B is Apache-2.0, and its
+card adds under the licence: "You must not use this model in a manner that
+infringes, misappropriates, or otherwise violates any third party's rights,
+including intellectual property rights." TUR shows that sentence as a
+restriction, so its download asks for acceptance (a decision the owner may
+reverse: the sentence restates the law). Qwen3 30B A3B: the Apache-2.0 text,
+byte for byte the file of Qwen3 4B. Left out, and why: the catalogue
+README.
+
+**Memory.** Estimates, not measurements: the files, the 16-bit context cache
+at 8 192 tokens (Gemma 4's sliding-window layers keep only their window),
+512 MiB for the engine and 300 MB for one image, all times 1.4: the ratio
+llama.cpp's own build showed for Qwen3 4B in CI (its processor kernels keep a
+repacked copy of the weights). The loader refuses an estimate below the
+files plus the cache. A model that would exhaust the memory is still refused
+by every command (`TUR-AI-LOCAL-005`, `-006`).
+
+**Tiers** (`src/fit.rs`, `fit::tiers`). Every model that converses is put in
+one of three tiers for this computer, each with its reasons in plain words:
+
+| Tier | When |
+|---|---|
+| `runs-well`, "fits and runs well" | It fits in the memory (total, with the reserve), and its expected generation speed is 8 tokens a second or more: faster than a person reads |
+| `slow`, "fits but will be slow" | It fits, and the speed is below that |
+| `does-not-fit`, "does not fit" | It needs more than the total memory with the reserve |
+
+`fits_now` says whether it also fits in the memory free now; the reasons
+say "Close some programs first" when it does not.
+
+**Speed.** Generation reads the active weights once per token, so it is
+bandwidth over bytes: bytes per token are the model file, or for a mixture
+of experts and Gemma's per-layer embeddings the catalogue's new
+`active_weight_bytes` (file × active share the card states). Bandwidth:
+
+| Device | Bytes a second | Source |
+|---|---|---|
+| Processor with AVX2/FMA (or Arm dot product) and an engine with processor variants | 9 GB × logical processors, at most 60 GB | CI run 43277339192: 14.85 tokens/s from 2.50 GB and 32.87 from 1.11 GB on 4 processors, about 36.5 GB/s |
+| Processor without them, or Fedora 45's single build | 1 GB × logical processors, at most 16 GB | the same run: 1.61 and 3.72 tokens/s, about 4 GB/s |
+| A graphics card with memory of its own | 150 GB, if the model's files and cache fit in that memory (only `amdgpu` reports it) | assumed, half of a mid-range card; not measured |
+| A built-in graphics processor | 40 GB | assumed; not measured |
+
+A catalogue measurement for the same kind of engine build is used instead
+of the rule, scaled from the 4-processor runner to this processor
+(`basis: measured`). A graphics processor counts only when the engine has
+the Vulkan backend; Fedora 45's build has none, and the reason says so.
+
+On the hardware fixtures of the tests (the 4 GB virtual machine, the
+constructed 32 GB, 16-processor desktop with an 8 GB card and an engine
+without Vulkan):
+
+| Model | 4 GB VM, 2 processors | 32 GB desktop, 16 processors (28.7 GB free) |
+|---|---|---|
+| qwen3-0.6b | runs well, not now | runs well (measured, ×60/36) |
+| qwen3-4b | does not fit | runs well, 24.7 tokens/s (measured) |
+| ministral-3-3b | does not fit | runs well, 15.2 tokens/s (measured in this work: 9.11 on the 4-processor runner, ×60/36) |
+| gemma-4-e2b | does not fit | runs well, 42.6 tokens/s (measured in this work: 25.55 on the 4-processor runner, ×60/36) |
+| gemma-4-e4b | does not fit | runs well, 20.7 tokens/s |
+| gemma-4-26b-a4b | does not fit | runs well, 27.5 tokens/s; **recommended** |
+| qwen3-30b-a3b | does not fit | runs well, 29.9 tokens/s, but not in the memory free now |
+
+## 11. `ensure`: a chosen model, ready
+
+`tur-ai-local ensure MODEL [--json] [--accept-licence] [--context N]
+[--no-serve] [--port P] [--idle-stop S] [--start-timeout S] [--reasoning
+on|off|auto]` does, in order, and says each step as one JSON object a line
+(`ensure-event`, `schemas/ai-local-report.schema.json`):
+
+1. **Refuses before anything** a licence with restrictions not accepted
+   (`-013`), a context longer than the model's, a model that can never fit
+   this computer (`-005`).
+2. **`plan`**: what is already there (whole files and partial `.part`
+   files), what is left to download, and the free space of the disk of the
+   models folder (`df --output=avail -B1`). Less free than what is left
+   plus 1 GiB: refused (`-028`), nothing downloaded.
+3. **The download**, from the catalogue's pinned `https` URL only
+   (redirects too), going on from a partial file with an HTTP range request
+   (the bytes there are hashed again first; a server that answers with the
+   whole file is read from the start). **`progress`** every 1 % (or 1 MiB).
+   A broken connection keeps the partial file for the next attempt (`-008`);
+   a size or a SHA-256 that does not match deletes it (`-009`, `-010`).
+   **`verified`** for each file, **`installed`** with the record of
+   verification; **`already-present`** instead when the model was verified
+   before.
+4. **The engine** (unless `--no-serve`): a model already served with this
+   context is **`ready`** at once; another is stopped first (**`stopping`**);
+   the memory free now is checked (`-006`); **`starting`** runs
+   `tur-ai-local serve` in a process group of its own, which outlives
+   `ensure`; **`ready`** with its state once it answers.
+5. **Stop**: `tur-ai-local cancel` writes a request in the runtime folder;
+   `ensure` sees it between two pieces of the download or while the engine
+   starts, stops (stopping the engine it started), keeps what it
+   downloaded, and ends with **`cancelled`** (`-029`). A failure ends with
+   **`failed`** and its code, which is also the first line of its standard
+   error.
+
+Nothing downloads unless a person asks: `ensure` is a command, and P@x's
+service runs it only for `UseLocalModel`, after the person was told the
+download size ([pax-service.md](pax-service.md), section 2.1).
+
+**Tests.** `tests/ensure.rs`: the library against an HTTP server on the
+test machine serving the tiny model of known digest (plain `http` to a
+loopback address allowed for these tests only; no command offers it): a
+whole download, events and record; already present, nothing fetched; a
+connection cut at 20 bytes, then resumed with `range: bytes=20-`; a server
+that answers a range with the whole file; a wrong digest, nothing kept; a
+stop after the first piece, the partial file kept and finished next time;
+too little disk, nothing asked of the server. The command with the stand-in
+engine: a model present is served (`already-present`, `starting`, `ready`),
+asked again it is `ready` at once; a restricted licence and a model too
+large are refused before any download, with a `failed` event; `cancel`
+leaves its request; every event follows the schema. The local-ai workflow's
+`pax` job runs one real `ensure` of Ministral 3 3B from Mistral's
+repository, then a P@x task through it.

@@ -1,0 +1,36 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# The image the accessibility test of P@x runs in (the `accessibility` job of
+# .github/workflows/pax.yml): the desktop builder image (Fedora 45, Qt, KWin;
+# desktop/ci/builder/Containerfile), with what the test adds on top:
+#
+#   at-spi2-core, at-spi2-atk   the accessibility bus, its registry, and the
+#                               bridge GTK 3 applications use
+#   python3-gobject, gtk3       the GTK 3 test window (tests/pax/a11y/mail_app.py)
+#                               and the test's own D-Bus client (Gio)
+#   gtk4, gnome-text-editor     a GTK 4 application, the "open text editor"
+#   firefox                     Firefox
+#   wine                        Windows programs: Wine's own notepad is used,
+#                               not a Microsoft binary
+#
+# Fedora keeps only the newest update of a package, so versions are not
+# pinned here; what was installed is written to
+# /usr/share/tur-builder/a11y-packages.tsv and kept with the job's evidence.
+# This image is built in the job and not kept: it is a test fixture, not a
+# build environment.
+
+ARG BUILDER
+FROM ${BUILDER}
+
+RUN dnf -y --setopt=install_weak_deps=False --setopt=tsflags=nodocs install \
+        at-spi2-core at-spi2-atk dbus-tools \
+        python3-gobject gtk3 gtk4 libadwaita gnome-text-editor \
+        firefox \
+        wine \
+    && dnf clean all \
+    && rm -rf /var/cache/dnf /var/cache/libdnf5 /var/log/dnf* \
+    && fc-cache -f \
+    && rpm -qa --qf '%{NAME}\t%{VERSION}-%{RELEASE}\t%{LICENSE}\n' | sort > /usr/share/tur-builder/a11y-packages.tsv
+
+LABEL org.opencontainers.image.title="TUR P@x accessibility test" \
+      org.opencontainers.image.description="The desktop builder with an accessibility bus, GTK, Firefox and Wine; a CI fixture, not shipped"

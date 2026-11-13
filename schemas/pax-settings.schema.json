@@ -3,7 +3,7 @@
   "$id": "https://github.com/giorgiogiudice/TUR/schemas/pax-settings.schema.json",
   "$comment": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
   "title": "P@x settings",
-  "description": "What the session service of P@x keeps about P@x itself, in $XDG_CONFIG_HOME/tur/pax/settings.json: whether the person switched it on, which consent text they accepted, the provider and model, and the spending limits. Written only by tur-pax serve, on a request through org.tur.Agent1. It never holds a key: the key is in the password store of the session. The loader in services/tur-pax (settings.rs) is authoritative and also enforces: the model name has no control characters and no surrounding whitespace; a limit in money is above 0 and at most 100000; a limit in tokens is at least 1 and at most 100000000000. A file that cannot be read leaves P@x switched off.",
+  "description": "What the session service of P@x keeps about P@x itself, in $XDG_CONFIG_HOME/tur/pax/settings.json: whether the person switched it on, which consent text they accepted, the provider and model, and the spending limits. Written only by tur-pax serve, on a request through org.tur.Agent1. It never holds a key: the key is in the password store of the session. The loader in services/tur-pax (settings.rs) is authoritative and also enforces: the model name has no control characters and no surrounding whitespace; a limit in money is above 0 and at most 100000; a limit in tokens is at least 1 and at most 100000000000. A file that cannot be read leaves P@x switched off. The generation settings the person chose are kept per provider and model (generation); the loader checks their form, and the service checks them against what the model list declares the model accepts each time they are set and before each task.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -96,6 +96,82 @@
       "type": "array",
       "items": {
         "$ref": "pax-models.schema.json#/$defs/provider"
+      }
+    },
+    "generation": {
+      "description": "The generation settings the person chose, one entry per model of a provider. A setting that is absent is the model's default. Set through SetGenerationSettings of org.tur.Agent1 or tur-pax models settings.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "provider",
+          "model",
+          "settings"
+        ],
+        "properties": {
+          "provider": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+          },
+          "model": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "settings": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "temperature": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 2
+              },
+              "top_p": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "top_k": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "stop": {
+                "type": "array",
+                "maxItems": 16,
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                }
+              },
+              "effort": {
+                "enum": [
+                  "none",
+                  "minimal",
+                  "low",
+                  "medium",
+                  "high",
+                  "xhigh",
+                  "max"
+                ]
+              },
+              "thinking_budget": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "max_output_tokens": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "context_tokens": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          }
+        }
       }
     }
   }

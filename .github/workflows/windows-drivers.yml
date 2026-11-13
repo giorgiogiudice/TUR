@@ -1,0 +1,143 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Experiment (docs/reports/windows-drivers-1.md): can Windows USB and HID
+# device drivers run as ordinary user-space programs under Wine's driver
+# host (winedevice.exe, ntoskrnl.exe, wineusb.sys, winebus.sys), never in a
+# kernel?
+#
+# On the runner: three virtual USB devices, emulated in user space by
+# tests/windows-drivers/virtual-usb/usbip_devices.py and plugged into the
+# kernel's USB/IP virtual host controller (vhci_hcd): a bulk loopback, a
+# source/sink with vendor control requests, and a vendor-defined HID device.
+# The runner's kernel (linux-azure) is built without dummy_hcd, so the
+# kernel's own gadget framework cannot be used. The only thing loaded into
+# the runner's kernel is the stock vhci-hcd module (with usbip-core):
+# nothing built here and no Windows driver.
+#
+# In a Fedora 45 container with Fedora 45's Wine: a WDM USB function driver
+# and test programs written for this experiment, a KMDF binding probe and a
+# best-effort mingw-w64 build of Microsoft's kmdf_fx2 sample are built with
+# mingw-w64; tests/windows-drivers/harness.py then installs them in Wine
+# prefixes, grants and withdraws device access, runs a bubblewrap sandbox
+# shaped like tur-runtime's, and records what worked.
+#
+# The job is green when the harness ran; a negative result is recorded as a
+# finding in the results table, not as a failed job. No Microsoft binary is
+# downloaded or used; Microsoft's sample sources (MS-PL, MIT) are fetched at
+# pinned commits and not committed.
+name: windows-drivers
+
+on:
+  pull_request:
+    paths:
+      - "tests/windows-drivers/**"
+      - ".github/workflows/windows-drivers.yml"
+  workflow_dispatch:
+    inputs:
+      only:
+        description: "Comma-separated harness scenarios (empty: all)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-drivers-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    # -o pipefail: a step that pipes into tee fails when the command does.
+    shell: bash
+
+env:
+  # Fedora 45's container image, by digest (tag 45 on 13 November 2026).
+  FEDORA_IMAGE: registry.fedoraproject.org/fedora:45@sha256:fa773d10382c082ff2cccaf7982a5c162f11f296f91274b994357f2d3d473770
+
+jobs:
+  fedora-wine:
+    name: Windows USB and HID drivers in Wine's user-space driver host (Fedora 45 Wine)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Scratch directory
+        run: |
+          mkdir -p "$RUNNER_TEMP/twd/evidence"
+          echo "WORK=$RUNNER_TEMP/twd" >> "$GITHUB_ENV"
+
+      - name: What the runner's kernel offers for virtual USB devices
+        run: |
+          sudo python3 -I tests/windows-drivers/virtual-usb/usbip_devices.py probe | tee "$WORK/evidence/kernel-probe.txt"
+          { echo '### Kernel'; echo '```'; cat "$WORK/evidence/kernel-probe.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Virtual USB devices (USB/IP, emulated in user space)
+        run: |
+          mkdir -p "$WORK/evidence/virtual-usb"
+          sudo nohup python3 -I tests/windows-drivers/virtual-usb/usbip_devices.py run \
+            --log-dir "$WORK/evidence/virtual-usb" > "$WORK/evidence/virtual-usb/daemon.out" 2>&1 &
+          for _ in $(seq 1 60); do
+            [ -f "$WORK/evidence/virtual-usb/ready" ] && break
+            sleep 1
+          done
+          cat "$WORK/evidence/virtual-usb/daemon.out" "$WORK/evidence/virtual-usb/usbip-devices.log" || true
+          test -f "$WORK/evidence/virtual-usb/ready"
+          sudo python3 -I tests/windows-drivers/virtual-usb/usbip_devices.py show | tee "$WORK/evidence/devices.txt"
+          [ "$(cat "$WORK/evidence/virtual-usb/ready")" = 3 ]
+          { echo '### Virtual USB devices'; echo '```'; cat "$WORK/evidence/devices.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Let bubblewrap make user namespaces in the container
+        # Ubuntu 24.04 denies unprivileged user namespaces to unconfined
+        # programs, which a privileged container's are. This throw-away
+        # runner lifts the restriction (remedy 2 of
+        # tests/windows-runtime/sandbox-preflight.sh).
+        run: |
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 | tee "$WORK/evidence/userns.txt" || true
+
+      - name: Experiment in Fedora 45 with Fedora's Wine
+        env:
+          TWD_ONLY: ${{ github.event.inputs.only }}
+        run: |
+          sudo dmesg --clear || true
+          docker run --rm --privileged --network host \
+            -e TWD_ONLY \
+            -v /dev:/dev -v /sys:/sys -v /run/udev:/run/udev:ro \
+            -v "$GITHUB_WORKSPACE:/src:ro" -v "$WORK:/work" \
+            "$FEDORA_IMAGE" bash /src/tests/windows-drivers/fedora-run.sh
+
+      - name: Kernel log and devices afterwards
+        if: always()
+        run: |
+          sudo dmesg | grep -iE 'usb|vhci|hid' | tail -n 600 > "$WORK/evidence/dmesg.txt" || true
+          sudo python3 -I tests/windows-drivers/virtual-usb/usbip_devices.py show > "$WORK/evidence/devices-after.txt" 2>&1 || true
+          sudo chown -R "$(id -u):$(id -g)" "$WORK" || true
+          grep -E 'did not claim|usbfs|interface' "$WORK/evidence/dmesg.txt" | sort | uniq -c | sort -rn | head -n 20 || true
+
+      - name: Unplug the virtual devices
+        if: always()
+        run: |
+          sudo pkill -f usbip_devices.py || true
+          sleep 2
+          sudo chown -R "$(id -u):$(id -g)" "$WORK" || true
+
+      - name: Results
+        if: always()
+        run: |
+          if [ -f "$WORK/evidence/results.md" ]; then
+            cat "$WORK/evidence/results.md" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No results were written." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ -f "$WORK/evidence/kmdf-fx2/summary.txt" ]; then
+            { echo '### kmdf_fx2 with mingw-w64'; echo '```'; cat "$WORK/evidence/kmdf-fx2/summary.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: windows-drivers-evidence
+          path: ${{ runner.temp }}/twd/evidence/
+          if-no-files-found: warn
+

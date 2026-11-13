@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# TUR Light, the light global theme (desktop-experience.md, 5 and 7.6). Data
+# only: the settings Plasma writes into an account's defaults when the theme
+# applies. No layout script and no splash: both would be code inside Plasma.
+# Every key here is one Plasma 6.8 applies (desktop/data/gen_theme.py, LNF_KEYS).
+
+# The colours: generated from TUR's tokens (desktop/data/gen_theme.py).
+[kdeglobals][General]
+ColorScheme=TurLight
+
+# KDE's Breeze icons, cursor, widget style, window frame and Plasma style. The
+# Plasma style follows the colour scheme, so TUR needs no style of its own.
+[kdeglobals][Icons]
+Theme=breeze
+
+[kdeglobals][KDE]
+widgetStyle=Breeze
+
+[plasmarc][Theme]
+name=default
+
+[kcminputrc][Mouse]
+cursorTheme=breeze_cursors
+
+[kwinrc][org.kde.kdecoration2]
+library=org.kde.breeze
+theme=Breeze
+
+# The picture on a desktop that has none of its own. The same as the dark
+# theme's until the wallpaper has a light image (docs/architecture/tur-theme.md).
+[Wallpaper]
+Image=Tur

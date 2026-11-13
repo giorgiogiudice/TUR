@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/giorgiogiudice/TUR/schemas/remedy-applied.schema.json",
+  "$comment": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+  "title": "TUR applied remedies",
+  "description": "What tur-runtime keeps beside an application once the person applies an autopilot result (tur-runtime app autopilot --apply): the remedies, the environment variables every launch of the application then gets, whether /dev/ntsync is left out of its sandbox, and the backup taken before anything was changed, which undoes the change (tur-runtime app autopilot --revert). The file is prefixes/<app-id>/remedies.json, written by tur-runtime only and never visible to the application.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "app_id", "result_id", "applied_at", "backup", "remedies", "case_folding_before"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "app_id": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*(\\.[a-z0-9]+(-[a-z0-9]+)*)+$", "maxLength": 255 },
+    "result_id": { "type": "string", "pattern": "^[a-z0-9.-]+@[0-9]{8}T[0-9]{6}Z$" },
+    "applied_at": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$" },
+    "backup": { "description": "The name of the backup taken first, as prefix backup names it.", "type": "string", "pattern": "^[0-9]{8}T[0-9]{6}Z-[a-z0-9-]+$" },
+    "remedies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "label"],
+        "properties": {
+          "id": { "type": "string" },
+          "parameters": { "type": "object", "additionalProperties": { "type": "string" } },
+          "label": { "type": "string" }
+        }
+      }
+    },
+    "environment": {
+      "description": "Added to every launch of the application; a variable the person sets on the command line wins. The launch rules apply: no variable the runtime manager sets itself, nothing starting with LD_.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "value"],
+        "properties": {
+          "name": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,127}$" },
+          "value": { "type": "string", "maxLength": 4096 }
+        }
+      }
+    },
+    "hide_ntsync": { "type": "boolean" },
+    "case_folding_before": { "description": "Whether drive C: was case-insensitive before; a revert restores it as it was.", "type": "boolean" }
+  }
+}

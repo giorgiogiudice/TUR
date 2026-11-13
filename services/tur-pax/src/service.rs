@@ -59,7 +59,8 @@ use tur_pax_memory::{
     UserConfirmation, is_known_zone, weekday_and_day_of,
 };
 use tur_pax_providers::{
-    ApiKey, Message, ProviderConfig, ProviderId, SpendMeter, Usage, connect, connect_without_key,
+    ApiKey, Effort, ListedModel, Message, ProviderConfig, ProviderError, ProviderId, SpendMeter,
+    Usage, connect, connect_without_key, list_models,
 };
 
 use crate::audit::{AuditRecord, AuditWriteError};
@@ -79,11 +80,12 @@ use crate::sandbox::{Grant, GrantRules};
 use crate::scheduler::{Runner, TaskRun, TickReport, outcome_name, run_due};
 use crate::settings::{
     KeySourceKind, Limits, MODEL_CANNOT_ACT, ModelList, Origin, Paths, ProviderEntry, Settings,
-    find_provider, is_provider_id, providers, runtime_key,
+    find_provider, is_model_name, is_provider_id, providers, runtime_key,
 };
 use crate::spending::{Ledger, TaskBudget, Zone, day_of};
 use crate::textui::{DEFAULT_TOOLS_DIR, read_json_dir, read_tools};
 use crate::trail::{EventKind, FileTrail, TIME_FIELD, Trail, TrailEvent};
+use crate::tuning;
 use crate::wake::Waker;
 
 /// The version of the interface this service speaks.
@@ -161,6 +163,14 @@ pub enum Event {
     MemoryChanged,
     /// The switch or the state changed.
     StateChanged,
+    /// A step of making a local model ready: one event of `tur-ai-local
+    /// ensure`, or P@x's own last one (`in-use`, `failed`).
+    LocalModelProgress {
+        /// The model's catalogue id.
+        model: String,
+        /// The event.
+        event: Value,
+    },
 }
 
 /// Receives the service's events.
@@ -304,6 +314,16 @@ struct State {
     locked: Option<bool>,
     key_set: Option<bool>,
     counter: u64,
+    /// A local model being made ready, if one is.
+    local: Option<LocalJob>,
+}
+
+/// A model of local AI being made ready for P@x (`UseLocalModel`).
+struct LocalJob {
+    id: String,
+    model: String,
+    child: Arc<Mutex<Option<std::process::Child>>>,
+    last: Value,
 }
 
 /// What a job needs to run.
@@ -849,6 +869,7 @@ impl Core {
                 locked: None,
                 key_set: None,
                 counter: 0,
+                local: None,
             }),
             ledger,
             ticking: Mutex::new(()),
@@ -1338,6 +1359,21 @@ impl Core {
                 "prices_status": state.models.status,
             },
             "proposals": state.proposals.len(),
+            "generation": match (&current, &settings.model) {
+                (Some((entry, _)), Some(model)) => match settings.effective_values(entry, model) {
+                    Ok(values) => json!({ "settings": values, "problem": null }),
+                    Err(problem) => json!({
+                        "settings": null,
+                        "problem": { "error_code": problem.code.as_str(), "message": problem.detail },
+                    }),
+                },
+                _ => Value::Null,
+            },
+            "local_model": state.local.as_ref().map(|job| json!({
+                "job": job.id,
+                "model": job.model,
+                "last_event": job.last,
+            })),
         })
     }
 
@@ -1767,6 +1803,9 @@ impl Core {
                 observer: &mut observer,
                 budget: &mut budget,
                 assistant: &mut assistant,
+                // The session service does not offer the interface tools
+                // yet (docs/architecture/pax-accessibility.md, section 9).
+                interface: &mut crate::interface::NoInterface,
             };
             let request = TaskRequest {
                 task_id: &job.id,
@@ -2597,6 +2636,571 @@ impl Core {
 }
 
 /// One line of the trail as an entry of the activity list.
+/// How long a provider's own list of models is kept before it is asked
+/// again: a day.
+pub const LISTING_FRESH_SECONDS: u64 = 86_400;
+
+fn provider_fault(error: &ProviderError) -> Fault {
+    Fault {
+        code: error.kind().error_code(),
+        detail: error.to_string(),
+    }
+}
+
+/// A size as a person reads it: "2.9 GB".
+fn gigabytes(bytes: u64) -> String {
+    format!("{:.1} GB", bytes as f64 / 1e9)
+}
+
+/// The settings of the models, the models of a provider, and local AI.
+impl Core {
+    /// The models of a provider: the model list's, and, once the person
+    /// asked for it (`refresh`), the ones the provider's own list names,
+    /// kept for a day. Asking the provider sends it the key, as a task
+    /// would; nothing else is sent.
+    ///
+    /// # Errors
+    ///
+    /// `TUR-AI-SERVICE-006` for an identifier no provider has; with
+    /// `refresh`, the key's codes and the provider layer's.
+    pub fn provider_models(&self, provider: &str, refresh: bool) -> Result<Value, Fault> {
+        let (entry, origin) = self.provider_entry(provider)?;
+        let gateway = {
+            let state = self.state();
+            if state.settings.provider.as_deref() == Some(provider) {
+                state.settings.base_url.clone()
+            } else {
+                None
+            }
+        };
+        let cache = self.parts.paths.listing.join(format!("{}.json", entry.id));
+        let now = self.now().seconds();
+        let mut source = "list";
+        let mut fetched_at: Option<u64> = None;
+        let mut fetched: Vec<ListedModel> = Vec::new();
+        if refresh {
+            fetched = self.fetch_models(&entry, gateway.as_deref())?;
+            fetched_at = Some(now);
+            source = "provider";
+            let document = json!({
+                "schema_version": 1,
+                "provider": entry.id,
+                "fetched_at": now,
+                "models": fetched,
+            });
+            crate::settings::write_private(&cache, document.to_string().as_bytes())?;
+        } else if let Ok(text) = fs::read_to_string(&cache)
+            && let Ok(document) = crate::strict::value_from_str(&text)
+        {
+            let at = document["fetched_at"].as_u64().unwrap_or(0);
+            if now.saturating_sub(at) < LISTING_FRESH_SECONDS
+                && let Ok(models) =
+                    serde_json::from_value::<Vec<ListedModel>>(document["models"].clone())
+            {
+                fetched = models;
+                fetched_at = Some(at);
+                source = "cache";
+            }
+        }
+        let mut models: Vec<Value> = entry
+            .models
+            .iter()
+            .map(|model| {
+                let abilities = entry.abilities(&model.model);
+                json!({
+                    "model": model.model,
+                    "label": model.label,
+                    "in_list": true,
+                    "offered_by_provider": fetched.iter().any(|listed| listed.model == model.model),
+                    "settings_declared": entry.settings_spec(&model.model).is_some(),
+                    "can_act": abilities.act,
+                    "can_see": abilities.see,
+                    "tested_with_tur": model.tested_with_tur,
+                    "price_known": model.prices.is_some(),
+                })
+            })
+            .collect();
+        for listed in &fetched {
+            if entry.model(&listed.model).is_none() {
+                models.push(json!({
+                    "model": listed.model,
+                    "label": listed.label,
+                    "in_list": false,
+                    "offered_by_provider": true,
+                    "settings_declared": entry.settings_spec(&listed.model).is_some(),
+                    "can_act": null,
+                    "can_see": null,
+                    "tested_with_tur": false,
+                    "price_known": false,
+                }));
+            }
+        }
+        Ok(json!({
+            "provider": entry.id,
+            "origin": origin.as_str(),
+            "source": source,
+            "fetched_at": fetched_at,
+            "models": models,
+        }))
+    }
+
+    /// Ask a provider for its list of models, with its key.
+    fn fetch_models(
+        &self,
+        entry: &ProviderEntry,
+        gateway: Option<&str>,
+    ) -> Result<Vec<ListedModel>, Fault> {
+        let config = entry.listing_config(gateway);
+        match entry.key_source() {
+            KeySourceKind::None => {
+                list_models(&config, None).map_err(|error| provider_fault(&error))
+            }
+            KeySourceKind::RuntimeFile(file) => {
+                let key = self.runtime_key(entry.adapter, file, config.base_url.as_deref())?;
+                list_models(&config, Some(&key)).map_err(|error| provider_fault(&error))
+            }
+            KeySourceKind::Keyring(item) => {
+                let key = self.parts.keys.key(item)?;
+                list_models(&config, Some(&key)).map_err(|error| provider_fault(&error))
+            }
+        }
+    }
+
+    /// The generation settings of a model of a provider: what it accepts,
+    /// what the person chose, what takes effect, and what the person is to
+    /// know about them.
+    ///
+    /// # Errors
+    ///
+    /// `TUR-AI-SERVICE-006` for an identifier no provider has or a name
+    /// that cannot be a model's.
+    pub fn generation_settings(&self, provider: &str, model: &str) -> Result<Value, Fault> {
+        let (entry, _) = self.provider_entry(provider)?;
+        if !is_model_name(model) {
+            return Err(invalid("that cannot be the name of a model"));
+        }
+        let settings = self.state().settings.clone();
+        let spec = entry.settings_spec(model);
+        let chosen = settings
+            .choice(provider, model)
+            .cloned()
+            .unwrap_or_default();
+        let effective = tuning::effective(spec.as_ref(), &chosen);
+        let problem = tuning::check(
+            spec.as_ref(),
+            &effective,
+            entry.adapter,
+            entry.reasoning_style,
+        )
+        .err();
+        let mut notices: Vec<String> = Vec::new();
+        if spec.is_none() {
+            notices.push(
+                "TUR has no list of the settings this model accepts, so only its output limit \
+                 can be set, and the provider's own defaults apply."
+                    .to_owned(),
+            );
+        }
+        if let Some(rule) = spec.as_ref().and_then(tuning::sampling_rule) {
+            notices.push(rule);
+        }
+        if effective
+            .effort
+            .is_some_and(|effort| effort != Effort::None)
+        {
+            notices.push(
+                "While the model reasons, its thinking is output: it counts towards the output \
+                 limit of a response and towards today's limit."
+                    .to_owned(),
+            );
+        }
+        let listed = entry.model(model);
+        Ok(json!({
+            "provider": entry.id,
+            "model": model,
+            "adapter": entry.adapter.as_str(),
+            "declared": spec.is_some(),
+            "accepts": tuning::accepted(spec.as_ref()),
+            "chosen": chosen,
+            "effective": effective,
+            "max_output_tokens": effective
+                .max_output_tokens
+                .or(settings.max_output_tokens)
+                .or(listed.and_then(|listed| listed.max_output_tokens))
+                .unwrap_or(crate::settings::DEFAULT_MAX_OUTPUT_TOKENS),
+            "problem": problem,
+            "notices": notices,
+            "sources": spec.as_ref().map(|spec| spec.sources.clone()).unwrap_or_default(),
+            "checked": spec.as_ref().and_then(|spec| spec.checked.clone()),
+        }))
+    }
+
+    /// Change the generation settings of a model of a provider, from a JSON
+    /// object: each member a setting, `null` to go back to the model's
+    /// default. The result is checked against what the model accepts before
+    /// it is kept.
+    ///
+    /// # Errors
+    ///
+    /// `TUR-AI-SERVICE-006` with the sentence that says what the model does
+    /// not take; `-009` if the settings cannot be saved.
+    pub fn set_generation_settings(
+        &self,
+        provider: &str,
+        model: &str,
+        given: &str,
+    ) -> Result<(), Fault> {
+        let (entry, _) = self.provider_entry(provider)?;
+        if !is_model_name(model) {
+            return Err(invalid("that cannot be the name of a model"));
+        }
+        let given = crate::strict::object_from_str(given)
+            .map_err(|_| invalid("the settings are not one JSON object"))?;
+        self.change_settings(|settings| {
+            let current = settings
+                .choice(provider, model)
+                .cloned()
+                .unwrap_or_default();
+            let merged = tuning::merge(&current, &given).map_err(invalid)?;
+            let spec = entry.settings_spec(model);
+            let effective = tuning::effective(spec.as_ref(), &merged);
+            tuning::check(
+                spec.as_ref(),
+                &effective,
+                entry.adapter,
+                entry.reasoning_style,
+            )
+            .map_err(invalid)?;
+            settings.set_choice(provider, model, merged);
+            Ok(())
+        })?;
+        self.record_change("generation", "changed");
+        self.emit(Event::StateChanged);
+        Ok(())
+    }
+
+    /// What local AI offers this computer, with whether P@x can use each
+    /// model and the settings it accepts there.
+    ///
+    /// # Errors
+    ///
+    /// The code local AI reported, or `TUR-AI-SERVICE-010`.
+    pub fn local_models(&self) -> Result<Value, Fault> {
+        let mut offers = crate::local::offers(&self.parts.paths.ai_local)?;
+        let (preset, in_progress) = {
+            let state = self.state();
+            (
+                state.models.provider("local").cloned(),
+                state.local.as_ref().map(
+                    |job| json!({ "job": job.id, "model": job.model, "last_event": job.last }),
+                ),
+            )
+        };
+        if let Some(models) = offers["models"].as_array_mut() {
+            for offer in models {
+                let id = offer["id"].as_str().unwrap_or_default().to_owned();
+                let usable = preset
+                    .as_ref()
+                    .is_some_and(|entry| entry.model(&id).is_some());
+                offer["usable_by_pax"] = json!(usable);
+                offer["settings"] = preset.as_ref().map_or(json!({}), |entry| {
+                    tuning::accepted(entry.settings_spec(&id).as_ref())
+                });
+            }
+        }
+        offers["in_progress"] = in_progress.unwrap_or(Value::Null);
+        Ok(offers)
+    }
+
+    /// Make a model of local AI ready and use it for P@x: `tur-ai-local
+    /// ensure` downloads it if it is not there (from its publisher, going on
+    /// from a partial download, checked), and starts it; each step is a
+    /// `LocalModelProgress` signal. When it is ready, the provider becomes
+    /// `local` with that model; if that is another provider than the one in
+    /// use, P@x is switched off until the person accepts the consent text of
+    /// local AI, as for any change of provider.
+    ///
+    /// `options` is `""` or a JSON object: `download_bytes`, the size the
+    /// person was told, required when the model is not downloaded yet;
+    /// `accept_licence`, required when its licence restricts use.
+    ///
+    /// # Errors
+    ///
+    /// `TUR-AI-SERVICE-006` for a model the local preset does not offer, a
+    /// download size the person was not told, a licence not accepted;
+    /// `-004` while another model is being made ready; `-010` when local AI
+    /// cannot be asked.
+    pub fn use_local_model(self: &Arc<Self>, model: &str, options: &str) -> Result<String, Fault> {
+        let options = if options.trim().is_empty() {
+            Map::new()
+        } else {
+            crate::strict::object_from_str(options)
+                .map_err(|_| invalid("the options are not one JSON object"))?
+        };
+        let mut download_bytes: Option<u64> = None;
+        let mut accept_licence = false;
+        for (name, value) in &options {
+            match name.as_str() {
+                "download_bytes" => {
+                    download_bytes = Some(
+                        value
+                            .as_u64()
+                            .ok_or_else(|| invalid("download_bytes is not a whole number"))?,
+                    );
+                }
+                "accept_licence" => {
+                    accept_licence = value
+                        .as_bool()
+                        .ok_or_else(|| invalid("accept_licence is not true or false"))?;
+                }
+                _ => {
+                    return Err(invalid(
+                        "UseLocalModel takes download_bytes and accept_licence",
+                    ));
+                }
+            }
+        }
+        let (entry, settings, busy) = {
+            let state = self.state();
+            (
+                state.models.provider("local").cloned(),
+                state.settings.clone(),
+                state.local.is_some(),
+            )
+        };
+        let Some(entry) = entry else {
+            return Err(invalid("the model list has no local preset"));
+        };
+        if entry.model(model).is_none() {
+            return Err(invalid("that is not a model of local AI that P@x offers"));
+        }
+        if busy {
+            return Err(fault(
+                TaskCode::ServiceBusy,
+                "a local model is already being made ready",
+            ));
+        }
+        let program = self.parts.paths.ai_local.clone();
+        let offers = crate::local::offers(&program)?;
+        let Some(offer) = crate::local::offer(&offers, model) else {
+            return Err(invalid("local AI's catalogue has no such model"));
+        };
+        let name = offer["name"].as_str().unwrap_or(model).to_owned();
+        let size = offer["download_bytes"].as_u64().unwrap_or(0);
+        if offer["installed"] != "installed" && download_bytes != Some(size) {
+            return Err(invalid(format!(
+                "{name} is not on this computer yet: it downloads {} ({size} bytes) from {}. \
+                 Tell the person first, then name the size: download_bytes {size}",
+                gigabytes(size),
+                offer["repository"].as_str().unwrap_or("its publisher"),
+            )));
+        }
+        if offer["licence"]["restricts_use"] == true && !accept_licence {
+            return Err(invalid(format!(
+                "the licence of {name} restricts its use: {} It needs the person's acceptance: \
+                 accept_licence true",
+                offer["licence"]["restrictions"]
+                    .as_str()
+                    .unwrap_or_default()
+            )));
+        }
+        let values = settings.effective_values(&entry, model)?;
+        let request = crate::local::EnsureRequest {
+            model: model.to_owned(),
+            accept_licence,
+            context: values
+                .context_tokens
+                .unwrap_or(crate::local::DEFAULT_CONTEXT),
+            reasoning_auto: entry
+                .settings_spec(model)
+                .is_some_and(|spec| spec.effort.is_some()),
+        };
+        let mut child = crate::local::start_ensure(&program, &request)?;
+        let Some(stdout) = child.stdout.take() else {
+            let _ = child.kill();
+            return Err(fault(
+                TaskCode::ServiceLocalUnavailable,
+                "local AI gave no output",
+            ));
+        };
+        let child = Arc::new(Mutex::new(Some(child)));
+        let id = {
+            let mut state = self.state();
+            state.counter += 1;
+            let id = format!("l-{}", state.counter);
+            state.local = Some(LocalJob {
+                id: id.clone(),
+                model: model.to_owned(),
+                child: Arc::clone(&child),
+                last: Value::Null,
+            });
+            id
+        };
+        self.record_change("local_model", "requested");
+        self.emit(Event::StateChanged);
+        let core = Arc::clone(self);
+        let model = model.to_owned();
+        let spawned = thread::Builder::new()
+            .name("tur-pax-local".to_owned())
+            .spawn(move || core.follow_local(&model, &name, stdout, &child));
+        if spawned.is_err() {
+            self.state().local = None;
+            return Err(fault(
+                TaskCode::ServiceLocalUnavailable,
+                "the service could not follow local AI",
+            ));
+        }
+        Ok(id)
+    }
+
+    /// Read the events of `ensure` as they come, and act on the last one.
+    fn follow_local(
+        &self,
+        model: &str,
+        name: &str,
+        stdout: std::process::ChildStdout,
+        child: &Mutex<Option<std::process::Child>>,
+    ) {
+        use std::io::BufRead;
+        let mut last = Value::Null;
+        for line in std::io::BufReader::new(stdout).lines() {
+            let Ok(line) = line else {
+                break;
+            };
+            let Ok(event) = crate::strict::value_from_str(&line) else {
+                continue;
+            };
+            if event["kind"] != "ensure-event" {
+                continue;
+            }
+            last = event.clone();
+            if let Some(job) = self.state().local.as_mut() {
+                job.last = event.clone();
+            }
+            self.emit(Event::LocalModelProgress {
+                model: model.to_owned(),
+                event,
+            });
+        }
+        let errors = {
+            let mut guard = child
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            match guard.take() {
+                Some(mut process) => {
+                    let text = crate::local::error_text(&mut process);
+                    let _ = process.wait();
+                    text
+                }
+                None => String::new(),
+            }
+        };
+        let finished = |event: Value| {
+            if let Some(job) = self.state().local.as_mut() {
+                job.last = event.clone();
+            }
+            self.emit(Event::LocalModelProgress {
+                model: model.to_owned(),
+                event,
+            });
+        };
+        match last["event"].as_str() {
+            Some("ready") => match self.set_provider("local", model) {
+                Ok(()) => {
+                    let consent_needed = !self.state().settings.consent_is_current();
+                    finished(json!({
+                        "kind": "pax-event",
+                        "event": "in-use",
+                        "model": model,
+                        "provider": "local",
+                        "consent_needed": consent_needed,
+                        "message": if consent_needed {
+                            format!(
+                                "{name} is ready on this computer and chosen for P@x. Read and \
+                                 accept what P@x sends to local AI to switch P@x on."
+                            )
+                        } else {
+                            format!("{name} is ready on this computer and P@x uses it now.")
+                        },
+                    }));
+                }
+                Err(problem) => finished(json!({
+                    "kind": "pax-event",
+                    "event": "failed",
+                    "model": model,
+                    "code": problem.code.as_str(),
+                    "message": problem.detail,
+                })),
+            },
+            Some("failed" | "cancelled") => {}
+            _ => {
+                let problem = crate::local::fault_of(&errors);
+                finished(json!({
+                    "kind": "pax-event",
+                    "event": "failed",
+                    "model": model,
+                    "code": problem.code.as_str(),
+                    "message": problem.detail,
+                }));
+            }
+        }
+        self.state().local = None;
+        self.emit(Event::StateChanged);
+    }
+
+    /// Stop making a local model ready: local AI is asked to stop, and the
+    /// program is ended if it has not after 20 seconds. What was downloaded
+    /// is kept for the next time.
+    ///
+    /// # Errors
+    ///
+    /// `TUR-AI-SERVICE-007` when no model is being made ready.
+    pub fn cancel_local_model(&self) -> Result<(), Fault> {
+        let child = self
+            .state()
+            .local
+            .as_ref()
+            .map(|job| Arc::clone(&job.child));
+        let Some(child) = child else {
+            return Err(fault(
+                TaskCode::ServiceNotFound,
+                "no local model is being made ready",
+            ));
+        };
+        let asked = crate::local::cancel(&self.parts.paths.ai_local).is_ok();
+        let wait = if asked {
+            std::time::Duration::from_secs(20)
+        } else {
+            std::time::Duration::ZERO
+        };
+        let _ = thread::Builder::new()
+            .name("tur-pax-local-stop".to_owned())
+            .spawn(move || {
+                let started = std::time::Instant::now();
+                loop {
+                    {
+                        let mut guard = child
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner);
+                        let Some(process) = guard.as_mut() else {
+                            return;
+                        };
+                        if let Ok(Some(_)) = process.try_wait() {
+                            return;
+                        }
+                        if started.elapsed() >= wait {
+                            let _ = process.kill();
+                            return;
+                        }
+                    }
+                    thread::sleep(std::time::Duration::from_millis(250));
+                }
+            });
+        self.record_change("local_model", "cancelled");
+        Ok(())
+    }
+}
+
 fn activity_entry(number: usize, line: &Map<String, Value>) -> Value {
     let field = |name: &str| line.get(name).and_then(Value::as_str);
     let number_of = |name: &str| field(name).and_then(|text| text.parse::<u64>().ok());

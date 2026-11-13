@@ -23,8 +23,16 @@ never signs in. This adds one boot, after the test has finished with the disk
   because the sign-in file was written by a host that cannot label it.
 
 Writes OUT_DIR/splash/frame-*.png, OUT_DIR/screenshot-desktop.png and
-OUT_DIR/splash/splash.json. Informational: it decides nothing on its own;
+OUT_DIR/splash/splash.json. The splash part is informational:
 tests/boot/screenshot-text.py reads the pictures, and a person looks at them.
+
+The same boot is the boot test's user's first Plasma session: a new account
+(task D-04). `prepare` adds the kernel argument `tur.desktop_check`, which
+starts the test image's desktop check in the guest. After the picture of the
+desktop, `boot` waits for the guest to switch the account to TUR Light and
+takes OUT_DIR/screenshot-desktop-light.png; then it reads the guest's facts
+into OUT_DIR/desktop/ and judges them (tests/boot/desktop_checks.py). A
+required desktop check that fails fails this step.
 Run in CI only (ADR-0002).
 """
 
@@ -37,10 +45,12 @@ import pathlib
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 import time
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import desktop_checks  # noqa: E402
 import vm  # noqa: E402
 
 TEST_USER = "turtest"  # tests/boot/guest/rootfs/usr/libexec/tur-boot-test/guest-agent
@@ -104,6 +114,8 @@ def prepare(disk: str, work: pathlib.Path) -> int:
         # first run of this step).
         words += ["console=ttyS0,115200n8", "console=tty0", "rhgb", "quiet", "plymouth.ignore-serial-consoles",
                   "enforcing=0"]
+        # The test image's desktop check (task D-04) runs in this boot only.
+        words += ["tur.desktop_check"]
         (out / "cmdline.txt").write_text(" ".join(words) + "\n")
 
         # The deployment's /etc, by the ostree= argument (a link inside /ostree).
@@ -143,6 +155,37 @@ class DirectMachine(vm.Machine):
                                     "-append", self.append]
 
 
+# Seconds after the picture of the dark desktop at which the guest switches to
+# TUR Light (it counts from its own start, which is a moment after QEMU's).
+LIGHT_AFTER = 30
+
+
+def wait_for_marker(machine: vm.Machine, log: pathlib.Path, marker: str, timeout: float) -> bool:
+    """Wait until the guest prints TUR-BOOT-TEST: <marker> on the serial console."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline and machine.alive():
+        if log.exists() and (vm.MARK + marker) in vm.clean(log.read_bytes().decode("utf-8", errors="replace")):
+            return True
+        time.sleep(1)
+    return False
+
+
+def unpack_desktop_facts(report: pathlib.Path, target: pathlib.Path) -> None:
+    """The guest's desktop check sends one tar stream over the virtio-serial port."""
+    shutil.rmtree(target, ignore_errors=True)
+    target.mkdir(parents=True, exist_ok=True)
+    if not report.exists() or report.stat().st_size == 0:
+        print(f"no desktop facts arrived ({report})")
+        return
+    try:
+        with tarfile.open(report) as archive:
+            members = [m for m in archive.getmembers()
+                       if (m.isfile() or m.isdir()) and not m.name.startswith("/") and ".." not in m.name]
+            archive.extractall(target, members=members, filter="data")
+    except (tarfile.TarError, OSError) as error:
+        print(f"the desktop facts could not be read: {error}")
+
+
 def boot(work: pathlib.Path, out: pathlib.Path, seconds: int) -> int:
     src = work / "splash"
     shots = out / "splash"
@@ -154,8 +197,11 @@ def boot(work: pathlib.Path, out: pathlib.Path, seconds: int) -> int:
         disk=str(work / "disk.raw"), work=work, name="tur-splash",
         serial_log=shots / "serial.log", report_tar=work / "splash-report.tar", qemu_log=shots / "qemu.log",
         variables_from=str(variables) if variables.exists() else None,
+        # When the guest's desktop check may switch to TUR Light: after the
+        # picture of the dark desktop, which is taken at `seconds`.
+        fw_cfg={"desktop-check/light-at": str(seconds + LIGHT_AFTER)},
     )
-    for stale in (machine.variables, shots / "serial.log"):
+    for stale in (machine.variables, shots / "serial.log", machine.report_tar):
         stale.unlink(missing_ok=True)
     result: dict = {"command_line": append, "frames": [], "desktop": None}
     started = time.monotonic()
@@ -190,12 +236,23 @@ def boot(work: pathlib.Path, out: pathlib.Path, seconds: int) -> int:
             shot["at_seconds"] = round(time.monotonic() - started, 1)
             result["desktop"] = shot
             (out / "screenshot-desktop.ppm.tmp").unlink(missing_ok=True)
+        # Task D-04: the guest switches the account to TUR Light; then its facts.
+        log = shots / "serial.log"
+        if machine.alive() and wait_for_marker(machine, log, "DESKTOP-LIGHT-APPLIED", LIGHT_AFTER + 240):
+            time.sleep(3)
+            shot = vm.screenshot(qmp, work, out / "screenshot-desktop-light.png")
+            shot["at_seconds"] = round(time.monotonic() - started, 1)
+            result["desktop_light"] = shot
+            (out / "screenshot-desktop-light.ppm.tmp").unlink(missing_ok=True)
+        result["desktop_check_sent"] = machine.alive() and wait_for_marker(machine, log, "DESKTOP-CHECK-DONE sent", 150)
     finally:
         machine.quit()
         machine.variables.unlink(missing_ok=True)
     (shots / "splash.json").write_text(json.dumps(result, indent=2) + "\n")
     print(f"{len(result['frames'])} frames in {shots}; desktop: {result['desktop']}")
-    return 0
+    print(f"light desktop: {result.get('desktop_light')}; facts sent: {result.get('desktop_check_sent')}")
+    unpack_desktop_facts(machine.report_tar, out / "desktop")
+    return desktop_checks.write(out, desktop_checks.judge(out))
 
 
 def main() -> int:

@@ -205,6 +205,13 @@ pub struct Model {
     pub memory_context: u32,
     /// The size of the context cache per token, in bytes (16-bit cache).
     pub kv_bytes_per_token: u64,
+    /// The bytes of weights read for each generated token, where it is not
+    /// the whole model file: a mixture-of-experts model reads only its
+    /// active experts, and Gemma's per-layer embeddings are looked up, not
+    /// multiplied. Without it, the model file's size. It decides the speed
+    /// estimate of [`crate::fit::tiers`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active_weight_bytes: Option<u64>,
     /// What the model can do.
     pub capabilities: Vec<Capability>,
     /// How it thinks before it answers.
@@ -243,6 +250,11 @@ impl Model {
     /// The bytes of all its files.
     pub fn download_bytes(&self) -> u64 {
         self.files().iter().map(|file| file.size_bytes).sum()
+    }
+
+    /// The bytes of weights read for each generated token.
+    pub fn active_bytes(&self) -> u64 {
+        self.active_weight_bytes.unwrap_or(self.file.size_bytes)
     }
 
     /// It can do this.
@@ -571,6 +583,14 @@ pub fn check(file_name: &str, model: &Model) -> Vec<String> {
             .kv_bytes_per_token
             .saturating_mul(u64::from(model.memory_context)),
     );
+    if model
+        .active_weight_bytes
+        .is_some_and(|active| active == 0 || active > model.file.size_bytes)
+    {
+        problems.push(format!(
+            "{id}: active_weight_bytes must be above 0 and at most the model file's size"
+        ));
+    }
     if model.memory_bytes < floor {
         problems.push(format!(
             "{id}: memory_bytes {} is less than the files and the context cache, {floor}",

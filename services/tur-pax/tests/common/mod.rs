@@ -30,6 +30,7 @@ use std::time::Duration;
 use serde_json::{Value, json};
 use tur_pax::audit::{AuditRecord, AuditWriteError};
 use tur_pax::exec::{ExecOutput, ExecStatus, Executor};
+use tur_pax::interface::{Interface, NoInterface};
 use tur_pax::orchestrator::{
     Control, NoAssistant, NoBudget, NoControl, NoObserver, Orchestrator, Signal, Situation,
     TaskClock, TaskLimits, TaskReport, TaskRequest,
@@ -1066,6 +1067,8 @@ pub struct Harness {
     pub clock: ManualClock,
     pub control: Box<dyn Control>,
     pub recalled: RecalledNotes,
+    /// What drives the accessibility bridge: none unless a test sets one.
+    pub interface: Box<dyn Interface>,
     /// The conversation, kept between tasks.
     pub history: Vec<Message>,
     /// If set, the trail fails after this many entries.
@@ -1096,6 +1099,7 @@ impl Harness {
             clock: ManualClock::new(Duration::from_millis(1)),
             control: Box::new(NoControl),
             recalled: RecalledNotes::none(),
+            interface: Box::new(NoInterface),
             history: Vec::new(),
             trail_capacity: None,
             tasks: 0,
@@ -1143,6 +1147,7 @@ impl Harness {
             observer: &mut observer,
             budget: &mut budget,
             assistant: &mut assistant,
+            interface: &mut *self.interface,
         };
         let task = TaskRequest {
             task_id: &task_id,

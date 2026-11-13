@@ -165,6 +165,79 @@ fn validate_refuses_a_tur_test_claim_without_a_report() {
 }
 
 #[test]
+fn an_autopilot_record_is_validated_and_routed_as_settings() {
+    // The record exactly as tur-runtime's autopilot writes it
+    // (services/tur-runtime/src/autopilot.rs, catalogue_record).
+    let scratch = Scratch::new("autopilot");
+    let record = format!(
+        "\n# A compatibility record written by tur-runtime's compatibility autopilot\n[[editions.records]]\nroute = \"wine\"\nrating = \"unknown\"\nreported_by = \"tur-autopilot\"\nversion_tested = \"1.0\"\ndate = \"2026-11-12\"\nremedies = [\"dll-builtin:d3dx9_43\", \"windows-version-win11\"]\nruntime_version = \"wine-9.0\"\nevidence_sha256 = \"{}\"\nnotes = \"Measured once, on one machine; not a rating.\"\n",
+        "ab".repeat(32)
+    );
+    scratch.file(
+        "org.example.app.toml",
+        &entry_text("org.example.app", "Example", &record),
+    );
+    let outcome = run(&["validate", &scratch.path()]);
+    assert_eq!(outcome.status, EXIT_OK, "{}", outcome.stderr);
+    // It rates nothing.
+    assert!(
+        outcome.stdout.contains("0 rated by TUR tests"),
+        "{}",
+        outcome.stdout
+    );
+
+    let elsewhere = Scratch::new("autopilot-host");
+    let host = elsewhere.file("host.json", FULL_HOST);
+    let outcome = run(&[
+        "--catalogue",
+        &scratch.path(),
+        "route",
+        "org.example.app",
+        "--host",
+        &host,
+        "--json",
+    ]);
+    assert!(
+        outcome.status == EXIT_OK || outcome.status == EXIT_NEEDS_SETUP,
+        "{}",
+        outcome.stderr
+    );
+    let routed: serde_json::Value = serde_json::from_str(&outcome.stdout).unwrap();
+    let options = routed["options"].as_array().unwrap();
+    let wine = options
+        .iter()
+        .find(|option| option["route"] == "wine")
+        .unwrap();
+    assert_eq!(wine["rating"], "unknown");
+    assert_eq!(wine["rating_source"]["kind"], "unrated");
+    assert_eq!(
+        wine["settings"]["remedies"],
+        serde_json::json!(["dll-builtin:d3dx9_43", "windows-version-win11"])
+    );
+    assert_eq!(wine["settings"]["runtime_version"], "wine-9.0");
+    assert!(
+        options
+            .iter()
+            .filter(|option| option["route"] != "wine")
+            .all(|option| option.get("settings").is_none())
+    );
+
+    // A rating on such a record is refused.
+    let rated = record.replace("rating = \"unknown\"", "rating = \"good\"");
+    scratch.file(
+        "org.example.app.toml",
+        &entry_text("org.example.app", "Example", &rated),
+    );
+    let outcome = run(&["validate", &scratch.path()]);
+    assert_eq!(outcome.status, EXIT_INVALID);
+    assert!(
+        outcome.stderr.contains("TUR-DESKTOP-CATALOGUE-006"),
+        "{}",
+        outcome.stderr
+    );
+}
+
+#[test]
 fn validate_checks_that_a_named_test_report_exists() {
     let scratch = Scratch::new("report");
     let record = "\n[[editions.records]]\nroute = \"wine\"\nrating = \"good\"\nreported_by = \"tur-test\"\ntest_report = \"docs/reports/compat/example.md\"\nversion_tested = \"1.0\"\ndate = \"2026-11-12\"\n";

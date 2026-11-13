@@ -150,13 +150,34 @@ fn the_recommendation_follows_memory_and_processor() {
         .collect();
     assert!(fits.contains(&("qwen3-0.6b", "not-now")), "{fits:?}");
     assert!(fits.contains(&("qwen3-4b", "too-large")), "{fits:?}");
-    // 32 GB, 16 processors with AVX2: the largest model that can call tools
-    // within the speed budget, and a model for images.
+    // 32 GB, 16 processors with AVX2: the largest model that can call
+    // tools, fits in the memory free now and runs well (a mixture of
+    // experts reads 2.2 GB a token), and a model for images.
     let big = recommend("desktop-amd");
     assert_eq!(big["code"], "TUR-AI-LOCAL-004");
-    assert_eq!(big["model"], "qwen3-4b");
-    assert_eq!(big["vision_model"], "qwen3-vl-2b-instruct");
+    assert_eq!(big["model"], "gemma-4-26b-a4b");
+    assert_eq!(big["vision_model"], "gemma-4-26b-a4b");
     assert_eq!(big["embeddings_model"], "qwen3-embedding-0.6b");
+    // Every model that converses has a tier with its reasons; the largest
+    // fits the total memory but not the memory free now.
+    let tiers = big["tiers"].as_array().expect("tiers");
+    let tier = |id: &str| {
+        tiers
+            .iter()
+            .find(|tier| tier["model"] == id)
+            .unwrap_or_else(|| panic!("{id}"))
+            .clone()
+    };
+    assert_eq!(tier("qwen3-30b-a3b")["tier"], "runs-well");
+    assert_eq!(tier("qwen3-30b-a3b")["fits_now"], false);
+    assert_eq!(tier("gemma-4-e2b")["tier"], "runs-well");
+    assert_eq!(tier("gemma-4-e2b")["device"], "processor");
+    let small_tiers = small["tiers"].as_array().expect("tiers");
+    assert!(
+        small_tiers
+            .iter()
+            .any(|tier| tier["model"] == "qwen3-30b-a3b" && tier["tier"] == "does-not-fit")
+    );
 }
 
 #[test]

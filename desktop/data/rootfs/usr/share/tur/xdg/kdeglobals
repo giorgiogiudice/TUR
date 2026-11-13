@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# TUR's system defaults for every KDE program (desktop-experience.md, 7.6),
+# read through the link /etc/xdg/kdeglobals by the user's session, the
+# first-run setup and the login screen. A person's own settings, in their
+# ~/.config, always come first; this file never changes them.
+
+[KDE]
+# The global theme of every account that has not chosen one, and of the
+# login screen: TUR Dark (desktop-experience.md, 17.1: dark by default).
+LookAndFeelPackage=org.tur.dark
+# The pair Plasma switches between when "light by day, dark at night" is on.
+DefaultDarkLookAndFeel=org.tur.dark
+DefaultLightLookAndFeel=org.tur.light
+# Files and folders open with a double click, as on Windows and in Plasma's
+# own default.
+SingleClick=false
