@@ -8,7 +8,8 @@
 #       -v /run/udev:/run/udev:ro -v CHECKOUT:/src:ro -v WORK:/work \
 #       fedora:45@sha256:... bash /src/tests/windows-drivers/fedora-run.sh
 #
-# after gadget/gadget.sh has made the virtual USB devices on the runner. The
+# after virtual-usb/usbip_devices.py has plugged the virtual USB devices into
+# the runner's vhci_hcd (and writes virtual-usb/ under WORK/evidence). The
 # container is privileged only so that it sees the runner's devices and can
 # change their ACLs (what a TUR service would do); Wine and every Windows
 # program run as the unprivileged user "tur". Packages are Fedora's only.
@@ -57,4 +58,5 @@ chmod -R a+rX "${work}/build"
 
 echo "== harness"
 python3 -I "${src}/harness.py" --build "${work}/build" --evidence "${work}/evidence" --user tur \
+    --hid-log "${work}/evidence/virtual-usb/hid-output.log" \
     --label "Fedora 45 container, $(wine --version 2>/dev/null)" ${TWD_ONLY:+--only "${TWD_ONLY}"}

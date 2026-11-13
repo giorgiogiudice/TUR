@@ -6,8 +6,9 @@ Wine's user-space driver host, against virtual USB devices.
 Runs as root (it grants and withdraws device access, as a TUR service would)
 and runs every Wine process as an ordinary user (--user). Expects:
 
-  * the gadgets of gadget/gadget.sh to be up (1209:0001 loopback,
-    1209:0002 source/sink, 1209:0003 HID) and /dev/hidg0 for the HID peer;
+  * the virtual USB devices of virtual-usb/usbip_devices.py to be plugged in
+    (1209:0001 loopback, 1209:0002 source/sink, 1209:0003 HID), and that
+    program's hid-output.log at --hid-log;
   * the output of build.sh in --build;
   * wine, wineserver, setfacl, setpriv and bwrap on PATH.
 
@@ -33,12 +34,10 @@ import os
 import pathlib
 import pwd
 import re
-import select
 import shlex
 import shutil
 import subprocess
 import sys
-import threading
 import time
 import traceback
 
@@ -136,7 +135,7 @@ class Harness:
         self.results: list[dict] = []
         self.counter = 0
         self.granted: set[str] = set()
-        self.peer: HidPeer | None = None
+        self.hid_log = pathlib.Path(args.hid_log) if args.hid_log else None
 
     # -------------------------------------------------------- running as the user
     def env(self, prefix: pathlib.Path, debug: str) -> dict:
@@ -271,51 +270,6 @@ class Scenario:
                 lines.append(f"{path.name}: {line}")
         write(self.dir / "excerpt.txt", "\n".join(lines[:600]) + ("\n(cut at 600 lines)\n" if len(lines) > 600 else "\n"))
         self.record["excerpt"] = str((self.dir / "excerpt.txt").relative_to(self.h.evidence))
-
-
-# ---------------------------------------------------------------- HID peer
-
-class HidPeer(threading.Thread):
-    """The device side of the HID gadget: sends input reports that start with
-    TURHID and a counter, and records every output report the host sends."""
-
-    def __init__(self, path: str = "/dev/hidg0") -> None:
-        super().__init__(daemon=True)
-        self.path = path
-        self.stop = threading.Event()
-        self.received: list[bytes] = []
-        self.sent = 0
-        self.error = None
-
-    def run(self) -> None:
-        try:
-            fd = os.open(self.path, os.O_RDWR | os.O_NONBLOCK)
-        except OSError as exc:
-            self.error = str(exc)
-            return
-        counter = 0
-        try:
-            while not self.stop.is_set():
-                report = (b"TURHID" + counter.to_bytes(4, "little")).ljust(32, b"\0")
-                try:
-                    os.write(fd, report)
-                    self.sent += 1
-                    counter += 1
-                except BlockingIOError:
-                    pass
-                except OSError as exc:
-                    self.error = f"write: {exc}"
-                    time.sleep(0.2)
-                ready, _, _ = select.select([fd], [], [], 0.05)
-                if ready:
-                    try:
-                        data = os.read(fd, 64)
-                        if data:
-                            self.received.append(data)
-                    except (BlockingIOError, OSError):
-                        pass
-        finally:
-            os.close(fd)
 
 
 # ---------------------------------------------------------------- the scenarios
@@ -489,27 +443,41 @@ wineserver -k; wineserver -w
     while now() < deadline and "check device-found PASS" not in read(sc.dir / "twdtest-soak.out"):
         time.sleep(1)
     time.sleep(5)
-    # The revocation a TUR service would do: take the ACL away (does nothing
-    # to an open file) and disconnect the device at its hub port, which ends
-    # every open usbfs file of it; the device comes back as a new device.
+    # The revocation a TUR service would do: take the ACL away (that does
+    # nothing to a file already open) and disconnect the device at its hub
+    # port, which ends every open usbfs file of it. If the port cannot be
+    # disabled or the device stays, a logical disconnect through sysfs.
     h.revoke(loop["node"])
-    port = None
     parent = os.path.dirname(loop["sysfs"])
     portnum = loop["name"].split("-")[-1].split(".")[-1]
-    for candidate in glob.glob(f"{parent}/*/*-port{portnum}/disable") + glob.glob(f"{parent}/*-port{portnum}/disable"):
-        port = candidate
+    candidates = glob.glob(f"{parent}/*/*-port{portnum}/disable") + glob.glob(f"{parent}/*-port{portnum}/disable")
     t_revoke = now()
     method = None
-    if port:
+
+    def gone() -> bool:
+        g = gadget(LOOPBACK)
+        return g is None or g["dev"] != loop["dev"]
+
+    if candidates:
         try:
-            write(pathlib.Path(port), "1")
-            method = f"port disable ({port})"
+            write(pathlib.Path(candidates[0]), "1")
+            deadline = now() + 15
+            while now() < deadline and not gone():
+                time.sleep(0.5)
+            if gone():
+                method = f"hub port disabled ({candidates[0]})"
+            else:
+                sc.note(f"port {candidates[0]} disabled, but the device stayed")
         except OSError as exc:
             sc.note(f"port disable failed: {exc}")
     if not method:
-        write(pathlib.Path(loop["sysfs"]) / "remove", "1")
-        method = "sysfs remove (logical disconnect)"
-    sc.note(f"revoked by {method}")
+        try:
+            write(pathlib.Path(loop["sysfs"]) / "remove", "1")
+            method = "logical disconnect (sysfs remove)"
+        except OSError as exc:
+            sc.note(f"sysfs remove failed: {exc}")
+            method = "none worked"
+    sc.note(f"revoked by: {method}")
     try:
         rc = proc.wait(timeout=180)
     except subprocess.TimeoutExpired:
@@ -521,16 +489,7 @@ wineserver -k; wineserver -w
     sc.check("application-saw-revocation", "check soak FAIL" in out,
              "the soak stopped: the application lost the device", expected=True)
     sc.check("application-not-hung", rc != "timeout", f"sandbox exit {rc}, {took:.1f} s after revocation")
-    # Bring the device back for the scenarios after this one.
-    if port and method.startswith("port"):
-        write(pathlib.Path(port), "0")
-    else:
-        subprocess.run(["sh", "-c", "echo '' > /sys/kernel/config/usb_gadget/twd_loopback/UDC; sleep 1; "
-                        "ls /sys/class/udc | sort | head -n1 > /sys/kernel/config/usb_gadget/twd_loopback/UDC"])
-    time.sleep(3)
-    back = gadget(LOOPBACK)
-    sc.note(f"device after re-enable: {back['node'] if back else 'absent'} (was {loop['node']})")
-    sc.check("device-back", back is not None, json.dumps(back))
+    sc.note(f"device afterwards: {json.dumps(gadget(LOOPBACK))}")
     sc.finish()
 
 
@@ -595,8 +554,6 @@ def s_hid(h: Harness) -> None:
         sc.check("hidraw-node", False, "the host made no hidraw node for the HID gadget")
         sc.finish()
         return
-    h.peer = HidPeer()
-    h.peer.start()
     h.revoke_all()
     h.boot(sc, "boot-init", init=True)
     rc = h.wine(sc, "hidtest-no-grant", [str(h.build / "hidtest.exe"), "1209", "0003", "8"])
@@ -604,15 +561,15 @@ def s_hid(h: Harness) -> None:
     h.grant(hidraw[0])
     write(sc.dir / "grant.txt", h.acl(hidraw[0]))
     h.boot(sc, "boot")
-    before = len(h.peer.received)
+    before = len(read(h.hid_log).splitlines()) if h.hid_log else 0
     rc = h.wine(sc, "hidtest", [str(h.build / "hidtest.exe"), "1209", "0003", "30"], timeout=180)
     sc.note(f"hidtest exit {rc}")
     sc.program_checks("hidtest", "HID")
     time.sleep(1)
-    got = [r for r in h.peer.received[before:] if r.startswith(b"TUROUT")]
+    received = read(h.hid_log).splitlines()[before:] if h.hid_log else []
+    got = [line for line in received if "TUROUT" in line]
     sc.check("output-report-delivered", bool(got),
-             f"gadget received {len(h.peer.received) - before} output reports; first: {got[0][:16] if got else b''!r}")
-    sc.note(f"peer sent {h.peer.sent} input reports; error {h.peer.error}")
+             f"the device received {len(received)} output reports; first with TUROUT: {got[0] if got else '-'}")
     h.kill(sc)
     h.revoke(hidraw[0])
     sc.finish()
@@ -624,9 +581,6 @@ def s_conflict(h: Harness) -> None:
     g = need_gadget(HIDPID)
     iface = g["interfaces"][0]["name"] if g["interfaces"] else None
     sc.note(f"interfaces before: {json.dumps(g['interfaces'])}")
-    if h.peer is None:
-        h.peer = HidPeer()
-        h.peer.start()
     h.grant(g["node"])
     h.boot(sc, "boot-bound")
     rc = h.wine(sc, "twdtest-bound", [str(h.build / "twdtest.exe"), "interrupt", "1209", "0003", "60"], timeout=300)
@@ -684,6 +638,7 @@ def main() -> int:
     ap.add_argument("--evidence", required=True)
     ap.add_argument("--user", default="tur")
     ap.add_argument("--label", default="")
+    ap.add_argument("--hid-log", default="", help="the virtual HID device's record of output reports")
     ap.add_argument("--only", default="", help="comma-separated scenario functions to run")
     args = ap.parse_args()
     if os.geteuid() != 0:
@@ -730,8 +685,6 @@ def main() -> int:
             if h.results:
                 h.results[-1]["error"] = text
             harness_failed = True
-    if h.peer:
-        h.peer.stop.set()
     h.revoke_all()
 
     write(h.evidence / "results.json", json.dumps({"label": args.label, "scenarios": h.results}, indent=2) + "\n")

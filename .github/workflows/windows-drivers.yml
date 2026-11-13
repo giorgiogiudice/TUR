@@ -5,12 +5,14 @@
 # host (winedevice.exe, ntoskrnl.exe, wineusb.sys, winebus.sys), never in a
 # kernel?
 #
-# On the runner: the kernel's own USB gadget framework makes three virtual
-# USB devices (dummy_hcd + configfs; tests/windows-drivers/gadget/gadget.sh):
-# a bulk loopback, a source/sink with vendor control requests, and a
-# vendor-defined HID device. Those are the only things loaded into the
-# runner's kernel: stock modules (dummy_hcd, libcomposite, usb_f_ss_lb,
-# usb_f_hid), nothing built here and no Windows driver.
+# On the runner: three virtual USB devices, emulated in user space by
+# tests/windows-drivers/virtual-usb/usbip_devices.py and plugged into the
+# kernel's USB/IP virtual host controller (vhci_hcd): a bulk loopback, a
+# source/sink with vendor control requests, and a vendor-defined HID device.
+# The runner's kernel (linux-azure) is built without dummy_hcd, so the
+# kernel's own gadget framework cannot be used. The only thing loaded into
+# the runner's kernel is the stock vhci-hcd module (with usbip-core):
+# nothing built here and no Windows driver.
 #
 # In a Fedora 45 container with Fedora 45's Wine: a WDM USB function driver
 # and test programs written for this experiment, a KMDF binding probe and a
@@ -44,6 +46,11 @@ concurrency:
   group: windows-drivers-${{ github.ref }}
   cancel-in-progress: true
 
+defaults:
+  run:
+    # -o pipefail: a step that pipes into tee fails when the command does.
+    shell: bash
+
 env:
   # Fedora 45's container image, by digest (tag 45 on 13 November 2026).
   FEDORA_IMAGE: registry.fedoraproject.org/fedora:45@sha256:fa773d10382c082ff2cccaf7982a5c162f11f296f91274b994357f2d3d473770
@@ -63,20 +70,23 @@ jobs:
 
       - name: What the runner's kernel offers for virtual USB devices
         run: |
-          sudo bash tests/windows-drivers/gadget/gadget.sh probe | tee "$WORK/evidence/kernel-probe.txt"
-          if ! modinfo dummy_hcd >/dev/null 2>&1; then
-            echo "dummy_hcd is not in the installed modules; installing the kernel's extra modules package" \
-              | tee -a "$WORK/evidence/kernel-probe.txt"
-            sudo apt-get update
-            sudo apt-get install -y "linux-modules-extra-$(uname -r)" 2>&1 | tail -n 5 | tee -a "$WORK/evidence/kernel-probe.txt"
-            sudo bash tests/windows-drivers/gadget/gadget.sh probe | tee -a "$WORK/evidence/kernel-probe.txt"
-          fi
+          sudo python3 -I tests/windows-drivers/virtual-usb/usbip_devices.py probe | tee "$WORK/evidence/kernel-probe.txt"
           { echo '### Kernel'; echo '```'; cat "$WORK/evidence/kernel-probe.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Virtual USB devices (dummy_hcd + configfs gadgets)
+      - name: Virtual USB devices (USB/IP, emulated in user space)
         run: |
-          sudo bash tests/windows-drivers/gadget/gadget.sh up 2>&1 | tee "$WORK/evidence/gadgets.txt"
-          { echo '### Virtual USB devices'; echo '```'; cat "$WORK/evidence/gadgets.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          mkdir -p "$WORK/evidence/virtual-usb"
+          sudo nohup python3 -I tests/windows-drivers/virtual-usb/usbip_devices.py run \
+            --log-dir "$WORK/evidence/virtual-usb" > "$WORK/evidence/virtual-usb/daemon.out" 2>&1 &
+          for _ in $(seq 1 60); do
+            [ -f "$WORK/evidence/virtual-usb/ready" ] && break
+            sleep 1
+          done
+          cat "$WORK/evidence/virtual-usb/daemon.out" "$WORK/evidence/virtual-usb/usbip-devices.log" || true
+          test -f "$WORK/evidence/virtual-usb/ready"
+          sudo python3 -I tests/windows-drivers/virtual-usb/usbip_devices.py show | tee "$WORK/evidence/devices.txt"
+          [ "$(cat "$WORK/evidence/virtual-usb/ready")" = 3 ]
+          { echo '### Virtual USB devices'; echo '```'; cat "$WORK/evidence/devices.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Let bubblewrap make user namespaces in the container
         # Ubuntu 24.04 denies unprivileged user namespaces to unconfined
@@ -100,10 +110,17 @@ jobs:
       - name: Kernel log and devices afterwards
         if: always()
         run: |
-          sudo dmesg | grep -iE 'usb|gadget|dummy|hid|configfs' | tail -n 400 > "$WORK/evidence/dmesg.txt" || true
-          sudo bash tests/windows-drivers/gadget/gadget.sh show > "$WORK/evidence/gadgets-after.txt" 2>&1 || true
+          sudo dmesg | grep -iE 'usb|vhci|hid' | tail -n 600 > "$WORK/evidence/dmesg.txt" || true
+          sudo python3 -I tests/windows-drivers/virtual-usb/usbip_devices.py show > "$WORK/evidence/devices-after.txt" 2>&1 || true
           sudo chown -R "$(id -u):$(id -g)" "$WORK" || true
           grep -E 'did not claim|usbfs|interface' "$WORK/evidence/dmesg.txt" | sort | uniq -c | sort -rn | head -n 20 || true
+
+      - name: Unplug the virtual devices
+        if: always()
+        run: |
+          sudo pkill -f usbip_devices.py || true
+          sleep 2
+          sudo chown -R "$(id -u):$(id -g)" "$WORK" || true
 
       - name: Results
         if: always()
@@ -124,6 +141,3 @@ jobs:
           path: ${{ runner.temp }}/twd/evidence/
           if-no-files-found: warn
 
-      - name: Remove the virtual devices
-        if: always()
-        run: sudo bash tests/windows-drivers/gadget/gadget.sh down || true

@@ -122,7 +122,18 @@ int wmain(int argc, wchar_t **argv)
         return ok ? 0 : 1;
     }
     if (!wcscmp(argv[1], L"diinstall")) {
-        ok = DiInstallDriverW(NULL, full, 0, &reboot);
+        // mingw-w64's import library for newdev.dll predates DiInstallDriverW,
+        // so it is looked up at run time, as installers that support old
+        // Windows versions do.
+        typedef BOOL(WINAPI * di_install_driver_fn)(HWND, const WCHAR *, DWORD, BOOL *);
+        HMODULE newdev = LoadLibraryW(L"newdev.dll");
+        di_install_driver_fn di_install_driver =
+            newdev ? (di_install_driver_fn)(void (*)(void))GetProcAddress(newdev, "DiInstallDriverW") : NULL;
+        if (!di_install_driver) {
+            wprintf(L"TWDINST DiInstallDriverW not found in newdev.dll\n");
+            return 1;
+        }
+        ok = di_install_driver(NULL, full, 0, &reboot);
         wprintf(L"TWDINST DiInstallDriverW %ls ok=%d error=%lu reboot=%d\n", full, ok, ok ? 0 : GetLastError(),
                 reboot);
         list_files(L"C:\\windows\\inf\\oem*.inf");
