@@ -25,6 +25,7 @@ tur-diag status [--json]
 tur-diag collect --output FILE.tar.zst [--since-boot] [--profile default|technical]
 tur-diag verify-bundle FILE
 tur-diag report prepare|send|list|status ...     (problem-reports.md, section 2)
+tur-diag heal status|catalogue|explain|scan|apply|undo|notices|report ...   (self-healing.md)
 ```
 
 - `status` prints the TUR build (from `/usr/lib/tur/release`), source revision,

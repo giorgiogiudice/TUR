@@ -211,7 +211,8 @@ pub enum FakeEntry {
     Link(String),
 }
 
-type Answer = Result<CommandOutput, RunError>;
+/// What a command of a [`FakeMachine`] answers.
+pub type Answer = Result<CommandOutput, RunError>;
 
 /// A machine that answers from tables. For tests.
 ///
