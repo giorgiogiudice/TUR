@@ -48,6 +48,9 @@ LOOPBACK, SOURCESINK, HIDPID = 0x0001, 0x0002, 0x0003
 DEBUG_FULL = ("+wineusb,+plugplay,+setupapi,+usbd,+hid,+loaddll,warn+debugstr,"
               "+ntoskrnl,err+all,fixme+all")
 DEBUG_QUIET = "-all"
+# Creating a prefix installs all of wine.inf; +setupapi there is megabytes of
+# noise and minutes of time.
+DEBUG_INIT = "+wineusb,+plugplay,+loaddll,warn+debugstr,err+all"
 
 EXCERPT_PATTERNS = [
     r"wineusb:", r"plugplay:", r"usbd:", r"AddDevice", r"Failed to", r"Unable to",
@@ -179,7 +182,8 @@ class Harness:
         """Start the prefix's wineserver, services and winedevice. Their debug
         output goes to NAME.err for as long as they run."""
         self.kill(sc)
-        return self.wine(sc, name, ["wineboot", "-i" if init else "-u"], debug, timeout=600)
+        return self.wine(sc, name, ["wineboot", "-i" if init else "-u"], DEBUG_INIT if init else debug,
+                         timeout=600)
 
     def winpath(self, path: pathlib.Path) -> str:
         return "Z:" + str(path).replace("/", "\\")
@@ -362,9 +366,8 @@ def s_environment(h: Harness) -> None:
     }.items():
         r = subprocess.run(cmd, capture_output=True, text=True)
         info[key] = (r.stdout.strip() or r.stderr.strip())
-    info["wine-drivers"] = sorted(os.path.basename(p) for p in
-                                  glob.glob("/usr/lib*/wine/x86_64-windows/*.sys") +
-                                  glob.glob("/usr/lib/x86_64-linux-gnu/wine/x86_64-windows/*.sys"))
+    info["wine-drivers"] = sorted({os.path.basename(p) for p in
+                                   glob.glob("/usr/lib*/**/x86_64-windows/*.sys", recursive=True)})
     info["wine-has-wdfldr"] = any("wdfldr" in d.lower() or "wdf01000" in d.lower() for d in info["wine-drivers"])
     for pid in (LOOPBACK, SOURCESINK, HIDPID):
         info[f"gadget-{pid:04x}"] = gadget(pid)
@@ -417,6 +420,25 @@ def s_wdm(h: Harness, pid: int, mode: str, name: str, title: str, debug: str = D
         logs = sc.logs()
         sc.check("driver-entry-ran", "twdusb: DriverEntry" in logs, "twdusb.sys's DbgPrint from DriverEntry, in Wine's log")
         sc.check("add-device-ran", "twdusb: AddDevice" in logs, "twdusb.sys's AddDevice was called by Wine's PnP manager")
+    h.kill(sc)
+    sc.finish()
+
+
+def s_winusb(h: Harness) -> None:
+    sc = h.scenario("winusb", "A WinUSB-based program against Wine's winusb.dll", prefix="A")
+    if not (h.build / "winusbtest.exe").exists():
+        sc.check("built", False, "winusbtest.exe was not built")
+        sc.finish()
+        return
+    g = need_gadget(LOOPBACK)
+    h.grant(g["node"])
+    h.boot(sc, "boot")
+    rc = h.wine(sc, "winusbtest", [str(h.build / "winusbtest.exe"), "60"], timeout=180)
+    sc.note(f"winusbtest exit {rc}")
+    sc.program_checks("winusbtest", "WINUSB")
+    err = read(sc.dir / "winusbtest.err")
+    stub = [l for l in err.splitlines() if "unimplemented function" in l or "winusb" in l.lower()]
+    sc.check("winusb-implemented", rc == 0, " | ".join(stub[:3])[:500], expected=False)
     h.kill(sc)
     sc.finish()
 
@@ -683,6 +705,7 @@ def main() -> int:
                                          "The same without Wine debug output, for timings", DEBUG_QUIET)),
         ("sourcesink", lambda: s_wdm(h, SOURCESINK, "sourcesink", "wdm-sourcesink",
                                      "twdusb.sys on the source/sink gadget: vendor control and patterned bulk")),
+        ("winusb", lambda: s_winusb(h)),
         ("sandbox", lambda: s_sandbox(h)),
         ("pnputil", lambda: s_pnputil(h)),
         ("kmdfprobe", lambda: s_kmdf(h, "kmdfprobe.sys", "kmdfprobe.inf", "kmdf-probe",

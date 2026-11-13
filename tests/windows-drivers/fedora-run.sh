@@ -32,15 +32,18 @@ id tur >/dev/null 2>&1 || useradd -m -u 1001 tur
     echo "wine: $(wine --version 2>&1)"
     echo "packages:"
     rpm -q wine wine-core wine-filesystem libusb1 bubblewrap mingw64-gcc mingw64-headers mingw64-crt \
-        mingw64-binutils systemd-libs | sed 's/^/  /'
+        mingw64-binutils systemd-libs | sed 's/^/  /' || true
+    pe="$(dirname "$(find /usr/lib64 /usr/lib -name wineusb.sys -path '*x86_64-windows*' 2>/dev/null | head -n 1)")"
+    unix="$(dirname "$(find /usr/lib64 /usr/lib -name wineusb.so -path '*x86_64-unix*' 2>/dev/null | head -n 1)")"
+    echo "wine PE directory: ${pe}"
     echo "wine drivers (*.sys) shipped:"
-    ls /usr/lib64/wine/x86_64-windows/*.sys 2>/dev/null | xargs -n1 basename | tr '\n' ' '
+    find "${pe}" -maxdepth 1 -name '*.sys' -printf '%f ' 2>/dev/null || true
     echo
-    echo "wine unix libraries for drivers:"
-    ls /usr/lib64/wine/x86_64-unix/ 2>/dev/null | grep -E 'wineusb|winebus|hid' | tr '\n' ' '
+    echo "wine Unix libraries of drivers (${unix}):"
+    find "${unix}" -maxdepth 1 \( -name 'wineusb*' -o -name 'winebus*' -o -name 'hid*' \) -printf '%f ' 2>/dev/null || true
     echo
     echo "wineusb.so links:"
-    ldd /usr/lib64/wine/x86_64-unix/wineusb.so 2>&1 | grep -E 'usb|udev' | sed 's/^/  /'
+    ldd "${unix}/wineusb.so" 2>&1 | grep -E 'usb|udev' | sed 's/^/  /' || true
 } | tee "${work}/evidence/versions.txt"
 
 echo "== build"

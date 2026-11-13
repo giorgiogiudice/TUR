@@ -14,6 +14,7 @@
 #   twdinst.exe     installs driver packages (app/twdinst.c)
 #   twdtest.exe     talks to twdusb.sys (app/twdtest.c)
 #   hidtest.exe     talks to a HID device through hid.dll (app/hidtest.c)
+#   winusbtest.exe  calls WinUsb_Initialize, Wine's own winusb.dll (app/winusbtest.c)
 # and the INF files beside the drivers. OUTPUT_DIR/imports.txt lists what
 # each image imports.
 set -euo pipefail
@@ -46,12 +47,15 @@ echo "== programs"
 "${cc}" "${common[@]}" -municode -o "${out}/twdinst.exe" "${here}/app/twdinst.c" -lsetupapi -lnewdev
 "${cc}" "${common[@]}" -o "${out}/twdtest.exe" "${here}/app/twdtest.c" -lsetupapi
 "${cc}" "${common[@]}" -o "${out}/hidtest.exe" "${here}/app/hidtest.c" -lsetupapi -lhid
+"${cc}" "${common[@]}" -o "${out}/winusbtest.exe" "${here}/app/winusbtest.c" -lsetupapi -lwinusb ||
+    echo "winusbtest.exe: not built (the harness records it)"
 
 cp "${here}/driver/twdusb.inf" "${here}/driver/kmdfprobe.inf" "${out}/"
 
 {
-    for image in twdusb.sys kmdfprobe.sys twdinst.exe twdtest.exe hidtest.exe; do
+    for image in twdusb.sys kmdfprobe.sys twdinst.exe twdtest.exe hidtest.exe winusbtest.exe; do
         echo "== ${image}"
+        [ -f "${out}/${image}" ] || { echo "  (not built)"; continue; }
         "${objdump}" -p "${out}/${image}" | grep -E '^(Subsystem|AddressOfEntryPoint|ImageBase)' || true
         "${objdump}" -p "${out}/${image}" | awk '/DLL Name:/{print "  " $0} /^\t[0-9a-f]+ +[0-9]+ +[A-Za-z_]/{print "    " $NF}'
     done
