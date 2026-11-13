@@ -699,10 +699,20 @@ keep_log() {
         return 1
     fi
     mkdir -p "${mnt}"
-    if ! mount -t ext4 -o nodev,nosuid,noexec "${root}" "${mnt}" 2>> "${LOG}"; then
-        mark "log-kept result=no reason=mount-failed"
+    # Whatever still holds the new root after bootc (run 43363925029: the
+    # mount below came back read-only).
+    mark "log-keep before-mount=\"$(findmnt -n -S "${root}" -o TARGET,OPTIONS 2> /dev/null | tr '\n' ';')\" device_read_only=$(blockdev --getro "${root}" 2> /dev/null)"
+    if ! mount -t ext4 -o rw,nodev,nosuid,noexec "${root}" "${mnt}" 2>> "${LOG}"; then
+        mark "log-kept result=no reason=mount-failed $(tail -n 1 "${LOG}")"
         return 1
     fi
+    if ! touch "${mnt}/.tur-installer-write-test" 2> /dev/null; then
+        # The filesystem is still held read-only by an earlier mount of
+        # bootc's. Make it writable for the time it takes to copy the log.
+        mount -o remount,rw "${mnt}" 2>> "${LOG}"
+        mark "log-keep remount-rw options=$(findmnt -n -o OPTIONS "${mnt}" 2> /dev/null)"
+    fi
+    rm -f "${mnt}/.tur-installer-write-test"
     for candidate in "${mnt}"/ostree/deploy/*/var; do
         if [ -d "${candidate}" ]; then var="${candidate}"; break; fi
     done
@@ -719,7 +729,10 @@ keep_log() {
     fi
     if [ -z "${label}" ]; then
         for contexts in "${mnt}"/ostree/deploy/*/deploy/*/etc/selinux/targeted/contexts/files/file_contexts \
-            "${mnt}"/ostree/deploy/*/deploy/*/usr/etc/selinux/targeted/contexts/files/file_contexts; do
+            "${mnt}"/ostree/deploy/*/deploy/*/usr/etc/selinux/targeted/contexts/files/file_contexts \
+            /etc/selinux/targeted/contexts/files/file_contexts; do
+            # The last is the installer environment's own policy, which
+            # build-medium.sh checks is the installed image's, file by file.
             [ -f "${contexts}" ] || continue
             label="$(awk '$1 == "/var/log(/.*)?" { print $NF; exit }' "${contexts}")"
             if [ -n "${label}" ]; then
