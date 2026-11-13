@@ -8,10 +8,11 @@
 # contains tur.boot_test, which tests/boot/build-disk.sh sets at install time.
 # guest-agent observes the boot test's three boots and, in the second, has
 # component-checks run TUR's programs as an ordinary user; scenario-agent takes
-# over in the boot-health scenarios (tests/boot/rollback.py). A second unit,
-# tur-desktop-check, runs only in the extra boot of tests/boot/splash.py
-# (kernel argument tur.desktop_check) and records what a new account's
-# desktop got (task D-04).
+# over in the boot-health scenarios (tests/boot/rollback.py), and
+# signed-update-agent in the release workflow's test of signed updates
+# (tests/boot/signed-update.py). A second unit, tur-desktop-check, runs only
+# in the extra boot of tests/boot/splash.py (kernel argument
+# tur.desktop_check) and records what a new account's desktop got (task D-04).
 #
 # The build context is the repository root, filtered by
 # Containerfile.containerignore beside this file.
@@ -44,7 +45,8 @@ COPY services/tur-device-manager/tests/fixtures/laptop/ /usr/share/tur-pax-e2e/l
 
 RUN set -eu; \
     chmod 0755 /usr/libexec/tur-boot-test/guest-agent /usr/libexec/tur-boot-test/scenario-agent \
-        /usr/libexec/tur-boot-test/component-checks /usr/libexec/tur-boot-test/make-pe-fixture; \
+        /usr/libexec/tur-boot-test/component-checks /usr/libexec/tur-boot-test/make-pe-fixture \
+        /usr/libexec/tur-boot-test/signed-update-agent; \
     install -m 0644 /usr/share/tur-pax-e2e/repo/tests/pax/probe_sockets.py /usr/share/tur-pax-e2e/probe_sockets.py; \
     install -m 0755 /usr/share/tur-pax-e2e/repo/tests/pax/tur-pax-test-tool /usr/bin/tur-pax-test-tool; \
     find /usr/share/tur-pax-e2e -type d -exec chmod 0755 {} +; \

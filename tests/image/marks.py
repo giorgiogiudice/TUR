@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
 """Fail if Fedora's marks are in a TUR image (desktop-experience.md, 12.5).
 
-    tests/image/marks.py IMAGE OUT_DIR [--base BASE_REF]
+    tests/image/marks.py IMAGE OUT_DIR [--base BASE_REF] [--layers OCI_LAYOUT[:REF]]
 
 Looks at the built image from four sides and fails if any finds something
 the allow-list (tests/image/marks-allowlist.tsv) does not account for:
@@ -16,6 +16,22 @@ the allow-list (tests/image/marks-allowlist.tsv) does not account for:
   from the base image. This one has no allow-list;
 - packages: Fedora's logo and release packages must not be installed.
 
+Those four look at the image as a container sees it: the layers merged. A
+file that a later layer deletes or replaces is still in the earlier layer,
+and whoever pulls the image downloads it (desktop-experience.md, 12.1, item
+3). With --layers, every layer of the same image, read from an OCI layout
+(the published image, scripts/release/), is also checked, as the tar stream
+it is:
+
+- whiteouts: no layer may delete anything a layer below it holds;
+- shadowed files: no file or link may be in more than one layer;
+- artwork and names: the two checks above, on the files of each layer.
+
+Without whiteouts and shadowed files, the layers hold exactly the files of
+the merged image, so the text, initramfs and package checks of the merged
+image hold for every layer as well. The base's own layers fail the first two
+(Fedora's logos are in them), which is why the published image is re-chunked.
+
 The allow-list is table C of section 12.4 written down: each line is a kind
 (text or name), a path pattern and the reason it may stay. A pattern that
 matched nothing is reported, so that the list stays as short as the image
@@ -27,11 +43,14 @@ from __future__ import annotations
 
 import argparse
 import fnmatch
+import gzip
+import hashlib
 import json
 import os
 import pathlib
 import subprocess
 import sys
+import tarfile
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
 ALLOWLIST = pathlib.Path(__file__).resolve().parent / "marks-allowlist.tsv"
@@ -40,6 +59,13 @@ FORBIDDEN_PACKAGES = [
     "fedora-release-identity-kinoite", "fedora-release-ostree-desktop", "fedora-release-notes",
     "fedora-bookmarks", "plasma-welcome-fedora",
 ]
+# Where artwork lives: file names are checked here.
+ART_DIRS = ["/usr/share/icons", "/usr/share/pixmaps", "/usr/share/plymouth", "/usr/share/wallpapers",
+            "/usr/share/backgrounds", "/usr/share/plasma", "/usr/share/anaconda", "/usr/share/firstboot",
+            "/usr/share/sddm", "/usr/share/plasmalogin", "/usr/share/applications",
+            "/usr/share/fedora-logos", "/usr/share/oxygen"]
+# Checksums against fedora-logos are checked in a wider set.
+DIGEST_DIRS = ART_DIRS + ["/usr/share/metainfo", "/usr/share/tur", "/etc"]
 
 # Runs inside the image, with the image's own python3. Prints one JSON object.
 SCANNER = r'''
@@ -49,13 +75,8 @@ TEXT_ROOTS = ["/etc", "/usr/bin", "/usr/sbin", "/usr/lib", "/usr/lib64", "/usr/l
 SKIP_DIRS = ["/usr/share/doc", "/usr/share/licenses", "/usr/share/man", "/usr/share/info", "/usr/share/locale",
              "/usr/share/gtk-doc", "/usr/share/help", "/usr/lib/modules", "/usr/lib/firmware", "/usr/lib/sysimage",
              "/usr/lib/.build-id", "/usr/lib/debug"]
-# Where artwork lives: file names are checked here.
-ART_DIRS = ["/usr/share/icons", "/usr/share/pixmaps", "/usr/share/plymouth", "/usr/share/wallpapers",
-            "/usr/share/backgrounds", "/usr/share/plasma", "/usr/share/anaconda", "/usr/share/firstboot",
-            "/usr/share/sddm", "/usr/share/plasmalogin", "/usr/share/applications",
-            "/usr/share/fedora-logos", "/usr/share/oxygen"]
-# Checksums against fedora-logos are checked in a wider set.
-DIGEST_DIRS = ART_DIRS + ["/usr/share/metainfo", "/usr/share/tur", "/etc"]
+ART_DIRS = config["art_dirs"]
+DIGEST_DIRS = config["digest_dirs"]
 fedora_digests = set(config["fedora_logos_digests"])
 
 def grep(roots, skip):
@@ -167,11 +188,18 @@ def podman() -> list[str]:
 
 
 def run(args: list[str], **kwargs) -> str:
-    return subprocess.run(args, check=True, capture_output=True, text=True, **kwargs).stdout
+    result = subprocess.run(args, capture_output=True, text=True, **kwargs)
+    if result.returncode != 0:
+        sys.exit(f"{' '.join(args[:6])} ... failed ({result.returncode}): {result.stderr.strip()[-1500:]}")
+    return result.stdout
 
 
 def fedora_logos_digests(base: str) -> dict[str, str]:
     """SHA-256 of each file of fedora-logos, as the base image's package database records it."""
+    # Where the image was not just built (the release workflow), the base is
+    # not in the store yet: fetch it by its pinned digest.
+    if subprocess.run(podman() + ["image", "exists", base], capture_output=True).returncode != 0:
+        run(podman() + ["pull", "--quiet", base])
     out = run(podman() + ["run", "--rm", "--network", "none", base, "rpm", "-q", "--dump", "fedora-logos"])
     digests = {}
     for line in out.splitlines():
@@ -182,6 +210,147 @@ def fedora_logos_digests(base: str) -> dict[str, str]:
     if len(digests) < 50:
         sys.exit(f"only {len(digests)} file digests of fedora-logos found in the base: the check would see nothing")
     return digests
+
+
+def open_blob(path: pathlib.Path):
+    """A layer blob as an uncompressed stream, whatever its compression."""
+    with open(path, "rb") as stream:
+        magic = stream.read(4)
+    if magic[:2] == b"\x1f\x8b":
+        return gzip.open(path, "rb"), None
+    if magic == b"\x28\xb5\x2f\xfd":
+        process = subprocess.Popen(["zstd", "-dc", str(path)], stdout=subprocess.PIPE)
+        return process.stdout, process
+    return open(path, "rb"), None
+
+
+def layer_name(member: tarfile.TarInfo) -> str:
+    name = member.name
+    while name.startswith("./"):
+        name = name[2:]
+    return "/" + name.strip("/")
+
+
+# The one file rpm-ostree's chunked format writes into every layer: OSTree's
+# repository configuration (measured in release run 43356225989: in all 65
+# layers; no other file was in two). Accepted only when every copy has the
+# same bytes, so that no copy hides another.
+REPEATED_BY_CHUNKING = {"/sysroot/ostree/repo/config"}
+
+
+def self_test() -> int:
+    """The layer scan on a small layout made here: what it must find, and what it must accept."""
+    import io
+    import tempfile
+    with tempfile.TemporaryDirectory() as root:
+        os.makedirs(f"{root}/blobs/sha256")
+
+        def put(data: bytes) -> dict:
+            digest = hashlib.sha256(data).hexdigest()
+            pathlib.Path(f"{root}/blobs/sha256/{digest}").write_bytes(data)
+            return {"digest": "sha256:" + digest, "size": len(data)}
+
+        def layer(files: list[tuple[str, bytes | None]], compress: bool) -> dict:
+            raw = io.BytesIO()
+            with tarfile.open(fileobj=raw, mode="w") as archive:
+                for name, data in files:
+                    info = tarfile.TarInfo(name)
+                    if data is None:
+                        info.type = tarfile.DIRTYPE
+                    else:
+                        info.size = len(data)
+                    archive.addfile(info, io.BytesIO(data) if data is not None else None)
+            return put(gzip.compress(raw.getvalue()) if compress else raw.getvalue())
+
+        config = b"[core]\nrepo_version=1\n"
+        layers = [
+            layer([("usr/", None), ("usr/share/icons/a.png", b"a"), ("sysroot/ostree/repo/config", config),
+                   ("usr/share/pixmaps/fedora-logo-1.png", b"generic"), ("etc/x", b"one")], True),
+            layer([("./usr/share/icons/b.png", b"b"), ("sysroot/ostree/repo/config", config),
+                   ("usr/share/pixmaps/fedora-own.png", b"x"), ("usr/share/tur/art", b"LOGO")], False),
+            layer([("etc/x", b"two"), ("usr/share/icons/.wh.a.png", b""),
+                   ("sysroot/ostree/repo/config", config + b"changed\n")], True),
+        ]
+        manifest = put(json.dumps({"schemaVersion": 2, "config": put(b"{}"), "layers": layers}).encode())
+        pathlib.Path(f"{root}/index.json").write_text(json.dumps({"schemaVersion": 2, "manifests": [
+            dict(manifest, annotations={"org.opencontainers.image.ref.name": "latest"})]}))
+        logos = {hashlib.sha256(b"LOGO").hexdigest(): "/usr/share/pixmaps/fedora-logo.png"}
+        found = scan_layers(f"{root}:latest", logos, load_allowlist())["findings"]
+    want = [
+        "layer 1: named after Fedora: /usr/share/pixmaps/fedora-own.png",
+        "layer 1: /usr/share/tur/art is /usr/share/pixmaps/fedora-logo.png of fedora-logos",
+        "layer 2: /etc/x is also in layer 0: one hides the other",
+        "layer 2: deletes /usr/share/icons/a.png (a whiteout): a layer below holds what this image does not show",
+        "layer 2: /sysroot/ostree/repo/config differs from its copy in layer 1",
+    ]
+    ok = sorted(found) == sorted(want)
+    print("self-test:", "passed" if ok else "FAILED", *found, sep="\n  ")
+    return 0 if ok else 1
+
+
+def scan_layers(layout: str, digests: dict[str, str], entries: list[dict]) -> dict:
+    """Every layer of the image in an OCI layout, file by file."""
+    directory, _, ref = layout.partition(":")
+    root = pathlib.Path(directory)
+    blob = lambda digest: root / "blobs" / digest.split(":")[0] / digest.split(":")[1]  # noqa: E731
+    manifests = json.loads((root / "index.json").read_text())["manifests"]
+    if ref:
+        manifests = [m for m in manifests if m.get("annotations", {}).get("org.opencontainers.image.ref.name") == ref]
+    if len(manifests) != 1:
+        sys.exit(f"{layout}: expected one image, found {len(manifests)}")
+    manifest = json.loads(blob(manifests[0]["digest"]).read_text())
+    if "layers" not in manifest:
+        sys.exit(f"{layout}: not an image manifest (an index of several images?)")
+    holder: dict[str, int] = {}
+    copies: dict[str, set[str]] = {}
+    layers, findings = [], []
+    for number, layer in enumerate(manifest["layers"]):
+        stream, process = open_blob(blob(layer["digest"]))
+        files = links = dirs = size = 0
+        with tarfile.open(fileobj=stream, mode="r|") as archive:
+            for member in archive:
+                path = layer_name(member)
+                base = os.path.basename(path)
+                if base.startswith(".wh."):
+                    findings.append(f"layer {number}: deletes {os.path.dirname(path)}/{base[4:]} (a whiteout): "
+                                    "a layer below holds what this image does not show")
+                    continue
+                if member.isdir():
+                    dirs += 1
+                    continue
+                if path in REPEATED_BY_CHUNKING and member.isfile():
+                    # Accepted only as the same bytes in every layer: then
+                    # no copy hides anything.
+                    data = archive.extractfile(member).read()
+                    copies.setdefault(path, set()).add(hashlib.sha256(data).hexdigest())
+                    if len(copies[path]) > 1:
+                        findings.append(f"layer {number}: {path} differs from its copy in layer {holder[path]}")
+                elif path in holder:
+                    findings.append(f"layer {number}: {path} is also in layer {holder[path]}: one hides the other")
+                holder[path] = number
+                if member.isfile():
+                    files += 1
+                    size += member.size
+                else:
+                    links += 1
+                if "fedora" in base.lower() and any(path.startswith(d + "/") for d in ART_DIRS):
+                    if not allowed(entries, "name", path):
+                        findings.append(f"layer {number}: named after Fedora: {path}")
+                if member.isfile() and member.size and any(path.startswith(d + "/") for d in DIGEST_DIRS):
+                    h = hashlib.sha256()
+                    data = archive.extractfile(member)
+                    for chunk in iter(lambda: data.read(1 << 20), b""):
+                        h.update(chunk)
+                    if h.hexdigest() in digests:
+                        findings.append(f"layer {number}: {path} is {digests[h.hexdigest()]} of fedora-logos")
+        stream.close()
+        if process is not None and process.wait() != 0:
+            findings.append(f"layer {number}: {layer['digest']} could not be decompressed")
+        layers.append({"layer": number, "digest": layer["digest"], "media_type": layer.get("mediaType"),
+                       "compressed_bytes": layer.get("size"), "files": files, "links": links,
+                       "directories": dirs, "file_bytes": size})
+    return {"layout": layout, "manifest": manifests[0]["digest"], "layers": layers,
+            "paths": len(holder), "findings": findings}
 
 
 def load_allowlist() -> list[dict]:
@@ -205,10 +374,14 @@ def allowed(entries: list[dict], kind: str, path: str) -> dict | None:
 
 
 def main() -> int:
+    if sys.argv[1:] == ["--self-test"]:
+        return self_test()
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("image")
     ap.add_argument("out")
     ap.add_argument("--base", help="the base image (default: the pin in image/base.lock)")
+    ap.add_argument("--layers", metavar="OCI_LAYOUT[:REF]",
+                    help="also check every layer of the same image, read from this OCI layout")
     args = ap.parse_args()
     out = pathlib.Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -220,10 +393,12 @@ def main() -> int:
         base = f"{lock['BASE_IMAGE']}@{lock['BASE_DIGEST']}"
 
     digests = fedora_logos_digests(base)
-    config = json.dumps({"fedora_logos_digests": sorted(digests), "forbidden": FORBIDDEN_PACKAGES})
+    config = json.dumps({"fedora_logos_digests": sorted(digests), "forbidden": FORBIDDEN_PACKAGES,
+                         "art_dirs": ART_DIRS, "digest_dirs": DIGEST_DIRS})
     scan = json.loads(run(podman() + ["run", "--rm", "-i", "--network", "none", args.image,
                                       "python3", "-", config], input=SCANNER))
     entries = load_allowlist()
+    layers = scan_layers(args.layers, digests, load_allowlist()) if args.layers else None
 
     failures: list[str] = []
     rows: list[str] = []
@@ -249,6 +424,11 @@ def main() -> int:
         failures.append(f"the initramfs could not be unpacked: {initrd.get('error', '')[-400:]}")
     elif 'NAME="TUR"' not in initrd.get("release", ""):
         failures.append("the initramfs's os-release does not name TUR")
+    if layers is not None:
+        failures += layers["findings"]
+        for layer in layers["layers"]:
+            rows.append(f"layer {layer['layer']:3}  {layer['digest'][:19]}  {layer['files']} files, "
+                        f"{layer['links']} links, {layer['file_bytes']} bytes")
     unused = [e for e in entries if not e["used"]]
 
     report = {
@@ -262,6 +442,7 @@ def main() -> int:
         "forbidden_installed": scan["forbidden_installed"],
         "failures": failures,
         "unused_allowlist_lines": [f"{e['line']}: {e['kind']} {e['pattern']}" for e in unused],
+        "layers": layers,
         "scan": scan,
     }
     (out / "marks.json").write_text(json.dumps(report, indent=2) + "\n")
@@ -275,8 +456,12 @@ def main() -> int:
         f"- files containing \"Fedora\": {report['text_hits']} in the image, "
         f"{report['initramfs_text_hits']} in the initramfs; named after Fedora: {report['name_hits']}",
         f"- allow-list lines that matched nothing: {len(unused)}",
-        "",
     ]
+    if layers is not None:
+        md.append(f"- every layer checked: {len(layers['layers'])} layers of {layers['manifest'][:19]}, "
+                  f"{layers['paths']} files and links, {len(layers['findings'])} finding(s) "
+                  "(whiteouts, shadowed files, artwork, names)")
+    md.append("")
     md += [f"- {f}" for f in failures[:60]]
     (out / "marks.md").write_text("\n".join(md) + "\n")
     print("\n".join(rows))

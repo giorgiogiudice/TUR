@@ -1,0 +1,29 @@
+SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0 (this file only)
+
+What this computer trusts for TUR's updates (ADR-0023;
+docs/architecture/publishing.md in the TUR repository).
+
+The container policy, /usr/share/containers/policy.json, accepts an image
+named ghcr.io/giorgiogiudice/tur only with a sigstore signature that verifies
+with release.pub and is recorded in Sigstore's public transparency log, whose
+key is rekor.pub. Images from anywhere else are not affected.
+
+release.pub   TUR's release key, the public half. Its private half is held
+              by the release workflow on GitHub and nowhere else. Absent until
+              the project's owner creates it: until then every image from
+              ghcr.io/giorgiogiudice/tur is refused.
+rekor.pub     The public key of Sigstore's Rekor transparency log at
+              https://rekor.sigstore.dev, as Sigstore's signed trust root
+              names it. The policy uses it to check offline that a signature
+              was entered in the public log.
+fulcio.crt    The certificate chain of Sigstore's Fulcio certificate
+              authority at https://fulcio.sigstore.dev. Each published image
+              also carries a keyless signature made with the release
+              workflow's own identity; this chain verifies it. The container
+              libraries in this image cannot yet match a workflow identity
+              (they match an e-mail address only), so the policy does not
+              use it.
+
+rekor.pub and fulcio.crt are Sigstore's public trust data, copied unchanged
+from Sigstore's trust root (scripts/release/trust-roots.py); they are not
+under the TUR licence.

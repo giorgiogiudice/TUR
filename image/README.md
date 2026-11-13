@@ -12,6 +12,7 @@ The TUR operating system is one bootc container image, defined by
 | `programs.sh` | What the build stage runs: fetch the crates, compile the programs, gather what goes with them |
 | `base.lock` | The pinned base image: repository, tag, digest, version |
 | `branding/` | What replaces Fedora's marks: the script the build runs, the pinned replacement packages, Firefox's policy (section "Fedora's marks") |
+| `signing/` | The script that adds TUR's rule to the container policy at build time (section "Signed updates") |
 | `rootfs/` | Files copied into the image. Everything lives under `/usr` |
 | `third-party-licensed/` | Files that are **not** under the TUR licence, each directory with its own licence and README |
 
@@ -164,6 +165,25 @@ idle timeout, and systemd stops a unit that requires the mount when it unmounts
 it. The units are ordered after the mount instead
 ([TUR-005](../docs/reports/TUR-005.md)).
 
+## Signed updates
+
+What the image carries for [ADR-0023](../docs/adr/0023-publishing-signed-updates.md);
+the design as built, and how publishing is switched on, is
+[publishing.md](../docs/architecture/publishing.md).
+
+| In the image | Source | Purpose |
+|---|---|---|
+| `/usr/share/containers/policy.json` | the base's vendor policy, plus one rule added by [`signing/policy.py`](signing/policy.py) in a `RUN` of the `Containerfile` | An image named `ghcr.io/giorgiogiudice/tur` is accepted only with a sigstore signature by TUR's release key that is entered in Sigstore's public Rekor log. Every other source, the `oci:` and `containers-storage:` transports and the default keep the base's policy |
+| `/usr/share/containers/registries.d/tur.yaml` | `rootfs/` | Signatures of that repository are sigstore attachments beside the image |
+| `/usr/share/tur/signing/rekor.pub`, `fulcio.crt` | `rootfs/`, from Sigstore's trust root (`scripts/release/trust-roots.py`) | The Rekor log's key; Fulcio's chain for the keyless signature |
+| `/usr/share/tur/signing/release.pub` | the owner, when publishing is switched on | TUR's release key. Absent until then: every image of the repository is refused |
+
+Nothing is written under `/etc`: the base ships its policy as a vendor file
+in `/usr/share/containers` and no `/etc/containers/policy.json`, which an
+administrator may still create. The build fails if the base already has a
+rule for the repository or if anything else in its policy would change; the
+smoke test checks the rule, the files, and that the policy parses.
+
 ## What CI produces
 
 | Artifact | Content |
@@ -173,6 +193,7 @@ it. The units are ordered after the mount instead
 | `licences.txt` | Every licence expression of the RPM packages, with a count |
 | `image-crates.csv`, `crates.tsv` | The crates compiled into TUR's programs, as kept in [`docs/dependencies/image-crates.csv`](../docs/dependencies/image-crates.csv), and the image's own list |
 | `identifiers.md`, `identifiers.json` | The names the policy engine has built in, held against the desktop files, programs and units of the image (informational) |
+| `tur-image-oci` (artifact of its own, kept five days) | The tested image as an OCI archive, with its image ID, build ID and source revision: what the release workflow publishes ([publishing.md](../docs/architecture/publishing.md), section 3) |
 
 `scripts/sbom-licences.py sbom.spdx.json` turns the SBOM into the package and
 licence list kept in
@@ -225,9 +246,11 @@ disk once more with the splash shown and a user signed in, and fails if the
 text on any screenshot names Fedora (`tests/boot/splash.py`,
 `tests/boot/screenshot-text.py`).
 
-Not done here: the image's lower layers still contain the base's files,
-Fedora's logos among them, until a published image is squashed or re-chunked
-(design 12.1, item 3); the time servers are still Fedora's NTP pool zone; the
+The image CI builds still has the base's layers, Fedora's logos among them,
+below TUR's; the image that is published is re-chunked so that no layer holds
+them, and every layer of it is checked (`tests/image/marks.py --layers`;
+[publishing.md](../docs/architecture/publishing.md), section 4). Not done
+here: the time servers are still Fedora's NTP pool zone; the
 splash is shown only with the `rhgb` or `splash` kernel argument, which the
 image does not set. See TUR-008.
 

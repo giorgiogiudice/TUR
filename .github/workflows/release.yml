@@ -1,0 +1,461 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Release (ADR-0023; docs/architecture/publishing.md): publish the image CI
+# built and tested, as a signed update, to ghcr.io/giorgiogiudice/tur.
+#
+# 1. await    waits until every other workflow on the commit has finished and
+#             decides whether its image may be released (scripts/release/await.py).
+# 2. release  takes the image the `image` workflow tested (its OCI archive,
+#             checked against the image ID that workflow recorded), re-chunks
+#             it so that no layer holds what a later one removed, checks every
+#             layer for Fedora's marks and the files against the tested image,
+#             pushes it to a registry inside the job, signs it there, and proves
+#             on a booted TUR guest that it is accepted and started while an
+#             unsigned image, one signed with another key and one whose
+#             signature is not in the transparency log are refused before
+#             anything is staged. Then the same digest, with its signatures, is
+#             copied to where it is published and read back.
+# 3. promote  (manual, with a build ID) points `stable` at a published build.
+#
+# To rehearse without waiting for every workflow again: start the workflow by
+# hand with `image_run` (a run of the image workflow that passed), or, on a
+# pull request, push a commit that changes only the release itself: the
+# branch's latest successful image run is then used. Neither ever publishes.
+#
+# Publishing is off until the owner sets the repository variable
+# TUR_PUBLISH=1 (publishing.md, section 8). Until then, and always on pull
+# requests, the release job runs in full against its own registry and its
+# own throwaway keys, and nothing leaves the job.
+name: release
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - ".github/workflows/release.yml"
+      - ".github/workflows/image.yml"
+      - "scripts/release/**"
+      - "image/signing/**"
+      - "image/rootfs/usr/share/tur/signing/**"
+      - "image/rootfs/usr/share/containers/**"
+      - "tests/boot/signed-update.py"
+      - "tests/boot/guest/**"
+      - "tests/image/marks.py"
+  workflow_dispatch:
+    inputs:
+      promote:
+        description: "A published build ID to promote to stable (empty: release this commit to testing)"
+        type: string
+        required: false
+        default: ""
+      image_run:
+        description: "Rehearse with this run of the image workflow, without waiting (never publishes)"
+        type: string
+        required: false
+        default: ""
+
+permissions: {}
+
+concurrency:
+  group: release-${{ github.event_name }}-${{ github.ref }}-${{ inputs.promote || 'testing' }}
+  # A newer commit supersedes an older one that is still waiting; a person's
+  # promotion is never cancelled.
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
+
+env:
+  PUBLISHED_REPOSITORY: ghcr.io/giorgiogiudice/tur
+  COSIGN_VERSION: v3.1.4
+  COSIGN_SHA256: 424e2c97d0b45fd7a6b608a87f090f35633f4c23ece5f092d48bba11aaf4bbfa
+  REGISTRY_IMAGE: docker.io/library/registry:3.1.1@sha256:325b4b29b041e82803abeb703e201655e4e23ab83264ec1a7c9ddb0a5b14a6e0
+  PODMAN: sudo podman
+
+jobs:
+  lint:
+    name: Lint the release scripts
+    if: ${{ !inputs.promote }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Lint
+        run: |
+          shellcheck -x scripts/release/*.sh tests/boot/guest/rootfs/usr/libexec/tur-boot-test/signed-update-agent \
+            tests/boot/guest/rootfs/usr/libexec/tur-boot-test/guest-agent
+          python3 -m py_compile scripts/release/*.py tests/boot/signed-update.py tests/image/marks.py image/signing/policy.py
+          python3 scripts/release/compare-trees.py --self-test
+          python3 tests/image/marks.py --self-test
+
+  await:
+    name: Wait for every workflow on this commit
+    if: ${{ !inputs.promote }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      release: ${{ steps.await.outputs.release }}
+      reason: ${{ steps.await.outputs.reason }}
+      image_run: ${{ steps.await.outputs.image_run }}
+      boot_run: ${{ steps.await.outputs.boot_run }}
+      rollback_run: ${{ steps.await.outputs.rollback_run }}
+      rehearsal: ${{ steps.await.outputs.rehearsal }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Wait, then decide
+        id: await
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IMAGE_RUN: ${{ inputs.image_run }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          shortcut=()
+          if [ -n "$IMAGE_RUN" ]; then shortcut=(--image-run "$IMAGE_RUN"); fi
+          if [ -n "$HEAD_REF" ]; then shortcut=(--fallback-branch "$HEAD_REF"); fi
+          python3 scripts/release/await.py \
+            "${{ github.event.pull_request.head.sha || github.sha }}" "${{ github.event_name }}" --timeout 16200 \
+            "${shortcut[@]}"
+
+  release:
+    name: Re-chunk, sign, prove on a booted guest, publish
+    needs: [lint, await]
+    if: ${{ needs.await.outputs.release == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    permissions:
+      contents: read
+      actions: read     # the artifacts of the image, boot and rollback runs
+      id-token: write   # keyless signing with this workflow's own identity
+      packages: write   # pushing to ghcr.io, only with TUR_PUBLISH=1
+    env:
+      PUBLISH: ${{ vars.TUR_PUBLISH == '1' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && needs.await.outputs.rehearsal != 'true' && '1' || '0' }}
+      OUT: out/release
+      LOCAL: localhost:5000/tur
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      # The pinned base, for the marks check (fedora-logos' checksums come
+      # from it): from TUR's mirror once quay.io has dropped the digest.
+      - uses: ./.github/actions/use-base-mirror
+
+      - name: Mode
+        run: |
+          mkdir -p "$OUT"
+          if [ "$PUBLISH" = 1 ]; then
+            echo "Publishing is ON: the image goes to $PUBLISHED_REPOSITORY." | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Publishing is off (TUR_PUBLISH is not 1, or this is not main): a rehearsal; nothing leaves this job." | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "podman: $(podman --version); skopeo: $(skopeo --version); kernel: $(uname -r)"
+          df -h / | tail -1
+
+      - name: Before publishing, the release key must exist
+        if: ${{ env.PUBLISH == '1' }}
+        env:
+          HAVE_KEY: ${{ secrets.TUR_RELEASE_SIGNING_KEY != '' }}
+        run: |
+          test "$HAVE_KEY" = true || { echo "the secret TUR_RELEASE_SIGNING_KEY is missing (publishing.md, section 8)"; exit 1; }
+          test -s image/rootfs/usr/share/tur/signing/release.pub \
+            || { echo "image/rootfs/usr/share/tur/signing/release.pub is missing: computers would refuse every update"; exit 1; }
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache/CodeQL
+          df -h / | tail -1
+
+      - name: Choose a work directory
+        run: |
+          work="$RUNNER_TEMP/tur-release"
+          mkdir -p "$work"
+          echo "WORK=$work" >> "$GITHUB_ENV"
+
+      # Hosted runners expose /dev/kvm but not to the runner user (see boot.yml).
+      - name: Enable KVM for the runner user
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          sudo udevadm settle
+          python3 tests/boot/check-kvm.py "$OUT/kvm.json"
+
+      - name: Install cosign, QEMU and UEFI firmware
+        run: |
+          curl -sSfL -o "$RUNNER_TEMP/cosign" \
+            "https://github.com/sigstore/cosign/releases/download/${COSIGN_VERSION}/cosign-linux-amd64"
+          echo "${COSIGN_SHA256}  $RUNNER_TEMP/cosign" | sha256sum -c -
+          sudo install -m 0755 "$RUNNER_TEMP/cosign" /usr/local/bin/cosign
+          cosign version 2>&1 | grep GitVersion
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils ovmf zstd
+          qemu-system-x86_64 --version | head -1
+
+      # ---- the image CI tested ------------------------------------------------------
+      - name: Download the tested image (image workflow)
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: tur-image-oci
+          path: ${{ env.WORK }}/tested
+          run-id: ${{ needs.await.outputs.image_run }}
+          github-token: ${{ github.token }}
+      - name: Download its build manifest and SBOM (image workflow)
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: tur-image-metadata
+          path: ${{ env.WORK }}/metadata
+          run-id: ${{ needs.await.outputs.image_run }}
+          github-token: ${{ github.token }}
+      - name: Download what the boot test recorded (boot workflow)
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: tur-boot-test
+          path: ${{ env.WORK }}/boot
+          run-id: ${{ needs.await.outputs.boot_run }}
+          github-token: ${{ github.token }}
+      - name: Download what the rollback scenarios recorded (rollback workflow)
+        if: ${{ needs.await.outputs.rollback_run != '' }}
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          pattern: tur-rollback-*
+          path: ${{ env.WORK }}/rollback
+          run-id: ${{ needs.await.outputs.rollback_run }}
+          github-token: ${{ github.token }}
+
+      - name: The tested image, checked by its image ID
+        run: |
+          others=(--boot "$WORK/boot")
+          if [ -d "$WORK/rollback" ]; then others+=(--rollback "$WORK/rollback"); fi
+          python3 scripts/release/tested.py "$WORK/tested" "$OUT/tested.json" "${others[@]}"
+          id=$(cat "$WORK/tested/image-id")
+          sudo skopeo copy --quiet "oci-archive:$WORK/tested/tur-image.oci.tar" containers-storage:localhost/tur:tested
+          loaded=$($PODMAN image inspect -f '{{.Id}}' localhost/tur:tested)
+          echo "loaded: $loaded"
+          test "$loaded" = "$id"
+          echo "IMAGE_ID=$id" >> "$GITHUB_ENV"
+          echo "BUILD_ID=$(cat "$WORK/tested/build-id")" >> "$GITHUB_ENV"
+
+      - name: The trust roots the image carries are Sigstore's
+        run: |
+          cosign initialize > /dev/null
+          python3 scripts/release/trust-roots.py "$(find ~/.sigstore -name trusted_root.json | head -1)" \
+            --check image/rootfs/usr/share/tur/signing
+
+      # ---- re-chunk -------------------------------------------------------------------
+      - name: Log in to the published repository
+        if: ${{ env.PUBLISH == '1' }}
+        env:
+          TOKEN: ${{ github.token }}
+        run: printf '%s' "$TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+
+      - name: Re-chunk
+        id: rechunk
+        run: |
+          set -o pipefail
+          previous=""
+          if [ "$PUBLISH" = 1 ] && skopeo inspect --raw "docker://$PUBLISHED_REPOSITORY:testing" > /dev/null 2>&1; then
+            previous="docker://$PUBLISHED_REPOSITORY:testing"
+            export REGISTRY_AUTH_FILE="$HOME/.docker/config.json"
+          fi
+          scripts/release/rechunk.sh localhost/tur:tested "$WORK/tested/tur-image.oci.tar" "$IMAGE_ID" \
+            "$WORK" "$WORK/published" $previous | tee "$OUT/rechunk.txt"
+          echo "DIGEST=$(cat "$WORK/published.digest")" >> "$GITHUB_ENV"
+          sudo skopeo copy --quiet "oci:$WORK/published:latest" containers-storage:localhost/tur:published
+          rm -f "$WORK/tested/tur-image.oci.tar"
+
+      - name: The re-chunked image holds the same files as the tested one
+        id: trees
+        if: ${{ !cancelled() && steps.rechunk.outcome == 'success' }}
+        run: sudo python3 scripts/release/compare-trees.py localhost/tur:tested localhost/tur:published "$OUT/trees.json"
+
+      - name: Fedora's marks, in the image and in every layer of it
+        id: marks
+        if: ${{ !cancelled() && steps.rechunk.outcome == 'success' }}
+        run: |
+          status=0
+          python3 tests/image/marks.py localhost/tur:published "$OUT/marks" --layers "$WORK/published:latest" || status=$?
+          cat "$OUT/marks/marks.md" >> "$GITHUB_STEP_SUMMARY" || true
+          exit "$status"
+
+      - name: Smoke tests of the re-chunked image
+        id: smoke
+        if: ${{ !cancelled() && steps.rechunk.outcome == 'success' }}
+        run: tests/image/smoke.sh localhost/tur:published "$BUILD_ID"
+
+      # ---- a registry in this job, the image signed in it ------------------------------
+      - name: Push to a registry inside the job
+        id: push
+        if: ${{ !cancelled() && steps.rechunk.outcome == 'success' }}
+        run: |
+          mkdir -p "$WORK/registry"
+          docker run -d --name tur-registry -p 5000:5000 -v "$WORK/registry:/var/lib/registry" "$REGISTRY_IMAGE"
+          for _ in $(seq 30); do curl -sf http://localhost:5000/v2/ > /dev/null && break; sleep 1; done
+          skopeo copy --quiet --preserve-digests --dest-tls-verify=false \
+            "oci:$WORK/published:latest" "docker://$LOCAL:$BUILD_ID"
+          pushed=$(skopeo inspect --raw --tls-verify=false "docker://$LOCAL:$BUILD_ID" | sha256sum | cut -d' ' -f1)
+          echo "re-chunked: $DIGEST"; echo "pushed:     sha256:$pushed"
+          test "sha256:$pushed" = "$DIGEST"
+          # The refusal fixtures: the same layers, another digest each.
+          python3 scripts/release/variant.py "$WORK/published" latest unsigned other-key no-log | tee "$WORK/variants.env"
+          variants=""
+          while IFS='=' read -r name digest; do
+            skopeo copy --quiet --preserve-digests --dest-tls-verify=false \
+              "oci:$WORK/published:$name" "docker://$LOCAL:test-$name"
+            variants="$variants $name=$digest"
+          done < "$WORK/variants.env"
+          echo "VARIANTS=${variants# }" >> "$GITHUB_ENV"
+
+      - name: Sign
+        id: sign
+        if: ${{ !cancelled() && steps.push.outcome == 'success' }}
+        env:
+          TUR_RELEASE_KEY: ${{ env.PUBLISH == '1' && secrets.TUR_RELEASE_SIGNING_KEY || '' }}
+          COSIGN_PASSWORD: ${{ env.PUBLISH == '1' && secrets.TUR_RELEASE_SIGNING_PASSWORD || '' }}
+        run: |
+          keys="$WORK/keys"
+          mkdir -p "$keys"
+          ( cd "$keys" && COSIGN_PASSWORD="" cosign generate-key-pair --output-key-prefix other > /dev/null )
+          if [ "$PUBLISH" = 1 ]; then
+            key=env://TUR_RELEASE_KEY
+            pub=image/rootfs/usr/share/tur/signing/release.pub
+            cosign public-key --key env://TUR_RELEASE_KEY > "$keys/from-secret.pub"
+            cmp "$keys/from-secret.pub" "$pub" \
+              || { echo "the secret key is not the one whose public half the image carries"; exit 1; }
+          else
+            # A throwaway key in place of the release key, which does not exist
+            # while publishing is off. The guest is given its public half.
+            ( cd "$keys" && COSIGN_PASSWORD="" cosign generate-key-pair --output-key-prefix release > /dev/null )
+            key="$keys/release.key"
+            pub="$keys/release.pub"
+            export COSIGN_PASSWORD=""
+          fi
+          echo "RELEASE_PUB=$pub" >> "$GITHUB_ENV"
+          TUR_BUILD_MANIFEST="$WORK/metadata/build-manifest.json" TUR_SBOM="$WORK/metadata/sbom.spdx.json" \
+          TUR_TEST_VARIANTS="$VARIANTS" TUR_OTHER_KEY="$keys/other.key" \
+            scripts/release/sign.sh "$LOCAL" "$DIGEST" "$key" "$pub" "$OUT/signing"
+
+      # ---- the proof on a booted guest ---------------------------------------------------
+      - name: Install the tested image to a disk, with the boot test's agent
+        id: disk
+        if: ${{ !cancelled() && steps.rechunk.outcome == 'success' }}
+        run: |
+          python3 image/signing/policy.py --print > "$WORK/policy-rule.json"
+          tests/boot/build-disk.sh localhost/tur:tested "$WORK" "$OUT/prepare"
+
+      - name: Prepare the disk (the boot test's first two boots)
+        id: prepare
+        if: ${{ !cancelled() && steps.disk.outcome == 'success' }}
+        run: python3 tests/boot/run-vm.py --disk "$WORK/disk.raw" --work "$WORK" --out "$OUT/prepare" --timeout 900 --prepare-only
+
+      - name: Signed update in a booted guest
+        id: guest
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' && steps.sign.outcome == 'success' }}
+        run: |
+          cases=()
+          for pair in $VARIANTS; do cases+=(--case "${pair%%=*}=test-${pair%%=*}"); done
+          key=()
+          if [ "$PUBLISH" != 1 ]; then key=(--test-key "$RELEASE_PUB"); fi
+          python3 tests/boot/signed-update.py --disk "$WORK/disk.raw" --work "$WORK" --out "$OUT/signed-update" \
+            --registry 10.0.2.2:5000/tur --digest "$DIGEST" --signed "$BUILD_ID" "${cases[@]}" "${key[@]}" \
+            --policy-rule "$WORK/policy-rule.json" --timeout 3600
+
+      # ---- publishing ----------------------------------------------------------------------
+      # Always rehearsed against a second repository of the job's registry: the
+      # same script, the same checks, the same promotion.
+      - name: Rehearse publishing and promotion
+        id: rehearse
+        if: ${{ !cancelled() && steps.sign.outcome == 'success' }}
+        run: |
+          rehearsal=localhost:5000/tur-rehearsal
+          scripts/release/publish.sh "$LOCAL" "$DIGEST" "$rehearsal" "$BUILD_ID" testing
+          scripts/release/publish.sh "$LOCAL" "$DIGEST" "$rehearsal" "$BUILD_ID" testing
+          scripts/release/publish.sh "$rehearsal" "$DIGEST" "$rehearsal" "$BUILD_ID" stable
+          cosign verify --allow-http-registry --key "$RELEASE_PUB" "$rehearsal:stable" > /dev/null
+          cosign verify --allow-http-registry --certificate-identity "https://github.com/$GITHUB_WORKFLOW_REF" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com "$rehearsal:stable" > /dev/null
+          echo "the rehearsal repository's stable names $DIGEST, with both signatures"
+
+      - name: Publish to testing
+        if: ${{ success() && env.PUBLISH == '1' }}
+        run: |
+          scripts/release/publish.sh "$LOCAL" "$DIGEST" "$PUBLISHED_REPOSITORY" "$BUILD_ID" testing
+          cosign verify --key "$RELEASE_PUB" "$PUBLISHED_REPOSITORY@$DIGEST" > /dev/null
+          cosign verify --certificate-identity "https://github.com/$GITHUB_WORKFLOW_REF" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com "$PUBLISHED_REPOSITORY@$DIGEST" > /dev/null
+          echo "Published: \`$PUBLISHED_REPOSITORY:$BUILD_ID\` = \`$DIGEST\`, and \`testing\`." | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Release of ${BUILD_ID:-?}"
+            echo
+            echo "- tested image: \`sha256:${IMAGE_ID:-?}\` (image workflow run ${{ needs.await.outputs.image_run }})"
+            echo "- published digest: \`${DIGEST:-not made}\`"
+            echo "- publishing: $([ "$PUBLISH" = 1 ] && echo "on, to $PUBLISHED_REPOSITORY" || echo "off (rehearsal)")"
+            echo
+            if [ -f "$OUT/signed-update/summary.md" ]; then cat "$OUT/signed-update/summary.md"; fi
+            if [ -f "$OUT/signing/signing.env" ]; then echo; echo '```'; cat "$OUT/signing/signing.env"; echo '```'; fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          show() { echo "::group::$1"; if [ -f "$1" ]; then tail -n "${2:-200}" "$1"; else echo "(absent)"; fi; echo "::endgroup::"; }
+          show "$OUT/prepare/host/vm-result.json"
+          show "$OUT/signed-update/guest/stage/status"
+          show "$OUT/signed-update/guest/new-version/status"
+          for f in "$OUT"/signed-update/guest/stage/switch-*.txt; do show "$f" 40; done
+          df -h /
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: tur-release
+          path: out/release/
+          if-no-files-found: warn
+
+  promote:
+    name: Promote a published build to stable
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.promote != '' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write   # moving the stable tag
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Promote
+        env:
+          BUILD_ID: ${{ inputs.promote }}
+          TUR_PUBLISH: ${{ vars.TUR_PUBLISH }}
+          TOKEN: ${{ github.token }}
+        run: |
+          test "$TUR_PUBLISH" = 1 || { echo "publishing is off (TUR_PUBLISH is not 1): nothing to promote"; exit 1; }
+          test "$GITHUB_REF" = refs/heads/main || { echo "promote from main only"; exit 1; }
+          [[ "$BUILD_ID" =~ ^[0-9]{8}\.g[0-9a-f]{12}$ ]] || { echo "not a build ID: $BUILD_ID"; exit 1; }
+          curl -sSfL -o "$RUNNER_TEMP/cosign" \
+            "https://github.com/sigstore/cosign/releases/download/${COSIGN_VERSION}/cosign-linux-amd64"
+          echo "${COSIGN_SHA256}  $RUNNER_TEMP/cosign" | sha256sum -c -
+          sudo install -m 0755 "$RUNNER_TEMP/cosign" /usr/local/bin/cosign
+          printf '%s' "$TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          digest="sha256:$(skopeo inspect --raw "docker://$PUBLISHED_REPOSITORY:$BUILD_ID" | sha256sum | cut -d' ' -f1)"
+          echo "$PUBLISHED_REPOSITORY:$BUILD_ID is $digest"
+          # Only what TUR's release workflow on main signed, with both signatures.
+          cosign verify --key image/rootfs/usr/share/tur/signing/release.pub "$PUBLISHED_REPOSITORY@$digest" > /dev/null
+          cosign verify --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity "https://github.com/$GITHUB_REPOSITORY/.github/workflows/release.yml@refs/heads/main" \
+            "$PUBLISHED_REPOSITORY@$digest" > /dev/null
+          scripts/release/publish.sh "$PUBLISHED_REPOSITORY" "$digest" "$PUBLISHED_REPOSITORY" "$BUILD_ID" stable
+          echo "\`stable\` now names \`$PUBLISHED_REPOSITORY:$BUILD_ID\` = \`$digest\` (promoted by ${{ github.actor }})." \
+            | tee -a "$GITHUB_STEP_SUMMARY"
