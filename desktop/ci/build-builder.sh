@@ -23,7 +23,14 @@ echo "base: $base (tag $BASE_TAG, verified $BASE_VERIFIED), builder revision $BU
 # reference; only where the bytes come from changes.
 echo "contexts: ${TUR_BUILD_CONTEXTS:-none (the base comes from $BASE_IMAGE)}"
 # shellcheck disable=SC2086 # TUR_BUILD_CONTEXTS is a list of flags, one word each
-docker build --pull ${TUR_BUILD_CONTEXTS:-} --build-arg "BASE=$base" -t "$image" -f "$here/builder/Containerfile" "$here/builder"
+# The labels say what the image is made from: fetch-builder.sh takes the image
+# pinned in builder.lock only when its inputs are those of this checkout.
+docker build --pull ${TUR_BUILD_CONTEXTS:-} --build-arg "BASE=$base" \
+    --label "org.tur.builder.inputs=$("$here/builder-inputs.sh")" \
+    --label "org.tur.builder.base=$base" \
+    --label "org.tur.builder.revision=$BUILDER_REVISION" \
+    --label "org.opencontainers.image.source=https://github.com/giorgiogiudice/TUR" \
+    -t "$image" -f "$here/builder/Containerfile" "$here/builder"
 
 mkdir -p "$dir"
 docker run --rm "$image" cat /usr/share/tur-builder/packages.tsv > "$dir/packages.tsv"

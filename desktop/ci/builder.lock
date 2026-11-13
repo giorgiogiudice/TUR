@@ -22,3 +22,13 @@ BASE_VERIFIED=2026-11-13
 # anything else. Expect to refresh builder.packages and, if Qt or a font
 # changed, the reference images, in the same pull request.
 BUILDER_REVISION=1
+
+# The built image, kept in TUR's registry and pinned by digest, so that every
+# run tests and renders with the same bytes, whatever the Actions cache holds
+# (desktop/README.md, "The builder image"). It is used only while its label
+# org.tur.builder.inputs matches the lines above and the Containerfile
+# (desktop/ci/builder-inputs.sh). After changing them, the desktop workflow
+# builds the image, pushes it and prints the BUILDER_DIGEST line to put here;
+# its check "The builder image is pinned" fails until then.
+BUILDER_IMAGE=ghcr.io/giorgiogiudice/tur-desktop-builder
+BUILDER_DIGEST=

@@ -298,15 +298,33 @@ jobs:
           path: ${{ env.BUILDER_DIR }}
           key: ${{ steps.key.outputs.key }}
 
+      # Without the cache: the image builder.lock pins, from TUR's registry;
+      # without a usable pin, built (desktop/README.md, "The builder image").
+      - name: The pinned builder image, if the cache has none
+        id: fetch
+        if: steps.cache.outputs.cache-hit != 'true'
+        env:
+          TOKEN: ${{ github.token }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          printf '%s' "$TOKEN" | docker login ghcr.io --username "$ACTOR" --password-stdin
+          status=0
+          desktop/ci/fetch-builder.sh "$BUILDER_DIR" || status=$?
+          case "$status" in
+            0) echo "fetched=true" >> "$GITHUB_OUTPUT" ;;
+            3) echo "fetched=false" >> "$GITHUB_OUTPUT" ;;
+            *) exit "$status" ;;
+          esac
+
       # The pinned Fedora base from TUR's mirror: TUR_BUILD_CONTEXTS.
       - uses: ./.github/actions/use-base-mirror
-        if: steps.cache.outputs.cache-hit != 'true'
+        if: steps.cache.outputs.cache-hit != 'true' && steps.fetch.outputs.fetched != 'true'
         with:
           check: "false"
           images: desktop/ci/builder.lock
 
-      - name: Build the builder image, if the cache has none
-        if: steps.cache.outputs.cache-hit != 'true'
+      - name: Build the builder image, if neither the cache nor the pin has one
+        if: steps.cache.outputs.cache-hit != 'true' && steps.fetch.outputs.fetched != 'true'
         run: desktop/ci/build-builder.sh "$BUILDER_DIR"
 
       - name: Load the builder image
