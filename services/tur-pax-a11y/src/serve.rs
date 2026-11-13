@@ -295,7 +295,11 @@ impl Bridge {
                 self.overlay.wait_for_arrival(before, ARRIVAL_TIMEOUT),
                 "ok".to_owned(),
             ),
-            Err(error) => (false, format!("failed ({error})")),
+            // The error's name only: its text may quote the window's title.
+            Err(error) => (
+                false,
+                format!("failed:{}", error.split(':').next().unwrap_or_default()),
+            ),
         };
         log(&format!(
             "arrived={arrived} highlight={placed} window={} rect={},{},{},{} pid={pid}",
