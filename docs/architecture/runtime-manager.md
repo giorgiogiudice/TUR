@@ -26,7 +26,8 @@ A recommendation names a route. It is never a statement that a particular
 application works: that needs a recorded test (§2.3). The same holds for
 launching and installing: an application that installs and opens a window has
 been measured to do that, in one version, on one machine. The measurements so
-far are in the [second report](../reports/windows-runtime-2.md).
+far are in the [second report](../reports/windows-runtime-2.md); case-insensitive
+prefixes were measured in the [third](../reports/windows-runtime-3.md).
 See [Not done yet](#not-done-yet).
 
 ## Inspection
@@ -192,6 +193,8 @@ families they belong to, and the Windows end-to-end test
 | `TUR-WINDOWS-PREFIX-006` | The prefix is on another runtime version than the one installed |
 | `TUR-WINDOWS-PREFIX-007` | The prefix is pinned and a migration was asked for |
 | `TUR-WINDOWS-PREFIX-008` | The named backup does not exist |
+| `TUR-WINDOWS-PREFIX-009` | Case-insensitive file names were asked for and the file system holding the prefix cannot provide them (reported with the result; the prefix is created case-sensitive) |
+| `TUR-WINDOWS-PREFIX-010` | Case-insensitive file names were asked for and drive C: could not be given them for another reason: not permitted, not empty, read-only, `chattr` missing (reported with the result; the prefix is created case-sensitive) |
 | `TUR-WINDOWS-APP-001` | The file is not a Windows installer, program or archive of programs |
 | `TUR-WINDOWS-APP-002` | The file's kind has no known unattended mode, so it is not run |
 | `TUR-WINDOWS-APP-003` | The installer exited with a failure status |
@@ -302,6 +305,7 @@ that creates, writes, deletes or starts anything.
 | Step | What the executor does |
 |---|---|
 | `create-dir` | Creates a directory and its parents, mode 0700 |
+| `case-fold` | Creates a directory as `create-dir` does, then runs `chattr +F` on it, outside the sandbox. What `chattr` says is the outcome, recorded in the report; a file system that cannot fold case is not a failure. See [Case-insensitive prefixes](#case-insensitive-prefixes) |
 | `write-file` | Writes a file through a temporary file and a rename, mode 0600 |
 | `write-bytes` | The same for a file that is not text (an icon). A printed plan shows its size, not its bytes |
 | `remove-tree` | Deletes a tree. Refused unless the path lies inside an application's own directory under the runtime manager's roots. A symbolic link is removed, never followed |
@@ -384,12 +388,12 @@ launch takes at most 1024 arguments and 64 extra variables.
 
 | Operation | Plan |
 |---|---|
-| create | Create the directories; run `wine wineboot --init` (or `umu-run ""`) in the sandbox; require `system.reg`; switch off Wine's own prefix updating; write the metadata. The metadata is written last, so a failed creation leaves no valid prefix behind |
+| create | Create the directories; with `--casefold` (Wine only), create `drive_c` empty and give it the case-folding attribute; run `wine wineboot --init` (or `umu-run ""`) in the sandbox; require `system.reg`; switch off Wine's own prefix updating; write the metadata. The metadata is written last, so a failed creation leaves no valid prefix behind |
 | verify | Checks only: the directories exist and are not links, the prefix belongs to the user, `system.reg` and `user.reg` exist, `drive_c/windows` exists, the registry's `#arch` line matches, Wine's own updating is still off. Exit status 8 when a check fails |
 | repair | `wine wineboot --update` with the runtime the prefix is on. Refused when another version is installed: that would be a migration. It restores system files Wine can start without; when Wine cannot start in the prefix at all (a missing `kernel32.dll`, measured in CI), only a restore or a reset helps |
 | back up | `tar --create --gzip` of `metadata.json`, `prefix/` and `home/` into `backups/<app-id>/`; and of `application.json` and `profile.json` when the application was installed, so that a restore brings back the application and not only its prefix |
-| restore | Unpack into `staging/`; require that the archive's metadata names this application and that it holds a prefix; only then move the current prefix aside and the unpacked one into place |
-| reset | Back up (unless `--no-backup`), delete `prefix/` and `home/`, create again with the same settings and grants |
+| restore | Unpack into `staging/`; require that the archive's metadata names this application and that it holds a prefix; only then move the current prefix aside and the unpacked one into place. An archive does not keep the case-folding attribute: when the prefix being replaced has a case-insensitive drive C:, the unpacked `drive_c` is created and given the attribute before the archive is unpacked into it |
+| reset | Back up (unless `--no-backup`), delete `prefix/` and `home/`, create again with the same settings and grants, and with a case-insensitive drive C: when the old one was |
 | remove | Delete the application's directory, staging, logs and staged launcher entry. Backups are kept |
 | migrate | See below |
 | grant, revoke, pin, unpin | Rewrite the metadata |
@@ -827,6 +831,7 @@ name.
 | `prefix`, `prefix_id` | The prefix and the name the profile uses for it |
 | `runtime`, `runtime_version` | What the application was installed with |
 | `installed_at` | When, in UTC |
+| `case_folding` | Whether drive C: is case-insensitive: `requested`, `casefolded`, a `reason` (`casefolded`, `not-requested`, `no-casefold-feature`, `no-attributes`, `not-permitted`, `not-empty`, `read-only`, `tool-missing`, `failed`) and, when `chattr` refused, its message as `detail`. Optional: records written before it existed do not have it |
 | `install` | The installer's `kind`; the `method` (`unattended-installer`, `unpacked`, `copied`); the `arguments` the installer was given; and the `source`: the file's name, size and SHA-256 |
 | `uninstall` | The `method` (`uninstaller`, `msi-product`, `remove-prefix`), the `program` (a Windows path on `C:`, or a product code), its `arguments`, and the `registry_key` they came from |
 | `launcher` | The staged `desktop_entry` and `icon` files, and `installed: false` |
@@ -954,6 +959,250 @@ runtime version and app version") and not how. Decided here:
 | Backups at removal | Kept |
 | An installer's exit status | Only 0 is success. `msiexec` returns 3010 when a restart is wanted; that is treated as a failure, and was not met |
 
+## Case-insensitive prefixes
+
+Windows finds `File.txt` when a program asks for `FILE.TXT`; a Linux file
+system compares names byte for byte. Wine bridges the two in user space, and
+ext4 can do it in the kernel. This section says how `tur-runtime` uses the
+kernel's way, what that changes, and what was measured
+([third report](../reports/windows-runtime-3.md), issue #81).
+
+### What Wine does, and what changes on a case-folded directory
+
+Read in Wine's source (`dlls/ntdll/unix/file.c`, Wine 9.0 and master, the
+GitHub mirror):
+
+- **Lookup** (`find_file_in_dir`). Wine first asks the kernel for the name
+  exactly as given (`stat`, `fstatat` in master); if that finds it, nothing
+  else happens. Otherwise it reads the whole directory and compares every
+  entry with the name, without regard to case (`wcsnicmp`). On a directory
+  of 5 000 files that is 5 000 comparisons for every name asked for in
+  another case, and for every name that is not there.
+- **Detection** (`get_dir_case_sensitivity_stat`). On Linux, Wine opens the
+  directory and asks for its inode flags (`EXT2_IOC_GETFLAGS`); when
+  `EXT4_CASEFOLD_FL` is set it treats the directory as case-insensitive. The
+  answer is not cached: every check is an open, an ioctl and a close. Added
+  in Wine 4.11 (commit 0639d182e54c, "ntdll: Add support for EXT4 per
+  directory case folding", 2019).
+- **On a case-folded directory**: the first `stat` already finds the name in
+  any case, so the directory scan does not happen. A name that is not there
+  skips the scan only when it is not an 8.3 name (`if (!is_name_8_dot_3 &&
+  !get_dir_case_sensitivity(...)) goto not_found;`): `README.TXT` still
+  causes a scan when it is missing, because it could be the short name of
+  another file. Measured, a missing long name was nevertheless slower on a
+  case-folded directory than on an ordinary one, and its cost grew with the
+  size of the directory; where that time goes was not established (see the
+  report).
+- **One thing gets slower**: a directory query for one name without
+  wildcards (`FindFirstFile("C:\\dir\\name.txt")`) is answered with one `stat`
+  on an ordinary directory, and with a full read of the directory on a
+  case-folded one (`read_directory_data_stat`: "if the file system is not
+  case sensitive we can't find the actual name through stat()").
+
+### What the kernel does
+
+From the kernel's own source and documentation (torvalds/linux master, which
+was 7.4-rc2 on 13 November 2026):
+
+- The feature is per file system (`casefold`, `EXT4_FEATURE_INCOMPAT_CASEFOLD`,
+  made with `mkfs.ext4 -O casefold`, encoding UTF-8 12.1, optionally
+  `-E encoding_flags=strict`) **and** per directory (the `F` attribute,
+  `EXT4_CASEFOLD_FL`, `chattr +F`). Since Linux 5.2. A file system with the
+  feature cannot be mounted by a kernel without `CONFIG_UNICODE`.
+- `ext4_ioctl_setflags` refuses the attribute with `EOPNOTSUPP` on a file
+  system without the feature, `ENOTDIR` on a file and `ENOTEMPTY` on a
+  directory that is not empty (setting and clearing alike). The owner of the
+  directory may set it; no capability is needed (`vfs_fileattr_set`:
+  `inode_owner_or_capable`).
+- New directories inherit it (`EXT4_FL_INHERITED`, applied when the inode is
+  created). A directory *moved* into a case-folded one keeps its own flags.
+- Comparison is Unicode NFD plus full case folding, ignoring
+  default-ignorable code points (`fs/unicode/mkutf8data.c`: "Apply unicode
+  normalization form NFD … Apply a full casefold (C + F)"). Names are kept on
+  disk as written. Without strict mode, a name that is not valid UTF-8 is
+  compared byte for byte.
+- Negative lookups are not cached in a case-folded directory (`ext4_lookup`):
+  a name that is not there is looked for on disk every time.
+- A rename to the same name in another case is a no-op in the kernel
+  (`vfs_rename`: `if (source == target) return 0;`): the name keeps its old
+  case.
+- With encryption (fscrypt): supported together since Linux 5.13, with a v2
+  policy; setting the attribute on an encrypted directory needs its key.
+- Bind mounts keep the attribute: it is a property of the inode, so
+  bubblewrap's `--bind` shows the prefix as it is. overlayfs is not used
+  here; it refused case-folding layers until 6.17 and has had bugs with them
+  since (fixed in 7.4-rc1).
+- Neither `/sys/fs/ext4/features/casefold` (it says what the kernel
+  supports) nor `statx` tells an unprivileged process whether a mounted file
+  system has the feature. Trying the attribute on an empty directory does.
+
+Other file systems: btrfs has no case folding; f2fs and tmpfs (since 6.13,
+mount option `casefold`) have the same per-directory attribute; xfs has
+only a whole-file-system ASCII mode.
+
+### What other projects do
+
+- **Proton** sets the attribute on the `drive_c` it creates for a new
+  prefix (`set_dir_casefold_bit` in Valve's `proton` script, since
+  proton-4.11-1) and ignores a refusal.
+- **Bottles** does the same: "Pre-create drive_c directory and set the
+  case-fold flag" (`bottles/backend/managers/manager.py`), since 51.12
+  ("Improved performance by using case-fold for drive_c when available").
+- Lutris, Heroic and umu-launcher have no code of their own for it; umu runs
+  Proton's script.
+- SteamOS is reported to format SD cards with `mkfs.ext4 -O casefold`; that
+  was read second-hand, not in an official release note.
+- Wine itself does not set the attribute: its prefix creation makes
+  `drive_c` with a plain `mkdir`.
+
+### What tur-runtime does
+
+- With `--casefold` (it is off by default, see below), creating a Wine prefix
+  creates `prefix/drive_c` empty and runs `chattr +F` on it **before** Wine
+  is started in the prefix. Everything Wine and the application then create
+  on drive C: inherits the attribute. The rest of the prefix (registry files,
+  `dosdevices` with its `c:` and `z:` links) stays an ordinary directory, as
+  Wine expects; Z: (the sandbox's root) is not affected. Wine keeps a
+  `drive_c` that is already there (`setup_config_dir` in
+  `dlls/ntdll/unix/server.c`).
+- Why `drive_c` and not the whole prefix: drive C: is the only part of a
+  prefix Windows programs look up names in; the registry files and
+  `dosdevices` are read by Wine under the names it wrote. That is also where
+  Proton and Bottles put it.
+- `chattr` and `lsattr` (e2fsprogs) set and read the attribute, outside the
+  sandbox, on the runtime manager's own directory, with `LC_ALL=C`; their
+  messages are classified into the reasons the record keeps. This crate
+  forbids `unsafe`, and the standard library has no safe form of the ioctl.
+- A file system that cannot fold case is not a failure. The prefix is
+  created as before, case-sensitive, and the report and the application
+  record say why (`no-casefold-feature` for `EOPNOTSUPP`, and so on), with
+  `TUR-WINDOWS-PREFIX-009` (the file system cannot) or `-010` (another
+  reason) as a warning on standard error and in the JSON report.
+- `tur-runtime` never changes a file system's features. Whether the file
+  system holding `$XDG_DATA_HOME` has `casefold` is decided when it is made,
+  by the installer.
+- A Proton prefix is left to Proton, which sets the attribute itself.
+- `--no-casefold` leaves drive C: an ordinary directory: for comparison, and
+  as the way out if an application misbehaves on a case-folded drive.
+- A reset keeps drive C: case-insensitive, or not, as it was; so does a
+  restore over an existing prefix (the archive does not hold the attribute,
+  so the unpacked `drive_c` is given it before the archive is unpacked into
+  it).
+
+### The default
+
+**Off.** `DEFAULT_CASE_FOLDING` in `services/tur-runtime/src/casefold.rs` is
+`CaseFolding::Off`; `--casefold` asks for it per prefix. Decided on 13
+November 2026 from the measurements in the
+[third report](../reports/windows-runtime-3.md) (workflow run 43334979526):
+
+- **Every application still passes.** The eight installers of the five
+  real applications installed, opened their window, did their job and were
+  removed with nothing left, in two case-folded and two ordinary passes on
+  the same ext4 file system: 64 of 64 steps in each mode.
+- **It is not faster for them.** Install times summed over both passes were
+  237.6 s case-folded and 232.6 s not; the medians 14.6 s and 14.1 s; time to
+  the first window and to remove were the same. The difference is smaller
+  than the spread between two passes of the same mode (creating a prefix
+  alone varied from 8.8 to 13.2 s). Issue #81 asks for case folding to be
+  switched on "only if faster".
+- **It is slower for some things Windows programs do often.** In the test
+  program, case folding made a lookup of an existing name in another case up
+  to 29 times faster (5 000 files), which is the case it exists for. But
+  creating a file was 1.6 to 3 times slower, looking for a name that is
+  not there 1.3 to 2.7 times slower, and `FindFirstFile` of one exact name 66
+  times slower at 5 000 files: Wine answers that with one `stat` on an
+  ordinary directory and with a full read of a case-folded one.
+- **It changes what programs see.** `GetFinalPathNameByHandle` returns the
+  name in the case it was asked for, not the case on disk; precomposed and
+  decomposed accents, `ß` and `ss`, and the Kelvin sign and `K` become the
+  same name; a second file whose name differs only by composition is
+  refused. Wine's own emulation does none of these, and Windows does not
+  either for the first.
+
+It is the right choice for one kind of application: one whose files spell
+a directory in two ways, as archives put together on case-sensitive systems
+sometimes do (game modifications, plug-in collections). In the test, an
+archive with `App/Plugins/one.txt` and `App/plugins/two.txt` gave one
+directory on a case-folded drive C:, where all six spellings found their
+file, and two directories on an ordinary one, where three of six did not.
+That is what `--casefold` is for, and what a catalogue entry or the
+application centre could ask for per application.
+
+To be looked at again when: the measurement is repeated on the TUR image
+(Fedora's kernel and Wine, a real disk); Wine stops reading the whole
+directory for an exact name on a case-folded directory; or an application
+is found that is measurably faster with it.
+
+### What the installer must guarantee
+
+For case folding to happen at all on an installed TUR system:
+
+1. The file system that holds `/var/home` (and so every user's
+   `$XDG_DATA_HOME/tur/runtime`) is ext4 made with `-O casefold` (encoding
+   UTF-8; strict mode is not needed and was not tested). Fedora's
+   `/etc/mke2fs.conf` (e2fsprogs 1.47.4) does not turn it on, bootc adds only
+   `-O verity` for ext4, and the Kinoite default layout is btrfs, which has
+   no case folding at all.
+2. The kernel has `CONFIG_UNICODE=y` (Fedora 45's does).
+3. The feature cannot be added later by a user: `tune2fs -O casefold` works
+   only on an unmounted file system (e2fsprogs 1.45.7 and later) and needs
+   root; `fuse2fs` refuses case-folding file systems.
+4. Encrypted home directories with fscrypt would need a v2 policy and the
+   key loaded when the prefix is created. Not tested.
+
+Nothing else is needed from the installer: `tur-runtime` asks for the
+attribute per prefix, and the rest of the system is unaffected because no
+other directory gets it.
+
+### What it does not change
+
+- Windows and ext4 do not fold case the same way. NTFS compares names after
+  a simple upper-casing table, without Unicode normalisation; ext4 normalises
+  (NFD) and applies full case folding. On a case-folded drive C: `café`
+  written precomposed and decomposed are one name, `ß` matches `ss`, and the
+  Kelvin sign matches `K`; Wine's own comparison on an ordinary directory
+  does not do these. What was measured is in the report.
+- Renaming a file to the same name in another case does not change its
+  case on a case-folded drive (the kernel treats it as a rename to itself).
+  Measured, Wine 9.0 did not change it on an ordinary drive either.
+- A handle's final path (`GetFinalPathNameByHandle`) carries the case the
+  file was opened with on a case-folded drive, and the case on disk on an
+  ordinary one; Windows gives the case on disk.
+- Granted host directories and the private home are not case-folded; Wine
+  emulates case-insensitivity there as before.
+
+### Sources
+
+Read on 13 November 2026. Kernel files are torvalds/linux master (7.4-rc2):
+`fs/ext4/ioctl.c` (`ext4_ioctl_setflags`), `fs/ext4/ext4.h`
+(`EXT4_CASEFOLD_FL`, `EXT4_FL_INHERITED`), `fs/ext4/ialloc.c`,
+`fs/ext4/namei.c` (`ext4_lookup`), `fs/ext4/super.c`, `fs/file_attr.c`
+(`vfs_fileattr_set`), `fs/namei.c` (`vfs_rename`), `fs/unicode/mkutf8data.c`,
+`fs/crypto/hooks.c`, `Documentation/admin-guide/ext4.rst`,
+`Documentation/filesystems/tmpfs.rst`, `fs/overlayfs/params.c`; release
+containment of commits b886ee3e778e (5.2), 471fbbea7ff7 (5.13), 083957f9614a
+(6.17) and 1d27da7de3f7 (7.4-rc1) checked against the tags. e2fsprogs:
+`misc/mke2fs.8.in`, `misc/tune2fs.c`, `misc/fuse2fs.c` (v1.47.4) and the
+release notes of 1.45.7, 1.46.0 and 1.47.0. Wine: `dlls/ntdll/unix/file.c`
+and `dlls/ntdll/unix/server.c` at `wine-9.0` and master, from the GitHub
+mirror `wine-mirror/wine` (winehq.org refuses automated reading). Proton:
+`proton` at HEAD of `ValveSoftware/Proton`, and the tags `proton-4.2-9` and
+`proton-4.11-1`. Bottles: `bottles/backend/utils/file.py`,
+`bottles/backend/managers/manager.py` and its 51.12 release notes. Fedora:
+`kernel-x86_64-fedora.config` and `e2fsprogs` on src.fedoraproject.org
+(branch f45); anaconda's `data/profile.d/fedora.conf` and
+`fedora-kinoite.conf`; bootc's `crates/lib/src/install/baseline.rs`. Ubuntu:
+the noble kernel annotations and Launchpad's e2fsprogs; the runner's own
+`/boot/config` and `mke2fs -V`, printed by the job.
+
+Not read from a primary source: that SteamOS formats SD cards with
+`-O casefold` (a third party's copy of its script); the configuration of the
+Ubuntu Azure kernel flavour, except as the job printed it
+(`CONFIG_UNICODE=y`); Wine bug 47099, and whether Wine ever accepted
+case-only renames on a case-folded directory (bugs.winehq.org and
+gitlab.winehq.org refuse automated reading).
+
 ## Verified upstream
 
 Read on 12 November 2026. Where a primary source could not be read, that is
@@ -1028,7 +1277,8 @@ tur-runtime inspect <path> [--json] [--host-arch ARCH] [--available LIST]
 tur-runtime profile validate <file>
 
 tur-runtime prefix create <app-id> [--runtime wine|proton] [--prefix-id NAME]
-        [--graphics SETTING] [--pin] [--no-network] [--grant DIR]... [--grant-rw DIR]...
+        [--graphics SETTING] [--pin] [--no-network] [--casefold | --no-casefold]
+        [--grant DIR]... [--grant-rw DIR]...
 tur-runtime prefix verify|repair|backup|remove|migrate|pin|unpin <app-id>
 tur-runtime prefix reset <app-id> [--no-backup]
 tur-runtime prefix restore <app-id> <backup-name>
@@ -1041,8 +1291,8 @@ tur-runtime desktop-entry <profile> [--launcher PROGRAM]
 
 tur-runtime installer identify <file> [--json]
 tur-runtime app install <installer> [--app-id ID] [--name NAME] [--main-exe PROGRAM]
-        [--portable] [--no-network] [--timeout SECONDS] [--keep-failed]
-        [--launcher PROGRAM]
+        [--portable] [--no-network] [--casefold | --no-casefold] [--timeout SECONDS]
+        [--keep-failed] [--launcher PROGRAM]
 tur-runtime app list [--json]
 tur-runtime app show <app-id> [--json]
 tur-runtime app launch <app-id> [--migrate] [--env NAME=VALUE]... [--wine-debug CHANNELS]
@@ -1086,6 +1336,14 @@ the report, or the error, is JSON on standard output.
 
 ## Not done yet
 
+- **Case-insensitive prefixes beyond the first measurement.** Off by
+  default (see [The default](#the-default)). Not tried: the TUR image and
+  Fedora's kernel, a real disk instead of a loop device, strict encoding,
+  fscrypt, Proton (which sets the attribute itself). The prefix metadata
+  does not record it (only the application record does), so `prefix
+  verify` cannot check it and a prefix made with `prefix create` keeps it
+  only in its directory's attribute. Nothing asks for it per application
+  yet: a catalogue entry or the application centre would pass `--casefold`.
 - **Running on the TUR image.** Everything that has run, ran on a hosted Ubuntu
   runner with Ubuntu's Wine (reports [1](../reports/windows-runtime-1.md) and
   [2](../reports/windows-runtime-2.md)). Wine is not in the image yet, and

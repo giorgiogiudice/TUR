@@ -27,6 +27,8 @@
 //!   working directory, the synchronisation decision and the steps.
 //! * [`sandbox`] wraps every runtime command in bubblewrap; [`grant`] decides
 //!   which host directories may be shown to an application.
+//! * [`casefold`] makes a new prefix's drive C: case-insensitive where the
+//!   file system can (ext4 with the `casefold` feature).
 //! * [`plan`] is what all of these produce, and [`exec`] carries a plan out.
 //! * [`desktop`] writes the text of a desktop entry.
 //!
@@ -62,6 +64,7 @@ pub mod android;
 pub mod app_record;
 pub mod arch;
 pub mod bundle;
+pub mod casefold;
 pub mod codes;
 pub mod desktop;
 pub mod discover;

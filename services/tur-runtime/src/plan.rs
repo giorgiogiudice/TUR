@@ -13,6 +13,8 @@ use std::path::PathBuf;
 
 use serde::{Serialize, Serializer};
 
+use crate::casefold::CaseFoldRecord;
+
 /// The operation a plan carries out.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 #[serde(rename_all = "kebab-case")]
@@ -177,6 +179,17 @@ pub enum Step {
         /// The directory.
         path: PathBuf,
     },
+    /// Create an empty directory, as `create-dir` does, and ask its file
+    /// system to fold the case of the names in it (`chattr +F`). A file
+    /// system that cannot is an outcome, not a failure: the directory is
+    /// then an ordinary one and the plan goes on. Only creating the
+    /// directory can fail the step.
+    CaseFold {
+        /// The directory.
+        path: PathBuf,
+        /// The `chattr` command, or nothing when `chattr` is not installed.
+        command: Option<CommandSpec>,
+    },
     /// Write a file, replacing it atomically if it exists.
     WriteFile {
         /// The file.
@@ -257,6 +270,17 @@ impl Step {
     pub fn describe(&self) -> String {
         match self {
             Step::CreateDir { path } => format!("create directory {}", path.display()),
+            Step::CaseFold { path, command } => match command {
+                Some(command) => format!(
+                    "create directory {} and make it case-insensitive where the file system can: {}",
+                    path.display(),
+                    command.display_line()
+                ),
+                None => format!(
+                    "create directory {}; it cannot be made case-insensitive: chattr is not installed",
+                    path.display()
+                ),
+            },
             Step::WriteFile { path, contents } => {
                 format!("write {} ({} bytes)", path.display(), contents.len())
             }
@@ -354,6 +378,12 @@ pub enum StepOutcome {
         /// How long it was given, in seconds.
         seconds: u64,
     },
+    /// A directory was created and the file system asked to fold the case
+    /// of names in it.
+    CaseFolded {
+        /// Whether it does, and why or why not.
+        record: CaseFoldRecord,
+    },
 }
 
 /// A step that could not be carried out.
@@ -428,6 +458,10 @@ pub struct PlanReport {
     pub exit_status: Option<i32>,
     /// Whether the plan stopped because a command ran out of time.
     pub timed_out: bool,
+    /// What became of making a directory case-insensitive, when the plan
+    /// asked for that.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub case_folding: Option<CaseFoldRecord>,
 }
 
 impl PlanReport {
@@ -448,6 +482,7 @@ pub fn run_plan(plan: &Plan, executor: &mut dyn Executor) -> PlanReport {
         findings: Vec::new(),
         exit_status: None,
         timed_out: false,
+        case_folding: None,
     };
     for (index, step) in plan.steps.iter().enumerate() {
         let problem = match executor.execute(step) {
@@ -481,6 +516,10 @@ pub fn run_plan(plan: &Plan, executor: &mut dyn Executor) -> PlanReport {
                 }
                 _ => Some(detail),
             },
+            Ok(StepOutcome::CaseFolded { record }) => {
+                report.case_folding = Some(record);
+                None
+            }
             Ok(StepOutcome::Done) => None,
         };
         if let Some(message) = problem {
@@ -516,6 +555,9 @@ pub(crate) mod fake {
         pub(crate) failing_checks: Vec<String>,
         /// The index of a time-limited command that runs out of time.
         pub(crate) time_out_at: Option<usize>,
+        /// The exit status and message of `chattr` for a case-folding step;
+        /// by default it succeeds.
+        pub(crate) case_fold: Option<(i32, &'static str)>,
     }
 
     impl Executor for FakeExecutor {
@@ -536,6 +578,18 @@ pub(crate) mod fake {
                         } else {
                             self.statuses.remove(0)
                         },
+                    }
+                }
+                Step::CaseFold { command: None, .. } => StepOutcome::CaseFolded {
+                    record: CaseFoldRecord::attempted(
+                        crate::casefold::CaseFoldReason::ToolMissing,
+                        None,
+                    ),
+                },
+                Step::CaseFold { .. } => {
+                    let (status, output) = self.case_fold.unwrap_or((0, ""));
+                    StepOutcome::CaseFolded {
+                        record: crate::casefold::classify(status, output),
                     }
                 }
                 Step::Check { check } | Step::Require { check } => {

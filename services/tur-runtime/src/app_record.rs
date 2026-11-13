@@ -21,6 +21,7 @@ use std::io::Read;
 
 use serde::{Deserialize, Serialize};
 
+use crate::casefold::CaseFoldRecord;
 use crate::codes::Code;
 use crate::installer::InstallerKind;
 use crate::metadata::RuntimeKind;
@@ -187,6 +188,10 @@ pub struct AppRecord {
     pub runtime_version: String,
     /// When it was installed.
     pub installed_at: Timestamp,
+    /// Whether the prefix's drive C: is case-insensitive, and why or why
+    /// not. Left out of records written before it was recorded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub case_folding: Option<CaseFoldRecord>,
     /// How it was installed, and from which file.
     pub install: InstallRecord,
     /// How it is removed.
@@ -402,6 +407,13 @@ impl AppRecord {
         )?;
         check(is_plain_absolute(&self.profile), "profile", NOT_A_PATH)?;
         check(
+            self.case_folding
+                .as_ref()
+                .is_none_or(CaseFoldRecord::is_consistent),
+            "case_folding",
+            "must give a reason that agrees with whether it was asked for and obtained",
+        )?;
+        check(
             self.executables.len() <= MAX_RECORDED_ITEMS
                 && self
                     .executables
@@ -499,6 +511,7 @@ pub(crate) mod tests {
     use serde_json::Value;
 
     use super::*;
+    use crate::casefold::CaseFoldReason;
     use crate::paths::RuntimeDirs;
     use crate::testdata::TempDir;
 
@@ -521,6 +534,7 @@ pub(crate) mod tests {
             runtime: RuntimeKind::Wine,
             runtime_version: "wine-9.0".to_owned(),
             installed_at: Timestamp::from_unix(1_794_478_500),
+            case_folding: None,
             install: InstallRecord {
                 kind: InstallerKind::PlainExe,
                 method: InstallMethod::Copied,
@@ -575,6 +589,10 @@ pub(crate) mod tests {
                 ),
                 ..minimal().launcher
             },
+            case_folding: Some(CaseFoldRecord::attempted(
+                CaseFoldReason::NoCasefoldFeature,
+                Some("chattr: Operation not supported while setting flags on /d/drive_c"),
+            )),
             executables: vec!["C:\\App\\app.exe".to_owned()],
             shortcuts: vec![ShortcutRecord {
                 name: "Example".to_owned(),
@@ -672,6 +690,26 @@ pub(crate) mod tests {
                 record.launcher.icon = Some("/a/../b.png".to_owned());
             }),
             case("profile", |record| record.profile = String::new()),
+            // Case folding obtained without being asked for, and refused
+            // with the reason that says it worked.
+            case("case_folding", |record| {
+                record.case_folding = Some(CaseFoldRecord {
+                    casefolded: true,
+                    ..CaseFoldRecord::not_requested()
+                });
+            }),
+            case("case_folding", |record| {
+                record.case_folding = Some(CaseFoldRecord {
+                    casefolded: false,
+                    ..CaseFoldRecord::attempted(CaseFoldReason::Casefolded, None)
+                });
+            }),
+            case("case_folding", |record| {
+                record.case_folding = Some(CaseFoldRecord {
+                    detail: Some("line\nbreak".to_owned()),
+                    ..CaseFoldRecord::attempted(CaseFoldReason::Failed, None)
+                });
+            }),
             case("executables", |record| {
                 record.executables = vec!["C:\\x.exe".to_owned(); 65];
             }),
@@ -875,6 +913,10 @@ pub(crate) mod tests {
             schema_strings(&schema, "/$defs/uninstall/properties/method/enum"),
             wire_names(&UninstallMethod::ALL)
         );
+        assert_eq!(
+            schema_strings(&schema, "/$defs/case_folding/properties/reason/enum"),
+            wire_names(&CaseFoldReason::ALL)
+        );
         for list in ["executables", "shortcuts"] {
             assert_eq!(
                 schema["properties"][list]["maxItems"], MAX_RECORDED_ITEMS,
@@ -891,6 +933,7 @@ pub(crate) mod tests {
             ("uninstall", &everything["uninstall"]),
             ("launcher", &everything["launcher"]),
             ("shortcut", &everything["shortcuts"][0]),
+            ("case_folding", &everything["case_folding"]),
         ] {
             assert_eq!(
                 keys(&schema["$defs"][definition]["properties"]),
@@ -921,6 +964,11 @@ pub(crate) mod tests {
         assert_eq!(
             required(&schema, "/$defs/launcher/required"),
             keys(&least["launcher"])
+        );
+        let bare_case_folding = serde_json::to_value(CaseFoldRecord::not_requested()).unwrap();
+        assert_eq!(
+            required(&schema, "/$defs/case_folding/required"),
+            keys(&bare_case_folding)
         );
         let bare_shortcut = serde_json::to_value(ShortcutRecord {
             name: "n".to_owned(),
