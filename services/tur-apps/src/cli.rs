@@ -83,7 +83,8 @@ pub enum Command {
         /// Confirm in advance: carry the plan out without asking.
         #[arg(long)]
         yes: bool,
-        /// Write progress and the result as JSON lines.
+        /// Write progress and the result as JSON lines. The line `cancel`
+        /// on standard input then cancels, where that is still safe.
         #[arg(long)]
         events: bool,
     },
@@ -152,8 +153,9 @@ pub enum SourceAction {
 
 /// The proposed D-Bus interface's methods (`dbus/org.tur.Apps1.xml`), the
 /// subcommand each one does the work of, and whether it changes anything.
-/// `Cancel` belongs to the service alone: a command line is cancelled by
-/// interrupting it.
+/// `Cancel` belongs to the service alone: on the command line, an
+/// `install --events` is cancelled by writing the line `cancel` to its
+/// standard input (`src/cancel.rs`).
 pub const DBUS_METHODS: [(&str, Option<&str>, bool); 9] = [
     ("Plan", Some("plan"), false),
     ("Install", Some("install"), true),

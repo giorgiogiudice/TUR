@@ -9,10 +9,12 @@
 //! and formats sizes by the locale, and its output is read here.
 
 use std::io::{BufRead, BufReader, Read};
+use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::mpsc;
 use std::thread;
+use std::time::{Duration, Instant};
 
 use crate::codes::{Code, Failure};
 
@@ -29,6 +31,9 @@ pub struct Outcome {
     pub stdout: String,
     /// What it printed on standard error.
     pub stderr: String,
+    /// Whether it was stopped because a cancel was asked for
+    /// ([`Program::run_streaming_until`]).
+    pub stopped: bool,
 }
 
 impl Outcome {
@@ -124,8 +129,33 @@ impl Program {
         arguments: &[String],
         on_line: &mut dyn FnMut(Stream, &str),
     ) -> Result<Outcome, Failure> {
+        self.run_with(arguments, on_line, None)
+    }
+
+    /// Like [`Program::run_streaming`], but the program is stopped, with
+    /// everything it started, as soon as `stop` says so. It then runs in a
+    /// process group of its own, which is ended with SIGTERM and, five
+    /// seconds later, SIGKILL. The outcome says whether it was stopped.
+    pub fn run_streaming_until(
+        &self,
+        arguments: &[String],
+        on_line: &mut dyn FnMut(Stream, &str),
+        stop: &dyn Fn() -> bool,
+    ) -> Result<Outcome, Failure> {
+        self.run_with(arguments, on_line, Some(stop))
+    }
+
+    fn run_with(
+        &self,
+        arguments: &[String],
+        on_line: &mut dyn FnMut(Stream, &str),
+        stop: Option<&dyn Fn() -> bool>,
+    ) -> Result<Outcome, Failure> {
         let mut command = self.command(arguments);
         command.stdout(Stdio::piped()).stderr(Stdio::piped());
+        if stop.is_some() {
+            command.process_group(0);
+        }
         let mut child = spawn(&mut command).map_err(|error| {
             Failure::new(
                 Code::ProgramMissing,
@@ -147,19 +177,39 @@ impl Program {
         drop(sender);
 
         let mut outcome = Outcome::default();
-        for (stream, line) in receiver {
-            on_line(stream, &line);
-            let target = match stream {
-                Stream::Stdout => &mut outcome.stdout,
-                Stream::Stderr => &mut outcome.stderr,
-            };
-            if target.len() + line.len() < MAX_OUTPUT_BYTES {
-                target.push_str(&line);
-                target.push('\n');
+        // Once the program is stopped, what its group still prints is read
+        // for a while, and then no longer waited for.
+        let mut give_up: Option<Instant> = None;
+        loop {
+            if !outcome.stopped && stop.is_some_and(|stop| stop()) {
+                outcome.stopped = true;
+                terminate(&mut child);
+                give_up = Some(Instant::now() + Duration::from_secs(10));
+            }
+            match receiver.recv_timeout(Duration::from_millis(100)) {
+                Ok((stream, line)) => {
+                    on_line(stream, &line);
+                    let target = match stream {
+                        Stream::Stdout => &mut outcome.stdout,
+                        Stream::Stderr => &mut outcome.stderr,
+                    };
+                    if target.len() + line.len() < MAX_OUTPUT_BYTES {
+                        target.push_str(&line);
+                        target.push('\n');
+                    }
+                }
+                Err(mpsc::RecvTimeoutError::Disconnected) => break,
+                Err(mpsc::RecvTimeoutError::Timeout) => {
+                    if give_up.is_some_and(|deadline| Instant::now() > deadline) {
+                        break;
+                    }
+                }
             }
         }
-        for reader in readers {
-            let _ = reader.join();
+        if !outcome.stopped {
+            for reader in readers {
+                let _ = reader.join();
+            }
         }
         let status = child.wait().map_err(|error| {
             Failure::new(
@@ -170,6 +220,33 @@ impl Program {
         outcome.status = status.code();
         Ok(outcome)
     }
+}
+
+/// Ends a program started in a process group of its own, and everything it
+/// started: SIGTERM to the group, then SIGKILL five seconds later if the
+/// program has not ended. The signals are sent by the system's `kill`
+/// program: this crate has no unsafe code with which to send them itself.
+fn terminate(child: &mut Child) {
+    let group = format!("-{}", child.id());
+    let kill = find(&["/usr/bin/kill", "/bin/kill"]);
+    let signal = |name: &str| {
+        let _ = Command::new(&kill)
+            .args([name, "--", group.as_str()])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+    };
+    signal("-TERM");
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while Instant::now() < deadline {
+        if matches!(child.try_wait(), Ok(Some(_))) {
+            return;
+        }
+        thread::sleep(Duration::from_millis(50));
+    }
+    signal("-KILL");
+    let _ = child.kill();
 }
 
 /// Starts a command, trying again for a moment when the program file is
@@ -251,6 +328,36 @@ mod tests {
         assert!(seen.contains(&(Stream::Stdout, "one".to_owned())));
         assert!(seen.contains(&(Stream::Stderr, "two".to_owned())));
         assert_eq!(outcome.tail(), "two");
+    }
+
+    #[test]
+    fn a_program_is_stopped_with_what_it_started_when_asked() {
+        let program = Program::new("sh", "/bin/sh");
+        let seen_one = std::cell::Cell::new(false);
+        let started = Instant::now();
+        let outcome = program
+            .run_streaming_until(
+                &args(&["-c", "echo one; sleep 60; echo two"]),
+                &mut |_, line| {
+                    if line == "one" {
+                        seen_one.set(true);
+                    }
+                },
+                &|| seen_one.get(),
+            )
+            .unwrap();
+        assert!(outcome.stopped);
+        assert!(!outcome.success());
+        assert_eq!(outcome.stdout, "one\n");
+        // The sleep the shell started was ended too, or the pipe would have
+        // stayed open for a minute.
+        assert!(started.elapsed() < Duration::from_secs(30), "{:?}", started.elapsed());
+
+        let outcome = program
+            .run_streaming_until(&args(&["-c", "echo done"]), &mut |_, _| {}, &|| false)
+            .unwrap();
+        assert!(!outcome.stopped);
+        assert!(outcome.success());
     }
 
     #[test]

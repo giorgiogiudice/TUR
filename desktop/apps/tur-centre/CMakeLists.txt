@@ -53,6 +53,14 @@ qt_add_qml_module(turcentre
         src/hitsmodel.cpp
         src/catalogue.h
         src/catalogue.cpp
+        src/appssource.h
+        src/appssource.cpp
+        src/appsprocess.h
+        src/appsprocess.cpp
+        src/appsfixture.h
+        src/appsfixture.cpp
+        src/apps.h
+        src/apps.cpp
     QML_FILES ${centre_qml}
 )
 target_include_directories(turcentre PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)

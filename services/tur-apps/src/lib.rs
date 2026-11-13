@@ -25,6 +25,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod cancel;
 pub mod cli;
 pub mod codes;
 pub mod digest;

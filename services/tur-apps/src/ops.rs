@@ -15,6 +15,7 @@ use std::path::PathBuf;
 use serde::Serialize;
 use serde_json::{Value, json};
 
+use crate::cancel;
 use crate::codes::{Code, Failure};
 use crate::digest::hash_file;
 use crate::download::fetch_installer;
@@ -106,6 +107,9 @@ pub fn install(
             "Nothing was installed: confirm with --yes, or answer yes when asked.",
         ));
     }
+    if cancel::requested() {
+        return Err(cancel::cancelled(""));
+    }
     let record = match &plan.execution {
         Execution::Flatpak {
             app_id,
@@ -152,10 +156,38 @@ fn install_flatpak(
     );
     let outcome = {
         let mut forward = forward_lines(emitter, "install", true);
-        flatpak.run_streaming(&flatpak::install_arguments(remote, reference), &mut forward)?
+        flatpak.run_streaming_until(
+            &flatpak::install_arguments(remote, reference),
+            &mut forward,
+            &cancel::requested,
+        )?
     };
     let after: BTreeSet<String> = flatpak_refs(flatpak)?.into_iter().collect();
     let added: Vec<String> = after.difference(&before).cloned().collect();
+    if outcome.stopped {
+        // Cancelled: take away what flatpak had added, as after a failure,
+        // and say whether that worked.
+        if !added.is_empty() {
+            let _ = flatpak.run(&flatpak::uninstall_arguments(&added, false));
+        }
+        emitter.finished("install", false);
+        let now: BTreeSet<String> = flatpak_refs(flatpak)?.into_iter().collect();
+        let left: Vec<String> = now.difference(&before).cloned().collect();
+        if !left.is_empty() {
+            return Err(Failure::new(
+                Code::StepFailed,
+                format!(
+                    "The installation was stopped, and these could not be removed again: {}. `flatpak uninstall --user` removes them.",
+                    left.join(", ")
+                ),
+            ));
+        }
+        return Err(cancel::cancelled(if added.is_empty() {
+            "flatpak was stopped before it had added anything."
+        } else {
+            "flatpak was stopped, and what it had added was removed again."
+        }));
+    }
     if !outcome.success() || !after.contains(reference) {
         // Take away what this attempt brought in, so a failure leaves
         // nothing behind.
@@ -297,6 +329,18 @@ fn install_windows(
         }
     };
 
+    // The last moment a cancel is honoured: tur-runtime is not stopped once
+    // it has started.
+    if cancel::requested() {
+        if let Some(directory) = &download_directory {
+            let _ = fs::remove_dir_all(directory);
+        }
+        return Err(cancel::cancelled(if download_directory.is_some() {
+            "The downloaded installer was deleted; nothing in it ran."
+        } else {
+            "Nothing in the file ran."
+        }));
+    }
     emitter.started(
         "install",
         format!(

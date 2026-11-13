@@ -67,7 +67,8 @@ QStringList ProcessSource::arguments(const CatalogueRequest &request, const Sett
             out << QStringLiteral("--prefs") << settings.preferences;
     }
     // Everything after "--" is a value, whatever it begins with.
-    out << QStringLiteral("--") << request.subject;
+    if (request.hasSubject())
+        out << QStringLiteral("--") << request.subject;
     return out;
 }
 
@@ -126,7 +127,7 @@ void ProcessSource::pump()
     while (!m_queue.isEmpty() && m_running.size() < m_settings.concurrency) {
         Job *job = m_queue.takeFirst();
         m_running.insert(job->id, job);
-        if (!isUsableSubject(job->request.subject)) {
+        if (job->request.hasSubject() && !isUsableSubject(job->request.subject)) {
             CatalogueReply reply;
             reply.failure = CatalogueReply::Refused;
             answer(job, reply);

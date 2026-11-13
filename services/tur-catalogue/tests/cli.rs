@@ -141,6 +141,17 @@ fn validate_accepts_the_seed_catalogue() {
     let repository = repository();
     let outcome = on_seed(&["validate", "--repository", &repository]);
     assert_eq!(outcome.status, EXIT_OK, "{}", outcome.stderr);
+
+    // The same counts as JSON, for the application centre's Home view.
+    let outcome = run(&["validate", &seed, "--json"]);
+    assert_eq!(outcome.status, EXIT_OK, "{}", outcome.stderr);
+    let report: serde_json::Value = serde_json::from_str(&outcome.stdout).unwrap();
+    assert_eq!(report["valid"], true);
+    assert_eq!(
+        report["statistics"]["applications"].as_u64(),
+        Some(applications as u64)
+    );
+    assert_eq!(report["statistics"]["rated_by_tur_tests"], 0);
 }
 
 #[test]

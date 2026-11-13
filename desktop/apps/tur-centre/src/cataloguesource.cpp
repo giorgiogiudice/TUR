@@ -10,6 +10,8 @@ QString CatalogueRequest::commandName() const
         return QStringLiteral("show");
     case Route:
         return QStringLiteral("route");
+    case Validate:
+        return QStringLiteral("validate");
     case Search:
         break;
     }

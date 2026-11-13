@@ -195,6 +195,15 @@ fn fetch_into(
         match child.try_wait() {
             Ok(Some(_)) => break,
             Ok(None) => {
+                if crate::cancel::requested() {
+                    // Cancelled: curl is one program, and stops at once.
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    let _ = fs::remove_file(&partial);
+                    return Err(crate::cancel::cancelled(
+                        "The download was stopped, and what had arrived was deleted.",
+                    ));
+                }
                 if let Ok(metadata) = fs::metadata(&partial) {
                     on_progress(metadata.len());
                 }

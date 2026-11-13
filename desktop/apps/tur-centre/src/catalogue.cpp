@@ -4,6 +4,8 @@
 #include "fixturesource.h"
 #include "processsource.h"
 
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QMetaObject>
 
 #include <algorithm>
@@ -487,6 +489,42 @@ void Catalogue::dropSource()
         m_source->deleteLater();
         m_source = nullptr;
     }
+    if (!m_statistics.isEmpty() || m_checkingStatistics) {
+        m_statistics.clear();
+        m_checkingStatistics = false;
+        Q_EMIT statisticsChanged();
+    }
+}
+
+QVariantMap Catalogue::statistics() const
+{
+    return m_statistics;
+}
+
+bool Catalogue::checkingStatistics() const
+{
+    return m_checkingStatistics;
+}
+
+void Catalogue::checkStatistics()
+{
+    if (m_checkingStatistics || !m_statistics.isEmpty())
+        return;
+    m_checkingStatistics = true;
+    Q_EMIT statisticsChanged();
+    ask(CatalogueRequest::Validate, QString(), [this](const CatalogueReply &reply) {
+        m_checkingStatistics = false;
+        // Only a complete answer counts: without the number, Home says
+        // nothing about who rated what.
+        if (reply.failure == CatalogueReply::None && reply.exitStatus == 0) {
+            const QJsonObject document = QJsonDocument::fromJson(reply.output).object();
+            const QJsonObject counts = document.value(QLatin1String("statistics")).toObject();
+            if (document.value(QLatin1String("valid")).toBool()
+                && counts.value(QLatin1String("rated_by_tur_tests")).isDouble())
+                m_statistics = counts.toVariantMap();
+        }
+        Q_EMIT statisticsChanged();
+    });
 }
 
 quint64 Catalogue::ask(CatalogueRequest::Command command, const QString &subject, ReplyHandler handler)

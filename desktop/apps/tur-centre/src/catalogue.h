@@ -197,6 +197,13 @@ class Catalogue : public QObject
     Q_PROPERTY(SearchSession *search READ search CONSTANT FINAL)
     Q_PROPERTY(ApplicationSession *application READ application CONSTANT FINAL)
 
+    // The catalogue's counts, `tur-catalogue validate --json`'s
+    // "statistics", once checkStatistics() has been answered; empty while
+    // they are not known. Home says that TUR has rated nothing itself only
+    // while `rated_by_tur_tests` is 0 (desktop-experience.md, 8.1).
+    Q_PROPERTY(QVariantMap statistics READ statistics NOTIFY statisticsChanged FINAL)
+    Q_PROPERTY(bool checkingStatistics READ checkingStatistics NOTIFY statisticsChanged FINAL)
+
 public:
     using Details = CatalogueDetails;
     using ReplyHandler = std::function<void(const CatalogueReply &)>;
@@ -220,6 +227,11 @@ public:
 
     SearchSession *search() const;
     ApplicationSession *application() const;
+    QVariantMap statistics() const;
+    bool checkingStatistics() const;
+
+    // Asks for the catalogue's counts, once; again after a failure.
+    Q_INVOKABLE void checkStatistics();
 
     // The values of the router's vocabulary this program has words for, by
     // list: routes, ratings, outlooks, severities, rating_source_kinds.
@@ -240,6 +252,7 @@ public:
 
 Q_SIGNALS:
     void configurationChanged();
+    void statisticsChanged();
 
 private:
     struct Pending
@@ -267,6 +280,8 @@ private:
     QHash<QString, Pending> m_pending;
     QHash<QString, Details> m_known;
     quint64 m_epoch = 0;
+    QVariantMap m_statistics;
+    bool m_checkingStatistics = false;
 
     SearchSession *m_search;
     ApplicationSession *m_application;

@@ -60,6 +60,10 @@ install)
         echo "Installing runtime/$runtime"
         echo "runtime/$runtime" >> "$state/refs"
     fi
+    if [ -e "$state/slow-install" ]; then
+        # Long enough to be cancelled half-way (tests/cli.rs).
+        sleep 60
+    fi
     if [ -e "$state/fail-install" ]; then
         echo "Error: Failed to install $id: the fake was told to fail" >&2
         exit 1
