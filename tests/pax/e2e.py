@@ -192,10 +192,23 @@ class Machine:
             self.x11 = Listener(socket.AF_UNIX, str(self.x11_path))
         self.system_bus = Path("/run/dbus/system_bus_socket")
 
+    def granted_named(self):
+        """The granted folder as a person writes it: through /home where
+        /home is the system's link (Fedora Atomic: /home -> var/home), else
+        as it is."""
+        link = Path("/home")
+        if link.is_symlink():
+            try:
+                return link / self.granted.relative_to(link.resolve())
+            except ValueError:
+                pass
+        return self.granted
+
     def placeholders(self):
         return {
             "{{HOME}}": str(self.home),
             "{{GRANTED}}": str(self.granted),
+            "{{GRANTED_NAMED}}": str(self.granted_named()),
             "{{PORT}}": str(self.tcp.address[1]),
             "{{ABSTRACT}}": self.abstract_name,
             "{{RUNTIME}}": str(self.session),
@@ -924,6 +937,33 @@ class Test:
             [(item.get("class"), item.get("decision"), item.get("executed")) for item in outcome.proposals()]
             == [(0, "allowed", True), (0, "allowed", True)],
             json.dumps(outcome.proposals())[:400],
+        )
+
+    def check_grant_through_system_link(self, outcome):
+        name = outcome.name
+        named = self.machine.granted_named()
+        here = "/home is the system's link here" if named != self.machine.granted else "/home is not a link here"
+        print(f"  (the folder was granted as {named}; {here})", flush=True)
+        self.all_allowed_observations(outcome, 2, action="command:read_only", tier="4")
+        report = outcome.output("toolu_named") or ""
+        self.checks.check(
+            name,
+            "a folder granted through the system's link is read under that name",
+            "QUARTERLY-REPORT-OK" in report,
+            report[:200],
+        )
+        beside = outcome.output("toolu_beside") or ""
+        self.checks.check(
+            name,
+            "the link shows nothing beside the granted folder: the SSH canary is not there",
+            "CANARY" not in beside,
+            beside[:200],
+        )
+        self.checks.equal(
+            name,
+            "the first command succeeded and the second found nothing",
+            outcome.executed("TUR_AI_RESULT"),
+            ["ok", "failed"],
         )
 
     def check_sandbox_probe(self, outcome):

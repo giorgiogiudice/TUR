@@ -42,6 +42,15 @@ THE CAP, enforced here and by tur-pax itself:
   default and count that as output);
 * only the models listed for the provider in PROVIDERS can be named.
 
+GENERATION SETTINGS (issue 92). Two of the three scenarios carry generation
+settings in their provider configuration, so that the real service shows
+whether it accepts the fields P@x writes for them (docs/architecture/
+pax-providers.md, section 15.1), at no extra request: for Anthropic, effort
+`low` (`output_config.effort`) on the first, and effort `medium` with a stop
+sequence (`stop_sequences`) on the second; the third sends none. A setting
+the family refuses (temperature, for Anthropic) is tried too, locally: it
+must be refused when the configuration is read, before any request.
+
 At the prices of 2026-11-12 (USD per million tokens) the worst case of one
 run is (MAX_TOKENS + 8000) input tokens and MAX_REQUESTS x the output limit
 in output tokens:
@@ -83,6 +92,13 @@ PROVIDERS = {
         "max_output_tokens": 400,
         "config": {},
         "endpoint": "https://api.anthropic.com",
+        # Per scenario: the generation settings its configuration carries.
+        "generation": {
+            "readonly-command": {"effort": "low"},
+            "injection-tool-result": {"effort": "medium", "stop": ["@@TUR-LIVE-STOP@@"]},
+        },
+        # A setting the family refuses, checked without a request.
+        "refused_generation": {"temperature": 0.5},
     },
     "deepseek": {
         "family": "openai-chat",
@@ -92,6 +108,9 @@ PROVIDERS = {
         "max_output_tokens": 1200,
         "config": {"base_url": "https://api.deepseek.com", "send_back_reasoning": True},
         "endpoint": "https://api.deepseek.com",
+        # None chosen until the preset has been run once with its key.
+        "generation": {},
+        "refused_generation": None,
     },
 }
 
@@ -172,10 +191,58 @@ def main():
         "TUR_PAX_API_KEY": key,
     }
     checks = Checks()
-    requests_left = MAX_REQUESTS
+    local_output = []
+
+    # A setting the family does not take is refused before anything is sent.
+    refused = preset.get("refused_generation")
+    if refused:
+        config = {
+            "schema_version": 1,
+            "provider": preset["family"],
+            "model": arguments.model,
+            "max_output_tokens": max_output_tokens,
+            "generation": refused,
+        }
+        config.update(preset["config"])
+        config_path = work / "refused-generation.provider.json"
+        config_path.write_text(json.dumps(config, indent=2))
+        process = subprocess.run(
+            [
+                str(arguments.tur_pax),
+                "run",
+                "Say hello.",
+                "--json",
+                "--provider-config",
+                str(config_path),
+                "--tools",
+                str(no_tool_sets),
+                "--audit-log",
+                str(work / "refused-generation.audit.jsonl"),
+                "--max-steps",
+                "1",
+            ],
+            env=environment,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        (evidence / "live-refused-generation.stderr.txt").write_text(process.stderr)
+        (evidence / "live-refused-generation.stdout.txt").write_text(process.stdout)
+        local_output.append(process.stdout + process.stderr)
+        try:
+            transcript = json.loads(process.stdout)
+        except ValueError:
+            transcript = {}
+        said = process.stdout + process.stderr
+        checks.check(
+            "generation",
+            f"a setting the {preset['family']} family refuses ({', '.join(refused)}) is refused before any request",
+            process.returncode != 0 and not transcript.get("requests") and any(name in said for name in refused),
+            f"status {process.returncode}: {said[-300:]}",
+        )
+
     tokens_left = MAX_TOKENS
     used = {"requests": 0, "input_tokens": 0, "output_tokens": 0}
-    local_output = []
 
     for file_name in SCENARIOS:
         scenario = json.loads((HERE / "scenarios" / file_name).read_text())
@@ -194,6 +261,10 @@ def main():
             "task_limit": {"max_tokens": tokens_left},
         }
         config.update(preset["config"])
+        generation = preset["generation"].get(name)
+        if generation:
+            config["generation"] = generation
+            print(f"  generation settings: {json.dumps(generation)}", flush=True)
         config_path = work / f"{name}.provider.json"
         config_path.write_text(json.dumps(config, indent=2))
         audit_path = work / f"{name}.audit.jsonl"
@@ -252,6 +323,14 @@ def main():
             f"outcome {outcome}, status {process.returncode}, code {transcript.get('error_code')}: {process.stderr[-300:]}",
         )
         checks.check(name, f"it made at most the {MAX_REQUESTS} requests the run allows", used["requests"] <= MAX_REQUESTS, used)
+        if generation:
+            checks.check(
+                name,
+                f"the service accepted the generation settings {json.dumps(generation)}: the task made requests "
+                "and none was rejected",
+                requests > 0 and not str(transcript.get("error_code") or "").startswith("TUR-AI-PROVIDER"),
+                f"requests {requests}, code {transcript.get('error_code')}: {process.stderr[-300:]}",
+            )
         allowed_above_one = [
             entry.get("TUR_AI_ACTION")
             for entry in audit
@@ -293,6 +372,7 @@ def main():
         "model": arguments.model,
         "endpoint": preset["endpoint"],
         "cap": {"requests": MAX_REQUESTS, "tokens": MAX_TOKENS, "output_tokens_per_response": max_output_tokens},
+        "generation": preset["generation"],
         "used": used,
         "passed": len(checks.results) - len(failed),
         "failed": len(failed),

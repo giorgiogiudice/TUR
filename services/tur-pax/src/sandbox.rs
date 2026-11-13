@@ -45,9 +45,26 @@
 //! home directory other than the home directory itself is refused. This
 //! module does not depend on that crate: its sandbox is built around a Wine
 //! prefix, a display and a GPU, none of which a read-only command has.
+//!
+//! # The system's own links
+//!
+//! On an image-based system (Fedora Atomic, and so TUR) `/home` is a link to
+//! `var/home`, and `/mnt`, `/opt`, `/srv`, `/root` and `/usr/local` are links
+//! into `/var` too. A person writes `/home/ada/Documents`. A grant may not be
+//! reached through a link, because a link inside a granted tree could point
+//! anywhere; but these few links are the system's, owned by the
+//! administrator in directories only the administrator can write, and are
+//! the way every path of the person's begins. So [`GrantRules`] resolves
+//! them, and only them ([`SYSTEM_LINKS`], [`SystemLink`]): a grant named
+//! through one of them is accepted if the rest of the path has no link, and
+//! is judged under the name the person would use, so `/var/home/ada/Documents`
+//! and `/home/ada/Documents` get the same answer and `/var/roothome` is
+//! `/root`. The sandbox shows the granted folder at its real place and adds
+//! the same link, so that a command can name it either way.
 
 use std::fmt;
 use std::fs;
+use std::os::unix::fs::MetadataExt;
 use std::path::{Component, Path, PathBuf};
 
 /// The sandbox program. Never looked up along a search path.
@@ -105,6 +122,119 @@ pub const REFUSED_TREES: [&str; 16] = [
 /// The directory that holds home directories. A grant inside it is accepted
 /// only inside the user's own home directory.
 pub const HOMES_TREE: &str = "/home";
+
+/// The system's own links that a grant may be named through (see the module
+/// documentation). Each is used only if, on the machine, it is a symbolic
+/// link owned by the administrator in a directory only the administrator can
+/// write, and its target passes [`SystemLink::new`]. No other link is ever
+/// followed.
+pub const SYSTEM_LINKS: [&str; 6] = ["/home", "/mnt", "/opt", "/srv", "/root", "/usr/local"];
+
+/// The tree an image-based system keeps its writable state in, where the
+/// system's links point.
+const STATE_TREE: &str = "/var";
+
+/// One of the system's links, resolved: `name` is the path a person writes,
+/// `target` where it leads.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SystemLink {
+    name: PathBuf,
+    target: PathBuf,
+}
+
+impl SystemLink {
+    /// A link from `name`, one of [`SYSTEM_LINKS`], to `target`, its resolved
+    /// form. `None` if either is not a plain absolute path, if `name` is not
+    /// on the list, or if the target could widen what is granted: the root,
+    /// one of the names on the list or a path inside one, or a path that is
+    /// or overlaps a system tree ([`REFUSED_TREES`]) and is not strictly
+    /// inside `/var`, where an image-based system keeps these folders.
+    pub fn new(name: &str, target: &Path) -> Option<SystemLink> {
+        let target_text = target.to_str()?;
+        if !SYSTEM_LINKS.contains(&name) || !is_plain_absolute(target_text) {
+            return None;
+        }
+        if target.parent().is_none() || target == Path::new(name) {
+            return None;
+        }
+        if SYSTEM_LINKS
+            .iter()
+            .any(|other| overlaps(target, Path::new(other)))
+        {
+            return None;
+        }
+        let in_state = target.starts_with(STATE_TREE) && target != Path::new(STATE_TREE);
+        let touches_system = REFUSED_TREES
+            .iter()
+            .any(|tree| overlaps(target, Path::new(tree)));
+        if touches_system && !in_state {
+            return None;
+        }
+        // Not a tree the sandbox shows from `/var`, such as the logs.
+        if STATE_VIEW
+            .iter()
+            .any(|(shown, _)| overlaps(target, Path::new(shown)))
+        {
+            return None;
+        }
+        Some(SystemLink {
+            name: PathBuf::from(name),
+            target: target.to_path_buf(),
+        })
+    }
+
+    /// The path a person writes, such as `/home`.
+    pub fn name(&self) -> &Path {
+        &self.name
+    }
+
+    /// Where it leads, such as `/var/home`.
+    pub fn target(&self) -> &Path {
+        &self.target
+    }
+}
+
+/// The system's links on this machine (see [`SYSTEM_LINKS`]). Only a link
+/// owned by the administrator, in a directory owned by the administrator
+/// that nobody else can write, is taken.
+pub fn system_links() -> Vec<SystemLink> {
+    SYSTEM_LINKS
+        .iter()
+        .filter_map(|name| {
+            let path = Path::new(name);
+            let link = fs::symlink_metadata(path).ok()?;
+            if !link.file_type().is_symlink() || link.uid() != 0 {
+                return None;
+            }
+            let parent = fs::metadata(path.parent()?).ok()?;
+            if parent.uid() != 0 || parent.mode() & 0o022 != 0 {
+                return None;
+            }
+            SystemLink::new(name, &fs::canonicalize(path).ok()?)
+        })
+        .collect()
+}
+
+/// `path` with a leading part rewritten from one form of a link to the
+/// other: from a link's name to its target when `to_target`, else from its
+/// target to its name. Unchanged if no link applies.
+fn rewrite(links: &[SystemLink], path: &Path, to_target: bool) -> PathBuf {
+    for link in links {
+        let (from, to) = if to_target {
+            (&link.name, &link.target)
+        } else {
+            (&link.target, &link.name)
+        };
+        if let Ok(rest) = path.strip_prefix(from) {
+            return if rest.as_os_str().is_empty() {
+                to.clone()
+            } else {
+                to.join(rest)
+            };
+        }
+    }
+    path.to_path_buf()
+}
 
 /// Locations under the home directory that are named in refusals. Every
 /// other hidden entry of the home directory is refused too, without a name.
@@ -276,47 +406,62 @@ impl Grant {
 /// The rules that decide which paths a task may be granted, for one user.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GrantRules {
-    /// The home directory, as named and with links resolved. Empty when no
-    /// usable home directory is known: then nothing among the home
-    /// directories can be granted.
+    /// The home directory, as named, with links resolved, and under the name
+    /// of a system link. Empty when no usable home directory is known: then
+    /// nothing among the home directories can be granted.
     homes: Vec<PathBuf>,
+    /// The system's links on this machine ([`system_links`]).
+    links: Vec<SystemLink>,
 }
 
 impl GrantRules {
-    /// The rules for a user whose home directory is `home`.
+    /// The rules for a user whose home directory is `home`, with the
+    /// system's links of this machine ([`system_links`]).
     ///
     /// A home directory that is not a plain absolute path, or that is or
     /// contains a system tree or the directory of home directories (`/`,
     /// `/home`, `/var`, `/root`), is not used: it would turn the rules for
     /// the inside of a home directory into rules for the whole machine.
     pub fn new(home: Option<&Path>) -> Self {
-        let mut homes = Vec::new();
+        let links = system_links();
+        let resolved = home.and_then(|home| fs::canonicalize(home).ok());
+        Self::build(home, resolved.as_deref(), links)
+    }
+
+    /// The rules for a home directory, without looking at the file system
+    /// and with no system link.
+    pub fn for_home(home: &str) -> Self {
+        Self::build(Some(Path::new(home)), None, Vec::new())
+    }
+
+    /// The rules for a home directory and the system's links given, without
+    /// looking at the file system. Each link is checked with
+    /// [`SystemLink::new`]; one that fails is left out.
+    pub fn with_links(home: &str, links: &[(&str, &str)]) -> Self {
+        let links = links
+            .iter()
+            .filter_map(|(name, target)| SystemLink::new(name, Path::new(target)))
+            .collect();
+        Self::build(Some(Path::new(home)), None, links)
+    }
+
+    fn build(home: Option<&Path>, resolved: Option<&Path>, links: Vec<SystemLink>) -> Self {
+        let mut homes: Vec<PathBuf> = Vec::new();
         if let Some(home) = home {
             let mut forms = vec![home.to_path_buf()];
-            if let Ok(resolved) = fs::canonicalize(home)
-                && resolved != home
-            {
-                forms.push(resolved);
+            forms.extend(resolved.map(Path::to_path_buf));
+            // The same home directory under the other name of a link.
+            for form in forms.clone() {
+                forms.push(rewrite(&links, &form, true));
+                forms.push(rewrite(&links, &form, false));
             }
             for form in forms {
-                if is_usable_home(&form) {
+                if is_usable_home(&form) && !homes.contains(&form) {
                     homes.push(form);
                 }
             }
         }
-        GrantRules { homes }
-    }
-
-    /// The rules for a home directory, without looking at the file system.
-    pub fn for_home(home: &str) -> Self {
-        let home = Path::new(home);
-        GrantRules {
-            homes: if is_usable_home(home) {
-                vec![home.to_path_buf()]
-            } else {
-                Vec::new()
-            },
-        }
+        GrantRules { homes, links }
     }
 
     /// The home directories the rules protect.
@@ -324,10 +469,18 @@ impl GrantRules {
         &self.homes
     }
 
+    /// The system's links the rules resolve.
+    pub fn links(&self) -> &[SystemLink] {
+        &self.links
+    }
+
     /// Apply every rule to a path, without looking at the file system.
     ///
     /// The path is taken as it is written, so it must already be free of
-    /// links; [`GrantRules::admit`] makes sure of that.
+    /// links; [`GrantRules::admit`] makes sure of that. A path that lies in
+    /// the target of a system link is judged under the link's name, the way
+    /// a person writes it: `/var/home/ada/Documents` as
+    /// `/home/ada/Documents`, `/var/roothome` as `/root`.
     ///
     /// # Errors
     ///
@@ -336,7 +489,8 @@ impl GrantRules {
         if !is_plain_absolute(path) {
             return Err(GrantRefusal::NotPlain);
         }
-        let path = Path::new(path);
+        let named = rewrite(&self.links, Path::new(path), false);
+        let path = named.as_path();
         if path.parent().is_none() {
             return Err(GrantRefusal::Root);
         }
@@ -385,7 +539,10 @@ impl GrantRules {
 
     /// Check a path the user wants to grant, against the rules and against
     /// the file system as it is. The path must exist, must be a directory or
-    /// a regular file, and must not be reached through a symbolic link.
+    /// a regular file, and must not be reached through a symbolic link other
+    /// than one of the system's links at its start ([`SYSTEM_LINKS`]). The
+    /// grant holds the path with that link resolved, which is where the
+    /// folder really is.
     ///
     /// # Errors
     ///
@@ -395,7 +552,8 @@ impl GrantRules {
             return Err(GrantRefusal::NotPlain);
         }
         let resolved = fs::canonicalize(requested).map_err(|_| GrantRefusal::Missing)?;
-        if resolved != Path::new(requested) {
+        // Only the system's own link at the start may lead elsewhere.
+        if resolved != rewrite(&self.links, Path::new(requested), true) {
             return Err(GrantRefusal::Link {
                 resolved: resolved.display().to_string(),
             });
@@ -404,9 +562,10 @@ impl GrantRules {
         if !metadata.is_dir() && !metadata.is_file() {
             return Err(GrantRefusal::WrongKind);
         }
-        self.judge(requested)?;
+        let path = resolved.to_str().ok_or(GrantRefusal::NotPlain)?;
+        self.judge(path)?;
         Ok(Grant {
-            path: requested.to_owned(),
+            path: path.to_owned(),
         })
     }
 }
@@ -550,6 +709,11 @@ pub struct SandboxPlan {
     pub limits: Limits,
     /// What the command reads on standard input. Nothing, if `None`.
     pub stdin: Option<Vec<u8>>,
+    /// The system's links the sandbox has, as on the host, so that a granted
+    /// folder can be named either way: (name, target), such as
+    /// (`/home`, `/var/home`). Only a link that leads to a granted folder is
+    /// made, and it shows nothing by itself.
+    pub links: Vec<(String, String)>,
 }
 
 impl SandboxPlan {
@@ -619,6 +783,25 @@ impl SandboxPlan {
                 });
             }
         }
+        // The system's links that lead to a granted folder, at the top level
+        // only: a link under a directory the sandbox shows from the host is
+        // there already.
+        let mut links = Vec::new();
+        for link in rules.links() {
+            let (Some(name), Some(target)) = (link.name().to_str(), link.target().to_str()) else {
+                continue;
+            };
+            let top_level = link.name().parent() == Some(Path::new("/"));
+            let leads_to_a_grant = mounts.iter().any(|mount| {
+                mount.kind == MountKind::Granted && Path::new(&mount.path).starts_with(target)
+            });
+            let taken = mounts
+                .iter()
+                .any(|mount| overlaps(Path::new(&mount.path), link.name()));
+            if top_level && leads_to_a_grant && !taken {
+                links.push((name.to_owned(), target.to_owned()));
+            }
+        }
         // Last, so that nothing above can put anything into it.
         mounts.push(Mount {
             kind: MountKind::Tmpfs,
@@ -654,6 +837,9 @@ impl SandboxPlan {
         for mount in &mounts {
             mount.push_arguments(&mut arguments);
         }
+        for (name, target) in &links {
+            arguments.extend(["--symlink".to_owned(), target.clone(), name.clone()]);
+        }
         // The root of the sandbox is an in-memory file system. Nothing is to
         // be written to it.
         arguments.extend(["--remount-ro".to_owned(), "/".to_owned()]);
@@ -681,6 +867,7 @@ impl SandboxPlan {
             environment,
             limits,
             stdin: None,
+            links,
         })
     }
 
@@ -695,8 +882,16 @@ impl SandboxPlan {
     /// Whether `path` would exist inside the sandbox as something of the
     /// host's: it is, or lies inside, a host path the plan shows, and is not
     /// covered by the private `/tmp`.
+    /// A path under one of the plan's links is taken where the link leads.
     pub fn shows(&self, path: &str) -> bool {
-        let path = Path::new(path);
+        let mut path = PathBuf::from(path);
+        for (name, target) in &self.links {
+            if let Ok(rest) = path.strip_prefix(name) {
+                path = Path::new(target).join(rest);
+                break;
+            }
+        }
+        let path = path.as_path();
         let covered = self
             .mounts
             .iter()
@@ -1213,6 +1408,213 @@ mod tests {
                 ..
             })
         ));
+    }
+
+    /// The links of Fedora Atomic, and so of TUR, as `ls -l /` shows them.
+    const ATOMIC_LINKS: &[(&str, &str)] = &[
+        ("/home", "/var/home"),
+        ("/mnt", "/var/mnt"),
+        ("/opt", "/var/opt"),
+        ("/srv", "/var/srv"),
+        ("/root", "/var/roothome"),
+        ("/usr/local", "/var/usrlocal"),
+    ];
+
+    #[test]
+    fn on_an_image_based_system_a_folder_gets_the_same_answer_under_either_name() {
+        // $HOME may hold either form; the answer is the same.
+        for home in ["/var/home/ada", "/home/ada"] {
+            let rules = GrantRules::with_links(home, ATOMIC_LINKS);
+            assert_eq!(rules.links().len(), ATOMIC_LINKS.len(), "{home}");
+            for form in ["/var/home/ada", "/home/ada"] {
+                assert!(rules.homes().iter().any(|known| known == Path::new(form)), "{home}: {form}");
+            }
+            let cases: &[(&str, Result<(), GrantRefusal>)] = &[
+                ("/var/home/ada/Documents", Ok(())),
+                ("/home/ada/Documents", Ok(())),
+                ("/var/mnt/data/shared", Ok(())),
+                ("/var/opt/tool/share", Ok(())),
+                ("/var/srv/files", Ok(())),
+                ("/var/home/ada", Err(GrantRefusal::ContainsHome)),
+                ("/var/home", Err(GrantRefusal::ContainsHome)),
+                ("/var", Err(GrantRefusal::ContainsHome)),
+                ("/var/home/ada/.cache", Err(GrantRefusal::HiddenInHome)),
+                (
+                    "/var/home/ada/.ssh",
+                    Err(GrantRefusal::Protected {
+                        what: "the SSH directory",
+                    }),
+                ),
+                ("/var/home/grace/Documents", Err(GrantRefusal::OtherAccount)),
+                ("/var/roothome", Err(GrantRefusal::System)),
+                ("/var/roothome/notes", Err(GrantRefusal::System)),
+                ("/var/usrlocal/bin", Err(GrantRefusal::System)),
+                ("/var/lib", Err(GrantRefusal::System)),
+                ("/var/log", Err(GrantRefusal::System)),
+                ("/var/tmp/work", Err(GrantRefusal::System)),
+            ];
+            for (path, expected) in cases {
+                assert_eq!(&rules.judge(path), expected, "{home}: {path}");
+            }
+            // Everything refused without the links is still refused.
+            for path in HOSTILE {
+                if *path != "/var/home/ada/Documents" {
+                    assert!(rules.judge(path).is_err(), "{home}: {path:?} passed");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_link_that_could_widen_a_grant_is_not_taken() {
+        for (name, target) in [
+            ("/home", "/"),
+            ("/home", "/etc"),
+            ("/home", "/etc/home"),
+            ("/home", "/usr/home"),
+            ("/home", "/run/home"),
+            ("/home", "/var"),
+            ("/home", "/var/log"),
+            ("/home", "/var/log/home"),
+            ("/home", "/home"),
+            ("/home", "/mnt/home"),
+            ("/mnt", "/home/ada"),
+            ("/home", "var/home"),
+            ("/home", "/var/../etc"),
+            ("/media", "/run/media"),
+            ("/var", "/var/x"),
+            ("/etc", "/var/etc"),
+        ] {
+            assert!(
+                SystemLink::new(name, Path::new(target)).is_none(),
+                "{name} -> {target} was taken"
+            );
+        }
+        for (name, target) in ATOMIC_LINKS
+            .iter()
+            .copied()
+            .chain([("/home", "/data/home"), ("/srv", "/export/srv")])
+        {
+            let link = SystemLink::new(name, Path::new(target)).expect("a system link");
+            assert_eq!((link.name(), link.target()), (Path::new(name), Path::new(target)));
+        }
+        // Rules given such a link leave it out, and judge as without it.
+        let rules = GrantRules::with_links(HOME, &[("/home", "/etc")]);
+        assert!(rules.links().is_empty());
+        assert_eq!(rules.judge("/etc/ada/Documents"), Err(GrantRefusal::System));
+    }
+
+    #[test]
+    fn the_sandbox_has_the_link_a_granted_folder_is_named_through() {
+        let rules = GrantRules::with_links("/var/home/ada", ATOMIC_LINKS);
+        let grants = [
+            Grant::unchecked("/var/home/ada/Documents"),
+            Grant::unchecked("/var/mnt/data"),
+        ];
+        let plan =
+            SandboxPlan::read_only(&rules, &grants, &command(), Limits::default()).expect("a plan");
+        assert_the_fixed_parts_hold(&plan, "through links");
+        // Two links, for the two grants, and none for /opt, /srv, /root or
+        // /usr/local, which lead to nothing granted or are not at the top.
+        assert_eq!(
+            plan.links,
+            [
+                ("/home".to_owned(), "/var/home".to_owned()),
+                ("/mnt".to_owned(), "/var/mnt".to_owned())
+            ]
+        );
+        let line = plan.arguments.join(" ");
+        assert!(line.contains("--symlink /var/home /home"), "{line}");
+        assert!(line.contains("--ro-bind /var/home/ada/Documents /var/home/ada/Documents"), "{line}");
+        for shown in [
+            "/home/ada/Documents",
+            "/home/ada/Documents/report.txt",
+            "/var/home/ada/Documents",
+            "/mnt/data/x",
+        ] {
+            assert!(plan.shows(shown), "{shown}");
+        }
+        for hidden in [
+            "/home/ada",
+            "/home/ada/.ssh",
+            "/home/ada/Pictures",
+            "/home/grace/Documents",
+            "/var/home/ada/.ssh",
+            "/root",
+            "/opt/tool",
+        ] {
+            assert!(!plan.shows(hidden), "{hidden}");
+        }
+        // With nothing granted there is no link at all.
+        let plan = SandboxPlan::read_only(&rules, &[], &command(), Limits::default()).expect("a plan");
+        assert!(plan.links.is_empty());
+        assert!(!plan.arguments.iter().any(|argument| argument == "--symlink"));
+    }
+
+    /// A scratch directory of the test's own, made fresh.
+    fn scratch(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("tur-pax-sandbox-{name}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).expect("a scratch directory");
+        dir
+    }
+
+    #[test]
+    fn a_grant_named_through_a_system_link_is_admitted_where_the_folder_really_is() {
+        // A stand-in for the system's /home -> var/home: the real link
+        // belongs to the administrator, which a test cannot make, so the
+        // rules are given it.
+        let root = scratch("admit");
+        let real = root.join("var/home");
+        let named = root.join("home");
+        fs::create_dir_all(real.join("ada/Documents")).expect("folders");
+        fs::create_dir_all(real.join("ada/.ssh")).expect("folders");
+        fs::create_dir_all(root.join("elsewhere")).expect("folders");
+        std::os::unix::fs::symlink(&real, &named).expect("a link");
+        // A link inside the granted tree is still refused.
+        std::os::unix::fs::symlink(root.join("elsewhere"), real.join("ada/Escape")).expect("a link");
+        std::os::unix::fs::symlink(real.join("ada/.ssh"), real.join("ada/Keys")).expect("a link");
+
+        let link = SystemLink {
+            name: named.clone(),
+            target: real.clone(),
+        };
+        let home = named.join("ada");
+        let rules = GrantRules::build(Some(home.as_path()), None, vec![link]);
+
+        let through = named.join("ada/Documents");
+        let grant = rules.admit(through.to_str().expect("text")).expect("admitted");
+        assert_eq!(Path::new(grant.path()), real.join("ada/Documents"));
+        let direct = rules
+            .admit(real.join("ada/Documents").to_str().expect("text"))
+            .expect("admitted");
+        assert_eq!(direct, grant);
+
+        for refused in ["ada/Escape", "ada/Keys", "ada/Keys/id_ed25519"] {
+            let path = named.join(refused);
+            assert!(
+                matches!(
+                    rules.admit(path.to_str().expect("text")),
+                    Err(GrantRefusal::Link { .. } | GrantRefusal::Missing)
+                ),
+                "{refused}"
+            );
+        }
+        assert!(matches!(
+            rules.admit(named.join("ada/.ssh").to_str().expect("text")),
+            Err(GrantRefusal::Protected { .. })
+        ));
+        assert_eq!(
+            rules.admit(named.join("ada").to_str().expect("text")),
+            Err(GrantRefusal::ContainsHome)
+        );
+        // Without the link in the rules, the same name is refused as a link.
+        let plain = GrantRules::build(Some(real.join("ada").as_path()), None, Vec::new());
+        assert!(matches!(
+            plain.admit(through.to_str().expect("text")),
+            Err(GrantRefusal::Link { .. })
+        ));
+        let _ = fs::remove_dir_all(&root);
     }
 
     #[test]

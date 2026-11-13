@@ -195,6 +195,13 @@ run pax-grant-as-named tur-pax run "Say hello." --json --provider-config "${out}
     --audit-log "${out}/pax-grant-as-named.audit.jsonl" --grant-read "${named}"
 run pax-grant-resolved tur-pax run "Say hello." --json --provider-config "${out}/provider-closed.json" \
     --audit-log "${out}/pax-grant-resolved.audit.jsonl" --grant-read "${real_home}/Documents"
+# Through the same link, what must stay refused still is: a hidden folder of
+# the home directory, and the home directory itself.
+mkdir -p "${real_home}/.tur-boot-hidden"
+run pax-grant-hidden-named tur-pax run "Say hello." --json --provider-config "${out}/provider-closed.json" \
+    --audit-log "${out}/pax-grant-hidden-named.audit.jsonl" --grant-read "/home/$(id -un)/.tur-boot-hidden"
+run pax-grant-home-named tur-pax run "Say hello." --json --provider-config "${out}/provider-closed.json" \
+    --audit-log "${out}/pax-grant-home-named.audit.jsonl" --grant-read "/home/$(id -un)"
 unset TUR_PAX_API_KEY
 
 # ---- P@x end to end: tests/pax/e2e.py, as the pax workflow runs it ----------------------------

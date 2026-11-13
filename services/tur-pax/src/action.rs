@@ -1127,6 +1127,86 @@ pub const PROTECTED_TARGETS: &[ProtectedTarget] = &[
         "plasmalogin",
         PrivilegedOperation::SecurityPolicy,
     ),
+    // Added when the lists were held against the TUR image on 2026-11-13
+    // (issue 58; tests/image/identifiers.py, image run 43479278136): units
+    // of the image with a security-relevant name that no prefix covered.
+    // The login screen as Fedora 45 names it, and its alias.
+    protect(
+        TargetRule::Unit,
+        "plasma-login",
+        PrivilegedOperation::SecurityPolicy,
+    ),
+    protect(
+        TargetRule::Unit,
+        "display-manager",
+        PrivilegedOperation::SecurityPolicy,
+    ),
+    protect(
+        TargetRule::Unit,
+        "fedora-kinoite-plasmalogin",
+        PrivilegedOperation::SecurityPolicy,
+    ),
+    // Accounts, the authentication agent, the wallet's PAM link and PAM's
+    // namespaces.
+    protect(
+        TargetRule::Unit,
+        "accounts-daemon",
+        PrivilegedOperation::SecurityPolicy,
+    ),
+    protect(
+        TargetRule::Unit,
+        "plasma-polkit-agent",
+        PrivilegedOperation::SecurityPolicy,
+    ),
+    protect(
+        TargetRule::Unit,
+        "plasma-kwallet-pam",
+        PrivilegedOperation::SecurityPolicy,
+    ),
+    protect(
+        TargetRule::Unit,
+        "pam_namespace",
+        PrivilegedOperation::SecurityPolicy,
+    ),
+    protect(
+        TargetRule::Unit,
+        "systemd-userdb-",
+        PrivilegedOperation::SecurityPolicy,
+    ),
+    // The agents that hold a person's keys, smart cards, and SSH's own units
+    // other than the server.
+    protect(
+        TargetRule::Unit,
+        "gpg-agent",
+        PrivilegedOperation::SecurityPolicy,
+    ),
+    protect(
+        TargetRule::Unit,
+        "ssh-",
+        PrivilegedOperation::SecurityPolicy,
+    ),
+    protect(
+        TargetRule::Unit,
+        "pcscd",
+        PrivilegedOperation::SecurityPolicy,
+    ),
+    // The system-wide cryptographic policy, and the firewall rules container
+    // networks add.
+    protect(
+        TargetRule::Unit,
+        "fips-crypto-policy",
+        PrivilegedOperation::SecurityPolicy,
+    ),
+    protect(
+        TargetRule::Unit,
+        "netavark-firewalld",
+        PrivilegedOperation::SecurityPolicy,
+    ),
+    protect(
+        TargetRule::Unit,
+        "netavark-nftables",
+        PrivilegedOperation::SecurityPolicy,
+    ),
     // The measurements a disk key is sealed to, and the broker of the device
     // that holds it.
     protect(
@@ -1139,12 +1219,24 @@ pub const PROTECTED_TARGETS: &[ProtectedTarget] = &[
         "tpm2-abrmd",
         PrivilegedOperation::Encryption,
     ),
-    // The project's own services, the assistant and its policy owner included.
+    // On the image (issue 58): enrolling a disk key, the TPM's own setup and
+    // the signatures made with it.
     protect(
         TargetRule::Unit,
-        "tur-",
-        PrivilegedOperation::SecurityPolicy,
+        "systemd-cryptenroll",
+        PrivilegedOperation::Encryption,
     ),
+    protect(
+        TargetRule::Unit,
+        "systemd-tpm2",
+        PrivilegedOperation::Encryption,
+    ),
+    protect(
+        TargetRule::Unit,
+        "systemd-report-sign-tpm2",
+        PrivilegedOperation::Encryption,
+    ),
+    // The project's own services, the assistant and its policy owner included.
     protect(
         TargetRule::Unit,
         "tur-",
@@ -1154,6 +1246,18 @@ pub const PROTECTED_TARGETS: &[ProtectedTarget] = &[
     protect(
         TargetRule::Unit,
         "systemd-cryptsetup",
+        PrivilegedOperation::Encryption,
+    ),
+    // Generated like systemd-cryptsetup@ (no unit file): integrity and
+    // verity protection of a volume.
+    protect(
+        TargetRule::Unit,
+        "systemd-veritysetup",
+        PrivilegedOperation::Encryption,
+    ),
+    protect(
+        TargetRule::Unit,
+        "systemd-integritysetup",
         PrivilegedOperation::Encryption,
     ),
     protect(TargetRule::Unit, "clevis", PrivilegedOperation::Encryption),
@@ -1168,6 +1272,8 @@ pub const PROTECTED_TARGETS: &[ProtectedTarget] = &[
         PrivilegedOperation::Partitioning,
     ),
     protect(TargetRule::Unit, "lvm2", PrivilegedOperation::Partitioning),
+    // On the image (issue 58): the import of LVM's device list.
+    protect(TargetRule::Unit, "lvm-", PrivilegedOperation::Partitioning),
     protect(TargetRule::Unit, "mdadm", PrivilegedOperation::Partitioning),
     protect(TargetRule::Unit, "mdmon", PrivilegedOperation::Partitioning),
     protect(
@@ -1215,6 +1321,12 @@ pub const PROTECTED_TARGETS: &[ProtectedTarget] = &[
     ),
     protect(TargetRule::Unit, "ostree", PrivilegedOperation::OsUpdate),
     protect(TargetRule::Unit, "bootc", PrivilegedOperation::OsUpdate),
+    // On the image (issue 58): systemd's own updater of the system.
+    protect(
+        TargetRule::Unit,
+        "systemd-sysupdate",
+        PrivilegedOperation::OsUpdate,
+    ),
     // A bus-activation alias can stand for any service.
     protect(TargetRule::Unit, "dbus", PrivilegedOperation::Unclassified),
     // Files: authentication, authorisation, accounts, trust and the audit trail.
@@ -1423,6 +1535,10 @@ pub const PROTECTED_TARGETS: &[ProtectedTarget] = &[
         "/etc/gdm",
         PrivilegedOperation::SecurityPolicy,
     ),
+    // Fedora 45 ships neither file (the defaults are in /usr/lib/systemd);
+    // an entry covers every name that begins with it, so these also cover
+    // the drop-in directories logind.conf.d and journald.conf.d, which are
+    // where a change would go (issue 58).
     protect(
         TargetRule::ConfigurationFile,
         "/etc/systemd/logind.conf",
@@ -1438,9 +1554,10 @@ pub const PROTECTED_TARGETS: &[ProtectedTarget] = &[
         "/etc/tur",
         PrivilegedOperation::SecurityPolicy,
     ),
+    // On the image (issue 58): the login screen's configuration.
     protect(
         TargetRule::ConfigurationFile,
-        "/etc/tur",
+        "/etc/plasmalogin",
         PrivilegedOperation::SecurityPolicy,
     ),
     // Files: storage, encryption, boot, firmware and the OS image.
@@ -1706,9 +1823,15 @@ pub const PROTECTED_TARGETS: &[ProtectedTarget] = &[
         "tur-",
         PrivilegedOperation::SecurityPolicy,
     ),
+    // The login screens (issue 58).
     protect(
         TargetRule::Package,
-        "tur-",
+        "plasma-login",
+        PrivilegedOperation::SecurityPolicy,
+    ),
+    protect(
+        TargetRule::Package,
+        "sddm",
         PrivilegedOperation::SecurityPolicy,
     ),
     protect(
@@ -1994,6 +2117,31 @@ mod tests {
         ] {
             assert!(PROTECTED_TARGETS.iter().any(|entry| entry.rule == rule));
         }
+        // No entry is there twice (issue 58: three were, after a rename).
+        for (index, entry) in PROTECTED_TARGETS.iter().enumerate() {
+            assert!(
+                !PROTECTED_TARGETS[..index]
+                    .iter()
+                    .any(|earlier| earlier.rule == entry.rule
+                        && earlier.prefix.eq_ignore_ascii_case(entry.prefix)),
+                "{} is listed twice",
+                entry.prefix
+            );
+        }
+        // The drop-in directories of the files Fedora 45 does not ship.
+        for file in [
+            "/etc/systemd/logind.conf.d/10-tur.conf",
+            "/etc/systemd/journald.conf.d/10-tur.conf",
+            "/etc/plasmalogin.conf",
+            "/etc/plasmalogin.conf.d/10-tur.conf",
+        ] {
+            assert!(
+                PROTECTED_TARGETS.iter().any(|entry| entry.rule
+                    == TargetRule::ConfigurationFile
+                    && entry.covers(file)),
+                "{file}"
+            );
+        }
     }
 
     #[test]
@@ -2178,6 +2326,41 @@ mod tests {
             ("bootc-finalize-staged.service", Op::OsUpdate),
             ("dbus-broker.service", Op::Unclassified),
             ("dbus-org.freedesktop.login1.service", Op::Unclassified),
+            // Seen on the TUR image (issue 58), no prefix covered them.
+            ("plasma-login.service", Op::SecurityPolicy),
+            ("plasma-login-kwin_wayland.service", Op::SecurityPolicy),
+            ("display-manager.service", Op::SecurityPolicy),
+            ("fedora-kinoite-plasmalogin-workaround.service", Op::SecurityPolicy),
+            ("accounts-daemon.service", Op::SecurityPolicy),
+            ("plasma-polkit-agent.service", Op::SecurityPolicy),
+            ("plasma-kwallet-pam.service", Op::SecurityPolicy),
+            ("pam_namespace.service", Op::SecurityPolicy),
+            ("systemd-userdb-load-credentials.service", Op::SecurityPolicy),
+            ("gpg-agent.service", Op::SecurityPolicy),
+            ("gpg-agent-ssh.socket", Op::SecurityPolicy),
+            ("ssh-agent.service", Op::SecurityPolicy),
+            ("ssh-agent.socket", Op::SecurityPolicy),
+            ("ssh-host-keys-migration.service", Op::SecurityPolicy),
+            ("pcscd.service", Op::SecurityPolicy),
+            ("pcscd.socket", Op::SecurityPolicy),
+            ("fips-crypto-policy-overlay.service", Op::SecurityPolicy),
+            ("netavark-firewalld-reload.service", Op::SecurityPolicy),
+            ("netavark-nftables-reload.service", Op::SecurityPolicy),
+            ("systemd-cryptenroll@.service", Op::Encryption),
+            ("systemd-cryptenroll.socket", Op::Encryption),
+            ("systemd-cryptenroll-firstboot.service", Op::Encryption),
+            ("systemd-tpm2-setup.service", Op::Encryption),
+            ("systemd-tpm2-setup-early.service", Op::Encryption),
+            ("systemd-tpm2-clear.service", Op::Encryption),
+            ("systemd-report-sign-tpm2@.service", Op::Encryption),
+            ("systemd-veritysetup@root.service", Op::Encryption),
+            ("systemd-integritysetup@data.service", Op::Encryption),
+            ("lvm-devices-import.service", Op::Partitioning),
+            ("lvm-devices-import.path", Op::Partitioning),
+            ("systemd-sysupdate.service", Op::OsUpdate),
+            ("systemd-sysupdate.timer", Op::OsUpdate),
+            ("systemd-sysupdated.service", Op::OsUpdate),
+            ("systemd-sysupdate-reboot.timer", Op::OsUpdate),
         ];
         for (unit, expected) in units {
             let covering: Vec<&ProtectedTarget> = PROTECTED_TARGETS
