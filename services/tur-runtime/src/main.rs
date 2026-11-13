@@ -54,16 +54,16 @@ use serde_json::{Value, json};
 
 use tur_runtime::app_record::{AppRecord, SourceRecord, load_record};
 use tur_runtime::autopilot::{
-    APPLIED_SCHEMA_VERSION, Abilities, AppliedRemedies, AutopilotResult, CandidatePlan,
-    CheckSpec, DEFAULT_MAX_ATTEMPTS, FactsRecord, Limits, MAX_ATTEMPTS_LIMIT, MAX_RESULT_BYTES,
+    APPLIED_SCHEMA_VERSION, Abilities, AppliedRemedies, AutopilotResult, CandidatePlan, CheckSpec,
+    DEFAULT_MAX_ATTEMPTS, FactsRecord, Limits, MAX_ATTEMPTS_LIMIT, MAX_RESULT_BYTES,
     MAX_SMALL_FILE_BYTES, Outcome, PrefixFingerprints, RESULT_SCHEMA_VERSION, SearchContext,
     Unsuppliable, candidates, catalogue_record, evidence_digest, parse_result_id, search,
 };
 use tur_runtime::autopilot_run::{
-    CopyTrials, WindowProbe, applied_file, copy_paths, create_private_dir, fingerprint,
-    font_files, import_registry, make_base, probe_case_folding as probe_folding_ability,
-    reg_import_command, remove_tree, results_dir, static_facts, trial_settings_text,
-    wine_builtin_dlls,
+    CopyTrials, WindowProbe, applied_file, copy_paths, create_private_dir, fingerprint, font_files,
+    merge_copy,
+    import_registry, make_base, probe_case_folding as probe_folding_ability, reg_import_command,
+    remove_tree, results_dir, static_facts, trial_settings_text, wine_builtin_dlls,
 };
 use tur_runtime::casefold::{
     CaseFoldRecord, CaseFolding, chattr_command, probe as probe_case_folding,
@@ -71,9 +71,6 @@ use tur_runtime::casefold::{
 use tur_runtime::failure::{FailureClass, StaticFacts};
 use tur_runtime::launch_host::{PROGRAM_DIRECTORIES, find_program};
 
-use tur_runtime::remedy::{Catalogue, EnvironmentValue, RemedyKind, Resolved, reg_file};
-use tur_runtime::runtime_cmd::{RUNTIME_PATH, wine_has_ntsync};
-use tur_runtime::sandbox::SandboxError;
 use tur_runtime::desktop::desktop_entry;
 use tur_runtime::discover::{discover, snapshot};
 use tur_runtime::exec::{Forward, SystemExecutor, supervise};
@@ -89,13 +86,16 @@ use tur_runtime::launch_host::{LaunchHost, RuntimeVersion, WineInstall, probe_wi
 use tur_runtime::limits::MAX_PROFILE_BYTES;
 use tur_runtime::metadata::{GrantAccess, NtsyncDevice, PrefixMetadata, RuntimeKind};
 use tur_runtime::paths::{AppPaths, PathsError, RuntimeDirs};
-use tur_runtime::plan::{CommandSpec, Operation, Plan, PlanReport, Step, run_plan};
+use tur_runtime::plan::{Operation, Plan, PlanReport, Step, run_plan};
 use tur_runtime::prefix::{
     Planner, PrefixSettings, default_prefix_id, load_metadata, with_grant, without_grant,
 };
 use tur_runtime::profile::{AppProfile, GraphicsBackend, ProfileRuntime, parse_profile};
+use tur_runtime::remedy::{Catalogue, EnvironmentValue, RemedyKind, Resolved, reg_file};
 use tur_runtime::report::render_text;
 use tur_runtime::runtime_cmd::DEFAULT_WINE_DEBUG;
+use tur_runtime::runtime_cmd::wine_has_ntsync;
+use tur_runtime::sandbox::SandboxError;
 use tur_runtime::sha256::sha256_file;
 use tur_runtime::timefmt::Timestamp;
 use tur_runtime::{
@@ -1449,12 +1449,7 @@ fn run_app(command: AppCommand) -> u8 {
                 let applied = match load_applied(&app_id) {
                     Ok(applied) => applied,
                     Err(message) => {
-                        return fail(
-                            common.json,
-                            Code::AppRecordInvalid,
-                            &message,
-                            EXIT_REFUSED,
-                        );
+                        return fail(common.json, Code::AppRecordInvalid, &message, EXIT_REFUSED);
                     }
                 };
                 run_launch(
@@ -2065,7 +2060,12 @@ fn load_applied(app_id: &str) -> Result<Option<AppliedRemedies>, String> {
     let text = read_text(&path, MAX_SMALL_FILE_BYTES)?;
     AppliedRemedies::parse(&text, app_id)
         .map(Some)
-        .map_err(|problem| format!("the applied remedies in {} are not valid: {problem}", path.display()))
+        .map_err(|problem| {
+            format!(
+                "the applied remedies in {} are not valid: {problem}",
+                path.display()
+            )
+        })
 }
 
 /// The record, metadata and session of an installed Wine application.
@@ -2104,7 +2104,10 @@ fn render_plans(plans: &[CandidatePlan]) -> String {
             ));
         }
         for passed in &plan.passed_over {
-            text.push_str(&format!("  not tried: {}: {}\n", passed.remedy, passed.reason));
+            text.push_str(&format!(
+                "  not tried: {}: {}\n",
+                passed.remedy, passed.reason
+            ));
         }
     }
     text
@@ -2117,7 +2120,10 @@ fn run_autopilot_plan(app_id: Option<&str>, failure: Option<&str>, json: bool) -
         None => None,
         Some((_, Some(class))) => Some(class),
         Some((name, None)) => {
-            let names: Vec<&str> = FailureClass::ALL.iter().map(|class| class.as_str()).collect();
+            let names: Vec<&str> = FailureClass::ALL
+                .iter()
+                .map(|class| class.as_str())
+                .collect();
             print_error_line(&format!(
                 "error: \"{name}\" is not a failure class; the classes are {}",
                 names.join(", ")
@@ -2130,8 +2136,11 @@ fn run_autopilot_plan(app_id: Option<&str>, failure: Option<&str>, json: bool) -
         exe_name: "program.exe".to_owned(),
         ..StaticFacts::default()
     };
-    let mut known: Option<(FailureClass, Option<String>, Vec<tur_runtime::failure::Hint>)> =
-        given.map(|class| (class, None, Vec::new()));
+    let mut known: Option<(
+        FailureClass,
+        Option<String>,
+        Vec<tur_runtime::failure::Hint>,
+    )> = given.map(|class| (class, None, Vec::new()));
     let mut source = if given.is_some() { "given" } else { "none" };
     if let Some(app_id) = app_id {
         let dirs = match RuntimeDirs::from_env(|name| std::env::var(name).ok()) {
@@ -2318,7 +2327,10 @@ fn run_autopilot_results(app_id: &str, json: bool) -> u8 {
     let summaries: Vec<Value> = results
         .iter()
         .map(|result| {
-            let stamp = result.result_id.split_once('@').map_or("", |(_, stamp)| stamp);
+            let stamp = result
+                .result_id
+                .split_once('@')
+                .map_or("", |(_, stamp)| stamp);
             let record = directory.join(stamp).join("record.toml");
             json!({
                 "result_id": result.result_id,
@@ -2352,7 +2364,11 @@ fn run_autopilot_results(app_id: &str, json: bool) -> u8 {
             print_line(&format!("no results in {}", directory.display()));
         }
         for result in &results {
-            let found: Vec<&str> = result.found.iter().map(|found| found.label.as_str()).collect();
+            let found: Vec<&str> = result
+                .found
+                .iter()
+                .map(|found| found.label.as_str())
+                .collect();
             print_line(&format!(
                 "{}\t{}\t{}\t{}",
                 result.result_id,
@@ -2361,7 +2377,11 @@ fn run_autopilot_results(app_id: &str, json: bool) -> u8 {
                     .failure
                     .as_ref()
                     .map_or("-", |failure| failure.class.as_str()),
-                if found.is_empty() { "-".to_owned() } else { found.join(" + ") }
+                if found.is_empty() {
+                    "-".to_owned()
+                } else {
+                    found.join(" + ")
+                }
             ));
         }
         if let Some(applied) = &applied {
@@ -2396,15 +2416,15 @@ fn run_autopilot(app_id: &str, options: &AutopilotOptions<'_>) -> u8 {
     }
     let check = match options.check {
         None => CheckSpec::default(),
-        Some(path) => match read_text(path, MAX_SMALL_FILE_BYTES)
-            .and_then(|text| CheckSpec::parse(&text))
-        {
-            Ok(check) => check,
-            Err(problem) => {
-                let message = format!("the check {} cannot be used: {problem}", path.display());
-                return fail(json, Code::AutopilotCheckInvalid, &message, EXIT_INPUT);
+        Some(path) => {
+            match read_text(path, MAX_SMALL_FILE_BYTES).and_then(|text| CheckSpec::parse(&text)) {
+                Ok(check) => check,
+                Err(problem) => {
+                    let message = format!("the check {} cannot be used: {problem}", path.display());
+                    return fail(json, Code::AutopilotCheckInvalid, &message, EXIT_INPUT);
+                }
             }
-        },
+        }
     };
     let (session, record, metadata) = match autopilot_session(app_id, common) {
         Ok(prepared) => prepared,
@@ -2460,7 +2480,10 @@ fn run_autopilot(app_id: &str, options: &AutopilotOptions<'_>) -> u8 {
     let result_id = format!("{app_id}@{stamp}");
     let directory = results_dir(&session.dirs, app_id).join(&stamp);
     if std::fs::symlink_metadata(&directory).is_ok() {
-        let message = format!("{} exists already; start the autopilot again", directory.display());
+        let message = format!(
+            "{} exists already; start the autopilot again",
+            directory.display()
+        );
         return fail(json, Code::StepFailed, &message, EXIT_REFUSED);
     }
     if let Err(problem) = create_private_dir(&directory) {
@@ -2478,8 +2501,7 @@ fn run_autopilot(app_id: &str, options: &AutopilotOptions<'_>) -> u8 {
             session.host.chattr.as_deref(),
             &directory,
         ),
-        ntsync: session.host.ntsync == NtsyncDevice::Present
-            && wine_has_ntsync(&installed.version),
+        ntsync: session.host.ntsync == NtsyncDevice::Present && wine_has_ntsync(&installed.version),
         builtin_dlls: wine_builtin_dlls(),
         font_files: font_files(&wanted),
     };
@@ -2649,7 +2671,11 @@ fn run_autopilot(app_id: &str, options: &AutopilotOptions<'_>) -> u8 {
             "record_file": record_written.then_some(&record_file),
         }));
     } else {
-        print_autopilot_text(&result, &result_file, record_written.then_some(record_file.as_path()));
+        print_autopilot_text(
+            &result,
+            &result_file,
+            record_written.then_some(record_file.as_path()),
+        );
     }
     if !result.real_prefix.unchanged {
         let message = "the real prefix changed while the autopilot ran: the autopilot does not \
@@ -2675,7 +2701,11 @@ fn run_autopilot(app_id: &str, options: &AutopilotOptions<'_>) -> u8 {
 }
 
 fn print_autopilot_text(result: &AutopilotResult, result_file: &Path, record_file: Option<&Path>) {
-    print_line(&format!("result {}: {}", result.result_id, result.outcome.as_str()));
+    print_line(&format!(
+        "result {}: {}",
+        result.result_id,
+        result.outcome.as_str()
+    ));
     if let Some(failure) = &result.failure {
         print_line(&format!(
             "  unchanged: {} ({}): {}",
@@ -2711,7 +2741,10 @@ fn print_autopilot_text(result: &AutopilotResult, result_file: &Path, record_fil
     }
     print_line(&format!(
         "  copies: {}, the first took {:.1} s ({} files, {} bytes)",
-        result.snapshot.method, result.snapshot.seconds, result.snapshot.files, result.snapshot.bytes
+        result.snapshot.method,
+        result.snapshot.seconds,
+        result.snapshot.files,
+        result.snapshot.bytes
     ));
     print_line(&format!(
         "  real prefix: {}",
@@ -2729,21 +2762,14 @@ fn print_autopilot_text(result: &AutopilotResult, result_file: &Path, record_fil
 }
 
 /// The steps that give the prefix's drive C: the case-folding attribute: a
-/// new, empty, case-folded directory first, then (in a second plan, once
-/// the attribute is known to be there) the contents copied in, and the two
-/// directories swapped.
-fn case_fold_swap_plans(
-    session: &Session,
-    cp: &Path,
-) -> Result<(Plan, Plan), PlanError> {
+/// new, empty, case-folded directory first; then, once the attribute is
+/// known to be there, the contents are merged in (`merge_copy`, not a plan
+/// step) and a second plan swaps the two directories. Returns both plans,
+/// drive C: and the new directory.
+fn case_fold_swap_plans(session: &Session) -> (Plan, Plan, PathBuf, PathBuf) {
     let drive_c = session.app.prefix.join("drive_c");
     let fresh = session.app.prefix.join("drive_c.tur-autopilot");
     let old = session.app.prefix.join("drive_c.tur-before");
-    let text = |path: &Path| -> Result<String, PlanError> {
-        path.to_str()
-            .map(str::to_owned)
-            .ok_or(PlanError::Sandbox(SandboxError::Path { role: "drive C:" }))
-    };
     let mut first = Plan::new(Operation::Configure, &session.app.app_id);
     first.steps.push(Step::RemoveTree {
         path: fresh.clone(),
@@ -2756,35 +2782,17 @@ fn case_fold_swap_plans(
             .as_deref()
             .and_then(|chattr| chattr_command(chattr, &fresh)),
     });
-    let mut environment = std::collections::BTreeMap::new();
-    environment.insert("PATH".to_owned(), RUNTIME_PATH.to_owned());
-    environment.insert("LC_ALL".to_owned(), "C".to_owned());
     let mut second = Plan::new(Operation::Configure, &session.app.app_id);
-    second.steps.push(Step::Run {
-        label: "copy drive C: into the case-insensitive directory".to_owned(),
-        command: CommandSpec {
-            program: text(cp)?,
-            arguments: vec![
-                "-a".to_owned(),
-                "--reflink=auto".to_owned(),
-                "--".to_owned(),
-                format!("{}/.", text(&drive_c)?),
-                format!("{}/", text(&fresh)?),
-            ],
-            environment,
-            working_directory: None,
-        },
-    });
     second.steps.push(Step::Rename {
         from: drive_c.clone(),
         to: old.clone(),
     });
     second.steps.push(Step::Rename {
-        from: fresh,
-        to: drive_c,
+        from: fresh.clone(),
+        to: drive_c.clone(),
     });
     second.steps.push(Step::RemoveTree { path: old });
-    Ok((first, second))
+    (first, second, drive_c, fresh)
 }
 
 /// `app autopilot --apply <result-id>`: the person's decision to apply what
@@ -2827,7 +2835,8 @@ fn run_autopilot_apply(result_id: &str, common: &Common) -> u8 {
         Ok(installed) => installed,
         Err(error) => return refuse(json, &error),
     };
-    if result.runtime_version != installed.version || metadata.runtime_version != installed.version {
+    if result.runtime_version != installed.version || metadata.runtime_version != installed.version
+    {
         let message = format!(
             "the result was measured with {}, the prefix is on {} and {} is installed; run the \
              autopilot again",
@@ -2842,7 +2851,11 @@ fn run_autopilot_apply(result_id: &str, common: &Common) -> u8 {
     let catalogue = Catalogue::shipped();
     let mut resolved: Vec<Resolved> = Vec::new();
     for found in &result.found {
-        if found.parameters.get("exe").is_some_and(|named| *named != exe) {
+        if found
+            .parameters
+            .get("exe")
+            .is_some_and(|named| *named != exe)
+        {
             let message = format!(
                 "the result was made for the program {:?}, and the application's program is {exe:?}",
                 found.parameters.get("exe")
@@ -2900,17 +2913,7 @@ fn run_autopilot_apply(result_id: &str, common: &Common) -> u8 {
         && resolved
             .iter()
             .any(|remedy| remedy.kind == RemedyKind::DriveCCaseFolding);
-    let swap = if fold {
-        let Some(cp) = find_program(&PROGRAM_DIRECTORIES, &["cp"]) else {
-            return refuse(json, &PlanError::ToolMissing { program: "cp" });
-        };
-        match case_fold_swap_plans(&session, &cp) {
-            Ok(plans) => Some(plans),
-            Err(error) => return refuse(json, &error),
-        }
-    } else {
-        None
-    };
+    let swap = fold.then(|| case_fold_swap_plans(&session));
     let environment: Vec<EnvironmentValue> = resolved
         .iter()
         .flat_map(|remedy| remedy.environment.iter())
@@ -2940,14 +2943,16 @@ fn run_autopilot_apply(result_id: &str, common: &Common) -> u8 {
     let undo = format!("tur-runtime app autopilot {app_id} --revert");
 
     let mut plans: Vec<&Plan> = vec![&backup, &changes];
-    if let Some((first, second)) = &swap {
+    if let Some((first, second, _, _)) = &swap {
         plans.push(first);
         plans.push(second);
     }
     plans.push(&record_plan);
     if common.dry_run {
         if json {
-            print_json(&json!({ "dry_run": true, "plans": plans, "applied": applied, "undo": undo }));
+            print_json(
+                &json!({ "dry_run": true, "plans": plans, "applied": applied, "undo": undo }),
+            );
         } else {
             for plan in &plans {
                 print_line(plan.render_text().trim_end());
@@ -2990,7 +2995,7 @@ fn run_autopilot_apply(result_id: &str, common: &Common) -> u8 {
         let why = failure_message(failure, executor.last_output());
         return roll_back(&mut executor, why);
     }
-    if let Some((first, second)) = &swap {
+    if let Some((first, second, drive_c, fresh)) = &swap {
         let report = run_plan(first, &mut executor);
         let folded = report
             .case_folding
@@ -2999,8 +3004,18 @@ fn run_autopilot_apply(result_id: &str, common: &Common) -> u8 {
         if report.failure.is_some() || !folded {
             let why = report.case_folding.as_ref().map_or_else(
                 || "drive C: could not be rebuilt".to_owned(),
-                |record| format!("drive C: could not be made case-insensitive: {}", record.summary()),
+                |record| {
+                    format!(
+                        "drive C: could not be made case-insensitive: {}",
+                        record.summary()
+                    )
+                },
             );
+            return roll_back(&mut executor, why);
+        }
+        if let Err(problem) = merge_copy(drive_c, fresh) {
+            let _ = remove_tree(&session.dirs, fresh);
+            let why = format!("drive C: could not be copied: {problem}");
             return roll_back(&mut executor, why);
         }
         let report = run_plan(second, &mut executor);

@@ -2665,7 +2665,9 @@ mod tests {
             evidence_sha256: Some("cd".repeat(32)),
         };
         edition.records.push(measured("2026-11-01", &["dpi-120"]));
-        edition.records.push(measured("2026-11-13", &["windows-version-win11"]));
+        edition
+            .records
+            .push(measured("2026-11-13", &["windows-version-win11"]));
         let entry = super::tests::entry(Category::Productivity, vec![edition.clone()]);
         let options = run(&entry, &full_host(), &Preferences::default());
         let wine = options

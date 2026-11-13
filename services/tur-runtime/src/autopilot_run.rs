@@ -116,14 +116,14 @@ pub fn remove_tree(dirs: &RuntimeDirs, path: &Path) -> Result<(), String> {
     }
 }
 
+/// The entries of one directory: names and what `lstat` says of them.
+type Entries = [(String, fs::Metadata)];
+
 /// Visits every directory under `root`, without following links, with the
 /// entries it holds sorted by name. Stops after [`MAX_WALK_ENTRIES`]
 /// entries or below [`MAX_WALK_DEPTH`] levels. Returns whether the walk was
 /// complete.
-fn each_directory(
-    root: &Path,
-    visit: &mut dyn FnMut(&Path, &[(String, fs::Metadata)]),
-) -> bool {
+fn each_directory(root: &Path, visit: &mut dyn FnMut(&Path, &Entries)) -> bool {
     let mut stack = vec![(PathBuf::new(), 0usize)];
     let mut seen = 0usize;
     let mut complete = true;
@@ -238,7 +238,11 @@ pub fn case_collisions(root: &Path) -> Vec<String> {
         for names in by_folded.values() {
             if names.len() > 1 && found.len() < 8 {
                 let place = relative.to_string_lossy();
-                let place = if place.is_empty() { ".".to_owned() } else { place.into_owned() };
+                let place = if place.is_empty() {
+                    ".".to_owned()
+                } else {
+                    place.into_owned()
+                };
                 let text: String = format!("{place}: {}", names.join(", "))
                     .chars()
                     .filter(|character| !character.is_control())
@@ -412,7 +416,11 @@ impl Copier {
                 .into_iter()
                 .rev()
                 .collect();
-            Err(format!("cp exited with status {}: {}", exit_code(output.status), tail.trim()))
+            Err(format!(
+                "cp exited with status {}: {}",
+                exit_code(output.status),
+                tail.trim()
+            ))
         }
     }
 
@@ -447,11 +455,9 @@ impl Copier {
                 text.trim()
             ));
         }
-        let mut contents = from.as_os_str().to_owned();
-        contents.push("/.");
-        let mut target = to.as_os_str().to_owned();
-        target.push("/");
-        self.cp(Path::new(&contents), Path::new(&target), self.reflink)
+        // `cp -a` refuses a directory whose name differs only in case from
+        // one it has just made ("File exists"); merging them is the point.
+        merge_copy(from, to)
     }
 
     /// Copies a directory that is not a prefix (the private home).
@@ -462,6 +468,66 @@ impl Copier {
     pub fn copy_tree(&self, from: &Path, to: &Path) -> Result<(), String> {
         self.cp(from, to, self.reflink)
     }
+}
+
+/// Copies the tree at `from` into the directory `to`, which may exist, and
+/// may fold case. A directory that is already there, under any case, is
+/// merged into rather than refused: on a case-folded destination `Plugins`
+/// and `plugins` become one directory, as on Windows. Links are copied as
+/// links and never followed; files keep their permissions; anything that
+/// is not a file, a directory or a link is left out.
+///
+/// # Errors
+///
+/// What could not be copied, as text.
+pub fn merge_copy(from: &Path, to: &Path) -> Result<(), String> {
+    use std::os::unix::fs::{PermissionsExt, symlink};
+    let failed = |what: &str, path: &Path, error: std::io::Error| {
+        format!("cannot {what} {}: {error}", path.display())
+    };
+    let mut stack = vec![(PathBuf::new(), 0usize)];
+    while let Some((relative, depth)) = stack.pop() {
+        let source = from.join(&relative);
+        let target = to.join(&relative);
+        match fs::create_dir(&target) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                if !fs::symlink_metadata(&target).is_ok_and(|metadata| metadata.is_dir()) {
+                    return Err(failed("merge into", &target, error));
+                }
+            }
+            Err(error) => return Err(failed("create", &target, error)),
+        }
+        if let Ok(metadata) = fs::symlink_metadata(&source) {
+            let mode = metadata.permissions().mode() & 0o7777;
+            let _ = fs::set_permissions(&target, fs::Permissions::from_mode(mode | 0o700));
+        }
+        let reader = fs::read_dir(&source).map_err(|error| failed("read", &source, error))?;
+        for entry in reader {
+            let entry = entry.map_err(|error| failed("read", &source, error))?;
+            let name = entry.file_name();
+            let kind = entry
+                .file_type()
+                .map_err(|error| failed("examine", &entry.path(), error))?;
+            let destination = target.join(&name);
+            if kind.is_dir() {
+                if depth + 1 >= 64 {
+                    return Err(format!("{} is nested too deeply", entry.path().display()));
+                }
+                stack.push((relative.join(&name), depth + 1));
+            } else if kind.is_symlink() {
+                let link = fs::read_link(entry.path())
+                    .map_err(|error| failed("read the link", &entry.path(), error))?;
+                let _ = fs::remove_file(&destination);
+                symlink(&link, &destination)
+                    .map_err(|error| failed("create the link", &destination, error))?;
+            } else if kind.is_file() {
+                fs::copy(entry.path(), &destination)
+                    .map_err(|error| failed("copy", &entry.path(), error))?;
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Makes the first copy of the real prefix and private home, under `base`,
@@ -868,7 +934,6 @@ pub struct CopyTrials<'a> {
 impl CopyTrials<'_> {
     fn attempt(
         &self,
-        number: usize,
         remedies: &[Resolved],
         timings: &mut Timings,
         header: &mut String,
@@ -884,14 +949,13 @@ impl CopyTrials<'_> {
             || remedies
                 .iter()
                 .any(|remedy| remedy.kind == RemedyKind::DriveCCaseFolding);
-        if let Err(problem) = self
-            .copier
-            .copy_prefix(&self.base.join("prefix"), &copy.prefix, case_folding)
+        if let Err(problem) =
+            self.copier
+                .copy_prefix(&self.base.join("prefix"), &copy.prefix, case_folding)
         {
             return Ok(Err(problem));
         }
-        self.copier
-            .copy_tree(&self.base.join("home"), &copy.home)?;
+        self.copier.copy_tree(&self.base.join("home"), &copy.home)?;
         create_private_dir(&copy.logs)?;
         timings.snapshot_seconds = started.elapsed().as_secs_f64();
 
@@ -994,7 +1058,12 @@ impl CopyTrials<'_> {
             header.push_str(&format!("# remedy sets {name}={value}\n"));
         }
         let started = Instant::now();
-        let watched = watch(&assembled.sandboxed, self.check, &classes, self.probe.as_ref());
+        let watched = watch(
+            &assembled.sandboxed,
+            self.check,
+            &classes,
+            self.probe.as_ref(),
+        );
         timings.run_seconds = started.elapsed().as_secs_f64();
         Ok(Ok(watched?))
     }
@@ -1016,7 +1085,7 @@ impl TrialRunner for CopyTrials<'_> {
                 labels.join(" + ")
             }
         );
-        let outcome = self.attempt(number, remedies, &mut timings, &mut header);
+        let outcome = self.attempt(remedies, &mut timings, &mut header);
         let _ = remove_tree(self.dirs, &self.result_dir.join("trial"));
         let (not_applicable, run, output) = match outcome {
             Ok(Ok((run, output))) => (None, run, output),
@@ -1136,8 +1205,14 @@ mod tests {
     #[test]
     fn copies_are_laid_out_as_an_application_s_own() {
         let paths = copy_paths(Path::new("/d/tur/runtime/autopilot/a.b/x/trial"), "a.b");
-        assert_eq!(paths.prefix, Path::new("/d/tur/runtime/autopilot/a.b/x/trial/prefix"));
-        assert_eq!(paths.home, Path::new("/d/tur/runtime/autopilot/a.b/x/trial/home"));
+        assert_eq!(
+            paths.prefix,
+            Path::new("/d/tur/runtime/autopilot/a.b/x/trial/prefix")
+        );
+        assert_eq!(
+            paths.home,
+            Path::new("/d/tur/runtime/autopilot/a.b/x/trial/home")
+        );
         assert_eq!(
             z_drive(Path::new("/d/x/remedy.reg")).as_deref(),
             Some("Z:\\d\\x\\remedy.reg")
@@ -1170,7 +1245,25 @@ mod tests {
         create_private_dir(to.parent().unwrap()).unwrap();
         copier.copy_prefix(&from, &to, false).unwrap();
         fs::write(to.join("drive_c/file.txt"), b"changed in the copy").unwrap();
-        assert_eq!(fs::read(from.join("drive_c/file.txt")).unwrap(), b"original");
+        assert_eq!(
+            fs::read(from.join("drive_c/file.txt")).unwrap(),
+            b"original"
+        );
+        // Two spellings of one directory are merged, not refused.
+        fs::create_dir_all(from.join("drive_c/App/Plugins")).unwrap();
+        fs::create_dir_all(from.join("drive_c/App/plugins")).unwrap();
+        fs::write(from.join("drive_c/App/Plugins/one.txt"), b"one").unwrap();
+        fs::write(from.join("drive_c/App/plugins/two.txt"), b"two").unwrap();
+        symlink("../file.txt", from.join("drive_c/App/link")).unwrap();
+        let merged = temp.path().join("tur/runtime/autopilot/a.b/x/merged");
+        fs::create_dir_all(merged.join("drive_c/App/plugins")).unwrap();
+        merge_copy(&from, &merged).unwrap();
+        assert_eq!(fs::read(merged.join("drive_c/App/Plugins/one.txt")).unwrap(), b"one");
+        assert_eq!(fs::read(merged.join("drive_c/App/plugins/two.txt")).unwrap(), b"two");
+        assert_eq!(
+            fs::read_link(merged.join("drive_c/App/link")).unwrap(),
+            Path::new("../file.txt")
+        );
         // Without chattr a case-insensitive copy is refused, not faked.
         let other = temp.path().join("tur/runtime/autopilot/a.b/x/other/prefix");
         assert!(copier.copy_prefix(&from, &other, true).is_err());

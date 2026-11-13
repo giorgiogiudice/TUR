@@ -22,6 +22,12 @@ the sandbox, finds out what it installed, records that, generates a launcher
 entry, and removes the application again. It is described from
 [Installing a Windows application](#installing-a-windows-application) on.
 
+The fourth is the compatibility autopilot: when an installed application
+fails, it tries known remedies in throwaway copies of the prefix and records
+what made it pass. It has a design note of its own,
+[compat-autopilot](compat-autopilot.md); see also
+[The compatibility autopilot](#the-compatibility-autopilot) below.
+
 A recommendation names a route. It is never a statement that a particular
 application works: that needs a recorded test (§2.3). The same holds for
 launching and installing: an application that installs and opens a window has
@@ -206,6 +212,8 @@ families they belong to, and the Windows end-to-end test
 | `TUR-WINDOWS-APP-009` | Something of the application was still there after it was removed |
 | `TUR-WINDOWS-APP-010` | A value given for an installation (name, time limit) is not allowed |
 | `TUR-WINDOWS-APP-011` | The application's own uninstaller failed or ran out of time (reported with the result; the application is removed all the same) |
+| `TUR-WINDOWS-AUTOPILOT-001` to `-009` | The compatibility autopilot's conditions: no remedy found, a Microsoft component TUR cannot supply, a result missing or not valid, nothing to apply, a check file not valid, the autopilot unavailable here, remedies already applied or none to revert ([compat-autopilot](compat-autopilot.md#12-command-line-and-codes)) |
+| `TUR-WINDOWS-COMPAT-001` to `-012` | Failure classes, not errors of this program: what the autopilot read from a run of an application, from `prefix-unusable` to `check-failed` ([compat-autopilot](compat-autopilot.md#3-failure-detection)) |
 | `TUR-SECURITY-SANDBOX-001` | The effective user is root |
 | `TUR-SECURITY-SANDBOX-002` | bubblewrap is not installed |
 | `TUR-SECURITY-SANDBOX-003` | A directory cannot be granted to an application |
@@ -466,6 +474,7 @@ Nothing is inherited. The environment is built from:
 | `WINEARCH=win64` | Only while a prefix is created (Wine only) |
 | `GAMEID=umu-default`, `STORE=none`, `PROTONPATH=<pinned version>`, `PROTON_VERB=waitforexitandrun` | Proton only. `umu-default` applies no fixes: there is no application database to supply a real identifier |
 | `--env NAME=VALUE` | Added by the user to one launch. A name this table sets, and any name starting with `LD_`, is refused |
+| Applied remedies | `app launch` only: the variables of remedies the person applied with the autopilot (`prefixes/<app-id>/remedies.json`), held to the same rules; a variable given with `--env` wins. A remedy may also leave `/dev/ntsync` out of the sandbox ([compat-autopilot](compat-autopilot.md#9-applying-and-undoing)) |
 
 The session bus address, the SSH and GnuPG agent variables, tokens and everything
 else in the caller's environment are not passed on. Launch logs record the names
@@ -1299,6 +1308,12 @@ tur-runtime app launch <app-id> [--migrate] [--env NAME=VALUE]... [--wine-debug 
         [-- arguments for the application]
 tur-runtime app uninstall <app-id> [--skip-uninstaller] [--remove-backups]
         [--timeout SECONDS]
+tur-runtime app autopilot <app-id> [--check FILE] [--max-attempts N] [--no-combinations]
+        [--network] [--keep-copies]
+tur-runtime app autopilot [<app-id>] --plan [--failure CLASS]
+tur-runtime app autopilot <app-id> --results
+tur-runtime app autopilot --apply <result-id>
+tur-runtime app autopilot <app-id> --revert
 ```
 
 Every `prefix` and `launch` command, and `app install`, `app launch` and
@@ -1326,6 +1341,7 @@ caller's `PATH`: what is found there is also visible inside the sandbox.
 | 6 | The operation was refused before anything was changed or started |
 | 7 | A step failed while the operation was carried out. For `app install`: the installer failed or ran out of time, or what it installed could not be made into an application; the installation was rolled back |
 | 8 | Verification found problems in the prefix. For `app uninstall`: something was still there after the removal |
+| 10 | `app autopilot`: no remedy that was tried made the application pass, or it needs a Microsoft component TUR cannot supply |
 
 Once the application has run, `launch` exits with the application's own exit
 status, which can be any of the numbers above; the JSON report says which it
@@ -1333,6 +1349,23 @@ was.
 
 Errors are written to standard error as `error[CODE]: message`. With `--json`
 the report, or the error, is JSON on standard output.
+
+## The compatibility autopilot
+
+`tur-runtime app autopilot <app-id>` copies the application's prefix and
+private home (copy-on-write where the file system can), runs the application
+unchanged in a copy against a check, reads the failure class from the
+evidence, and tries the remedies of a declarative catalogue
+(`services/tur-runtime/remedies/catalogue.json`) chosen for that class, each in
+a fresh copy, singly and then in bounded pairs. Every attempt runs in this
+document's sandbox, without network and without granted directories. The
+real prefix is only read, and its fingerprints before and after are part of
+the result. `--apply` sets what was found in the real prefix after a
+`prefix backup`; `--revert` restores that backup. No remedy installs or
+fetches anything; a failure that needs a Microsoft component is answered with
+the Windows-guest route. Everything else is in
+[compat-autopilot](compat-autopilot.md); the measurements in
+[autopilot-1](../reports/autopilot-1.md).
 
 ## Not done yet
 
@@ -1420,6 +1453,8 @@ the report, or the error, is JSON on standard output.
 - **Error-code registry.** The codes above are not yet registry entries in the
   sense of §29.3.
 - **Assistant tools for applications.** P@x can inspect a file
-  (`runtime_inspect_file`). It has no tool to identify an installer or to list
-  installed applications: both would be read-only, and both need entries in
-  the assistant's own tool tests, which belong to another component.
+  (`runtime_inspect_file`) and ask what the autopilot would try and what it
+  found (`runtime_autopilot_plan`, `runtime_autopilot_results`, both class 0).
+  It has no tool to identify an installer, to list installed applications or
+  to run the autopilot; why the last is not offered yet is in
+  [compat-autopilot](compat-autopilot.md#11-px).

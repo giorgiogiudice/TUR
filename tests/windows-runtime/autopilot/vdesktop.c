@@ -10,13 +10,21 @@
 
 int main(void)
 {
-    int width = GetSystemMetrics(SM_CXSCREEN);
-    int height = GetSystemMetrics(SM_CYSCREEN);
+    RECT desktop;
+    int width;
+    int height;
     HWND window;
     MSG message;
     DWORD until;
 
-    printf("screen %dx%d\n", width, height);
+    /* The desktop window is the screen as the program sees it; asking for
+     * it first also makes Wine set up the desktop, virtual or not, before
+     * anything is measured. */
+    GetWindowRect(GetDesktopWindow(), &desktop);
+    width = desktop.right - desktop.left;
+    height = desktop.bottom - desktop.top;
+    printf("screen %dx%d (system metrics %dx%d)\n", width, height, GetSystemMetrics(SM_CXSCREEN),
+           GetSystemMetrics(SM_CYSCREEN));
     fflush(stdout);
     if (width > 1024 || height > 768) {
         fprintf(stderr,

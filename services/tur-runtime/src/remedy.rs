@@ -262,9 +262,12 @@ pub struct Resolved {
 pub fn is_identifier(text: &str) -> bool {
     !text.is_empty()
         && text.len() <= 64
-        && text
-            .split('-')
-            .all(|word| !word.is_empty() && word.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit()))
+        && text.split('-').all(|word| {
+            !word.is_empty()
+                && word
+                    .bytes()
+                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
+        })
 }
 
 /// Whether `text` can be the `exe` parameter: a plain file name.
@@ -282,9 +285,9 @@ pub fn is_program_name(text: &str) -> bool {
 pub fn is_dll_parameter(text: &str) -> bool {
     !text.is_empty()
         && text.len() <= 64
-        && text
-            .bytes()
-            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || matches!(b, b'_' | b'-' | b'.'))
+        && text.bytes().all(|b| {
+            b.is_ascii_lowercase() || b.is_ascii_digit() || matches!(b, b'_' | b'-' | b'.')
+        })
         && !text.starts_with('.')
         && !text.ends_with(".dll")
 }
@@ -484,7 +487,9 @@ impl Remedy {
             ("reverting", &self.reverting, 1000),
         ] {
             if text.is_empty() || !is_plain_text(text, max) {
-                problems.push(format!("{field} is empty, too long or holds a control character"));
+                problems.push(format!(
+                    "{field} is empty, too long or holds a control character"
+                ));
             }
         }
         if self.runtimes.is_empty() {
@@ -496,11 +501,7 @@ impl Remedy {
         if self.needs_hint && self.hints.is_empty() {
             problems.push("needs_hint without a hint".to_owned());
         }
-        if self
-            .addresses
-            .iter()
-            .any(|class| class.is_unsuppliable())
-        {
+        if self.addresses.iter().any(|class| class.is_unsuppliable()) {
             problems.push(
                 "no remedy addresses a missing Microsoft component or .NET runtime: TUR cannot \
                  supply them"
@@ -548,7 +549,11 @@ impl Remedy {
                 ));
             }
             for text in [&value.key, &value.name, &value.value] {
-                if !is_plain_text(text, 512) || text.contains('"') || text.contains('[') || text.contains(']') {
+                if !is_plain_text(text, 512)
+                    || text.contains('"')
+                    || text.contains('[')
+                    || text.contains(']')
+                {
                     problems.push(format!("{text:?} cannot be written into a .reg file"));
                 }
                 let rest = text.replace("{exe}", "").replace("{dll}", "");
@@ -734,7 +739,8 @@ mod tests {
         full["environment"] = serde_json::json!([{ "name": "A", "value": "b" }]);
         full["needs_hint"] = Value::Bool(true);
         assert_eq!(keys(&full), keys(&schema["$defs"]["remedy"]["properties"]));
-        let component = serde_json::to_value(&Catalogue::shipped().microsoft_components[0]).unwrap();
+        let component =
+            serde_json::to_value(&Catalogue::shipped().microsoft_components[0]).unwrap();
         assert_eq!(
             keys(&component),
             keys(&schema["$defs"]["microsoft_component"]["properties"])
@@ -789,7 +795,11 @@ mod tests {
         };
         let mut machine = base.clone();
         machine.registry[0].key = "HKEY_LOCAL_MACHINE\\Software\\Wine".to_owned();
-        assert!(check(machine).iter().any(|p| p.contains("HKEY_CURRENT_USER")));
+        assert!(
+            check(machine)
+                .iter()
+                .any(|p| p.contains("HKEY_CURRENT_USER"))
+        );
         let mut fetch = base.clone();
         fetch.description = "Runs winetricks vcrun2019".to_owned();
         assert!(check(fetch).iter().any(|p| p.contains("winetricks")));
@@ -850,7 +860,9 @@ mod tests {
         bare.parameters.remove("dll");
         assert!(catalogue.resolve(&bare).is_err());
         let mut hostile = instance;
-        hostile.parameters.insert("exe".to_owned(), "a]\n[HKEY_LOCAL_MACHINE".to_owned());
+        hostile
+            .parameters
+            .insert("exe".to_owned(), "a]\n[HKEY_LOCAL_MACHINE".to_owned());
         assert!(catalogue.resolve(&hostile).is_err());
 
         let dpi = catalogue

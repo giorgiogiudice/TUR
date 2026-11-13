@@ -297,13 +297,24 @@ fn the_autopilot_tools_run_and_change_nothing() {
             .to_vec()
     };
 
-    let line = command_line(&registry, "runtime_autopilot_plan", json!({ "failure": "dll-init-failed" }));
+    let line = command_line(
+        &registry,
+        "runtime_autopilot_plan",
+        json!({ "failure": "dll-init-failed" }),
+    );
     let (status, stdout, stderr) = run_in(&line);
-    assert!(success("runtime_autopilot_plan").contains(&status), "{status}: {stderr}");
+    assert!(
+        success("runtime_autopilot_plan").contains(&status),
+        "{status}: {stderr}"
+    );
     let plan: Value = serde_json::from_str(&stdout).unwrap_or_else(|e| panic!("{e}: {stdout}"));
     assert_eq!(plan["plans"][0]["class"], "dll-init-failed");
     assert_eq!(plan["failure_source"], "given");
-    assert!(plan["never_supplied"].as_array().is_some_and(|list| !list.is_empty()));
+    assert!(
+        plan["never_supplied"]
+            .as_array()
+            .is_some_and(|list| !list.is_empty())
+    );
 
     let line = command_line(&registry, "runtime_autopilot_plan", json!({}));
     let (status, stdout, stderr) = run_in(&line);
@@ -319,7 +330,10 @@ fn the_autopilot_tools_run_and_change_nothing() {
         json!({ "app_id": "org.example.app" }),
     );
     let (status, stdout, stderr) = run_in(&line);
-    assert!(success("runtime_autopilot_results").contains(&status), "{status}: {stderr}");
+    assert!(
+        success("runtime_autopilot_results").contains(&status),
+        "{status}: {stderr}"
+    );
     let results: Value = serde_json::from_str(&stdout).unwrap_or_else(|e| panic!("{e}: {stdout}"));
     assert_eq!(results["results"], json!([]));
     assert!(results["applied"].is_null());

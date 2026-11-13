@@ -532,7 +532,9 @@ pub fn hints(output: &str, facts: &StaticFacts, dll: Option<&str>) -> Vec<Hint> 
     // program's own text.
     let program_text: String = output
         .lines()
-        .take_while(|line| !line.contains("starting debugger") && !line.contains("Unhandled exception"))
+        .take_while(|line| {
+            !line.contains("starting debugger") && !line.contains("Unhandled exception")
+        })
         .filter(|line| !is_wine_line(line))
         .collect::<Vec<&str>>()
         .join("\n")
@@ -546,7 +548,9 @@ pub fn hints(output: &str, facts: &StaticFacts, dll: Option<&str>) -> Vec<Hint> 
     if !found.contains(&Hint::Direct3d)
         && output.lines().any(|line| {
             is_wine_line(line)
-                && (line.contains("err:d3d") || line.contains("err:wgl") || line.contains("err:vulkan"))
+                && (line.contains("err:d3d")
+                    || line.contains("err:wgl")
+                    || line.contains("err:vulkan"))
         })
     {
         found.push(Hint::Direct3d);
@@ -791,8 +795,9 @@ mod tests {
         );
         assert_eq!(crash.class, FailureClass::Crash);
 
-        let dotnet =
-            diagnosis("err:module:load_dll mscoree.dll not found, IL-only binary L\"a.exe\" cannot be loaded");
+        let dotnet = diagnosis(
+            "err:module:load_dll mscoree.dll not found, IL-only binary L\"a.exe\" cannot be loaded",
+        );
         assert_eq!(dotnet.class, FailureClass::DotnetRuntimeMissing);
 
         let unusable = diagnosis("wine: could not load kernel32.dll, status c0000135");
@@ -871,7 +876,10 @@ mod tests {
         seen.window_required = false;
         seen.exit_status = None;
         seen.ended = Ended::TimedOut;
-        assert_eq!(diagnose(&seen, &facts, &none, &[]).class, FailureClass::Hung);
+        assert_eq!(
+            diagnose(&seen, &facts, &none, &[]).class,
+            FailureClass::Hung
+        );
     }
 
     #[test]

@@ -17,9 +17,10 @@ int main(void)
     printf("ANSI code page %u\n", code_page);
     fflush(stdout);
     if (code_page != 932) {
-        /* The lead-byte table this program would use does not exist. */
-        char *volatile table = NULL;
-        table[0x81] = 1;
+        /* The lead-byte table this program would use does not exist: the
+         * access violation such a program would cause, raised explicitly
+         * (a store to a low address is not reliably a fault under Wine). */
+        RaiseException(EXCEPTION_ACCESS_VIOLATION, EXCEPTION_NONCONTINUABLE, 0, NULL);
         return 6;
     }
     printf("TUR-CHECK-PASS codepage\n");

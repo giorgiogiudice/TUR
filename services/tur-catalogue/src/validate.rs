@@ -612,15 +612,18 @@ fn is_remedy_label(text: &str) -> bool {
     };
     let id_ok = !id.is_empty()
         && id.len() <= 64
-        && id
-            .split('-')
-            .all(|word| !word.is_empty() && word.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit()));
+        && id.split('-').all(|word| {
+            !word.is_empty()
+                && word
+                    .bytes()
+                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
+        });
     let parameter_ok = parameter.is_none_or(|parameter| {
         !parameter.is_empty()
             && parameter.len() <= 64
-            && parameter
-                .bytes()
-                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || matches!(b, b'_' | b'.' | b'-'))
+            && parameter.bytes().all(|b| {
+                b.is_ascii_lowercase() || b.is_ascii_digit() || matches!(b, b'_' | b'.' | b'-')
+            })
     });
     id_ok && parameter_ok
 }
@@ -637,7 +640,10 @@ fn is_version_token(text: &str) -> bool {
 
 /// Whether `text` is a SHA-256 digest in lower-case hexadecimal.
 fn is_sha256(text: &str) -> bool {
-    text.len() == 64 && text.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+    text.len() == 64
+        && text
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
 /// Checks one compatibility record, including the honesty rule.

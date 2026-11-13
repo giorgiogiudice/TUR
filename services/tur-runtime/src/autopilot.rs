@@ -33,9 +33,7 @@ use crate::failure::{
 };
 use crate::metadata::RuntimeKind;
 use crate::profile::is_app_id;
-use crate::remedy::{
-    Catalogue, EnvironmentValue, RemedyInstance, Requirement, Resolved, instance,
-};
+use crate::remedy::{Catalogue, EnvironmentValue, RemedyInstance, Requirement, Resolved, instance};
 use crate::runtime_cmd::check_arguments;
 use crate::sha256::sha256_hex;
 use crate::timefmt::Timestamp;
@@ -154,7 +152,9 @@ impl CheckSpec {
         }
         for text in self.output_contains.iter().chain(&self.output_lacks) {
             if text.is_empty() || text.len() > 512 || text.chars().any(char::is_control) {
-                return Err("an output text is empty, too long or holds a control character".to_owned());
+                return Err(
+                    "an output text is empty, too long or holds a control character".to_owned(),
+                );
             }
         }
         if self.output_contains.len() + self.output_lacks.len() > 32 {
@@ -200,7 +200,9 @@ pub fn evaluate(check: &CheckSpec, run: &RawRun, output: &str) -> Vec<String> {
         (_, Ended::Exited, Some(status)) => {
             problems.push(format!("the program exited with status {status}"));
         }
-        (_, Ended::Exited, None) => problems.push("the program's exit status is unknown".to_owned()),
+        (_, Ended::Exited, None) => {
+            problems.push("the program's exit status is unknown".to_owned())
+        }
         (ExitRule::Zero, Ended::Stopped | Ended::TimedOut, _) => {
             problems.push("the program did not exit by itself in time".to_owned());
         }
@@ -307,7 +309,18 @@ pub fn candidates(
             continue;
         }
         if !remedy.runtimes.contains(&runtime) {
-            skip(&remedy.id, format!("it is for {}", remedy.runtimes.iter().map(|r| r.as_str()).collect::<Vec<_>>().join(", ")));
+            skip(
+                &remedy.id,
+                format!(
+                    "it is for {}",
+                    remedy
+                        .runtimes
+                        .iter()
+                        .map(|r| r.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+            );
             continue;
         }
         if !remedy.automatic {
@@ -380,7 +393,10 @@ pub fn candidates(
         let reason = if matched.is_empty() {
             format!("it addresses {class}")
         } else {
-            format!("it addresses {class}, and the evidence shows {}", hint_names(&matched))
+            format!(
+                "it addresses {class}, and the evidence shows {}",
+                hint_names(&matched)
+            )
         };
         chosen.push(Candidate {
             instance: instance(remedy, exe, if takes_dll { dll } else { None }),
@@ -670,12 +686,8 @@ fn attempt(
         check_problems: problems.clone(),
     };
     let builtin = |dll: &str| context.abilities.builtin_dlls.contains(&dll_base(dll));
-    let diagnosis = crate::failure::diagnose(
-        &evidence,
-        context.facts,
-        &builtin,
-        &catalogue.families(),
-    );
+    let diagnosis =
+        crate::failure::diagnose(&evidence, context.facts, &builtin, &catalogue.families());
     record.failure = Some(FailureRecord::from(&diagnosis));
     record.problems = problems;
     (record, Some(diagnosis))
@@ -717,7 +729,14 @@ pub fn search(
     };
     if baseline_passed {
         notes.push("The application passed its check unchanged; no remedy was tried.".to_owned());
-        return done(attempts, None, None, Vec::new(), Outcome::PassedWithoutRemedy, notes);
+        return done(
+            attempts,
+            None,
+            None,
+            Vec::new(),
+            Outcome::PassedWithoutRemedy,
+            notes,
+        );
     }
     let Some(diagnosis) = diagnosis else {
         if !baseline_applicable {
@@ -732,7 +751,14 @@ pub fn search(
              guest route runs the application on real Windows.",
             diagnosis.summary
         ));
-        return done(attempts, Some(failure), None, Vec::new(), Outcome::Unsuppliable, notes);
+        return done(
+            attempts,
+            Some(failure),
+            None,
+            Vec::new(),
+            Outcome::Unsuppliable,
+            notes,
+        );
     }
     let exe = context.facts.exe_name.clone();
     let plan = candidates(
@@ -766,7 +792,14 @@ pub fn search(
         attempts.push(record);
         match outcome {
             AttemptOutcome::Passed => {
-                return done(attempts, Some(failure), Some(plan.clone()), set, Outcome::Fixed, notes);
+                return done(
+                    attempts,
+                    Some(failure),
+                    Some(plan.clone()),
+                    set,
+                    Outcome::Fixed,
+                    notes,
+                );
             }
             AttemptOutcome::Failed => {
                 failed_singles.push(candidate.clone());
@@ -833,7 +866,14 @@ pub fn search(
             let passed = record.outcome == AttemptOutcome::Passed;
             attempts.push(record);
             if passed {
-                return done(attempts, Some(failure), Some(plan.clone()), set, Outcome::Fixed, notes);
+                return done(
+                    attempts,
+                    Some(failure),
+                    Some(plan.clone()),
+                    set,
+                    Outcome::Fixed,
+                    notes,
+                );
             }
         }
     }
@@ -843,13 +883,24 @@ pub fn search(
             diagnosis.class
         ));
     }
-    done(attempts, Some(failure), Some(plan), Vec::new(), Outcome::NotFixed, notes)
+    done(
+        attempts,
+        Some(failure),
+        Some(plan),
+        Vec::new(),
+        Outcome::NotFixed,
+        notes,
+    )
 }
 
 /// The SHA-256 of the evidence: every attempt as the result records it,
 /// logs by their digests.
 pub fn evidence_digest(attempts: &[Attempt]) -> String {
-    sha256_hex(serde_json::to_string(attempts).unwrap_or_default().as_bytes())
+    sha256_hex(
+        serde_json::to_string(attempts)
+            .unwrap_or_default()
+            .as_bytes(),
+    )
 }
 
 /// How the throwaway copies were made.
@@ -1070,12 +1121,9 @@ pub fn catalogue_record(result: &AutopilotResult) -> Option<String> {
         .iter()
         .map(|found| toml_string(&found.label))
         .collect();
-    let failure = result
-        .failure
-        .as_ref()
-        .map_or_else(String::new, |failure| {
-            format!("failed as {} ({}) unchanged; ", failure.class, failure.code)
-        });
+    let failure = result.failure.as_ref().map_or_else(String::new, |failure| {
+        format!("failed as {} ({}) unchanged; ", failure.class, failure.code)
+    });
     let checked = if result.check.window {
         "a window of its own"
     } else {
@@ -1106,7 +1154,11 @@ pub fn catalogue_record(result: &AutopilotResult) -> Option<String> {
     }
     let _ = writeln!(text, "date = \"{date}\"");
     let _ = writeln!(text, "remedies = [{}]", remedies.join(", "));
-    let _ = writeln!(text, "runtime_version = {}", toml_string(&result.runtime_version));
+    let _ = writeln!(
+        text,
+        "runtime_version = {}",
+        toml_string(&result.runtime_version)
+    );
     let _ = writeln!(text, "evidence_sha256 = \"{}\"", result.evidence_sha256);
     let _ = writeln!(text, "notes = {}", toml_string(&notes));
     Some(text)
@@ -1270,7 +1322,10 @@ mod tests {
     fn abilities() -> Abilities {
         Abilities {
             x11_display: true,
-            builtin_dlls: ["d3dx9_43", "comctl32"].iter().map(|n| (*n).to_owned()).collect(),
+            builtin_dlls: ["d3dx9_43", "comctl32"]
+                .iter()
+                .map(|n| (*n).to_owned())
+                .collect(),
             ..Abilities::default()
         }
     }
@@ -1376,7 +1431,12 @@ mod tests {
         labels.sort_unstable();
         assert_eq!(labels, ["dll-builtin:d3dx9_43", "windows-version-win11"]);
         assert!(calls.len() <= 1 + DEFAULT_MAX_ATTEMPTS);
-        assert!(found.notes.iter().any(|note| note.contains("changed the failure")));
+        assert!(
+            found
+                .notes
+                .iter()
+                .any(|note| note.contains("changed the failure"))
+        );
     }
 
     #[test]
@@ -1455,7 +1515,10 @@ mod tests {
             ended: Ended::TimedOut,
             ..stopped
         };
-        assert_eq!(evaluate(&window, &timed_out, ""), ["no window of the program appeared"]);
+        assert_eq!(
+            evaluate(&window, &timed_out, ""),
+            ["no window of the program appeared"]
+        );
     }
 
     #[test]
@@ -1585,12 +1648,18 @@ mod tests {
             bytes: 1,
         })
         .unwrap();
-        assert_eq!(keys(&attempt), keys(&schema["$defs"]["attempt"]["properties"]));
+        assert_eq!(
+            keys(&attempt),
+            keys(&schema["$defs"]["attempt"]["properties"])
+        );
         let mut failure = written["failure"].clone();
         failure["dll"] = Value::from("a.dll");
         failure["function"] = Value::from("f");
         failure["component"] = Value::from("c");
-        assert_eq!(keys(&failure), keys(&schema["$defs"]["failure"]["properties"]));
+        assert_eq!(
+            keys(&failure),
+            keys(&schema["$defs"]["failure"]["properties"])
+        );
         assert_eq!(
             keys(&written["plan"]["candidates"][0]),
             keys(&schema["$defs"]["candidate"]["properties"])
@@ -1620,7 +1689,10 @@ mod tests {
             keys(&applied["properties"])
         );
         let text = record.to_json();
-        assert_eq!(AppliedRemedies::parse(&text, "tur.test.winver").unwrap(), record);
+        assert_eq!(
+            AppliedRemedies::parse(&text, "tur.test.winver").unwrap(),
+            record
+        );
         assert!(AppliedRemedies::parse(&text, "tur.test.other").is_err());
         let mut hostile = record;
         hostile.environment[0].name = "LD_PRELOAD".to_owned();

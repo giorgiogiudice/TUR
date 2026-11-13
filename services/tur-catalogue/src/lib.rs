@@ -78,9 +78,9 @@ pub use model::{
     parse_entry,
 };
 pub use route::{
-    ALTERNATIVE_TEXT_IDS, Alternative, AlternativeKind, CAVEAT_TEXT_IDS, Caveat, CaveatCode,
-    AutopilotSettings, Outlook, Params, Prerequisite, PrerequisiteCode, RatingSource, ReasonCode, ReasonPart,
-    RouteOption, RouteRequest, Severity, recommended, requirement_severity, route,
+    ALTERNATIVE_TEXT_IDS, Alternative, AlternativeKind, AutopilotSettings, CAVEAT_TEXT_IDS, Caveat,
+    CaveatCode, Outlook, Params, Prerequisite, PrerequisiteCode, RatingSource, ReasonCode,
+    ReasonPart, RouteOption, RouteRequest, Severity, recommended, requirement_severity, route,
 };
 pub use search::{MatchKind, SearchHit, search};
 pub use validate::{validate_catalogue, validate_entry};

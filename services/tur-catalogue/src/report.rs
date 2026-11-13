@@ -90,7 +90,10 @@ fn describe_record(record: &Record) -> String {
         let mut text = format!(
             "not a rating: passed TUR's compatibility autopilot check on {} with {}",
             record.date,
-            record.runtime_version.as_deref().unwrap_or("an unstated runtime")
+            record
+                .runtime_version
+                .as_deref()
+                .unwrap_or("an unstated runtime")
         );
         if let Some(version) = &record.version_tested {
             let _ = write!(text, " for version {version}");

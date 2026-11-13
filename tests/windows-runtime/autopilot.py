@@ -377,7 +377,7 @@ class Driver:
         status, applied, stderr, seconds = self.tur_json(["app", "autopilot", "--apply", result["result_id"], "--json"])
         row["apply_seconds"] = seconds
         (evidence / "apply.json").write_text(json.dumps(applied, indent=2) + "\n")
-        self.checks.check(where, "--apply succeeds", status == 0, stderr)
+        self.checks.check(where, "--apply succeeds", status == 0, json.dumps(applied)[:3000] + stderr)
         backup = (applied.get("applied") or {}).get("backup", "")
         self.checks.check(where, "a backup was taken first",
                           bool(backup) and (self.world.data / "tur/runtime/backups" / app_id / f"{backup}.tar.gz").is_file(),
@@ -477,7 +477,8 @@ class Driver:
         if result.get("outcome") == "fixed":
             status, applied, stderr, seconds = self.tur_json(["app", "autopilot", "--apply", result["result_id"], "--json"])
             row["apply_seconds"] = seconds
-            self.checks.check(where, "--apply succeeds", status == 0, stderr)
+            (evidence / "apply.json").write_text(json.dumps(applied, indent=2) + "\n")
+            self.checks.check(where, "--apply succeeds", status == 0, json.dumps(applied)[:3000] + stderr)
             status, again, seconds = self.autopilot(app_id, None, evidence, "autopilot-after-apply")
             row["after_apply"] = again.get("outcome")
             self.checks.check(where, "after --apply it passes unchanged", again.get("outcome") == "passed-without-remedy",

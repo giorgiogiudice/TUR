@@ -353,7 +353,9 @@ impl Code {
             Code::InstallRequestInvalid => "A value given for the installation is not allowed",
             Code::UninstallerFailed => "The application's own uninstaller failed",
             Code::AutopilotNoRemedy => "No remedy made the application pass its check",
-            Code::AutopilotUnsuppliable => "The application needs a Microsoft component TUR cannot supply",
+            Code::AutopilotUnsuppliable => {
+                "The application needs a Microsoft component TUR cannot supply"
+            }
             Code::AutopilotResultMissing => "No autopilot result has this identifier",
             Code::AutopilotResultInvalid => "The autopilot result is unreadable or not valid",
             Code::AutopilotNothingToApply => "The result found no remedy to apply",
