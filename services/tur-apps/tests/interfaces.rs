@@ -96,7 +96,7 @@ fn the_dbus_interface_and_the_command_line_are_one() {
 #[test]
 fn the_assistant_s_tools_are_methods_that_only_read() {
     let manifest: Value =
-        serde_json::from_str(&read(&component().join("pax/agent-tools.json"))).expect("JSON");
+        serde_json::from_str(&read(&component().join("agent-tools.json"))).expect("JSON");
     let xml_methods = xml_names(&xml(), "method");
     for tool in manifest["tools"].as_array().expect("tools") {
         let method = tool["method"].as_str().expect("a method");

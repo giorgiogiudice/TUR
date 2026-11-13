@@ -595,6 +595,8 @@ pub fn sse_google(turn: &Turn) -> String {
 pub struct Recorded {
     pub path: String,
     pub body: String,
+    /// The value of the `Authorization` header, if the request had one.
+    pub authorization: Option<String>,
 }
 
 impl Recorded {
@@ -763,11 +765,17 @@ fn read_request(stream: &mut TcpStream) -> Option<Recorded> {
     let mut words = lines.next()?.split(' ');
     let _method = words.next()?;
     let path = words.next()?.to_owned();
-    let length = lines
-        .filter_map(|line| line.split_once(':'))
-        .find(|(name, _)| name.trim().eq_ignore_ascii_case("content-length"))
-        .and_then(|(_, value)| value.trim().parse::<usize>().ok())
+    let headers: Vec<(&str, &str)> = lines.filter_map(|line| line.split_once(':')).collect();
+    let header = |wanted: &str| {
+        headers
+            .iter()
+            .find(|(name, _)| name.trim().eq_ignore_ascii_case(wanted))
+            .map(|(_, value)| value.trim().to_owned())
+    };
+    let length = header("content-length")
+        .and_then(|value| value.parse::<usize>().ok())
         .unwrap_or(0);
+    let authorization = header("authorization");
     let mut body = buffer[head_end + 4..].to_vec();
     while body.len() < length {
         match stream.read(&mut chunk) {
@@ -779,6 +787,7 @@ fn read_request(stream: &mut TcpStream) -> Option<Recorded> {
     Some(Recorded {
         path,
         body: String::from_utf8_lossy(&body).into_owned(),
+        authorization,
     })
 }
 
@@ -1137,6 +1146,7 @@ impl Harness {
         };
         let task = TaskRequest {
             task_id: &task_id,
+            provider_id: None,
             request,
             recalled: &self.recalled,
         };

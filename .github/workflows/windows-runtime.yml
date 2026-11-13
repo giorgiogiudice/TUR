@@ -8,6 +8,10 @@
 # tur-runtime and publishes a compatibility table. See
 # tests/windows-runtime/apps.py and apps.json.
 #
+# A third job compares prefixes whose drive_c is case-insensitive (ext4
+# case folding) with ordinary ones, on a casefold-capable file system made
+# in the job. See tests/windows-runtime/casefold.py and compare.py.
+#
 # This runs on Ubuntu with Ubuntu's Wine, not on the TUR image.
 name: windows-runtime
 
@@ -245,4 +249,163 @@ jobs:
         with:
           name: windows-runtime-applications
           path: ${{ runner.temp }}/tur-apps/evidence/
+          if-no-files-found: warn
+
+  case-folding:
+    # Case-insensitive prefixes (issue #81): a prefix's drive_c given the
+    # ext4 case-folding attribute before Wine writes into it, compared with
+    # an ordinary drive_c, on the same file system. The runner's own disk
+    # has no casefold feature, so the job makes a file system that has it,
+    # in an image file on a loop device, and runs:
+    #   1. tests/windows-runtime/casefold.py: a test program (casefold.c)
+    #      that looks at what names in another case resolve to and times
+    #      lookups, in both kinds of prefix; and one prefix on the runner's
+    #      own disk, which must fall back to case-sensitive and say why;
+    #   2. the real applications of the job above, four times: case-folded,
+    #      not, not, case-folded, so that neither mode always runs first;
+    #   3. tests/windows-runtime/compare.py, which puts the passes side by
+    #      side.
+    # Same limits as the job above: Ubuntu's Wine on a hosted runner, not
+    # the TUR image; no GPU.
+    name: Real applications with and without case-insensitive prefixes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    env:
+      CARGO_TERM_COLOR: never
+      CARGO_INCREMENTAL: "0"
+      DEBIAN_FRONTEND: noninteractive
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Scratch directory
+        run: |
+          mkdir -p "$RUNNER_TEMP/tur-casefold/evidence" "$RUNNER_TEMP/tur-casefold/build"
+          echo "WORK=$RUNNER_TEMP/tur-casefold" >> "$GITHUB_ENV"
+
+      - name: Install Wine with its 32-bit support, bubblewrap, a display and mingw-w64
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y wine wine64 wine32:i386 bubblewrap unzip \
+            xvfb x11-utils openbox wmctrl imagemagick gcc-mingw-w64-x86-64 e2fsprogs
+
+      - name: Versions
+        run: |
+          {
+            echo "runner image: ${ImageOS:-?} ${ImageVersion:-?}"
+            . /etc/os-release; echo "os: $PRETTY_NAME"
+            echo "kernel: $(uname -r)"
+            echo "kernel CONFIG_UNICODE: $(grep -h '^CONFIG_UNICODE' "/boot/config-$(uname -r)" 2>&1 | tr '\n' ' ')"
+            echo "kernel ext4 casefold support (/sys/fs/ext4/features/casefold): $(cat /sys/fs/ext4/features/casefold 2>&1)"
+            echo "wine: $(wine --version 2>/dev/null | head -n 1)"
+            echo "bubblewrap: $(bwrap --version)"
+            echo "e2fsprogs: $(mke2fs -V 2>&1 | head -n 1)"
+            echo "mingw x86_64: $(x86_64-w64-mingw32-gcc --version | head -n 1)"
+            echo "python: $(python3 --version)"
+            echo "packages:"
+            dpkg-query -W -f '  ${Package}:${Architecture} ${Version}\n' wine wine64 wine32 libwine \
+              bubblewrap e2fsprogs unzip xvfb openbox 2>&1 || true
+            root="$(findmnt -no SOURCE /)"
+            echo "runner's own disk under RUNNER_TEMP: $(findmnt -no SOURCE,FSTYPE -T "$RUNNER_TEMP")"
+            echo "features of the runner's root file system ($root):"
+            sudo dumpe2fs -h "$root" 2>/dev/null | grep -Ei '^filesystem features|encoding' | sed 's/^/  /' || true
+          } | tee "$WORK/evidence/versions.txt"
+          { echo '### Versions (case folding)'; echo '```'; cat "$WORK/evidence/versions.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: A file system with the casefold feature
+        # An image file on the runner's disk, made with mke2fs's casefold
+        # feature (UTF-8, not strict: the defaults) and mounted on a loop
+        # device. Nothing on the runner's own file systems is changed.
+        run: |
+          image="$RUNNER_TEMP/casefold.img"
+          truncate -s 24G "$image"
+          mkfs.ext4 -q -F -O casefold -E encoding=utf8 -L tur-casefold "$image"
+          sudo mkdir -p /srv/tur-casefold
+          sudo mount -o loop "$image" /srv/tur-casefold
+          sudo chown "$(id -u):$(id -g)" /srv/tur-casefold
+          {
+            echo "image: $image ($(du -h --apparent-size "$image" | cut -f1) apparent)"
+            dumpe2fs -h "$image" 2>/dev/null | grep -Ei '^filesystem features|encoding'
+            findmnt /srv/tur-casefold
+            mkdir /srv/tur-casefold/probe && chattr +F /srv/tur-casefold/probe && lsattr -d /srv/tur-casefold/probe
+            rmdir /srv/tur-casefold/probe
+          } | tee "$WORK/evidence/casefold-filesystem.txt"
+          echo "CASEFOLD=/srv/tur-casefold" >> "$GITHUB_ENV"
+
+      - name: Sandbox preflight
+        run: tests/windows-runtime/sandbox-preflight.sh "$WORK/evidence/sandbox-preflight.txt"
+
+      - name: Toolchain
+        working-directory: services/tur-runtime
+        run: |
+          rustup show active-toolchain || rustup toolchain install
+          rustc --version; cargo --version
+
+      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            services/tur-runtime/target
+          key: windows-runtime-${{ hashFiles('rust-toolchain.toml', 'services/tur-runtime/Cargo.toml', 'services/tur-runtime/Cargo.lock') }}
+          restore-keys: windows-runtime-
+
+      - name: Build tur-runtime and the test program
+        run: |
+          (cd services/tur-runtime && cargo build --locked)
+          x86_64-w64-mingw32-gcc -O1 -Wall -Wextra -o "$WORK/build/casefold.exe" tests/windows-runtime/casefold.c
+
+      - name: The test program, with and without case folding
+        run: |
+          mkdir -p "$WORK/plain"
+          python3 tests/windows-runtime/casefold.py \
+            --tur-runtime services/tur-runtime/target/debug/tur-runtime \
+            --program "$WORK/build/casefold.exe" \
+            --casefold-root "$CASEFOLD/program" \
+            --plain-root "$WORK/plain" \
+            --evidence "$WORK/evidence/program"
+
+      - name: Real applications, case-folded and not, four passes
+        if: always()
+        run: |
+          status=0
+          for pass in "1 casefold yes" "2 no-casefold no" "3 no-casefold no" "4 casefold yes"; do
+            set -- $pass
+            # The previous pass's display is gone before the next starts.
+            pkill -x Xvfb || true; pkill -x openbox || true; sleep 2
+            rm -f /tmp/.X99-lock /tmp/.X11-unix/X99
+            python3 tests/windows-runtime/apps.py \
+              --tur-runtime services/tur-runtime/target/debug/tur-runtime \
+              --apps tests/windows-runtime/apps.json \
+              --work-dir "$CASEFOLD/apps-$1" \
+              --downloads "$CASEFOLD/downloads" \
+              --evidence "$WORK/evidence/apps-$1-$2" \
+              --install-option=--$2 --expect-casefold "$3" \
+              --title "Real applications, pass $1: --$2" || status=1
+            rm -rf "$CASEFOLD/apps-$1"
+          done
+          exit $status
+
+      - name: Comparison
+        if: always()
+        run: |
+          python3 tests/windows-runtime/compare.py \
+            --pass "casefolded=$WORK/evidence/apps-1-casefold" \
+            --pass "not-casefolded=$WORK/evidence/apps-2-no-casefold" \
+            --pass "not-casefolded=$WORK/evidence/apps-3-no-casefold" \
+            --pass "casefolded=$WORK/evidence/apps-4-casefold" \
+            --out "$WORK/evidence" || true
+          for file in "$WORK/evidence/casefold-apps.md" "$WORK/evidence/program/casefold.md"; do
+            if [ -f "$file" ]; then cat "$file" >> "$GITHUB_STEP_SUMMARY"; echo >> "$GITHUB_STEP_SUMMARY"; fi
+          done
+          cp -r "$WORK/plain/xdg-state/tur/runtime/logs" "$WORK/evidence/plain-logs" 2>/dev/null || true
+          cp -r "$CASEFOLD/program/xdg-state/tur/runtime/logs" "$WORK/evidence/program-logs" 2>/dev/null || true
+          ls -laR "$WORK/evidence" | head -n 300
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: windows-runtime-casefold
+          path: ${{ runner.temp }}/tur-casefold/evidence/
           if-no-files-found: warn

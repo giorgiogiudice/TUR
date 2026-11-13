@@ -2,7 +2,7 @@
   "schema_version": 1,
   "status": "example",
   "prices_as_of": "2026-11-12",
-  "note": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0. An EXAMPLE, not a maintained price list. Model names and prices were read on 2026-11-12 from each provider's own pricing page (prices_url) and are the standard, pay-as-you-go prices in USD per million tokens. Each provider changes them without notice. Where a provider charges by prompt length, the price for the shortest prompts is given, which is what a task of P@x normally sends: Anthropic none; OpenAI up to 272K input tokens; Google none for the models listed. A model listed without prices has a price this format cannot state truthfully: tiered by prompt length (claude-haiku-5-5), or announced to change within weeks (gemini-4-carbon, from 2026-12-01). P@x then limits it in tokens. max_output_tokens is P@x's own limit for one response, chosen to bound what one response can cost; it is not the provider's maximum. No model here has been run with TUR: tested_with_tur is false everywhere. Each provider is an identifier with an adapter family (ADR-0004, amended 2026-11-12). The presets of the OpenAI-compatible family (adapter openai-chat) were read from each service's own documentation on 2026-11-12; the pages are in docs/architecture/pax-providers.md, section 14. Their prices are EXAMPLES too: DeepSeek's are its peak rates (off-peak rates are half; peak is 01:00-04:00 and 06:00-10:00 UTC on weekdays), and its page shows them in dollars without naming the currency; xAI's and Mistral's are for prompts under 200K tokens where the page tiers them. Context sizes are as the pages write them (1M read as 1000000, 256k as 256000). capabilities are what the pages declare, not what TUR measured. data_terms are TUR's summary of the pages named in sources, read on reviewed_on; the three companies' entries have none, so their consent text says their terms are not reviewed by TUR. The two local presets point at the standard addresses of Ollama (127.0.0.1:11434) and llama.cpp's llama-server (127.0.0.1:9931), take no key, and declare nothing about tools: that depends on the model and on how the server was started.",
+  "note": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0. An EXAMPLE, not a maintained price list. Model names and prices were read on 2026-11-12 from each provider's own pricing page (prices_url) and are the standard, pay-as-you-go prices in USD per million tokens. Each provider changes them without notice. Where a provider charges by prompt length, the price for the shortest prompts is given, which is what a task of P@x normally sends: Anthropic none; OpenAI up to 272K input tokens; Google none for the models listed. A model listed without prices has a price this format cannot state truthfully: tiered by prompt length (claude-haiku-5-5), or announced to change within weeks (gemini-4-carbon, from 2026-12-01). P@x then limits it in tokens. max_output_tokens is P@x's own limit for one response, chosen to bound what one response can cost; it is not the provider's maximum. No model here has been run with TUR: tested_with_tur is false everywhere. Each provider is an identifier with an adapter family (ADR-0004, amended 2026-11-12). The presets of the OpenAI-compatible family (adapter openai-chat) were read from each service's own documentation on 2026-11-12; the pages are in docs/architecture/pax-providers.md, section 14. Their prices are EXAMPLES too: DeepSeek's are its peak rates (off-peak rates are half; peak is 01:00-04:00 and 06:00-10:00 UTC on weekdays), and its page shows them in dollars without naming the currency; xAI's and Mistral's are for prompts under 200K tokens where the page tiers them. Context sizes are as the pages write them (1M read as 1000000, 256k as 256000). capabilities are what the pages declare, not what TUR measured. data_terms are TUR's summary of the pages named in sources, read on reviewed_on; the three companies' entries have none, so their consent text says their terms are not reviewed by TUR. The two local presets point at the standard addresses of Ollama (127.0.0.1:11434) and llama.cpp's llama-server (127.0.0.1:9931), take no key, and declare nothing about tools: that depends on the model and on how the server was started. The preset local is TUR's own local AI, tur-ai-local (docs/architecture/local-ai.md): its address 127.0.0.1:39281, its key read from the file tur-ai-local writes in the session's runtime directory each time it starts a model (runtime_key_file, never the password store), and its models the chat models of its catalogue that call tools, with the context size it serves (8192 tokens) and an output limit of 1024 tokens chosen by P@x.",
   "providers": [
     {
       "id": "anthropic",
@@ -436,6 +436,51 @@
         "runs_locally": true
       },
       "models": []
+    },
+    {
+      "id": "local",
+      "adapter": "openai-chat",
+      "name": "Local AI on this computer",
+      "base_url": "http://127.0.0.1:39281/v1",
+      "runtime_key_file": "tur-ai-local/api-key",
+      "capabilities": {
+        "tool_calling": true,
+        "streaming_tool_calls": true,
+        "image_input": false,
+        "context_tokens": 8192
+      },
+      "data_terms": {
+        "runs_locally": true
+      },
+      "models": [
+        {
+          "model": "qwen3-4b",
+          "label": "Qwen3 4B",
+          "max_output_tokens": 1024,
+          "tested_with_tur": false
+        },
+        {
+          "model": "qwen3-vl-2b-instruct",
+          "label": "Qwen3-VL 2B Instruct",
+          "capabilities": {
+            "image_input": true
+          },
+          "max_output_tokens": 1024,
+          "tested_with_tur": false
+        },
+        {
+          "model": "granite-4.0-1b",
+          "label": "Granite 4.0 1B",
+          "max_output_tokens": 1024,
+          "tested_with_tur": false
+        },
+        {
+          "model": "qwen3-0.6b",
+          "label": "Qwen3 0.6B",
+          "max_output_tokens": 1024,
+          "tested_with_tur": false
+        }
+      ]
     }
   ]
 }

@@ -38,7 +38,10 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use tur_pax_memory::default_store_dir;
-use tur_pax_providers::{Prices, ProviderConfig, ProviderId, RetryPolicy, TaskLimit, Timeouts};
+use tur_pax_providers::{
+    ApiKey, ErrorKind, FileKeySource, KeySource, Prices, ProviderConfig, ProviderId, RetryPolicy,
+    TaskLimit, Timeouts,
+};
 
 use crate::consent::{CONSENT_TEXT_VERSION, family_name};
 use crate::faults::{Fault, TaskCode};
@@ -399,6 +402,14 @@ pub struct ProviderEntry {
     /// family, such as a model server on this computer, can do without one.
     #[serde(default = "yes", skip_serializing_if = "is_true")]
     pub key_required: bool,
+    /// Where the key is read when it is not kept in the password store: a
+    /// file in the session's runtime directory (`$XDG_RUNTIME_DIR`), named
+    /// relative to it, that a model server on this computer writes for the
+    /// person each time it starts (`tur-ai-local/api-key` for
+    /// `tur-ai-local`). Only for an entry that needs a key and whose address
+    /// is this computer.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_key_file: Option<String>,
     /// Whether the model's reasoning is sent back with later requests,
     /// because the service's documentation requires it (OpenAI-compatible
     /// family only; DeepSeek).
@@ -478,7 +489,125 @@ pub fn is_keyring_item(name: &str) -> bool {
         })
 }
 
+/// The longest name of a key file in the runtime directory, in bytes.
+pub const RUNTIME_KEY_FILE_MAX: usize = 128;
+
+/// Whether `name` can name a key file in the session's runtime directory: a
+/// relative path of 1 to 128 bytes whose parts, separated by `/`, are each
+/// made of lower-case ASCII letters, digits, `-`, `_` and `.`, and none of
+/// which is `.` or `..`. It can name nothing outside the runtime directory.
+pub fn is_runtime_key_file(name: &str) -> bool {
+    (1..=RUNTIME_KEY_FILE_MAX).contains(&name.len())
+        && name.split('/').all(|part| {
+            !part.is_empty()
+                && part != "."
+                && part != ".."
+                && part.bytes().all(|byte| {
+                    byte.is_ascii_lowercase()
+                        || byte.is_ascii_digit()
+                        || matches!(byte, b'-' | b'_' | b'.')
+                })
+        })
+}
+
+/// Where the key of a provider comes from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeySourceKind<'a> {
+    /// Nowhere: the service takes no key and none is sent.
+    None,
+    /// The password store, under this item.
+    Keyring(&'a str),
+    /// A file in the session's runtime directory, by this name relative to
+    /// it, which a model server on this computer wrote.
+    RuntimeFile(&'a str),
+}
+
+/// The key a model server on this computer wrote for the person, in the file
+/// `file` of the session's runtime directory `runtime`
+/// ([`ProviderEntry::runtime_key_file`]).
+///
+/// It is read only for an address of this computer: such a key is never
+/// sent anywhere else. It is never put in the password store either: the
+/// server writes a new one each time it starts, it is worthless once the
+/// server stops, and the runtime directory is emptied at log-out.
+///
+/// # Errors
+///
+/// `TUR-AI-PROVIDER-012`, naming the file and never its content, if the
+/// address is not this computer, the runtime directory is not known, or the
+/// file is not there or not the person's alone (the model server is not
+/// running).
+pub fn runtime_key(
+    runtime: Option<&Path>,
+    adapter: ProviderId,
+    file: &str,
+    address: Option<&str>,
+) -> Result<ApiKey, Fault> {
+    let unavailable = |detail: &str| Fault {
+        code: ErrorKind::KeyUnavailable.error_code(),
+        detail: detail.to_owned(),
+    };
+    if !address.is_some_and(is_loopback_url) {
+        return Err(unavailable(
+            "the key file of a model server on this computer is sent only to an address of this \
+             computer",
+        ));
+    }
+    if !is_runtime_key_file(file) {
+        return Err(unavailable(
+            "the key file is not a name in the runtime directory",
+        ));
+    }
+    let Some(runtime) = runtime else {
+        return Err(unavailable(
+            "the session's runtime directory (XDG_RUNTIME_DIR) is not known, so the key file of \
+             the model server cannot be found",
+        ));
+    };
+    FileKeySource::new(runtime.join(file))
+        .api_key(adapter)
+        .map_err(|error| Fault {
+            code: error.kind().error_code(),
+            detail: error.to_string(),
+        })
+}
+
+/// How long P@x waits for a response to begin, from a model on this
+/// computer, in milliseconds. A model on the processor reads a request of
+/// P@x's (instructions and tool definitions: thousands of tokens) for a
+/// minute or more before it answers anything (`docs/reports/local-ai-1.md`).
+pub const LOCAL_RESPONSE_MS: u64 = 600_000;
+
+/// The timeouts for a provider at `address`: the provider layer's, except
+/// that a model on this computer is given [`LOCAL_RESPONSE_MS`] to begin.
+pub fn timeouts_for(address: Option<&str>) -> Timeouts {
+    let mut timeouts = Timeouts::default();
+    if address.is_some_and(is_loopback_url) {
+        timeouts.response_ms = timeouts.response_ms.max(LOCAL_RESPONSE_MS);
+    }
+    timeouts
+}
+
 impl ProviderEntry {
+    /// Where the key comes from: nowhere for a service that takes none, the
+    /// file a model server on this computer writes if the entry names one,
+    /// and otherwise the password store.
+    pub fn key_source(&self) -> KeySourceKind<'_> {
+        if !self.key_required {
+            KeySourceKind::None
+        } else if let Some(file) = &self.runtime_key_file {
+            KeySourceKind::RuntimeFile(file)
+        } else {
+            KeySourceKind::Keyring(self.keyring_item())
+        }
+    }
+
+    /// Whether the person has to give P@x a key for this provider, to keep
+    /// in the password store.
+    pub fn needs_a_stored_key(&self) -> bool {
+        matches!(self.key_source(), KeySourceKind::Keyring(_))
+    }
+
     /// The entry of an adapter family's own company, when no list names it.
     pub fn implicit(adapter: ProviderId) -> Self {
         ProviderEntry {
@@ -488,6 +617,7 @@ impl ProviderEntry {
             base_url: None,
             keyring_item: None,
             key_required: true,
+            runtime_key_file: None,
             send_back_reasoning: false,
             capabilities: None,
             data_terms: None,
@@ -589,6 +719,27 @@ impl ProviderEntry {
                 "{} cannot do without a key: only the openai-chat family can",
                 self.id
             ));
+        }
+        if let Some(file) = &self.runtime_key_file {
+            if !is_runtime_key_file(file) {
+                return Err(format!(
+                    "the key file of {} is not a name in the runtime directory",
+                    self.id
+                ));
+            }
+            if !self.key_required {
+                return Err(format!(
+                    "{} names a key file and is said to need no key",
+                    self.id
+                ));
+            }
+            if !self.base_url.as_deref().is_some_and(is_loopback_url) {
+                return Err(format!(
+                    "{} reads its key from a file of this computer, and its address is not this \
+                     computer",
+                    self.id
+                ));
+            }
         }
         if let Some(terms) = &self.data_terms {
             terms
@@ -992,17 +1143,18 @@ impl Settings {
                 max_tokens: Some(self.limits.task_tokens.unwrap_or(DEFAULT_TASK_TOKENS)),
             }
         };
+        let base_url = self.base_url.clone().or_else(|| entry.base_url.clone());
         let config = ProviderConfig {
             schema_version: tur_pax_providers::config::CONFIG_SCHEMA_VERSION,
             provider: entry.adapter,
-            base_url: self.base_url.clone().or_else(|| entry.base_url.clone()),
+            timeouts: timeouts_for(base_url.as_deref()),
+            base_url,
             send_back_reasoning: entry.send_back_reasoning,
             model: model.clone(),
             max_output_tokens: self
                 .max_output_tokens
                 .or(listed.and_then(|entry| entry.max_output_tokens))
                 .unwrap_or(DEFAULT_MAX_OUTPUT_TOKENS),
-            timeouts: Timeouts::default(),
             retry: RetryPolicy::default(),
             prices,
             task_limit: Some(task_limit),
@@ -1208,6 +1360,10 @@ pub struct Paths {
     pub extra_adapters: Option<PathBuf>,
     /// The home directory, for the rules on what a command may be shown.
     pub home: Option<PathBuf>,
+    /// The session's runtime directory (`$XDG_RUNTIME_DIR`), where a model
+    /// server on this computer writes the key it takes
+    /// ([`ProviderEntry::runtime_key_file`]).
+    pub runtime: Option<PathBuf>,
 }
 
 /// The model list an administrator may put in place.
@@ -1247,6 +1403,7 @@ impl Paths {
             extra_manifests: None,
             extra_adapters: None,
             home,
+            runtime: None,
         })
     }
 
@@ -1254,12 +1411,14 @@ impl Paths {
     /// two places the session service reads the environment; the other
     /// reads the address of the session bus.
     pub fn from_environment() -> Option<Paths> {
-        Paths::from_bases(
+        let mut paths = Paths::from_bases(
             absolute(std::env::var_os("XDG_CONFIG_HOME")),
             absolute(std::env::var_os("XDG_STATE_HOME")),
             absolute(std::env::var_os("XDG_DATA_HOME")),
             absolute(std::env::var_os("HOME")),
-        )
+        )?;
+        paths.runtime = absolute(std::env::var_os("XDG_RUNTIME_DIR"));
+        Some(paths)
     }
 }
 
@@ -1960,12 +2119,28 @@ mod tests {
                 "openrouter",
                 "together",
                 "ollama",
-                "llama-server"
+                "llama-server",
+                "local"
             ]
         );
         for entry in compatible {
             let terms = entry.data_terms.as_ref().expect("data terms");
-            if entry.key_required {
+            if entry.id == "local" {
+                // tur-ai-local: this computer, with the key it writes.
+                assert!(terms.runs_locally);
+                assert!(entry.runs_locally(Origin::Listed, None));
+                assert!(entry.key_required);
+                assert_eq!(
+                    entry.key_source(),
+                    KeySourceKind::RuntimeFile("tur-ai-local/api-key")
+                );
+                assert!(!entry.needs_a_stored_key());
+                assert_eq!(entry.base_url.as_deref(), Some("http://127.0.0.1:39281/v1"));
+                assert_eq!(entry.declared("qwen3-4b").tool_calling, Some(true));
+                assert_eq!(entry.declared("qwen3-4b").context_tokens, Some(8192));
+                assert_eq!(entry.abilities("qwen3-vl-2b-instruct").see, Some(true));
+                assert_eq!(entry.abilities("qwen3-4b").see, Some(false));
+            } else if entry.key_required {
                 // A cloud service: reviewed, with the pages it was read from,
                 // at an https address, offering tools.
                 assert_eq!(
@@ -2001,6 +2176,168 @@ mod tests {
             assert!(
                 entry.reviewed_terms(Origin::Listed, false).is_none(),
                 "{id}"
+            );
+        }
+    }
+
+    /// The ids and capabilities of `tur-ai-local`'s catalogue, read from its
+    /// entries as they are written (`id = "…"` and `capabilities = […]`
+    /// before the first table).
+    fn local_catalogue() -> Vec<(String, Vec<String>)> {
+        let directory = Path::new(env!("CARGO_MANIFEST_DIR")).join("../tur-ai-local/catalogue");
+        let mut entries = Vec::new();
+        for entry in fs::read_dir(&directory).expect("tur-ai-local's catalogue") {
+            let path = entry.expect("an entry").path();
+            if path.extension().is_none_or(|extension| extension != "toml") {
+                continue;
+            }
+            let text = fs::read_to_string(&path).expect("a catalogue entry");
+            let mut id = None;
+            let mut capabilities = Vec::new();
+            for line in text.lines().take_while(|line| !line.starts_with('[')) {
+                if let Some(value) = line.strip_prefix("id = ") {
+                    id = Some(value.trim_matches('"').to_owned());
+                }
+                if let Some(value) = line.strip_prefix("capabilities = ") {
+                    capabilities = value
+                        .trim_start_matches('[')
+                        .trim_end_matches(']')
+                        .split(',')
+                        .map(|item| item.trim().trim_matches('"').to_owned())
+                        .filter(|item| !item.is_empty())
+                        .collect();
+                }
+            }
+            entries.push((id.expect("an id"), capabilities));
+        }
+        entries.sort();
+        entries
+    }
+
+    #[test]
+    fn the_local_preset_offers_the_catalogue_s_chat_models_that_call_tools() {
+        let shipped = ModelList::from_json(include_str!("../data/models.json")).expect("loads");
+        let local = shipped.provider("local").expect("the local preset");
+        let catalogue = local_catalogue();
+        assert!(catalogue.len() >= 4, "{catalogue:?}");
+        let mut expected: Vec<&str> = catalogue
+            .iter()
+            .filter(|(_, can)| can.iter().any(|c| c == "chat") && can.iter().any(|c| c == "tools"))
+            .map(|(id, _)| id.as_str())
+            .collect();
+        expected.sort_unstable();
+        let mut listed: Vec<&str> = local
+            .models
+            .iter()
+            .map(|model| model.model.as_str())
+            .collect();
+        listed.sort_unstable();
+        assert_eq!(listed, expected);
+        // What each says it can see is what the catalogue says.
+        for (id, can) in &catalogue {
+            if local.model(id).is_some() {
+                assert_eq!(
+                    local.abilities(id).see,
+                    Some(can.iter().any(|c| c == "vision")),
+                    "{id}"
+                );
+            }
+        }
+        // The model's output fits in the context tur-ai-local serves.
+        for model in &local.models {
+            assert!(model.max_output_tokens.is_some_and(|tokens| tokens <= 2048));
+        }
+    }
+
+    #[test]
+    fn the_key_of_the_local_preset_is_read_from_tur_ai_local_s_file_only() {
+        let shipped = ModelList::from_json(include_str!("../data/models.json")).expect("loads");
+        let mut settings = Settings::default();
+        settings
+            .set_provider("local", "qwen3-4b", &shipped)
+            .expect("the local preset");
+        let config = settings.provider_config(&shipped).expect("a configuration");
+        assert_eq!(config.provider, ProviderId::OpenAiChat);
+        assert_eq!(
+            config.base_url.as_deref(),
+            Some("http://127.0.0.1:39281/v1")
+        );
+        assert_eq!(config.max_output_tokens, 1024);
+        // A model on this computer is given longer to begin answering.
+        assert_eq!(config.timeouts.response_ms, LOCAL_RESPONSE_MS);
+        assert_eq!(
+            timeouts_for(Some("https://api.example.org")),
+            Timeouts::default()
+        );
+        assert!(
+            !shipped
+                .providers
+                .iter()
+                .any(|entry| entry.id != "local" && entry.runtime_key_file.is_some())
+        );
+
+        // The consent text says that nothing leaves this computer.
+        let (entry, origin) = find_provider(&shipped, &settings, "local").expect("listed");
+        let terms = entry.reviewed_terms(origin, false);
+        let text = crate::consent::consent_text(&crate::consent::Subject {
+            name: &entry.name,
+            adapter: entry.adapter,
+            native: entry.is_native(),
+            terms_url: None,
+            by_hand: origin == Origin::ByHand,
+            terms,
+            runs_locally: entry.runs_locally(origin, None),
+        });
+        assert!(text.contains("which runs on this computer"), "{text}");
+        assert!(
+            text.contains("What P@x sends it stays on this computer: no company receives it."),
+            "{text}"
+        );
+        assert!(!text.contains("encrypted connection"), "{text}");
+
+        // A key file is a name in the runtime directory, for an entry that
+        // needs a key, at an address of this computer.
+        for name in ["tur-ai-local/api-key", "key", "a.b/c_d-1"] {
+            assert!(is_runtime_key_file(name), "{name}");
+        }
+        let too_long = "k".repeat(RUNTIME_KEY_FILE_MAX + 1);
+        for name in [
+            "",
+            "/run/user/1000/key",
+            "../key",
+            "a/../key",
+            "a//key",
+            "./key",
+            "Key",
+            "a key",
+            too_long.as_str(),
+        ] {
+            assert!(!is_runtime_key_file(name), "{name}");
+        }
+        let entry = |fields: &str| {
+            format!(
+                r#"{{ "schema_version": 1, "status": "example", "prices_as_of": "2026-11-12",
+                     "providers": [{{ "id": "x", "name": "X", "adapter": "openai-chat", {fields} }}] }}"#
+            )
+        };
+        assert!(
+            ModelList::from_json(&entry(
+                r#""base_url": "http://127.0.0.1:39281/v1", "runtime_key_file": "tur-ai-local/api-key""#
+            ))
+            .is_ok()
+        );
+        for fields in [
+            r#""base_url": "https://api.example.org/v1", "runtime_key_file": "tur-ai-local/api-key""#,
+            r#""base_url": "http://127.0.0.1:39281/v1", "runtime_key_file": "../.ssh/id_ed25519""#,
+            r#""base_url": "http://127.0.0.1:39281/v1", "runtime_key_file": "k", "key_required": false"#,
+        ] {
+            assert_eq!(
+                ModelList::from_json(&entry(fields))
+                    .expect_err(fields)
+                    .code
+                    .as_str(),
+                "TUR-AI-SERVICE-009",
+                "{fields}"
             );
         }
     }

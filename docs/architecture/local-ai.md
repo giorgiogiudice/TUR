@@ -71,9 +71,9 @@ model, and so can any application that speaks the common OpenAI-compatible API.
 5. Local speech (recognition and synthesis) in the same service.
 6. Measurements on the test PC's graphics card.
 
-Items 1 and 2 are done in their first slice (sections 6 and 7); item 3 is
-proved in CI with P@x's existing adapters and a harness, without the preset
-(section 8).
+Items 1 and 2 are done in their first slice (sections 6 and 7). Item 3 is
+done: the preset `local` exists and the `local-ai` workflow runs P@x through
+it against `tur-ai-local` (section 8, item 3).
 
 ## 6. The engine: llama.cpp's `llama-server`
 
@@ -184,13 +184,19 @@ the publisher's size and SHA-256.
 How each licence was established, and the models left out and why, are in
 the entries and in `services/tur-ai-local/catalogue/README.md`.
 
-**P@x tools.** `services/tur-ai-local/pax/`: `ai_local_status`,
+**P@x tools.** `services/tur-ai-local/agent-tools.json` and
+`agent-tools.adapter.json`, at the component's root where P@x finds every
+component's tools (pax-orchestrator.md, section 4.2): `ai_local_status`,
 `ai_local_models` and `ai_local_recommend`, class 0, without arguments,
 performed by `/usr/bin/tur-ai-local … --json`. Nothing that downloads,
-starts, stops or opens the network is a tool. Like `tur-update`'s, the files
-sit one directory below the component, because `tests/pax/e2e.py` and
-tur-pax's own tests list the components whose tools sit directly in their
-directory; P@x loads them by default once those lists are extended.
+starts, stops or opens the network is a tool. (They sat in `pax/` until P@x's
+tests discovered tool sets instead of listing them.)
+
+**P@x's provider.** The preset `local` of P@x's model list
+(pax-providers.md, section 14.8): `http://127.0.0.1:39281/v1`, the key read
+from `$XDG_RUNTIME_DIR/tur-ai-local/api-key` for each task (never kept in
+the password store: it changes with every `serve`), the catalogue's chat
+models that call tools, data terms "runs on this computer".
 
 ## 8. Deviations and open points
 
@@ -205,11 +211,16 @@ directory; P@x loads them by default once those lists are extended.
    catalogue's loader to skip `models/` first.
 2. **Fedora's llama-cpp build** (section 6.2): slow processor build, no
    Vulkan, ROCm required. To be raised with Fedora's maintainers.
-3. **P@x has no `local` preset and no Chat Completions adapter yet.** The
-   workflow runs P@x's existing OpenAI (Responses) and Anthropic (Messages)
-   adapters against `llama-server`'s compatible endpoints, and a minimal
-   Chat Completions harness of its own. P@x will also need a key source that
-   reads the key file.
+3. **P@x through the `local` preset: done.** P@x has a Chat Completions
+   family (`openai-chat`) and the preset `local`, with a key source that
+   reads `tur-ai-local`'s key file. The workflow's `pax` job no longer runs a
+   harness of its own: it runs `tur-pax run --provider local --model
+   qwen3-4b` against `tur-ai-local` serving Qwen3 4B on llama.cpp's own
+   build, with every component's tools and the read-only command tool in
+   the real sandbox (`tests/pax/local_model.py`). Its read-only command tool
+   no longer breaks llama-server's tool grammar: every shipped tool schema
+   is held to llama.cpp's limit (pax-orchestrator.md, section 4.4).
+   Results: `docs/reports/pax-5.md`.
 4. **Status from P@x.** The sandbox shows neither the runtime folder nor the
    loopback network, so `ai_local_status` cannot see a running model. A D-Bus
    interface (`org.tur.AiLocal1`) is the planned answer.
@@ -225,7 +236,9 @@ Nothing of this change is in the image (`image/` was not touched). To ship it:
 
 - `/usr/bin/tur-ai-local` (a line in `image/programs.tsv`) and the model
   catalogue at `/usr/share/tur/ai-local/models/*.toml`;
-- the P@x tool set at `/usr/share/tur/pax/tools/tur-ai-local/`;
+- the P@x tool set at `/usr/share/tur/pax/tools/tur-ai-local/`, which
+  `image/programs.sh` installs by itself once `tur-ai-local` has its line in
+  `image/programs.tsv` (the files are at the component's root);
 - the engine, pinned: Fedora's `llama-cpp-b9840-2.fc45` as it is (slow on the
   processor, no Vulkan, and ROCm's hipBLAS and rocBLAS with it; installed
   size in the report), or the same llama.cpp version built with

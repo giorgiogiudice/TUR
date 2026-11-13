@@ -86,7 +86,7 @@ const BUILT_IN_MANIFEST: &str = r#"{
                 "argv": {
                     "type": "array",
                     "description": "The program, then each of its arguments, one string each.",
-                    "items": { "type": "string", "maxLength": 4096 }
+                    "items": { "type": "string", "maxLength": 1999 }
                 }
             },
             "required": ["argv"],
@@ -123,7 +123,7 @@ const ASSISTANT_MANIFEST: &str = r#"{
         "input_schema": {
             "type": "object",
             "properties": {
-                "message": { "type": "string", "minLength": 1, "maxLength": 2000, "description": "What the notification says." },
+                "message": { "type": "string", "minLength": 1, "maxLength": 1999, "description": "What the notification says." },
                 "name": { "type": "string", "minLength": 1, "maxLength": 80, "description": "A short name for the list of reminders." },
                 "in_minutes": { "type": "integer", "minimum": 1, "maximum": 5270400, "description": "Minutes from now." },
                 "date": { "type": "string", "minLength": 10, "maxLength": 10, "description": "The date, as YYYY-MM-DD." },
@@ -142,7 +142,7 @@ const ASSISTANT_MANIFEST: &str = r#"{
         "input_schema": {
             "type": "object",
             "properties": {
-                "request": { "type": "string", "minLength": 1, "maxLength": 2000, "description": "What P@x is to do, as the person would ask it." },
+                "request": { "type": "string", "minLength": 1, "maxLength": 1999, "description": "What P@x is to do, as the person would ask it." },
                 "name": { "type": "string", "minLength": 1, "maxLength": 80, "description": "A short name for the list of schedules." },
                 "in_minutes": { "type": "integer", "minimum": 1, "maximum": 5270400, "description": "Minutes from now." },
                 "date": { "type": "string", "minLength": 10, "maxLength": 10, "description": "The date, as YYYY-MM-DD." },
@@ -161,7 +161,7 @@ const ASSISTANT_MANIFEST: &str = r#"{
         "input_schema": {
             "type": "object",
             "properties": {
-                "text": { "type": "string", "minLength": 1, "maxLength": 4000, "description": "The note, as one or two plain sentences." }
+                "text": { "type": "string", "minLength": 1, "maxLength": 1999, "description": "The note, as one or two plain sentences." }
             },
             "required": ["text"],
             "additionalProperties": false
