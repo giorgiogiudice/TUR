@@ -52,7 +52,8 @@ TESTS
   (failed: twdinst did not compile), 43365500575 (failed: the runner's
   kernel has no dummy_hcd), 43366132596 (pass, first full results),
   43367965703 (cancelled by the next push), 43368061907 (pass; the results
-  below). Both passing runs gave the same results except for timings.
+  below), 43369283535 (pass, on the commit that added this report, same
+  code). All three passing runs gave the same results except for timings.
 - Boot tests: NOT RUN. Nothing here can affect boot.
 - Hardware tests: NOT RUN. Emulated USB devices only (USB/IP); no real
   device, no vendor driver.
@@ -88,8 +89,9 @@ NEXT SAFE ACTION
   plain WDM one, yes: our own minimal WDM USB function driver was installed
   from its INF, loaded by Wine's PnP manager into `winedevice.exe` (a Linux
   process running as the user), and moved data to and from a virtual USB
-  device — bulk and vendor control transfers, byte-for-byte correct, about
-  16 MiB/s — also inside a bubblewrap sandbox that held exactly one device.
+  device — bulk and vendor control transfers, byte-for-byte correct, 11 to
+  20 MiB/s in three runs — also inside a bubblewrap sandbox that held exactly
+  one device.
   Never in a kernel. That is the whole positive result; it was our driver,
   written to avoid what Wine lacks, not a vendor's.
 - **KMDF drivers — the model Microsoft steers new drivers to — cannot load
@@ -197,7 +199,7 @@ marks a negative result the experiment set out to show.
 | START_DEVICE: GET_DESCRIPTOR (device, configuration ×2), SELECT_CONFIGURATION | **Pass**: start step 6 of 6, status 0; pipes 0x01 and 0x81, bulk, 512 bytes | `twdtest-loopback.out` |
 | Program opens the device interface (`SetupDiGetClassDevs` + `CreateFile`) and talks to the driver (`DeviceIoControl`) | **Pass** | |
 | Bulk OUT and IN, 64, 500 and 4096 bytes, compared byte for byte | **Pass** | |
-| 200 round trips of 4096 bytes | **Pass**, 200 of 200 intact; 0.474 ms per round trip, 16,879 KiB/s without debug output (with full tracing: 0.612 ms; the earlier passing run: 0.391 ms, 20,470 KiB/s). Through USB/IP on one machine: says the path adds little, not what real hardware does | `04-wdm-loopback-quiet` |
+| 200 round trips of 4096 bytes | **Pass**, 200 of 200 intact; 0.474 ms per round trip, 16,879 KiB/s without debug output (with full tracing: 0.612 ms; the earlier passing run: 0.391 ms, 20,470 KiB/s; the run on the report's own commit, 43369283535: 0.65 ms, 12,310 KiB/s). Through USB/IP on one shared runner: says the path adds little, not what real hardware does | `04-wdm-loopback-quiet` |
 | Vendor control OUT (0x5b, 64 bytes) and IN (0x5c) on 1209:0002 | **Pass**, same 64 bytes back | `05-wdm-sourcesink` |
 | Patterned bulk IN 4096 bytes / bulk OUT 4096 bytes checked by the device | **Pass** | |
 | A bulk IN with nothing to read, 1 s time-out: `IoCancelIrp` | **Does not end it**: `wineusb.sys` sets no cancel routine | `timeout-ends` |
@@ -451,7 +453,7 @@ grant, not by the checks.
 **Yes, try it — but as two narrow features, not as "Windows drivers work on
 TUR".** The measurements show that Wine's driver host is real: a WDM USB
 driver installed from its INF, was loaded by Wine's PnP manager, moved data
-over bulk and control transfers at about 16 MiB/s on a virtual device, ran in a
+over bulk and control transfers at 11–20 MiB/s on an emulated device, ran in a
 sandbox with exactly one device, and stopped cleanly when the device was
 withdrawn. They also show where it ends: no KMDF (the framework Microsoft
 steers new drivers to), no UMDF, no WinUSB, no class requests, and failure
