@@ -6,7 +6,7 @@ which ignores these lines.
 From 9da55be68fd7867919f667b5e6490cd00d84edda Mon Sep 17 00:00:00 2001
 From: TUR experiment <tur-experiment@users.noreply.github.com>
 Date: Fri, 13 Nov 2026 10:50:50 +0300
-Subject: [PATCH 10/13] ntoskrnl.exe: Add more functions the KMDF runtime
+Subject: [PATCH 10/15] ntoskrnl.exe: Add more functions the KMDF runtime
  imports.
 
 Not exported before, so the Kernel-Mode Driver Framework's image did not

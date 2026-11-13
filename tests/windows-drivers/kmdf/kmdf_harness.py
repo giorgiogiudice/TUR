@@ -175,17 +175,19 @@ def s_overlay(h, build: pathlib.Path) -> None:
     sc = h.scenario("kmdf-overlay", "Wine 11.20 + TUR patch set over Fedora's Wine; the KMDF runtime", prefix="none")
     pe = wine_pe_dir()
     info = {"wine-pe-dir": str(pe)}
-    for name in ("ntoskrnl.exe", "wdfldr.sys", "wineusb.sys"):
+    unix = pe.parent / "x86_64-unix"
+    for name, where in (("ntoskrnl.exe", pe), ("wdfldr.sys", pe), ("wineusb.sys", pe), ("wineusb.so", unix)):
         src = build / name
         if not src.exists():
             sc.check(f"overlay-{name}", False, "not built")
             continue
-        before = sha256(pe / name) if (pe / name).exists() else None
-        shutil.copy2(src, pe / name)
-        info[name] = {"fedora-sha256": before, "tur-sha256": sha256(pe / name), "bytes": (pe / name).stat().st_size}
-        sc.check(f"overlay-{name}", sha256(pe / name) == sha256(src),
-                 f"{pe / name}: Fedora's {before and before[:12]} replaced by {sha256(src)[:12]}" if before
-                 else f"{pe / name}: new")
+        dst = where / name
+        before = sha256(dst) if dst.exists() else None
+        shutil.copy2(src, dst)
+        info[name] = {"fedora-sha256": before, "tur-sha256": sha256(dst), "bytes": dst.stat().st_size}
+        sc.check(f"overlay-{name}", sha256(dst) == sha256(src),
+                 f"{dst}: Fedora's {before and before[:12]} replaced by {sha256(src)[:12]}" if before
+                 else f"{dst}: new")
     for name in ("Wdf01000.sys", "kmdftest.sys", "osrusbfx2.sys", "kmdftest.exe", "osrusbfx2.exe", "twdinst.exe"):
         p = build / name
         info[name] = {"sha256": sha256(p), "bytes": p.stat().st_size} if p.exists() else None

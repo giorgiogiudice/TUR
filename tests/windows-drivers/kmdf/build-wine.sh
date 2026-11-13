@@ -9,8 +9,8 @@
 #
 #   ntoskrnl.exe   Wine's user-space kernel, with the patches
 #   wdfldr.sys     the KMDF loader the patch set adds
-#   wineusb.sys    Wine's USB bus driver, with the patches (the PE half only
-#                  goes in the overlay; its Unix half is unchanged)
+#   wineusb.sys    Wine's USB bus driver, with the patches (the PE half and
+#                  its Unix half wineusb.so both go in the overlay)
 #
 #   tests/windows-drivers/kmdf/build-wine.sh OUTPUT_DIR
 #
@@ -94,3 +94,12 @@ for m in ntoskrnl.exe wdfldr.sys wineusb.sys; do
     cp "${f}" "${overlay}/${m}"
     echo "built: ${m} $(stat -c %s "${overlay}/${m}") bytes"
 done
+# wineusb.sys's Unix half (libusb); patches 0012-0013 change it, so it goes
+# in the overlay too (Wine's x86_64-unix directory).
+f="$(find "${build}/dlls/wineusb.sys" -name wineusb.so | head -n 1)"
+if [ -n "${f}" ]; then
+    cp "${f}" "${overlay}/wineusb.so"
+    echo "built: wineusb.so $(stat -c %s "${overlay}/wineusb.so") bytes"
+else
+    echo "not built: wineusb.so (libusb not found by configure?)"
+fi

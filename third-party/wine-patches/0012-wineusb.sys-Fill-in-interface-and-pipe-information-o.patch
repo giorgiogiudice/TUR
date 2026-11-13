@@ -6,7 +6,7 @@ which ignores these lines.
 From 639e64363cb8208c843c7cd80bb335b07d645202 Mon Sep 17 00:00:00 2001
 From: TUR experiment <tur-experiment@users.noreply.github.com>
 Date: Fri, 13 Nov 2026 11:28:20 +0300
-Subject: [PATCH 12/13] wineusb.sys: Fill in interface and pipe information on
+Subject: [PATCH 12/15] wineusb.sys: Fill in interface and pipe information on
  SELECT_CONFIGURATION.
 
 On Windows the bus driver fills the interface and pipe information of a

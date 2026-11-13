@@ -1,0 +1,125 @@
+SPDX-License-Identifier: LGPL-2.1-or-later
+A patch to Wine (https://gitlab.winehq.org/wine/wine), under Wine's licence;
+see README.md and COPYING.LIB in this directory. Applied with `git apply`,
+which ignores these lines.
+
+From 0b3b945c45d096ea8001bb33df2aba878e574e2c Mon Sep 17 00:00:00 2001
+From: TUR experiment <tur-experiment@users.noreply.github.com>
+Date: Fri, 13 Nov 2026 11:38:53 +0300
+Subject: [PATCH 14/15] ntoskrnl.exe: Implement ExAllocateTimer, ExSetTimer,
+ ExCancelTimer and ExDeleteTimer.
+
+The Kernel-Mode Driver Framework creates every timer of a 1.13 or later
+client with ExAllocateTimer, so failing it (as an earlier patch did) made
+WdfTimerCreate fail with STATUS_INSUFFICIENT_RESOURCES. Build them on
+KeSetTimerEx with a DPC that calls the timer's callback; the high-resolution
+and no-wake attributes make no difference here.
+---
+ dlls/ntoskrnl.exe/ntoskrnl.c | 70 +++++++++++++++++++++++++++++-------
+ 1 file changed, 57 insertions(+), 13 deletions(-)
+
+diff --git a/dlls/ntoskrnl.exe/ntoskrnl.c b/dlls/ntoskrnl.exe/ntoskrnl.c
+index f77f75a..63af57a 100644
+--- a/dlls/ntoskrnl.exe/ntoskrnl.c
++++ b/dlls/ntoskrnl.exe/ntoskrnl.c
+@@ -4176,43 +4176,87 @@ NTSTATUS WINAPI EtwActivityIdControl( ULONG code, GUID *guid )
+     return STATUS_NOT_SUPPORTED;
+ }
+ 
++struct ex_timer
++{
++    KTIMER timer;
++    KDPC dpc;
++    void (WINAPI *callback)( struct ex_timer *timer, void *context );
++    void *context;
++};
++
++static void WINAPI ex_timer_dpc( KDPC *dpc, void *context, void *arg1, void *arg2 )
++{
++    struct ex_timer *timer = context;
++
++    TRACE( "timer %p, callback %p, context %p\n", timer, timer->callback, timer->context );
++    timer->callback( timer, timer->context );
++}
++
+ /*****************************************************
+  *           ExAllocateTimer    (NTOSKRNL.EXE.@)
+  *
+- * High-resolution and no-wake timers (Windows 8.1) are not available:
+- * callers fall back to KeSetTimer timers.
++ * The Windows 8.1 timer interface (the Kernel-Mode Driver Framework creates
++ * every timer with it), on top of KeSetTimerEx. EX_TIMER_HIGH_RESOLUTION and
++ * EX_TIMER_NO_WAKE make no difference here.
+  */
+ void * WINAPI ExAllocateTimer( void *callback, void *context, ULONG attributes )
+ {
+-    FIXME( "callback %p, context %p, attributes %#lx: not supported\n", callback, context, attributes );
+-    return NULL;
++    struct ex_timer *timer;
++
++    TRACE( "callback %p, context %p, attributes %#lx\n", callback, context, attributes );
++
++    if (!(timer = ExAllocatePool( NonPagedPool, sizeof(*timer) ))) return NULL;
++    KeInitializeTimerEx( &timer->timer, NotificationTimer );
++    KeInitializeDpc( &timer->dpc, ex_timer_dpc, timer );
++    timer->callback = callback;
++    timer->context = context;
++    return timer;
+ }
+ 
+ /*****************************************************
+  *           ExSetTimer    (NTOSKRNL.EXE.@)
++ *
++ * duetime and period are in 100 ns units, like KeSetTimerEx's duetime;
++ * KeSetTimerEx takes the period in milliseconds.
+  */
+-BOOLEAN WINAPI ExSetTimer( void *timer, LONGLONG duetime, LONGLONG period, void *parameters )
++BOOLEAN WINAPI ExSetTimer( void *handle, LONGLONG duetime, LONGLONG period, void *parameters )
+ {
+-    FIXME( "timer %p: not supported\n", timer );
+-    return FALSE;
++    struct ex_timer *timer = handle;
++    LARGE_INTEGER due;
++
++    TRACE( "timer %p, duetime %s, period %s, parameters %p\n", timer,
++           wine_dbgstr_longlong(duetime), wine_dbgstr_longlong(period), parameters );
++
++    due.QuadPart = duetime;
++    return KeSetTimerEx( &timer->timer, due, (LONG)(period / 10000), &timer->dpc );
+ }
+ 
+ /*****************************************************
+  *           ExCancelTimer    (NTOSKRNL.EXE.@)
+  */
+-BOOLEAN WINAPI ExCancelTimer( void *timer, void *parameters )
++BOOLEAN WINAPI ExCancelTimer( void *handle, void *parameters )
+ {
+-    FIXME( "timer %p: not supported\n", timer );
+-    return FALSE;
++    struct ex_timer *timer = handle;
++
++    TRACE( "timer %p, parameters %p\n", timer, parameters );
++    return KeCancelTimer( &timer->timer );
+ }
+ 
+ /*****************************************************
+  *           ExDeleteTimer    (NTOSKRNL.EXE.@)
++ *
++ * KeCancelTimer waits for a callback in progress, so the timer can be freed
++ * whatever cancel and wait say.
+  */
+-BOOLEAN WINAPI ExDeleteTimer( void *timer, BOOLEAN cancel, BOOLEAN wait, void *parameters )
++BOOLEAN WINAPI ExDeleteTimer( void *handle, BOOLEAN cancel, BOOLEAN wait, void *parameters )
+ {
+-    FIXME( "timer %p: not supported\n", timer );
+-    return FALSE;
++    struct ex_timer *timer = handle;
++    BOOLEAN ret;
++
++    TRACE( "timer %p, cancel %u, wait %u, parameters %p\n", timer, cancel, wait, parameters );
++    ret = KeCancelTimer( &timer->timer );
++    ExFreePool( timer );
++    return ret;
+ }
+ 
+ /*****************************************************
