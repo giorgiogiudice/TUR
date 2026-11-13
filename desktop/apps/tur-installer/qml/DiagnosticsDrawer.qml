@@ -32,6 +32,10 @@ ColumnLayout {
         return out
     }
 
+    // The room the drawer's buttons need, whatever the text size: a
+    // button's label does not wrap.
+    readonly property real buttonsWidth: Math.max(logButton.implicitWidth, saveButton.implicitWidth)
+
     signal logRequested()
     signal saveRequested()
 
@@ -149,6 +153,8 @@ ColumnLayout {
     }
 
     Kit.Button {
+        id: logButton
+
         objectName: "logButton"
         Layout.fillWidth: true
         Layout.topMargin: Kit.Theme.spaceGroup
@@ -157,6 +163,8 @@ ColumnLayout {
     }
 
     Kit.Button {
+        id: saveButton
+
         objectName: "drawerSaveButton"
         Layout.fillWidth: true
         text: qsTr("Save the log…")

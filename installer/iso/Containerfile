@@ -157,7 +157,7 @@ RUN set -eu; \
     mkdir -p "${home}/.config/autostart"; \
     for entry in /etc/xdg/autostart/*.desktop; do \
         case "${entry##*/}" in \
-            *welcome* | *discover* | *setup* | *kaccess* ) \
+            *welcome* | *discover* ) \
                 printf '[Desktop Entry]\nHidden=true\n' > "${home}/.config/autostart/${entry##*/}"; \
                 echo "hidden for the live user: ${entry##*/}" ;; \
         esac; \
@@ -173,7 +173,11 @@ RUN set -eu; \
     # installer environment's /etc only; the installed system comes from the
     # payload on the medium.
     ln -sf /usr/lib/systemd/system/graphical.target /etc/systemd/system/default.target; \
+    # No login prompt on a serial port either: the live user has no
+    # password, and the prompt's hang-up of the port would cut the
+    # installer's state lines off (TUR-009).
     for unit in avahi-daemon.service avahi-daemon.socket cups.service cups.socket cups.path sshd.service \
+        serial-getty@.service \
         plymouth-start.service plymouth-read-write.service plymouth-quit.service plymouth-quit-wait.service; do \
         ln -sf /dev/null "/etc/systemd/system/${unit}"; \
     done; \

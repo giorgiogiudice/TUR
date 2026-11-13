@@ -44,7 +44,12 @@ WizardScreen {
 
     initialFocus: lookAgain
 
-    Component.onCompleted: screen.engine.runDisks()
+    Component.onCompleted: {
+        screen.engine.runDisks()
+        // A list that was already there when the screen opened.
+        if (screen.engine.disksState === "done")
+            Qt.callLater(screen.focusFirstDisk)
+    }
 
     Connections {
         target: screen.engine

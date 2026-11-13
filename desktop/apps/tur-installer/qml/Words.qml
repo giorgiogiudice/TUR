@@ -40,9 +40,16 @@ QtObject {
         return qsTr("connection not reported")
     }
 
+    // The disk's model; a disk that reports none (a virtual disk, some USB
+    // enclosures) is named by the end of its serial number instead.
     function diskName(disk: var): string {
         const model = String(disk.model || "").trim()
-        return model.length > 0 ? model : qsTr("Unnamed disk")
+        if (model.length > 0)
+            return model
+        const serial = String(disk.serial || disk.wwn || "")
+        if (serial.length > 0)
+            return qsTr("Disk …%1").arg(serial.length > 8 ? serial.slice(-8) : serial)
+        return qsTr("Unnamed disk")
     }
 
     // "Samsung SSD 980 PRO · 931.5 GiB · NVMe"

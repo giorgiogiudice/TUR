@@ -1,9 +1,13 @@
 # Installing TUR on a test PC
 
 This is how to put a pre-alpha build of TUR on one of the project's own test
-computers from a USB stick. The medium and the installer are described in
-[ADR-0018](../adr/0018-first-installer-medium.md); what was tested, and how,
-is in [TUR-007](../reports/TUR-007.md).
+computers from a USB stick. The stick starts a TUR desktop you can try, and
+from it a graphical installer. The medium and the installers are described in
+[ADR-0018](../adr/0018-first-installer-medium.md) and
+[ADR-0025](../adr/0025-live-session-and-graphical-installer.md); what was
+tested, and how, is in [TUR-007](../reports/TUR-007.md) (the text installer)
+and [TUR-009](../reports/TUR-009.md) (the live session and the graphical
+installer).
 
 Read these three points before anything else.
 
@@ -25,11 +29,11 @@ Read these three points before anything else.
 |---|---|---|
 | Processor | 64-bit x86 (Intel or AMD) | A virtual machine with 2 processor cores |
 | Firmware | UEFI. The medium does not start in legacy BIOS mode (CSM) | OVMF, the UEFI firmware of virtual machines |
-| Memory | The installer refuses less than 3 GiB usable | 4 GiB |
+| Memory | The installer refuses less than 3 GiB usable. The live desktop wants more: 6 GiB was tested | 6 GiB with the live desktop; 4 GiB with the text installer |
 | Disk to install on | At least 20 GiB. It must report a serial number (every ordinary SATA, NVMe and USB disk does) | A 20 GiB virtual disk |
 | USB stick | 8 GB or larger. Everything on it is overwritten | A virtual USB stick and a virtual optical drive |
-| Keyboard and screen | Attached directly. The installer is text on the screen and assumes a **US English keyboard layout** | A virtual keyboard |
-| Network | Not needed and not used by the installer | No network device at all |
+| Keyboard, mouse and screen | Attached directly. The graphical installer can be used with the keyboard alone; its first screen lets you choose the keyboard layout. The text installer assumes a **US English keyboard layout** | A virtual keyboard and a virtual display (no 3D) |
+| Network | Not needed and not used by either installer. The live desktop can use one if you connect it | No network device at all |
 
 Not tested at all: NVMe and SATA disks (the virtual disks are of another
 kind), Wi-Fi-only computers, NVIDIA graphics, laptops' special keys, touch
@@ -144,14 +148,107 @@ Then start from the stick: most computers show a one-time boot menu with F12,
 F9, F8 or Esc right after power on. Choose the USB stick; if it appears
 twice, choose the entry that says UEFI.
 
-## 5. The installer, screen by screen
+## 5. The live desktop and the installer, screen by screen
 
 Screenshots are from the virtual machine in CI.
 
-**Boot menu.** One entry, "Install TUR … (erases the disk you choose)". It
-starts by itself after five seconds. Then text scrolls for up to a minute
-while the installer environment starts. Nothing has been changed at this
-point, and nothing is changed until step 4 below.
+**Boot menu.** Two entries:
+
+- **"Try or install TUR …"**, the default. It starts by itself after five
+  seconds.
+- **"Install TUR … (text mode; erases the disk you choose)"**: the text
+  installer, for a computer whose graphics do not come up (section 5b). Press
+  `t` while the menu is shown, or choose it with the arrow keys and Enter.
+
+Text scrolls for up to a minute, then the TUR desktop appears, signed in by
+itself. Nothing has been changed at this point, and nothing is changed until
+you type the confirmation in step 5 below. Everything you do on this desktop
+is lost when the computer is switched off.
+
+**The live desktop.** The installer opens by itself. To look around first,
+choose **Try TUR first** or close its window; the **Install TUR** icon on the
+desktop opens it again. The live desktop has no password; its screen does not
+lock.
+
+![The live desktop with the installer](../reports/assets/TUR-009/live-desktop.png)
+
+The installer works with the mouse and with the keyboard alone: **Tab** moves
+to the next control, **Space** presses it. The right-hand column,
+**Diagnostics**, says what is happening; **Detailed log** shows everything the
+installer has done, and **Save the log…** writes it to a USB stick (section
+9).
+
+**1. Welcome.** What the installer does, the language (English for now) and
+the keyboard layout. Choose the layout that matches your keyboard: it is used
+for the confirmation you will type. Choose **Continue**.
+
+![Welcome](../reports/assets/TUR-009/wizard-1-welcome.png)
+
+**2. This computer.** The installer checks every file of the copy of TUR on
+the stick (this takes a while on a slow stick), how the computer was started,
+its processor and memory, and Secure Boot. A check that stops the
+installation says so, with its code and what to do. Choose **Continue**.
+
+![This computer](../reports/assets/TUR-009/wizard-2-computer.png)
+
+**3. Where to install.** Every disk is shown with its model, size, how it is
+connected, the end of its serial number, a picture of its partitions, and
+what is on it in plain words: Windows, data encrypted with BitLocker, Windows
+files (NTFS), Linux, or empty. The installer only reads disks to find this
+out. The stick itself is shown and cannot be chosen; so can't a disk that is
+too small or in use, and it says why. Choose a disk. Under **How to install**
+there is one choice in this version, **Erase this disk and install TUR**;
+**Use the free space beside Windows** is shown as coming later (section 7).
+
+![Where to install](../reports/assets/TUR-009/wizard-3-disks.png)
+
+If the disk you expect is not listed, see the note about the disk controller
+in section 4. **Look again** lists the disks again, for example after you
+plugged one in.
+
+**4. Your account.** Nothing is asked here: TUR creates your account when it
+starts for the first time from the disk (section 6).
+
+**5. Confirm.** The only screen with a red frame. It shows the disk's model,
+capacity, connection, its whole serial number and its stable path, what is on
+it now, what will be on it, and what will be destroyed. If the disk holds
+Windows or BitLocker, a warning says so: "This disk holds Windows. Erasing it
+removes Windows and everything on it." To go on you must type the phrase it
+shows, exactly: the word `ERASE`, a space, and the end of that disk's serial
+number, in capital letters. Pasting is not accepted, and Enter does nothing:
+**Erase disk and install** becomes available only when the phrase matches.
+**Back** changes nothing.
+
+![The confirmation, for a disk that holds Windows](../reports/assets/TUR-009/wizard-5-confirm-windows.png)
+
+Check the model, capacity and serial number against the disk you mean. This
+is the last moment to stop.
+
+**6. Installing.** The stages as they happen: checking the disk again,
+preparing it, copying TUR (with the amount written so far), making the
+computer start TUR, finishing, checking the installation, keeping its record.
+In the virtual machine this took about a minute and a half; from a real USB
+stick onto a real disk it may take several minutes. **Cancel** is there only
+while nothing has been written; after that the screen says that cancelling is
+not available, and why. Do not switch off and do not pull the stick.
+
+![Installing](../reports/assets/TUR-009/wizard-6-installing.png)
+
+**7. Done.** "TUR is installed." Remove the stick, then choose **Restart
+now** (or **Shut down**). The record of the installation is kept on the new
+system, in `/var/log/tur-installer/`.
+
+![Done](../reports/assets/TUR-009/wizard-7-done.png)
+
+If the installation fails, the screen shows an error code, what happened, and
+the state the disk is in; **Save the log to a USB stick** writes the log for
+a report. Photograph the screen too. If the disk had already been written, it
+holds no working system; to try again, start from the stick again.
+
+## 5b. The text installer
+
+The boot menu's second entry, for when the live desktop does not come up.
+It installs the same way, with the same checks and the same phrase.
 
 **1. First screen.** It says what the installer does and does not do, checks
 the copy of TUR on the stick (this takes a while on a slow stick), and lists
@@ -245,7 +342,12 @@ a volume carrying the BitLocker signature) and a firmware entry named
 described the first disk as Windows, showed the Windows warning when that
 disk was chosen, installed TUR onto the second disk, and afterwards the
 Windows disk was byte-for-byte unchanged and its firmware entry was still
-there. No real Windows, no real BitLocker and no real firmware were involved.
+there. The same was tested with the graphical installer, without the
+firmware entry: the Windows-like disk was described as Windows, its
+confirmation showed the warning and refused a wrong phrase and the right one
+in lower case, TUR went onto the blank disk, and the Windows-like disk was
+unchanged after the installation and after TUR's first start. No real
+Windows, no real BitLocker and no real firmware were involved.
 
 1. **Back up first.** Copy everything on the Windows computer you cannot lose
    to somewhere else. Nothing below is meant to touch the Windows disk, but a
@@ -264,14 +366,20 @@ there. No real Windows, no real BitLocker and no real firmware were involved.
    on it is erased.
 4. **Start from the installer stick** with the firmware's one-time boot menu
    (section 4) and go through section 5. On the disk screen every disk is
-   described. The Windows disk says `holds: Windows (EFI/Microsoft/Boot)`,
-   usually with `NTFS` and, if it is encrypted, `BitLocker-encrypted volumes`.
-   **Choose the other disk**: check its size, model and the end of its serial
-   number.
+   described. The Windows disk says "Holds Windows", usually with "data
+   encrypted with BitLocker" if it is encrypted, and its partitions are listed
+   ("Windows start-up files", "Windows files (NTFS)"). In the text installer
+   it says `holds: Windows (EFI/Microsoft/Boot)`. **Choose the other disk**:
+   check its size, model and the end of its serial number.
 5. If you see the warning **"This disk holds Windows. Erasing it removes
-   Windows and everything on it."**, you chose the Windows disk. Press Enter
-   alone to go back. Nothing has been changed at that point.
-6. On the second disk, type the phrase, install, and power off.
+   Windows and everything on it."**, you chose the Windows disk. Choose
+   **Back** (in the text installer, press Enter alone). Nothing has been
+   changed at that point.
+6. On the second disk, type the phrase, install, and restart.
+
+The option **Use the free space beside Windows** on the disk screen is not
+available yet: installing on the same disk as Windows is planned (issue 64)
+and not built.
 7. **Choosing the system at start-up.** TUR's boot menu does not list Windows.
    Choose with the firmware's one-time boot menu key, which depends on the
    maker: commonly F12 (Dell, Lenovo, Acer), F11 (MSI, ASRock), F8 (ASUS),
@@ -307,14 +415,21 @@ Whatever happens, these are worth having:
 
 1. The computer: make and model, processor, memory, the disk's make and kind
    (NVMe, SATA), the graphics hardware, whether Secure Boot was on.
-2. The build: the line "TUR …, build …" at the top of every installer screen.
-3. How far it got: which of the screens in section 5 you reached, and the
+2. The build: the line "TUR …, build …" at the top of every text installer
+   screen, and under the steps on the left of the graphical installer.
+3. **The installer's log.** On the installer's last screen, or from
+   **Diagnostics ▸ Save the log…** at any time, plug in a USB stick (FAT,
+   exFAT, NTFS or ext4) and choose it: a folder `tur-installer-log-…` is added
+   to it. If TUR was installed, the same log is on the new system in
+   `/var/log/tur-installer/` (readable as root:
+   `sudo ls /var/log/tur-installer/`).
+4. How far it got: which of the screens in section 5 you reached, and the
    first start.
-4. **Photographs** of anything unexpected: an error code, a black screen with
+5. **Photographs** of anything unexpected: an error code, a black screen with
    text, a screen that stays as it is for more than five minutes. A serial
    number of the disk is visible on the confirmation screen; cover it if you
    do not want to share it.
-5. How long the installation took (the last screen says), and how long the
+6. How long the installation took (the last screen says), and how long the
    first start took.
 
 If the installed system starts, open a terminal (Konsole) and collect what

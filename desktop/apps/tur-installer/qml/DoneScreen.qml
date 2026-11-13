@@ -81,8 +81,8 @@ WizardScreen {
     Kit.Label {
         Layout.fillWidth: true
         visible: screen.success
-        text: qsTr("TUR was installed on %1 in %n second(s).", "", Number(screen.engine.result.seconds || 0))
-              .arg(Words.diskLine(screen.disk))
+        text: qsTr("TUR was installed on %1. Writing it took %2 seconds.")
+              .arg(Words.diskLine(screen.disk)).arg(Number(screen.engine.result.seconds || 0))
         paragraph: true
         wrapMode: Text.Wrap
     }

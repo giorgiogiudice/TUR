@@ -204,10 +204,11 @@ WizardScreen {
 
                 Kit.Label {
                     Layout.fillWidth: true
-                    text: Words.holdsData(screen.disk)
-                          ? qsTr("Everything on this disk: all %n partition(s) and every file on them. No data on this disk is kept.", "",
-                                 screen.disk.partition_count || 0)
-                          : qsTr("Everything on this disk. No data on this disk is kept.")
+                    text: !Words.holdsData(screen.disk) ? qsTr("Everything on this disk. No data on this disk is kept.")
+                          : screen.disk.partition_count === 1
+                            ? qsTr("Everything on this disk: its one partition and every file on it. No data on this disk is kept.")
+                            : qsTr("Everything on this disk: all %1 partitions and every file on them. No data on this disk is kept.")
+                              .arg(screen.disk.partition_count)
                     wrapMode: Text.Wrap
                 }
 

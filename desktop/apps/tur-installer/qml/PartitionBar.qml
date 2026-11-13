@@ -88,7 +88,7 @@ Item {
 
                 // A partition too small to see still gets a sliver.
                 width: Math.max(2, (bar.width - 4 - (bar.blocks.length - 1)) * block.modelData.share)
-                height: parent.height
+                height: bar.height - 4
                 radius: 2
                 color: bar.fill(block.modelData.kind)
             }

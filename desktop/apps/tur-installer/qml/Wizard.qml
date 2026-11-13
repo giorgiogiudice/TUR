@@ -252,6 +252,21 @@ Kit.Page {
                     tone: Kit.Label.Secondary
                 }
 
+                // For the person on the other end of a support request
+                // (desktop-experience.md, 6.2): which build this is.
+                Kit.Label {
+                    objectName: "buildLine"
+                    Layout.fillWidth: true
+                    Layout.topMargin: -Kit.Theme.spaceGroup + Kit.Theme.spaceGrid
+                    Layout.bottomMargin: Kit.Theme.spaceGroup
+                    visible: String(wizard.engine.facts.build_id || "").length > 0
+                    text: qsTr("TUR %1 · build %2").arg(String(wizard.engine.facts.version || ""))
+                              .arg(String(wizard.engine.facts.build_id || ""))
+                    kind: Kit.Label.Small
+                    tone: Kit.Label.Secondary
+                    wrapMode: Text.WrapAnywhere
+                }
+
                 Repeater {
                     model: wizard.steps
 
@@ -278,11 +293,19 @@ Kit.Page {
                             Layout.preferredWidth: 16
                             Layout.preferredHeight: 16
 
+                            // The last step after an installation that did
+                            // not complete is marked as that, not as done.
                             Kit.Glyph {
+                                id: stepSign
+
+                                readonly property bool failed: stepRow.index === wizard.steps.length - 1
+                                                               && wizard.step === "done"
+                                                               && wizard.engine.installState !== "success"
+
                                 anchors.centerIn: parent
                                 visible: stepRow.done
-                                kind: Kit.Glyph.Check
-                                tint: Kit.Theme.positive
+                                kind: stepSign.failed ? Kit.Glyph.Negative : Kit.Glyph.Check
+                                tint: stepSign.failed ? Kit.Theme.negative : Kit.Theme.positive
                                 size: 14
                             }
                         }
@@ -386,7 +409,7 @@ Kit.Page {
 
         // --- the diagnostics drawer -----------------------------------------------
         Rectangle {
-            Layout.preferredWidth: wizard.drawerWidth
+            Layout.preferredWidth: Math.max(wizard.drawerWidth, drawer.buttonsWidth + 2 * Kit.Theme.spaceMargin)
             Layout.fillHeight: true
             color: Kit.Theme.surfaceRaised
 

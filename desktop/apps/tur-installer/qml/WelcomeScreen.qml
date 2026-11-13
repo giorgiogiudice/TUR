@@ -85,6 +85,22 @@ WizardScreen {
                 valueRole: "code"
                 currentIndex: screen.keyboard.indexOf(screen.keyboard.current)
                 Accessible.name: qsTr("Keyboard layout")
+
+                // The kit has no list button of its own: the stock one, with
+                // the kit's outline and focus ring, so that it looks like a
+                // control and not like a line of text.
+                background: Rectangle {
+                    implicitWidth: 240
+                    implicitHeight: Kit.Theme.targetPointer
+                    radius: Kit.Theme.radiusControl
+                    color: Kit.Theme.surfaceRaised
+                    border.width: Kit.Theme.lineWidth
+                    border.color: Kit.Theme.lineControl
+
+                    Kit.FocusRing {
+                        shown: layoutBox.visualFocus
+                    }
+                }
                 onActivated: index => {
                     const code = screen.keyboard.layouts[index].code
                     if (!screen.keyboard.apply(code))
