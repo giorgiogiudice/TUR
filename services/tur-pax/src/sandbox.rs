@@ -1427,7 +1427,10 @@ mod tests {
             let rules = GrantRules::with_links(home, ATOMIC_LINKS);
             assert_eq!(rules.links().len(), ATOMIC_LINKS.len(), "{home}");
             for form in ["/var/home/ada", "/home/ada"] {
-                assert!(rules.homes().iter().any(|known| known == Path::new(form)), "{home}: {form}");
+                assert!(
+                    rules.homes().iter().any(|known| known == Path::new(form)),
+                    "{home}: {form}"
+                );
             }
             let cases: &[(&str, Result<(), GrantRefusal>)] = &[
                 ("/var/home/ada/Documents", Ok(())),
@@ -1496,7 +1499,10 @@ mod tests {
             .chain([("/home", "/data/home"), ("/srv", "/export/srv")])
         {
             let link = SystemLink::new(name, Path::new(target)).expect("a system link");
-            assert_eq!((link.name(), link.target()), (Path::new(name), Path::new(target)));
+            assert_eq!(
+                (link.name(), link.target()),
+                (Path::new(name), Path::new(target))
+            );
         }
         // Rules given such a link leave it out, and judge as without it.
         let rules = GrantRules::with_links(HOME, &[("/home", "/etc")]);
@@ -1525,7 +1531,10 @@ mod tests {
         );
         let line = plan.arguments.join(" ");
         assert!(line.contains("--symlink /var/home /home"), "{line}");
-        assert!(line.contains("--ro-bind /var/home/ada/Documents /var/home/ada/Documents"), "{line}");
+        assert!(
+            line.contains("--ro-bind /var/home/ada/Documents /var/home/ada/Documents"),
+            "{line}"
+        );
         for shown in [
             "/home/ada/Documents",
             "/home/ada/Documents/report.txt",
@@ -1546,14 +1555,21 @@ mod tests {
             assert!(!plan.shows(hidden), "{hidden}");
         }
         // With nothing granted there is no link at all.
-        let plan = SandboxPlan::read_only(&rules, &[], &command(), Limits::default()).expect("a plan");
+        let plan =
+            SandboxPlan::read_only(&rules, &[], &command(), Limits::default()).expect("a plan");
         assert!(plan.links.is_empty());
-        assert!(!plan.arguments.iter().any(|argument| argument == "--symlink"));
+        assert!(
+            !plan
+                .arguments
+                .iter()
+                .any(|argument| argument == "--symlink")
+        );
     }
 
     /// A scratch directory of the test's own, made fresh.
     fn scratch(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("tur-pax-sandbox-{name}-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("tur-pax-sandbox-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).expect("a scratch directory");
         dir
@@ -1572,7 +1588,8 @@ mod tests {
         fs::create_dir_all(root.join("elsewhere")).expect("folders");
         std::os::unix::fs::symlink(&real, &named).expect("a link");
         // A link inside the granted tree is still refused.
-        std::os::unix::fs::symlink(root.join("elsewhere"), real.join("ada/Escape")).expect("a link");
+        std::os::unix::fs::symlink(root.join("elsewhere"), real.join("ada/Escape"))
+            .expect("a link");
         std::os::unix::fs::symlink(real.join("ada/.ssh"), real.join("ada/Keys")).expect("a link");
 
         let link = SystemLink {
@@ -1583,7 +1600,9 @@ mod tests {
         let rules = GrantRules::build(Some(home.as_path()), None, vec![link]);
 
         let through = named.join("ada/Documents");
-        let grant = rules.admit(through.to_str().expect("text")).expect("admitted");
+        let grant = rules
+            .admit(through.to_str().expect("text"))
+            .expect("admitted");
         assert_eq!(Path::new(grant.path()), real.join("ada/Documents"));
         let direct = rules
             .admit(real.join("ada/Documents").to_str().expect("text"))

@@ -241,6 +241,7 @@ def main():
             f"status {process.returncode}: {said[-300:]}",
         )
 
+    requests_left = MAX_REQUESTS
     tokens_left = MAX_TOKENS
     used = {"requests": 0, "input_tokens": 0, "output_tokens": 0}
 

@@ -2136,9 +2136,9 @@ mod tests {
             "/etc/plasmalogin.conf.d/10-tur.conf",
         ] {
             assert!(
-                PROTECTED_TARGETS.iter().any(|entry| entry.rule
-                    == TargetRule::ConfigurationFile
-                    && entry.covers(file)),
+                PROTECTED_TARGETS
+                    .iter()
+                    .any(|entry| entry.rule == TargetRule::ConfigurationFile && entry.covers(file)),
                 "{file}"
             );
         }
@@ -2330,12 +2330,18 @@ mod tests {
             ("plasma-login.service", Op::SecurityPolicy),
             ("plasma-login-kwin_wayland.service", Op::SecurityPolicy),
             ("display-manager.service", Op::SecurityPolicy),
-            ("fedora-kinoite-plasmalogin-workaround.service", Op::SecurityPolicy),
+            (
+                "fedora-kinoite-plasmalogin-workaround.service",
+                Op::SecurityPolicy,
+            ),
             ("accounts-daemon.service", Op::SecurityPolicy),
             ("plasma-polkit-agent.service", Op::SecurityPolicy),
             ("plasma-kwallet-pam.service", Op::SecurityPolicy),
             ("pam_namespace.service", Op::SecurityPolicy),
-            ("systemd-userdb-load-credentials.service", Op::SecurityPolicy),
+            (
+                "systemd-userdb-load-credentials.service",
+                Op::SecurityPolicy,
+            ),
             ("gpg-agent.service", Op::SecurityPolicy),
             ("gpg-agent-ssh.socket", Op::SecurityPolicy),
             ("ssh-agent.service", Op::SecurityPolicy),
