@@ -87,8 +87,9 @@ ColumnLayout {
             text: block.operation ? block.operation.activity : ""
             kind: Kit.Label.Small
             tone: Kit.Label.Secondary
-            elide: Text.ElideMiddle
-            wrapMode: Text.NoWrap
+            // A reference such as runtime/org.freedesktop.Platform/x86_64/25.08
+            // has no spaces to wrap at; nothing is cut off.
+            wrapMode: Text.WrapAnywhere
         }
     }
 

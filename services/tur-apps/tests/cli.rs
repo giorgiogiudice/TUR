@@ -479,12 +479,12 @@ fn a_cancelled_flatpak_installation_is_stopped_and_takes_back_what_it_added() {
     for line in stdout.lines() {
         let line = line.unwrap();
         let event: Value = serde_json::from_str(&line).unwrap();
-        // The runtime is in: cancel now.
+        // The runtime is in ("installing runtime/..."): cancel now.
         if event["event"] == "activity"
             && event["text"]
                 .as_str()
                 .unwrap_or("")
-                .starts_with("Installing runtime/")
+                .starts_with("installing runtime/")
         {
             writeln!(stdin, "cancel").unwrap();
             stdin.flush().unwrap();

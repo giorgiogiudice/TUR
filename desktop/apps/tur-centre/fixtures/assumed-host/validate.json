@@ -1,0 +1,25 @@
+{
+  "licence": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+  "generated_by": "services/tur-catalogue/tests/desktop_fixtures.rs writes this from the output of tur-catalogue for the seed catalogue; do not edit",
+  "invocations": [
+    {
+      "command": "validate",
+      "subject": "",
+      "host": "not used",
+      "arguments": ["validate", "--json"],
+      "exit_status": 0,
+      "stderr": "",
+      "stdout": {
+        "valid": true,
+        "statistics": {
+          "applications": 36,
+          "editions": 94,
+          "records": 16,
+          "rated_by_external_sources": 12,
+          "rated_by_tur_tests": 0,
+          "unknown": 4
+        }
+      }
+    }
+  ]
+}

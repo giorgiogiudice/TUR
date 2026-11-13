@@ -97,6 +97,26 @@ add_test(NAME centre-starts-on-no-route
 # Without a catalogue program it still starts, and says what is wrong.
 add_test(NAME centre-starts-without-the-catalogue
     COMMAND tur-centre --standalone --check --catalogue-program /nonexistent/tur-catalogue tur-centre:search?q=office)
+# Installed, Updates and Sources, on recorded runs of tur-apps; and with no
+# tur-apps at all.
+add_test(NAME centre-starts-on-installed
+    COMMAND tur-centre --standalone --check --fixture ${centre_fixtures}/default
+            --apps-fixture ${centre_fixtures}/apps/remove tur-centre:installed)
+add_test(NAME centre-starts-on-updates
+    COMMAND tur-centre --standalone --check --fixture ${centre_fixtures}/default
+            --apps-fixture ${centre_fixtures}/apps/update tur-centre:updates)
+add_test(NAME centre-starts-on-sources
+    COMMAND tur-centre --standalone --check --fixture ${centre_fixtures}/default
+            --apps-fixture ${centre_fixtures}/apps/sources tur-centre:sources)
+add_test(NAME centre-starts-without-tur-apps
+    COMMAND tur-centre --standalone --check --fixture ${centre_fixtures}/default
+            --apps-program /nonexistent/tur-apps tur-centre:installed)
+set_tests_properties(
+    centre-starts-on-installed
+    centre-starts-on-updates
+    centre-starts-on-sources
+    centre-starts-without-tur-apps
+    PROPERTIES ENVIRONMENT "${TUR_TEST_ENVIRONMENT}" TIMEOUT 120)
 set_tests_properties(
     centre-starts
     centre-starts-on-a-search

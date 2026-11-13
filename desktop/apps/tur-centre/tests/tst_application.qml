@@ -104,13 +104,15 @@ Item {
             compare(textsOf(way, "wayNothingKnown"), [], "a caveat is known, so nothing claims otherwise")
             verify(!shown(way, "wayAllReports"), "no record, so no list of reports")
 
-            // Something is needed first, so the button says "Set up…". It
-            // does nothing yet, and says so.
+            // Something is needed first, so the button says "Set up…". Setting
+            // up Windows is not built (D-25): it does nothing yet, and says so.
             const primary = findChild(view, "applicationPrimary")
             verify(primary.visible)
             compare(primary.text, "Set up…")
-            verify(!primary.enabled, "part 1 installs nothing")
-            compare(textOf(view, "applicationNotYet"), "The application centre cannot install applications yet.")
+            verify(!primary.enabled, "setting up Windows is not built")
+            compare(textOf(view, "applicationNotYet"),
+                    "The application centre cannot set up what is needed first yet.")
+            verify(!shown(view, "applicationInstallerFile"), "the way it runs is not the compatibility layer")
 
             // "Other ways to run it": every other option, in the router's
             // order. The compatibility layer comes before the web, and is
@@ -191,9 +193,11 @@ Item {
             compare(textsOf(way, "caveatText"), [])
             compare(textsOf(way, "wayPrerequisite"), [])
 
-            // Nothing is needed first: "Install".
+            // Nothing is needed first: "Install", and tur-apps installs a
+            // Flatpak, so it can be pressed.
             compare(findChild(view, "applicationPrimary").text, "Install")
-            verify(!findChild(view, "applicationPrimary").enabled)
+            verify(findChild(view, "applicationPrimary").enabled)
+            verify(!shown(view, "applicationNotYet"))
 
             // The other Linux edition, with the router's note about it.
             const other = findChild(view, "otherWay0")
@@ -253,7 +257,12 @@ Item {
             const way = findChild(view, "recommendedWay")
             compare(textOf(way, "wayLabel"), "Web application")
             compare(textOf(way, "wayReason"), "The web application is the publisher's primary form of this application.")
+            // tur-apps does not install web applications: the button says
+            // what would happen and cannot be pressed, and the line says why.
             compare(findChild(view, "applicationPrimary").text, "Install")
+            verify(!findChild(view, "applicationPrimary").enabled)
+            compare(textOf(view, "applicationNotYet"),
+                    "The application centre cannot yet install applications that run this way.")
 
             // A route that may not work, for a stated reason: an obstacle,
             // not a blocker. It says "Probably will not work fully", and

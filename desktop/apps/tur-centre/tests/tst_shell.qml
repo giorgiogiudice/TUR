@@ -66,21 +66,57 @@ Item {
             verify(field.activeFocus, "the search field has the keyboard when the window opens")
             compare(findChild(shell, "shellTitle").text, "Application centre")
 
-            // Home carries its standing sentence, word for word.
+            // Home carries its standing sentence, word for word, once the
+            // catalogue's counts say that TUR has rated nothing itself.
             const sentence = findChild(shell, "homeStandingSentence")
-            verify(sentence !== null && sentence.visible)
+            verify(sentence !== null)
+            tryVerify(() => sentence.visible, 5000)
+            compare(host.catalogue.statistics.rated_by_tur_tests, 0)
             compare(sentence.text,
                     "TUR has not tested applications itself yet. Every rating here is what the named source reports.")
-            // Nothing was asked of the catalogue to show Home.
+            // Nothing was searched or looked up to show Home.
             compare(host.catalogue.search.status, SearchSession.Idle)
             compare(host.catalogue.application.status, ApplicationSession.Idle)
+        }
+
+        function test_the_standing_sentence_stands_only_while_it_is_true() {
+            // Without the counts (no catalogue program), nothing is claimed.
+            let shell = host.start("", "")
+            tryVerify(() => !host.catalogue.checkingStatistics, 5000)
+            compare(Object.keys(host.catalogue.statistics).length, 0)
+            verify(!findChild(shell, "homeStandingSentence").visible)
+            // With the counts, it is said exactly while TUR has rated
+            // nothing: the condition reads `rated_by_tur_tests` and nothing
+            // else.
+            shell = host.start("default", "")
+            tryVerify(() => host.catalogue.statistics.rated_by_tur_tests === 0, 5000)
+            const home = findChild(shell, "shellView").item
+            verify(home.turHasRatedNothing)
+            verify(findChild(shell, "homeStandingSentence").visible)
+        }
+
+        function test_home_offers_chrome_and_says_where_it_comes_from() {
+            const shell = host.start("default", "")
+            const card = findChild(shell, "homeChrome")
+            verify(card.visible)
+            compare(findChild(card, "homeChromeOrigin").text,
+                    "Chrome is made by Google, and Google's terms apply to it. TUR does not include it. Flatpak "
+                    + "downloads it from Google's own server while it installs; the package around it is kept by "
+                    + "Flathub's volunteers, not by Google. It is updated the same way.")
+            const install = findChild(card, "homeChromeInstall")
+            compare(install.text, "Install Google Chrome…")
+            // One action: Chrome's page, with the plan of installing it.
+            mouseClick(install)
+            compare(shell.view, "application")
+            compare(host.catalogue.application.applicationId, "com.google.chrome")
+            verify(host.apps.operation("com.google.chrome") !== null)
         }
 
         function test_the_side_list_has_the_design_s_seven_views() {
             const shell = host.start("default", "")
             const expected = [
                 ["home", "Home", true], ["search", "Search", true], ["categories", "Categories", false],
-                ["installed", "Installed", false], ["updates", "Updates", false], ["sources", "Sources", false],
+                ["installed", "Installed", true], ["updates", "Updates", true], ["sources", "Sources", true],
                 ["open-a-file", "Open a file", false]
             ]
             compare(shell.sections.length, 7)
@@ -88,7 +124,7 @@ Item {
                 const row = findChild(shell, "shellSection-" + key)
                 verify(row !== null, "the side list has " + title)
                 compare(row.text, title)
-                // What part 1 does not build is listed, and not available.
+                // What is not built yet is listed, and not available.
                 compare(row.enabled, built, title)
                 compare(row.selected, key === "home")
             }
@@ -100,8 +136,16 @@ Item {
             compare(shell.address, "tur-centre:search")
 
             // A view that is not built cannot be gone to.
-            mouseClick(findChild(shell, "shellSection-sources"))
+            mouseClick(findChild(shell, "shellSection-categories"))
             compare(shell.view, "search")
+
+            // Part 2's views, each with its address.
+            for (const view of ["installed", "updates", "sources"]) {
+                mouseClick(findChild(shell, "shellSection-" + view))
+                compare(shell.view, view)
+                compare(shell.address, "tur-centre:" + view)
+                verify(shell.open("tur-centre:" + view))
+            }
 
             mouseClick(findChild(shell, "shellSection-home"))
             compare(shell.view, "home")
@@ -197,6 +241,7 @@ Item {
                 { tag: "an application with a path", address: "tur-centre:app/../../etc/passwd" },
                 { tag: "badly encoded", address: "tur-centre:search?q=%E0%A4%A" },
                 { tag: "a view that is not built", address: "tur-centre:sources/google-play" },
+                { tag: "another view that is not built", address: "tur-centre:categories" },
                 { tag: "another program", address: "tur-settings:tur.pax.privacy" }
             ]
         }

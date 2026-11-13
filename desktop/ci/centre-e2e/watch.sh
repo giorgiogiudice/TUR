@@ -14,7 +14,7 @@ word=${2:?}
 shots=${OUT:?}/shots
 
 for _ in $(seq 900); do
-    line=$(xwininfo -root -tree 2>/dev/null | grep -i "\"[^\"]*$word[^\"]*\"" | grep -v -i 'tst_centre' | head -n 1)
+    line=$(xwininfo -root -tree 2>/dev/null | grep -i "\"[^\"]*${word}[^\"]*\"" | grep -v -i 'tst_centre' | head -n 1)
     if [ -n "$line" ]; then
         echo "found $line"
         sleep 2
