@@ -119,6 +119,18 @@ Read on 12 November 2026. The engine decision and its evidence are in
 | Ministral 3 3B Instruct 2512 (GGUF) | Model in TUR's catalogue (second list) | https://huggingface.co/mistralai/Ministral-3-3B-Instruct-2512-GGUF | `Apache-2.0` in the card, which adds one sentence under its licence (no use that infringes anyone's rights); no licence file [S85] | Fetched by user | No | TUR shows the card's sentence as a restriction; the download asks for acceptance. |
 | Qwen3 30B A3B (GGUF) | Model in TUR's catalogue (second list) | https://huggingface.co/Qwen/Qwen3-30B-A3B-GGUF | `Apache-2.0`: the repository's `LICENSE` is byte for byte that of Qwen3 4B [S50] | Fetched by user | No | As above. Restrictions: none. |
 
+## Windows drivers in user space (experiment windows-drivers-2)
+
+Read on 13 November 2026. The experiment and its result are in
+[report windows-drivers-2](../reports/windows-drivers-2.md); nothing here is in
+the image.
+
+| Project | Role in TUR | Source | Licence | Route | In image | Boundary |
+|---|---|---|---|---|---|---|
+| Windows Driver Frameworks (KMDF) | Source of the KMDF runtime (`Wdf01000.sys`) built for Wine's driver host, at commit `b6191d9543441329154da32f7ab9bdd97228dd3c` (10 September 2024; framework sources "Windows Release win-10.0.22621.1", KMDF 1.33) | https://github.com/microsoft/Windows-Driver-Frameworks | `MIT` (`LICENSE`, "Copyright (c) 2015 Microsoft"; the build compares the fetched file with [third-party/wdf/LICENSE](../../third-party/wdf/LICENSE)) [S86] | Not shipped: fetched in CI at the pinned commit; the changes and stand-ins TUR needs are in [third-party/wdf](../../third-party/wdf/README.md), under MIT | No | Runs inside Wine's driver host, never in a kernel. MIT: keep the notice with any binary. No Microsoft binary (WDK, `WdfLdr.sys`, `Wdf01000.sys`) is used. |
+| Windows-driver-samples, `usb/kmdf_fx2` | Test client: Microsoft's OSR USB-FX2 KMDF sample driver and its test program, at commit `d49bb7d72f3651952b2b6e4ad28d14fe2247eb69` | https://github.com/microsoft/Windows-driver-samples | `MS-PL` (`LICENSE`) [S87] | Not shipped: fetched in CI, built there, never committed | No | Test only. |
+| Wine (patch set) | `ntoskrnl.exe` with real DPCs and a new `wdfldr.sys` (the KMDF loader), for the experiment | https://gitlab.winehq.org/wine/wine, tag `wine-11.20` (`7298a818`), checked against master `cc5d1d86` | `LGPL-2.1-or-later` [S5]; the patches in [third-party/wine-patches](../../third-party/wine-patches/README.md) carry it | Built by TUR in CI from the pinned source with the patches; put over Fedora's Wine only inside a throw-away CI container | No | Patches to Wine are LGPL-2.1-or-later and meant for upstream; if TUR ever shipped a patched Wine, their source would have to be offered with it. |
+
 ## Corrections the specification needs
 
 These are observations for whoever next edits §17; this change does not edit the
@@ -192,6 +204,8 @@ quotes a package version or a Fedora licence tag, the source is the image SBOM
 | S51 | Granite models | Hugging Face API; `README.md` of the GGUF repository at the pinned revision and of the base model; `config.json`; GitHub repository licence of ibm-granite/granite-4.0-language-models | https://huggingface.co/ibm-granite/granite-4.0-1b-GGUF ; https://huggingface.co/ibm-granite/granite-4.0-1b |
 | S84 | Gemma 4 models | Hugging Face API (revisions, file sizes, LFS SHA-256), `README.md` at the pinned revisions and `config.json` of the base models, read on 2026-11-13; the licence page and the Gemma Terms of Use and Prohibited Use Policy pages | https://huggingface.co/google/gemma-4-E2B-it-qat-q4_0-gguf ; https://ai.google.dev/gemma/docs/gemma_4_license ; https://ai.google.dev/gemma/terms ; https://ai.google.dev/gemma/prohibited_use_policy |
 | S85 | Ministral 3 models | Hugging Face API, `README.md` at the pinned revision, the base model's `config.json`, read on 2026-11-13 | https://huggingface.co/mistralai/Ministral-3-3B-Instruct-2512-GGUF ; https://huggingface.co/mistralai/Ministral-3-3B-Instruct-2512 |
+| S86 | Windows Driver Frameworks | `LICENSE` and `README.md` ("WDF is licensed under the MIT License") at commit b6191d95, read on 2026-11-13 | https://github.com/microsoft/Windows-Driver-Frameworks/blob/b6191d9543441329154da32f7ab9bdd97228dd3c/LICENSE |
+| S87 | Windows-driver-samples | `LICENSE` (Microsoft Public License) at commit d49bb7d7, read on 2026-11-13 | https://github.com/microsoft/Windows-driver-samples/blob/d49bb7d72f3651952b2b6e4ad28d14fe2247eb69/LICENSE |
 
 ### Not verified
 

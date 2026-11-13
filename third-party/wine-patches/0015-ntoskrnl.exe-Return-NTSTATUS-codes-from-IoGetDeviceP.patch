@@ -1,0 +1,74 @@
+SPDX-License-Identifier: LGPL-2.1-or-later
+A patch to Wine (https://gitlab.winehq.org/wine/wine), under Wine's licence;
+see README.md and COPYING.LIB in this directory. Applied with `git apply`,
+which ignores these lines.
+
+From ebb20d45956d07279d79415efda14ba517902a35 Mon Sep 17 00:00:00 2001
+From: TUR experiment <tur-experiment@users.noreply.github.com>
+Date: Fri, 13 Nov 2026 11:40:40 +0300
+Subject: [PATCH 15/16] ntoskrnl.exe: Return NTSTATUS codes from
+ IoGetDeviceProperty.
+
+It returned setupapi's Win32 error codes unchanged. A property the device
+does not have (ERROR_INVALID_DATA, 13) therefore passed NT_SUCCESS, and
+a short buffer was not STATUS_BUFFER_TOO_SMALL. Microsoft's kmdf_fx2
+sample asks for DevicePropertyFriendlyName, got 13, took it for success,
+used the NULL memory object and the framework bugchecked (WDF_VIOLATION,
+invalid handle).
+---
+ dlls/ntoskrnl.exe/pnp.c | 24 +++++++++++++++++++++---
+ 1 file changed, 21 insertions(+), 3 deletions(-)
+
+diff --git a/dlls/ntoskrnl.exe/pnp.c b/dlls/ntoskrnl.exe/pnp.c
+index 843e728..0fa1fd7 100644
+--- a/dlls/ntoskrnl.exe/pnp.c
++++ b/dlls/ntoskrnl.exe/pnp.c
+@@ -951,6 +951,23 @@ NTSTATUS WINAPI IoGetDevicePropertyData( DEVICE_OBJECT *device, const DEVPROPKEY
+ /***********************************************************************
+  *           IoGetDeviceProperty   (NTOSKRNL.EXE.@)
+  */
++/* setupapi reports Win32 errors; IoGetDeviceProperty returned them as they
++ * were, so a missing property (ERROR_INVALID_DATA, 13) looked like success to
++ * NT_SUCCESS and a short buffer was not STATUS_BUFFER_TOO_SMALL. */
++static NTSTATUS status_from_setupapi_error( DWORD error )
++{
++    switch (error)
++    {
++    case ERROR_INSUFFICIENT_BUFFER: return STATUS_BUFFER_TOO_SMALL;
++    case ERROR_INVALID_DATA:
++    case ERROR_FILE_NOT_FOUND:
++    case ERROR_NO_SUCH_DEVINST: return STATUS_OBJECT_NAME_NOT_FOUND;
++    case ERROR_NOT_ENOUGH_MEMORY: return STATUS_INSUFFICIENT_RESOURCES;
++    case ERROR_INVALID_PARAMETER: return STATUS_INVALID_PARAMETER;
++    default: return STATUS_UNSUCCESSFUL;
++    }
++}
++
+ NTSTATUS WINAPI IoGetDeviceProperty( DEVICE_OBJECT *device, DEVICE_REGISTRY_PROPERTY property,
+                                      ULONG length, void *buffer, ULONG *needed )
+ {
+@@ -1093,20 +1110,21 @@ NTSTATUS WINAPI IoGetDeviceProperty( DEVICE_OBJECT *device, DEVICE_REGISTRY_PROP
+     if ((set = SetupDiCreateDeviceInfoList( &GUID_NULL, NULL )) == INVALID_HANDLE_VALUE)
+     {
+         ERR("Failed to create device list, error %#lx.\n", GetLastError());
+-        return GetLastError();
++        return status_from_setupapi_error( GetLastError() );
+     }
+ 
+     if (!SetupDiOpenDeviceInfoW( set, device_instance_id, NULL, 0, &sp_device))
+     {
+         ERR("Failed to open device, error %#lx.\n", GetLastError());
++        status = status_from_setupapi_error( GetLastError() );
+         SetupDiDestroyDeviceInfoList( set );
+-        return GetLastError();
++        return status;
+     }
+ 
+     if (SetupDiGetDeviceRegistryPropertyW( set, &sp_device, sp_property, NULL, buffer, length, needed ))
+         status = STATUS_SUCCESS;
+     else
+-        status = GetLastError();
++        status = status_from_setupapi_error( GetLastError() );
+ 
+     SetupDiDestroyDeviceInfoList( set );
+ 

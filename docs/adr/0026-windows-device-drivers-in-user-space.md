@@ -91,3 +91,22 @@ patch queue for Wine.
   measurement of the report is repeated on real hardware.
 - Each upstream fix is verified by the experiment before the catalogue claims a
   device works.
+
+## Note (2026-11-13): windows-drivers-2
+
+A note, not a change of status or decision. The follow-up experiment
+[windows-drivers-2](../reports/windows-drivers-2.md) built the KMDF runtime
+(`Wdf01000.sys`) from Microsoft's MIT-licensed Windows-Driver-Frameworks
+source with clang, lld and mingw-w64 (no WDK, no MSVC, no Microsoft binary),
+added a `wdfldr.sys` loader and other fixes to Wine 11.20 as a patch set, and
+ran KMDF drivers as ordinary user-space programs in Wine's driver host on
+emulated USB/IP devices in CI. A minimal KMDF USB driver passed every check
+(start, I/O queues, DPC, timer, work item, bulk and control transfers), and
+Microsoft's unmodified `kmdf_fx2` sample reached `EvtDevicePrepareHardware`
+and `EvtDeviceD0Entry` and moved data for its own test program. The
+statement above that KMDF drivers "cannot load at all" holds for stock Wine
+and Microsoft's binaries, not for a framework built from the published
+source. Whether this changes the decision (for example a narrowly scoped,
+per-device KMDF path behind the same static checks) is for a later revision
+of this ADR, after the owner's decision on the licence of TUR's stand-ins
+(report §7) and the upstream discussion with Wine (report §10).

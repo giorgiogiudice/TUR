@@ -1,0 +1,61 @@
+SPDX-License-Identifier: LGPL-2.1-or-later
+A patch to Wine (https://gitlab.winehq.org/wine/wine), under Wine's licence;
+see README.md and COPYING.LIB in this directory. Applied with `git apply`,
+which ignores these lines.
+
+From 0dde74acee351ceb15068c1b4da487d9ab6c1a21 Mon Sep 17 00:00:00 2001
+From: TUR experiment <tur-experiment@users.noreply.github.com>
+Date: Fri, 13 Nov 2026 10:41:47 +0300
+Subject: [PATCH 08/16] wineusb.sys: Handle power IRPs.
+
+Power IRPs to a USB device's PDO were completed by the default handler
+with STATUS_INVALID_DEVICE_REQUEST, which fails the start of any function
+driver that changes its device's power state, the Kernel-Mode Driver
+Framework's among them. Succeed set- and query-power on PDOs (the host's
+USB stack manages the device's power) and pass the bus FDO's down.
+---
+ dlls/wineusb.sys/wineusb.c | 24 ++++++++++++++++++++++++
+ 1 file changed, 24 insertions(+)
+
+diff --git a/dlls/wineusb.sys/wineusb.c b/dlls/wineusb.sys/wineusb.c
+index 806c197..96a7ab9 100644
+--- a/dlls/wineusb.sys/wineusb.c
++++ b/dlls/wineusb.sys/wineusb.c
+@@ -525,6 +525,29 @@ static NTSTATUS WINAPI driver_pnp(DEVICE_OBJECT *device, IRP *irp)
+     return pdo_pnp(device, irp);
+ }
+ 
++static NTSTATUS WINAPI driver_power(DEVICE_OBJECT *device, IRP *irp)
++{
++    IO_STACK_LOCATION *stack = IoGetCurrentIrpStackLocation(irp);
++    NTSTATUS status;
++
++    TRACE("device %p, irp %p, minor %#x.\n", device, irp, stack->MinorFunction);
++
++    PoStartNextPowerIrp(irp);
++    if (device == bus_fdo)
++    {
++        IoSkipCurrentIrpStackLocation(irp);
++        return PoCallDriver(bus_pdo, irp);
++    }
++
++    /* The host's USB stack does the device's power management; a function
++     * driver's power transitions succeed. */
++    if (stack->MinorFunction == IRP_MN_SET_POWER || stack->MinorFunction == IRP_MN_QUERY_POWER)
++        irp->IoStatus.Status = STATUS_SUCCESS;
++    status = irp->IoStatus.Status;
++    IoCompleteRequest(irp, IO_NO_INCREMENT);
++    return status;
++}
++
+ static NTSTATUS usb_submit_urb(struct usb_device *device, IRP *irp)
+ {
+     URB *urb = IoGetCurrentIrpStackLocation(irp)->Parameters.Others.Argument1;
+@@ -710,6 +733,7 @@ NTSTATUS WINAPI DriverEntry(DRIVER_OBJECT *driver, UNICODE_STRING *path)
+     driver->DriverExtension->AddDevice = driver_add_device;
+     driver->DriverUnload = driver_unload;
+     driver->MajorFunction[IRP_MJ_PNP] = driver_pnp;
++    driver->MajorFunction[IRP_MJ_POWER] = driver_power;
+     driver->MajorFunction[IRP_MJ_INTERNAL_DEVICE_CONTROL] = driver_internal_ioctl;
+ 
+     return STATUS_SUCCESS;

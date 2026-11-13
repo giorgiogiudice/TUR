@@ -1,0 +1,56 @@
+SPDX-License-Identifier: LGPL-2.1-or-later
+A patch to Wine (https://gitlab.winehq.org/wine/wine), under Wine's licence;
+see README.md and COPYING.LIB in this directory. Applied with `git apply`,
+which ignores these lines.
+
+From 5c0d3d6ce049da8f7bc85c68775d2dc5359db090 Mon Sep 17 00:00:00 2001
+From: TUR experiment <tur-experiment@users.noreply.github.com>
+Date: Fri, 13 Nov 2026 10:08:22 +0300
+Subject: [PATCH 04/16] ntoskrnl.exe: Add a WmiQueryTraceInformation that
+ fails.
+
+It was a stub, so calling it aborted the driver host. The Kernel-Mode Driver
+Framework calls it while starting, to find the WDF performance-trace
+callbacks, and falls back to its own table when the query fails. There is
+no kernel event tracing in Wine: report STATUS_NOT_SUPPORTED.
+---
+ dlls/ntoskrnl.exe/ntoskrnl.c        | 12 ++++++++++++
+ dlls/ntoskrnl.exe/ntoskrnl.exe.spec |  2 +-
+ 2 files changed, 13 insertions(+), 1 deletion(-)
+
+diff --git a/dlls/ntoskrnl.exe/ntoskrnl.c b/dlls/ntoskrnl.exe/ntoskrnl.c
+index 4455538..bfbc613 100644
+--- a/dlls/ntoskrnl.exe/ntoskrnl.c
++++ b/dlls/ntoskrnl.exe/ntoskrnl.c
+@@ -4846,6 +4846,18 @@ NTSTATUS WINAPI SeLocateProcessImageName(PEPROCESS process, UNICODE_STRING **ima
+     return STATUS_SUCCESS;
+ }
+ 
++/*********************************************************************
++ *           WmiQueryTraceInformation    (NTOSKRNL.@)
++ */
++NTSTATUS WINAPI WmiQueryTraceInformation( ULONG info_class, void *info, ULONG length, ULONG *required,
++                                          void *buffer )
++{
++    FIXME( "class %lu, info %p, length %lu, required %p, buffer %p: not supported\n",
++           info_class, info, length, required, buffer );
++    if (required) *required = 0;
++    return STATUS_NOT_SUPPORTED;
++}
++
+ /*********************************************************************
+  *           KeFlushQueuedDpcs    (NTOSKRNL.@)
+  */
+diff --git a/dlls/ntoskrnl.exe/ntoskrnl.exe.spec b/dlls/ntoskrnl.exe/ntoskrnl.exe.spec
+index 90af2b6..913b504 100644
+--- a/dlls/ntoskrnl.exe/ntoskrnl.exe.spec
++++ b/dlls/ntoskrnl.exe/ntoskrnl.exe.spec
+@@ -1401,7 +1401,7 @@
+ @ stub WRITE_REGISTER_USHORT
+ @ stub WmiFlushTrace
+ @ stub WmiQueryTrace
+-@ stub WmiQueryTraceInformation
++@ stdcall WmiQueryTraceInformation(long ptr long ptr ptr)
+ @ stub WmiStartTrace
+ @ stub WmiStopTrace
+ @ stub WmiTraceMessage

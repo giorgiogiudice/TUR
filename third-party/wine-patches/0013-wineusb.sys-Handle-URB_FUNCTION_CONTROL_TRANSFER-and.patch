@@ -1,0 +1,147 @@
+SPDX-License-Identifier: LGPL-2.1-or-later
+A patch to Wine (https://gitlab.winehq.org/wine/wine), under Wine's licence;
+see README.md and COPYING.LIB in this directory. Applied with `git apply`,
+which ignores these lines.
+
+From 629f021f8d7f34806c9b6650fc462c0a45c485e1 Mon Sep 17 00:00:00 2001
+From: TUR experiment <tur-experiment@users.noreply.github.com>
+Date: Fri, 13 Nov 2026 11:30:48 +0300
+Subject: [PATCH 13/16] wineusb.sys: Handle URB_FUNCTION_CONTROL_TRANSFER and
+ URB_FUNCTION_GET_STATUS_FROM_DEVICE.
+
+The Kernel-Mode Driver Framework sends every control transfer a driver
+makes (WdfUsbTargetDeviceSendControlTransferSynchronously and the
+format-request variant) as a generic URB_FUNCTION_CONTROL_TRANSFER with the
+caller's setup packet, and asks for the device status while it creates its
+USB target. Submit both on the default control pipe; the direction flag and
+the buffer length take precedence over the setup packet, as on Windows.
+---
+ dlls/wineusb.sys/unixlib.c | 74 ++++++++++++++++++++++++++++++++++++++
+ dlls/wineusb.sys/wineusb.c | 15 ++++++++
+ 2 files changed, 89 insertions(+)
+
+diff --git a/dlls/wineusb.sys/unixlib.c b/dlls/wineusb.sys/unixlib.c
+index af253ba..1757ee2 100644
+--- a/dlls/wineusb.sys/unixlib.c
++++ b/dlls/wineusb.sys/unixlib.c
+@@ -372,6 +372,16 @@ static void LIBUSB_CALL transfer_cb(struct libusb_transfer *transfer)
+                 break;
+             }
+ 
++            case URB_FUNCTION_CONTROL_TRANSFER:
++            case URB_FUNCTION_GET_STATUS_FROM_DEVICE:
++            {
++                struct _URB_CONTROL_TRANSFER *req = &urb->UrbControlTransfer;
++                req->TransferBufferLength = transfer->actual_length;
++                if (libusb_control_transfer_get_setup(transfer)->bmRequestType & LIBUSB_ENDPOINT_IN)
++                    memcpy(transfer_buffer, libusb_control_transfer_get_data(transfer), transfer->actual_length);
++                break;
++            }
++
+             default:
+                 ERR("Unexpected function %#x.\n", urb->UrbHeader.Function);
+         }
+@@ -649,6 +659,70 @@ static NTSTATUS usb_submit_urb(void *args)
+             return STATUS_PENDING;
+         }
+ 
++        case URB_FUNCTION_CONTROL_TRANSFER:
++        case URB_FUNCTION_GET_STATUS_FROM_DEVICE:
++        {
++            struct _URB_CONTROL_TRANSFER *req = &urb->UrbControlTransfer;
++            uint8_t req_type, request;
++            uint16_t value, index;
++            struct transfer_ctx *transfer_ctx;
++            unsigned char *buffer;
++
++            if (urb->UrbHeader.Function == URB_FUNCTION_GET_STATUS_FROM_DEVICE)
++            {
++                req_type = LIBUSB_ENDPOINT_IN | LIBUSB_REQUEST_TYPE_STANDARD | LIBUSB_RECIPIENT_DEVICE;
++                request = LIBUSB_REQUEST_GET_STATUS;
++                value = 0;
++                index = urb->UrbControlGetStatusRequest.Index;
++            }
++            else
++            {
++                /* The caller's setup packet, except that the direction flag
++                 * and the buffer length rule, as on Windows. */
++                req_type = req->SetupPacket[0] & ~LIBUSB_ENDPOINT_IN;
++                if (req->TransferFlags & USBD_TRANSFER_DIRECTION_IN)
++                    req_type |= LIBUSB_ENDPOINT_IN;
++                request = req->SetupPacket[1];
++                value = req->SetupPacket[2] | (req->SetupPacket[3] << 8);
++                index = req->SetupPacket[4] | (req->SetupPacket[5] << 8);
++            }
++
++            if (!(transfer_ctx = calloc(1, sizeof(*transfer_ctx))))
++                return STATUS_NO_MEMORY;
++            transfer_ctx->irp = irp;
++            transfer_ctx->transfer_buffer = params->transfer_buffer;
++
++            if (!(transfer = libusb_alloc_transfer(0)))
++            {
++                free(transfer_ctx);
++                return STATUS_NO_MEMORY;
++            }
++            irp->Tail.Overlay.DriverContext[0] = transfer;
++
++            if (!(buffer = malloc(LIBUSB_CONTROL_SETUP_SIZE + req->TransferBufferLength)))
++            {
++                free(transfer_ctx);
++                libusb_free_transfer(transfer);
++                return STATUS_NO_MEMORY;
++            }
++
++            libusb_fill_control_setup(buffer, req_type, request, value, index, req->TransferBufferLength);
++            if (!(req_type & LIBUSB_ENDPOINT_IN) && req->TransferBufferLength)
++                memcpy(buffer + LIBUSB_CONTROL_SETUP_SIZE, params->transfer_buffer, req->TransferBufferLength);
++            libusb_fill_control_transfer(transfer, handle, buffer, transfer_cb, transfer_ctx, 0);
++            transfer->flags = LIBUSB_TRANSFER_FREE_BUFFER | LIBUSB_TRANSFER_FREE_TRANSFER;
++            if ((ret = libusb_submit_transfer(transfer)) < 0)
++            {
++                ERR("Failed to submit control transfer: %s\n", libusb_strerror(ret));
++                libusb_free_transfer(transfer);
++                free(transfer_ctx);
++                urb->UrbHeader.Status = USBD_STATUS_REQUEST_FAILED;
++                return STATUS_UNSUCCESSFUL;
++            }
++
++            return STATUS_PENDING;
++        }
++
+         default:
+             FIXME("Unhandled function %#x.\n", urb->UrbHeader.Function);
+     }
+diff --git a/dlls/wineusb.sys/wineusb.c b/dlls/wineusb.sys/wineusb.c
+index 96a7ab9..0525567 100644
+--- a/dlls/wineusb.sys/wineusb.c
++++ b/dlls/wineusb.sys/wineusb.c
+@@ -588,6 +588,8 @@ static NTSTATUS usb_submit_urb(struct usb_device *device, IRP *irp)
+         case URB_FUNCTION_VENDOR_DEVICE:
+         case URB_FUNCTION_VENDOR_INTERFACE:
+         case URB_FUNCTION_VENDOR_ENDPOINT:
++        case URB_FUNCTION_CONTROL_TRANSFER:
++        case URB_FUNCTION_GET_STATUS_FROM_DEVICE:
+         {
+             struct usb_submit_urb_params params =
+             {
+@@ -628,6 +630,19 @@ static NTSTATUS usb_submit_urb(struct usb_device *device, IRP *irp)
+                         params.transfer_buffer = req->TransferBuffer;
+                     break;
+                 }
++
++                /* The get-status request has the same buffer fields at the
++                 * same offsets as the generic control transfer. */
++                case URB_FUNCTION_CONTROL_TRANSFER:
++                case URB_FUNCTION_GET_STATUS_FROM_DEVICE:
++                {
++                    struct _URB_CONTROL_TRANSFER *req = &urb->UrbControlTransfer;
++                    if (req->TransferBufferMDL)
++                        params.transfer_buffer = MmGetSystemAddressForMdlSafe(req->TransferBufferMDL, NormalPagePriority);
++                    else
++                        params.transfer_buffer = req->TransferBuffer;
++                    break;
++                }
+             }
+ 
+             /* Hold the wineusb lock while submitting and queuing, and

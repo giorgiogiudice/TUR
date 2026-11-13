@@ -1,0 +1,114 @@
+SPDX-License-Identifier: LGPL-2.1-or-later
+A patch to Wine (https://gitlab.winehq.org/wine/wine), under Wine's licence;
+see README.md and COPYING.LIB in this directory. Applied with `git apply`,
+which ignores these lines.
+
+From 6f1810502fa24d7b2d333b840be172f45e2f3cb5 Mon Sep 17 00:00:00 2001
+From: TUR experiment <tur-experiment@users.noreply.github.com>
+Date: Fri, 13 Nov 2026 10:50:09 +0300
+Subject: [PATCH 09/16] ntoskrnl.exe: Add power framework functions that report
+ it unavailable.
+
+PoFxRegisterDevice and the functions that use its handle were not
+exported, so drivers that import them, the Kernel-Mode Driver Framework
+among them, did not load. Registration fails with STATUS_NOT_SUPPORTED;
+the framework then manages device power without it.
+---
+ dlls/ntoskrnl.exe/ntoskrnl.exe.spec | 11 ++++++
+ dlls/ntoskrnl.exe/pnp.c             | 61 +++++++++++++++++++++++++++++
+ 2 files changed, 72 insertions(+)
+
+diff --git a/dlls/ntoskrnl.exe/ntoskrnl.exe.spec b/dlls/ntoskrnl.exe/ntoskrnl.exe.spec
+index bb64085..8107df4 100644
+--- a/dlls/ntoskrnl.exe/ntoskrnl.exe.spec
++++ b/dlls/ntoskrnl.exe/ntoskrnl.exe.spec
+@@ -904,6 +904,17 @@
+ @ stub PoSetSystemState
+ @ stub PoShutdownBugCheck
+ @ stdcall PoStartNextPowerIrp(ptr)
++@ stdcall PoFxActivateComponent(ptr long long)
++@ stdcall PoFxCompleteDevicePowerNotRequired(ptr)
++@ stdcall PoFxCompleteDirectedPowerDown(ptr)
++@ stdcall PoFxCompleteIdleCondition(ptr long)
++@ stdcall PoFxCompleteIdleState(ptr long)
++@ stdcall PoFxIdleComponent(ptr long long)
++@ stdcall PoFxRegisterDevice(ptr ptr ptr)
++@ stdcall PoFxReportDevicePoweredOn(ptr)
++@ stdcall PoFxSetDeviceIdleTimeout(ptr int64)
++@ stdcall PoFxStartDevicePowerManagement(ptr)
++@ stdcall PoFxUnregisterDevice(ptr)
+ @ stub PoUnregisterSystemState
+ @ stdcall ProbeForRead(ptr long long)
+ @ stdcall ProbeForWrite(ptr long long)
+diff --git a/dlls/ntoskrnl.exe/pnp.c b/dlls/ntoskrnl.exe/pnp.c
+index 77aa2d2..843e728 100644
+--- a/dlls/ntoskrnl.exe/pnp.c
++++ b/dlls/ntoskrnl.exe/pnp.c
+@@ -1724,6 +1724,67 @@ POWER_STATE WINAPI PoSetPowerState( DEVICE_OBJECT *device, POWER_STATE_TYPE type
+     return state;
+ }
+ 
++/* The runtime power framework (Windows 8): there is no device power
++ * management in Wine, so registration fails and a driver keeps managing
++ * power itself. The other functions take a handle only a successful
++ * registration returns. */
++NTSTATUS WINAPI PoFxRegisterDevice( DEVICE_OBJECT *pdo, void *device, void **handle )
++{
++    FIXME( "pdo %p, device %p, handle %p: not supported\n", pdo, device, handle );
++    if (handle) *handle = NULL;
++    return STATUS_NOT_SUPPORTED;
++}
++
++void WINAPI PoFxUnregisterDevice( void *handle )
++{
++    FIXME( "handle %p: stub\n", handle );
++}
++
++void WINAPI PoFxStartDevicePowerManagement( void *handle )
++{
++    FIXME( "handle %p: stub\n", handle );
++}
++
++void WINAPI PoFxSetDeviceIdleTimeout( void *handle, ULONGLONG timeout )
++{
++    FIXME( "handle %p, timeout %s: stub\n", handle, wine_dbgstr_longlong( timeout ) );
++}
++
++void WINAPI PoFxReportDevicePoweredOn( void *handle )
++{
++    FIXME( "handle %p: stub\n", handle );
++}
++
++void WINAPI PoFxActivateComponent( void *handle, ULONG component, ULONG flags )
++{
++    FIXME( "handle %p, component %lu, flags %#lx: stub\n", handle, component, flags );
++}
++
++void WINAPI PoFxIdleComponent( void *handle, ULONG component, ULONG flags )
++{
++    FIXME( "handle %p, component %lu, flags %#lx: stub\n", handle, component, flags );
++}
++
++void WINAPI PoFxCompleteIdleState( void *handle, ULONG component )
++{
++    FIXME( "handle %p, component %lu: stub\n", handle, component );
++}
++
++void WINAPI PoFxCompleteIdleCondition( void *handle, ULONG component )
++{
++    FIXME( "handle %p, component %lu: stub\n", handle, component );
++}
++
++void WINAPI PoFxCompleteDevicePowerNotRequired( void *handle )
++{
++    FIXME( "handle %p: stub\n", handle );
++}
++
++void WINAPI PoFxCompleteDirectedPowerDown( void *handle )
++{
++    FIXME( "handle %p: stub\n", handle );
++}
++
+ /*****************************************************
+  *           PoStartNextPowerIrp   (NTOSKRNL.EXE.@)
+  */

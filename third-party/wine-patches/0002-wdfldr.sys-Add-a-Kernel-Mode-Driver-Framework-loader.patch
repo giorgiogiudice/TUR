@@ -1,0 +1,385 @@
+SPDX-License-Identifier: LGPL-2.1-or-later
+A patch to Wine (https://gitlab.winehq.org/wine/wine), under Wine's licence;
+see README.md and COPYING.LIB in this directory. Applied with `git apply`,
+which ignores these lines.
+
+From 08212e93bc098442feb3285f18100af9e9230dc6 Mon Sep 17 00:00:00 2001
+From: TUR experiment <tur-experiment@users.noreply.github.com>
+Date: Fri, 13 Nov 2026 09:06:02 +0300
+Subject: [PATCH 02/16] wdfldr.sys: Add a Kernel-Mode Driver Framework loader.
+
+Every KMDF driver imports WdfVersionBind from WDFLDR.SYS and fails to load
+without it (bug 56228). Implement the loader interface: load the framework
+library service Wdf01000 with ZwLoadDriver, accept its WdfRegisterLibrary,
+and register clients with it. The framework library itself is not part of
+Wine.
+---
+ configure.ac                    |   1 +
+ dlls/wdfldr.sys/Makefile.in     |   8 +
+ dlls/wdfldr.sys/wdfldr.c        | 315 ++++++++++++++++++++++++++++++++
+ dlls/wdfldr.sys/wdfldr.sys.spec |   7 +
+ 4 files changed, 331 insertions(+)
+ create mode 100644 dlls/wdfldr.sys/Makefile.in
+ create mode 100644 dlls/wdfldr.sys/wdfldr.c
+ create mode 100644 dlls/wdfldr.sys/wdfldr.sys.spec
+
+diff --git a/configure.ac b/configure.ac
+index f1fccbd..3879686 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -3228,6 +3228,7 @@ WINE_CONFIG_MAKEFILE(dlls/wbemdisp)
+ WINE_CONFIG_MAKEFILE(dlls/wbemdisp/tests)
+ WINE_CONFIG_MAKEFILE(dlls/wbemprox)
+ WINE_CONFIG_MAKEFILE(dlls/wbemprox/tests)
++WINE_CONFIG_MAKEFILE(dlls/wdfldr.sys)
+ WINE_CONFIG_MAKEFILE(dlls/wdscore)
+ WINE_CONFIG_MAKEFILE(dlls/webservices)
+ WINE_CONFIG_MAKEFILE(dlls/webservices/tests)
+diff --git a/dlls/wdfldr.sys/Makefile.in b/dlls/wdfldr.sys/Makefile.in
+new file mode 100644
+index 0000000..e875079
+--- /dev/null
++++ b/dlls/wdfldr.sys/Makefile.in
+@@ -0,0 +1,8 @@
++MODULE    = wdfldr.sys
++IMPORTS   = ntoskrnl
++
++EXTRADLLFLAGS = -Wl,--subsystem,native
++
++SOURCES = \
++	wdfldr.c \
++	wdfldr.sys.spec
+diff --git a/dlls/wdfldr.sys/wdfldr.c b/dlls/wdfldr.sys/wdfldr.c
+new file mode 100644
+index 0000000..195925d
+--- /dev/null
++++ b/dlls/wdfldr.sys/wdfldr.c
+@@ -0,0 +1,315 @@
++/*
++ * Kernel-Mode Driver Framework loader (WdfLdr)
++ *
++ * Copyright 2026 TUR experiment
++ *
++ * This library is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU Lesser General Public
++ * License as published by the Free Software Foundation; either
++ * version 2.1 of the License, or (at your option) any later version.
++ *
++ * This library is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++ * Lesser General Public License for more details.
++ *
++ * You should have received a copy of the GNU Lesser General Public
++ * License along with this library; if not, write to the Free Software
++ * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
++ */
++
++/*
++ * Every KMDF driver is linked with a stub whose entry point calls
++ * WdfVersionBind() from this module before the driver's own DriverEntry.
++ * The loader loads the framework library (the "Wdf01000" kernel service),
++ * which registers itself with WdfRegisterLibrary() from its DriverEntry, and
++ * then asks the library to register the client, which fills in the client's
++ * function table and driver globals.
++ *
++ * The structures are those of the framework's loader interface
++ * (fxldr.h in Microsoft's MIT-licensed Windows-Driver-Frameworks sources).
++ * This module contains no framework code: the library itself is a separate
++ * driver.
++ */
++
++#include <stdarg.h>
++
++#include "ntstatus.h"
++#define WIN32_NO_STATUS
++#include "windef.h"
++#include "winbase.h"
++#include "winternl.h"
++#include "ddk/wdm.h"
++#include "wine/debug.h"
++
++WINE_DEFAULT_DEBUG_CHANNEL(wdfldr);
++
++static inline const char *debugstr_us( const UNICODE_STRING *us )
++{
++    if (!us) return "<null>";
++    return debugstr_wn( us->Buffer, us->Length / sizeof(WCHAR) );
++}
++
++typedef void (WINAPI *WDFFUNC)(void);
++
++typedef struct _WDF_VERSION
++{
++    ULONG Major;
++    ULONG Minor;
++    ULONG Build;
++} WDF_VERSION;
++
++typedef struct _WDF_BIND_INFO
++{
++    ULONG Size;
++    WCHAR *Component;
++    WDF_VERSION Version;
++    ULONG FuncCount;
++    WDFFUNC *FuncTable;
++    void *Module;
++} WDF_BIND_INFO;
++
++typedef struct _WDF_LIBRARY_INFO
++{
++    ULONG Size;
++    NTSTATUS (WINAPI *LibraryCommission)(void);
++    NTSTATUS (WINAPI *LibraryDecommission)(void);
++    NTSTATUS (WINAPI *LibraryRegisterClient)(WDF_BIND_INFO *info, void **globals, void **context);
++    NTSTATUS (WINAPI *LibraryUnregisterClient)(WDF_BIND_INFO *info, void *globals);
++    WDF_VERSION Version;
++} WDF_LIBRARY_INFO;
++
++typedef struct _CLIENT_INFO
++{
++    ULONG Size;
++    UNICODE_STRING *RegistryPath;
++    DRIVER_OBJECT *DriverObject;
++} CLIENT_INFO;
++
++typedef struct _WDF_INTERFACE_HEADER
++{
++    const GUID *InterfaceType;
++    ULONG InterfaceSize;
++} WDF_INTERFACE_HEADER;
++
++typedef struct _WDF_LOADER_INTERFACE
++{
++    WDF_INTERFACE_HEADER Header;
++    NTSTATUS (WINAPI *RegisterLibrary)(WDF_LIBRARY_INFO *info, UNICODE_STRING *service_path,
++                                       const UNICODE_STRING *device_name);
++    NTSTATUS (WINAPI *VersionBind)(DRIVER_OBJECT *driver, UNICODE_STRING *registry_path,
++                                   WDF_BIND_INFO *info, void **globals);
++    NTSTATUS (WINAPI *VersionUnbind)(UNICODE_STRING *registry_path, WDF_BIND_INFO *info, void *globals);
++    NTSTATUS (WINAPI *DiagnosticsValueByNameAsULONG)(UNICODE_STRING *name, ULONG *value);
++} WDF_LOADER_INTERFACE;
++
++/* {49215DFF-F5AC-4901-8588-AB3D540F6021} */
++static const GUID GUID_WDF_LOADER_INTERFACE_STANDARD =
++    { 0x49215dff, 0xf5ac, 0x4901, { 0x85, 0x88, 0xab, 0x3d, 0x54, 0x0f, 0x60, 0x21 } };
++
++#define DECLARE_CRITICAL_SECTION(cs) \
++    static CRITICAL_SECTION cs; \
++    static CRITICAL_SECTION_DEBUG cs##_debug = \
++    { 0, 0, &cs, { &cs##_debug.ProcessLocksList, &cs##_debug.ProcessLocksList }, \
++      0, 0, { (DWORD_PTR)(__FILE__ ": " # cs) }}; \
++    static CRITICAL_SECTION cs = { &cs##_debug, -1, 0, 0, 0, 0 };
++
++DECLARE_CRITICAL_SECTION(loader_cs);
++
++/* KMDF 1.x: the one framework library, a kernel service. */
++static const WCHAR library_service[] = L"\\Registry\\Machine\\System\\CurrentControlSet\\Services\\Wdf01000";
++
++static WDF_LIBRARY_INFO *library;
++static UNICODE_STRING library_service_path;
++static BOOL library_commissioned;
++static LONG client_count;
++
++NTSTATUS WINAPI WdfRegisterLibrary( WDF_LIBRARY_INFO *info, UNICODE_STRING *service_path,
++                                    const UNICODE_STRING *device_name )
++{
++    TRACE( "info %p, service_path %s, device_name %s\n", info, debugstr_us(service_path),
++           debugstr_us(device_name) );
++
++    if (!info || info->Size < sizeof(*info)) return STATUS_INVALID_PARAMETER;
++
++    TRACE( "library version %lu.%lu.%lu\n", info->Version.Major, info->Version.Minor, info->Version.Build );
++
++    EnterCriticalSection( &loader_cs );
++    if (library)
++    {
++        LeaveCriticalSection( &loader_cs );
++        WARN( "a framework library is already registered\n" );
++        return STATUS_OBJECT_NAME_COLLISION;
++    }
++    library = info;
++    if (service_path) RtlDuplicateUnicodeString( 1, service_path, &library_service_path );
++    LeaveCriticalSection( &loader_cs );
++    return STATUS_SUCCESS;
++}
++
++/* called with loader_cs held */
++static NTSTATUS load_library(void)
++{
++    UNICODE_STRING name;
++    NTSTATUS status;
++
++    if (!library)
++    {
++        RtlInitUnicodeString( &name, library_service );
++        status = ZwLoadDriver( &name );
++        TRACE( "ZwLoadDriver %s returned %#lx\n", debugstr_us(&name), status );
++        if (status && status != STATUS_IMAGE_ALREADY_LOADED)
++        {
++            ERR( "cannot load the framework library %s, status %#lx\n", debugstr_us(&name), status );
++            return status;
++        }
++        if (!library)
++        {
++            ERR( "the framework library did not register itself\n" );
++            return STATUS_DLL_NOT_FOUND;
++        }
++    }
++    if (!library_commissioned)
++    {
++        if ((status = library->LibraryCommission()))
++        {
++            ERR( "library commission failed, status %#lx\n", status );
++            return status;
++        }
++        library_commissioned = TRUE;
++    }
++    return STATUS_SUCCESS;
++}
++
++NTSTATUS WINAPI WdfVersionBind( DRIVER_OBJECT *driver, UNICODE_STRING *registry_path,
++                                WDF_BIND_INFO *info, void **globals )
++{
++    CLIENT_INFO client;
++    void *context;
++    NTSTATUS status;
++
++    TRACE( "driver %p, registry_path %s, info %p, globals %p\n", driver, debugstr_us(registry_path),
++           info, globals );
++
++    if (!info || !globals) return STATUS_INVALID_PARAMETER;
++
++    TRACE( "client %s version %lu.%lu.%lu, %lu functions\n", debugstr_w(info->Component),
++           info->Version.Major, info->Version.Minor, info->Version.Build, info->FuncCount );
++
++    if (info->Version.Major != 1)
++    {
++        FIXME( "framework version %lu not supported\n", info->Version.Major );
++        return STATUS_OBJECT_TYPE_MISMATCH;
++    }
++
++    EnterCriticalSection( &loader_cs );
++    if ((status = load_library()))
++    {
++        LeaveCriticalSection( &loader_cs );
++        return status;
++    }
++
++    client.Size = sizeof(client);
++    client.RegistryPath = registry_path;
++    client.DriverObject = driver;
++    context = &client;
++    status = library->LibraryRegisterClient( info, globals, &context );
++    TRACE( "LibraryRegisterClient returned %#lx, globals %p\n", status, *globals );
++    if (!status)
++    {
++        info->Module = library;
++        client_count++;
++    }
++    LeaveCriticalSection( &loader_cs );
++    return status;
++}
++
++NTSTATUS WINAPI WdfVersionUnbind( UNICODE_STRING *registry_path, WDF_BIND_INFO *info, void *globals )
++{
++    NTSTATUS status;
++
++    TRACE( "registry_path %s, info %p, globals %p\n", debugstr_us(registry_path), info, globals );
++
++    EnterCriticalSection( &loader_cs );
++    if (!library || !info || info->Module != library)
++    {
++        LeaveCriticalSection( &loader_cs );
++        return STATUS_INVALID_PARAMETER;
++    }
++    status = library->LibraryUnregisterClient( info, globals );
++    if (!status)
++    {
++        info->Module = NULL;
++        client_count--;
++    }
++    LeaveCriticalSection( &loader_cs );
++    return status;
++}
++
++NTSTATUS WINAPI WdfVersionBindClass( WDF_BIND_INFO *info, void *globals, void *class_info )
++{
++    FIXME( "info %p, globals %p, class_info %p: class extensions not supported\n", info, globals, class_info );
++    return STATUS_NOT_SUPPORTED;
++}
++
++void WINAPI WdfVersionUnbindClass( WDF_BIND_INFO *info, void *globals, void *class_info )
++{
++    FIXME( "info %p, globals %p, class_info %p: stub\n", info, globals, class_info );
++}
++
++NTSTATUS WINAPI WdfRegisterClassLibrary( void *class_library_info, UNICODE_STRING *service_path,
++                                         UNICODE_STRING *device_name )
++{
++    FIXME( "class_library_info %p, service_path %s, device_name %s: class extensions not supported\n",
++           class_library_info, debugstr_us(service_path), debugstr_us(device_name) );
++    return STATUS_NOT_SUPPORTED;
++}
++
++/* HKLM\System\CurrentControlSet\Control\Wdf\Kmdf\Diagnostics */
++static NTSTATUS WINAPI diagnostics_value( UNICODE_STRING *name, ULONG *value )
++{
++    static const WCHAR keyW[] = L"\\Registry\\Machine\\System\\CurrentControlSet\\Control\\Wdf\\Kmdf\\Diagnostics";
++    char buffer[offsetof( KEY_VALUE_PARTIAL_INFORMATION, Data[sizeof(ULONG)] )];
++    KEY_VALUE_PARTIAL_INFORMATION *info = (KEY_VALUE_PARTIAL_INFORMATION *)buffer;
++    OBJECT_ATTRIBUTES attr;
++    UNICODE_STRING key;
++    NTSTATUS status;
++    HANDLE handle;
++    ULONG size;
++
++    RtlInitUnicodeString( &key, keyW );
++    InitializeObjectAttributes( &attr, &key, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL );
++    if ((status = ZwOpenKey( &handle, KEY_QUERY_VALUE, &attr ))) return status;
++    status = ZwQueryValueKey( handle, name, KeyValuePartialInformation, buffer, sizeof(buffer), &size );
++    ZwClose( handle );
++    if (status) return status;
++    if (info->Type != REG_DWORD || info->DataLength != sizeof(ULONG)) return STATUS_OBJECT_TYPE_MISMATCH;
++    *value = *(ULONG *)info->Data;
++    return STATUS_SUCCESS;
++}
++
++NTSTATUS WINAPI WdfLdrQueryInterface( WDF_INTERFACE_HEADER *header )
++{
++    WDF_LOADER_INTERFACE *iface = (WDF_LOADER_INTERFACE *)header;
++
++    TRACE( "header %p\n", header );
++
++    if (!header || !header->InterfaceType) return STATUS_INVALID_PARAMETER;
++    if (!IsEqualGUID( header->InterfaceType, &GUID_WDF_LOADER_INTERFACE_STANDARD ))
++    {
++        FIXME( "interface %s not supported\n", debugstr_guid(header->InterfaceType) );
++        return STATUS_NOINTERFACE;
++    }
++    if (header->InterfaceSize < sizeof(*iface)) return STATUS_INVALID_PARAMETER;
++    iface->RegisterLibrary = WdfRegisterLibrary;
++    iface->VersionBind = WdfVersionBind;
++    iface->VersionUnbind = WdfVersionUnbind;
++    iface->DiagnosticsValueByNameAsULONG = diagnostics_value;
++    return STATUS_SUCCESS;
++}
++
++NTSTATUS WINAPI DriverEntry( DRIVER_OBJECT *driver, UNICODE_STRING *path )
++{
++    TRACE( "driver %p, path %s\n", driver, debugstr_us(path) );
++    return STATUS_SUCCESS;
++}
+diff --git a/dlls/wdfldr.sys/wdfldr.sys.spec b/dlls/wdfldr.sys/wdfldr.sys.spec
+new file mode 100644
+index 0000000..74b25a7
+--- /dev/null
++++ b/dlls/wdfldr.sys/wdfldr.sys.spec
+@@ -0,0 +1,7 @@
++@ stdcall WdfLdrQueryInterface(ptr)
++@ stdcall WdfRegisterClassLibrary(ptr ptr ptr)
++@ stdcall WdfRegisterLibrary(ptr ptr ptr)
++@ stdcall WdfVersionBind(ptr ptr ptr ptr)
++@ stdcall WdfVersionBindClass(ptr ptr ptr)
++@ stdcall WdfVersionUnbind(ptr ptr ptr)
++@ stdcall WdfVersionUnbindClass(ptr ptr ptr)

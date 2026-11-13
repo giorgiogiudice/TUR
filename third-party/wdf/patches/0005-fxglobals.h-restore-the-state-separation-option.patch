@@ -1,0 +1,41 @@
+SPDX-License-Identifier: MIT
+Change to Microsoft's Windows-Driver-Frameworks (MIT), TUR build; see ../README.md.
+
+fxglobals.h as published has blank lines where FxDriverGlobalsDebugExtension's
+StateSeparationDetection member was; globals.cpp sets it, with
+FxStateSeparationDetectionNone of an enumeration that is also missing.
+Restored with the one value the sources name.
+
+diff --git a/src/framework/shared/inc/private/common/fxglobals.h b/src/framework/shared/inc/private/common/fxglobals.h
+index 30c1fd6..fe86b52 100644
+--- a/src/framework/shared/inc/private/common/fxglobals.h
++++ b/src/framework/shared/inc/private/common/fxglobals.h
+@@ -82,6 +82,16 @@ typedef enum FxTrackPowerOption : UCHAR {
+     FxTrackPowerMaxValue
+ } FxTrackPowerOption;
+ 
++//
++// TUR build: used by globals.cpp (FxDriverGlobalsDebugExtension::
++// StateSeparationDetection, FxStateSeparationDetectionNone) and blanked in
++// the published file. Only "none" is known.
++//
++typedef enum FxStateSeparationDetectionOption : UCHAR {
++    FxStateSeparationDetectionNone = 0,
++    FxStateSeparationDetectionMaxValue
++} FxStateSeparationDetectionOption;
++
+ typedef enum FxVerifierDownlevelOption {
+     NotOkForDownLevel = 0,
+     OkForDownLevel = 1,
+@@ -190,6 +200,11 @@ struct FxDriverGlobalsDebugExtension {
+     //
+     FxTrackPowerOption TrackPower;
+ 
++    //
++    // TUR build: blanked in the published file; globals.cpp sets it.
++    //
++    FxStateSeparationDetectionOption StateSeparationDetection;
++
+ 
+ 
+ 

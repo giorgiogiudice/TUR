@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# Order in which build-wine.sh applies the patches.
+0001-ntoskrnl.exe-Run-DPCs-queued-with-KeInsertQueueDpc.patch
+0002-wdfldr.sys-Add-a-Kernel-Mode-Driver-Framework-loader.patch
+0003-ntoskrnl.exe-Implement-driver-object-extensions.patch
+0004-ntoskrnl.exe-Add-a-WmiQueryTraceInformation-that-fai.patch
+0005-ntoskrnl.exe-Add-KeQuerySystemTimePrecise.patch
+0006-ntoskrnl.exe-Add-IoOpenDriverRegistryKey.patch
+0007-ntoskrnl.exe-Add-functions-the-KMDF-runtime-imports-.patch
+0008-wineusb.sys-Handle-power-IRPs.patch
+0009-ntoskrnl.exe-Add-power-framework-functions-that-repo.patch
+0010-ntoskrnl.exe-Add-more-functions-the-KMDF-runtime-imp.patch
+0011-ntoskrnl.exe-Implement-the-remaining-stubs-the-KMDF-.patch
+0012-wineusb.sys-Fill-in-interface-and-pipe-information-o.patch
+0013-wineusb.sys-Handle-URB_FUNCTION_CONTROL_TRANSFER-and.patch
+0014-ntoskrnl.exe-Implement-ExAllocateTimer-ExSetTimer-Ex.patch
+0015-ntoskrnl.exe-Return-NTSTATUS-codes-from-IoGetDeviceP.patch
+0016-kernelbase-Wait-for-a-pending-DeviceIoControl-called.patch

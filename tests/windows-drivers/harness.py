@@ -79,7 +79,26 @@ def write(path: pathlib.Path, text: str) -> None:
     path.write_text(text, encoding="utf-8")
 
 
+LOG_CAP = 64 << 20  # a runaway trace (14 GB in one KMDF run) must not exhaust memory or disk
+
+
+def cap_log(path: pathlib.Path) -> None:
+    """Shrink a log over LOG_CAP to its first and last LOG_CAP/2 bytes, in place."""
+    try:
+        size = path.stat().st_size
+    except FileNotFoundError:
+        return
+    if size <= LOG_CAP:
+        return
+    with path.open("rb") as f:
+        head = f.read(LOG_CAP // 2)
+        f.seek(size - LOG_CAP // 2)
+        tail = f.read()
+    path.write_bytes(head + f"\n[... {size - LOG_CAP} bytes cut by the harness ...]\n".encode() + tail)
+
+
 def read(path: pathlib.Path) -> str:
+    cap_log(path)
     try:
         return path.read_text(encoding="utf-8", errors="replace")
     except FileNotFoundError:
