@@ -261,7 +261,9 @@ pub(crate) fn run(command: HealCommand) -> Result<ExitCode, DiagError> {
             let mut state = HealState::load(&paths.state)?;
             let running = Running::read(&machine);
             let fixes = Fixes::load(&paths.fixes);
-            let lines = scan(&machine, &catalogue, &paths, &mut state, &running, &fixes, repair);
+            let lines = scan(
+                &machine, &catalogue, &paths, &mut state, &running, &fixes, repair,
+            );
             state.save(&paths.state)?;
             for line in &lines {
                 if line.present || line.state.is_some() || line.unavailable.is_some() {
@@ -317,7 +319,9 @@ pub(crate) fn run(command: HealCommand) -> Result<ExitCode, DiagError> {
             io::stdin()
                 .take(u64::try_from(MAX_REQUEST_BYTES).unwrap_or(u64::MAX) + 1)
                 .read_to_end(&mut input)
-                .map_err(|error| DiagError::new(ErrorKind::HealRequestInvalid, error.to_string()))?;
+                .map_err(|error| {
+                    DiagError::new(ErrorKind::HealRequestInvalid, error.to_string())
+                })?;
             let answer = handle_request(
                 &heal.machine(),
                 &catalogue()?,
@@ -566,15 +570,14 @@ fn explain(code: &str, json: bool, heal: &HealPlaces) -> Result<ExitCode, DiagEr
     // The record is shown when the state can be read; P@x's sandbox can.
     let record = HealState::load(&heal.paths().state)
         .ok()
-        .and_then(|state| {
-            state
-                .latest(code)
-                .map(|index| state.faults[index].clone())
-        });
+        .and_then(|state| state.latest(code).map(|index| state.faults[index].clone()));
     if json {
         print_json(&json!({ "fault": fault, "record": record }))?;
     } else {
-        println!("{} ({})\n\n{}\n", fault.title, fault.code, fault.explanation);
+        println!(
+            "{} ({})\n\n{}\n",
+            fault.title, fault.code, fault.explanation
+        );
         for remedy in &fault.remedies {
             println!(
                 "Repair {}: {}\n  class {}{}; undo: {}",
@@ -593,7 +596,10 @@ fn explain(code: &str, json: bool, heal: &HealPlaces) -> Result<ExitCode, DiagEr
             println!("No repair is safe to try; TUR offers a report instead.");
         }
         if let Some(record) = record {
-            println!("\nOn this computer: {:?} since {}", record.state, record.first_seen_utc);
+            println!(
+                "\nOn this computer: {:?} since {}",
+                record.state, record.first_seen_utc
+            );
         }
     }
     Ok(ExitCode::SUCCESS)
@@ -608,11 +614,13 @@ fn show_outcome(outcome: &Outcome, json: bool) -> Result<ExitCode, DiagError> {
             outcome.code, outcome.remedy, outcome.outcome, outcome.detail, outcome.undo
         );
     }
-    Ok(if outcome.outcome == "repaired" || outcome.outcome == "undone" {
-        ExitCode::SUCCESS
-    } else {
-        ExitCode::from(NOT_REPAIRED)
-    })
+    Ok(
+        if outcome.outcome == "repaired" || outcome.outcome == "undone" {
+            ExitCode::SUCCESS
+        } else {
+            ExitCode::from(NOT_REPAIRED)
+        },
+    )
 }
 
 /// Asks the person to type `yes` for a repair that cannot be undone.

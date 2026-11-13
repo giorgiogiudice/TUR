@@ -407,7 +407,13 @@ impl Fault {
                 problems.push(format!("{at}: changes and undo must say something"));
             }
         }
-        if self.remedies.iter().filter(|remedy| remedy.automatic).count() > 1 {
+        if self
+            .remedies
+            .iter()
+            .filter(|remedy| remedy.automatic)
+            .count()
+            > 1
+        {
             problems.push("more than one automatic remedy".to_owned());
         }
         if !self.remedies.is_empty() && self.notice.repaired.as_deref().is_none_or(blank) {
@@ -415,7 +421,8 @@ impl Fault {
         }
         if self.remedies.is_empty() && self.report != ReportPolicy::Always {
             problems.push(
-                "a fault without a remedy must offer a report: report must be \"always\"".to_owned(),
+                "a fault without a remedy must offer a report: report must be \"always\""
+                    .to_owned(),
             );
         }
         match (self.report, self.report_kind) {
@@ -435,10 +442,16 @@ impl Fault {
         }
         for source in &self.sources {
             if !source.location.starts_with("https://") || blank(&source.what) {
-                problems.push(format!("source {:?} is not an https address", source.location));
+                problems.push(format!(
+                    "source {:?} is not an https address",
+                    source.location
+                ));
             }
             if !is_date(&source.read) {
-                problems.push(format!("source {:?}: read is not YYYY-MM-DD", source.location));
+                problems.push(format!(
+                    "source {:?}: read is not YYYY-MM-DD",
+                    source.location
+                ));
             }
         }
         problems

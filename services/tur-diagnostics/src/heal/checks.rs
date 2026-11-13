@@ -127,8 +127,10 @@ fn units_failed(machine: &dyn Machine, units: &[String]) -> Finding {
 
 /// `timedatectl show` prints properties as `NAME=value`.
 fn network_time_off(machine: &dyn Machine) -> Finding {
-    let output = match machine.run("timedatectl", &["show", "--property=NTP", "--property=CanNTP"])
-    {
+    let output = match machine.run(
+        "timedatectl",
+        &["show", "--property=NTP", "--property=CanNTP"],
+    ) {
         Ok(output) if output.success() => output,
         Ok(output) => {
             return Finding::unavailable(format!(
@@ -186,10 +188,9 @@ fn resolver_not_managed(
                 "{path} points to {target}, not to a file {service} keeps"
             )],
         ),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Finding::present(
-            vec![path.to_owned()],
-            vec![format!("{path} is missing")],
-        ),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            Finding::present(vec![path.to_owned()], vec![format!("{path} is missing")])
+        }
         Err(error) if error.kind() == std::io::ErrorKind::InvalidInput => {
             let content = match machine.read_file(path) {
                 Ok(content) => content,
@@ -298,7 +299,10 @@ fn tur_program_crashed(machine: &dyn Machine, prefixes: &[String]) -> Finding {
         let Some(exe) = entry.get("exe").and_then(Value::as_str) else {
             continue;
         };
-        if !prefixes.iter().any(|prefix| exe.starts_with(prefix.as_str())) {
+        if !prefixes
+            .iter()
+            .any(|prefix| exe.starts_with(prefix.as_str()))
+        {
             continue;
         }
         let program = exe.rsplit('/').next().unwrap_or(exe).to_owned();

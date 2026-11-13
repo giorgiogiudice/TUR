@@ -19,8 +19,8 @@ use super::checks::{Finding, run_check};
 use super::machine::Machine;
 use super::remedies::{self, UndoData};
 use super::state::{
-    Actor, AppliedRecord, DEFAULT_DATA_DIR, DEFAULT_STATE_FILE, EventKind, FaultRecord,
-    FaultState, HealState, Lock,
+    Actor, AppliedRecord, DEFAULT_DATA_DIR, DEFAULT_STATE_FILE, EventKind, FaultRecord, FaultState,
+    HealState, Lock,
 };
 use crate::error::{DiagError, ErrorKind};
 use crate::manifest::format_utc;
@@ -251,7 +251,14 @@ fn offer_report(state: &mut HealState, index: usize, fault: &Fault, now: &str) {
         let record = &mut state.faults[index];
         record.state = FaultState::ReportOffered;
         record.report_offered = true;
-        state.event(now, &fault.code, EventKind::ReportOffered, &subjects, None, None);
+        state.event(
+            now,
+            &fault.code,
+            EventKind::ReportOffered,
+            &subjects,
+            None,
+            None,
+        );
     }
 }
 
@@ -275,7 +282,11 @@ fn perform(
         match remedies::apply(machine, &paths.data_dir, fault, remedy, finding, &id) {
             Ok(applied) => {
                 let after = verify(machine, fault);
-                let outcome = if after.present { "not-repaired" } else { "repaired" };
+                let outcome = if after.present {
+                    "not-repaired"
+                } else {
+                    "repaired"
+                };
                 (outcome, applied.detail, applied.undo, Some(after))
             }
             Err(detail) => ("failed", detail, UndoData::NothingChanged, None),
@@ -310,7 +321,14 @@ fn perform(
         EventKind::NotRepaired
     };
     let subjects = record.subjects.clone();
-    state.event(&now_after, &fault.code, kind, &subjects, Some(&remedy.id), Some(actor));
+    state.event(
+        &now_after,
+        &fault.code,
+        kind,
+        &subjects,
+        Some(&remedy.id),
+        Some(actor),
+    );
     offer_report(state, index, fault, &now_after);
     Outcome {
         code: fault.code.clone(),
@@ -372,7 +390,9 @@ pub fn scan(
                 code: fault.code.clone(),
                 present: false,
                 unavailable: Some(reason.clone()),
-                state: state.active(&fault.code).map(|index| state.faults[index].state),
+                state: state
+                    .active(&fault.code)
+                    .map(|index| state.faults[index].state),
                 action: "the check could not be made; nothing was changed".to_owned(),
             });
             continue;
@@ -388,7 +408,14 @@ pub fn scan(
                     if record.state == FaultState::Repaired {
                         record.state = FaultState::NotRepaired;
                         let subjects = record.subjects.clone();
-                        state.event(&now, &fault.code, EventKind::NotRepaired, &subjects, None, None);
+                        state.event(
+                            &now,
+                            &fault.code,
+                            EventKind::NotRepaired,
+                            &subjects,
+                            None,
+                            None,
+                        );
                         actions.push("it came back after a repair".to_owned());
                     }
                     let record = &state.faults[index];
@@ -408,7 +435,8 @@ pub fn scan(
                             None,
                             None,
                         );
-                        actions.push("it happened again after an update meant to fix it".to_owned());
+                        actions
+                            .push("it happened again after an update meant to fix it".to_owned());
                     }
                     index
                 }
@@ -628,29 +656,37 @@ pub fn undo(
     let fault = catalogue
         .fault(code)
         .ok_or_else(|| error(ErrorKind::HealUnknown, format!("no fault {code}")))?;
-    let remedy = fault
-        .remedy(remedy_id)
-        .ok_or_else(|| error(ErrorKind::HealUnknown, format!("{code} has no remedy {remedy_id}")))?;
+    let remedy = fault.remedy(remedy_id).ok_or_else(|| {
+        error(
+            ErrorKind::HealUnknown,
+            format!("{code} has no remedy {remedy_id}"),
+        )
+    })?;
     if remedy.class > 1 && actor != Actor::Administrator {
         return Err(error(
             ErrorKind::HealNeedsApproval,
             format!("{remedy_id} is class {}", remedy.class),
         ));
     }
-    let found = state.faults.iter().enumerate().rev().find_map(|(index, record)| {
-        if record.code != code {
-            return None;
-        }
-        record
-            .applied
-            .iter()
-            .rposition(|applied| {
-                applied.remedy == remedy_id
-                    && applied.undone_utc.is_none()
-                    && applied.outcome != "failed"
-            })
-            .map(|position| (index, position))
-    });
+    let found = state
+        .faults
+        .iter()
+        .enumerate()
+        .rev()
+        .find_map(|(index, record)| {
+            if record.code != code {
+                return None;
+            }
+            record
+                .applied
+                .iter()
+                .rposition(|applied| {
+                    applied.remedy == remedy_id
+                        && applied.undone_utc.is_none()
+                        && applied.outcome != "failed"
+                })
+                .map(|position| (index, position))
+        });
     let Some((index, position)) = found else {
         return Err(error(
             ErrorKind::HealNothingToUndo,
@@ -670,9 +706,18 @@ pub fn undo(
     let subjects = record.subjects.clone();
     // A resolved record is active again; an older active one of the same
     // code cannot exist, as only one record of a code is ever unresolved.
-    state.event(&now, code, EventKind::Undone, &subjects, Some(remedy_id), Some(actor));
+    state.event(
+        &now,
+        code,
+        EventKind::Undone,
+        &subjects,
+        Some(remedy_id),
+        Some(actor),
+    );
     if let Some(uid) = uid {
-        state.faults[index].applied[position].detail.push_str(&format!("; undone at the request of UID {uid}"));
+        state.faults[index].applied[position]
+            .detail
+            .push_str(&format!("; undone at the request of UID {uid}"));
     }
     state.updated_utc = now;
     Ok(Outcome {
@@ -740,7 +785,10 @@ pub fn handle_request(
     connection: Option<&str>,
 ) -> Value {
     if input.len() > MAX_REQUEST_BYTES {
-        return refusal(&error(ErrorKind::HealRequestInvalid, "the request is too long"));
+        return refusal(&error(
+            ErrorKind::HealRequestInvalid,
+            "the request is too long",
+        ));
     }
     let request: Request = match serde_json::from_slice(input) {
         Ok(request) => request,
@@ -751,7 +799,10 @@ pub fn handle_request(
     if request.schema_version != REQUEST_SCHEMA_VERSION {
         return refusal(&error(
             ErrorKind::HealRequestInvalid,
-            format!("schema_version {} is not {REQUEST_SCHEMA_VERSION}", request.schema_version),
+            format!(
+                "schema_version {} is not {REQUEST_SCHEMA_VERSION}",
+                request.schema_version
+            ),
         ));
     }
     let uid = connection.and_then(uid_of_connection);
@@ -853,7 +904,9 @@ pub fn status_view(catalogue: &Catalogue, state: &HealState, state_file: &Path) 
                 explanation: fault
                     .map(|fault| fault.explanation.clone())
                     .unwrap_or_default(),
-                remedies: fault.map(|fault| fault.remedies.clone()).unwrap_or_default(),
+                remedies: fault
+                    .map(|fault| fault.remedies.clone())
+                    .unwrap_or_default(),
             }
         })
         .collect();
@@ -940,7 +993,10 @@ pub fn notices(
                 {
                     actions.push(format!("tur-diag heal undo {} {}", fault.code, remedy.id));
                 }
-                fill(text.repaired.as_deref().unwrap_or(&text.found), &event.subjects)
+                fill(
+                    text.repaired.as_deref().unwrap_or(&text.found),
+                    &event.subjects,
+                )
             }
             EventKind::NotRepaired => fill(
                 text.unrepaired.as_deref().unwrap_or(&text.found),
@@ -948,7 +1004,10 @@ pub fn notices(
             ),
             EventKind::ReportOffered => {
                 actions.push(format!("tur-diag heal report {}", fault.code));
-                fill(text.report.as_deref().unwrap_or(&text.found), &event.subjects)
+                fill(
+                    text.report.as_deref().unwrap_or(&text.found),
+                    &event.subjects,
+                )
             }
             EventKind::FixedByUpdate => {
                 if reported.contains(&fault.code) {

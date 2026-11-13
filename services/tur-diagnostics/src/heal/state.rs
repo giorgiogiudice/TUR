@@ -266,7 +266,8 @@ impl HealState {
         let parent = path
             .parent()
             .ok_or_else(|| unavailable(format!("{} has no directory", path.display())))?;
-        fs::create_dir_all(parent).map_err(|error| unavailable(format!("{}: {error}", parent.display())))?;
+        fs::create_dir_all(parent)
+            .map_err(|error| unavailable(format!("{}: {error}", parent.display())))?;
         let mut text = serde_json::to_vec_pretty(self)
             .map_err(|error| DiagError::new(ErrorKind::Internal, error.to_string()))?;
         text.push(b'\n');
@@ -283,7 +284,8 @@ impl HealState {
             .map_err(|error| unavailable(format!("{}: {error}", temporary.display())))?;
         fs::set_permissions(&temporary, fs::Permissions::from_mode(0o644))
             .map_err(|error| unavailable(format!("{}: {error}", temporary.display())))?;
-        fs::rename(&temporary, path).map_err(|error| unavailable(format!("{}: {error}", path.display())))
+        fs::rename(&temporary, path)
+            .map_err(|error| unavailable(format!("{}: {error}", path.display())))
     }
 
     /// Keeps the newest [`MAX_EVENTS`] events and [`MAX_RESOLVED`] resolved

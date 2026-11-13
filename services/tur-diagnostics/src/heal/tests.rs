@@ -32,10 +32,8 @@ struct TempDir(PathBuf);
 
 impl TempDir {
     fn new(name: &str) -> Self {
-        let path = std::env::temp_dir().join(format!(
-            "tur-diag-heal-{name}-{}",
-            std::process::id()
-        ));
+        let path =
+            std::env::temp_dir().join(format!("tur-diag-heal-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&path);
         fs::create_dir_all(&path).expect("a scratch directory");
         TempDir(path)
@@ -83,7 +81,13 @@ fn unit_states(failed: &str) -> String {
     };
     units
         .iter()
-        .map(|unit| if unit == failed { "failed\n" } else { "active\n" })
+        .map(|unit| {
+            if unit == failed {
+                "failed\n"
+            } else {
+                "active\n"
+            }
+        })
         .collect()
 }
 
@@ -122,7 +126,11 @@ fn empty_state() -> HealState {
 #[test]
 fn the_built_in_catalogue_is_valid_and_covers_every_kind() {
     let catalogue = catalogue();
-    let codes: Vec<&str> = catalogue.faults.iter().map(|fault| fault.code.as_str()).collect();
+    let codes: Vec<&str> = catalogue
+        .faults
+        .iter()
+        .map(|fault| fault.code.as_str())
+        .collect();
     assert_eq!(codes, [SERVICE, TIME, RESOLVER, SPACE, CRASH]);
     let kinds: BTreeSet<&str> = catalogue
         .faults
@@ -131,8 +139,12 @@ fn the_built_in_catalogue_is_valid_and_covers_every_kind() {
         .collect();
     assert_eq!(kinds.len(), 5);
     // At least one fault ends as an offered report with no remedy at all.
-    assert!(catalogue.faults.iter().any(|fault| fault.remedies.is_empty()
-        && fault.report == ReportPolicy::Always));
+    assert!(
+        catalogue
+            .faults
+            .iter()
+            .any(|fault| fault.remedies.is_empty() && fault.report == ReportPolicy::Always)
+    );
     // Every automatic remedy is reversible and at most class 1; every
     // irreversible one is class 2.
     for fault in &catalogue.faults {
@@ -154,7 +166,10 @@ fn the_validator_refuses_what_the_design_forbids() {
         change(&mut value);
         let catalogue: Catalogue = serde_json::from_value(value).expect("still a catalogue");
         let problems = catalogue.validate().join("\n");
-        assert!(problems.contains(expected), "{expected:?} not in:\n{problems}");
+        assert!(
+            problems.contains(expected),
+            "{expected:?} not in:\n{problems}"
+        );
     };
     // An irreversible remedy may not be automatic, nor class 1.
     refused(
@@ -181,13 +196,22 @@ fn the_validator_refuses_what_the_design_forbids() {
         "must offer a report",
     );
     // Codes parse and are not tur-diag's own.
-    refused(&|value| value["faults"][0]["code"] = json!("TUR-NOPE-1"), "does not parse");
+    refused(
+        &|value| value["faults"][0]["code"] = json!("TUR-NOPE-1"),
+        "does not parse",
+    );
     refused(
         &|value| value["faults"][0]["code"] = json!("TUR-DIAG-HEAL-001"),
         "tur-diag's own errors",
     );
-    refused(&|value| value["faults"][0]["component"] = json!("kitchen"), "not a report component");
-    refused(&|value| value["faults"][0]["sources"] = json!([]), "no source");
+    refused(
+        &|value| value["faults"][0]["component"] = json!("kitchen"),
+        "not a report component",
+    );
+    refused(
+        &|value| value["faults"][0]["sources"] = json!([]),
+        "no source",
+    );
     refused(
         &|value| value["faults"][2]["check"]["restore_target"] = json!("/tmp/x"),
         "restore_target",
@@ -196,14 +220,23 @@ fn the_validator_refuses_what_the_design_forbids() {
 
 #[test]
 fn the_catalogue_has_the_fields_its_schema_describes() {
-    let schema: Value =
-        serde_json::from_str(include_str!("../../../../schemas/heal-catalogue.schema.json"))
-            .expect("the schema is JSON");
+    let schema: Value = serde_json::from_str(include_str!(
+        "../../../../schemas/heal-catalogue.schema.json"
+    ))
+    .expect("the schema is JSON");
     let catalogue: Value = serde_json::from_str(BUILT_IN).expect("JSON");
-    let top: BTreeSet<&String> = schema["properties"].as_object().expect("properties").keys().collect();
+    let top: BTreeSet<&String> = schema["properties"]
+        .as_object()
+        .expect("properties")
+        .keys()
+        .collect();
     assert_eq!(top, catalogue.as_object().expect("object").keys().collect());
-    let fault_fields = schema["$defs"]["fault"]["properties"].as_object().expect("fault");
-    let remedy_fields = schema["$defs"]["remedy"]["properties"].as_object().expect("remedy");
+    let fault_fields = schema["$defs"]["fault"]["properties"]
+        .as_object()
+        .expect("fault");
+    let remedy_fields = schema["$defs"]["remedy"]["properties"]
+        .as_object()
+        .expect("remedy");
     for fault in catalogue["faults"].as_array().expect("faults") {
         for name in fault.as_object().expect("object").keys() {
             assert!(fault_fields.contains_key(name), "fault field {name}");
@@ -233,13 +266,28 @@ fn a_failed_service_is_restarted_once_by_the_service_and_the_repair_is_checked_t
         );
     let catalogue = catalogue();
     let mut state = empty_state();
-    let lines = scan(&machine, &catalogue, &paths, &mut state, &running("b1"), &Fixes::default(), true);
-    let line = lines.iter().find(|line| line.code == SERVICE).expect("a line");
+    let lines = scan(
+        &machine,
+        &catalogue,
+        &paths,
+        &mut state,
+        &running("b1"),
+        &Fixes::default(),
+        true,
+    );
+    let line = lines
+        .iter()
+        .find(|line| line.code == SERVICE)
+        .expect("a line");
     assert!(line.present);
     assert_eq!(line.state, Some(FaultState::Repaired), "{}", line.action);
     let ran = machine.ran();
-    let reset = ran.iter().position(|line| line == "systemctl reset-failed chronyd.service");
-    let start = ran.iter().position(|line| line == "systemctl start chronyd.service");
+    let reset = ran
+        .iter()
+        .position(|line| line == "systemctl reset-failed chronyd.service");
+    let start = ran
+        .iter()
+        .position(|line| line == "systemctl start chronyd.service");
     assert!(reset.is_some() && start > reset, "{ran:?}");
     let record = &state.faults[state.active(SERVICE).expect("a record")];
     assert_eq!(record.applied.len(), 1);
@@ -251,11 +299,22 @@ fn a_failed_service_is_restarted_once_by_the_service_and_the_repair_is_checked_t
     assert_eq!(kinds, [EventKind::Repaired]);
 
     // The next scan finds it still running: the repair held.
-    scan(&machine, &catalogue, &paths, &mut state, &running("b1"), &Fixes::default(), true);
+    scan(
+        &machine,
+        &catalogue,
+        &paths,
+        &mut state,
+        &running("b1"),
+        &Fixes::default(),
+        true,
+    );
     assert!(state.active(SERVICE).is_none());
     let record = &state.faults[state.latest(SERVICE).expect("a record")];
     assert_eq!(record.resolved_how.as_deref(), Some("repair-held"));
-    assert_eq!(state.events.last().map(|event| event.kind), Some(EventKind::Held));
+    assert_eq!(
+        state.events.last().map(|event| event.kind),
+        Some(EventKind::Held)
+    );
 }
 
 #[test]
@@ -270,7 +329,15 @@ fn a_service_that_fails_again_is_not_restarted_twice_in_one_boot_and_a_report_is
     let mut state = empty_state();
     for _ in 0..3 {
         machine.advance(60);
-        scan(&machine, &catalogue, &paths, &mut state, &running("b1"), &Fixes::default(), true);
+        scan(
+            &machine,
+            &catalogue,
+            &paths,
+            &mut state,
+            &running("b1"),
+            &Fixes::default(),
+            true,
+        );
     }
     let starts = machine
         .ran()
@@ -293,12 +360,28 @@ fn network_time_waits_for_a_person_and_a_request_repairs_and_undoes_it() {
     let machine = base()
         .with_command(TIME_LINE, printed("NTP=no\nCanNTP=yes\n"))
         .with_command("timedatectl set-ntp true", printed(""))
-        .with_effect("timedatectl set-ntp true", TIME_LINE, printed("NTP=yes\nCanNTP=yes\n"))
+        .with_effect(
+            "timedatectl set-ntp true",
+            TIME_LINE,
+            printed("NTP=yes\nCanNTP=yes\n"),
+        )
         .with_command("timedatectl set-ntp false", printed(""))
-        .with_effect("timedatectl set-ntp false", TIME_LINE, printed("NTP=no\nCanNTP=yes\n"));
+        .with_effect(
+            "timedatectl set-ntp false",
+            TIME_LINE,
+            printed("NTP=no\nCanNTP=yes\n"),
+        );
     let catalogue = catalogue();
     let mut state = empty_state();
-    scan(&machine, &catalogue, &paths, &mut state, &running("b1"), &Fixes::default(), true);
+    scan(
+        &machine,
+        &catalogue,
+        &paths,
+        &mut state,
+        &running("b1"),
+        &Fixes::default(),
+        true,
+    );
     assert!(!machine.ran().iter().any(|line| line.contains("set-ntp")));
     let index = state.active(TIME).expect("a record");
     assert_eq!(state.faults[index].state, FaultState::Present);
@@ -331,7 +414,11 @@ fn network_time_waits_for_a_person_and_a_request_repairs_and_undoes_it() {
     )
     .expect("undone");
     assert_eq!(undone.outcome, "undone");
-    assert!(machine.ran().contains(&"timedatectl set-ntp false".to_owned()));
+    assert!(
+        machine
+            .ran()
+            .contains(&"timedatectl set-ntp false".to_owned())
+    );
     let record = &state.faults[state.active(TIME).expect("a record")];
     assert!(record.automatic_suppressed);
     assert!(record.applied[0].undone_utc.is_some());
@@ -362,14 +449,25 @@ fn the_resolver_link_is_restored_and_the_kept_copy_puts_back_exactly_what_was_th
         .with_file("/etc/resolv.conf", original, 0o640);
     let catalogue = catalogue();
     let mut state = empty_state();
-    scan(&machine, &catalogue, &paths, &mut state, &running("b1"), &Fixes::default(), true);
+    scan(
+        &machine,
+        &catalogue,
+        &paths,
+        &mut state,
+        &running("b1"),
+        &Fixes::default(),
+        true,
+    );
     let index = state.active(RESOLVER).expect("found");
     // The evidence says how many servers, never which.
     let evidence = state.faults[index].evidence.join(" ");
     assert!(evidence.contains("1 name server"), "{evidence}");
     assert!(!evidence.contains("192.0.2.53") && !evidence.contains("example.org"));
     // Not automatic: nothing was changed.
-    assert!(matches!(machine.entry("/etc/resolv.conf"), Some(FakeEntry::File(..))));
+    assert!(matches!(
+        machine.entry("/etc/resolv.conf"),
+        Some(FakeEntry::File(..))
+    ));
 
     let outcome = apply(
         &machine,
@@ -383,7 +481,9 @@ fn the_resolver_link_is_restored_and_the_kept_copy_puts_back_exactly_what_was_th
     assert_eq!(outcome.outcome, "repaired");
     assert_eq!(
         machine.entry("/etc/resolv.conf"),
-        Some(FakeEntry::Link("../run/systemd/resolve/stub-resolv.conf".to_owned()))
+        Some(FakeEntry::Link(
+            "../run/systemd/resolve/stub-resolv.conf".to_owned()
+        ))
     );
     assert_eq!(machine.relabelled(), ["/etc/resolv.conf"]);
     // The copy is the root's alone, and it is not in the state anyone reads.
@@ -392,7 +492,11 @@ fn the_resolver_link_is_restored_and_the_kept_copy_puts_back_exactly_what_was_th
         .map(|entry| entry.expect("entry").path())
         .collect();
     assert_eq!(backups.len(), 1);
-    let mode = fs::metadata(&backups[0]).expect("metadata").permissions().mode() & 0o777;
+    let mode = fs::metadata(&backups[0])
+        .expect("metadata")
+        .permissions()
+        .mode()
+        & 0o777;
     assert_eq!(mode, 0o600);
     state.save(&paths.state).expect("saved");
     let shared = fs::read_to_string(&paths.state).expect("state");
@@ -421,11 +525,18 @@ fn a_resolver_configuration_that_is_the_resolvers_own_is_not_a_fault() {
     let check = &catalogue.fault(RESOLVER).expect("resolver").check;
     let linked = base()
         .with_command(RESOLVED_LINE, printed("active\n"))
-        .with_link("/etc/resolv.conf", "../run/systemd/resolve/stub-resolv.conf");
+        .with_link(
+            "/etc/resolv.conf",
+            "../run/systemd/resolve/stub-resolv.conf",
+        );
     assert!(!super::checks::run_check(&linked, check).present);
     let stub_file = base()
         .with_command(RESOLVED_LINE, printed("active\n"))
-        .with_file("/etc/resolv.conf", "nameserver 127.0.0.53\noptions edns0\n", 0o644);
+        .with_file(
+            "/etc/resolv.conf",
+            "nameserver 127.0.0.53\noptions edns0\n",
+            0o644,
+        );
     assert!(!super::checks::run_check(&stub_file, check).present);
     let not_running = base()
         .with_command(RESOLVED_LINE, exited(3, "inactive\n"))
@@ -449,8 +560,19 @@ fn deleting_logs_needs_an_administrator_who_confirms_and_is_never_done_for_a_req
         .with_command("journalctl --rotate --vacuum-size=268435456", printed(""));
     let catalogue = catalogue();
     let mut state = empty_state();
-    scan(&machine, &catalogue, &paths, &mut state, &running("b1"), &Fixes::default(), true);
-    assert_eq!(state.faults[state.active(SPACE).expect("found")].state, FaultState::Present);
+    scan(
+        &machine,
+        &catalogue,
+        &paths,
+        &mut state,
+        &running("b1"),
+        &Fixes::default(),
+        true,
+    );
+    assert_eq!(
+        state.faults[state.active(SPACE).expect("found")].state,
+        FaultState::Present
+    );
 
     let refused = apply(
         &machine,
@@ -472,7 +594,12 @@ fn deleting_logs_needs_an_administrator_who_confirms_and_is_never_done_for_a_req
     )
     .expect_err("not confirmed");
     assert_eq!(unconfirmed.kind(), ErrorKind::HealNotConfirmed);
-    assert!(!machine.ran().iter().any(|line| line.starts_with("journalctl")));
+    assert!(
+        !machine
+            .ran()
+            .iter()
+            .any(|line| line.starts_with("journalctl"))
+    );
 
     let outcome = apply(
         &machine,
@@ -502,8 +629,19 @@ fn deleting_logs_needs_an_administrator_who_confirms_and_is_never_done_for_a_req
     assert_eq!(undone.kind(), ErrorKind::HealNothingToUndo);
 
     // Space freed by other means: cleared.
-    machine.set_command(DF_LINE, printed("     Avail       Size\n 9000000000 20000000000\n"));
-    scan(&machine, &catalogue, &paths, &mut state, &running("b1"), &Fixes::default(), true);
+    machine.set_command(
+        DF_LINE,
+        printed("     Avail       Size\n 9000000000 20000000000\n"),
+    );
+    scan(
+        &machine,
+        &catalogue,
+        &paths,
+        &mut state,
+        &running("b1"),
+        &Fixes::default(),
+        true,
+    );
     assert!(state.active(SPACE).is_none());
 }
 
@@ -526,10 +664,22 @@ fn a_crash_of_a_tur_program_has_no_remedy_and_ends_as_an_offered_report() {
     let machine = base().with_command(&crash_line(), printed(&crashed()));
     let catalogue = catalogue();
     let mut state = empty_state();
-    scan(&machine, &catalogue, &paths, &mut state, &running("b1"), &Fixes::default(), true);
+    scan(
+        &machine,
+        &catalogue,
+        &paths,
+        &mut state,
+        &running("b1"),
+        &Fixes::default(),
+        true,
+    );
     let record = &state.faults[state.active(CRASH).expect("found")];
     assert_eq!(record.state, FaultState::ReportOffered);
-    assert_eq!(record.subjects, ["tur-diag"], "another program's crash is not TUR's");
+    assert_eq!(
+        record.subjects,
+        ["tur-diag"],
+        "another program's crash is not TUR's"
+    );
     let kinds: Vec<EventKind> = state.events.iter().map(|event| event.kind).collect();
     assert_eq!(kinds, [EventKind::ReportOffered]);
     let refused = apply(
@@ -544,7 +694,11 @@ fn a_crash_of_a_tur_program_has_no_remedy_and_ends_as_an_offered_report() {
     assert_eq!(refused.kind(), ErrorKind::HealUnknown);
     let shown = notices(&catalogue, &state, &BTreeSet::new(), &BTreeSet::new());
     assert_eq!(shown.len(), 1);
-    assert!(shown[0].body.starts_with("tur-diag crashed."), "{}", shown[0].body);
+    assert!(
+        shown[0].body.starts_with("tur-diag crashed."),
+        "{}",
+        shown[0].body
+    );
     assert_eq!(shown[0].actions, [format!("tur-diag heal report {CRASH}")]);
     // Nothing is ever sent from here: no command but the checks ran.
     let checks = [
@@ -578,15 +732,42 @@ fn after_an_update_that_names_the_code_a_fault_that_stays_away_is_reported_fixed
     let catalogue = catalogue();
     let mut state = empty_state();
     let before = base().with_command(&crash_line(), printed(&crashed()));
-    scan(&before, &catalogue, &paths, &mut state, &running("old"), &Fixes::default(), true);
+    scan(
+        &before,
+        &catalogue,
+        &paths,
+        &mut state,
+        &running("old"),
+        &Fixes::default(),
+        true,
+    );
     // The new version, after its restart: no crash in this boot.
     let after = base().with_command(&crash_line(), exited(1, ""));
     // The same version without the fix in its list: only "cleared".
     let mut same = state.clone();
-    scan(&after, &catalogue, &paths, &mut same, &running("old"), &fixes(), true);
-    assert_eq!(same.events.last().map(|event| event.kind), Some(EventKind::Cleared));
+    scan(
+        &after,
+        &catalogue,
+        &paths,
+        &mut same,
+        &running("old"),
+        &fixes(),
+        true,
+    );
+    assert_eq!(
+        same.events.last().map(|event| event.kind),
+        Some(EventKind::Cleared)
+    );
     // The new one, whose list names the code.
-    scan(&after, &catalogue, &paths, &mut state, &running("new"), &fixes(), true);
+    scan(
+        &after,
+        &catalogue,
+        &paths,
+        &mut state,
+        &running("new"),
+        &fixes(),
+        true,
+    );
     let record = &state.faults[state.latest(CRASH).expect("a record")];
     assert_eq!(record.resolved_how.as_deref(), Some("fixed-by-update"));
     let reported: BTreeSet<String> = [CRASH.to_owned()].into();
@@ -595,7 +776,11 @@ fn after_an_update_that_names_the_code_a_fault_that_stays_away_is_reported_fixed
         .iter()
         .find(|notice| notice.kind == EventKind::FixedByUpdate)
         .expect("a notice");
-    assert!(fixed.body.starts_with("The problem you reported is fixed"), "{}", fixed.body);
+    assert!(
+        fixed.body.starts_with("The problem you reported is fixed"),
+        "{}",
+        fixed.body
+    );
 }
 
 #[test]
@@ -605,12 +790,32 @@ fn after_an_update_that_names_the_code_a_fault_that_comes_back_is_offered_again(
     let catalogue = catalogue();
     let mut state = empty_state();
     let machine = base().with_command(&crash_line(), printed(&crashed()));
-    scan(&machine, &catalogue, &paths, &mut state, &running("old"), &Fixes::default(), true);
-    scan(&machine, &catalogue, &paths, &mut state, &running("new"), &fixes(), true);
+    scan(
+        &machine,
+        &catalogue,
+        &paths,
+        &mut state,
+        &running("old"),
+        &Fixes::default(),
+        true,
+    );
+    scan(
+        &machine,
+        &catalogue,
+        &paths,
+        &mut state,
+        &running("new"),
+        &fixes(),
+        true,
+    );
     let kinds: Vec<EventKind> = state.events.iter().map(|event| event.kind).collect();
     assert_eq!(
         kinds,
-        [EventKind::ReportOffered, EventKind::RecurredAfterUpdate, EventKind::ReportOffered]
+        [
+            EventKind::ReportOffered,
+            EventKind::RecurredAfterUpdate,
+            EventKind::ReportOffered
+        ]
     );
     let record = &state.faults[state.active(CRASH).expect("a record")];
     assert_eq!(record.state, FaultState::ReportOffered);
@@ -628,16 +833,31 @@ fn the_socket_answers_only_well_formed_requests_for_reversible_remedies() {
         .with_command(TIME_LINE, printed("NTP=yes\nCanNTP=yes\n"))
         .with_command(DF_LINE, printed("Avail Size\n10 20000000000\n"));
     let ask = |text: &str| {
-        handle_request(&machine, &catalogue, &paths, text.as_bytes(), Some("4-12345-678-1000"))
+        handle_request(
+            &machine,
+            &catalogue,
+            &paths,
+            text.as_bytes(),
+            Some("4-12345-678-1000"),
+        )
     };
-    let code = |answer: &Value| answer["error"]["code"].as_str().unwrap_or_default().to_owned();
+    let code = |answer: &Value| {
+        answer["error"]["code"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned()
+    };
     assert_eq!(code(&ask("not json")), "TUR-DIAG-HEAL-010");
     assert_eq!(
-        code(&ask(r#"{"schema_version":1,"tool":"heal_apply_remedy","arguments":{"code":"x","remedy":"y","extra":1}}"#)),
+        code(&ask(
+            r#"{"schema_version":1,"tool":"heal_apply_remedy","arguments":{"code":"x","remedy":"y","extra":1}}"#
+        )),
         "TUR-DIAG-HEAL-010"
     );
     assert_eq!(
-        code(&ask(r#"{"schema_version":1,"tool":"heal_scan","arguments":{"code":"x","remedy":"y"}}"#)),
+        code(&ask(
+            r#"{"schema_version":1,"tool":"heal_scan","arguments":{"code":"x","remedy":"y"}}"#
+        )),
         "TUR-DIAG-HEAL-010"
     );
     assert_eq!(
@@ -653,7 +873,12 @@ fn the_socket_answers_only_well_formed_requests_for_reversible_remedies() {
     assert_eq!(code(&answer), "TUR-DIAG-HEAL-002");
     assert_eq!(answer["ok"], json!(false));
     assert!(!machine.ran().iter().any(|line| line.contains("set-ntp")));
-    assert!(!machine.ran().iter().any(|line| line.starts_with("journalctl")));
+    assert!(
+        !machine
+            .ran()
+            .iter()
+            .any(|line| line.starts_with("journalctl"))
+    );
 }
 
 #[test]
@@ -672,14 +897,30 @@ fn the_state_round_trips_and_the_status_lists_only_what_is_not_resolved() {
         .with_command(TIME_LINE, printed("NTP=no\nCanNTP=yes\n"))
         .with_command(&crash_line(), printed(&crashed()));
     let mut state = empty_state();
-    scan(&machine, &catalogue, &paths, &mut state, &running("b1"), &Fixes::default(), true);
+    scan(
+        &machine,
+        &catalogue,
+        &paths,
+        &mut state,
+        &running("b1"),
+        &Fixes::default(),
+        true,
+    );
     state.save(&paths.state).expect("saved");
-    let mode = fs::metadata(&paths.state).expect("metadata").permissions().mode() & 0o777;
+    let mode = fs::metadata(&paths.state)
+        .expect("metadata")
+        .permissions()
+        .mode()
+        & 0o777;
     assert_eq!(mode, 0o644, "readable by everyone, P@x's sandbox included");
     let loaded = HealState::load(&paths.state).expect("loaded");
     assert_eq!(loaded, state);
     let view = status_view(&catalogue, &loaded, &paths.state);
-    let codes: Vec<&str> = view.faults.iter().map(|fault| fault.record.code.as_str()).collect();
+    let codes: Vec<&str> = view
+        .faults
+        .iter()
+        .map(|fault| fault.record.code.as_str())
+        .collect();
     assert_eq!(codes, [TIME, CRASH]);
     assert_eq!(view.faults[0].remedies[0].id, "enable-network-time");
     // A check that cannot run changes nothing and is not a fault.

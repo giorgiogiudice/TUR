@@ -368,12 +368,16 @@ fn a_request_of_the_adapters_is_one_the_built_program_reads() {
         panic!("not an adapter");
     };
     let line = adapter.request_line(&arguments);
-    let scratch = std::env::temp_dir().join(format!("tur-diag-heal-request-{}", std::process::id()));
+    let scratch =
+        std::env::temp_dir().join(format!("tur-diag-heal-request-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&scratch);
     std::fs::create_dir_all(&scratch).expect("a scratch directory");
     let mut child = Command::new(PROGRAM)
         .args(["heal", "handle", "--connection", "1-2-3-1000"])
-        .arg(format!("--heal-state={}", scratch.join("state.json").display()))
+        .arg(format!(
+            "--heal-state={}",
+            scratch.join("state.json").display()
+        ))
         .arg(format!("--heal-data={}", scratch.join("data").display()))
         .arg(format!("--root={}", scratch.display()))
         .stdin(Stdio::piped())
@@ -392,5 +396,9 @@ fn a_request_of_the_adapters_is_one_the_built_program_reads() {
     assert!(output.status.success());
     let answer: Value = serde_json::from_slice(&output.stdout).expect("the answer is JSON");
     assert_eq!(answer["ok"], json!(false), "{answer}");
-    assert_eq!(answer["error"]["code"], json!("TUR-DIAG-HEAL-003"), "{answer}");
+    assert_eq!(
+        answer["error"]["code"],
+        json!("TUR-DIAG-HEAL-003"),
+        "{answer}"
+    );
 }

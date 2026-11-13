@@ -203,8 +203,8 @@ pub fn undo(machine: &dyn Machine, data_dir: &Path, undo: &UndoData) -> Result<S
         UndoData::RestoreCopy { backup, path } => {
             let file = data_dir.join(BACKUP_DIR).join(backup);
             let text = fs::read(&file).map_err(|error| format!("{}: {error}", file.display()))?;
-            let copy: KeptCopy =
-                serde_json::from_slice(&text).map_err(|error| format!("{}: {error}", file.display()))?;
+            let copy: KeptCopy = serde_json::from_slice(&text)
+                .map_err(|error| format!("{}: {error}", file.display()))?;
             let put_back = match &copy {
                 KeptCopy::Link { target } => machine.replace_with_link(path, target),
                 KeptCopy::File { content, mode } => machine.replace_with_file(path, content, *mode),
