@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# The graphical installer's state lines on the first serial port
+# (/usr/libexec/tur-installer/tur-live-transcript). Present only on the
+# installer medium; started with the live session.
+
+[Unit]
+Description=TUR installer: copy the graphical installer's state lines to the serial port
+ConditionKernelCommandLine=tur.live
+ConditionPathExists=/dev/ttyS0
+After=systemd-tmpfiles-setup.service
+
+[Service]
+Type=simple
+ExecStart=/usr/libexec/tur-installer/tur-live-transcript

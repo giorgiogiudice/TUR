@@ -1,0 +1,29 @@
+{"licence":"SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0","what":"tur-install-engine install onto the blank disk; the lines of bootc's output are those of iso run 43291029560"}
+{"event":"stage","stage":"revalidate"}
+{"event":"stage","stage":"prepare"}
+{"event":"line","text":"Installing image: docker://localhost/tur:20261112.g22433a6d07a6"}
+{"event":"line","text":"Wiping /dev/vda"}
+{"event":"line","text":"Block setup: direct"}
+{"event":"line","text":"/dev/vda3: Created a new partition 3 of type 'Linux root (x86-64)' and of size 19.5 GiB."}
+{"event":"line","text":"Creating root filesystem (ext4) on device /dev/vda3 (size=20.9 GB)"}
+{"event":"written","bytes":134217728}
+{"event":"stage","stage":"copy"}
+{"event":"line","text":"Initializing ostree layout"}
+{"event":"copy-total","text":"70 (3.2 GB)"}
+{"event":"line","text":"layers already present: 0; layers needed: 70 (3.2 GB)"}
+{"event":"written","bytes":2254857830}
+{"event":"written","bytes":5368709120}
+{"event":"line","text":"Deploying container image...done (35 seconds)"}
+{"event":"stage","stage":"bootloader"}
+{"event":"line","text":"Bootloader: grub"}
+{"event":"line","text":"Installing bootloader via bootupd"}
+{"event":"line","text":"Installed: grub.cfg"}
+{"event":"stage","stage":"finish"}
+{"event":"line","text":"Trimming root"}
+{"event":"line","text":"Finalizing filesystem root"}
+{"event":"line","text":"Unmounting filesystems"}
+{"event":"line","text":"Installation complete!"}
+{"event":"written","bytes":8053063680}
+{"event":"stage","stage":"check"}
+{"event":"stage","stage":"record"}
+{"event":"result","outcome":"success","code":"","message":"TUR is installed.","disk_state":"installed","status":0,"seconds":66,"device":"/dev/vda","log_on_disk":"/var/log/tur-installer/20261113T101500Z-1a2b3c4d"}

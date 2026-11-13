@@ -1,0 +1,8 @@
+{"licence":"SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0","what":"tur-install-engine check on a computer with too little memory, from a damaged medium"}
+{"event":"progress","what":"payload","done":72,"total":72}
+{"event":"check","id":"boot-mode","state":"ok","text":"[ok]    Started by UEFI firmware","code":""}
+{"event":"check","id":"processor","state":"ok","text":"[ok]    64-bit x86 processor","code":""}
+{"event":"check","id":"memory","state":"stop","text":"[STOP]  Memory: 2.0 GiB usable","code":"TUR-INSTALL-PREFLIGHT-005"}
+{"event":"check","id":"secure-boot","state":"note","text":"[note]  Secure Boot in the firmware: enabled","code":""}
+{"event":"check","id":"payload","state":"stop","text":"[STOP]  Installation image on this medium: damaged","code":"TUR-INSTALL-MEDIUM-001"}
+{"event":"checks","blocking":[{"code":"TUR-INSTALL-PREFLIGHT-005","text":"This computer has 2.0 GiB of usable memory. TUR needs at least 3.0 GiB."},{"code":"TUR-INSTALL-MEDIUM-001","text":"The installation image on this medium cannot be used: 1 of 72 files of the installation image are damaged. Write the medium again, to another USB stick if you can, and compare its checksum before you do."}],"payload":"damaged","payload_detail":"1 of 72 files of the installation image are damaged","memory_bytes":2147483648,"secure_boot":"enabled","uefi":true,"version":"0.1.0-dev","build_id":"20261113.gabcdef012345","minimum_bytes":21474836480}

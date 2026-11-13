@@ -1,0 +1,11 @@
+{"licence":"SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0","what":"tur-install-engine check, on the virtual machine of tests/iso: 4 GiB, Secure Boot off"}
+{"event":"progress","what":"payload","done":0,"total":72}
+{"event":"progress","what":"payload","done":24,"total":72}
+{"event":"progress","what":"payload","done":48,"total":72}
+{"event":"progress","what":"payload","done":72,"total":72}
+{"event":"check","id":"boot-mode","state":"ok","text":"[ok]    Started by UEFI firmware","code":""}
+{"event":"check","id":"processor","state":"ok","text":"[ok]    64-bit x86 processor","code":""}
+{"event":"check","id":"memory","state":"ok","text":"[ok]    Memory: 3.8 GiB usable","code":""}
+{"event":"check","id":"secure-boot","state":"note","text":"[note]  Secure Boot in the firmware: disabled","code":""}
+{"event":"check","id":"payload","state":"ok","text":"[ok]    Installation image on this medium: 72 files, 3.0 GiB, checked in 9 s","code":""}
+{"event":"checks","blocking":[],"payload":"verified","payload_detail":"72 files, 3.0 GiB, checked in 9 s","memory_bytes":4073091072,"secure_boot":"disabled","uefi":true,"version":"0.1.0-dev","build_id":"20261113.gabcdef012345","minimum_bytes":21474836480}

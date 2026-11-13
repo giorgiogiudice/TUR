@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# The live session of the installer medium opens the installer when it
+# starts. Closing it leaves the live desktop; the icon on the desktop opens
+# it again. Present only on the installer medium.
+[Desktop Entry]
+Type=Application
+Name=Install TUR
+Comment=Install TUR on this computer
+Exec=/usr/libexec/tur-installer/tur-installer-wizard --standalone --started-by-session
+Icon=system-software-install
+Terminal=false
+OnlyShowIn=KDE;
+X-KDE-autostart-phase=2

@@ -4,6 +4,17 @@
 - **Date:** 2026-11-12
 - **Specification sections:** §4.1, §4.3, §5.1, §5.2, §6.1 to §6.3, §14, §19.5,
   §28; tasks TUR-006 and D-23
+- **Amended:** 2026-11-13 by [ADR-0025](0025-live-session-and-graphical-installer.md)
+
+> **Amendment, 13 November 2026.** The medium described here now starts, by
+> default, a live TUR desktop that opens a graphical installer;
+> the text installer of this ADR is the boot menu's second entry, "Install
+> TUR (text mode)". Both run the same `bootc install to-disk` command from one
+> library, `installer/iso/rootfs/usr/lib/tur-installer/engine.sh`. The
+> installer's log is now kept on the installed disk. The rest of this ADR
+> (the medium's shape, the payload as an OCI layout, the boot chain, the
+> safety rules, the error codes) holds unchanged. See ADR-0025 and
+> [TUR-009](../reports/TUR-009.md).
 
 ## Context
 

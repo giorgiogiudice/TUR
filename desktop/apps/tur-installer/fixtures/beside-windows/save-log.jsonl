@@ -1,0 +1,2 @@
+{"licence":"SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0","what":"tur-install-engine save-log --to <the stick>"}
+{"event":"result","outcome":"success","code":"","message":"The log was saved.","disk_state":"untouched","folder":"tur-installer-log-20261113T101800Z-5e6f7a8b","label":"SANDISK"}

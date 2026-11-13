@@ -1,22 +1,69 @@
 # SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
 #
 # Installer environment: the root filesystem the installer medium starts
-# (ADR-0018). It is the image that will be installed (the payload) plus:
+# (ADR-0018 and its amendment of 13 November 2026). It is the image that will
+# be installed (the payload) plus:
 #
 #   - Fedora's dracut-live package, and an initramfs built with it that can
 #     start a root filesystem stored on the medium;
-#   - the installer program, its two systemd units and a description of the
-#     payload that travels on the medium beside this root filesystem.
+#   - the live session: a user, `liveuser`, signed in automatically to Plasma
+#     by Plasma Login Manager, with no password and nothing kept after the
+#     computer is switched off (the root is the medium's SquashFS under a
+#     layer in memory);
+#   - TUR's graphical installer (desktop/apps/tur-installer), built in the
+#     stage below against this image's own Qt, and the polkit rule that lets
+#     the live user start its privileged half, the installation engine;
+#   - the text installer, its two systemd units, and the engine both share;
+#   - a description of the payload that travels on the medium beside this
+#     root filesystem.
 #
-# Nothing else may differ from the payload: `bootc install` takes the
+# Nothing `bootc install` reads may differ from the payload: it takes the
 # bootloader files, GRUB configuration fragments and installation settings
 # from the root it runs in, so that root has to be the image being installed.
 # installer/iso/build-medium.sh checks the package lists of both and stops if
-# anything but the dracut family changed.
+# any package but the dracut family changed, and hashes every file bootc reads.
 #
-# Build it through installer/iso/build-medium.sh, in CI only.
+# The build context is the repository root; what is sent is listed in
+# Containerfile.containerignore. Build it through installer/iso/build-medium.sh,
+# in CI only.
 
 ARG PAYLOAD_IMAGE
+
+# ---- build stage: the graphical installer --------------------------------------
+#
+# Compiled in a container made from the payload itself, so that it is built
+# against the Qt the live session runs. The compilers and headers stay in this
+# stage; only the program, its two libraries and its QML modules go on.
+FROM ${PAYLOAD_IMAGE} AS wizard
+
+RUN set -eu; \
+    rpm -q qt6-qtbase qt6-qtdeclarative; \
+    dnf -y --repo=fedora --repo=updates --setopt=install_weak_deps=False install \
+        cmake ninja-build gcc-c++ \
+        qt6-qtbase-devel qt6-qtbase-private-devel qt6-qtdeclarative-devel \
+        layer-shell-qt-devel kwayland-devel extra-cmake-modules; \
+    rpm -q qt6-qtbase qt6-qtbase-devel qt6-qtdeclarative-devel
+
+COPY desktop/ /src/desktop/
+COPY LICENSE.md NOTICE THIRD_PARTY_NOTICES.md /src/
+
+# One CMake project for every TUR desktop program (desktop/CMakeLists.txt);
+# only the installer and what it links are built. The run path names the
+# directory the libraries are put in below.
+RUN set -eu; \
+    cmake -S /src/desktop -B /build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+        -DCMAKE_BUILD_RPATH=/usr/lib/tur-installer/lib > /build-configure.log 2>&1 \
+        || { tail -n 80 /build-configure.log; exit 1; }; \
+    cmake --build /build --target tur-installer-wizard; \
+    mkdir -p /out/usr/lib/tur-installer/bin /out/usr/lib/tur-installer/lib /out/usr/lib/tur-installer/qml/Tur; \
+    cp /build/apps/tur-installer/tur-installer-wizard /out/usr/lib/tur-installer/bin/; \
+    find /build -maxdepth 3 -name 'lib*.so*' -not -path '/build/qml/*' -exec cp -a {} /out/usr/lib/tur-installer/lib/ \; ; \
+    cp -a /build/qml/Tur/Kit /build/qml/Tur/Installer /out/usr/lib/tur-installer/qml/Tur/; \
+    strip --strip-debug /out/usr/lib/tur-installer/bin/tur-installer-wizard /out/usr/lib/tur-installer/lib/*.so* || true; \
+    find /out -type f | sort; \
+    du -sh /out
+
+# ---- the installer environment ------------------------------------------------------
 FROM ${PAYLOAD_IMAGE}
 
 # Packages come from Fedora's own repositories, named explicitly. Their exact
@@ -46,7 +93,12 @@ RUN set -eu; \
     printf '%s\n' "${kver}" > /usr/lib/tur-installer/boot/kernel-version; \
     ls -la /usr/lib/tur-installer/boot
 
-COPY rootfs/ /
+COPY installer/iso/rootfs/ /
+COPY --from=wizard /out/ /
+
+# The graphical installer's recorded engine answers, only for the check
+# below, which loads its window with this image's Qt.
+COPY desktop/apps/tur-installer/fixtures/ /usr/share/tur-installer-check/fixtures/
 
 # What the medium carries beside this root filesystem, fixed by hash, so that
 # the installer can refuse a medium whose payload is not the one it was built
@@ -61,7 +113,9 @@ ARG MIN_TARGET_BYTES
 ARG MEDIUM_LABEL
 
 RUN set -eu; \
-    chmod 0755 /usr/libexec/tur-installer/tur-install; \
+    chmod 0755 /usr/libexec/tur-installer/tur-install /usr/libexec/tur-installer/tur-install-engine \
+        /usr/libexec/tur-installer/tur-installer-wizard /usr/libexec/tur-installer/tur-live-transcript; \
+    chmod 0644 /usr/lib/tur-installer/engine.sh; \
     test -n "${PAYLOAD_TARGET_IMGREF}"; test -n "${PAYLOAD_IMAGE_ID}"; \
     test -n "${PAYLOAD_INDEX_SHA256}"; test -n "${PAYLOAD_BLOB_COUNT}"; \
     test -n "${MIN_TARGET_BYTES}"; test -n "${MEDIUM_LABEL}"; \
@@ -77,17 +131,58 @@ RUN set -eu; \
         "MEDIUM_LABEL=${MEDIUM_LABEL}" \
         > /usr/lib/tur-installer/payload.env; \
     cat /usr/lib/tur-installer/payload.env; \
-    # The medium starts the installer and nothing else: no desktop, no
-    # boot-health units (they belong to an installed system), no boot splash
-    # (it would hold the console's keyboard), and nothing that uses a network.
-    # This is the installer environment's /etc only; the installed system
-    # comes from the payload on the medium.
-    ln -sf /usr/lib/systemd/system/tur-installer.target /etc/systemd/system/default.target; \
-    for unit in NetworkManager.service NetworkManager-wait-online.service NetworkManager-dispatcher.service \
-        avahi-daemon.service avahi-daemon.socket cups.service cups.socket cups.path sshd.service \
+    # The graphical installer runs with this image's Qt: load its window
+    # once, offscreen, on recorded answers, and fail the build on any QML
+    # warning or a library that cannot be found.
+    ldd /usr/lib/tur-installer/bin/tur-installer-wizard | tee /usr/lib/tur-installer/wizard-ldd.txt; \
+    if grep -q 'not found' /usr/lib/tur-installer/wizard-ldd.txt; then exit 1; fi; \
+    QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software XDG_RUNTIME_DIR=/tmp HOME=/tmp \
+        /usr/libexec/tur-installer/tur-installer-wizard --version; \
+    QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software XDG_RUNTIME_DIR=/tmp HOME=/tmp \
+        TUR_WIZARD_TRANSCRIPT=/tmp/wizard-check-transcript \
+        /usr/libexec/tur-installer/tur-installer-wizard --standalone --check \
+        --fixture /usr/share/tur-installer-check/fixtures/beside-windows; \
+    cat /tmp/wizard-check-transcript; \
+    rm -rf /usr/share/tur-installer-check /tmp/wizard-check-transcript; \
+    # --- the live session ----------------------------------------------------
+    # One user, signed in automatically (etc/plasmalogin.conf.d), with no
+    # password. Its home is made from usr/lib/tur-installer/live-home.
+    mkdir -p "$(realpath -m /home)"; \
+    useradd --create-home --comment "TUR live session" liveuser; \
+    passwd --delete liveuser; \
+    home="$(getent passwd liveuser | cut -d: -f6)"; \
+    cp -a /usr/lib/tur-installer/live-home/. "${home}/"; \
+    # Programs that would open over the installer on the first sign-in:
+    # hidden for this user, by an autostart entry of the same name.
+    mkdir -p "${home}/.config/autostart"; \
+    for entry in /etc/xdg/autostart/*.desktop; do \
+        case "${entry##*/}" in \
+            *welcome* | *discover* ) \
+                printf '[Desktop Entry]\nHidden=true\n' > "${home}/.config/autostart/${entry##*/}"; \
+                echo "hidden for the live user: ${entry##*/}" ;; \
+        esac; \
+    done; \
+    chown -R liveuser:liveuser "${home}"; \
+    chmod 0755 "${home}/Desktop/org.tur.Installer.desktop"; \
+    ls -laR "${home}"; \
+    # The medium starts the live session by default (graphical.target) and
+    # the text installer when the boot menu adds systemd.unit=tur-installer.target.
+    # No boot-health units (they belong to an installed system), no boot
+    # splash (it would hold the console's keyboard in text mode), no remote
+    # login and nothing that announces the machine on a network. This is the
+    # installer environment's /etc only; the installed system comes from the
+    # payload on the medium.
+    ln -sf /usr/lib/systemd/system/graphical.target /etc/systemd/system/default.target; \
+    # No login prompt on a serial port either: the live user has no
+    # password, and the prompt's hang-up of the port would cut the
+    # installer's state lines off (TUR-009).
+    for unit in avahi-daemon.service avahi-daemon.socket cups.service cups.socket cups.path sshd.service \
+        serial-getty@.service \
         plymouth-start.service plymouth-read-write.service plymouth-quit.service plymouth-quit-wait.service; do \
         ln -sf /dev/null "/etc/systemd/system/${unit}"; \
     done; \
-    systemd-analyze verify --recursive-errors=no tur-installer.target tur-installer.service 2>&1 | tail -n 20 || true
+    mkdir -p /etc/systemd/system/graphical.target.wants; \
+    ln -sf /usr/lib/systemd/system/tur-live-transcript.service /etc/systemd/system/graphical.target.wants/tur-live-transcript.service; \
+    systemd-analyze verify --recursive-errors=no tur-installer.target tur-installer.service tur-live-transcript.service 2>&1 | tail -n 20 || true
 
 LABEL org.tur.installer-environment="1"

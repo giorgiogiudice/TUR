@@ -149,6 +149,32 @@ class Session:
         if not kvm.get("enabled"):
             raise Stop("KVM is not enabled")
         self.result["outcome"] = "started"
+        self.choose_text_mode()
+
+    def choose_text_mode(self) -> None:
+        """Start the boot menu's text-mode entry, as a person would: by its key.
+
+        The medium starts the live session by default. Its menu gives the
+        text installer the hotkey "t" (installer/iso/third-party-licensed/grub).
+        The firmware says on the serial port when it starts the medium; from
+        then on "t" is pressed a few times a second until the menu has surely
+        come and gone. A key pressed before the menu is drawn waits for it;
+        one pressed after the kernel started is flushed when the installer
+        takes the console."""
+        try:
+            self.wait(r'BdsDxe: starting Boot\w+ "[^"]*(TURINSTALLERMEDIUM|DVD-ROM)', 60, "the firmware to start the medium")
+            self.result["facts"]["firmware_started_medium_seconds"] = self.elapsed()
+        except Stop:
+            self.say("the firmware did not say when it started the medium; pressing the key anyway")
+        self.cursor = 0
+        presses = 0
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            self.keyboard.press("t")
+            presses += 1
+            time.sleep(0.25)
+        self.result["facts"]["boot_menu"] = {"entry": "text mode", "hotkey": "t", "presses": presses}
+        self.step(f"pressed the boot menu's text-mode key {presses} times")
 
     def wait(self, pattern: str, timeout: float, what: str) -> "re.Match":
         """Wait for text on the serial port after the cursor; move the cursor past it."""
