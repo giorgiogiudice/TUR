@@ -110,8 +110,47 @@ jobs:
             installer/iso/rootfs/usr/libexec/tur-installer/tur-live-transcript \
             installer/iso/rootfs/usr/libexec/tur-installer/tur-installer-wizard \
             installer/iso/rootfs/usr/lib/tur-installer/engine.sh \
-            image/rootfs/usr/bin/tur-dualboot image/rootfs/usr/libexec/tur/tur-restart-windows
+            image/rootfs/usr/bin/tur-dualboot image/rootfs/usr/libexec/tur/tur-restart-windows \
+            installer/iso/rootfs/usr/lib/tur-installer/ntfs-shrink.sh
           python3 -m py_compile installer/iso/*.py tests/iso/*.py
+
+  # Shrinking NTFS (issue 64, step 2; ADR-0029): the library on crafted NTFS
+  # images made by ntfs-3g, on disposable disk images on the runner. No
+  # Windows; nothing of it is on the medium yet.
+  ntfs-shrink:
+    name: Shrinking NTFS on crafted images (step 2, measured)
+    needs: lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Install ntfs-3g and the partitioning tools
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends ntfs-3g dosfstools fdisk
+          dpkg-query -W -f='${Package} ${Version}\n' ntfs-3g fdisk
+
+      - name: Shrink, refuse, interrupt
+        run: |
+          mkdir -p out/ntfs-shrink
+          work="$RUNNER_TEMP/ntfs"
+          if [ -d /mnt ] && [ "$(df --output=avail -B1G /mnt | tail -1 | tr -d ' G')" -gt 30 ]; then
+            sudo mkdir -p /mnt/ntfs; work=/mnt/ntfs
+          fi
+          sudo python3 tests/iso/ntfs-shrink-test.py out/ntfs-shrink "$work"
+
+      - name: Summary
+        if: always()
+        run: |
+          if [ -f out/ntfs-shrink/summary.md ]; then cat out/ntfs-shrink/summary.md >> "$GITHUB_STEP_SUMMARY"; fi
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: tur-ntfs-shrink
+          path: out/ntfs-shrink/
+          if-no-files-found: warn
 
   product:
     name: Product medium - build, install, first start
