@@ -197,13 +197,19 @@ def flatpak(*arguments: str, env: dict[str, str]) -> subprocess.CompletedProcess
                           capture_output=True, text=True)
 
 
+def user_refs(recorder: Recorder) -> list[str]:
+    """Every reference flatpak lists for the recorder's user."""
+    result = flatpak("list", "--user", "--columns=ref", env=recorder.env())
+    return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+
+
 def older_commit(recorder: Recorder) -> str | None:
     """The commit before the current one of the application on Flathub."""
     env = recorder.env()
     reference = f"app/{FLATPAK_APP}/x86_64/stable"
     result = flatpak("remote-info", "--user", "--log", "flathub", reference, env=env)
     log(result.stdout[-2000:] + result.stderr[-2000:])
-    commits = re.findall(r"^\s*(?:Commit|History):\s*([0-9a-f]{64})", result.stdout, re.MULTILINE)
+    commits = re.findall(r"^\s*Commit:\s*([0-9a-f]{64})", result.stdout, re.MULTILINE)
     # remote-info --log prints the current commit, then "History:" and the
     # earlier ones, each as "Commit: <hash>".
     seen = []
@@ -226,7 +232,7 @@ def main() -> int:
     r = Recorder(args)
 
     # --- sources ----------------------------------------------------------
-    runs = [r.run(SOURCES), r.run(plan(APP))]
+    runs = [r.run(LIST), r.run(SOURCES), r.run(plan(APP))]
     r.expect("with Flathub not added, the plan is refused with TUR-DESKTOP-APPS-008",
              document(runs[-1]).get("error", {}).get("code") == "TUR-DESKTOP-APPS-008")
     runs.append(r.run(enable("flathub")))
@@ -243,6 +249,10 @@ def main() -> int:
     # --- update -----------------------------------------------------------
     commit = older_commit(r)
     note = "Chromium B.S.U.: "
+    # What the move to an earlier commit brings in (an earlier runtime) is
+    # the test's own doing, not tur-apps'; it is taken away after the
+    # removal below.
+    refs_before = set(user_refs(r))
     if commit:
         result = flatpak("update", "--user", "--noninteractive", f"--commit={commit}",
                          f"app/{FLATPAK_APP}/x86_64/stable", env=r.env())
@@ -250,8 +260,12 @@ def main() -> int:
         note += f"moved back to the earlier commit {commit} with flatpak update --commit, then updated by tur-apps."
     else:
         note += "Flathub has no earlier commit, so there was nothing to update."
+    brought_in = sorted(set(user_refs(r)) - refs_before)
+    log(f"the move to the earlier commit brought in: {brought_in}")
     runs = [r.run(LIST_UPDATES), r.run(update(APP)), r.run(LIST_UPDATES)]
     r.expect("updated", last_event(runs[1]).get("event") == "result")
+    if commit:
+        r.expect("the update moved it to another commit", last_event(runs[1]).get("result", {}).get("updated") is True)
     r.write("update", note, runs)
 
     # --- remove -----------------------------------------------------------
@@ -262,14 +276,23 @@ def main() -> int:
     r.expect("removed", last_event(runs[1]).get("event") == "result")
     r.expect("its data is kept", (data / "recorded-by-the-test").exists())
     r.write("remove", "Chromium B.S.U. removed, keeping its settings and data.", runs)
+    left = user_refs(r)
+    log(f"left after the removal: {left}")
+    r.expect("nothing tur-apps installed is left", sorted(set(left) - set(brought_in)) == [])
+    if left:
+        result = flatpak("uninstall", "--user", "--noninteractive", *left, env=r.env())
+        log(result.stdout[-2000:] + result.stderr[-2000:])
 
     # --- cancel -----------------------------------------------------------
     def first_operation(line: str) -> bool:
+        # flatpak's first operation line ("installing runtime/..."), not a
+        # stray terminal sequence.
         try:
             event = json.loads(line)
         except ValueError:
             return False
-        return event.get("event") == "activity" and event.get("step") == "install"
+        return (event.get("event") == "activity" and event.get("step") == "install"
+                and str(event.get("text", "")).startswith("installing "))
 
     runs = [r.run(plan(APP)), r.run(install(APP), cancel_when=first_operation), r.run(LIST)]
     end = last_event(runs[1])
@@ -282,9 +305,11 @@ def main() -> int:
             runs)
 
     # --- chrome -----------------------------------------------------------
-    runs = [r.run(plan(CHROME)), r.run(install(CHROME)), r.run(LIST), r.run(remove(CHROME, delete=True)), r.run(LIST)]
-    r.expect("Chrome installed per user", last_event(runs[1]).get("event") == "result")
-    r.expect("Chrome removed", last_event(runs[3]).get("event") == "result")
+    runs = [r.run(LIST), r.run(plan(CHROME)), r.run(install(CHROME)), r.run(LIST), r.run(remove(CHROME, delete=True)),
+            r.run(LIST)]
+    r.expect("Chrome installed per user", last_event(runs[2]).get("event") == "result")
+    r.expect("Chrome removed", last_event(runs[4]).get("event") == "result")
+    r.expect("nothing of Chrome is left", user_refs(r) == [])
     r.write("chrome", "Google Chrome from Flathub, per user: Flatpak downloads Google's package from dl.google.com.", runs)
 
     # --- failure (stand-in flatpak) ----------------------------------------
@@ -296,9 +321,11 @@ def main() -> int:
     fakes = pathlib.Path(args.fakes).resolve()
     programs = ["--flatpak-program", str(fakes / "flatpak"), "--curl-program", str(fakes / "curl")]
     fake_env = {"FAKE_STATE": str(state)}
-    runs = [r.run(plan(APP), programs=programs, extra_env=fake_env),
-            r.run(install(APP), programs=programs, extra_env=fake_env)]
-    r.expect("the stand-in's failure is reported", last_event(runs[1]).get("event") == "error")
+    runs = [r.run(LIST, programs=programs, extra_env=fake_env),
+            r.run(plan(APP), programs=programs, extra_env=fake_env),
+            r.run(install(APP), programs=programs, extra_env=fake_env),
+            r.run(LIST, programs=programs, extra_env=fake_env)]
+    r.expect("the stand-in's failure is reported", last_event(runs[2]).get("event") == "error")
     r.write("failure", "Real tur-apps against its own stand-in for flatpak (services/tur-apps/tests/fakes/flatpak), "
             "told to fail after installing the runtime: a failure half-way, which Flathub does not give on demand.",
             runs)

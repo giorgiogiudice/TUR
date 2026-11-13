@@ -172,16 +172,19 @@ ColumnLayout {
         visible: false
         active: false
         source: Qt.resolvedUrl("InstallerDialog.qml")
-        onLoaded: chooser.item.open()
-
-        Connections {
-            target: chooser.item
-            ignoreUnknownSignals: true
-
-            function onChosen(path: string) {
-                view.chooseInstaller(path)
-            }
+        onLoaded: {
+            const dialog = chooser.item as InstallerDialog
+            dialog.chosen.connect(view.chooseInstaller)
+            dialog.open()
         }
+    }
+
+    // "I have the installer file", or "Choose the installer…".
+    function openChooser(): void {
+        if (chooser.active)
+            (chooser.item as InstallerDialog).open()
+        else
+            chooser.active = true
     }
 
     Kit.BusyIndicator {
@@ -279,7 +282,7 @@ ColumnLayout {
         visible: view.takesAFile && !view.working
         text: qsTr("I have the installer file")
         kind: Kit.Button.Quiet
-        onClicked: chooser.active ? chooser.item.open() : (chooser.active = true)
+        onClicked: view.openChooser()
     }
 
     OperationBlock {
@@ -291,7 +294,7 @@ ColumnLayout {
             view.planWhenSourceIsOn = true
             view.apps.setSource(source, true)
         }
-        onInstallerRequested: chooser.active ? chooser.item.open() : (chooser.active = true)
+        onInstallerRequested: view.openChooser()
     }
 
     Loader {

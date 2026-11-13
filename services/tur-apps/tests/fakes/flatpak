@@ -96,6 +96,8 @@ list)
 info)
     if [ "$2" = "--show-size" ]; then
         echo 12345
+    elif [ -f "$state/commit" ]; then
+        cat "$state/commit"
     else
         echo "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     fi
@@ -125,6 +127,12 @@ uninstall)
     ;;
 update)
     echo "Updating $3"
+    # An update that moves to another commit, and brings in a runtime.
+    if [ -f "$state/update-to" ]; then cp "$state/update-to" "$state/commit"; fi
+    if [ -f "$state/update-adds" ] && ! grep -qx "$(cat "$state/update-adds")" "$state/refs"; then
+        echo "Installing $(cat "$state/update-adds")"
+        cat "$state/update-adds" >> "$state/refs"
+    fi
     ;;
 remote-ls)
     if [ -f "$state/updates" ]; then cat "$state/updates"; fi

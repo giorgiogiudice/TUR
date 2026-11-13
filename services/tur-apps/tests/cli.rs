@@ -108,10 +108,7 @@ impl World {
     }
 
     fn run(&self, arguments: &[&str]) -> Run {
-        let output = self
-            .command(arguments)
-            .output()
-            .expect("the program runs");
+        let output = self.command(arguments).output().expect("the program runs");
         Run {
             status: output.status.code().unwrap_or(-1),
             stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
@@ -792,6 +789,7 @@ fn updates_are_found_and_applied_for_a_flatpak_and_refused_for_windows() {
     let update = &run.json()["applications"][0]["update"];
     assert_eq!(update["available"], true);
     assert_eq!(update["version"], "2.0");
+    // Nothing new: the commit stays, and the result says so.
     let run = world.run(&["update", "org.example.viewer", "--events"]);
     assert_eq!(run.status, 0, "{}{}", run.stdout, run.stderr);
     assert!(
@@ -799,6 +797,26 @@ fn updates_are_found_and_applied_for_a_flatpak_and_refused_for_windows() {
             .log("flatpak.log")
             .contains("update --user --noninteractive app/org.example.Viewer/x86_64/stable")
     );
+    assert_eq!(run.events().last().unwrap()["result"]["updated"], false);
+    // Moved to an earlier commit with flatpak itself, then updated: the
+    // update is measured against what is installed, not against the
+    // record; and a runtime the update brings in is removed with the
+    // application.
+    let earlier = "c".repeat(64);
+    let later = "d".repeat(64);
+    fs::write(world.state("commit"), format!("{earlier}\n")).unwrap();
+    fs::write(world.state("update-to"), format!("{later}\n")).unwrap();
+    fs::write(
+        world.state("update-adds"),
+        "runtime/org.example.Platform/x86_64/2\n",
+    )
+    .unwrap();
+    let run = world.run(&["update", "org.example.viewer", "--events"]);
+    assert_eq!(run.status, 0, "{}{}", run.stdout, run.stderr);
+    assert_eq!(run.events().last().unwrap()["result"]["updated"], true);
+    let run = world.run(&["remove", "org.example.viewer", "--events"]);
+    assert_eq!(run.status, 0, "{}{}", run.stdout, run.stderr);
+    assert_eq!(fs::read_to_string(world.state("refs")).unwrap().trim(), "");
 
     fs::write(world.state("download"), BODY).unwrap();
     assert_eq!(

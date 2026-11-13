@@ -1,0 +1,25 @@
+{
+ "licence": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+ "recorded_by": "desktop/ci/centre-e2e/record.py, in the desktop workflow's job centre-e2e; copied by desktop/apps/tur-centre/fixtures/apps/update.py; do not edit",
+ "run": "43420798669",
+ "scenario": "installer",
+ "note": "A file that is not the installer the catalogue pins for Notepad++.",
+ "invocations": [
+  {
+   "arguments": [
+    "plan",
+    "--json",
+    "--installer",
+    "<installer>",
+    "--",
+    "org.notepad-plus-plus.notepad-plus-plus"
+   ],
+   "exit_status": 3,
+   "stderr": "",
+   "stdout": [
+    "{\"error\":{\"code\":\"TUR-DESKTOP-APPS-009\",\"detail\":{\"alternative\":null,\"caveats\":[],\"edition\":\"Windows edition: the publisher's page https://notepad-plus-plus.org/downloads/\",\"edition_index\":0,\"edition_kind\":\"windows\",\"outlook\":\"clear\",\"pinned\":false,\"prerequisites\":[{\"code\":\"install-wine\",\"text\":\"Wine must be installed.\"}],\"rating\":\"unknown\",\"rating_source\":{\"date\":\"2026-11-12\",\"kind\":\"tur-test\",\"report\":\"docs/reports/windows-runtime-2.md\",\"version_tested\":\"8.9.9.1\"},\"reason\":\"A Windows edition exists: Wine, a compatibility layer, comes before a virtual machine.\",\"reason_code\":\"windows-wine\",\"reason_parts\":[{\"code\":\"windows-wine\",\"params\":{}}],\"recommended\":true,\"route\":\"wine\"},\"message\":\"Wine must be installed. Nothing was installed.\",\"title\":\"A program this needs is not installed\"}}"
+   ],
+   "seconds": 0.0
+  }
+ ]
+}

@@ -99,6 +99,9 @@ check "nothing was installed system-wide" sh -c "test -z \"\$(flatpak list --sys
 reference=app/$app/x86_64/stable
 flatpak remote-info --user --log flathub "$reference" > "$out/logs/remote-log.txt" 2>&1
 older=$(grep -E '^[[:space:]]*Commit:' "$out/logs/remote-log.txt" | awk '{print $2}' | awk '!seen[$0]++' | sed -n 2p)
+# What the move to an earlier commit brings in (an earlier runtime) is this
+# script's doing, not the centre's: it is not counted as left behind below.
+flatpak list --user --columns=ref | sort > "$work/refs-before-downgrade"
 if [ -n "$older" ]; then
     flatpak update --user --noninteractive --commit="$older" "$reference" > "$out/logs/downgrade.log" 2>&1
     check "flatpak put the earlier commit $older in place" sh -c "flatpak info --user --show-commit $reference | grep -qx $older"
@@ -107,6 +110,8 @@ else
     echo "| Flathub has no earlier commit of $app: the update finds nothing to update | note |" >> "$summary"
     export TUR_CENTRE_E2E_UPDATE_EXPECTED=0
 fi
+flatpak list --user --columns=ref | sort > "$work/refs-after-downgrade"
+comm -13 "$work/refs-before-downgrade" "$work/refs-after-downgrade" > "$out/logs/brought-in-by-the-downgrade.txt"
 part e2e_update
 
 part e2e_remove
@@ -114,8 +119,10 @@ part e2e_remove
 # --- 3. What is on disk afterwards ---------------------------------------------
 
 check "its data is still there after Remove (kept by default)" test -d "$HOME/.var/app/$app"
-check "no reference is left installed for this user after the cancel" \
-    sh -c "test -z \"\$(flatpak list --user --columns=ref)\""
+flatpak list --user --columns=ref,origin > "$out/logs/left-at-the-end.txt" 2>&1
+flatpak list --user --columns=ref | sort > "$work/refs-at-the-end"
+comm -23 "$work/refs-at-the-end" "$out/logs/brought-in-by-the-downgrade.txt" > "$work/left-by-the-centre"
+check "no reference the centre installed is left after Remove and the cancel" test ! -s "$work/left-by-the-centre"
 check "no deployment of the application is left" test ! -e "$XDG_DATA_HOME/flatpak/app/$app"
 check "no record of tur-apps is left" test ! -e "$XDG_DATA_HOME/tur/apps/installed/$app.json"
 import -window root "$out/shots/e2e-screen-at-the-end.png" 2>/dev/null || true

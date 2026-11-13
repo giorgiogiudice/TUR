@@ -225,7 +225,7 @@ impl Program {
 /// Ends a program started in a process group of its own, and everything it
 /// started: SIGTERM to the group, then SIGKILL five seconds later if the
 /// program has not ended. The signals are sent by the system's `kill`
-/// program: this crate has no unsafe code with which to send them itself.
+/// program: this crate does not call the C library to send them itself.
 fn terminate(child: &mut Child) {
     let group = format!("-{}", child.id());
     let kill = find(&["/usr/bin/kill", "/bin/kill"]);
@@ -351,7 +351,11 @@ mod tests {
         assert_eq!(outcome.stdout, "one\n");
         // The sleep the shell started was ended too, or the pipe would have
         // stayed open for a minute.
-        assert!(started.elapsed() < Duration::from_secs(30), "{:?}", started.elapsed());
+        assert!(
+            started.elapsed() < Duration::from_secs(30),
+            "{:?}",
+            started.elapsed()
+        );
 
         let outcome = program
             .run_streaming_until(&args(&["-c", "echo done"]), &mut |_, _| {}, &|| false)

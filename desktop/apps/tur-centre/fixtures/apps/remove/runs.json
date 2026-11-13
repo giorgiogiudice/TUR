@@ -1,0 +1,91 @@
+{
+ "licence": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+ "recorded_by": "desktop/ci/centre-e2e/record.py, in the desktop workflow's job centre-e2e; copied by desktop/apps/tur-centre/fixtures/apps/update.py; do not edit",
+ "run": "43420798669",
+ "scenario": "remove",
+ "note": "Chromium B.S.U. removed, keeping its settings and data.",
+ "invocations": [
+  {
+   "arguments": [
+    "list",
+    "--json"
+   ],
+   "exit_status": 0,
+   "stderr": "",
+   "stdout": [
+    "{",
+    "  \"applications\": [",
+    "    {",
+    "      \"data\": [",
+    "        \"~/.var/app/net.sourceforge.chromium-bsu\"",
+    "      ],",
+    "      \"from\": \"Flatpak remote flathub\",",
+    "      \"id\": \"net.sourceforge.chromium-bsu\",",
+    "      \"installed_by\": \"tur-apps\",",
+    "      \"name\": \"Chromium B.S.U.\",",
+    "      \"route\": \"flatpak\",",
+    "      \"size\": 6969856,",
+    "      \"state\": \"installed\",",
+    "      \"update\": {",
+    "        \"available\": null,",
+    "        \"checked\": false,",
+    "        \"source\": null,",
+    "        \"version\": null",
+    "      },",
+    "      \"version\": \"0.9.16.1\"",
+    "    }",
+    "  ],",
+    "  \"kind\": \"installed\",",
+    "  \"problems\": [],",
+    "  \"schema_version\": 1,",
+    "  \"updates_checked\": false",
+    "}"
+   ],
+   "seconds": 0.0
+  },
+  {
+   "arguments": [
+    "remove",
+    "--keep-data",
+    "--events",
+    "--",
+    "net.sourceforge.chromium-bsu"
+   ],
+   "exit_status": 0,
+   "stderr": "",
+   "stdout": [
+    "{\"event\":\"step-started\",\"schema_version\":1,\"step\":\"uninstall\",\"text\":\"Removing Chromium B.S.U.; its data is kept\"}",
+    "{\"event\":\"activity\",\"schema_version\":1,\"step\":\"uninstall\",\"text\":\"uninstalling app/net.sourceforge.chromium-bsu/x86_64/stable\"}",
+    "{\"event\":\"activity\",\"schema_version\":1,\"step\":\"uninstall\",\"text\":\"uninstalling runtime/net.sourceforge.chromium_bsu.Locale/x86_64/stable\"}",
+    "{\"event\":\"step-finished\",\"ok\":true,\"schema_version\":1,\"step\":\"uninstall\"}",
+    "{\"event\":\"step-started\",\"schema_version\":1,\"step\":\"unused\",\"text\":\"Removing 4 runtime(s) and extension(s) only it used\"}",
+    "{\"event\":\"activity\",\"schema_version\":1,\"step\":\"unused\",\"text\":\"uninstalling runtime/org.freedesktop.Platform.GL.default/x86_64/26.08\"}",
+    "{\"event\":\"activity\",\"schema_version\":1,\"step\":\"unused\",\"text\":\"uninstalling runtime/org.freedesktop.Platform.GL.default/x86_64/26.08-extra\"}",
+    "{\"event\":\"activity\",\"schema_version\":1,\"step\":\"unused\",\"text\":\"uninstalling runtime/org.freedesktop.Platform/x86_64/26.08\"}",
+    "{\"event\":\"activity\",\"schema_version\":1,\"step\":\"unused\",\"text\":\"uninstalling runtime/org.freedesktop.Platform.Locale/x86_64/26.08\"}",
+    "{\"event\":\"activity\",\"schema_version\":1,\"step\":\"unused\",\"text\":\"uninstalling runtime/org.freedesktop.Platform.codecs-extra/x86_64/26.08-extra\"}",
+    "{\"event\":\"step-finished\",\"ok\":true,\"schema_version\":1,\"step\":\"unused\"}",
+    "{\"event\":\"result\",\"operation\":\"remove\",\"result\":{\"data\":\"keep\",\"id\":\"net.sourceforge.chromium-bsu\",\"kept\":[\"~/.var/app/net.sourceforge.chromium-bsu\"],\"left_behind\":[],\"name\":\"Chromium B.S.U.\",\"removed\":[\"app/net.sourceforge.chromium-bsu/x86_64/stable\",\"runtime/org.freedesktop.Platform.GL.default/x86_64/26.08\",\"runtime/org.freedesktop.Platform.GL.default/x86_64/26.08-extra\",\"runtime/org.freedesktop.Platform.codecs-extra/x86_64/26.08-extra\",\"runtime/org.freedesktop.Platform/x86_64/26.08\"],\"route\":\"flatpak\"},\"schema_version\":1}"
+   ],
+   "seconds": 1.3
+  },
+  {
+   "arguments": [
+    "list",
+    "--json"
+   ],
+   "exit_status": 0,
+   "stderr": "",
+   "stdout": [
+    "{",
+    "  \"applications\": [],",
+    "  \"kind\": \"installed\",",
+    "  \"problems\": [],",
+    "  \"schema_version\": 1,",
+    "  \"updates_checked\": false",
+    "}"
+   ],
+   "seconds": 0.0
+  }
+ ]
+}

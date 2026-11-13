@@ -71,15 +71,45 @@ fn forward_lines<'a>(
     stdout_too: bool,
 ) -> impl FnMut(Stream, &str) + 'a {
     move |stream, line| {
+        // flatpak 1.18 writes terminal control sequences even without a
+        // terminal (a line that is only "ESC[?25h", showing the cursor):
+        // they are not activity, and a person would see them as garbage.
+        let line = without_control_sequences(line);
         if line.trim().is_empty() || (stream == Stream::Stdout && !stdout_too) {
             return;
         }
-        let text = match flatpak::activity(line) {
+        let text = match flatpak::activity(&line) {
             Some((what, reference)) => format!("{what} {reference}"),
             None => line.trim().to_owned(),
         };
         emitter.activity(step, text);
     }
+}
+
+/// A line without its terminal control sequences (`ESC [ ... letter`) and
+/// other control characters.
+fn without_control_sequences(line: &str) -> String {
+    let mut out = String::with_capacity(line.len());
+    let mut characters = line.chars().peekable();
+    while let Some(character) = characters.next() {
+        if character == '\u{1b}' {
+            if characters.peek() == Some(&'[') {
+                characters.next();
+                // Parameters and intermediates, then one final letter.
+                for next in characters.by_ref() {
+                    if next.is_ascii_alphabetic() || next == '~' {
+                        break;
+                    }
+                }
+            }
+            continue;
+        }
+        if character.is_control() && character != '\t' {
+            continue;
+        }
+        out.push(character);
+    }
+    out
 }
 
 /// Installs an application by its plan, after `confirm` has said yes.
@@ -706,6 +736,17 @@ pub fn update(context: &Context, id: &str, emitter: &mut Emitter) -> Result<Valu
     let flatpak = &context.flatpak;
     flatpak.require("to update a Linux application")?;
     let before = record.version.clone();
+    // What is installed now, not what was recorded at installation: the
+    // application may have been moved to another commit since, with
+    // flatpak itself. And the references this update brings in (a new
+    // runtime branch), so that removing the application removes them too.
+    let commit_before = flatpak
+        .run(&flatpak::commit_arguments(&part.reference))
+        .ok()
+        .filter(|outcome| outcome.success())
+        .and_then(|outcome| flatpak::parse_commit(&outcome.stdout))
+        .or_else(|| part.commit.clone());
+    let refs_before: BTreeSet<String> = flatpak_refs(flatpak)?.into_iter().collect();
     emitter.started("update", format!("Updating {}", record.name));
     let outcome = {
         let mut forward = forward_lines(emitter, "update", true);
@@ -733,9 +774,15 @@ pub fn update(context: &Context, id: &str, emitter: &mut Emitter) -> Result<Valu
         .ok()
         .filter(|outcome| outcome.success())
         .and_then(|outcome| flatpak::parse_commit(&outcome.stdout));
-    let changed = commit.is_some() && commit != part.commit;
+    let changed = commit.is_some() && commit != commit_before;
+    let refs_after: BTreeSet<String> = flatpak_refs(flatpak)?.into_iter().collect();
     if let Some(flatpak_part) = record.flatpak.as_mut() {
         flatpak_part.commit = commit.or(part.commit);
+        for added in refs_after.difference(&refs_before) {
+            if !flatpak_part.added_refs.contains(added) {
+                flatpak_part.added_refs.push(added.clone());
+            }
+        }
     }
     records::save(dirs, &record)?;
     Ok(json!({
@@ -1164,6 +1211,16 @@ pub fn set_source(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn terminal_control_sequences_are_not_activity() {
+        assert_eq!(without_control_sequences("\u{1b}[?25h"), "");
+        assert_eq!(
+            without_control_sequences("\u{1b}[1mInstalling\u{1b}[0m app/x/y/z\r"),
+            "Installing app/x/y/z"
+        );
+        assert_eq!(without_control_sequences("plain"), "plain");
+    }
 
     #[test]
     fn the_data_choice_is_written_in_words() {
