@@ -140,8 +140,14 @@ shares Windows' ESP, puts Windows' `EFI/Boot/bootx64.efi` back, writes
 "Windows" into TUR's boot menu, checks that every partition entry and every
 ESP file Windows had is unchanged, and sets the default system. The image
 carries `/usr/bin/tur-dualboot` (status, `default tur|windows`,
-`restart-windows`; polkit action `org.tur.dualboot`, an administrator's
-password), which the installer uses and the person uses later. Both installers do it, from
+`restart-windows`), which the installer uses and the person uses later.
+Changing the default needs an administrator's password (polkit action
+`org.tur.dualboot`, `auth_admin_keep`). "Restart into Windows" does not: it
+is no more than restarting, which the person at the computer may already do,
+so its own action, `org.tur.dualboot.restart-windows`, naming a helper that
+does nothing else (`/usr/libexec/tur/tur-restart-windows`), is `yes` for an
+active local session and `auth_admin` otherwise (the lead's decision, 14
+November 2026). Both installers do it, from
 `engine.sh` (`beside_look`, `run_beside`). Nothing else changes: erasing a
 whole disk still runs `to-disk` as before.
 
@@ -166,7 +172,7 @@ crate):
   possible (TUR is UEFI-only, §4.1).
 - The computer starts the system the person chose. From TUR, "Restart into
   Windows" (`pkexec tur-dualboot restart-windows`) starts Windows through
-  the firmware, without the BitLocker prompt; "Windows" in TUR's menu starts
+  the firmware, without the BitLocker prompt and without a password; "Windows" in TUR's menu starts
   it through GRUB, and **with BitLocker Windows may then ask for its
   recovery key** (upstream bug above): the entry's title says so. A page in
   TUR's Settings for both is a follow-up (TUR Settings is another

@@ -110,7 +110,7 @@ jobs:
             installer/iso/rootfs/usr/libexec/tur-installer/tur-live-transcript \
             installer/iso/rootfs/usr/libexec/tur-installer/tur-installer-wizard \
             installer/iso/rootfs/usr/lib/tur-installer/engine.sh \
-            image/rootfs/usr/bin/tur-dualboot
+            image/rootfs/usr/bin/tur-dualboot image/rootfs/usr/libexec/tur/tur-restart-windows
           python3 -m py_compile installer/iso/*.py tests/iso/*.py
 
   product:

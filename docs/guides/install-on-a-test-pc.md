@@ -442,7 +442,7 @@ not with Secure Boot on. You are the first to try it with Windows.
    In the text installer, choose the disk's number, then **1**.
 6. **Starting either system.** The computer starts the system you chose.
    - From TUR, to start Windows once: open a terminal and run
-     `pkexec tur-dualboot restart-windows` (your password is asked). The
+     `tur-dualboot restart-windows` (no password is asked). The
      computer restarts straight into Windows, as it does at power-on, so
      BitLocker does not ask for its key; the next start is your default
      again.

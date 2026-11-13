@@ -3,10 +3,15 @@
 <!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
  "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
 <!--
-  TUR and Windows on one computer (ADR-0029): `pkexec tur-dualboot ...`
-  changes which system starts by default, or restarts into Windows once
-  through the firmware's BootNext. It writes firmware boot variables only.
-  An administrator's password, kept for a few minutes.
+  TUR and Windows on one computer (ADR-0029). Both write firmware boot
+  variables only.
+  - org.tur.dualboot: `pkexec tur-dualboot default tur|windows` changes which
+    system starts by default: an administrator's password, kept for a few
+    minutes.
+  - org.tur.dualboot.restart-windows: "Restart into Windows" (BootNext, then
+    a restart), through a helper that does nothing else. Like restarting, it
+    is allowed to the person at the computer without a password; elsewhere
+    an administrator's password.
 -->
 <policyconfig>
   <vendor>TUR</vendor>
@@ -19,5 +24,15 @@
       <allow_active>auth_admin_keep</allow_active>
     </defaults>
     <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/tur-dualboot</annotate>
+  </action>
+  <action id="org.tur.dualboot.restart-windows">
+    <description>Restart into Windows</description>
+    <message>Authentication is required to restart this computer into Windows.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/tur/tur-restart-windows</annotate>
   </action>
 </policyconfig>

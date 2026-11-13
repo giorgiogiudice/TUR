@@ -23,8 +23,11 @@
 # TPM, so a BitLocker Windows asks for its recovery key (ADR-0029, sources
 # S8, S9). Started by the firmware, Windows is measured as usual.
 #
-# Writing firmware variables needs root: run it with pkexec (polkit action
-# org.tur.dualboot, an administrator's password). The installer medium runs
+# Writing firmware variables needs root. `restart-windows` run by the person
+# at the computer goes through pkexec and /usr/libexec/tur/tur-restart-windows
+# (polkit action org.tur.dualboot.restart-windows: no password, as for
+# restarting). `default` needs `pkexec tur-dualboot` (org.tur.dualboot, an
+# administrator's password). The installer medium runs
 # it as root when it installs TUR beside Windows. Nothing here touches a
 # disk. Exit status: 0 done, 1 refused (with the reason), 2 usage.
 set -u
@@ -113,7 +116,11 @@ cmd_restart_windows() {
     local windows reboot=yes
     if [ "${1:-}" = --no-reboot ]; then reboot=no; fi
     need_uefi
-    need_root
+    # Not root: through the helper polkit allows to the person at the
+    # computer without a password (org.tur.dualboot.restart-windows).
+    if [ "$(id -u)" -ne 0 ]; then
+        exec pkexec /usr/libexec/tur/tur-restart-windows "$@"
+    fi
     windows="$(entry_of "${WINDOWS_LABEL}")"
     [ -n "${windows}" ] || refuse "the firmware has no boot entry named \"${WINDOWS_LABEL}\""
     efibootmgr --bootnext "${windows}" > /dev/null || refuse "efibootmgr could not set BootNext"

@@ -625,7 +625,7 @@ screen_finished() {
     say "  3. Switch the computer on. The first start shows a setup screen that"
     say "     creates your user account."
     if [ "${mode}" = beside ]; then
-        say "  To start Windows from TUR: \"pkexec tur-dualboot restart-windows\""
+        say "  To start Windows from TUR: \"tur-dualboot restart-windows\""
         say "  (no BitLocker prompt), or \"Windows\" in TUR's start menu (key w)."
         say "  Change which system starts by default: \"pkexec tur-dualboot default\"."
     fi
