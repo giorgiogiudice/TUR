@@ -499,10 +499,9 @@ in run 43382377329.
   with the fetched copy at every build.
 - The sample `kmdf_fx2`: MS-PL, fetched in CI, never committed.
 - Wine patches: LGPL-2.1-or-later, with Wine's COPYING.LIB.
-- **Open decision for the owner:** the stand-ins and patches in
-  `third-party/wdf` were written for TUR and are offered on this branch
-  under MIT (so the runtime is MIT throughout and could go upstream).
-  Releasing TUR-written code under MIT needs the owner's sign-off.
+- **Decided by the owner (2026-11-13): MIT.** The stand-ins and patches in
+  `third-party/wdf` were written for TUR and are released under MIT, so the
+  runtime is MIT throughout and could go upstream.
 - No Microsoft binary was downloaded or used; nothing ran in a kernel.
 
 ## 8. Effort
