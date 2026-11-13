@@ -9,6 +9,8 @@
 #
 #   ntoskrnl.exe   Wine's user-space kernel, with the patches
 #   wdfldr.sys     the KMDF loader the patch set adds
+#   wineusb.sys    Wine's USB bus driver, with the patches (the PE half only
+#                  goes in the overlay; its Unix half is unchanged)
 #
 #   tests/windows-drivers/kmdf/build-wine.sh OUTPUT_DIR
 #
@@ -77,16 +79,16 @@ cd "${build}"
 "${src}/configure" --enable-archs=x86_64 --without-x --without-freetype --without-wayland \
     --without-vulkan --without-opengl --without-gstreamer --without-pulse --without-alsa \
     --without-cups --without-sane --without-gphoto --without-v4l2 --without-krb5 --without-netapi \
-    --without-pcap --without-sdl --without-usb --without-udev --without-dbus --without-capi \
+    --without-pcap --without-sdl --without-udev --without-dbus --without-capi \
     --without-ffmpeg --without-gssapi --without-inotify --without-fontconfig --without-gnutls \
     --without-xinerama --without-xrandr --without-xshape --without-xxf86vm --without-xinput2 \
     --without-xcomposite --without-xcursor --without-xfixes --without-xinput --without-xrender \
     --without-xshm --without-osmesa --without-opencl --disable-tests \
     >"${out}/wine-configure.log" 2>&1 || { tail -n 40 "${out}/wine-configure.log"; exit 1; }
 echo "configure: ok"
-make -j"$(nproc)" dlls/ntoskrnl.exe/all dlls/wdfldr.sys/all >"${out}/wine-build.log" 2>&1 ||
+make -j"$(nproc)" dlls/ntoskrnl.exe/all dlls/wdfldr.sys/all dlls/wineusb.sys/all >"${out}/wine-build.log" 2>&1 ||
     { grep -E 'error|Error' "${out}/wine-build.log" | head -n 60; exit 1; }
-for m in ntoskrnl.exe wdfldr.sys; do
+for m in ntoskrnl.exe wdfldr.sys wineusb.sys; do
     f="$(find "${build}/dlls/${m}" -name "${m}" -path '*x86_64-windows*' | head -n 1)"
     [ -n "${f}" ] || { echo "not built: ${m}" >&2; exit 1; }
     cp "${f}" "${overlay}/${m}"

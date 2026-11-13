@@ -31,7 +31,7 @@ log() { echo "$*" | tee -a "${summary}"; }
 
 dnf -y --setopt=install_weak_deps=False install \
     clang lld llvm mingw64-gcc mingw64-binutils mingw64-headers mingw64-crt \
-    gcc make flex bison autoconf perl git-core python3 findutils diffutils \
+    gcc make flex bison autoconf perl git-core python3 findutils diffutils libusb1-devel \
     >"${ev}/dnf.log" 2>&1 || { tail -n 50 "${ev}/dnf.log"; exit 1; }
 {
     echo "clang: $(clang --version | head -n 1)"

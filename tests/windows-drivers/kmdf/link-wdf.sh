@@ -7,6 +7,11 @@
 #
 #   tests/windows-drivers/kmdf/link-wdf.sh WORK_DIR OUTPUT_DIR [WINE_TREE]
 #
+# mingw-w64's ntstrsafe.h defines its functions "extern __inline", which in
+# C gives every object that uses one an identical external copy:
+# --allow-multiple-definition keeps the first. A first link without it lists
+# every duplicate, and those that are not ntstrsafe.h's are reported.
+#
 # Import libraries come from implibs.sh (mingw-w64's export lists plus
 # Wine's .spec files). A symbol neither knows is the framework's own and is
 # reported.
@@ -20,9 +25,14 @@ lib="${work}/implib"
 echo "import libraries: $(bash "${here}/implibs.sh" "${lib}" "${wine_tree}")"
 
 libgcc="$(x86_64-w64-mingw32-gcc -print-libgcc-file-name 2>/dev/null)"
+clang++ --target=x86_64-w64-mingw32 -fuse-ld=lld -nostdlib -nostartfiles -shared -Wl,--error-limit=0 \
+    -Wl,--subsystem,native -Wl,--entry,TurWdfEntry -o "${work}/dup-check.sys" "${work}"/obj/*.o -L"${lib}" \
+    -lntoskrnl -lhal -lusbd -lwdfldr ${libgcc:+"${libgcc}"} >"${work}/dup-check.log" 2>&1
+sed -n 's/.*duplicate symbol: //p' "${work}/dup-check.log" | sort -u >"${work}/duplicates.txt"
+echo "duplicate symbols without --allow-multiple-definition: $(wc -l <"${work}/duplicates.txt"), not from ntstrsafe.h: $(grep -vc '^RtlString' "${work}/duplicates.txt") $(grep -v '^RtlString' "${work}/duplicates.txt" | head -n 20 | tr '\n' ' ')"
 clang++ --target=x86_64-w64-mingw32 -fuse-ld=lld -nostdlib -nostartfiles -shared \
     -Wl,--subsystem,native -Wl,--entry,TurWdfEntry -Wl,--image-base,0x140000000 \
-    -Wl,--file-alignment,0x1000 -Wl,--section-alignment,0x1000 \
+    -Wl,--file-alignment,0x1000 -Wl,--section-alignment,0x1000 -Wl,--allow-multiple-definition \
     -o "${out}/Wdf01000.sys" "${work}"/obj/*.o -L"${lib}" -lntoskrnl -lhal -lusbd -lwdfldr \
     ${libgcc:+"${libgcc}"} >"${work}/link.log" 2>&1
 rc=$?

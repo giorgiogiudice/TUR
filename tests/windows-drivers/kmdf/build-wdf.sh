@@ -177,7 +177,7 @@ note "errors: ${total_errors} in all"
 llvm-nm --version >/dev/null 2>&1 && nm=llvm-nm || nm=x86_64-w64-mingw32-nm
 if ls "${work}"/obj/*.o >/dev/null 2>&1; then
     "${nm}" -g --defined-only "${work}"/obj/*.o 2>/dev/null | awk 'NF==3 {print $3}' | sort -u >"${work}/defined.txt"
-    "${nm}" -u "${work}"/obj/*.o 2>/dev/null | awk '{print $NF}' | sed 's/^__imp_//' | sort -u |
+    "${nm}" -u "${work}"/obj/*.o 2>/dev/null | awk 'NF && $NF !~ /:$/ {print $NF}' | sed 's/^__imp_//' | sort -u |
         comm -23 - "${work}/defined.txt" >"${work}/undefined.txt"
     note "undefined symbols across the compiled objects: $(wc -l <"${work}/undefined.txt")"
     if [ "${#wine_trees[@]}" -gt 0 ]; then

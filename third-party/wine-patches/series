@@ -6,3 +6,5 @@
 0004-ntoskrnl.exe-Add-a-WmiQueryTraceInformation-that-fai.patch
 0005-ntoskrnl.exe-Add-KeQuerySystemTimePrecise.patch
 0006-ntoskrnl.exe-Add-IoOpenDriverRegistryKey.patch
+0007-ntoskrnl.exe-Add-functions-the-KMDF-runtime-imports-.patch
+0008-wineusb.sys-Handle-power-IRPs.patch

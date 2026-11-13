@@ -84,7 +84,7 @@ link_driver() { # name objects...
     shift
     if clang --target=x86_64-w64-mingw32 -fuse-ld=lld -nostdlib -nostartfiles -shared \
         -Wl,--subsystem,native -Wl,--entry,FxDriverEntry -Wl,--image-base,0x140000000 \
-        -Wl,--file-alignment,0x1000 -Wl,--section-alignment,0x1000 \
+        -Wl,--file-alignment,0x1000 -Wl,--section-alignment,0x1000 -Wl,--allow-multiple-definition \
         -o "${work}/out/${name}.sys" "$@" -L"${work}/implib" -lwdfldr -lusbd -lntoskrnl -lhal \
         ${libgcc:+"${libgcc}"} >"${work}/logs/${name}-link.log" 2>&1; then
         note "link ${name}.sys: ok; imports: $(llvm-objdump -p "${work}/out/${name}.sys" | awk '/DLL Name:/{printf "%s ", $3}')"

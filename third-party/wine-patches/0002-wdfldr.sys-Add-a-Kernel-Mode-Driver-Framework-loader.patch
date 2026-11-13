@@ -6,7 +6,7 @@ which ignores these lines.
 From 08212e93bc098442feb3285f18100af9e9230dc6 Mon Sep 17 00:00:00 2001
 From: TUR experiment <tur-experiment@users.noreply.github.com>
 Date: Fri, 13 Nov 2026 09:06:02 +0300
-Subject: [PATCH 2/6] wdfldr.sys: Add a Kernel-Mode Driver Framework loader.
+Subject: [PATCH 2/8] wdfldr.sys: Add a Kernel-Mode Driver Framework loader.
 
 Every KMDF driver imports WdfVersionBind from WDFLDR.SYS and fails to load
 without it (bug 56228). Implement the loader interface: load the framework

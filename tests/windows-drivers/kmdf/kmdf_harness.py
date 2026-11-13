@@ -172,7 +172,7 @@ def s_overlay(h, build: pathlib.Path) -> None:
     sc = h.scenario("kmdf-overlay", "Wine 11.20 + TUR patch set over Fedora's Wine; the KMDF runtime", prefix="none")
     pe = wine_pe_dir()
     info = {"wine-pe-dir": str(pe)}
-    for name in ("ntoskrnl.exe", "wdfldr.sys"):
+    for name in ("ntoskrnl.exe", "wdfldr.sys", "wineusb.sys"):
         src = build / name
         if not src.exists():
             sc.check(f"overlay-{name}", False, "not built")

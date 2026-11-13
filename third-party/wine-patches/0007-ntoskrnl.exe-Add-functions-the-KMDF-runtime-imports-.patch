@@ -1,0 +1,230 @@
+SPDX-License-Identifier: LGPL-2.1-or-later
+A patch to Wine (https://gitlab.winehq.org/wine/wine), under Wine's licence;
+see README.md and COPYING.LIB in this directory. Applied with `git apply`,
+which ignores these lines.
+
+From 7c83234b3449722ddbab3fff526f29816d3ae8d2 Mon Sep 17 00:00:00 2001
+From: TUR experiment <tur-experiment@users.noreply.github.com>
+Date: Fri, 13 Nov 2026 10:41:47 +0300
+Subject: [PATCH 7/8] ntoskrnl.exe: Add functions the KMDF runtime imports, and
+ implement PoRequestPowerIrp.
+
+Six functions the Kernel-Mode Driver Framework imports were not exported,
+so its image did not load: EtwActivityIdControl (no event tracing: fails),
+IoUnregisterPlugPlayNotificationEx, IoWMIDeviceObjectToProviderId,
+KeSetCoalescableTimer (a timer without coalescing), PoGetSystemWake and
+PoSetSystemWake (no system wake).
+
+PoRequestPowerIrp returned STATUS_NOT_IMPLEMENTED. A power-policy owner,
+the framework among them, requests the device's D0 with it when the device
+starts. Build the power IRP, send it to the top of the device's stack and
+call the requester's completion callback.
+---
+ dlls/ntoskrnl.exe/ntoskrnl.c        | 28 ++++++++++
+ dlls/ntoskrnl.exe/ntoskrnl.exe.spec |  6 +++
+ dlls/ntoskrnl.exe/pnp.c             | 82 +++++++++++++++++++++++++++--
+ dlls/ntoskrnl.exe/sync.c            | 11 ++++
+ 4 files changed, 123 insertions(+), 4 deletions(-)
+
+diff --git a/dlls/ntoskrnl.exe/ntoskrnl.c b/dlls/ntoskrnl.exe/ntoskrnl.c
+index 783d370..f83e4b7 100644
+--- a/dlls/ntoskrnl.exe/ntoskrnl.c
++++ b/dlls/ntoskrnl.exe/ntoskrnl.c
+@@ -4147,6 +4147,34 @@ NTSTATUS WINAPI IoUnregisterPlugPlayNotification(PVOID notification)
+     return STATUS_SUCCESS;
+ }
+ 
++/*****************************************************
++ *           IoUnregisterPlugPlayNotificationEx    (NTOSKRNL.EXE.@)
++ */
++NTSTATUS WINAPI IoUnregisterPlugPlayNotificationEx( void *notification )
++{
++    TRACE( "%p\n", notification );
++    return IoUnregisterPlugPlayNotification( notification );
++}
++
++/*****************************************************
++ *           IoWMIDeviceObjectToProviderId    (NTOSKRNL.EXE.@)
++ */
++ULONG WINAPI IoWMIDeviceObjectToProviderId( DEVICE_OBJECT *device )
++{
++    TRACE( "%p\n", device );
++    /* the device object identifies the provider, as on Windows */
++    return (ULONG)(ULONG_PTR)device;
++}
++
++/*****************************************************
++ *           EtwActivityIdControl    (NTOSKRNL.EXE.@)
++ */
++NTSTATUS WINAPI EtwActivityIdControl( ULONG code, GUID *guid )
++{
++    FIXME( "code %lu, guid %p: no event tracing\n", code, guid );
++    return STATUS_NOT_SUPPORTED;
++}
++
+ /*****************************************************
+  *           IoCsqInitialize  (NTOSKRNL.EXE.@)
+  */
+diff --git a/dlls/ntoskrnl.exe/ntoskrnl.exe.spec b/dlls/ntoskrnl.exe/ntoskrnl.exe.spec
+index 230df87..bb64085 100644
+--- a/dlls/ntoskrnl.exe/ntoskrnl.exe.spec
++++ b/dlls/ntoskrnl.exe/ntoskrnl.exe.spec
+@@ -1,3 +1,4 @@
++@ stdcall EtwActivityIdControl(long ptr)
+ @ stdcall EtwRegisterClassicProvider(ptr long ptr ptr ptr)
+ @ stdcall EtwUnregister(int64)
+ @ stdcall -arch=!i386 ExAcquireFastMutex(ptr)
+@@ -502,6 +503,7 @@
+ @ stdcall IoUnregisterFileSystem(ptr)
+ @ stub IoUnregisterFsRegistrationChange
+ @ stdcall IoUnregisterPlugPlayNotification(ptr)
++@ stdcall IoUnregisterPlugPlayNotificationEx(ptr)
+ @ stdcall IoUnregisterShutdownNotification(ptr)
+ @ stub IoUpdateShareAccess
+ @ stub IoValidateDeviceIoControlAccess
+@@ -517,6 +519,7 @@
+ @ stub IoWMIQueryAllDataMultiple
+ @ stub IoWMIQuerySingleInstance
+ @ stub IoWMIQuerySingleInstanceMultiple
++@ stdcall IoWMIDeviceObjectToProviderId(ptr)
+ @ stdcall IoWMIRegistrationControl(ptr long)
+ @ stub IoWMISetNotificationCallback
+ @ stub IoWMISetSingleInstance
+@@ -671,6 +674,7 @@
+ @ stdcall KeSetTargetProcessorDpc(ptr long)
+ @ stdcall KeSetTargetProcessorDpcEx(ptr ptr)
+ @ stub KeSetTimeIncrement
++@ stdcall KeSetCoalescableTimer(ptr int64 long long ptr)
+ @ stdcall KeSetTimer(ptr int64 ptr)
+ @ stdcall KeSetTimerEx(ptr int64 long ptr)
+ @ stdcall KeStackAttachProcess(ptr ptr)
+@@ -891,10 +895,12 @@
+ @ stub PoRegisterDeviceForIdleDetection
+ @ stub PoRegisterDeviceNotify
+ @ stub PoRegisterSystemState
++@ stdcall PoGetSystemWake(ptr)
+ @ stdcall PoRequestPowerIrp(ptr long long ptr ptr ptr)
+ @ stub PoRequestShutdownEvent
+ @ stub PoSetHiberRange
+ @ stdcall PoSetPowerState(ptr long long)
++@ stdcall PoSetSystemWake(ptr)
+ @ stub PoSetSystemState
+ @ stub PoShutdownBugCheck
+ @ stdcall PoStartNextPowerIrp(ptr)
+diff --git a/dlls/ntoskrnl.exe/pnp.c b/dlls/ntoskrnl.exe/pnp.c
+index ff0004a..77aa2d2 100644
+--- a/dlls/ntoskrnl.exe/pnp.c
++++ b/dlls/ntoskrnl.exe/pnp.c
+@@ -1633,12 +1633,86 @@ NTSTATUS WINAPI IoOpenDeviceRegistryKey( DEVICE_OBJECT *device, ULONG type, ACCE
+ /***********************************************************************
+  *           PoRequestPowerIrp   (NTOSKRNL.EXE.@)
+  */
++struct power_request
++{
++    DEVICE_OBJECT *device;
++    UCHAR minor;
++    POWER_STATE state;
++    PREQUEST_POWER_COMPLETE complete_cb;
++    void *ctx;
++};
++
++static NTSTATUS WINAPI power_request_complete( DEVICE_OBJECT *device, IRP *irp, void *context )
++{
++    struct power_request *request = context;
++
++    TRACE( "device %p, irp %p, status %#lx\n", request->device, irp, irp->IoStatus.Status );
++
++    if (request->complete_cb)
++        request->complete_cb( request->device, request->minor, request->state, request->ctx, &irp->IoStatus );
++    HeapFree( GetProcessHeap(), 0, request );
++    IoFreeIrp( irp );
++    return STATUS_MORE_PROCESSING_REQUIRED;
++}
++
+ NTSTATUS WINAPI PoRequestPowerIrp( DEVICE_OBJECT *device, UCHAR minor,
+-        POWER_STATE state, PREQUEST_POWER_COMPLETE complete_cb, void *ctx, IRP **irp )
++        POWER_STATE state, PREQUEST_POWER_COMPLETE complete_cb, void *ctx, IRP **irp_ret )
++{
++    struct power_request *request;
++    IO_STACK_LOCATION *stack;
++    DEVICE_OBJECT *top;
++    IRP *irp;
++
++    TRACE( "device %p, minor %#x, state %u, complete_cb %p, ctx %p, irp %p\n",
++           device, minor, state.DeviceState, complete_cb, ctx, irp_ret );
++
++    if (minor != IRP_MN_SET_POWER && minor != IRP_MN_QUERY_POWER)
++    {
++        FIXME( "minor %#x not supported\n", minor );
++        return STATUS_NOT_SUPPORTED;
++    }
++    if (!(request = HeapAlloc( GetProcessHeap(), 0, sizeof(*request) ))) return STATUS_INSUFFICIENT_RESOURCES;
++    top = IoGetAttachedDeviceReference( device );
++    if (!(irp = IoAllocateIrp( top->StackSize, FALSE )))
++    {
++        ObDereferenceObject( top );
++        HeapFree( GetProcessHeap(), 0, request );
++        return STATUS_INSUFFICIENT_RESOURCES;
++    }
++    request->device = device;
++    request->minor = minor;
++    request->state = state;
++    request->complete_cb = complete_cb;
++    request->ctx = ctx;
++
++    irp->IoStatus.Status = STATUS_NOT_SUPPORTED;
++    stack = IoGetNextIrpStackLocation( irp );
++    stack->MajorFunction = IRP_MJ_POWER;
++    stack->MinorFunction = minor;
++    stack->Parameters.Power.Type = DevicePowerState;
++    stack->Parameters.Power.State = state;
++    IoSetCompletionRoutine( irp, power_request_complete, request, TRUE, TRUE, TRUE );
++    if (irp_ret) *irp_ret = irp;
++    PoCallDriver( top, irp );
++    ObDereferenceObject( top );
++    return STATUS_PENDING;
++}
++
++/***********************************************************************
++ *           PoGetSystemWake   (NTOSKRNL.EXE.@)
++ */
++BOOLEAN WINAPI PoGetSystemWake( IRP *irp )
++{
++    FIXME( "irp %p: no system wake\n", irp );
++    return FALSE;
++}
++
++/***********************************************************************
++ *           PoSetSystemWake   (NTOSKRNL.EXE.@)
++ */
++void WINAPI PoSetSystemWake( IRP *irp )
+ {
+-    FIXME("device %p, minor %#x, state %u, complete_cb %p, ctx %p, irp %p, stub!\n",
+-            device, minor, state.DeviceState, complete_cb, ctx, irp);
+-    return STATUS_NOT_IMPLEMENTED;
++    FIXME( "irp %p: no system wake\n", irp );
+ }
+ 
+ /***********************************************************************
+diff --git a/dlls/ntoskrnl.exe/sync.c b/dlls/ntoskrnl.exe/sync.c
+index 6cc29c5..bec368e 100644
+--- a/dlls/ntoskrnl.exe/sync.c
++++ b/dlls/ntoskrnl.exe/sync.c
+@@ -552,6 +552,17 @@ BOOLEAN WINAPI KeSetTimerEx( KTIMER *timer, LARGE_INTEGER duetime, LONG period,
+     return ret;
+ }
+ 
++/***********************************************************************
++ *           KeSetCoalescableTimer (NTOSKRNL.EXE.@)
++ */
++BOOLEAN WINAPI KeSetCoalescableTimer( KTIMER *timer, LARGE_INTEGER duetime, ULONG period,
++                                      ULONG tolerable_delay, KDPC *dpc )
++{
++    TRACE( "timer %p, duetime %s, period %lu, tolerable_delay %lu, dpc %p.\n",
++           timer, wine_dbgstr_longlong( duetime.QuadPart ), period, tolerable_delay, dpc );
++    return KeSetTimerEx( timer, duetime, period, dpc );
++}
++
+ BOOLEAN WINAPI KeCancelTimer( KTIMER *timer )
+ {
+     BOOL ret;
