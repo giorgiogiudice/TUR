@@ -15,7 +15,10 @@ import Tur.Kit as Kit
 // path; what is on it now; what will be on it; what will be destroyed; a
 // separate warning when it holds Windows or BitLocker. Then the phrase the
 // engine derived from the disk's identity, "ERASE" and the end of its serial
-// number. The button is enabled only when the typed text matches exactly;
+// number. Installing beside Windows (ADR-0028) is confirmed on the same
+// screen, which then says that everything on the disk is kept, where TUR goes
+// and what is added to Windows' EFI system partition, with its own phrase,
+// "BESIDE" and the same end. The button is enabled only when the typed text matches exactly;
 // pasting is refused; Enter does nothing; nothing has the keyboard but the
 // field when the screen opens: there is no default button. The engine
 // compares the phrase again itself before it writes.
@@ -23,10 +26,15 @@ WizardScreen {
     id: screen
 
     required property var disk
+    // "erase" the whole disk, or "beside" Windows.
+    property string mode: "erase"
 
-    readonly property string phrase: String(screen.disk.phrase || "")
+    readonly property bool beside: screen.mode === "beside" && Words.besidePossible(screen.disk)
+    readonly property var room: screen.beside ? screen.disk.beside : ({})
+    readonly property string phrase: screen.beside ? String(screen.room.phrase || "") : String(screen.disk.phrase || "")
     readonly property bool matches: screen.phrase.length > 0 && field.text === screen.phrase
-    readonly property bool windows: screen.disk.windows === true || screen.disk.bitlocker === true
+    readonly property bool windows: screen.beside ? screen.disk.bitlocker === true
+                                                  : screen.disk.windows === true || screen.disk.bitlocker === true
     readonly property real diskSize: Number(screen.disk.size || 0)
 
     signal backRequested()
@@ -43,7 +51,8 @@ WizardScreen {
     Component.onCompleted: {
         Transcript.write("confirm-shown name=" + screen.disk.name + " by_id=" + screen.disk.by_id + " phrase=\""
                          + screen.phrase + "\" windows_warning=" + (screen.windows ? "yes" : "no")
-                         + " holds_data=" + (Words.holdsData(screen.disk) ? "yes" : "no"))
+                         + " holds_data=" + (Words.holdsData(screen.disk) ? "yes" : "no")
+                         + " mode=" + (screen.beside ? "beside" : "erase"))
     }
 
     Rectangle {
@@ -65,7 +74,7 @@ WizardScreen {
 
             Kit.Label {
                 Layout.fillWidth: true
-                text: qsTr("Erase this disk and install TUR")
+                text: screen.beside ? qsTr("Install TUR beside Windows") : qsTr("Erase this disk and install TUR")
                 kind: Kit.Label.Title
                 tone: Kit.Label.Negative
                 wrapMode: Text.Wrap
@@ -121,7 +130,7 @@ WizardScreen {
 
                 Kit.Label {
                     Layout.fillWidth: true
-                    text: qsTr("On it now")
+                    text: screen.beside ? qsTr("On it now, all of it kept") : qsTr("On it now")
                     kind: Kit.Label.Caps
                     tone: Kit.Label.Secondary
                 }
@@ -167,29 +176,71 @@ WizardScreen {
                     Layout.fillWidth: true
                     diskSize: Math.max(1, screen.diskSize)
                     after: true
+                    partitions: screen.beside ? (screen.disk.partitions || []) : []
+                    besideRegion: screen.beside ? screen.room : null
                 }
 
                 Kit.Label {
                     Layout.fillWidth: true
+                    visible: !screen.beside
                     text: qsTr("1 · BIOS boot · 1.0 MiB")
                     wrapMode: Text.Wrap
                 }
 
                 Kit.Label {
                     Layout.fillWidth: true
+                    visible: !screen.beside
                     text: qsTr("2 · EFI system · 512.0 MiB · FAT")
                     wrapMode: Text.Wrap
                 }
 
                 Kit.Label {
                     Layout.fillWidth: true
+                    visible: !screen.beside
                     text: qsTr("3 · TUR · %1 · ext4").arg(Words.size(Math.max(0, screen.diskSize - 513 * 1048576)))
                     wrapMode: Text.Wrap
                 }
 
                 Kit.Label {
                     Layout.fillWidth: true
+                    visible: !screen.beside
                     text: qsTr("A new partition table, written by bootc, the installer TUR's image carries. Not encrypted: encryption is not available in this version.")
+                    kind: Kit.Label.Small
+                    tone: Kit.Label.Secondary
+                    wrapMode: Text.Wrap
+                }
+
+                Kit.Label {
+                    objectName: "besideNewPartition"
+                    Layout.fillWidth: true
+                    visible: screen.beside
+                    text: String(screen.room.after || "").length > 0
+                          ? qsTr("New · TUR · %1 · ext4, in the free space between %2 and %3")
+                            .arg(Words.size(screen.room.free_size || 0)).arg(String(screen.room.before || "")).arg(String(screen.room.after || ""))
+                          : qsTr("New · TUR · %1 · ext4, in the free space after %2")
+                            .arg(Words.size(screen.room.free_size || 0)).arg(String(screen.room.before || ""))
+                    wrapMode: Text.Wrap
+                }
+
+                Kit.Label {
+                    Layout.fillWidth: true
+                    visible: screen.beside
+                    text: qsTr("%1 · EFI system, shared with Windows: TUR's start-up files are added (%2 of its %3 free). Windows' files there are kept.")
+                        .arg(String(screen.room.esp || "")).arg(Words.size(screen.room.esp_needed || 0)).arg(Words.size(screen.room.esp_free || 0))
+                    wrapMode: Text.Wrap
+                }
+
+                Kit.Label {
+                    Layout.fillWidth: true
+                    visible: screen.beside
+                    text: qsTr("The computer starts TUR's menu first, which offers TUR and Windows. Windows stays in the computer's own boot menu.")
+                    wrapMode: Text.Wrap
+                }
+
+                Kit.Label {
+                    Layout.fillWidth: true
+                    visible: screen.beside
+                    text: qsTr("The new partition is made by the installer and filled by bootc, the installer TUR's image carries. Not encrypted: encryption is not available in this version.")
                     kind: Kit.Label.Small
                     tone: Kit.Label.Secondary
                     wrapMode: Text.Wrap
@@ -209,7 +260,24 @@ WizardScreen {
                 }
 
                 Kit.Label {
+                    objectName: "besideNothingDestroyed"
                     Layout.fillWidth: true
+                    visible: screen.beside
+                    text: qsTr("Nothing that is on the disk now. No partition is deleted, moved or shrunk, and Windows' partitions are not written to.")
+                    wrapMode: Text.Wrap
+                }
+
+                Kit.Label {
+                    Layout.fillWidth: true
+                    visible: screen.beside
+                    text: qsTr("Still, back up what matters to you first: a power cut or a faulty disk while installing can go wrong.")
+                    kind: Kit.Label.Strong
+                    wrapMode: Text.Wrap
+                }
+
+                Kit.Label {
+                    Layout.fillWidth: true
+                    visible: !screen.beside
                     text: !Words.holdsData(screen.disk) ? qsTr("Everything on this disk. No data on this disk is kept.")
                           : screen.disk.partition_count === 1
                             ? qsTr("Everything on this disk: its one partition and every file on it. No data on this disk is kept.")
@@ -230,10 +298,14 @@ WizardScreen {
                 Layout.fillWidth: true
                 visible: screen.windows
                 severity: Kit.Message.Warning
-                title: screen.disk.windows ? qsTr("This disk holds Windows. Erasing it removes Windows and everything on it.")
-                                           : qsTr("This disk holds data encrypted with BitLocker. Erasing it destroys that data.")
-                reason: screen.disk.bitlocker ? qsTr("It also holds a volume encrypted with BitLocker, which is lost with it.") : ""
-                whatToDo: qsTr("To keep Windows, go back and choose another disk.")
+                title: screen.beside ? qsTr("Windows on this disk uses BitLocker.")
+                       : screen.disk.windows ? qsTr("This disk holds Windows. Erasing it removes Windows and everything on it.")
+                       : qsTr("This disk holds data encrypted with BitLocker. Erasing it destroys that data.")
+                reason: screen.beside ? qsTr("Starting Windows from TUR's menu changes what BitLocker checks when the computer starts, so Windows may ask for its BitLocker recovery key.")
+                        : screen.disk.bitlocker ? qsTr("It also holds a volume encrypted with BitLocker, which is lost with it.") : ""
+                whatToDo: screen.beside ? qsTr("Have the recovery key ready before you go on. Or start Windows from the computer's own boot menu.")
+                          : Words.besidePossible(screen.disk) ? qsTr("To keep Windows, go back and choose “Use the free space beside Windows”.")
+                          : qsTr("To keep Windows, go back and choose another disk.")
                 supportBundleAvailable: false
             }
 
@@ -306,14 +378,14 @@ WizardScreen {
 
                     objectName: "eraseButton"
                     Layout.minimumWidth: implicitWidth
-                    text: qsTr("Erase disk and install")
+                    text: screen.beside ? qsTr("Install beside Windows") : qsTr("Erase disk and install")
                     kind: Kit.Button.Destructive
                     enabled: screen.matches
                     onEnabledChanged: Transcript.write("erase-button enabled=" + (eraseButton.enabled ? "yes" : "no"))
                     onClicked: {
                         if (!screen.matches)
                             return
-                        Transcript.write("erase-confirmed name=" + screen.disk.name)
+                        Transcript.write("erase-confirmed name=" + screen.disk.name + " mode=" + (screen.beside ? "beside" : "erase"))
                         screen.eraseRequested(field.text)
                     }
                 }

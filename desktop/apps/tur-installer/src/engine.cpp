@@ -407,12 +407,17 @@ void Engine::onDisksEvent(const QJsonObject &event)
         for (const QVariant &item : std::as_const(m_disks)) {
             const QVariantMap disk = item.toMap();
             TranscriptFile::write(
-                QStringLiteral("disk-listed name=%1 serial=\"%2\" status=%3 windows=%4 bitlocker=%5 partitions=%6")
+                QStringLiteral("disk-listed name=%1 serial=\"%2\" status=%3 windows=%4 bitlocker=%5 partitions=%6 beside=%7")
                     .arg(disk.value(QStringLiteral("name")).toString(), disk.value(QStringLiteral("serial")).toString(),
                          disk.value(QStringLiteral("status")).toString(),
                          disk.value(QStringLiteral("windows")).toBool() ? QStringLiteral("yes") : QStringLiteral("no"),
                          disk.value(QStringLiteral("bitlocker")).toBool() ? QStringLiteral("yes") : QStringLiteral("no"))
-                    .arg(disk.value(QStringLiteral("partition_count")).toInt()));
+                    .arg(disk.value(QStringLiteral("partition_count")).toInt())
+                    .arg(!disk.value(QStringLiteral("beside")).isValid() || disk.value(QStringLiteral("beside")).isNull()
+                             ? QStringLiteral("none")
+                             : disk.value(QStringLiteral("beside")).toMap().value(QStringLiteral("possible")).toBool()
+                                 ? QStringLiteral("possible")
+                                 : disk.value(QStringLiteral("beside")).toMap().value(QStringLiteral("code")).toString()));
         }
         TranscriptFile::write(QStringLiteral("disks total=%1 selectable=%2").arg(m_disks.size()).arg(m_selectable));
         Q_EMIT disksChanged();
@@ -427,7 +432,7 @@ bool Engine::cancellable() const
            && (m_stage.isEmpty() || m_stage == QStringLiteral("revalidate"));
 }
 
-void Engine::install(const QVariantMap &disk, const QString &phrase)
+void Engine::install(const QVariantMap &disk, const QString &phrase, const QString &mode)
 {
     if (m_installRun && m_installRun->running())
         return;
@@ -442,7 +447,15 @@ void Engine::install(const QVariantMap &disk, const QString &phrase)
     m_outputLines.clear();
     Q_EMIT outputChanged();
     Q_EMIT installChanged();
-    const QStringList arguments {
+    const bool beside = mode == QStringLiteral("beside");
+    QStringList arguments;
+    if (beside) {
+        const QVariantMap room = disk.value(QStringLiteral("beside")).toMap();
+        arguments << QStringLiteral("--mode") << QStringLiteral("beside")
+                  << QStringLiteral("--region-start") << QString::number(room.value(QStringLiteral("free_start")).toLongLong())
+                  << QStringLiteral("--region-size") << QString::number(room.value(QStringLiteral("free_size")).toLongLong());
+    }
+    arguments << QStringList {
         QStringLiteral("--by-id"), disk.value(QStringLiteral("by_id")).toString(),
         QStringLiteral("--serial"), disk.value(QStringLiteral("serial")).toString(),
         QStringLiteral("--wwn"), disk.value(QStringLiteral("wwn")).toString(),
@@ -450,8 +463,12 @@ void Engine::install(const QVariantMap &disk, const QString &phrase)
         QStringLiteral("--fingerprint"), disk.value(QStringLiteral("fingerprint")).toString(),
         QStringLiteral("--phrase"), phrase,
     };
-    TranscriptFile::write(QStringLiteral("install-requested by_id=%1").arg(disk.value(QStringLiteral("by_id")).toString()));
-    m_installRun = start(QStringLiteral("install"), arguments, m_installFixture);
+    TranscriptFile::write(QStringLiteral("install-requested by_id=%1 mode=%2")
+                              .arg(disk.value(QStringLiteral("by_id")).toString(), beside ? QStringLiteral("beside")
+                                                                                           : QStringLiteral("erase")));
+    const QString fixtureFile = beside && m_installFixture == QStringLiteral("install") ? QStringLiteral("install-beside")
+                                                                                        : m_installFixture;
+    m_installRun = start(QStringLiteral("install"), arguments, fixtureFile);
     connect(m_installRun, &EngineRun::event, this, &Engine::onInstallEvent);
     connect(m_installRun, &EngineRun::ended, this, [this](int exitCode, const QString &problem) {
         EngineRun *run = m_installRun;
@@ -582,6 +599,8 @@ QString Engine::stageTitle(const QString &stage) const
         return tr("Checking the installation");
     if (stage == QStringLiteral("record"))
         return tr("Keeping the installation record");
+    if (stage == QStringLiteral("boot-menu"))
+        return tr("Adding Windows to TUR's start menu");
     return stage;
 }
 

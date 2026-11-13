@@ -795,6 +795,30 @@ jobs:
           rm -f "$WORK/shared.raw"
           exit "$status"
 
+      # The graphical installer in the live session, driven with the keyboard.
+      # This disk's Windows partition carries BitLocker's signature, as an
+      # encrypted C: shows, so the confirmation shows the BitLocker note.
+      - name: "Beside Windows, graphical installer: install, compare, first start, compare"
+        if: ${{ !cancelled() && env.MEDIUM != '' }}
+        run: |
+          d="$OUT/live"
+          mkdir -p "$d"
+          tests/iso/make-windows-shared-disk.sh "$WORK/live-shared.raw" "$WORK/standin.efi" --bitlocker-c \
+            > "$d/windows-disk.txt"
+          python3 tests/iso/windows-disk.py record "$WORK/live-shared.raw" "$d/before.json"
+          status=0
+          python3 tests/iso/live.py beside --medium "$MEDIUM" --medium-as usb \
+            --disk "$WORK/live-shared.raw" --work "$WORK/vm" --out "$d" || status=$?
+          python3 tests/iso/windows-disk.py compare "$d/before.json" "$WORK/live-shared.raw" "$d/compare-install.json" || status=$?
+          if [ "$status" -eq 0 ]; then
+            python3 tests/iso/boot-installed.py --no-bootindex --variables-from "$d/host/OVMF_VARS.after.fd" \
+              --disk "$WORK/live-shared.raw" --work "$WORK/vm" --out "$d/first-start" || status=$?
+            sudo python3 tests/boot/inspect-disk.py postmortem "$WORK/live-shared.raw" "$d/first-start"
+            python3 tests/iso/windows-disk.py compare "$d/before.json" "$WORK/live-shared.raw" "$d/compare-first-start.json" || status=$?
+          fi
+          rm -f "$WORK/live-shared.raw"
+          exit "$status"
+
       - name: Report
         if: always()
         run: python3 tests/iso/beside-report.py --job beside --out "$OUT"

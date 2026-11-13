@@ -16,11 +16,14 @@ Item {
     property var partitions: []
     // Draw the layout TUR will write instead: BIOS boot, EFI system, root.
     property bool after: false
+    // With `after`: TUR goes into this free space (the engine's "beside":
+    // free_start and free_size in bytes) and the partitions stay (ADR-0028).
+    property var besideRegion: null
 
     readonly property var blocks: {
         const out = []
         const total = Math.max(1, bar.diskSize)
-        if (bar.after) {
+        if (bar.after && bar.besideRegion === null) {
             const esp = 512 * 1048576
             const bios = 1048576
             out.push({ share: bios / total, kind: "bios-boot" })
@@ -30,7 +33,10 @@ Item {
         }
         // Sorted by where they start; space before, between and after them
         // that no partition uses is shown as free.
-        const parts = (bar.partitions || []).slice().sort((a, b) => (a.start || 0) - (b.start || 0))
+        const listed = (bar.partitions || []).slice()
+        if (bar.after && bar.besideRegion !== null)
+            listed.push({ start: (bar.besideRegion.free_start || 0) / 512, size: bar.besideRegion.free_size || 0, kind: "tur" })
+        const parts = listed.sort((a, b) => (a.start || 0) - (b.start || 0))
         let cursor = 0
         for (const part of parts) {
             const start = (part.start || 0) * 512

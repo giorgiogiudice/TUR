@@ -6,16 +6,19 @@ import QtQuick.Layouts
 import Tur.Kit as Kit
 
 // Screen 3: where to install. Every disk, with what is on it; the medium the
-// installer runs from is shown and cannot be chosen. Then how: in this
-// version only "Erase this disk and install TUR". Using the free space
-// beside Windows (issue 64, step 1) is shown as not yet available, with the
-// way to keep Windows today: another disk.
+// installer runs from is shown and cannot be chosen. Then how: "Erase this
+// disk and install TUR", or, on a disk that holds Windows with free space
+// beside it, "Use the free space beside Windows" (issue 64, step 1;
+// ADR-0028). When that cannot be done on the chosen disk, the screen says why
+// and what to do.
 WizardScreen {
     id: screen
 
     required property Engine engine
     // The kernel name of the disk chosen so far, to show it chosen again.
     property string chosenName
+    // How: "erase" or "beside".
+    property string mode: "erase"
 
     readonly property var chosenDisk: {
         for (const disk of screen.engine.disks) {
@@ -26,6 +29,7 @@ WizardScreen {
     }
 
     signal diskChosen(var disk)
+    signal modeChosen(string mode)
     signal backRequested()
     signal continueRequested()
 
@@ -74,7 +78,7 @@ WizardScreen {
 
     Kit.Label {
         Layout.fillWidth: true
-        text: qsTr("Choose the disk TUR will use. The disk you choose is erased: everything on it is lost. The other disks are not touched.")
+        text: qsTr("Choose the disk TUR will use, then how. Erasing a disk loses everything on it. On a disk that holds Windows, TUR can use free space beside Windows instead and keep it. The other disks are not touched.")
         paragraph: true
         wrapMode: Text.Wrap
     }
@@ -148,19 +152,45 @@ WizardScreen {
                 objectName: "eraseOption"
                 Layout.fillWidth: true
                 text: qsTr("Erase this disk and install TUR")
-                subtitle: qsTr("Everything on the disk is replaced by TUR.")
-                selected: true
+                subtitle: screen.chosenDisk !== null && screen.chosenDisk.windows
+                          ? qsTr("Everything on the disk, Windows too, is replaced.")
+                          : qsTr("Everything on the disk is replaced by TUR.")
+                selected: screen.mode !== "beside"
                 focusPolicy: Qt.StrongFocus
+                onClicked: {
+                    screen.modeChosen("erase")
+                    Transcript.write("mode-chosen mode=erase")
+                }
             }
 
             Kit.ListRow {
                 objectName: "besideWindowsOption"
                 Layout.fillWidth: true
                 text: qsTr("Use the free space beside Windows")
-                subtitle: qsTr("Coming later. To keep Windows now, install TUR on another disk.")
-                enabled: false
+                subtitle: Words.besidePossible(screen.chosenDisk)
+                          ? qsTr("Keeps Windows. Uses %1 of free space.").arg(Words.size(screen.chosenDisk.beside.free_size || 0))
+                          : qsTr("Not available on this disk.")
+                enabled: Words.besidePossible(screen.chosenDisk)
+                selected: screen.mode === "beside" && Words.besidePossible(screen.chosenDisk)
+                focusPolicy: Qt.StrongFocus
+                onClicked: {
+                    screen.modeChosen("beside")
+                    Transcript.write("mode-chosen mode=beside")
+                }
             }
         }
+    }
+
+    Kit.Label {
+        objectName: "besideExplanation"
+        Layout.fillWidth: true
+        visible: screen.chosenDisk !== null
+        text: Words.besidePossible(screen.chosenDisk)
+              ? qsTr("Beside Windows, TUR goes into the free space you made in Windows. Windows' partitions and files stay as they are; TUR adds its start-up files to Windows' EFI system partition. When the computer starts, TUR's menu offers TUR and Windows.")
+              : Words.besideWhyNot(screen.chosenDisk)
+        tone: Kit.Label.Secondary
+        paragraph: true
+        wrapMode: Text.Wrap
     }
 
     RowLayout {

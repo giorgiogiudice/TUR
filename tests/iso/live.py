@@ -39,6 +39,14 @@ What the run does:
      install"; follows the stages; screenshot of every screen.
   6. On the result, "Restart now". QEMU stops at the reset.
 
+The scenario "beside" (ADR-0028) has one disk, laid out as Windows leaves it
+after Shrink Volume (tests/iso/make-windows-shared-disk.sh), as the main disk
+"tur-boot-test". It chooses that disk, then "Use the free space beside
+Windows", goes on to the confirmation, types the disk's erase phrase (the
+install button must stay unavailable), then the "BESIDE" phrase, presses
+Enter (nothing may happen), then "Install beside Windows", and follows the
+installation to its end as "install" does.
+
 It writes OUT_DIR/result.json (the facts tests/iso/report.py reads, in the
 same shape as tests/iso/install.py's, plus the live session's own),
 OUT_DIR/serial.log and numbered screenshots, and exits 0 if the run reached
@@ -495,6 +503,98 @@ class Run:
         if not facts["powered_off_by_installer"]:
             self.machine.quit()
 
+    def run_beside(self) -> None:
+        facts, live = self.result["facts"], self.live
+        self.to_live_desktop()
+        self.through_checks()
+        listed = self.disk_screen()
+        live["disks_listed"] = listed
+        target = listed.get(DISK_SERIAL)
+        if not target or target.get("status") != "ok" or target.get("beside") != "possible":
+            raise Stop(f"the Windows disk is not offered for installing beside Windows: {target}")
+        self.press(f"disk-{target['name']}")
+        self.wait(rf"TUR-WIZARD: disk-chosen name={target['name']}\b", 30, "the disk to be chosen")
+        time.sleep(1)
+        self.shot("disks-windows-chosen")
+        self.press("besideWindowsOption")
+        self.wait(r"TUR-WIZARD: mode-chosen mode=beside", 30, "beside Windows to be chosen")
+        live["mode_chosen"] = "beside"
+        time.sleep(1)
+        self.shot("disks-beside-chosen")
+        self.press("continueButton")
+        self.screen_ready("account")
+        since = len(self.pump())
+        self.press("continueButton")
+        self.screen_ready("confirm")
+        shown = self.last_wizard(r"confirm-shown (.*)")
+        confirm = isovm.fields(shown.group(1)) if shown else {}
+        live["confirm_beside"] = confirm
+        live["focus_on_confirm"] = self.focus()
+        time.sleep(1)
+        self.shot("confirm-beside")
+        phrase = "BESIDE " + isovm.confirmation_phrase(DISK_SERIAL).split(" ", 1)[1]
+        self.engine_facts()
+        facts["confirmation"] = {
+            "by_id": confirm.get("by_id"),
+            "phrase_shown": confirm.get("phrase"),
+            "phrase_computed_by_the_test": phrase,
+            "phrase_matches": confirm.get("phrase") == phrase,
+            "mode": confirm.get("mode"),
+        }
+        if self.focus() != "phraseField":
+            self.tab_to("phraseField")
+        erase = isovm.confirmation_phrase(DISK_SERIAL)
+        before = len(self.wizard_lines())
+        self.type(erase)
+        time.sleep(0.8)
+        live["erase_phrase_on_beside"] = dict(self.phrase_state(len(erase), before), typed=erase)
+        self.clear_field()
+        before = len(self.wizard_lines())
+        self.type(phrase)
+        time.sleep(0.8)
+        live["phrase_typed"] = self.phrase_state(len(phrase), before)
+        self.shot("confirm-beside-typed")
+        self.step("Enter in the confirmation field")
+        self.key("ret")
+        time.sleep(3)
+        live["enter_erased"] = bool(re.search(r"TUR-WIZARD: (erase-confirmed|install-requested)", self.pump()[since:]))
+        if live["enter_erased"]:
+            raise Stop("Enter in the confirmation field started the installation")
+        self.press("eraseButton")
+        match = self.wait(r'TUR-INSTALLER: installing device=(\S+) command="([^"]*)"', 600, "the installation to start", since)
+        facts["install_device"], facts["install_command"] = match.group(1), match.group(2)
+        install_started = self.elapsed()
+        self.screen_ready("install", 60)
+        try:
+            self.wait(r"TUR-WIZARD: stage name=copy cancellable=(\w+)", 600, "the copy stage", since)
+            time.sleep(6)
+            self.shot("installing-beside")
+        except Stop as error:
+            self.step(f"no copy stage seen: {error}")
+        match = self.wait(r"TUR-INSTALLER: install-finished status=(\d+) seconds=(\d+)", 2400,
+                          "the installation to finish", since)
+        facts["install_status"], facts["install_seconds"] = int(match.group(1)), int(match.group(2))
+        facts["install_seconds_seen_by_host"] = round(self.elapsed() - install_started, 1)
+        match = self.wait(r"TUR-INSTALLER: result=(success|failed)\b[^\n]*", 600, "the result", since)
+        facts["result"] = match.group(1)
+        facts["result_line"] = match.group(0)
+        facts["beside_states"] = [state for state in self.transcript.states() if state.startswith("beside ")]
+        self.screen_ready("done", 120)
+        live["stages_seen"] = [line.split()[1].split("=", 1)[1] for line in self.wizard_lines(since)
+                               if line.startswith("stage name=")]
+        shown = self.last_wizard(r"result-shown (.*)")
+        live["result_shown"] = isovm.fields(shown.group(1)) if shown else None
+        time.sleep(2)
+        self.shot("done-beside")
+        self.engine_facts()
+        if facts["result"] != "success":
+            raise Stop("the installer reported a failure")
+        self.press("restartButton")
+        self.wait(r"TUR-WIZARD: power request=reboot", 30, "the restart to be asked for")
+        facts["powered_off_by_installer"] = self.wait_power_off()
+        if not facts["powered_off_by_installer"]:
+            self.machine.quit()
+
     def finish(self, outcome: str) -> int:
         self.transcript.pump()
         self.machine.collect()
@@ -536,7 +636,7 @@ class Run:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("scenario", choices=["install"])
+    ap.add_argument("scenario", choices=["install", "beside"])
     ap.add_argument("--medium", required=True)
     ap.add_argument("--disk", required=True)
     ap.add_argument("--work", required=True)
@@ -554,7 +654,10 @@ def main() -> int:
     run = Run(args)
     try:
         run.start()
-        run.run_install()
+        if args.scenario == "beside":
+            run.run_beside()
+        else:
+            run.run_install()
     except (Stop, RuntimeError, ConnectionError) as error:
         return run.abort(str(error))
     if run.machine.variables.exists():

@@ -19,6 +19,7 @@ Item {
     //   step     the screen
     //   chosen   the disk chosen before it, by kernel name
     //   install  the recorded installation to run
+    //   mode     how: "erase" (default) or "beside" Windows (ADR-0028)
     readonly property var states: [
         { name: "welcome", step: "welcome" },
         { name: "computer", step: "computer" },
@@ -33,7 +34,16 @@ Item {
         { name: "installing", step: "install", chosen: "vda", install: "install-paused" },
         { name: "done-success", step: "done", chosen: "vda", install: "install" },
         { name: "done-failed", step: "done", chosen: "vda", install: "install-failed" },
-        { name: "done-refused", step: "done", chosen: "vda", install: "install-refused" }
+        { name: "done-refused", step: "done", chosen: "vda", install: "install-refused" },
+        { name: "disks-windows-chosen", fixture: "same-disk", step: "disk", chosen: "vda" },
+        { name: "disks-beside-chosen", fixture: "same-disk", step: "disk", chosen: "vda", mode: "beside" },
+        { name: "disks-beside-not-possible", fixture: "same-disk", step: "disk", chosen: "vdb" },
+        { name: "confirm-beside", fixture: "same-disk", step: "confirm", chosen: "vda", mode: "beside" },
+        { name: "installing-beside", fixture: "same-disk", step: "install", chosen: "vda", mode: "beside",
+          install: "install-beside-paused" },
+        { name: "done-beside", fixture: "same-disk", step: "done", chosen: "vda", mode: "beside", install: "install-beside" },
+        { name: "done-beside-failed", fixture: "same-disk", step: "done", chosen: "vda", mode: "beside",
+          install: "install-beside-failed" }
     ]
 
     property Item stage: null
@@ -151,9 +161,11 @@ Item {
             if (chosen === null)
                 throw new Error("the fixture has no disk " + state.chosen)
             host.wizard.chosenDisk = chosen
+            host.wizard.mode = state.mode || "erase"
             if (state.install) {
                 host.wizard.goTo("confirm")
-                host.engine.install(chosen, chosen.phrase)
+                host.engine.install(chosen, state.mode === "beside" ? chosen.beside.phrase : chosen.phrase,
+                                    state.mode || "erase")
                 host.wizard.goTo("install")
             } else {
                 host.wizard.goTo(state.step)
