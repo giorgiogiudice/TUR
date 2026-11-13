@@ -100,6 +100,17 @@ typedef struct _IO_REPORT_INTERRUPT_ACTIVE_STATE_PARAMETERS {
 #ifndef USHORT_MAX
 #define USHORT_MAX 0xffff
 #endif
+#ifndef _TUR_MORE_KERNEL_FUNCTIONS
+#define _TUR_MORE_KERNEL_FUNCTIONS
+typedef const WCHAR *LPCWCHAR;
+NTKERNELAPI NTSTATUS NTAPI IoGetActivityIdIrp(_In_ PIRP Irp, _Out_ LPGUID Guid);
+NTKERNELAPI NTSTATUS NTAPI IoSetActivityIdIrp(_Inout_ PIRP Irp, _In_opt_ LPCGUID Guid);
+NTKERNELAPI NTSTATUS NTAPI IoQueryFullDriverPath(_In_ PDRIVER_OBJECT DriverObject, _Out_ PUNICODE_STRING FullPath);
+NTKERNELAPI PEPROCESS NTAPI IoGetInitiatorProcess(_In_ PFILE_OBJECT FileObject);
+NTKERNELAPI NTSTATUS NTAPI WmiTraceMessageVa(_In_ TRACEHANDLE LoggerHandle, _In_ ULONG MessageFlags,
+                                             _In_ LPCGUID MessageGuid, _In_ USHORT MessageNumber,
+                                             _In_ va_list MessageArgList);
+#endif
 #ifndef _TUR_RTL_SIZET_ADD
 #define _TUR_RTL_SIZET_ADD
 static __inline NTSTATUS RtlSIZETAdd(SIZE_T Augend, SIZE_T Addend, SIZE_T *Result)
@@ -198,11 +209,6 @@ DEFINE_GUID(GUID_D3COLD_SUPPORT_INTERFACE, 0xb38290e5, 0x3cd0, 0x4f9d, 0x99, 0x3
    to DMA_OPERATIONS and DEVICE_DESCRIPTION. */
 #ifndef _TUR_DMA_V3
 #define _TUR_DMA_V3
-typedef LONG DMA_COMPLETION_STATUS, *PDMA_COMPLETION_STATUS;
-#define DmaComplete  0
-#define DmaAborted   1
-#define DmaError     2
-#define DmaCancelled 3
 typedef VOID NTAPI DMA_COMPLETION_ROUTINE(_In_ PDMA_ADAPTER DmaAdapter, _In_ PDEVICE_OBJECT DeviceObject,
                                           _In_ PVOID CompletionContext, _In_ DMA_COMPLETION_STATUS Status);
 typedef DMA_COMPLETION_ROUTINE *PDMA_COMPLETION_ROUTINE;

@@ -113,7 +113,7 @@ defs=(-D_AMD64_ -DAMD64 -D_WIN64 -D_KERNEL_MODE -DNTDDI_VERSION=0x0A00000C -D_WI
     -DWDF_PRODUCTION_RELEASE=1 -DDBG=0 -DPOOL_NX_OPTIN=1 -DUNICODE -D_UNICODE)
 common=(-O1 -g0
     -fms-extensions -fno-builtin-malloc -fno-stack-protector -fno-strict-aliasing -fwrapv -mno-red-zone
-    -ferror-limit=0 -w -Wno-error
+    -ferror-limit=0 -w -Wno-error -Wno-invalid-token-paste
     -I"${work}/gen" -include "${tp}/compat/tur-wdf-prelude.h")
 for d in "${incdirs[@]}"; do common+=(-I"${d}"); done
 # -fms-compatibility alone would hide __GNUC__ from mingw-w64's headers,

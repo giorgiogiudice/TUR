@@ -58,6 +58,17 @@ void __cdecl DoTraceLevelMessage(PVOID FxDriverGlobals, ULONG DebugPrintLevel, U
 }
 #endif
 
+/* The in-flight recorder (tracing.cpp), declared by fxtrace.h for the
+   kernel-mode build and needed by globals.cpp, which does not include it. */
+#ifdef __cplusplus
+extern "C++" {
+struct _FX_DRIVER_GLOBALS;
+VOID FxIFRStart(struct _FX_DRIVER_GLOBALS *FxDriverGlobals, PCUNICODE_STRING RegistryPath,
+                PDRIVER_OBJECT DriverObject);
+VOID FxIFRStop(struct _FX_DRIVER_GLOBALS *FxDriverGlobals);
+}
+#endif
+
 #ifndef WPP_INIT_TRACING
 #define WPP_INIT_TRACING(DriverObject, RegistryPath)
 #define WPP_CLEANUP(DriverObject)

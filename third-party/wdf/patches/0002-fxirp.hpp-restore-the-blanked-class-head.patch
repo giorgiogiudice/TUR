@@ -4,14 +4,15 @@ Change to Microsoft's Windows-Driver-Frameworks (MIT), TUR build; see ../README.
 fxirp.hpp as published has blank lines where the end of its header comment,
 its include guard and the head of class FxIrp were: the rest of the file
 is inside an unterminated comment. They are reconstructed from the
-#endif at the end of the file and from the members' use (m_Irp, the two
-constructors, SetIrp, GetTriageInfo's access to m_Irp).
+#endif at the end of the file and from the members' use (m_Irp, used
+directly by other framework classes, so public; the two constructors;
+SetIrp; GetTriageInfo).
 
 diff --git a/src/framework/shared/inc/private/common/fxirp.hpp b/src/framework/shared/inc/private/common/fxirp.hpp
-index 1c16fb5..caef888 100644
+index 1c16fb5..f90d1a6 100644
 --- a/src/framework/shared/inc/private/common/fxirp.hpp
 +++ b/src/framework/shared/inc/private/common/fxirp.hpp
-@@ -20,68 +20,53 @@ Environment:
+@@ -20,68 +20,56 @@ Environment:
  
  Revision History:
  
@@ -33,8 +34,11 @@ index 1c16fb5..caef888 100644
  
 +    friend VOID GetTriageInfo(VOID);
  
-+private:
++public:
  
++    //
++    // Public: other framework classes use it directly.
++    //
 +    MdIrp m_Irp;
  
 +public:

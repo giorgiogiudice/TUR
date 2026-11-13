@@ -71,6 +71,7 @@ python3 -I "${here}/incmap.py" "${work}/gen" "${here}" "${pub}" ${sample:+"${sam
 
 cc=(clang --target=x86_64-w64-mingw32)
 cflags=(-std=gnu11 -O1 -g0 -fms-extensions -fno-stack-protector -fno-builtin-malloc -mno-red-zone -w
+    -Wno-error=incompatible-pointer-types -Wno-incompatible-pointer-types
     -D_AMD64_ -DAMD64 -D_WIN64 -D_KERNEL_MODE -DNTDDI_VERSION=0x0A00000C -D_WIN32_WINNT=0x0A00 -DWINVER=0x0A00
     -DKMDF_VERSION_MAJOR=1 -DKMDF_VERSION_MINOR=${KMDF_MINOR} -DKMDF_MINIMUM_VERSION_REQUIRED=${KMDF_MINOR}
     -DPOOL_NX_OPTIN=1 -include "${compat}/tur-wdf-prelude.h")
@@ -136,7 +137,10 @@ if [ -d "${sample}/driver" ]; then
     mkdir -p "${work}/gen-exe"
     python3 -I "${here}/incmap.py" "${work}/gen-exe" "${sample}/exe" -- "${sample}/inc" "${sysroot}/include" \
         >"${work}/incmap-exe.log" 2>&1
-    if x86_64-w64-mingw32-gcc -O2 -w -o "${work}/out/osrusbfx2.exe" -I"${work}/gen-exe" -I"${sample}/inc" \
+    # MSVC's __pragma has no meaning to GCC; pointer-type mismatches the
+    # sample has are errors in GCC 14 and later.
+    if x86_64-w64-mingw32-gcc -O2 -w -Wno-incompatible-pointer-types -Wno-implicit-function-declaration \
+        -D'__pragma(x)=' -o "${work}/out/osrusbfx2.exe" -I"${work}/gen-exe" -I"${sample}/inc" \
         "${sample}/exe/testapp.c" "${sample}/exe/dump.c" -lsetupapi -lcfgmgr32 >"${work}/logs/testapp.log" 2>&1; then
         note "build osrusbfx2.exe (the sample's testapp.c): ok"
     else

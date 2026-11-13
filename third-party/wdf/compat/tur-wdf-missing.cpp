@@ -11,6 +11,7 @@
      WdfLdrDiagnosticsValueByNameAsULONG wdfldr.h; the loader's diagnostics key
      DoTraceLevelMessage                 DbgTrace.h; replaces dbgtrace.cpp, see below
      imp_WdfCompanionTarget*             fxdynamics.h; UMDF companions: not supported
+     FxVerifierQueryStateSeparationDetection  globals.cpp; verifier option, "none"
 */
 #include "fx.hpp"
 #include "fxldr.h"
@@ -226,3 +227,15 @@ WDFEXPORT(WdfCompanionTargetWdmGetCompanionProcess)(
 }
 
 } /* extern "C" */
+
+/* globals.cpp declares this and calls it; its definition is not in the
+   published sources. The only option the sources name is "none". */
+VOID
+FxVerifierQueryStateSeparationDetection(
+    _In_ HANDLE Key,
+    _Out_ FxStateSeparationDetectionOption* StateSeparationDetection
+    )
+{
+    UNREFERENCED_PARAMETER(Key);
+    *StateSeparationDetection = FxStateSeparationDetectionNone;
+}

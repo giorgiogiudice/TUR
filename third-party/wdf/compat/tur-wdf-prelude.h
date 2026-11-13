@@ -23,7 +23,7 @@
    member's name into itself plus the new members (the names occur nowhere
    else in the headers this build uses). The types are spelt out because the
    expansion happens inside wdm.h, before tur-ddk-additions.h declares their
-   names; DMA_COMPLETION_STATUS is a LONG for the same reason. Wine has no DMA,
+   names. Wine has no DMA,
    so these members are only ever compiled, never called. */
 #define BuildMdlFromScatterGatherList BuildMdlFromScatterGatherList; \
     NTSTATUS (NTAPI *GetDmaAdapterInfo)(struct _DMA_ADAPTER *, struct _ADAPTER_INFO *); \
@@ -38,18 +38,18 @@
     BOOLEAN (NTAPI *CancelAdapterChannel)(struct _DMA_ADAPTER *, struct _DEVICE_OBJECT *, PVOID); \
     NTSTATUS (NTAPI *MapTransferEx)(struct _DMA_ADAPTER *, struct _MDL *, PVOID, ULONGLONG, ULONG, PULONG, BOOLEAN, \
                                     struct _SCATTER_GATHER_LIST *, ULONG, \
-                                    VOID (NTAPI *)(struct _DMA_ADAPTER *, struct _DEVICE_OBJECT *, PVOID, LONG), \
+                                    VOID (NTAPI *)(struct _DMA_ADAPTER *, struct _DEVICE_OBJECT *, PVOID, DMA_COMPLETION_STATUS), \
                                     PVOID); \
     NTSTATUS (NTAPI *GetScatterGatherListEx)(struct _DMA_ADAPTER *, struct _DEVICE_OBJECT *, PVOID, struct _MDL *, \
                                              ULONGLONG, ULONG, ULONG, PDRIVER_LIST_CONTROL, PVOID, BOOLEAN, \
                                              VOID (NTAPI *)(struct _DMA_ADAPTER *, struct _DEVICE_OBJECT *, PVOID, \
-                                                            LONG), \
+                                                            DMA_COMPLETION_STATUS), \
                                              PVOID, struct _SCATTER_GATHER_LIST **); \
     NTSTATUS (NTAPI *BuildScatterGatherListEx)(struct _DMA_ADAPTER *, struct _DEVICE_OBJECT *, PVOID, \
                                                struct _MDL *, ULONGLONG, ULONG, ULONG, PDRIVER_LIST_CONTROL, PVOID, \
                                                BOOLEAN, PVOID, ULONG, \
                                                VOID (NTAPI *)(struct _DMA_ADAPTER *, struct _DEVICE_OBJECT *, \
-                                                              PVOID, LONG), \
+                                                              PVOID, DMA_COMPLETION_STATUS), \
                                                PVOID, PVOID); \
     NTSTATUS (NTAPI *FlushAdapterBuffersEx)(struct _DMA_ADAPTER *, struct _MDL *, PVOID, ULONGLONG, ULONG, BOOLEAN); \
     VOID (NTAPI *FreeAdapterObject)(struct _DMA_ADAPTER *, IO_ALLOCATION_ACTION); \

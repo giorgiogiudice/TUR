@@ -6,3 +6,6 @@
    MIT-licensed sources nor in mingw-w64. The group functions it would map
    are declared by mingw-w64's ntddk.h, so it is empty. */
 #pragma once
+
+/* procgrp.lib's initialisation for down-level systems: nothing to do. */
+#define WdmlibProcgrpInitialize() ((void)0)

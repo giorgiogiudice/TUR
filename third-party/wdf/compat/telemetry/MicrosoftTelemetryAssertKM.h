@@ -11,3 +11,6 @@
 #define MICROSOFT_TELEMETRY_ASSERT_KM(x)
 #define MICROSOFT_TELEMETRY_ASSERT_MSG(x, m)
 #define MICROSOFT_TELEMETRY_ASSERT_MSG_KM(x, m)
+#define InitializeTelemetryAssertsKMByName(...) ((NTSTATUS)0)
+#define InitializeTelemetryAssertsKM(...) ((NTSTATUS)0)
+#define UninitializeTelemetryAssertsKM(...) ((void)0)

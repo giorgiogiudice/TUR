@@ -1,0 +1,20 @@
+SPDX-License-Identifier: MIT
+Change to Microsoft's Windows-Driver-Frameworks (MIT), TUR build; see ../README.md.
+
+A stack array of UCHAR_MEMORY_ALIGNED (a 1-byte type with 16-byte
+alignment) is accepted by MSVC and rejected by clang (element size not a
+multiple of its alignment); the array itself is aligned instead.
+
+diff --git a/src/framework/kmdf/src/dma/base/fxdmatransactionpacket.cpp b/src/framework/kmdf/src/dma/base/fxdmatransactionpacket.cpp
+index e32063f..b4ab57d 100644
+--- a/src/framework/kmdf/src/dma/base/fxdmatransactionpacket.cpp
++++ b/src/framework/kmdf/src/dma/base/fxdmatransactionpacket.cpp
+@@ -665,7 +665,7 @@ FxDmaPacketTransaction::StageTransfer(
+     PSCATTER_GATHER_LIST sgList;
+ 
+     PFX_DRIVER_GLOBALS pFxDriverGlobals;
+-    UCHAR_MEMORY_ALIGNED sgListBuffer[sizeof(SCATTER_GATHER_LIST)
++    DECLSPEC_ALIGN(MEMORY_ALLOCATION_ALIGNMENT) UCHAR sgListBuffer[sizeof(SCATTER_GATHER_LIST)
+                             + sizeof(SCATTER_GATHER_ELEMENT)];
+     WDFDMATRANSACTION dmaTransaction;
+ 

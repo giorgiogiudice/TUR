@@ -1,0 +1,25 @@
+SPDX-License-Identifier: MIT
+Change to Microsoft's Windows-Driver-Frameworks (MIT), TUR build; see ../README.md.
+
+fxrequestapi.cpp uses WDF_REQUEST_REUSE_MUST_COMPLETE, which only
+fxrequest.cpp defines (as 2); defined here the same way.
+
+diff --git a/src/framework/shared/core/fxrequestapi.cpp b/src/framework/shared/core/fxrequestapi.cpp
+index 179ce3b..23d694f 100644
+--- a/src/framework/shared/core/fxrequestapi.cpp
++++ b/src/framework/shared/core/fxrequestapi.cpp
+@@ -26,6 +26,14 @@ Revision History:
+ --*/
+ #include "coreprivshared.hpp"
+ 
++//
++// TUR build: defined in fxrequest.cpp only (the shared definition was
++// blanked in the published sources).
++//
++#ifndef WDF_REQUEST_REUSE_MUST_COMPLETE
++#define WDF_REQUEST_REUSE_MUST_COMPLETE 2
++#endif
++
+ // Tracing support
+ extern "C" {
+ #include "FxRequestApi.tmh"
