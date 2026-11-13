@@ -78,6 +78,7 @@ pub mod engine;
 pub mod exec;
 pub mod faults;
 pub mod keyring;
+pub mod local;
 pub mod manifest;
 pub mod notify;
 pub mod orchestrator;
@@ -94,6 +95,7 @@ pub mod store;
 pub mod strict;
 pub mod textui;
 pub mod trail;
+pub mod tuning;
 pub mod wake;
 
 pub use action::{

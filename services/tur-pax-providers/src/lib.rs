@@ -16,10 +16,13 @@
 //!   [`Capabilities`] and streams a response as an [`EventStream`].
 //! * [`anthropic`], [`openai`], [`google`] and [`openai_chat`] are the
 //!   adapters, one for each family.
+//! * [`listing`] asks a provider which models it offers.
 //! * [`probe`] checks with one small request whether a model calls tools.
 //! * [`error`] is the typed error with its stable `TUR-AI-PROVIDER-*` code.
 //! * [`secret`] holds the API key, which cannot be printed.
 //! * [`config`] is the configuration file format.
+//! * [`generation`] is the generation settings (temperature, effort and
+//!   the rest) and how each family writes them.
 //! * [`spend`] adds up what a task used and enforces its limit.
 //! * [`strict`] is the JSON parser that refuses a repeated key. Everything a
 //!   provider sends is read through it.
@@ -79,8 +82,10 @@ pub mod anthropic;
 pub mod cli;
 pub mod config;
 pub mod error;
+pub mod generation;
 pub mod google;
 mod http;
+pub mod listing;
 pub mod model;
 pub mod openai;
 pub mod openai_chat;
@@ -94,6 +99,8 @@ mod toolcalls;
 
 pub use config::{Prices, ProviderConfig, RetryPolicy, TaskLimit, Timeouts};
 pub use error::{ErrorKind, ProviderError};
+pub use generation::{Effort, Generation, ReasoningStyle};
+pub use listing::{ListedModel, list_models};
 pub use model::{
     FinishReason, Image, Message, OpaquePart, Part, ProviderId, Request, ResultContent, Role,
     StreamEvent, ToolCall, ToolDefinition, ToolResult, Turn, Usage,

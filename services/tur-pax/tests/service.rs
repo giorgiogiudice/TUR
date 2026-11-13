@@ -219,6 +219,8 @@ impl World {
         paths.extra_adapters = Some(tools.join("adapters"));
         paths.models = vec![root.join("models.json")];
         paths.runtime = Some(root.join("run"));
+        // A stand-in for local AI, written by the tests that need one.
+        paths.ai_local = root.join("tur-ai-local");
         let mut initial = Settings::default();
         settings(&mut initial);
         initial
@@ -1189,6 +1191,8 @@ fn a_provider_added_by_hand_is_used_by_its_identifier_and_keyring_item() {
             key_required: true,
             runtime_key_file: None,
             send_back_reasoning: false,
+            reasoning_style: Default::default(),
+            settings: None,
             capabilities: None,
             data_terms: None,
             data_terms_url: None,
@@ -1635,4 +1639,477 @@ fn a_model_served_by_tur_ai_local_is_sent_the_key_from_its_file() {
     assert_eq!(started[0]["TUR_AI_PROVIDER"], "openai-chat");
     let finished = world.trail_events("task_finished");
     assert_eq!(finished[0]["TUR_AI_PROVIDER_ID"], "local");
+}
+
+// ------------------------------------------------- models and their settings
+
+/// A model list with one Anthropic model that declares what it takes.
+fn declared_list() -> String {
+    r#"{ "schema_version": 1, "status": "example", "prices_as_of": "2026-11-12",
+         "providers": [{
+            "id": "anthropic", "adapter": "anthropic", "name": "Anthropic",
+            "settings": { "stop": {"max": 4}, "max_output_tokens": {"min": 1, "max": 128000},
+                          "sources": ["https://example.org/effort"], "checked": "2026-11-13" },
+            "models": [
+                { "model": "test-model",
+                  "settings": { "effort": { "values": ["low", "medium", "high", "xhigh", "max"],
+                                            "provider_default": "medium" } } },
+                { "model": "undeclared-model" }
+            ]
+         }] }"#
+        .to_owned()
+}
+
+#[test]
+fn generation_settings_are_checked_kept_and_sent_in_the_family_s_fields() {
+    let server = FakeServer::start(vec![says("Thought hard.")]);
+    let list = declared_list();
+    let models = ModelList::from_json(&list).expect("a model list");
+    let base_url = server.base_url();
+    let world = with_models("generation", &list, |settings| {
+        settings
+            .set_provider("anthropic", "test-model", &models)
+            .expect("a provider");
+        settings.base_url = Some(base_url);
+        settings
+            .enable(CONSENT_TEXT_VERSION, NOW)
+            .expect("switched on");
+    });
+    world.keys.set("anthropic", KEY).expect("a key");
+
+    // What the model takes, before anything is chosen.
+    let described = world
+        .core
+        .generation_settings("anthropic", "test-model")
+        .expect("described");
+    assert_eq!(described["declared"], true);
+    assert_eq!(described["accepts"]["effort"]["values"][3], "xhigh");
+    assert!(described["accepts"].get("temperature").is_none());
+    assert_eq!(described["sources"][0], "https://example.org/effort");
+
+    // Refused in words: a setting the model does not take, a level it does
+    // not have, and anything at all for a model with no declaration.
+    let refusal = world
+        .core
+        .set_generation_settings("anthropic", "test-model", r#"{"temperature": 0.3}"#)
+        .expect_err("no temperature");
+    assert_eq!(code(refusal.clone()), "TUR-AI-SERVICE-006");
+    assert!(
+        refusal
+            .detail
+            .contains("This model does not take a temperature.")
+    );
+    let refusal = world
+        .core
+        .set_generation_settings("anthropic", "test-model", r#"{"effort": "minimal"}"#)
+        .expect_err("no such level");
+    assert!(
+        refusal
+            .detail
+            .contains("This model's reasoning effort can be low, medium, high, xhigh or max."),
+        "{}",
+        refusal.detail
+    );
+    let refusal = world
+        .core
+        .set_generation_settings("anthropic", "undeclared-model", r#"{"effort": "high"}"#)
+        .expect_err("only the provider's declaration");
+    assert!(
+        refusal
+            .detail
+            .contains("This model does not take a reasoning effort."),
+        "{}",
+        refusal.detail
+    );
+    world
+        .core
+        .set_generation_settings(
+            "anthropic",
+            "undeclared-model",
+            r#"{"max_output_tokens": 2000}"#,
+        )
+        .expect("an output limit is always a choice");
+    // A provider no list describes: only the output limit.
+    let refusal = world
+        .core
+        .set_generation_settings("openai", "any-model", r#"{"temperature": 0.2}"#)
+        .expect_err("nothing declared");
+    assert!(
+        refusal.detail.contains("TUR has no list"),
+        "{}",
+        refusal.detail
+    );
+    assert_eq!(
+        world
+            .core
+            .generation_settings("openai", "any-model")
+            .expect("described")["declared"],
+        false
+    );
+
+    // Chosen, kept in the settings file, and sent as output_config.effort
+    // and stop_sequences.
+    world
+        .core
+        .set_generation_settings(
+            "anthropic",
+            "test-model",
+            r#"{"effort": "high", "stop": ["END"], "max_output_tokens": 3000}"#,
+        )
+        .expect("chosen");
+    let saved: Value =
+        serde_json::from_str(&fs::read_to_string(&world.paths.settings).expect("the settings"))
+            .expect("JSON");
+    let kept = saved["generation"]
+        .as_array()
+        .expect("kept")
+        .iter()
+        .find(|choice| choice["model"] == "test-model")
+        .cloned()
+        .expect("the model's choice");
+    assert_eq!(kept["settings"]["effort"], "high");
+    let status = world.core.status();
+    assert_eq!(status["generation"]["settings"]["effort"], "high");
+    let notices = world
+        .core
+        .generation_settings("anthropic", "test-model")
+        .expect("described")["notices"]
+        .to_string();
+    assert!(notices.contains("its thinking is output"), "{notices}");
+
+    let result = world.run("Think about it.");
+    assert_eq!(result["outcome"], "completed");
+    let body = &server.bodies()[0];
+    assert_eq!(body["output_config"], json!({ "effort": "high" }));
+    assert_eq!(body["stop_sequences"], json!(["END"]));
+    assert_eq!(body["max_tokens"], 3000);
+    assert!(body.get("temperature").is_none());
+
+    // null goes back to the model's default; nothing is sent then.
+    world
+        .core
+        .set_generation_settings(
+            "anthropic",
+            "test-model",
+            r#"{"effort": null, "stop": null}"#,
+        )
+        .expect("cleared");
+    let described = world
+        .core
+        .generation_settings("anthropic", "test-model")
+        .expect("described");
+    assert!(described["chosen"].get("effort").is_none());
+    assert!(world.trail_events("setting_changed").len() >= 2);
+}
+
+#[test]
+fn the_models_of_a_provider_are_its_list_s_and_the_ones_it_named_within_a_day() {
+    let list = declared_list();
+    let world = with_models("listing", &list, |_| {});
+    let listed = world
+        .core
+        .provider_models("anthropic", false)
+        .expect("the list");
+    assert_eq!(listed["source"], "list");
+    assert_eq!(listed["models"][0]["model"], "test-model");
+    assert_eq!(listed["models"][0]["settings_declared"], true);
+    assert_eq!(listed["models"][1]["model"], "undeclared-model");
+
+    // What the provider named an hour ago is shown beside the list.
+    let cache = world.paths.listing.join("anthropic.json");
+    fs::create_dir_all(cache.parent().expect("a folder")).expect("a folder");
+    fs::write(
+        &cache,
+        json!({ "schema_version": 1, "provider": "anthropic", "fetched_at": NOW - 3600,
+                "models": [{ "model": "test-model" }, { "model": "brand-new-model", "label": "New" }] })
+            .to_string(),
+    )
+    .expect("written");
+    let listed = world
+        .core
+        .provider_models("anthropic", false)
+        .expect("the list");
+    assert_eq!(listed["source"], "cache");
+    assert_eq!(listed["fetched_at"], NOW - 3600);
+    let names: Vec<&str> = listed["models"]
+        .as_array()
+        .expect("models")
+        .iter()
+        .filter_map(|model| model["model"].as_str())
+        .collect();
+    assert_eq!(
+        names,
+        vec!["test-model", "undeclared-model", "brand-new-model"]
+    );
+    assert_eq!(listed["models"][0]["offered_by_provider"], true);
+    assert_eq!(listed["models"][2]["in_list"], false);
+
+    // A day later it is asked again only when the person asks.
+    world.advance(LISTING_DAY);
+    assert_eq!(
+        world
+            .core
+            .provider_models("anthropic", false)
+            .expect("the list")["source"],
+        "list"
+    );
+    // Asking needs the key; without one, nothing is sent.
+    let refusal = world
+        .core
+        .provider_models("anthropic", true)
+        .expect_err("no key");
+    assert_eq!(code(refusal), "TUR-AI-KEY-002");
+    assert_eq!(
+        code(
+            world
+                .core
+                .provider_models("nobody", false)
+                .expect_err("no such provider")
+        ),
+        "TUR-AI-SERVICE-006"
+    );
+}
+
+const LISTING_DAY: u64 = tur_pax::service::LISTING_FRESH_SECONDS;
+
+/// A stand-in for `tur-ai-local`: it reports two models, makes one ready,
+/// and waits for a stop on the other.
+fn stand_in_local_ai(root: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+
+    let models = json!({
+        "schema_version": 1, "kind": "models",
+        "models": [
+            { "id": "qwen3-4b", "name": "Qwen3 4B", "capabilities": ["chat", "tools"],
+              "repository": "https://huggingface.co/Qwen/Qwen3-4B-GGUF",
+              "download_bytes": 2_497_280_256_u64, "installed": "absent",
+              "licence": { "id": "Apache-2.0", "restricts_use": false, "restrictions": "none" },
+              "tier": { "tier": "runs-well", "message": "Qwen3 4B fits and runs well." } },
+            { "id": "ministral-3-3b", "name": "Ministral 3 3B Instruct",
+              "capabilities": ["chat", "tools", "vision"],
+              "repository": "https://huggingface.co/mistralai/Ministral-3-3B-Instruct-2512-GGUF",
+              "download_bytes": 2_988_524_864_u64, "installed": "absent",
+              "licence": { "id": "Apache-2.0", "restricts_use": true,
+                           "restrictions": "Do not infringe anyone's rights." },
+              "tier": { "tier": "runs-well", "message": "It fits and runs well." } },
+            { "id": "gemma-4-e2b", "name": "Gemma 4 E2B", "capabilities": ["chat", "tools", "vision"],
+              "repository": "https://huggingface.co/google/gemma-4-E2B-it-qat-q4_0-gguf",
+              "download_bytes": 4_336_349_920_u64, "installed": "installed",
+              "licence": { "id": "Apache-2.0", "restricts_use": false, "restrictions": "none" },
+              "tier": { "tier": "slow", "message": "Gemma 4 E2B fits but will be slow." } },
+            { "id": "qwen3-embedding-0.6b", "name": "Embeddings", "capabilities": ["embeddings"] }
+        ]
+    });
+    let recommend = json!({ "recommendation": {
+        "model": "qwen3-4b", "message": "Qwen3 4B is the best fit for this computer.",
+        "reasons": ["Memory: plenty."], "vision_model": null } });
+    fs::write(root.join("models-report.json"), models.to_string()).expect("written");
+    fs::write(root.join("recommend-report.json"), recommend.to_string()).expect("written");
+    let event = |name: &str, extra: &str| {
+        format!(
+            r#"{{"schema_version":1,"kind":"ensure-event","event":"{name}","model":"$2","code":null,"message":"{name}","file":null,"bytes_done":null,"bytes_total":null,"bytes_to_download":null,"free_bytes":null,"state":null{extra}}}"#
+        )
+    };
+    let script = format!(
+        "#!/bin/sh\n\
+         here=\"$(dirname \"$0\")\"\n\
+         echo \"$*\" >> \"$here/calls.log\"\n\
+         case \"$1\" in\n\
+         models) cat \"$here/models-report.json\" ;;\n\
+         recommend) cat \"$here/recommend-report.json\" ;;\n\
+         cancel) touch \"$here/cancel-request\"; echo '{{\"kind\":\"cancel\"}}' ;;\n\
+         ensure)\n\
+           echo '{plan}'\n\
+           if [ \"$2\" = gemma-4-e2b ]; then\n\
+             while [ ! -e \"$here/cancel-request\" ]; do sleep 0.05; done\n\
+             echo '{cancelled}'\n\
+             echo 'TUR-AI-LOCAL-029' >&2\n\
+             exit 1\n\
+           fi\n\
+           echo '{progress}'\n\
+           echo '{verified}'\n\
+           echo '{installed}'\n\
+           echo '{starting}'\n\
+           echo '{ready}'\n\
+           ;;\n\
+         esac\n",
+        plan = event("plan", ""),
+        cancelled = event("cancelled", r#","extra":"TUR-AI-LOCAL-029""#),
+        progress = event("progress", ""),
+        verified = event("verified", ""),
+        installed = event("installed", ""),
+        starting = event("starting", ""),
+        ready = event("ready", ""),
+    );
+    let program = root.join("tur-ai-local");
+    fs::write(&program, script).expect("written");
+    fs::set_permissions(&program, fs::Permissions::from_mode(0o755)).expect("executable");
+}
+
+fn local_event(event: &Event, model: &str, name: &str) -> bool {
+    matches!(event, Event::LocalModelProgress { model: m, event } if m == model && event["event"] == name)
+}
+
+#[test]
+fn a_local_model_is_made_ready_by_local_ai_after_the_person_was_told_its_size() {
+    let shipped = include_str!("../data/models.json");
+    let world = with_models("local-ensure", shipped, |_| {});
+    stand_in_local_ai(&world.root);
+
+    // What local AI offers, with whether P@x can use it and its settings.
+    let offers = world.core.local_models().expect("the offers");
+    assert_eq!(offers["recommended"], "qwen3-4b");
+    let models = offers["models"].as_array().expect("models");
+    assert_eq!(models.len(), 3, "the embeddings model is not offered");
+    assert_eq!(models[0]["usable_by_pax"], true);
+    assert_eq!(models[0]["settings"]["effort"]["default"], "none");
+    assert_eq!(models[0]["tier"]["tier"], "runs-well");
+
+    // The person is told the size first: without it, nothing starts.
+    let refusal = world
+        .core
+        .use_local_model("qwen3-4b", "")
+        .expect_err("the size was not named");
+    assert_eq!(code(refusal.clone()), "TUR-AI-SERVICE-006");
+    assert!(refusal.detail.contains("2.5 GB"), "{}", refusal.detail);
+    assert!(refusal.detail.contains("download_bytes 2497280256"));
+    let refusal = world
+        .core
+        .use_local_model("qwen3-4b", r#"{"download_bytes": 1}"#)
+        .expect_err("another size");
+    assert_eq!(code(refusal), "TUR-AI-SERVICE-006");
+    // A licence that restricts use needs the person's acceptance.
+    let refusal = world
+        .core
+        .use_local_model("ministral-3-3b", r#"{"download_bytes": 2988524864}"#)
+        .expect_err("the licence");
+    assert!(
+        refusal.detail.contains("Do not infringe"),
+        "{}",
+        refusal.detail
+    );
+    assert_eq!(
+        code(
+            world
+                .core
+                .use_local_model("no-such-model", "")
+                .expect_err("unknown")
+        ),
+        "TUR-AI-SERVICE-006"
+    );
+    assert_eq!(
+        code(
+            world
+                .core
+                .use_local_model(
+                    "qwen3-4b",
+                    r#"{"download_bytes": 2497280256, "force": true}"#
+                )
+                .expect_err("an option it does not take")
+        ),
+        "TUR-AI-SERVICE-006"
+    );
+    let calls = fs::read_to_string(world.root.join("calls.log")).expect("the calls");
+    assert!(!calls.contains("ensure"), "nothing was started: {calls}");
+
+    // Told and agreed: local AI makes it ready, step by step.
+    let job = world
+        .core
+        .use_local_model("qwen3-4b", r#"{"download_bytes": 2497280256}"#)
+        .expect("started");
+    assert!(job.starts_with("l-"));
+    let in_use = world
+        .events
+        .wait_for(|event| local_event(event, "qwen3-4b", "in-use"));
+    let Event::LocalModelProgress { event: in_use, .. } = in_use else {
+        unreachable!()
+    };
+    assert_eq!(in_use["provider"], "local");
+    assert_eq!(in_use["consent_needed"], true);
+    let steps: Vec<String> = world
+        .events
+        .all()
+        .iter()
+        .filter_map(|event| match event {
+            Event::LocalModelProgress { model, event } if model == "qwen3-4b" => {
+                event["event"].as_str().map(str::to_owned)
+            }
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        steps,
+        [
+            "plan",
+            "progress",
+            "verified",
+            "installed",
+            "starting",
+            "ready",
+            "in-use"
+        ]
+    );
+    // It was asked for exactly the model, its default context, and a
+    // template that lets P@x switch thinking with each request.
+    let calls = fs::read_to_string(world.root.join("calls.log")).expect("the calls");
+    assert!(
+        calls.contains("ensure qwen3-4b --json --context 8192 --reasoning auto"),
+        "{calls}"
+    );
+    assert!(!calls.contains("--accept-licence"));
+    // The provider is local AI with that model; consent for it is still to
+    // be given, so P@x stays off.
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while world.core.status()["local_model"] != Value::Null {
+        assert!(Instant::now() < deadline, "the job did not end");
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    let status = world.core.status();
+    assert_eq!(status["provider"], "local");
+    assert_eq!(status["model"], "qwen3-4b");
+    assert_eq!(status["enabled"], false);
+    assert_eq!(status["generation"]["settings"]["effort"], "none");
+    assert_eq!(status["generation"]["settings"]["context_tokens"], 8192);
+}
+
+#[test]
+fn making_a_local_model_ready_can_be_stopped_and_one_at_a_time() {
+    let shipped = include_str!("../data/models.json");
+    let world = with_models("local-cancel", shipped, |_| {});
+    stand_in_local_ai(&world.root);
+    assert_eq!(
+        code(world.core.cancel_local_model().expect_err("nothing runs")),
+        "TUR-AI-SERVICE-007"
+    );
+    // Already downloaded: no size to name.
+    world
+        .core
+        .use_local_model("gemma-4-e2b", "")
+        .expect("started");
+    world
+        .events
+        .wait_for(|event| local_event(event, "gemma-4-e2b", "plan"));
+    assert_eq!(
+        code(
+            world
+                .core
+                .use_local_model("qwen3-4b", r#"{"download_bytes": 2497280256}"#)
+                .expect_err("one at a time")
+        ),
+        "TUR-AI-SERVICE-004"
+    );
+    assert_eq!(world.core.status()["local_model"]["model"], "gemma-4-e2b");
+    world.core.cancel_local_model().expect("asked to stop");
+    world
+        .events
+        .wait_for(|event| local_event(event, "gemma-4-e2b", "cancelled"));
+    let calls = fs::read_to_string(world.root.join("calls.log")).expect("the calls");
+    assert!(calls.contains("cancel --json"), "{calls}");
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while world.core.status()["local_model"] != Value::Null {
+        assert!(Instant::now() < deadline, "the job did not end");
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    // Nothing was chosen.
+    assert_eq!(world.core.status()["provider"], Value::Null);
 }

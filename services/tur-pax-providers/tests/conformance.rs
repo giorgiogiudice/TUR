@@ -15,12 +15,12 @@ use std::time::Duration;
 
 use serde_json::{Value, json};
 use tur_pax_providers::{
-    ErrorKind, FinishReason, Message, OpaquePart, Part, SpendMeter, StreamEvent, TaskLimit,
-    ToolDefinition, ToolResult, Turn, Usage, capabilities_of,
+    ErrorKind, FinishReason, Message, OpaquePart, Part, ProviderConfig, ProviderId, SpendMeter,
+    StreamEvent, TaskLimit, ToolDefinition, ToolResult, Turn, Usage, capabilities_of,
 };
 
 use common::{
-    FakeServer, FollowUp, Reply, SYSTEM, Wire, config, config_with, hello, provider, run,
+    FakeServer, FollowUp, Reply, SYSTEM, Wire, base_url, config, config_with, hello, provider, run,
 };
 
 /// The two tools of the manifest example in the design document.
@@ -654,6 +654,127 @@ fn the_adapter_declares_its_capabilities(wire: &Wire) {
     assert!(server.requests().is_empty());
 }
 
+/// What each family takes of the generation settings, where it must appear
+/// in the request, and what the loader refuses for it (section 15 of
+/// pax-providers.md).
+fn generation_table(provider: ProviderId) -> (Value, Vec<(&'static str, Value)>, Vec<Value>) {
+    match provider {
+        ProviderId::Anthropic => (
+            json!({ "stop": ["STOP"], "effort": "high" }),
+            vec![
+                ("/stop_sequences", json!(["STOP"])),
+                ("/output_config/effort", json!("high")),
+            ],
+            vec![
+                json!({ "temperature": 0.5 }),
+                json!({ "top_p": 0.9 }),
+                json!({ "top_k": 5 }),
+                json!({ "effort": "minimal" }),
+                json!({ "thinking_budget": 1024 }),
+            ],
+        ),
+        ProviderId::OpenAi => (
+            json!({ "temperature": 0.5, "top_p": 0.9, "effort": "none" }),
+            vec![
+                ("/temperature", json!(0.5)),
+                ("/top_p", json!(0.9)),
+                ("/reasoning/effort", json!("none")),
+            ],
+            vec![
+                json!({ "top_k": 5 }),
+                json!({ "stop": ["STOP"] }),
+                json!({ "thinking_budget": 1024 }),
+            ],
+        ),
+        ProviderId::Google => (
+            json!({ "stop": ["STOP"], "effort": "low" }),
+            vec![
+                ("/generation_config/stop_sequences", json!(["STOP"])),
+                ("/generation_config/thinking_level", json!("low")),
+                ("/generation_config/max_output_tokens", json!(256)),
+            ],
+            vec![
+                json!({ "temperature": 0.5 }),
+                json!({ "top_k": 5 }),
+                json!({ "effort": "none" }),
+                json!({ "effort": "max" }),
+                json!({ "thinking_budget": 1024 }),
+            ],
+        ),
+        ProviderId::OpenAiChat => (
+            json!({
+                "temperature": 0.5, "top_p": 0.9, "top_k": 20, "stop": ["STOP"],
+                "effort": "medium"
+            }),
+            vec![
+                ("/temperature", json!(0.5)),
+                ("/top_p", json!(0.9)),
+                ("/top_k", json!(20)),
+                ("/stop", json!(["STOP"])),
+                ("/reasoning_effort", json!("medium")),
+                ("/max_tokens", json!(256)),
+            ],
+            vec![json!({ "thinking_budget": 1024 })],
+        ),
+    }
+}
+
+fn generation_settings_reach_the_wire_as_the_family_takes_them(wire: &Wire) {
+    let (accepted, expected, refused) = generation_table(wire.provider);
+    let server = FakeServer::start(vec![Reply::stream(wire.plain)]);
+    let config = config_with(wire.provider, &server, |value| {
+        value["generation"] = accepted.clone();
+    });
+    let events = run(&config, &hello(&config));
+    assert_eq!(finish(&events), &FinishReason::EndTurn);
+    let body = server.requests()[0].json();
+    for (pointer, value) in expected {
+        assert_eq!(body.pointer(pointer), Some(&value), "{pointer} in {body}");
+    }
+    // A setting the family has no place for is refused before anything is
+    // sent, never dropped in silence.
+    for generation in refused {
+        let value = json!({
+            "schema_version": 1,
+            "provider": wire.provider.as_str(),
+            "base_url": base_url(wire.provider, &server),
+            "model": "test-model",
+            "max_output_tokens": 256,
+            "generation": generation,
+        });
+        let error = ProviderConfig::from_json(&value.to_string())
+            .expect_err("the family has no place for this setting");
+        assert_eq!(error.kind(), ErrorKind::ConfigInvalid, "{value}");
+    }
+    assert_eq!(server.requests().len(), 1);
+}
+
+fn with_nothing_set_no_generation_field_is_sent(wire: &Wire) {
+    let server = FakeServer::start(vec![Reply::stream(wire.plain)]);
+    let config = config(wire.provider, &server);
+    assert!(config.generation.is_empty());
+    let events = run(&config, &hello(&config));
+    assert_eq!(finish(&events), &FinishReason::EndTurn);
+    let body = server.requests()[0].json();
+    for pointer in [
+        "/temperature",
+        "/top_p",
+        "/top_k",
+        "/stop",
+        "/stop_sequences",
+        "/thinking",
+        "/output_config",
+        "/reasoning",
+        "/reasoning_effort",
+        "/chat_template_kwargs",
+        "/thinking_budget_tokens",
+        "/generation_config/stop_sequences",
+        "/generation_config/thinking_level",
+    ] {
+        assert!(body.pointer(pointer).is_none(), "{pointer} was sent");
+    }
+}
+
 // One test per provider for each function above.
 macro_rules! conformance {
     ($provider:ident: $($test:ident),+ $(,)?) => {
@@ -700,4 +821,6 @@ for_every_provider!(
     spend_limit_stops_a_stream,
     spend_is_counted_under_the_limit,
     the_adapter_declares_its_capabilities,
+    generation_settings_reach_the_wire_as_the_family_takes_them,
+    with_nothing_set_no_generation_field_is_sent,
 );

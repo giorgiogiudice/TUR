@@ -22,6 +22,18 @@
             "input_per_million": 4.0,
             "output_per_million": 20.0,
             "cached_input_per_million": 0.2
+          },
+          "settings": {
+            "effort": {
+              "values": [
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+              ],
+              "provider_default": "medium"
+            }
           }
         },
         {
@@ -34,15 +46,54 @@
             "input_per_million": 2.0,
             "output_per_million": 10.0,
             "cached_input_per_million": 0.1
+          },
+          "settings": {
+            "effort": {
+              "values": [
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+              ],
+              "provider_default": "high"
+            }
           }
         },
         {
           "model": "claude-haiku-5-5",
           "label": "Claude Haiku 5.5",
           "max_output_tokens": 8192,
-          "tested_with_tur": false
+          "tested_with_tur": false,
+          "settings": {
+            "effort": {
+              "values": [
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+              ],
+              "provider_default": "medium"
+            }
+          }
         }
-      ]
+      ],
+      "settings": {
+        "stop": {
+          "max": 4
+        },
+        "max_output_tokens": {
+          "min": 1,
+          "max": 128000
+        },
+        "sources": [
+          "https://platform.claude.com/docs/en/build-with-claude/effort",
+          "https://platform.claude.com/docs/en/build-with-claude/extended-thinking",
+          "https://platform.claude.com/docs/en/api/migration-2026-10-21"
+        ],
+        "checked": "2026-11-13"
+      }
     },
     {
       "id": "google",
@@ -62,15 +113,51 @@
             "input_per_million": 0.3,
             "output_per_million": 2.5,
             "cached_input_per_million": 0.03
+          },
+          "settings": {
+            "effort": {
+              "values": [
+                "minimal",
+                "low",
+                "medium",
+                "high"
+              ],
+              "provider_default": "minimal"
+            }
           }
         },
         {
           "model": "gemini-4-carbon",
           "label": "Gemini 4 Carbon",
           "max_output_tokens": 8192,
-          "tested_with_tur": false
+          "tested_with_tur": false,
+          "settings": {
+            "effort": {
+              "values": [
+                "low",
+                "medium",
+                "high"
+              ],
+              "provider_default": "medium"
+            }
+          }
         }
-      ]
+      ],
+      "settings": {
+        "stop": {
+          "max": 4
+        },
+        "max_output_tokens": {
+          "min": 1,
+          "max": 65536
+        },
+        "sources": [
+          "https://aistudio.google.com/api-reference/interactions-api",
+          "https://aistudio.google.com/docs/thinking",
+          "https://aistudio.google.com/docs/text-generation"
+        ],
+        "checked": "2026-11-13"
+      }
     },
     {
       "id": "openai",
@@ -89,6 +176,16 @@
             "input_per_million": 2.0,
             "output_per_million": 10.0,
             "cached_input_per_million": 0.1
+          },
+          "settings": {
+            "effort": {
+              "values": [
+                "low",
+                "medium",
+                "high"
+              ],
+              "provider_default": "medium"
+            }
           }
         },
         {
@@ -101,9 +198,39 @@
             "input_per_million": 0.1,
             "output_per_million": 0.5,
             "cached_input_per_million": 0.01
+          },
+          "settings": {
+            "temperature": {
+              "min": 0,
+              "max": 2
+            },
+            "top_p": {
+              "min": 0,
+              "max": 1
+            },
+            "effort": {
+              "values": [
+                "none",
+                "low",
+                "medium",
+                "high"
+              ],
+              "provider_default": "medium",
+              "sampling_only_with": [
+                "none"
+              ]
+            }
           }
         }
-      ]
+      ],
+      "settings": {
+        "sources": [
+          "https://developers.openai.com/api/reference/resources/responses/methods/create",
+          "https://developers.openai.com/api/docs/guides/reasoning",
+          "https://developers.openai.com/api/docs/guides/latest-model"
+        ],
+        "checked": "2026-11-13"
+      }
     },
     {
       "id": "deepseek",
@@ -135,7 +262,9 @@
         {
           "model": "deepseek-flash",
           "label": "DeepSeek V4.1 Flash",
-          "capabilities": { "image_input": true },
+          "capabilities": {
+            "image_input": true
+          },
           "max_output_tokens": 8192,
           "tested_with_tur": false,
           "prices": {
@@ -148,7 +277,9 @@
         {
           "model": "deepseek-v4-pro",
           "label": "DeepSeek V4 Pro",
-          "capabilities": { "image_input": false },
+          "capabilities": {
+            "image_input": false
+          },
           "max_output_tokens": 8192,
           "tested_with_tur": false,
           "prices": {
@@ -158,7 +289,41 @@
             "cached_input_per_million": 0.044
           }
         }
-      ]
+      ],
+      "settings": {
+        "temperature": {
+          "min": 0,
+          "max": 2
+        },
+        "top_p": {
+          "min": 0.01,
+          "max": 1
+        },
+        "stop": {
+          "max": 16
+        },
+        "effort": {
+          "values": [
+            "none",
+            "low",
+            "high",
+            "max"
+          ],
+          "provider_default": "high",
+          "sampling_only_with": [
+            "none"
+          ]
+        },
+        "max_output_tokens": {
+          "min": 1,
+          "max": 393216
+        },
+        "sources": [
+          "https://api-docs.deepseek.com/api/create-chat-completion",
+          "https://api-docs.deepseek.com/guides/thinking_mode"
+        ],
+        "checked": "2026-11-13"
+      }
     },
     {
       "id": "mistral",
@@ -188,19 +353,33 @@
         {
           "model": "mistral-small-2603",
           "label": "Mistral Small",
-          "capabilities": { "image_input": true, "context_tokens": 256000 },
+          "capabilities": {
+            "image_input": true,
+            "context_tokens": 256000
+          },
           "max_output_tokens": 8192,
           "tested_with_tur": false,
           "prices": {
             "currency": "USD",
             "input_per_million": 0.15,
             "output_per_million": 0.6
+          },
+          "settings": {
+            "effort": {
+              "values": [
+                "none",
+                "high"
+              ]
+            }
           }
         },
         {
           "model": "mistral-large-4",
           "label": "Mistral Large 4",
-          "capabilities": { "image_input": true, "context_tokens": 1000000 },
+          "capabilities": {
+            "image_input": true,
+            "context_tokens": 1000000
+          },
           "max_output_tokens": 8192,
           "tested_with_tur": false,
           "prices": {
@@ -208,9 +387,36 @@
             "input_per_million": 0.7,
             "output_per_million": 2.1,
             "cached_input_per_million": 0.07
+          },
+          "settings": {
+            "effort": {
+              "values": [
+                "low",
+                "medium",
+                "high"
+              ]
+            }
           }
         }
-      ]
+      ],
+      "settings": {
+        "temperature": {
+          "min": 0,
+          "max": 1
+        },
+        "top_p": {
+          "min": 0,
+          "max": 1
+        },
+        "stop": {
+          "max": 4
+        },
+        "sources": [
+          "https://docs.mistral.ai/api/endpoint/chat",
+          "https://docs.mistral.ai/capabilities/reasoning"
+        ],
+        "checked": "2026-11-13"
+      }
     },
     {
       "id": "xai",
@@ -239,7 +445,10 @@
         {
           "model": "grok-4.3",
           "label": "Grok 4.3",
-          "capabilities": { "image_input": true, "context_tokens": 1000000 },
+          "capabilities": {
+            "image_input": true,
+            "context_tokens": 1000000
+          },
           "max_output_tokens": 8192,
           "tested_with_tur": false,
           "prices": {
@@ -252,7 +461,10 @@
         {
           "model": "grok-4.7",
           "label": "Grok 4.7",
-          "capabilities": { "image_input": true, "context_tokens": 500000 },
+          "capabilities": {
+            "image_input": true,
+            "context_tokens": 500000
+          },
           "max_output_tokens": 8192,
           "tested_with_tur": false,
           "prices": {
@@ -260,9 +472,35 @@
             "input_per_million": 2.0,
             "output_per_million": 6.0,
             "cached_input_per_million": 0.5
+          },
+          "settings": {
+            "effort": {
+              "values": [
+                "low",
+                "medium",
+                "high",
+                "xhigh"
+              ],
+              "provider_default": "high"
+            }
           }
         }
-      ]
+      ],
+      "settings": {
+        "temperature": {
+          "min": 0,
+          "max": 1
+        },
+        "top_p": {
+          "min": 0,
+          "max": 0.95
+        },
+        "sources": [
+          "https://docs.x.ai/developers/model-capabilities/text/reasoning.md",
+          "https://docs.x.ai/developers/rest-api-reference/inference/chat-completions.md"
+        ],
+        "checked": "2026-11-13"
+      }
     },
     {
       "id": "groq",
@@ -291,28 +529,72 @@
         {
           "model": "openai/gpt-oss-120b",
           "label": "GPT-OSS 120B on Groq",
-          "capabilities": { "image_input": false, "context_tokens": 131072 },
+          "capabilities": {
+            "image_input": false,
+            "context_tokens": 131072
+          },
           "max_output_tokens": 8192,
           "tested_with_tur": false,
           "prices": {
             "currency": "USD",
             "input_per_million": 0.15,
             "output_per_million": 0.6
+          },
+          "settings": {
+            "effort": {
+              "values": [
+                "low",
+                "medium",
+                "high"
+              ],
+              "provider_default": "medium"
+            }
           }
         },
         {
           "model": "qwen/qwen3.8-27b",
           "label": "Qwen 3.8 27B on Groq (preview)",
-          "capabilities": { "image_input": true, "context_tokens": 131072 },
+          "capabilities": {
+            "image_input": true,
+            "context_tokens": 131072
+          },
           "max_output_tokens": 8192,
           "tested_with_tur": false,
           "prices": {
             "currency": "USD",
             "input_per_million": 0.8,
             "output_per_million": 4.0
+          },
+          "settings": {
+            "effort": {
+              "values": [
+                "none",
+                "low",
+                "medium",
+                "high"
+              ]
+            }
           }
         }
-      ]
+      ],
+      "settings": {
+        "temperature": {
+          "min": 0,
+          "max": 2
+        },
+        "top_p": {
+          "min": 0,
+          "max": 1
+        },
+        "stop": {
+          "max": 4
+        },
+        "sources": [
+          "https://console.groq.com/docs/reasoning",
+          "https://console.groq.com/docs/api-reference"
+        ],
+        "checked": "2026-11-13"
+      }
     },
     {
       "id": "openrouter",
@@ -342,7 +624,10 @@
         {
           "model": "mistralai/mistral-small-2603",
           "label": "Mistral Small through OpenRouter",
-          "capabilities": { "image_input": true, "context_tokens": 262144 },
+          "capabilities": {
+            "image_input": true,
+            "context_tokens": 262144
+          },
           "max_output_tokens": 8192,
           "tested_with_tur": false,
           "prices": {
@@ -354,7 +639,10 @@
         {
           "model": "x-ai/grok-4.3",
           "label": "Grok 4.3 through OpenRouter",
-          "capabilities": { "image_input": true, "context_tokens": 1000000 },
+          "capabilities": {
+            "image_input": true,
+            "context_tokens": 1000000
+          },
           "max_output_tokens": 8192,
           "tested_with_tur": false,
           "prices": {
@@ -392,7 +680,10 @@
         {
           "model": "openai/gpt-oss-120b",
           "label": "GPT-OSS 120B on Together",
-          "capabilities": { "image_input": false, "context_tokens": 131072 },
+          "capabilities": {
+            "image_input": false,
+            "context_tokens": 131072
+          },
           "max_output_tokens": 8192,
           "tested_with_tur": false,
           "prices": {
@@ -404,7 +695,10 @@
         {
           "model": "Qwen/Qwen3.5-9B",
           "label": "Qwen 3.5 9B on Together",
-          "capabilities": { "image_input": true, "context_tokens": 262144 },
+          "capabilities": {
+            "image_input": true,
+            "context_tokens": 262144
+          },
           "max_output_tokens": 8192,
           "tested_with_tur": false,
           "prices": {
@@ -435,7 +729,29 @@
       "data_terms": {
         "runs_locally": true
       },
-      "models": []
+      "models": [],
+      "reasoning_style": "enable_thinking",
+      "settings": {
+        "temperature": {
+          "min": 0,
+          "max": 2
+        },
+        "top_p": {
+          "min": 0,
+          "max": 1
+        },
+        "top_k": {
+          "min": 0,
+          "max": 1000
+        },
+        "stop": {
+          "max": 8
+        },
+        "sources": [
+          "https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md"
+        ],
+        "checked": "2026-11-13"
+      }
     },
     {
       "id": "local",
@@ -457,7 +773,36 @@
           "model": "qwen3-4b",
           "label": "Qwen3 4B",
           "max_output_tokens": 1024,
-          "tested_with_tur": false
+          "tested_with_tur": false,
+          "settings": {
+            "temperature": {
+              "min": 0,
+              "max": 2,
+              "default": 0.7
+            },
+            "top_p": {
+              "min": 0,
+              "max": 1,
+              "default": 0.8
+            },
+            "top_k": {
+              "min": 0,
+              "max": 1000,
+              "default": 20
+            },
+            "effort": {
+              "values": [
+                "none",
+                "medium"
+              ],
+              "default": "none"
+            },
+            "context_tokens": {
+              "min": 2048,
+              "max": 32768,
+              "default": 8192
+            }
+          }
         },
         {
           "model": "qwen3-vl-2b-instruct",
@@ -466,21 +811,266 @@
             "image_input": true
           },
           "max_output_tokens": 1024,
-          "tested_with_tur": false
+          "tested_with_tur": false,
+          "settings": {
+            "context_tokens": {
+              "min": 2048,
+              "max": 131072,
+              "default": 8192
+            }
+          }
         },
         {
           "model": "granite-4.0-1b",
           "label": "Granite 4.0 1B",
           "max_output_tokens": 1024,
-          "tested_with_tur": false
+          "tested_with_tur": false,
+          "settings": {
+            "context_tokens": {
+              "min": 2048,
+              "max": 131072,
+              "default": 8192
+            }
+          }
         },
         {
           "model": "qwen3-0.6b",
           "label": "Qwen3 0.6B",
           "max_output_tokens": 1024,
-          "tested_with_tur": false
+          "tested_with_tur": false,
+          "settings": {
+            "temperature": {
+              "min": 0,
+              "max": 2,
+              "default": 0.7
+            },
+            "top_p": {
+              "min": 0,
+              "max": 1,
+              "default": 0.8
+            },
+            "top_k": {
+              "min": 0,
+              "max": 1000,
+              "default": 20
+            },
+            "effort": {
+              "values": [
+                "none",
+                "medium"
+              ],
+              "default": "none"
+            },
+            "context_tokens": {
+              "min": 2048,
+              "max": 32768,
+              "default": 8192
+            }
+          }
+        },
+        {
+          "model": "ministral-3-3b",
+          "label": "Ministral 3 3B Instruct",
+          "capabilities": {
+            "image_input": true
+          },
+          "max_output_tokens": 1024,
+          "tested_with_tur": false,
+          "settings": {
+            "temperature": {
+              "min": 0,
+              "max": 2,
+              "default": 0.05
+            },
+            "context_tokens": {
+              "min": 2048,
+              "max": 131072,
+              "default": 8192
+            }
+          }
+        },
+        {
+          "model": "gemma-4-e2b",
+          "label": "Gemma 4 E2B",
+          "capabilities": {
+            "image_input": true
+          },
+          "max_output_tokens": 1024,
+          "tested_with_tur": false,
+          "settings": {
+            "temperature": {
+              "min": 0,
+              "max": 2,
+              "default": 1.0
+            },
+            "top_p": {
+              "min": 0,
+              "max": 1,
+              "default": 0.95
+            },
+            "top_k": {
+              "min": 0,
+              "max": 1000,
+              "default": 64
+            },
+            "effort": {
+              "values": [
+                "none",
+                "medium"
+              ],
+              "default": "none"
+            },
+            "context_tokens": {
+              "min": 2048,
+              "max": 131072,
+              "default": 8192
+            }
+          }
+        },
+        {
+          "model": "gemma-4-e4b",
+          "label": "Gemma 4 E4B",
+          "capabilities": {
+            "image_input": true
+          },
+          "max_output_tokens": 1024,
+          "tested_with_tur": false,
+          "settings": {
+            "temperature": {
+              "min": 0,
+              "max": 2,
+              "default": 1.0
+            },
+            "top_p": {
+              "min": 0,
+              "max": 1,
+              "default": 0.95
+            },
+            "top_k": {
+              "min": 0,
+              "max": 1000,
+              "default": 64
+            },
+            "effort": {
+              "values": [
+                "none",
+                "medium"
+              ],
+              "default": "none"
+            },
+            "context_tokens": {
+              "min": 2048,
+              "max": 131072,
+              "default": 8192
+            }
+          }
+        },
+        {
+          "model": "gemma-4-26b-a4b",
+          "label": "Gemma 4 26B A4B",
+          "capabilities": {
+            "image_input": true
+          },
+          "max_output_tokens": 1024,
+          "tested_with_tur": false,
+          "settings": {
+            "temperature": {
+              "min": 0,
+              "max": 2,
+              "default": 1.0
+            },
+            "top_p": {
+              "min": 0,
+              "max": 1,
+              "default": 0.95
+            },
+            "top_k": {
+              "min": 0,
+              "max": 1000,
+              "default": 64
+            },
+            "effort": {
+              "values": [
+                "none",
+                "medium"
+              ],
+              "default": "none"
+            },
+            "context_tokens": {
+              "min": 2048,
+              "max": 131072,
+              "default": 8192
+            }
+          }
+        },
+        {
+          "model": "qwen3-30b-a3b",
+          "label": "Qwen3 30B A3B",
+          "max_output_tokens": 1024,
+          "tested_with_tur": false,
+          "settings": {
+            "temperature": {
+              "min": 0,
+              "max": 2,
+              "default": 0.7
+            },
+            "top_p": {
+              "min": 0,
+              "max": 1,
+              "default": 0.8
+            },
+            "top_k": {
+              "min": 0,
+              "max": 1000,
+              "default": 20
+            },
+            "effort": {
+              "values": [
+                "none",
+                "medium"
+              ],
+              "default": "none"
+            },
+            "context_tokens": {
+              "min": 2048,
+              "max": 32768,
+              "default": 8192
+            }
+          }
         }
-      ]
+      ],
+      "reasoning_style": "enable_thinking",
+      "settings": {
+        "temperature": {
+          "min": 0,
+          "max": 2
+        },
+        "top_p": {
+          "min": 0,
+          "max": 1
+        },
+        "top_k": {
+          "min": 0,
+          "max": 1000
+        },
+        "stop": {
+          "max": 8
+        },
+        "max_output_tokens": {
+          "min": 1,
+          "max": 8192
+        },
+        "context_tokens": {
+          "min": 2048,
+          "max": 32768,
+          "default": 8192
+        },
+        "sources": [
+          "https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md",
+          "services/tur-ai-local/catalogue"
+        ],
+        "checked": "2026-11-13"
+      }
     }
   ]
 }

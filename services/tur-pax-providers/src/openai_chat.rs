@@ -73,7 +73,7 @@ pub const CAPABILITIES: Capabilities = Capabilities {
         provider_tool: None,
         implemented: false,
     },
-    model_discovery: false,
+    model_discovery: true,
     speech_services: false,
 };
 
@@ -162,6 +162,7 @@ fn request_body(request: &Request, send_back_reasoning: bool) -> Result<Value, P
         "stream": true,
         "stream_options": { "include_usage": true },
     });
+    crate::generation::apply_openai_chat(&request.generation, &mut body);
     if !request.tools.is_empty() {
         let tools: Vec<Value> = request
             .tools
@@ -685,15 +686,32 @@ impl Decoder for ChatDecoder {
 
 /// The neutral usage of a usage object. The cached part is where OpenAI and
 /// DeepSeek put it, or where some services put it flat.
+///
+/// Output includes the model's reasoning, which is billed as output. The
+/// reference counts reasoning inside `completion_tokens`
+/// (`completion_tokens_details.reasoning_tokens` is a part of it); a
+/// service that left it out of `completion_tokens` but put it in
+/// `total_tokens`, or reported it alone, is still counted in full as far as
+/// its figures allow: the largest of the completion, the total less the
+/// prompt, and the reasoning.
 fn usage(usage: &Value) -> Usage {
     let cached = usage["prompt_tokens_details"]["cached_tokens"]
         .as_u64()
         .or_else(|| usage["prompt_cache_hit_tokens"].as_u64())
         .or_else(|| usage["cached_tokens"].as_u64())
         .unwrap_or(0);
+    let input = usage["prompt_tokens"].as_u64().unwrap_or(0);
+    let completion = usage["completion_tokens"].as_u64().unwrap_or(0);
+    let from_total = usage["total_tokens"]
+        .as_u64()
+        .map_or(0, |total| total.saturating_sub(input));
+    let reasoning = usage["completion_tokens_details"]["reasoning_tokens"]
+        .as_u64()
+        .or_else(|| usage["reasoning_tokens"].as_u64())
+        .unwrap_or(0);
     Usage {
-        input_tokens: usage["prompt_tokens"].as_u64().unwrap_or(0),
-        output_tokens: usage["completion_tokens"].as_u64().unwrap_or(0),
+        input_tokens: input,
+        output_tokens: completion.max(from_total).max(reasoning),
         cached_input_tokens: cached,
         estimated: false,
     }
@@ -753,6 +771,7 @@ mod tests {
             messages,
             tools: Vec::new(),
             max_output_tokens: 512,
+            generation: crate::generation::Generation::default(),
         }
     }
 
@@ -761,6 +780,22 @@ mod tests {
             provider: ProviderId::OpenAiChat,
             data: json!({ "reasoning_content": text }),
         })
+    }
+
+    #[test]
+    fn reasoning_is_counted_as_output_whatever_figure_carries_it() {
+        // The reference: reasoning inside completion_tokens.
+        let openai = json!({ "prompt_tokens": 100, "completion_tokens": 900, "total_tokens": 1000,
+            "completion_tokens_details": { "reasoning_tokens": 800 } });
+        assert_eq!(usage(&openai).output_tokens, 900);
+        // Reasoning left out of completion_tokens but in the total.
+        let apart = json!({ "prompt_tokens": 100, "completion_tokens": 100, "total_tokens": 1000 });
+        assert_eq!(usage(&apart).output_tokens, 900);
+        // Reasoning reported alone, larger than the completion.
+        let alone =
+            json!({ "prompt_tokens": 100, "completion_tokens": 50, "reasoning_tokens": 700 });
+        assert_eq!(usage(&alone).output_tokens, 700);
+        assert_eq!(usage(&alone).input_tokens, 100);
     }
 
     #[test]

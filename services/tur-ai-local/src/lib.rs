@@ -16,6 +16,8 @@
 //! * [`store`]: the downloaded models under `$XDG_DATA_HOME/tur/models`.
 //! * [`download`]: fetching a model from its publisher, or importing a file,
 //!   with its size and SHA-256 checked before it can be used.
+//! * [`ensure`]: a chosen model downloaded, resumed, checked and put in
+//!   place in one step, with its progress as events.
 //! * [`engine`]: the inference engine (llama.cpp's `llama-server`), the
 //!   address it may listen on and its command line.
 //! * [`serve`]: starting the engine as a child process, stopping it when it
@@ -86,6 +88,7 @@ pub mod cli;
 pub mod codes;
 pub mod download;
 pub mod engine;
+pub mod ensure;
 pub mod fit;
 pub mod hardware;
 pub mod serve;

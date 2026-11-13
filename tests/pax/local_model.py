@@ -104,6 +104,7 @@ def main():
     parser.add_argument("--evidence", required=True, type=Path)
     parser.add_argument("--max-seconds", type=int, default=1500)
     parser.add_argument("--max-steps", type=int, default=8)
+    parser.add_argument("--tasks", default="", help="the tasks to run, by name, separated by commas (default: all)")
     arguments = parser.parse_args()
 
     work = arguments.work_dir.resolve()
@@ -139,6 +140,12 @@ def main():
         ("local-ai", "Which AI model could run locally on this computer, and why?", False, []),
         ("readonly-command", scenario_request("03-readonly-command.json"), False, ["--grant-read", str(granted)]),
     ]
+    wanted = [name for name in arguments.tasks.split(",") if name]
+    unknown = [name for name in wanted if name not in [task[0] for task in tasks]]
+    if unknown:
+        parser.error(f"unknown tasks: {unknown}")
+    if wanted:
+        tasks = [task for task in tasks if task[0] in wanted]
     local_output = []
     answered = []
     for name, request, fixture, extra in tasks:
