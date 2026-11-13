@@ -39,12 +39,13 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use tur_pax_memory::default_store_dir;
 use tur_pax_providers::{
-    ApiKey, ErrorKind, FileKeySource, KeySource, Prices, ProviderConfig, ProviderId, RetryPolicy,
-    TaskLimit, Timeouts,
+    ApiKey, ErrorKind, FileKeySource, KeySource, Prices, ProviderConfig, ProviderId,
+    ReasoningStyle, RetryPolicy, TaskLimit, Timeouts,
 };
 
 use crate::consent::{CONSENT_TEXT_VERSION, family_name};
 use crate::faults::{Fault, TaskCode};
+use crate::tuning::{self, Choice, SettingsSpec, Values};
 
 /// The settings schema version this build reads and writes.
 pub const SETTINGS_SCHEMA_VERSION: u32 = 1;
@@ -371,6 +372,10 @@ pub struct ModelEntry {
     /// The prices, if they are known.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prices: Option<Prices>,
+    /// The generation settings this model accepts, in place of what its
+    /// provider declares ([`crate::tuning`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub settings: Option<SettingsSpec>,
 }
 
 /// One provider: a service P@x can talk to, by an identifier of its own.
@@ -415,6 +420,15 @@ pub struct ProviderEntry {
     /// family only; DeepSeek).
     #[serde(default, skip_serializing_if = "is_false")]
     pub send_back_reasoning: bool,
+    /// How the service is told how much its model reasons (OpenAI-compatible
+    /// family only): `reasoning_effort`, or the chat template's
+    /// `enable_thinking` switch of llama.cpp's server.
+    #[serde(default, skip_serializing_if = "ReasoningStyle::is_default")]
+    pub reasoning_style: ReasoningStyle,
+    /// The generation settings its models accept, unless a model declares
+    /// otherwise ([`crate::tuning`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub settings: Option<SettingsSpec>,
     /// What it declares its models can do, unless a model declares otherwise.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub capabilities: Option<DeclaredCapabilities>,
@@ -619,6 +633,8 @@ impl ProviderEntry {
             key_required: true,
             runtime_key_file: None,
             send_back_reasoning: false,
+            reasoning_style: ReasoningStyle::default(),
+            settings: None,
             capabilities: None,
             data_terms: None,
             data_terms_url: None,
@@ -634,6 +650,18 @@ impl ProviderEntry {
         self.capabilities
             .unwrap_or_default()
             .overlaid(self.model(model).and_then(|entry| entry.capabilities))
+    }
+
+    /// The generation settings a model of this provider accepts: the
+    /// model's own declarations over the provider's. `None` when neither
+    /// declares anything.
+    pub fn settings_spec(&self, model: &str) -> Option<SettingsSpec> {
+        let own = self.model(model).and_then(|entry| entry.settings.as_ref());
+        match (&self.settings, own) {
+            (None, None) => None,
+            (Some(provider), own) => Some(provider.overlaid(own)),
+            (None, Some(own)) => Some(own.clone()),
+        }
     }
 
     /// What P@x may attempt with a model of this provider.
@@ -703,6 +731,19 @@ impl ProviderEntry {
         }
     }
 
+    /// A configuration for asking this provider which models it offers
+    /// ([`tur_pax_providers::list_models`]): its address, or the gateway
+    /// address of the settings, and the timeouts of that address.
+    pub fn listing_config(&self, gateway: Option<&str>) -> ProviderConfig {
+        let base_url = gateway
+            .map(str::to_owned)
+            .or_else(|| self.base_url.clone());
+        let mut config = self.probe("models", None);
+        config.timeouts = timeouts_for(base_url.as_deref());
+        config.base_url = base_url;
+        config
+    }
+
     /// Check the entry. The reason names what is wrong and quotes nothing.
     fn check(&self) -> Result<(), String> {
         if !is_provider_id(&self.id) {
@@ -714,6 +755,25 @@ impl ProviderEntry {
             .is_some_and(|item| !is_keyring_item(item))
         {
             return Err(format!("the keyring item of {} is not valid", self.id));
+        }
+        if !self.reasoning_style.is_default() && self.adapter != ProviderId::OpenAiChat {
+            return Err(format!(
+                "{} names a reasoning style: only the openai-chat family reads one",
+                self.id
+            ));
+        }
+        if let Some(spec) = &self.settings {
+            spec.check(self.adapter, self.reasoning_style)
+                .map_err(|reason| format!("the generation settings of {}: {reason}", self.id))?;
+        }
+        for model in &self.models {
+            if model.settings.is_some()
+                && let Some(spec) = self.settings_spec(&model.model)
+            {
+                spec.check(self.adapter, self.reasoning_style).map_err(|reason| {
+                    format!("the generation settings of a model of {}: {reason}", self.id)
+                })?;
+            }
         }
         if !self.key_required && self.adapter != ProviderId::OpenAiChat {
             return Err(format!(
@@ -844,6 +904,10 @@ pub struct Settings {
     /// has is the list's.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub providers: Vec<ProviderEntry>,
+    /// The generation settings the person chose, for each model of each
+    /// provider they set any for ([`crate::tuning`]).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub generation: Vec<Choice>,
 }
 
 impl Default for Settings {
@@ -858,6 +922,7 @@ impl Default for Settings {
             max_output_tokens: None,
             limits: Limits::default(),
             providers: Vec::new(),
+            generation: Vec::new(),
         }
     }
 }
@@ -980,7 +1045,61 @@ impl Settings {
             .limits
             .validate()
             .map_err(|fault| storage(fault.detail))?;
+        let mut chosen: Vec<(&str, &str)> = Vec::new();
+        for choice in &settings.generation {
+            if !is_provider_id(&choice.provider) || !is_model_name(&choice.model) {
+                return Err(storage(
+                    "a generation setting names no valid provider or model",
+                ));
+            }
+            if chosen.contains(&(choice.provider.as_str(), choice.model.as_str())) {
+                return Err(storage("a model's generation settings are there twice"));
+            }
+            chosen.push((&choice.provider, &choice.model));
+            choice
+                .settings
+                .check_form()
+                .map_err(|reason| storage(format!("a generation setting: {reason}")))?;
+        }
         Ok(settings)
+    }
+
+    /// What the person chose for a model of a provider.
+    pub fn choice(&self, provider: &str, model: &str) -> Option<&Values> {
+        self.generation
+            .iter()
+            .find(|choice| choice.provider == provider && choice.model == model)
+            .map(|choice| &choice.settings)
+    }
+
+    /// Keep what the person chose for a model of a provider; nothing chosen
+    /// removes the entry.
+    pub fn set_choice(&mut self, provider: &str, model: &str, values: Values) {
+        self.generation
+            .retain(|choice| !(choice.provider == provider && choice.model == model));
+        if !values.is_empty() {
+            self.generation.push(Choice {
+                provider: provider.to_owned(),
+                model: model.to_owned(),
+                settings: values,
+            });
+        }
+    }
+
+    /// The generation settings that take effect for a model of a provider:
+    /// the person's choice over the model's defaults, checked against what
+    /// the model declares it accepts.
+    ///
+    /// # Errors
+    ///
+    /// `TUR-AI-SERVICE-006`, with the sentence of [`tuning::check`].
+    pub fn effective_values(&self, entry: &ProviderEntry, model: &str) -> Result<Values, Fault> {
+        let spec = entry.settings_spec(model);
+        let chosen = self.choice(&entry.id, model).cloned().unwrap_or_default();
+        let values = tuning::effective(spec.as_ref(), &chosen);
+        tuning::check(spec.as_ref(), &values, entry.adapter, entry.reasoning_style)
+            .map_err(invalid)?;
+        Ok(values)
     }
 
     /// Load the settings file. A file that does not exist is the settings
@@ -1145,6 +1264,7 @@ impl Settings {
             }
         };
         let base_url = self.base_url.clone().or_else(|| entry.base_url.clone());
+        let values = self.effective_values(&entry, model)?;
         let config = ProviderConfig {
             schema_version: tur_pax_providers::config::CONFIG_SCHEMA_VERSION,
             provider: entry.adapter,
@@ -1152,14 +1272,15 @@ impl Settings {
             base_url,
             send_back_reasoning: entry.send_back_reasoning,
             model: model.clone(),
-            max_output_tokens: self
+            max_output_tokens: values
                 .max_output_tokens
+                .or(self.max_output_tokens)
                 .or(listed.and_then(|entry| entry.max_output_tokens))
                 .unwrap_or(DEFAULT_MAX_OUTPUT_TOKENS),
             retry: RetryPolicy::default(),
             prices,
             task_limit: Some(task_limit),
-            generation: tur_pax_providers::Generation::default(),
+            generation: values.generation(entry.reasoning_style),
         };
         config.validate().map_err(|error| Fault {
             code: error.kind().error_code(),
@@ -1366,6 +1487,11 @@ pub struct Paths {
     /// server on this computer writes the key it takes
     /// ([`ProviderEntry::runtime_key_file`]).
     pub runtime: Option<PathBuf>,
+    /// The program of local AI, `tur-ai-local` ([`crate::local`]).
+    pub ai_local: PathBuf,
+    /// Where the lists of models the providers gave are kept, one file per
+    /// provider.
+    pub listing: PathBuf,
 }
 
 /// The model list an administrator may put in place.
@@ -1406,6 +1532,8 @@ impl Paths {
             extra_adapters: None,
             home,
             runtime: None,
+            ai_local: PathBuf::from(crate::local::AI_LOCAL),
+            listing: state.join("model-lists"),
         })
     }
 
@@ -2435,5 +2563,136 @@ mod tests {
         }
         // Whatever this machine is set to, the answer is a zone that exists.
         assert!(tur_pax_memory::is_known_zone(&host_zone()));
+    }
+
+    #[test]
+    fn the_local_preset_declares_what_each_catalogue_model_takes() {
+        use tur_pax_providers::Effort;
+
+        let shipped = ModelList::from_json(include_str!("../data/models.json")).expect("loads");
+        let local = shipped.provider("local").expect("the local preset");
+        assert_eq!(local.reasoning_style, ReasoningStyle::EnableThinking);
+        let directory = Path::new(env!("CARGO_MANIFEST_DIR")).join("../tur-ai-local/catalogue");
+        for model in &local.models {
+            let text = fs::read_to_string(directory.join(format!("{}.toml", model.model)))
+                .expect("its catalogue entry");
+            let field = |name: &str| {
+                let prefix = format!("{name} = ");
+                text.lines()
+                    .find_map(|line| line.strip_prefix(&prefix))
+                    .map(|value| value.trim_matches('"').to_owned())
+                    .expect("a field of the entry")
+            };
+            let context: u32 = field("context_length").parse().expect("a number");
+            let spec = local.settings_spec(&model.model).expect("declared");
+            // A model that can think is offered the switch, off by default
+            // as tur-ai-local serves it; one that cannot is offered none.
+            assert_eq!(
+                spec.effort.is_some(),
+                field("thinking") == "hybrid",
+                "{}",
+                model.model
+            );
+            if let Some(effort) = &spec.effort {
+                assert_eq!(effort.default, Some(Effort::None), "{}", model.model);
+            }
+            let range = spec.context_tokens.expect("a context range");
+            assert!(range.max <= context, "{}", model.model);
+            assert_eq!(range.default, Some(8192), "{}", model.model);
+        }
+
+        // The defaults reach the configuration of a task.
+        let mut settings = Settings::default();
+        settings
+            .set_provider("local", "qwen3-4b", &shipped)
+            .expect("the local preset");
+        let config = settings.provider_config(&shipped).expect("a configuration");
+        assert_eq!(config.generation.effort, Some(Effort::None));
+        assert_eq!(config.generation.temperature, Some(0.7));
+        assert_eq!(config.generation.top_k, Some(20));
+        assert_eq!(
+            config.generation.reasoning_style,
+            ReasoningStyle::EnableThinking
+        );
+        // The person's choice replaces a default; one outside the
+        // declaration stops the configuration with the sentence.
+        settings.set_choice(
+            "local",
+            "qwen3-4b",
+            Values {
+                temperature: Some(0.2),
+                effort: Some(Effort::Medium),
+                ..Values::default()
+            },
+        );
+        let config = settings.provider_config(&shipped).expect("a configuration");
+        assert_eq!(config.generation.temperature, Some(0.2));
+        assert_eq!(config.generation.effort, Some(Effort::Medium));
+        settings.set_choice(
+            "local",
+            "qwen3-4b",
+            Values {
+                top_k: Some(5000),
+                ..Values::default()
+            },
+        );
+        let refusal = settings.provider_config(&shipped).expect_err("refused");
+        assert_eq!(refusal.code.as_str(), "TUR-AI-SERVICE-006");
+        assert_eq!(
+            refusal.detail,
+            "Top-k must be from 0 to 1000 for this model."
+        );
+        // Nothing chosen removes the entry.
+        settings.set_choice("local", "qwen3-4b", Values::default());
+        assert!(settings.generation.is_empty());
+    }
+
+    #[test]
+    fn every_listed_model_declares_only_what_its_family_can_be_sent() {
+        let shipped = ModelList::from_json(include_str!("../data/models.json")).expect("loads");
+        for entry in &shipped.providers {
+            for model in &entry.models {
+                if let Some(spec) = entry.settings_spec(&model.model) {
+                    spec.check(entry.adapter, entry.reasoning_style)
+                        .unwrap_or_else(|reason| panic!("{} {}: {reason}", entry.id, model.model));
+                    if entry.adapter == ProviderId::Anthropic {
+                        assert!(spec.temperature.is_none() && spec.top_p.is_none());
+                    }
+                    assert!(spec.checked.is_some(), "{} {}", entry.id, model.model);
+                }
+            }
+        }
+        // A declaration the family cannot be sent is not a valid list.
+        let refused = ModelList::from_json(
+            r#"{ "schema_version": 1, "status": "example", "prices_as_of": "2026-11-12",
+                 "providers": [{ "id": "anthropic", "adapter": "anthropic", "name": "A",
+                     "settings": { "temperature": {"min": 0, "max": 1} } }] }"#,
+        );
+        assert!(refused.is_err());
+        // A choice kept in the settings file is read back, and one out of
+        // any provider's range is not a settings file.
+        let text = r#"{ "schema_version": 1, "generation": [
+            { "provider": "local", "model": "qwen3-4b", "settings": { "temperature": 0.3, "effort": "medium" } } ] }"#;
+        let settings = Settings::from_json(text).expect("loads");
+        assert_eq!(
+            settings
+                .choice("local", "qwen3-4b")
+                .and_then(|values| values.temperature),
+            Some(0.3)
+        );
+        assert!(
+            Settings::from_json(
+                r#"{ "schema_version": 1, "generation": [
+                { "provider": "local", "model": "m", "settings": { "temperature": 3 } } ] }"#
+            )
+            .is_err()
+        );
+        assert!(
+            Settings::from_json(
+                r#"{ "schema_version": 1, "generation": [
+                { "provider": "local", "model": "m", "settings": { "seed": 3 } } ] }"#
+            )
+            .is_err()
+        );
     }
 }

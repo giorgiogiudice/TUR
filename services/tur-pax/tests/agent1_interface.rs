@@ -221,6 +221,8 @@ fn every_way_into_the_service_ends_in_one_task_loop_that_grants_nothing() {
         "wake.rs",
         "consent.rs",
         "bus.rs",
+        "local.rs",
+        "tuning.rs",
     ];
     for name in modules {
         let text = shipped(name);

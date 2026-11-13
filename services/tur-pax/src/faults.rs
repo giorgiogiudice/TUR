@@ -275,6 +275,12 @@ task_code_registry! {
         user_message: "P@x could not read or save its settings. Nothing was changed.",
         explanation: "A settings file that cannot be read leaves the assistant switched off. The detail names the file and never quotes it.",
         recovery: "Check the files under the configuration and state folders of the assistant.";
+    ServiceLocalUnavailable => "TUR-AI-SERVICE-010", Error,
+        title: "Local AI on this computer could not be asked.",
+        detection: "The local AI program (tur-ai-local) is not installed, could not be started, ended without an answer, or answered with something that is not its report.",
+        user_message: "P@x could not reach local AI on this computer. Nothing was downloaded or changed.",
+        explanation: "The models a computer can run, their download and their start are local AI's. P@x asks it and shows what it says.",
+        recovery: "Install the latest TUR updates. If it keeps happening, create a support bundle.";
     KeyStoreUnavailable => "TUR-AI-KEY-001", Error,
         title: "No password store is available to keep or read the provider key.",
         detection: "No service on the session bus offered the Secret Service interface, or it did not answer.",

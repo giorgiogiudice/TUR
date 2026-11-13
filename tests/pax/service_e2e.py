@@ -60,6 +60,9 @@ from fake_provider import ScriptedProvider  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 HERE = Path(__file__).resolve().parent
+# A stand-in for local AI: what the service runs for ListLocalModels,
+# UseLocalModel and CancelLocalModel.
+STUB_AI_LOCAL = HERE / "stub-tur-ai-local"
 
 # Not a real key: the provider is a script on this machine.
 KEY = "sk-test-KEY-svc-e2e-" + secrets.token_hex(12)
@@ -270,7 +273,7 @@ class Test:
             "[D-BUS Service]\n"
             f"Name={AGENT}\n"
             f"Exec={self.tur_pax} serve --manifests {tools / 'manifests'} --adapters {tools / 'adapters'}"
-            f" --models {models}\n"
+            f" --models {models} --ai-local {STUB_AI_LOCAL}\n"
         )
         self.bus.start(self.environment())
 
@@ -863,6 +866,112 @@ class Test:
         hertz = os.sysconf("SC_CLK_TCK")
         check(name, "less than 0.05 s of processor time in 10 s of waiting", used / hertz < 0.05, f"{used / hertz:.3f} s")
 
+    def models_and_settings(self):
+        name = "models-and-settings"
+        print(f"\n{name}: the models of a provider, their settings, checked and sent in the family's fields", flush=True)
+        check, equal = self.checks.check, self.checks.equal
+        error_006 = f"{AGENT}.Error.TUR_AI_SERVICE_006"
+        described, error = self.call_json("GetGenerationSettings", "ss", "anthropic", "claude-opus-5-5")
+        check(name, "a listed model's settings are described", not error and described and described.get("declared"), error or described)
+        accepts = (described or {}).get("accepts", {})
+        check(name, "Claude Opus 5.5 takes an effort up to max, and no temperature",
+              "max" in accepts.get("effort", {}).get("values", []) and "temperature" not in accepts, accepts)
+        _, error = self.call("SetGenerationSettings", "sss", "anthropic", "claude-opus-5-5", '{"temperature": 0.3}')
+        equal(name, "a setting the model does not take is refused", error, error_006)
+        _, error = self.call("SetGenerationSettings", "sss", "openai", "gpt-6-luna", '{"temperature": 0.3}')
+        equal(name, "a temperature while the model reasons is refused", error, error_006)
+        _, error = self.call("SetGenerationSettings", "sss", "openai", "gpt-6-luna", '{"effort": "none", "temperature": 0.3}')
+        check(name, "the same temperature with the effort none is kept", error is None, error)
+        _, error = self.call("SetGenerationSettings", "sss", "anthropic", "claude-opus-5-5", '{"effort": "high"}')
+        check(name, "an effort the model takes is kept", error is None, error)
+        saved = json.loads(self.settings_path().read_text())
+        kept = {(entry["provider"], entry["model"]): entry["settings"] for entry in saved.get("generation", [])}
+        equal(name, "the settings file keeps each model's choice", kept.get(("anthropic", "claude-opus-5-5")), {"effort": "high"})
+
+        # The chosen effort goes to the provider in Anthropic's field.
+        _, error = self.call("SetProvider", "ss", "anthropic", "claude-opus-5-5")
+        check(name, "another model of the same provider is chosen", error is None, error)
+        equal(name, "the consent stays: same provider", self.status().get("enabled"), True)
+        self.script([{"text": "I thought about it."}])
+        reply, error = self.call("StartTask", "ss", "Think about it.", "")
+        task = (reply[0] if isinstance(reply, list) else reply) if not error else None
+        result = self.finished(task) if task else None
+        equal(name, "the task completed", (result or {}).get("outcome"), "completed")
+        bodies = self.provider.bodies()
+        body = bodies[-1] if bodies else {}
+        equal(name, "the request carries output_config.effort high", body.get("output_config"), {"effort": "high"})
+        check(name, "and no sampling parameter", not any(field in body for field in ("temperature", "top_p", "top_k")), sorted(body))
+        _, error = self.call("SetProvider", "ss", "anthropic", "scripted-model")
+        check(name, "the scripted model is chosen again", error is None, error)
+
+        listed, error = self.call_json("ListProviderModels", "sb", "anthropic", False)
+        models = {model["model"]: model for model in (listed or {}).get("models", [])}
+        check(name, "ListProviderModels gives the list's models with their declarations",
+              not error and models.get("claude-opus-5-5", {}).get("settings_declared") is True, error or listed)
+        equal(name, "from TUR's list, until the person asks the provider", (listed or {}).get("source"), "list")
+
+        shown = self.cli("models", "settings", "anthropic:claude-opus-5-5", "--json")
+        check(name, "tur-pax models settings shows the choice", shown.returncode == 0 and '"effort": "high"' in shown.stdout, shown.stdout + shown.stderr)
+        refused = self.cli("models", "settings", "anthropic:claude-opus-5-5", "--set", "temperature=0.2")
+        check(name, "tur-pax models settings refuses what the model does not take, in words",
+              refused.returncode == 1 and "does not take a temperature" in refused.stderr, refused.stderr)
+        listed = self.cli("models", "list", "anthropic")
+        check(name, "tur-pax models list names the provider's models", listed.returncode == 0 and "anthropic:claude-opus-5-5" in listed.stdout, listed.stdout + listed.stderr)
+
+    def local_model(self):
+        name = "local-model"
+        print(f"\n{name}: local models offered by hardware, made ready by local AI when chosen", flush=True)
+        check, equal = self.checks.check, self.checks.equal
+        error_006 = f"{AGENT}.Error.TUR_AI_SERVICE_006"
+        state = self.home / ".local" / "share" / "stub-tur-ai-local"
+        offers, error = self.call_json("ListLocalModels")
+        models = {model["id"]: model for model in (offers or {}).get("models", [])}
+        check(name, "ListLocalModels gives local AI's models, without the embeddings model", not error and sorted(models) == ["gemma-4-e2b", "ministral-3-3b", "qwen3-0.6b"], error or offers)
+        equal(name, "with its recommendation", (offers or {}).get("recommended"), "qwen3-0.6b")
+        qwen = models.get("qwen3-0.6b", {})
+        check(name, "each with its tier, whether P@x can use it and the settings it takes there",
+              qwen.get("tier", {}).get("tier") == "runs-well" and qwen.get("usable_by_pax") is True
+              and qwen.get("settings", {}).get("effort", {}).get("default") == "none", qwen)
+
+        _, error = self.call("UseLocalModel", "ss", "qwen3-0.6b", "")
+        equal(name, "a download the person was not told the size of is refused", error, error_006)
+        _, error = self.call("UseLocalModel", "ss", "ministral-3-3b", '{"download_bytes": 2988524864}')
+        equal(name, "a licence with a restriction not accepted is refused", error, error_006)
+        calls = (state / "calls.log").read_text() if (state / "calls.log").exists() else ""
+        check(name, "nothing was started", "ensure" not in calls, calls)
+
+        not_agreed = self.cli("models", "use", "local:qwen3-0.6b")
+        check(name, "tur-pax models use says the size and downloads nothing without --yes",
+              not_agreed.returncode == 1 and "0.6 GB" in not_agreed.stdout and "--yes" in not_agreed.stderr, not_agreed.stdout + not_agreed.stderr)
+        used = self.cli("models", "use", "local:qwen3-0.6b", "--yes")
+        check(name, "tur-pax models use local:qwen3-0.6b --yes makes it ready and chooses it",
+              used.returncode == 0 and "ready on this computer" in used.stdout, used.stdout + used.stderr)
+        steps = [json.loads(item["args"][1]).get("event") for item in self.signals
+                 if item["member"] == "LocalModelProgress" and item["args"][0] == "qwen3-0.6b"]
+        equal(name, "every step was signalled, in order", steps, ["plan", "progress", "verified", "installed", "starting", "ready", "in-use"])
+        calls = (state / "calls.log").read_text() if (state / "calls.log").exists() else ""
+        check(name, "local AI was asked for the model, its context and a template P@x can switch",
+              "ensure qwen3-0.6b --json --context 8192 --reasoning auto" in calls, calls)
+        status = self.wait_for(lambda: (lambda s: s if s.get("local_model") is None and s.get("provider") == "local" else None)(self.status()), 20) or {}
+        equal(name, "the provider is local AI with that model", (status.get("provider"), status.get("model")), ("local", "qwen3-0.6b"))
+        equal(name, "and P@x waits for the consent for local AI", status.get("enabled"), False)
+        equal(name, "the model's defaults are in effect", (status.get("generation") or {}).get("settings", {}).get("effort"), "none")
+
+        reply, error = self.call("UseLocalModel", "ss", "gemma-4-e2b", "")
+        check(name, "a downloaded model needs no size", error is None and reply, error)
+        planned = self.wait_for(lambda: [item for item in self.signals if item["member"] == "LocalModelProgress" and item["args"][0] == "gemma-4-e2b"], 20)
+        check(name, "its plan was signalled", bool(planned))
+        _, error = self.call("UseLocalModel", "ss", "qwen3-0.6b", '{"download_bytes": 639446688}')
+        equal(name, "one model is made ready at a time", error, f"{AGENT}.Error.TUR_AI_SERVICE_004")
+        _, error = self.call("CancelLocalModel")
+        check(name, "CancelLocalModel asks local AI to stop", error is None, error)
+        cancelled = self.wait_for(lambda: [item for item in self.signals if item["member"] == "LocalModelProgress"
+                                           and item["args"][0] == "gemma-4-e2b" and json.loads(item["args"][1]).get("event") == "cancelled"], 30)
+        check(name, "and it stopped", bool(cancelled))
+        status = self.wait_for(lambda: (lambda s: s if s.get("local_model") is None else None)(self.status()), 30) or {}
+        equal(name, "nothing is being made ready any more, and the model in use is unchanged", (status.get("local_model"), status.get("model")), (None, "qwen3-0.6b"))
+        (self.evidence / "stub-tur-ai-local-calls.log").write_text(calls)
+
     def key_nowhere(self):
         name = "key"
         print(f"\n{name}: the key is in no reply, signal, notification, file or log", flush=True)
@@ -942,6 +1051,8 @@ def main():
             test.planted()
             test.idle()
             test.other_user()
+            test.models_and_settings()
+            test.local_model()
             test.key_nowhere()
     except Exception as error:  # noqa: BLE001
         import traceback
