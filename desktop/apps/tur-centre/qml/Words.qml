@@ -317,7 +317,7 @@ QtObject {
     // application.
     function updateState(update: var): string {
         if (!update || update.checked !== true)
-            return qsTr("Not checked")
+            return qsTr("Updates not checked")
         if (update.available === true && update.version)
             //: %1 is the version an update brings.
             return qsTr("An update is available: version %1").arg(update.version)

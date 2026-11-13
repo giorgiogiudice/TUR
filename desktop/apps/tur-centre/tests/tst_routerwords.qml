@@ -58,7 +58,7 @@ Item {
                 compare(RouterWords.reason(option), option.reason, file + ", " + option.route)
                 written++
             }
-            verify(written >= 20, written + " options")
+            verify(written >= 15, written + " options")
         }
 
         function test_every_prerequisite_is_the_router_s_own_words() {

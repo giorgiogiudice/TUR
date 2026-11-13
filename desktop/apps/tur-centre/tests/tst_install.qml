@@ -292,10 +292,15 @@ Item {
             compare(switchOn.text, "Switch on Flathub and try again")
             mouseClick(switchOn)
             // Switched on, then the plan again: the recorded second plan.
-            tryVerify(() => {
-                const now = host.apps.operation(app)
-                return now !== null && now.phase === AppsOperation.Planned
-            }, 10000)
+            tryVerify(() => host.apps.sourceChanging === "" && host.apps.sourcesStatus !== Apps.Loading, 5000,
+                      "the source was switched and listed again")
+            compare(JSON.stringify(host.apps.sourcesFailure), "{}")
+            const flathub = host.apps.sources.find(source => source.name === "flathub")
+            compare(flathub ? flathub.state : "", "on")
+            const again = host.apps.operation(app)
+            verify(again !== null)
+            tryVerify(() => again.phase !== AppsOperation.Planning, 5000)
+            compare(again.phase, AppsOperation.Planned, JSON.stringify(again.failure))
             tryVerify(() => view.planSheet.opened, 2000)
         }
 
