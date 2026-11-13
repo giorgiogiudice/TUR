@@ -1,0 +1,31 @@
+SPDX-License-Identifier: MIT
+Change to Microsoft's Windows-Driver-Frameworks (MIT), TUR build; see ../README.md.
+
+fxregistryapi.cpp calls FxRegKey::VerifyStateSeparationRegistryPolicy,
+which the published sources declare and define nowhere (a verifier check
+of driver package isolation). Declared here as an inline that checks
+nothing.
+
+diff --git a/src/framework/shared/inc/private/common/fxregkey.hpp b/src/framework/shared/inc/private/common/fxregkey.hpp
+index 3568cd0..6fa5c31 100644
+--- a/src/framework/shared/inc/private/common/fxregkey.hpp
++++ b/src/framework/shared/inc/private/common/fxregkey.hpp
+@@ -91,6 +91,18 @@ public:
+         VOID
+         );
+ 
++    //
++    // TUR build: fxregistryapi.cpp calls this; the published sources declare
++    // it nowhere. A verifier check of driver package isolation ("state
++    // separation"); here it checks nothing.
++    //
++    VOID
++    VerifyStateSeparationRegistryPolicy(
++        VOID
++        )
++    {
++    }
++
+     _Must_inspect_result_
+     __drv_maxIRQL(PASSIVE_LEVEL)
+     NTSTATUS

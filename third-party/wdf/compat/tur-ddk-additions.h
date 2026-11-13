@@ -50,6 +50,181 @@ NTKERNELAPI PVOID NTAPI ExAllocatePool2(_In_ POOL_FLAGS Flags, _In_ SIZE_T Numbe
 NTKERNELAPI VOID NTAPI KeQuerySystemTimePrecise(_Out_ PLARGE_INTEGER CurrentTime);
 #endif
 
+/* KeGetCurrentProcessorIndex: the WDK reads it from the processor control
+   region (gs:), which in a user-space driver host is the thread's TEB. The
+   framework uses it only to index a per-processor table for its bug-check
+   callback; the processor number serves. */
+#ifndef _TUR_KE_GET_CURRENT_PROCESSOR_INDEX
+#define _TUR_KE_GET_CURRENT_PROCESSOR_INDEX
+#define KeGetCurrentProcessorIndex() KeGetCurrentProcessorNumberEx(NULL)
+#endif
+
+/* Opening a driver's registry keys (Windows 10 2004). */
+#ifndef _TUR_DRIVER_REGKEY_TYPE
+#define _TUR_DRIVER_REGKEY_TYPE
+typedef enum _DRIVER_REGKEY_TYPE {
+    DriverRegKeyParameters,
+    DriverRegKeyPersistentState,
+    DriverRegKeySharedPersistentState
+} DRIVER_REGKEY_TYPE, *PDRIVER_REGKEY_TYPE;
+NTKERNELAPI NTSTATUS NTAPI IoOpenDriverRegistryKey(_In_ PDRIVER_OBJECT DriverObject,
+                                                   _In_ DRIVER_REGKEY_TYPE RegKeyType,
+                                                   _In_ ACCESS_MASK DesiredAccess, _In_ ULONG Flags,
+                                                   _Out_ PHANDLE DriverRegKey);
+#endif
+
+/* Interrupts (Windows 8). */
+#ifndef CM_RESOURCE_INTERRUPT_WAKE_HINT
+#define CM_RESOURCE_INTERRUPT_WAKE_HINT 0x200
+#endif
+#ifndef _TUR_IO_REPORT_INTERRUPT_ACTIVE_STATE
+#define _TUR_IO_REPORT_INTERRUPT_ACTIVE_STATE
+typedef struct _IO_REPORT_INTERRUPT_ACTIVE_STATE_PARAMETERS {
+    ULONG Version;
+    union {
+        PVOID Generic;
+        PIO_INTERRUPT_MESSAGE_INFO InterruptMessageTable;
+        PKINTERRUPT InterruptObject;
+    } ConnectionContext;
+} IO_REPORT_INTERRUPT_ACTIVE_STATE_PARAMETERS, *PIO_REPORT_INTERRUPT_ACTIVE_STATE_PARAMETERS;
+#endif
+
+/* Pool, registry and integer helpers. */
+#ifndef POOL_NX_ALLOCATION
+#define POOL_NX_ALLOCATION 512
+#endif
+#ifndef RTL_QUERY_REGISTRY_TYPECHECK
+#define RTL_QUERY_REGISTRY_TYPECHECK 0x00000100
+#define RTL_QUERY_REGISTRY_TYPECHECK_SHIFT 24
+#endif
+#ifndef USHORT_MAX
+#define USHORT_MAX 0xffff
+#endif
+#ifndef _TUR_RTL_SIZET_ADD
+#define _TUR_RTL_SIZET_ADD
+static __inline NTSTATUS RtlSIZETAdd(SIZE_T Augend, SIZE_T Addend, SIZE_T *Result)
+{
+    if (Augend + Addend < Augend) {
+        *Result = (SIZE_T) -1;
+        return STATUS_INTEGER_OVERFLOW;
+    }
+    *Result = Augend + Addend;
+    return STATUS_SUCCESS;
+}
+#endif
+#ifndef WDF_VIOLATION
+#define WDF_VIOLATION 0x0000010D
+#endif
+#ifndef PERF_WORKER_THREAD
+#define PERF_WORKER_THREAD 0x48000000
+#endif
+
+/* The power framework, version 3 (Windows 10). */
+#ifndef _TUR_PO_FX_V3
+#define _TUR_PO_FX_V3
+typedef VOID NTAPI PO_FX_DEVICE_POWER_REQUIRED_CALLBACK(_In_ PVOID Context);
+typedef PO_FX_DEVICE_POWER_REQUIRED_CALLBACK *PPO_FX_DEVICE_POWER_REQUIRED_CALLBACK;
+typedef VOID NTAPI PO_FX_DEVICE_POWER_NOT_REQUIRED_CALLBACK(_In_ PVOID Context);
+typedef PO_FX_DEVICE_POWER_NOT_REQUIRED_CALLBACK *PPO_FX_DEVICE_POWER_NOT_REQUIRED_CALLBACK;
+typedef NTSTATUS NTAPI PO_FX_DIRECTED_POWER_UP_CALLBACK(_In_ PVOID Context, _In_ ULONG Flags);
+typedef PO_FX_DIRECTED_POWER_UP_CALLBACK *PPO_FX_DIRECTED_POWER_UP_CALLBACK;
+typedef NTSTATUS NTAPI PO_FX_DIRECTED_POWER_DOWN_CALLBACK(_In_ PVOID Context, _In_ ULONG Flags);
+typedef PO_FX_DIRECTED_POWER_DOWN_CALLBACK *PPO_FX_DIRECTED_POWER_DOWN_CALLBACK;
+#define PO_FX_VERSION_V3 3
+#define PO_FX_DEVICE_FLAG_RESERVED_1             0x0000000000000001ULL
+#define PO_FX_DEVICE_FLAG_DISABLE_FAST_RESUME    0x0000000000000002ULL
+#define PO_FX_DEVICE_FLAG_DFX_CHILDREN_OPTIONAL  0x0000000000000004ULL
+typedef struct _PO_FX_DEVICE_V3 {
+    ULONG Version;
+    ULONGLONG Flags;
+    PPO_FX_COMPONENT_ACTIVE_CONDITION_CALLBACK ComponentActiveConditionCallback;
+    PPO_FX_COMPONENT_IDLE_CONDITION_CALLBACK ComponentIdleConditionCallback;
+    PPO_FX_COMPONENT_IDLE_STATE_CALLBACK ComponentIdleStateCallback;
+    PPO_FX_DEVICE_POWER_REQUIRED_CALLBACK DevicePowerRequiredCallback;
+    PPO_FX_DEVICE_POWER_NOT_REQUIRED_CALLBACK DevicePowerNotRequiredCallback;
+    PPO_FX_POWER_CONTROL_CALLBACK PowerControlCallback;
+    PPO_FX_DIRECTED_POWER_UP_CALLBACK DirectedPowerUpCallback;
+    PPO_FX_DIRECTED_POWER_DOWN_CALLBACK DirectedPowerDownCallback;
+    ULONG DirectedFxTimeoutInSeconds;
+    PVOID DeviceContext;
+    ULONG ComponentCount;
+    PO_FX_COMPONENT_V2 Components[ANYSIZE_ARRAY];
+} PO_FX_DEVICE_V3, *PPO_FX_DEVICE_V3;
+#endif
+
+/* D3cold support interface (Windows 8). */
+#ifndef _TUR_D3COLD_SUPPORT_INTERFACE
+#define _TUR_D3COLD_SUPPORT_INTERFACE
+typedef VOID NTAPI SET_D3COLD_SUPPORT(_In_reads_opt_(_Inexpressible_("varies")) PVOID Context, _In_ BOOLEAN D3ColdSupport);
+typedef SET_D3COLD_SUPPORT *PSET_D3COLD_SUPPORT;
+typedef enum _DEVICE_WAKE_DEPTH {
+    DeviceWakeDepthNotWakeable = 0,
+    DeviceWakeDepthD0,
+    DeviceWakeDepthD1,
+    DeviceWakeDepthD2,
+    DeviceWakeDepthD3hot,
+    DeviceWakeDepthD3cold,
+    DeviceWakeDepthMaximum
+} DEVICE_WAKE_DEPTH, *PDEVICE_WAKE_DEPTH;
+typedef NTSTATUS NTAPI GET_IDLE_WAKE_INFO(PVOID Context, SYSTEM_POWER_STATE SystemPowerState,
+                                          PDEVICE_WAKE_DEPTH DeepestWakeableDstate);
+typedef GET_IDLE_WAKE_INFO *PGET_IDLE_WAKE_INFO;
+typedef NTSTATUS NTAPI GET_D3COLD_CAPABILITY(PVOID Context, PBOOLEAN D3ColdSupported);
+typedef GET_D3COLD_CAPABILITY *PGET_D3COLD_CAPABILITY;
+typedef enum _D3COLD_LAST_TRANSITION_STATUS {
+    LastDStateTransitionStatusUnknown = 0,
+    LastDStateTransitionD3hot,
+    LastDStateTransitionD3cold
+} D3COLD_LAST_TRANSITION_STATUS, *PD3COLD_LAST_TRANSITION_STATUS;
+typedef VOID NTAPI GET_D3COLD_LAST_TRANSITION_STATUS(PVOID Context, PD3COLD_LAST_TRANSITION_STATUS LastTransitionStatus);
+typedef GET_D3COLD_LAST_TRANSITION_STATUS *PGET_D3COLD_LAST_TRANSITION_STATUS;
+typedef struct _D3COLD_SUPPORT_INTERFACE {
+    USHORT Size;
+    USHORT Version;
+    PVOID Context;
+    PINTERFACE_REFERENCE InterfaceReference;
+    PINTERFACE_DEREFERENCE InterfaceDereference;
+    PSET_D3COLD_SUPPORT SetD3ColdSupport;
+    PGET_IDLE_WAKE_INFO GetIdleWakeInfo;
+    PGET_D3COLD_CAPABILITY GetD3ColdCapability;
+    PGET_D3COLD_CAPABILITY GetBusDriverD3ColdSupport;
+    PGET_D3COLD_LAST_TRANSITION_STATUS GetLastTransitionStatus;
+} D3COLD_SUPPORT_INTERFACE, *PD3COLD_SUPPORT_INTERFACE;
+#define D3COLD_SUPPORT_INTERFACE_VERSION 1
+DEFINE_GUID(GUID_D3COLD_SUPPORT_INTERFACE, 0xb38290e5, 0x3cd0, 0x4f9d, 0x99, 0x37, 0xf5, 0xfe, 0x2b, 0x44, 0xd4, 0x7a);
+#endif
+
+/* DMA version 3 (Windows 8): the types of the members the prelude appends
+   to DMA_OPERATIONS and DEVICE_DESCRIPTION. */
+#ifndef _TUR_DMA_V3
+#define _TUR_DMA_V3
+typedef LONG DMA_COMPLETION_STATUS, *PDMA_COMPLETION_STATUS;
+#define DmaComplete  0
+#define DmaAborted   1
+#define DmaError     2
+#define DmaCancelled 3
+typedef VOID NTAPI DMA_COMPLETION_ROUTINE(_In_ PDMA_ADAPTER DmaAdapter, _In_ PDEVICE_OBJECT DeviceObject,
+                                          _In_ PVOID CompletionContext, _In_ DMA_COMPLETION_STATUS Status);
+typedef DMA_COMPLETION_ROUTINE *PDMA_COMPLETION_ROUTINE;
+#define DEVICE_DESCRIPTION_VERSION3 3
+#define DMA_TRANSFER_INFO_VERSION1 1
+#define DMA_TRANSFER_CONTEXT_VERSION1 1
+#define DMA_TRANSFER_CONTEXT_SIZE_V1 64
+#define DMA_SYNCHRONOUS_CALLBACK 0x01
+#define DMA_ZERO_BUFFERS 0x02
+typedef struct _DMA_TRANSFER_INFO_V1 {
+    ULONG MapRegisterCount;
+    ULONG ScatterGatherElementCount;
+    ULONG ScatterGatherListSize;
+} DMA_TRANSFER_INFO_V1, *PDMA_TRANSFER_INFO_V1;
+typedef struct _DMA_TRANSFER_INFO {
+    ULONG Version;
+    union {
+        DMA_TRANSFER_INFO_V1 V1;
+    };
+} DMA_TRANSFER_INFO, *PDMA_TRANSFER_INFO;
+#endif
+
 /* ntstrsafe.h's UNICODE_STRING functions, as documented. */
 #ifndef _TUR_RTL_UNICODE_STRING_SAFE
 #define _TUR_RTL_UNICODE_STRING_SAFE

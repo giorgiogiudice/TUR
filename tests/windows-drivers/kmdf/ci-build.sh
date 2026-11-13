@@ -95,9 +95,15 @@ if [ -f "${here}/build-fx2.sh" ]; then
     cp "${out}"/fx2/*.txt "${out}"/fx2/*.log "${ev}/fx2/" 2>/dev/null || true
 fi
 
+# The first experiment's installer program (twdinst.exe), used to install
+# the driver packages.
+bash "${src}/tests/windows-drivers/build.sh" "${out}/twd" >"${ev}/build-twd.out" 2>&1 ||
+    log "- build.sh (twdinst.exe): FAILED"
+
 # What the experiment job takes from here.
 mkdir -p /work/kmdf-artifact
-cp "${out}"/Wdf01000.sys "${out}"/wine-overlay/* "${out}"/fx2/out/* /work/kmdf-artifact/ 2>/dev/null || true
+cp "${out}"/Wdf01000.sys "${out}"/wine-overlay/* "${out}"/fx2/out/* "${out}/twd/twdinst.exe" \
+    /work/kmdf-artifact/ 2>/dev/null || true
 ls -l /work/kmdf-artifact | tee -a "${ev}/artifact-files.txt"
 chmod -R a+rX /work/kmdf-artifact "${ev}"
 exit 0

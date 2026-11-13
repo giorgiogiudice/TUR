@@ -25,3 +25,7 @@ __declspec(selectany) ULONGLONG Microsoft_Windows_DriverFrameworks_KernelMode_Pe
 #define EventWriteFX_POWER_HW_RELEASE_STOP(...) ((NTSTATUS)0)
 #define EventWriteFX_EVTIOSTOP_START(...) ((NTSTATUS)0)
 #define EventWriteFX_EVTIOSTOP_STOP(...) ((NTSTATUS)0)
+#define EventWriteFX_POWER_D0_ENTRY_START(...) ((NTSTATUS)0)
+#define EventWriteFX_POWER_D0_ENTRY_STOP(...) ((NTSTATUS)0)
+#define EventWriteFX_POWER_D0_EXIT_START(...) ((NTSTATUS)0)
+#define EventWriteFX_POWER_D0_EXIT_STOP(...) ((NTSTATUS)0)

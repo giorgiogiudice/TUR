@@ -7,13 +7,7 @@
    fails, which the framework treats as "sleep study disabled". */
 #pragma once
 
-#ifndef _TUR_WNF_STATE_NAME_DEFINED
-#define _TUR_WNF_STATE_NAME_DEFINED
-typedef struct _WNF_STATE_NAME {
-    ULONG Data[2];
-} WNF_STATE_NAME, *PWNF_STATE_NAME;
-typedef const WNF_STATE_NAME *PCWNF_STATE_NAME;
-#endif
+/* WNF_STATE_NAME and PCWNF_STATE_NAME come from mingw-w64's ntdef.h. */
 
 /* Any value: the subscription is never made. */
 #define WNF_PO_DRIPS_DEVICE_CONSTRAINTS_REGISTERED { 0xa3bc0875, 0x41940b3a }

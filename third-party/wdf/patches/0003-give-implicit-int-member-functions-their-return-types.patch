@@ -1,0 +1,71 @@
+SPDX-License-Identifier: MIT
+Change to Microsoft's Windows-Driver-Frameworks (MIT), TUR build; see ../README.md.
+
+Six inline member functions have no return type, which MSVC accepts
+(implicit int, warning C4430 off) and standard C++ compilers reject.
+Each gets the type its body returns: VOID or BOOLEAN.
+
+diff --git a/src/framework/kmdf/inc/private/fxdmatransactionpacket.hpp b/src/framework/kmdf/inc/private/fxdmatransactionpacket.hpp
+index bbf66ef..bfab800 100644
+--- a/src/framework/kmdf/inc/private/fxdmatransactionpacket.hpp
++++ b/src/framework/kmdf/inc/private/fxdmatransactionpacket.hpp
+@@ -191,6 +191,7 @@ protected:
+ protected:
+ 
+     inline
++    VOID
+     SetMapRegisterBase(
+         __in PVOID Value
+         )
+@@ -203,6 +204,7 @@ protected:
+     }
+ 
+     inline
++    VOID
+     ClearMapRegisterBase(
+         VOID
+         )
+@@ -213,6 +215,7 @@ protected:
+     }
+ 
+     inline
++    BOOLEAN
+     IsMapRegisterBaseSet(
+         VOID
+         )
+diff --git a/src/framework/shared/inc/private/common/fxdevicetext.hpp b/src/framework/shared/inc/private/common/fxdevicetext.hpp
+index 4256129..2c25c9a 100644
+--- a/src/framework/shared/inc/private/common/fxdevicetext.hpp
++++ b/src/framework/shared/inc/private/common/fxdevicetext.hpp
+@@ -49,6 +49,7 @@ struct  FxDeviceText : public FxStump {
+     }
+ 
+     static
++    VOID
+     _CleanupList(
+         __inout PSINGLE_LIST_ENTRY Head
+         )
+diff --git a/src/framework/shared/inc/private/common/fxrequestbase.hpp b/src/framework/shared/inc/private/common/fxrequestbase.hpp
+index 0a58ae2..a71b1bb 100644
+--- a/src/framework/shared/inc/private/common/fxrequestbase.hpp
++++ b/src/framework/shared/inc/private/common/fxrequestbase.hpp
+@@ -293,6 +293,7 @@ public:
+     }
+ 
+     __inline
++    BOOLEAN
+     HasContext(
+         VOID
+         )
+diff --git a/src/framework/shared/inc/private/common/fxusbdevice.hpp b/src/framework/shared/inc/private/common/fxusbdevice.hpp
+index 853eb66..61d4122 100644
+--- a/src/framework/shared/inc/private/common/fxusbdevice.hpp
++++ b/src/framework/shared/inc/private/common/fxusbdevice.hpp
+@@ -214,6 +214,7 @@ public:
+         );
+ 
+     __inline
++    VOID
+     CopyDeviceDescriptor(
+         __out PUSB_DEVICE_DESCRIPTOR UsbDeviceDescriptor
+         )

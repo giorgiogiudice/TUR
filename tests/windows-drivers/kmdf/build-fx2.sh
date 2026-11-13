@@ -66,7 +66,7 @@ python3 -I "${here}/salgen.py" "${work}/gen/tur-sal-generated.h" "${pub}" "${com
     ${sample:+"${sample}"} >"${work}/salgen.log" 2>&1
 incdirs=("${compat}" "${work}/gen" "${here}" "${pub}" "${ddk}")
 [ -d "${sample}" ] && incdirs=("${compat}" "${work}/gen" "${sample}/inc" "${sample}/driver" "${here}" "${pub}" "${ddk}")
-python3 -I "${here}/incmap.py" "${work}/gen" "${here}" ${sample:+"${sample}"} -- "${incdirs[@]}" "${sysroot}/include" \
+python3 -I "${here}/incmap.py" "${work}/gen" "${here}" "${pub}" ${sample:+"${sample}"} -- "${incdirs[@]}" "${sysroot}/include" \
     >"${work}/incmap.log" 2>&1
 
 cc=(clang --target=x86_64-w64-mingw32)
@@ -132,7 +132,11 @@ if [ -d "${sample}/driver" ]; then
     sed -e 's/@NAME@/osrusbfx2/g' -e 's/@HWID@/USB\\VID_0547\&PID_1002/' \
         -e 's/@DESC@/OSR USB-FX2 (emulated), Microsoft kmdf_fx2 sample driver/' \
         "${here}/kmdf-driver.inf.in" >"${work}/out/osrusbfx2.inf"
-    if x86_64-w64-mingw32-gcc -O2 -w -o "${work}/out/osrusbfx2.exe" -I"${sample}/inc" \
+    # The program's #include names, resolved case-insensitively as above.
+    mkdir -p "${work}/gen-exe"
+    python3 -I "${here}/incmap.py" "${work}/gen-exe" "${sample}/exe" -- "${sample}/inc" "${sysroot}/include" \
+        >"${work}/incmap-exe.log" 2>&1
+    if x86_64-w64-mingw32-gcc -O2 -w -o "${work}/out/osrusbfx2.exe" -I"${work}/gen-exe" -I"${sample}/inc" \
         "${sample}/exe/testapp.c" "${sample}/exe/dump.c" -lsetupapi -lcfgmgr32 >"${work}/logs/testapp.log" 2>&1; then
         note "build osrusbfx2.exe (the sample's testapp.c): ok"
     else

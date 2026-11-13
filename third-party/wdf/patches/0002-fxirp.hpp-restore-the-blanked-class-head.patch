@@ -1,0 +1,119 @@
+SPDX-License-Identifier: MIT
+Change to Microsoft's Windows-Driver-Frameworks (MIT), TUR build; see ../README.md.
+
+fxirp.hpp as published has blank lines where the end of its header comment,
+its include guard and the head of class FxIrp were: the rest of the file
+is inside an unterminated comment. They are reconstructed from the
+#endif at the end of the file and from the members' use (m_Irp, the two
+constructors, SetIrp, GetTriageInfo's access to m_Irp).
+
+diff --git a/src/framework/shared/inc/private/common/fxirp.hpp b/src/framework/shared/inc/private/common/fxirp.hpp
+index 1c16fb5..caef888 100644
+--- a/src/framework/shared/inc/private/common/fxirp.hpp
++++ b/src/framework/shared/inc/private/common/fxirp.hpp
+@@ -20,68 +20,53 @@ Environment:
+ 
+ Revision History:
+ 
++--*/
+ 
++//
++// TUR build: the published file has blank lines from here to the first
++// member below (no end of the header comment, no include guard, no class
++// head). Reconstructed: the guard named by the #endif at the end of the
++// file, and the class head from the members' use -- m_Irp (fxirpkm.hpp,
++// fxlibrarycommon.cpp's GetTriageInfo), the constructors FxIrp() and
++// FxIrp(MdIrp) and SetIrp (fxioqueue.cpp, fxioqueuekm.cpp).
++//
+ 
++#ifndef _FXIRP_H_
++#define _FXIRP_H_
+ 
++class FxIrp {
+ 
++    friend VOID GetTriageInfo(VOID);
+ 
++private:
+ 
++    MdIrp m_Irp;
+ 
++public:
+ 
++    FxIrp(
++        VOID
++        ) :
++        m_Irp(NULL)
++    {
++    }
+ 
++    FxIrp(
++        __in_opt MdIrp Irp
++        ) :
++        m_Irp(Irp)
++    {
++    }
+ 
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
++    MdIrp
++    SetIrp(
++        __in_opt MdIrp Irp
++        )
++    {
++        MdIrp old = m_Irp;
++        m_Irp = Irp;
++        return old;
++    }
+ 
+ 
+     // A function for when not assigning

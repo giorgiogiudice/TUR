@@ -10,4 +10,5 @@
 #ifndef _TUR_WDF_NTDDK_ADDITIONS_
 #define _TUR_WDF_NTDDK_ADDITIONS_
 #include "tur-ddk-additions.h"
+#include "tur-wdf-trace.h"
 #endif

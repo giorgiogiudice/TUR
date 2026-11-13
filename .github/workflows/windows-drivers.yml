@@ -94,6 +94,68 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
+  # The run half: the drivers kmdf-build made, in Fedora 45's Wine with the
+  # patched ntoskrnl.exe and the new wdfldr.sys put over it inside the
+  # throw-away container, against two virtual USB devices (the loopback
+  # and an FX2-like board, USB/IP). Green when the harness ran; the results
+  # table is the finding.
+  kmdf-run:
+    name: KMDF drivers in Wine's user-space driver host (run)
+    needs: kmdf-build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: kmdf-binaries
+          path: ${{ runner.temp }}/kmdf-binaries
+
+      - name: Virtual USB devices (loopback and FX2-like, USB/IP)
+        run: |
+          mkdir -p "$RUNNER_TEMP/kmdf-run/evidence/virtual-usb"
+          ls -l "$RUNNER_TEMP/kmdf-binaries"
+          sudo nohup python3 -I tests/windows-drivers/virtual-usb/usbip_devices.py run --devices loopback,fx2 \
+            --log-dir "$RUNNER_TEMP/kmdf-run/evidence/virtual-usb" > "$RUNNER_TEMP/kmdf-run/evidence/virtual-usb/daemon.out" 2>&1 &
+          for _ in $(seq 1 60); do
+            [ -f "$RUNNER_TEMP/kmdf-run/evidence/virtual-usb/ready" ] && break
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/kmdf-run/evidence/virtual-usb/daemon.out" "$RUNNER_TEMP/kmdf-run/evidence/virtual-usb/usbip-devices.log" || true
+          sudo python3 -I tests/windows-drivers/virtual-usb/usbip_devices.py show | tee "$RUNNER_TEMP/kmdf-run/evidence/devices.txt"
+          [ "$(cat "$RUNNER_TEMP/kmdf-run/evidence/virtual-usb/ready")" = 2 ]
+
+      - name: KMDF drivers in Fedora 45's Wine with the overlay
+        env:
+          KMDF_ONLY: ${{ github.event.inputs.only }}
+        run: |
+          sudo dmesg --clear || true
+          docker run --rm --privileged --network host -e KMDF_ONLY \
+            -v /dev:/dev -v /sys:/sys -v /run/udev:/run/udev:ro \
+            -v "$GITHUB_WORKSPACE:/src:ro" -v "$RUNNER_TEMP/kmdf-binaries:/kmdf:ro" -v "$RUNNER_TEMP/kmdf-run:/work" \
+            "$FEDORA_IMAGE" bash /src/tests/windows-drivers/kmdf/kmdf-run.sh
+
+      - name: Results
+        if: always()
+        run: |
+          sudo pkill -f usbip_devices.py || true
+          sleep 2
+          sudo dmesg | grep -iE 'usb|vhci' | tail -n 300 > "$RUNNER_TEMP/kmdf-run/evidence/dmesg.txt" || true
+          sudo chown -R "$(id -u):$(id -g)" "$RUNNER_TEMP/kmdf-run" || true
+          if [ -f "$RUNNER_TEMP/kmdf-run/evidence/results.md" ]; then
+            cat "$RUNNER_TEMP/kmdf-run/evidence/results.md" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No KMDF results were written." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: kmdf-run-evidence
+          path: ${{ runner.temp }}/kmdf-run/evidence/
+          if-no-files-found: warn
+
   fedora-wine:
     name: Windows USB and HID drivers in Wine's user-space driver host (Fedora 45 Wine)
     runs-on: ubuntu-24.04
