@@ -10,7 +10,9 @@ Subsystem:        AI control layer: tier 2 (the accessibility tree); the
 Build ID:         not applicable: this task builds no image of its own (the
                   image and boot workflows ran on the pull request)
 Source revision:  pull request 93 (feat/pax-accessibility); commits and
-                  runs under "Runs"
+                  runs under "Runs". The code is 84377f8; the commit
+                  that adds the last figures to this report follows it
+                  and changes no code
 
 SUMMARY
 - What changed: P@x can read and operate other applications' windows
@@ -66,7 +68,7 @@ runs waited an hour in the queue.
 | cae3a74 | pax 43373170495 | fails | With those fixed: Firefox pressed "Preview" (the page's script ran: "Previewed: "), but typed text did not arrive although Firefox answered "done". Wine: the test's `ps` is not in the image |
 | ac6c446 | rust 43374066112 | fails | Clippy: a complex tuple type (`tree.rs`); `tests/tools.rs` matched `Performer` without the new variant; rustfmt |
 | f34006b | pax 43374530238 | **pass** | 69 checks, 0 hard failures (table below). rust: `services/tur-pax` passed clippy and every test; `services/tur-pax-a11y` passed clippy and its 23 unit tests and failed only on rustfmt of one line |
-| FINAL_COMMIT | FINAL_RUNS | FINAL_RESULT | FINAL_TEXT |
+| 84377f8 | pax 43375930833, rust 43375930829, image 43375930839, boot 43375930812, gate 43375930823 | **pass** | Every workflow on the commit green. rust: every component, clippy `-D warnings`, all tests (tur-pax with the new sweep, `tests/interface.rs`; tur-pax-a11y's unit tests). pax: the end-to-end and session tests unchanged and passing; the accessibility job 69 checks, 0 hard failures, reads now photographed too (every screenshot of every task but the stop shows P@x) |
 
 ## Results under KWin
 
@@ -78,7 +80,7 @@ Firefox 160.0, Wine 11.20. KWin headless on its virtual backend at 1280 ×
 `org.a11y.Status.IsEnabled`; tur-settings also started with
 `QT_LINUX_ACCESSIBILITY_ALWAYS_ON=1`.
 
-### Coverage per toolkit (run 43374530238, `coverage.json`, `survey-*.json`)
+### Coverage per toolkit (run 43375930833, `coverage.json`, `survey-*.json`; run 43374530238 gave the same figures but one)
 
 What `tur-pax-a11y survey` read of the one window of each application:
 elements visited after pruning what is not shown, and of them how many have
@@ -91,7 +93,7 @@ did through the bridge in the same run.
 | Qt Quick (tur-settings) | 27 | 22 | 27 | 1 | Action 27, Component 27, Text 4, Value 2, EditableText 1 | SetFocus 13, Increase 4, Decrease 4, Press 1 | yes | **yes** | **no** for list rows (only SetFocus offered); 1 element has Press | not tried (the search field's change is not a person's edit for Qt, limit 3) |
 | GTK 3 (test window, at-spi2-atk) | 14 | 10 | 14 | 3 | Component 14, Text 7, Action 5, EditableText 3, Value 2 | click 3, activate 2 | yes | – | **yes** (Bold; the application saw it) | **yes** (Message holds "hello"; the application saw it) |
 | GTK 4 (gnome-text-editor) | 83 | 12 | 55 | 1 | Component 83, Action 78, Text 3, EditableText 1 | click 7, clipboard.copy/cut/paste 3 each, menu.popup 3, selection.delete 3 | yes | – | – | **yes** ("hello" in the document, read back) |
-| Firefox 160 (Gecko) | 101 | 51 | 85 | 2 | Action 101, Component 101, Text 67, EditableText 67, Selection 1 | clickAncestor 39, click 24, press 21, jump 6, activate 2, switch 1 | yes (page and browser) | yes (the field took the keyboard) | **yes** (Preview: the page's script ran) | **no**: answered "done", nothing arrived (read back) |
+| Firefox 160 (Gecko) | 101 | 51 | 86 (85 in the earlier run) | 2 | Action 101, Component 101, Text 67, EditableText 67, Selection 1 | clickAncestor 39, click 24, press 21, jump 6, activate 2, switch 1 | yes (page and browser) | yes (the field took the keyboard) | **yes** (Preview: the page's script ran) | **no**: answered "done", nothing arrived (read back) |
 | Wine 11.20 (notepad, Wine's own) | **nothing on the bus**: before and after notepad the bus listed only kwin and tur-pax-overlay; notepad.exe and wineserver were running and the window was on screen (screenshot `wine-notepad.png`) | | | | | | no | no | no | no |
 
 Positions were exact where looked at: the highlight sat on the GTK 3
@@ -99,7 +101,7 @@ Positions were exact where looked at: the highlight sat on the GTK 3
 GTK 4 window with client-side decoration), tur-settings' "Appearance" row
 and Firefox's "Preview" button and search field (screenshots below).
 
-### The tasks (run 43374530238)
+### The tasks (runs 43374530238 and 43375930833, the same results)
 
 | Task | Request | Decisions (class, decision) | Outcome | What happened |
 |---|---|---|---|---|
@@ -119,7 +121,7 @@ each).
 
 ### Screenshots
 
-Taken from KWin (`ScreenShot2.CaptureActiveScreen`) when the bridge logged
+Run 43375930833. Taken from KWin (`ScreenShot2.CaptureActiveScreen`) when the bridge logged
 that P@x's pointer had arrived, 0.3 s later (the highlight fades in), inside
 the bridge's 600 ms rest before acting. In the artifact `pax-accessibility`
 of the run, `screenshots/`. Looked at:
@@ -129,7 +131,7 @@ of the run, `screenshots/`. Looked at:
 | `mail-bold-and-type-2.png` | P@x's pointer on the GTK 3 "Bold" button, "Nothing has been sent." still showing (before the press); the window framed in gold; the pill "P@x is controlling · Stop: Meta+Esc · Keys: Meta+/" |
 | `mail-bold-and-type-3.png` | The pointer and highlight on the Message field |
 | `settings-appearance-2.png` | The pointer resting on tur-settings' "Appearance" row, the row highlighted exactly, caption "P@x: focus" (the press before it failed) |
-| `editor-hello-1.png` | gnome-text-editor's text view highlighted under its header bar, caption "P@x: type"; in the next frame the document holds "hello" |
+| `editor-hello-1.png` | gnome-text-editor's text view (a GTK 4 window drawing its own decoration) highlighted under its header bar, the pointer resting on it, caption "P@x: type", the document still empty; in the next frame it holds "hello" |
 | `firefox-page-2.png`, `-3.png` | The highlight on the search field (focused, empty) and on "Preview", the pointer on it |
 | `stop-while-acting-1.png` | After `Hide`: no indicator, no pointer (43 sampled gold pixels: the window icon) |
 | `wine-notepad.png` | Wine's notepad on screen through Wine's Wayland driver, with nothing of it on the accessibility bus |
@@ -141,8 +143,9 @@ gold in this run (the indicator had not drawn its pill yet), so the
 threshold was 100. The pictures listed above were looked at, not only
 counted. One thing seen in them: the caption beside a highlight can cover
 the next control (on the GTK 3 window it covers "Send").
-The last read of a task can miss the frame: the task ended before the
-screenshot (from FINAL_COMMIT reads rest 600 ms as acting does).
+In run 43374530238 the last read of three tasks was photographed after
+the task had ended (no gold); from 84377f8 reads rest 600 ms as actions do,
+and every one was photographed with P@x on screen.
 
 ## What the tests prove
 
