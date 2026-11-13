@@ -149,6 +149,296 @@ pub struct UiAction {
     pub control: String,
     /// Whether the action only reads or also acts.
     pub kind: UiActionKind,
+    /// What the accessibility bridge read about the target and what it
+    /// would do to it. [`UiDetail::default`] says nothing more: the action
+    /// is then decided from the four fields above alone, as a screen action
+    /// is.
+    pub detail: UiDetail,
+}
+
+impl UiAction {
+    /// A UI action with no detail beyond the application, the window title,
+    /// the control and the kind.
+    pub fn new(application: &str, window_title: &str, control: &str, kind: UiActionKind) -> Self {
+        UiAction {
+            application: application.to_owned(),
+            window_title: window_title.to_owned(),
+            control: control.to_owned(),
+            kind,
+            detail: UiDetail::default(),
+        }
+    }
+
+    /// Every identifier the target application is known by: the reported
+    /// one first, then the others the bridge found. The user policy's lists
+    /// are matched against each; one match is enough (the stricter reading).
+    pub fn identities(&self) -> impl Iterator<Item = &str> {
+        std::iter::once(self.application.as_str())
+            .chain(self.detail.also_known_as.iter().map(String::as_str))
+    }
+}
+
+/// What an accessibility action does to its target, as the accessibility
+/// bridge performs it (`services/tur-pax-a11y`,
+/// `docs/architecture/pax-accessibility.md`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum UiOperation {
+    /// Not stated: a screen action, or a caller that says only "observe" or
+    /// "act". Decided by the rules of section 5.1 alone.
+    #[default]
+    Unspecified,
+    /// Read the target: a window, an element or the element with the
+    /// keyboard. Kind [`UiActionKind::Observe`].
+    Read,
+    /// Give the target the keyboard.
+    Focus,
+    /// Scroll the target into view.
+    Scroll,
+    /// Expand a tree row, a group or a menu.
+    Expand,
+    /// Collapse it.
+    Collapse,
+    /// Select a tab, a row of a list or an item of a menu.
+    Select,
+    /// Press a button, a link, a box or a row: its default action.
+    Press,
+    /// Insert text into a text field at its caret.
+    Type,
+}
+
+impl UiOperation {
+    /// Every operation.
+    pub const ALL: [UiOperation; 9] = [
+        UiOperation::Unspecified,
+        UiOperation::Read,
+        UiOperation::Focus,
+        UiOperation::Scroll,
+        UiOperation::Expand,
+        UiOperation::Collapse,
+        UiOperation::Select,
+        UiOperation::Press,
+        UiOperation::Type,
+    ];
+
+    /// The operation as text, for the audit record and the bridge protocol.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            UiOperation::Unspecified => "unspecified",
+            UiOperation::Read => "read",
+            UiOperation::Focus => "focus",
+            UiOperation::Scroll => "scroll",
+            UiOperation::Expand => "expand",
+            UiOperation::Collapse => "collapse",
+            UiOperation::Select => "select",
+            UiOperation::Press => "press",
+            UiOperation::Type => "type",
+        }
+    }
+
+    /// The operation named by `text`, as [`UiOperation::as_str`] writes it.
+    pub fn from_name(text: &str) -> Option<Self> {
+        UiOperation::ALL
+            .into_iter()
+            .find(|operation| operation.as_str() == text)
+    }
+
+    /// The kind an action with this operation must have: reading observes,
+    /// everything else acts. `None` for [`UiOperation::Unspecified`], which
+    /// goes with either.
+    pub const fn kind(self) -> Option<UiActionKind> {
+        match self {
+            UiOperation::Unspecified => None,
+            UiOperation::Read => Some(UiActionKind::Observe),
+            UiOperation::Focus
+            | UiOperation::Scroll
+            | UiOperation::Expand
+            | UiOperation::Collapse
+            | UiOperation::Select
+            | UiOperation::Press
+            | UiOperation::Type => Some(UiActionKind::Act),
+        }
+    }
+}
+
+/// What kind of element the target is, as far as the policy engine cares.
+///
+/// The accessibility bus reports one of about 130 roles
+/// (`AtspiRole` in at-spi2-core's `atspi-constants.h`); the engine needs to
+/// know only whether an element is a control that can be pressed, a field
+/// text can be typed into, a field for a secret, or a terminal.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum UiRole {
+    /// The bridge did not say, or the role is "unknown" or "invalid".
+    #[default]
+    Unknown,
+    /// A push button.
+    Button,
+    /// A toggle button.
+    ToggleButton,
+    /// A check box.
+    CheckBox,
+    /// A radio button.
+    RadioButton,
+    /// A switch.
+    Switch,
+    /// An item of a menu, checkable or not.
+    MenuItem,
+    /// A link.
+    Link,
+    /// A tab of a tab bar.
+    PageTab,
+    /// A row of a list.
+    ListItem,
+    /// A row of a tree.
+    TreeItem,
+    /// A cell or a row of a table.
+    TableCell,
+    /// A combo box.
+    ComboBox,
+    /// A slider, a spin button or a dial.
+    Slider,
+    /// A field or a document that takes text.
+    Text,
+    /// A field for a password.
+    PasswordText,
+    /// A terminal: what is typed into it is run.
+    Terminal,
+    /// A scrolled area or a scroll bar.
+    ScrollArea,
+    /// A label, a heading or other static text.
+    Label,
+    /// A window, a frame, a dialog or an alert.
+    Window,
+    /// Anything else: a panel, a section, a group, an image.
+    Other,
+}
+
+impl UiRole {
+    /// Every role.
+    pub const ALL: [UiRole; 21] = [
+        UiRole::Unknown,
+        UiRole::Button,
+        UiRole::ToggleButton,
+        UiRole::CheckBox,
+        UiRole::RadioButton,
+        UiRole::Switch,
+        UiRole::MenuItem,
+        UiRole::Link,
+        UiRole::PageTab,
+        UiRole::ListItem,
+        UiRole::TreeItem,
+        UiRole::TableCell,
+        UiRole::ComboBox,
+        UiRole::Slider,
+        UiRole::Text,
+        UiRole::PasswordText,
+        UiRole::Terminal,
+        UiRole::ScrollArea,
+        UiRole::Label,
+        UiRole::Window,
+        UiRole::Other,
+    ];
+
+    /// The role of an AT-SPI role number (`AtspiRole`, at-spi2-core
+    /// `atspi/atspi-constants.h`, checked on 13 November 2026). A number
+    /// the table does not name is [`UiRole::Other`]; 0 (invalid) and 67
+    /// (unknown) are [`UiRole::Unknown`].
+    pub const fn from_atspi(role: u32) -> Self {
+        match role {
+            0 | 67 => UiRole::Unknown,
+            43 | 129 => UiRole::Button,
+            62 => UiRole::ToggleButton,
+            7 => UiRole::CheckBox,
+            44 => UiRole::RadioButton,
+            130 => UiRole::Switch,
+            8 | 35 | 45 | 59 => UiRole::MenuItem,
+            88 => UiRole::Link,
+            37 => UiRole::PageTab,
+            32 => UiRole::ListItem,
+            91 => UiRole::TreeItem,
+            56 | 90 => UiRole::TableCell,
+            11 => UiRole::ComboBox,
+            15 | 51 | 52 => UiRole::Slider,
+            61 | 73 | 76 | 77 | 79 | 82 | 94 | 95 | 96 => UiRole::Text,
+            40 => UiRole::PasswordText,
+            60 => UiRole::Terminal,
+            48 | 49 | 68 => UiRole::ScrollArea,
+            29 | 81 | 83 | 116 => UiRole::Label,
+            2 | 16 | 19 | 23 | 69 => UiRole::Window,
+            _ => UiRole::Other,
+        }
+    }
+
+    /// The role as text, for the audit record.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            UiRole::Unknown => "unknown",
+            UiRole::Button => "button",
+            UiRole::ToggleButton => "toggle_button",
+            UiRole::CheckBox => "check_box",
+            UiRole::RadioButton => "radio_button",
+            UiRole::Switch => "switch",
+            UiRole::MenuItem => "menu_item",
+            UiRole::Link => "link",
+            UiRole::PageTab => "page_tab",
+            UiRole::ListItem => "list_item",
+            UiRole::TreeItem => "tree_item",
+            UiRole::TableCell => "table_cell",
+            UiRole::ComboBox => "combo_box",
+            UiRole::Slider => "slider",
+            UiRole::Text => "text",
+            UiRole::PasswordText => "password_text",
+            UiRole::Terminal => "terminal",
+            UiRole::ScrollArea => "scroll_area",
+            UiRole::Label => "label",
+            UiRole::Window => "window",
+            UiRole::Other => "other",
+        }
+    }
+
+    /// Whether pressing an element of this role is something the engine can
+    /// judge from its name: a control that has a name for what it does.
+    pub const fn is_pressable(self) -> bool {
+        matches!(
+            self,
+            UiRole::Button
+                | UiRole::ToggleButton
+                | UiRole::CheckBox
+                | UiRole::RadioButton
+                | UiRole::Switch
+                | UiRole::MenuItem
+                | UiRole::Link
+                | UiRole::PageTab
+                | UiRole::ListItem
+                | UiRole::TreeItem
+                | UiRole::TableCell
+                | UiRole::ComboBox
+        )
+    }
+}
+
+/// What the accessibility bridge read about the target of an action, and
+/// the text an action types. Every field comes from the accessibility bus,
+/// except [`UiDetail::text`], which is the model's proposal and is data.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct UiDetail {
+    /// What the action does.
+    pub operation: UiOperation,
+    /// The role of the target.
+    pub role: UiRole,
+    /// The accessible description of the target. Read against the pattern
+    /// tables like the name.
+    pub description: String,
+    /// The target is the default control of its window (`STATE_IS_DEFAULT`):
+    /// pressing it affirms a dialog, so it is treated like "OK".
+    pub default_control: bool,
+    /// The target takes text (`STATE_EDITABLE`).
+    pub editable: bool,
+    /// What [`UiOperation::Type`] inserts; empty for every other operation.
+    pub text: String,
+    /// Other identifiers of the target application: its program, its
+    /// desktop file, its name on the accessibility bus.
+    pub also_known_as: Vec<String>,
 }
 
 /// A command and the sandbox it would run in.

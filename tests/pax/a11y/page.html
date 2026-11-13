@@ -1,0 +1,39 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0 -->
+<!-- A page for the accessibility test of P@x (tests/pax/a11y/harness.py):
+     a field, a harmless button, a consequential one, a link and a status
+     line that says what happened. It sends nothing anywhere. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>TUR accessibility test page</title>
+<style>
+  body { font: 16px sans-serif; margin: 32px; }
+  label, button, a { margin: 8px; }
+  input { font: 16px sans-serif; width: 320px; }
+</style>
+</head>
+<body>
+<h1>TUR accessibility test page</h1>
+<p>
+  <label for="terms">Search terms</label>
+  <input id="terms" type="text">
+</p>
+<p>
+  <button id="preview" type="button">Preview</button>
+  <button id="send" type="button">Send</button>
+  <a href="#details">Read more</a>
+</p>
+<p id="status" role="status">Nothing has happened yet.</p>
+<p id="details">Details: this page is part of a test.</p>
+<script>
+  const status = document.getElementById("status");
+  document.getElementById("preview").addEventListener("click", () => {
+    status.textContent = "Previewed: " + document.getElementById("terms").value;
+  });
+  document.getElementById("send").addEventListener("click", () => {
+    status.textContent = "SENT";
+  });
+</script>
+</body>
+</html>

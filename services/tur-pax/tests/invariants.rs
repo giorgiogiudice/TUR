@@ -25,8 +25,8 @@ use tur_pax::{
     Action, ActionClass, AgentOperation, CommandAction, Context, Decision, HeldApprovals, Mode,
     OperationContent, PolicyStore, Presence, PrivilegedOperation, Reason, Refusal, Relaxation,
     RelaxationLevel, RepairSession, Sandbox, StandingApproval, Timestamp, ToolManifest,
-    TypedOperation, TypedOperationKind, UiAction, UiActionKind, UserPolicy, Verdict, WindowOwner,
-    WorkingContext, decide,
+    TypedOperation, TypedOperationKind, UiAction, UiActionKind, UiDetail, UiOperation, UiRole,
+    UserPolicy, Verdict, WindowOwner, WorkingContext, decide,
 };
 
 const NOW: Timestamp = Timestamp(1_000_000);
@@ -94,6 +94,121 @@ const UI_LABELS: [(&str, &str, bool); 7] = [
     // "Send" with a Cyrillic first letter.
     ("Document 1", "\u{405}end", true),
 ];
+
+/// One action of the accessibility bridge (pax-accessibility.md, section 5):
+/// what it does, the role the bus reports for its target, the target's
+/// name and description, whether it is the default control, whether it
+/// takes text, the text typed, and whether the stated rules make it
+/// consequential in a window of the user's, in an application nothing is
+/// said about.
+struct InterfaceAct {
+    operation: UiOperation,
+    role: UiRole,
+    name: &'static str,
+    description: &'static str,
+    default_control: bool,
+    editable: bool,
+    text: &'static str,
+    consequential: bool,
+}
+
+const fn act_case(
+    operation: UiOperation,
+    role: UiRole,
+    name: &'static str,
+    text: &'static str,
+    consequential: bool,
+) -> InterfaceAct {
+    InterfaceAct {
+        operation,
+        role,
+        name,
+        description: "",
+        default_control: false,
+        editable: matches!(role, UiRole::Text | UiRole::PasswordText | UiRole::Terminal),
+        text,
+        consequential,
+    }
+}
+
+const INTERFACE_ACTS: [InterfaceAct; 21] = [
+    // Moving the keyboard or the view: an element without a name is fine.
+    act_case(UiOperation::Focus, UiRole::Text, "", "", false),
+    act_case(UiOperation::Scroll, UiRole::ScrollArea, "", "", false),
+    // ... but not one whose name matches the tables.
+    act_case(UiOperation::Focus, UiRole::Button, "Send", "", true),
+    // Expanding, collapsing, selecting: judged by the name.
+    act_case(UiOperation::Expand, UiRole::TreeItem, "Folders", "", false),
+    act_case(
+        UiOperation::Collapse,
+        UiRole::TreeItem,
+        "Folders",
+        "",
+        false,
+    ),
+    act_case(UiOperation::Select, UiRole::PageTab, "General", "", false),
+    act_case(UiOperation::Select, UiRole::ListItem, "", "", true),
+    // Pressing: a control with a readable, ordinary name.
+    act_case(UiOperation::Press, UiRole::Button, "Bold", "", false),
+    act_case(UiOperation::Press, UiRole::Link, "Read more", "", false),
+    act_case(UiOperation::Press, UiRole::Button, "Send", "", true),
+    act_case(UiOperation::Press, UiRole::Button, "Delete draft", "", true),
+    // The description says what the name does not.
+    InterfaceAct {
+        description: "Deletes the selected text",
+        ..act_case(UiOperation::Press, UiRole::Button, "Bold", "", true)
+    },
+    // The default control of a dialog affirms it.
+    InterfaceAct {
+        default_control: true,
+        ..act_case(UiOperation::Press, UiRole::Button, "Bold", "", true)
+    },
+    // A role that is not a control.
+    act_case(UiOperation::Press, UiRole::Unknown, "Bold", "", true),
+    // Typing: into a field that takes text, without a line break, not a
+    // secret, not a terminal, not a field whose name matches the tables.
+    act_case(UiOperation::Type, UiRole::Text, "", "hello", false),
+    act_case(UiOperation::Type, UiRole::Text, "Search", "hello\n", true),
+    act_case(
+        UiOperation::Type,
+        UiRole::PasswordText,
+        "Password",
+        "hello",
+        true,
+    ),
+    InterfaceAct {
+        editable: false,
+        ..act_case(UiOperation::Type, UiRole::Text, "Message", "hello", true)
+    },
+    act_case(UiOperation::Type, UiRole::Terminal, "", "ls", true),
+    act_case(
+        UiOperation::Type,
+        UiRole::Text,
+        "Amount to transfer",
+        "10",
+        true,
+    ),
+    // Reading a window through the bridge.
+    act_case(UiOperation::Read, UiRole::Window, "", "", false),
+];
+
+fn interface_action(application: &str, act: &InterfaceAct) -> UiAction {
+    UiAction {
+        application: application.to_owned(),
+        window_title: "Document 1".to_owned(),
+        control: act.name.to_owned(),
+        kind: act.operation.kind().unwrap_or(UiActionKind::Act),
+        detail: UiDetail {
+            operation: act.operation,
+            role: act.role,
+            description: act.description.to_owned(),
+            default_control: act.default_control,
+            editable: act.editable,
+            text: act.text.to_owned(),
+            also_known_as: Vec::new(),
+        },
+    }
+}
 
 /// The operations a repair session never covers: the list in section 5.5 of
 /// the addendum, plus the unclassified type.
@@ -245,6 +360,7 @@ fn ui(application: &str, window_title: &str, control: &str, kind: UiActionKind) 
         window_title: window_title.to_owned(),
         control: control.to_owned(),
         kind,
+        detail: tur_pax::UiDetail::default(),
     }
 }
 
@@ -304,6 +420,22 @@ fn cases() -> Vec<Case> {
             let target = ui(application, window_title, control, UiActionKind::Act);
             cases.push(Case::new(Action::Accessibility(target.clone()), floor));
             cases.push(Case::new(Action::ScreenInput(target), floor));
+        }
+
+        // The accessibility bridge's actions, through the accessibility
+        // tree only.
+        for act in &INTERFACE_ACTS {
+            let floor = if act.operation == UiOperation::Read {
+                ActionClass::Observe
+            } else if act.consequential {
+                ActionClass::Consequential
+            } else {
+                ActionClass::Reversible
+            };
+            cases.push(Case::new(
+                Action::Accessibility(interface_action(application, act)),
+                floor,
+            ));
         }
     }
 
@@ -765,6 +897,11 @@ fn the_generators_cover_what_they_claim() {
             }));
         }
     }
+    for operation in UiOperation::ALL {
+        assert!(space.cases.iter().any(|case| {
+            ui_target(&case.action).is_some_and(|target| target.detail.operation == operation)
+        }));
+    }
     for owner in WindowOwner::ALL {
         assert!(
             space
@@ -778,7 +915,7 @@ fn the_generators_cover_what_they_claim() {
     }
 
     // The sizes stated in docs/architecture/agent-policy.md.
-    assert_eq!(space.cases.len(), 255);
+    assert_eq!(space.cases.len(), 486);
     assert_eq!(space.tool_contexts.len(), 320);
     assert_eq!(space.ui_contexts.len(), 192);
     assert_eq!(space.privileged_contexts.len(), 960);
@@ -789,7 +926,7 @@ fn the_generators_cover_what_they_claim() {
         .iter()
         .map(|case| space.contexts_for(case).len() * space.policies.len())
         .sum();
-    assert_eq!(inputs, 738_432);
+    assert_eq!(inputs, 1_137_600);
 
     // The statement of which sessions are open agrees with the list.
     let sessions = repair_sessions();

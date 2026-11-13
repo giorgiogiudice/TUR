@@ -140,7 +140,7 @@ fn command_line(registry: &ToolRegistry, tool: &str, arguments: Value) -> Vec<St
         Performer::Adapter { adapter, arguments } => {
             adapter.argv(&arguments).expect("a command line")
         }
-        Performer::Command { .. } | Performer::Assistant(_) => {
+        Performer::Command { .. } | Performer::Assistant(_) | Performer::Interface(_) => {
             panic!("{tool} is not a tool of a manifest")
         }
     }

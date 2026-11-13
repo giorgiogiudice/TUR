@@ -43,7 +43,9 @@
 use serde_json::{Map, Value};
 use tur_core::ErrorCode;
 
-use crate::action::{Action, CommandAction, Sandbox, UiAction, UiActionKind, WorkingContext};
+use crate::action::{
+    Action, CommandAction, Sandbox, UiAction, UiActionKind, UiOperation, WorkingContext,
+};
 use crate::class::ActionClass;
 use crate::context::{Context, Presence, Timestamp};
 use crate::decision::{Decision, Refusal, Verdict};
@@ -585,14 +587,27 @@ fn summarise_ui(ui: &UiAction) -> String {
     let application = identifier(&ui.application);
     let matched = match ui.kind {
         UiActionKind::Observe => None,
-        UiActionKind::Act => {
-            match_consequential(&ui.control).or_else(|| match_consequential(&ui.window_title))
-        }
+        UiActionKind::Act => match_consequential(&ui.control)
+            .or_else(|| match_consequential(&ui.detail.description))
+            .or_else(|| match_consequential(&ui.window_title)),
     };
-    match matched {
-        Some(category) => format!("application {application}, pattern {}", category.as_str()),
-        None => format!("application {application}"),
+    // The operation and the role come from fixed tables; the name, the
+    // description, the title and any typed text are never written.
+    let mut summary = format!("application {application}");
+    if ui.detail.operation != UiOperation::Unspecified {
+        summary.push_str(&format!(
+            ", operation {}, role {}",
+            ui.detail.operation.as_str(),
+            ui.detail.role.as_str()
+        ));
     }
+    if ui.detail.operation == UiOperation::Type {
+        summary.push_str(&format!(", {} characters", ui.detail.text.chars().count()));
+    }
+    if let Some(category) = matched {
+        summary.push_str(&format!(", pattern {}", category.as_str()));
+    }
+    summary
 }
 
 /// The summary of a command outside the privileged sandbox: the program as it
@@ -900,6 +915,7 @@ mod tests {
             window_title: "Compose".to_owned(),
             control: "Send".to_owned(),
             kind: UiActionKind::Act,
+            detail: crate::action::UiDetail::default(),
         };
         let command = CommandAction {
             sandbox: Sandbox::Privileged(PrivilegedOperation::ServiceControl),
@@ -944,6 +960,7 @@ mod tests {
             window_title: "Re: salary review for Alex".to_owned(),
             control: "Send".to_owned(),
             kind: UiActionKind::Act,
+            detail: crate::action::UiDetail::default(),
         });
         let message = record(&ui, &trusted()).message();
         assert!(
@@ -1244,6 +1261,7 @@ mod tests {
                 window_title: format!("Sign in - {secret}"),
                 control: secret.to_owned(),
                 kind: UiActionKind::Act,
+                detail: crate::action::UiDetail::default(),
             });
             let command = Action::Command(CommandAction {
                 sandbox: Sandbox::User,
