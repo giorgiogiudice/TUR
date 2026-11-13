@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Starts tur-pax-ui, with nothing shown, when something calls org.tur.PaxUi1
+# on the session bus and the window is not open: P@x's tray item, the
+# launcher's "Ask P@x" result (docs/architecture/desktop-experience.md, 9.1).
+# Installed as /usr/share/dbus-1/services/org.tur.PaxUi1.service.
+[D-BUS Service]
+Name=org.tur.PaxUi1
+Exec=/usr/bin/tur-pax-ui --background

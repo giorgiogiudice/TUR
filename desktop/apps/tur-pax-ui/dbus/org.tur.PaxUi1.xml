@@ -1,0 +1,30 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+ "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<!-- SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0 -->
+<!--
+  org.tur.PaxUi1: how other programs ask P@x's window to show itself
+  (docs/architecture/tur-pax-ui.md, section 5). Implemented by tur-pax-ui.
+
+  Session bus. Well-known name org.tur.PaxUi1, started on demand
+  (data/org.tur.PaxUi1.service). Object path /org/tur/PaxUi1. Interface
+  version 1.
+
+  It shows and hides P@x's window and nothing else. It carries no words to
+  P@x: a program that wants P@x to do something calls org.tur.Agent1, whose
+  rules apply (docs/architecture/pax-service.md, section 3).
+-->
+<node name="/org/tur/PaxUi1">
+  <interface name="org.tur.PaxUi1">
+    <!-- Shows "ask" (the ask bar), "panel" (the conversation), "activity"
+         (P@x's record of what it did) or "setup" (P@x's setup), and gives it
+         the keyboard. Anything else is refused with InvalidArgs. -->
+    <method name="Show">
+      <arg name="mode" type="s" direction="in"/>
+    </method>
+    <!-- Takes the bar and the panel away. -->
+    <method name="Hide"/>
+    <property name="InterfaceVersion" type="u" access="read">
+      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="const"/>
+    </property>
+  </interface>
+</node>

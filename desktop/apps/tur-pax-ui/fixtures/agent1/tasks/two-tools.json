@@ -1,0 +1,244 @@
+{
+  "licence": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+  "request": "Set the value for the night.",
+  "signals": [
+    {
+      "args": [
+        "t-1794556079-1",
+        {
+          "answer": "",
+          "attended": true,
+          "cost": null,
+          "currency": null,
+          "error_code": null,
+          "finished_at": null,
+          "message": "",
+          "outcome": null,
+          "request": "Set the value for the night.",
+          "schedule": null,
+          "started_at": 1794556079,
+          "state": "working",
+          "steps": [],
+          "task": "t-1794556079-1",
+          "texts": [],
+          "usage": {
+            "cached_input_tokens": 0,
+            "input_tokens": 0,
+            "output_tokens": 0
+          }
+        }
+      ],
+      "member": "TaskStarted"
+    },
+    {
+      "args": [
+        "working"
+      ],
+      "member": "StateChanged"
+    },
+    {
+      "args": [
+        "t-1794556079-1",
+        "interim",
+        "I will read the value and set it."
+      ],
+      "member": "TextAdded"
+    },
+    {
+      "args": [
+        "t-1794556079-1",
+        {
+          "audit_id": "t-1794556079-1#2",
+          "class": 0,
+          "decision": "allowed",
+          "detail": "Call tool \"test_observe\" of service \"org.tur.Test1\" with arguments {}",
+          "error_code": null,
+          "exit_code": null,
+          "index": 1,
+          "message": null,
+          "output_bytes": 0,
+          "reason": "observe_permitted",
+          "result": null,
+          "service": "org.tur.Test1",
+          "state": "running",
+          "tier": 1,
+          "title": "Read the test value",
+          "tool": "test_observe",
+          "truncated": false,
+          "withheld": 0
+        }
+      ],
+      "member": "ActionProposed"
+    },
+    {
+      "args": [
+        "t-1794556079-1",
+        {
+          "audit_id": "t-1794556079-1#3",
+          "class": 0,
+          "decision": "allowed",
+          "detail": "Call tool \"test_observe\" of service \"org.tur.Test1\" with arguments {}",
+          "error_code": null,
+          "exit_code": 0,
+          "index": 1,
+          "message": null,
+          "output_bytes": 55,
+          "reason": "observe_permitted",
+          "result": "ok",
+          "service": "org.tur.Test1",
+          "state": "done",
+          "tier": 1,
+          "title": "Read the test value",
+          "tool": "test_observe",
+          "truncated": false,
+          "withheld": 0
+        }
+      ],
+      "member": "ActionCompleted"
+    },
+    {
+      "args": [
+        "t-1794556079-1",
+        {
+          "audit_id": "t-1794556079-1#4",
+          "class": 1,
+          "decision": "allowed",
+          "detail": "Call tool \"test_reversible\" of service \"org.tur.Test1\" with arguments {\"value\":\"night\"}",
+          "error_code": null,
+          "exit_code": null,
+          "index": 2,
+          "message": null,
+          "output_bytes": 0,
+          "reason": "reversible_permitted",
+          "result": null,
+          "service": "org.tur.Test1",
+          "state": "running",
+          "tier": 1,
+          "title": "Set the test value",
+          "tool": "test_reversible",
+          "truncated": false,
+          "withheld": 0
+        }
+      ],
+      "member": "ActionProposed"
+    },
+    {
+      "args": [
+        "t-1794556079-1",
+        {
+          "audit_id": "t-1794556079-1#5",
+          "class": 1,
+          "decision": "allowed",
+          "detail": "Call tool \"test_reversible\" of service \"org.tur.Test1\" with arguments {\"value\":\"night\"}",
+          "error_code": null,
+          "exit_code": 0,
+          "index": 2,
+          "message": null,
+          "output_bytes": 51,
+          "reason": "reversible_permitted",
+          "result": "ok",
+          "service": "org.tur.Test1",
+          "state": "done",
+          "tier": 1,
+          "title": "Set the test value",
+          "tool": "test_reversible",
+          "truncated": false,
+          "withheld": 0
+        }
+      ],
+      "member": "ActionCompleted"
+    },
+    {
+      "args": [
+        "t-1794556079-1",
+        "answer",
+        "The value is set for the night."
+      ],
+      "member": "TextAdded"
+    },
+    {
+      "args": [
+        "t-1794556079-1",
+        {
+          "answer": "The value is set for the night.",
+          "attended": true,
+          "cost": null,
+          "currency": null,
+          "error_code": null,
+          "finished_at": 1794556079,
+          "message": "",
+          "outcome": "completed",
+          "request": "Set the value for the night.",
+          "schedule": null,
+          "started_at": 1794556079,
+          "state": "finished",
+          "steps": [
+            {
+              "audit_id": "t-1794556079-1#3",
+              "class": 0,
+              "decision": "allowed",
+              "detail": "Call tool \"test_observe\" of service \"org.tur.Test1\" with arguments {}",
+              "error_code": null,
+              "exit_code": 0,
+              "index": 1,
+              "message": null,
+              "output_bytes": 55,
+              "reason": "observe_permitted",
+              "result": "ok",
+              "service": "org.tur.Test1",
+              "state": "done",
+              "tier": 1,
+              "title": "Read the test value",
+              "tool": "test_observe",
+              "truncated": false,
+              "withheld": 0
+            },
+            {
+              "audit_id": "t-1794556079-1#5",
+              "class": 1,
+              "decision": "allowed",
+              "detail": "Call tool \"test_reversible\" of service \"org.tur.Test1\" with arguments {\"value\":\"night\"}",
+              "error_code": null,
+              "exit_code": 0,
+              "index": 2,
+              "message": null,
+              "output_bytes": 51,
+              "reason": "reversible_permitted",
+              "result": "ok",
+              "service": "org.tur.Test1",
+              "state": "done",
+              "tier": 1,
+              "title": "Set the test value",
+              "tool": "test_reversible",
+              "truncated": false,
+              "withheld": 0
+            }
+          ],
+          "task": "t-1794556079-1",
+          "texts": [
+            {
+              "kind": "interim",
+              "text": "I will read the value and set it."
+            },
+            {
+              "kind": "answer",
+              "text": "The value is set for the night."
+            }
+          ],
+          "usage": {
+            "cached_input_tokens": 0,
+            "input_tokens": 80,
+            "output_tokens": 60
+          }
+        }
+      ],
+      "member": "TaskFinished"
+    },
+    {
+      "args": [
+        "idle"
+      ],
+      "member": "StateChanged"
+    }
+  ]
+}

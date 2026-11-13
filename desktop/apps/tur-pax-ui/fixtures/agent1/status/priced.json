@@ -1,0 +1,68 @@
+{
+  "licence": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+  "recorded": {
+    "abilities": {
+      "act": null,
+      "notices": [],
+      "see": null
+    },
+    "adapter": "anthropic",
+    "consent": {
+      "accepted_at": 1794556079,
+      "accepted_for": "anthropic",
+      "accepted_version": "2",
+      "current": true,
+      "text_version": "2"
+    },
+    "enabled": true,
+    "generation": {
+      "problem": null,
+      "settings": {
+        "effort": "high"
+      }
+    },
+    "interface_version": 1,
+    "key": "set",
+    "local_model": null,
+    "model": "claude-opus-5-5",
+    "model_listed": true,
+    "model_tested": false,
+    "price_known": true,
+    "problem": null,
+    "proposals": 1,
+    "provider": "anthropic",
+    "provider_name": "Anthropic",
+    "provider_origin": "listed",
+    "ready": true,
+    "running": null,
+    "session_locked": null,
+    "spending": {
+      "currency": "USD",
+      "day": "2026-11-13",
+      "day_limit": {
+        "cost": 5.0,
+        "tokens": null
+      },
+      "day_limit_reached": false,
+      "month": {
+        "cost": 0.0,
+        "input_tokens": 520,
+        "output_tokens": 390,
+        "responses": 13
+      },
+      "prices_as_of": "2026-11-12",
+      "prices_status": "example",
+      "task_limit": {
+        "cost": 1.0,
+        "tokens": null
+      },
+      "today": {
+        "cost": 0.0,
+        "input_tokens": 520,
+        "output_tokens": 390,
+        "responses": 13
+      }
+    },
+    "state": "idle"
+  }
+}

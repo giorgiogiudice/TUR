@@ -14,12 +14,14 @@ desktop-experience.md 17.1, answer 2) and what the programs that bind the keys
 bind. The generated file is committed, as the token files are, and the
 `boundary` job runs --check.
 
-The bindings. A desktop file of one of P@x's programs (tur-pax*) under
-desktop/ that has an X-KDE-Shortcuts line binds the command named by its
-X-TUR-Pax-Command line, and must bind it to the keys commands.json gives. No
-such file exists yet (nothing binds any of P@x's keys: commands.json says
-"bound": false for each); the check says so, and fails if a command marked
-bound has no binding file. Needs only the Python standard library.
+The bindings. A group of a desktop file under desktop/ (the entry, or one of
+its actions) that has an X-KDE-Shortcuts line binds the command named by the
+same group's X-TUR-Pax-Command line, and must bind it to the keys
+commands.json gives. In a desktop file of one of P@x's programs (org.tur.Pax*)
+every group with a key must name its command. tur-pax-ui's desktop file
+(desktop/apps/tur-pax-ui/data/org.tur.PaxUi.desktop) binds three this way.
+The check fails if a command marked bound has no group that binds it. Needs
+only the Python standard library.
 """
 
 from __future__ import annotations
@@ -103,6 +105,22 @@ def render(data: dict) -> str:
     return "\n".join(out) + "\n"
 
 
+def groups(text: str) -> list[tuple[str, dict[str, str]]]:
+    """The groups of a desktop file, each with its keys: [("Desktop Entry", {...}), ...]."""
+    out: list[tuple[str, dict[str, str]]] = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        header = re.fullmatch(r"\[(.+)\]", line)
+        if header:
+            out.append((header.group(1), {}))
+        elif "=" in line and out:
+            key, value = line.split("=", 1)
+            out[-1][1].setdefault(key.strip(), value.strip())
+    return out
+
+
 def bindings(data: dict, root: pathlib.Path = ROOT) -> tuple[list[str], list[str]]:
     """Files that bind one of P@x's commands, and where they disagree."""
     keys = {command["id"]: command["keys"] for command in data["commands"]}
@@ -112,23 +130,24 @@ def bindings(data: dict, root: pathlib.Path = ROOT) -> tuple[list[str], list[str
         if "build" in path.relative_to(root / "desktop").parts:
             continue
         text = path.read_text(encoding="utf-8", errors="replace")
-        shortcut = re.search(r"^X-KDE-Shortcuts=(.*)$", text, re.MULTILINE)
-        if shortcut is None:
-            continue
         relative = path.relative_to(root).as_posix()
-        command = re.search(r"^X-TUR-Pax-Command=(.*)$", text, re.MULTILINE)
-        if not path.name.startswith("org.tur.Pax") and command is None:
-            continue
-        found.append(relative)
-        if command is None:
-            errors.append(f"{relative}: binds {shortcut.group(1)} but names no X-TUR-Pax-Command")
-            continue
-        cid = command.group(1).strip()
-        bound_ids.add(cid)
-        if cid not in keys:
-            errors.append(f"{relative}: X-TUR-Pax-Command={cid} is not in commands.json")
-        elif shortcut.group(1).strip() != keys[cid]:
-            errors.append(f"{relative}: binds {cid} to {shortcut.group(1).strip()}; commands.json says {keys[cid]}")
+        for name, entries in groups(text):
+            shortcut = entries.get("X-KDE-Shortcuts")
+            if shortcut is None:
+                continue
+            command = entries.get("X-TUR-Pax-Command")
+            if not path.name.startswith("org.tur.Pax") and command is None:
+                continue
+            where = f"{relative} [{name}]"
+            found.append(where)
+            if command is None:
+                errors.append(f"{where}: binds {shortcut} but names no X-TUR-Pax-Command")
+                continue
+            bound_ids.add(command)
+            if command not in keys:
+                errors.append(f"{where}: X-TUR-Pax-Command={command} is not in commands.json")
+            elif shortcut != keys[command]:
+                errors.append(f"{where}: binds {command} to {shortcut}; commands.json says {keys[command]}")
     for command in data["commands"]:
         if command["bound"] and command["id"] not in bound_ids:
             errors.append(f"command {command['id']} is marked bound and no file binds it")
@@ -143,6 +162,12 @@ def self_test(data: dict) -> int:
         "other keys": ("X-KDE-Shortcuts=Meta+Shift+Space\nX-TUR-Pax-Command=ask\n", "commands.json says Meta+Space"),
         "no command": ("X-KDE-Shortcuts=Meta+Space\n", "names no X-TUR-Pax-Command"),
         "unknown": ("X-KDE-Shortcuts=Meta+Q\nX-TUR-Pax-Command=quit\n", "is not in commands.json"),
+        "action agrees": ("X-KDE-Shortcuts=Meta+Space\nX-TUR-Pax-Command=ask\n\n[Desktop Action stop]\n"
+                          "X-KDE-Shortcuts=Meta+Esc\nX-TUR-Pax-Command=stop\n", None),
+        "action other keys": ("X-KDE-Shortcuts=Meta+Space\nX-TUR-Pax-Command=ask\n\n[Desktop Action stop]\n"
+                              "X-KDE-Shortcuts=Ctrl+Esc\nX-TUR-Pax-Command=stop\n", "commands.json says Meta+Esc"),
+        "action no command": ("X-TUR-Pax-Command=ask\nX-KDE-Shortcuts=Meta+Space\n\n[Desktop Action keys]\n"
+                              "X-KDE-Shortcuts=Meta+/\n", "names no X-TUR-Pax-Command"),
     }
     failures = 0
     for name, (body, expected) in cases.items():

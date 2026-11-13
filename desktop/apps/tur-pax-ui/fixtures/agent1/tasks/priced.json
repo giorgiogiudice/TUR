@@ -1,0 +1,87 @@
+{
+  "licence": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+  "request": "Think about it.",
+  "signals": [
+    {
+      "args": [
+        "t-1794556161-11",
+        {
+          "answer": "",
+          "attended": true,
+          "cost": null,
+          "currency": null,
+          "error_code": null,
+          "finished_at": null,
+          "message": "",
+          "outcome": null,
+          "request": "Think about it.",
+          "schedule": null,
+          "started_at": 1794556161,
+          "state": "working",
+          "steps": [],
+          "task": "t-1794556161-11",
+          "texts": [],
+          "usage": {
+            "cached_input_tokens": 0,
+            "input_tokens": 0,
+            "output_tokens": 0
+          }
+        }
+      ],
+      "member": "TaskStarted"
+    },
+    {
+      "args": [
+        "working"
+      ],
+      "member": "StateChanged"
+    },
+    {
+      "args": [
+        "t-1794556161-11",
+        "answer",
+        "I thought about it."
+      ],
+      "member": "TextAdded"
+    },
+    {
+      "args": [
+        "t-1794556161-11",
+        {
+          "answer": "I thought about it.",
+          "attended": true,
+          "cost": 0.00076,
+          "currency": "USD",
+          "error_code": null,
+          "finished_at": 1794556161,
+          "message": "",
+          "outcome": "completed",
+          "request": "Think about it.",
+          "schedule": null,
+          "started_at": 1794556161,
+          "state": "finished",
+          "steps": [],
+          "task": "t-1794556161-11",
+          "texts": [
+            {
+              "kind": "answer",
+              "text": "I thought about it."
+            }
+          ],
+          "usage": {
+            "cached_input_tokens": 0,
+            "input_tokens": 40,
+            "output_tokens": 30
+          }
+        }
+      ],
+      "member": "TaskFinished"
+    },
+    {
+      "args": [
+        "idle"
+      ],
+      "member": "StateChanged"
+    }
+  ]
+}

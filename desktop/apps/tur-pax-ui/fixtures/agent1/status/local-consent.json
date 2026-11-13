@@ -1,0 +1,77 @@
+{
+  "licence": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+  "recorded": {
+    "abilities": {
+      "act": true,
+      "notices": [
+        "This model takes no images, as its provider's entry declares, so P@x will not offer it control of the screen."
+      ],
+      "see": false
+    },
+    "adapter": "openai-chat",
+    "consent": {
+      "accepted_at": null,
+      "accepted_for": null,
+      "accepted_version": null,
+      "current": false,
+      "text_version": "2"
+    },
+    "enabled": false,
+    "generation": {
+      "problem": null,
+      "settings": {
+        "context_tokens": 8192,
+        "effort": "none",
+        "temperature": 0.7,
+        "top_k": 20,
+        "top_p": 0.8
+      }
+    },
+    "interface_version": 1,
+    "key": "file_missing",
+    "local_model": null,
+    "model": "qwen3-0.6b",
+    "model_listed": true,
+    "model_tested": false,
+    "price_known": false,
+    "problem": {
+      "error_code": "TUR-AI-SERVICE-001",
+      "message": "P@x is switched off. Switch it on in its settings first."
+    },
+    "proposals": 1,
+    "provider": "local",
+    "provider_name": "Local AI on this computer",
+    "provider_origin": "listed",
+    "ready": false,
+    "running": null,
+    "session_locked": null,
+    "spending": {
+      "currency": null,
+      "day": "2026-11-13",
+      "day_limit": {
+        "cost": null,
+        "tokens": 2000000
+      },
+      "day_limit_reached": false,
+      "month": {
+        "cost": 0.00076,
+        "input_tokens": 560,
+        "output_tokens": 420,
+        "responses": 14
+      },
+      "prices_as_of": "2026-11-12",
+      "prices_status": "example",
+      "task_limit": {
+        "cost": null,
+        "tokens": 400000
+      },
+      "today": {
+        "cost": 0.00076,
+        "input_tokens": 560,
+        "output_tokens": 420,
+        "responses": 14
+      }
+    },
+    "state": "off"
+  }
+}
