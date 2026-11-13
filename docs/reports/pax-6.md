@@ -122,7 +122,40 @@ small official GGUF); SmolLM2 (superseded, no tool-calling claim).
 
 ## The tiers
 
-TIERS_SECTION
+Rules in `services/tur-ai-local/src/fit.rs` and local-ai.md, section 10:
+**does not fit** when the model needs more than the total memory with the
+reserve; otherwise **runs well** at 8 tokens a second or more and **slow**
+below, from bandwidth over the bytes read per token. Processor: 9 GB/s per
+logical processor up to 60 GB/s with the fast kernels and an engine with
+processor variants, 1 GB/s up to 16 GB/s without (from local-ai-1's
+measurements); a graphics card with its own memory 150 GB/s and a built-in
+one 40 GB/s (assumed, not measured), only with a Vulkan engine and room in
+the card's memory. A catalogue measurement for the same kind of build is
+scaled to this processor and used instead (`basis: measured`).
+
+On the tests' machines (engine without Vulkan; the desktop has an 8 GB AMD
+card, which therefore does not count):
+
+| Model | 4 GB VM, 2 processors (AVX2) | 16 GB, 16 processors (unit test) | 32 GB desktop, 16 processors, 28.7 GB free |
+|---|---|---|---|
+| qwen3-0.6b | runs well, not now | runs well (measured) | runs well (measured) |
+| granite-4.0-1b | does not fit | runs well (measured) | runs well (measured) |
+| qwen3-vl-2b-instruct | does not fit | runs well (measured) | runs well (measured) |
+| qwen3-4b | does not fit | runs well, about 24.7 tokens/s (measured) | runs well (measured) |
+| ministral-3-3b | does not fit | runs well, 15.2 (measured here) | runs well, 15.2 (measured) |
+| gemma-4-e2b | does not fit | runs well, 39.7 | runs well, 39.7 |
+| gemma-4-e4b | does not fit | runs well, 20.7; **recommended** | runs well, 20.7 |
+| gemma-4-26b-a4b | does not fit | does not fit | runs well, 27.5; **recommended** |
+| qwen3-30b-a3b | does not fit | does not fit | runs well, 29.9, not in the memory free now |
+
+With Fedora 45's single build on 2 processors every model is slow
+(Qwen3 4B 0.8 tokens/s, measured and scaled); with a Vulkan engine and the
+8 GB card, Gemma 4 E2B and E4B run on the card (`graphics-card`). These are
+`fit::tests` and `tests/cli.rs::the_recommendation_follows_memory_and_processor`.
+The measurement of Ministral 3 3B in this work (9.11 tokens/s on the
+4-processor runner) is about half of what the rule estimates for it (16.8),
+because it was read with a 2 684-token prompt: the rule is optimistic for
+long prompts, which P@x sends.
 
 ## Generation settings per family
 
@@ -150,7 +183,42 @@ reasoning tokens. Tested per family in `tests/conformance.rs`
 
 ## The real `ensure` and P@x through it
 
-ENSURE_SECTION
+**Run 43341975820** (commit `68f720e`), local-ai job "P@x through the local
+preset (ministral-3-3b, ensure)", GitHub runner (AMD EPYC 7763, 4 logical
+processors, 16.8 GB, no graphics processor), llama.cpp's own b9840 CPU
+build:
+
+`tur-ai-local ensure ministral-3-3b --json --accept-licence --reasoning auto
+--idle-stop 3600 --start-timeout 900 --engine <llama-server>` printed 108
+events: `plan` ("Ministral 3 3B Instruct downloads 3.0 GB from
+https://huggingface.co/mistralai/Ministral-3-3B-Instruct-2512-GGUF.",
+2 988 524 864 bytes to download, 108 216 127 488 bytes free), 103
+`progress`, `verified` for each of the two files (size and SHA-256 as the
+catalogue gives), `installed` (`TUR-AI-LOCAL-023`), `starting`, `ready`
+(`TUR-AI-LOCAL-026`, http://127.0.0.1:39281). 27 s from start to ready,
+download included. Then `tur-ai-local verify` hashed both files again:
+pass. The engine's resident memory when ready: 5.40 GB (the estimate is
+6.58 GB). The model was cached (`local-ai-model-ministral-3-3b-<sha256>`);
+the next run (43344490859) found it there: `already-present`, `starting`,
+`ready`.
+
+**The P@x task through it**: `tur-pax run "<two-tools scenario>" --provider
+local --model ministral-3-3b` (the preset's defaults sent: temperature 0.05,
+no thinking switch for this model, context 8 192), the key from
+tur-ai-local's file, every component's tools and the read-only command tool
+in the real sandbox. Completed in 159.6 s, 4 requests, 12 548 tokens in and
+254 out: the model called `device_list_problems`, `catalogue_search` and
+`catalogue_route` (all class 0, allowed, run) and answered with the
+runner's firmware finding and Discord's Flatpak route. Every required check
+of `tests/pax/local_model.py` passed (provider `local`, family
+`openai-chat`, nothing above class 1 decided or performed, no grammar error,
+the key in no file or output). llama-server read the first request at 34.8
+tokens a second (2 684 tokens in 77.2 s) and generated at 9.1. The second
+run's task: completed in 190.4 s, 2 requests, one tool call.
+
+**What it does not show**: a download resumed after a real interruption (the
+library tests do that against a local server), a cancel of a real download,
+a model other than Ministral 3 3B, the Fedora engine with these models.
 
 ## Breaking changes
 
@@ -199,7 +267,32 @@ ENSURE_SECTION
 
 ## Limits
 
-LIMITS_SECTION
+- **No cloud provider was called.** Every family's fields are the
+  documentation's (pax-providers.md, 15.5 lists what was not verified).
+- **Gemma 4** was not run by P@x; E2B is measured only by the local-ai
+  comparison job's table (llama.cpp b9840 own build), see "Runs". E4B,
+  26B A4B and Qwen3 30B A3B were not run anywhere: their memory needs and
+  speeds are estimates.
+- **No graphics processor** anywhere; the graphics-card tier is a rule.
+  The engine TUR would install (Fedora 45's) has no Vulkan backend, and
+  `tur-ai-local serve` passes no `--n-gpu-layers` (current llama.cpp
+  offloads automatically with `-ngl auto`; whether b9840 does was not
+  checked).
+- **The tiers' rule overestimates** speed for long prompts (above).
+- **`tur-ai-local ensure` cancel** is a file the command polls between
+  pieces; a stalled connection is cut by the 120-second read timeout, not
+  by the cancel. The service ends the program after 20 s.
+- **`free_space` uses `df`**; without it the check is skipped and the plan
+  says `free_bytes: null`.
+- **Stop-sequence limits** of Anthropic and Google are TUR's, not the
+  providers'.
+- **OpenRouter, Together and Ollama** declare no settings: only the output
+  limit can be set for their models.
+- **The `image` and `boot` workflows fail on this pull request for a reason
+  outside it**: the pinned base image digest
+  `quay.io/fedora/fedora-kinoite@sha256:f857f6c5…` (`image/base.lock`) is
+  gone from quay.io ("manifest unknown"); the same workflows passed on main
+  hours earlier. `image/**` is not this change's to edit.
 
 ## Follow-ups
 

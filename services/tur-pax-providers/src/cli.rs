@@ -513,7 +513,7 @@ mod tests {
                 "image input: yes",
                 control,
                 "not implemented by this adapter",
-                "model discovery: no",
+                "model discovery: yes",
                 "speech services: no",
             ] {
                 assert!(text.contains(expected), "{provider}: {expected}\n{text}");

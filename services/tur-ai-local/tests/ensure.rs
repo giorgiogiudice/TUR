@@ -340,7 +340,7 @@ fn without_room_on_the_disk_nothing_is_downloaded() {
         root: dir.join("models"),
     };
     let run = fetch(&store, &model, Some(1_000_000), false);
-    let error = run.result.expect_err("no room");
+    let error = run.result.as_ref().expect_err("no room");
     assert_eq!(error.code, AiLocalCode::NoDiskSpace);
     assert!(error.detail.contains("kept free"), "{}", error.detail);
     assert_eq!(names(&run), vec!["plan"]);
