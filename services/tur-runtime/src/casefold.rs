@@ -135,7 +135,9 @@ impl CaseFoldReason {
     /// The reason in plain language.
     pub const fn describe(self) -> &'static str {
         match self {
-            CaseFoldReason::Casefolded => "drive C: is case-insensitive: the file system folds case",
+            CaseFoldReason::Casefolded => {
+                "drive C: is case-insensitive: the file system folds case"
+            }
             CaseFoldReason::NotRequested => {
                 "drive C: was not made case-insensitive: it was not asked for"
             }
@@ -255,8 +257,7 @@ pub fn classify(status: i32, output: &str) -> CaseFoldRecord {
         CaseFoldReason::NoCasefoldFeature
     } else if output.contains("Inappropriate ioctl for device") {
         CaseFoldReason::NoAttributes
-    } else if output.contains("Operation not permitted") || output.contains("Permission denied")
-    {
+    } else if output.contains("Operation not permitted") || output.contains("Permission denied") {
         CaseFoldReason::NotPermitted
     } else if output.contains("Directory not empty") {
         CaseFoldReason::NotEmpty

@@ -1042,12 +1042,7 @@ fn plan_prefix_in(
         PrefixCommand::Repair { .. } => Planned::of(planner.repair(&metadata, &installed()?)?),
         PrefixCommand::Reset { no_backup, .. } => {
             let case_folding = session.live_case_folding();
-            Planned::of(planner.reset(
-                &metadata,
-                &installed()?,
-                !no_backup,
-                case_folding,
-            )?)
+            Planned::of(planner.reset(&metadata, &installed()?, !no_backup, case_folding)?)
         }
         PrefixCommand::Migrate { .. } => Planned::of(planner.migrate(&metadata, &installed()?)?),
         PrefixCommand::Backup { .. } => {
@@ -1715,7 +1710,7 @@ fn run_app_show(app_id: &str, json: bool) -> u8 {
         );
         line("installer kind", record.install.kind.label());
         line(
-            "drive C:",
+            "drive C",
             &record.case_folding.as_ref().map_or_else(
                 || "not recorded (installed before case folding was recorded)".to_owned(),
                 CaseFoldRecord::summary,

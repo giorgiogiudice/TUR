@@ -279,14 +279,7 @@ fn create_dry_run_prints_the_plan_and_changes_nothing() {
 #[test]
 fn case_folding_is_planned_on_request_and_left_out_on_request() {
     let home = Home::new("create-casefold");
-    let outcome = home.run_named(&[
-        "prefix",
-        "create",
-        APP,
-        "--casefold",
-        "--dry-run",
-        "--json",
-    ]);
+    let outcome = home.run_named(&["prefix", "create", APP, "--casefold", "--dry-run", "--json"]);
     assert_eq!(outcome.status, 0, "{}", outcome.stderr);
     let plan = &outcome.json()["plan"];
     assert_eq!(
@@ -327,7 +320,11 @@ fn case_folding_is_planned_on_request_and_left_out_on_request() {
     // Text form.
     let outcome = home.run_named(&["prefix", "create", APP, "--casefold", "--dry-run"]);
     assert_eq!(outcome.status, 0, "{}", outcome.stderr);
-    assert!(outcome.stdout.contains("case-insensitive"), "{}", outcome.stdout);
+    assert!(
+        outcome.stdout.contains("case-insensitive"),
+        "{}",
+        outcome.stdout
+    );
 
     // Both at once is a mistake on the command line.
     let outcome = home.run_named(&[

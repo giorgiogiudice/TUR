@@ -18,11 +18,11 @@ use std::path::PathBuf;
 
 use serde::Serialize;
 
+use crate::casefold::DEFAULT_CASE_FOLDING;
 use crate::grant::ProgramFile;
 use crate::launch_host::RuntimeVersion;
 use crate::metadata::{PrefixMetadata, RuntimeKind, SyncRecord};
 use crate::plan::{CommandSpec, Operation, Plan, Step};
-use crate::casefold::DEFAULT_CASE_FOLDING;
 use crate::prefix::{Planner, PrefixSettings};
 use crate::profile::{AppProfile, GraphicsBackend, ProfileFormat, ProfileRuntime, SyncBackend};
 use crate::runtime_cmd::{Invocation, PlanError, Task, assemble, decide_sync, dll_overrides};

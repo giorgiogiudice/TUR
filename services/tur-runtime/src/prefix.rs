@@ -1040,17 +1040,18 @@ pub(crate) mod tests {
             } => {
                 assert_eq!(path, &drive_c);
                 assert_eq!(command.program, "/usr/bin/chattr");
-                assert_eq!(
-                    command.arguments,
-                    ["+F", "--", drive_c.to_str().unwrap()]
-                );
+                assert_eq!(command.arguments, ["+F", "--", drive_c.to_str().unwrap()]);
                 assert_eq!(command.environment["LC_ALL"], "C");
             }
             other => panic!("{other:?}"),
         }
         // Wine is started after drive C: exists, never before.
         assert_eq!(run_command(&plan, 4).environment["WINEARCH"], "win64");
-        assert!(plan.notes.iter().any(|note| note.contains("where the file system can")));
+        assert!(
+            plan.notes
+                .iter()
+                .any(|note| note.contains("where the file system can"))
+        );
 
         // A file system that cannot fold case: the prefix is created all the
         // same, and the report says why it is case-sensitive.
@@ -1078,7 +1079,10 @@ pub(crate) mod tests {
         let mut without_chattr = Setup::new("prefix-casefold-no-chattr");
         without_chattr.host.chattr = None;
         let (plan, _) = planner(&without_chattr).create(&folded, false).unwrap();
-        assert!(matches!(&plan.steps[3], Step::CaseFold { command: None, .. }));
+        assert!(matches!(
+            &plan.steps[3],
+            Step::CaseFold { command: None, .. }
+        ));
         let report = run_plan(&plan, &mut FakeExecutor::default());
         assert!(report.succeeded());
         assert_eq!(
@@ -1089,8 +1093,15 @@ pub(crate) mod tests {
         // Not asked for: no step, and nothing in the report.
         let (plan, _) = planner(&setup).create(&settings(), false).unwrap();
         assert!(!kinds(&plan).contains(&"case-fold"));
-        assert_eq!(run_plan(&plan, &mut FakeExecutor::default()).case_folding, None);
-        assert!(plan.notes.iter().any(|note| note.contains("not made case-insensitive")));
+        assert_eq!(
+            run_plan(&plan, &mut FakeExecutor::default()).case_folding,
+            None
+        );
+        assert!(
+            plan.notes
+                .iter()
+                .any(|note| note.contains("not made case-insensitive"))
+        );
 
         // Proton builds its own prefix; it is left alone.
         let proton = PrefixSettings {
@@ -1412,7 +1423,9 @@ pub(crate) mod tests {
             "../../etc/passwd",
             "20261112T101500Z-manual.tar.gz",
         ] {
-            let error = planner(&setup).restore(name, true, CaseFolding::Off).unwrap_err();
+            let error = planner(&setup)
+                .restore(name, true, CaseFolding::Off)
+                .unwrap_err();
             assert_eq!(error.code(), Code::BackupMissing, "{name:?}");
         }
     }
@@ -1473,7 +1486,9 @@ pub(crate) mod tests {
             graphics_backend: GraphicsBackend::Dxvk,
             ..recorded()
         };
-        let plan = planner(&setup).reset(&before, &wine_9(), true, CaseFolding::Off).unwrap();
+        let plan = planner(&setup)
+            .reset(&before, &wine_9(), true, CaseFolding::Off)
+            .unwrap();
         assert_eq!(
             kinds(&plan),
             [
@@ -1530,13 +1545,17 @@ pub(crate) mod tests {
                 .any(|step| matches!(step, Step::RemoveTree { .. }))
         );
 
-        let without = planner(&setup).reset(&before, &wine_9(), false, CaseFolding::Off).unwrap();
+        let without = planner(&setup)
+            .reset(&before, &wine_9(), false, CaseFolding::Off)
+            .unwrap();
         assert_eq!(kinds(&without)[0], "remove-tree");
         assert!(without.notes[0].contains("without a backup"));
 
         // A reset with a newer Wine gives a prefix on the newer Wine, unless
         // the prefix is pinned.
-        let newer = planner(&setup).reset(&before, &wine_11(), true, CaseFolding::Off).unwrap();
+        let newer = planner(&setup)
+            .reset(&before, &wine_11(), true, CaseFolding::Off)
+            .unwrap();
         let after = parse_metadata(&written(&newer, &setup.app.metadata)).unwrap();
         assert_eq!(after.runtime_version, "wine-11.0");
         let pinned = PrefixMetadata {
@@ -1551,7 +1570,11 @@ pub(crate) mod tests {
                 version: "wine-9.0".to_owned()
             }
         );
-        assert!(planner(&setup).reset(&pinned, &wine_9(), true, CaseFolding::Off).is_ok());
+        assert!(
+            planner(&setup)
+                .reset(&pinned, &wine_9(), true, CaseFolding::Off)
+                .is_ok()
+        );
     }
 
     #[test]
