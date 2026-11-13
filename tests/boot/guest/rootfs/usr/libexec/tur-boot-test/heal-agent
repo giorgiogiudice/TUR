@@ -34,6 +34,16 @@
 #              in this boot it comes back (report offered again); after a
 #              restart it stays away (fixed by the update)
 #
+# Awareness (the owner's rule: the person is always kept aware): the
+# test user's own session manager runs, with no graphical session at first.
+# The notices of the first fault wait; then a "sign-in" (a stand-in
+# notification service on the user's session bus, WAYLAND_DISPLAY in the
+# user manager, tur-heal-notify.service started as graphical-session.target
+# starts it) shows them, and from then on tur-heal-notify.path shows each new
+# one as the service records it. Phase B, after the restart, starts without
+# a session again: the "fixed" notice waits and is shown at the next
+# sign-in. Every Notify call the stand-in receives is recorded.
+#
 # It decides nothing: tests/boot/heal.py turns the facts into checks.
 #
 # What is test plumbing: the chronyd drop-in in /run; the stand-in receiver
@@ -137,7 +147,39 @@ until [ "$(systemctl show -p ActiveState --value tur-boot-mark-good.service)" = 
 done
 put mark_good "$(systemctl show -p ActiveState --value tur-boot-mark-good.service)"
 loginctl enable-linger "${test_user}"
-for _ in $(seq 1 30); do [ -d "/run/user/${uid}" ] && break; sleep 1; done
+for _ in $(seq 1 30); do [ -S "/run/user/${uid}/bus" ] && break; sleep 1; done
+mkdir -p "${out}/notify"
+chown "${test_user}" "${out}/notify"
+user_bus="unix:path=/run/user/${uid}/bus"
+# user_systemctl ARGS...: the test user's own service manager.
+user_systemctl() {
+    runuser -u "${test_user}" -- env "XDG_RUNTIME_DIR=/run/user/${uid}" "DBUS_SESSION_BUS_ADDRESS=${user_bus}" \
+        systemctl --user "$@"
+}
+# sign_in LABEL: what a graphical sign-in does for the notices: a
+# notification service on the session bus, the display in the user manager's
+# environment, and tur-heal-notify.service started (graphical-session.target
+# wants it). The stand-in records every Notify call.
+sign_in() {
+    local label="$1"
+    rm -f "${out}/notify/ready-${label}"
+    runuser -u "${test_user}" -- env "XDG_RUNTIME_DIR=/run/user/${uid}" "DBUS_SESSION_BUS_ADDRESS=${user_bus}" \
+        setsid /usr/libexec/tur-boot-test/heal-notifications "${out}/notify/recorded.jsonl" \
+        "${out}/notify/ready-${label}" > "${out}/notify/server-${label}.log" 2>&1 < /dev/null &
+    for _ in $(seq 1 30); do [ -e "${out}/notify/ready-${label}" ] && break; sleep 1; done
+    put "notification_server_${label}" "$([ -e "${out}/notify/ready-${label}" ] && echo ready || echo absent)"
+    user_systemctl set-environment WAYLAND_DISPLAY=wayland-tur-heal-test "DBUS_SESSION_BUS_ADDRESS=${user_bus}"
+    user_systemctl start tur-heal-notify.service
+    put "notify_unit_${label}" "$(user_systemctl show -p Result --value tur-heal-notify.service)"
+}
+# flush LABEL: run the notice unit once more, as the path unit would, and
+# keep what is still waiting.
+flush() {
+    user_systemctl start tur-heal-notify.service
+    as_user "pending-${1}.json" tur-diag heal notices --json
+}
+put user_manager "$(user_systemctl is-system-running 2>&1)"
+put notify_path_active "$(user_systemctl is-active tur-heal-notify.path 2>&1)"
 
 if [ "${name}" = phase-b ]; then
     # ---- after the restart: the fault the update addresses stays away ------------
@@ -145,6 +187,14 @@ if [ "${name}" = phase-b ]; then
     mark_previous_build
     scan fixed
     as_user notices-fixed.json tur-diag heal notices --json
+    # No graphical session yet after the restart: the notice waits.
+    sleep 3
+    put recorded_before_sign_in_b "$(wc -l < "${out}/notify/recorded.jsonl" 2> /dev/null || echo 0)"
+    sign_in b
+    sleep 3
+    flush b
+    as_user history-b.json tur-diag heal history --json
+    as_user history-b.txt tur-diag heal history
     cap status-fixed.json tur-diag heal status --json
     systemctl unmask tur-heal.timer
     systemctl start tur-heal.timer
@@ -195,6 +245,19 @@ scan service-held
 put chronyd_after_second_scan "$(systemctl is-active chronyd.service)"
 rm -rf /run/systemd/system/chronyd.service.d
 systemctl daemon-reload
+
+# ---- awareness: no graphical session, the notices wait; a sign-in shows them -------------
+say "HEAL-STEP notices uptime=$(uptime_s)"
+sleep 3
+as_user pending-no-session.json tur-diag heal notices --json
+# The program itself, with no session bus at all: nothing can be shown,
+# nothing is marked seen.
+as_user notify-no-session.txt env DBUS_SESSION_BUS_ADDRESS=unix:path=/nonexistent tur-diag heal notify
+as_user pending-still.json tur-diag heal notices --json
+put notify_unit_before_sign_in "$(user_systemctl show -p ConditionResult --value tur-heal-notify.service)"
+sign_in a
+sleep 2
+flush after-sign-in
 
 # ---- 2. network time off: P@x asks the service --------------------------------------------
 say "HEAL-STEP time uptime=$(uptime_s)"
@@ -319,7 +382,15 @@ say "HEAL-STEP fix-link uptime=$(uptime_s)"
 fixes_over_image
 mark_previous_build
 scan recurred
-as_user notices-a.json tur-diag heal notices --json --mark-shown
+as_user notices-a.json tur-diag heal notices --json
+sleep 3
+flush end-a
+as_user history-a.json tur-diag heal history --json
+as_user history-a.txt tur-diag heal history
+put notify_unit_end_a "$(user_systemctl show -p Result --value tur-heal-notify.service)"
+user_systemctl unset-environment WAYLAND_DISPLAY
+pkill -u "${test_user}" -f heal-notifications
+cp "${out}/notify/recorded.jsonl" "${state}/recorded-a.jsonl" 2> /dev/null
 cap status-a.json tur-diag heal status --json
 umount /usr/share/tur/heal
 

@@ -13,8 +13,8 @@ use serde_json::{Value, json};
 
 use super::catalogue::{BUILT_IN, Catalogue, Check, ReportPolicy};
 use super::engine::{
-    ApplyRequest, Fix, Fixes, Paths, Running, apply, handle_request, notices, scan, status_view,
-    uid_of_connection, undo,
+    ApplyRequest, Fix, Fixes, HISTORY_COMMAND, Paths, PersonEntry, Running, apply, handle_request,
+    history, notices, scan, status_view, uid_of_connection, undo,
 };
 use super::machine::{FakeEntry, FakeMachine, exited, printed};
 use super::state::{Actor, EventKind, FaultState, HealState};
@@ -699,7 +699,13 @@ fn a_crash_of_a_tur_program_has_no_remedy_and_ends_as_an_offered_report() {
         "{}",
         shown[0].body
     );
-    assert_eq!(shown[0].actions, [format!("tur-diag heal report {CRASH}")]);
+    assert_eq!(
+        shown[0].actions,
+        [
+            format!("tur-diag heal report {CRASH}"),
+            HISTORY_COMMAND.to_owned()
+        ]
+    );
     // Nothing is ever sent from here: no command but the checks ran.
     let checks = [
         "systemctl is-",
@@ -958,4 +964,139 @@ fn the_scan_keeps_the_count_of_failed_units_for_status_in_the_sandbox() {
     let status = crate::gather_status(&host);
     assert_eq!(status.failed_units, Some(2));
     assert!(status.failed_units_as_of.is_some());
+}
+
+// ------------------------------------------------------------- awareness
+
+#[test]
+fn an_automatic_repair_is_told_and_so_is_whether_it_held() {
+    let dir = TempDir::new("aware-service");
+    let paths = dir.paths();
+    let machine = base()
+        .with_command(&units_line(), exited(0, &unit_states("chronyd.service")))
+        .with_command("systemctl reset-failed chronyd.service", printed(""))
+        .with_command("systemctl start chronyd.service", printed(""))
+        .with_effect(
+            "systemctl start chronyd.service",
+            &units_line(),
+            exited(1, &unit_states("none")),
+        );
+    let catalogue = catalogue();
+    let mut state = empty_state();
+    for _ in 0..2 {
+        scan(&machine, &catalogue, &paths, &mut state, &running("b1"), &Fixes::default(), true);
+    }
+    let shown = notices(&catalogue, &state, &BTreeSet::new(), &BTreeSet::new());
+    let kinds: Vec<EventKind> = shown.iter().map(|notice| notice.kind).collect();
+    assert_eq!(kinds, [EventKind::Repaired, EventKind::Held]);
+    assert!(shown[0].body.contains("TUR did this by itself"), "{}", shown[0].body);
+    assert!(shown[1].body.starts_with("The repair TUR made by itself held"), "{}", shown[1].body);
+    // Every notice says where to see more.
+    for notice in &shown {
+        assert_eq!(notice.actions.last().map(String::as_str), Some(HISTORY_COMMAND));
+    }
+    // A repair a person made is not followed by a "held" notice: they saw it.
+    let time = base()
+        .with_command(TIME_LINE, printed("NTP=no\nCanNTP=yes\n"))
+        .with_command("timedatectl set-ntp true", printed(""))
+        .with_effect("timedatectl set-ntp true", TIME_LINE, printed("NTP=yes\nCanNTP=yes\n"));
+    let mut state = empty_state();
+    scan(&time, &catalogue, &paths, &mut state, &running("b1"), &Fixes::default(), true);
+    apply(
+        &time,
+        &catalogue,
+        &paths,
+        &mut state,
+        &running("b1"),
+        &request(TIME, "enable-network-time", Actor::Person, false),
+    )
+    .expect("applied");
+    scan(&time, &catalogue, &paths, &mut state, &running("b1"), &Fixes::default(), true);
+    let kinds: Vec<EventKind> = notices(&catalogue, &state, &BTreeSet::new(), &BTreeSet::new())
+        .iter()
+        .map(|notice| notice.kind)
+        .collect();
+    assert_eq!(kinds, [EventKind::Detected, EventKind::Repaired]);
+}
+
+#[test]
+fn the_history_names_who_acted_newest_first_with_the_persons_own_decisions() {
+    let dir = TempDir::new("history");
+    let paths = dir.paths();
+    let catalogue = catalogue();
+    let time = base()
+        .with_command(TIME_LINE, printed("NTP=no\nCanNTP=yes\n"))
+        .with_command("timedatectl set-ntp true", printed(""))
+        .with_effect("timedatectl set-ntp true", TIME_LINE, printed("NTP=yes\nCanNTP=yes\n"))
+        .with_command("timedatectl set-ntp false", printed(""))
+        .with_effect("timedatectl set-ntp false", TIME_LINE, printed("NTP=no\nCanNTP=yes\n"));
+    let mut state = empty_state();
+    scan(&time, &catalogue, &paths, &mut state, &running("b1"), &Fixes::default(), true);
+    time.advance(60);
+    let mut pax = request(TIME, "enable-network-time", Actor::Request, false);
+    pax.uid = Some(1000);
+    apply(&time, &catalogue, &paths, &mut state, &running("b1"), &pax).expect("applied");
+    time.advance(60);
+    undo(
+        &time,
+        &catalogue,
+        &paths,
+        &mut state,
+        TIME,
+        "enable-network-time",
+        Actor::Person,
+        Some(1000),
+    )
+    .expect("undone");
+    let person = [PersonEntry {
+        at_utc: "2000-01-01T00:00:00Z".to_owned(),
+        kind: "report-declined".to_owned(),
+        code: Some(CRASH.to_owned()),
+        title: "A TUR program crashed".to_owned(),
+        report_id: None,
+    }];
+    let entries = history(&catalogue, &state, &person);
+    let rows: Vec<(String, Option<String>)> = entries
+        .iter()
+        .map(|entry| (entry.kind.clone(), entry.who.clone()))
+        .collect();
+    assert_eq!(
+        rows,
+        [
+            ("undone".to_owned(), Some("you".to_owned())),
+            (
+                "repaired".to_owned(),
+                Some("P@x (or another program of account 1000)".to_owned())
+            ),
+            ("detected".to_owned(), None),
+            ("report-declined".to_owned(), Some("you".to_owned())),
+        ]
+    );
+    assert!(entries[1].text.starts_with("Repaired: The clock is not kept right"), "{}", entries[1].text);
+    assert!(entries[3].text.starts_with("You chose not to send a report"));
+}
+
+#[test]
+fn the_persons_own_request_says_so_and_nothing_else_may_be_claimed() {
+    let dir = TempDir::new("by-person");
+    let paths = dir.paths();
+    let catalogue = catalogue();
+    let machine = base()
+        .with_command(TIME_LINE, printed("NTP=no\nCanNTP=yes\n"))
+        .with_command("timedatectl set-ntp true", printed(""))
+        .with_effect("timedatectl set-ntp true", TIME_LINE, printed("NTP=yes\nCanNTP=yes\n"));
+    let ask = |by: &str| {
+        let text = format!(
+            r#"{{"schema_version":1,"tool":"heal_apply_remedy","arguments":{{"code":"{TIME}","remedy":"enable-network-time"}}{by}}}"#
+        );
+        handle_request(&machine, &catalogue, &paths, text.as_bytes(), Some("1-2-3-1000"))
+    };
+    let refused = ask(r#","by":"service""#);
+    assert_eq!(refused["error"]["code"], json!("TUR-DIAG-HEAL-010"));
+    let answer = ask(r#","by":"person""#);
+    assert_eq!(answer["ok"], json!(true), "{answer}");
+    let state = HealState::load(&paths.state).expect("state");
+    let record = &state.faults[state.latest(TIME).expect("a record")];
+    assert_eq!(record.applied[0].by, Actor::Person);
+    assert_eq!(state.events.last().and_then(|event| event.uid), Some(1000));
 }

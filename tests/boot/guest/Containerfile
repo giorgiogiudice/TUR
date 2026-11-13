@@ -48,7 +48,7 @@ RUN set -eu; \
         /usr/libexec/tur-boot-test/component-checks /usr/libexec/tur-boot-test/make-pe-fixture \
         /usr/libexec/tur-boot-test/signed-update-agent \
         /usr/libexec/tur-boot-test/heal-agent /usr/libexec/tur-boot-test/heal-pax \
-        /usr/libexec/tur-boot-test/heal-receiver; \
+        /usr/libexec/tur-boot-test/heal-receiver /usr/libexec/tur-boot-test/heal-notifications; \
     install -m 0644 /usr/share/tur-pax-e2e/repo/tests/pax/probe_sockets.py /usr/share/tur-pax-e2e/probe_sockets.py; \
     install -m 0755 /usr/share/tur-pax-e2e/repo/tests/pax/tur-pax-test-tool /usr/bin/tur-pax-test-tool; \
     find /usr/share/tur-pax-e2e -type d -exec chmod 0755 {} +; \

@@ -27,8 +27,9 @@ mod tests;
 
 pub use catalogue::{Catalogue, Check, Fault, Remedy, RemedyKind, ReportPolicy};
 pub use engine::{
-    ApplyRequest, Fixes, Notice, Outcome, Paths, Running, ScanLine, StatusView, apply,
-    handle_request, notices, scan, status_view, undo,
+    ApplyRequest, Fixes, HISTORY_COMMAND, HistoryEntry, Notice, Outcome, Paths, PersonEntry,
+    Running, ScanLine, StatusView, apply, handle_request, history, notices, scan, status_view,
+    undo,
 };
 pub use machine::{FakeMachine, Machine, RealMachine};
 pub use state::{Actor, EventKind, FaultState, HealState, Lock};

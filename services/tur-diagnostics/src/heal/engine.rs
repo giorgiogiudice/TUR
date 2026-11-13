@@ -329,6 +329,9 @@ fn perform(
         Some(&remedy.id),
         Some(actor),
     );
+    if let Some(event) = state.events.last_mut() {
+        event.uid = uid;
+    }
     offer_report(state, index, fault, &now_after);
     Outcome {
         code: fault.code.clone(),
@@ -517,7 +520,10 @@ pub fn scan(
                 record.state = FaultState::Resolved;
                 record.resolved_how = Some(how.to_owned());
                 record.resolved_utc = Some(now.clone());
-                state.event(&now, &fault.code, kind, &subjects, None, None);
+                let by = (kind == EventKind::Held)
+                    .then(|| state.faults[index].applied.last().map(|applied| applied.by))
+                    .flatten();
+                state.event(&now, &fault.code, kind, &subjects, None, by);
                 line.state = Some(FaultState::Resolved);
                 line.action = format!("resolved: {how}");
             }
@@ -570,7 +576,7 @@ pub fn apply(
             ));
         }
     }
-    let limit = if request.actor == Actor::Request {
+    let limit = if matches!(request.actor, Actor::Request | Actor::Person) {
         REQUESTS_PER_BOOT
     } else {
         u32::MAX
@@ -712,6 +718,9 @@ pub fn undo(
         Some(remedy_id),
         Some(actor),
     );
+    if let Some(event) = state.events.last_mut() {
+        event.uid = uid;
+    }
     if let Some(uid) = uid {
         state.faults[index].applied[position]
             .detail
@@ -739,6 +748,11 @@ pub struct Request {
     pub tool: String,
     /// The tool's input.
     pub arguments: RequestArguments,
+    /// `"person"` when the person's own `tur-diag heal apply` or `undo`
+    /// sends it. P@x's request adapter cannot add it. It names who acted in
+    /// the history and grants nothing.
+    #[serde(default)]
+    pub by: Option<String>,
 }
 
 /// The input of both request tools.
@@ -804,6 +818,16 @@ pub fn handle_request(
         ));
     }
     let uid = connection.and_then(uid_of_connection);
+    let actor = match request.by.as_deref() {
+        None => Actor::Request,
+        Some("person") => Actor::Person,
+        Some(other) => {
+            return refusal(&error(
+                ErrorKind::HealRequestInvalid,
+                format!("by {other:?} is not \"person\""),
+            ));
+        }
+    };
     let running = Running::read(machine);
     let _lock = match Lock::take(&paths.data_dir) {
         Ok(lock) => lock,
@@ -824,7 +848,7 @@ pub fn handle_request(
             &ApplyRequest {
                 code: arguments.code.clone(),
                 remedy: arguments.remedy.clone(),
-                actor: Actor::Request,
+                actor,
                 uid,
                 confirmed: false,
             },
@@ -836,7 +860,7 @@ pub fn handle_request(
             &mut state,
             &arguments.code,
             &arguments.remedy,
-            Actor::Request,
+            actor,
             uid,
         ),
         other => Err(error(
@@ -924,6 +948,9 @@ pub fn status_view(catalogue: &Catalogue, state: &HealState, state_file: &Path) 
     }
 }
 
+/// The command that shows the person everything self-healing did.
+pub const HISTORY_COMMAND: &str = "tur-diag heal history";
+
 /// One notice for the person.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Notice {
@@ -991,9 +1018,31 @@ pub fn notices(
                 {
                     actions.push(format!("tur-diag heal undo {} {}", fault.code, remedy.id));
                 }
-                fill(
+                let repaired = fill(
                     text.repaired.as_deref().unwrap_or(&text.found),
                     &event.subjects,
+                );
+                if event.by == Some(Actor::Service) {
+                    format!(
+                        "{repaired} TUR did this by itself; it checks again at its next look and \
+                         tells you whether the repair held."
+                    )
+                } else {
+                    repaired
+                }
+            }
+            EventKind::Held => {
+                // Only a repair TUR made by itself: the person was not there.
+                if event.by != Some(Actor::Service) {
+                    continue;
+                }
+                format!(
+                    "The repair TUR made by itself held: {} still works at its next check.",
+                    if event.subjects.is_empty() {
+                        "it".to_owned()
+                    } else {
+                        event.subjects.join(", ")
+                    }
                 )
             }
             EventKind::NotRepaired => fill(
@@ -1034,8 +1083,10 @@ pub fn notices(
                 "The change made for \"{}\" was undone, as asked.",
                 fault.title
             ),
-            EventKind::Held | EventKind::Cleared => continue,
+            EventKind::Cleared => continue,
         };
+        // Every notice says where to see more.
+        actions.push(HISTORY_COMMAND.to_owned());
         found.push(Notice {
             id: event.seq,
             at_utc: event.at_utc.clone(),
@@ -1047,4 +1098,135 @@ pub fn notices(
         });
     }
     found
+}
+
+/// Something the person's own account did about a fault, kept in the
+/// person's state directory, not in the system's: a report sent, or one the
+/// person chose not to send.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PersonEntry {
+    /// When, UTC.
+    pub at_utc: String,
+    /// `report-sent`, `report-declined` or `report-not-sent`.
+    pub kind: String,
+    /// The fault's code, when the report had one.
+    pub code: Option<String>,
+    /// The report's title.
+    pub title: String,
+    /// The report's identifier at the receiver, for a sent one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub report_id: Option<String>,
+}
+
+/// One line of `tur-diag heal history`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct HistoryEntry {
+    /// When, UTC.
+    pub at_utc: String,
+    /// The fault's code, if there is one.
+    pub code: Option<String>,
+    /// What happened, as a kind: an event kind of the service, or
+    /// `report-sent`, `report-declined`.
+    pub kind: String,
+    /// Who did it: `TUR`, `you`, `you, as administrator`, `P@x`, or nobody.
+    pub who: Option<String>,
+    /// What happened, in plain words.
+    pub text: String,
+}
+
+/// Who an actor is, in the history's words.
+fn who(actor: Option<Actor>, uid: Option<u32>) -> Option<String> {
+    actor.map(|actor| match actor {
+        Actor::Service => "TUR".to_owned(),
+        Actor::Administrator => "you, as administrator".to_owned(),
+        Actor::Person => "you".to_owned(),
+        Actor::Request => match uid {
+            Some(uid) => format!("P@x (or another program of account {uid})"),
+            None => "P@x".to_owned(),
+        },
+    })
+}
+
+/// Everything self-healing did and the person decided, newest first: the
+/// service's events (what it found, repaired by itself, verified, offered;
+/// what P@x and the person applied or undid) and the person's own report
+/// decisions.
+pub fn history(catalogue: &Catalogue, state: &HealState, person: &[PersonEntry]) -> Vec<HistoryEntry> {
+    let mut entries: Vec<HistoryEntry> = Vec::new();
+    for event in &state.events {
+        let title = catalogue
+            .fault(&event.code)
+            .map_or_else(|| event.code.clone(), |fault| fault.title.clone());
+        let subjects = if event.subjects.is_empty() {
+            String::new()
+        } else {
+            format!(" ({})", event.subjects.join(", "))
+        };
+        let remedy = event
+            .remedy
+            .as_deref()
+            .and_then(|id| catalogue.fault(&event.code)?.remedy(id));
+        let changes = remedy.map_or_else(String::new, |remedy| format!(" {}", remedy.changes));
+        let version = event.version.as_deref().unwrap_or("the running version");
+        let text = match event.kind {
+            EventKind::Detected => format!("Found: {title}{subjects}. It waits for you."),
+            EventKind::Repaired => format!(
+                "Repaired: {title}{subjects}.{changes} Checked afterwards: it works."
+            ),
+            EventKind::NotRepaired => format!(
+                "Not repaired: {title}{subjects}. The check still finds the problem."
+            ),
+            EventKind::Held => format!("Checked again later: the repair of {title} held."),
+            EventKind::ReportOffered => {
+                format!("A report to TUR's developers is offered for: {title}{subjects}.")
+            }
+            EventKind::Cleared => format!("Gone: {title}."),
+            EventKind::FixedByUpdate => format!(
+                "Fixed by the update to {version}: {title} has not happened again."
+            ),
+            EventKind::RecurredAfterUpdate => format!(
+                "Happened again after the update to {version}, which was meant to fix it: {title}."
+            ),
+            EventKind::Undone => format!("Undone, as asked: the repair of {title}."),
+        };
+        entries.push(HistoryEntry {
+            at_utc: event.at_utc.clone(),
+            code: Some(event.code.clone()),
+            kind: serde_json::to_value(event.kind)
+                .ok()
+                .and_then(|value| value.as_str().map(str::to_owned))
+                .unwrap_or_default(),
+            who: who(event.by, event.uid),
+            text,
+        });
+    }
+    for entry in person {
+        let text = match entry.kind.as_str() {
+            "report-sent" => format!(
+                "You sent a report to TUR's developers: {}{}.",
+                entry.title,
+                entry
+                    .report_id
+                    .as_deref()
+                    .map_or_else(String::new, |id| format!(" (report {id})"))
+            ),
+            "report-not-sent" => format!(
+                "A report was not sent: sending was not confirmed: {}.",
+                entry.title
+            ),
+            _ => format!("You chose not to send a report: {}.", entry.title),
+        };
+        entries.push(HistoryEntry {
+            at_utc: entry.at_utc.clone(),
+            code: entry.code.clone(),
+            kind: entry.kind.clone(),
+            who: Some("you".to_owned()),
+            text,
+        });
+    }
+    // Times are UTC in one fixed format, so text order is time order. The
+    // sort is stable: events of one second keep the order they happened in.
+    entries.reverse();
+    entries.sort_by(|one, other| other.at_utc.cmp(&one.at_utc));
+    entries
 }
