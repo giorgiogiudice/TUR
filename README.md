@@ -16,6 +16,7 @@ And a system that undoes a bad update by itself.**
 [![Base: Fedora Kinoite (bootc)](https://img.shields.io/badge/base-Fedora%20Kinoite%20%C2%B7%20bootc-51a2da)](docs/adr/0001-base-distribution.md)
 
 [Why TUR](#why-tur) ·
+[Breakthroughs](#breakthroughs) ·
 [What it does](#what-tur-does) ·
 [P@x](#px-your-assistant) ·
 [Help build it](#tur-needs-you) ·
@@ -49,10 +50,35 @@ built to be. It is an ambitious project, and it is at the beginning.
 [It needs you](#tur-needs-you).
 
 > [!IMPORTANT]
-> **TUR is pre-alpha. There is nothing to install yet.**
-> The design is in place and the first components are being built and tested.
-> This page describes what TUR is being built to do, and says plainly
+> **TUR is pre-alpha. No preview has been released yet.**
+> Large parts are built and tested automatically on every change, in virtual
+> machines; none of it has been tested on real hardware yet. This page
+> describes what TUR is being built to do, and says plainly
 > [what exists today](#where-tur-is-today).
+
+## Breakthroughs
+
+TUR is betting on five things no desktop operating system does today. Each one
+is being built in the open, and each claim below links to the test that shows
+it. The full story, with what is *not* proven yet, is in
+[Goals and breakthroughs](docs/breakthroughs.md).
+
+| The bet | Why it matters | Shown so far |
+|---|---|---|
+| **Windows drivers, without a Windows kernel** | A device that only has a Windows driver works on TUR, without letting foreign code into the heart of the system | Windows USB drivers run as ordinary, sandboxed programs. **Microsoft's own unmodified KMDF sample driver runs** on a framework rebuilt from Microsoft's open-source code, with no Microsoft binary used. As far as we know, a first for Wine ([report](docs/reports/windows-drivers-2.md)) |
+| **A compatibility autopilot** | A Windows application that fails gets fixed by the computer, not by a forum search | Finds the right fix in **12 of 12 fixable test cases**, trying each one on a throwaway copy so your own setup is never touched ([report](docs/reports/autopilot-1.md)) |
+| **An assistant that operates your applications** | Say what you want; P@x does it in the applications you already use | P@x reads and operates Qt, GTK and Firefox windows, and **refuses "Send", "Delete" and similar unless you approve**. It stops the moment you switch it off ([report](docs/reports/pax-7.md)) |
+| **Private AI on your own computer** | A capable assistant with no account, no bill and nothing leaving the machine | TUR picks open models (Gemma 4, Qwen3, Ministral 3) that fit your hardware, downloads one when you choose it, and P@x runs on it ([report](docs/reports/pax-6.md)) |
+| **A system that heals itself** | A problem seen on one computer becomes a tested fix for everyone | Built: problem reports with personal details removed, **signed updates a computer checks before installing**, and automatic rollback of a bad update. Next: joining them into one loop |
+
+<p align="center">
+  <img src="docs/reports/assets/desktop-5/desktop-dark.png" alt="The TUR desktop, dark theme" width="32%"/>
+  <img src="docs/reports/assets/TUR-009/wizard-3-disks.png" alt="TUR's installer choosing a disk; it recognises a Windows disk encrypted with BitLocker" width="32%"/>
+  <img src="docs/reports/assets/desktop-7/e2e-4-plan.png" alt="The application centre showing exactly what an install will do before it starts" width="32%"/>
+  <br/>
+  <sub>The TUR desktop · the installer, which recognises a Windows disk · the application centre's plan before an install.
+  Real screenshots from TUR's automated tests in a virtual machine.</sub>
+</p>
 
 ## What TUR does
 
@@ -118,13 +144,15 @@ Anthropic (Claude), OpenAI, Google, DeepSeek or another compatible service, and 
 ### Local AI, built in
 
 TUR can run AI models **on your own computer**. No account, no key, no bill,
-and nothing you ask leaves the machine. Choose a model in the application centre;
-TUR shows what each one is good at, how much memory it needs, how fast it will be
-on *your* computer and what its licence allows, and recommends one that fits.
-P@x can use it, a simple chat window uses it, and other applications can be
-allowed to use it through a standard local interface. Speech recognition and
-speech run locally too, so the assistant can work fully offline. Local AI is off
-until you switch it on. ([Design](docs/architecture/local-ai.md); not built yet.)
+and nothing you ask leaves the machine. When you choose a model, TUR shows what
+each one is good at, how much memory it needs, how fast it will be on *your*
+computer and what its licence allows, and recommends the ones that fit, such as
+Gemma 4 E2B on a computer with modest memory. The model downloads the first time you pick it.
+P@x can use it, and other applications can be allowed to use it through a
+standard local interface. Local speech recognition and speech are planned, so
+the assistant can work fully offline. Local AI is off until you switch it on.
+([Design](docs/architecture/local-ai.md); built and tested automatically, not
+yet in the TUR image.)
 
 **You stay in charge.** An assistant that can do anything needs limits you can
 trust, so they are built into the system, not left to the AI's judgement:
@@ -165,19 +193,21 @@ becomes.
 
 | Area | State |
 |---|---|
-| Architecture and decisions | Published: [specification](docs/architecture/specification.md), [decision records](docs/adr/README.md) |
-| Operating-system image | Builds reproducibly ([report](docs/reports/TUR-002.md)), installs to a disk and **boots to a graphical login in a virtual machine** on every change ([report and screenshots](docs/reports/TUR-003.md)). Not yet tested on real hardware |
-| TUR's own programs | **Eleven programs are built into the image and run on the installed, booted system** with SELinux enforcing: diagnostics, devices, storage, the application catalogue, the Windows runtime, the update manager, boot health, the installer core, and P@x with its memory and AI connections. P@x's 349 end-to-end checks pass there, including its sandbox ([report](docs/reports/TUR-006.md)). The desktop programs are not in the image yet |
-| P@x | [Design](docs/architecture/ai-control-layer.md) published. A text assistant runs end to end in continuous integration against a scripted stand-in for the AI: it uses real system tools, runs read-only commands in a sandbox, and refuses everything that would need the user's approval. It runs the same way through its Claude, OpenAI and Gemini connections ([first report](docs/reports/pax-1.md), [second report](docs/reports/pax-2.md)). Never yet run with a real AI model; no voice, screen control or approvals |
+| Architecture and decisions | Published: [specification](docs/architecture/specification.md), [decision records](docs/adr/README.md), [goals and breakthroughs](docs/breakthroughs.md) |
+| Operating-system image | Builds reproducibly ([report](docs/reports/TUR-002.md)), carries TUR's own name and look instead of Fedora's ([report](docs/reports/TUR-008.md)), installs to a disk and **boots to a graphical login in a virtual machine** on every change ([report and screenshots](docs/reports/TUR-003.md)). Not yet tested on real hardware |
+| Installer | **A USB installer that starts a live TUR desktop with a step-by-step graphical installer.** It shows every disk and what is on it, recognises Windows and BitLocker, and installs only after a typed confirmation; tested in a virtual machine on every change, including beside a Windows disk ([report](docs/reports/TUR-009.md)). Installing into free space on the same disk as Windows is not built yet. Not released; not yet tested on real hardware |
+| TUR's own programs | **Eleven programs are built into the image and run on the installed, booted system** with SELinux enforcing: diagnostics, devices, storage, the application catalogue, the Windows runtime, the update manager, boot health, the installer core, and P@x with its memory and AI connections ([report](docs/reports/TUR-006.md)). Newer programs (application installs, local AI, the desktop programs) are not in the image yet |
+| P@x | Runs as a service of the desktop session, with its key kept in the system keyring and a daily spending limit ([report](docs/reports/pax-3.md)). Works with Claude, OpenAI, Gemini, DeepSeek and other compatible services, and with local models; has carried out tasks with the real Claude and a real local model. **Reads and operates other applications** (Qt, GTK, Firefox) under the policy engine, refusing what needs your approval ([report](docs/reports/pax-7.md)); shows on screen when it is acting ([report](docs/reports/desktop-4.md)). Not yet: Windows applications, voice, approving a dangerous action from the desktop |
+| Local AI | Reads the hardware, recommends models that fit, downloads the one chosen and serves it to P@x; tested automatically with a real model ([report](docs/reports/local-ai-1.md), [models](docs/reports/pax-6.md)). Not yet in the image; no graphics-card build yet |
+| Running Windows programs | **Five real applications** (7-Zip, Notepad++, PuTTY, VLC, Inno Setup) are installed unattended, started, checked for one real function and removed without leftovers, inside a sandbox, on every change ([report](docs/reports/windows-runtime-2.md)). **The compatibility autopilot** finds the fix for a failing application on a throwaway copy ([report](docs/reports/autopilot-1.md)). A small, friendly sample; not yet on the TUR image or with a graphics card |
+| Windows device drivers | **Experiment succeeded in the lab**: Windows USB drivers, including KMDF drivers, run as sandboxed programs, never in the kernel ([first report](docs/reports/windows-drivers-1.md), [second report](docs/reports/windows-drivers-2.md), [proposed decision](docs/adr/0026-windows-device-drivers-in-user-space.md)). Emulated devices only so far; not in the image |
+| The Windows guest | [Designed](docs/architecture/windows-guest.md) for Windows 10 and 11; not built yet |
 | Android | [Design](docs/architecture/android-runtime.md) published; not yet built |
-| Running Windows programs | **Five real applications** (7-Zip, Notepad++, PuTTY, VLC, Inno Setup; eight installers of five kinds) are installed unattended, started, checked for one real function and removed without leftovers through TUR's runtime manager, inside a sandbox that keeps them out of the user's files, on every change ([report and screenshots](docs/reports/windows-runtime-2.md)). A small, friendly sample: it says nothing yet about demanding applications. Tested with Ubuntu's Wine on a build machine without a graphics card, not yet on the TUR image |
-| Desktop and application centre | The shared interface kit and the first part of the application centre (search, how an application will run and who says so, and a plain answer when it cannot) are built and checked by screenshot tests in both themes ([kit](docs/reports/desktop-1.md), [centre](docs/reports/desktop-2.md)). Not yet run in a real desktop session; cannot install anything yet |
-| Settings | The settings program has its first pages (Overview, Appearance, About), search, and **an address for every setting**: it can be opened at an exact row, reports where that row is on screen and highlights it, which is what lets P@x show you where a setting is ([report](docs/reports/desktop-3.md)). Pages for what is not built say so. Not yet run in a real desktop session |
-| Rollback of a bad update | **Built and proven in a virtual machine**: a new version that fails its health check, crashes the login screen, cannot mount its disk, panics or hangs is replaced by the previous version within three attempts, and power cuts during an update leave one whole version (26 scenarios on every change; [report](docs/reports/TUR-005.md)). Not yet shown on real hardware or with Secure Boot; nothing tells the user on screen yet |
-| Updates | The update manager reads the system's state and decides what should happen and why, with every refusal explained ([design](docs/architecture/update-manager.md), [report](docs/reports/update-1.md)). It does not download or apply anything yet |
-| The Windows guest | [Designed](docs/adr/README.md) |
-| Desktop, application centre, Windows and Android running | Not started |
-| Anything you can install | Not yet |
+| Desktop and application centre | TUR's theme, a new account's defaults and P@x's on-screen presence are in place ([theme](docs/reports/desktop-5.md)). **The application centre installs, updates and removes applications**, showing exactly what will happen first ([report](docs/reports/desktop-7.md)). Settings has its first pages and an address for every setting, which lets P@x point at it ([report](docs/reports/desktop-3.md)). Tested under KWin in continuous integration; the desktop programs are not in the image yet |
+| Rollback of a bad update | **Built and proven in a virtual machine**: a new version that fails its health check, crashes the login screen, cannot mount its disk, panics or hangs is replaced by the previous version within three attempts, and power cuts during an update leave one whole version (26 scenarios on every change; [report](docs/reports/TUR-005.md)). Not yet shown on real hardware or with Secure Boot |
+| Updates | The update manager decides what should happen and why ([report](docs/reports/update-1.md)). **The tested system is signed and published as an update, and a computer refuses one whose signature is missing or wrong**; proven on a booted test machine ([report](docs/reports/release-1.md)). Publishing is switched off until the project's release key is in place |
+| Problem reports | A person can choose to send a report with personal details removed; the receiving service is built ([design](docs/architecture/problem-reports.md)). Not yet deployed |
+| Anything you can install | Not yet: no preview has been released |
 
 ## Try TUR
 
@@ -256,7 +286,9 @@ ecosystems, the diagnostics and recovery, and P@x.
 
 - Not several operating systems merged into one kernel.
 - Not a promise that every application ever written will run.
-- Not a way to load Windows or macOS hardware drivers.
+- Not a way to load Windows or macOS drivers into the kernel. Windows USB
+  drivers are being made to run as ordinary, sandboxed programs instead
+  ([breakthroughs](docs/breakthroughs.md#1-windows-drivers-without-a-windows-kernel)).
 - Not a redistribution of Microsoft, Apple or Google software. You bring the
   applications and licences you are entitled to use.
 - Not for business or government use. See [License](#license).
@@ -286,8 +318,11 @@ the [AI control layer design](docs/architecture/ai-control-layer.md) and the
 
 - [Architecture specification](docs/architecture/specification.md) — the project baseline
 - [Decision records](docs/adr/README.md) — what was decided, and why
+- [Goals and breakthroughs](docs/breakthroughs.md) — the five bets, and what has been shown
 - [P@x: the AI control layer](docs/architecture/ai-control-layer.md) and its [policy engine](docs/architecture/agent-policy.md)
-- [Android runtime](docs/architecture/android-runtime.md)
+- [P@x operating applications](docs/architecture/pax-accessibility.md) · [local AI](docs/architecture/local-ai.md)
+- [Compatibility autopilot](docs/architecture/compat-autopilot.md) · [Windows guest](docs/architecture/windows-guest.md) · [Android runtime](docs/architecture/android-runtime.md)
+- [Signed updates](docs/architecture/publishing.md) · [problem reports](docs/architecture/problem-reports.md) · [rollback](docs/architecture/boot-health-and-rollback.md)
 - [Dependency and licence inventory](docs/dependencies/upstream-projects.md) and the [licence review](docs/dependencies/licence-review.md)
 - [CONTRIBUTING.md](CONTRIBUTING.md) — how to contribute
 - [AGENTS.md](AGENTS.md) — the rules automated contributors work under
