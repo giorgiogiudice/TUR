@@ -6,7 +6,7 @@ which ignores these lines.
 From 210b1b158d75986261bb39aacc1dcc5a07b05fd6 Mon Sep 17 00:00:00 2001
 From: TUR experiment <tur-experiment@users.noreply.github.com>
 Date: Fri, 13 Nov 2026 09:03:44 +0300
-Subject: [PATCH 1/8] ntoskrnl.exe: Run DPCs queued with KeInsertQueueDpc.
+Subject: [PATCH 01/10] ntoskrnl.exe: Run DPCs queued with KeInsertQueueDpc.
 
 KeInsertQueueDpc returned TRUE without ever calling the deferred routine,
 so a driver's deferred work silently never happened (bug 49394 was closed

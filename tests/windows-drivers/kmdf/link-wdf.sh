@@ -30,7 +30,9 @@ clang++ --target=x86_64-w64-mingw32 -fuse-ld=lld -nostdlib -nostartfiles -shared
     -lntoskrnl -lhal -lusbd -lwdfldr ${libgcc:+"${libgcc}"} >"${work}/dup-check.log" 2>&1
 sed -n 's/.*duplicate symbol: //p' "${work}/dup-check.log" | sort -u >"${work}/duplicates.txt"
 echo "duplicate symbols without --allow-multiple-definition: $(wc -l <"${work}/duplicates.txt"), not from ntstrsafe.h: $(grep -vc '^RtlString' "${work}/duplicates.txt") $(grep -v '^RtlString' "${work}/duplicates.txt" | head -n 20 | tr '\n' ' ')"
-clang++ --target=x86_64-w64-mingw32 -fuse-ld=lld -nostdlib -nostartfiles -shared \
+ctors=$(for o in "${work}"/obj/*.o; do llvm-objdump -h "${o}" | grep -qE ' \.ctors| \.init_array' && basename "${o}"; done)
+echo "objects with static constructors (not run: there is no C++ start-up code): ${ctors:-none}"
+clang++ --target=x86_64-w64-mingw32 -fuse-ld=lld -nostdlib -nostartfiles -shared -Wl,--error-limit=0 \
     -Wl,--subsystem,native -Wl,--entry,TurWdfEntry -Wl,--image-base,0x140000000 \
     -Wl,--file-alignment,0x1000 -Wl,--section-alignment,0x1000 -Wl,--allow-multiple-definition \
     -o "${out}/Wdf01000.sys" "${work}"/obj/*.o -L"${lib}" -lntoskrnl -lhal -lusbd -lwdfldr \
@@ -44,7 +46,7 @@ if [ "${rc}" -eq 0 ]; then
 else
     n=$(grep -c 'undefined symbol' "${work}/link.log")
     echo "link Wdf01000.sys: FAILED (${n} undefined symbols); first:"
-    grep -E 'undefined symbol|error' "${work}/link.log" | sed -E 's/^.*undefined symbol: //' | sort -u | head -n 120 |
+    grep -E 'undefined symbol' "${work}/link.log" | sed -E 's/^.*undefined symbol: //' | sort -u | head -n 200 |
         sed 's/^/    /'
 fi
 exit 0

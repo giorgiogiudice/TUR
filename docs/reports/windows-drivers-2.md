@@ -66,14 +66,19 @@ NEXT SAFE ACTION
   framework's own use of it.
 - **All 180 files of the runtime compile (iteration 6).** The error count
   went 106,913 → 529 → 46,584 → 811 → 89 → 0 over six iterations (section
-  3). The link resolved every symbol (0 undefined) and stopped only at
-  identical duplicate copies of mingw-w64's `ntstrsafe.h` inline functions;
-  iteration 7 links past them.
-- **The framework imports 162 kernel functions and data; Wine 11.20 lacks
-  or stubs 48 of them** (section 5.2): 7 not exported at all (the image would
-  not load), 19 aborting stubs, 22 that log FIXME and do nothing. Wine
-  master is identical for these. With the TUR patches: 122 implemented, the
-  6 missing ones added in iteration 7.
+  3). Linking `Wdf01000.sys` is the current step: iteration 7 got past
+  duplicate inline copies and listed the remaining undefined symbols
+  (section 3); iteration 8 supplies them.
+- **The client drivers build**: `kmdftest.sys` and Microsoft's unmodified
+  `kmdf_fx2` sample (`osrusbfx2.sys`) and its test program, with the same
+  toolchain and a stand-in KMDF stub (iteration 7).
+- **The framework imports at least 182 kernel functions and data** (section
+  5.2). Of the 162 that mingw-w64's import libraries know, Wine 11.20 lacks or
+  stubs 48: 7 not exported at all, 19 aborting stubs, 22 that log FIXME and
+  do nothing; Wine master is identical for these. Another 20 (power
+  framework, high-resolution timers, activity IDs, verifier queries, ...)
+  are in neither Wine nor mingw-w64's libraries and were found at the link.
+  The TUR patches add all of the missing ones (0007, 0009, 0010).
 - **The Wine side builds**: Wine 11.20's `ntoskrnl.exe` with real DPCs and a
   new `wdfldr.sys` (KMDF loader), two patches that also apply to Wine
   master (section 4). They are installed over Fedora 45's Wine in the CI
@@ -150,6 +155,8 @@ files are in `third-party/wdf/patches/` (MIT).
 
 | Function | Library | Stand-in |
 |---|---|---|
+| `WdmlibIoCreateDeviceSecure` (`IoCreateDeviceSecure`), `SDDL_DEVOBJ_SYS_ALL_ADM_ALL` | `wdmsec.lib` | `tur-wdmsec.c`: `IoCreateDevice`, no security descriptor (Wine has none on device objects) |
+| `FxPnpDevice{D0Entry,D0Exit,PrepareHardware,ReleaseHardware}::InvokeCompanionCallback` | not published | succeed (no companion target ever exists) |
 | `WdfBindClientHelper`, `WdfLdrDiagnosticsValueByNameAsULONG` | WDF build internals | `tur-wdf-missing.cpp` |
 | `USBD_CreateHandle`, `USBD_UrbAllocate`, `USBD_QueryUsbCapability`, … | `usbdex.lib` | `tur-usbdex.c`, from Microsoft's documentation |
 | C++ start-up (static constructors) | MSVC CRT | `tur-wdf-entry.c` |
@@ -183,8 +190,9 @@ plus three of `compat/`).
 | 3 (`6faf383`, 43380816664) | 4 | 46,584 | `FxIrp` incomplete (the blanked class head) cascading through every class |
 | 4 (`80a5c2c`, 43382377329) | 0 | 811 | `FxIrp::m_Irp` private; my `DMA_COMPLETION_STATUS`; `device_common.h`; token pasting |
 | 5 (`265e616`, 43383650067) | 149 | 89 | Windows 8–10 kernel types mingw-w64 lacks (`STACK_DEVICE_CAPABILITIES`, power framework v1/v3 functions, `WakeFromInterrupt`, interrupt policy fields), one more undefined enumeration (`FxWmiInstanceAction`), a linkage mismatch |
-| 6 (`ffc7579`, 43386297642) | **180 of 180** | **0** | compiled; the link stopped at duplicate definitions of mingw-w64's `ntstrsafe.h` functions (C99 `extern inline` in the C files) — 0 undefined symbols |
-| 7 (`1f91af3`) | *pending* | *pending* | link with the duplicates resolved; Wine patches 0007–0008 |
+| 6 (`ffc7579`, 43386297642) | **180 of 180** | **0** | compiled; the link stopped at the first 20 duplicate definitions of mingw-w64's `ntstrsafe.h` functions (C99 `extern inline` in the C files) before reporting undefined symbols |
+| 7 (`1f91af3`, 43387715486) | 180 of 180 | 0 | 74 duplicates, all `ntstrsafe.h`'s, linked past; the link then reported undefined symbols: more kernel imports Wine lacks (power framework, high-resolution timers, activity IDs, verifier queries, `IoQueryFullDriverPath`, `IoGetInitiatorProcess`), `wdmsec.lib`'s `IoCreateDeviceSecure` and SDDL constant, four companion callbacks, one C-linkage mismatch of mine, and `__CTOR_LIST__`. `kmdftest.sys` (90,112 bytes) and Microsoft's `osrusbfx2.sys` (221,184 bytes) linked |
+| 8 | *pending* | *pending* | Wine patches 0009–0010, `tur-wdmsec.c`, companion callbacks |
 
 ## 4. The Wine patch set
 
@@ -203,9 +211,14 @@ both also apply to master `cc5d1d86` (checked in every build).
 | 0007 `ntoskrnl.exe: Add functions the KMDF runtime imports, and implement PoRequestPowerIrp.` | the six missing imports (failing or minimal); `PoRequestPowerIrp` builds the power IRP, sends it to the top of the stack and calls the completion callback | the import table (5.2); the power-policy owner requests D0 at start (upstream this would be two patches) |
 | 0008 `wineusb.sys: Handle power IRPs.` | set/query power succeed on PDOs, the bus FDO passes them down | without it every KMDF USB driver's start fails at D0 |
 
-A patch for the power framework (`PoFxRegisterDevice` and friends) was
-written and dropped: the import table shows the framework finds them at
-run time, so their absence does not stop the image loading.
+| 0009 `ntoskrnl.exe: Add power framework functions that report it unavailable.` | `PoFxRegisterDevice` fails with `STATUS_NOT_SUPPORTED`; the ten functions that take its handle do nothing | imported by the framework (`poxinterfacekm.cpp`); without them the image does not load |
+| 0010 `ntoskrnl.exe: Add more functions the KMDF runtime imports.` | `ExAllocateTimer` fails (callers use `KeSetTimer` timers), `ExSetTimer`/`ExCancelTimer`/`ExDeleteTimer`, `IoGetActivityIdIrp`/`IoSetActivityIdIrp`, `IoGetInitiatorProcess`, `IoQueryFullDriverPath` (from the loader entry), `VfIsRuleClassEnabled` (FALSE), `VfCheckNxPoolType` | the link of iteration 7 |
+
+A correction to an earlier iteration of this report: patch 0009 was first
+written, then dropped because the import table did not list the power
+framework. The table had missed it (its symbols are in neither mingw-w64's
+import libraries nor Wine, and the table only counted names one of them
+knows); the link of iteration 7 showed them, and the patch is back.
 
 Iteration 5: all six applied (and apply to master), but `ntoskrnl.exe` did
 not link: patch 0006 called `ZwOpenKey`/`ZwCreateKey`/`ZwClose`, which

@@ -228,8 +228,10 @@ WDFEXPORT(WdfCompanionTargetWdmGetCompanionProcess)(
 
 } /* extern "C" */
 
-/* globals.cpp declares this and calls it; its definition is not in the
-   published sources. The only option the sources name is "none". */
+/* globals.cpp declares this (inside extern "C") and calls it; its
+   definition is not in the published sources. The only option the sources
+   name is "none". */
+extern "C"
 VOID
 FxVerifierQueryStateSeparationDetection(
     _In_ HANDLE Key,
@@ -238,4 +240,43 @@ FxVerifierQueryStateSeparationDetection(
 {
     UNREFERENCED_PARAMETER(Key);
     *StateSeparationDetection = FxStateSeparationDetectionNone;
+}
+
+/* The companion part of four PnP callbacks (fxpnpcallbacks.hpp), not in
+   the published sources. FxCompanionLibrary never creates a companion
+   target, so the framework never calls them; they succeed. */
+NTSTATUS
+FxPnpDeviceD0Entry::InvokeCompanionCallback(
+    _In_ FxCompanionTarget* CompanionTarget
+    )
+{
+    UNREFERENCED_PARAMETER(CompanionTarget);
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+FxPnpDeviceD0Exit::InvokeCompanionCallback(
+    _In_ FxCompanionTarget* CompanionTarget
+    )
+{
+    UNREFERENCED_PARAMETER(CompanionTarget);
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+FxPnpDevicePrepareHardware::InvokeCompanionCallback(
+    _In_ FxCompanionTarget* CompanionTarget
+    )
+{
+    UNREFERENCED_PARAMETER(CompanionTarget);
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+FxPnpDeviceReleaseHardware::InvokeCompanionCallback(
+    _In_ FxCompanionTarget* CompanionTarget
+    )
+{
+    UNREFERENCED_PARAMETER(CompanionTarget);
+    return STATUS_SUCCESS;
 }

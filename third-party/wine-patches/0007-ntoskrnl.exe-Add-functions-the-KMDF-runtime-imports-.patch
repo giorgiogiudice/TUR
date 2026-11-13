@@ -6,8 +6,8 @@ which ignores these lines.
 From 7c83234b3449722ddbab3fff526f29816d3ae8d2 Mon Sep 17 00:00:00 2001
 From: TUR experiment <tur-experiment@users.noreply.github.com>
 Date: Fri, 13 Nov 2026 10:41:47 +0300
-Subject: [PATCH 7/8] ntoskrnl.exe: Add functions the KMDF runtime imports, and
- implement PoRequestPowerIrp.
+Subject: [PATCH 07/10] ntoskrnl.exe: Add functions the KMDF runtime imports,
+ and implement PoRequestPowerIrp.
 
 Six functions the Kernel-Mode Driver Framework imports were not exported,
 so its image did not load: EtwActivityIdControl (no event tracing: fails),

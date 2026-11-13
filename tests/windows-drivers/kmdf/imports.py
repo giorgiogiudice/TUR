@@ -142,7 +142,6 @@ def main() -> int:
 
     wanted = sorted({l.strip() for l in open(args.undefined) if l.strip()})
     owner = nm_exports(args.mingw_lib)
-    cache0: dict = {}
     for tree in args.trees:
         for module in MODULES:
             for name in spec_exports(tree, module):

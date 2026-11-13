@@ -8,3 +8,5 @@
 0006-ntoskrnl.exe-Add-IoOpenDriverRegistryKey.patch
 0007-ntoskrnl.exe-Add-functions-the-KMDF-runtime-imports-.patch
 0008-wineusb.sys-Handle-power-IRPs.patch
+0009-ntoskrnl.exe-Add-power-framework-functions-that-repo.patch
+0010-ntoskrnl.exe-Add-more-functions-the-KMDF-runtime-imp.patch
