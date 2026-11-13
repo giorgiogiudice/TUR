@@ -2,10 +2,15 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/giorgiogiudice/TUR/schemas/pax-provider-config.schema.json",
   "title": "P@x provider configuration",
-  "description": "How P@x reaches one model provider: which provider, which model, the output limit, timeouts, retry behaviour, and optionally prices and a limit for one task. The API key is never part of this file: it lives in the system keyring. The loader in services/tur-pax-providers is authoritative. It also enforces rules this schema cannot express: a base URL may use plain http only for a loopback host, retry.initial_delay_ms may not exceed retry.max_delay_ms, task_limit.max_cost needs prices, the openai-chat family needs a base_url, and send_back_reasoning is accepted for openai-chat only.",
+  "description": "How P@x reaches one model provider: which provider, which model, the output limit, timeouts, retry behaviour, and optionally prices and a limit for one task. The API key is never part of this file: it lives in the system keyring. The loader in services/tur-pax-providers is authoritative. It also enforces rules this schema cannot express: a base URL may use plain http only for a loopback host, retry.initial_delay_ms may not exceed retry.max_delay_ms, task_limit.max_cost needs prices, the openai-chat family needs a base_url, and send_back_reasoning is accepted for openai-chat only. Generation settings are checked against what the family's interface has a place for (see the generation property).",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "provider", "model", "max_output_tokens"],
+  "required": [
+    "schema_version",
+    "provider",
+    "model",
+    "max_output_tokens"
+  ],
   "$defs": {
     "duration_ms": {
       "description": "A duration in milliseconds, at most one hour.",
@@ -17,13 +22,32 @@
       "description": "A price per million tokens, in the currency of the prices.",
       "type": "number",
       "minimum": 0
+    },
+    "effort": {
+      "description": "How much the model reasons before it answers: the union of the levels the providers document. No family takes all of them and a model takes fewer still; the model list declares which.",
+      "enum": [
+        "none",
+        "minimal",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ]
     }
   },
   "properties": {
-    "schema_version": { "const": 1 },
+    "schema_version": {
+      "const": 1
+    },
     "provider": {
       "description": "The adapter family, which selects the adapter. anthropic: the Messages API. openai: the Responses API. google: the Gemini Interactions API. openai-chat: the OpenAI-compatible Chat Completions API that DeepSeek, other services and local model servers offer; it has no public address of its own.",
-      "enum": ["anthropic", "openai", "google", "openai-chat"]
+      "enum": [
+        "anthropic",
+        "openai",
+        "google",
+        "openai-chat"
+      ]
     },
     "base_url": {
       "description": "The base URL of the provider's API, without the path of an endpoint. Without it the family's public endpoint is used; openai-chat has none and needs one, given as the service documents it, up to the path /chat/completions (for example https://api.deepseek.com, http://127.0.0.1:11434/v1). Set it to use a compatible gateway. It must be https://host[:port][/path]; http is accepted for a loopback host only. User information, a query and a fragment are not accepted.",
@@ -100,7 +124,11 @@
       "description": "Prices per million tokens, for showing what a task cost. There are no default prices. Without this object only tokens are counted.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["currency", "input_per_million", "output_per_million"],
+      "required": [
+        "currency",
+        "input_per_million",
+        "output_per_million"
+      ],
       "properties": {
         "currency": {
           "description": "The currency the prices are in, for display.",
@@ -136,6 +164,59 @@
           "description": "The most tokens a task may use, input and output together.",
           "type": "integer",
           "minimum": 1
+        }
+      }
+    },
+    "generation": {
+      "description": "Generation settings. Only what is set is sent; nothing set leaves every default to the provider. The loader refuses what the family's interface has no place for: anthropic takes no temperature, top_p, top_k (Messages API version 2026-10-21 rejects them), effort minimal or thinking_budget; openai takes no top_k, stop or thinking_budget; google takes no temperature, top_p, top_k, effort none or max, or thinking_budget; openai-chat takes thinking_budget only with reasoning_style enable_thinking. Wire fields: docs/architecture/pax-providers.md, section 15.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "temperature": {
+          "description": "Sampling temperature.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 2
+        },
+        "top_p": {
+          "description": "Nucleus sampling: the share of probability mass sampled from.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "top_k": {
+          "description": "Sample from this many most likely tokens.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        "stop": {
+          "description": "Text that ends the response where it appears.",
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "effort": {
+          "description": "How much the model reasons. anthropic: output_config.effort, none as thinking disabled; openai: reasoning.effort; google: generation_config.thinking_level; openai-chat: reasoning_effort, or chat_template_kwargs.enable_thinking with reasoning_style enable_thinking.",
+          "$ref": "#/$defs/effort"
+        },
+        "thinking_budget": {
+          "description": "The most tokens the model may reason for. openai-chat with reasoning_style enable_thinking only (llama.cpp's thinking_budget_tokens).",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000000
+        },
+        "reasoning_style": {
+          "description": "openai-chat only: how the service is told how much to reason.",
+          "enum": [
+            "reasoning_effort",
+            "enable_thinking"
+          ],
+          "default": "reasoning_effort"
         }
       }
     }

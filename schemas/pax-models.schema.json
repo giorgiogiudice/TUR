@@ -3,7 +3,7 @@
   "$id": "https://github.com/giorgiogiudice/TUR/schemas/pax-models.schema.json",
   "$comment": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
   "title": "P@x model list",
-  "description": "The providers P@x can use, each by an identifier with an adapter family (ADR-0004, amended 12 November 2026), the models offered for each, and their prices. Read from /etc/tur/pax/models.json if it exists, else /usr/share/tur/pax/models.json; never written by P@x. Model names and prices are configuration, never compiled in (ADR-0004). A model the person types that is not listed is accepted; its price is then not known and P@x limits it in tokens. The loader in services/tur-pax (settings.rs) is authoritative and also enforces: a provider is listed once; a model name is listed once per provider, with no control characters and no surrounding whitespace; prices follow the rules of the provider configuration (finite, not negative, a currency of 1 to 8 letters); an openai-chat entry names its base_url; key_required false and send_back_reasoning true are for openai-chat only; data_terms with runs_locally need a base_url on this computer, and reviewed data terms name the pages they were read from; runtime_key_file has no part that is . or .., and needs key_required and a base_url on this computer. The adapter families' own companies (anthropic, openai, google) exist without an entry, at their public addresses and with no prices.",
+  "description": "The providers P@x can use, each by an identifier with an adapter family (ADR-0004, amended 12 November 2026), the models offered for each, and their prices. Read from /etc/tur/pax/models.json if it exists, else /usr/share/tur/pax/models.json; never written by P@x. Model names and prices are configuration, never compiled in (ADR-0004). A model the person types that is not listed is accepted; its price is then not known and P@x limits it in tokens. The loader in services/tur-pax (settings.rs) is authoritative and also enforces: a provider is listed once; a model name is listed once per provider, with no control characters and no surrounding whitespace; prices follow the rules of the provider configuration (finite, not negative, a currency of 1 to 8 letters); an openai-chat entry names its base_url; key_required false and send_back_reasoning true are for openai-chat only; data_terms with runs_locally need a base_url on this computer, and reviewed data terms name the pages they were read from; runtime_key_file has no part that is . or .., and needs key_required and a base_url on this computer. The adapter families' own companies (anthropic, openai, google) exist without an entry, at their public addresses and with no prices. Generation settings: settings declares what the models of a provider, or one model, accept (temperature, top_p, top_k, stop, effort, thinking_budget, max_output_tokens, context_tokens), each with its range and the default P@x sends when the person chose none; a model's declaration overlays its provider's, setting by setting. A setting that is not declared is not offered and a choice of it is refused; a model with no declaration at all takes only an output limit. The loader also refuses a declaration whose ranges are out of order, whose defaults are outside them, or that names a setting the adapter family cannot be sent (services/tur-pax-providers, generation.rs); reasoning_style is for openai-chat only.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -105,6 +105,18 @@
           "type": "boolean",
           "default": false
         },
+        "reasoning_style": {
+          "description": "openai-chat only: how the service is told how much its model reasons. reasoning_effort (the default): the reasoning_effort field. enable_thinking: llama.cpp's server, the chat template's switch chat_template_kwargs.enable_thinking.",
+          "enum": [
+            "reasoning_effort",
+            "enable_thinking"
+          ],
+          "default": "reasoning_effort"
+        },
+        "settings": {
+          "description": "The generation settings its models accept, unless a model declares otherwise.",
+          "$ref": "#/$defs/settings"
+        },
         "data_terms": {
           "description": "What the provider says about the data sent to it, as TUR read it. Without reviewed_on the terms are not reviewed by TUR, and the consent text says so; an entry the person adds by hand is never shown as reviewed.",
           "type": "object",
@@ -119,10 +131,18 @@
               "description": "The model runs on this computer; the base_url must be a loopback address.",
               "type": "boolean"
             },
-            "stores_requests": { "$ref": "#/$defs/statement" },
-            "retention": { "$ref": "#/$defs/statement" },
-            "trains_on_data": { "$ref": "#/$defs/statement" },
-            "processing_location": { "$ref": "#/$defs/statement" },
+            "stores_requests": {
+              "$ref": "#/$defs/statement"
+            },
+            "retention": {
+              "$ref": "#/$defs/statement"
+            },
+            "trains_on_data": {
+              "$ref": "#/$defs/statement"
+            },
+            "processing_location": {
+              "$ref": "#/$defs/statement"
+            },
             "terms_url": {
               "type": "string",
               "pattern": "^https://"
@@ -213,6 +233,10 @@
                     "minimum": 0
                   }
                 }
+              },
+              "settings": {
+                "description": "The generation settings this model accepts, in place of what its provider declares.",
+                "$ref": "#/$defs/settings"
               }
             }
           }
@@ -230,6 +254,144 @@
         "capabilities": {
           "description": "What its models declare they can do, unless a model declares otherwise. A model that declares no tool calling is offered no tools.",
           "$ref": "#/$defs/capabilities"
+        }
+      }
+    },
+    "effort": {
+      "description": "How much the model reasons: the union of the providers' levels.",
+      "enum": [
+        "none",
+        "minimal",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ]
+    },
+    "number_range": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "min",
+        "max"
+      ],
+      "properties": {
+        "min": {
+          "type": "number"
+        },
+        "max": {
+          "type": "number"
+        },
+        "default": {
+          "description": "What P@x sends when the person chose none. Absent: nothing is sent and the provider's own default applies.",
+          "type": "number"
+        }
+      }
+    },
+    "count_range": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "min",
+        "max"
+      ],
+      "properties": {
+        "min": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "default": {
+          "description": "What P@x uses when the person chose none.",
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "settings": {
+      "description": "The generation settings a model accepts (services/tur-pax, tuning.rs). Each setting that is present is offered, in its range; one that is absent is not. Read from the provider's documentation on the date in checked, from the pages in sources.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "temperature": {
+          "$ref": "#/$defs/number_range"
+        },
+        "top_p": {
+          "$ref": "#/$defs/number_range"
+        },
+        "top_k": {
+          "$ref": "#/$defs/count_range"
+        },
+        "stop": {
+          "description": "Stop sequences: at most max.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "max"
+          ],
+          "properties": {
+            "max": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 16
+            }
+          }
+        },
+        "effort": {
+          "description": "The reasoning efforts the model takes.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "values"
+          ],
+          "properties": {
+            "values": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/effort"
+              }
+            },
+            "default": {
+              "description": "What P@x sends when the person chose none.",
+              "$ref": "#/$defs/effort"
+            },
+            "provider_default": {
+              "description": "What the provider applies when nothing is sent, as its documentation says; used for the rule of sampling_only_with.",
+              "$ref": "#/$defs/effort"
+            },
+            "sampling_only_with": {
+              "description": "Temperature, top_p and top_k are taken only at these efforts: the model refuses or ignores them while it reasons.",
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/effort"
+              }
+            }
+          }
+        },
+        "thinking_budget": {
+          "$ref": "#/$defs/count_range"
+        },
+        "max_output_tokens": {
+          "$ref": "#/$defs/count_range"
+        },
+        "context_tokens": {
+          "description": "A model on this computer: the context tur-ai-local starts it with.",
+          "$ref": "#/$defs/count_range"
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "checked": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
         }
       }
     }

@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Present only in the boot-test image (tests/boot/guest). Never part of TUR.
+
+[Unit]
+Description=TUR boot test: what a new account's desktop got (test image only)
+Documentation=https://github.com/giorgiogiudice/TUR/tree/main/tests/boot
+# Inert unless the extra boot of tests/boot/splash.py asked for it, and never
+# on hardware.
+ConditionKernelCommandLine=tur.desktop_check
+ConditionVirtualization=vm
+After=basic.target
+
+[Service]
+Type=exec
+ExecStart=/usr/libexec/tur-boot-test/desktop-check
+StandardOutput=journal
+StandardError=journal
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target

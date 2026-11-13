@@ -1,0 +1,86 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR local model catalogue entry. Format: schemas/local-model.schema.json.
+# How entries are written and sourced: services/tur-ai-local/catalogue/README.md.
+#
+# Sources read on 2026-11-13: the Hugging Face API for google/gemma-4-E2B-it-qat-q4_0-gguf
+# (revision, file list, sizes and LFS SHA-256 digests; the pinned resolve
+# URLs answered with the same size and digest), its README.md at the pinned
+# revision, the base model's config.json
+# (35 layers, 7 of them full attention, 1 KV head, global head size 512,
+# 512-token sliding window),
+# and the licence pages named in [licence].
+
+schema_version = 1
+id = "gemma-4-e2b"
+name = "Gemma 4 E2B"
+publisher = "Google DeepMind"
+repository = "https://huggingface.co/google/gemma-4-E2B-it-qat-q4_0-gguf"
+revision = "675cff42a74c774d6cb76f76d8eacb49b48c9b93"
+format = "gguf"
+# Quantisation-aware training (QAT) checkpoint, published as Q4_0 by Google.
+quantisation = "Q4_0 (QAT)"
+parameters = "2.3B effective, 5.1B with embeddings"
+# The model card: "Context Length | 128K tokens".
+context_length = 131072
+# Estimate, not measured: the two files; the 16-bit context cache at 8192
+# tokens of the 7 full-attention layers (1 KV head x 512 x 2 x 2 bytes =
+# 2,048 bytes each, 14,336 bytes per token; the 28 sliding-window layers
+# keep only their 512-token window, 15 MB); 512 MiB for the engine's
+# working memory and 300 MB for encoding one image; all of it times 1.4,
+# the ratio llama.cpp's own build showed over the same sum for Qwen3 4B in
+# CI run 43277339192 (its processor kernels keep a repacked copy of the
+# weights), rounded up. To be replaced by a measurement.
+# active_weight_bytes, the bytes read for each generated token: the file
+# times 2.3/5.1, because the per-layer embeddings are looked up, not
+# multiplied (the card).
+memory_bytes = 7410000000
+memory_context = 8192
+kv_bytes_per_token = 14336
+active_weight_bytes = 1510000000
+capabilities = ["chat", "tools", "vision"]
+# The model card: "configurable thinking modes"; llama.cpp's chat template
+# switches it with enable_thinking.
+thinking = "hybrid"
+languages = ["mul"]
+languages_note = "The publisher states multilingual support in over 140 languages."
+good_for = [
+  "Conversation, writing and summarising on a computer with 16 GB of memory, privately.",
+  "Tool calls for an assistant that acts.",
+  "Questions about images and screenshots.",
+]
+checked = "2026-11-13"
+
+[file]
+name = "gemma-4-E2B_q4_0-it.gguf"
+url = "https://huggingface.co/google/gemma-4-E2B-it-qat-q4_0-gguf/resolve/675cff42a74c774d6cb76f76d8eacb49b48c9b93/gemma-4-E2B_q4_0-it.gguf"
+size_bytes = 3349516256
+sha256 = "fa401b55b07ee70a54c6dae3903c783a6e65064312529ea57175cb5f8dec6634"
+
+[projector]
+name = "gemma-4-E2B-it-mmproj.gguf"
+url = "https://huggingface.co/google/gemma-4-E2B-it-qat-q4_0-gguf/resolve/675cff42a74c774d6cb76f76d8eacb49b48c9b93/gemma-4-E2B-it-mmproj.gguf"
+size_bytes = 986833664
+sha256 = "021059cce659fe7f9170d5599761d7bbaf644b798dab9503aca30dc43e6beb14"
+
+[licence]
+id = "Apache-2.0"
+url = "https://ai.google.dev/gemma/docs/gemma_4_license"
+summary = "Apache License 2.0. You may use, copy, change and share the model for any purpose, commercial use included. If you pass it on, include the licence and keep its notices."
+restrictions = "none"
+evidence = "The model card header at the pinned revision declares apache-2.0, with license_link https://ai.google.dev/gemma/docs/gemma_4_license; that address redirects to https://ai.google.dev/gemma/apache_2, which is the Apache License 2.0 text, read on 2026-11-13. Google's Gemma Terms of Use (https://ai.google.dev/gemma/terms, last modified 2026-04-01) say that they apply to the Gemma models listed in their appendix and: \"For Gemma 4 terms, see the Gemma 4 license.\" The Gemma Prohibited Use Policy belongs to those terms, so it does not apply to Gemma 4. The repository holds no licence file and is not gated."
+checked = "2026-11-13"
+
+[[tested]]
+date = "2026-11-13"
+report = "docs/reports/pax-6.md"
+run = "https://github.com/giorgiogiudice/TUR/actions/runs/43346627935"
+engine = "llama-server b9840 from llama.cpp's own release llama-b9840-bin-ubuntu-x64 (processor variants, AVX2 kernels used)"
+hardware = "GitHub-hosted ubuntu-24.04 runner: AMD EPYC 7763, 4 logical processors (2 cores), AVX2 and FMA, 16.8 GB of memory, no graphics processor"
+context = 8192
+generation_tokens_per_second = 25.55
+prompt_tokens_per_second = 125.03
+peak_memory_bytes = 5679255552
+tool_call = "yes"
+image_input = "yes"
+embeddings = "not-tested"
+notes = "The local-ai workflow's table (local_ai_ci.py): downloaded and checked in 54.1 s, loaded in 2.5 s; 128 tokens generated in 6.28 s wall time from a 159-token prompt; a well-formed tool call, streamed too, and an answer that used the tool's result; the colour of a red image named."

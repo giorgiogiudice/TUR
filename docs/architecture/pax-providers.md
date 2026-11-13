@@ -59,6 +59,8 @@ call on a thread of its own. There is no async runtime.
 | `error` | `ProviderError` and the `TUR-AI-PROVIDER-*` registry |
 | `secret` | `ApiKey`, `KeySource`, `EnvKeySource` |
 | `config` | The configuration file format |
+| `generation` | The generation settings and the fields each family takes them in (section 15) |
+| `listing` | The models a provider offers, from its own list (section 15.4) |
 | `spend` | `SpendMeter`: usage per task, cost, the task limit |
 | `http`, `sse`, `toolcalls` | Private: transport and retries, the event-stream parser, tool-call assembly |
 
@@ -191,11 +193,13 @@ Adapter behaviour that follows from the providers' rules:
   `TUR-AI-PROVIDER-004` before anything is sent. An opaque part from another
   provider is left out.
 
-No sampling parameter (`temperature`, `top_p`, `top_k`), no thinking or
-reasoning setting and no tool-choice setting is sent to any provider. On the
-Anthropic API version used here, a sampling parameter is rejected with a 400,
-and several current models reject a forced tool choice. The model's defaults
-apply.
+Generation settings (temperature, top-p, top-k, stop sequences, reasoning
+effort, a thinking budget) are sent only when a configuration sets them, in
+the fields each family documents, and a setting a family has no place for
+is refused before anything is sent: [section 15](#15-generation-settings-and-model-lists).
+With none set, nothing is sent and the model's defaults apply, as before. No
+tool-choice setting is sent to the three companies' families: several current
+models reject a forced tool choice.
 
 ### 4.2 Stream
 
@@ -288,7 +292,7 @@ needs.
 | Images in tool results | – | yes | yes | yes |
 | Native computer control, offered by the provider | No | `computer_toolset_20260801` | `computer` | `computer_use` |
 | Native computer control, implemented here | No | no | no | no |
-| Model discovery | No | no | no | no |
+| Model discovery | No | yes | yes | yes |
 | Speech services | No | no | no | no |
 
 The `openai-chat` family declares what the *format* can carry: streaming,
@@ -312,10 +316,10 @@ of scope for this layer. What each provider documents today:
 All three can ask for several actions in one turn. Each action must still pass
 the policy engine one by one.
 
-**Model discovery** is not implemented. `GET /v1/models` is named in OpenAI's
-rate-limits guide and, for Anthropic, in the Claude API reference bundled with
-the development tooling. Neither endpoint's response was read, and Google's
-equivalent was not looked up. Model names remain configuration.
+**Model discovery**: `list_models` asks a provider for the models a key may
+use ([section 15.4](#154-the-models-of-a-provider)). What it names is shown
+beside the model list; model names remain configuration, and nothing a
+provider says about capabilities or prices is taken.
 
 ## 6. Errors
 
@@ -454,7 +458,8 @@ consent text of section 8 is written.
 **Configuration.** `schemas/pax-provider-config.schema.json`; the loader
 `ProviderConfig::from_json` is authoritative. Fields: `schema_version`,
 `provider`, `base_url` (optional), `model`, `max_output_tokens`, `timeouts`,
-`retry`, `prices` (optional), `task_limit` (optional). `model` and
+`retry`, `prices` (optional), `task_limit` (optional), `generation`
+(optional, section 15). `model` and
 `max_output_tokens` are required and have no default. There are no default
 prices. A test checks that no source file of the crate contains a model name.
 
@@ -511,7 +516,6 @@ adapter could be built, 4 the probe did not show that the model calls tools.
 ## 11. Known gaps
 
 - **Not run against any real provider.** See the top of this document.
-- **Model discovery** is not implemented.
 - **Native computer control** is not implemented.
 - **Reasoning is not shown.** Thinking summaries are kept inside opaque parts
   and are not surfaced as events.
@@ -638,7 +642,8 @@ All tests run in CI and nowhere else. None contacts a provider.
 
 | Test | What it shows |
 |---|---|
-| `tests/conformance.rs` | The provider conformance suite of sections 10 and 12 of the design. Twenty-two neutral-level tests, each run against all four adapter families. |
+| `tests/conformance.rs` | The provider conformance suite of sections 10 and 12 of the design. Twenty-four neutral-level tests, each run against all four adapter families; the last two are the generation settings of section 15. |
+| `tests/listing.rs` | The list of models of each family: request, key header, every page, a list that is not one (section 15.4). |
 | `tests/openai_chat.rs` | What the compatible family must do beyond that (section 14.6). |
 | `tests/secrets.rs` | The key is in no error, event or debug rendering, and is sent only in the documented header. |
 | `tests/config_and_schema.rs` | The schema and the loader agree; the examples load; no model name is compiled in. |
@@ -677,6 +682,8 @@ section 14; none is a recording of a real service.
 | Spend limit | The stream is cut with `TUR-AI-PROVIDER-010`; the next request is not sent |
 | Spend under the limit | Usage and cost add up over two requests |
 | Capabilities | The adapter declares the required rows; nothing is sent |
+| Generation settings reach the wire | The family's own fields for every setting it takes, at the exact JSON path; every setting it has no place for refused by the loader; nothing sent before |
+| Nothing set, nothing sent | No temperature, top-p, top-k, stop, thinking, effort, reasoning or template field in the request |
 
 For the compatible family, "the reasoning content unchanged" in the tool
 round trip reads: the reasoning is kept as an opaque part and, with the
@@ -869,7 +876,8 @@ scenarios 18 and 19 through the family.
   documents them; the format's reference does not.
 - **Retry-After** is documented by Groq (429), OpenRouter (429, 503, some
   402) and Mistral (429); not by DeepSeek, xAI or Together. Backoff applies.
-- **Service-specific extras** are not used: DeepSeek's `thinking` switch,
+- **Service-specific extras** are not used: DeepSeek's `thinking` object
+  (its `reasoning_effort`, which the same page documents, is: section 15),
   `user_id` cache isolation and beta `strict` tools; Mistral's
   `prompt_mode`; Groq's `reasoning_format`; OpenRouter's routing and `zdr`.
 - **The settings page** that adds a provider, shows its terms and runs the
@@ -950,3 +958,123 @@ read, with its date and source.
 
 **The local AI service of ADR-0021** (`tur-ai-local`) is the preset
 `local`, above.
+
+## 15. Generation settings and model lists
+
+Added on 13 November 2026 (issue #84). Every page below was read on
+**2026-11-13**, except where a row names the Claude API reference bundled
+with the development tooling (cached 2026-11-03), which cites the
+platform pages listed. **No request was sent to any provider**: what each
+family is sent is checked against a local server that records it
+(`tests/conformance.rs`, `tests/listing.rs`).
+
+### 15.1 What each family is sent
+
+`Generation` (`src/generation.rs`) is part of a configuration
+(`generation` in `schemas/pax-provider-config.schema.json`) and of every
+request made from it. Only what is set is sent. A setting a family's
+interface has no place for is **refused** by the loader
+(`TUR-AI-PROVIDER-011`), never dropped in silence.
+
+| Setting | Anthropic Messages (API `2026-10-21`) | OpenAI Responses | Google Interactions | Chat Completions (`openai-chat`) |
+|---|---|---|---|---|
+| temperature | refused | `temperature` | refused | `temperature` |
+| top-p | refused | `top_p` | refused | `top_p` |
+| top-k | refused | refused | refused | `top_k` (llama.cpp; a model of a service that lacks it does not declare it) |
+| stop sequences | `stop_sequences` | refused | `generation_config.stop_sequences` | `stop` |
+| effort `none` | `thinking: {"type": "disabled"}` | `reasoning: {"effort": "none"}` | refused | `reasoning_effort: "none"`, or with llama.cpp `chat_template_kwargs: {"enable_thinking": false}` |
+| effort `minimal` | refused | `reasoning.effort` | `generation_config.thinking_level` | `reasoning_effort`, or `enable_thinking: true` |
+| effort `low` to `xhigh` | `output_config: {"effort": …}` | `reasoning.effort` | `generation_config.thinking_level` | `reasoning_effort`, or `enable_thinking: true` |
+| effort `max` | `output_config.effort` | `reasoning.effort` | refused | `reasoning_effort`, or `enable_thinking: true` |
+| thinking budget | refused | refused | refused | `thinking_budget_tokens`, with `enable_thinking` only |
+| output limit | `max_tokens` (thinking counts in it) | `max_output_tokens` (reasoning counts in it) | `generation_config.max_output_tokens` (thoughts count in it) | `max_tokens` |
+
+| Family | Why, from its documentation | Sources |
+|---|---|---|
+| Anthropic | On API version `2026-10-21` "a Messages request that sends `temperature`, `top_p` or `top_k` returns a 400 error on every model". Effort is `output_config.effort`, `low` to `max` (no `minimal`); `budget_tokens` is removed on current models and adaptive thinking is the default; `{type: "disabled"}` is accepted by some models only (Claude Opus 5.5 and Sonnet 5.5 reject it, so the model list offers them no `none`). | The Claude API reference bundled with the development tooling, citing <https://platform.claude.com/docs/en/api/migration-2026-10-21>, <https://platform.claude.com/docs/en/build-with-claude/effort>, <https://platform.claude.com/docs/en/build-with-claude/extended-thinking> |
+| OpenAI | `reasoning.effort` is `none`, `minimal`, `low`, `medium`, `high`, `xhigh` or `max`, "Not all reasoning models support every value", default `medium`; `temperature` 0 to 2 and `top_p`, "When reasoning effort is not `none`, remove `temperature`, `top_p`, and `top_logprobs`"; Responses has no `top_k` and no `stop`; `max_output_tokens` includes reasoning. | <https://developers.openai.com/api/reference/resources/responses/methods/create.md>, <https://developers.openai.com/api/docs/guides/reasoning>, <https://developers.openai.com/api/docs/guides/latest-model>, the SDK's `response_create_params.py` and `shared/reasoning_effort.py` |
+| Google | The Interactions reference's `generation_config` lists `stop_sequences`, `thinking_level` (`minimal` to `xhigh`, per model), `thinking_summaries`, `max_output_tokens` and `seed`; `temperature`, `top_p` and `top_k` are not in it ("Gemini 4 and Gemini 3.6+ models ignore custom values …"; "In future model generations, supplying these parameters returns an HTTP 400 error"); `thinking_budget` is not in it, and "You cannot use both `thinking_level` and the legacy `thinking_budget` parameter in the same request". Gemini 4 cannot switch thinking off. | <https://aistudio.google.com/api-reference/interactions-api>, <https://aistudio.google.com/docs/thinking>, <https://aistudio.google.com/docs/text-generation>, <https://aistudio.google.com/docs/whats-new-gemini-3.6> |
+| openai-chat | The Chat Completions reference: `temperature` 0 to 2, `top_p`, `stop` (1 to 4 strings), `reasoning_effort` (as Responses). DeepSeek: `reasoning_effort` `none`, `low`, `high`, `max` (`none` switches thinking off), temperature "has no effect in thinking mode", up to 16 stop sequences, `max_tokens` up to 393 216. llama.cpp's server: `temperature`, `top_k`, `top_p`, `stop` and `chat_template_kwargs` (README: "For example: `{"enable_thinking": false}`"); `thinking_budget_tokens` is in its source, not its README. Mistral, xAI and Groq: `reasoning_effort` with per-model values; xAI rejects `stop` on reasoning models. | <https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create.md>; <https://api-docs.deepseek.com/api/create-chat-completion>, `/guides/thinking_mode`; <https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md>; <https://docs.mistral.ai/api/endpoint/chat>, `/capabilities/reasoning`; <https://docs.x.ai/developers/model-capabilities/text/reasoning.md>; <https://console.groq.com/docs/reasoning> |
+
+**How a compatible service is told to reason** is a field of its provider
+entry, `reasoning_style`: `reasoning_effort` (the default) or
+`enable_thinking`, llama.cpp's chat-template switch, which the presets
+`llama-server` and `local` use.
+
+### 15.2 What a model accepts
+
+What one model accepts, in which range, and with which default, is
+declared by the model list (`settings` of a provider entry and of a model,
+`schemas/pax-models.schema.json`), and the session service holds the
+person's choice to it (`services/tur-pax/src/tuning.rs`;
+[pax-service.md](pax-service.md), section 2.5). A declaration the family
+cannot be sent is refused when the list is read. The example list declares:
+
+| Provider, model | Accepts (range, P@x's default) | Notes |
+|---|---|---|
+| `anthropic`, all three | effort `low` to `max`; stop up to 4; output limit 1 to 128 000 | No temperature, top-p or top-k (version `2026-10-21`). Provider default effort: `medium` for Opus 5.5 and Haiku 5.5, `high` for Sonnet 5.5. No `none`: Opus 5.5 and Sonnet 5.5 reject `disabled`. The stop limit is TUR's own: none was found documented. |
+| `google`, `gemini-3.5-flash-lite` | thinking level `minimal`, `low`, `medium`, `high`; stop up to 4; output 1 to 65 536 | Its default is `minimal`. Stop count not documented: TUR's limit. |
+| `google`, `gemini-4-carbon` | level `low`, `medium`, `high` | Thinking cannot be switched off; default `medium`. |
+| `openai`, `gpt-6.1-sol` | effort `low`, `medium`, `high` | "does not support `none` or `minimal`"; whether it takes `xhigh` or `max` was not stated, so they are not offered. No temperature: it never runs at `none`. |
+| `openai`, `gpt-6-luna` | effort `none`, `low`, `medium`, `high`; temperature 0 to 2 and top-p 0 to 1 **only with effort `none`** | Supports `none` per the latest-model guide. |
+| `deepseek`, both | effort `none`, `low`, `high`, `max`; temperature 0 to 2, top-p 0.01 to 1, only with `none`; stop up to 16; output 1 to 393 216 | Default effort `high`. |
+| `mistral` | temperature 0 to 1 (the page recommends 0 to 0.7 and states no wider range), top-p 0 to 1, stop up to 4 (TUR's limit); `mistral-small-2603` effort `none`, `high`; `mistral-large-4` `low`, `medium`, `high` | |
+| `xai` | temperature 0 to 1 ("Values above 1 are sampled at 1"), top-p 0 to 0.95; no stop (rejected by reasoning models); `grok-4.7` effort `low`, `medium`, `high`, `xhigh` | `grok-4.3`'s efforts are not on the page read: none offered. |
+| `groq` | temperature 0 to 2, top-p 0 to 1, stop up to 4; `openai/gpt-oss-120b` effort `low`, `medium`, `high`; `qwen/qwen3.8-27b` `none`, `low`, `medium`, `high` | "Values outside a model's supported set are rejected with a 400." |
+| `llama-server` | temperature 0 to 2, top-p 0 to 1, top-k 0 to 1 000, stop up to 8 | Whatever model the person loads; no effort: it depends on the model's template. |
+| `local`, every model | temperature, top-p, top-k, stop up to 8, output 1 to 8 192, context 2 048 to the model's own (at most 131 072), 8 192 by default | Qwen3 (0.6B, 4B, 30B A3B): effort `none` or `medium` (thinking off or on), default `none`; defaults temperature 0.7, top-p 0.8, top-k 20 (the cards' non-thinking settings). Gemma 4: the same switch; defaults 1.0, 0.95, 64 (its card). Ministral 3 3B: temperature default 0.05 (its card: "below 0.1"). |
+| `openrouter`, `together`, `ollama` | nothing declared | Their parameter pages were not read for this work: only the output limit can be set. |
+
+### 15.3 Thinking tokens and the limit of a day
+
+Every family counts the model's reasoning as output, and so does the
+meter: Anthropic's `output_tokens` include thinking; OpenAI's
+`output_tokens` include `output_tokens_details.reasoning_tokens`; Google's
+thought tokens are added to the output (`total_thought_tokens` is beside
+`total_output_tokens`, and "pricing is the sum of output tokens and thinking
+tokens"); for `openai-chat` the output is the largest of
+`completion_tokens`, `total_tokens` less the prompt, and the reasoning
+tokens, so a service that reports reasoning apart from the completion is
+still counted (`openai_chat::tests::reasoning_is_counted_as_output_whatever_figure_carries_it`).
+The day's and the task's limits act on these counts as before; a higher
+effort spends more of them, and `GetGenerationSettings` says so. Thinking
+counts in each family's output limit, which still bounds one response.
+
+### 15.4 The models of a provider
+
+`list_models` (`src/listing.rs`):
+
+| Family | Request | Key | Names | Next page |
+|---|---|---|---|---|
+| Anthropic | `GET /v1/models?limit=1000` | `x-api-key`, `anthropic-version` | `data[].id`, `display_name` | `has_more`, `after_id=<last_id>` |
+| OpenAI | `GET /v1/models` | Bearer | `data[].id` | none documented |
+| Google | `GET /v1beta/models?pageSize=1000` | `x-goog-api-key` | `models[].name` without `models/`, `displayName` | `nextPageToken`, `pageToken` |
+| openai-chat | `GET <base URL>/models` | Bearer, or none | `data[].id`, or a bare list | none |
+
+Sources: <https://developers.openai.com/api/reference/resources/models/methods/list.md>,
+<https://aistudio.google.com/api-reference/models/list-models>,
+<https://api-docs.deepseek.com/api/list-models>,
+<https://docs.mistral.ai/api/endpoint/models>, llama.cpp's README; for
+Anthropic, the Models API in the bundled Claude API reference. At most 20
+pages and 2 000 names; a name that cannot be a model name is left out; a
+name listed twice is kept once. The session service asks only when the
+person asks (`ListProviderModels` with `refresh`), keeps the answer for a
+day, and shows it beside the model list; a model only the provider names
+has no declared settings and no known price.
+
+### 15.5 Not verified
+
+- **No provider was called.** Field names and values are the
+  documentation's.
+- Whether OpenAI rejects or ignores `temperature` at an effort other than
+  `none` (the guide says to remove it); TUR refuses it either way.
+- Whether `gpt-6.1-sol` takes `xhigh` or `max`; Anthropic's and Google's
+  limits on the number of stop sequences.
+- Whether llama.cpp b9840, the pinned engine, honours `enable_thinking:
+  true` when started with `--reasoning off` (its current source does);
+  P@x's `UseLocalModel` starts a model that can think with
+  `--reasoning auto`, so the request's switch decides.
+- `thinking_budget_tokens` is in llama.cpp's source, not its README, and no
+  shipped preset offers it.
+- The model lists' answers were written from the documentation; none was
+  read from a provider.

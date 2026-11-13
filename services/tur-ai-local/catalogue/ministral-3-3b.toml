@@ -1,0 +1,78 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR local model catalogue entry. Format: schemas/local-model.schema.json.
+# How entries are written and sourced: services/tur-ai-local/catalogue/README.md.
+#
+# Sources read on 2026-11-13: the Hugging Face API for
+# mistralai/Ministral-3-3B-Instruct-2512-GGUF (revision, file list, sizes and
+# LFS SHA-256 digests; the pinned resolve URLs answered with the same size
+# and digest), its README.md at the pinned revision, and the base model's
+# config.json (mistralai/Ministral-3-3B-Instruct-2512: 26 layers, 8 KV heads
+# of 128).
+
+schema_version = 1
+id = "ministral-3-3b"
+name = "Ministral 3 3B Instruct"
+publisher = "Mistral AI"
+repository = "https://huggingface.co/mistralai/Ministral-3-3B-Instruct-2512-GGUF"
+revision = "eb599d408350ea2bb60452cb86be7c7b2fc28227"
+format = "gguf"
+quantisation = "Q4_K_M"
+parameters = "3.4B, with a 0.4B vision encoder"
+# The model card: "Supports a 256k context window"; config.json:
+# max_position_embeddings 262144.
+context_length = 262144
+# Estimate, not measured: the model file and the BF16 projector the
+# publisher ships; the 16-bit context cache at 8192 tokens (26 layers x 8
+# KV heads x 128 x 2 x 2 bytes = 106,496 bytes per token); 512 MiB for the
+# engine's working memory and 300 MB for one image; all of it times 1.4,
+# the ratio llama.cpp's own build showed for Qwen3 4B in CI run
+# 43277339192, rounded up. The local-ai workflow measures it.
+memory_bytes = 6580000000
+memory_context = 8192
+kv_bytes_per_token = 106496
+capabilities = ["chat", "tools", "vision"]
+# An instruct model; the publisher's reasoning variant is a separate model.
+thinking = "none"
+languages = ["en", "fr", "es", "de", "it", "pt", "nl", "zh", "ja", "ko", "ar"]
+languages_note = "The publisher states support for dozens of languages and lists these eleven."
+good_for = [
+  "A small assistant that acts, on a computer with 8 to 16 GB of memory.",
+  "Tool calls and JSON output (the publisher: native function calling).",
+  "Questions about images and screenshots.",
+]
+checked = "2026-11-13"
+
+[file]
+name = "Ministral-3-3B-Instruct-2512-Q4_K_M.gguf"
+url = "https://huggingface.co/mistralai/Ministral-3-3B-Instruct-2512-GGUF/resolve/eb599d408350ea2bb60452cb86be7c7b2fc28227/Ministral-3-3B-Instruct-2512-Q4_K_M.gguf"
+size_bytes = 2147023008
+sha256 = "9ed150d4367e68df0ac8e1540f6ddc65b42d0ee26378329d1ecbca60f93fc5f8"
+
+[projector]
+name = "Ministral-3-3B-Instruct-2512-BF16-mmproj.gguf"
+url = "https://huggingface.co/mistralai/Ministral-3-3B-Instruct-2512-GGUF/resolve/eb599d408350ea2bb60452cb86be7c7b2fc28227/Ministral-3-3B-Instruct-2512-BF16-mmproj.gguf"
+size_bytes = 841501856
+sha256 = "70ca26e41ecea9da997e2887462ad68b848fbf64da011ff4107bbe7353519ee0"
+
+[licence]
+id = "Apache-2.0"
+url = "https://www.apache.org/licenses/LICENSE-2.0.txt"
+summary = "Apache License 2.0. You may use, copy, change and share the model for any purpose, commercial use included. If you pass it on, include the licence and keep its notices."
+restrictions = "The publisher's model card adds one sentence under its licence: you must not use the model in a way that infringes, misappropriates or otherwise violates anyone's rights, intellectual-property rights included."
+evidence = "The model card at the pinned revision declares apache-2.0 in its header and, under License, links the Apache License 2.0 text at apache.org, followed by the sentence summarised in restrictions. The repository holds no licence file and is not gated."
+checked = "2026-11-13"
+
+[[tested]]
+date = "2026-11-13"
+report = "docs/reports/pax-6.md"
+run = "https://github.com/giorgiogiudice/TUR/actions/runs/43341975820"
+engine = "llama-server b9840 from llama.cpp's own release llama-b9840-bin-ubuntu-x64 (processor variants, AVX2 kernels used), started by tur-ai-local ensure"
+hardware = "GitHub-hosted ubuntu-24.04 runner: AMD EPYC 7763, 4 logical processors (2 cores), AVX2 and FMA, 16.8 GB of memory, no graphics processor"
+context = 8192
+generation_tokens_per_second = 9.11
+prompt_tokens_per_second = 34.76
+peak_memory_bytes = 5403578368
+tool_call = "yes"
+image_input = "not-tested"
+embeddings = "not-tested"
+notes = "One P@x task (two-tools) through the local preset: 4 requests, three tool calls (device_list_problems, catalogue_search, catalogue_route), answered. The speeds are llama-server's own timings for P@x's first request: 2,684 prompt tokens in 77.2 s, then 8 tokens generated. Peak memory is the engine's resident set as tur-ai-local status read it once the engine was ready, before the task."

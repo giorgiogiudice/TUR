@@ -15,6 +15,9 @@
 !branding/
 branding/tur-logo.png
 branding/render.py
+# TUR's desktop theme and defaults (task D-04): the tree image/Containerfile
+# copies, and nothing else of desktop/.
+!desktop/data/rootfs/
 !rust-toolchain.toml
 !LICENSE.md
 !NOTICE

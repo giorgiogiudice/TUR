@@ -1,0 +1,69 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR local model catalogue entry. Format: schemas/local-model.schema.json.
+# How entries are written and sourced: services/tur-ai-local/catalogue/README.md.
+#
+# Sources read on 2026-11-13: the Hugging Face API for google/gemma-4-26B-A4B-it-qat-q4_0-gguf
+# (revision, file list, sizes and LFS SHA-256 digests; the pinned resolve
+# URLs answered with the same size and digest), its README.md at the pinned
+# revision, the base model's config.json
+# (30 layers: 5 full-attention layers with 2 KV heads of 512, 25
+# sliding-window layers with 8 KV heads of 256 and a 1024-token window),
+# and the licence pages named in [licence].
+
+schema_version = 1
+id = "gemma-4-26b-a4b"
+name = "Gemma 4 26B A4B"
+publisher = "Google DeepMind"
+repository = "https://huggingface.co/google/gemma-4-26B-A4B-it-qat-q4_0-gguf"
+revision = "d1c082be9cf3c8a514acf63b8761f4b41935842e"
+format = "gguf"
+# Quantisation-aware training (QAT) checkpoint, published as Q4_0 by Google.
+quantisation = "Q4_0 (QAT)"
+parameters = "25.2B, 3.8B active (mixture of experts)"
+# The model card: "Context Length | 256K tokens".
+context_length = 262144
+# Estimate, not measured: the two files; the 16-bit context cache at 8192
+# tokens of the 5 full-attention layers (2 KV heads x 512 x 2 x 2 bytes =
+# 4,096 bytes each, 20,480 bytes per token) and the fixed cache of the 25
+# sliding-window layers (8 KV heads x 256 x 2 x 2 bytes x 1024 tokens,
+# 210 MB); 512 MiB for the engine and 300 MB for one image; all of it
+# times 1.4, as for the other entries, rounded up. To be replaced by a
+# measurement.
+# active_weight_bytes: the file times 3.8/25.2, the active share of a
+# mixture-of-experts model (the card: 3.8B active).
+memory_bytes = 23590000000
+memory_context = 8192
+kv_bytes_per_token = 20480
+active_weight_bytes = 2180000000
+capabilities = ["chat", "tools", "vision"]
+# The model card: "configurable thinking modes"; llama.cpp's chat template
+# switches it with enable_thinking.
+thinking = "hybrid"
+languages = ["mul"]
+languages_note = "The publisher states multilingual support in over 140 languages."
+good_for = [
+  "A stronger assistant for a computer with 32 GB of memory, or a graphics card with 24 GB of its own memory.",
+  "Tool calls, reasoning and help with code.",
+  "Questions about images and screenshots.",
+]
+checked = "2026-11-13"
+
+[file]
+name = "gemma-4-26B_q4_0-it.gguf"
+url = "https://huggingface.co/google/gemma-4-26B-A4B-it-qat-q4_0-gguf/resolve/d1c082be9cf3c8a514acf63b8761f4b41935842e/gemma-4-26B_q4_0-it.gguf"
+size_bytes = 14439363584
+sha256 = "3eca3b8f6d7baf218a7dd6bba5fb59a56ee25fe2d567b6f5f589b4f697eca51d"
+
+[projector]
+name = "gemma-4-26B-it-mmproj.gguf"
+url = "https://huggingface.co/google/gemma-4-26B-A4B-it-qat-q4_0-gguf/resolve/d1c082be9cf3c8a514acf63b8761f4b41935842e/gemma-4-26B-it-mmproj.gguf"
+size_bytes = 1194828160
+sha256 = "a359953a076b877db30c31dbbb4c6d93b4a6e017ee5db5784247e4d4c0dd4f3b"
+
+[licence]
+id = "Apache-2.0"
+url = "https://ai.google.dev/gemma/docs/gemma_4_license"
+summary = "Apache License 2.0. You may use, copy, change and share the model for any purpose, commercial use included. If you pass it on, include the licence and keep its notices."
+restrictions = "none"
+evidence = "The model card header at the pinned revision declares apache-2.0, with license_link https://ai.google.dev/gemma/docs/gemma_4_license; that address redirects to https://ai.google.dev/gemma/apache_2, which is the Apache License 2.0 text, read on 2026-11-13. Google's Gemma Terms of Use (https://ai.google.dev/gemma/terms, last modified 2026-04-01) say that they apply to the Gemma models listed in their appendix and: \"For Gemma 4 terms, see the Gemma 4 license.\" The Gemma Prohibited Use Policy belongs to those terms, so it does not apply to Gemma 4. The repository holds no licence file and is not gated."
+checked = "2026-11-13"

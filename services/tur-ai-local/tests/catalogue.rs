@@ -48,37 +48,59 @@ fn the_seed_catalogue_loads_and_follows_the_schema() {
 }
 
 #[test]
-fn three_to_five_small_permissive_models_with_tools_and_vision() {
+fn small_and_large_permissive_models_with_tools_and_vision() {
     let catalogue = seed();
     let count = catalogue.models.len();
-    assert!((3..=5).contains(&count), "{count} models");
+    assert!((5..=16).contains(&count), "{count} models");
+    // The owner's list (issue #84): Gemma 4 E2B and E4B, Ministral 3 3B,
+    // and larger models for 32 GB or a graphics card.
+    for id in ["gemma-4-e2b", "gemma-4-e4b", "ministral-3-3b"] {
+        let model = catalogue
+            .get(id)
+            .unwrap_or_else(|| panic!("{id} is in the catalogue"));
+        assert!(model.can(Capability::Tools), "{id}");
+        assert!(model.can(Capability::Vision), "{id}");
+    }
     assert!(
         catalogue
             .models
             .iter()
-            .any(|model| model.can(Capability::Tools))
+            .any(|model| model.download_bytes() <= 1_000_000_000 && model.can(Capability::Tools)),
+        "a model small enough for any processor"
     );
     assert!(
         catalogue
             .models
             .iter()
-            .any(|model| model.can(Capability::Vision))
+            .filter(|model| model.download_bytes() >= 15_000_000_000)
+            .count()
+            >= 2,
+        "larger models for 32 GB of memory or a graphics card"
     );
     for model in &catalogue.models {
-        // Small enough for a processor: no file of the first list is larger
-        // than 3 GB.
-        assert!(model.download_bytes() <= 3_000_000_000, "{}", model.id);
-        // Every licence of the first list is permissive and restricts no
-        // use; a restricted licence would be listed with its restrictions.
+        // Every licence is permissive. A restriction a publisher adds is
+        // shown, and the download asks for it to be accepted.
         assert!(
             ["Apache-2.0", "MIT"].contains(&model.licence.id.as_str()),
             "{}: {}",
             model.id,
             model.licence.id
         );
-        assert_eq!(model.licence.restrictions, "none", "{}", model.id);
-        assert!(!model.licence.restricts_use());
+        assert_eq!(
+            model.licence.restricts_use(),
+            model.licence.restrictions != "none",
+            "{}",
+            model.id
+        );
+        // What a mixture of experts reads per token is less than its file.
+        if let Some(active) = model.active_weight_bytes {
+            assert!(active < model.file.size_bytes, "{}", model.id);
+        }
     }
+    // The model whose publisher adds a sentence to its licence shows it.
+    let ministral = catalogue.get("ministral-3-3b").expect("ministral");
+    assert!(ministral.licence.restricts_use());
+    assert!(ministral.licence.restrictions.contains("infringes"));
 }
 
 #[test]

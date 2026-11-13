@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# The launcher's favourites for a new account (desktop-experience.md, 7.2):
+# Files, the web browser (Firefox) and Settings, the same as the panel's
+# pinned applications. The application centre and TUR's welcome join them
+# when they are in the image. Read once, when the launcher first starts in an
+# account (plasma-workspace, applets/kicker/kastatsfavoritesmodel.cpp).
+
+[General]
+Prepend=org.kde.dolphin.desktop;org.mozilla.firefox.desktop;systemsettings.desktop
+IgnoreDefaults=true

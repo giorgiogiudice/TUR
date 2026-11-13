@@ -144,6 +144,16 @@ RUN --mount=type=bind,source=branding,target=/run/tur-art \
         "${TUR_VERSION}" "${TUR_BUILD_ID}" && \
     bootc container lint
 
+# ---- desktop theme and defaults (task D-04) -- one COPY, owned by desktop/ ------
+# TUR's colour schemes, its two global themes, the system defaults for KDE
+# (no splash, no KDE welcome window, TUR's theme on the login screen) and the
+# panel of a new account. Data only, generated and checked in desktop/data
+# (gen_theme.py; MANIFEST.tsv lists every file). After the branding step, so
+# that these global themes replace the provisional one; and as its own small
+# layer, so that a change here does not rebuild the step above.
+COPY desktop/data/rootfs/ /
+# ---- end of desktop theme and defaults ------------------------------------------
+
 LABEL org.opencontainers.image.title="TUR" \
       org.opencontainers.image.description="TUR operating-system image (pre-alpha)" \
       org.opencontainers.image.source="https://github.com/giorgiogiudice/TUR" \

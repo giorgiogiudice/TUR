@@ -1,7 +1,7 @@
 #!/bin/sh
 # SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
 #
-# Render every page of the gallery, the toolchain proof, every state of the
+# Render every page of the gallery, the toolchain proof, TUR's colour schemes, every state of the
 # application centre and of the settings, and the states of P@x's overlay,
 # twice, and compare the pictures with the references in
 # desktop/tests/screenshots.
@@ -50,6 +50,8 @@ for pass in actual repeat; do
     render "$out/$pass" 1 desktop/ci/probe/tst_probe.qml
     render "$out/$pass" 1 desktop/kit/tests/shots/render_gallery.qml
     render "$out/$pass" 1.5 desktop/kit/tests/shots/render_gallery.qml
+    # TUR's KDE colour schemes (desktop/data, task D-04), at a scale of 1.
+    render "$out/$pass" 1 desktop/data/tests/render_schemes.qml
     render "$out/$pass" 1 desktop/apps/tur-centre/tests/shots/render_centre.qml "$centre"
     render "$out/$pass" 1.5 desktop/apps/tur-centre/tests/shots/render_centre.qml "$centre"
     render "$out/$pass" 1 desktop/apps/tur-settings/tests/shots/render_settings.qml "$settings"

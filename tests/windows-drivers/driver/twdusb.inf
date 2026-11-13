@@ -1,0 +1,53 @@
+; SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+;
+; Installs twdusb.sys, the TUR test WDM USB function driver, for the test
+; gadgets of tests/windows-drivers (pid.codes test IDs, 1209:0001-0003).
+; Unsigned: Wine does not check driver signatures; nothing here is for Windows.
+
+[Version]
+Signature   = "$WINDOWS NT$"
+Class       = USBDevice
+ClassGuid   = {88BAE032-5A81-49f0-BC3D-A4FF138216D6}
+Provider    = %Provider%
+DriverVer   = 11/13/2026,1.0.0.0
+
+[DestinationDirs]
+DefaultDestDir = 12
+
+[SourceDisksNames]
+1 = %Disk%,,,
+
+[SourceDisksFiles]
+twdusb.sys = 1
+
+[Manufacturer]
+%Provider% = TWD_Models,NTamd64
+
+[TWD_Models.NTamd64]
+%Loopback%   = TWD_Install, USB\VID_1209&PID_0001
+%SourceSink% = TWD_Install, USB\VID_1209&PID_0002
+%HidGadget%  = TWD_Install, USB\VID_1209&PID_0003
+
+[TWD_Install]
+CopyFiles = TWD_Files
+
+[TWD_Files]
+twdusb.sys
+
+[TWD_Install.Services]
+AddService = twdusb, 0x00000002, TWD_Service
+
+[TWD_Service]
+DisplayName   = %ServiceName%
+ServiceType   = 1
+StartType     = 3
+ErrorControl  = 1
+ServiceBinary = %12%\twdusb.sys
+
+[Strings]
+Provider    = "TUR test"
+Disk        = "TUR test driver disk"
+Loopback    = "TUR test USB device (loopback gadget)"
+SourceSink  = "TUR test USB device (source/sink gadget)"
+HidGadget   = "TUR test USB device (HID gadget, raw USB)"
+ServiceName = "TUR test WDM USB driver"

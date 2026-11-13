@@ -15,6 +15,7 @@ use std::net::IpAddr;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{ErrorKind, ProviderError};
+use crate::generation::Generation;
 use crate::model::{Message, ProviderId, Request, ToolDefinition};
 
 /// The configuration schema version this build reads.
@@ -68,6 +69,12 @@ pub struct ProviderConfig {
     /// The limit for one task. Without it a task is not limited by this layer.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub task_limit: Option<TaskLimit>,
+    /// Generation settings: temperature, top-p, top-k, stop sequences, how
+    /// much the model reasons. Only what is set is sent; a setting the
+    /// family's interface has no place for is refused
+    /// ([`Generation::check`]).
+    #[serde(default, skip_serializing_if = "Generation::is_empty")]
+    pub generation: Generation,
 }
 
 /// Timeouts, in milliseconds.
@@ -229,6 +236,9 @@ impl ProviderConfig {
                 ));
             }
         }
+        self.generation
+            .check(self.provider)
+            .map_err(|detail| invalid(&format!("generation: {detail}")))?;
         if let Some(limit) = &self.task_limit {
             if limit.max_cost.is_none() && limit.max_tokens.is_none() {
                 return Err(invalid("task_limit must set max_cost, max_tokens or both"));
@@ -274,6 +284,7 @@ impl ProviderConfig {
             messages,
             tools,
             max_output_tokens: self.max_output_tokens,
+            generation: self.generation.clone(),
         }
     }
 }
@@ -594,5 +605,35 @@ mod tests {
         assert_eq!(request.max_output_tokens, 1024);
         assert_eq!(request.system.as_deref(), Some("Be brief."));
         assert_eq!(request.messages.len(), 1);
+        assert!(request.generation.is_empty());
+    }
+
+    #[test]
+    fn generation_settings_are_checked_for_the_family_and_reach_the_request() {
+        let config = with(|value| {
+            value["generation"] = json!({ "effort": "high", "stop": ["END"] });
+        })
+        .unwrap();
+        let request = config.request(None, vec![Message::user_text("Hello")], Vec::new());
+        assert_eq!(request.generation, config.generation);
+        assert_eq!(
+            request.generation.effort,
+            Some(crate::generation::Effort::High)
+        );
+        let text = serde_json::to_string(&config).unwrap();
+        assert_eq!(ProviderConfig::from_json(&text).unwrap(), config);
+        // Messages API version 2026-10-21 rejects sampling parameters.
+        let detail = rejected(|value| value["generation"] = json!({ "temperature": 0.2 }));
+        assert!(detail.contains("temperature"), "{detail}");
+        rejected(|value| value["generation"] = json!({ "seed": 7 }));
+        rejected(|value| value["generation"] = json!({ "effort": "ultra" }));
+        rejected(|value| value["generation"] = json!({ "reasoning_style": "enable_thinking" }));
+        // Nothing set is not written out.
+        let plain = with(|_| {}).unwrap();
+        assert!(
+            !serde_json::to_string(&plain)
+                .unwrap()
+                .contains("generation")
+        );
     }
 }

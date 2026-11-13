@@ -33,6 +33,7 @@
     "memory_bytes": { "description": "The memory needed at memory_context: the files, the 16-bit context cache and the engine's working memory. An estimate until measured.", "type": "integer", "minimum": 1 },
     "memory_context": { "description": "The context size memory_bytes is given for, in tokens.", "type": "integer", "minimum": 1 },
     "kv_bytes_per_token": { "description": "The size of the 16-bit context cache per token: layers x KV heads x head size x 2 (keys and values) x 2 bytes.", "type": "integer", "minimum": 1 },
+    "active_weight_bytes": { "description": "The bytes of weights read for each generated token, where it is not the whole model file: a mixture-of-experts model reads only its active experts, and Gemma 4's per-layer embeddings are looked up, not multiplied. Without it, the model file's size. tur-ai-local estimates the speed of a model from it. At most the model file's size (the loader checks).", "type": "integer", "minimum": 1 },
     "capabilities": {
       "description": "chat: conversation. tools: OpenAI-style tool calling. vision: image input (needs the projector). embeddings: text embeddings only.",
       "type": "array",

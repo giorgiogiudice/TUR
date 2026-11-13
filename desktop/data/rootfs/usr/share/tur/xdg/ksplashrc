@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# No splash screen while Plasma starts (desktop-experience.md, 6.4): the sign
+# that the desktop is ready is the desktop. Plasma 6.8 starts its splash
+# unless Engine is something other than KSplashQML (startkde/startplasma.cpp).
+#
+# The group is locked ([$i], KDE's "immutable" mark). Without the lock this
+# file would not be enough: whenever a global theme is applied, at every
+# sign-in included, Plasma writes Engine=KSplashQML into the account's
+# defaults, which come before this file. Every global theme has a splash as
+# far as Plasma is concerned, because a theme without one falls back to
+# Breeze's (libklookandfeel/klookandfeelmanager.cpp; seen in the boot test).
+# The price: the splash cannot be chosen in System Settings.
+
+[KSplash][$i]
+Engine=none
+Theme=None

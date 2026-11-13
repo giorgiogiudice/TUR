@@ -46,7 +46,7 @@ pub const CAPABILITIES: Capabilities = Capabilities {
         provider_tool: Some(COMPUTER_CONTROL_TOOL),
         implemented: false,
     },
-    model_discovery: false,
+    model_discovery: true,
     speech_services: false,
 };
 
@@ -116,6 +116,7 @@ fn request_body(request: &Request) -> Result<Value, ProviderError> {
         "stream": true,
         "messages": messages,
     });
+    crate::generation::apply_anthropic(&request.generation, &mut body);
     if let Some(system) = request.system.as_deref()
         && !system.trim().is_empty()
     {
@@ -475,6 +476,7 @@ mod tests {
             messages,
             tools: Vec::new(),
             max_output_tokens: 512,
+            generation: crate::generation::Generation::default(),
         }
     }
 
