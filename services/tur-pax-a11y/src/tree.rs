@@ -728,7 +728,27 @@ impl Desktop {
                 ));
             }
         };
-        // Among several of the same name, the ones that can be used.
+        // Among several of the same name: for typing, the fields that take
+        // text; otherwise the controls (a label and its field, or a label
+        // and its button, often share a name).
+        let chosen = if chosen.len() > 1 {
+            let kind: Vec<(Node, Facts)> = chosen
+                .iter()
+                .filter(|(_, facts)| {
+                    let category = UiRole::from_atspi(facts.role);
+                    if typing {
+                        category == UiRole::Text && facts.editable()
+                    } else {
+                        category.is_pressable() || category == UiRole::Text
+                    }
+                })
+                .cloned()
+                .collect();
+            if kind.is_empty() { chosen } else { kind }
+        } else {
+            chosen
+        };
+        // Then the ones that can be used.
         let mut chosen = if chosen.len() > 1 {
             let usable: Vec<(Node, Facts)> = chosen
                 .iter()

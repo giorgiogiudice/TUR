@@ -219,6 +219,8 @@ impl Overlay {
     ///
     /// The overlay could not place the highlight.
     pub fn highlight(&self, pid: u32, title: &str, rect: [i32; 4], caption: &str) -> Result<u32, String> {
+        // One highlight at a time: what was pointed at before goes.
+        let _ = self.call("Clear", vec![Value::string(self.lease()), Value::U32(0)]);
         let width = f64::from(rect[2].max(1));
         let height = f64::from(rect[3].max(1));
         let place = |title: &str| {

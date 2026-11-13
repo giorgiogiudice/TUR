@@ -436,6 +436,12 @@ impl Node {
     }
 }
 
+/// Whether an action name reads as a name: some letters, and none of the
+/// characters a key binding is written with.
+pub fn looks_like_an_action_name(name: &str) -> bool {
+    name.chars().any(char::is_alphabetic) && !name.contains([';', '<', '>'])
+}
+
 /// A whole number of any width a toolkit may answer with.
 pub fn integer(value: &Value) -> Option<i64> {
     match value.unwrapped() {
@@ -762,7 +768,7 @@ impl Client {
     /// The application did not answer.
     pub fn actions(&self, node: &Node) -> Result<Vec<String>, BusError> {
         let value = self.first(node, iface::ACTION, "GetActions", Vec::new())?;
-        Ok(value
+        let mut names: Vec<String> = value
             .as_array()
             .unwrap_or_default()
             .iter()
@@ -774,7 +780,21 @@ impl Client {
                     .unwrap_or_default()
                     .to_owned()
             })
-            .collect())
+            .collect();
+        // Some toolkits answer GetActions with a key binding where the
+        // name should be (Firefox through at-spi2-atk: ";;"); the action's
+        // own name is then asked for.
+        for (index, name) in names.iter_mut().enumerate() {
+            if !looks_like_an_action_name(name)
+                && let Ok(index) = i32::try_from(index)
+                && let Ok(asked) =
+                    self.first(node, iface::ACTION, "GetName", vec![Value::I32(index)])
+                && let Some(asked) = asked.as_str()
+            {
+                *name = asked.to_owned();
+            }
+        }
+        Ok(names)
     }
 
     /// Do the element's action number `index`.
@@ -1027,6 +1047,16 @@ mod tests {
         assert_eq!(Node::from_value(&null), None);
         assert!(Node::from_value(&Value::variant(reference.clone())).is_some());
         assert_eq!(Node::from_value(&Value::string("x")), None);
+    }
+
+    #[test]
+    fn a_key_binding_is_not_taken_for_an_action_name() {
+        for name in ["press", "click", "SetFocus", "expand or contract", "jump"] {
+            assert!(looks_like_an_action_name(name), "{name}");
+        }
+        for binding in [";;", "<Alt>F;", "", ";<Control>c;"] {
+            assert!(!looks_like_an_action_name(binding), "{binding}");
+        }
     }
 
     #[test]

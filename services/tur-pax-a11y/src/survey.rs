@@ -124,7 +124,7 @@ pub fn survey() -> Result<Value, String> {
                 "actions": actions,
                 "truncated": budget.truncated,
                 "visited": budget.visited(),
-                "milliseconds": begun.elapsed().as_millis(),
+                "milliseconds": u64::try_from(begun.elapsed().as_millis()).unwrap_or(u64::MAX),
             }));
         }
     }
@@ -159,6 +159,6 @@ pub fn survey() -> Result<Value, String> {
     }
     Ok(json!({
         "applications": applications.into_values().collect::<Vec<Value>>(),
-        "milliseconds": started.elapsed().as_millis(),
+        "milliseconds": u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
     }))
 }

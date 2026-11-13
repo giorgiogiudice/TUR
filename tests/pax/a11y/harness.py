@@ -505,11 +505,13 @@ class Harness:
 
         follower = threading.Thread(target=follow, daemon=True)
         follower.start()
-        try:
-            stdout, _ = process.communicate(timeout=400)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            stdout, _ = process.communicate()
+        # Standard error is the follower's alone: the transcript is read
+        # here, and the task is ended if it outlives its bound.
+        bound = threading.Timer(400, process.kill)
+        bound.start()
+        stdout = process.stdout.read()
+        process.wait()
+        bound.cancel()
         follower.join(timeout=30)
         provider.stop()
 
@@ -823,7 +825,7 @@ class Harness:
         }
         before = self.survey()
         boot = subprocess.run(
-            ["wineboot", "--init"],
+            ["wine", "wineboot", "--init"],
             env=self.session.environment(**environment),
             capture_output=True,
             text=True,
@@ -852,7 +854,9 @@ class Harness:
         }
         self.checks.check("wine", "Wine's notepad was measured (whatever it exposes)", True, hard=False)
         self.session.stop("wine-notepad")
-        subprocess.run(["wineserver", "-k"], env=self.session.environment(**environment), capture_output=True, timeout=60)
+        wineserver = shutil.which("wineserver") or shutil.which("wineserver64")
+        if wineserver:
+            subprocess.run([wineserver, "-k"], env=self.session.environment(**environment), capture_output=True, timeout=60)
 
     def phase_stop(self):
         log = self.out / "mail-stop.log"
