@@ -46,7 +46,7 @@ Fetched for this decision, not recalled.
 | KWin and the keyboard layout | KWin reloads the layout when the `Layout` group of `kxkbrc` changes, through `KConfigWatcher`. KConfig announces a change with the D-Bus signal `org.kde.kconfig.notify.ConfigChanged` on `/<file name>`, argument `a{saay}` (group to keys). | [S6], [S7] |
 | `bootc install to-disk` progress | bootc 1.17.1 has no progress option for `install to-disk` (only `install reset` has one). It prints its steps as lines: partitioning, `Initializing ostree layout`, `layers needed: N (size)`, `Deploying container image...done`, `Installing bootloader via bootupd`, `Trimming root`, `Finalizing filesystem root`, `Installation complete!`. It makes the root with `mkfs.ext4 ... -O verity`; there is no option for further features. | [S8], TUR-007's logs |
 | GRUB and ext4 `casefold` | Fedora 45's GRUB (`rhboot/grub2`, branch `fedora-45`, `grub-core/fs/ext2.c`) supports the incompatible features filetype, extents, flex_bg, meta_bg, 64bit and encrypt, and ignores recover, mmp, csum_seed and largedir. `casefold` (0x20000) is neither: GRUB refuses to open the filesystem ("filesystem has unsupported incompatible features"). A GRUB maintainer: GRUB does not implement casefold, so it cannot read such a filesystem. | [S9], [S10] |
-| `tune2fs` and `casefold` | e2fsprogs supports the feature since 1.45; `tune2fs` can switch it off again only after checking no directory uses it (1.47.0). Whether `tune2fs -O casefold` on an existing filesystem is accepted was measured in CI (TUR-009). | [S11], TUR-009 |
+| `tune2fs` and `casefold` | e2fsprogs supports the feature since 1.45; `tune2fs` can switch it off again only after checking no directory uses it (1.47.0). `tune2fs -O casefold -E encoding=utf8` on an unmounted root was measured in CI: accepted (TUR-009). | [S11], TUR-009 |
 
 ## Options considered
 
@@ -98,14 +98,23 @@ Fetched for this decision, not recalled.
 
 **Casefold on the root filesystem (issue 81).**
 
-1. **Set it at installation** (`tune2fs -O casefold` on the unmounted root
-   after `bootc install`, or mkfs options). The root holds `/boot`, and GRUB
-   reads it at every start; GRUB refuses a filesystem with the feature. The
-   computer would not start. Rejected; CI shows it (TUR-009).
-2. **A separate `/boot`, or a separate `/var`, made casefold-capable.** A
-   different disk layout from the one ADR-0013 and ADR-0014 were proven on,
-   and `bootc install to-disk` would have to be replaced by `to-filesystem`.
-   Not in this change.
+1. **Set it at installation** (`tune2fs -O casefold -E encoding=utf8` on
+   the unmounted root after `bootc install`; bootc 1.17.1 has no option for
+   further mkfs features, it passes only `-O verity`). The root holds
+   `/boot`, and GRUB reads it at every start. **Measured** (TUR-009, iso run
+   43369283112): `tune2fs` accepts it on the unmounted root (e2fsprogs
+   1.47.0 on the runner; Fedora 45 has 1.47.4), `dumpe2fs` then lists
+   `casefold`, and the disk no longer starts: GRUB 2.12 prints
+   `grub_search_fs_uuid: no such device: <the root's UUID>` and stops at its
+   prompt. Rejected.
+2. **A separate `/boot`, or a separate filesystem for `/var/home`, made
+   casefold-capable.** Wine prefixes live under `/var/home`, so either works
+   for issue 81. Both are a different disk layout from the one ADR-0013 and
+   ADR-0014 were proven on (GRUB's environment block on the ext4 root), and
+   `bootc install to-disk` would have to be replaced by `to-filesystem` or
+   given a block setup that makes them. Needs its own ADR and the boot and
+   rollback proofs again. Not in this change; recommended as the way to
+   issue 81.
 3. **Case-insensitive storage for Wine prefixes in a filesystem of its own**,
    for example an ext4 image file under `/var` made with casefold and mounted
    by the Windows runtime. Needs nothing from the installer. Recommended to

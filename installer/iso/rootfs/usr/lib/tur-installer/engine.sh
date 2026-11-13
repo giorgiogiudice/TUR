@@ -690,7 +690,7 @@ label_on() {
 
 keep_log() {
     local device="$1" id="$2" root mnt="${SESSION}/target" var="" dest label="" label_from=none file status=0 contexts made=""
-    local copied=0 labelled=yes unmounted=yes state
+    local copied=0 labelled=yes unmounted=yes state remounted=no
     local candidate
     kept_log_path=""
     root="$(root_partition "${device}")"
@@ -699,17 +699,20 @@ keep_log() {
         return 1
     fi
     mkdir -p "${mnt}"
-    # Whatever still holds the new root after bootc (run 43363925029: the
-    # mount below came back read-only).
+    # bootc 1.17.1 leaves the new root mounted read-only at
+    # /run/bootc/storage after `install to-disk` (TUR-009), so a new mount of
+    # it shares that read-only filesystem. Recorded, then dealt with below.
     mark "log-keep before-mount=\"$(findmnt -n -S "${root}" -o TARGET,OPTIONS 2> /dev/null | tr '\n' ';')\" device_read_only=$(blockdev --getro "${root}" 2> /dev/null)"
     if ! mount -t ext4 -o rw,nodev,nosuid,noexec "${root}" "${mnt}" 2>> "${LOG}"; then
         mark "log-kept result=no reason=mount-failed $(tail -n 1 "${LOG}")"
         return 1
     fi
     if ! touch "${mnt}/.tur-installer-write-test" 2> /dev/null; then
-        # The filesystem is still held read-only by an earlier mount of
-        # bootc's. Make it writable for the time it takes to copy the log.
+        # The filesystem is still held read-only by bootc's mount. Make it
+        # writable for the time it takes to copy the log, and read-only
+        # again afterwards, as bootc left it.
         mount -o remount,rw "${mnt}" 2>> "${LOG}"
+        remounted=yes
         mark "log-keep remount-rw options=$(findmnt -n -o OPTIONS "${mnt}" 2> /dev/null)"
     fi
     rm -f "${mnt}/.tur-installer-write-test"
@@ -741,6 +744,12 @@ keep_log() {
             fi
         done
     fi
+    if [ -z "${label}" ]; then
+        # Fedora's targeted policy's label for /var/log (when
+        # neither file_contexts holds the line looked for, as in TUR-009).
+        label=system_u:object_r:var_log_t:s0
+        label_from=default
+    fi
     [ -d "${var}/log" ] || made="${var}/log"
     mark "log-keep var=${var#"${mnt}"} var_holds=\"$(find "${var}" -mindepth 1 -maxdepth 1 -printf '%f ' 2> /dev/null)\" var_attributes=\"$(lsattr -d "${var}" 2> /dev/null | cut -d' ' -f1)\" label_from=${label_from} label=${label:-none}"
     dest="${var}/log/tur-installer/${id}"
@@ -763,6 +772,9 @@ keep_log() {
     fi
     kept_log_path="/var/log/tur-installer/${id}"
     sync
+    # Read-only again before letting go: this writes the journal out, so
+    # the disk is consistent whatever happens to the live session next.
+    if [ "${remounted}" = yes ]; then mount -o remount,ro "${mnt}" 2>> "${LOG}" || status=1; fi
     umount "${mnt}" 2>> "${LOG}" || { status=1; unmounted=no; }
     state="$(dumpe2fs -h "${root}" 2> /dev/null | sed -n 's/^Filesystem state:[[:space:]]*//p')"
     mark "log-kept result=$([ "${status}" -eq 0 ] && echo yes || echo partly) path=${kept_log_path} files=${copied} selinux_label=${label:-none} labelled=${labelled} made_var_log=$([ -n "${made}" ] && echo yes || echo no) unmounted=${unmounted} filesystem_state=\"${state}\""

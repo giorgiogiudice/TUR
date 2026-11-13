@@ -50,7 +50,9 @@ not yet the session directory of section 8.
 
 **ext4 `casefold` on the root (issue 81) is not set.** The root filesystem
 holds `/boot`, which GRUB reads at every start, and Fedora 45's GRUB refuses
-an ext4 filesystem with the `casefold` feature. See ADR-0025.
+an ext4 filesystem with the `casefold` feature: measured in CI, a root
+given it with `tune2fs` stops at GRUB's prompt ("no such device" for the
+root's UUID; TUR-009). See ADR-0025 for the ways to issue 81.
 
 The way to the design of this document: the engine's steps become the
 phases of section 7, carried out by a `CommandRunner` that this library
