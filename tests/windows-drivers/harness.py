@@ -502,8 +502,11 @@ def s_pnputil(h: Harness) -> None:
     h.wine(sc, "twdinst-diinstall", [str(h.build / "twdinst.exe"), "diinstall", h.winpath(h.build / "twdusb.inf")])
     h.wine(sc, "twdinst-files", [str(h.build / "twdinst.exe"), "files"])
     files = read(sc.dir / "twdinst-files.out")
-    sc.check("inf-staged", "TWDINST file oem" in files, "an oemN.inf in C:\\windows\\inf after pnputil and DiInstallDriverW",
-             expected=False)
+    # Wine's SetupCopyOEMInf keeps the INF's name (oemN.inf only on a clash)
+    # and puts the package in the driver store as NAME.inf_N.
+    staged = "TWDINST file oem" in files or "twdusb.inf_" in files
+    sc.check("inf-staged", staged, "the package in C:\\windows\\inf or the driver store after pnputil and "
+             "DiInstallDriverW", expected=False)
     logs = sc.logs()
     sc.check("pnputil-is-stub", "fixme:pnputil" in logs or "stub" in read(sc.dir / "pnputil.err"),
              "Wine's pnputil.exe prints a FIXME and does nothing")
