@@ -50,9 +50,9 @@ RowLayout {
 
             objectName: "caveatText"
             Layout.fillWidth: true
-            text: row.caveat.text
+            text: RouterWords.caveat(row.caveat)
             paragraph: true
-            Accessible.name: Words.spokenCaveat(row.severity, row.caveat.text)
+            Accessible.name: Words.spokenCaveat(row.severity, RouterWords.caveat(row.caveat))
         }
     }
 }

@@ -233,10 +233,46 @@ Item {
             compare(Words.recordSource({ reported_by: "nobody", rating: "unknown", date: "2026-11-12" }).kind, "unrated")
             compare(Words.recordSource({ reported_by: "tur-test", test_report: "docs/reports/x.md",
                                          version_tested: "3", date: "2026-11-12" }).report, "docs/reports/x.md")
+            // Every reporter has its words: those that can rate a route read
+            // like the router's sources; TUR's compatibility autopilot never
+            // rates, and says "Works with these settings" (issue #98).
+            verify(router.reporters.indexOf("tur-autopilot") >= 0, "the vocabulary lists the autopilot")
             for (const reporter of router.reporters) {
-                const kind = Words.recordSource({ reported_by: reporter, date: "2026-11-12" }).kind
-                verify(router.rating_source_kinds.indexOf(kind) >= 0, reporter)
+                const source = Words.recordSource({ reported_by: reporter, date: "2026-11-12", remedies: [] })
+                if (reporter === "tur-autopilot") {
+                    compare(source.kind, "tur-autopilot")
+                    continue
+                }
+                verify(router.rating_source_kinds.indexOf(source.kind) >= 0, reporter)
             }
+            const autopilot = Words.recordSource({ reported_by: "tur-autopilot", rating: "unknown", date: "2026-11-13",
+                                                   remedies: ["dll-builtin:d3dx9_43", "windows-version-win11"],
+                                                   runtime_version: "wine-9.0" })
+            compare(Words.sourceSentence(autopilot, "unknown"),
+                    "Works with these settings · found by TUR's compatibility autopilot on 13 November 2026 · not a rating")
+            compare(Words.settingsSentence({ remedies: ["windows-version-win11"], runtime_version: "wine-9.0",
+                                             date: "2026-11-13", evidence_sha256: "0".repeat(64) }),
+                    "Found by TUR's compatibility autopilot on 13 November 2026 with wine-9.0. Measured once, on one "
+                    + "computer; not a rating.")
+        }
+
+        // TUR's own test with no rating does not read as a rating (#67).
+        function test_tur_s_own_test_without_a_rating() {
+            const source = { kind: "tur-test", report: "docs/reports/windows-runtime-2.md", version_tested: "8.9.9.1",
+                             date: "2026-11-12" }
+            compare(Words.sourceSentence(source, "unknown"),
+                    "Tested by TUR on 12 November 2026 with version 8.9.9.1 · TUR has not rated how well it works")
+            compare(Words.sourceSentence(source, "good"), "Tested by TUR on 12 November 2026 with version 8.9.9.1")
+        }
+
+        function test_a_pinned_free_installer_is_installed_not_fetched() {
+            const entry = { editions: [{ kind: "windows", obtain: "publisher-page", installer: { url: "https://x/y.exe" } }] }
+            compare(Words.primaryAction({ route: "wine", edition_index: 0, outlook: "clear", prerequisites: [] }, entry),
+                    "install")
+            compare(Words.installable("wine"), true)
+            compare(Words.installable("flatpak"), true)
+            compare(Words.installable("windows-guest"), false)
+            compare(Words.installable("web"), false)
         }
 
         function test_a_day_is_written_in_full_without_its_weekday() {

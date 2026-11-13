@@ -528,7 +528,7 @@ database. This crate is that database.
 ## Command line
 
 ```
-tur-catalogue [--catalogue DIR] validate [dir] [--repository DIR]
+tur-catalogue [--catalogue DIR] validate [dir] [--repository DIR] [--json]
 tur-catalogue [--catalogue DIR] search <query> [--json]
 tur-catalogue [--catalogue DIR] show <id> [--json]
 tur-catalogue [--catalogue DIR] route <id> [--host <facts.json>] [--prefs <prefs.json>] [--offer-guest] [--json]
@@ -610,12 +610,12 @@ These are not yet registry entries in the sense of §29.3.
 - **A rating from TUR's own tests.** Four records are TUR's own
   (`reported_by = "tur-test"`, report `docs/reports/windows-runtime-2.md`):
   the Wine route of 7-Zip, Notepad++, PuTTY and VLC. All four are `unknown`:
-  VLC because playback was not tried; the other three because the
-  application centre's Home view says, unconditionally, that TUR has tested
-  nothing and every rating is a named source's
-  (`the_home_view_s_standing_sentence_is_still_true` guards it). A rating
-  from TUR waits for that sentence to become conditional (a change to
-  `tur-centre`). Every rating in the catalogue is still an external report.
+  VLC because playback was not tried; the other three because, when they
+  were entered, the application centre's Home view said unconditionally
+  that TUR had tested nothing. Since task D-11 the sentence is conditional:
+  `tur-centre` shows it only while `tur-catalogue validate --json` counts
+  no rating from TUR's own tests, so a rating from TUR can now be entered.
+  Every rating in the catalogue is still an external report.
 - **Host detection.** Host facts are stated by the caller. The detection in
   `tur-runtime` is not used.
 - **Fallback to inspection.** An application that is not in the catalogue is

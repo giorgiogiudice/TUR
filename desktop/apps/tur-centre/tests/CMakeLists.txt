@@ -26,6 +26,16 @@ add_dependencies(tst_centre tst_centre_helper)
 add_test(NAME centre-qml COMMAND tst_centre)
 set_tests_properties(centre-qml PROPERTIES ENVIRONMENT "${TUR_TEST_ENVIRONMENT}" TIMEOUT 900)
 
+# How the centre runs tur-apps, against a stand-in that misbehaves on request
+# (unit/apps-helper.sh) and the recorded runs of the real one.
+qt_add_executable(tst_centre_apps unit/tst_apps.cpp)
+target_compile_definitions(tst_centre_apps PRIVATE
+    ${centre_test_definitions}
+    TUR_CENTRE_APPS_HELPER="${CMAKE_CURRENT_SOURCE_DIR}/unit/apps-helper.sh")
+target_link_libraries(tst_centre_apps PRIVATE Qt6::Core Qt6::Gui Qt6::Test turcentre)
+add_test(NAME centre-unit-apps COMMAND tst_centre_apps)
+set_tests_properties(centre-unit-apps PROPERTIES ENVIRONMENT "${TUR_TEST_ENVIRONMENT}" TIMEOUT 300)
+
 foreach(name answers sources catalogue)
     qt_add_executable(tst_centre_${name} unit/tst_${name}.cpp)
     target_compile_definitions(tst_centre_${name} PRIVATE

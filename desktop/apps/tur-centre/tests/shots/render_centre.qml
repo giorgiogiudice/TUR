@@ -96,6 +96,20 @@ Item {
                 verify(section !== null, "the state has a section named " + name)
                 section.expanded = true
             }
+            // A state that shows a sheet is the picture of the sheet: the
+            // plan of an installation, the removal's question.
+            const sheet = host.sheetOf(data.state)
+            if (sheet !== null) {
+                verify(sheet.opened)
+                wait(50)
+                Testing.Harness.grab(sheet.sheetItem, "")
+                wait(50)
+                const sheetFile = Testing.Harness.outputDir + "/" + data.tag + ".png"
+                const sheetShot = Testing.Harness.grab(sheet.sheetItem, sheetFile)
+                verify(sheetShot.saved, "the picture was saved to " + sheetFile)
+                return
+            }
+
             // The search field has the keyboard, as when the window opens.
             shell.focusSearch()
 

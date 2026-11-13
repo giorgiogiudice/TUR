@@ -1,0 +1,60 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR application catalogue entry. Format: schemas/app-catalogue-entry.schema.json.
+# How entries are written and sourced: catalogue/README.md.
+# TUR has not tested this application. No record means unknown.
+#
+# Offered, not shipped (desktop-experience.md, 17.1, answer 4): Google's
+# terms do not let TUR put Chrome in the image. The application centre
+# offers it to people coming from Windows and installs it per user from
+# Flathub. Flathub's package is maintained by Flathub's volunteers, not by
+# Google; it carries no copy of Chrome: Flatpak downloads Google's own
+# package from dl.google.com at installation, checked against the digest the
+# Flathub manifest pins ("extra data"). TUR bundles nothing from Google.
+
+schema_version = 1
+id = "com.google.chrome"
+name = "Google Chrome"
+aliases = ["Chrome", "Chrome browser"]
+publisher = "Google"
+category = "internet"
+summary = "Google's web browser."
+homepage = "https://www.google.com/chrome/"
+
+[[editions]]
+kind = "flatpak"
+flatpak_id = "com.google.Chrome"
+licence = "proprietary"
+packaging = "community"
+notes = "Flathub's package is maintained by Flathub volunteers and is not verified by Flathub as coming from Google. It does not contain Chrome: at installation, Flatpak downloads Google's Debian package of Chrome from dl.google.com (157.0.8103.78 on the day checked, 147 497 676 bytes) and checks it against the SHA-256 in Flathub's manifest. Google's terms apply to Chrome. Google's own Linux packages are an RPM repository, which on an atomic system would mean layering a system package for every user; the per-user Flatpak is used instead."
+
+[[editions.references]]
+title = "Flathub listing and API: com.google.Chrome, licence LicenseRef-proprietary, not verified; extra data from dl.google.com"
+url = "https://flathub.org/apps/com.google.Chrome"
+checked = "2026-11-13"
+
+[[editions.references]]
+title = "The Flathub manifest of com.google.Chrome (the package, maintained by Flathub volunteers)"
+url = "https://github.com/flathub/com.google.Chrome"
+checked = "2026-11-13"
+
+[[editions]]
+kind = "windows"
+obtain = "publisher-page"
+download_page = "https://www.google.com/chrome/"
+licence = "proprietary"
+
+[[editions.references]]
+title = "Google Chrome download page"
+url = "https://www.google.com/chrome/"
+checked = "2026-11-13"
+
+[[editions]]
+kind = "macos"
+obtain = "publisher-page"
+download_page = "https://www.google.com/chrome/"
+licence = "proprietary"
+
+[[editions.references]]
+title = "Google Chrome download page"
+url = "https://www.google.com/chrome/"
+checked = "2026-11-13"

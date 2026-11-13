@@ -17,18 +17,23 @@ import Tur.Kit as Kit
 // tur-centre:app/<id>, where <id> is the catalogue's identifier. `address`
 // is where the shell is; open() goes to one.
 //
-// Part 1 builds Home, Search and an application's page. The other five views
-// are listed, because the design's structure has seven, and are unavailable
-// until the task that builds each.
+// Part 1 built Home, Search and an application's page; part 2 (D-11) builds
+// Installed, Updates and Sources, with their addresses tur-centre:installed,
+// tur-centre:updates and tur-centre:sources. Categories and Open a file are
+// listed, because the design's structure has seven views, and are
+// unavailable until the task that builds each.
 Kit.Page {
     id: shell
 
     required property Catalogue catalogue
+    // Installing, updating, removing and the sources: tur-apps. Without it
+    // the shell reads and installs nothing.
+    property Apps apps: null
 
     // How long after the last key a search is sent, in milliseconds.
     property int debounce: 250
 
-    // "home", "search" or "application".
+    // "home", "search", "application", "installed", "updates" or "sources".
     property string view: "home"
 
     readonly property bool onApplication: shell.view === "application"
@@ -41,8 +46,13 @@ Kit.Page {
             const query = shell.catalogue.search.query
             return query.length > 0 ? "tur-centre:search?q=" + encodeURIComponent(query) : "tur-centre:search"
         }
+        if (shell.managedViews.indexOf(shell.view) >= 0)
+            return "tur-centre:" + shell.view
         return "tur-centre:home"
     }
+
+    // The views of part 2, which need tur-apps.
+    readonly property var managedViews: ["installed", "updates", "sources"]
 
     readonly property real sideWidth: 204
 
@@ -56,9 +66,9 @@ Kit.Page {
         { view: "home", title: qsTr("Home"), built: true },
         { view: "search", title: qsTr("Search"), built: true },
         { view: "categories", title: qsTr("Categories"), built: false },
-        { view: "installed", title: qsTr("Installed"), built: false },
-        { view: "updates", title: qsTr("Updates"), built: false },
-        { view: "sources", title: qsTr("Sources"), built: false },
+        { view: "installed", title: qsTr("Installed"), built: shell.apps !== null },
+        { view: "updates", title: qsTr("Updates"), built: shell.apps !== null },
+        { view: "sources", title: qsTr("Sources"), built: shell.apps !== null },
         { view: "open-a-file", title: qsTr("Open a file"), built: false }
     ]
 
@@ -85,11 +95,33 @@ Kit.Page {
         shell.view = "application"
     }
 
-    // From an application's page: to the results, if there are any to go
-    // back to, and otherwise to Home.
-    function goBack(): void {
-        shell.view = shell.hasQuery ? "search" : "home"
+    // An application's page, with the plan of installing it: its sheet
+    // opens on the page when the plan is made.
+    function installApplication(applicationId: string): void {
+        shell.showApplication(applicationId)
+        if (shell.apps !== null)
+            shell.apps.plan(applicationId, "")
     }
+
+    // Installed, Updates or Sources. False without tur-apps.
+    function showManaged(name: string): bool {
+        if (shell.apps === null || shell.managedViews.indexOf(name) < 0)
+            return false
+        shell.view = name
+        return true
+    }
+
+    // From an application's page: to Installed or Updates when it was opened
+    // from there; otherwise to the results, if there are any to go back to,
+    // and otherwise to Home.
+    function goBack(): void {
+        shell.view = shell.backTo
+    }
+
+    // Where the way back from an application's page leads.
+    property string openedFrom: "home"
+    readonly property string backTo: shell.managedViews.indexOf(shell.openedFrom) >= 0 ? shell.openedFrom
+                                     : shell.hasQuery ? "search" : "home"
 
     function focusSearch(): void {
         field.forceActiveFocus()
@@ -104,6 +136,9 @@ Kit.Page {
                 shell.showHome()
                 return true
             }
+            const managed = /^tur-centre:(installed|updates|sources)$/.exec(text)
+            if (managed !== null)
+                return shell.showManaged(managed[1])
             const page = /^tur-centre:app\/([^/?#]+)$/.exec(text)
             if (page !== null) {
                 shell.showApplication(decodeURIComponent(page[1]))
@@ -147,7 +182,18 @@ Kit.Page {
     padding: 0
 
     onFocusItemChanged: shell.reveal(shell.focusItem)
-    onViewChanged: flick.contentY = 0
+    onViewChanged: {
+        flick.contentY = 0
+        if (shell.view !== "application")
+            shell.openedFrom = shell.view
+    }
+
+    // What is installed, so that an application's page knows whether to say
+    // "Install" or "Open". The sources are not asked for updates here.
+    Component.onCompleted: {
+        if (shell.apps !== null && shell.apps.installedStatus === Apps.Idle)
+            shell.apps.refresh(false)
+    }
 
     // Typing is searching: the catalogue is asked once the keys pause.
     Timer {
@@ -172,6 +218,36 @@ Kit.Page {
         id: homeView
 
         HomeView {
+            catalogue: shell.catalogue
+            apps: shell.apps
+            onInstallRequested: applicationId => shell.installApplication(applicationId)
+            onApplicationRequested: applicationId => shell.showApplication(applicationId)
+        }
+    }
+
+    Component {
+        id: installedView
+
+        InstalledView {
+            apps: shell.apps
+            onApplicationRequested: applicationId => shell.showApplication(applicationId)
+        }
+    }
+
+    Component {
+        id: updatesView
+
+        UpdatesView {
+            apps: shell.apps
+            onApplicationRequested: applicationId => shell.showApplication(applicationId)
+        }
+    }
+
+    Component {
+        id: sourcesView
+
+        SourcesView {
+            apps: shell.apps
         }
     }
 
@@ -190,6 +266,7 @@ Kit.Page {
 
         ApplicationView {
             application: shell.catalogue.application
+            apps: shell.apps
             onUrlRequested: url => shell.urlRequested(url)
         }
     }
@@ -209,8 +286,12 @@ Kit.Page {
             BackButton {
                 objectName: "shellBack"
                 visible: shell.onApplication
-                text: shell.hasQuery ? qsTr("Results") : qsTr("Home")
-                spokenName: shell.hasQuery ? qsTr("Back to the results") : qsTr("Back to Home")
+                text: shell.backTo === "installed" ? qsTr("Installed")
+                      : shell.backTo === "updates" ? qsTr("Updates")
+                      : shell.backTo === "search" ? qsTr("Results") : qsTr("Home")
+                spokenName: shell.backTo === "installed" ? qsTr("Back to Installed")
+                            : shell.backTo === "updates" ? qsTr("Back to Updates")
+                            : shell.backTo === "search" ? qsTr("Back to the results") : qsTr("Back to Home")
                 onClicked: shell.goBack()
             }
 
@@ -332,8 +413,21 @@ Kit.Page {
                         anchors.right: parent.right
                         anchors.top: parent.top
                         anchors.margins: Kit.Theme.spaceMargin
-                        sourceComponent: shell.view === "application" ? applicationView
-                                         : shell.view === "search" ? searchView : homeView
+                        sourceComponent: {
+                            switch (shell.view) {
+                            case "application":
+                                return applicationView
+                            case "search":
+                                return searchView
+                            case "installed":
+                                return installedView
+                            case "updates":
+                                return updatesView
+                            case "sources":
+                                return sourcesView
+                            }
+                            return homeView
+                        }
                     }
                 }
             }

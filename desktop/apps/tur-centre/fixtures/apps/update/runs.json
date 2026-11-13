@@ -1,0 +1,104 @@
+{
+ "licence": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+ "recorded_by": "desktop/ci/centre-e2e/record.py, in the desktop workflow's job centre-e2e; copied by desktop/apps/tur-centre/fixtures/apps/update.py; do not edit",
+ "run": "43422694076",
+ "scenario": "update",
+ "note": "Chromium B.S.U.: moved back to the earlier commit bee584343a60a7742e6a43e9c70fc31bae3b388bd82339cd7adfca6d7965a93a with flatpak update --commit, then updated by tur-apps.",
+ "invocations": [
+  {
+   "arguments": [
+    "list",
+    "--check-updates",
+    "--json"
+   ],
+   "exit_status": 0,
+   "stderr": "",
+   "stdout": [
+    "{",
+    "  \"applications\": [",
+    "    {",
+    "      \"data\": [",
+    "        \"~/.var/app/net.sourceforge.chromium-bsu\"",
+    "      ],",
+    "      \"from\": \"Flatpak remote flathub\",",
+    "      \"id\": \"net.sourceforge.chromium-bsu\",",
+    "      \"installed_by\": \"tur-apps\",",
+    "      \"name\": \"Chromium B.S.U.\",",
+    "      \"route\": \"flatpak\",",
+    "      \"size\": 6629888,",
+    "      \"state\": \"installed\",",
+    "      \"update\": {",
+    "        \"available\": true,",
+    "        \"checked\": true,",
+    "        \"source\": \"flatpak remote-ls --updates\",",
+    "        \"version\": null",
+    "      },",
+    "      \"version\": \"0.9.16.1\"",
+    "    }",
+    "  ],",
+    "  \"kind\": \"installed\",",
+    "  \"problems\": [],",
+    "  \"schema_version\": 1,",
+    "  \"updates_checked\": true",
+    "}"
+   ],
+   "seconds": 0.5
+  },
+  {
+   "arguments": [
+    "update",
+    "--events",
+    "--",
+    "net.sourceforge.chromium-bsu"
+   ],
+   "exit_status": 0,
+   "stderr": "",
+   "stdout": [
+    "{\"event\":\"step-started\",\"schema_version\":1,\"step\":\"update\",\"text\":\"Updating Chromium B.S.U.\"}",
+    "{\"event\":\"activity\",\"schema_version\":1,\"step\":\"update\",\"text\":\"updating app/net.sourceforge.chromium-bsu/x86_64/stable\"}",
+    "{\"event\":\"step-finished\",\"ok\":true,\"schema_version\":1,\"step\":\"update\"}",
+    "{\"event\":\"result\",\"operation\":\"update\",\"result\":{\"id\":\"net.sourceforge.chromium-bsu\",\"updated\":true,\"version\":\"0.9.16.1\",\"version_before\":\"0.9.16.1\"},\"schema_version\":1}"
+   ],
+   "seconds": 0.9
+  },
+  {
+   "arguments": [
+    "list",
+    "--check-updates",
+    "--json"
+   ],
+   "exit_status": 0,
+   "stderr": "",
+   "stdout": [
+    "{",
+    "  \"applications\": [",
+    "    {",
+    "      \"data\": [",
+    "        \"~/.var/app/net.sourceforge.chromium-bsu\"",
+    "      ],",
+    "      \"from\": \"Flatpak remote flathub\",",
+    "      \"id\": \"net.sourceforge.chromium-bsu\",",
+    "      \"installed_by\": \"tur-apps\",",
+    "      \"name\": \"Chromium B.S.U.\",",
+    "      \"route\": \"flatpak\",",
+    "      \"size\": 6969856,",
+    "      \"state\": \"installed\",",
+    "      \"update\": {",
+    "        \"available\": false,",
+    "        \"checked\": true,",
+    "        \"source\": \"flatpak remote-ls --updates\",",
+    "        \"version\": null",
+    "      },",
+    "      \"version\": \"0.9.16.1\"",
+    "    }",
+    "  ],",
+    "  \"kind\": \"installed\",",
+    "  \"problems\": [],",
+    "  \"schema_version\": 1,",
+    "  \"updates_checked\": true",
+    "}"
+   ],
+   "seconds": 0.5
+  }
+ ]
+}

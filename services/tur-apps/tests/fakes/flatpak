@@ -60,6 +60,10 @@ install)
         echo "Installing runtime/$runtime"
         echo "runtime/$runtime" >> "$state/refs"
     fi
+    if [ -e "$state/slow-install" ]; then
+        # Long enough to be cancelled half-way (tests/cli.rs).
+        sleep 60
+    fi
     if [ -e "$state/fail-install" ]; then
         echo "Error: Failed to install $id: the fake was told to fail" >&2
         exit 1
@@ -92,6 +96,8 @@ list)
 info)
     if [ "$2" = "--show-size" ]; then
         echo 12345
+    elif [ -f "$state/commit" ]; then
+        cat "$state/commit"
     else
         echo "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     fi
@@ -121,6 +127,12 @@ uninstall)
     ;;
 update)
     echo "Updating $3"
+    # An update that moves to another commit, and brings in a runtime.
+    if [ -f "$state/update-to" ]; then cp "$state/update-to" "$state/commit"; fi
+    if [ -f "$state/update-adds" ] && ! grep -qx "$(cat "$state/update-adds")" "$state/refs"; then
+        echo "Installing $(cat "$state/update-adds")"
+        cat "$state/update-adds" >> "$state/refs"
+    fi
     ;;
 remote-ls)
     if [ -f "$state/updates" ]; then cat "$state/updates"; fi

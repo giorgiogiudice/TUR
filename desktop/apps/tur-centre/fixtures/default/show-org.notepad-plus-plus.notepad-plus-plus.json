@@ -1,0 +1,84 @@
+{
+  "licence": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+  "generated_by": "services/tur-catalogue/tests/desktop_fixtures.rs writes this from the output of tur-catalogue for the seed catalogue; do not edit",
+  "invocations": [
+    {
+      "command": "show",
+      "subject": "org.notepad-plus-plus.notepad-plus-plus",
+      "host": "not used",
+      "arguments": ["show", "--json", "--", "org.notepad-plus-plus.notepad-plus-plus"],
+      "exit_status": 0,
+      "stderr": "",
+      "stdout": {
+        "schema_version": 1,
+        "id": "org.notepad-plus-plus.notepad-plus-plus",
+        "entry_kind": "application",
+        "name": "Notepad++",
+        "aliases": [
+          "Notepad Plus Plus",
+          "npp"
+        ],
+        "publisher": "Notepad++ Team",
+        "category": "development",
+        "summary": "Text and source code editor for Windows.",
+        "homepage": "https://notepad-plus-plus.org/",
+        "editions": [
+          {
+            "kind": "windows",
+            "flatpak_id": null,
+            "remote": null,
+            "obtain": "publisher-page",
+            "package": null,
+            "distribution": null,
+            "store_id": null,
+            "download_page": "https://notepad-plus-plus.org/downloads/",
+            "installer": {
+              "url": "https://github.com/notepad-plus-plus/notepad-plus-plus/releases/download/v8.9.9.1/npp.8.9.9.1.Installer.x64.exe",
+              "sha256": "ce3267f5c4e7e42f847e00f4b20234da6150647203033cdde34a69593efc3152",
+              "size": 7048536,
+              "version": "8.9.9.1",
+              "licence": "GPL-3.0-or-later, with the clarifications in the project's LICENSE file",
+              "licence_url": "https://github.com/notepad-plus-plus/notepad-plus-plus/blob/v8.9.9.1/LICENSE",
+              "hash_source": "The digest GitHub publishes for the release asset of notepad-plus-plus v8.9.9.1 (tests/windows-runtime/apps.json)",
+              "checked": "2026-11-12",
+              "portable": false
+            },
+            "stores": [],
+            "url": null,
+            "primary": false,
+            "licence": "open-source",
+            "packaging": null,
+            "requirements": [],
+            "records": [
+              {
+                "route": "wine",
+                "rating": "unknown",
+                "reported_by": "tur-test",
+                "source_name": null,
+                "source_url": null,
+                "source_rating": null,
+                "test_report": "docs/reports/windows-runtime-2.md",
+                "version_tested": "8.9.9.1",
+                "date": "2026-11-12",
+                "notes": "Automated test of the NSIS installer npp.8.9.9.1.Installer.x64.exe and of the portable archive: install, launch, opening a file given on the command line, and uninstall all passed. Wine 9.0 from Ubuntu on a hosted runner, software rendering; not the TUR image. One window and one function were looked at. No rating is entered yet: see docs/reports/apps-1.md."
+              }
+            ],
+            "references": [
+              {
+                "title": "Notepad++ downloads page; links each release on GitHub",
+                "url": "https://notepad-plus-plus.org/downloads/",
+                "checked": "2026-11-12"
+              },
+              {
+                "title": "Notepad++ licence at tag v8.9.9.1: GPL-3.0-or-later",
+                "url": "https://github.com/notepad-plus-plus/notepad-plus-plus/blob/v8.9.9.1/LICENSE",
+                "checked": "2026-11-12"
+              }
+            ],
+            "notes": "Windows only. The publisher's downloads page links to the project's GitHub releases, where the installer below is published with its digest."
+          }
+        ]
+      }
+    }
+  ]
+}

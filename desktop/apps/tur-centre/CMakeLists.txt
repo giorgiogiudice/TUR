@@ -24,6 +24,17 @@ set(centre_qml
     qml/BackButton.qml
     qml/AppTile.qml
     qml/FailureMessage.qml
+    qml/RouterWords.qml
+    qml/ChoiceRow.qml
+    qml/InstallSheet.qml
+    qml/RemoveSheet.qml
+    qml/InstallerDialog.qml
+    qml/OperationBlock.qml
+    qml/OnThisComputer.qml
+    qml/InstalledRow.qml
+    qml/InstalledView.qml
+    qml/UpdatesView.qml
+    qml/SourcesView.qml
 )
 
 # The sources are in qml/; the module is flat, so that every type sees every
@@ -32,7 +43,7 @@ foreach(file IN LISTS centre_qml)
     get_filename_component(name ${file} NAME)
     set_source_files_properties(${file} PROPERTIES QT_RESOURCE_ALIAS ${name})
 endforeach()
-set_source_files_properties(qml/Words.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
+set_source_files_properties(qml/Words.qml qml/RouterWords.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 
 # NO_CACHEGEN: no ahead-of-time compilation of QML to C++ (desktop/README.md).
 qt_add_qml_module(turcentre
@@ -53,6 +64,14 @@ qt_add_qml_module(turcentre
         src/hitsmodel.cpp
         src/catalogue.h
         src/catalogue.cpp
+        src/appssource.h
+        src/appssource.cpp
+        src/appsprocess.h
+        src/appsprocess.cpp
+        src/appsfixture.h
+        src/appsfixture.cpp
+        src/apps.h
+        src/apps.cpp
     QML_FILES ${centre_qml}
 )
 target_include_directories(turcentre PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -78,6 +97,26 @@ add_test(NAME centre-starts-on-no-route
 # Without a catalogue program it still starts, and says what is wrong.
 add_test(NAME centre-starts-without-the-catalogue
     COMMAND tur-centre --standalone --check --catalogue-program /nonexistent/tur-catalogue tur-centre:search?q=office)
+# Installed, Updates and Sources, on recorded runs of tur-apps; and with no
+# tur-apps at all.
+add_test(NAME centre-starts-on-installed
+    COMMAND tur-centre --standalone --check --fixture ${centre_fixtures}/default
+            --apps-fixture ${centre_fixtures}/apps/remove tur-centre:installed)
+add_test(NAME centre-starts-on-updates
+    COMMAND tur-centre --standalone --check --fixture ${centre_fixtures}/default
+            --apps-fixture ${centre_fixtures}/apps/update tur-centre:updates)
+add_test(NAME centre-starts-on-sources
+    COMMAND tur-centre --standalone --check --fixture ${centre_fixtures}/default
+            --apps-fixture ${centre_fixtures}/apps/sources tur-centre:sources)
+add_test(NAME centre-starts-without-tur-apps
+    COMMAND tur-centre --standalone --check --fixture ${centre_fixtures}/default
+            --apps-program /nonexistent/tur-apps tur-centre:installed)
+set_tests_properties(
+    centre-starts-on-installed
+    centre-starts-on-updates
+    centre-starts-on-sources
+    centre-starts-without-tur-apps
+    PROPERTIES ENVIRONMENT "${TUR_TEST_ENVIRONMENT}" TIMEOUT 120)
 set_tests_properties(
     centre-starts
     centre-starts-on-a-search

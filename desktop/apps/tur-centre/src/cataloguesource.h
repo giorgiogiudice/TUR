@@ -24,13 +24,20 @@ struct CatalogueRequest
         Search, // subject: what the person typed
         Show,   // subject: an application's identifier
         Route,  // subject: an application's identifier
+        // No subject: the catalogue's counts (`validate --json`), from which
+        // Home learns whether TUR has rated any application itself.
+        Validate,
     };
 
     Command command = Search;
     QString subject;
 
-    // "search", "show" or "route": the subcommand of tur-catalogue.
+    // "search", "show", "route" or "validate": the subcommand of
+    // tur-catalogue.
     QString commandName() const;
+
+    // Whether the question has a subject. Only Validate has none.
+    bool hasSubject() const { return command != Validate; }
 };
 
 // One answer: what the program printed and how it ended, or why there is no

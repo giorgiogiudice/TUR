@@ -93,6 +93,12 @@ const SETS: [Set; 2] = [
             "org.kde.krita",
             "tur.class.android-banking",
             "com.bandainamco.eldenring",
+            // Installing (D-11): the Flatpak the end-to-end test installs,
+            // Chrome offered to people coming from Windows, and a Windows
+            // application whose installer TUR can download.
+            "net.sourceforge.chromium-bsu",
+            "com.google.chrome",
+            "org.notepad-plus-plus.notepad-plus-plus",
         ],
         unknown: &["org.example.missing"],
     },
@@ -201,6 +207,32 @@ fn invoke(command: &'static str, subject: &str, host_file: Option<&str>) -> Invo
         exit_status: output.status.code().unwrap(),
         stdout,
         stderr,
+    }
+}
+
+/// Runs `tur-catalogue validate --json` against the seed catalogue: the
+/// counts the application centre's Home view reads, to say whether TUR has
+/// rated any application itself (desktop-experience.md, 8.1).
+fn invoke_validate() -> Invocation {
+    let arguments = vec!["validate".to_owned(), "--json".to_owned()];
+    let seed = repository_root().join("catalogue");
+    let output = Command::new(env!("CARGO_BIN_EXE_tur-catalogue"))
+        .arg("--catalogue")
+        .arg(&seed)
+        .args(&arguments)
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let parsed: Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(parsed["valid"], true, "{stdout}");
+    Invocation {
+        command: "validate",
+        subject: String::new(),
+        host: "not used",
+        arguments,
+        exit_status: output.status.code().unwrap(),
+        stdout,
+        stderr: String::from_utf8(output.stderr).unwrap(),
     }
 }
 
@@ -430,7 +462,10 @@ fn vocabulary() -> String {
         ("alternative_text_ids", text_ids(&ALTERNATIVE_TEXT_IDS)),
         ("routes", names_of(&Route::ALL)),
         ("ratings", names_of(&Rating::ALL)),
-        ("reporters", names_of(&Reporter::ALL)),
+        // Every reporter: the application centre names a record of TUR's
+        // compatibility autopilot ("Works with these settings") in its
+        // "All reports" list, although such a record never rates a route.
+        ("reporters", names_of(&Reporter::EVERY)),
         ("rating_source_kinds", names_of(&rating_sources)),
         ("outlooks", names_of(&outlooks)),
         ("severities", names_of(&severities)),
@@ -465,6 +500,11 @@ fn expected_files() -> BTreeMap<String, String> {
             .host
             .map(|facts| scratch.file(&format!("{}/host-facts.json", set.directory), facts));
         let host_file = host_file.as_deref();
+
+        files.insert(
+            format!("{}/validate.json", set.directory),
+            document(&[invoke_validate()]),
+        );
 
         let mut applications: BTreeSet<String> =
             set.applications.iter().map(|id| (*id).to_owned()).collect();
@@ -681,11 +721,13 @@ fn a_fixture_file_keeps_the_router_s_text_and_carries_the_licence_identifier() {
 /// The application centre's Home view carries one standing sentence "for as
 /// long as it is true": "TUR has not tested applications itself yet. Every
 /// rating here is what the named source reports." (desktop-experience.md,
-/// section 8.1). `tur-centre` shows it unconditionally, because the router's
-/// JSON does not say whether a record is TUR's own. When the catalogue gains
-/// its first TUR test this fails, and the sentence must become conditional.
+/// section 8.1). `tur-centre` shows it only while `tur-catalogue validate
+/// --json` counts no rating from TUR's own tests (task D-11). Its recorded
+/// answer must be the catalogue's count, so that the pictures of Home say
+/// what is true of the seed catalogue.
 #[test]
-fn the_home_view_s_standing_sentence_is_still_true() {
+fn the_home_view_reads_whether_tur_has_rated_anything() {
+    let recorded: Value = serde_json::from_str(&invoke_validate().stdout).unwrap();
     let directory = repository_root().join("catalogue");
     let catalogue = match Catalogue::load(&directory, Date::today_utc()) {
         Ok(catalogue) => catalogue,
@@ -695,8 +737,8 @@ fn the_home_view_s_standing_sentence_is_still_true() {
         }
     };
     assert_eq!(
-        catalogue.statistics().rated_by_tur_tests,
-        0,
-        "the catalogue now holds a rating from TUR's own test: tur-centre's Home view must stop saying that TUR has tested nothing (desktop/apps/tur-centre/qml/HomeView.qml)"
+        recorded["statistics"]["rated_by_tur_tests"].as_u64(),
+        Some(catalogue.statistics().rated_by_tur_tests as u64),
+        "validate --json gives the count the application centre's Home view decides on"
     );
 }

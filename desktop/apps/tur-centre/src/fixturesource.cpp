@@ -72,6 +72,8 @@ void FixtureSource::load()
                 recorded.request.command = CatalogueRequest::Show;
             else if (command == QLatin1String("route"))
                 recorded.request.command = CatalogueRequest::Route;
+            else if (command == QLatin1String("validate"))
+                recorded.request.command = CatalogueRequest::Validate;
             else
                 return refuse(QStringLiteral("an invocation has the command \"%1\".").arg(command));
             if (!subject.isString() || !status.isDouble() || !(output.isObject() || output.isNull()))
@@ -129,11 +131,12 @@ void FixtureSource::deliver(quint64 id, const CatalogueRequest &request)
         return;
 
     CatalogueReply reply;
-    const QStringList asked { request.commandName(), QStringLiteral("--json"), QStringLiteral("--"),
-                              request.subject };
+    QStringList asked { request.commandName(), QStringLiteral("--json") };
+    if (request.hasSubject())
+        asked << QStringLiteral("--") << request.subject;
     reply.commandLine = ProcessSource::commandLine(QStringLiteral("tur-catalogue"), asked);
 
-    if (!isUsableSubject(request.subject)) {
+    if (request.hasSubject() && !isUsableSubject(request.subject)) {
         reply.failure = CatalogueReply::Refused;
     } else if (!m_problem.isEmpty()) {
         reply.failure = CatalogueReply::NotRecorded;

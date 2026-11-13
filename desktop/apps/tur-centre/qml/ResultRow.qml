@@ -144,7 +144,7 @@ Item {
                         required property var modelData
 
                         Layout.fillWidth: true
-                        text: modelData.text
+                        text: RouterWords.prerequisite(modelData)
                         kind: Kit.Label.Small
                         paragraph: true
                     }

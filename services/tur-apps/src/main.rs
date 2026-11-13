@@ -200,6 +200,11 @@ fn run(cli: Cli) -> u8 {
             events,
         } => {
             let mut emitter = Emitter::stdout(events);
+            if events {
+                // The application centre cancels by writing "cancel" here
+                // (src/cancel.rs says where it is honoured).
+                tur_apps::cancel::listen_on_stdin();
+            }
             let request = match parse_route(route.as_deref()) {
                 Ok(route) => Request {
                     id,
