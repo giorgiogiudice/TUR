@@ -73,4 +73,131 @@ NEXT SAFE ACTION
 - Image owner: install the program and its files (tur-pax-ui.md, section 9).
 ```
 
-RESULTS-PENDING
+## What it looks like
+
+Pictures from the `screenshots` job (the references in
+`desktop/tests/screenshots/paxui-*`, 29 states, dark and light), drawn against
+the stand-in for `org.tur.Agent1`, which answers with what the real service
+said in CI: every word in them that is not tur-pax-ui's own is the service's
+or the scripted model's. Each picture was looked at.
+
+| | |
+|---|---|
+| ![Ask bar](assets/desktop-6/paxui-ask-dark-ltr-1x.png) | **The ask bar**, P@x on: the field, Send, "Speaking to P@x is coming later", and P@x's keys from `commands.json` |
+| ![P@x is off](assets/desktop-6/paxui-off-light-ltr-1x.png) | **P@x is off** (9.1's card, as the bar shows it): "Set up P@x" and "Not now" |
+| ![A task running](assets/desktop-6/paxui-running-light-ltr-1x.png) | **A task running**: P@x's words, the first step done with its decision and the "Data" mark, the second step running; Stop with Meta+Esc, and Pause |
+| ![A task done, details open](assets/desktop-6/paxui-done-details-dark-ltr-1x.png) | **A task done**: two steps, the answer, the summary with its tokens |
+| ![A refused step](assets/desktop-6/paxui-refused-light-ltr-1x.png) | **A refused step**: the class 2 step refused, with the service's reason in its words |
+| ![Stopped](assets/desktop-6/paxui-stopped-dark-ltr-1x.png) | **Stopped while its sandboxed command ran**: the step "Stopped before it ended", the system's card with `TUR-AI-TASK-003`; the keyboard back in the field |
+| ![Spending limit](assets/desktop-6/paxui-limit-dark-ltr-1x.png) | **The day's limit reached**: one card, the system's, with `TUR-AI-SPEND-001`; the header's day in warning colour; the model's price unknown, so tokens |
+| ![Activity](assets/desktop-6/paxui-activity-open-light-ltr-1x.png) | **What P@x did**: the recorded activity, a task opened to its decisions |
+| ![Local models](assets/desktop-6/paxui-setup-local-dark-ltr-1x.png) | **Setup, local AI**: tiers (runs well, slow), sizes, the restricting licence, the best fit |
+| ![Providers](assets/desktop-6/paxui-setup-provider-light-ltr-1x.png) | **Setup, providers**: every preset alphabetically; DeepSeek's terms as TUR read them; "not reviewed by TUR" for the others; services on this computer apart |
+| ![Download](assets/desktop-6/paxui-setup-download-dark-ltr-1x.png) | **Setup, making a model ready**: local AI's real figures, with Cancel |
+| ![Settings refused](assets/desktop-6/paxui-setup-settings-refused-light-ltr-1x.png) | **Setup, how the model answers**: only what GPT-6 Luna takes; the service's refusal of a temperature while it reasons, in its words |
+| ![Consent](assets/desktop-6/paxui-setup-consent-dark-ltr-1x.png) | **Setup, what will be sent**: the service's text, version 2; "Switch P@x on" unavailable until the box is ticked |
+
+## What proves it
+
+| Claim | Test | Result |
+|---|---|---|
+| The client's methods are the interface's, type for type | `tst_paxui_client` against `services/tur-pax/interfaces/org.tur.Agent1.xml` | pass |
+| Presence; parsed replies; refusals as codes and the service's sentence; signals drive the conversation | `tst_paxui_client`, on a private bus with the stand-in | pass |
+| A key reaches the service and stays nowhere in the client | `tst_paxui_client` (every property read back), `tst_setup` (the field is emptied; the stand-in notes only the length) | pass |
+| The stop key stops a running task and never starts P@x's service | `tst_paxui_client` (`tur-pax-ui --stop`, with an activation file the bus could use) | pass |
+| Streaming in order, one row at a time; a refused step with its reason and code; stop mid-step; the day's limit said once | `tst_paxui_conversation` (recorded signals), `tst_conversation.qml` (the panel), end to end (the real service) | RESULT-PENDING |
+| Consent with its version; local tiers, sizes, licences; download progress and cancel; provider terms; settings validation and the service's refusal; limits | `tst_setup.qml` | RESULT-PENDING |
+| Contrast in both variants; gold only inside P@x's marks; keyboard and accessible names in both directions; no clipped text at 200 % and right-to-left long | `tst_walks.qml`, 29 states | RESULT-PENDING |
+| The program loads every view with no QML warning, with no session bus | `pax-ui-starts-*` | pass |
+| The keys in the desktop file are `commands.json`'s | `gen_commands.py --check` and `--self-test` (`boundary` job) | pass |
+| The fixture is what the service says | `e2e.py record` (`pax-ui-end-to-end`) | RESULT-PENDING |
+| Against the real `tur-pax serve`: asked, steps streamed, stopped within 2 s, the command killed | `e2e.py ui` + `e2e_ask_stop.qml` | RESULT-PENDING |
+
+## What CI found on the way
+
+1. `conversation.h` held a `QPointer` to a forward-declared class: the only
+   compile error of the first build (run 43420786400); everything else built
+   with warnings as errors, and qmllint had nothing to say from the first run.
+2. The first end-to-end run could not reach the service from the builder
+   container: `busctl` from the container got "Access denied". Docker
+   confines the container with its AppArmor profile, and a dbus-daemon with
+   AppArmor mediation refuses such a peer. The test's bus now has
+   `<apparmor mode="disabled"/>`; the service still checks the caller's user
+   (run 43424271552, `e2e-probe.txt`).
+3. The recording differed between runs by one late `StateChanged` of the
+   previous task; a recorded task now runs from its `TaskStarted` to its
+   `TaskFinished`.
+4. The first task of the end-to-end test can start and end between two looks
+   of the test (50 ms); the test now follows the rows as they come instead.
+5. Qt Quick's software renderer left pictures of scrolled shapes behind in
+   the first screenshots (flames and ticks in the header); the pictures are
+   now taken with nothing scrolled. Not seen with the scene as it is shown.
+6. Stop, once hidden at the end of a task, kept the keyboard; the field now
+   takes it.
+
+## Licence placement
+
+All of tur-pax-ui is the project's own, side A: a `QGuiApplication` on
+`Tur.Kit` and `Tur.Kit.Pax`, linking Qt (LGPL-3.0) and, by the program only,
+LayerShellQt (LGPL-2.1/3.0, read at Plasma 6.8.2). `boundary.py` passes on the
+sources and on what the binaries link.
+
+## Decisions the owner may want to reverse
+
+Listed with reasons in [tur-pax-ui.md](../architecture/tur-pax-ui.md),
+section 11: every provider in setup, not three; local AI as its own way in;
+consent last; Meta+Esc bound now by the desktop file; the new
+`org.tur.PaxUi1` (Show, Hide) without an ADR; Stop in blue; setup as an
+ordinary window; the window may start the service when opened.
+
+## What the service lacked
+
+[tur-pax-ui.md](../architecture/tur-pax-ui.md), section 10: a running task's
+cost is not streamed (the panel shows the day's change since the task
+started); what a tool returned is not on the interface (only its size); no
+"Check the key"; no "Allow another 1.00 USD"; no guide mode; no request words
+in the activity; no code on a `TextAdded` notice.
+
+## Not verified
+
+- tur-pax-ui under KWin and on the image: the layer-shell surface, its
+  anchors and keyboard, and the panel's height.
+- That Meta+Space, Meta+Esc and Meta+/ are free in Plasma 6.8's defaults,
+  and that KDE's shortcut service binds a desktop action's key.
+- Any real model or provider; KWallet; dbus-broker.
+- A screen reader on the real program (the walks read Qt's accessibility
+  interfaces, not AT-SPI).
+
+## Follow-ups
+
+1. Install tur-pax-ui and its files in the image with the other desktop
+   programs (issue #59; tur-pax-ui.md, section 9), and an `org.tur.Pax` icon.
+2. Run tur-pax-ui in the compositor job (layer shell, keys).
+3. On `tur-pax`: a task's running cost, the tool output's text (withheld
+   parts removed), "Check the key", a code on notices.
+4. D-18 (approval sheet) and D-19 (P@x's settings pages) build on
+   `AgentClient` and `Conversation`.
+5. `desktop/apps/README.md` still names the directory `pax-ui/`; it is
+   `tur-pax-ui/` (not this task's file).
+
+## Proposed text for desktop-experience.md (not edited)
+
+- **9.2, Implementation**, add: "Built in task D-17
+  ([tur-pax-ui.md](tur-pax-ui.md)). The ask bar and the panel are one
+  layer-shell surface; the setup is an ordinary window. A step's output is
+  marked as data on its line, because the service sends its size and not its
+  text. The cost shown while a task runs is the day's change since it
+  started."
+- **9.12**, replace the second paragraph of screen 2 with: "Every provider of
+  the model list, companies in alphabetical order and services on this
+  computer apart, each with its data terms as TUR read them or 'not reviewed
+  by TUR'; local AI is offered before them, as a way of its own." Add after
+  screen 3: "Built with the consent screen last, after the key and the
+  limits, so that nothing is switched on before the last screen."
+- **9.1**, in the row "Keyboard", add: "Bound by tur-pax-ui's desktop file,
+  with the stop key (`--stop`) and the keys list (`--show-keys`) as its
+  actions; each checked against commands.json."
+
+## CI runs
+
+RUNS-PENDING
