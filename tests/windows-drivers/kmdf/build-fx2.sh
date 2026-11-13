@@ -93,8 +93,8 @@ link_driver() { # name objects...
         grep -E 'undefined symbol|error' "${work}/logs/${name}-link.log" | head -n 30 | sed 's/^/    /' | tee -a "${summary}"
     fi
 }
-compile() { # source object log -> 0/1
-    if "${cc[@]}" "${cflags[@]}" -c -o "$2" "$1" >"$3" 2>&1; then
+compile() { # source object log [extra flags...] -> 0/1
+    if "${cc[@]}" "${cflags[@]}" "${@:4}" -c -o "$2" "$1" >"$3" 2>&1; then
         return 0
     fi
     note "compile $(basename "$1"): FAILED, $(grep -c 'error:' "$3") errors; first:"
@@ -122,7 +122,11 @@ if [ -d "${sample}/driver" ]; then
     objs=()
     for src in "${sample}"/driver/*.c; do
         name="$(basename "${src}" .c)"
-        if compile "${src}" "${work}/obj/fx2-${name}.o" "${work}/logs/fx2-${name}.log"; then
+        # DBG=1 in driver.c only: its TraceEvents (used when WPP is off) then
+        # prints with DbgPrint, so the log shows the sample's own steps.
+        extra=()
+        [ "${name}" = driver ] && extra=(-DDBG=1)
+        if compile "${src}" "${work}/obj/fx2-${name}.o" "${work}/logs/fx2-${name}.log" "${extra[@]}"; then
             note "compile kmdf_fx2 ${name}.c: ok"
             objs+=("${work}/obj/fx2-${name}.o")
         else

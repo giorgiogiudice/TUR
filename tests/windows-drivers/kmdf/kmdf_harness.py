@@ -144,7 +144,7 @@ class Kmdf:
         sc.check("client-image-loaded", bool(first(r"TUR fxstub: binding")),
                  first(r"TUR fxstub: binding") or "the KMDF stub's first message is not in the log "
                  + (first(r"err:module:import_dll.*" + stem) or first(r"Failed to load driver.*" + stem)))
-        sc.check("wdfldr-loaded", bool(first(r"[Ll]oaded.*wdfldr\.sys")), first(r"[Ll]oaded.*wdfldr\.sys"))
+        sc.check("wdfldr-loaded", bool(first(r"(?i)loaded.*wdfldr\.sys")), first(r"(?i)loaded.*wdfldr\.sys"))
         sc.check("framework-library-loaded", bool(first(r"[Ll]oaded.*Wdf01000\.sys")) or
                  bool(first(r"wdfldr:.*WdfRegisterLibrary")), first(r"[Ll]oaded.*Wdf01000\.sys")
                  or first(r"wdfldr:.*ZwLoadDriver") or first(r"wdfldr:.*err") or "not loaded")
@@ -271,11 +271,16 @@ def s_fx2(h, k: Kmdf, fx2_log: pathlib.Path | None) -> None:
                  f"{[l for l in seen if 'set-7segment' in l][:2]}")
     h.wine(sc, "twdinst-devices", [str(k.build / "twdinst.exe"), "devices"], twd.DEBUG_QUIET)
     logs = k.common_checks(sc, "osrusbfx2")
-    for step, pattern in (("DriverEntry", r"OsrFxEvtDeviceAdd|DriverEntry"),
-                          ("EvtDevicePrepareHardware", r"PrepareHardware|SelectInterfaces"),
-                          ("EvtDeviceD0Entry", r"D0Entry")):
-        hit = next((l.strip() for l in logs.splitlines() if re.search(pattern, l) and "osrusbfx2" in l.lower()
-                    or re.search("OsrFx.*" + pattern, l)), "")
+    # The sample's own TraceEvents lines ("OSRUSBFX2 ..."; driver.c is built
+    # with DBG=1), in the order a start reaches them.
+    for step, pattern in (("DriverEntry", r"OSRUSBFX2 Driver Sample"),
+                          ("EvtDriverDeviceAdd", r"--> OsrFxEvtDeviceAdd"),
+                          ("EvtDevicePrepareHardware", r"--> EvtDevicePrepareHardware"),
+                          ("SelectInterfaces", r"BulkInput Pipe is"),
+                          ("EvtDeviceD0Entry", r"-->OsrFxEvtEvtDeviceD0Entry"),
+                          ("interrupt-read", r"InterruptPipeReadComplete SwitchState"),
+                          ("EvtIoDeviceControl", r"--> OsrFxEvtIoDeviceControl")):
+        hit = next((l.strip() for l in logs.splitlines() if "OSRUSBFX2" in l and re.search(pattern, l)), "")
         sc.check(f"sample-step:{step}", bool(hit), hit[:300])
     h.kill(sc)
     h.revoke(g["node"])

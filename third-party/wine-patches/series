@@ -10,3 +10,4 @@
 0008-wineusb.sys-Handle-power-IRPs.patch
 0009-ntoskrnl.exe-Add-power-framework-functions-that-repo.patch
 0010-ntoskrnl.exe-Add-more-functions-the-KMDF-runtime-imp.patch
+0011-ntoskrnl.exe-Implement-the-remaining-stubs-the-KMDF-.patch

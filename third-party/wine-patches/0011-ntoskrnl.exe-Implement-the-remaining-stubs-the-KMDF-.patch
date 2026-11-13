@@ -1,0 +1,365 @@
+SPDX-License-Identifier: LGPL-2.1-or-later
+A patch to Wine (https://gitlab.winehq.org/wine/wine), under Wine's licence;
+see README.md and COPYING.LIB in this directory. Applied with `git apply`,
+which ignores these lines.
+
+From 21b39d39c8f6d446ff11006bc45c335480da89f6 Mon Sep 17 00:00:00 2001
+From: TUR experiment <tur-experiment@users.noreply.github.com>
+Date: Fri, 13 Nov 2026 11:05:58 +0300
+Subject: [PATCH 11/11] ntoskrnl.exe: Implement the remaining stubs the KMDF
+ runtime imports.
+
+MmIsDriverVerifying returns FALSE (no Driver Verifier), as Windows does
+without it; the KMDF runtime calls it from WdfDriverCreate.  Also
+MmSizeOfMdl, IoBuildPartialMdl, IoSetCompletionRoutineEx,
+KeGetRecommendedSharedDataAlignment, MmLockPagable{Data,Image}Section,
+IoFreeErrorLogEntry, IoWriteErrorLogEntry, IoWMIWriteEvent (fails),
+WmiTraceMessageVa, IoInvalidateDeviceState, IoRequestDeviceEject,
+IoRegisterLastChanceShutdownNotification, IoGetDmaAdapter (no adapters),
+KeSynchronizeExecution and the interrupt spin lock functions (interrupt
+objects are never connected), and the KdDebuggerNotPresent variable.
+---
+ dlls/ntoskrnl.exe/ntoskrnl.c        | 172 ++++++++++++++++++++++++++++
+ dlls/ntoskrnl.exe/ntoskrnl.exe.spec |  38 +++---
+ 2 files changed, 191 insertions(+), 19 deletions(-)
+
+diff --git a/dlls/ntoskrnl.exe/ntoskrnl.c b/dlls/ntoskrnl.exe/ntoskrnl.c
+index dc45103..f77f75a 100644
+--- a/dlls/ntoskrnl.exe/ntoskrnl.c
++++ b/dlls/ntoskrnl.exe/ntoskrnl.c
+@@ -36,6 +36,7 @@ WINE_DEFAULT_DEBUG_CHANNEL(ntoskrnl);
+ WINE_DECLARE_DEBUG_CHANNEL(relay);
+ 
+ BOOLEAN KdDebuggerEnabled = FALSE;
++BOOLEAN KdDebuggerNotPresent = TRUE;
+ ULONG InitSafeBootMode = 0;
+ USHORT NtBuildNumber = 0;
+ 
+@@ -4271,6 +4272,177 @@ void WINAPI VfCheckNxPoolType( POOL_TYPE type, void *caller, ULONG tag )
+     TRACE( "%u, %p, %#lx\n", type, caller, tag );
+ }
+ 
++/*****************************************************
++ *           MmIsDriverVerifying    (NTOSKRNL.EXE.@)
++ *
++ * There is no Driver Verifier; Windows returns FALSE when it is off.
++ */
++ULONG WINAPI MmIsDriverVerifying( DRIVER_OBJECT *driver )
++{
++    TRACE( "%p\n", driver );
++    return FALSE;
++}
++
++/*****************************************************
++ *           MmSizeOfMdl    (NTOSKRNL.EXE.@)
++ */
++SIZE_T WINAPI MmSizeOfMdl( void *base, SIZE_T length )
++{
++    TRACE( "%p, %Iu\n", base, length );
++    return sizeof(MDL) + sizeof(PFN_NUMBER) * ADDRESS_AND_SIZE_TO_SPAN_PAGES( base, length );
++}
++
++/*****************************************************
++ *           IoBuildPartialMdl    (NTOSKRNL.EXE.@)
++ *
++ * Wine's MDLs describe ordinary process memory, so a partial MDL is the
++ * same range described afresh.
++ */
++void WINAPI IoBuildPartialMdl( MDL *source, MDL *target, void *va, ULONG length )
++{
++    TRACE( "%p, %p, %p, %lu\n", source, target, va, length );
++    if (!length) length = source->ByteCount - (ULONG)((char *)va - ((char *)source->StartVa + source->ByteOffset));
++    MmInitializeMdl( target, va, length );
++    target->MdlFlags |= MDL_PARTIAL | (source->MdlFlags & (MDL_PAGES_LOCKED | MDL_SOURCE_IS_NONPAGED_POOL));
++    if (source->MdlFlags & MDL_SOURCE_IS_NONPAGED_POOL) target->MappedSystemVa = va;
++}
++
++/*****************************************************
++ *           IoSetCompletionRoutineEx    (NTOSKRNL.EXE.@)
++ */
++NTSTATUS WINAPI IoSetCompletionRoutineEx( DEVICE_OBJECT *device, IRP *irp, PIO_COMPLETION_ROUTINE routine,
++                                          void *context, BOOLEAN success, BOOLEAN error, BOOLEAN cancel )
++{
++    TRACE( "%p, %p, %p, %p\n", device, irp, routine, context );
++    IoSetCompletionRoutine( irp, routine, context, success, error, cancel );
++    return STATUS_SUCCESS;
++}
++
++/*****************************************************
++ *           KeGetRecommendedSharedDataAlignment    (NTOSKRNL.EXE.@)
++ */
++ULONG WINAPI KeGetRecommendedSharedDataAlignment(void)
++{
++    return 64;
++}
++
++/*****************************************************
++ *           MmLockPagableDataSection    (NTOSKRNL.EXE.@)
++ */
++void * WINAPI MmLockPagableDataSection( void *address )
++{
++    TRACE( "%p\n", address );
++    return address;
++}
++
++/*****************************************************
++ *           MmLockPagableImageSection    (NTOSKRNL.EXE.@)
++ */
++void * WINAPI MmLockPagableImageSection( void *address )
++{
++    TRACE( "%p\n", address );
++    return address;
++}
++
++/*****************************************************
++ *           IoFreeErrorLogEntry    (NTOSKRNL.EXE.@)
++ */
++void WINAPI IoFreeErrorLogEntry( void *entry )
++{
++    TRACE( "%p\n", entry );
++}
++
++/*****************************************************
++ *           IoWriteErrorLogEntry    (NTOSKRNL.EXE.@)
++ */
++void WINAPI IoWriteErrorLogEntry( void *entry )
++{
++    FIXME( "%p: no system event log\n", entry );
++}
++
++/*****************************************************
++ *           IoWMIWriteEvent    (NTOSKRNL.EXE.@)
++ */
++NTSTATUS WINAPI IoWMIWriteEvent( void *event )
++{
++    FIXME( "%p: no WMI\n", event );
++    return STATUS_UNSUCCESSFUL;
++}
++
++/*****************************************************
++ *           WmiTraceMessageVa    (NTOSKRNL.EXE.@)
++ */
++NTSTATUS WINAPI WmiTraceMessageVa( ULONG64 logger, ULONG flags, const GUID *guid, USHORT number, void *args )
++{
++    TRACE( "%s, %#lx, %s, %u\n", wine_dbgstr_longlong(logger), flags, debugstr_guid(guid), number );
++    return STATUS_SUCCESS;
++}
++
++/*****************************************************
++ *           IoInvalidateDeviceState    (NTOSKRNL.EXE.@)
++ */
++void WINAPI IoInvalidateDeviceState( DEVICE_OBJECT *device )
++{
++    FIXME( "%p: stub\n", device );
++}
++
++/*****************************************************
++ *           IoRequestDeviceEject    (NTOSKRNL.EXE.@)
++ */
++void WINAPI IoRequestDeviceEject( DEVICE_OBJECT *device )
++{
++    FIXME( "%p: stub\n", device );
++}
++
++/*****************************************************
++ *           IoRegisterLastChanceShutdownNotification    (NTOSKRNL.EXE.@)
++ */
++NTSTATUS WINAPI IoRegisterLastChanceShutdownNotification( DEVICE_OBJECT *device )
++{
++    FIXME( "%p: stub\n", device );
++    return STATUS_SUCCESS;
++}
++
++/*****************************************************
++ *           IoGetDmaAdapter    (NTOSKRNL.EXE.@)
++ *
++ * No DMA adapters: USB and software drivers do not use them.
++ */
++void * WINAPI IoGetDmaAdapter( DEVICE_OBJECT *device, void *description, ULONG *map_registers )
++{
++    FIXME( "%p, %p, %p: no DMA adapters\n", device, description, map_registers );
++    return NULL;
++}
++
++/*****************************************************
++ *           KeSynchronizeExecution    (NTOSKRNL.EXE.@)
++ *
++ * Interrupt objects are never connected, so there is no interrupt to
++ * synchronise with.
++ */
++BOOLEAN WINAPI KeSynchronizeExecution( void *interrupt, BOOLEAN (WINAPI *routine)(void *), void *context )
++{
++    TRACE( "%p, %p, %p\n", interrupt, routine, context );
++    return routine( context );
++}
++
++/*****************************************************
++ *           KeAcquireInterruptSpinLock    (NTOSKRNL.EXE.@)
++ */
++KIRQL WINAPI KeAcquireInterruptSpinLock( void *interrupt )
++{
++    TRACE( "%p\n", interrupt );
++    return 0;  /* PASSIVE_LEVEL */
++}
++
++/*****************************************************
++ *           KeReleaseInterruptSpinLock    (NTOSKRNL.EXE.@)
++ */
++void WINAPI KeReleaseInterruptSpinLock( void *interrupt, KIRQL irql )
++{
++    TRACE( "%p, %u\n", interrupt, irql );
++}
++
+ /*****************************************************
+  *           IoCsqInitialize  (NTOSKRNL.EXE.@)
+  */
+diff --git a/dlls/ntoskrnl.exe/ntoskrnl.exe.spec b/dlls/ntoskrnl.exe/ntoskrnl.exe.spec
+index ea91b35..b6a1035 100644
+--- a/dlls/ntoskrnl.exe/ntoskrnl.exe.spec
++++ b/dlls/ntoskrnl.exe/ntoskrnl.exe.spec
+@@ -346,7 +346,7 @@
+ @ stub IoAttachDeviceToDeviceStackSafe
+ @ stdcall IoBuildAsynchronousFsdRequest(long ptr ptr long ptr ptr)
+ @ stdcall IoBuildDeviceIoControlRequest(long ptr ptr long ptr long long ptr ptr)
+-@ stub IoBuildPartialMdl
++@ stdcall IoBuildPartialMdl(ptr ptr ptr long)
+ @ stdcall IoBuildSynchronousFsdRequest(long ptr ptr long ptr ptr ptr)
+ @ stdcall IoCallDriver(ptr ptr)
+ @ stub IoCancelFileOpen
+@@ -396,7 +396,7 @@
+ @ stub IoForwardAndCatchIrp
+ @ stub IoForwardIrpSynchronously
+ @ stub IoFreeController
+-@ stub IoFreeErrorLogEntry
++@ stdcall IoFreeErrorLogEntry(ptr)
+ @ stdcall IoFreeIrp(ptr)
+ @ stdcall IoFreeMdl(ptr)
+ @ stdcall IoFreeWorkItem(ptr)
+@@ -415,7 +415,7 @@
+ @ stdcall IoGetDevicePropertyData(ptr ptr long long long ptr ptr ptr)
+ @ stub IoGetDeviceToVerify
+ @ stub IoGetDiskDeviceObject
+-@ stub IoGetDmaAdapter
++@ stdcall IoGetDmaAdapter(ptr ptr ptr)
+ @ stdcall IoGetDriverObjectExtension(ptr ptr)
+ @ stub IoGetFileObjectGenericMapping
+ @ stub IoGetInitialStack
+@@ -430,7 +430,7 @@
+ @ stdcall IoInitializeRemoveLockEx(ptr long long long long)
+ @ stdcall IoInitializeTimer(ptr ptr ptr)
+ @ stdcall IoInvalidateDeviceRelations(ptr long)
+-@ stub IoInvalidateDeviceState
++@ stdcall IoInvalidateDeviceState(ptr)
+ @ stdcall -arch=win64 IoIs32bitProcess(ptr)
+ @ stub IoIsFileOriginRemote
+ @ stub IoIsOperationSynchronous
+@@ -460,7 +460,7 @@
+ @ stdcall IoRegisterDriverReinitialization(ptr ptr ptr)
+ @ stdcall IoRegisterFileSystem(ptr)
+ @ stub IoRegisterFsRegistrationChange
+-@ stub IoRegisterLastChanceShutdownNotification
++@ stdcall IoRegisterLastChanceShutdownNotification(ptr)
+ @ stdcall IoRegisterPlugPlayNotification(long long ptr ptr ptr ptr ptr)
+ @ stdcall IoRegisterShutdownNotification(ptr)
+ @ stdcall IoReleaseCancelSpinLock(long)
+@@ -474,9 +474,9 @@
+ @ stdcall IoReportResourceUsage(ptr ptr ptr long ptr ptr long long ptr)
+ @ stdcall IoReportTargetDeviceChange(ptr ptr)
+ @ stdcall IoReportTargetDeviceChangeAsynchronous(ptr ptr ptr ptr)
+-@ stub IoRequestDeviceEject
++@ stdcall IoRequestDeviceEject(ptr)
+ @ stdcall IoReuseIrp(ptr long)
+-@ stub IoSetCompletionRoutineEx
++@ stdcall IoSetCompletionRoutineEx(ptr ptr ptr ptr long long long)
+ @ stdcall IoSetDeviceInterfacePropertyData(ptr ptr long long long long ptr)
+ @ stdcall IoSetDeviceInterfaceState(ptr long)
+ @ stdcall IoSetDevicePropertyData(ptr ptr long long long long ptr)
+@@ -525,14 +525,14 @@
+ @ stub IoWMISetSingleInstance
+ @ stub IoWMISetSingleItem
+ @ stub IoWMISuggestInstanceName
+-@ stub IoWMIWriteEvent
+-@ stub IoWriteErrorLogEntry
++@ stdcall IoWMIWriteEvent(ptr)
++@ stdcall IoWriteErrorLogEntry(ptr)
+ @ stub IoWriteOperationCount
+ @ stub IoWritePartitionTableEx
+ @ stub IoWriteTransferCount
+ @ stdcall KdChangeOption(long long ptr long ptr ptr)
+ @ extern KdDebuggerEnabled
+-@ stub KdDebuggerNotPresent
++@ extern KdDebuggerNotPresent
+ @ stdcall KdDisableDebugger()
+ @ stdcall KdEnableDebugger()
+ @ stub KdEnteredDebugger
+@@ -543,7 +543,7 @@
+ @ stdcall Ke386IoSetAccessProcess(ptr long)
+ @ stdcall Ke386QueryIoAccessMap(long ptr)
+ @ stdcall Ke386SetIoAccessMap(long ptr)
+-@ stub KeAcquireInterruptSpinLock
++@ stdcall KeAcquireInterruptSpinLock(ptr)
+ @ stdcall KeAcquireSpinLockAtDpcLevel(ptr)
+ @ stdcall -arch=!i386 KeAcquireSpinLockRaiseToDpc(ptr)
+ @ stub KeAddSystemServiceTable
+@@ -574,7 +574,7 @@
+ @ stdcall KeGetCurrentProcessorNumberEx(ptr)
+ @ stdcall KeGetCurrentThread()
+ @ stub KeGetPreviousMode
+-@ stub KeGetRecommendedSharedDataAlignment
++@ stdcall KeGetRecommendedSharedDataAlignment()
+ @ stub KeI386AbiosCall
+ @ stub KeI386AllocateGdtSelectors
+ @ stub KeI386Call16BitCStyleFunction
+@@ -638,7 +638,7 @@
+ @ stub KeReadStateTimer
+ @ stdcall KeRegisterBugCheckCallback(ptr ptr ptr long ptr)
+ @ stdcall KeRegisterBugCheckReasonCallback(ptr ptr long ptr)
+-@ stub KeReleaseInterruptSpinLock
++@ stdcall KeReleaseInterruptSpinLock(ptr long)
+ @ stub KeReleaseMutant
+ @ stdcall KeReleaseMutex(ptr long)
+ @ stdcall KeReleaseSemaphore(ptr long long long)
+@@ -678,7 +678,7 @@
+ @ stdcall KeSetTimer(ptr int64 ptr)
+ @ stdcall KeSetTimerEx(ptr int64 long ptr)
+ @ stdcall KeStackAttachProcess(ptr ptr)
+-@ stub KeSynchronizeExecution
++@ stdcall KeSynchronizeExecution(ptr ptr ptr)
+ @ stub KeTerminateThread
+ @ stdcall KeTestAlertThread(long)
+ @ extern KeTickCount
+@@ -741,13 +741,13 @@
+ @ stub MmGrowKernelStack
+ @ stub MmHighestUserAddress
+ @ stdcall MmIsAddressValid(ptr)
+-@ stub MmIsDriverVerifying
++@ stdcall MmIsDriverVerifying(ptr)
+ @ stub MmIsNonPagedSystemAddressValid
+ @ stub MmIsRecursiveIoFault
+ @ stdcall MmIsThisAnNtAsSystem()
+ @ stub MmIsVerifierEnabled
+-@ stub MmLockPagableDataSection
+-@ stub MmLockPagableImageSection
++@ stdcall MmLockPagableDataSection(ptr)
++@ stdcall MmLockPagableImageSection(ptr)
+ @ stdcall MmLockPagableSectionByHandle(ptr)
+ @ stdcall MmMapIoSpace(int64 long long)
+ @ stdcall MmMapLockedPages(ptr long)
+@@ -774,7 +774,7 @@
+ @ stub MmSecureVirtualMemory
+ @ stub MmSetAddressRangeModified
+ @ stub MmSetBankedSection
+-@ stub MmSizeOfMdl
++@ stdcall MmSizeOfMdl(ptr long)
+ @ stub MmSystemRangeStart
+ @ stub MmTrimAllSystemPagableMemory
+ @ stdcall MmUnlockPagableImageSection(ptr)
+@@ -1424,7 +1424,7 @@
+ @ stub WmiStartTrace
+ @ stub WmiStopTrace
+ @ stub WmiTraceMessage
+-@ stub WmiTraceMessageVa
++@ stdcall WmiTraceMessageVa(int64 long ptr long ptr)
+ @ stub WmiUpdateTrace
+ @ stub XIPDispatch
+ @ stdcall -private ZwAccessCheckAndAuditAlarm(ptr long ptr ptr ptr long ptr long ptr ptr ptr) NtAccessCheckAndAuditAlarm

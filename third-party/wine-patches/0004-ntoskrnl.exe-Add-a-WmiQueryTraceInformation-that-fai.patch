@@ -6,7 +6,7 @@ which ignores these lines.
 From 5c0d3d6ce049da8f7bc85c68775d2dc5359db090 Mon Sep 17 00:00:00 2001
 From: TUR experiment <tur-experiment@users.noreply.github.com>
 Date: Fri, 13 Nov 2026 10:08:22 +0300
-Subject: [PATCH 04/10] ntoskrnl.exe: Add a WmiQueryTraceInformation that
+Subject: [PATCH 04/11] ntoskrnl.exe: Add a WmiQueryTraceInformation that
  fails.
 
 It was a stub, so calling it aborted the driver host. The Kernel-Mode Driver
