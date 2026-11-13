@@ -18,6 +18,7 @@ use std::path::PathBuf;
 
 use serde::Serialize;
 
+use crate::casefold::DEFAULT_CASE_FOLDING;
 use crate::grant::ProgramFile;
 use crate::launch_host::RuntimeVersion;
 use crate::metadata::{PrefixMetadata, RuntimeKind, SyncRecord};
@@ -224,6 +225,7 @@ pub fn plan_launch(
                 graphics: profile.graphics_backend.unwrap_or(GraphicsBackend::Auto),
                 network: true,
                 grants: Vec::new(),
+                case_folding: DEFAULT_CASE_FOLDING,
             };
             let (creation, created) = planner.create(&settings, false)?;
             steps.extend(creation.steps);

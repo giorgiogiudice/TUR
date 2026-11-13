@@ -16,14 +16,10 @@ on:
   push:
     branches: [main]
     paths:
-      - "services/tur-pax/**"
-      - "services/tur-pax-providers/**"
-      - "services/tur-pax-memory/**"
-      - "services/tur-device-manager/**"
-      - "services/tur-storage/**"
-      - "services/tur-catalogue/**"
-      - "services/tur-diagnostics/**"
-      - "services/tur-runtime/**"
+      # tur-pax, its providers and memory, and every component: which of
+      # them ship tools is discovered (services/<component>/agent-tools.json)
+      # and their programs run here.
+      - "services/**"
       - "crates/tur-core/**"
       - "catalogue/**"
       - "tests/pax/**"
@@ -32,14 +28,10 @@ on:
       - ".github/workflows/pax.yml"
   pull_request:
     paths:
-      - "services/tur-pax/**"
-      - "services/tur-pax-providers/**"
-      - "services/tur-pax-memory/**"
-      - "services/tur-device-manager/**"
-      - "services/tur-storage/**"
-      - "services/tur-catalogue/**"
-      - "services/tur-diagnostics/**"
-      - "services/tur-runtime/**"
+      # tur-pax, its providers and memory, and every component: which of
+      # them ship tools is discovered (services/<component>/agent-tools.json)
+      # and their programs run here.
+      - "services/**"
       - "crates/tur-core/**"
       - "catalogue/**"
       - "tests/pax/**"
@@ -117,39 +109,59 @@ jobs:
             ~/.cargo/registry/index
             ~/.cargo/registry/cache
             ~/.cargo/git/db
-            services/tur-pax/target
-            services/tur-pax-memory/target
-            services/tur-device-manager/target
-            services/tur-storage/target
-            services/tur-catalogue/target
-            services/tur-diagnostics/target
-            services/tur-runtime/target
-          key: pax-${{ hashFiles('rust-toolchain.toml', 'services/tur-pax/Cargo.lock', 'services/tur-pax-memory/Cargo.lock', 'services/tur-device-manager/Cargo.lock', 'services/tur-storage/Cargo.lock', 'services/tur-catalogue/Cargo.lock', 'services/tur-diagnostics/Cargo.lock', 'services/tur-runtime/Cargo.lock') }}
+            services/*/target
+          key: pax-${{ hashFiles('rust-toolchain.toml', 'services/*/Cargo.lock') }}
           restore-keys: pax-
+
+      - name: Discover the tool sets
+        # One rule, no list: a component ships its assistant tools as
+        # services/<component>/agent-tools.json with agent-tools.adapter.json
+        # beside it. Each program an adapter starts from /usr/bin is built
+        # from the component that ships the adapter.
+        run: |
+          python3 - > "$WORK/programs.tsv" <<'PY'
+          import json, pathlib, sys
+          rows = set()
+          for adapters in sorted(pathlib.Path("services").glob("*/agent-tools.adapter.json")):
+              component = adapters.parent.name
+              for adapter in json.loads(adapters.read_text())["adapters"]:
+                  program = adapter["program"]
+                  if not program.startswith("/usr/bin/"):
+                      sys.exit(f"{component}: {program} is not a program in /usr/bin")
+                  rows.add((component, program))
+          for component, program in sorted(rows):
+              print(f"{component}\t{program}")
+          PY
+          echo "components that ship tools: $(ls services/*/agent-tools.json | cut -d/ -f2 | tr '\n' ' ')"
+          cat "$WORK/programs.tsv" | tee "$WORK/evidence/tool-programs.tsv"
 
       - name: Build tur-pax and the tool programs it adapts
         run: |
-          for component in tur-pax tur-pax-memory tur-device-manager tur-storage tur-catalogue tur-diagnostics tur-runtime; do
+          for component in tur-pax tur-pax-memory; do
             echo "::group::cargo build: $component"
             (cd "services/$component" && cargo build --locked)
             echo "::endgroup::"
           done
+          while IFS="$(printf '\t')" read -r component program; do
+            echo "::group::cargo build: $component ($(basename "$program"))"
+            (cd "services/$component" && cargo build --locked --bin "$(basename "$program")")
+            echo "::endgroup::"
+          done < "$WORK/programs.tsv"
 
       - name: Put the programs, the catalogue and the fixtures in place
         # Where the shipped adapters expect them: /usr/bin and /usr/share.
         # Both are in the read-only system view of the sandbox. The fixtures
         # and the test tool are the test's own.
         run: |
-          sudo install -m 0755 services/tur-device-manager/target/debug/tur-device /usr/bin/tur-device
-          sudo install -m 0755 services/tur-storage/target/debug/tur-storage /usr/bin/tur-storage
-          sudo install -m 0755 services/tur-catalogue/target/debug/tur-catalogue /usr/bin/tur-catalogue
-          sudo install -m 0755 services/tur-diagnostics/target/debug/tur-diag /usr/bin/tur-diag
-          sudo install -m 0755 services/tur-runtime/target/debug/tur-runtime /usr/bin/tur-runtime
+          while IFS="$(printf '\t')" read -r component program; do
+            sudo install -m 0755 "services/$component/target/debug/$(basename "$program")" "$program"
+          done < "$WORK/programs.tsv"
           sudo mkdir -p /usr/share/tur /usr/share/tur-pax-e2e
           sudo cp -r catalogue /usr/share/tur/catalogue
           # Each component's assistant tools, where tur-pax looks for them
           # when it is not told otherwise: one directory for each component,
-          # holding its manifest and, beside it, its adapters.
+          # holding its manifest and, beside it, its adapters. Every
+          # component that ships them is installed; none is named here.
           for component in services/*/; do
             if [ -f "$component/agent-tools.json" ]; then
               name="$(basename "$component")"

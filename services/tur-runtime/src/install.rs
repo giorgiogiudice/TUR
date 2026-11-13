@@ -39,6 +39,7 @@ use crate::app_record::{
     UninstallRecord, as_text, is_text, load_record,
 };
 use crate::arch::Arch;
+use crate::casefold::CaseFoldRecord;
 use crate::desktop::{DesktopEntry, EntryExtras, desktop_entry_with};
 use crate::discover::{
     ChoiceError, Discovery, ShortcutPlace, choose_main, primary_entry, windows_path,
@@ -369,6 +370,8 @@ pub struct RecordOptions<'a> {
     pub method: InstallMethod,
     /// The arguments the installer was given.
     pub arguments: Vec<String>,
+    /// What became of making the prefix's drive C: case-insensitive.
+    pub case_folding: Option<CaseFoldRecord>,
 }
 
 /// Everything that is written down about a finished installation.
@@ -718,6 +721,7 @@ pub fn describe_installation(
         runtime: metadata.runtime,
         runtime_version: metadata.runtime_version.clone(),
         installed_at: planner.now,
+        case_folding: options.case_folding,
         install: InstallRecord {
             kind: info.kind,
             method: options.method,
@@ -1375,6 +1379,7 @@ mod tests {
                 .iter()
                 .map(|argument| (*argument).to_owned())
                 .collect(),
+            case_folding: None,
         }
     }
 
@@ -1625,6 +1630,19 @@ mod tests {
 
         // A program with no version information and no icon: its file name,
         // and the theme's generic icon.
+        // What became of case folding is recorded as it was reported.
+        let folded = RecordOptions {
+            main_executable: Some("putty.exe"),
+            case_folding: Some(CaseFoldRecord::attempted(
+                crate::casefold::CaseFoldReason::Casefolded,
+                None,
+            )),
+            ..options(InstallMethod::Unpacked, &[])
+        };
+        let record = describe(folded).unwrap().record;
+        assert!(record.case_folding.as_ref().unwrap().casefolded);
+        assert!(record.to_json().contains("\"reason\": \"casefolded\""));
+
         let bare = RecordOptions {
             main_executable: Some("puttygen.exe"),
             ..options(InstallMethod::Unpacked, &[])

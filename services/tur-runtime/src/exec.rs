@@ -21,6 +21,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use crate::casefold::{CaseFoldReason, CaseFoldRecord, classify};
 use crate::launch_host::current_effective_uid;
 use crate::limits::{
     MAX_CHECK_BYTES, MAX_COMMAND_OUTPUT_BYTES, MAX_ERROR_OUTPUT_BYTES, MAX_LOG_BYTES,
@@ -146,6 +147,44 @@ impl SystemExecutor {
         let tail_from = combined.len().saturating_sub(MAX_ERROR_OUTPUT_BYTES);
         self.last_output = printable(combined.get(tail_from..).unwrap_or_default());
         Ok(StepOutcome::Exited { status })
+    }
+
+    /// Runs `chattr +F` on a directory that was just created, and says what
+    /// became of it. Nothing here fails the step: a file system that cannot
+    /// fold case leaves an ordinary directory behind.
+    fn case_fold(&mut self, spec: Option<&CommandSpec>) -> StepOutcome {
+        let record = match spec {
+            None => CaseFoldRecord::attempted(CaseFoldReason::ToolMissing, None),
+            Some(spec) => match Self::command(spec).output() {
+                Err(error) => {
+                    let reason = if error.kind() == io::ErrorKind::NotFound {
+                        CaseFoldReason::ToolMissing
+                    } else {
+                        CaseFoldReason::Failed
+                    };
+                    let detail = format!("cannot start {}: {error}", spec.program);
+                    CaseFoldRecord::attempted(reason, Some(&detail))
+                }
+                Ok(output) => {
+                    let mut combined = output.stdout;
+                    combined.extend_from_slice(&output.stderr);
+                    let status = exit_code(output.status);
+                    self.append_to_command_log(
+                        &format!(
+                            "make a directory case-insensitive: {} (exit status {status})",
+                            spec.display_line()
+                        ),
+                        &combined,
+                    );
+                    let tail_from = combined.len().saturating_sub(MAX_ERROR_OUTPUT_BYTES);
+                    classify(
+                        status,
+                        &printable(combined.get(tail_from..).unwrap_or_default()),
+                    )
+                }
+            },
+        };
+        StepOutcome::CaseFolded { record }
     }
 
     /// Runs a command for at most `limit_seconds`. When the time is up the
@@ -473,6 +512,14 @@ impl Executor for SystemExecutor {
                 .create(path)
                 .map(|()| StepOutcome::Done)
                 .map_err(|error| io_error("create", path, error)),
+            Step::CaseFold { path, command } => {
+                DirBuilder::new()
+                    .recursive(true)
+                    .mode(0o700)
+                    .create(path)
+                    .map_err(|error| io_error("create", path, error))?;
+                Ok(self.case_fold(command.as_ref()))
+            }
             Step::WriteFile { path, contents } => write_file(path, contents.as_bytes())
                 .map(|()| StepOutcome::Done)
                 .map_err(|error| io_error("write", path, error)),
@@ -760,6 +807,81 @@ mod tests {
             error
                 .message
                 .starts_with("cannot start /nonexistent/program")
+        );
+    }
+
+    #[test]
+    fn a_case_fold_step_creates_the_directory_whatever_the_file_system_says() {
+        let scratch = scratch("exec-casefold");
+        let mut executor = SystemExecutor::new(&scratch.dirs);
+        let outcome = |executor: &mut SystemExecutor, name: &str, command: Option<CommandSpec>| {
+            let path = scratch.app.join(name);
+            let outcome = executor
+                .execute(&Step::CaseFold {
+                    path: path.clone(),
+                    command,
+                })
+                .unwrap();
+            assert!(path.is_dir(), "{name}");
+            assert_eq!(
+                fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+                0o700
+            );
+            match outcome {
+                StepOutcome::CaseFolded { record } => record,
+                other => panic!("{other:?}"),
+            }
+        };
+        // chattr succeeds.
+        let record = outcome(&mut executor, "folded", Some(shell("exit 0")));
+        assert_eq!(record.reason, CaseFoldReason::Casefolded);
+        assert!(record.casefolded);
+        // The file system has no casefold feature: an outcome, not an error.
+        let refusal = "echo 'chattr: Operation not supported while setting flags on x' >&2; exit 1";
+        let record = outcome(&mut executor, "plain", Some(shell(refusal)));
+        assert_eq!(record.reason, CaseFoldReason::NoCasefoldFeature);
+        assert!(!record.casefolded);
+        assert_eq!(
+            record.detail.as_deref(),
+            Some("chattr: Operation not supported while setting flags on x")
+        );
+        // No chattr at all, and a chattr that is not where the plan says.
+        let record = outcome(&mut executor, "no-tool", None);
+        assert_eq!(record.reason, CaseFoldReason::ToolMissing);
+        let missing = CommandSpec {
+            program: scratch.app.join("no-such-chattr").display().to_string(),
+            ..shell("exit 0")
+        };
+        let record = outcome(&mut executor, "absent-tool", Some(missing));
+        assert_eq!(record.reason, CaseFoldReason::ToolMissing);
+        assert!(record.detail.unwrap().contains("cannot start"));
+
+        // Through a plan: the report carries the outcome and the plan goes on.
+        let mut plan = Plan::new(Operation::Create, "com.example.app");
+        plan.steps.push(Step::CaseFold {
+            path: scratch.app.join("in-a-plan"),
+            command: Some(shell(refusal)),
+        });
+        plan.steps.push(Step::CreateDir {
+            path: scratch.app.join("after"),
+        });
+        let report = run_plan(&plan, &mut executor);
+        assert!(report.succeeded());
+        assert_eq!(report.completed, 2);
+        assert_eq!(
+            report.case_folding.map(|record| record.reason),
+            Some(CaseFoldReason::NoCasefoldFeature)
+        );
+        // Only creating the directory can fail the step.
+        let blocker = scratch.app.join("a-file");
+        fs::write(&blocker, "x").unwrap();
+        assert!(
+            executor
+                .execute(&Step::CaseFold {
+                    path: blocker.join("below"),
+                    command: Some(shell("exit 0")),
+                })
+                .is_err()
         );
     }
 

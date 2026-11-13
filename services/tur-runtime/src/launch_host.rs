@@ -149,6 +149,12 @@ pub struct LaunchHost {
     pub unzip: Option<PathBuf>,
     /// The `install` program, used to copy a program file into a prefix.
     pub install: Option<PathBuf>,
+    /// e2fsprogs' `chattr`, used to make a new prefix's drive C:
+    /// case-insensitive.
+    pub chattr: Option<PathBuf>,
+    /// e2fsprogs' `lsattr`, used to tell whether a prefix's drive C: is
+    /// case-insensitive.
+    pub lsattr: Option<PathBuf>,
     /// What looking for the `ntsync` device found.
     pub ntsync: NtsyncDevice,
     /// How `/bin`, `/lib` and the like are laid out.
@@ -397,6 +403,8 @@ impl LaunchHost {
             tar: find_program(&PROGRAM_DIRECTORIES, &["tar"]),
             unzip: find_program(&PROGRAM_DIRECTORIES, &["unzip"]),
             install: find_program(&PROGRAM_DIRECTORIES, &["install"]),
+            chattr: find_program(&PROGRAM_DIRECTORIES, &["chattr"]),
+            lsattr: find_program(&PROGRAM_DIRECTORIES, &["lsattr"]),
             ntsync: probe_ntsync(Path::new(NTSYNC_DEVICE)),
             system: system_entries(),
             sockets,
@@ -432,6 +440,8 @@ pub(crate) mod tests {
             tar: Some(PathBuf::from("/usr/bin/tar")),
             unzip: Some(PathBuf::from("/usr/bin/unzip")),
             install: Some(PathBuf::from("/usr/bin/install")),
+            chattr: Some(PathBuf::from("/usr/bin/chattr")),
+            lsattr: Some(PathBuf::from("/usr/bin/lsattr")),
             ntsync: NtsyncDevice::Absent,
             system: vec![
                 SystemEntry::Link {

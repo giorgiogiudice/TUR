@@ -3,7 +3,7 @@
   "$id": "https://github.com/giorgiogiudice/TUR/schemas/pax-models.schema.json",
   "$comment": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
   "title": "P@x model list",
-  "description": "The providers P@x can use, each by an identifier with an adapter family (ADR-0004, amended 12 November 2026), the models offered for each, and their prices. Read from /etc/tur/pax/models.json if it exists, else /usr/share/tur/pax/models.json; never written by P@x. Model names and prices are configuration, never compiled in (ADR-0004). A model the person types that is not listed is accepted; its price is then not known and P@x limits it in tokens. The loader in services/tur-pax (settings.rs) is authoritative and also enforces: a provider is listed once; a model name is listed once per provider, with no control characters and no surrounding whitespace; prices follow the rules of the provider configuration (finite, not negative, a currency of 1 to 8 letters); an openai-chat entry names its base_url; key_required false and send_back_reasoning true are for openai-chat only; data_terms with runs_locally need a base_url on this computer, and reviewed data terms name the pages they were read from. The adapter families' own companies (anthropic, openai, google) exist without an entry, at their public addresses and with no prices.",
+  "description": "The providers P@x can use, each by an identifier with an adapter family (ADR-0004, amended 12 November 2026), the models offered for each, and their prices. Read from /etc/tur/pax/models.json if it exists, else /usr/share/tur/pax/models.json; never written by P@x. Model names and prices are configuration, never compiled in (ADR-0004). A model the person types that is not listed is accepted; its price is then not known and P@x limits it in tokens. The loader in services/tur-pax (settings.rs) is authoritative and also enforces: a provider is listed once; a model name is listed once per provider, with no control characters and no surrounding whitespace; prices follow the rules of the provider configuration (finite, not negative, a currency of 1 to 8 letters); an openai-chat entry names its base_url; key_required false and send_back_reasoning true are for openai-chat only; data_terms with runs_locally need a base_url on this computer, and reviewed data terms name the pages they were read from; runtime_key_file has no part that is . or .., and needs key_required and a base_url on this computer. The adapter families' own companies (anthropic, openai, google) exist without an entry, at their public addresses and with no prices.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -92,6 +92,13 @@
           "description": "Whether the service needs a key. false only for openai-chat, for a server that takes none (a model server on this computer).",
           "type": "boolean",
           "default": true
+        },
+        "runtime_key_file": {
+          "description": "Where the key is read in place of the password store: a file of the session's runtime directory ($XDG_RUNTIME_DIR), named relative to it, that a model server on this computer writes for the person each time it starts (tur-ai-local writes tur-ai-local/api-key, mode 0600). The file must be a regular file readable by its owner alone. Only for an entry that needs a key and whose base_url is this computer; the key is never sent to another address and never stored.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-z0-9._-]+(/[a-z0-9._-]+)*$"
         },
         "send_back_reasoning": {
           "description": "openai-chat only: send the model's reasoning back with later requests, for a service whose documentation requires it (DeepSeek).",

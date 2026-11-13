@@ -23,6 +23,7 @@ use std::fs;
 use std::io::Read;
 use std::path::Path;
 
+use crate::casefold::{CaseFolding, chattr_command};
 use crate::grant::GrantContext;
 use crate::launch_host::{LaunchHost, RuntimeVersion};
 use crate::limits::MAX_METADATA_BYTES;
@@ -100,6 +101,8 @@ pub struct PrefixSettings {
     pub network: bool,
     /// The granted host directories, already admitted.
     pub grants: Vec<Grant>,
+    /// Whether drive C: is made case-insensitive where the file system can.
+    pub case_folding: CaseFolding,
 }
 
 /// Plans prefix operations for one application.
@@ -215,6 +218,21 @@ impl Planner<'_> {
             .collect()
     }
 
+    /// The prefix's drive C:, which Wine creates when it is not there.
+    pub fn drive_c(&self) -> std::path::PathBuf {
+        self.app.prefix.join("drive_c")
+    }
+
+    /// Creates `path` empty and asks its file system to fold case in it.
+    fn case_fold_step(&self, path: std::path::PathBuf) -> Step {
+        let command = self
+            .host
+            .chattr
+            .as_deref()
+            .and_then(|chattr| chattr_command(chattr, &path));
+        Step::CaseFold { path, command }
+    }
+
     fn registry_requirement(&self) -> Step {
         Step::Require {
             check: Check::File {
@@ -224,9 +242,25 @@ impl Planner<'_> {
     }
 
     /// The steps that create a prefix described by `metadata`.
-    pub(crate) fn create_steps(&self, metadata: &PrefixMetadata) -> Result<Vec<Step>, PlanError> {
+    ///
+    /// With [`CaseFolding::Try`] and Wine, `drive_c` is created empty and
+    /// made case-insensitive before Wine is started: the attribute can only
+    /// be given to an empty directory, and everything Wine then creates on
+    /// drive C: inherits it. Wine leaves a `drive_c` that is already there
+    /// as it is (`setup_config_dir` in `dlls/ntdll/unix/server.c`). Proton
+    /// builds its prefix its own way, and its own script already sets the
+    /// attribute on the `drive_c` it creates (`set_dir_casefold_bit` in
+    /// Valve's `proton`), so a Proton prefix is left to it.
+    pub(crate) fn create_steps(
+        &self,
+        metadata: &PrefixMetadata,
+        case_folding: CaseFolding,
+    ) -> Result<Vec<Step>, PlanError> {
         let assembled = assemble(&self.maintenance(metadata), Task::Initialise)?;
         let mut steps = self.directory_steps();
+        if case_folding == CaseFolding::Try && metadata.runtime == RuntimeKind::Wine {
+            steps.push(self.case_fold_step(self.drive_c()));
+        }
         steps.push(Step::Run {
             label: "create the prefix".to_owned(),
             command: assembled.sandboxed,
@@ -254,11 +288,16 @@ impl Planner<'_> {
             return Err(PlanError::PrefixExists);
         }
         let metadata = self.fresh_metadata(settings)?;
-        let mut plan = self.plan(Operation::Create, self.create_steps(&metadata)?);
+        let mut plan = self.plan(
+            Operation::Create,
+            self.create_steps(&metadata, settings.case_folding)?,
+        );
         plan.notes.push(format!(
             "The prefix is tied to {}; a later runtime upgrade does not change it.",
             metadata.runtime_version
         ));
+        plan.notes
+            .push(case_folding_note(settings.case_folding, metadata.runtime));
         Ok((plan, metadata))
     }
 
@@ -438,10 +477,21 @@ impl Planner<'_> {
     /// this application before anything is replaced. `prefix_exists` says
     /// whether there is a prefix to move out of the way.
     ///
+    /// An archive does not keep the case-folding attribute. With
+    /// [`CaseFolding::Try`], given when the prefix being replaced has a
+    /// case-insensitive drive C:, the unpacked `drive_c` is created and made
+    /// case-insensitive before the archive is unpacked into it, so that the
+    /// restored prefix is as the replaced one was.
+    ///
     /// # Errors
     ///
     /// [`PlanError::BackupMissing`] when `name` is not a backup name.
-    pub fn restore(&self, name: &str, prefix_exists: bool) -> Result<Plan, PlanError> {
+    pub fn restore(
+        &self,
+        name: &str,
+        prefix_exists: bool,
+        case_folding: CaseFolding,
+    ) -> Result<Plan, PlanError> {
         self.refuse_root()?;
         if !is_backup_name(name) {
             return Err(PlanError::BackupMissing {
@@ -471,6 +521,11 @@ impl Planner<'_> {
             Step::CreateDir {
                 path: incoming.clone(),
             },
+        ];
+        if case_folding == CaseFolding::Try {
+            steps.push(self.case_fold_step(incoming.join("prefix").join("drive_c")));
+        }
+        steps.extend([
             Step::Run {
                 label: "unpack the backup".to_owned(),
                 command: unpack,
@@ -486,7 +541,7 @@ impl Planner<'_> {
                     path: incoming.join("prefix"),
                 },
             },
-        ];
+        ]);
         if prefix_exists {
             steps.push(Step::Rename {
                 from: self.app.app_dir.clone(),
@@ -548,11 +603,15 @@ impl Planner<'_> {
     ///
     /// [`PlanError::Pinned`] when the prefix is pinned to another version
     /// than the one installed.
+    ///
+    /// `case_folding` is what the old prefix had: a reset keeps drive C:
+    /// case-insensitive, or not, as it was.
     pub fn reset(
         &self,
         metadata: &PrefixMetadata,
         installed: &RuntimeVersion,
         backup: bool,
+        case_folding: CaseFolding,
     ) -> Result<Plan, PlanError> {
         self.refuse_root()?;
         if metadata.pinned && metadata.runtime_version != installed.version {
@@ -583,7 +642,8 @@ impl Planner<'_> {
         for path in [&self.app.prefix, &self.app.home] {
             steps.push(Step::RemoveTree { path: path.clone() });
         }
-        steps.extend(self.create_steps(&fresh)?);
+        steps.extend(self.create_steps(&fresh, case_folding)?);
+        notes.push(case_folding_note(case_folding, fresh.runtime));
         let mut plan = self.plan(Operation::Reset, steps);
         plan.notes = notes;
         Ok(plan)
@@ -673,6 +733,24 @@ impl Planner<'_> {
     }
 }
 
+/// What a plan says about the case folding of drive C:.
+fn case_folding_note(case_folding: CaseFolding, runtime: RuntimeKind) -> String {
+    match (case_folding, runtime) {
+        (CaseFolding::Try, RuntimeKind::Wine) => "Drive C: is made case-insensitive where the \
+             file system can (ext4 with the casefold feature); where it cannot, it is an \
+             ordinary directory, Wine emulates case-insensitivity, and the report says why."
+            .to_owned(),
+        (CaseFolding::Try, RuntimeKind::Proton) => {
+            "Drive C: is left to Proton, whose own script asks for case folding on the \
+             drive_c it creates; that was not run here."
+                .to_owned()
+        }
+        (CaseFolding::Off, _) => {
+            "Drive C: is not made case-insensitive; Wine emulates case-insensitivity.".to_owned()
+        }
+    }
+}
+
 fn text(path: &Path) -> Result<String, PlanError> {
     plain_text(path)
         .map(str::to_owned)
@@ -757,6 +835,7 @@ pub(crate) mod tests {
             graphics: GraphicsBackend::Auto,
             network: true,
             grants: Vec::new(),
+            case_folding: CaseFolding::Off,
         }
     }
 
@@ -774,6 +853,7 @@ pub(crate) mod tests {
             .iter()
             .map(|step| match step {
                 Step::CreateDir { .. } => "create-dir",
+                Step::CaseFold { .. } => "case-fold",
                 Step::WriteFile { .. } => "write-file",
                 Step::WriteBytes { .. } => "write-bytes",
                 Step::RemoveTree { .. } => "remove-tree",
@@ -932,6 +1012,133 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn a_case_insensitive_drive_c_is_made_before_wine_writes_into_it() {
+        let setup = Setup::new("prefix-casefold");
+        let folded = PrefixSettings {
+            case_folding: CaseFolding::Try,
+            ..settings()
+        };
+        let (plan, _) = planner(&setup).create(&folded, false).unwrap();
+        assert_eq!(
+            kinds(&plan),
+            [
+                "create-dir",
+                "create-dir",
+                "create-dir",
+                "case-fold",
+                "run",
+                "require",
+                "write-file",
+                "write-file"
+            ]
+        );
+        let drive_c = setup.app.prefix.join("drive_c");
+        match &plan.steps[3] {
+            Step::CaseFold {
+                path,
+                command: Some(command),
+            } => {
+                assert_eq!(path, &drive_c);
+                assert_eq!(command.program, "/usr/bin/chattr");
+                assert_eq!(command.arguments, ["+F", "--", drive_c.to_str().unwrap()]);
+                assert_eq!(command.environment["LC_ALL"], "C");
+            }
+            other => panic!("{other:?}"),
+        }
+        // Wine is started after drive C: exists, never before.
+        assert_eq!(run_command(&plan, 4).environment["WINEARCH"], "win64");
+        assert!(
+            plan.notes
+                .iter()
+                .any(|note| note.contains("where the file system can"))
+        );
+
+        // A file system that cannot fold case: the prefix is created all the
+        // same, and the report says why it is case-sensitive.
+        let mut executor = FakeExecutor {
+            case_fold: Some((
+                1,
+                "chattr: Operation not supported while setting flags on drive_c",
+            )),
+            ..FakeExecutor::default()
+        };
+        let report = run_plan(&plan, &mut executor);
+        assert!(report.succeeded());
+        let record = report.case_folding.unwrap();
+        assert!(record.requested && !record.casefolded);
+        assert_eq!(
+            record.reason,
+            crate::casefold::CaseFoldReason::NoCasefoldFeature
+        );
+        assert_eq!(record.reason.code(), Some(Code::CaseFoldUnsupported));
+        // And one that can.
+        let report = run_plan(&plan, &mut FakeExecutor::default());
+        assert!(report.case_folding.unwrap().casefolded);
+
+        // Without chattr the step stays, with nothing to run.
+        let mut without_chattr = Setup::new("prefix-casefold-no-chattr");
+        without_chattr.host.chattr = None;
+        let (plan, _) = planner(&without_chattr).create(&folded, false).unwrap();
+        assert!(matches!(
+            &plan.steps[3],
+            Step::CaseFold { command: None, .. }
+        ));
+        let report = run_plan(&plan, &mut FakeExecutor::default());
+        assert!(report.succeeded());
+        assert_eq!(
+            report.case_folding.unwrap().reason.code(),
+            Some(Code::CaseFoldFailed)
+        );
+
+        // Not asked for: no step, and nothing in the report.
+        let (plan, _) = planner(&setup).create(&settings(), false).unwrap();
+        assert!(!kinds(&plan).contains(&"case-fold"));
+        assert_eq!(
+            run_plan(&plan, &mut FakeExecutor::default()).case_folding,
+            None
+        );
+        assert!(
+            plan.notes
+                .iter()
+                .any(|note| note.contains("not made case-insensitive"))
+        );
+
+        // Proton builds its own prefix; it is left alone.
+        let proton = PrefixSettings {
+            runtime: RuntimeKind::Proton,
+            version: RuntimeVersion {
+                version: "GE-Proton10-20".to_owned(),
+                build: "GE-Proton10-20".to_owned(),
+            },
+            ..folded.clone()
+        };
+        let (plan, _) = planner(&setup).create(&proton, false).unwrap();
+        assert!(!kinds(&plan).contains(&"case-fold"));
+
+        // A reset keeps what the old prefix had.
+        let metadata = recorded();
+        let plan = planner(&setup)
+            .reset(&metadata, &wine_9(), false, CaseFolding::Try)
+            .unwrap();
+        let fold = kinds(&plan).iter().position(|kind| *kind == "case-fold");
+        let wine = kinds(&plan).iter().position(|kind| *kind == "run");
+        assert!(fold.is_some() && fold < wine, "{:?}", kinds(&plan));
+
+        // A restore makes the unpacked drive C: case-insensitive before the
+        // archive is unpacked into it.
+        let plan = planner(&setup)
+            .restore("20261112T101500Z-manual", true, CaseFolding::Try)
+            .unwrap();
+        let fold = kinds(&plan).iter().position(|kind| *kind == "case-fold");
+        let unpack = kinds(&plan).iter().position(|kind| *kind == "run");
+        assert!(fold.is_some() && fold < unpack, "{:?}", kinds(&plan));
+        assert!(matches!(
+            &plan.steps[fold.unwrap()],
+            Step::CaseFold { path, .. } if *path == setup.app.staging.join("incoming/prefix/drive_c")
+        ));
+    }
+
+    #[test]
     fn creation_is_refused_when_it_should_be() {
         let setup = Setup::new("prefix-create-refused");
         assert_eq!(
@@ -963,7 +1170,7 @@ pub(crate) mod tests {
             Err(PlanError::RunningAsRoot)
         );
         assert_eq!(
-            as_root.reset(&metadata, &wine_9(), true),
+            as_root.reset(&metadata, &wine_9(), true, CaseFolding::Off),
             Err(PlanError::RunningAsRoot)
         );
         assert_eq!(
@@ -971,7 +1178,7 @@ pub(crate) mod tests {
             PlanError::RunningAsRoot
         );
         assert_eq!(
-            as_root.restore("20261112T101500Z-manual", true),
+            as_root.restore("20261112T101500Z-manual", true, CaseFolding::Off),
             Err(PlanError::RunningAsRoot)
         );
         assert_eq!(as_root.remove(true), Err(PlanError::RunningAsRoot));
@@ -1129,7 +1336,7 @@ pub(crate) mod tests {
     fn restore_checks_the_archive_before_replacing_anything() {
         let setup = Setup::new("prefix-restore");
         let plan = planner(&setup)
-            .restore("20261112T101500Z-manual", true)
+            .restore("20261112T101500Z-manual", true, CaseFolding::Off)
             .unwrap();
         assert_eq!(
             kinds(&plan),
@@ -1193,7 +1400,7 @@ pub(crate) mod tests {
 
         // With no prefix in place there is nothing to move away.
         let plan = planner(&setup)
-            .restore("20261112T101500Z-manual", false)
+            .restore("20261112T101500Z-manual", false, CaseFolding::Off)
             .unwrap();
         assert_eq!(
             kinds(&plan),
@@ -1216,7 +1423,9 @@ pub(crate) mod tests {
             "../../etc/passwd",
             "20261112T101500Z-manual.tar.gz",
         ] {
-            let error = planner(&setup).restore(name, true).unwrap_err();
+            let error = planner(&setup)
+                .restore(name, true, CaseFolding::Off)
+                .unwrap_err();
             assert_eq!(error.code(), Code::BackupMissing, "{name:?}");
         }
     }
@@ -1277,7 +1486,9 @@ pub(crate) mod tests {
             graphics_backend: GraphicsBackend::Dxvk,
             ..recorded()
         };
-        let plan = planner(&setup).reset(&before, &wine_9(), true).unwrap();
+        let plan = planner(&setup)
+            .reset(&before, &wine_9(), true, CaseFolding::Off)
+            .unwrap();
         assert_eq!(
             kinds(&plan),
             [
@@ -1334,13 +1545,17 @@ pub(crate) mod tests {
                 .any(|step| matches!(step, Step::RemoveTree { .. }))
         );
 
-        let without = planner(&setup).reset(&before, &wine_9(), false).unwrap();
+        let without = planner(&setup)
+            .reset(&before, &wine_9(), false, CaseFolding::Off)
+            .unwrap();
         assert_eq!(kinds(&without)[0], "remove-tree");
         assert!(without.notes[0].contains("without a backup"));
 
         // A reset with a newer Wine gives a prefix on the newer Wine, unless
         // the prefix is pinned.
-        let newer = planner(&setup).reset(&before, &wine_11(), true).unwrap();
+        let newer = planner(&setup)
+            .reset(&before, &wine_11(), true, CaseFolding::Off)
+            .unwrap();
         let after = parse_metadata(&written(&newer, &setup.app.metadata)).unwrap();
         assert_eq!(after.runtime_version, "wine-11.0");
         let pinned = PrefixMetadata {
@@ -1349,13 +1564,17 @@ pub(crate) mod tests {
         };
         assert_eq!(
             planner(&setup)
-                .reset(&pinned, &wine_11(), true)
+                .reset(&pinned, &wine_11(), true, CaseFolding::Off)
                 .unwrap_err(),
             PlanError::Pinned {
                 version: "wine-9.0".to_owned()
             }
         );
-        assert!(planner(&setup).reset(&pinned, &wine_9(), true).is_ok());
+        assert!(
+            planner(&setup)
+                .reset(&pinned, &wine_9(), true, CaseFolding::Off)
+                .is_ok()
+        );
     }
 
     #[test]
