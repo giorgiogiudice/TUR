@@ -22,8 +22,9 @@ Checks (all required):
 - the policy the guest ran with is the image's own: the vendor file holds
   TUR's rule exactly as image/signing/policy.py writes it (--policy-rule),
   and no /etc/containers/policy.json exists;
-- each refusal case: bootc switch failed, the container libraries said the
-  source image was rejected, nothing was staged, no deployment was added,
+- each refusal case: bootc switch failed when the image proxy opened the
+  image, with the reason the policy gives for that case (REFUSALS), nothing
+  was staged, no deployment was added,
   no image reference and no object was added to OSTree's repository;
 - the signed image: bootc switch succeeded and staged exactly --digest;
 - after the restart: the system runs exactly --digest, it is the product
@@ -55,6 +56,17 @@ PATTERNS = [
     ("gate passed", r"tur-boot-health: gate: Boot health gate (passed|degraded)"),
     ("marked good", r"tur-boot-health: mark-good: counter removed"),
 ]
+
+
+# What containers/image says for each refusal fixture, as measured with the
+# base's skopeo and with bootc (docs/reports/release-1.md). bootc reports it
+# as "failed to invoke method OpenImage: <reason>": the image proxy refused
+# when the image was opened, before any layer was fetched.
+REFUSALS = {
+    "unsigned": "A signature was required, but no signature exists",
+    "other-key": "No public key verified against the RekorSET",
+    "no-log": "missing dev.sigstore.cosign/bundle annotation",
+}
 
 
 def props(text: str) -> dict[str, str]:
@@ -184,8 +196,11 @@ def main() -> int:
         before = stage.get(f"case_{name}_deployments_before")
         after = stage.get(f"case_{name}_deployments_after")
         ref_parts, object_parts = refs.split("->"), objects.split("->")
-        check(f"R-{name}", f"{name}: refused by the container policy", rc not in ("", "0") and bool(message),
-              f"bootc switch exit status {rc}; {message or 'no rejection message'}")
+        reason = REFUSALS.get(name, "")
+        check(f"R-{name}", f"{name}: refused by the container policy when the image was opened",
+              rc not in ("", "0") and message.startswith("failed to invoke method OpenImage: ")
+              and bool(reason) and reason in message,
+              f"bootc switch exit status {rc}; {message or 'no rejection message'}; expected: {reason!r}")
         check(f"N-{name}", f"{name}: nothing staged, nothing added",
               stage.get(f"case_{name}_staged") == "none" and before == after and before is not None
               and len(ref_parts) == 2 and ref_parts[0] == ref_parts[1]

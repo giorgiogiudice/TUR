@@ -35,7 +35,7 @@ that repository only with TUR's signature.
 | `testing` | the newest build released from `main`. The owner's test PC follows it |
 | `stable` | a build a person promoted after it ran on the test PC (section 9) |
 | Signatures | beside the image, tag `sha256-<digest>.sig` (section 5) |
-| Attestations | beside the image, tag `sha256-<digest>.att`: the build manifest (and the SBOM when the log accepts its size) |
+| Attestations | beside the image, tag `sha256-<digest>.att`: the build manifest and the SBOM |
 | Labels | those of the tested image: `org.tur.build-id`, `org.opencontainers.image.revision`, `.version`, `.source`, `org.tur.base.*` |
 
 A computer follows one channel: `bootc switch ghcr.io/giorgiogiudice/tur:testing`
@@ -78,8 +78,9 @@ too.
 
 The `boot` and `rollback` workflows build the same commit again and record
 the image ID they booted. Those IDs are compared and recorded in
-`tested.json`, not required to match: as measured (release-1, finding 1), two
-builds of one commit agree on one runner but not yet across runners. The
+`tested.json`, not required to match: as measured (release-1, finding 1),
+builds of one commit have the same image ID on some runners and not on
+others. The
 image that is published is booted by the release workflow itself (section 7).
 
 **The digest that is published is the digest that was tested.** The
@@ -88,8 +89,10 @@ re-chunking wrote. That digest is pushed to the job's registry (read back and
 compared), signed by digest, switched to and started by the booted guest
 (which reports the digest it runs), and copied with
 `skopeo copy --preserve-digests` (which refuses any copy that would change a
-digest) to the published repository, where the build ID tag, the channel tag
-and the digest are each read back and compared (`scripts/release/publish.sh`).
+digest) to the published repository, with its signature and attestation
+tags (`cosign copy --only=sig,att`); the build ID tag, the channel tag, the
+digest and each signature tag are read back there and compared
+(`scripts/release/publish.sh`).
 
 ## 4. Re-chunking
 
@@ -100,8 +103,10 @@ both ([desktop-experience.md](desktop-experience.md), 12.1, item 3; issue
 build-chunked-oci --bootc --format-version 2` (rpm-ostree 2026.3, from the
 tested image itself; upstream `docs/build-chunked-oci.md`) on the tested
 image. It writes the image's merged file system again as a bootc image whose
-layers are cut by package (at most 64, the upstream default), each file in
-exactly one layer. Format version 2 puts parent directories in every layer,
+layers are cut by package (65 layers in release-1, with rpm-ostree's default
+limit of 64 chunks), each
+file in exactly one layer, except OSTree's repository configuration, which
+the format repeats, identical, in every layer. Format version 2 puts parent directories in every layer,
 so their metadata does not depend on unpacking order (the upstream
 recommendation for reproducible output); there is no earlier published image
 that version 1 would keep compatible. Once a build is published, the next one
@@ -116,13 +121,18 @@ Three checks follow, each required:
 - **Same files** (`scripts/release/compare-trees.py`): both images are mounted
   and every entry compared: type, permissions, owner, group, size, SHA-256,
   link target. Modification times are not compared (OSTree sets one value for
-  all). The differences OSTree makes by design are listed in the script with
-  their reasons; anything else fails.
+  all). The only differences allowed are under
+  `/sysroot/ostree/repo/objects/`, OSTree's object store of the commit each
+  image is made from (the base's commit in the tested image, the re-chunked
+  image's own in the published one; 1607 objects in release-1, nothing else
+  differed among about 474,000 entries). A changed, added or missing file
+  anywhere else fails; `--self-test` proves it on small trees.
 - **Fedora's marks in every layer** (`tests/image/marks.py --layers`): the
   merged image is checked as the `image` workflow checks it (text, file names,
   fedora-logos checksums, the initramfs, packages), and every layer is read as
   the tar stream it is: no layer may delete anything (a whiteout), no file may
-  be in two layers, and no layer may hold a file of `fedora-logos` or a name
+  be in two layers (save `/sysroot/ostree/repo/config`, accepted only when
+  every copy is the same), and no layer may hold a file of `fedora-logos` or a name
   the allow-list does not cover. Without whiteouts and duplicates the layers
   hold exactly the merged image's files, so the merged checks hold for every
   layer.
@@ -175,8 +185,9 @@ checksum):
    workflow identity; then the release key can be retired.
 3. **Attestations**, keyless: the build manifest
    (`--type https://github.com/giorgiogiudice/TUR/blob/main/schemas/build-manifest.schema.json`)
-   and the SBOM (`spdxjson`) when Rekor accepts its size; the SBOM is 6 to 7 MB
-   and is a workflow artifact in any case.
+   and the SBOM (`spdxjson`, 6 to 7 MB; Rekor accepted it in release run
+   43413472528). If the log ever refuses the SBOM, the run says so and goes
+   on: the SBOM is a workflow artifact in any case.
 
 Every signature names `ghcr.io/giorgiogiudice/tur` as the signed repository
 (cosign `--sign-container-identity`), wherever the image is when it is signed,
@@ -286,7 +297,10 @@ On every release run, publishing on or off:
   `registries.conf.d` drop-in in the guest's `/etc` points the name there):
   - `unsigned` (no signature), `other-key` (signed with another key, entered
     in Rekor), `no-log` (signed with the release key, not entered in Rekor):
-    each is refused by the container libraries ("Source image rejected"),
+    each is refused when bootc's image proxy opens the image, before any
+    layer is fetched, with the policy's reason for that case ("A signature
+    was required, but no signature exists"; "No public key verified against
+    the RekorSET"; "missing dev.sigstore.cosign/bundle annotation"),
     and nothing is staged: no staged deployment, no new deployment, no image
     reference and no object added to OSTree's repository;
   - the image under release: staged, by exactly the digest under release;
@@ -390,9 +404,11 @@ it back. Nothing is rebuilt or re-signed: signatures belong to the digest.
 - `testing` moves to the newest commit released; a release run cancelled by
   a newer push leaves `testing` where it was. There is no check that
   `testing` only moves forward in history.
-- The SBOM attestation may be refused by the public log for its size
-  (section 5).
 - The rollback scenarios and the boot test boot their own builds of the
-  commit, not the exported image (section 3; release-1, finding 1).
+  commit, not the exported image, and those builds have the same image ID
+  only on some runners (section 3; release-1, finding 1).
+- A full run on `main` waits for the slowest workflow on the commit (the
+  `iso` workflow, 76 minutes in release-1) and then takes about 36 minutes:
+  about two hours from merge to publication with free runners.
 - Release notes from the merged pull requests (ADR-0023, consequences) are
   not built yet.

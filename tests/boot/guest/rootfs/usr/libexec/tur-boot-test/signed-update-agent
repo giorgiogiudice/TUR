@@ -187,7 +187,10 @@ for pair in ${cases}; do
     put "case_${case_name}_deployments_after" "${after_dep}"
     put "case_${case_name}_image_refs" "${before_refs}->${after_refs}"
     put "case_${case_name}_objects" "${before_objects}->${after_objects}"
-    put "case_${case_name}_message" "$(grep -m1 -o 'Source image rejected.*' "${out}/switch-${case_name}.txt" | cut -c1-300)"
+    # bootc passes on what the image proxy (containers/image) said when it
+    # opened the image, before any layer: "... failed to invoke method
+    # OpenImage: <the policy's reason>".
+    put "case_${case_name}_message" "$(grep -m1 -o 'failed to invoke method OpenImage: .*' "${out}/switch-${case_name}.txt" | cut -c1-300)"
     say "SIGNED-CASE name=${case_name} rc=${rc} staged=${staged:-none} refs=${before_refs}->${after_refs}"
     tail -n 3 "${out}/switch-${case_name}.txt" | while read -r line; do say "bootc switch (${case_name}): ${line}"; done
 done
