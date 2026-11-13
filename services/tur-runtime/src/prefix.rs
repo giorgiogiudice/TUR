@@ -247,7 +247,7 @@ impl Planner<'_> {
     /// made case-insensitive before Wine is started: the attribute can only
     /// be given to an empty directory, and everything Wine then creates on
     /// drive C: inherits it. Wine leaves a `drive_c` that is already there
-    /// as it is (`init_config_dir` in `dlls/ntdll/unix/server.c`). Proton
+    /// as it is (`setup_config_dir` in `dlls/ntdll/unix/server.c`). Proton
     /// builds its prefix its own way, and its own script already sets the
     /// attribute on the `drive_c` it creates (`set_dir_casefold_bit` in
     /// Valve's `proton`), so a Proton prefix is left to it.
