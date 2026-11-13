@@ -43,6 +43,16 @@
 //!   [`icon`] and [`pe_res`] read a program's icon and version information;
 //!   [`sha256`] names the file an application was installed from.
 //!
+//! The compatibility autopilot:
+//!
+//! * [`failure`] reads stable failure classes from what a launch left
+//!   behind: exit status, window, Wine's loader and debugger messages.
+//! * [`remedy`] is the catalogue of declarative, reversible remedies.
+//! * [`autopilot`] chooses remedies for a failure, searches for one that
+//!   makes the application's check pass, and records the result;
+//!   [`autopilot_run`] does that in throwaway copies of the prefix, never in
+//!   the prefix itself.
+//!
 //! Every operation is a plan first. A plan can be printed, compared and
 //! tested without starting anything; only [`exec::SystemExecutor`] touches
 //! the system.
@@ -63,6 +73,8 @@
 pub mod android;
 pub mod app_record;
 pub mod arch;
+pub mod autopilot;
+pub mod autopilot_run;
 pub mod bundle;
 pub mod casefold;
 pub mod codes;
@@ -71,6 +83,7 @@ pub mod discover;
 pub mod elf;
 pub mod error;
 pub mod exec;
+pub mod failure;
 pub mod grant;
 pub mod host;
 pub mod icon;
@@ -90,6 +103,7 @@ pub mod plan;
 pub mod prefix;
 pub mod profile;
 pub mod recommend;
+pub mod remedy;
 pub mod report;
 pub mod runtime_cmd;
 pub mod sandbox;

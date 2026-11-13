@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/giorgiogiudice/TUR/schemas/remedy-check.schema.json",
+  "$comment": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+  "title": "TUR autopilot check",
+  "description": "What 'works' means for one application when tur-runtime's compatibility autopilot runs it (docs/architecture/compat-autopilot.md): a window of its own, an exit status, texts in its output. A run also fails when Wine reports that the process was ended (a crash, a DLL that failed to initialise, imports that could not be resolved). Without a check file the autopilot uses the default: a window within 60 seconds, then 3 seconds up or an exit with status 0.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "window", "exit", "timeout_seconds", "settle_seconds"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "window": { "description": "Whether a window of the program must appear.", "type": "boolean" },
+    "window_class": { "description": "The X11 class of the window; by default the program's file name in lower case, which is what Wine sets.", "type": "string", "pattern": "^[A-Za-z0-9._+ -]+$", "maxLength": 128 },
+    "exit": {
+      "description": "zero: the program exits by itself with status 0. zero-or-running: it exits with 0 or is still running when it is stopped. any: any exit, or none.",
+      "enum": ["zero", "zero-or-running", "any"]
+    },
+    "timeout_seconds": { "type": "integer", "minimum": 1, "maximum": 600 },
+    "settle_seconds": { "description": "How long the program must stay up after its window appeared. Less than the timeout.", "type": "integer", "minimum": 0, "maximum": 60 },
+    "output_contains": { "type": "array", "maxItems": 32, "items": { "$ref": "#/$defs/text" } },
+    "output_lacks": { "type": "array", "maxItems": 32, "items": { "$ref": "#/$defs/text" } },
+    "arguments": { "description": "Arguments the program is started with.", "type": "array", "maxItems": 1024, "items": { "type": "string" } }
+  },
+  "$defs": {
+    "text": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$" }
+  }
+}

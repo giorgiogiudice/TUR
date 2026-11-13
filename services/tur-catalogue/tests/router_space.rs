@@ -138,6 +138,9 @@ fn record(route: Route, rating: Rating) -> Record {
         version_tested: None,
         date: "2026-11-12".to_owned(),
         notes: None,
+        remedies: Vec::new(),
+        runtime_version: None,
+        evidence_sha256: None,
     }
 }
 
@@ -1106,6 +1109,7 @@ fn option(route: Route, edition_index: usize, kind: EditionKind) -> RouteOption 
             code: ReasonCode::WindowsWine,
             params: Default::default(),
         }],
+        settings: None,
     }
 }
 

@@ -395,6 +395,56 @@ pub fn version_info(path: &Path) -> Option<VersionInfo> {
     Some(parse_version(&blob))
 }
 
+/// The most resource directories [`resource_languages`] reads.
+const MAX_LANGUAGE_DIRECTORIES: usize = 2048;
+
+/// The language identifiers of the resources of the PE image at `path`,
+/// sorted and without repeats. Empty when the file is not a PE image, has no
+/// resources, or cannot be read. The tree is read to its fixed depth only.
+pub fn resource_languages(path: &Path) -> Vec<u16> {
+    fn walk(reader: &mut Reader<'_>, layout: &PeLayout) -> Result<Vec<u16>, InspectError> {
+        let Some(base) = layout
+            .resources
+            .and_then(|address| layout.file_offset(address))
+        else {
+            return Ok(Vec::new());
+        };
+        let mut found = Vec::new();
+        let mut read = 0usize;
+        for kind in directory(reader, base, 0)? {
+            let Some(kind_at) = kind.subdirectory() else {
+                continue;
+            };
+            for name in directory(reader, base, kind_at)? {
+                let Some(name_at) = name.subdirectory() else {
+                    continue;
+                };
+                read += 1;
+                if read > MAX_LANGUAGE_DIRECTORIES {
+                    return Ok(found);
+                }
+                for language in directory(reader, base, name_at)? {
+                    if let Some(id) = language.id.and_then(|id| u16::try_from(id).ok())
+                        && !found.contains(&id)
+                    {
+                        found.push(id);
+                    }
+                }
+            }
+        }
+        Ok(found)
+    }
+    let Ok(mut reader) = open(path) else {
+        return Vec::new();
+    };
+    let Ok(Some(found)) = layout(&mut reader) else {
+        return Vec::new();
+    };
+    let mut languages = walk(&mut reader, &found).unwrap_or_default();
+    languages.sort_unstable();
+    languages
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
@@ -616,6 +666,25 @@ pub(crate) mod tests {
             let mut reader = Reader::from_bytes(bytes);
             assert!(layout(&mut reader).unwrap().is_none());
         }
+    }
+
+    #[test]
+    fn the_languages_of_the_resources_are_listed() {
+        let temp = TempDir::new("pe-languages");
+        let path = temp.path().join("app.exe");
+        let resources = vec![
+            (RT_ICON, 1, b"icon".to_vec()),
+            (RT_GROUP_ICON, 100, b"group".to_vec()),
+        ];
+        std::fs::write(&path, image(0x8664, &resources, b"")).unwrap();
+        assert_eq!(resource_languages(&path), [1033]);
+        let plain = temp.path().join("plain.exe");
+        std::fs::write(&plain, image(0x8664, &[], b"")).unwrap();
+        assert!(resource_languages(&plain).is_empty());
+        let text = temp.path().join("notes.txt");
+        std::fs::write(&text, b"not a program").unwrap();
+        assert!(resource_languages(&text).is_empty());
+        assert!(resource_languages(&temp.path().join("missing.exe")).is_empty());
     }
 
     #[test]

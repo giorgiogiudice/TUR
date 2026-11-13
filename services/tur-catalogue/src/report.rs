@@ -86,8 +86,23 @@ pub fn describe_rating(rating: Rating, source: &RatingSource) -> String {
 }
 
 fn describe_record(record: &Record) -> String {
+    if record.reported_by == Reporter::TurAutopilot {
+        let mut text = format!(
+            "not a rating: passed TUR's compatibility autopilot check on {} with {}",
+            record.date,
+            record
+                .runtime_version
+                .as_deref()
+                .unwrap_or("an unstated runtime")
+        );
+        if let Some(version) = &record.version_tested {
+            let _ = write!(text, " for version {version}");
+        }
+        let _ = write!(text, " and these settings: {}", record.remedies.join(", "));
+        return text;
+    }
     let source = match record.reported_by {
-        Reporter::Nobody => RatingSource::Unrated,
+        Reporter::Nobody | Reporter::TurAutopilot => RatingSource::Unrated,
         Reporter::External => RatingSource::External {
             name: record.source_name.clone().unwrap_or_default(),
             url: record.source_url.clone().unwrap_or_default(),
@@ -225,6 +240,15 @@ pub fn render_routes(entry: &Entry, options: &[RouteOption]) -> String {
                 describe_rating(option.rating, &option.rating_source)
             );
             let _ = writeln!(out, "   Outlook: {}", outlook_text(option.outlook));
+        }
+        if let Some(settings) = &option.settings {
+            let _ = writeln!(
+                out,
+                "   Works with these settings (TUR's autopilot, {} with {}; not a rating): {}",
+                settings.date,
+                settings.runtime_version,
+                settings.remedies.join(", ")
+            );
         }
         let _ = writeln!(out, "   Why: {}", option.reason);
         if let Some(alternative) = &option.alternative {

@@ -1,0 +1,6 @@
+; SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+; The import library mfc.c is linked against: only the DLL's name and one
+; symbol of TUR's own. No Microsoft file is involved.
+LIBRARY mfc140u.dll
+EXPORTS
+    TurAutopilotNeverCalled
