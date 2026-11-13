@@ -102,8 +102,13 @@ jobs:
     name: Install to disk and boot under UEFI in QEMU/KVM
     runs-on: ubuntu-24.04
     timeout-minutes: 100
+    permissions:
+      contents: read
+      packages: read
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - uses: ./.github/actions/use-base-mirror
 
       - name: Runner environment
         run: |

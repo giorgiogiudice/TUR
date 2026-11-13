@@ -1,0 +1,67 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Serve the pinned base image from TUR's mirror when its upstream registry no
+# longer has it. See image/README.md, "The base image and its mirror".
+#
+# quay.io keeps a digest of fedora-kinoite only about a day after Fedora moves
+# the :45 tag. .github/workflows/base-mirror.yml copies every pinned digest,
+# byte for byte, to ghcr.io/giorgiogiudice/tur-base. This action:
+#
+#   1. logs podman and skopeo in to ghcr.io with the job's token, as root
+#      (sudo podman, sudo skopeo) and as the runner user;
+#   2. writes a containers-registries.conf(5) drop-in that declares the mirror
+#      as a mirror-by-digest-only mirror of the base repository, for root and
+#      for the runner user;
+#   3. checks that the pinned digest can be fetched, and says from where.
+#
+# The image reference the build uses does not change: scripts/build-image.sh
+# still builds FROM quay.io/fedora/fedora-kinoite@<digest>, and the labels and
+# the build manifest still name quay.io. Only where the bytes come from does.
+#
+# The calling job needs `packages: read` (and `contents: read` for checkout):
+#
+#   permissions:
+#     contents: read
+#     packages: read
+#   steps:
+#     - uses: actions/checkout@...
+#     - uses: ./.github/actions/use-base-mirror
+name: Use the base image mirror
+description: >-
+  Log in to ghcr.io and declare TUR's mirror of the pinned base image as a
+  digest-only mirror of quay.io/fedora/fedora-kinoite, for root and rootless
+  podman and skopeo.
+inputs:
+  token:
+    description: Token with read access to the mirror package.
+    default: ${{ github.token }}
+  mirror:
+    description: The mirror repository.
+    default: ghcr.io/giorgiogiudice/tur-base
+  lock:
+    description: The base pin to read BASE_IMAGE and BASE_DIGEST from.
+    default: image/base.lock
+  check:
+    description: >-
+      "true" to fail the step when the pinned digest is in neither the mirror
+      nor the upstream registry.
+    default: "true"
+runs:
+  using: composite
+  steps:
+    - name: Declare the base image mirror
+      shell: bash
+      env:
+        TOKEN: ${{ inputs.token }}
+        ACTOR: ${{ github.actor }}
+        MIRROR: ${{ inputs.mirror }}
+        LOCK: ${{ inputs.lock }}
+      run: '"$GITHUB_ACTION_PATH/setup.sh"'
+
+    - name: Check that the pinned base can be fetched
+      if: ${{ inputs.check == 'true' }}
+      shell: bash
+      env:
+        MIRROR: ${{ inputs.mirror }}
+        LOCK: ${{ inputs.lock }}
+      run: '"$GITHUB_ACTION_PATH/check.sh"'
