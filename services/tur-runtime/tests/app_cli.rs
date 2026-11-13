@@ -196,6 +196,8 @@ impl Home {
             runtime: RuntimeKind::Wine,
             runtime_version: "wine-9.0".to_owned(),
             installed_at: Timestamp::from_unix(1_794_478_500),
+            // As a record written before case folding was recorded.
+            case_folding: None,
             install: InstallRecord {
                 kind: InstallerKind::Nsis,
                 method: InstallMethod::UnattendedInstaller,
@@ -549,6 +551,12 @@ fn installed_applications_are_listed_shown_and_launched_from_their_record() {
         outcome
             .stdout
             .contains("  installer kind: NSIS installer\n")
+    );
+    // A record from before case folding was recorded is still read.
+    assert!(
+        outcome
+            .stdout
+            .contains("  drive C: not recorded (installed before case folding was recorded)\n")
     );
     assert!(outcome.stdout.contains(&format!(
         "  installed from: setup.exe (SHA-256 {})\n",

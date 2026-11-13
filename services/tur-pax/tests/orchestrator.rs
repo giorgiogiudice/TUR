@@ -1271,16 +1271,18 @@ fn the_orchestrator_has_no_switch_for_the_trusted_path() {
         }
     }
     // What the text interface reads from the environment is where its files
-    // are and where the key is. Nothing else.
+    // are and where the key is: the session's runtime directory holds the
+    // key file of a model server on this computer. Nothing else.
     let text = source("textui.rs");
     let read: Vec<&str> = text
         .lines()
         .filter(|line| line.contains("env::var"))
         .collect();
-    assert_eq!(read.len(), 3, "{read:?}");
+    assert_eq!(read.len(), 4, "{read:?}");
     assert!(read[0].contains("var_os(variable)"));
     assert!(read[1].contains("var_os(\"HOME\")"));
-    assert!(read[2].contains("var_os(\"HOME\")"));
+    assert!(read[2].contains("var_os(\"XDG_RUNTIME_DIR\")"));
+    assert!(read[3].contains("var_os(\"HOME\")"));
     // The context of the loop is the one that grants nothing.
     for presence in Presence::ALL {
         for session_locked in [false, true] {

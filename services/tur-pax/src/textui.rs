@@ -3,10 +3,12 @@
 //! The text interface: `tur-pax run` and `tur-pax chat`.
 //!
 //! ```text
-//! tur-pax run "<request>" [--provider-config <file>] [--policy <file>]
+//! tur-pax run "<request>" [--provider-config <file>
+//!                          | --provider <id> --model <name> [--models <file>]]
+//!                         [--policy <file>]
 //!                         [--tools <dir>] [--manifests <dir>] [--adapters <dir>]
 //!                         [--grant-read <path>]... [--audit-log <file>]
-//!                         [--memory-store <dir>] [--key-env <VARIABLE>]
+//!                         [--memory-store <dir>] [--key-env <VARIABLE> | --no-key]
 //!                         [--max-steps <n>] [--max-seconds <n>]
 //!                         [--no-commands] [--task <id>] [--json]
 //! tur-pax chat            the same options, without --json
@@ -25,7 +27,15 @@
 //!
 //! `run` and `chat` are for a person at a terminal who names a provider
 //! configuration and supplies a key in the environment: a deliberate act
-//! each time. They do not look at the switch, the consent record or the
+//! each time. A provider can also be named by its identifier in the model
+//! list (`--provider local --model qwen3-4b`): its entry then gives the
+//! family, the address and the key source, as in the session service. A
+//! model server on this computer that takes no key is sent none; one whose
+//! entry names a key file in the session's runtime directory
+//! (`tur-ai-local`) is sent the key from that file; `--no-key` sends none
+//! at all. The provider's identifier is written to the audit trail
+//! (`TUR_AI_PROVIDER_ID`) beside its family. They do not look at the
+//! switch, the consent record or the
 //! limit of one day; those belong to the session service
 //! ([`crate::service`]), which is what the desktop talks to. They offer the
 //! model none of P@x's own operations, because nothing here could show a
@@ -49,7 +59,8 @@ use clap::Args;
 use serde_json::{Value, json};
 use tur_pax_memory::{FileStore, Memory, RecallBudget, RecalledNotes, StdFs};
 use tur_pax_providers::{
-    EnvKeySource, KeySource, Message, Provider, ProviderConfig, SpendMeter, connect,
+    ApiKey, EnvKeySource, KeySource, Message, Provider, ProviderConfig, SpendMeter, connect,
+    connect_without_key,
 };
 
 use crate::codes::{Code, Problem};
@@ -62,6 +73,9 @@ use crate::orchestrator::{
 use crate::policy::UserPolicy;
 use crate::registry::{ToolFiles, ToolRegistry, read_tool_sets};
 use crate::sandbox::{Grant, GrantRules};
+use crate::settings::{
+    ADMIN_MODELS, KeySourceKind, ModelList, ProviderEntry, SHIPPED_MODELS, Settings, runtime_key,
+};
 use crate::trail::FileTrail;
 
 /// Exit status: the task completed.
@@ -109,9 +123,34 @@ pub struct TaskArgs {
     /// Read in addition to the tool sets.
     #[arg(long, value_name = "DIR")]
     pub adapters: Option<PathBuf>,
-    /// The environment variable that holds the API key.
-    #[arg(long, value_name = "VARIABLE", default_value = DEFAULT_KEY_VARIABLE)]
-    pub key_env: String,
+    /// A provider of the model list, by its identifier, in place of a
+    /// provider configuration file: its entry decides the adapter family,
+    /// the address, the limits and where the key comes from, as in the
+    /// session service. Needs --model.
+    #[arg(
+        long,
+        value_name = "ID",
+        conflicts_with = "provider_config",
+        requires = "model"
+    )]
+    pub provider: Option<String>,
+    /// The model, with --provider.
+    #[arg(long, value_name = "NAME", requires = "provider")]
+    pub model: Option<String>,
+    /// The model list --provider is looked up in. Without it,
+    /// /etc/tur/pax/models.json, then /usr/share/tur/pax/models.json.
+    #[arg(long, value_name = "FILE", requires = "provider")]
+    pub models: Option<PathBuf>,
+    /// The environment variable that holds the API key. Without it,
+    /// TUR_PAX_API_KEY; with --provider, a provider whose entry names a key
+    /// file of a model server on this computer is sent the key from that
+    /// file, and one that takes no key is sent none.
+    #[arg(long, value_name = "VARIABLE", conflicts_with = "no_key")]
+    pub key_env: Option<String>,
+    /// Send no key at all: for a model server on this computer that takes
+    /// none. Only the openai-chat family can be used without a key.
+    #[arg(long)]
+    pub no_key: bool,
     /// A folder or a file the commands of this task may read. May be given
     /// more than once. Keys, keyrings, browser profiles and hidden folders
     /// are refused.
@@ -162,6 +201,9 @@ pub struct ChatArgs {
 /// Everything a task needs, read from the machine.
 struct Setup {
     config: ProviderConfig,
+    /// The provider's identifier: the model list's, or the family's when a
+    /// configuration file named only the family.
+    provider_id: String,
     provider: Box<dyn Provider>,
     registry: ToolRegistry,
     policy: UserPolicy,
@@ -262,37 +304,98 @@ fn prepare(args: &TaskArgs, err: &mut dyn Write) -> io::Result<Option<Setup>> {
     }
 }
 
-fn build(args: &TaskArgs, err: &mut dyn Write) -> io::Result<Result<Setup, Vec<Fault>>> {
-    // The provider: configuration, key, adapter.
-    let config_path = match &args.provider_config {
-        Some(path) => Some(path.clone()),
-        None => {
-            base_dir("XDG_CONFIG_HOME", ".config").map(|base| base.join("tur/pax/provider.json"))
-        }
-    };
-    let Some(config_path) = config_path else {
-        return Ok(Err(vec![input_fault(
-            Code::InputUnreadable,
-            "no provider configuration was named and no home directory is known".to_owned(),
-        )]));
-    };
-    let config_text = match read_file(&config_path) {
-        Ok(text) => text,
-        Err(fault) => return Ok(Err(vec![fault])),
-    };
-    let provider_fault = |error: tur_pax_providers::ProviderError| Fault {
+fn provider_fault(error: tur_pax_providers::ProviderError) -> Fault {
+    Fault {
         code: error.kind().error_code(),
         detail: error.to_string(),
+    }
+}
+
+/// The configuration of a provider named by its identifier, from the model
+/// list, as the session service makes it: the entry's family, address and
+/// key source, the model's output limit, the default limit of one task.
+fn listed_provider(args: &TaskArgs, id: &str) -> Result<(ProviderConfig, ProviderEntry), Fault> {
+    let models = match &args.models {
+        Some(path) => ModelList::from_json(&read_file(path)?)?,
+        None => ModelList::load(&[PathBuf::from(ADMIN_MODELS), PathBuf::from(SHIPPED_MODELS)])?,
     };
-    let config = match ProviderConfig::from_json(&config_text) {
-        Ok(config) => config,
-        Err(error) => return Ok(Err(vec![provider_fault(error)])),
+    let mut settings = Settings::default();
+    settings.set_provider(id, args.model.as_deref().unwrap_or_default(), &models)?;
+    let config = settings.provider_config(&models)?;
+    let Some((entry, _)) = settings.current_provider(&models) else {
+        return Err(input_fault(
+            Code::InputInvalid,
+            format!("no provider has the identifier {id:?}"),
+        ));
     };
-    let key = match EnvKeySource::new(args.key_env.as_str()).api_key(config.provider) {
-        Ok(key) => key,
-        Err(error) => return Ok(Err(vec![provider_fault(error)])),
+    Ok((config, entry))
+}
+
+/// The key a model server on this computer wrote for the person, in the
+/// session's runtime directory: see [`crate::settings::runtime_key`].
+fn key_from_runtime_file(file: &str, config: &ProviderConfig) -> Result<ApiKey, Fault> {
+    let runtime = std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from);
+    let runtime = runtime.filter(|path| path.is_absolute());
+    runtime_key(
+        runtime.as_deref(),
+        config.provider,
+        file,
+        config.base_url.as_deref(),
+    )
+}
+
+fn build(args: &TaskArgs, err: &mut dyn Write) -> io::Result<Result<Setup, Vec<Fault>>> {
+    // The provider: configuration, key, adapter. Either a configuration
+    // file, or a provider of the model list by its identifier.
+    let (config, entry) = if let Some(id) = &args.provider {
+        match listed_provider(args, id) {
+            Ok((config, entry)) => (config, Some(entry)),
+            Err(fault) => return Ok(Err(vec![fault])),
+        }
+    } else {
+        let config_path = match &args.provider_config {
+            Some(path) => Some(path.clone()),
+            None => base_dir("XDG_CONFIG_HOME", ".config")
+                .map(|base| base.join("tur/pax/provider.json")),
+        };
+        let Some(config_path) = config_path else {
+            return Ok(Err(vec![input_fault(
+                Code::InputUnreadable,
+                "no provider configuration was named and no home directory is known".to_owned(),
+            )]));
+        };
+        let config_text = match read_file(&config_path) {
+            Ok(text) => text,
+            Err(fault) => return Ok(Err(vec![fault])),
+        };
+        match ProviderConfig::from_json(&config_text) {
+            Ok(config) => (config, None),
+            Err(error) => return Ok(Err(vec![provider_fault(error)])),
+        }
     };
-    let provider = match connect(&config, key) {
+    let provider_id = entry.as_ref().map_or_else(
+        || config.provider.as_str().to_owned(),
+        |entry| entry.id.clone(),
+    );
+    // The key: none when none is to be sent; the file a model server on
+    // this computer wrote, for an entry that names one; otherwise the
+    // environment variable.
+    let source = entry.as_ref().map(ProviderEntry::key_source);
+    let connected = if args.no_key || matches!(source, Some(KeySourceKind::None)) {
+        connect_without_key(&config)
+    } else {
+        let key = match (&args.key_env, source) {
+            (None, Some(KeySourceKind::RuntimeFile(file))) => key_from_runtime_file(file, &config),
+            (variable, _) => EnvKeySource::new(variable.as_deref().unwrap_or(DEFAULT_KEY_VARIABLE))
+                .api_key(config.provider)
+                .map_err(provider_fault),
+        };
+        match key {
+            Ok(key) => connect(&config, key),
+            Err(fault) => return Ok(Err(vec![fault])),
+        }
+    };
+    let provider = match connected {
         Ok(provider) => provider,
         Err(error) => return Ok(Err(vec![provider_fault(error)])),
     };
@@ -387,6 +490,7 @@ fn build(args: &TaskArgs, err: &mut dyn Write) -> io::Result<Result<Setup, Vec<F
 
     Ok(Ok(Setup {
         config,
+        provider_id,
         provider,
         registry,
         policy,
@@ -457,6 +561,7 @@ impl Setup {
         };
         let task = TaskRequest {
             task_id,
+            provider_id: Some(&self.provider_id),
             request,
             recalled,
         };
@@ -578,6 +683,17 @@ fn print_ending(report: &TaskReport, out: &mut dyn Write) -> io::Result<()> {
     writeln!(out)
 }
 
+/// The provider as the text interface names it: its family, and its
+/// identifier when that is another.
+fn provider_name(setup: &Setup) -> String {
+    let family = setup.config.provider.as_str();
+    if setup.provider_id == family {
+        family.to_owned()
+    } else {
+        format!("{} ({family})", setup.provider_id)
+    }
+}
+
 /// Run `tur-pax run`. Returns the exit status.
 ///
 /// Results go to `out` and problems to `err`. An error is returned only if
@@ -601,6 +717,7 @@ pub fn run_task(args: &RunArgs, out: &mut dyn Write, err: &mut dyn Write) -> io:
         let mut document = report.to_json();
         document["task"] = json!(task);
         document["provider"] = json!(setup.config.provider.as_str());
+        document["provider_id"] = json!(setup.provider_id);
         document["model"] = json!(setup.config.model);
         document["tools"] = setup.tools_json();
         document["unavailable_tools"] = json!(setup.registry.unavailable());
@@ -618,7 +735,7 @@ pub fn run_task(args: &RunArgs, out: &mut dyn Write, err: &mut dyn Write) -> io:
     writeln!(
         out,
         "task {task}: provider {}, model {}",
-        setup.config.provider,
+        provider_name(&setup),
         printable(&setup.config.model)
     )?;
     writeln!(out, "tools offered: {}", names.join(", "))?;
@@ -656,7 +773,7 @@ pub fn chat(
     writeln!(
         out,
         "P@x, provider {}. One request per line; /quit to end.",
-        setup.config.provider
+        provider_name(&setup)
     )?;
     loop {
         write!(out, "you> ")?;

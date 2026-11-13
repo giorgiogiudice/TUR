@@ -566,6 +566,12 @@ impl Observer for NoObserver {
 pub struct TaskRequest<'a> {
     /// The task identifier, written to every record of the trail.
     pub task_id: &'a str,
+    /// The identifier of the provider the task is sent to, as the model list
+    /// or the person names it (`deepseek`, `local`), written to the trail
+    /// as `TUR_AI_PROVIDER_ID` when the task starts and when it ends, beside
+    /// the adapter family of every record. `None` when the provider was
+    /// named by its family alone: the family is written then.
+    pub provider_id: Option<&'a str>,
     /// What the user typed.
     pub request: &'a str,
     /// Notes recalled from memory for this request. They are placed in the
@@ -668,6 +674,7 @@ impl Stop {
 struct Session<'t> {
     task: &'t str,
     provider: &'static str,
+    provider_id: String,
     context: Context,
     started: Duration,
     items: Vec<ReportItem>,
@@ -956,6 +963,9 @@ impl Orchestrator<'_> {
         let mut session = Session {
             task: task.task_id,
             provider: self.provider.id().as_str(),
+            provider_id: crate::trail::identifier(
+                task.provider_id.unwrap_or(self.provider.id().as_str()),
+            ),
             context: self.situation.context(),
             started: self.clock.elapsed(),
             items: Vec::new(),
@@ -965,6 +975,7 @@ impl Orchestrator<'_> {
         let mut stop = self.drive(task, history, meter, &mut session);
 
         let mut finished = TrailEvent::new(EventKind::TaskFinished, session.task, session.provider)
+            .with("TUR_AI_PROVIDER_ID", session.provider_id.clone())
             .with("TUR_AI_OUTCOME", stop.outcome.as_str())
             .with("TUR_AI_STEPS", session.steps.to_string())
             .with("TUR_AI_REQUESTS", meter.requests().to_string())
@@ -1041,6 +1052,7 @@ impl Orchestrator<'_> {
             "no"
         };
         let started = TrailEvent::new(EventKind::TaskStarted, session.task, session.provider)
+            .with("TUR_AI_PROVIDER_ID", session.provider_id.clone())
             .with("TUR_AI_ATTENDED", attended);
         if self.trail.event(&started).is_err() {
             return Stop::audit();

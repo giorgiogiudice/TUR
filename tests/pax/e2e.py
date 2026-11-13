@@ -365,11 +365,16 @@ class Test:
     def tool_set(self):
         """The tool set of the test: what ships, plus two test services.
 
-        What ships is not copied here. Each component's agent-tools.json and
-        agent-tools.adapter.json were installed by the workflow into the
-        directory of tool sets tur-pax reads by default, one subdirectory for
-        each component, and tur-pax is not told where they are. This checks
-        that they are there, exactly as the components have them.
+        What ships is not listed here: it is discovered. A component ships
+        its tools by one rule, services/<component>/agent-tools.json with
+        agent-tools.adapter.json beside it, and every component that does is
+        found by looking. The workflow installed each into the directory of
+        tool sets tur-pax reads by default, one subdirectory for each
+        component, and tur-pax is not told where they are. This checks that
+        every discovered set is there, exactly as its component has it, and
+        that every installed set loads. On an installed system the copy of
+        the repository holds only some components; a set installed that the
+        copy does not hold is listed and must load too.
         """
         for directory in (self.manifests, self.adapters):
             if directory.exists():
@@ -379,14 +384,32 @@ class Test:
         name = "tool sets"
         print(name, flush=True)
         shipped = sorted(path.parent.name for path in services.glob("*/agent-tools.json"))
+        self.checks.check(
+            name,
+            "components ship assistant tools, found by the rule services/<component>/agent-tools.json",
+            bool(shipped),
+            ", ".join(shipped) or "none found",
+        )
         self.checks.equal(
             name,
-            "five components ship assistant tools",
-            shipped,
-            ["tur-catalogue", "tur-device-manager", "tur-diagnostics", "tur-runtime", "tur-storage"],
+            "every component that ships a manifest ships its adapters beside it",
+            [component for component in shipped if not (services / component / "agent-tools.adapter.json").is_file()],
+            [],
         )
         installed = sorted(path.name for path in INSTALLED_TOOLS.iterdir()) if INSTALLED_TOOLS.is_dir() else []
-        self.checks.equal(name, f"each has its directory under {INSTALLED_TOOLS}", installed, shipped)
+        self.checks.equal(
+            name,
+            f"each has its directory under {INSTALLED_TOOLS}",
+            [component for component in shipped if component not in installed],
+            [],
+        )
+        extra = [component for component in installed if component not in shipped]
+        self.checks.check(
+            name,
+            "tool sets installed that this copy of the repository does not hold (informational)",
+            True,
+            ", ".join(extra) or "none",
+        )
         different = [
             f"{component}/{file}"
             for component in shipped
@@ -395,10 +418,20 @@ class Test:
             or (INSTALLED_TOOLS / component / file).read_bytes() != (services / component / file).read_bytes()
         ]
         self.checks.equal(name, "the installed manifests and adapters are the components' own", different, [])
+        refused = []
+        for component in installed:
+            validated = subprocess.run(
+                [str(self.tur_pax), "manifest", "validate", str(INSTALLED_TOOLS / component / "agent-tools.json")],
+                capture_output=True,
+                text=True,
+            )
+            if validated.returncode != 0:
+                refused.append(f"{component}: {(validated.stdout + validated.stderr).strip()[:200]}")
+        self.checks.equal(name, "tur-pax loads every installed manifest", refused, [])
         self.checks.check(
             name,
             "the assistant itself holds no manifest and no adapter of a component",
-            not (services / "tur-pax" / "tools").exists(),
+            not (services / "tur-pax" / "tools").exists() and not (services / "tur-pax" / "agent-tools.json").exists(),
         )
         # A test service with one tool of each class 0 to 3, and a tool that
         # reads a fixture tree instead of this machine.
@@ -407,6 +440,24 @@ class Test:
         shutil.copy(data / "test-service.adapters.json", self.adapters / "test-service.json")
         shutil.copy(HERE / "manifests" / "fixture.json", self.manifests / "fixture.json")
         shutil.copy(HERE / "adapters" / "fixture.json", self.adapters / "fixture.json")
+
+        # What every action is, by the manifests that declare it: the class
+        # of each tool of every installed set and of the two test services,
+        # and the program each adapter starts.
+        manifests = [INSTALLED_TOOLS / component / "agent-tools.json" for component in installed]
+        manifests += sorted(self.manifests.glob("*.json"))
+        adapters = [INSTALLED_TOOLS / component / "agent-tools.adapter.json" for component in installed]
+        adapters += sorted(self.adapters.glob("*.json"))
+        self.classes = {"command:read_only": 0, "agent:memory_read": 0}
+        for path in manifests:
+            manifest = json.loads(path.read_text())
+            for tool in manifest["tools"]:
+                self.classes[f"{manifest['service']}:{tool['name']}"] = tool["class"]
+        self.programs = set()
+        for path in adapters:
+            if path.is_file():
+                for adapter in json.loads(path.read_text())["adapters"]:
+                    self.programs.add(adapter["program"])
 
     def controls(self):
         """Show that each canary works where there is no sandbox."""
@@ -418,17 +469,10 @@ class Test:
         version = subprocess.run(["/usr/bin/bwrap", "--version"], capture_output=True, text=True)
         check(name, "bubblewrap is installed", version.returncode == 0, version.stdout + version.stderr)
 
-        for program in (
-            "tur-device",
-            "tur-storage",
-            "tur-catalogue",
-            "tur-diag",
-            "tur-runtime",
-            "tur-pax-test-tool",
-            "lsblk",
-            "prlimit",
-        ):
-            check(name, f"/usr/bin/{program} is installed", Path(f"/usr/bin/{program}").is_file())
+        # Every program an installed adapter or a test service starts, found
+        # from the adapters, and what the sandbox itself needs.
+        for program in sorted(self.programs | {"/usr/bin/lsblk", "/usr/bin/prlimit"}):
+            check(name, f"{program} is installed", Path(program).is_file())
         check(name, "the catalogue is installed", Path("/usr/share/tur/catalogue").is_dir())
         check(name, "the fixture tree is installed", Path("/usr/share/tur-pax-e2e/laptop").is_dir())
 
@@ -1437,27 +1481,13 @@ class Test:
         performed = sorted(
             {entry.get("TUR_AI_ACTION") for outcome in self.outcomes for entry in outcome.events("executed")}
         )
-        allowed = {
-            "command:read_only",
-            "org.tur.Test1:test_observe",
-            "org.tur.Test1:test_reversible",
-            "org.tur.PaxFixture1:fixture_device_problems",
-            "org.tur.Catalogue1:catalogue_route",
-            "org.tur.Catalogue1:catalogue_search",
-            "org.tur.Catalogue1:catalogue_show",
-            "org.tur.Diagnostics1:diag_get_status",
-            "org.tur.Device1:device_get_inventory",
-            "org.tur.Device1:device_list_problems",
-            "org.tur.Device1:device_list",
-            "org.tur.Device1:device_get",
-            "org.tur.Storage1:storage_list_volumes",
-            "org.tur.Storage1:storage_preview_mount",
-            "org.tur.Runtime1:runtime_inspect_file",
-        }
+        # The class of each, as the manifest that declares it says: not a
+        # list of names kept here.
+        above_one = [action for action in performed if self.classes.get(action, 99) > 1]
         self.checks.equal(
             name,
-            "everything that was performed is a class 0 or class 1 action",
-            [action for action in performed if action not in allowed],
+            "everything that was performed is a class 0 or class 1 action a manifest declares",
+            above_one,
             [],
         )
         system_texts = {json.dumps(system_text(body)) for outcome in self.outcomes for body in outcome.bodies}
