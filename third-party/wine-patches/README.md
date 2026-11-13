@@ -10,10 +10,10 @@ in Wine's style, each small and meant to be proposed upstream.
 
 | | |
 |---|---|
-| Against | Wine `wine-11.20` (`7298a818b79446bae153b8d5aa27235ab3703bf9`), the version Fedora 45 ships; Fedora's Staging patch set touches none of the files patched here |
+| Against | Wine `wine-11.20` (`7298a818b79446bae153b8d5aa27235ab3703bf9`), the version Fedora 45 ships (Fedora builds it with the Staging patch set; the modules built here are plain 11.20 plus these patches) |
 | Also checked against | Wine master `cc5d1d86ee7d60649e6f858106db046c77c8b12c` (`build-wine.sh` reports whether each patch applies) |
 | Applied by | `tests/windows-drivers/kmdf/build-wine.sh`, with `git apply`, in the order of [`series`](series) |
-| Built | only the modules they touch (`ntoskrnl.exe`, `wdfldr.sys`), in CI; the experiment puts them over Fedora's in a throw-away container. Never shipped |
+| Built | only the modules they touch (`ntoskrnl.exe`, `wdfldr.sys`, `wineusb.sys` and its Unix half `wineusb.so`, `kernelbase.dll`), in CI; the experiment puts them over Fedora's in a throw-away container (`kernelbase.dll` for one scenario only). Never shipped |
 
 Each `.patch` file is the output of `git format-patch` with a licence note
 above it, which `git apply` ignores. The author line is a placeholder: Wine

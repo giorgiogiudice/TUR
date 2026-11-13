@@ -1,9 +1,9 @@
 <!-- SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0 -->
-# windows-drivers-2 — KMDF drivers in Wine's user-space driver host, runtime built from Microsoft's MIT source (experiment, in progress)
+# windows-drivers-2 — KMDF drivers in Wine's user-space driver host, runtime built from Microsoft's MIT source (experiment)
 
-> **Status: in progress.** This report is updated with every CI iteration of
-> pull request 96 so that the findings are never only in a CI log. Sections
-> marked *pending* have no measurement yet.
+> **Status: experiment finished (time box).** Twelve CI iterations of pull
+> request 96 on 2026-11-13. The final run is 43396371070 (commit
+> `549e454`): every check of the KMDF scenarios passes.
 
 ```text
 TUR DEVELOPMENT REPORT
@@ -41,7 +41,7 @@ BUILD
 - Command: tests/windows-drivers/kmdf/ci-build.sh in a Fedora 45 container,
   in CI only; nothing was built on a development machine
 - Result: Wine modules build; Wdf01000.sys (1,507,328 bytes), kmdftest.sys
-  and Microsoft's osrusbfx2.sys build and load (sections 3 and 6)
+  and Microsoft's osrusbfx2.sys build, load and run (sections 3 and 6)
 
 TESTS
 - Integration: workflow windows-drivers, all runs green (a failed build is a
@@ -53,11 +53,39 @@ KNOWN LIMITATIONS
 - See section 9.
 
 NEXT SAFE ACTION
-- Continue the run iterations past WdfDriverCreate; see section 8.
+- The owner's licence decision (section 7), then the upstream path
+  (section 10); ADR-0026 has a note, its status is unchanged.
 ```
 
-## The answer so far
+## The answer
 
+**Yes: KMDF drivers run as ordinary user-space programs in Wine, on a
+framework built from Microsoft's MIT source.** In the final run
+(43396371070, commit `549e454`) all 62 checks pass, none fail:
+
+- **`kmdftest.sys`**, a minimal KMDF USB driver: loaded by Wine's PnP
+  manager into `winedevice.exe`, bound to KMDF 1.33 through the new
+  `wdfldr.sys`, and went `DriverEntry` → `WdfDriverCreate` →
+  `EvtDriverDeviceAdd` → `WdfDeviceCreate` → `EvtDevicePrepareHardware` →
+  `EvtDeviceD0Entry`; its test program got answers to IOCTLs, a `WDFDPC`, a
+  `WDFTIMER` and a `WDFWORKITEM` ran, and bulk (64 and 512 bytes) and vendor
+  control transfers went through the emulated device.
+- **Microsoft's unmodified `kmdf_fx2` sample** (`osrusbfx2.sys`) on an
+  emulated OSR USB-FX2 board: `EvtDevicePrepareHardware` and
+  `EvtDeviceD0Entry` ran, its continuous reader received switch interrupts,
+  and **its own test program read and wrote**: descriptor dump, bulk write
+  and read-back (10 × 64 bytes), bar graph lit and read back (0xff), switch
+  state read, the 7-segment display set through 0–7 and read back, and the
+  switch interrupt message. The device logged every request
+  (`set-bargraph 0xff`, `0xd7 -> 0xff`, `set-7segment 0x01` … `0x80`).
+
+It took sixteen Wine patches (section 4; all apply to Wine master), a set
+of stand-ins for what the published source lacks (section 2), and no
+Microsoft binary. Nothing ran in a kernel. Iteration by iteration:
+
+- **Iteration 12 (run 43396371070, commit `549e454`): everything passes.**
+  With patch 0016 the FX2 test program's menu run completed: bar graph,
+  switches, 7-segment display and the switch interrupt message.
 - **Iteration 11 (run 43395168698, commit `97d5434`): the goal is met for
   the minimal driver and largely for Microsoft's sample.** No crash, no
   unimplemented call in either scenario.
@@ -149,14 +177,11 @@ NEXT SAFE ACTION
 - **The client drivers build**: `kmdftest.sys` and Microsoft's unmodified
   `kmdf_fx2` sample (`osrusbfx2.sys`) and its test program, with the same
   toolchain and a stand-in KMDF stub (iteration 7).
-- **The framework imports at least 182 kernel functions and data** (section
-  5.2). Of the 162 that mingw-w64's import libraries know, Wine 11.20 lacks or
-  stubs 48: 7 not exported at all, 19 aborting stubs, 22 that log FIXME and
-  do nothing; Wine master is identical for these. Another 20 (power
-  framework, high-resolution timers, activity IDs, verifier queries, ...)
-  are in neither Wine nor mingw-w64's libraries and were found at the link.
-  The TUR patches add all of the missing ones (0007, 0009, 0010) and
-  replace every aborting stub (0001, 0004, 0011).
+- **The linked framework imports 189 kernel functions and data** (section
+  5.2, from the final link). Wine 11.20 and master alike: 118 implemented,
+  22 FIXME stubs, 19 aborting stubs, 30 not exported. With the TUR patches:
+  160 implemented, 29 FIXME stubs (harmless in user space), none aborting,
+  none missing.
 - **The Wine side**: sixteen patches to Wine 11.20 (`ntoskrnl.exe`, a new
   `wdfldr.sys`, `wineusb.sys`), all of which also apply to Wine master
   (section 4). They are installed over Fedora 45's Wine in the CI container.
@@ -280,12 +305,13 @@ plus three of `compat/`).
 | 6 (`ffc7579`, 43386297642) | **180 of 180** | **0** | compiled; the link stopped at the first 20 duplicate definitions of mingw-w64's `ntstrsafe.h` functions (C99 `extern inline` in the C files) before reporting undefined symbols |
 | 7 (`1f91af3`, 43387715486) | 180 of 180 | 0 | 74 duplicates, all `ntstrsafe.h`'s, linked past; the link then reported undefined symbols: more kernel imports Wine lacks (power framework, high-resolution timers, activity IDs, verifier queries, `IoQueryFullDriverPath`, `IoGetInitiatorProcess`), `wdmsec.lib`'s `IoCreateDeviceSecure` and SDDL constant, four companion callbacks, one C-linkage mismatch of mine, and `__CTOR_LIST__`. `kmdftest.sys` (90,112 bytes) and Microsoft's `osrusbfx2.sys` (221,184 bytes) linked |
 | 8 (`abbbb69`, 43388872919) | 180 of 180 | 0 | **linked**: `Wdf01000.sys`, 1,507,328 bytes, after Wine patches 0009–0010, `tur-wdmsec.c`, the companion callbacks and the linkage fix; loaded in Wine (section 6) |
+| 9–12 (`be3cd7e` … `549e454`) | 180 of 180 | 0 | run-time iterations (section 6); one header wrapper added (`compat/wdm.h`, section 2.7) |
 
 ## 4. The Wine patch set
 
 `third-party/wine-patches`, LGPL-2.1-or-later, against wine-11.20
-(`7298a818`, what Fedora 45 ships; Staging touches none of these files);
-both also apply to master `cc5d1d86` (checked in every build).
+(`7298a818`, what Fedora 45 ships); all sixteen also apply to master
+`cc5d1d86` (checked in every build; last in run 43396371070).
 
 | Patch | What | Why |
 |---|---|---|
@@ -299,12 +325,12 @@ both also apply to master `cc5d1d86` (checked in every build).
 | 0008 `wineusb.sys: Handle power IRPs.` | set/query power succeed on PDOs, the bus FDO passes them down | without it every KMDF USB driver's start fails at D0 |
 | 0009 `ntoskrnl.exe: Add power framework functions that report it unavailable.` | `PoFxRegisterDevice` fails with `STATUS_NOT_SUPPORTED`; the ten functions that take its handle do nothing | imported by the framework (`poxinterfacekm.cpp`); without them the image does not load |
 | 0010 `ntoskrnl.exe: Add more functions the KMDF runtime imports.` | `ExAllocateTimer` fails (callers use `KeSetTimer` timers), `ExSetTimer`/`ExCancelTimer`/`ExDeleteTimer`, `IoGetActivityIdIrp`/`IoSetActivityIdIrp`, `IoGetInitiatorProcess`, `IoQueryFullDriverPath` (from the loader entry), `VfIsRuleClassEnabled` (FALSE), `VfCheckNxPoolType` | the link of iteration 7 |
+| 0011 `ntoskrnl.exe: Implement the remaining stubs the KMDF runtime imports.` | `MmIsDriverVerifying` returns FALSE (no Driver Verifier, as on Windows without it); `MmSizeOfMdl`, `IoBuildPartialMdl`, `IoSetCompletionRoutineEx`, `KeGetRecommendedSharedDataAlignment`, `MmLockPagable{Data,Image}Section`, the error-log and WMI-event functions (no event log, no WMI), `WmiTraceMessageVa`, `IoInvalidateDeviceState`, `IoRequestDeviceEject`, `IoRegisterLastChanceShutdownNotification`, `IoGetDmaAdapter` (no adapters), `KeSynchronizeExecution` and the interrupt spin locks (interrupts are never connected), the `KdDebuggerNotPresent` variable | iteration 8: `WdfDriverCreate` called `MmIsDriverVerifying`, a `stub`, and the driver host aborted; the rest were the other `stub` imports in 5.2, each an abort waiting to happen |
 | 0012 `wineusb.sys: Fill in interface and pipe information on SELECT_CONFIGURATION.` | fills each interface's class/subclass/protocol and each pipe's endpoint, packet size, interval and type from the active configuration descriptor, sets configuration and interface handles, walks every interface in the request | iteration 9: the framework builds the request itself, and its pipes came back as endpoint 0, packet size 0, control; Wine had relied on usbd.sys's `USBD_CreateConfigurationRequestEx` prefilling them |
 | 0013 `wineusb.sys: Handle URB_FUNCTION_CONTROL_TRANSFER and URB_FUNCTION_GET_STATUS_FROM_DEVICE.` | submits the generic control transfer (the caller's setup packet; direction flag and buffer length take precedence, as on Windows) and the device get-status request on the default control pipe | the framework sends every driver control transfer (`WdfUsbTargetDeviceSendControlTransferSynchronously`, `WdfUsbTargetDeviceFormatRequestForControlTransfer`, which the FX2 sample uses for its bar graph, switches and 7-segment display) as `URB_FUNCTION_CONTROL_TRANSFER`, which wineusb rejected; get-status was the FIXME of iteration 9; found reading the framework's source |
 | 0014 `ntoskrnl.exe: Implement ExAllocateTimer, ExSetTimer, ExCancelTimer and ExDeleteTimer.` | the Windows 8.1 timer interface on top of `KeSetTimerEx` and a DPC that calls the callback (replacing 0010's failing versions) | iteration 10: the framework creates every timer of a 1.13+ client with `ExAllocateTimer`; `WdfTimerCreate` failed |
 | 0015 `ntoskrnl.exe: Return NTSTATUS codes from IoGetDeviceProperty.` | maps setupapi's Win32 errors (`ERROR_INSUFFICIENT_BUFFER` → `STATUS_BUFFER_TOO_SMALL`, a missing property → `STATUS_OBJECT_NAME_NOT_FOUND`, ...) | iteration 10: a missing friendly name came back as 13, "success"; the FX2 sample then used a NULL memory object and the framework bugchecked. A Wine bug for any driver |
 | 0016 `kernelbase: Wait for a pending DeviceIoControl called without an OVERLAPPED.` | as `ReadFile`/`WriteFile` already do in Wine, and as Windows does | iteration 11: the FX2 test program opens its device overlapped and calls `DeviceIoControl` without an `OVERLAPPED`; the framework pends every request, so the call failed with `ERROR_IO_PENDING`. Installed for the FX2 scenario only (Fedora ships Staging's `kernelbase`; this is plain 11.20 plus the patch) |
-| 0011 `ntoskrnl.exe: Implement the remaining stubs the KMDF runtime imports.` | `MmIsDriverVerifying` returns FALSE (no Driver Verifier, as on Windows without it); `MmSizeOfMdl`, `IoBuildPartialMdl`, `IoSetCompletionRoutineEx`, `KeGetRecommendedSharedDataAlignment`, `MmLockPagable{Data,Image}Section`, the error-log and WMI-event functions (no event log, no WMI), `WmiTraceMessageVa`, `IoInvalidateDeviceState`, `IoRequestDeviceEject`, `IoRegisterLastChanceShutdownNotification`, `IoGetDmaAdapter` (no adapters), `KeSynchronizeExecution` and the interrupt spin locks (interrupts are never connected), the `KdDebuggerNotPresent` variable | iteration 8: `WdfDriverCreate` called `MmIsDriverVerifying`, a `stub`, and the driver host aborted; the rest were the other `stub` imports in 5.2, each an abort waiting to happen |
 
 A correction to an earlier iteration of this report: patch 0009 was first
 written, then dropped because the import table did not list the power
@@ -315,10 +341,23 @@ knows); the link of iteration 7 showed them, and the patch is back.
 Iteration 5: all six applied (and apply to master), but `ntoskrnl.exe` did
 not link: patch 0006 called `ZwOpenKey`/`ZwCreateKey`/`ZwClose`, which
 ntoskrnl itself only forwards to ntdll; fixed to `Nt*` in iteration 6.
-Built in CI (`build-wine.sh`: Wine's tools, `ntoskrnl.exe`, `wdfldr.sys`
-only) and put over Fedora 45's Wine in the throw-away container
-(`/usr/lib64/wine-wow64/wine/x86_64-windows/`, measured in run
-43382377329). Run-time effect: *pending*.
+Built in CI (`build-wine.sh`: Wine's tools, `ntoskrnl.exe`, `wdfldr.sys`,
+`wineusb.sys` with its Unix half `wineusb.so`, and `kernelbase.dll`) and put
+over Fedora 45's Wine in the throw-away container
+(`/usr/lib64/wine-wow64/wine/x86_64-windows/` and `x86_64-unix/`). Run-time
+effect: section 6.
+
+Grouped by what they are, for upstream:
+
+- **Wine bugs any driver can hit** (no KMDF needed to see them): 0001 (DPCs
+  never ran), 0003 (driver object extensions), 0012 (select-configuration
+  pipe information only when `usbd.sys` prefilled it), 0013 (no generic
+  control transfer), 0015 (`IoGetDeviceProperty` returned Win32 errors as
+  NTSTATUS), 0016 (`DeviceIoControl` without `OVERLAPPED` did not wait),
+  0008 (no power IRPs in `wineusb.sys`), 0007's `PoRequestPowerIrp`.
+- **Missing or aborting kernel exports**, each small: 0004, 0005, 0006,
+  0007, 0009, 0010, 0011, 0014.
+- **New module**: 0002 `wdfldr.sys`.
 
 ## 5. Kernel functions the framework uses that Wine lacks
 
@@ -338,25 +377,32 @@ time with `MmGetSystemRoutineAddress` rather than imported; the link step
 (`globals.cpp`), so as it stands it would abort the driver host before any
 driver binds.
 
-### 5.2 Authoritative import table (iteration 6, from the compiled objects)
+### 5.2 Authoritative import table (final link, iteration 12)
 
-`imports.py` over the undefined symbols of all 180 objects (run
-43386297642, artifact `kmdf-build-evidence`, `wdf/imports.md`). 162 imports,
-all from `ntoskrnl.exe` except `WdfRegisterLibrary` (`wdfldr.sys`); none
-from `hal.dll` or `usbd.sys` (the framework's USB target builds its URBs
-itself; the client-contract functions are in `tur-usbdex.c`). Functions the
-framework looks up at run time with `MmGetSystemRoutineAddress` (the power
-framework, `IoConnectInterruptEx`, ...) are not imports and are not counted.
+`imports.py` over the undefined symbols of the linked runtime (run
+43396371070, artifact `kmdf-build-evidence`, `wdf/imports.md`): 189
+functions and data from `ntoskrnl.exe` and `wdfldr.sys`; none from
+`hal.dll` or `usbd.sys` (the framework builds its URBs itself; the USBD
+client-contract functions are in `tur-usbdex.c`). Functions the framework
+looks up at run time with `MmGetSystemRoutineAddress` (`IoConnectInterruptEx`,
+`IoReportInterruptActive`, ...) are not imports; Wine lacks them and the
+framework does without.
 
 | Wine | implemented | FIXME stub (does nothing) | `stub` (aborts) | missing (no load) |
 |---|---|---|---|---|
-| 11.20 | 114 | 22 | 19 | 7 |
-| master `cc5d1d86` | 114 | 22 | 19 | 7 |
-| 11.20 + TUR patches 0001–0006 | 122 | 17 | 17 | 6 |
-| 11.20 + TUR patches 0001–0008 | 128 (expected; iteration 7 measures) | 17 | 17 | 0 |
+| 11.20 | 118 | 22 | 19 | 30 |
+| master `cc5d1d86` | 118 | 22 | 19 | 30 |
+| 11.20 + TUR patches 0001–0016 | 160 | 29 | 0 | 0 |
 
-Every import not plainly implemented (11.20 = master; "+TUR" after patches
-0001–0006):
+The earlier table of iteration 6 (from the objects, before linking) counted
+162 imports with 114/22/19/7: it missed the 20-odd names that are in
+neither mingw-w64's import libraries nor Wine. The FIXME stubs that remain
+(`ExCreateCallback`/`ExRegisterCallback`, `IoWMIRegistrationControl`,
+`KeRegisterBugCheckReasonCallback`, `PoSetPowerState`, ...) were all hit in
+the final run and none mattered.
+
+The iteration-6 detail, kept for the record (11.20 = master; "+TUR" was
+then patches 0001–0006):
 
 | Function | 11.20 / master | +TUR | Effect for a KMDF USB driver |
 |---|---|---|---|
@@ -380,7 +426,7 @@ handler, so a power IRP to a USB device fails with
 |---|---|
 | Overlay of the patched `ntoskrnl.exe`, `wineusb.sys` and new `wdfldr.sys` over Fedora 45's Wine | PASS (run 43382377329 onwards) |
 | `kmdftest.sys` (minimal KMDF USB driver) on the loopback device 1209:0001 | iteration 9: started; iteration 10: IOCTLs, `WDFDPC`, `WDFWORKITEM`; **iteration 11: all PASS**, including `WDFTIMER`, bulk echo 64/512 bytes and a vendor control transfer |
-| Microsoft's `kmdf_fx2` sample and its `testapp.c` on the FX2-like device 0547:1002 | iteration 10: `WDF_VIOLATION` (Wine `IoGetDeviceProperty` bug, patch 0015); **iteration 11: `EvtDevicePrepareHardware`, `EvtDeviceD0Entry`, interrupt reads, test program's descriptor dump and bulk write/read PASS, bar graph set**; menu run stopped at `ERROR_IO_PENDING` (patch 0016) |
+| Microsoft's `kmdf_fx2` sample and its `testapp.c` on the FX2-like device 0547:1002 | **iteration 12: all PASS** (descriptor dump, bulk write/read, bar graph, switches, 7-segment display, switch interrupt message); iteration 10: `WDF_VIOLATION` (Wine `IoGetDeviceProperty` bug, patch 0015); iteration 11: `EvtDevicePrepareHardware`, `EvtDeviceD0Entry`, interrupt reads, test program's descriptor dump and bulk write/read PASS, bar graph set**; menu run stopped at `ERROR_IO_PENDING` (patch 0016) |
 
 Iteration 10, `kmdftest.exe` checks: `device-interface-found`, `ioctl-info`
 (44 bytes), `prepare-hardware-ran` (events 0x7), `d0-entry-ran` (1),
@@ -459,17 +505,112 @@ in run 43382377329.
   Releasing TUR-written code under MIT needs the owner's sign-off.
 - No Microsoft binary was downloaded or used; nothing ran in a kernel.
 
-## 8. Effort and next steps (as of this iteration)
+## 8. Effort
 
-1. Iteration 12: the FX2 test program's menu run (bar graph, switches,
-   7-segment display, switch interrupt message) with patch 0016.
-2. Each run iteration so far exposed one layer; the report records them.
+- **Wall clock:** one working day, not the two allowed: the first commit
+  at 09:28 and the final green run at about 12:30 (+03:00) on 2026-11-13,
+  twelve CI iterations; each build of Wine's modules, the framework and
+  the drivers takes about 25 minutes on a GitHub runner, the run job about
+  10.
+- **Size:** sixteen Wine patches, about 1,180 added and 50 removed lines;
+  ten patches to Microsoft's framework source and 37 stand-in files
+  (about 2,600 lines with the patches) in `third-party/wdf`; about 2,500
+  lines of build scripts, harness and test driver in
+  `tests/windows-drivers/kmdf`; an FX2-like device in `usbip_devices.py`.
+- **What took the iterations:** making the source compile (iterations 1–6,
+  section 3), linking (7–8), then one layer of Wine at a time at run time
+  (8–12): an aborting stub, a header that read a kernel's processor block,
+  missing USB and timer functions, a Win32 error returned as NTSTATUS, and
+  `DeviceIoControl` not waiting.
+
+Not done, for a follow-up: other KMDF drivers (real vendor packages,
+class extensions, which `wdfldr.sys` refuses), UMDF, 32-bit drivers,
+Driver Verifier, real hardware, and the sandbox of experiment 1 around the
+driver host.
 
 ## 9. Limits
 
 - Emulated USB devices (USB/IP), not hardware.
-- Wine 11.20 with the patched modules only inside a CI container.
+- Wine 11.20 with the patched modules only inside a CI container; the
+  patched `kernelbase.dll` (plain 11.20 plus 0016, over Fedora's Staging
+  build) only in the FX2 scenario.
+- Two drivers: one written for the test and one Microsoft sample. Vendor
+  KMDF drivers may use class extensions (not supported), DMA or interrupts
+  (no hardware in Wine), or kernel functions not exercised here.
+- The test drivers' traces, not a debugger, are the evidence for each step.
 - The stand-ins are written from the framework's use of what they replace;
   where Microsoft's real definition differs (values of private constants,
   layouts only class extensions see), they are this branch's own and are
   marked so in each file.
+
+## 10. Upstream path
+
+Wine is the natural home for most of this, and nothing in it needs a
+Microsoft binary:
+
+1. **The Wine bugs** (section 4, first group) go upstream first, one merge
+   request each, with a conformance test in `dlls/ntoskrnl.exe/tests`
+   (`driver_pnp.c`, `driver_usb.c` exist) where Wine's test drivers can
+   show the behaviour. They help every driver, KMDF or not, and are the
+   least controversial.
+2. **The missing kernel exports**: one merge request per family (Ex timers,
+   power framework that reports itself unavailable, verifier queries, the
+   rest), each with the smallest behaviour that is honest (fail cleanly
+   where Wine has nothing).
+3. **`wdfldr.sys`**: the loader is small and Wine-native (it loads the
+   `Wdf01000` service and binds clients through the documented
+   `WdfVersionBind`/`WdfRegisterLibrary` contract); bug 56228 asks for it.
+   It is useful even with a framework the user installs.
+4. **The framework itself** (`Wdf01000.sys` built from Microsoft's MIT
+   source) is a separate question for Wine: building it needs Microsoft's
+   source plus the stand-ins of section 2 (private headers, generated
+   files, blanked lines) and clang in MSVC mode. It could live as an
+   optional Wine component fetched at build time (like Wine Mono and Gecko
+   are separate packages) or stay a TUR package. The stand-ins' licence is
+   the owner's open decision (section 7).
+
+### 10.1 Draft proposal for wine-devel
+
+```text
+Subject: Running KMDF drivers in winedevice with a framework built from
+         Microsoft's MIT source
+
+Hello,
+
+Microsoft publishes the Kernel-Mode Driver Framework source
+(github.com/microsoft/Windows-Driver-Frameworks) under the MIT licence.
+We built Wdf01000.sys from it with clang (x86_64-w64-mingw32, MSVC
+compatibility mode), lld and mingw-w64 headers, no WDK and no Microsoft
+binary, and loaded KMDF USB drivers in winedevice.exe on Wine 11.20.
+A minimal KMDF driver and Microsoft's kmdf_fx2 sample start
+(EvtDevicePrepareHardware, EvtDeviceD0Entry) and move bulk, interrupt
+and control data through wineusb.sys against emulated devices.
+
+Most of what it took are Wine bugs or gaps that any driver can hit, and
+we would like to send them as separate merge requests with tests:
+
+  - ntoskrnl: run DPCs queued with KeInsertQueueDpc (bug 49394 closed
+    with a stub that never runs them);
+  - ntoskrnl: IoAllocateDriverObjectExtension/IoGetDriverObjectExtension;
+  - ntoskrnl: IoGetDeviceProperty returns setupapi's Win32 error codes as
+    NTSTATUS (ERROR_INVALID_DATA, 13, passes NT_SUCCESS);
+  - kernelbase: DeviceIoControl without an OVERLAPPED does not wait for a
+    pending request on an overlapped handle (ReadFile/WriteFile do);
+  - wineusb: fill interface and pipe information on SELECT_CONFIGURATION
+    from the descriptors (it relies on usbd.sys prefilling them);
+  - wineusb: URB_FUNCTION_CONTROL_TRANSFER, GET_STATUS_FROM_DEVICE and
+    power IRPs;
+  - ntoskrnl: a handful of exports Windows 8+ drivers import (Ex timers,
+    KeQuerySystemTimePrecise, IoOpenDriverRegistryKey, MmIsDriverVerifying,
+    ...), each failing cleanly where Wine has nothing behind them.
+
+Separately, a wdfldr.sys (bug 56228): WdfVersionBind loads the Wdf01000
+service with ZwLoadDriver and binds the client through the documented
+WdfRegisterLibrary contract. It would let a framework built from the
+published source (or installed by the user) work without other changes.
+
+Would you take these, and is there interest in discussing whether a
+framework built from Microsoft's source could be an optional component?
+The patches, build scripts and CI logs are public: <link to the TUR
+repository's third-party/wine-patches and docs/reports/windows-drivers-2.md>.
+```
