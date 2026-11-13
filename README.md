@@ -179,6 +179,13 @@ becomes.
 | Desktop, application centre, Windows and Android running | Not started |
 | Anything you can install | Not yet |
 
+## Try TUR
+
+**No preview has been released yet.** The first will be a pre-alpha USB
+installer for testers, published as a GitHub pre-release once it has had a
+legal review and been tested on real hardware. How a preview is made, signed
+and checked is in [docs/releases](docs/releases/README.md).
+
 ## How it is built
 
 ```mermaid

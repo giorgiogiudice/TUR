@@ -1,0 +1,347 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Release an installer medium as a public preview: a GitHub pre-release with
+# the notes and the small files, and the medium itself (larger than the 2 GiB
+# GitHub allows per release file) on S3-compatible object storage. The process
+# and the owner's one-time setup are in docs/releases/README.md.
+#
+# A release is started only by hand (workflow_dispatch) and releases exactly a
+# medium CI built and tested: the medium artifact of a green `iso` run on main
+# (`source_run`, started with `upload_medium`), checked against what that run
+# recorded. Nothing is built here.
+#
+#   lint      shellcheck, Python syntax, unit tests
+#   test      the dry-run test: every step below against a local S3 stand-in
+#             (moto) and a stand-in for GitHub's API, with a small fake medium
+#   prepare   (by hand only) check the source run, download and verify the
+#             medium, sign it (keyless; and with TUR's release key when that
+#             secret exists), write the notes from docs/releases/TEMPLATE.md,
+#             decide publish or dry run, upload the notes, checksums and
+#             signatures as an artifact for review
+#   publish   (by hand only, and only if every guard holds) upload to object
+#             storage, read every object back, create the GitHub pre-release
+#
+# GUARDS. `publish` runs only if ALL of these hold: started by hand from main;
+# input `publish` ticked; repository variable TUR_RELEASES_ENABLED is 1; the
+# four storage secrets exist; the variable TUR_DOWNLOADS_PUBLIC_URL is an
+# https:// address; the medium's manifest does not say "not for
+# redistribution"; the tag is free. The job's `if:` checks the first three
+# itself, and the job checks all of them again before it touches anything
+# (scripts/release-installer/guard.py). Otherwise the run is a dry run.
+#
+# On pull requests only `lint` and `test` run (no secrets, no real storage).
+name: release-installer
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to release, a pre-release such as 0.1.0-preview.1 (tag v<version>)
+        type: string
+        required: true
+      source_run:
+        description: Id of a green run of the iso workflow on main that uploaded the medium (upload_medium)
+        type: string
+        required: true
+      publish:
+        description: >-
+          Upload and create the pre-release. Without the repository variable
+          TUR_RELEASES_ENABLED=1 and the storage secrets, the run stays a dry run.
+        type: boolean
+        default: false
+  pull_request:
+    paths:
+      - ".github/workflows/release-installer.yml"
+      - "scripts/release-installer/**"
+      - "docs/releases/**"
+
+permissions: {}
+
+concurrency:
+  group: release-installer-${{ github.event_name == 'workflow_dispatch' && 'release' || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  COSIGN_VERSION: v3.1.4
+  COSIGN_SHA256: 424e2c97d0b45fd7a6b608a87f090f35633f4c23ece5f092d48bba11aaf4bbfa
+  RCLONE_VERSION: v1.75.2
+  RCLONE_SHA256: 349ac8fba6ff65d6247043f1750cdcb518ec5d500ef91463a10d37c0ccdf3702
+  MOTO_IMAGE: docker.io/motoserver/moto:5.2.5@sha256:59a1965d845249b04def37a0e2565f9cc6c44543cb89b68e90f28f344b3b0d1a
+  # Where in the bucket a release goes: releases/<version>/<file>. notes.py uses the same.
+  PREFIX: releases
+
+jobs:
+  lint:
+    name: Lint and unit tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Lint
+        run: |
+          shellcheck --version | sed -n 2p
+          shellcheck -x scripts/release-installer/*.sh scripts/release-installer/test/*.sh
+          python3 -m py_compile scripts/release-installer/*.py scripts/release-installer/test/*.py
+      - name: Unit tests (guard, verification, notes)
+        run: python3 -m unittest discover -s scripts/release-installer/test -v
+
+  test:
+    name: Dry-run test against stand-ins for object storage and GitHub
+    needs: lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write # keyless signing of the fake medium, on pull requests only
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Install cosign and rclone (pinned by SHA-256)
+        run: scripts/release-installer/install-tools.sh
+      - name: Pull the S3 stand-in (moto, pinned by digest)
+        run: docker pull --quiet "$MOTO_IMAGE"
+      - name: Run the release path end to end
+        env:
+          TUR_TEST_KEYLESS: ${{ github.event_name == 'pull_request' && '1' || '0' }}
+        run: scripts/release-installer/test/run.sh "$RUNNER_TEMP/release-test"
+      - name: Keep what the test produced
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: release-installer-test
+          path: |
+            ${{ runner.temp }}/release-test/release/*.md
+            ${{ runner.temp }}/release-test/release/*.json
+            ${{ runner.temp }}/release-test/release/*.SHA256SUMS
+            ${{ runner.temp }}/release-test/release/*.env
+            ${{ runner.temp }}/release-test/state.json
+            ${{ runner.temp }}/release-test/uploads.json
+          if-no-files-found: warn
+
+  prepare:
+    name: Verify, sign and write the notes (dry run unless every guard holds)
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    needs: [lint, test]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      actions: read # the source run and its artifacts
+      id-token: write # keyless signing
+    outputs:
+      publish: ${{ steps.guard.outputs.publish }}
+    env:
+      VERSION: ${{ inputs.version }}
+      SOURCE_RUN: ${{ inputs.source_run }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Check the version
+        run: |
+          python3 -c 'import sys; sys.path.insert(0, "scripts/release-installer"); import verify
+          try:
+              verify.check_version(sys.argv[1])
+          except verify.Refused as error:
+              sys.exit(f"::error::{error}")' "$VERSION"
+
+      - name: Check the source run (iso workflow, main, green, medium uploaded)
+        run: |
+          python3 scripts/release-installer/source.py "$SOURCE_RUN" "$RUNNER_TEMP/source.env"
+          cat "$RUNNER_TEMP/source.env" >> "$GITHUB_ENV"
+
+      - name: Is the tag free?
+        run: |
+          if python3 scripts/release-installer/github_release.py check --tag "v$VERSION"; then
+            echo "TAG_FREE=yes" >> "$GITHUB_ENV"
+          else
+            echo "TAG_FREE=no" >> "$GITHUB_ENV"
+          fi
+
+      - name: Choose a work directory
+        run: scripts/release-installer/workdir.sh
+
+      - name: Install cosign and rclone (pinned by SHA-256)
+        run: scripts/release-installer/install-tools.sh
+
+      - name: Download the medium (source run)
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: ${{ env.medium_artifact }}
+          path: ${{ env.WORK }}/source/medium
+          run-id: ${{ inputs.source_run }}
+          github-token: ${{ github.token }}
+
+      - name: Download the source run's test record
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: ${{ env.record_artifact }}
+          path: ${{ env.WORK }}/source/record
+          run-id: ${{ inputs.source_run }}
+          github-token: ${{ github.token }}
+
+      - name: Verify the medium against its SHA256SUMS, manifest and test record
+        run: |
+          python3 scripts/release-installer/verify.py --medium-dir "$WORK/source/medium" \
+            --record-dir "$WORK/source/record" --revision "$source_sha" --version "$VERSION" --out "$WORK/release"
+          grep -E '^(base|iso|sums|manifest|redistributable)=' "$WORK/release/release.env" >> "$GITHUB_ENV"
+          df -h "$WORK"
+
+      - name: Guard - publish or dry run
+        id: guard
+        env:
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          PUBLISH_INPUT: ${{ inputs.publish }}
+          RELEASES_ENABLED: ${{ vars.TUR_RELEASES_ENABLED }}
+          HAVE_ENDPOINT: ${{ secrets.TUR_DOWNLOADS_ENDPOINT != '' }}
+          HAVE_BUCKET: ${{ secrets.TUR_DOWNLOADS_BUCKET != '' }}
+          HAVE_ACCESS_KEY: ${{ secrets.TUR_DOWNLOADS_ACCESS_KEY != '' }}
+          HAVE_SECRET_KEY: ${{ secrets.TUR_DOWNLOADS_SECRET_KEY != '' }}
+          PUBLIC_URL: ${{ vars.TUR_DOWNLOADS_PUBLIC_URL }}
+        run: |
+          REDISTRIBUTABLE="$redistributable" python3 scripts/release-installer/guard.py
+
+      - name: Sign the medium and its checksums
+        env:
+          TUR_RELEASE_KEY: ${{ secrets.TUR_RELEASE_SIGNING_KEY }}
+          COSIGN_PASSWORD: ${{ secrets.TUR_RELEASE_SIGNING_PASSWORD }}
+        run: scripts/release-installer/sign.sh "$WORK/release" "$base"
+
+      - name: Write the release notes (docs/releases/TEMPLATE.md)
+        env:
+          DRY_RUN: ${{ steps.guard.outputs.publish != 'true' }}
+          TUR_DOWNLOADS_PUBLIC_URL: ${{ vars.TUR_DOWNLOADS_PUBLIC_URL }}
+          SOURCE_RUN_URL: ${{ env.source_run_url }}
+        run: |
+          python3 scripts/release-installer/notes.py docs/releases/TEMPLATE.md docs/releases/known-issues.md \
+            "$WORK/release" "$WORK/release/notes.md"
+          cat "$WORK/release/notes.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Stage the files for review
+        run: |
+          mkdir -p "$WORK/review"
+          cd "$WORK/release"
+          cp notes.md release.json release.env signing.env "$sums" "$manifest" ./*.sigstore.json "$WORK/review/"
+          if [ -f "$base.release-key.pub" ]; then cp "$base.release-key.pub" "$WORK/review/"; fi
+          cp "$RUNNER_TEMP/source.env" "$WORK/review/"
+          ls -la "$WORK/review"
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: release-installer-review
+          path: ${{ env.WORK }}/review/
+          retention-days: 30
+          if-no-files-found: error
+
+  publish:
+    name: Upload to object storage and create the GitHub pre-release
+    # Every guard is checked again inside the job (guard.py --require).
+    if: >-
+      github.event_name == 'workflow_dispatch' && inputs.publish &&
+      vars.TUR_RELEASES_ENABLED == '1' && github.ref == 'refs/heads/main' &&
+      needs.prepare.outputs.publish == 'true'
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    permissions:
+      contents: write # the tag and the release
+      actions: read # the source run's medium
+    env:
+      VERSION: ${{ inputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Choose a work directory
+        run: scripts/release-installer/workdir.sh
+
+      - name: Download the files prepared for review (this run)
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: release-installer-review
+          path: ${{ env.WORK }}/release
+
+      - name: Guard - every condition again
+        env:
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          PUBLISH_INPUT: ${{ inputs.publish }}
+          RELEASES_ENABLED: ${{ vars.TUR_RELEASES_ENABLED }}
+          HAVE_ENDPOINT: ${{ secrets.TUR_DOWNLOADS_ENDPOINT != '' }}
+          HAVE_BUCKET: ${{ secrets.TUR_DOWNLOADS_BUCKET != '' }}
+          HAVE_ACCESS_KEY: ${{ secrets.TUR_DOWNLOADS_ACCESS_KEY != '' }}
+          HAVE_SECRET_KEY: ${{ secrets.TUR_DOWNLOADS_SECRET_KEY != '' }}
+          PUBLIC_URL: ${{ vars.TUR_DOWNLOADS_PUBLIC_URL }}
+        run: |
+          cat "$WORK/release/release.env" "$WORK/release/source.env" >> "$GITHUB_ENV"
+          redistributable="$(sed -n 's/^redistributable=//p' "$WORK/release/release.env")"
+          if python3 scripts/release-installer/github_release.py check --tag "v$VERSION"; then tag_free=yes; else tag_free=no; fi
+          REDISTRIBUTABLE="$redistributable" TAG_FREE="$tag_free" python3 scripts/release-installer/guard.py --require
+
+      - name: Install cosign and rclone (pinned by SHA-256)
+        run: scripts/release-installer/install-tools.sh
+
+      - name: Download the medium again (source run)
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: ${{ env.medium_artifact }}
+          path: ${{ env.WORK }}/source/medium
+          run-id: ${{ inputs.source_run }}
+          github-token: ${{ github.token }}
+
+      - name: It is the medium that was verified and signed
+        run: |
+          mv "$WORK/source/medium/$source_iso" "$WORK/release/$iso"
+          cd "$WORK/release"
+          sha256sum -c "$sums"
+          identity="$GITHUB_SERVER_URL/$GITHUB_WORKFLOW_REF"
+          cosign verify-blob --bundle "$sums.keyless.sigstore.json" --certificate-identity "$identity" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com "$sums"
+          if [ -f "$base.release-key.pub" ]; then
+            cosign verify-blob --bundle "$sums.release-key.sigstore.json" --key "$base.release-key.pub" "$sums"
+          fi
+
+      - name: Upload to object storage and read every object back
+        env:
+          TUR_DOWNLOADS_ENDPOINT: ${{ secrets.TUR_DOWNLOADS_ENDPOINT }}
+          TUR_DOWNLOADS_BUCKET: ${{ secrets.TUR_DOWNLOADS_BUCKET }}
+          TUR_DOWNLOADS_ACCESS_KEY: ${{ secrets.TUR_DOWNLOADS_ACCESS_KEY }}
+          TUR_DOWNLOADS_SECRET_KEY: ${{ secrets.TUR_DOWNLOADS_SECRET_KEY }}
+          TUR_DOWNLOADS_PUBLIC_URL: ${{ vars.TUR_DOWNLOADS_PUBLIC_URL }}
+        run: |
+          cd "$WORK/release"
+          files=("$iso" "$sums" "$manifest" ./*.sigstore.json)
+          if [ -f "$base.release-key.pub" ]; then files+=("$base.release-key.pub"); fi
+          python3 "$GITHUB_WORKSPACE/scripts/release-installer/upload.py" . "$PREFIX/$VERSION" uploads.json "${files[@]#./}"
+
+      - name: Create the GitHub pre-release
+        run: |
+          cd "$WORK/release"
+          assets=("$sums" "$manifest" ./*.sigstore.json)
+          if [ -f "$base.release-key.pub" ]; then assets+=("$base.release-key.pub"); fi
+          python3 "$GITHUB_WORKSPACE/scripts/release-installer/github_release.py" create --tag "v$VERSION" \
+            --sha "$source_sha" --name "TUR $VERSION (pre-alpha preview)" --notes notes.md "${assets[@]#./}"
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Release v$VERSION"
+            echo
+            if [ -f "$WORK/release/uploads.json" ]; then
+              python3 -c 'import json, sys
+          for f in json.load(open(sys.argv[1])):
+              print("- %s (%s bytes, SHA-256 %s)" % (f["url"], f["bytes"], f["sha256"]))' "$WORK/release/uploads.json"
+            fi
+            echo "- $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/v$VERSION"
+          } >> "$GITHUB_STEP_SUMMARY"
