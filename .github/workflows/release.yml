@@ -88,6 +88,7 @@ jobs:
             tests/boot/guest/rootfs/usr/libexec/tur-boot-test/guest-agent
           python3 -m py_compile scripts/release/*.py tests/boot/signed-update.py tests/image/marks.py image/signing/policy.py
           python3 scripts/release/compare-trees.py --self-test
+          python3 tests/image/marks.py --self-test
 
   await:
     name: Wait for every workflow on this commit
@@ -252,6 +253,7 @@ jobs:
         run: printf '%s' "$TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
 
       - name: Re-chunk
+        id: rechunk
         run: |
           set -o pipefail
           previous=""
@@ -266,10 +268,13 @@ jobs:
           rm -f "$WORK/tested/tur-image.oci.tar"
 
       - name: The re-chunked image holds the same files as the tested one
+        id: trees
+        if: ${{ !cancelled() && steps.rechunk.outcome == 'success' }}
         run: sudo python3 scripts/release/compare-trees.py localhost/tur:tested localhost/tur:published "$OUT/trees.json"
 
       - name: Fedora's marks, in the image and in every layer of it
-        if: ${{ !cancelled() }}
+        id: marks
+        if: ${{ !cancelled() && steps.rechunk.outcome == 'success' }}
         run: |
           status=0
           python3 tests/image/marks.py localhost/tur:published "$OUT/marks" --layers "$WORK/published:latest" || status=$?
@@ -277,11 +282,14 @@ jobs:
           exit "$status"
 
       - name: Smoke tests of the re-chunked image
-        if: ${{ !cancelled() }}
+        id: smoke
+        if: ${{ !cancelled() && steps.rechunk.outcome == 'success' }}
         run: tests/image/smoke.sh localhost/tur:published "$BUILD_ID"
 
       # ---- a registry in this job, the image signed in it ------------------------------
       - name: Push to a registry inside the job
+        id: push
+        if: ${{ !cancelled() && steps.rechunk.outcome == 'success' }}
         run: |
           mkdir -p "$WORK/registry"
           docker run -d --name tur-registry -p 5000:5000 -v "$WORK/registry:/var/lib/registry" "$REGISTRY_IMAGE"
@@ -302,6 +310,8 @@ jobs:
           echo "VARIANTS=${variants# }" >> "$GITHUB_ENV"
 
       - name: Sign
+        id: sign
+        if: ${{ !cancelled() && steps.push.outcome == 'success' }}
         env:
           TUR_RELEASE_KEY: ${{ env.PUBLISH == '1' && secrets.TUR_RELEASE_SIGNING_KEY || '' }}
           COSIGN_PASSWORD: ${{ env.PUBLISH == '1' && secrets.TUR_RELEASE_SIGNING_PASSWORD || '' }}
@@ -330,14 +340,20 @@ jobs:
 
       # ---- the proof on a booted guest ---------------------------------------------------
       - name: Install the tested image to a disk, with the boot test's agent
+        id: disk
+        if: ${{ !cancelled() && steps.rechunk.outcome == 'success' }}
         run: |
           python3 image/signing/policy.py --print > "$WORK/policy-rule.json"
           tests/boot/build-disk.sh localhost/tur:tested "$WORK" "$OUT/prepare"
 
       - name: Prepare the disk (the boot test's first two boots)
+        id: prepare
+        if: ${{ !cancelled() && steps.disk.outcome == 'success' }}
         run: python3 tests/boot/run-vm.py --disk "$WORK/disk.raw" --work "$WORK" --out "$OUT/prepare" --timeout 900 --prepare-only
 
       - name: Signed update in a booted guest
+        id: guest
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' && steps.sign.outcome == 'success' }}
         run: |
           cases=()
           for pair in $VARIANTS; do cases+=(--case "${pair%%=*}=test-${pair%%=*}"); done
@@ -351,6 +367,8 @@ jobs:
       # Always rehearsed against a second repository of the job's registry: the
       # same script, the same checks, the same promotion.
       - name: Rehearse publishing and promotion
+        id: rehearse
+        if: ${{ !cancelled() && steps.sign.outcome == 'success' }}
         run: |
           rehearsal=localhost:5000/tur-rehearsal
           scripts/release/publish.sh "$LOCAL" "$DIGEST" "$rehearsal" "$BUILD_ID" testing
@@ -362,7 +380,7 @@ jobs:
           echo "the rehearsal repository's stable names $DIGEST, with both signatures"
 
       - name: Publish to testing
-        if: ${{ env.PUBLISH == '1' }}
+        if: ${{ success() && env.PUBLISH == '1' }}
         run: |
           scripts/release/publish.sh "$LOCAL" "$DIGEST" "$PUBLISHED_REPOSITORY" "$BUILD_ID" testing
           cosign verify --key "$RELEASE_PUB" "$PUBLISHED_REPOSITORY@$DIGEST" > /dev/null

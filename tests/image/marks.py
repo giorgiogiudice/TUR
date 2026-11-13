@@ -231,6 +231,63 @@ def layer_name(member: tarfile.TarInfo) -> str:
     return "/" + name.strip("/")
 
 
+# The one file rpm-ostree's chunked format writes into every layer: OSTree's
+# repository configuration (measured in release run 43356225989: in all 65
+# layers; no other file was in two). Accepted only when every copy has the
+# same bytes, so that no copy hides another.
+REPEATED_BY_CHUNKING = {"/sysroot/ostree/repo/config"}
+
+
+def self_test() -> int:
+    """The layer scan on a small layout made here: what it must find, and what it must accept."""
+    import io
+    import tempfile
+    with tempfile.TemporaryDirectory() as root:
+        os.makedirs(f"{root}/blobs/sha256")
+
+        def put(data: bytes) -> dict:
+            digest = hashlib.sha256(data).hexdigest()
+            pathlib.Path(f"{root}/blobs/sha256/{digest}").write_bytes(data)
+            return {"digest": "sha256:" + digest, "size": len(data)}
+
+        def layer(files: list[tuple[str, bytes | None]], compress: bool) -> dict:
+            raw = io.BytesIO()
+            with tarfile.open(fileobj=raw, mode="w") as archive:
+                for name, data in files:
+                    info = tarfile.TarInfo(name)
+                    if data is None:
+                        info.type = tarfile.DIRTYPE
+                    else:
+                        info.size = len(data)
+                    archive.addfile(info, io.BytesIO(data) if data is not None else None)
+            return put(gzip.compress(raw.getvalue()) if compress else raw.getvalue())
+
+        config = b"[core]\nrepo_version=1\n"
+        layers = [
+            layer([("usr/", None), ("usr/share/icons/a.png", b"a"), ("sysroot/ostree/repo/config", config),
+                   ("usr/share/pixmaps/fedora-logo-1.png", b"generic"), ("etc/x", b"one")], True),
+            layer([("./usr/share/icons/b.png", b"b"), ("sysroot/ostree/repo/config", config),
+                   ("usr/share/pixmaps/fedora-own.png", b"x"), ("usr/share/tur/art", b"LOGO")], False),
+            layer([("etc/x", b"two"), ("usr/share/icons/.wh.a.png", b""),
+                   ("sysroot/ostree/repo/config", config + b"changed\n")], True),
+        ]
+        manifest = put(json.dumps({"schemaVersion": 2, "config": put(b"{}"), "layers": layers}).encode())
+        pathlib.Path(f"{root}/index.json").write_text(json.dumps({"schemaVersion": 2, "manifests": [
+            dict(manifest, annotations={"org.opencontainers.image.ref.name": "latest"})]}))
+        logos = {hashlib.sha256(b"LOGO").hexdigest(): "/usr/share/pixmaps/fedora-logo.png"}
+        found = scan_layers(f"{root}:latest", logos, load_allowlist())["findings"]
+    want = [
+        "layer 1: named after Fedora: /usr/share/pixmaps/fedora-own.png",
+        "layer 1: /usr/share/tur/art is /usr/share/pixmaps/fedora-logo.png of fedora-logos",
+        "layer 2: /etc/x is also in layer 0: one hides the other",
+        "layer 2: deletes /usr/share/icons/a.png (a whiteout): a layer below holds what this image does not show",
+        "layer 2: /sysroot/ostree/repo/config differs from its copy in layer 1",
+    ]
+    ok = sorted(found) == sorted(want)
+    print("self-test:", "passed" if ok else "FAILED", *found, sep="\n  ")
+    return 0 if ok else 1
+
+
 def scan_layers(layout: str, digests: dict[str, str], entries: list[dict]) -> dict:
     """Every layer of the image in an OCI layout, file by file."""
     directory, _, ref = layout.partition(":")
@@ -245,6 +302,7 @@ def scan_layers(layout: str, digests: dict[str, str], entries: list[dict]) -> di
     if "layers" not in manifest:
         sys.exit(f"{layout}: not an image manifest (an index of several images?)")
     holder: dict[str, int] = {}
+    copies: dict[str, set[str]] = {}
     layers, findings = [], []
     for number, layer in enumerate(manifest["layers"]):
         stream, process = open_blob(blob(layer["digest"]))
@@ -260,7 +318,14 @@ def scan_layers(layout: str, digests: dict[str, str], entries: list[dict]) -> di
                 if member.isdir():
                     dirs += 1
                     continue
-                if path in holder:
+                if path in REPEATED_BY_CHUNKING and member.isfile():
+                    # Accepted only as the same bytes in every layer: then
+                    # no copy hides anything.
+                    data = archive.extractfile(member).read()
+                    copies.setdefault(path, set()).add(hashlib.sha256(data).hexdigest())
+                    if len(copies[path]) > 1:
+                        findings.append(f"layer {number}: {path} differs from its copy in layer {holder[path]}")
+                elif path in holder:
                     findings.append(f"layer {number}: {path} is also in layer {holder[path]}: one hides the other")
                 holder[path] = number
                 if member.isfile():
@@ -309,6 +374,8 @@ def allowed(entries: list[dict], kind: str, path: str) -> dict | None:
 
 
 def main() -> int:
+    if sys.argv[1:] == ["--self-test"]:
+        return self_test()
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("image")
     ap.add_argument("out")
