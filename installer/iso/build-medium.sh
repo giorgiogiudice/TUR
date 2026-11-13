@@ -66,10 +66,19 @@ env_image="${TUR_MEDIUM_ENV_IMAGE:-localhost/tur-installer-env:${name}}"
 #   systemd.firstboot=off no first-boot questions on the console
 #   plymouth.enable=0     no boot splash: it would hold the console's keyboard
 #   loglevel=3 audit=0    no kernel or audit messages written over the screens
-#   tur.installer=1       starts tur-installer.service
 #   console=...           the kernel also writes to the first serial port when
 #                         the machine has one; the screen is the last console
-kernel_arguments="root=live:CDLABEL=${label} rd.live.image selinux=0 systemd.firstboot=off plymouth.enable=0 rd.plymouth=0 loglevel=3 audit=0 tur.installer=1 console=ttyS0,115200n8 console=tty0"
+# and, for each entry of the boot menu:
+#   tur.live=1            the live session (graphical.target, the default
+#                         target of the installer environment): the desktop,
+#                         signed in as the live user, and the graphical
+#                         installer
+#   tur.installer=1 systemd.unit=tur-installer.target
+#                         the text installer on the first console, and no
+#                         desktop
+kernel_arguments="root=live:CDLABEL=${label} rd.live.image selinux=0 systemd.firstboot=off plymouth.enable=0 rd.plymouth=0 loglevel=3 audit=0 console=ttyS0,115200n8 console=tty0"
+live_arguments="${kernel_arguments} tur.live=1"
+text_arguments="${kernel_arguments} tur.installer=1 systemd.unit=tur-installer.target"
 
 for tool in xorriso mksquashfs mkfs.vfat mmd mcopy python3 sha256sum sfdisk; do
     command -v "${tool}" > /dev/null || { echo "missing tool: ${tool}" >&2; exit 1; }
@@ -212,8 +221,9 @@ step environment_build_seconds "installer environment: ${env_image} FROM ${paylo
     --build-arg "MIN_TARGET_BYTES=${min_target}" \
     --build-arg "MEDIUM_LABEL=${label}" \
     --pull=never \
+    --ignorefile installer/iso/Containerfile.containerignore \
     --tag "${env_image}" \
-    installer/iso
+    .
 env_id="$("${podman[@]}" image inspect -f '{{.Id}}' "${env_image}")"
 in_env rpm -qa --qf "${rpm_query}" | sort > "${facts}/environment-packages.tsv"
 in_env /bin/sh -c "${relevant}" > "${facts}/environment-install-relevant.sha256"
@@ -320,7 +330,8 @@ kernel_package="$(owner "/usr/lib/modules/${kver}/vmlinuz")"
 printf '%s\t%s\t%s\t%s\n' vmlinuz "/usr/lib/modules/${kver}/vmlinuz" "$(sha256sum "${iso}/boot/vmlinuz" | cut -d' ' -f1)" "${kernel_package}" | tee -a "${facts}/boot-chain.tsv"
 
 title="TUR ${tur_version} build ${build_id}"
-sed -e "s|@LABEL@|${label}|g" -e "s|@TITLE@|${title}|g" -e "s|@KERNEL_ARGUMENTS@|${kernel_arguments}|g" \
+sed -e "s|@LABEL@|${label}|g" -e "s|@TITLE@|${title}|g" \
+    -e "s|@LIVE_ARGUMENTS@|${live_arguments}|g" -e "s|@TEXT_ARGUMENTS@|${text_arguments}|g" \
     installer/iso/third-party-licensed/grub/grub.cfg.in > "${esp}/grub.cfg"
 if grep -q '@[A-Z_]*@' "${esp}/grub.cfg"; then
     echo "the boot menu still has a placeholder:" >&2
@@ -372,20 +383,25 @@ TUR installer medium
 TUR ${tur_version}, build ${build_id}
 Source revision ${revision}
 
-Starting a computer from this medium (UEFI only) runs an installer that
-erases ONE WHOLE DISK, after a typed confirmation, and installs TUR on it.
+Starting a computer from this medium (UEFI only) starts a TUR desktop you
+can try, with an installer that erases ONE WHOLE DISK, after a typed
+confirmation, and installs TUR on it. The boot menu's second entry is the
+same installer in text mode.
 Instructions: docs/guides/install-on-a-test-pc.md in the TUR source tree.
 
-This is a pre-alpha test build for the project's own test machines. It is
-NOT FOR REDISTRIBUTION: the system on it still contains Fedora's logos and
-release packages, which Fedora's terms do not allow in a derived system.
+This is a pre-alpha preview for testers. The system on it is TUR's own
+image: Fedora's logos and release packages are replaced by TUR's and by
+Fedora's mark-free generic ones. The boot chain is Fedora's signed shim,
+GRUB and kernel, unchanged. A legal review of distribution has not been
+completed.
 
 What is on this medium
   EFI system partition  Fedora's signed shim and GRUB, unchanged, and a menu
   boot/                 Fedora's kernel, unchanged, and an initramfs built
                         with Fedora's dracut
   LiveOS/squashfs.img   the installer environment: the TUR image plus
-                        Fedora's dracut-live and the TUR installer
+                        Fedora's dracut-live, the live session and TUR's
+                        two installers
   payload/              the TUR image that is installed (OCI layout)
   tur-installer/        this file, contents.json (every file by SHA-256),
                         licences
@@ -450,7 +466,8 @@ medium_bytes="$(stat -c %s "${medium}")"
     echo "medium_bytes=${medium_bytes}"
     echo "medium_sha256=${medium_sha256}"
     echo "label=${label}"
-    echo "kernel_arguments=${kernel_arguments}"
+    echo "kernel_arguments=${live_arguments}"
+    echo "kernel_arguments_text_mode=${text_arguments}"
     echo "payload_image=${payload}"
     echo "payload_image_id=${payload_id}"
     echo "payload_target_imgref=${target_imgref}"

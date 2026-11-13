@@ -5,8 +5,33 @@
   "send_back_reasoning": true,
   "model": "example-local-model",
   "max_output_tokens": 2048,
-  "timeouts": { "connect_ms": 2000, "response_ms": 300000, "idle_ms": 120000 },
-  "retry": { "max_attempts": 2, "initial_delay_ms": 250, "max_delay_ms": 5000 },
-  "prices": { "currency": "USD", "input_per_million": 0.0, "output_per_million": 0.0 },
-  "task_limit": { "max_tokens": 200000 }
+  "timeouts": {
+    "connect_ms": 2000,
+    "response_ms": 300000,
+    "idle_ms": 120000
+  },
+  "retry": {
+    "max_attempts": 2,
+    "initial_delay_ms": 250,
+    "max_delay_ms": 5000
+  },
+  "prices": {
+    "currency": "USD",
+    "input_per_million": 0.0,
+    "output_per_million": 0.0
+  },
+  "task_limit": {
+    "max_tokens": 200000
+  },
+  "generation": {
+    "temperature": 0.7,
+    "top_p": 0.8,
+    "top_k": 20,
+    "stop": [
+      "<|end|>"
+    ],
+    "effort": "none",
+    "thinking_budget": 2048,
+    "reasoning_style": "enable_thinking"
+  }
 }

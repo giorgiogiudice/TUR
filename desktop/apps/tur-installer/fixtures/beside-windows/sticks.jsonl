@@ -1,0 +1,3 @@
+{"licence":"SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0","what":"tur-install-engine sticks: one USB stick with a FAT filesystem"}
+{"event":"stick","device":"/dev/disk/by-id/usb-SanDisk_Ultra_4C530001230927105432-0:0-part1","name":"sdb1","label":"SANDISK","fstype":"vfat","size":30752636928,"model":"Ultra","vendor":"SanDisk"}
+{"event":"sticks"}

@@ -1,0 +1,265 @@
+// SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+import QtQuick
+import QtTest
+import Tur.Installer
+import Tur.Kit as Kit
+
+// What the installer must and must not do, on the engine's recorded answers:
+//
+//  - the whole way through, with the keyboard, onto the blank disk;
+//  - the medium the installer runs from is listed, cannot be chosen, and the
+//    keyboard passes it by;
+//  - the confirmation: nothing has the keyboard but the field; the button is
+//    enabled only by the exact phrase; a wrong phrase, the right one in lower
+//    case and a pasted one are refused; Enter does nothing;
+//  - the Windows disk shows the Windows and BitLocker warning, the blank one
+//    does not;
+//  - "Cancel" while the engine has written nothing, and the sentence instead
+//    once it writes;
+//  - a failure shows its code, what state the disk is in, and the way to save
+//    the log to a USB stick; a refusal before writing leads back to the disks.
+Item {
+    id: root
+
+    width: 1180
+    height: 900
+
+    WizardHost {
+        id: host
+
+        anchors.fill: parent
+    }
+
+    TextEdit {
+        id: clipboardSource
+
+        visible: false
+    }
+
+    TestCase {
+        name: "InstallerWizard"
+        when: windowShown
+
+        function initTestCase() {
+            Kit.Motion.frozen = true
+        }
+
+        function cleanup() {
+            host.stop()
+            wait(0)
+        }
+
+        function state(name) {
+            for (const item of host.states) {
+                if (item.name === name)
+                    return item
+            }
+            throw new Error("no state " + name)
+        }
+
+        function enter(name) {
+            const wizard = host.enter(state(name))
+            tryVerify(() => host.ready, 10000, "the state " + name + " was reached")
+            wait(50)
+            return wizard
+        }
+
+        function control(wizard, name) {
+            const item = findChild(wizard, name)
+            verify(item !== null, "the screen has " + name)
+            return item
+        }
+
+        // The tab stop that has the keyboard, by its name.
+        function focusName() {
+            for (let at = root.Window.activeFocusItem; at !== null; at = at.parent) {
+                if (at.objectName.length > 0)
+                    return at.objectName
+            }
+            return ""
+        }
+
+        // Tab until `name` has the keyboard, as tests/iso does in a virtual
+        // machine; then the control is pressed with Space.
+        function tabTo(name) {
+            for (let press = 0; press < 40; press++) {
+                if (focusName() === name)
+                    return
+                keyClick(Qt.Key_Tab)
+            }
+            fail("Tab never reached " + name)
+        }
+
+        function press(name) {
+            tabTo(name)
+            keyClick(Qt.Key_Space)
+            wait(20)
+        }
+
+        function test_the_whole_way_with_the_keyboard() {
+            const wizard = enter("welcome")
+            compare(focusName(), "continueButton", "Continue has the keyboard on the first screen")
+            press("continueButton")
+            tryCompare(wizard, "step", "computer")
+            tryCompare(host.engine, "checkState", "done", 10000)
+            tryVerify(() => focusName() === "continueButton", 5000, "Continue has the keyboard once the checks pass")
+            press("continueButton")
+            tryCompare(wizard, "step", "disk")
+            tryCompare(host.engine, "disksState", "done", 10000)
+            press("disk-vda")
+            compare(wizard.chosenDisk.name, "vda")
+            press("continueButton")
+            tryCompare(wizard, "step", "account")
+            press("continueButton")
+            tryCompare(wizard, "step", "confirm")
+            compare(focusName(), "phraseField", "the field has the keyboard: there is no default button")
+            for (const key of "ERASE BOOTTEST")
+                keyClick(key === " " ? Qt.Key_Space : key, key === " " ? Qt.NoModifier : Qt.ShiftModifier)
+            verify(control(wizard, "eraseButton").enabled, "the exact phrase enables the button")
+            press("eraseButton")
+            tryCompare(wizard, "step", "done", 10000)
+            compare(host.engine.installState, "success")
+            verify(control(wizard, "removeMedium").visible, "the result says to remove the medium")
+            compare(focusName(), "restartButton")
+            press("restartButton")
+            compare(host.engine.powerRequest, "reboot")
+        }
+
+        function test_the_medium_cannot_be_chosen() {
+            const wizard = enter("disks")
+            const medium = control(wizard, "disk-sda")
+            verify(!medium.enabled, "the medium the installer runs from cannot be chosen")
+            verify(!medium.activeFocusOnTab || !medium.enabled)
+            mouseClick(medium)
+            verify(wizard.chosenDisk.name !== "sda", "clicking it chooses nothing")
+            verify(!control(wizard, "continueButton").enabled, "nothing chosen, nothing to continue with")
+            // Tab goes round every control and never reaches it.
+            const seen = []
+            for (let press = 0; press < 30; press++) {
+                keyClick(Qt.Key_Tab)
+                seen.push(focusName())
+            }
+            verify(seen.indexOf("disk-sda") < 0, "Tab never reaches the medium: " + seen.join(", "))
+            verify(seen.indexOf("disk-vda") >= 0 && seen.indexOf("disk-vdb") >= 0, "Tab reaches both disks: " + seen.join(", "))
+        }
+
+        function test_nothing_but_the_exact_phrase() {
+            const wizard = enter("confirm-windows")
+            const field = control(wizard, "phraseField")
+            const erase = control(wizard, "eraseButton")
+            compare(focusName(), "phraseField")
+            verify(!erase.enabled, "nothing typed: the button is unavailable")
+            verify(control(wizard, "windowsWarning").visible, "the Windows disk has the Windows warning")
+
+            keyClick(Qt.Key_W, Qt.ShiftModifier)
+            keyClick(Qt.Key_R, Qt.ShiftModifier)
+            keyClick(Qt.Key_O, Qt.ShiftModifier)
+            keyClick(Qt.Key_N, Qt.ShiftModifier)
+            keyClick(Qt.Key_G, Qt.ShiftModifier)
+            verify(!erase.enabled, "a wrong phrase does not enable it")
+
+            field.text = "erase owsdiska"
+            verify(!erase.enabled, "the right phrase in lower case does not enable it")
+
+            field.text = "ERASE OWSDISKA "
+            verify(!erase.enabled, "the phrase with a space after it does not enable it")
+
+            // Pasted: refused.
+            field.text = ""
+            clipboardSource.text = "ERASE OWSDISKA"
+            clipboardSource.selectAll()
+            clipboardSource.copy()
+            field.forceActiveFocus()
+            keySequence(StandardKey.Paste)
+            compare(field.text, "", "pasting is refused")
+            verify(!erase.enabled)
+
+            // Typed, and Enter does not press the button.
+            field.text = "ERASE OWSDISKA"
+            verify(erase.enabled, "the exact phrase enables the button")
+            keyClick(Qt.Key_Return)
+            keyClick(Qt.Key_Enter)
+            wait(50)
+            compare(wizard.step, "confirm", "Enter erases nothing")
+            compare(host.engine.installState, "idle", "nothing was asked of the engine")
+        }
+
+        function test_no_windows_warning_for_the_blank_disk() {
+            const wizard = enter("confirm-blank")
+            verify(!control(wizard, "windowsWarning").visible)
+            compare(findChild(wizard, "confirmPhrase").text, "ERASE BOOTTEST")
+            verify(findChild(wizard, "confirmPath").text.indexOf("/dev/disk/by-id/virtio-tur-boot-test") >= 0,
+                   "the stable path is shown")
+            verify(findChild(wizard, "confirmSerial").text.indexOf("tur-boot-test") >= 0, "the serial number is shown")
+        }
+
+        function test_cancel_before_writing() {
+            const wizard = enter("installing-cancellable")
+            verify(host.engine.cancellable)
+            const cancel = control(wizard, "cancelButton")
+            verify(cancel.visible)
+            compare(focusName(), "cancelButton")
+            keyClick(Qt.Key_Space)
+            tryCompare(wizard, "step", "done", 5000)
+            compare(host.engine.installState, "cancelled")
+            compare(host.engine.result.disk_state, "untouched")
+            verify(control(wizard, "backToDisksButton").visible)
+            press("backToDisksButton")
+            tryCompare(wizard, "step", "disk")
+            compare(host.engine.installState, "idle")
+        }
+
+        function test_no_cancel_once_writing() {
+            const wizard = enter("installing")
+            verify(!host.engine.cancellable, "the disk is being written")
+            verify(!control(wizard, "cancelButton").visible, "Cancel is not offered")
+            verify(control(wizard, "cancelUnavailable").visible, "the sentence says why not")
+            host.engine.cancel()
+            verify(host.engine.cancelRefused)
+            compare(host.engine.installState, "running", "asking anyway stops nothing")
+        }
+
+        function test_a_failure_says_what_happened() {
+            const wizard = enter("done-failed")
+            const message = control(wizard, "failureMessage")
+            verify(message.visible)
+            compare(message.code, "TUR-INSTALL-MEDIUM-002")
+            verify(message.whatToDo.indexOf("partly written") >= 0, message.whatToDo)
+            verify(!control(wizard, "backToDisksButton").visible, "an erased disk is not a reason to go back")
+            compare(focusName(), "saveLogButton", "saving the log has the keyboard")
+            press("saveLogButton")
+            tryCompare(host.engine, "sticksState", "done", 5000)
+            compare(host.engine.sticks.length, 1)
+            host.engine.saveLog(host.engine.sticks[0].device)
+            tryCompare(host.engine, "saveState", "done", 5000)
+            verify(String(host.engine.saveResult.folder).indexOf("tur-installer-log-") === 0)
+        }
+
+        function test_a_refusal_leads_back() {
+            const wizard = enter("done-refused")
+            const message = control(wizard, "failureMessage")
+            compare(message.code, "TUR-INSTALL-CONFIRM-004")
+            verify(message.whatToDo.indexOf("Nothing was changed") >= 0, message.whatToDo)
+            verify(control(wizard, "backToDisksButton").visible)
+        }
+
+        function test_a_blocking_check_stops_here() {
+            const wizard = enter("computer-blocked")
+            compare(host.engine.blocking.length, 2)
+            verify(!control(wizard, "continueButton").enabled, "Continue stays unavailable")
+        }
+
+        function test_no_disk_to_install_on() {
+            const wizard = enter("disks-none")
+            compare(host.engine.selectable, 0)
+            verify(!control(wizard, "continueButton").enabled)
+            verify(!control(wizard, "disk-vda").enabled, "the small disk cannot be chosen")
+        }
+
+        function test_beside_windows_is_not_offered_yet() {
+            const wizard = enter("disks-chosen")
+            verify(control(wizard, "eraseOption").selected)
+            verify(!control(wizard, "besideWindowsOption").enabled, "using the free space beside Windows comes later")
+        }
+    }
+}

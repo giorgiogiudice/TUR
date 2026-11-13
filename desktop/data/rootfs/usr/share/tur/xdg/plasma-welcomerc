@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# KDE's welcome window does not open by itself (desktop-experience.md, 6.4 and
+# 12.3): TUR's own welcome replaces it (task D-14). Plasma 6.8's welcome
+# daemon opens the window when LastSeenVersion is empty, and after a Plasma
+# update when ShowUpdatePage is true (plasma-welcome, src/kded/daemon.cpp).
+# Any version counts as seen. The program stays in the launcher.
+
+[General]
+LastSeenVersion=6.8.0
+ShowUpdatePage=false

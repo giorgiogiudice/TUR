@@ -83,6 +83,7 @@ pub fn probe_request(model: &str) -> Request {
         )],
         tools: tool.into_iter().collect(),
         max_output_tokens: PROBE_OUTPUT_TOKENS,
+        generation: crate::generation::Generation::default(),
     }
 }
 

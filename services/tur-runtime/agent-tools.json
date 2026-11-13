@@ -20,6 +20,52 @@
         "required": ["path"],
         "additionalProperties": false
       }
+    },
+    {
+      "name": "runtime_autopilot_plan",
+      "description": "Say what the compatibility autopilot would try for a Windows application that fails under Wine, in which order and why, and which remedies it would not try and why. Nothing is run or changed. The autopilot itself only ever works in throwaway copies of the application's prefix; applying a remedy it found is the person's decision, made outside the assistant.",
+      "class": 0,
+      "method": "AutopilotPlan",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "app_id": {
+            "type": "string",
+            "description": "The identifier of an installed Windows application, such as org.example.app. Without it the plan is made from the failure class alone.",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "failure": {
+            "type": "string",
+            "description": "The failure class to plan for. Without it, the class of the application's latest autopilot result, or every class.",
+            "enum": [
+              "prefix-unusable", "dll-missing", "microsoft-component-missing", "dotnet-runtime-missing",
+              "dll-load-failed", "dll-init-failed", "unimplemented-function", "crash", "exited-with-error",
+              "no-window", "hung", "check-failed"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "runtime_autopilot_results",
+      "description": "List the compatibility autopilot's results for a Windows application: what failed, what was tried, what made it work, how long it took, and which remedies are applied to it now. Reads only.",
+      "class": 0,
+      "method": "AutopilotResults",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "app_id": {
+            "type": "string",
+            "description": "The identifier of an installed Windows application, such as org.example.app.",
+            "minLength": 1,
+            "maxLength": 255
+          }
+        },
+        "required": ["app_id"],
+        "additionalProperties": false
+      }
     }
   ]
 }

@@ -1,0 +1,11 @@
+#!/usr/bin/env xdg-open
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# The icon on the live desktop that opens TUR's installer again.
+[Desktop Entry]
+Type=Application
+Name=Install TUR
+Comment=Install TUR on this computer
+Exec=/usr/libexec/tur-installer/tur-installer-wizard --standalone
+Icon=system-software-install
+Terminal=false
+StartupNotify=true

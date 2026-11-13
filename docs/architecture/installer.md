@@ -1,6 +1,7 @@
 # Installer core
 
-**Status:** non-destructive core only. Nothing described here writes to a disk.
+**Status:** non-destructive core only. Nothing in this library writes to a
+disk; the installer medium's engine does (section 0).
 **Component:** `installer/tur-installer-core` (library and the `tur-installer` binary)
 **Specification sections:** §5.2, §6.1 to §6.3, §14, §19.5, §28; task TUR-006
 **Related decisions:** [ADR-0001](../adr/0001-base-distribution.md), [ADR-0005](../adr/0005-languages-and-workspace.md)
@@ -10,6 +11,53 @@ whether it is safe to erase, what would be written and what would be lost, and
 that records what the installer did. The part that carries a plan out does not
 exist yet. Statements here describe code that CI compiles and tests; anything
 not yet verified is listed under [Assumptions](#assumptions-to-verify).
+
+## 0. What installs TUR today: the medium's engine and its two front ends
+
+This library still writes to no disk. What does install TUR is the
+installer medium ([ADR-0018](../adr/0018-first-installer-medium.md),
+[ADR-0025](../adr/0025-live-session-and-graphical-installer.md)), in three
+pieces:
+
+| Piece | Where | Runs as | Does |
+|---|---|---|---|
+| The engine | `installer/iso/rootfs/usr/lib/tur-installer/engine.sh` | root | Checks the image on the medium against its SHA-256 sums; checks the computer; lists disks with their stable identity and, in plain words, what is on them (read-only); derives the confirmation phrase; looks at the chosen disk again just before writing; runs the one `bootc install to-disk` command; checks the result; keeps the log on the installed disk |
+| The text installer | `installer/iso/rootfs/usr/libexec/tur-installer/tur-install` | root, on the first console | Sources the engine. The boot menu's "Install TUR (text mode)" |
+| The graphical installer | `desktop/apps/tur-installer` (`tur-installer-wizard`) | the live session's user | The screens of desktop-experience §11.5. Reaches the engine only through `tur-install-engine`, started with pkexec for each step |
+
+`tur-install-engine` is the engine's command line for the graphical
+installer: `check`, `disks`, `install --by-id … --serial … --wwn … --size …
+--fingerprint … --phrase …`, `sticks`, `save-log --to …`. It writes one JSON
+object per line (the format is described at the top of the program and in
+`desktop/apps/tur-installer/fixtures/README.md`), reads `cancel` on its
+standard input until it starts writing, and logs every line it sends. It
+trusts nothing it is told: the disk must still be the one that was listed
+(stable path, serial number, WWN, size and a fingerprint of its partitions
+and filesystems), and the phrase must be the one it derives itself from the
+disk it finds. polkit allows it to the live user only, on the medium only
+(`org.tur.installer.engine`).
+
+The rules the engine follows are this library's: the phrase of
+`confirmation_phrase` (plan.rs), the minimum memory of preflight.rs, the
+error codes of codes.rs where one exists. The engine has five codes of its
+own, `TUR-INSTALL-MEDIUM-001` to `-005` (ADR-0018 and ADR-0025), not yet in
+the registry crate.
+
+The installation log (the engine's log, bootc's output, the graphical
+installer's state lines) is copied to `/var/log/tur-installer/<session>/`
+on the installed disk (§28.3), with the SELinux label of `/var/log`. It is
+not yet the session directory of section 8.
+
+**ext4 `casefold` on the root (issue 81) is not set.** The root filesystem
+holds `/boot`, which GRUB reads at every start, and Fedora 45's GRUB refuses
+an ext4 filesystem with the `casefold` feature: measured in CI, a root
+given it with `tune2fs` stops at GRUB's prompt ("no such device" for the
+root's UUID; TUR-009). See ADR-0025 for the ways to issue 81.
+
+The way to the design of this document: the engine's steps become the
+phases of section 7, carried out by a `CommandRunner` that this library
+records, and the graphical installer talks to that instead of the shell
+library. Until then the shell library is the one place that touches a disk.
 
 ## 1. What is deliberately not implemented
 

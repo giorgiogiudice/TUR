@@ -1,0 +1,177 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/giorgiogiudice/TUR/schemas/remedy-result.schema.json",
+  "$comment": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+  "title": "TUR autopilot result",
+  "description": "The measured result of one run of tur-runtime's compatibility autopilot (docs/architecture/compat-autopilot.md): the application, the runtime, what failed in an unchanged copy of its prefix, every attempt with its remedies, outcome, timings and log digest, what made the check pass, and the fingerprints of the real prefix before and after, which must be equal. Written as autopilot/<app-id>/<time>/result.json under tur-runtime's data directory, never visible to the application. evidence_sha256 is the SHA-256 of the attempts serialised as compact JSON, with every time written as whole milliseconds; a result whose attempts do not match it is refused.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "result_id", "app_id", "app_name", "main_executable_windows", "runtime",
+    "runtime_version", "runtime_build", "started_at", "finished_at", "outcome", "check",
+    "trials_network", "snapshot", "facts", "attempts", "found", "real_prefix", "evidence_sha256",
+    "seconds", "notes"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "result_id": { "description": "<app-id>@<UTC time, compact>.", "type": "string", "pattern": "^[a-z0-9.-]+@[0-9]{8}T[0-9]{6}Z$" },
+    "app_id": { "type": "string" },
+    "app_name": { "type": "string" },
+    "app_version": { "type": "string" },
+    "installer_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "main_executable_windows": { "type": "string" },
+    "runtime": { "enum": ["wine", "proton"] },
+    "runtime_version": { "type": "string" },
+    "runtime_build": { "type": "string" },
+    "started_at": { "$ref": "#/$defs/timestamp" },
+    "finished_at": { "$ref": "#/$defs/timestamp" },
+    "outcome": { "enum": ["passed-without-remedy", "fixed", "not-fixed", "unsuppliable"] },
+    "check": { "$ref": "remedy-check.schema.json" },
+    "trials_network": { "description": "Whether the copies shared the host's network. Granted directories are never shown to a copy.", "type": "boolean" },
+    "snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["method", "seconds", "bytes", "files"],
+      "properties": {
+        "method": { "description": "reflink: copy-on-write (btrfs, xfs). copy: an ordinary copy.", "enum": ["reflink", "copy"] },
+        "seconds": { "type": "number", "minimum": 0 },
+        "bytes": { "type": "integer", "minimum": 0 },
+        "files": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "facts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["exe_name", "resource_languages", "dlls_beside_program", "case_collisions"],
+      "properties": {
+        "exe_name": { "type": "string" },
+        "resource_languages": { "type": "array", "items": { "type": "string", "pattern": "^[0-9a-f]{4}$" } },
+        "dlls_beside_program": { "type": "array", "items": { "type": "string" } },
+        "case_collisions": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "failure": { "$ref": "#/$defs/failure" },
+    "plan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["class", "hints", "candidates", "passed_over"],
+      "properties": {
+        "class": { "$ref": "remedy-catalogue.schema.json#/$defs/failure_class" },
+        "hints": { "type": "array", "items": { "$ref": "remedy-catalogue.schema.json#/$defs/hint" } },
+        "candidates": { "type": "array", "items": { "$ref": "#/$defs/candidate" } },
+        "passed_over": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["remedy", "reason"],
+            "properties": { "remedy": { "type": "string" }, "reason": { "type": "string" } }
+          }
+        }
+      }
+    },
+    "attempts": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/attempt" } },
+    "found": { "type": "array", "items": { "$ref": "#/$defs/remedy_instance" } },
+    "unsuppliable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["component", "route", "explanation"],
+      "properties": {
+        "component": { "type": "string" },
+        "dll": { "type": "string" },
+        "route": { "const": "windows-guest" },
+        "explanation": { "type": "string" }
+      }
+    },
+    "real_prefix": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["before", "after", "unchanged"],
+      "properties": {
+        "before": { "$ref": "#/$defs/sha256" },
+        "after": { "$ref": "#/$defs/sha256" },
+        "unchanged": { "type": "boolean" }
+      }
+    },
+    "evidence_sha256": { "$ref": "#/$defs/sha256" },
+    "seconds": { "type": "number", "minimum": 0 },
+    "notes": { "type": "array", "items": { "type": "string" } }
+  },
+  "$defs": {
+    "timestamp": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$" },
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "remedy_instance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label"],
+      "properties": {
+        "id": { "type": "string" },
+        "parameters": { "description": "exe: the program's file name; dll: the DLL the evidence named.", "type": "object", "additionalProperties": { "type": "string" } },
+        "label": { "description": "The identifier with its DLL, as a catalogue record names it: dll-builtin:d3dx9_43.", "type": "string" }
+      }
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["instance", "group", "hinted", "reason", "order"],
+      "properties": {
+        "instance": { "$ref": "#/$defs/remedy_instance" },
+        "group": { "type": "string" },
+        "hinted": { "type": "boolean" },
+        "reason": { "type": "string" },
+        "order": { "type": "integer" }
+      }
+    },
+    "failure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["class", "code", "summary", "hints", "evidence"],
+      "properties": {
+        "class": { "$ref": "remedy-catalogue.schema.json#/$defs/failure_class" },
+        "code": { "type": "string", "pattern": "^TUR-WINDOWS-COMPAT-[0-9]{3}$" },
+        "summary": { "type": "string" },
+        "dll": { "type": "string" },
+        "function": { "type": "string" },
+        "component": { "type": "string" },
+        "hints": { "type": "array", "items": { "$ref": "remedy-catalogue.schema.json#/$defs/hint" } },
+        "evidence": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "attempt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["number", "remedies", "outcome", "ended", "window_seen", "timings"],
+      "properties": {
+        "number": { "description": "0 is the baseline: the application unchanged.", "type": "integer", "minimum": 0 },
+        "remedies": { "type": "array", "items": { "$ref": "#/$defs/remedy_instance" } },
+        "outcome": { "enum": ["passed", "failed", "not-applicable"] },
+        "failure": { "$ref": "#/$defs/failure" },
+        "problems": { "type": "array", "items": { "type": "string" } },
+        "exit_status": { "type": "integer" },
+        "ended": { "enum": ["exited", "stopped", "timed-out"] },
+        "window_seen": { "type": "boolean" },
+        "note": { "type": "string" },
+        "timings": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["snapshot_seconds", "remedy_seconds", "run_seconds"],
+          "properties": {
+            "snapshot_seconds": { "type": "number", "minimum": 0 },
+            "remedy_seconds": { "type": "number", "minimum": 0 },
+            "run_seconds": { "type": "number", "minimum": 0 }
+          }
+        },
+        "log": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["file", "sha256", "bytes"],
+          "properties": {
+            "file": { "type": "string", "pattern": "^attempt-[0-9]+\\.log$" },
+            "sha256": { "$ref": "#/$defs/sha256" },
+            "bytes": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    }
+  }
+}

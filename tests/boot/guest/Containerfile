@@ -2,7 +2,7 @@
 #
 # Boot-test image: the TUR image plus a test agent.
 #
-# The product image carries no test hooks. This layer adds one systemd unit,
+# The product image carries no test hooks. This layer adds systemd units,
 # the test's scripts and the fixtures of the P@x end-to-end test, and nothing
 # else. The agent only runs in a virtual machine whose kernel command line
 # contains tur.boot_test, which tests/boot/build-disk.sh sets at install time.
@@ -10,7 +10,9 @@
 # component-checks run TUR's programs as an ordinary user; scenario-agent takes
 # over in the boot-health scenarios (tests/boot/rollback.py), and
 # signed-update-agent in the release workflow's test of signed updates
-# (tests/boot/signed-update.py).
+# (tests/boot/signed-update.py). A second unit, tur-desktop-check, runs only
+# in the extra boot of tests/boot/splash.py (kernel argument
+# tur.desktop_check) and records what a new account's desktop got (task D-04).
 #
 # The build context is the repository root, filtered by
 # Containerfile.containerignore beside this file.
@@ -52,6 +54,10 @@ RUN set -eu; \
     mkdir -p /usr/lib/systemd/system/multi-user.target.wants; \
     ln -s ../tur-boot-test.service \
         /usr/lib/systemd/system/multi-user.target.wants/tur-boot-test.service; \
+    # The desktop check of the extra boot (tests/boot/splash.py; task D-04).
+    chmod 0755 /usr/libexec/tur-boot-test/desktop-check; \
+    ln -s ../tur-desktop-check.service \
+        /usr/lib/systemd/system/multi-user.target.wants/tur-desktop-check.service; \
     bootc container lint
 
 LABEL org.tur.test-image="boot"

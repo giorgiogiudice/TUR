@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR's graphical installer, in the live session of the installer medium.
+[Desktop Entry]
+Type=Application
+Name=Install TUR
+GenericName=Installer
+Comment=Install TUR on this computer
+Exec=/usr/libexec/tur-installer/tur-installer-wizard --standalone
+Icon=system-software-install
+Terminal=false
+Categories=System;
+StartupNotify=true

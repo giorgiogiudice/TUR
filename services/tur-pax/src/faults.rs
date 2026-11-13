@@ -275,6 +275,12 @@ task_code_registry! {
         user_message: "P@x could not read or save its settings. Nothing was changed.",
         explanation: "A settings file that cannot be read leaves the assistant switched off. The detail names the file and never quotes it.",
         recovery: "Check the files under the configuration and state folders of the assistant.";
+    ServiceLocalUnavailable => "TUR-AI-SERVICE-010", Error,
+        title: "Local AI on this computer could not be asked.",
+        detection: "The local AI program (tur-ai-local) is not installed, could not be started, ended without an answer, or answered with something that is not its report.",
+        user_message: "P@x could not reach local AI on this computer. Nothing was downloaded or changed.",
+        explanation: "The models a computer can run, their download and their start are local AI's. P@x asks it and shows what it says.",
+        recovery: "Install the latest TUR updates. If it keeps happening, create a support bundle.";
     KeyStoreUnavailable => "TUR-AI-KEY-001", Error,
         title: "No password store is available to keep or read the provider key.",
         detection: "No service on the session bus offered the Secret Service interface, or it did not answer.",
@@ -317,6 +323,36 @@ task_code_registry! {
         user_message: "P@x could not set its timer. A reminder may be shown late.",
         explanation: "Schedules that come due are still handled whenever the runner is woken: when the session starts, when a task ends and when a schedule changes.",
         recovery: "Check that the user service manager is running.";
+    InterfaceUnavailable => "TUR-AI-INTERFACE-001", Error,
+        title: "The accessibility bridge could not be reached, or it cannot see the desktop.",
+        detection: "The bridge program could not be started, closed its connection, did not answer in time, or reported that the accessibility bus or P@x's indicator is not available.",
+        user_message: "P@x cannot see or operate the windows on your screen right now.",
+        explanation: "The bridge reads the accessibility tree only while P@x's indicator is on screen, and only when the session's accessibility bus answers. Nothing was read or done.",
+        recovery: "Check that accessibility is switched on for the session and that P@x's indicator is running.";
+    InterfaceTargetNotFound => "TUR-AI-INTERFACE-002", Notice,
+        title: "No window or control matched what P@x asked for, or more than one did.",
+        detection: "The bridge found no window or element with the given identifier, title, name or role, or found several and could not tell which was meant.",
+        user_message: "P@x could not find that window or control.",
+        explanation: "The call never became an action, so nothing was decided or done. The detail lists what the bridge found instead.",
+        recovery: "None is needed; P@x can read the window again and name the control exactly.";
+    InterfaceActionFailed => "TUR-AI-INTERFACE-003", Warning,
+        title: "The application did not carry out what the accessibility bridge asked of it.",
+        detection: "The element offers no way to do what was asked through the accessibility tree, or the application answered that it did not do it, or answered with an error.",
+        user_message: "The application did not let P@x do that through its accessibility interface.",
+        explanation: "Applications expose different parts of what they can do. A list row that offers only to take the keyboard cannot be pressed this way.",
+        recovery: "Do it yourself, or let P@x try another way to reach the same place.";
+    InterfaceStopped => "TUR-AI-INTERFACE-004", Notice,
+        title: "P@x's indicator was switched off or its stop control was used, so the accessibility bridge stopped.",
+        detection: "The bridge's hold on P@x's indicator ended, the indicator left the bus, or the task was cancelled while the bridge was working.",
+        user_message: "P@x stopped what it was doing on your screen.",
+        explanation: "The bridge acts only while the indicator shows that P@x is acting. When it goes, whatever was under way is abandoned and the bridge is closed.",
+        recovery: "None is needed. Ask again when you want P@x to go on.";
+    InterfaceTargetChanged => "TUR-AI-INTERFACE-005", Warning,
+        title: "The control changed between the decision to act on it and the action.",
+        detection: "When the bridge came to act, the element no longer had the role, name, description, state or window it had when the policy engine decided.",
+        user_message: "The control P@x was about to use changed, so P@x did not use it.",
+        explanation: "A decision covers the element as it was read. An element that changed could now do something else, so the action is abandoned rather than decided anew without the person.",
+        recovery: "None is needed; P@x can read the window again.";
 }
 
 impl TaskCode {

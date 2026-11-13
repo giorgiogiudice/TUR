@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# The live session does not suspend by itself. While the disk is written the
+# installation engine also holds a systemd inhibitor.
+[AC][SuspendAndShutdown]
+AutoSuspendAction=0
+
+[Battery][SuspendAndShutdown]
+AutoSuspendAction=0
+
+[LowBattery][SuspendAndShutdown]
+AutoSuspendAction=0

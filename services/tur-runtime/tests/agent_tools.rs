@@ -75,23 +75,27 @@ fn help(arguments: &[&str]) -> String {
 }
 
 /// Hold a command line against the built program: it names the installed
-/// program, `subcommand` is on it and is a subcommand the program lists, and
-/// every option before a `--` is one the help of the subcommand or of the
-/// program describes.
-fn check_against_the_program(tool: &str, line: &[String], subcommand: &str) {
+/// program, the words of `subcommand` are on it and each is a subcommand the
+/// level above lists, and every option before a `--` is one the help of the
+/// subcommand or of the program describes.
+fn check_against_the_program(tool: &str, line: &[String], subcommand: &[&str]) {
     assert_eq!(line[0], INSTALLED, "{tool}");
-    assert!(
-        line[1..].iter().any(|argument| argument == subcommand),
-        "{tool}: {line:?} does not name {subcommand}"
-    );
+    for (depth, word) in subcommand.iter().enumerate() {
+        assert_eq!(
+            line.get(depth + 1).map(String::as_str),
+            Some(*word),
+            "{tool}: {line:?} does not name {subcommand:?}"
+        );
+        let above = help(&subcommand[..depth]);
+        assert!(
+            above
+                .lines()
+                .any(|text| text.split_whitespace().next() == Some(*word)),
+            "{tool}: no subcommand {word}:\n{above}"
+        );
+    }
     let program_help = help(&[]);
-    assert!(
-        program_help
-            .lines()
-            .any(|text| text.split_whitespace().next() == Some(subcommand)),
-        "{tool}: the program lists no subcommand {subcommand}:\n{program_help}"
-    );
-    let subcommand_help = help(&[subcommand]);
+    let subcommand_help = help(subcommand);
     for argument in line[1..].iter().take_while(|argument| *argument != "--") {
         let Some(option) = argument.strip_prefix("--") else {
             continue;
@@ -100,7 +104,7 @@ fn check_against_the_program(tool: &str, line: &[String], subcommand: &str) {
         let flag = format!("--{name}");
         assert!(
             subcommand_help.contains(&flag) || program_help.contains(&flag),
-            "{tool}: {flag} is not an option of `{subcommand}`:\n{subcommand_help}"
+            "{tool}: {flag} is not an option of `{subcommand:?}`:\n{subcommand_help}"
         );
     }
 }
@@ -119,29 +123,85 @@ fn run(arguments: &[String]) -> (Option<i32>, String, String) {
 }
 
 /// The tools P@x is offered, in the order of the manifest.
-const OFFERED: [&str; 1] = ["runtime_inspect_file"];
+const OFFERED: [&str; 3] = [
+    "runtime_inspect_file",
+    "runtime_autopilot_plan",
+    "runtime_autopilot_results",
+];
 
 /// The tools the manifest declares that no program performs yet.
 const NOT_OFFERED: [&str; 0] = [];
 
-/// Every tool with the class the manifest declares.
-const CLASSES: [(&str, u64); 1] = [("runtime_inspect_file", 0)];
+/// Every tool with the class the manifest declares. The autopilot's tools
+/// only read: what would be tried, and what was found. Running the
+/// autopilot and applying what it found are not offered to the assistant
+/// (docs/architecture/compat-autopilot.md, "P@x").
+const CLASSES: [(&str, u64); 3] = [
+    ("runtime_inspect_file", 0),
+    ("runtime_autopilot_plan", 0),
+    ("runtime_autopilot_results", 0),
+];
 
 /// A call of each offered tool: its arguments, the subcommand that performs
 /// it, and the whole command line.
-fn cases() -> Vec<(&'static str, Value, &'static str, Vec<&'static str>)> {
-    vec![(
-        "runtime_inspect_file",
-        json!({ "path": "/usr/bin/true" }),
-        "inspect",
-        vec![
-            "/usr/bin/tur-runtime",
-            "inspect",
-            "--json",
-            "--",
-            "/usr/bin/true",
-        ],
-    )]
+#[allow(clippy::type_complexity)]
+fn cases() -> Vec<(&'static str, Value, Vec<&'static str>, Vec<&'static str>)> {
+    vec![
+        (
+            "runtime_inspect_file",
+            json!({ "path": "/usr/bin/true" }),
+            vec!["inspect"],
+            vec![
+                "/usr/bin/tur-runtime",
+                "inspect",
+                "--json",
+                "--",
+                "/usr/bin/true",
+            ],
+        ),
+        (
+            "runtime_autopilot_plan",
+            json!({ "app_id": "org.example.app", "failure": "dll-missing" }),
+            vec!["app", "autopilot"],
+            vec![
+                "/usr/bin/tur-runtime",
+                "app",
+                "autopilot",
+                "--plan",
+                "--json",
+                "--failure=dll-missing",
+                "--",
+                "org.example.app",
+            ],
+        ),
+        (
+            "runtime_autopilot_plan",
+            json!({}),
+            vec!["app", "autopilot"],
+            vec![
+                "/usr/bin/tur-runtime",
+                "app",
+                "autopilot",
+                "--plan",
+                "--json",
+                "--",
+            ],
+        ),
+        (
+            "runtime_autopilot_results",
+            json!({ "app_id": "org.example.app" }),
+            vec!["app", "autopilot"],
+            vec![
+                "/usr/bin/tur-runtime",
+                "app",
+                "autopilot",
+                "--results",
+                "--json",
+                "--",
+                "org.example.app",
+            ],
+        ),
+    ]
 }
 
 #[test]
@@ -201,8 +261,91 @@ fn every_command_line_is_one_the_program_really_has() {
     for (tool, arguments, subcommand, expected) in cases {
         let line = command_line(&registry, tool, arguments);
         assert_eq!(line, expected, "{tool}");
-        check_against_the_program(tool, &line, subcommand);
+        check_against_the_program(tool, &line, &subcommand);
     }
+}
+
+#[test]
+fn the_autopilot_tools_run_and_change_nothing() {
+    let registry = registry();
+    let file = AdapterFile::from_json(ADAPTERS).expect("a valid adapter file");
+    // A scratch data directory, so that what the tools read is known; they
+    // must leave it as they found it.
+    let scratch = std::env::temp_dir().join(format!("tur-runtime-tools-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&scratch);
+    std::fs::create_dir_all(&scratch).expect("a scratch directory");
+    let run_in = |line: &[String]| {
+        let output = Command::new(PROGRAM)
+            .args(&line[1..])
+            .env("HOME", &scratch)
+            .env("XDG_DATA_HOME", scratch.join("data"))
+            .env("XDG_STATE_HOME", scratch.join("state"))
+            .output()
+            .expect("the built program runs");
+        (
+            output.status.code().expect("an exit status"),
+            String::from_utf8_lossy(&output.stdout).into_owned(),
+            String::from_utf8_lossy(&output.stderr).into_owned(),
+        )
+    };
+    let success = |tool: &str| -> Vec<i32> {
+        file.adapters()
+            .iter()
+            .find(|adapter| adapter.tool() == tool)
+            .expect("an adapter")
+            .success_exit_codes()
+            .to_vec()
+    };
+
+    let line = command_line(
+        &registry,
+        "runtime_autopilot_plan",
+        json!({ "failure": "dll-init-failed" }),
+    );
+    let (status, stdout, stderr) = run_in(&line);
+    assert!(
+        success("runtime_autopilot_plan").contains(&status),
+        "{status}: {stderr}"
+    );
+    let plan: Value = serde_json::from_str(&stdout).unwrap_or_else(|e| panic!("{e}: {stdout}"));
+    assert_eq!(plan["plans"][0]["class"], "dll-init-failed");
+    assert_eq!(plan["failure_source"], "given");
+    assert!(
+        plan["never_supplied"]
+            .as_array()
+            .is_some_and(|list| !list.is_empty())
+    );
+
+    let line = command_line(&registry, "runtime_autopilot_plan", json!({}));
+    let (status, stdout, stderr) = run_in(&line);
+    assert_eq!(status, 0, "{stderr}");
+    let every: Value = serde_json::from_str(&stdout).unwrap_or_else(|e| panic!("{e}: {stdout}"));
+    // Every class that a remedy can address, and none that needs a
+    // Microsoft component.
+    assert_eq!(every["plans"].as_array().map(Vec::len), Some(10));
+
+    let line = command_line(
+        &registry,
+        "runtime_autopilot_results",
+        json!({ "app_id": "org.example.app" }),
+    );
+    let (status, stdout, stderr) = run_in(&line);
+    assert!(
+        success("runtime_autopilot_results").contains(&status),
+        "{status}: {stderr}"
+    );
+    let results: Value = serde_json::from_str(&stdout).unwrap_or_else(|e| panic!("{e}: {stdout}"));
+    assert_eq!(results["results"], json!([]));
+    assert!(results["applied"].is_null());
+
+    // Reading changed nothing: the scratch directory is as empty as it was.
+    let left: Vec<_> = std::fs::read_dir(&scratch)
+        .expect("the scratch directory")
+        .flatten()
+        .map(|entry| entry.path())
+        .collect();
+    assert!(left.is_empty(), "{left:?}");
+    let _ = std::fs::remove_dir_all(&scratch);
 }
 
 #[test]

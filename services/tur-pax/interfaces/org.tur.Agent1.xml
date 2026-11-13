@@ -62,6 +62,32 @@
     <method name="ListModels">
       <arg name="models" type="s" direction="out"/>
     </method>
+    <!-- Models of a provider, and their generation settings -->
+    <method name="ListProviderModels">
+      <arg name="provider" type="s" direction="in"/>
+      <arg name="refresh" type="b" direction="in"/>
+      <arg name="models" type="s" direction="out"/>
+    </method>
+    <method name="GetGenerationSettings">
+      <arg name="provider" type="s" direction="in"/>
+      <arg name="model" type="s" direction="in"/>
+      <arg name="settings" type="s" direction="out"/>
+    </method>
+    <method name="SetGenerationSettings">
+      <arg name="provider" type="s" direction="in"/>
+      <arg name="model" type="s" direction="in"/>
+      <arg name="settings" type="s" direction="in"/>
+    </method>
+    <!-- Local AI on this computer: offered by hardware, made ready on request -->
+    <method name="ListLocalModels">
+      <arg name="models" type="s" direction="out"/>
+    </method>
+    <method name="UseLocalModel">
+      <arg name="model" type="s" direction="in"/>
+      <arg name="options" type="s" direction="in"/>
+      <arg name="job" type="s" direction="out"/>
+    </method>
+    <method name="CancelLocalModel"/>
     <!-- The key. It is taken, never given back. -->
     <method name="SetKey">
       <arg name="provider" type="s" direction="in"/>
@@ -146,6 +172,10 @@
     <signal name="MemoryChanged"/>
     <signal name="StateChanged">
       <arg name="state" type="s"/>
+    </signal>
+    <signal name="LocalModelProgress">
+      <arg name="model" type="s"/>
+      <arg name="event" type="s"/>
     </signal>
     <property name="State" type="s" access="read">
       <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="true"/>

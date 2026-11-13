@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# Plasma's Welcome Center would open over the installer at the first sign-in
+# of the live session. Its daemon (plasma-welcome, src/kded/daemon.cpp)
+# opens it when LastSeenVersion is empty, and after an upgrade unless
+# ShowUpdatePage is false. Neither applies here.
+[General]
+LastSeenVersion=6.8.0
+ShowUpdatePage=false

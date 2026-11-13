@@ -66,6 +66,7 @@ use tur_pax_providers::{
 use crate::codes::{Code, Problem};
 use crate::exec::BwrapExecutor;
 use crate::faults::{Fault, TaskCode};
+use crate::interface::{BRIDGE_PROGRAM, BridgeInterface, Interface, NoInterface};
 use crate::orchestrator::{
     NoAssistant, NoBudget, NoControl, NoObserver, Observer, Orchestrator, ReportItem, Situation,
     SystemTaskClock, TaskLimits, TaskOutcome, TaskReport, TaskRequest,
@@ -172,6 +173,15 @@ pub struct TaskArgs {
     /// Do not offer the model the read-only command tool.
     #[arg(long)]
     pub no_commands: bool,
+    /// Offer the interface tools: P@x reads and operates the windows on the
+    /// screen through the accessibility tree, by way of the accessibility
+    /// bridge, and only while P@x's indicator is on screen.
+    #[arg(long)]
+    pub interface: bool,
+    /// The accessibility bridge program, with --interface. Without it,
+    /// /usr/bin/tur-pax-a11y.
+    #[arg(long, value_name = "FILE", requires = "interface")]
+    pub interface_bridge: Option<PathBuf>,
     /// The task identifier written to the audit trail.
     #[arg(long, value_name = "ID")]
     pub task: Option<String>,
@@ -213,6 +223,9 @@ struct Setup {
     audit_path: PathBuf,
     limits: TaskLimits,
     memory_store: Option<PathBuf>,
+    /// The accessibility bridge, with --interface. Started on the first
+    /// interface call and kept for the conversation.
+    interface: Option<BridgeInterface>,
 }
 
 /// `text` with every control character but the line break and the tab
@@ -416,9 +429,16 @@ fn build(args: &TaskArgs, err: &mut dyn Write) -> io::Result<Result<Setup, Vec<F
         Err(fault) => return Ok(Err(vec![fault])),
     }
     let registry = match ToolRegistry::load(&manifests, &adapters, !args.no_commands) {
-        Ok(registry) => registry,
+        Ok(registry) => registry.with_interface_tools(args.interface),
         Err(problems) => return Ok(Err(problems)),
     };
+    let interface = args.interface.then(|| {
+        BridgeInterface::new(
+            args.interface_bridge
+                .as_deref()
+                .unwrap_or(Path::new(BRIDGE_PROGRAM)),
+        )
+    });
 
     // The policy. A file that cannot be used leaves observation only.
     let policy = match &args.policy {
@@ -504,6 +524,7 @@ fn build(args: &TaskArgs, err: &mut dyn Write) -> io::Result<Result<Setup, Vec<F
             ..TaskLimits::default()
         },
         memory_store: args.memory_store.clone(),
+        interface,
     }))
 }
 
@@ -542,6 +563,11 @@ impl Setup {
         // operations belong to the session service.
         let mut budget = NoBudget;
         let mut assistant = NoAssistant;
+        let mut none = NoInterface;
+        let interface: &mut dyn Interface = match &mut self.interface {
+            Some(bridge) => bridge,
+            None => &mut none,
+        };
         let mut orchestrator = Orchestrator {
             provider: &*self.provider,
             config: &self.config,
@@ -558,6 +584,7 @@ impl Setup {
             observer,
             budget: &mut budget,
             assistant: &mut assistant,
+            interface,
         };
         let task = TaskRequest {
             task_id,

@@ -55,11 +55,15 @@ use std::path::Path;
 use serde_json::{Map, Value};
 use tur_pax_providers::ToolDefinition;
 
-use crate::action::{Action, AgentOperation, CommandAction, Sandbox, WorkingContext};
+use crate::action::{
+    Action, AgentOperation, CommandAction, Sandbox, UiAction, UiActionKind, UiDetail,
+    WorkingContext,
+};
 use crate::adapter::{Adapter, AdapterFile};
 use crate::class::ActionClass;
 use crate::codes::{Code, Problem};
 use crate::faults::{Fault, TaskCode, faults};
+use crate::interface::{INTERFACE_MANIFEST, InterfaceCall, InterfaceTool};
 use crate::manifest::{ToolManifest, ToolSpec};
 
 /// The name of the built-in tool that runs a command in the read-only
@@ -304,6 +308,9 @@ pub enum Performer<'a> {
     },
     /// One of P@x's own operations. No program is run for it.
     Assistant(AssistantCall),
+    /// A call of an interface tool, carried out by the accessibility bridge
+    /// once its target has been resolved and decided.
+    Interface(InterfaceCall),
 }
 
 impl Performer<'_> {
@@ -317,7 +324,7 @@ impl Performer<'_> {
         match self {
             Performer::Adapter { adapter, arguments } => adapter.argv(arguments),
             Performer::Command { argv } => Ok(argv.clone()),
-            Performer::Assistant(_) => Ok(Vec::new()),
+            Performer::Assistant(_) | Performer::Interface(_) => Ok(Vec::new()),
         }
     }
 }
@@ -340,6 +347,8 @@ pub struct ToolRegistry {
     assistant: Option<ToolManifest>,
     /// Which of them are offered.
     assistant_tools: AssistantTools,
+    /// The manifest of the interface tools, if they are offered.
+    interface: Option<ToolManifest>,
 }
 
 impl ToolRegistry {
@@ -362,8 +371,10 @@ impl ToolRegistry {
         let mut services: Vec<Service> = Vec::new();
         let mut tool_names: BTreeSet<String> = BTreeSet::new();
         tool_names.insert(COMMAND_TOOL.to_owned());
-        // The names of P@x's own operations are taken, offered or not.
+        // The names of P@x's own operations and of the interface tools are
+        // taken, offered or not.
         tool_names.extend(ASSISTANT_TOOLS.iter().map(|name| (*name).to_owned()));
+        tool_names.extend(InterfaceTool::ALL.iter().map(|tool| tool.name().to_owned()));
 
         for text in manifests {
             let manifest = match ToolManifest::from_json(text) {
@@ -462,6 +473,7 @@ impl ToolRegistry {
                 built_in,
                 assistant: None,
                 assistant_tools: AssistantTools::default(),
+                interface: None,
             })
         } else {
             Err(problems)
@@ -481,6 +493,26 @@ impl ToolRegistry {
             None
         };
         self
+    }
+
+    /// The same registry, offering the interface tools as well: P@x's way
+    /// of acting through the accessibility tree.
+    ///
+    /// Only a caller that drives an accessibility bridge offers them:
+    /// `tur-pax run --interface` does.
+    #[must_use]
+    pub fn with_interface_tools(mut self, offered: bool) -> Self {
+        self.interface = if offered {
+            ToolManifest::from_json(INTERFACE_MANIFEST).ok()
+        } else {
+            None
+        };
+        self
+    }
+
+    /// Whether the interface tools are offered.
+    pub fn has_interface_tools(&self) -> bool {
+        self.interface.is_some()
     }
 
     /// Whether the named tool is one of P@x's own operations and is offered.
@@ -578,6 +610,11 @@ impl ToolRegistry {
                 }
             }
         }
+        if let Some(interface) = &self.interface {
+            for tool in interface.tools() {
+                tools.push((interface.service(), tool));
+            }
+        }
         tools
     }
 
@@ -651,6 +688,35 @@ impl ToolRegistry {
             return Ok(Proposal {
                 action: Action::Agent(operation),
                 performer: Performer::Assistant(call),
+            });
+        }
+        if let (Some(interface), Some(tool)) = (&self.interface, InterfaceTool::from_name(name)) {
+            // The same check as for any tool. The action has no target yet:
+            // the task loop asks the accessibility bridge what the call would
+            // act on and puts that in before the engine decides. Until then
+            // it names no application, so the engine would refuse it as
+            // incomplete.
+            interface
+                .tool_call(name, arguments.clone())
+                .map_err(faults)?;
+            let kind = if tool.observes() {
+                UiActionKind::Observe
+            } else {
+                UiActionKind::Act
+            };
+            let action = Action::Accessibility(UiAction {
+                application: String::new(),
+                window_title: String::new(),
+                control: String::new(),
+                kind,
+                detail: UiDetail {
+                    operation: tool.operation(),
+                    ..UiDetail::default()
+                },
+            });
+            return Ok(Proposal {
+                action,
+                performer: Performer::Interface(InterfaceCall { tool, arguments }),
             });
         }
         for service in &self.services {

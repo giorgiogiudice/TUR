@@ -1,0 +1,3 @@
+{"licence":"SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0","what":"tur-install-engine install, held while it looks at the disk again: the moment at which it can still be cancelled"}
+{"event":"stage","stage":"revalidate"}
+{"event":"pause"}

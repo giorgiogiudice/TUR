@@ -1,0 +1,486 @@
+{
+  "$comment": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0. The remedy catalogue of tur-runtime's compatibility autopilot (docs/architecture/compat-autopilot.md). Format: schemas/remedy-catalogue.schema.json. Each remedy is a declarative, reversible change to a prefix's registry, to the environment of a launch, or to how drive C: compares names. None downloads, installs or runs anything; a failure that needs a Microsoft component is named in microsoft_components and is answered with the Windows-guest route, never with a remedy. Every source was read on the date in 'checked'; what a source says is described here in TUR's words, nothing is copied from it.",
+  "schema_version": 1,
+  "checked": "2026-11-13",
+  "remedies": [
+    {
+      "id": "windows-version-win11",
+      "title": "Report Windows 11 to the program",
+      "description": "Sets the Windows version Wine reports to the program (version 10.0, build 22000) for the program's own executable only.",
+      "kind": "registry",
+      "group": "windows-version",
+      "runtimes": ["wine"],
+      "addresses": ["exited-with-error", "check-failed", "no-window", "crash"],
+      "hints": ["windows-version"],
+      "order": 10,
+      "registry": [
+        { "key": "HKEY_CURRENT_USER\\Software\\Wine\\AppDefaults\\{exe}", "name": "Version", "type": "string", "value": "win11" }
+      ],
+      "automatic": true,
+      "reverting": "Deleting the value returns the program to the version the prefix reports by default; the backup taken before applying restores the prefix exactly.",
+      "sources": [
+        { "kind": "wine-source", "reference": "https://raw.githubusercontent.com/wine-mirror/wine/wine-9.0/dlls/ntdll/version.c", "detail": "version_init() reads the value Version from HKCU\\Software\\Wine\\AppDefaults\\<program> and then from HKCU\\Software\\Wine; the table of names includes win11 (10.0, build 22000) and win10 (10.0, build 19043), which is the default.", "checked": "2026-11-13" }
+      ]
+    },
+    {
+      "id": "windows-version-win10",
+      "title": "Report Windows 10 to the program",
+      "description": "Sets the Windows version Wine reports to the program to Windows 10 (version 10.0, build 19043) for the program's own executable only.",
+      "kind": "registry",
+      "group": "windows-version",
+      "runtimes": ["wine"],
+      "addresses": ["exited-with-error", "check-failed", "no-window", "crash"],
+      "hints": ["windows-version"],
+      "order": 11,
+      "registry": [
+        { "key": "HKEY_CURRENT_USER\\Software\\Wine\\AppDefaults\\{exe}", "name": "Version", "type": "string", "value": "win10" }
+      ],
+      "automatic": true,
+      "reverting": "Deleting the value returns the program to the version the prefix reports by default; the backup taken before applying restores the prefix exactly.",
+      "sources": [
+        { "kind": "wine-source", "reference": "https://raw.githubusercontent.com/wine-mirror/wine/wine-9.0/dlls/ntdll/version.c", "detail": "As for windows-version-win11: the name win10 selects version 10.0, build 19043.", "checked": "2026-11-13" }
+      ]
+    },
+    {
+      "id": "windows-version-win7",
+      "title": "Report Windows 7 to the program",
+      "description": "Sets the Windows version Wine reports to the program to Windows 7 (version 6.1) for the program's own executable only. For older programs that refuse a newer Windows.",
+      "kind": "registry",
+      "group": "windows-version",
+      "runtimes": ["wine"],
+      "addresses": ["exited-with-error", "check-failed", "no-window", "crash"],
+      "hints": ["windows-version"],
+      "order": 12,
+      "registry": [
+        { "key": "HKEY_CURRENT_USER\\Software\\Wine\\AppDefaults\\{exe}", "name": "Version", "type": "string", "value": "win7" }
+      ],
+      "automatic": true,
+      "reverting": "Deleting the value returns the program to the version the prefix reports by default; the backup taken before applying restores the prefix exactly.",
+      "sources": [
+        { "kind": "wine-source", "reference": "https://raw.githubusercontent.com/wine-mirror/wine/wine-9.0/dlls/ntdll/version.c", "detail": "As for windows-version-win11: the name win7 selects version 6.1.", "checked": "2026-11-13" }
+      ]
+    },
+    {
+      "id": "windows-version-winxp64",
+      "title": "Report Windows XP (64-bit) to the program",
+      "description": "Sets the Windows version Wine reports to the program to Windows XP x64 (version 5.2) for the program's own executable only. For old programs that refuse anything newer.",
+      "kind": "registry",
+      "group": "windows-version",
+      "runtimes": ["wine"],
+      "addresses": ["exited-with-error", "check-failed", "no-window", "crash"],
+      "hints": ["windows-version"],
+      "needs_hint": true,
+      "order": 13,
+      "registry": [
+        { "key": "HKEY_CURRENT_USER\\Software\\Wine\\AppDefaults\\{exe}", "name": "Version", "type": "string", "value": "winxp64" }
+      ],
+      "automatic": true,
+      "reverting": "Deleting the value returns the program to the version the prefix reports by default; the backup taken before applying restores the prefix exactly.",
+      "sources": [
+        { "kind": "wine-source", "reference": "https://raw.githubusercontent.com/wine-mirror/wine/wine-9.0/dlls/ntdll/version.c", "detail": "As for windows-version-win11: the name winxp64 selects Windows XP x64.", "checked": "2026-11-13" }
+      ]
+    },
+    {
+      "id": "dll-builtin",
+      "title": "Use Wine's own implementation of a DLL",
+      "description": "Sets the load order of the DLL named in the evidence to Wine's builtin implementation, for the program's own executable only. For a program that ships a copy of a system DLL that does not work under Wine, and for a DLL an earlier setting disabled or set to native only.",
+      "kind": "registry",
+      "group": "dll-load-order",
+      "runtimes": ["wine"],
+      "addresses": ["dll-missing", "dll-load-failed", "dll-init-failed", "crash"],
+      "hints": [],
+      "parameter": "dll",
+      "order": 20,
+      "registry": [
+        { "key": "HKEY_CURRENT_USER\\Software\\Wine\\AppDefaults\\{exe}\\DllOverrides", "name": "{dll}", "type": "string", "value": "builtin" }
+      ],
+      "requires": ["wine-builtin-dll"],
+      "automatic": true,
+      "reverting": "Deleting the value returns the DLL to Wine's default load order for the program; the backup taken before applying restores the prefix exactly.",
+      "sources": [
+        { "kind": "wine-source", "reference": "https://raw.githubusercontent.com/wine-mirror/wine/wine-9.0/dlls/ntdll/unix/loadorder.c", "detail": "get_load_order() takes a DLL's load order from WINEDLLOVERRIDES, then from HKCU\\Software\\Wine\\AppDefaults\\<program>\\DllOverrides, then from HKCU\\Software\\Wine\\DllOverrides; parse_load_order() reads n (native) and b (builtin), and an empty value disables the DLL.", "checked": "2026-11-13" },
+        { "kind": "wine-source", "reference": "https://raw.githubusercontent.com/wine-mirror/wine/wine-9.0/dlls/ntdll/unix/loader.c", "detail": "With the default load order a builtin DLL flagged prefer-native (for example d3dx9_43, d3dcompiler_47, d3dx11_43, whose Makefile.in set -Wb,--prefer-native) gives way to a native copy the program carries.", "checked": "2026-11-13" }
+      ]
+    },
+    {
+      "id": "dll-native-builtin",
+      "title": "Use the program's own copy of a DLL, then Wine's",
+      "description": "Sets the load order of the DLL named in the evidence to the program's own copy first and Wine's builtin second, for the program's own executable only. Offered only when the program's directory holds that DLL: nothing is fetched.",
+      "kind": "registry",
+      "group": "dll-load-order",
+      "runtimes": ["wine"],
+      "addresses": ["unimplemented-function", "dll-missing", "crash"],
+      "hints": ["dll-beside-program"],
+      "needs_hint": true,
+      "parameter": "dll",
+      "order": 21,
+      "registry": [
+        { "key": "HKEY_CURRENT_USER\\Software\\Wine\\AppDefaults\\{exe}\\DllOverrides", "name": "{dll}", "type": "string", "value": "native,builtin" }
+      ],
+      "requires": ["dll-beside-program"],
+      "automatic": true,
+      "reverting": "Deleting the value returns the DLL to Wine's default load order for the program; the backup taken before applying restores the prefix exactly.",
+      "sources": [
+        { "kind": "wine-source", "reference": "https://raw.githubusercontent.com/wine-mirror/wine/wine-9.0/dlls/ntdll/unix/loadorder.c", "detail": "As for dll-builtin: the value n,b loads the native DLL and falls back to the builtin one.", "checked": "2026-11-13" }
+      ]
+    },
+    {
+      "id": "virtual-desktop-1024x768",
+      "title": "Run the program in a 1024x768 virtual desktop",
+      "description": "Makes Wine show the program inside a desktop window of 1024 by 768 pixels instead of on the whole screen. For programs that assume a screen size or change the display mode.",
+      "kind": "registry",
+      "group": "virtual-desktop",
+      "runtimes": ["wine"],
+      "addresses": ["exited-with-error", "check-failed", "no-window", "crash"],
+      "hints": ["display-size"],
+      "order": 30,
+      "registry": [
+        { "key": "HKEY_CURRENT_USER\\Software\\Wine\\Explorer", "name": "Desktop", "type": "string", "value": "Default" },
+        { "key": "HKEY_CURRENT_USER\\Software\\Wine\\Explorer\\Desktops", "name": "Default", "type": "string", "value": "1024x768" }
+      ],
+      "requires": ["x11-display"],
+      "automatic": true,
+      "reverting": "Deleting the two values returns the prefix to Wine's default of no virtual desktop; the backup taken before applying restores the prefix exactly.",
+      "sources": [
+        { "kind": "wine-source", "reference": "https://raw.githubusercontent.com/wine-mirror/wine/wine-9.0/programs/explorer/desktop.c", "detail": "The desktop's name is read from the value Desktop of HKCU\\Software\\Wine\\Explorer, and its size from that name's value under HKCU\\Software\\Wine\\Explorer\\Desktops.", "checked": "2026-11-13" },
+        { "kind": "wine-source", "reference": "https://raw.githubusercontent.com/wine-mirror/wine/wine-9.0/programs/winecfg/x11drvdlg.c", "detail": "winecfg's virtual-desktop setting writes the same two values (Explorer: Desktop = Default; Explorer\\Desktops: Default = <width>x<height>).", "checked": "2026-11-13" }
+      ]
+    },
+    {
+      "id": "virtual-desktop-800x600",
+      "title": "Run the program in an 800x600 virtual desktop",
+      "description": "As virtual-desktop-1024x768, with a desktop of 800 by 600 pixels.",
+      "kind": "registry",
+      "group": "virtual-desktop",
+      "runtimes": ["wine"],
+      "addresses": ["exited-with-error", "check-failed", "no-window", "crash"],
+      "hints": ["display-size"],
+      "needs_hint": true,
+      "order": 31,
+      "registry": [
+        { "key": "HKEY_CURRENT_USER\\Software\\Wine\\Explorer", "name": "Desktop", "type": "string", "value": "Default" },
+        { "key": "HKEY_CURRENT_USER\\Software\\Wine\\Explorer\\Desktops", "name": "Default", "type": "string", "value": "800x600" }
+      ],
+      "requires": ["x11-display"],
+      "automatic": true,
+      "reverting": "Deleting the two values returns the prefix to Wine's default of no virtual desktop; the backup taken before applying restores the prefix exactly.",
+      "sources": [
+        { "kind": "wine-source", "reference": "https://raw.githubusercontent.com/wine-mirror/wine/wine-9.0/programs/explorer/desktop.c", "detail": "As for virtual-desktop-1024x768.", "checked": "2026-11-13" }
+      ]
+    },
+    {
+      "id": "dpi-120",
+      "title": "Scale the display to 125% (120 DPI)",
+      "description": "Sets the logical resolution Wine reports to 120 dots per inch, which Windows calls 125% scaling.",
+      "kind": "registry",
+      "group": "dpi",
+      "runtimes": ["wine"],
+      "addresses": ["exited-with-error", "check-failed"],
+      "hints": ["dpi"],
+      "needs_hint": true,
+      "order": 40,
+      "registry": [
+        { "key": "HKEY_CURRENT_USER\\Control Panel\\Desktop", "name": "LogPixels", "type": "dword", "value": "120" }
+      ],
+      "automatic": true,
+      "reverting": "Deleting the value returns the prefix to Wine's default of 96 DPI; the backup taken before applying restores the prefix exactly.",
+      "sources": [
+        { "kind": "wine-source", "reference": "https://raw.githubusercontent.com/wine-mirror/wine/wine-9.0/dlls/win32u/sysparams.c", "detail": "The LOGPIXELS entry is the value LogPixels of HKCU\\Control Panel\\Desktop.", "checked": "2026-11-13" },
+        { "kind": "wine-source", "reference": "https://raw.githubusercontent.com/wine-mirror/wine/wine-9.0/programs/winecfg/x11drvdlg.c", "detail": "winecfg's screen-resolution setting writes LogPixels to HKCU\\Control Panel\\Desktop as a DWORD.", "checked": "2026-11-13" }
+      ]
+    },
+    {
+      "id": "dpi-144",
+      "title": "Scale the display to 150% (144 DPI)",
+      "description": "Sets the logical resolution Wine reports to 144 dots per inch, which Windows calls 150% scaling.",
+      "kind": "registry",
+      "group": "dpi",
+      "runtimes": ["wine"],
+      "addresses": ["exited-with-error", "check-failed"],
+      "hints": ["dpi"],
+      "needs_hint": true,
+      "order": 41,
+      "registry": [
+        { "key": "HKEY_CURRENT_USER\\Control Panel\\Desktop", "name": "LogPixels", "type": "dword", "value": "144" }
+      ],
+      "automatic": true,
+      "reverting": "Deleting the value returns the prefix to Wine's default of 96 DPI; the backup taken before applying restores the prefix exactly.",
+      "sources": [
+        { "kind": "wine-source", "reference": "https://raw.githubusercontent.com/wine-mirror/wine/wine-9.0/dlls/win32u/sysparams.c", "detail": "As for dpi-120.", "checked": "2026-11-13" }
+      ]
+    },
+    {
+      "id": "renderer-gl",
+      "title": "Draw Direct3D through OpenGL",
+      "description": "Makes Wine's own Direct3D implementation (wined3d) draw through OpenGL, for the program's own executable only.",
+      "kind": "registry",
+      "group": "renderer",
+      "runtimes": ["wine"],
+      "addresses": ["crash", "no-window", "exited-with-error"],
+      "hints": ["direct3d"],
+      "needs_hint": true,
+      "order": 50,
+      "registry": [
+        { "key": "HKEY_CURRENT_USER\\Software\\Wine\\AppDefaults\\{exe}\\Direct3D", "name": "renderer", "type": "string", "value": "gl" }
+      ],
+      "automatic": true,
+      "reverting": "Deleting the value returns wined3d to its default renderer; the backup taken before applying restores the prefix exactly.",
+      "sources": [
+        { "kind": "wine-source", "reference": "https://raw.githubusercontent.com/wine-mirror/wine/wine-9.0/dlls/wined3d/wined3d_main.c", "detail": "wined3d reads the value renderer from HKCU\\Software\\Wine\\Direct3D and HKCU\\Software\\Wine\\AppDefaults\\<program>\\Direct3D, and accepts vulkan, gl, and gdi or no3d.", "checked": "2026-11-13" }
+      ]
+    },
+    {
+      "id": "renderer-vulkan",
+      "title": "Draw Direct3D through Vulkan",
+      "description": "Makes Wine's own Direct3D implementation (wined3d) draw through Vulkan, for the program's own executable only. Needs a Vulkan driver on the machine.",
+      "kind": "registry",
+      "group": "renderer",
+      "runtimes": ["wine"],
+      "addresses": ["crash", "no-window", "exited-with-error"],
+      "hints": ["direct3d"],
+      "needs_hint": true,
+      "order": 51,
+      "registry": [
+        { "key": "HKEY_CURRENT_USER\\Software\\Wine\\AppDefaults\\{exe}\\Direct3D", "name": "renderer", "type": "string", "value": "vulkan" }
+      ],
+      "automatic": true,
+      "reverting": "Deleting the value returns wined3d to its default renderer; the backup taken before applying restores the prefix exactly.",
+      "sources": [
+        { "kind": "wine-source", "reference": "https://raw.githubusercontent.com/wine-mirror/wine/wine-9.0/dlls/wined3d/wined3d_main.c", "detail": "As for renderer-gl.", "checked": "2026-11-13" }
+      ]
+    },
+    {
+      "id": "renderer-no3d",
+      "title": "Turn Direct3D drawing off",
+      "description": "Makes wined3d draw nothing in 3D (renderer no3d), for the program's own executable only. For programs that only need 2D and crash in 3D initialisation.",
+      "kind": "registry",
+      "group": "renderer",
+      "runtimes": ["wine"],
+      "addresses": ["crash", "no-window"],
+      "hints": ["direct3d"],
+      "needs_hint": true,
+      "order": 52,
+      "registry": [
+        { "key": "HKEY_CURRENT_USER\\Software\\Wine\\AppDefaults\\{exe}\\Direct3D", "name": "renderer", "type": "string", "value": "no3d" }
+      ],
+      "automatic": true,
+      "reverting": "Deleting the value returns wined3d to its default renderer; the backup taken before applying restores the prefix exactly.",
+      "sources": [
+        { "kind": "wine-source", "reference": "https://raw.githubusercontent.com/wine-mirror/wine/wine-9.0/dlls/wined3d/wined3d_main.c", "detail": "As for renderer-gl: gdi and no3d select no 3D renderer.", "checked": "2026-11-13" }
+      ]
+    },
+    {
+      "id": "audio-off",
+      "title": "Turn sound off",
+      "description": "Tells Wine to load no audio driver, so that the program sees no sound device.",
+      "kind": "registry",
+      "group": "audio",
+      "runtimes": ["wine"],
+      "addresses": ["crash", "hung", "no-window", "exited-with-error"],
+      "hints": ["audio"],
+      "needs_hint": true,
+      "order": 60,
+      "registry": [
+        { "key": "HKEY_CURRENT_USER\\Software\\Wine\\Drivers", "name": "Audio", "type": "string", "value": "" }
+      ],
+      "automatic": true,
+      "reverting": "Deleting the value returns Wine to its default list of audio drivers; the backup taken before applying restores the prefix exactly.",
+      "sources": [
+        { "kind": "wine-source", "reference": "https://raw.githubusercontent.com/wine-mirror/wine/wine-9.0/dlls/mmdevapi/main.c", "detail": "init_driver() reads the value Audio of HKCU\\Software\\Wine\\Drivers: an empty value means no driver; without it the list is pulse,alsa,oss,coreaudio.", "checked": "2026-11-13" }
+      ]
+    },
+    {
+      "id": "audio-alsa",
+      "title": "Use the ALSA sound driver",
+      "description": "Tells Wine to use its ALSA audio driver instead of trying PulseAudio first.",
+      "kind": "registry",
+      "group": "audio",
+      "runtimes": ["wine"],
+      "addresses": ["crash", "hung", "no-window", "exited-with-error"],
+      "hints": ["audio"],
+      "needs_hint": true,
+      "order": 61,
+      "registry": [
+        { "key": "HKEY_CURRENT_USER\\Software\\Wine\\Drivers", "name": "Audio", "type": "string", "value": "alsa" }
+      ],
+      "automatic": true,
+      "reverting": "Deleting the value returns Wine to its default list of audio drivers; the backup taken before applying restores the prefix exactly.",
+      "sources": [
+        { "kind": "wine-source", "reference": "https://raw.githubusercontent.com/wine-mirror/wine/wine-9.0/dlls/mmdevapi/main.c", "detail": "As for audio-off: the value is a comma-separated list of driver names.", "checked": "2026-11-13" }
+      ]
+    },
+    {
+      "id": "font-arial-liberation-sans",
+      "title": "Show Liberation Sans where the program asks for Arial",
+      "description": "Maps the font family Arial to Liberation Sans, a metric-compatible free font, when the machine has Liberation Sans and no Arial. No font is installed: Microsoft's fonts are never fetched.",
+      "kind": "registry",
+      "group": "font-arial",
+      "runtimes": ["wine"],
+      "addresses": ["check-failed", "exited-with-error", "crash"],
+      "hints": ["fonts"],
+      "needs_hint": true,
+      "order": 70,
+      "registry": [
+        { "key": "HKEY_CURRENT_USER\\Software\\Wine\\Fonts\\Replacements", "name": "Arial", "type": "string", "value": "Liberation Sans" }
+      ],
+      "requires": ["font-file"],
+      "font_file": "LiberationSans-Regular.ttf",
+      "automatic": true,
+      "reverting": "Deleting the value removes the mapping; the backup taken before applying restores the prefix exactly.",
+      "sources": [
+        { "kind": "wine-source", "reference": "https://raw.githubusercontent.com/wine-mirror/wine/wine-9.0/dlls/win32u/font.c", "detail": "load_gdi_font_replacements() reads HKCU\\Software\\Wine\\Fonts\\Replacements, where a value maps the family named by the value's name onto the installed family named by its data; a real font of the first name takes precedence.", "checked": "2026-11-13" }
+      ]
+    },
+    {
+      "id": "locale-ja",
+      "title": "Run the program with a Japanese locale (code page 932)",
+      "description": "Starts the program with LC_ALL=ja_JP.UTF-8, so that Wine's system and user locale are Japanese and the ANSI code page is 932. For programs written for a Japanese Windows that misread or crash on other code pages.",
+      "kind": "environment",
+      "group": "locale",
+      "runtimes": ["wine", "proton"],
+      "addresses": ["crash", "exited-with-error", "check-failed", "no-window"],
+      "hints": ["locale-ja"],
+      "needs_hint": true,
+      "order": 80,
+      "environment": [ { "name": "LC_ALL", "value": "ja_JP.UTF-8" } ],
+      "automatic": true,
+      "reverting": "Removing the setting from the application's applied remedies returns it to the user's own locale.",
+      "sources": [
+        { "kind": "wine-source", "reference": "https://raw.githubusercontent.com/wine-mirror/wine/wine-9.0/dlls/ntdll/unix/env.c", "detail": "init_locale() calls setlocale(LC_ALL, \"\") and turns the LC_CTYPE and LC_MESSAGES locales into Windows locale names (unix_to_win_locale); when setlocale gives C it reads LC_ALL itself. The code pages follow from the locale.", "checked": "2026-11-13" }
+      ]
+    },
+    {
+      "id": "locale-zh-cn",
+      "title": "Run the program with a Simplified Chinese locale (code page 936)",
+      "description": "Starts the program with LC_ALL=zh_CN.UTF-8.",
+      "kind": "environment",
+      "group": "locale",
+      "runtimes": ["wine", "proton"],
+      "addresses": ["crash", "exited-with-error", "check-failed", "no-window"],
+      "hints": ["locale-zh-cn"],
+      "needs_hint": true,
+      "order": 81,
+      "environment": [ { "name": "LC_ALL", "value": "zh_CN.UTF-8" } ],
+      "automatic": true,
+      "reverting": "Removing the setting from the application's applied remedies returns it to the user's own locale.",
+      "sources": [
+        { "kind": "wine-source", "reference": "https://raw.githubusercontent.com/wine-mirror/wine/wine-9.0/dlls/ntdll/unix/env.c", "detail": "As for locale-ja.", "checked": "2026-11-13" }
+      ]
+    },
+    {
+      "id": "locale-zh-tw",
+      "title": "Run the program with a Traditional Chinese locale (code page 950)",
+      "description": "Starts the program with LC_ALL=zh_TW.UTF-8.",
+      "kind": "environment",
+      "group": "locale",
+      "runtimes": ["wine", "proton"],
+      "addresses": ["crash", "exited-with-error", "check-failed", "no-window"],
+      "hints": ["locale-zh-tw"],
+      "needs_hint": true,
+      "order": 82,
+      "environment": [ { "name": "LC_ALL", "value": "zh_TW.UTF-8" } ],
+      "automatic": true,
+      "reverting": "Removing the setting from the application's applied remedies returns it to the user's own locale.",
+      "sources": [
+        { "kind": "wine-source", "reference": "https://raw.githubusercontent.com/wine-mirror/wine/wine-9.0/dlls/ntdll/unix/env.c", "detail": "As for locale-ja.", "checked": "2026-11-13" }
+      ]
+    },
+    {
+      "id": "locale-ko",
+      "title": "Run the program with a Korean locale (code page 949)",
+      "description": "Starts the program with LC_ALL=ko_KR.UTF-8.",
+      "kind": "environment",
+      "group": "locale",
+      "runtimes": ["wine", "proton"],
+      "addresses": ["crash", "exited-with-error", "check-failed", "no-window"],
+      "hints": ["locale-ko"],
+      "needs_hint": true,
+      "order": 83,
+      "environment": [ { "name": "LC_ALL", "value": "ko_KR.UTF-8" } ],
+      "automatic": true,
+      "reverting": "Removing the setting from the application's applied remedies returns it to the user's own locale.",
+      "sources": [
+        { "kind": "wine-source", "reference": "https://raw.githubusercontent.com/wine-mirror/wine/wine-9.0/dlls/ntdll/unix/env.c", "detail": "As for locale-ja.", "checked": "2026-11-13" }
+      ]
+    },
+    {
+      "id": "drive-c-case-insensitive",
+      "title": "Make drive C: case-insensitive",
+      "description": "Rebuilds the prefix's drive C: as a directory with the ext4 case-folding attribute and copies its contents in, so that names that differ only in case are one name. For programs whose files spell one directory in two ways. Needs a file system with the casefold feature.",
+      "kind": "drive-c-case-folding",
+      "group": "case-folding",
+      "runtimes": ["wine"],
+      "addresses": ["check-failed", "exited-with-error", "crash", "no-window"],
+      "hints": ["case-collision"],
+      "needs_hint": true,
+      "order": 90,
+      "requires": ["case-folding-file-system"],
+      "automatic": true,
+      "reverting": "Restoring the backup taken before applying brings back the ordinary drive C: with both spellings as they were.",
+      "sources": [
+        { "kind": "tur-measurement", "reference": "docs/reports/windows-runtime-3.md", "detail": "Measured in TUR's own CI: an archive with App/Plugins/one.txt and App/plugins/two.txt gave one directory on a case-folded drive C:, where all six spellings found their file, and two on an ordinary one, where three of six did not.", "checked": "2026-11-13" },
+        { "kind": "wine-source", "reference": "https://raw.githubusercontent.com/wine-mirror/wine/wine-9.0/dlls/ntdll/unix/file.c", "detail": "Wine treats a directory with EXT4_CASEFOLD_FL as case-insensitive (get_dir_case_sensitivity_stat), as described in docs/architecture/runtime-manager.md.", "checked": "2026-11-13" }
+      ]
+    },
+    {
+      "id": "ntsync-off",
+      "title": "Synchronise through the Wine server instead of ntsync",
+      "description": "Hides /dev/ntsync from the application's sandbox, so that a Wine that would use the kernel's ntsync driver falls back to synchronisation through the Wine server. Only meaningful where the device opens and Wine is 11.0 or later.",
+      "kind": "hide-ntsync",
+      "group": "synchronisation",
+      "runtimes": ["wine"],
+      "addresses": ["crash", "hung", "no-window"],
+      "hints": [],
+      "order": 95,
+      "requires": ["ntsync-device"],
+      "automatic": true,
+      "reverting": "Removing the setting from the application's applied remedies passes the device in again.",
+      "sources": [
+        { "kind": "wine-release-notes", "reference": "https://raw.githubusercontent.com/wine-mirror/wine/wine-11.0/ANNOUNCE.md", "detail": "\"The NTSync Linux kernel module is used when available\" (Wine 11.0), as recorded in docs/architecture/runtime-manager.md; without the device Wine uses the Wine server.", "checked": "2026-11-12" }
+      ]
+    },
+    {
+      "id": "proton-no-esync",
+      "title": "Proton: no eventfd-based synchronisation",
+      "description": "Sets PROTON_NO_ESYNC=1 for a Proton launch. Recorded for Proton profiles; the autopilot of this build runs Wine applications only and has never run it.",
+      "kind": "environment",
+      "group": "proton-synchronisation",
+      "runtimes": ["proton"],
+      "addresses": ["crash", "hung"],
+      "hints": [],
+      "order": 96,
+      "environment": [ { "name": "PROTON_NO_ESYNC", "value": "1" } ],
+      "automatic": false,
+      "reverting": "Removing the setting from the application's applied remedies.",
+      "sources": [
+        { "kind": "proton-readme", "reference": "https://raw.githubusercontent.com/ValveSoftware/Proton/proton_10.0/README.md", "detail": "The runtime-configuration table lists PROTON_NO_ESYNC: do not use eventfd-based in-process synchronization primitives.", "checked": "2026-11-13" }
+      ]
+    },
+    {
+      "id": "proton-no-fsync",
+      "title": "Proton: no futex-based synchronisation",
+      "description": "Sets PROTON_NO_FSYNC=1 for a Proton launch. Recorded for Proton profiles; the autopilot of this build runs Wine applications only and has never run it.",
+      "kind": "environment",
+      "group": "proton-synchronisation",
+      "runtimes": ["proton"],
+      "addresses": ["crash", "hung"],
+      "hints": [],
+      "order": 97,
+      "environment": [ { "name": "PROTON_NO_FSYNC", "value": "1" } ],
+      "automatic": false,
+      "reverting": "Removing the setting from the application's applied remedies.",
+      "sources": [
+        { "kind": "proton-readme", "reference": "https://raw.githubusercontent.com/ValveSoftware/Proton/proton_10.0/README.md", "detail": "The runtime-configuration table lists PROTON_NO_FSYNC: do not use futex-based in-process synchronization primitives.", "checked": "2026-11-13" }
+      ]
+    }
+  ],
+  "microsoft_components": [
+    { "id": "visual-cpp-mfc", "name": "Microsoft Foundation Classes (Visual C++ redistributable)", "dll_prefixes": ["mfc"], "note": "Wine 9.0 has no implementation of MFC (no dlls/mfc42 or dlls/mfc140u in its source tree)." },
+    { "id": "visual-cpp-atl", "name": "Active Template Library (Visual C++ redistributable)", "dll_prefixes": ["atl"], "note": "Wine implements some ATL versions; a missing one that this Wine lacks is a Microsoft component." },
+    { "id": "visual-cpp-runtime", "name": "Visual C++ runtime", "dll_prefixes": ["msvcp", "msvcr", "vcruntime", "vcomp", "concrt", "ucrtbase"], "note": "Wine implements most of these itself; only a name this Wine lacks is reported." },
+    { "id": "visual-basic-runtime", "name": "Visual Basic runtime", "dll_prefixes": ["msvbvm"], "note": "" },
+    { "id": "directx-redistributable", "name": "DirectX redistributable", "dll_prefixes": ["d3dx", "d3dcompiler", "xinput", "xaudio", "x3daudio", "xapofx"], "note": "Wine implements most of these itself; only a name this Wine lacks is reported." },
+    { "id": "msxml", "name": "Microsoft XML Core Services", "dll_prefixes": ["msxml"], "note": "" },
+    { "id": "dotnet-framework", "name": ".NET Framework", "dll_prefixes": ["mscoree", "mscorwks"], "note": "A .NET program needs a .NET runtime. Wine Mono is free software and is not provided by this build; Microsoft's .NET is never supplied." }
+  ]
+}

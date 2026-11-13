@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+[package]
+name = "tur-pax-a11y"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+license = "LicenseRef-TUR-Noncommercial-1.0.0"
+description = "TUR: P@x's accessibility bridge. Reads and operates applications through AT-SPI over D-Bus, for the P@x task loop, under its policy engine."
+repository = "https://github.com/giorgiogiudice/TUR"
+publish = false
+
+# Each component is its own workspace with its own lockfile. See ADR-0005.
+[workspace]
+
+[lib]
+name = "tur_pax_a11y"
+path = "src/lib.rs"
+
+[[bin]]
+name = "tur-pax-a11y"
+path = "src/main.rs"
+
+[dependencies]
+# The answers to the task loop are JSON.
+serde_json = "1.0"
+# The D-Bus implementation (tur_pax::bus), the protocol to the task loop
+# (tur_pax::interface) and the policy engine the bridge decides with a second
+# time (tur_pax::decide). No AT-SPI client library is linked: libatspi is
+# LGPL and would add GLib; the bus interfaces are spoken directly.
+tur-pax = { path = "../tur-pax" }
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"

@@ -77,7 +77,9 @@ pub mod decision;
 pub mod engine;
 pub mod exec;
 pub mod faults;
+pub mod interface;
 pub mod keyring;
+pub mod local;
 pub mod manifest;
 pub mod notify;
 pub mod orchestrator;
@@ -94,12 +96,14 @@ pub mod store;
 pub mod strict;
 pub mod textui;
 pub mod trail;
+pub mod tuning;
 pub mod wake;
 
 pub use action::{
     Action, AgentOperation, CommandAction, OperationContent, PrivilegedOperation,
     PrivilegedRequestKind, ProtectedTarget, Sandbox, TargetRule, ToolCall, TypedOperation,
-    TypedOperationKind, TypedOperationSpec, UiAction, UiActionKind, WorkingContext,
+    TypedOperationKind, TypedOperationSpec, UiAction, UiActionKind, UiDetail, UiOperation, UiRole,
+    WorkingContext,
 };
 pub use audit::{
     ActionOutcome, ActionResult, AuditMeta, AuditOutcome, AuditRecord, AuditSink, AuditWriteError,

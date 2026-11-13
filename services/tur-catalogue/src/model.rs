@@ -808,11 +808,27 @@ pub enum Reporter {
     External,
     /// TUR's own test, with a reference to its test report.
     TurTest,
+    /// TUR's compatibility autopilot (`tur-runtime app autopilot`): the
+    /// application passed TUR's check in a throwaway copy of its prefix with
+    /// the settings in `remedies`. Never a rating: the record's rating is
+    /// `unknown`, and the router shows the settings beside the route.
+    TurAutopilot,
 }
 
 impl Reporter {
-    /// Every reporter, in schema order.
+    /// The reporters whose records can give a route its rating, in schema
+    /// order. This is the list the application centre's vocabulary carries
+    /// (`desktop/apps/tur-centre/fixtures/vocabulary.json`); a
+    /// `tur-autopilot` record never rates a route, see [`Reporter::EVERY`].
     pub const ALL: [Reporter; 3] = [Reporter::Nobody, Reporter::External, Reporter::TurTest];
+
+    /// Every reporter, in schema order.
+    pub const EVERY: [Reporter; 4] = [
+        Reporter::Nobody,
+        Reporter::External,
+        Reporter::TurTest,
+        Reporter::TurAutopilot,
+    ];
 
     /// The reporter as written in an entry.
     pub const fn as_str(self) -> &'static str {
@@ -820,6 +836,7 @@ impl Reporter {
             Reporter::Nobody => "nobody",
             Reporter::External => "external",
             Reporter::TurTest => "tur-test",
+            Reporter::TurAutopilot => "tur-autopilot",
         }
     }
 }
@@ -855,6 +872,17 @@ pub struct Record {
     /// Free-text notes.
     #[serde(default)]
     pub notes: Option<String>,
+    /// TUR autopilot: the remedies the application passed with, as
+    /// `tur-runtime` names them (`dll-builtin:d3dx9_43`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub remedies: Vec<String>,
+    /// TUR autopilot: the runtime version it was measured with, such as
+    /// `wine-9.0`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_version: Option<String>,
+    /// TUR autopilot: the SHA-256 of the evidence in its result.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evidence_sha256: Option<String>,
 }
 
 /// A public page that a fact of an edition was checked against.
@@ -932,7 +960,7 @@ mod tests {
         for value in Rating::ALL {
             assert_eq!(written(value), value.as_str());
         }
-        for value in Reporter::ALL {
+        for value in Reporter::EVERY {
             assert_eq!(written(value), value.as_str());
         }
         assert_eq!(written(EntryKind::Application), "application");

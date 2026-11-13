@@ -88,6 +88,10 @@ string_enum! {
         Serving => "TUR-AI-LOCAL-026",
         /// Whether a model is being served cannot be seen from here.
         StateNotVisible => "TUR-AI-LOCAL-027",
+        /// There is not enough free disk space for the model.
+        NoDiskSpace => "TUR-AI-LOCAL-028",
+        /// The download was stopped on request.
+        Cancelled => "TUR-AI-LOCAL-029",
     }
 }
 
@@ -441,6 +445,34 @@ impl AiLocalCode {
                                         the assistant's sandbox does not show. The local AI \
                                         service will publish it over D-Bus in a later slice.",
                 recovery_action: "Open Settings, AI, to see whether a model is running.",
+            },
+            AiLocalCode::NoDiskSpace => CodeEntry {
+                code: self,
+                title: "Not enough disk space",
+                severity: Severity::Error,
+                detection: "The free space of the file system that holds the models folder is \
+                            less than what is still to be downloaded plus a reserve of 1 GiB.",
+                user_message: "There is not enough free disk space for this model. Nothing more \
+                               was downloaded.",
+                technical_explanation: "The space is checked before the download starts, so \
+                                        that a download does not fill the disk and leave a \
+                                        file that cannot be used.",
+                recovery_action: "Free some disk space, or remove a model you no longer use, and \
+                                  try again.",
+            },
+            AiLocalCode::Cancelled => CodeEntry {
+                code: self,
+                title: "Download stopped",
+                severity: Severity::Notice,
+                detection: "The person asked for the download or the start of the model to stop \
+                            (tur-ai-local cancel, or the assistant's cancel).",
+                user_message: "The download was stopped as you asked. What was downloaded is \
+                               kept, so the next try goes on from there.",
+                technical_explanation: "A partial file ends in .part and is never used. The \
+                                        next try asks the publisher's server for the rest and \
+                                        checks the size and the SHA-256 digest of the whole \
+                                        file before the model can be used.",
+                recovery_action: "No action is needed. Ask for the model again to go on.",
             },
         }
     }

@@ -1,0 +1,400 @@
+#!/usr/bin/bash
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# The privileged half of TUR's graphical installer (ADR-0018, amendment of
+# 13 November 2026). The graphical installer runs as the live session's user
+# and starts this program, one step at a time, through pkexec:
+#
+#     pkexec /usr/libexec/tur-installer/tur-install-engine check
+#     pkexec /usr/libexec/tur-installer/tur-install-engine disks
+#     pkexec /usr/libexec/tur-installer/tur-install-engine install \
+#         --by-id /dev/disk/by-id/... --serial S --wwn W --size BYTES \
+#         --fingerprint F --phrase "ERASE ..."
+#
+# polkit allows it, without a password, to the live session's user only, in
+# an active local session (org.tur.installer.engine; the rule exists only on
+# the medium). Everything that decides about disks and writes to them is in
+# /usr/lib/tur-installer/engine.sh, which the text installer uses too.
+#
+# It writes one JSON object per line to standard output, and nothing else:
+#
+#   {"event":"progress","what":"payload","done":N,"total":M}
+#   {"event":"check","id":...,"state":"ok|stop|note","text":...,"code":...}
+#   {"event":"checks","blocking":[{"code":...,"text":...}],...}
+#   {"event":"disk", ... one per whole disk ...}
+#   {"event":"disks","total":N,"selectable":M,"minimum_bytes":B}
+#   {"event":"stage","stage":"revalidate|prepare|copy|bootloader|finish|check|record"}
+#   {"event":"line","text":...}            a line of bootc's output
+#   {"event":"written","bytes":N}          bytes written to the disk so far
+#   {"event":"cancel","accepted":true|false}
+#   {"event":"result","outcome":"success|failed|refused|cancelled",...}
+#
+# The installation can be cancelled by writing the line "cancel" to its
+# standard input, until the point at which the disk begins to be written.
+# After that a request is answered with {"event":"cancel","accepted":false}.
+# If the graphical installer goes away (its end of the pipes closes), the
+# installation carries on to its end: stopping it half-way would leave a disk
+# that starts nothing.
+#
+# It checks everything again itself and trusts nothing the graphical
+# installer says: the disk must be the one that was shown (stable path,
+# serial number, size, content), and the phrase must be the one this program
+# derives from the disk.
+set -u
+umask 022
+trap '' PIPE HUP INT
+
+if [ "$(id -u)" -ne 0 ]; then
+    printf '{"event":"result","outcome":"refused","code":"TUR-INSTALL-MEDIUM-004","message":"The installation engine was started without the rights it needs. Nothing was changed.","disk_state":"untouched"}\n'
+    exit 2
+fi
+
+# shellcheck source=installer/iso/rootfs/usr/lib/tur-installer/engine.sh
+. /usr/lib/tur-installer/engine.sh
+
+# ---- JSON -------------------------------------------------------------------
+
+# js TEXT: TEXT as a JSON string.
+js() {
+    local s
+    s="$(printf '%s' "$1" | tr -d '\000-\010\013\014\016-\037')"
+    s="${s//\\/\\\\}"
+    s="${s//\"/\\\"}"
+    s="${s//$'\n'/\\n}"
+    s="${s//$'\r'/\\r}"
+    s="${s//$'\t'/\\t}"
+    printf '"%s"' "${s}"
+}
+
+# number TEXT: TEXT if it is a whole number, else 0.
+number() {
+    case "$1" in
+        '' | *[!0-9]*) echo 0 ;;
+        *) echo "$1" ;;
+    esac
+}
+
+# emit JSON: one line on standard output. A closed pipe is not an error.
+emit() {
+    printf '%s\n' "$1" 2> /dev/null || true
+    printf 'ENGINE> %s\n' "$1" >> "${LOG}"
+}
+
+result() {
+    # result OUTCOME CODE MESSAGE DISK_STATE [EXTRA_JSON]
+    emit "{\"event\":\"result\",\"outcome\":$(js "$1"),\"code\":$(js "$2"),\"message\":$(js "$3"),\"disk_state\":$(js "$4")${5:+,$5}}"
+}
+
+# ---- check: the image on the medium and the computer ----------------------------
+
+payload_progress() {
+    emit "{\"event\":\"progress\",\"what\":\"payload\",\"done\":$1,\"total\":${2:-0}}"
+}
+
+do_check() {
+    local i item
+    mark "engine check"
+    mark "start version=${tur_version:-unknown} build_id=${tur_build_id:-unknown} revision=${tur_revision:-unknown} serial_port=${serial_port} kernel=$(uname -r) frontend=graphical"
+    mark "cmdline $(cat /proc/cmdline)"
+    mark "live-medium source=$(findmnt -n -o SOURCE,FSTYPE "${LIVE_MOUNT}" 2> /dev/null | tr -s ' ' | head -n 1) root=$(findmnt -n -o SOURCE,FSTYPE / | tr -s ' ' | head -n 1)"
+    verify_payload payload_progress
+    run_checks
+    for i in "${!check_ids[@]}"; do
+        emit "{\"event\":\"check\",\"id\":$(js "${check_ids[i]}"),\"state\":$(js "${check_states[i]}"),\"text\":$(js "${check_lines[i]}"),\"code\":$(js "${check_codes[i]}")}"
+    done
+    local blocks=""
+    for item in "${blocking[@]}"; do
+        blocks+="${blocks:+,}{\"code\":$(js "${item%%|*}"),\"text\":$(js "${item#*|}")}"
+    done
+    emit "{\"event\":\"checks\",\"blocking\":[${blocks}],\"payload\":$(js "${payload_state}"),\"payload_detail\":$(js "${payload_detail}"),\"memory_bytes\":${memory_bytes:-0},\"secure_boot\":$(js "${secure_boot}"),\"uefi\":$([ -d /sys/firmware/efi ] && echo true || echo false),\"version\":$(js "${tur_version}"),\"build_id\":$(js "${tur_build_id}"),\"minimum_bytes\":${min_target_bytes:-0}}"
+    if [ "${#blocking[@]}" -gt 0 ]; then mark "blocked count=${#blocking[@]}"; fi
+}
+
+# ---- disks -----------------------------------------------------------------------
+
+# partition_kind PART: what one partition is, in one word. Reads only.
+partition_kind() {
+    local part="$1" ptype fstype magic
+    ptype="$(prop "${part}" PARTTYPE)"
+    ptype="${ptype,,}"
+    fstype="$(prop "${part}" FSTYPE)"
+    magic="$(head -c 11 "/dev/${part}" 2> /dev/null | tail -c 8 | tr -d '\000')"
+    if [ "${fstype}" = BitLocker ] || [ "${magic}" = "-FVE-FS-" ]; then echo bitlocker; return; fi
+    case "${ptype}" in
+        21686148-6449-6e6f-744e-656564454649) echo bios-boot; return ;;
+        e3c9e316-0b5c-4db8-817d-f92df00215ae) echo microsoft-reserved; return ;;
+        de94bba4-06d1-4d40-a16a-bfd50179d6ac) echo windows-recovery; return ;;
+    esac
+    case "${fstype}" in
+        ntfs) echo ntfs ;;
+        vfat)
+            if [ "${ptype}" = "${ESP_GUID}" ]; then
+                if has_microsoft_boot "/dev/${part}"; then echo windows-boot; else echo esp; fi
+            else
+                echo fat
+            fi
+            ;;
+        ext2 | ext3 | ext4 | xfs | btrfs | f2fs | crypto_LUKS | LVM2_member | swap | linux_raid_member | squashfs | erofs) echo linux ;;
+        iso9660 | udf) echo optical ;;
+        "") echo unknown ;;
+        *) echo other ;;
+    esac
+}
+
+do_disks() {
+    local i part parts tree phrase print
+    mark "engine disks"
+    scan_disks
+    dump_inventory
+    for i in "${!d_name[@]}"; do
+        parts=""
+        while read -r part; do
+            [ -n "${part}" ] || continue
+            parts+="${parts:+,}{\"name\":$(js "${part}"),\"number\":$(js "$(prop "${part}" PARTN)"),\"start\":$(number "$(prop "${part}" START)"),\"size\":$(number "$(prop "${part}" SIZE)"),\"fstype\":$(js "$(prop "${part}" FSTYPE)"),\"label\":$(js "$(prop "${part}" LABEL)"),\"partlabel\":$(js "$(prop "${part}" PARTLABEL)"),\"type\":$(js "$(prop "${part}" PARTTYPENAME)"),\"kind\":$(js "$(partition_kind "${part}")")}"
+        done < <(lsblk -ln -o NAME,TYPE "/dev/${d_name[i]}" 2> /dev/null | awk '$2 == "part" { print $1 }')
+        phrase=""
+        print=""
+        if [ "${d_status[i]}" = ok ]; then
+            phrase="$(phrase_for "${i}")"
+            print="$(fingerprint "${d_name[i]}")"
+        fi
+        tree="{\"event\":\"disk\",\"name\":$(js "${d_name[i]}"),\"model\":$(js "${d_model[i]}"),\"serial\":$(js "${d_serial[i]}"),\"serial_end\":$(js "$(serial_end "${i}")"),\"wwn\":$(js "${d_wwn[i]}"),\"size\":${d_size[i]:-0},\"transport\":$(js "${d_tran[i]}"),\"by_id\":$(js "${d_byid[i]}"),\"status\":$(js "${d_status[i]}"),\"code\":$(js "${d_code[i]}"),\"why\":$(js "${d_why[i]}"),\"holds\":$(js "${d_holds[i]}"),\"words\":$(js "${d_words[i]}"),\"windows\":$([ "${d_windows[i]}" = yes ] && echo true || echo false),\"bitlocker\":$([ "${d_bitlocker[i]}" = yes ] && echo true || echo false),\"linux\":${d_linux[i]:-0},\"ntfs\":${d_ntfs[i]:-0},\"partition_count\":${d_parts[i]:-0},\"phrase\":$(js "${phrase}"),\"fingerprint\":$(js "${print}"),\"partitions\":[${parts}]}"
+        emit "${tree}"
+    done
+    emit "{\"event\":\"disks\",\"total\":${#d_name[@]},\"selectable\":${selectable},\"minimum_bytes\":${min_target_bytes:-0}}"
+    if [ "${selectable}" -eq 0 ]; then mark "no-target code=TUR-INSTALL-MEDIUM-003"; fi
+}
+
+# ---- install --------------------------------------------------------------------
+
+stage=""
+set_stage() {
+    if [ "$1" != "${stage}" ]; then
+        stage="$1"
+        emit "{\"event\":\"stage\",\"stage\":$(js "$1")}"
+        mark "stage ${1}"
+    fi
+}
+
+# A line "cancel" on standard input, without waiting. End of input (the
+# graphical installer went away) is not a request to cancel.
+cancel_requested() {
+    local line
+    while read -r -t 0 2> /dev/null; do
+        if ! IFS= read -r line; then
+            exec 0< /dev/null
+            return 1
+        fi
+        if [ "${line}" = cancel ]; then return 0; fi
+    done
+    return 1
+}
+
+shown_lines=0
+written_start=0
+device_name=""
+
+sectors_written() {
+    awk '{ print $7 }' "/sys/block/$1/stat" 2> /dev/null || echo 0
+}
+
+# install_poll PID: called by run_install about every two seconds.
+install_poll() {
+    local total line now
+    total="$(wc -l < "${INSTALL_LOG}")"
+    if [ "${total}" -gt "${shown_lines}" ]; then
+        while IFS= read -r line; do
+            line="${line//$'\r'/}"
+            [ -n "${line}" ] || continue
+            case "${line}" in
+                *"Initializing ostree layout"* | *"layers already present"* | *"Deploying container image"*) set_stage copy ;;
+                *"Installing bootloader"* | "Bootloader:"*) set_stage bootloader ;;
+                *"Trimming root"* | *"Finalizing filesystem"* | *"Unmounting filesystems"*) set_stage finish ;;
+            esac
+            case "${line}" in
+                *"layers needed:"*)
+                    emit "{\"event\":\"copy-total\",\"text\":$(js "${line##*layers needed: }")}"
+                    ;;
+            esac
+            emit "{\"event\":\"line\",\"text\":$(js "${line}")}"
+        done < <(sed -n "$((shown_lines + 1)),${total}p" "${INSTALL_LOG}")
+        shown_lines="${total}"
+    fi
+    now="$(sectors_written "${device_name}")"
+    emit "{\"event\":\"written\",\"bytes\":$(((now - written_start) * 512))}"
+    if [ -n "$1" ] && cancel_requested; then
+        emit '{"event":"cancel","accepted":false}'
+        mark "cancel accepted=no stage=${stage}"
+    fi
+}
+
+do_install() {
+    local by_id="" serial="" wwn="" size="" print="" phrase="" expected id
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+            --by-id) by_id="$2"; shift 2 ;;
+            --serial) serial="$2"; shift 2 ;;
+            --wwn) wwn="$2"; shift 2 ;;
+            --size) size="$2"; shift 2 ;;
+            --fingerprint) print="$2"; shift 2 ;;
+            --phrase) phrase="$2"; shift 2 ;;
+            *)
+                result refused TUR-INSTALL-CONFIRM-001 "Unknown option $1; nothing was changed." untouched
+                exit 2
+                ;;
+        esac
+    done
+    case "${size}" in '' | *[!0-9]*) size=0 ;; esac
+    mark "engine install by_id=${by_id}"
+    set_stage revalidate
+    # The image on the medium, again: the graphical installer checked it at
+    # its start, possibly long ago.
+    if ! verify_payload; then
+        mark "check payload=${payload_state} code=TUR-INSTALL-MEDIUM-001"
+        result refused TUR-INSTALL-MEDIUM-001 "The installation image on this medium cannot be used: ${payload_detail}. Nothing was changed." untouched
+        exit 3
+    fi
+    if ! revalidate "${by_id}" "${serial}" "${wwn}" "${size}" "${print}"; then
+        mark "revalidate result=refused code=${engine_code}"
+        result refused "${engine_code}" "${engine_message} Nothing was changed." untouched
+        exit 3
+    fi
+    device_name="${target_device##*/}"
+    expected="$(phrase_of "$(prop "${device_name}" SERIAL)" "$(prop "${device_name}" WWN)" "$(prop "${device_name}" SIZE)")"
+    if [ "${phrase}" != "${expected}" ]; then
+        mark "confirm result=mismatch code=TUR-INSTALL-CONFIRM-001 frontend=graphical"
+        result refused TUR-INSTALL-CONFIRM-001 "The confirmation does not name this disk. Nothing was changed." untouched
+        exit 3
+    fi
+    mark "confirm result=accepted frontend=graphical"
+    if cancel_requested; then
+        emit '{"event":"cancel","accepted":true}'
+        mark "cancel accepted=yes stage=${stage}"
+        result cancelled "" "The installation was cancelled before anything was written. Nothing was changed." untouched
+        exit 4
+    fi
+    # From here on the disk is written.
+    set_stage prepare
+    written_start="$(sectors_written "${device_name}")"
+    run_install "${target_device}" install_poll
+    if [ "${install_status}" -ne 0 ]; then
+        mark "result=failed code=TUR-INSTALL-MEDIUM-002"
+        result failed TUR-INSTALL-MEDIUM-002 "The installation stopped with an error (status ${install_status}) after ${install_seconds} s." erased "\"status\":${install_status},\"seconds\":${install_seconds}"
+        exit 5
+    fi
+    set_stage check
+    if ! check_installed "${target_device}"; then
+        mark "result=failed code=TUR-INSTALL-MEDIUM-002"
+        result failed TUR-INSTALL-MEDIUM-002 "The installer reported success after ${install_seconds} s, but the disk does not have the partitions an installed TUR has." erased "\"status\":0,\"seconds\":${install_seconds}"
+        exit 5
+    fi
+    record_root_features "${target_device}"
+    set_stage record
+    id="$(session_id)"
+    keep_log "${target_device}" "${id}"
+    mark "result=success seconds=${install_seconds} device=${target_device}"
+    result success "" "TUR is installed." installed "\"status\":0,\"seconds\":${install_seconds},\"device\":$(js "${target_device}"),\"log_on_disk\":$(js "${kept_log_path}")"
+}
+
+# ---- the log, to a USB stick -----------------------------------------------------
+
+# A filesystem the log can be saved to: on a USB or removable disk that is not
+# the medium the installer runs from, of a kind Linux writes safely, and not
+# BitLocker. Writing the log adds one folder to it and changes nothing else.
+stick_link() {
+    local part="$1" link
+    for link in /dev/disk/by-id/*; do
+        [ -L "${link}" ] || continue
+        if [ "$(readlink -f "${link}")" = "/dev/${part}" ]; then
+            case "${link##*/}" in
+                wwn-* | nvme-eui.*) continue ;;
+            esac
+            echo "${link}"
+            return
+        fi
+    done
+}
+
+stick_candidates() {
+    local name type live tran removable part fstype
+    live=" $(live_disks | sort -u | tr '\n' ' ')"
+    while read -r name type; do
+        [ "${type}" = disk ] || continue
+        [ "${live#* "${name}" }" = "${live}" ] || continue
+        tran="$(prop "${name}" TRAN)"
+        removable="$(prop "${name}" RM)"
+        [ "${tran}" = usb ] || [ "${removable}" = 1 ] || continue
+        [ "$(prop "${name}" RO)" = 1 ] && continue
+        while read -r part; do
+            [ -b "/dev/${part}" ] || continue
+            fstype="$(prop "${part}" FSTYPE)"
+            case "${fstype}" in
+                vfat | exfat | ntfs | ext4 | ext3 | ext2 | btrfs | xfs) echo "${name} ${part} ${fstype}" ;;
+            esac
+        done < <(lsblk -ln -o NAME "/dev/${name}" 2> /dev/null)
+    done < <(lsblk -dn -o NAME,TYPE 2> /dev/null)
+}
+
+do_sticks() {
+    local disk part fstype link
+    mark "engine sticks"
+    while read -r disk part fstype; do
+        [ -n "${part}" ] || continue
+        link="$(stick_link "${part}")"
+        [ -n "${link}" ] || continue
+        emit "{\"event\":\"stick\",\"device\":$(js "${link}"),\"name\":$(js "${part}"),\"label\":$(js "$(prop "${part}" LABEL)"),\"fstype\":$(js "${fstype}"),\"size\":$(number "$(prop "${part}" SIZE)"),\"model\":$(js "$(prop "${disk}" MODEL)"),\"vendor\":$(js "$(prop "${disk}" VENDOR)")}"
+    done < <(stick_candidates)
+    emit '{"event":"sticks"}'
+}
+
+do_save_log() {
+    local to="" part device folder status
+    if [ "${1:-}" = --to ]; then to="${2:-}"; fi
+    mark "engine save-log to=${to}"
+    device="$(readlink -f "${to}" 2> /dev/null)"
+    part="${device##*/}"
+    if [ "${to#/dev/disk/by-id/}" = "${to}" ] || ! stick_candidates | awk '{ print $2 }' | grep -qx "${part}"; then
+        result failed "" "That is not a USB stick the log can be saved to. Nothing was written." untouched
+        exit 3
+    fi
+    folder="tur-installer-log-$(session_id)"
+    # Mounted in a mount namespace of its own, which ends with the command:
+    # nothing else sees the mount, and it cannot outlive the copy.
+    # shellcheck disable=SC2016  # expanded by the inner shell
+    unshare --mount --propagation private /bin/sh -c '
+        mkdir -p "$2" || exit 2
+        mount -o nodev,nosuid,noexec "$1" "$2" || exit 3
+        mkdir -p "$2/$3" && cp "$4"/*.log "$2/$3/" 2> /dev/null
+        if [ -f "$5" ]; then cp "$5" "$2/$3/wizard-transcript.log"; fi
+        lsblk -o NAME,SIZE,FSTYPE,LABEL,PARTTYPENAME,MODEL,TRAN > "$2/$3/disks.txt" 2>&1
+        rc=$?
+        sync
+        umount "$2" || rc=4
+        exit "$rc"' _ "${device}" "${SESSION}/stick" "${folder}" "${SESSION}" "${WIZARD_TRANSCRIPT}"
+    status=$?
+    if [ "${status}" -ne 0 ]; then
+        mark "log-saved result=no status=${status}"
+        result failed "" "The log could not be written to the stick (status ${status}). Nothing else on it was changed." untouched
+        exit 5
+    fi
+    mark "log-saved result=yes device=${to} folder=${folder}"
+    result success "" "The log was saved." untouched "\"folder\":$(js "${folder}"),\"label\":$(js "$(prop "${part}" LABEL)")"
+}
+
+case "${1:-}" in
+    check) do_check ;;
+    disks) do_disks ;;
+    sticks) do_sticks ;;
+    save-log)
+        shift
+        do_save_log "$@"
+        ;;
+    install)
+        shift
+        do_install "$@"
+        ;;
+    *)
+        echo "usage: tur-install-engine check | disks | sticks | save-log --to PATH | install --by-id PATH --serial S --wwn W --size BYTES --fingerprint F --phrase PHRASE" >&2
+        exit 2
+        ;;
+esac

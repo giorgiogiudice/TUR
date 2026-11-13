@@ -1,0 +1,29 @@
+#!/usr/bin/bash
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Copies the graphical installer's state lines ("TUR-WIZARD: ...") to the
+# first serial port, as the text installer and the engine write theirs, and
+# the journal's lines about the installer, pkexec and polkit
+# ("TUR-LIVE-JOURNAL| ..."). A person never needs them; tests/iso reads them
+# while it drives the installer with the keyboard. The installer itself runs
+# as the live user, who may not write to the serial port. Present only on the
+# installer medium.
+#
+# The port is opened for each line: whatever else opens it (a login prompt,
+# were one started) and hangs it up cannot silence this.
+set -u
+transcript=/run/tur-installer/wizard/transcript
+port=/dev/ttyS0
+[ -c "${port}" ] || exit 0
+
+say() { printf '%s\r\n' "$1" >> "${port}" 2> /dev/null; }
+
+say "TUR-LIVE: session-starting uptime=$(cut -d' ' -f1 /proc/uptime)"
+
+journalctl -f -n 0 -q -o short-monotonic 2> /dev/null \
+    | grep --line-buffered -E 'tur-installer|org\.tur\.Installer|tur-install-engine|pkexec|polkit|plasmalogin|kwin_wayland.*(error|crash)|coredump' \
+    | while IFS= read -r line; do say "TUR-LIVE-JOURNAL| ${line}"; done &
+
+until [ -e "${transcript}" ]; do sleep 1; done
+say "TUR-LIVE: transcript-found uptime=$(cut -d' ' -f1 /proc/uptime) $(stat -c '%U:%G %a' "${transcript}")"
+tail -n +1 -F "${transcript}" 2> /dev/null | while IFS= read -r line; do say "${line}"; done

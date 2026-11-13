@@ -13,6 +13,35 @@
         { "input": "path" }
       ],
       "success_exit_codes": [0, 3, 4]
+    },
+    {
+      "tool": "runtime_autopilot_plan",
+      "kind": "command",
+      "program": "/usr/bin/tur-runtime",
+      "arguments": [
+        { "literal": "app" },
+        { "literal": "autopilot" },
+        { "literal": "--plan" },
+        { "literal": "--json" },
+        { "option": "--failure", "input": "failure" },
+        { "literal": "--" },
+        { "input": "app_id" }
+      ],
+      "success_exit_codes": [0, 6]
+    },
+    {
+      "tool": "runtime_autopilot_results",
+      "kind": "command",
+      "program": "/usr/bin/tur-runtime",
+      "arguments": [
+        { "literal": "app" },
+        { "literal": "autopilot" },
+        { "literal": "--results" },
+        { "literal": "--json" },
+        { "literal": "--" },
+        { "input": "app_id" }
+      ],
+      "success_exit_codes": [0, 6]
     }
   ]
 }

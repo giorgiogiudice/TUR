@@ -352,6 +352,9 @@ pub struct Request {
     pub tools: Vec<ToolDefinition>,
     /// The most output tokens the model may produce for this request.
     pub max_output_tokens: u32,
+    /// The generation settings, from configuration. Empty: every default
+    /// is the provider's.
+    pub generation: crate::generation::Generation,
 }
 
 /// Token usage of one response.

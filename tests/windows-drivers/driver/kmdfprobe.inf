@@ -1,0 +1,54 @@
+; SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+;
+; Installs kmdfprobe.sys for the loopback test gadget (1209:0001), with the
+; [*.Wdf] section a KMDF driver package carries. Unsigned; Wine only.
+
+[Version]
+Signature   = "$WINDOWS NT$"
+Class       = USBDevice
+ClassGuid   = {88BAE032-5A81-49f0-BC3D-A4FF138216D6}
+Provider    = %Provider%
+DriverVer   = 11/13/2026,1.0.0.0
+
+[DestinationDirs]
+DefaultDestDir = 12
+
+[SourceDisksNames]
+1 = %Disk%,,,
+
+[SourceDisksFiles]
+kmdfprobe.sys = 1
+
+[Manufacturer]
+%Provider% = Probe_Models,NTamd64
+
+[Probe_Models.NTamd64]
+%Loopback% = Probe_Install, USB\VID_1209&PID_0001
+
+[Probe_Install]
+CopyFiles = Probe_Files
+
+[Probe_Files]
+kmdfprobe.sys
+
+[Probe_Install.Services]
+AddService = kmdfprobe, 0x00000002, Probe_Service
+
+[Probe_Service]
+DisplayName   = %ServiceName%
+ServiceType   = 1
+StartType     = 3
+ErrorControl  = 1
+ServiceBinary = %12%\kmdfprobe.sys
+
+[Probe_Install.Wdf]
+KmdfService = kmdfprobe, Probe_WdfSection
+
+[Probe_WdfSection]
+KmdfLibraryVersion = 1.15
+
+[Strings]
+Provider    = "TUR test"
+Disk        = "TUR test driver disk"
+Loopback    = "TUR test USB device (loopback gadget), KMDF probe"
+ServiceName = "TUR KMDF binding probe"

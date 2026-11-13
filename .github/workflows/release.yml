@@ -143,6 +143,10 @@ jobs:
         with:
           persist-credentials: false
 
+      # The pinned base, for the marks check (fedora-logos' checksums come
+      # from it): from TUR's mirror once quay.io has dropped the digest.
+      - uses: ./.github/actions/use-base-mirror
+
       - name: Mode
         run: |
           mkdir -p "$OUT"

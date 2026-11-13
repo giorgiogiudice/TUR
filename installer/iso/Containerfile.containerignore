@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# What is sent to the build of installer/iso/Containerfile, whose context is
+# the repository root: the installer environment's files, and the desktop
+# tree the graphical installer is compiled from (with the licence files its
+# CMake project names).
+*
+!installer/iso/
+!desktop/
+!LICENSE.md
+!NOTICE
+!THIRD_PARTY_NOTICES.md
+
+# Never build output or reference pictures, whatever a working tree holds.
+desktop/build/
+desktop/tests/screenshots/
+**/*.png

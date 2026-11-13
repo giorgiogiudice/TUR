@@ -70,6 +70,9 @@ use crate::decision::{Decision, Reason, Refusal, Verdict};
 use crate::engine::describe;
 use crate::exec::{ExecStatus, Executor};
 use crate::faults::TaskCode;
+use crate::interface::{
+    Answer, Failure, Interface, InterfaceCall, InterfaceTool, Target, screen_windows,
+};
 use crate::policy::UserPolicy;
 use crate::redact::{filter_json, filter_text, kind_name};
 use crate::registry::{AssistantCall, BUILT_IN_SERVICE, COMMAND_TOOL, Performer, ToolRegistry};
@@ -791,9 +794,15 @@ fn action_label(action: &Action) -> String {
         Action::Tool(call) => format!("{}:{}", call.service(), call.tool()),
         Action::Command(_) => "command:read_only".to_owned(),
         Action::Agent(operation) => format!("agent:{}", operation.as_str()),
+        Action::Accessibility(ui) => format!("accessibility:{}", ui.kind.as_str()),
         _ => "other".to_owned(),
     }
 }
+
+/// The most bytes of an answer of the accessibility bridge that are passed
+/// on to the model. The bridge keeps within a smaller budget; this is the
+/// second bound.
+const INTERFACE_OUTPUT_BYTES: usize = 65_536;
 
 const fn verdict_name(verdict: &Verdict) -> &'static str {
     match verdict {
@@ -855,6 +864,8 @@ struct Performed {
     bytes: usize,
     truncated: bool,
     withheld: Vec<SecretKind>,
+    /// The code of a failure, where it is not the one the state implies.
+    code: Option<TaskCode>,
 }
 
 impl Performed {
@@ -869,11 +880,17 @@ impl Performed {
             bytes: 0,
             truncated: false,
             withheld: Vec::new(),
+            code: None,
         }
     }
 
     /// The code of an action that did not end well.
     fn failure(&self) -> Option<TaskCode> {
+        if self.state != "ok"
+            && let Some(code) = self.code
+        {
+            return Some(code);
+        }
         match self.state {
             "not_started" => Some(TaskCode::SandboxUnavailable),
             "timed_out" => Some(TaskCode::SandboxTimedOut),
@@ -944,6 +961,8 @@ pub struct Orchestrator<'a> {
     pub budget: &'a mut dyn Budget,
     /// What performs P@x's own operations.
     pub assistant: &'a mut dyn Assistant,
+    /// What drives the accessibility bridge, for the interface tools.
+    pub interface: &'a mut dyn Interface,
 }
 
 impl Orchestrator<'_> {
@@ -1304,7 +1323,7 @@ impl Orchestrator<'_> {
 
         // 2. The action, from the manifest.
         let registry = self.registry;
-        let proposal = match registry.propose(&call.name, call.arguments.clone()) {
+        let mut proposal = match registry.propose(&call.name, call.arguments.clone()) {
             Ok(proposal) => proposal,
             Err(found) => {
                 let unknown = found
@@ -1328,6 +1347,57 @@ impl Orchestrator<'_> {
             }
         };
 
+        // 2b. For an interface tool, what the call would act on: read from
+        //     the accessibility bus by the bridge, never taken from the
+        //     model. The owner of the window is the bus's record of the
+        //     process, and counts for this one decision only.
+        let mut context = session.context.clone();
+        let mut target: Option<Target> = None;
+        if let Performer::Interface(interface_call) = &proposal.performer {
+            // An unattended task does not act through the screen or the
+            // accessibility tree (design section 17, item 8).
+            if self.situation.presence == Presence::Unattended {
+                let code = TaskCode::InterfaceUnavailable;
+                return self.reject(
+                    session,
+                    call,
+                    "unattended_interface",
+                    code.as_str(),
+                    code.user_message(),
+                    Some("a task nobody is present for does not use the accessibility tree"),
+                );
+            }
+            match self.interface.resolve(interface_call, self.control) {
+                Answer::Done(found) => {
+                    proposal.action = Action::Accessibility(found.action(interface_call));
+                    context.target_window_owner = found.owner();
+                    target = Some(found);
+                }
+                Answer::NotDone(failure, _) if failure.stops_the_task() => {
+                    return Err(Stop::with_code(
+                        TaskOutcome::Cancelled,
+                        TaskCode::InterfaceStopped,
+                    ));
+                }
+                Answer::NotDone(failure, detail) => {
+                    let code = if failure == Failure::NotFound {
+                        TaskCode::InterfaceTargetNotFound
+                    } else {
+                        TaskCode::InterfaceUnavailable
+                    };
+                    let detail = filter_text(&detail).text;
+                    return self.reject(
+                        session,
+                        call,
+                        "target_not_resolved",
+                        code.as_str(),
+                        code.user_message(),
+                        Some(detail.as_str()),
+                    );
+                }
+            }
+        }
+
         // 3. The decision, recorded before anything else happens.
         let meta = AuditMeta {
             task: session.task,
@@ -1335,7 +1405,7 @@ impl Orchestrator<'_> {
         };
         let decision = decide_and_record(
             &proposal.action,
-            &session.context,
+            &context,
             self.policy,
             self.clock.now(),
             &meta,
@@ -1384,7 +1454,18 @@ impl Orchestrator<'_> {
         // 4. What the decision means here.
         let result = match decision.verdict() {
             Verdict::Allow if decision.class() <= ActionClass::Reversible => {
-                let performed = self.perform(session.task, &proposal.performer);
+                let mut stopped = false;
+                let performed = match (&proposal.performer, &target) {
+                    (Performer::Interface(interface_call), Some(found)) => {
+                        let (performed, stop) = self.operate(interface_call, found);
+                        stopped = stop;
+                        performed
+                    }
+                    (Performer::Interface(_), None) => {
+                        Performed::not_started("the target of the call was not resolved")
+                    }
+                    _ => self.perform(session.task, &proposal.performer),
+                };
                 let label = action_label(&proposal.action);
                 // The two events of the audit vocabulary: what became of the
                 // action, and, if anything was withheld from its output, how
@@ -1420,6 +1501,17 @@ impl Orchestrator<'_> {
                     if self.trail.event(&event).is_err() {
                         return Err(Stop::audit());
                     }
+                }
+                // P@x was stopped while the bridge worked: what it was doing
+                // is recorded, and the task ends here.
+                if stopped {
+                    report.executed = performed.state != "not_started";
+                    report.result = Some(performed.state);
+                    self.note(session, ReportItem::Proposal(report));
+                    return Err(Stop::with_code(
+                        TaskOutcome::Cancelled,
+                        TaskCode::InterfaceStopped,
+                    ));
                 }
                 report.executed = performed.state != "not_started";
                 report.result = Some(performed.state);
@@ -1500,6 +1592,70 @@ impl Orchestrator<'_> {
             detail,
             truncated: false,
             withheld: filtered.withheld,
+            code: None,
+        }
+    }
+
+    /// Carry out an interface call the engine allowed, through the
+    /// accessibility bridge. What it returns passes the output filter like
+    /// anything else that goes back to the provider; a list of windows is
+    /// first screened against the user's policy. The second value says that
+    /// P@x was stopped while the bridge worked.
+    fn operate(&mut self, call: &InterfaceCall, target: &Target) -> (Performed, bool) {
+        match self.interface.perform(call, target, self.control) {
+            Answer::Done(value) => {
+                let value = if call.tool == InterfaceTool::ListWindows {
+                    screen_windows(&value, self.policy).0
+                } else {
+                    value
+                };
+                let filtered = filter_json(&value);
+                let bytes = filtered.value.to_string().len();
+                if bytes > INTERFACE_OUTPUT_BYTES {
+                    let mut performed = Performed::not_started(
+                        "the accessibility bridge answered with more than can be passed on",
+                    );
+                    performed.state = "failed";
+                    performed.code = Some(TaskCode::InterfaceActionFailed);
+                    performed.bytes = bytes;
+                    performed.truncated = true;
+                    return (performed, false);
+                }
+                (
+                    Performed {
+                        state: "ok",
+                        ok: true,
+                        exit: None,
+                        bytes,
+                        output: filtered.value,
+                        stderr: String::new(),
+                        detail: None,
+                        truncated: false,
+                        withheld: filtered.withheld,
+                        code: None,
+                    },
+                    false,
+                )
+            }
+            Answer::NotDone(failure, detail) => {
+                let mut performed = Performed::not_started(filter_text(&detail).text);
+                performed.code = Some(match failure {
+                    Failure::Unavailable => TaskCode::InterfaceUnavailable,
+                    Failure::NotFound => TaskCode::InterfaceTargetNotFound,
+                    Failure::Failed | Failure::Refused => TaskCode::InterfaceActionFailed,
+                    Failure::Changed => TaskCode::InterfaceTargetChanged,
+                    Failure::Stopped | Failure::Cancelled => TaskCode::InterfaceStopped,
+                });
+                // The bridge got as far as the application: the action was
+                // tried and did not happen.
+                if matches!(
+                    failure,
+                    Failure::Failed | Failure::Changed | Failure::Refused
+                ) {
+                    performed.state = "failed";
+                }
+                (performed, failure.stops_the_task())
+            }
         }
     }
 
@@ -1510,6 +1666,9 @@ impl Orchestrator<'_> {
         let mut grants = self.grants.to_vec();
         let (argv, limits, success, structured, feed) = match performer {
             Performer::Assistant(call) => return self.assist(task, call),
+            Performer::Interface(_) => {
+                return Performed::not_started("an interface call is carried out by the bridge");
+            }
             Performer::Command { argv } => (argv.clone(), Limits::default(), vec![0], false, None),
             Performer::Adapter { adapter, arguments } => {
                 let argv = match adapter.argv(arguments) {
@@ -1626,6 +1785,7 @@ impl Orchestrator<'_> {
             bytes: output.stdout.len() + output.stderr.len(),
             truncated: output.stdout_truncated || output.stderr_truncated,
             withheld,
+            code: None,
         }
     }
 }
@@ -1843,6 +2003,7 @@ mod tests {
             bytes: 47,
             truncated: false,
             withheld: Vec::new(),
+            code: None,
         };
         let value: Value = serde_json::from_str(&performed.text()).expect("JSON");
         let frame = &value["tur_pax_tool_result"];

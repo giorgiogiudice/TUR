@@ -54,6 +54,12 @@ env:
   # reports it for the release asset.
   UPSTREAM_URL: https://github.com/ggml-org/llama.cpp/releases/download/b9840/llama-b9840-bin-ubuntu-x64.tar.gz
   UPSTREAM_SHA256: 7a8a02089076eb6bd86e6a5d23ea99b91ce0d13f8d43b01fa3ad5aa4e02e7e92
+  # The models measured one by one: the first list (local-ai-1), and in the
+  # comparison job also Gemma 4 E2B, the smallest Gemma 4 the catalogue
+  # offers, to show that the engine version runs it. The larger models of
+  # the second list do not fit the runner's 16 GB or take too long on its
+  # processor; their entries say they are estimates.
+  FIRST_LIST: qwen3-0.6b,granite-4.0-1b,qwen3-vl-2b-instruct,qwen3-4b,qwen3-embedding-0.6b
   CARGO_TERM_COLOR: never
   CARGO_INCREMENTAL: "0"
 
@@ -161,6 +167,7 @@ jobs:
             python3 /w/services/tur-ai-local/ci/local_ai_ci.py table \
               --tal "$WORK/bin/tur-ai-local" --catalogue /w/services/tur-ai-local/catalogue \
               --data "$WORK/data" --runtime "$WORK/run" --evidence "$WORK/evidence/fedora" \
+              --models "$FIRST_LIST" \
               --label fedora-llama-cpp-b9840 --remove-after --keep qwen3-0.6b
 
       - name: Summary
@@ -233,6 +240,7 @@ jobs:
           python3 services/tur-ai-local/ci/local_ai_ci.py table \
             --tal "$WORK/bin/tur-ai-local" --catalogue services/tur-ai-local/catalogue \
             --data "$WORK/data" --runtime "$WORK/run" --evidence "$WORK/evidence/upstream" \
+            --models "$FIRST_LIST,gemma-4-e2b" \
             --engine "$UPSTREAM_SERVER" --label upstream-llama-cpp-b9840-cpu --remove-after --keep qwen3-0.6b
 
       - name: Fedora 45's Ollama, with the same model file
@@ -287,15 +295,33 @@ jobs:
           if-no-files-found: warn
 
   pax:
-    name: P@x through the local preset, against tur-ai-local
+    name: P@x through the local preset (${{ matrix.model }}, ${{ matrix.via }}), against tur-ai-local
     runs-on: ubuntu-24.04
     timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # The catalogue's first recommendation for an assistant that acts,
+          # downloaded with pull and served with serve, three tasks.
+          - model: qwen3-4b
+            via: pull
+            tasks: two-tools,local-ai,readonly-command
+            cache: local-ai-model-qwen3-4b-7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5
+          # The smallest model of the second list, made ready by one
+          # `tur-ai-local ensure` as P@x's service does when a person chooses
+          # it: downloaded from the publisher, checked, started. Its
+          # licence shows a restriction, accepted here as a person would.
+          # One task.
+          - model: ministral-3-3b
+            via: ensure
+            tasks: two-tools
+            cache: local-ai-model-ministral-3-3b-9ed150d4367e68df0ac8e1540f6ddc65b42d0ee26378329d1ecbca60f93fc5f8
     env:
       DEBIAN_FRONTEND: noninteractive
-      # The model P@x is run with: the catalogue's recommendation for an
-      # assistant that acts, on llama.cpp's own build (Fedora's reads a P@x
-      # request too slowly: docs/reports/local-ai-1.md, section 3).
-      PAX_MODEL: qwen3-4b
+      # On llama.cpp's own build (Fedora's reads a P@x request too slowly:
+      # docs/reports/local-ai-1.md, section 3).
+      PAX_MODEL: ${{ matrix.model }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
@@ -390,10 +416,11 @@ jobs:
       - name: The model, from the cache when it is there
         uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
-          path: ${{ runner.temp }}/local-ai/data/tur/models/qwen3-4b
-          key: local-ai-model-qwen3-4b-7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5
+          path: ${{ runner.temp }}/local-ai/data/tur/models/${{ matrix.model }}
+          key: ${{ matrix.cache }}
 
-      - name: The model, through tur-ai-local
+      - name: The model, through tur-ai-local pull
+        if: matrix.via == 'pull'
         # Downloaded and checked against the catalogue's digest, or checked
         # again when it came from the cache.
         run: |
@@ -409,24 +436,63 @@ jobs:
           mkdir -p "$WORK/upstream" && tar -xzf "$WORK/llama.tar.gz" -C "$WORK/upstream"
           echo "UPSTREAM_SERVER=$(find "$WORK/upstream" -name llama-server -type f | head -n 1)" >> "$GITHUB_ENV"
 
+      - name: The model, through one tur-ai-local ensure
+        if: matrix.via == 'ensure'
+        # What P@x's service runs when a person chooses a local model
+        # (UseLocalModel): the licence accepted, the disk checked, the
+        # files downloaded from the publisher (or found in the cache) and
+        # checked, the engine started; its progress as JSON lines. The
+        # events are kept as evidence and checked against the report
+        # schema. The files are hashed again afterwards, so that a cached
+        # copy is proved too.
+        run: |
+          events="$WORK/evidence/pax/ensure-$PAX_MODEL.jsonl"
+          started=$(date +%s)
+          status=0
+          "$WORK/bin/tur-ai-local" ensure "$PAX_MODEL" --json --accept-licence --reasoning auto \
+            --idle-stop 3600 --start-timeout 900 --engine "$UPSTREAM_SERVER" \
+            --catalogue services/tur-ai-local/catalogue --models-dir "$WORK/data/tur/models" --runtime-dir "$WORK/run" \
+            > "$events" 2> "$events.err" || status=$?
+          echo "ensure took $(( $(date +%s) - started )) s, exit $status"
+          grep -v '"event":"progress"' "$events" || true
+          cat "$events.err"
+          test "$status" -eq 0
+          python3 - "$events" <<'PY'
+          import json, sys
+          events = [json.loads(line) for line in open(sys.argv[1]) if line.strip()]
+          names = [event["event"] for event in events]
+          assert names[-1] == "ready", names
+          assert names[0] in ("plan", "already-present"), names
+          if names[0] == "plan":
+              assert "installed" in names and names.count("verified") == 2, names
+          assert all(event["kind"] == "ensure-event" and event["model"] == events[0]["model"] for event in events)
+          print("ensure events:", ", ".join(sorted(set(names))))
+          PY
+          "$WORK/bin/tur-ai-local" verify "$PAX_MODEL" --catalogue services/tur-ai-local/catalogue --models-dir "$WORK/data/tur/models"
+
       - name: P@x through the local preset
         # tur-ai-local serves the model as it would for a person: on
         # 127.0.0.1:39281, its default address, with a new access key in
-        # $WORK/run/tur-ai-local/api-key and its default context. P@x is
-        # `tur-pax run --provider local --model qwen3-4b`: the preset gives
-        # the address and reads that key file; the read-only command tool
-        # is on, in the real sandbox. What the model does is recorded; what
-        # fails the step is listed in tests/pax/local_model.py.
+        # $WORK/run/tur-ai-local/api-key and its default context (started
+        # here with serve, or already by ensure). P@x is `tur-pax run
+        # --provider local --model <model>`: the preset gives the address,
+        # the model's generation settings and reads that key file; the
+        # read-only command tool is on, in the real sandbox. What the model
+        # does is recorded; what fails the step is listed in
+        # tests/pax/local_model.py.
         run: |
           log="$WORK/run/serve-$PAX_MODEL.log"
-          "$WORK/bin/tur-ai-local" serve "$PAX_MODEL" --json --idle-stop 3600 --engine "$UPSTREAM_SERVER" \
-            --catalogue services/tur-ai-local/catalogue --models-dir "$WORK/data/tur/models" --runtime-dir "$WORK/run" \
-            > "$log" 2> "$log.err" &
-          for _ in $(seq 1 600); do grep -q '"event":"ready"' "$log" 2>/dev/null && break; sleep 1; done
-          if ! grep -q '"event":"ready"' "$log"; then
-            echo "::error::the engine did not become ready with $PAX_MODEL"; cat "$log.err"; exit 1
+          if [ "${{ matrix.via }}" = pull ]; then
+            "$WORK/bin/tur-ai-local" serve "$PAX_MODEL" --json --idle-stop 3600 --engine "$UPSTREAM_SERVER" \
+              --catalogue services/tur-ai-local/catalogue --models-dir "$WORK/data/tur/models" --runtime-dir "$WORK/run" \
+              > "$log" 2> "$log.err" &
+            for _ in $(seq 1 600); do grep -q '"event":"ready"' "$log" 2>/dev/null && break; sleep 1; done
+            if ! grep -q '"event":"ready"' "$log"; then
+              echo "::error::the engine did not become ready with $PAX_MODEL"; cat "$log.err"; exit 1
+            fi
+            grep '"event":"ready"' "$log"
           fi
-          grep '"event":"ready"' "$log"
+          "$WORK/bin/tur-ai-local" status --json --runtime-dir "$WORK/run" | tee "$WORK/evidence/pax/status-$PAX_MODEL.json"
           set +e
           python3 tests/pax/local_model.py \
             --tur-pax services/tur-pax/target/debug/tur-pax \
@@ -434,7 +500,7 @@ jobs:
             --tools "$WORK/pax/tools" \
             --fixture-manifests "$WORK/pax/manifests" --fixture-adapters "$WORK/pax/adapters" \
             --runtime-dir "$WORK/run" --engine-log "$WORK/run/tur-ai-local/engine.log" \
-            --model "$PAX_MODEL" --engine upstream-llama-cpp-b9840-cpu \
+            --model "$PAX_MODEL" --engine upstream-llama-cpp-b9840-cpu --tasks "${{ matrix.tasks }}" \
             --work-dir "$WORK/pax/work" --evidence "$WORK/evidence/pax"
           status=$?
           cp "$WORK/run/tur-ai-local/engine.log" "$WORK/evidence/pax/engine-$PAX_MODEL.log" 2>/dev/null || true
@@ -452,6 +518,6 @@ jobs:
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         if: always()
         with:
-          name: local-ai-pax-evidence
+          name: local-ai-pax-evidence-${{ matrix.model }}
           path: ${{ runner.temp }}/local-ai/evidence/
           if-no-files-found: warn

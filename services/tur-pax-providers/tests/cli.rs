@@ -102,7 +102,7 @@ fn check_validates_and_prints_capabilities_without_a_network_call() {
             "tool calling: yes",
             "image input: yes",
             control,
-            "model discovery: no",
+            "model discovery: yes",
             "ping: not requested; no network call was made",
         ] {
             assert!(run.stdout.contains(expected), "{expected}\n{}", run.stdout);

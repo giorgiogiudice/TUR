@@ -68,6 +68,7 @@ engine except as part of a proposed action, where it is data.
 | **Tool call** | The class the service declared in its manifest (0 to 3). A tool call can only be built from a validated manifest, so the service, the tool name and the class never come from the model. |
 | **Accessibility or screen action, observing** | 0 |
 | **Accessibility or screen action, acting** | 1. Raised to 2 if the name of the control or the title of the window matches the pattern tables, if the name of the control cannot be read, or if the compositor did not say whose process the window belongs to. |
+| **Accessibility action of the bridge** (a `UiAction` whose `detail` states an operation: focus, scroll, expand, collapse, select, press, type; [pax-accessibility.md](pax-accessibility.md), section 5) | 1. Raised to 2 by the rules above, and also if the element's description matches the tables, if it is the default control of its window, if it is a terminal; for a press, if its role is not one a control is pressed by; for typing, if the field does not take text, is for a password, or the text holds a control character, a line or paragraph separator or a direction mark. Focusing or scrolling an element without a name is class 1. Reading is class 0. |
 | **Any accessibility or screen action in a sensitive application** | 2 |
 | **Command, read-only sandbox** | 0 |
 | **Command, user sandbox, inside a task workspace the system can undo** | 1 |
@@ -267,6 +268,13 @@ one included. Nothing in the policy file removes an entry.
 regard to ASCII case and surrounding whitespace, and an identifier also matches
 its own form with `.desktop` appended. A relaxation compares exactly.
 
+**Several identifiers.** A UI action may carry, besides its application, the
+other identifiers the accessibility bridge found for it (`UiDetail::also_known_as`:
+its program, its desktop file, its Flatpak identifier, its name on the
+bus). Exclusion and sensitivity hold if they hold for **any** of them; a
+relaxation applies to the main identifier and never when any identifier is
+sensitive.
+
 **Plain identifiers.** An identifier is plain if it is 1 to 255 printable ASCII
 characters with no space at either end. The policy file accepts plain identifiers
 only. An application whose reported identifier is not plain is sensitive: such an
@@ -381,7 +389,7 @@ The rules are evaluated in this order. The first that applies decides.
 |---|---|---|---|
 | 1 | The action is incomplete: no tool name, no application, empty command, or a typed operation outside the shape of its type | refuse | `malformed_action` |
 | 2 | Class 4 | refuse | `prohibited` |
-| 3a | Accessibility or screen action in an excluded application | refuse | `excluded_application` |
+| 3a | Accessibility or screen action in an excluded application, under any of its identifiers | refuse | `excluded_application` |
 | 3b | Accessibility or screen action on a window of a process with administrator rights | refuse | `privileged_window` |
 | 3c | Accessibility or screen action while the session is locked | refuse | `session_locked` |
 | 4 | Mode is observe-only and the class is above 0 | refuse | `observe_only` |
@@ -436,7 +444,7 @@ least one row for every rule of the table.
 
 `tests/invariants.rs` enumerates:
 
-- **255 actions.** Tool calls of class 0 to 3 with two argument sets.
+- **486 actions.** Tool calls of class 0 to 3 with two argument sets.
   Accessibility and screen actions in eleven applications (plain; excluded by the
   user, and the same in another letter case with `.desktop` appended; sensitive;
   relaxed; sensitive and relaxed; a terminal on the built-in list, and the same
@@ -444,7 +452,14 @@ least one row for every rule of the table.
   a password manager on the built-in list; an identifier with an invisible
   character), observing, and acting on seven labels (ordinary; a consequential
   control; a consequential window title; no name; "OK"; an icon; a look-alike
-  letter). Commands in every sandbox, working context and operation type. Typed
+  letter); and, through the accessibility tree only, 21 actions of the
+  accessibility bridge in each of the eleven applications (focus and scroll
+  of unnamed elements; a focus on "Send"; expand, collapse, select a tab;
+  select an unnamed row; press "Bold", a link, "Send", "Delete draft", a
+  button whose description deletes, the default control, an element of no
+  known role; type into an unnamed field, with a line break, into a password
+  field, into a field that does not take text, into a terminal, into
+  "Amount to transfer"; read a window). Commands in every sandbox, working context and operation type. Typed
   operations of every kind, six of them on protected targets, one with a secret
   content, and seven that do not have the shape of their type. Every agent
   operation.
@@ -467,7 +482,7 @@ least one row for every rule of the table.
 - **9 user policies**: each mode, with no per-application settings, with all of
   them, and with every application relaxed.
 
-That is 738 432 decisions for each sweep. The test
+That is 1 137 600 decisions for each sweep. The test
 `the_generators_cover_what_they_claim` asserts these numbers and that every
 variant of every enumerated type appears. Everything a test compares a decision
 with is stated in the test file and not taken from the engine: the class each
@@ -693,7 +708,10 @@ What a record may contain is restricted by construction:
   withheld: a rule that withheld what merely looks like a secret would let the
   model keep part of a command out of the record.
 - A UI action is summarised as the application and the pattern category that
-  matched. Window titles and control names are never written.
+  matched (in the name, the description or the window title); an action of
+  the accessibility bridge also as its operation, its role category and, for
+  typing, the number of characters. Window titles, control names,
+  descriptions and typed text are never written.
 - The prompt text of any other action is never written.
 - Task, provider, service, tool and application identifiers are written only if
   they consist of ASCII letters, digits, dots, underscores and hyphens; otherwise
@@ -872,6 +890,14 @@ it changed. Choices 39 onward were made while aligning the engine with revision 
 | 55 | `TUR_AI_ATTENDED` for an attended task in a locked session | `yes`. The field records what the task is, not who is at the screen. | New. |
 | 56 | `TUR_AI_SANDBOX` for a typed operation | `privileged`. | New. |
 | 57 | `TUR_AI_TIER` for a typed operation | 4, as for a command. | New. |
+| 58 | An application known by several identifiers (program, desktop file, name on the bus) | Excluded or sensitive if any identifier is. A relaxation only for the main one, and never if any is sensitive. | New ([pax-accessibility.md](pax-accessibility.md)). An application can choose its name on the bus; a name can add a match, never remove one. |
+| 59 | Focusing or scrolling an element that has no name | Class 1: moving the keyboard or the view changes nothing in the application. A name that is not empty and cannot be read is still class 2. | New. |
+| 60 | Pressing an element whose role is not a control (a label, a panel, an unknown role) | Class 2: what it does cannot be judged from a name. | New. |
+| 61 | Typing a line break, a tab or another control character, a line or paragraph separator or a direction mark | Class 2: Enter submits a form or sends a message. | New. |
+| 62 | Typing into a password field, a field that does not take text, or a terminal | Class 2: credential entry is the person's (addendum A, section 7); a terminal runs what is typed (section 17, item 1). | New. |
+| 63 | The default control of a dialog (`STATE_IS_DEFAULT`) | Class 2 whatever its name: it affirms the dialog, like "OK". | New; extends 49. |
+| 64 | A pattern in an element's description, not its name | Class 2, as for the name. | New. |
+| 65 | A UI action whose operation does not go with its kind, typing with no text, or text with another operation | Incomplete: refused (rule 1). | New. |
 
 ## 11. Known limits
 
@@ -1010,6 +1036,15 @@ What this engine cannot guarantee by itself.
     layer (`tur-pax-memory`: stated, observed, procedure) are mapped onto the
     engine's operations in this document only, not in code; (d) the built-in names were checked against upstream sources
     and distribution packages, not against the image (section 2.5).
+
+17. **The accessibility bridge's facts are the bus's.** The role, the
+    states, the description and the identifiers of an element come from
+    the application through the accessibility bus. An application can lie
+    about all of them; the rules are for honest applications and the
+    pattern tables are a heuristic (limit 7). The bridge decides again on
+    what it reads just before acting ([pax-accessibility.md](pax-accessibility.md),
+    section 5.3), which narrows the gap between decision and action and does
+    not close it.
 
 ## 12. Not in A0
 

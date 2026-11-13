@@ -151,6 +151,18 @@ allow cmake KWayland              desktop/apps/tur-pax-overlay/CMakeLists.txt   
 allow cmake Plasma::KWaylandClient desktop/apps/tur-pax-overlay/CMakeLists.txt,desktop/tests/compositor/CMakeLists.txt   LGPL-2.1-only OR LGPL-3.0-only
 allow soname libKWaylandClient.so.6 *                          LGPL-2.1-only OR LGPL-3.0-only
 
+# TUR's graphical installer, tur-installer (design, section 11.5; task D-23;
+# ADR-0018, amendment of 13 November 2026): its own QML module and library,
+# under the project licence. It adds no library: Qt D-Bus (LGPL-3.0-only),
+# already allowed above, sends KConfig's change notification for the keyboard
+# layout, and the installation engine is a separate program it starts through
+# pkexec (QProcess, in Qt Core), which is the command-line side of the
+# boundary. It uses Qt Quick Controls' ComboBox, allowed above, for the
+# keyboard layout.
+allow qml Tur.Installer           desktop/apps/tur-installer/**   LicenseRef-TUR-Noncommercial-1.0.0
+allow cmake turinstaller          desktop/apps/tur-installer/**   LicenseRef-TUR-Noncommercial-1.0.0
+allow soname libturinstaller.so*  *                               LicenseRef-TUR-Noncommercial-1.0.0
+
 # And blue is the system: what is drawn in P@x's module does not use the
 # system's accent.
 deny-text desktop/kit/pax/*.qml  Theme\.(accent|selection)  blue is the system's colour; P@x's components are gold (design, 5.1)

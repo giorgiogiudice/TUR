@@ -65,6 +65,12 @@ pub const METHODS: &[(&str, &str, &str)] = &[
     ("SetProvider", "ss", ""),
     ("SetLimits", "s", ""),
     ("ListModels", "", "s"),
+    ("ListProviderModels", "sb", "s"),
+    ("GetGenerationSettings", "ss", "s"),
+    ("SetGenerationSettings", "sss", ""),
+    ("ListLocalModels", "", "s"),
+    ("UseLocalModel", "ss", "s"),
+    ("CancelLocalModel", "", ""),
     ("SetKey", "ss", ""),
     ("RemoveKey", "s", "b"),
     ("HasKey", "s", "b"),
@@ -94,6 +100,7 @@ pub const SIGNALS: &[(&str, &str)] = &[
     ("SchedulesChanged", ""),
     ("MemoryChanged", ""),
     ("StateChanged", "s"),
+    ("LocalModelProgress", "ss"),
 ];
 
 /// The properties of the interface: name and type. All read-only.
@@ -191,6 +198,12 @@ impl Events for BusEvents {
                 vec![Value::string(proposal), text(details)],
             ),
             Event::SchedulesChanged => self.signal("SchedulesChanged", Vec::new()),
+            Event::LocalModelProgress { model, event } => {
+                self.signal(
+                    "LocalModelProgress",
+                    vec![Value::string(model), text(event)],
+                );
+            }
             Event::MemoryChanged => self.signal("MemoryChanged", Vec::new()),
             Event::StateChanged => {
                 let core = self
@@ -336,6 +349,24 @@ pub fn dispatch(core: &Arc<Core>, call: &Message) -> Reply {
         "SetProvider" => done(core.set_provider(text(0), text(1))),
         "SetLimits" => done(core.set_limits(text(0))),
         "ListModels" => Ok(json(core.models())),
+        "ListProviderModels" => core
+            .provider_models(
+                text(0),
+                call.body.get(1).and_then(Value::as_bool).unwrap_or(false),
+            )
+            .map(json)
+            .map_err(|f| refused(&f)),
+        "GetGenerationSettings" => core
+            .generation_settings(text(0), text(1))
+            .map(json)
+            .map_err(|f| refused(&f)),
+        "SetGenerationSettings" => done(core.set_generation_settings(text(0), text(1), text(2))),
+        "ListLocalModels" => core.local_models().map(json).map_err(|f| refused(&f)),
+        "UseLocalModel" => core
+            .use_local_model(text(0), text(1))
+            .map(|job| vec![Value::string(job)])
+            .map_err(|f| refused(&f)),
+        "CancelLocalModel" => done(core.cancel_local_model()),
         "SetKey" => done(core.set_key(text(0), text(1))),
         "RemoveKey" => core
             .remove_key(text(0))
