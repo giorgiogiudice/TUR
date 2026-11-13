@@ -212,7 +212,11 @@ impl Transport {
         }
     }
 
-    fn get_attempt(&self, fetch: &Fetch<'_>, key: Option<&ApiKey>) -> Result<String, ProviderError> {
+    fn get_attempt(
+        &self,
+        fetch: &Fetch<'_>,
+        key: Option<&ApiKey>,
+    ) -> Result<String, ProviderError> {
         let secret = key.map_or("", ApiKey::expose);
         let mut request = self
             .agent

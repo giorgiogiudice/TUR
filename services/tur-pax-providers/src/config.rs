@@ -630,6 +630,10 @@ mod tests {
         rejected(|value| value["generation"] = json!({ "reasoning_style": "enable_thinking" }));
         // Nothing set is not written out.
         let plain = with(|_| {}).unwrap();
-        assert!(!serde_json::to_string(&plain).unwrap().contains("generation"));
+        assert!(
+            !serde_json::to_string(&plain)
+                .unwrap()
+                .contains("generation")
+        );
     }
 }

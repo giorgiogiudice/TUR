@@ -151,9 +151,8 @@ fn answer_one(mut stream: TcpStream, answer: &Answer, log: &Mutex<Vec<String>>) 
             send(&mut stream, "200 OK", "", &other, size);
         }
         Answer::Slowly => {
-            let head = format!(
-                "HTTP/1.1 200 OK\r\ncontent-length: {size}\r\nconnection: close\r\n\r\n"
-            );
+            let head =
+                format!("HTTP/1.1 200 OK\r\ncontent-length: {size}\r\nconnection: close\r\n\r\n");
             let _ = stream.write_all(head.as_bytes());
             for piece in TINY.chunks(8) {
                 if stream.write_all(piece).is_err() {
@@ -222,7 +221,10 @@ fn a_whole_download_is_checked_put_in_place_and_not_fetched_again() {
     assert_eq!(plan.bytes_to_download, Some(TINY.len() as u64));
     assert_eq!(plan.bytes_done, Some(0));
     assert_eq!(plan.free_bytes, Some(u64::MAX));
-    assert_eq!(fs::read(dir.join("models/tiny-test/tiny.gguf")).expect("file"), TINY);
+    assert_eq!(
+        fs::read(dir.join("models/tiny-test/tiny.gguf")).expect("file"),
+        TINY
+    );
     assert_eq!(store.state(&model).0, InstallState::Installed);
     assert!(!part_path(&dir.join("models/tiny-test/tiny.gguf")).exists());
     // Already there: nothing is asked of the server.
@@ -247,7 +249,10 @@ fn a_broken_download_goes_on_from_where_it_stopped() {
     let error = first.result.expect_err("the connection broke");
     assert_eq!(error.code, AiLocalCode::DownloadFailed);
     // What arrived is kept for the next attempt, and nothing is usable.
-    assert_eq!(fs::metadata(part_path(&destination)).expect("part").len(), 20);
+    assert_eq!(
+        fs::metadata(part_path(&destination)).expect("part").len(),
+        20
+    );
     assert!(!destination.exists());
     assert_eq!(store.state(&model).0, InstallState::Absent);
 
@@ -397,13 +402,27 @@ fn the_command_serves_a_model_already_present_and_its_events_follow_the_schema()
         let arguments: Vec<&str> = arguments.iter().map(String::as_str).collect();
         run(&arguments)
     };
-    let output = run_with(&["pull", "tiny-test", "--from-file", source.to_str().expect("UTF-8")]);
+    let output = run_with(&[
+        "pull",
+        "tiny-test",
+        "--from-file",
+        source.to_str().expect("UTF-8"),
+    ]);
     assert!(output.status.success(), "{}", stderr_text(&output));
 
     let port = free_port().to_string();
     let output = run_with(&[
-        "ensure", "tiny-test", "--json", "--context", "512", "--port", &port, "--start-timeout",
-        "30", "--idle-stop", "600",
+        "ensure",
+        "tiny-test",
+        "--json",
+        "--context",
+        "512",
+        "--port",
+        &port,
+        "--start-timeout",
+        "30",
+        "--idle-stop",
+        "600",
     ]);
     assert!(output.status.success(), "{}", stderr_text(&output));
     let events = lines(&output);
@@ -418,10 +437,21 @@ fn the_command_serves_a_model_already_present_and_its_events_follow_the_schema()
     let ready = events.last().expect("ready");
     assert_eq!(ready["code"], "TUR-AI-LOCAL-026");
     assert_eq!(ready["state"]["model"], "tiny-test");
-    assert_eq!(ready["state"]["base_url"], format!("http://127.0.0.1:{port}"));
+    assert_eq!(
+        ready["state"]["base_url"],
+        format!("http://127.0.0.1:{port}")
+    );
 
     // Asked again: the model is running as asked, nothing is started.
-    let output = run_with(&["ensure", "tiny-test", "--json", "--context", "512", "--port", &port]);
+    let output = run_with(&[
+        "ensure",
+        "tiny-test",
+        "--json",
+        "--context",
+        "512",
+        "--port",
+        &port,
+    ]);
     assert!(output.status.success(), "{}", stderr_text(&output));
     let names: Vec<String> = lines(&output)
         .iter()

@@ -792,7 +792,8 @@ mod tests {
         let apart = json!({ "prompt_tokens": 100, "completion_tokens": 100, "total_tokens": 1000 });
         assert_eq!(usage(&apart).output_tokens, 900);
         // Reasoning reported alone, larger than the completion.
-        let alone = json!({ "prompt_tokens": 100, "completion_tokens": 50, "reasoning_tokens": 700 });
+        let alone =
+            json!({ "prompt_tokens": 100, "completion_tokens": 50, "reasoning_tokens": 700 });
         assert_eq!(usage(&alone).output_tokens, 700);
         assert_eq!(usage(&alone).input_tokens, 100);
     }

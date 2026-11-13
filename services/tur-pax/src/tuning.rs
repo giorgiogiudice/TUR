@@ -151,10 +151,11 @@ impl SettingsSpec {
     pub fn check(&self, family: ProviderId, style: ReasoningStyle) -> Result<(), String> {
         for (name, range) in [("temperature", self.temperature), ("top_p", self.top_p)] {
             if let Some(range) = range {
-                let ordered = range.min.is_finite() && range.max.is_finite() && range.min <= range.max;
-                let inside = range
-                    .default
-                    .is_none_or(|value| value.is_finite() && (range.min..=range.max).contains(&value));
+                let ordered =
+                    range.min.is_finite() && range.max.is_finite() && range.min <= range.max;
+                let inside = range.default.is_none_or(|value| {
+                    value.is_finite() && (range.min..=range.max).contains(&value)
+                });
                 if !ordered || !inside {
                     return Err(format!("the range of {name} is not in order"));
                 }
@@ -192,7 +193,9 @@ impl SettingsSpec {
                 seen.push(*value);
             }
             if effort.values.is_empty()
-                || effort.default.is_some_and(|value| !effort.values.contains(&value))
+                || effort
+                    .default
+                    .is_some_and(|value| !effort.values.contains(&value))
                 || effort
                     .sampling_only_with
                     .iter()
@@ -430,7 +433,9 @@ pub fn check(
     };
     let refused = |what: &str| Err(format!("This model does not take {what}."));
     let outside = |what: &str, min: String, max: String| {
-        Err(format!("{what} must be from {min} to {max} for this model."))
+        Err(format!(
+            "{what} must be from {min} to {max} for this model."
+        ))
     };
     if let Some(value) = values.temperature {
         match spec.temperature {
@@ -659,20 +664,43 @@ mod tests {
     fn a_choice_inside_the_declaration_passes_and_one_outside_is_refused_in_words() {
         let model = reasoning_model();
         let ok = values(r#"{"effort": "none", "temperature": 0.3}"#);
-        assert_eq!(check(Some(&model), &ok, ProviderId::OpenAi, ReasoningStyle::default()), Ok(()));
+        assert_eq!(
+            check(
+                Some(&model),
+                &ok,
+                ProviderId::OpenAi,
+                ReasoningStyle::default()
+            ),
+            Ok(())
+        );
         let hot = values(r#"{"effort": "none", "temperature": 2.5}"#);
         assert_eq!(
-            check(Some(&model), &hot, ProviderId::OpenAi, ReasoningStyle::default()),
+            check(
+                Some(&model),
+                &hot,
+                ProviderId::OpenAi,
+                ReasoningStyle::default()
+            ),
             Err("A temperature is a number from 0 to 2.".to_owned())
         );
         let level = values(r#"{"effort": "xhigh"}"#);
         assert_eq!(
-            check(Some(&model), &level, ProviderId::OpenAi, ReasoningStyle::default()),
+            check(
+                Some(&model),
+                &level,
+                ProviderId::OpenAi,
+                ReasoningStyle::default()
+            ),
             Err("This model's reasoning effort can be none, low, medium or high.".to_owned())
         );
         let top_k = values(r#"{"top_k": 5}"#);
         assert_eq!(
-            check(Some(&model), &top_k, ProviderId::OpenAi, ReasoningStyle::default()),
+            check(
+                Some(&model),
+                &top_k,
+                ProviderId::OpenAi,
+                ReasoningStyle::default()
+            ),
             Err("This model does not take top-k.".to_owned())
         );
     }
@@ -689,7 +717,10 @@ mod tests {
         )
         .expect_err("refused");
         assert!(error.starts_with("This model takes temperature, top-p and top-k only when its reasoning effort is none"), "{error}");
-        assert!(error.ends_with("Set the reasoning effort to none first."), "{error}");
+        assert!(
+            error.ends_with("Set the reasoning effort to none first."),
+            "{error}"
+        );
         let error = check(
             Some(&model),
             &values(r#"{"top_p": 0.9, "effort": "high"}"#),
@@ -697,13 +728,24 @@ mod tests {
             ReasoningStyle::default(),
         )
         .expect_err("refused");
-        assert!(error.contains("only when its reasoning effort is none"), "{error}");
+        assert!(
+            error.contains("only when its reasoning effort is none"),
+            "{error}"
+        );
     }
 
     #[test]
     fn a_model_without_a_declaration_takes_only_an_output_limit() {
         let only = values(r#"{"max_output_tokens": 2048}"#);
-        assert_eq!(check(None, &only, ProviderId::OpenAiChat, ReasoningStyle::default()), Ok(()));
+        assert_eq!(
+            check(
+                None,
+                &only,
+                ProviderId::OpenAiChat,
+                ReasoningStyle::default()
+            ),
+            Ok(())
+        );
         let error = check(
             None,
             &values(r#"{"temperature": 0.1}"#),
@@ -727,15 +769,25 @@ mod tests {
         assert_eq!(none.top_k, Some(20));
         assert_eq!(none.effort, Some(Effort::None));
         assert_eq!(none.context_tokens, Some(8192));
-        let chosen = effective(Some(&local), &values(r#"{"temperature": 0.2, "effort": "medium"}"#));
+        let chosen = effective(
+            Some(&local),
+            &values(r#"{"temperature": 0.2, "effort": "medium"}"#),
+        );
         assert_eq!(chosen.temperature, Some(0.2));
         assert_eq!(chosen.effort, Some(Effort::Medium));
 
         let model = reasoning_model();
         let mut with_default = model.clone();
-        with_default.temperature = Some(NumberRange { min: 0.0, max: 2.0, default: Some(1.0) });
+        with_default.temperature = Some(NumberRange {
+            min: 0.0,
+            max: 2.0,
+            default: Some(1.0),
+        });
         // Medium reasons, so the default temperature is not sent.
-        assert_eq!(effective(Some(&with_default), &Values::default()).temperature, None);
+        assert_eq!(
+            effective(Some(&with_default), &Values::default()).temperature,
+            None
+        );
         assert_eq!(
             effective(Some(&with_default), &values(r#"{"effort": "none"}"#)).temperature,
             Some(1.0)
@@ -745,20 +797,43 @@ mod tests {
     #[test]
     fn a_declaration_the_family_cannot_be_sent_is_not_valid() {
         let claude = spec(r#"{ "temperature": {"min": 0, "max": 1} }"#);
-        assert!(claude.check(ProviderId::Anthropic, ReasoningStyle::default()).is_err());
+        assert!(
+            claude
+                .check(ProviderId::Anthropic, ReasoningStyle::default())
+                .is_err()
+        );
         let gemini = spec(r#"{ "effort": {"values": ["none", "low"]} }"#);
-        assert!(gemini.check(ProviderId::Google, ReasoningStyle::default()).is_err());
-        let fine = spec(r#"{ "effort": {"values": ["low", "high"], "default": "low"}, "stop": {"max": 4} }"#);
-        assert!(fine.check(ProviderId::Anthropic, ReasoningStyle::default()).is_ok());
+        assert!(
+            gemini
+                .check(ProviderId::Google, ReasoningStyle::default())
+                .is_err()
+        );
+        let fine = spec(
+            r#"{ "effort": {"values": ["low", "high"], "default": "low"}, "stop": {"max": 4} }"#,
+        );
+        assert!(
+            fine.check(ProviderId::Anthropic, ReasoningStyle::default())
+                .is_ok()
+        );
         let backwards = spec(r#"{ "top_k": {"min": 10, "max": 1} }"#);
-        assert!(backwards.check(ProviderId::OpenAiChat, ReasoningStyle::default()).is_err());
+        assert!(
+            backwards
+                .check(ProviderId::OpenAiChat, ReasoningStyle::default())
+                .is_err()
+        );
         let outside = spec(r#"{ "effort": {"values": ["low"], "default": "high"} }"#);
-        assert!(outside.check(ProviderId::OpenAi, ReasoningStyle::default()).is_err());
+        assert!(
+            outside
+                .check(ProviderId::OpenAi, ReasoningStyle::default())
+                .is_err()
+        );
     }
 
     #[test]
     fn a_model_s_declaration_overlays_its_provider_s() {
-        let provider = spec(r#"{ "stop": {"max": 4}, "temperature": {"min": 0, "max": 2}, "sources": ["https://example.org/a"] }"#);
+        let provider = spec(
+            r#"{ "stop": {"max": 4}, "temperature": {"min": 0, "max": 2}, "sources": ["https://example.org/a"] }"#,
+        );
         let model = spec(r#"{ "temperature": {"min": 0, "max": 1} }"#);
         let both = provider.overlaid(Some(&model));
         assert_eq!(both.temperature.map(|range| range.max), Some(1.0));
@@ -776,7 +851,12 @@ mod tests {
         assert_eq!(merged.effort, Some(Effort::High));
         assert_eq!(merged.top_k, Some(7));
         assert_eq!(merged.stop, vec!["x".to_owned()]);
-        for bad in [r#"{"seed": 1}"#, r#"{"effort": "ultra"}"#, r#"{"top_k": -1}"#, r#"{"stop": "x"}"#] {
+        for bad in [
+            r#"{"seed": 1}"#,
+            r#"{"effort": "ultra"}"#,
+            r#"{"top_k": -1}"#,
+            r#"{"stop": "x"}"#,
+        ] {
             let given: Map<String, Value> = serde_json::from_str(bad).unwrap();
             assert!(merge(&current, &given).is_err(), "{bad}");
         }

@@ -82,10 +82,10 @@ use crate::settings::{
     KeySourceKind, Limits, MODEL_CANNOT_ACT, ModelList, Origin, Paths, ProviderEntry, Settings,
     find_provider, is_model_name, is_provider_id, providers, runtime_key,
 };
-use crate::tuning;
 use crate::spending::{Ledger, TaskBudget, Zone, day_of};
 use crate::textui::{DEFAULT_TOOLS_DIR, read_json_dir, read_tools};
 use crate::trail::{EventKind, FileTrail, TIME_FIELD, Trail, TrailEvent};
+use crate::tuning;
 use crate::wake::Waker;
 
 /// The version of the interface this service speaks.
@@ -2670,11 +2670,7 @@ impl Core {
                 None
             }
         };
-        let cache = self
-            .parts
-            .paths
-            .listing
-            .join(format!("{}.json", entry.id));
+        let cache = self.parts.paths.listing.join(format!("{}.json", entry.id));
         let now = self.now().seconds();
         let mut source = "list";
         let mut fetched_at: Option<u64> = None;
@@ -2753,7 +2749,9 @@ impl Core {
     ) -> Result<Vec<ListedModel>, Fault> {
         let config = entry.listing_config(gateway);
         match entry.key_source() {
-            KeySourceKind::None => list_models(&config, None).map_err(|error| provider_fault(&error)),
+            KeySourceKind::None => {
+                list_models(&config, None).map_err(|error| provider_fault(&error))
+            }
             KeySourceKind::RuntimeFile(file) => {
                 let key = self.runtime_key(entry.adapter, file, config.base_url.as_deref())?;
                 list_models(&config, Some(&key)).map_err(|error| provider_fault(&error))
@@ -2780,10 +2778,18 @@ impl Core {
         }
         let settings = self.state().settings.clone();
         let spec = entry.settings_spec(model);
-        let chosen = settings.choice(provider, model).cloned().unwrap_or_default();
+        let chosen = settings
+            .choice(provider, model)
+            .cloned()
+            .unwrap_or_default();
         let effective = tuning::effective(spec.as_ref(), &chosen);
-        let problem =
-            tuning::check(spec.as_ref(), &effective, entry.adapter, entry.reasoning_style).err();
+        let problem = tuning::check(
+            spec.as_ref(),
+            &effective,
+            entry.adapter,
+            entry.reasoning_style,
+        )
+        .err();
         let mut notices: Vec<String> = Vec::new();
         if spec.is_none() {
             notices.push(
@@ -2795,7 +2801,10 @@ impl Core {
         if let Some(rule) = spec.as_ref().and_then(tuning::sampling_rule) {
             notices.push(rule);
         }
-        if effective.effort.is_some_and(|effort| effort != Effort::None) {
+        if effective
+            .effort
+            .is_some_and(|effort| effort != Effort::None)
+        {
             notices.push(
                 "While the model reasons, its thinking is output: it counts towards the output \
                  limit of a response and towards today's limit."
@@ -2845,12 +2854,20 @@ impl Core {
         let given = crate::strict::object_from_str(given)
             .map_err(|_| invalid("the settings are not one JSON object"))?;
         self.change_settings(|settings| {
-            let current = settings.choice(provider, model).cloned().unwrap_or_default();
+            let current = settings
+                .choice(provider, model)
+                .cloned()
+                .unwrap_or_default();
             let merged = tuning::merge(&current, &given).map_err(invalid)?;
             let spec = entry.settings_spec(model);
             let effective = tuning::effective(spec.as_ref(), &merged);
-            tuning::check(spec.as_ref(), &effective, entry.adapter, entry.reasoning_style)
-                .map_err(invalid)?;
+            tuning::check(
+                spec.as_ref(),
+                &effective,
+                entry.adapter,
+                entry.reasoning_style,
+            )
+            .map_err(invalid)?;
             settings.set_choice(provider, model, merged);
             Ok(())
         })?;
@@ -2871,15 +2888,17 @@ impl Core {
             let state = self.state();
             (
                 state.models.provider("local").cloned(),
-                state.local.as_ref().map(|job| {
-                    json!({ "job": job.id, "model": job.model, "last_event": job.last })
-                }),
+                state.local.as_ref().map(
+                    |job| json!({ "job": job.id, "model": job.model, "last_event": job.last }),
+                ),
             )
         };
         if let Some(models) = offers["models"].as_array_mut() {
             for offer in models {
                 let id = offer["id"].as_str().unwrap_or_default().to_owned();
-                let usable = preset.as_ref().is_some_and(|entry| entry.model(&id).is_some());
+                let usable = preset
+                    .as_ref()
+                    .is_some_and(|entry| entry.model(&id).is_some());
                 offer["usable_by_pax"] = json!(usable);
                 offer["settings"] = preset.as_ref().map_or(json!({}), |entry| {
                     tuning::accepted(entry.settings_spec(&id).as_ref())
@@ -2931,7 +2950,11 @@ impl Core {
                         .as_bool()
                         .ok_or_else(|| invalid("accept_licence is not true or false"))?;
                 }
-                _ => return Err(invalid("UseLocalModel takes download_bytes and accept_licence")),
+                _ => {
+                    return Err(invalid(
+                        "UseLocalModel takes download_bytes and accept_licence",
+                    ));
+                }
             }
         }
         let (entry, settings, busy) = {
@@ -2973,7 +2996,9 @@ impl Core {
             return Err(invalid(format!(
                 "the licence of {name} restricts its use: {} It needs the person's acceptance: \
                  accept_licence true",
-                offer["licence"]["restrictions"].as_str().unwrap_or_default()
+                offer["licence"]["restrictions"]
+                    .as_str()
+                    .unwrap_or_default()
             )));
         }
         let values = settings.effective_values(&entry, model)?;

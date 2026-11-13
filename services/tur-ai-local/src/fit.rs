@@ -337,7 +337,10 @@ fn measured(model: &Model, cpu: EngineCpu) -> Option<f64> {
 
 /// The graphics processor the engine would run on, its memory, and the
 /// bytes a second it is assumed to give; or why there is none.
-fn graphics(hardware: &Hardware, engine: EngineBuild) -> Result<(Device, Option<u64>, f64), String> {
+fn graphics(
+    hardware: &Hardware,
+    engine: EngineBuild,
+) -> Result<(Device, Option<u64>, f64), String> {
     let usable: Vec<_> = hardware
         .vulkan
         .devices
@@ -464,9 +467,7 @@ pub fn tiers(
                 SpeedBasis::Measured => "measured in TUR's tests and scaled to this processor",
                 SpeedBasis::Estimated => "estimated from the model's size and this hardware",
             };
-            reasons.push(format!(
-                "About {speed} tokens a second {place} ({how})."
-            ));
+            reasons.push(format!("About {speed} tokens a second {place} ({how})."));
             let tier = if speed >= RUNS_WELL_TOKENS_PER_SECOND {
                 Tier::RunsWell
             } else {
@@ -479,8 +480,7 @@ pub fn tiers(
             };
             if !fits_now {
                 reasons.push(
-                    "Close some programs first: it does not fit in the memory free now."
-                        .to_owned(),
+                    "Close some programs first: it does not fit in the memory free now.".to_owned(),
                 );
             }
             ModelTier {
@@ -549,7 +549,7 @@ pub fn recommend(
             .any(|fit| fit.model == model.id && fit.verdict == Verdict::Fits)
     };
     let runs_well = |model: &&Model| {
-        tier_of(*model).is_some_and(|tier| tier.tier == Tier::RunsWell && tier.fits_now)
+        tier_of(model).is_some_and(|tier| tier.tier == Tier::RunsWell && tier.fits_now)
     };
     let largest = |models: Vec<&Model>| -> Option<String> {
         models
@@ -621,9 +621,7 @@ pub fn recommend(
             } else {
                 "without"
             },
-            crate::human_bytes(
-                processor_bytes_per_second(hardware.cpu.logical_cpus, fast) as u64
-            )
+            crate::human_bytes(processor_bytes_per_second(hardware.cpu.logical_cpus, fast) as u64)
         ),
         match engine.cpu {
             EngineCpu::Variants => "Engine: processor variants that use these instructions.",
@@ -768,14 +766,27 @@ mod tests {
     #[test]
     fn three_tiers_with_a_reason_each_on_a_16_gb_computer() {
         let catalogue = seed();
-        let tiers = tiers(&catalogue, &machine(16, "avx avx2 fma f16c"), 8192, VARIANTS);
+        let tiers = tiers(
+            &catalogue,
+            &machine(16, "avx avx2 fma f16c"),
+            8192,
+            VARIANTS,
+        );
         // Embeddings models have no tier: they do not converse.
-        assert!(tiers.iter().all(|tier| tier.model != "qwen3-embedding-0.6b"));
+        assert!(
+            tiers
+                .iter()
+                .all(|tier| tier.model != "qwen3-embedding-0.6b")
+        );
         for id in ["qwen3-30b-a3b", "gemma-4-26b-a4b"] {
             let judged = tier(&tiers, id);
             assert_eq!(judged.tier, Tier::DoesNotFit, "{id}");
             assert_eq!(judged.tokens_per_second, None);
-            assert!(judged.message.ends_with("does not fit: it needs more memory than this computer has."));
+            assert!(
+                judged
+                    .message
+                    .ends_with("does not fit: it needs more memory than this computer has.")
+            );
         }
         // 16 logical processors with the fast kernels: 60 GB a second,
         // 2.9 GB read for each token of Gemma 4 E4B.
@@ -786,7 +797,11 @@ mod tests {
         assert_eq!(e4b.tokens_per_second, Some(20.7));
         assert!(e4b.fits_now);
         assert_eq!(e4b.message, "Gemma 4 E4B fits and runs well.");
-        assert!(e4b.reasons.iter().any(|reason| reason.contains("no graphics processor")));
+        assert!(
+            e4b.reasons
+                .iter()
+                .any(|reason| reason.contains("no graphics processor"))
+        );
         // Qwen3 4B was measured: 14.85 tokens a second on the 4-processor
         // runner, scaled by 60/36.
         let measured = tier(&tiers, "qwen3-4b");
@@ -862,11 +877,18 @@ mod tests {
         let without = tiers(&catalogue, &hardware, 8192, VARIANTS);
         let e2b = tier(&without, "gemma-4-e2b");
         assert_eq!(e2b.device, Some(Device::Processor));
-        assert!(e2b.reasons.iter().any(|reason| reason.contains("no Vulkan backend")));
+        assert!(
+            e2b.reasons
+                .iter()
+                .any(|reason| reason.contains("no Vulkan backend"))
+        );
         // A card that does not report its memory is not counted on.
         hardware.gpus[0].vram_bytes = None;
         let unknown = tiers(&catalogue, &hardware, 8192, with_vulkan);
-        assert_eq!(tier(&unknown, "gemma-4-e2b").device, Some(Device::Processor));
+        assert_eq!(
+            tier(&unknown, "gemma-4-e2b").device,
+            Some(Device::Processor)
+        );
     }
 
     #[test]

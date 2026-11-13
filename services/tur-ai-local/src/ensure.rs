@@ -184,7 +184,10 @@ pub fn fetch_model(
         )
     };
     let dir = store.model_dir(&model.id).ok_or_else(|| {
-        EnsureError::new(AiLocalCode::UnknownModel, format!("{:?} is not a model id", model.id))
+        EnsureError::new(
+            AiLocalCode::UnknownModel,
+            format!("{:?} is not a model id", model.id),
+        )
     })?;
     let total = model.download_bytes();
     let (state, _) = store.state(model);
@@ -206,7 +209,9 @@ pub fn fetch_model(
         }
         InstallState::Damaged => {
             // A record that does not match: what is there cannot be trusted.
-            store.remove(&model.id).map_err(|error| storage(&dir, &error))?;
+            store
+                .remove(&model.id)
+                .map_err(|error| storage(&dir, &error))?;
         }
         InstallState::Absent => {}
     }
@@ -234,7 +239,10 @@ pub fn fetch_model(
             crate::human_bytes(to_download),
             model.repository,
             if present > 0 {
-                format!(", going on from {} already here", crate::human_bytes(present))
+                format!(
+                    ", going on from {} already here",
+                    crate::human_bytes(present)
+                )
             } else {
                 String::new()
             }

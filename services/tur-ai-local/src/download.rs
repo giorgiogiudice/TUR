@@ -313,7 +313,9 @@ impl Scheme {
             return false;
         };
         let authority = rest.split('/').next().unwrap_or("");
-        let host = authority.rsplit_once(':').map_or(authority, |(host, _)| host);
+        let host = authority
+            .rsplit_once(':')
+            .map_or(authority, |(host, _)| host);
         host == "localhost"
             || host
                 .trim_start_matches('[')
@@ -442,7 +444,8 @@ pub fn download_resumable(
     };
     let resumed = match status {
         206 if have > 0 => {
-            let expected_range = format!("bytes {have}-{}/{}", file.size_bytes - 1, file.size_bytes);
+            let expected_range =
+                format!("bytes {have}-{}/{}", file.size_bytes - 1, file.size_bytes);
             if header("content-range").as_deref().map(str::trim) != Some(expected_range.as_str()) {
                 // Not the part that was asked for: start again next time.
                 let _ = fs::remove_file(&temporary);
@@ -460,7 +463,8 @@ pub fn download_resumable(
         hasher = Sha256::new();
     }
     let remaining = file.size_bytes - have;
-    if let Some(announced) = header("content-length").and_then(|value| value.trim().parse::<u64>().ok())
+    if let Some(announced) =
+        header("content-length").and_then(|value| value.trim().parse::<u64>().ok())
         && announced != remaining
     {
         let _ = fs::remove_file(&temporary);

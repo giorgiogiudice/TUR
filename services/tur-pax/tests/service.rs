@@ -1694,7 +1694,11 @@ fn generation_settings_are_checked_kept_and_sent_in_the_family_s_fields() {
         .set_generation_settings("anthropic", "test-model", r#"{"temperature": 0.3}"#)
         .expect_err("no temperature");
     assert_eq!(code(refusal.clone()), "TUR-AI-SERVICE-006");
-    assert!(refusal.detail.contains("This model does not take a temperature."));
+    assert!(
+        refusal
+            .detail
+            .contains("This model does not take a temperature.")
+    );
     let refusal = world
         .core
         .set_generation_settings("anthropic", "test-model", r#"{"effort": "minimal"}"#)
@@ -1719,14 +1723,22 @@ fn generation_settings_are_checked_kept_and_sent_in_the_family_s_fields() {
     );
     world
         .core
-        .set_generation_settings("anthropic", "undeclared-model", r#"{"max_output_tokens": 2000}"#)
+        .set_generation_settings(
+            "anthropic",
+            "undeclared-model",
+            r#"{"max_output_tokens": 2000}"#,
+        )
         .expect("an output limit is always a choice");
     // A provider no list describes: only the output limit.
     let refusal = world
         .core
         .set_generation_settings("openai", "any-model", r#"{"temperature": 0.2}"#)
         .expect_err("nothing declared");
-    assert!(refusal.detail.contains("TUR has no list"), "{}", refusal.detail);
+    assert!(
+        refusal.detail.contains("TUR has no list"),
+        "{}",
+        refusal.detail
+    );
     assert_eq!(
         world
             .core
@@ -1776,7 +1788,11 @@ fn generation_settings_are_checked_kept_and_sent_in_the_family_s_fields() {
     // null goes back to the model's default; nothing is sent then.
     world
         .core
-        .set_generation_settings("anthropic", "test-model", r#"{"effort": null, "stop": null}"#)
+        .set_generation_settings(
+            "anthropic",
+            "test-model",
+            r#"{"effort": null, "stop": null}"#,
+        )
         .expect("cleared");
     let described = world
         .core
@@ -1821,14 +1837,20 @@ fn the_models_of_a_provider_are_its_list_s_and_the_ones_it_named_within_a_day() 
         .iter()
         .filter_map(|model| model["model"].as_str())
         .collect();
-    assert_eq!(names, vec!["test-model", "undeclared-model", "brand-new-model"]);
+    assert_eq!(
+        names,
+        vec!["test-model", "undeclared-model", "brand-new-model"]
+    );
     assert_eq!(listed["models"][0]["offered_by_provider"], true);
     assert_eq!(listed["models"][2]["in_list"], false);
 
     // A day later it is asked again only when the person asks.
     world.advance(LISTING_DAY);
     assert_eq!(
-        world.core.provider_models("anthropic", false).expect("the list")["source"],
+        world
+            .core
+            .provider_models("anthropic", false)
+            .expect("the list")["source"],
         "list"
     );
     // Asking needs the key; without one, nothing is sent.
@@ -1838,7 +1860,12 @@ fn the_models_of_a_provider_are_its_list_s_and_the_ones_it_named_within_a_day() 
         .expect_err("no key");
     assert_eq!(code(refusal), "TUR-AI-KEY-002");
     assert_eq!(
-        code(world.core.provider_models("nobody", false).expect_err("no such provider")),
+        code(
+            world
+                .core
+                .provider_models("nobody", false)
+                .expect_err("no such provider")
+        ),
         "TUR-AI-SERVICE-006"
     );
 }
@@ -1956,16 +1983,28 @@ fn a_local_model_is_made_ready_by_local_ai_after_the_person_was_told_its_size() 
         .core
         .use_local_model("ministral-3-3b", r#"{"download_bytes": 2988524864}"#)
         .expect_err("the licence");
-    assert!(refusal.detail.contains("Do not infringe"), "{}", refusal.detail);
+    assert!(
+        refusal.detail.contains("Do not infringe"),
+        "{}",
+        refusal.detail
+    );
     assert_eq!(
-        code(world.core.use_local_model("no-such-model", "").expect_err("unknown")),
+        code(
+            world
+                .core
+                .use_local_model("no-such-model", "")
+                .expect_err("unknown")
+        ),
         "TUR-AI-SERVICE-006"
     );
     assert_eq!(
         code(
             world
                 .core
-                .use_local_model("qwen3-4b", r#"{"download_bytes": 2497280256, "force": true}"#)
+                .use_local_model(
+                    "qwen3-4b",
+                    r#"{"download_bytes": 2497280256, "force": true}"#
+                )
                 .expect_err("an option it does not take")
         ),
         "TUR-AI-SERVICE-006"
@@ -2000,7 +2039,15 @@ fn a_local_model_is_made_ready_by_local_ai_after_the_person_was_told_its_size() 
         .collect();
     assert_eq!(
         steps,
-        ["plan", "progress", "verified", "installed", "starting", "ready", "in-use"]
+        [
+            "plan",
+            "progress",
+            "verified",
+            "installed",
+            "starting",
+            "ready",
+            "in-use"
+        ]
     );
     // It was asked for exactly the model, its default context, and a
     // template that lets P@x switch thinking with each request.

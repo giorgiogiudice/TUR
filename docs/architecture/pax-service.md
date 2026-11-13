@@ -92,6 +92,12 @@ model wrote.
 | `SetProvider` | `s provider`, `s model` | | Chooses a provider by its identifier ([section 9](#9-consent-provider-model-and-the-limit-of-a-day)) and a model name. Another provider withdraws the consent and switches P@x off | `-006`, `-009` |
 | `SetLimits` | `s limits` | | JSON with any of `task_cost`, `day_cost`, `task_tokens`, `day_tokens`; `null` restores a default | `-006`, `-009` |
 | `ListModels` | | `s models` | Every provider by identifier: its adapter family, name, origin (`listed`, `by_hand`, `implicit`), address, keyring item, `key_required`, declared capabilities, `data_terms` as TUR read them (`null` when not reviewed or added by hand), `data_terms_reviewed`, `runs_locally`, terms and key pages, models with their prices, declared capabilities, `can_act`, `can_see` and `notices`; the list's date and status | never |
+| `ListProviderModels` | `s provider`, `b refresh` | `s models` | The models of a provider: the model list's, with whether each declares its generation settings, and those its own list names (`refresh`: asked now, with its key; otherwise the answer of the last day, kept in the state folder). `source` is `list`, `cache` or `provider` ([2.5](#25-models-generation-settings-and-local-ai)) | `-006`; with `refresh`, the key's codes and `TUR-AI-PROVIDER-*` |
+| `GetGenerationSettings` | `s provider`, `s model` | `s settings` | What the model accepts (each setting with its range and P@x's default), what the person chose, what takes effect, a `problem` if the choice no longer passes, `notices` in plain words, and the pages the declaration was read from | `-006` |
+| `SetGenerationSettings` | `s provider`, `s model`, `s settings` | | A JSON object of settings (`temperature`, `top_p`, `top_k`, `stop`, `effort`, `thinking_budget`, `max_output_tokens`, `context_tokens`); `null` takes one back to the model's default. Checked against the model's declaration and the family before it is kept | `-006` with the sentence that says what the model does not take; `-009` |
+| `ListLocalModels` | | `s models` | What local AI offers this computer (`tur-ai-local models` and `recommend`): every model that converses with its download size, whether it is downloaded, its licence in plain words, its tier and reasons, whether P@x can use it and the settings it takes there; the recommendation; a model being made ready | `-010`, `TUR-AI-LOCAL-*` |
+| `UseLocalModel` | `s model`, `s options` | `s job` | Makes a model of the `local` preset ready and chooses it: runs `tur-ai-local ensure`, whose steps are `LocalModelProgress` signals; when it is ready, the provider becomes `local` with that model (consent for local AI as for any change of provider). `options`: `download_bytes`, the size the person was told, required for a model not yet downloaded; `accept_licence`, required for a licence that restricts use | `-006` (not offered, size not named, licence not accepted, an option it does not take); `-004` while another is made ready; `-010` |
+| `CancelLocalModel` | | | Asks local AI to stop (`tur-ai-local cancel`); the program is ended if it has not after 20 s. What was downloaded is kept | `-007` when nothing is being made ready |
 | `SetKey` | `s provider`, `s key` | | Stores the key under the provider's keyring item (its identifier unless its entry names another), in place of any key there. An identifier no entry has yet is accepted | `SERVICE-006`, `KEY-001`, `-003`, `-004`, `-005` |
 | `RemoveKey` | `s provider` | `b removed` | Removes it | as above |
 | `HasKey` | `s provider` | `b set` | Whether one is stored. Never makes the store prompt | as above |
@@ -128,6 +134,7 @@ Also answered: `org.freedesktop.DBus.Introspectable.Introspect`,
 | `SchedulesChanged` | | Schedules, runs or proposals changed |
 | `MemoryChanged` | | Memory changed |
 | `StateChanged` | `s state` | The state changed. `org.freedesktop.DBus.Properties.PropertiesChanged` is sent with it |
+| `LocalModelProgress` | `s model`, `s event` | A step of making a local model ready: each `ensure-event` of `tur-ai-local` as it prints it (`plan`, `progress`, `verified`, `installed`, `already-present`, `stopping`, `starting`, `ready`, `failed`, `cancelled`), then P@x's own `in-use` (with `consent_needed`) or `failed` (`kind` `pax-event`) |
 
 ### 2.3 Properties
 
@@ -166,7 +173,9 @@ decided).
 its key to a file: section 5),
 `abilities` (`act`, `see`: what the model's entry declares, `null` when
 nothing is; `notices`: the plain sentences that say what P@x will not
-attempt with it), `session_locked`, `running`, `spending`
+attempt with it), `generation` (`settings`: what takes effect for the
+model in use, or a `problem`), `local_model` (a model being made ready:
+`job`, `model`, `last_event`), `session_locked`, `running`, `spending`
 (`currency`, `today` and `month` each with `cost`, `input_tokens`,
 `output_tokens`, `responses`; `day`; `day_limit` and `task_limit` each with
 `cost` and `tokens`; `day_limit_reached`; `prices_as_of`; `prices_status`),
@@ -174,6 +183,82 @@ attempt with it), `session_locked`, `running`, `spending`
 
 The others are listed member by member in `service.rs`, beside the function
 that builds each.
+
+### 2.5 Models, generation settings and local AI
+
+Added on 13 November 2026 (issue #84). The rules of what each family is
+sent, and what each listed model declares, are in
+[pax-providers.md](pax-providers.md), section 15; the code is
+`services/tur-pax/src/tuning.rs` (declarations and choices),
+`settings.rs` (where they are kept and applied), `local.rs` (local AI) and
+`service.rs`.
+
+**Choosing a model.** `ListModels` and `ListProviderModels` give every
+provider's models; `SetProvider` chooses one, as before. The command line:
+`tur-pax models list [PROVIDER] [--refresh]`, `tur-pax models use
+PROVIDER:MODEL`. Asking a provider for its own list (`--refresh`) sends it
+the key in its family's header and nothing else; the answer is kept for a
+day.
+
+**Generation settings.** The model list declares what each model accepts,
+with ranges and the default P@x sends when the person chose none; a model
+with no declaration takes only an output limit. The person's choice is kept
+per provider and model (`generation` in the settings file), checked when it
+is set (`SetGenerationSettings`, `tur-pax models settings PROVIDER:MODEL
+--set NAME=VALUE --clear NAME`) and again before each task: a choice the
+model list no longer allows stops the task with `TUR-AI-SERVICE-006` and its
+sentence, instead of sending what a provider would reject. Refusals are in
+words, for example "This model does not take a temperature.", "This
+model's reasoning effort can be low, medium, high, xhigh or max.", "This
+model takes temperature, top-p and top-k only when its reasoning effort is
+none; while it reasons it refuses or ignores them. Set the reasoning effort
+to none first." The output limit of a model's choice comes before the
+settings file's `max_output_tokens`, then the model list's.
+
+**Thinking and the day.** A model's reasoning is output in every family
+(pax-providers.md, 15.3), so it counts towards the task's and the day's
+limits as it is reported; `GetGenerationSettings` says so while an effort
+other than `none` is in effect.
+
+**Local AI** (`tur-ai-local`, [local-ai.md](local-ai.md)). `ListLocalModels`
+runs `tur-ai-local models --json` and `recommend --json` and gives, for
+each model that converses, what a person needs to choose: the download
+size, whether it is downloaded, the licence in plain words and whether it
+restricts use, the tier (runs well, slow, does not fit) with its reasons,
+whether the `local` preset offers it, and its settings. `UseLocalModel`
+then:
+
+1. refuses a model the `local` preset does not offer; a model not yet
+   downloaded unless `download_bytes` is the size the person was told (the
+   refusal says the size and where it comes from); a licence that restricts
+   use unless `accept_licence`; a second model while one is made ready;
+2. runs `tur-ai-local ensure <model> --json --context <the model's
+   context_tokens, 8192 by default> --reasoning <auto for a model that can
+   think, so that the request's switch decides; off otherwise>
+   [--accept-licence]`;
+3. sends each line it prints as a `LocalModelProgress` signal;
+4. when the last is `ready`, chooses the provider `local` with that model
+   (`SetProvider`): if the provider in use was another, the consent is
+   withdrawn and P@x is off until the person accepts the text for local AI,
+   as for any change of provider; the last signal, `in-use`, says whether
+   that is needed;
+5. `CancelLocalModel` asks `tur-ai-local cancel`, and ends the program if
+   it has not stopped after 20 seconds; what was downloaded is kept.
+
+`tur-pax models use local:<id>` does the same from a terminal: it prints
+the model's tier, its download size and source, and its licence's
+restriction, and goes on only with `--yes` (and `--accept-licence`), then
+prints the steps as they come. The program is `/usr/bin/tur-ai-local`, or
+`tur-pax serve --ai-local FILE` (the `pax` workflow's stand-in,
+`tests/pax/stub-tur-ai-local`). New code: `TUR-AI-SERVICE-010`, local AI
+could not be asked.
+
+**Authority.** None of these methods runs anything above class 1, or
+anything the model asks for: they change settings, ask a provider for its
+list with the person's key, or run local AI's own commands with arguments
+the service builds from the catalogue's identifiers. No tool reaches them.
+`tests/agent1_interface.rs` holds the new modules to the same rules as the
+others.
 
 ## 3. Who is served
 
@@ -221,7 +306,9 @@ file or method that could add any of them.
 | `StartTask` | A task, attended | No: the loop |
 | `Wake`, the timers, a schedule that comes due | A reminder shown; a scheduled task, unattended | No: the loop, unattended |
 | `CreateSchedule`, `ConfirmProposal` | A schedule exists | No: a schedule only says when a task runs. A standing approval is refused, so no schedule can hold one |
-| `Enable`, `SetProvider`, `SetLimits`, `SetKey`, … | Settings change | No action is performed |
+| `Enable`, `SetProvider`, `SetLimits`, `SetKey`, `SetGenerationSettings`, … | Settings change | No action is performed |
+| `ListProviderModels` with `refresh` | The provider is asked for its list of models, with the key | No action is performed; nothing of the person's is sent |
+| `UseLocalModel`, `CancelLocalModel` | Local AI downloads, checks and starts a model of its catalogue, or stops | No action of P@x's: local AI's own commands, run for the person who asked |
 | `ConfirmMemory`, `ForgetMemory`, `SetMemoryEnabled` | Memory changes | No action is performed; memory is data, never authority |
 
 **P@x's own tools.** The service offers the model three tools of its own, all
@@ -344,8 +431,9 @@ the test in its place where needed).
 
 | File | Holds | Written by | Mode |
 |---|---|---|---|
-| `$XDG_CONFIG_HOME/tur/pax/settings.json` | Switch, consent, provider identifier, model, gateway, output limit, limits, providers the person added. Schema `schemas/pax-settings.schema.json`. Never a key | The service, on a call; whole or not at all (written beside, flushed, renamed) | 0600, directory 0700 |
+| `$XDG_CONFIG_HOME/tur/pax/settings.json` | Switch, consent, provider identifier, model, gateway, output limit, limits, providers the person added, the generation settings chosen for each model (`generation`). Schema `schemas/pax-settings.schema.json`. Never a key | The service, on a call; whole or not at all (written beside, flushed, renamed) | 0600, directory 0700 |
 | `$XDG_CONFIG_HOME/tur/pax/policy.json` | The person's policy (agent-policy.md). Read, never written. Unusable: observe only | Not the service | |
+| `$XDG_STATE_HOME/tur/pax/model-lists/<provider>.json` | The models a provider's own list named, and when it was asked. Kept a day. No key | The service, on `ListProviderModels` with `refresh` | 0600 |
 | `$XDG_STATE_HOME/tur/pax/spending.json` | Per day: responses, tokens, cost, currency. 62 days. No words, no key | The service, after every response | 0600 |
 | `$XDG_STATE_HOME/tur/pax/audit.jsonl` | The audit trail of pax-orchestrator.md section 7, plus three events ([section 8](#8-audit)); each line now says when it was written (`__REALTIME_TIMESTAMP`, microseconds, the journal's name for it) | The service | as created |
 | `$XDG_DATA_HOME/tur/pax/` | Memory, schedules, runs (pax-memory-and-schedules.md) | The service | 0600 / 0700 |

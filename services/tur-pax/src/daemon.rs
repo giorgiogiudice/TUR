@@ -463,15 +463,14 @@ pub fn run_models(
             accept_licence,
             ..
         } => models_use(&connection, &incoming, choice, *yes, *accept_licence, out),
-        ModelsCommand::Cancel { .. } => {
-            call_service(&connection, "CancelLocalModel", Vec::new()).and_then(|_| {
+        ModelsCommand::Cancel { .. } => call_service(&connection, "CancelLocalModel", Vec::new())
+            .and_then(|_| {
                 writeln!(
                     out,
                     "Local AI was asked to stop. What it downloaded is kept."
                 )
                 .map_err(|error| error.to_string())
-            })
-        }
+            }),
         ModelsCommand::Settings {
             choice,
             set,

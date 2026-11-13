@@ -735,9 +735,7 @@ impl ProviderEntry {
     /// ([`tur_pax_providers::list_models`]): its address, or the gateway
     /// address of the settings, and the timeouts of that address.
     pub fn listing_config(&self, gateway: Option<&str>) -> ProviderConfig {
-        let base_url = gateway
-            .map(str::to_owned)
-            .or_else(|| self.base_url.clone());
+        let base_url = gateway.map(str::to_owned).or_else(|| self.base_url.clone());
         let mut config = self.probe("models", None);
         config.timeouts = timeouts_for(base_url.as_deref());
         config.base_url = base_url;
@@ -770,9 +768,13 @@ impl ProviderEntry {
             if model.settings.is_some()
                 && let Some(spec) = self.settings_spec(&model.model)
             {
-                spec.check(self.adapter, self.reasoning_style).map_err(|reason| {
-                    format!("the generation settings of a model of {}: {reason}", self.id)
-                })?;
+                spec.check(self.adapter, self.reasoning_style)
+                    .map_err(|reason| {
+                        format!(
+                            "the generation settings of a model of {}: {reason}",
+                            self.id
+                        )
+                    })?;
             }
         }
         if !self.key_required && self.adapter != ProviderId::OpenAiChat {

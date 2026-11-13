@@ -20,8 +20,7 @@ use tur_pax_providers::{
 };
 
 use common::{
-    FakeServer, FollowUp, Reply, SYSTEM, Wire, base_url, config, config_with, hello, provider,
-    run,
+    FakeServer, FollowUp, Reply, SYSTEM, Wire, base_url, config, config_with, hello, provider, run,
 };
 
 /// The two tools of the manifest example in the design document.

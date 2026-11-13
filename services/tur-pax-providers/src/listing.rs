@@ -83,7 +83,13 @@ fn label(value: Option<&Value>) -> Option<String> {
 
 /// The models of one page: `items` is the array, `name` and `label` the
 /// fields of an item, `prefix` what is taken off the front of a name.
-fn read_items(items: &[Value], name: &str, label_field: &str, prefix: &str, out: &mut Vec<ListedModel>) {
+fn read_items(
+    items: &[Value],
+    name: &str,
+    label_field: &str,
+    prefix: &str,
+    out: &mut Vec<ListedModel>,
+) {
     for item in items {
         let Some(model) = item.get(name).and_then(Value::as_str) else {
             continue;

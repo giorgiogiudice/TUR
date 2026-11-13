@@ -379,8 +379,7 @@ pub(crate) fn apply_openai_chat(generation: &Generation, body: &mut Value) {
         }
         ReasoningStyle::EnableThinking => {
             if let Some(effort) = generation.effort {
-                body["chat_template_kwargs"] =
-                    json!({ "enable_thinking": effort != Effort::None });
+                body["chat_template_kwargs"] = json!({ "enable_thinking": effort != Effort::None });
             }
             if let Some(budget) = generation.thinking_budget {
                 body["thinking_budget_tokens"] = json!(budget);
@@ -463,7 +462,10 @@ mod tests {
                 },
             ];
             for generation in bad {
-                assert!(generation.check(family).is_err(), "{family}: {generation:?}");
+                assert!(
+                    generation.check(family).is_err(),
+                    "{family}: {generation:?}"
+                );
             }
         }
     }
@@ -567,14 +569,20 @@ mod tests {
         llama.reasoning_style = ReasoningStyle::EnableThinking;
         let mut server = json!({});
         apply_openai_chat(&llama, &mut server);
-        assert_eq!(server["chat_template_kwargs"], json!({ "enable_thinking": true }));
+        assert_eq!(
+            server["chat_template_kwargs"],
+            json!({ "enable_thinking": true })
+        );
         assert_eq!(server["thinking_budget_tokens"], json!(1024));
         assert!(server.get("reasoning_effort").is_none());
         llama.effort = Some(Effort::None);
         llama.thinking_budget = None;
         let mut quiet = json!({});
         apply_openai_chat(&llama, &mut quiet);
-        assert_eq!(quiet["chat_template_kwargs"], json!({ "enable_thinking": false }));
+        assert_eq!(
+            quiet["chat_template_kwargs"],
+            json!({ "enable_thinking": false })
+        );
         assert!(quiet.get("thinking_budget_tokens").is_none());
     }
 
@@ -593,9 +601,10 @@ mod tests {
             serde_json::to_value(&generation).unwrap(),
             json!({ "effort": "low", "reasoning_style": "enable_thinking" })
         );
-        let back: Generation =
-            serde_json::from_value(json!({ "effort": "low", "reasoning_style": "enable_thinking" }))
-                .unwrap();
+        let back: Generation = serde_json::from_value(
+            json!({ "effort": "low", "reasoning_style": "enable_thinking" }),
+        )
+        .unwrap();
         assert_eq!(back, generation);
         assert!(serde_json::from_value::<Generation>(json!({ "seed": 1 })).is_err());
     }

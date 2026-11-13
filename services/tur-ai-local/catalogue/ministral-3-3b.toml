@@ -61,3 +61,18 @@ summary = "Apache License 2.0. You may use, copy, change and share the model for
 restrictions = "The publisher's model card adds one sentence under its licence: you must not use the model in a way that infringes, misappropriates or otherwise violates anyone's rights, intellectual-property rights included."
 evidence = "The model card at the pinned revision declares apache-2.0 in its header and, under License, links the Apache License 2.0 text at apache.org, followed by the sentence summarised in restrictions. The repository holds no licence file and is not gated."
 checked = "2026-11-13"
+
+[[tested]]
+date = "2026-11-13"
+report = "docs/reports/pax-6.md"
+run = "https://github.com/giorgiogiudice/TUR/actions/runs/43341975820"
+engine = "llama-server b9840 from llama.cpp's own release llama-b9840-bin-ubuntu-x64 (processor variants, AVX2 kernels used), started by tur-ai-local ensure"
+hardware = "GitHub-hosted ubuntu-24.04 runner: AMD EPYC 7763, 4 logical processors (2 cores), AVX2 and FMA, 16.8 GB of memory, no graphics processor"
+context = 8192
+generation_tokens_per_second = 9.11
+prompt_tokens_per_second = 34.76
+peak_memory_bytes = 5403578368
+tool_call = "yes"
+image_input = "not-tested"
+embeddings = "not-tested"
+notes = "One P@x task (two-tools) through the local preset: 4 requests, three tool calls (device_list_problems, catalogue_search, catalogue_route), answered. The speeds are llama-server's own timings for P@x's first request: 2,684 prompt tokens in 77.2 s, then 8 tokens generated. Peak memory is the engine's resident set as tur-ai-local status read it once the engine was ready, before the task."

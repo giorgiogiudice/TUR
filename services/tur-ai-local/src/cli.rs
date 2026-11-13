@@ -48,8 +48,8 @@ use crate::SCHEMA_VERSION;
 use crate::catalogue::{Capability, Catalogue, INSTALLED_CATALOGUE, Model, Tested, Thinking};
 use crate::codes::{AiLocalCode, CodeEntry, registry};
 use crate::download::{self, DownloadError};
-use crate::ensure;
 use crate::engine::{self, DEFAULT_ENGINE, DEFAULT_PORT, Launch, Listen, Reasoning};
+use crate::ensure;
 use crate::fit::{self, DEFAULT_CONTEXT, Fit, Recommendation, Verdict};
 use crate::hardware::{self, Hardware, Source};
 use crate::human_bytes;
@@ -838,7 +838,11 @@ fn models_command(places: &Places, args: &ModelsArgs, out: &mut dyn Write) -> Re
             text.push_str(&format!("  {}\n", fit.message));
         }
         if let Some(tier) = &view.tier {
-            text.push_str(&format!("  {} {}\n", tier.message, tier.reasons.last().map_or("", String::as_str)));
+            text.push_str(&format!(
+                "  {} {}\n",
+                tier.message,
+                tier.reasons.last().map_or("", String::as_str)
+            ));
         }
     }
     for name in &other_folders {
@@ -891,7 +895,10 @@ fn recommend_command(
     }
     text.push_str("\nEvery model, for this computer:\n");
     for tier in &recommendation.tiers {
-        text.push_str(&format!("{} [{}] {}\n", tier.model, tier.tier, tier.message));
+        text.push_str(&format!(
+            "{} [{}] {}\n",
+            tier.model, tier.tier, tier.message
+        ));
         for reason in &tier.reasons {
             text.push_str(&format!("  {reason}\n"));
         }

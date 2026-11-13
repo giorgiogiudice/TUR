@@ -199,7 +199,10 @@ impl Events for BusEvents {
             ),
             Event::SchedulesChanged => self.signal("SchedulesChanged", Vec::new()),
             Event::LocalModelProgress { model, event } => {
-                self.signal("LocalModelProgress", vec![Value::string(model), text(event)]);
+                self.signal(
+                    "LocalModelProgress",
+                    vec![Value::string(model), text(event)],
+                );
             }
             Event::MemoryChanged => self.signal("MemoryChanged", Vec::new()),
             Event::StateChanged => {
