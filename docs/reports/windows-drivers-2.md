@@ -20,7 +20,7 @@ SUMMARY
   Driver Framework runtime (Wdf01000.sys) from Microsoft's MIT-licensed
   Windows-Driver-Frameworks source with an open toolchain (clang, lld,
   mingw-w64 headers), builds Wine 11.20's ntoskrnl.exe, wineusb.sys and a
-  new wdfldr.sys (the KMDF loader) with a twelve-patch Wine patch set, and
+  new wdfldr.sys (the KMDF loader) with a thirteen-patch Wine patch set, and
   runs KMDF drivers against emulated USB devices in Fedora 45's Wine.
 - Why: experiment 1 (windows-drivers-1) found that every KMDF driver fails
   to load in Wine because WDFLDR.SYS and Wdf01000.sys are Microsoft
@@ -29,7 +29,7 @@ SUMMARY
 FILES
 - Added: third-party/wdf/** (MIT: Microsoft's LICENSE, patches, compat/
   stand-ins, sources.txt), third-party/wine-patches/** (LGPL-2.1-or-later:
-  COPYING.LIB, twelve patches, series), tests/windows-drivers/kmdf/**,
+  COPYING.LIB, thirteen patches, series), tests/windows-drivers/kmdf/**,
   docs/reports/windows-drivers-2.md
 - Modified: .github/workflows/windows-drivers.yml (jobs kmdf-build,
   kmdf-run; path triggers), tests/windows-drivers/virtual-usb/
@@ -74,7 +74,8 @@ NEXT SAFE ACTION
   trace grew to 14 GB and the job was killed before the FX2 scenario.
   Iteration 10 fixes the cause (`compat/wdm.h`), caps logs, and fills in
   pipe information in `wineusb.sys` (patch 0012; the pipes came back as
-  endpoint 0, packet size 0).
+  endpoint 0, packet size 0) and adds the generic control transfer the
+  framework sends for every driver control request (patch 0013).
 - **Iteration 8 (run 43388872919, commit `abbbb69`) was the first in which
   KMDF code ran in Wine.** Measured in the `kmdftest` scenario:
   - `Wdf01000.sys` built (1,507,328 bytes) and loaded native in Wine;
@@ -111,7 +112,7 @@ NEXT SAFE ACTION
   are in neither Wine nor mingw-w64's libraries and were found at the link.
   The TUR patches add all of the missing ones (0007, 0009, 0010) and
   replace every aborting stub (0001, 0004, 0011).
-- **The Wine side**: twelve patches to Wine 11.20 (`ntoskrnl.exe`, a new
+- **The Wine side**: thirteen patches to Wine 11.20 (`ntoskrnl.exe`, a new
   `wdfldr.sys`, `wineusb.sys`), all of which also apply to Wine master
   (section 4). They are installed over Fedora 45's Wine in the CI container.
 
@@ -254,6 +255,7 @@ both also apply to master `cc5d1d86` (checked in every build).
 | 0009 `ntoskrnl.exe: Add power framework functions that report it unavailable.` | `PoFxRegisterDevice` fails with `STATUS_NOT_SUPPORTED`; the ten functions that take its handle do nothing | imported by the framework (`poxinterfacekm.cpp`); without them the image does not load |
 | 0010 `ntoskrnl.exe: Add more functions the KMDF runtime imports.` | `ExAllocateTimer` fails (callers use `KeSetTimer` timers), `ExSetTimer`/`ExCancelTimer`/`ExDeleteTimer`, `IoGetActivityIdIrp`/`IoSetActivityIdIrp`, `IoGetInitiatorProcess`, `IoQueryFullDriverPath` (from the loader entry), `VfIsRuleClassEnabled` (FALSE), `VfCheckNxPoolType` | the link of iteration 7 |
 | 0012 `wineusb.sys: Fill in interface and pipe information on SELECT_CONFIGURATION.` | fills each interface's class/subclass/protocol and each pipe's endpoint, packet size, interval and type from the active configuration descriptor, sets configuration and interface handles, walks every interface in the request | iteration 9: the framework builds the request itself, and its pipes came back as endpoint 0, packet size 0, control; Wine had relied on usbd.sys's `USBD_CreateConfigurationRequestEx` prefilling them |
+| 0013 `wineusb.sys: Handle URB_FUNCTION_CONTROL_TRANSFER and URB_FUNCTION_GET_STATUS_FROM_DEVICE.` | submits the generic control transfer (the caller's setup packet; direction flag and buffer length take precedence, as on Windows) and the device get-status request on the default control pipe | the framework sends every driver control transfer (`WdfUsbTargetDeviceSendControlTransferSynchronously`, `WdfUsbTargetDeviceFormatRequestForControlTransfer`, which the FX2 sample uses for its bar graph, switches and 7-segment display) as `URB_FUNCTION_CONTROL_TRANSFER`, which wineusb rejected; get-status was the FIXME of iteration 9; found reading the framework's source |
 | 0011 `ntoskrnl.exe: Implement the remaining stubs the KMDF runtime imports.` | `MmIsDriverVerifying` returns FALSE (no Driver Verifier, as on Windows without it); `MmSizeOfMdl`, `IoBuildPartialMdl`, `IoSetCompletionRoutineEx`, `KeGetRecommendedSharedDataAlignment`, `MmLockPagable{Data,Image}Section`, the error-log and WMI-event functions (no event log, no WMI), `WmiTraceMessageVa`, `IoInvalidateDeviceState`, `IoRequestDeviceEject`, `IoRegisterLastChanceShutdownNotification`, `IoGetDmaAdapter` (no adapters), `KeSynchronizeExecution` and the interrupt spin locks (interrupts are never connected), the `KdDebuggerNotPresent` variable | iteration 8: `WdfDriverCreate` called `MmIsDriverVerifying`, a `stub`, and the driver host aborted; the rest were the other `stub` imports in 5.2, each an abort waiting to happen |
 
 A correction to an earlier iteration of this report: patch 0009 was first

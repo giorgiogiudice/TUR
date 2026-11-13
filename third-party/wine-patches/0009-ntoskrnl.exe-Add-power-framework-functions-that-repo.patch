@@ -6,7 +6,7 @@ which ignores these lines.
 From 6f1810502fa24d7b2d333b840be172f45e2f3cb5 Mon Sep 17 00:00:00 2001
 From: TUR experiment <tur-experiment@users.noreply.github.com>
 Date: Fri, 13 Nov 2026 10:50:09 +0300
-Subject: [PATCH 09/12] ntoskrnl.exe: Add power framework functions that report
+Subject: [PATCH 09/13] ntoskrnl.exe: Add power framework functions that report
  it unavailable.
 
 PoFxRegisterDevice and the functions that use its handle were not
