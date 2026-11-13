@@ -43,6 +43,7 @@ on:
       # The boot test's harness, which tests/iso builds on.
       - "tests/boot/**"
       - "scripts/build-image.sh"
+      - ".github/actions/use-base-mirror/**"
       - "VERSION"
       - ".github/workflows/iso.yml"
   pull_request:
@@ -62,6 +63,7 @@ on:
       # The boot test's harness, which tests/iso builds on.
       - "tests/boot/**"
       - "scripts/build-image.sh"
+      - ".github/actions/use-base-mirror/**"
       - "VERSION"
       - ".github/workflows/iso.yml"
   workflow_dispatch:
@@ -109,10 +111,16 @@ jobs:
     needs: lint
     runs-on: ubuntu-24.04
     timeout-minutes: 150
+    permissions:
+      contents: read
+      packages: read
     env:
       OUT: out/iso
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      # The pinned base from TUR's mirror when quay.io no longer has it.
+      - uses: ./.github/actions/use-base-mirror
 
       - name: Runner environment
         run: |
@@ -436,12 +444,18 @@ jobs:
     needs: lint
     runs-on: ubuntu-24.04
     timeout-minutes: 150
+    permissions:
+      contents: read
+      packages: read
     env:
       OUT: out/iso-proof
       TEST_IMAGE: localhost/tur-boot-test:ci
       PAYLOAD: localhost/tur-iso-test:ci
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      # The pinned base from TUR's mirror when quay.io no longer has it.
+      - uses: ./.github/actions/use-base-mirror
 
       - name: Runner environment
         run: |
