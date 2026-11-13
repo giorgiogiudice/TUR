@@ -43,6 +43,22 @@ error codes of codes.rs where one exists. The engine has five codes of its
 own, `TUR-INSTALL-MEDIUM-001` to `-005` (ADR-0018 and ADR-0025), not yet in
 the registry crate.
 
+**Beside Windows on the same disk** ([ADR-0028](../adr/0028-install-beside-windows.md)).
+For a disk that holds Windows and has at least 20 GiB of free space (made
+with Windows' Shrink Volume), the engine offers a second way: `disks` lists,
+per Windows disk, `"beside": {possible, code, why, free_start, free_size,
+before, after, esp, esp_size, esp_free, esp_needed, phrase}`; `install
+--mode beside --region-start B --region-size B ... --phrase "BESIDE ..."`
+checks the disk and the free stretch again, then (`run_beside`) records the
+GPT and the SHA-256 of every file on the ESP, adds one GPT entry ("TUR",
+type Linux root x86-64) for the free stretch, makes ext4 in it, runs `bootc
+install to-filesystem` into it (bootupd adds TUR's boot loader to Windows'
+ESP and a "TUR" firmware entry first in the boot order), puts Windows'
+`EFI/Boot/bootx64.efi` back, writes "Windows" into
+`/boot/grub2/custom.cfg`, and checks that every partition entry and every
+ESP file Windows had is unchanged. Its state lines start `TUR-INSTALLER:
+beside `. Never `--replace=alongside`: it deletes the ESP's `EFI` directory.
+
 The installation log (the engine's log, bootc's output, the graphical
 installer's state lines) is copied to `/var/log/tur-installer/<session>/`
 on the installed disk (§28.3), with the SELinux label of `/var/log`. It is

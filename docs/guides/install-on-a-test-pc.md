@@ -11,11 +11,12 @@ installer).
 
 Read these three points before anything else.
 
-- **The installer erases one whole disk.** Everything on the disk you choose
-  is destroyed: every partition, every operating system, every file. It
-  cannot keep data, and it cannot put TUR on the same disk as Windows or
-  another system. Use a computer, or at least a disk, with nothing on it that
-  you need. To keep Windows, install TUR on a second disk (section 7).
+- **The installer erases one whole disk**, unless you choose **Use the free
+  space beside Windows** on a disk that holds Windows and has room (section
+  7b). Erasing destroys everything on the disk: every partition, every
+  operating system, every file. Use a computer, or at least a disk, with
+  nothing on it that you need, and back up. To keep Windows, install TUR on
+  a second disk (section 7) or beside Windows on the same disk (section 7b).
 - **Everything below was tested in a virtual machine only.** No real
   computer, no real USB stick and no real disk has been used yet. You are the
   first. Section 9 says what to report back.
@@ -198,8 +199,10 @@ what is on it in plain words: Windows, data encrypted with BitLocker, Windows
 files (NTFS), Linux, or empty. The installer only reads disks to find this
 out. The stick itself is shown and cannot be chosen; so can't a disk that is
 too small or in use, and it says why. Choose a disk. Under **How to install**
-there is one choice in this version, **Erase this disk and install TUR**;
-**Use the free space beside Windows** is shown as coming later (section 7).
+there are two choices: **Erase this disk and install TUR**, and, on a disk
+that holds Windows and has free space beside it, **Use the free space beside
+Windows** (section 7b). When the second is not possible on the chosen disk,
+the screen says why.
 
 ![Where to install](../reports/assets/TUR-009/wizard-3-disks.png)
 
@@ -378,9 +381,7 @@ Windows, no real BitLocker and no real firmware were involved.
    changed at that point.
 6. On the second disk, type the phrase, install, and restart.
 
-The option **Use the free space beside Windows** on the disk screen is not
-available yet: installing on the same disk as Windows is planned (issue 64)
-and not built.
+To put TUR on the same disk as Windows instead, see section 7b.
 7. **Choosing the system at start-up.** TUR's boot menu does not list Windows.
    Choose with the firmware's one-time boot menu key, which depends on the
    maker: commonly F12 (Dell, Lenovo, Acer), F11 (MSI, ASRock), F8 (ASUS),
@@ -402,6 +403,61 @@ can. Windows is not affected. If the firmware still lists an entry for the
 removed disk, it skips it; the entry can be deleted in the firmware setup.
 If TUR was first in the boot order, make "Windows Boot Manager" first again
 in the firmware setup.
+
+## 7b. Beside Windows on the same disk
+
+TUR can go into **free space on the Windows disk that you make in Windows
+first**. The installer does not shrink Windows; Windows does that itself,
+safely, including with BitLocker. Windows, its files and its partitions are
+kept; TUR adds its start-up files to Windows' EFI system partition and a
+"Windows" entry to its own start menu ([ADR-0028](../adr/0028-install-beside-windows.md),
+[TUR-011](../reports/TUR-011.md)).
+
+**Tested in a virtual machine only**, on a disk laid out as Windows leaves
+it, with no Microsoft file in it and a stand-in program where Windows' boot
+manager would be. No real Windows, no real BitLocker, no real firmware, and
+not with Secure Boot on. You are the first to try it with Windows.
+
+1. **Back up first**, and **have the BitLocker recovery key ready** (section
+   7, points 1 and 2).
+2. **Shut Windows down fully**: hold Shift while you choose Shut down. (A
+   normal shut down with Fast Startup leaves Windows half-asleep.)
+3. **Make room in Windows.** At least 20 GiB; 60 GiB or more is better for
+   using TUR. Right-click Start, **Disk Management**, right-click the Windows
+   partition (C:), **Shrink Volume**, enter the amount in MB (20 GiB is
+   20480), **Shrink**. The free space appears as "Unallocated", usually
+   between C: and a small recovery partition. Leave it unallocated: do not
+   make a new volume in it.
+4. **Start from the installer stick** (section 4) and go through section 5.
+   Choose the Windows disk. Under **How to install** choose **Use the free
+   space beside Windows**; it says how much free space it found. If it is
+   not available, the screen says why: not enough free space (step 3), or
+   Windows' EFI system partition is too full, or holds another Linux's
+   start-up files.
+5. **The confirmation** says that everything on the disk is kept, where TUR
+   goes, and what is added to the EFI system partition. Type the phrase it
+   shows, **BESIDE** and the end of the disk's serial number (the erase
+   phrase does not work here), and choose **Install beside Windows**.
+   In the text installer, choose the disk's number, then **1**.
+6. **Starting either system.** The computer then starts TUR's menu first. It
+   lists TUR and **Windows**; choose Windows with the arrow keys and Enter,
+   or press **w** while the menu shows (it waits 5 seconds). Windows is also
+   still in the computer's own boot menu (section 7, point 7), as "Windows
+   Boot Manager". **If Windows uses BitLocker**, starting it from TUR's menu
+   may make it ask for the recovery key each time; start it from the
+   computer's boot menu instead, or move "Windows Boot Manager" back to the
+   top of the boot order in the firmware setup and start TUR from the boot
+   menu (its entry is "TUR").
+7. **If the installation stops** (a power cut, an error), Windows' partitions
+   were not written to and Windows still starts from the computer's boot
+   menu. The free space then holds an unfinished partition named "TUR":
+   delete it in Windows' Disk Management (right-click it, Delete Volume),
+   and try again.
+
+Please report: whether Windows started from TUR's menu, whether BitLocker
+asked for its key, and the firmware's boot order afterwards.
+
+**Removing TUR from beside Windows.** In Windows' Disk Management, delete the "TUR" partition; in the firmware setup, delete the "TUR" boot entry. TUR's start-up files stay in `EFI\fedora` on the EFI system partition, harmless; removing them needs a tool that writes the EFI system partition, and is not described here.
 
 ## 8. What this build cannot do
 
