@@ -2,3 +2,7 @@
 # Order in which build-wine.sh applies the patches.
 0001-ntoskrnl.exe-Run-DPCs-queued-with-KeInsertQueueDpc.patch
 0002-wdfldr.sys-Add-a-Kernel-Mode-Driver-Framework-loader.patch
+0003-ntoskrnl.exe-Implement-driver-object-extensions.patch
+0004-ntoskrnl.exe-Add-a-WmiQueryTraceInformation-that-fai.patch
+0005-ntoskrnl.exe-Add-KeQuerySystemTimePrecise.patch
+0006-ntoskrnl.exe-Add-IoOpenDriverRegistryKey.patch

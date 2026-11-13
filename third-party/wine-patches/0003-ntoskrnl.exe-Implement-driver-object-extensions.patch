@@ -1,0 +1,133 @@
+SPDX-License-Identifier: LGPL-2.1-or-later
+A patch to Wine (https://gitlab.winehq.org/wine/wine), under Wine's licence;
+see README.md and COPYING.LIB in this directory. Applied with `git apply`,
+which ignores these lines.
+
+From 5bd0e9652b23999617bd4efff010cca905a8c2c4 Mon Sep 17 00:00:00 2001
+From: TUR experiment <tur-experiment@users.noreply.github.com>
+Date: Fri, 13 Nov 2026 10:07:54 +0300
+Subject: [PATCH 3/6] ntoskrnl.exe: Implement driver object extensions.
+
+IoAllocateDriverObjectExtension returned STATUS_NOT_IMPLEMENTED and
+IoGetDriverObjectExtension NULL. The Kernel-Mode Driver Framework keeps its
+driver object in an extension (WdfDriverCreate), as do class drivers
+such as classpnp. Keep a list of extensions per driver object, keyed by
+the client identification address, freed with the driver object.
+---
+ dlls/ntoskrnl.exe/ntoskrnl.c         | 64 +++++++++++++++++++++++++---
+ dlls/ntoskrnl.exe/ntoskrnl_private.h |  1 +
+ 2 files changed, 60 insertions(+), 5 deletions(-)
+
+diff --git a/dlls/ntoskrnl.exe/ntoskrnl.c b/dlls/ntoskrnl.exe/ntoskrnl.c
+index 2bbd5fd..4455538 100644
+--- a/dlls/ntoskrnl.exe/ntoskrnl.c
++++ b/dlls/ntoskrnl.exe/ntoskrnl.c
+@@ -1093,14 +1093,45 @@ done:
+ /***********************************************************************
+  *           IoAllocateDriverObjectExtension  (NTOSKRNL.EXE.@)
+  */
++struct driver_extension
++{
++    struct list entry;
++    void *id;
++    char data[1];
++};
++
+ NTSTATUS WINAPI IoAllocateDriverObjectExtension( PDRIVER_OBJECT DriverObject,
+                                                  PVOID ClientIdentificationAddress,
+                                                  ULONG DriverObjectExtensionSize,
+                                                  PVOID *DriverObjectExtension )
+ {
+-    FIXME( "stub: %p, %p, %lu, %p\n", DriverObject, ClientIdentificationAddress,
+-            DriverObjectExtensionSize, DriverObjectExtension );
+-    return STATUS_NOT_IMPLEMENTED;
++    struct wine_driver *driver = CONTAINING_RECORD( DriverObject, struct wine_driver, driver_obj );
++    struct driver_extension *ext;
++
++    TRACE( "%p, %p, %lu, %p\n", DriverObject, ClientIdentificationAddress,
++           DriverObjectExtensionSize, DriverObjectExtension );
++
++    *DriverObjectExtension = NULL;
++    EnterCriticalSection( &drivers_cs );
++    LIST_FOR_EACH_ENTRY( ext, &driver->extensions, struct driver_extension, entry )
++    {
++        if (ext->id == ClientIdentificationAddress)
++        {
++            LeaveCriticalSection( &drivers_cs );
++            return STATUS_OBJECT_NAME_COLLISION;
++        }
++    }
++    if (!(ext = HeapAlloc( GetProcessHeap(), HEAP_ZERO_MEMORY,
++                           offsetof( struct driver_extension, data[DriverObjectExtensionSize] ) )))
++    {
++        LeaveCriticalSection( &drivers_cs );
++        return STATUS_INSUFFICIENT_RESOURCES;
++    }
++    ext->id = ClientIdentificationAddress;
++    list_add_tail( &driver->extensions, &ext->entry );
++    LeaveCriticalSection( &drivers_cs );
++    *DriverObjectExtension = ext->data;
++    return STATUS_SUCCESS;
+ }
+ 
+ 
+@@ -1110,8 +1141,23 @@ NTSTATUS WINAPI IoAllocateDriverObjectExtension( PDRIVER_OBJECT DriverObject,
+ PVOID WINAPI IoGetDriverObjectExtension( PDRIVER_OBJECT DriverObject,
+                                          PVOID ClientIdentificationAddress )
+ {
+-    FIXME( "stub: %p, %p\n", DriverObject, ClientIdentificationAddress );
+-    return NULL;
++    struct wine_driver *driver = CONTAINING_RECORD( DriverObject, struct wine_driver, driver_obj );
++    struct driver_extension *ext;
++    void *ret = NULL;
++
++    TRACE( "%p, %p\n", DriverObject, ClientIdentificationAddress );
++
++    EnterCriticalSection( &drivers_cs );
++    LIST_FOR_EACH_ENTRY( ext, &driver->extensions, struct driver_extension, entry )
++    {
++        if (ext->id == ClientIdentificationAddress)
++        {
++            ret = ext->data;
++            break;
++        }
++    }
++    LeaveCriticalSection( &drivers_cs );
++    return ret;
+ }
+ 
+ 
+@@ -1546,6 +1592,13 @@ static NTSTATUS WINAPI unhandled_irp( DEVICE_OBJECT *device, IRP *irp )
+ static void free_driver_object( void *obj )
+ {
+     struct wine_driver *driver = obj;
++    struct driver_extension *ext, *next;
++
++    LIST_FOR_EACH_ENTRY_SAFE( ext, next, &driver->extensions, struct driver_extension, entry )
++    {
++        list_remove( &ext->entry );
++        HeapFree( GetProcessHeap(), 0, ext );
++    }
+     RtlFreeUnicodeString( &driver->driver_obj.DriverName );
+     RtlFreeUnicodeString( &driver->driver_obj.DriverExtension->ServiceKeyName );
+     free_kernel_object( driver );
+@@ -1591,6 +1644,7 @@ NTSTATUS WINAPI IoCreateDriver( UNICODE_STRING *name, PDRIVER_INITIALIZE init )
+     for (i = 0; i <= IRP_MJ_MAXIMUM_FUNCTION; i++)
+         driver->driver_obj.MajorFunction[i] = unhandled_irp;
+     list_init( &driver->root_pnp_devices );
++    list_init( &driver->extensions );
+ 
+     EnterCriticalSection( &drivers_cs );
+     if (wine_rb_put( &wine_drivers, &driver->driver_obj.DriverName, &driver->entry ))
+diff --git a/dlls/ntoskrnl.exe/ntoskrnl_private.h b/dlls/ntoskrnl.exe/ntoskrnl_private.h
+index 4bbf26c..68547bd 100644
+--- a/dlls/ntoskrnl.exe/ntoskrnl_private.h
++++ b/dlls/ntoskrnl.exe/ntoskrnl_private.h
+@@ -102,6 +102,7 @@ struct wine_driver
+     SERVICE_STATUS_HANDLE service_handle;
+     struct wine_rb_entry entry;
+     struct list root_pnp_devices;
++    struct list extensions;
+ };
+ 
+ void ObReferenceObject( void *obj );

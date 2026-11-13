@@ -185,6 +185,10 @@ both also apply to master `cc5d1d86` (checked in every build).
 |---|---|---|
 | 0001 `ntoskrnl.exe: Run DPCs queued with KeInsertQueueDpc.` | queued DPCs run in order on one driver-host thread; `KeRemoveQueueDpc` implemented (was `stub`); `KeFlushQueuedDpcs` waits; `KeInitializeDpc` no longer a semi-stub | KMDF's `WDFDPC`, and any driver's DPC, never ran (the stub that closed bug 49394 returns TRUE and does nothing) |
 | 0002 `wdfldr.sys: Add a Kernel-Mode Driver Framework loader.` | new module: `WdfVersionBind` loads the `Wdf01000` service with `ZwLoadDriver`, accepts `WdfRegisterLibrary`, registers clients; `WdfLdrQueryInterface`; class extensions return `STATUS_NOT_SUPPORTED` | every KMDF driver imports it (bug 56228) |
+| 0003 `ntoskrnl.exe: Implement driver object extensions.` | `IoAllocateDriverObjectExtension` (returned `STATUS_NOT_IMPLEMENTED`) and `IoGetDriverObjectExtension` (returned NULL): a list per driver object | `WdfDriverCreate` keeps the framework's driver object in one; found reading Wine's source |
+| 0004 `ntoskrnl.exe: Add a WmiQueryTraceInformation that fails.` | was a `stub` (aborts); now returns `STATUS_NOT_SUPPORTED` | called while the framework starts (`globals.cpp`); the framework falls back when it fails |
+| 0005 `ntoskrnl.exe: Add KeQuerySystemTimePrecise.` | not exported before | imported by the framework (Mx layer) |
+| 0006 `ntoskrnl.exe: Add IoOpenDriverRegistryKey.` | not exported before; opens or creates `Parameters` (or `State`) under the service key | imported by the framework (`fxglobals.h`) |
 
 Built in CI (`build-wine.sh`: Wine's tools, `ntoskrnl.exe`, `wdfldr.sys`
 only) and put over Fedora 45's Wine in the throw-away container
