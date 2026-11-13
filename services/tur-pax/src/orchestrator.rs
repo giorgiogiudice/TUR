@@ -196,12 +196,14 @@ impl Default for TaskLimits {
 pub const MIN_TOOL_RESULT_BYTES: usize = 2048;
 
 /// The most bytes of one tool's result a model whose context holds
-/// `context_tokens` tokens is sent: an eighth of the context, counted at
-/// four bytes a token (JSON text runs at three to four), and never less than
-/// [`MIN_TOOL_RESULT_BYTES`]. A local model with 8 192 tokens gets 4 096
-/// bytes; a model with 200 000 tokens 100 000.
+/// `context_tokens` tokens is sent: a quarter of the context, counted at
+/// four bytes a token (JSON text runs at three to four), which is one byte
+/// per token of context, and never less than [`MIN_TOOL_RESULT_BYTES`]. A
+/// local model with 8 192 tokens gets 8 192 bytes, about 2 000 to 2 700
+/// tokens, beside P@x's own request of about 3 300; a model with 200 000
+/// tokens 200 000.
 pub fn tool_result_budget(context_tokens: u64) -> usize {
-    usize::try_from(context_tokens.saturating_mul(4) / 8)
+    usize::try_from(context_tokens)
         .unwrap_or(usize::MAX)
         .max(MIN_TOOL_RESULT_BYTES)
 }
@@ -2138,14 +2140,14 @@ mod tests {
     #[test]
     fn a_result_is_cut_to_fit_a_small_context() {
         // The budget scales with the context and has a floor.
-        assert_eq!(tool_result_budget(8192), 4096);
-        assert_eq!(tool_result_budget(200_000), 100_000);
+        assert_eq!(tool_result_budget(8192), 8192);
+        assert_eq!(tool_result_budget(200_000), 200_000);
         assert_eq!(tool_result_budget(1000), MIN_TOOL_RESULT_BYTES);
         let limits = TaskLimits::default();
         assert_eq!(limits.tool_result_bytes, None);
         assert_eq!(
             limits.with_context(Some(8192)).tool_result_bytes,
-            Some(4096)
+            Some(8192)
         );
         assert_eq!(limits.with_context(None), limits);
 

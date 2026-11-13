@@ -191,9 +191,10 @@ code and the sentence the user is shown.
 (an adapter's `max_output_bytes`), which a local model's 8 192 tokens could
 not hold at all. When the model's context is known (`context_tokens`, as the
 person chose it for a model on this computer or as the model list declares
-it), one tool's result is cut to an eighth of the context, counted at four
+it), one tool's result is cut to a quarter of the context, counted at four
 bytes a token, never below 2 048 bytes (`orchestrator::tool_result_budget`:
-4 096 bytes for 8 192 tokens, 100 000 for 200 000). The frame stays; the
+8 192 bytes for 8 192 tokens, 200 000 for 200 000; P@x's own request with
+every tool set is about 3 300 tokens). The frame stays; the
 program's output and its error output become the beginning of their text,
 cut at a character, with `"truncated": true` and a `cut` sentence that says
 why, and the task's report marks the call as truncated. A model with no
