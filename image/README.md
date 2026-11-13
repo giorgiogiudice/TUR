@@ -231,6 +231,68 @@ Fedora's logos among them, until a published image is squashed or re-chunked
 splash is shown only with the `rhgb` or `splash` kernel argument, which the
 image does not set. See TUR-008.
 
+## The base image and its mirror
+
+`base.lock` pins `quay.io/fedora/fedora-kinoite` by digest. Fedora moves the
+`:45` tag every day, and quay.io removes the manifest it pointed to about a day
+later (13 November 2026: `sha256:f857f6c5…` answered "manifest unknown" and
+every image build failed). A digest is therefore only pullable from quay.io
+for a day or two after it stops being current.
+
+TUR keeps its own copy of every digest it pins:
+
+- **The mirror** is the package `ghcr.io/giorgiogiudice/tur-base` in GitHub's
+  registry. It holds unmodified copies of Fedora's image, made with
+  `skopeo copy --all --preserve-digests`, so each has exactly the digest it has
+  on quay.io, for every platform in the index. Each digest is tagged twice:
+  with its version (`45.20261113.0`) and as `sha256-<hex>`. The package is
+  private and is used only by TUR's CI: the repository's workflows read it with
+  their own token; nobody else can.
+- **The `base-mirror` workflow** copies the digest in `base.lock` whenever the
+  file changes: on a pull request from this repository, on the push to `main`,
+  and by hand. It checks that the mirror returns the same digest by digest and
+  by both tags, and for each platform. Its job `through-mirror` then makes
+  quay.io unreachable, builds the image from the mirror alone and checks that
+  the image's `org.tur.base.*` labels still name quay.io and the pinned digest.
+- **The action `.github/actions/use-base-mirror`** runs after checkout in every
+  job that pulls the base (`image`, `boot`, `rollback` and `update`; `iso`
+  does not use it yet, so its builds still depend on quay.io). It
+  logs podman and skopeo in to ghcr.io, as root and as the runner user, and
+  writes this [containers-registries.conf(5)][rc] drop-in to
+  `/etc/containers/registries.conf.d/` and to the runner user's
+  `~/.config/containers/registries.conf.d/`:
+
+  ```toml
+  [[registry]]
+  prefix = "quay.io/fedora/fedora-kinoite"
+  location = "quay.io/fedora/fedora-kinoite"
+  mirror-by-digest-only = true
+
+  [[registry.mirror]]
+  location = "ghcr.io/giorgiogiudice/tur-base"
+  ```
+
+  A pull or build `FROM quay.io/fedora/fedora-kinoite@sha256:…` then asks the
+  mirror first and quay.io only when the mirror does not have the digest (the
+  mirrors are tried in order, the primary location last). A pull by tag never
+  uses the mirror. The reference the build uses does not change, so the labels,
+  the build manifest and the reproducibility check are the same as before.
+  The action also says, for the pinned digest, whether the mirror and quay.io
+  have it, and fails with an explanation when neither does.
+- **The weekly `pin-age` job** compares the pin with quay.io's current `:45`.
+  When the pin is more than seven days older, it opens (or updates) an issue
+  "Base image pin is N days old" with the new digest and version, and closes it
+  once the pin is fresh again. It opens an issue and not a pull request: a pull
+  request opened with the workflow's own token would not run CI.
+
+A digest that was never mirrored cannot be recovered once quay.io drops it;
+the job `through-mirror` checks that pulling one fails with that explanation.
+So merge a re-pin within a day of the digest it names, and let `base-mirror`
+run on the pull request before then. Only `base-mirror` writes to the package
+(`packages: write`); a job that pulls the base needs `packages: read`.
+
+[rc]: https://github.com/containers/container-libs/blob/main/image/docs/containers-registries.conf.5.md
+
 ## Updating the base pin
 
 The base is pinned by digest. The upstream registry publishes only a rolling tag,
