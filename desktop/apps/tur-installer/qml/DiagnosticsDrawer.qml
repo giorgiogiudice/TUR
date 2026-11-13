@@ -83,9 +83,15 @@ ColumnLayout {
             Layout.fillWidth: true
             spacing: Kit.Theme.spaceRelated
 
+            // An installation that did not complete is not "done".
             Kit.Glyph {
-                kind: Kit.Glyph.Check
-                tint: Kit.Theme.positive
+                id: doneSign
+
+                readonly property bool failed: doneRow.modelData.name === "install"
+                                               && ["failed", "refused", "cancelled"].indexOf(drawer.engine.installState) >= 0
+
+                kind: doneSign.failed ? Kit.Glyph.Negative : Kit.Glyph.Check
+                tint: doneSign.failed ? Kit.Theme.negative : Kit.Theme.positive
                 size: 12
             }
 
