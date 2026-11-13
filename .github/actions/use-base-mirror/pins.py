@@ -47,6 +47,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 
 HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -367,8 +368,16 @@ def cmd_copy(_: list[str]) -> int:
                 continue
             for t in tags:
                 start = datetime.datetime.now()
-                r = subprocess.run(["skopeo", "copy", "--all", "--preserve-digests", "--retry-times", "3",
-                                    src, f"docker://{mirror}:{t}"], capture_output=True, text=True)
+                # skopeo's own retries do not cover a blob upload that ghcr.io
+                # answers with 500 (seen on 13 November 2026); a new attempt
+                # skips the blobs that arrived.
+                for attempt in range(1, 5):
+                    r = subprocess.run(["skopeo", "copy", "--all", "--preserve-digests", "--retry-times", "3",
+                                        src, f"docker://{mirror}:{t}"], capture_output=True, text=True)
+                    if r.returncode == 0:
+                        break
+                    print(f"    attempt {attempt} failed: {r.stderr.strip().splitlines()[-1][-400:] if r.stderr.strip() else '?'}")
+                    time.sleep(20 * attempt)
                 if r.returncode != 0:
                     print(r.stdout[-2000:], r.stderr[-2000:])
                     failed.append(p.ref)

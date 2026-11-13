@@ -31,4 +31,4 @@ BUILDER_REVISION=1
 # builds the image, pushes it and prints the BUILDER_DIGEST line to put here;
 # its check "The builder image is pinned" fails until then.
 BUILDER_IMAGE=ghcr.io/giorgiogiudice/tur-desktop-builder
-BUILDER_DIGEST=
+BUILDER_DIGEST=sha256:e319e96c9f19538229dc1f2bc11230b103fe53bdb95b0e7293b7c756e75682af
