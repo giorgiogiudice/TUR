@@ -229,7 +229,10 @@ public:
     Q_INVOKABLE void refresh(bool checkUpdates);
     Q_INVOKABLE void refreshSources();
     // Switches a source on or off for this person, then lists them again.
-    Q_INVOKABLE void setSource(const QString &name, bool on);
+    // With `thenPlan`, once the source is switched, the plan of installing
+    // that application is made again ("Switch on Flathub and try again").
+    Q_INVOKABLE void setSource(const QString &name, bool on, const QString &thenPlan = QString(),
+                               const QString &installerFile = QString());
 
     // Makes the plan of installing an application, and shows it: the
     // operation's phase becomes Planned. Nothing is installed until
@@ -279,6 +282,7 @@ private:
 
     AppsSource *source();
     void dropSource();
+    void listInstalled(bool checkUpdates, bool afresh);
     quint64 submit(const AppsRequest &request, LineHandler onLine, ReplyHandler onEnd);
     void forget(quint64 id);
     void lineArrived(quint64 id, const QByteArray &line);
@@ -306,6 +310,7 @@ private:
     bool m_updatesChecked = false;
     QStringList m_installedProblems;
     quint64 m_listRequest = 0;
+    bool m_listChecksUpdates = false;
 
     QVariantList m_sources;
     Status m_sourcesStatus = Idle;

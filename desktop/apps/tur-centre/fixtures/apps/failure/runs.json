@@ -1,10 +1,28 @@
 {
  "licence": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
  "recorded_by": "desktop/ci/centre-e2e/record.py, in the desktop workflow's job centre-e2e; copied by desktop/apps/tur-centre/fixtures/apps/update.py; do not edit",
- "run": "43420798669",
+ "run": "43422694076",
  "scenario": "failure",
  "note": "Real tur-apps against its own stand-in for flatpak (services/tur-apps/tests/fakes/flatpak), told to fail after installing the runtime: a failure half-way, which Flathub does not give on demand.",
  "invocations": [
+  {
+   "arguments": [
+    "list",
+    "--json"
+   ],
+   "exit_status": 0,
+   "stderr": "",
+   "stdout": [
+    "{",
+    "  \"applications\": [],",
+    "  \"kind\": \"installed\",",
+    "  \"problems\": [],",
+    "  \"schema_version\": 1,",
+    "  \"updates_checked\": false",
+    "}"
+   ],
+   "seconds": 0.0
+  },
   {
    "arguments": [
     "plan",
@@ -190,6 +208,24 @@
     "{\"error\":{\"code\":\"TUR-DESKTOP-APPS-010\",\"message\":\"flatpak did not install app/net.sourceforge.chromium-bsu/x86_64/stable: Error: Failed to install net.sourceforge.chromium-bsu: the fake was told to fail. What it had added was removed again.\",\"title\":\"A step failed\"},\"event\":\"error\",\"schema_version\":1}"
    ],
    "seconds": 0.1
+  },
+  {
+   "arguments": [
+    "list",
+    "--json"
+   ],
+   "exit_status": 0,
+   "stderr": "",
+   "stdout": [
+    "{",
+    "  \"applications\": [],",
+    "  \"kind\": \"installed\",",
+    "  \"problems\": [],",
+    "  \"schema_version\": 1,",
+    "  \"updates_checked\": false",
+    "}"
+   ],
+   "seconds": 0.0
   }
  ]
 }

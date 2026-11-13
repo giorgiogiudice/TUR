@@ -1,7 +1,7 @@
 {
  "licence": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
  "recorded_by": "desktop/ci/centre-e2e/record.py, in the desktop workflow's job centre-e2e; copied by desktop/apps/tur-centre/fixtures/apps/update.py; do not edit",
- "run": "43420798669",
+ "run": "43422694076",
  "scenario": "update",
  "note": "Chromium B.S.U.: moved back to the earlier commit bee584343a60a7742e6a43e9c70fc31bae3b388bd82339cd7adfca6d7965a93a with flatpak update --commit, then updated by tur-apps.",
  "invocations": [
@@ -42,7 +42,7 @@
     "  \"updates_checked\": true",
     "}"
    ],
-   "seconds": 0.4
+   "seconds": 0.5
   },
   {
    "arguments": [
@@ -57,7 +57,7 @@
     "{\"event\":\"step-started\",\"schema_version\":1,\"step\":\"update\",\"text\":\"Updating Chromium B.S.U.\"}",
     "{\"event\":\"activity\",\"schema_version\":1,\"step\":\"update\",\"text\":\"updating app/net.sourceforge.chromium-bsu/x86_64/stable\"}",
     "{\"event\":\"step-finished\",\"ok\":true,\"schema_version\":1,\"step\":\"update\"}",
-    "{\"event\":\"result\",\"operation\":\"update\",\"result\":{\"id\":\"net.sourceforge.chromium-bsu\",\"updated\":false,\"version\":\"0.9.16.1\",\"version_before\":\"0.9.16.1\"},\"schema_version\":1}"
+    "{\"event\":\"result\",\"operation\":\"update\",\"result\":{\"id\":\"net.sourceforge.chromium-bsu\",\"updated\":true,\"version\":\"0.9.16.1\",\"version_before\":\"0.9.16.1\"},\"schema_version\":1}"
    ],
    "seconds": 0.9
   },
@@ -98,7 +98,7 @@
     "  \"updates_checked\": true",
     "}"
    ],
-   "seconds": 0.4
+   "seconds": 0.5
   }
  ]
 }

@@ -1,7 +1,7 @@
 {
  "licence": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
  "recorded_by": "desktop/ci/centre-e2e/record.py, in the desktop workflow's job centre-e2e; copied by desktop/apps/tur-centre/fixtures/apps/update.py; do not edit",
- "run": "43420798669",
+ "run": "43422694076",
  "scenario": "install",
  "note": "Chromium B.S.U. installed per user from Flathub, with the real flatpak.",
  "invocations": [
@@ -182,7 +182,7 @@
     "  ]",
     "}"
    ],
-   "seconds": 1.0
+   "seconds": 1.6
   },
   {
    "arguments": [
@@ -209,7 +209,7 @@
     "{\"event\":\"step-finished\",\"ok\":true,\"schema_version\":1,\"step\":\"record\"}",
     "{\"event\":\"result\",\"operation\":\"install\",\"result\":{\"flatpak\":{\"added_refs\":[\"app/net.sourceforge.chromium-bsu/x86_64/stable\",\"runtime/org.freedesktop.Platform.GL.default/x86_64/26.08\",\"runtime/org.freedesktop.Platform.GL.default/x86_64/26.08-extra\",\"runtime/org.freedesktop.Platform.codecs-extra/x86_64/26.08-extra\",\"runtime/org.freedesktop.Platform/x86_64/26.08\"],\"app_id\":\"net.sourceforge.chromium-bsu\",\"commit\":\"bd6d7c58cfe920a6dd508167c8fd1071c2902d702b5dafc9aacdac2b8221f661\",\"reference\":\"app/net.sourceforge.chromium-bsu/x86_64/stable\",\"remote\":\"flathub\"},\"id\":\"net.sourceforge.chromium-bsu\",\"name\":\"Chromium B.S.U.\",\"record\":\"~/.local/share/tur/apps/installed/net.sourceforge.chromium-bsu.json\",\"route\":\"flatpak\",\"source\":{\"file_name\":null,\"kind\":\"flatpak-remote\",\"pinned\":false,\"remote\":\"flathub\",\"sha256\":null,\"size\":null,\"url\":\"https://dl.flathub.org/repo/\"},\"version\":\"0.9.16.1\",\"windows\":null},\"schema_version\":1}"
    ],
-   "seconds": 17.5
+   "seconds": 20.1
   },
   {
    "arguments": [

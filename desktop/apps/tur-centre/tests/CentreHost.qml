@@ -249,6 +249,9 @@ Item {
         const id = host.catalogue.application.applicationId
         const operation = host.apps.operation(id)
         const finish = () => {
+            // A sheet that is closing is gone before the state is looked at.
+            if (!state.sheet && view.planSheet.visible)
+                return
             stepper.stop()
             host.actDone = true
         }
@@ -268,7 +271,11 @@ Item {
             if (host.phase === 0) {
                 view.primaryClicked()
                 host.phase = 1
-            } else if (host.phase === 1 && operation && operation.phase === AppsOperation.Planned) {
+            } else if (host.phase === 1 && operation && operation.phase === AppsOperation.Planned
+                       && view.planSheet.opened) {
+                // As the sheet's Install does: it closes, and the plan is
+                // carried out.
+                view.planSheet.close()
                 operation.confirm()
                 host.phase = 2
             } else if (host.phase === 1 && operation && operation.phase === AppsOperation.Failed) {

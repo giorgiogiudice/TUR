@@ -69,8 +69,6 @@ ColumnLayout {
 
     // The failure of the last attempt to open the application.
     property var launchFailure: ({})
-    // After "Switch on Flathub and try again": plan again once it is on.
-    property bool planWhenSourceIsOn: false
 
     // Starts the plan of an installation; its sheet opens when it is made.
     function install(file: string): void {
@@ -126,18 +124,6 @@ ColumnLayout {
 
         function onChanged() {
             view.showPlan()
-        }
-    }
-
-    Connections {
-        target: view.apps
-        ignoreUnknownSignals: true
-
-        function onSourcesChanged() {
-            if (view.planWhenSourceIsOn && view.apps.sourceChanging.length === 0) {
-                view.planWhenSourceIsOn = false
-                view.install(view.operation ? view.operation.installerFile : "")
-            }
         }
     }
 
@@ -290,10 +276,9 @@ ColumnLayout {
         Layout.fillWidth: true
         operation: view.operation
         name: view.ready ? view.entry.name : ""
-        onSwitchOnRequested: source => {
-            view.planWhenSourceIsOn = true
-            view.apps.setSource(source, true)
-        }
+        // Switched on, then the plan is made again.
+        onSwitchOnRequested: source => view.apps.setSource(source, true, view.applicationId,
+                                                           view.operation ? view.operation.installerFile : "")
         onInstallerRequested: view.openChooser()
     }
 

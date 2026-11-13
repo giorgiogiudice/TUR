@@ -1,10 +1,28 @@
 {
  "licence": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
  "recorded_by": "desktop/ci/centre-e2e/record.py, in the desktop workflow's job centre-e2e; copied by desktop/apps/tur-centre/fixtures/apps/update.py; do not edit",
- "run": "43420798669",
+ "run": "43422694076",
  "scenario": "sources",
  "note": "A fresh user on the runner: Flathub not added; switched on through tur-apps.",
  "invocations": [
+  {
+   "arguments": [
+    "list",
+    "--json"
+   ],
+   "exit_status": 0,
+   "stderr": "",
+   "stdout": [
+    "{",
+    "  \"applications\": [],",
+    "  \"kind\": \"installed\",",
+    "  \"problems\": [],",
+    "  \"schema_version\": 1,",
+    "  \"updates_checked\": false",
+    "}"
+   ],
+   "seconds": 0.0
+  },
   {
    "arguments": [
     "sources",
@@ -68,7 +86,7 @@
     "  \"state\": \"on\"",
     "}"
    ],
-   "seconds": 0.6
+   "seconds": 0.8
   },
   {
    "arguments": [
@@ -261,7 +279,7 @@
     "  ]",
     "}"
    ],
-   "seconds": 1.2
+   "seconds": 1.4
   }
  ]
 }

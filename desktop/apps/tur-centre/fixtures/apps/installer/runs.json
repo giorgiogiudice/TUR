@@ -1,7 +1,7 @@
 {
  "licence": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
  "recorded_by": "desktop/ci/centre-e2e/record.py, in the desktop workflow's job centre-e2e; copied by desktop/apps/tur-centre/fixtures/apps/update.py; do not edit",
- "run": "43420798669",
+ "run": "43422694076",
  "scenario": "installer",
  "note": "A file that is not the installer the catalogue pins for Notepad++.",
  "invocations": [

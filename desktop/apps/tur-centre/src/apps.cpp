@@ -543,8 +543,19 @@ void Apps::answered(quint64 id, const AppsReply &reply)
 
 void Apps::refresh(bool checkUpdates)
 {
+    listInstalled(checkUpdates, false);
+}
+
+void Apps::listInstalled(bool checkUpdates, bool afresh)
+{
+    // The same question already asked is not asked twice; a list that asks
+    // for updates answers a plain one too. After a change, a list asked
+    // before it would be stale, and is asked again.
+    if (!afresh && m_listRequest && (m_listChecksUpdates || !checkUpdates))
+        return;
     if (m_listRequest)
         forget(m_listRequest);
+    m_listChecksUpdates = checkUpdates;
     AppsRequest request;
     request.command = checkUpdates ? AppsRequest::ListWithUpdates : AppsRequest::List;
     m_installedStatus = Loading;
@@ -592,7 +603,7 @@ void Apps::refreshSources()
     });
 }
 
-void Apps::setSource(const QString &name, bool on)
+void Apps::setSource(const QString &name, bool on, const QString &thenPlan, const QString &installerFile)
 {
     if (!m_sourceChanging.isEmpty())
         return;
@@ -602,7 +613,7 @@ void Apps::setSource(const QString &name, bool on)
     m_sourceChanging = name;
     m_sourcesFailure.clear();
     Q_EMIT sourcesChanged();
-    submit(request, nullptr, [this](const AppsReply &reply) {
+    submit(request, nullptr, [this, thenPlan, installerFile](const AppsReply &reply) {
         QJsonObject document;
         const QVariantMap failure = readDocument(reply, &document);
         m_sourceChanging.clear();
@@ -612,7 +623,10 @@ void Apps::setSource(const QString &name, bool on)
         if (!failure.isEmpty()) {
             m_sourcesFailure = failure;
             Q_EMIT sourcesChanged();
+            return;
         }
+        if (!thenPlan.isEmpty())
+            plan(thenPlan, installerFile);
     });
 }
 
@@ -730,7 +744,7 @@ void Apps::operationEnded(AppsOperation *operation)
     if (operation->phase() != AppsOperation::Cancelled
         && !(operation->kind() == AppsOperation::Install && operation->phase() == AppsOperation::Failed
              && operation->plan().isEmpty()))
-        refresh(m_updatesChecked);
+        listInstalled(m_updatesChecked, true);
     if (operation->kind() == AppsOperation::Update)
         nextUpdate();
 }

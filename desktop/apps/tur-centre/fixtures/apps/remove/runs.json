@@ -1,7 +1,7 @@
 {
  "licence": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
  "recorded_by": "desktop/ci/centre-e2e/record.py, in the desktop workflow's job centre-e2e; copied by desktop/apps/tur-centre/fixtures/apps/update.py; do not edit",
- "run": "43420798669",
+ "run": "43422694076",
  "scenario": "remove",
  "note": "Chromium B.S.U. removed, keeping its settings and data.",
  "invocations": [
@@ -67,7 +67,7 @@
     "{\"event\":\"step-finished\",\"ok\":true,\"schema_version\":1,\"step\":\"unused\"}",
     "{\"event\":\"result\",\"operation\":\"remove\",\"result\":{\"data\":\"keep\",\"id\":\"net.sourceforge.chromium-bsu\",\"kept\":[\"~/.var/app/net.sourceforge.chromium-bsu\"],\"left_behind\":[],\"name\":\"Chromium B.S.U.\",\"removed\":[\"app/net.sourceforge.chromium-bsu/x86_64/stable\",\"runtime/org.freedesktop.Platform.GL.default/x86_64/26.08\",\"runtime/org.freedesktop.Platform.GL.default/x86_64/26.08-extra\",\"runtime/org.freedesktop.Platform.codecs-extra/x86_64/26.08-extra\",\"runtime/org.freedesktop.Platform/x86_64/26.08\"],\"route\":\"flatpak\"},\"schema_version\":1}"
    ],
-   "seconds": 1.3
+   "seconds": 2.0
   },
   {
    "arguments": [

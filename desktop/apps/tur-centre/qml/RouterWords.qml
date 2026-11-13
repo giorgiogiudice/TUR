@@ -158,16 +158,11 @@ QtObject {
         "community-package": qsTr("This package is maintained by its packagers, not by the application's publisher."),
         "experimental.darling": qsTr("Experimental: Darling comes with no promise that this application works, and it does not run mainstream macOS graphical applications."),
         "guest-unsuitable-for-games": qsTr("A Windows guest is not offered for games: it has no usable GPU acceleration."),
-        "guest-not-offered.no-virtual-machines": qsTr("A Windows guest would be offered for this application as well, and is not, because you have chosen never to use a virtual machine. What is lost: the route that runs it on real Windows, which is the one expected to work where Wine does not."),
-        "requirement.kernel-anti-cheat.proton": qsTr("Its anti-cheat will not work here: it runs only on real Windows, with a kernel driver that a compatibility layer cannot provide. Dual boot is the only way."),
-        "requirement.kernel-anti-cheat.wine": qsTr("Its anti-cheat will not work here: it runs only on real Windows, with a kernel driver that a compatibility layer cannot provide. Dual boot is the only way."),
-        "requirement.kernel-anti-cheat.windows-guest": qsTr("Its kernel-level anti-cheat is not expected to accept a virtual machine. Dual boot is the only way."),
-        "requirement.kernel-anti-cheat.android-runtime": qsTr("Its anti-cheat detects that this is not a certified phone: it fails, or puts the account at risk of a ban."),
-        "requirement.kernel-anti-cheat.darling": qsTr("Its anti-cheat needs a kernel component that Darling cannot load."),
-        "requirement.kernel-anti-cheat.linux": qsTr("The catalogue lists kernel-level anti-cheat for this edition; check the publisher's notes for Linux before relying on it."),
-        "requirement.kernel-anti-cheat.web": qsTr("Other editions of this application use kernel-level anti-cheat; the web edition does not load it."),
-        "requirement.hardware-attested-drm.linux-or-web": qsTr("Its copy protection asks for hardware attestation: on Linux, protected content may be limited to a lower quality or refused."),
-        "requirement.hardware-attested-drm.not-provided": qsTr("Its copy protection needs hardware attestation, which this route cannot provide: protected content is limited to low quality or refused.")
+        "guest-not-offered.no-virtual-machines": qsTr("A Windows guest would be offered for this application as well, and is not, because you have chosen never to use a virtual machine. What is lost: the route that runs it on real Windows, which is the one expected to work where Wine does not.")
+        // Not the requirement caveats: one identifier is written two ways
+        // ("Its anti-cheat ..." and, for a game, "This game's anti-cheat
+        // ..."), with nothing in `params` to say which, so they are shown in
+        // the router's words until the router gives the difference.
     })
 
     function caveat(item: var): string {
