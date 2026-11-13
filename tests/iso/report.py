@@ -712,17 +712,19 @@ def check_live(name: str, label: str, out: pathlib.Path, checks: Checks, windows
 def check_casefold(out: pathlib.Path, checks: Checks) -> dict:
     """Informational: the installed disk given ext4's casefold feature, started."""
     facts = load(out / "casefold" / "casefold.json")
-    start = load(out / "casefold" / "start" / "first-start.json")
+    start = load(out / "casefold" / "first-start" / "first-start.json")
     checks.add(
         "casefold.experiment",
-        "Informational (issue 81): the installed root given ext4's casefold feature afterwards (tune2fs, "
-        "unmounted), then started: whether a rendered screen appears",
+        "Informational (issue 81): the installed root given ext4's casefold feature afterwards (tune2fs -O "
+        "casefold -E encoding=utf8, unmounted), then started: whether a rendered screen appears",
         (facts.get("casefold") is True and start is not None) if facts else None,
         f"tune2fs: {(facts or {}).get('tune2fs')}; e2fsck after: status {((facts or {}).get('e2fsck_after') or {}).get('status')}; "
         f"start: outcome {(start or {}).get('outcome')}, rendered after {(start or {}).get('rendered_first_seen_seconds')} s",
         False,
     )
-    return {"casefold": facts, "start_outcome": (start or {}).get("outcome")}
+    first = check_first_start("casefold", "Informational (issue 81): the installed disk with casefold on its root, "
+                              "started", out, checks, required=False)
+    return {"casefold": facts, "start_outcome": (start or {}).get("outcome"), "first_start": first}
 
 
 def main() -> int:

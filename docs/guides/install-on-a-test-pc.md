@@ -19,9 +19,10 @@ Read these three points before anything else.
 - **Everything below was tested in a virtual machine only.** No real
   computer, no real USB stick and no real disk has been used yet. You are the
   first. Section 9 says what to report back.
-- **Do not pass the medium on.** The system on it still contains Fedora's
-  logos and release packages, which Fedora's terms do not allow in a derived
-  system (issue 11). It is for the project's own test machines.
+- **This is a pre-alpha preview, for testers.** Pass on only the versions
+  the project publishes. The system on it is TUR's own image (Fedora's marks
+  were replaced, TUR-008); its boot chain is Fedora's signed shim, GRUB and
+  kernel, unchanged.
 
 ## 1. What you need
 
@@ -60,7 +61,7 @@ tests it, and keeps it for three days only when asked to.
    | `tur-installer.iso` | The medium |
    | `tur-installer.SHA256SUMS` | Its checksum |
    | `tur-installer.manifest.json` | What the medium contains, by hash |
-   | `DO-NOT-REDISTRIBUTE.txt` | Why it must not be passed on |
+   | `DO-NOT-REDISTRIBUTE.txt` | What the medium is, and that only published versions are passed on |
 
 5. Check the file. The checksum you compute must equal the one in
    `tur-installer.SHA256SUMS`.

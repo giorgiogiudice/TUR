@@ -173,8 +173,11 @@ def main() -> int:
             },
         ],
         "distribution": (
-            "Not for redistribution. The payload still contains Fedora's logos and release packages "
-            "(issue 11), and the boot chain is Fedora's signed shim and GRUB."
+            "Pre-alpha preview for testers. The installed system is TUR's own image: Fedora's logos and "
+            "release packages are replaced by TUR's and Fedora's mark-free generic ones (TUR-008). The "
+            "boot chain is Fedora's signed shim, GRUB and kernel, unchanged. Licence terms: "
+            "tur-installer/licenses on the medium and the packages' own licences; a legal review of "
+            "distribution has not been completed."
         ),
     }
     target.write_text(json.dumps(manifest, indent=2) + "\n")

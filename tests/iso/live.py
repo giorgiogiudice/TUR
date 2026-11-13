@@ -357,9 +357,24 @@ class Run:
         self.screen_ready("confirm")
         return since
 
-    def phrase_state(self) -> dict:
-        match = self.last_wizard(r"phrase-typed length=(\d+) matches=(\w+) erase_enabled=(\w+)")
-        return {"length": int(match.group(1)), "matches": match.group(2), "erase_enabled": match.group(3)} if match else {}
+    def phrase_state(self, length: int | None = None, after: int = 0, timeout: float = 15) -> dict:
+        """What the installer said after the field held `length` characters.
+
+        The state lines reach the serial port a moment after the keys: wait
+        for the line that describes the whole text typed, not an earlier one."""
+        deadline = time.monotonic() + timeout
+        while True:
+            match = None
+            for line in reversed(self.wizard_lines()[after:]):
+                match = re.match(r"phrase-typed length=(\d+) matches=(\w+) erase_enabled=(\w+)", line)
+                if match:
+                    break
+            if match and (length is None or int(match.group(1)) == length):
+                return {"length": int(match.group(1)), "matches": match.group(2), "erase_enabled": match.group(3)}
+            if time.monotonic() > deadline:
+                return {"length": int(match.group(1)), "matches": match.group(2), "erase_enabled": match.group(3),
+                        "waited_for_length": length} if match else {"waited_for_length": length}
+            time.sleep(0.3)
 
     def run_install(self) -> None:
         facts, live = self.result["facts"], self.live
@@ -393,9 +408,10 @@ class Run:
             attempts = []
             for label, text in (("a wrong phrase", "ERASE WRONG123"),
                                 ("the right phrase in lower case", isovm.confirmation_phrase(WINDOWS_SERIAL).lower())):
+                before = len(self.wizard_lines())
                 self.type(text)
                 time.sleep(0.8)
-                attempts.append(dict(self.phrase_state(), what=label, typed=text))
+                attempts.append(dict(self.phrase_state(len(text), before), what=label, typed=text))
                 if len(attempts) == 1:
                     self.shot("confirm-windows-wrong-phrase")
                 self.clear_field()
@@ -425,9 +441,10 @@ class Run:
         }
         if self.focus() != "phraseField":
             self.tab_to("phraseField")
+        before = len(self.wizard_lines())
         self.type(phrase)
         time.sleep(0.8)
-        live["phrase_typed"] = self.phrase_state()
+        live["phrase_typed"] = self.phrase_state(len(phrase), before)
         self.shot("confirm-typed")
         # Enter in the field must not erase anything.
         self.step("Enter in the confirmation field")

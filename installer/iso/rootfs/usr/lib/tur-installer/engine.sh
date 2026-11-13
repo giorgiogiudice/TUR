@@ -669,12 +669,28 @@ record_root_features() {
 # keep_log DEVICE SESSION_ID: copy the installer's log to the installed disk,
 # /var/log/tur-installer/SESSION_ID (specification 28.3). The installed
 # system's /var is the ostree state root's var directory on the root
-# partition. Files are given the SELinux label of /var/log, read from the
-# disk, so that the installed system, which enforces SELinux, can read them.
-# Returns 1 and leaves the disk as it was if anything is unexpected.
+# partition; right after `bootc install` it may not hold log/ yet (the
+# installed system's tmpfiles make it at the first start), and then it is
+# made here. Every directory and file made here gets the SELinux label the
+# installed system's own policy gives /var/log (its file_contexts, in the
+# deployment), so that the installed system, which enforces SELinux, sees
+# them as it would have made them. Nothing else on the disk is changed.
 kept_log_path=""
+
+# label_on FILE LABEL: set FILE's SELinux label without SELinux running here.
+label_on() {
+    if command -v setfattr > /dev/null 2>&1; then
+        setfattr -h -n security.selinux -v "$2" "$1" 2>> "${LOG}"
+    elif command -v chcon > /dev/null 2>&1; then
+        chcon -h "$2" "$1" 2>> "${LOG}"
+    else
+        return 1
+    fi
+}
+
 keep_log() {
-    local device="$1" id="$2" root mnt="${SESSION}/target" var="" dest label="" file status=0
+    local device="$1" id="$2" root mnt="${SESSION}/target" var="" dest label="" file status=0 contexts made=""
+    local candidate
     kept_log_path=""
     root="$(root_partition "${device}")"
     if [ -z "${root}" ]; then
@@ -687,32 +703,45 @@ keep_log() {
         return 1
     fi
     for candidate in "${mnt}"/ostree/deploy/*/var; do
-        if [ -d "${candidate}/log" ]; then var="${candidate}"; break; fi
+        if [ -d "${candidate}" ]; then var="${candidate}"; break; fi
     done
     if [ -z "${var}" ]; then
         umount "${mnt}" 2>> "${LOG}"
-        mark "log-kept result=no reason=no-var-log"
+        mark "log-kept result=no reason=no-state-root-var"
         return 1
     fi
-    if command -v getfattr > /dev/null 2>&1; then
+    # The label of /var/log: from the disk if it has the directory, else from
+    # the deployment's policy.
+    if [ -d "${var}/log" ] && command -v getfattr > /dev/null 2>&1; then
         label="$(getfattr --only-values -h -n security.selinux "${var}/log" 2> /dev/null | tr -d '\000')"
     fi
+    if [ -z "${label}" ]; then
+        for contexts in "${mnt}"/ostree/deploy/*/deploy/*/etc/selinux/targeted/contexts/files/file_contexts; do
+            [ -f "${contexts}" ] || continue
+            label="$(awk '$1 == "/var/log(/.*)?" { print $NF; exit }' "${contexts}")"
+            [ -n "${label}" ] && break
+        done
+    fi
+    [ -d "${var}/log" ] || made="${var}/log"
     dest="${var}/log/tur-installer/${id}"
     mkdir -p "${dest}" || status=1
     for file in "${LOG}" "${INSTALL_LOG}" "${SESSION}"/*.json "${WIZARD_TRANSCRIPT}"; do
         [ -f "${file}" ] && cp "${file}" "${dest}/" 2>> "${LOG}"
     done
+    if [ -n "${made}" ]; then chmod 0755 "${made}"; fi
     chmod 0750 "${var}/log/tur-installer" "${dest}" 2> /dev/null
     chmod 0640 "${dest}"/* 2> /dev/null
-    if [ -n "${label}" ] && command -v setfattr > /dev/null 2>&1; then
-        for file in "${var}/log/tur-installer" "${dest}" "${dest}"/*; do
-            setfattr -h -n security.selinux -v "${label}" "${file}" 2>> "${LOG}" || status=1
+    if [ -n "${label}" ]; then
+        for file in ${made:+"${made}"} "${var}/log/tur-installer" "${dest}" "${dest}"/*; do
+            label_on "${file}" "${label}" || status=1
         done
+    else
+        status=1
     fi
     kept_log_path="/var/log/tur-installer/${id}"
     sync
     umount "${mnt}" 2>> "${LOG}" || status=1
-    mark "log-kept result=$([ "${status}" -eq 0 ] && echo yes || echo partly) path=${kept_log_path} selinux_label=${label:-none}"
+    mark "log-kept result=$([ "${status}" -eq 0 ] && echo yes || echo partly) path=${kept_log_path} selinux_label=${label:-none} made_var_log=$([ -n "${made}" ] && echo yes || echo no)"
     return "${status}"
 }
 

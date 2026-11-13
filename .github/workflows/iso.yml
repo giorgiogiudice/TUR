@@ -15,12 +15,13 @@
 #             that the boot test's checks and boot-health scenarios can run on
 #             a disk installed from a medium.
 #
-# THE MEDIUM IS NOT UPLOADED BY DEFAULT. This repository is public and the
-# image still contains Fedora's logos and release packages, which may not be
-# distributed in a derived system (issue 11). Every run uploads the manifest,
+# THE MEDIUM IS NOT UPLOADED BY DEFAULT. Every run uploads the manifest,
 # checksums, logs and screenshots. The medium itself is uploaded only when the
-# workflow is started by hand with `upload_medium` set, for the project's own
-# test machines, and is deleted after three days.
+# workflow is started by hand with `upload_medium` set, and is deleted after
+# three days; .github/workflows/release-installer.yml publishes a preview from
+# such a run. Fedora's marks were replaced in the image (TUR-008); the boot
+# chain is Fedora's signed shim, GRUB and kernel, unchanged, and a legal
+# review of distribution has not been completed.
 name: iso
 
 on:
@@ -67,9 +68,8 @@ on:
     inputs:
       upload_medium:
         description: >-
-          Upload the installer medium as an artifact (three days). Only for the
-          project's own test machines: the image still carries Fedora's marks
-          and must not be passed on (issue 11).
+          Upload the installer medium as an artifact (three days): for testers,
+          and as the source of a preview release (release-installer.yml).
         type: boolean
         default: false
 
@@ -329,8 +329,9 @@ jobs:
           status=0
           sudo python3 tests/iso/installed-root.py casefold "$LIVE_DISK" "$OUT/casefold" || status=$?
           if [ "$status" -eq 0 ]; then
-            python3 tests/iso/boot-installed.py --disk "$LIVE_DISK" --work "$WORK/vm" --out "$OUT/casefold/start" \
-              --timeout 240 --run-on 10 || status=$?
+            python3 tests/iso/boot-installed.py --disk "$LIVE_DISK" --work "$WORK/vm" --out "$OUT/casefold/first-start" \
+              --timeout 240 || status=$?
+            sudo python3 tests/boot/inspect-disk.py postmortem "$LIVE_DISK" "$OUT/casefold/first-start" || true
           fi
           rm -f "$LIVE_DISK"
           exit "$status"
@@ -398,7 +399,7 @@ jobs:
           path: out/iso/
           if-no-files-found: warn
 
-      # Only on request, only for the project's own test machines (issue 11).
+      # Only on request: for testers, and for release-installer.yml.
       - name: Stage the medium for upload
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_medium && env.MEDIUM != '' }}
         run: |
@@ -406,10 +407,12 @@ jobs:
           mv "$MEDIUM" "$WORK/upload/"
           cp "$OUT"/medium/*.manifest.json "$OUT"/medium/*.SHA256SUMS "$WORK/upload/"
           cat > "$WORK/upload/DO-NOT-REDISTRIBUTE.txt" <<'EOF'
-          TUR installer medium: a pre-alpha test build for the project's own
-          test machines. Do not pass it on or publish it. The system on it
-          still contains Fedora's logos and release packages, which Fedora's
-          terms do not allow in a derived system (issue 11).
+          TUR installer medium: a pre-alpha preview for testers, not a
+          release. Pass on only the versions published by the project's
+          release process (release-installer.yml). The system on it is TUR's
+          own image (Fedora's marks replaced, TUR-008); the boot chain is
+          Fedora's signed shim, GRUB and kernel, unchanged. A legal review of
+          distribution has not been completed.
 
           Check the file before use:  sha256sum -c tur-installer.SHA256SUMS
           Instructions: docs/guides/install-on-a-test-pc.md

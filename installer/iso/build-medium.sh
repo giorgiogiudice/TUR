@@ -383,20 +383,25 @@ TUR installer medium
 TUR ${tur_version}, build ${build_id}
 Source revision ${revision}
 
-Starting a computer from this medium (UEFI only) runs an installer that
-erases ONE WHOLE DISK, after a typed confirmation, and installs TUR on it.
+Starting a computer from this medium (UEFI only) starts a TUR desktop you
+can try, with an installer that erases ONE WHOLE DISK, after a typed
+confirmation, and installs TUR on it. The boot menu's second entry is the
+same installer in text mode.
 Instructions: docs/guides/install-on-a-test-pc.md in the TUR source tree.
 
-This is a pre-alpha test build for the project's own test machines. It is
-NOT FOR REDISTRIBUTION: the system on it still contains Fedora's logos and
-release packages, which Fedora's terms do not allow in a derived system.
+This is a pre-alpha preview for testers. The system on it is TUR's own
+image: Fedora's logos and release packages are replaced by TUR's and by
+Fedora's mark-free generic ones. The boot chain is Fedora's signed shim,
+GRUB and kernel, unchanged. A legal review of distribution has not been
+completed.
 
 What is on this medium
   EFI system partition  Fedora's signed shim and GRUB, unchanged, and a menu
   boot/                 Fedora's kernel, unchanged, and an initramfs built
                         with Fedora's dracut
   LiveOS/squashfs.img   the installer environment: the TUR image plus
-                        Fedora's dracut-live and the TUR installer
+                        Fedora's dracut-live, the live session and TUR's
+                        two installers
   payload/              the TUR image that is installed (OCI layout)
   tur-installer/        this file, contents.json (every file by SHA-256),
                         licences

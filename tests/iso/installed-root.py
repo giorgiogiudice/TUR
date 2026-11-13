@@ -17,7 +17,8 @@ on the disk (/var/log/tur-installer/<session>/) to OUT_DIR/installer-log/:
   - the installer's log kept on the disk (specification 28.3), with its
     SELinux label.
 
-casefold runs `tune2fs -O casefold` on the root partition (unmounted), for
+casefold runs `tune2fs -O casefold -E encoding=utf8` on the root partition
+(unmounted), for
 the informational run that starts such a disk to see what GRUB does. It is
 never part of an installation.
 
@@ -126,7 +127,7 @@ def casefold(disk: str, out: pathlib.Path) -> int:
     try:
         root = root_partition(loop)
         facts["features_before"] = features(root)
-        done = subprocess.run(["tune2fs", "-O", "casefold", root], capture_output=True, text=True)
+        done = subprocess.run(["tune2fs", "-O", "casefold", "-E", "encoding=utf8", root], capture_output=True, text=True)
         facts["tune2fs"] = {"status": done.returncode, "output": (done.stdout + done.stderr).strip()}
         check = subprocess.run(["e2fsck", "-fn", root], capture_output=True, text=True)
         facts["e2fsck_after"] = {"status": check.returncode, "output": (check.stdout + check.stderr).strip()[-2000:]}

@@ -32,6 +32,12 @@ WizardScreen {
     signal backRequested()
     signal eraseRequested(string phrase)
 
+    function writePhraseState(): void {
+        Transcript.write("phrase-typed length=" + field.text.length + " matches="
+                         + (field.text === screen.phrase && screen.phrase.length > 0 ? "yes" : "no")
+                         + " erase_enabled=" + (eraseButton.enabled ? "yes" : "no"))
+    }
+
     initialFocus: field
 
     Component.onCompleted: {
@@ -268,9 +274,9 @@ WizardScreen {
                     }
                     Keys.onReturnPressed: event => event.accepted = true
                     Keys.onEnterPressed: event => event.accepted = true
-                    onTextChanged: Transcript.write("phrase-typed length=" + field.text.length + " matches="
-                                                    + (screen.matches ? "yes" : "no") + " erase_enabled="
-                                                    + (eraseButton.enabled ? "yes" : "no"))
+                    // Written once the bindings have followed the text, so
+                    // that the line says what the screen then shows.
+                    onTextChanged: Qt.callLater(screen.writePhraseState)
 
                     // The middle button pastes the selection on Linux: not here.
                     MouseArea {
