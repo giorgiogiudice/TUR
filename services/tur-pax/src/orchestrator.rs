@@ -1807,7 +1807,9 @@ fn perform_request(adapter: &Adapter, arguments: &Map<String, Value>) -> Perform
     let mut stream = match UnixStream::connect(socket) {
         Ok(stream) => stream,
         Err(error) => {
-            return Performed::not_started(format!("the service at {socket} did not answer: {error}"));
+            return Performed::not_started(format!(
+                "the service at {socket} did not answer: {error}"
+            ));
         }
     };
     let timeout = Some(Duration::from_secs(adapter.timeout_seconds()));
@@ -1834,7 +1836,8 @@ fn perform_request(adapter: &Adapter, arguments: &Map<String, Value>) -> Perform
     let truncated = answer.len() > limit;
     answer.truncate(limit);
     if let Err(error) = read {
-        let mut performed = Performed::not_started(format!("the service's answer was cut short: {error}"));
+        let mut performed =
+            Performed::not_started(format!("the service's answer was cut short: {error}"));
         performed.state = if matches!(
             error.kind(),
             std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock

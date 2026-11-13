@@ -130,10 +130,12 @@ pub fn known_not_root(host: &dyn Host) -> bool {
     host.read_file(PROCESS_STATUS_FILE, SMALL_FILE_BYTES)
         .ok()
         .and_then(|content| {
-            String::from_utf8_lossy(&content.data).lines().find_map(|line| {
-                let ids = line.strip_prefix("Uid:")?;
-                ids.split_whitespace().nth(1)?.parse::<u32>().ok()
-            })
+            String::from_utf8_lossy(&content.data)
+                .lines()
+                .find_map(|line| {
+                    let ids = line.strip_prefix("Uid:")?;
+                    ids.split_whitespace().nth(1)?.parse::<u32>().ok()
+                })
         })
         .is_some_and(|uid| uid != 0)
 }
@@ -501,7 +503,10 @@ mod tests {
     fn bootc_is_not_started_without_administrator_rights() {
         // Issue #57: in P@x's sandbox, with no new privileges, starting
         // bootc is refused by SELinux and recorded as a denial.
-        let ordinary = tur_host().with_file("/proc/self/status", "Name:\ttur-diag\nUid:\t1000\t1000\t1000\t1000\n");
+        let ordinary = tur_host().with_file(
+            "/proc/self/status",
+            "Name:\ttur-diag\nUid:\t1000\t1000\t1000\t1000\n",
+        );
         assert!(known_not_root(&ordinary));
         assert_eq!(gather_identity(&ordinary).tur.deployment_checksum, None);
         let root = tur_host().with_file("/proc/self/status", "Uid:\t0\t0\t0\t0\n");
@@ -522,12 +527,20 @@ mod tests {
             .with_file(HEAL_STATE_FILE, state);
         let status = gather_status(&sandboxed);
         assert_eq!(status.failed_units, Some(3));
-        assert_eq!(status.failed_units_as_of.as_deref(), Some("2026-11-13T10:00:00Z"));
+        assert_eq!(
+            status.failed_units_as_of.as_deref(),
+            Some("2026-11-13T10:00:00Z")
+        );
         assert!(render_status(&status).contains("counted by TUR's healing service"));
         // Counted now when systemctl answers.
-        let live = FakeHost::new().with_command("systemctl", "").with_file(HEAL_STATE_FILE, state);
+        let live = FakeHost::new()
+            .with_command("systemctl", "")
+            .with_file(HEAL_STATE_FILE, state);
         let status = gather_status(&live);
-        assert_eq!((status.failed_units, status.failed_units_as_of), (Some(0), None));
+        assert_eq!(
+            (status.failed_units, status.failed_units_as_of),
+            (Some(0), None)
+        );
     }
 
     #[test]

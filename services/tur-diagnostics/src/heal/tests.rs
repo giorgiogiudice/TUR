@@ -938,7 +938,15 @@ fn the_scan_keeps_the_count_of_failed_units_for_status_in_the_sandbox() {
         printed("foo.service loaded failed failed Foo\nbar.mount loaded failed failed Bar\n"),
     );
     let mut state = empty_state();
-    scan(&machine, &catalogue(), &paths, &mut state, &running("b1"), &Fixes::default(), false);
+    scan(
+        &machine,
+        &catalogue(),
+        &paths,
+        &mut state,
+        &running("b1"),
+        &Fixes::default(),
+        false,
+    );
     state.save(&paths.state).expect("saved");
     // What tur-diag status reads where systemctl cannot be asked.
     let host = crate::FakeHost::new()

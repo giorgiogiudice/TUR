@@ -329,7 +329,9 @@ fn convert(raw: RawAdapter, at: &str) -> Result<Adapter, Vec<Fault>> {
         _ => {
             problems.push(fault(
                 TaskCode::AdapterParse,
-                format!("{at}.kind must be \"command\" or \"request\", the kinds this build performs"),
+                format!(
+                    "{at}.kind must be \"command\" or \"request\", the kinds this build performs"
+                ),
             ));
             AdapterKind::Command
         }
@@ -354,7 +356,9 @@ fn convert(raw: RawAdapter, at: &str) -> Result<Adapter, Vec<Fault>> {
             if !raw.socket.as_deref().is_some_and(is_request_socket) {
                 problems.push(fault(
                     TaskCode::AdapterProgram,
-                    format!("{at}.socket must be the full path of a socket under {REQUEST_SOCKET_DIR}"),
+                    format!(
+                        "{at}.socket must be the full path of a socket under {REQUEST_SOCKET_DIR}"
+                    ),
                 ));
             }
             // A request carries the validated input and nothing else: no
@@ -1109,9 +1113,18 @@ mod tests {
 
         for (adapter, code) in [
             (r#"{"tool":"t","kind":"request"}"#, "TUR-AI-ADAPTER-005"),
-            (r#"{"tool":"t","kind":"request","socket":"/run/user/1000/bus"}"#, "TUR-AI-ADAPTER-005"),
-            (r#"{"tool":"t","kind":"request","socket":"/run/tur/"}"#, "TUR-AI-ADAPTER-005"),
-            (r#"{"tool":"t","kind":"request","socket":"/run/tur/../dbus/x"}"#, "TUR-AI-ADAPTER-005"),
+            (
+                r#"{"tool":"t","kind":"request","socket":"/run/user/1000/bus"}"#,
+                "TUR-AI-ADAPTER-005",
+            ),
+            (
+                r#"{"tool":"t","kind":"request","socket":"/run/tur/"}"#,
+                "TUR-AI-ADAPTER-005",
+            ),
+            (
+                r#"{"tool":"t","kind":"request","socket":"/run/tur/../dbus/x"}"#,
+                "TUR-AI-ADAPTER-005",
+            ),
             (
                 r#"{"tool":"t","kind":"request","socket":"/run/tur/x","program":"/usr/bin/x"}"#,
                 "TUR-AI-ADAPTER-001",

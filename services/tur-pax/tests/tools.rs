@@ -42,10 +42,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use serde_json::{Map, Value, json};
+use tur_pax::adapter::{AdapterKind, is_request_socket};
 use tur_pax::registry::{
     ADAPTER_FILE, AssistantTools, MANIFEST_FILE, Performer, ToolFiles, ToolRegistry, read_tool_sets,
 };
-use tur_pax::adapter::{AdapterKind, is_request_socket};
 use tur_pax::sandbox::is_system_visible;
 use tur_pax::{Action, ActionClass};
 

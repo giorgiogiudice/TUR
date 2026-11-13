@@ -378,9 +378,7 @@ pub fn scan(
     state.version.clone_from(&running.version);
     state.boot_id.clone_from(&running.boot_id);
     state.failed_units = count_failed_units(machine);
-    state.failed_units_utc = state
-        .failed_units
-        .map(|_| format_utc(machine.now()));
+    state.failed_units_utc = state.failed_units.map(|_| format_utc(machine.now()));
     let mut lines = Vec::new();
     for fault in &catalogue.faults {
         let finding = run_check(machine, &fault.check);
