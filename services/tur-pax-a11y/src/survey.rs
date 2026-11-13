@@ -57,7 +57,10 @@ pub fn survey() -> Result<Value, String> {
         let mut identities = vec![application.application.clone()];
         identities.extend(application.also_known_as.iter().cloned());
         let key = format!("{} ({})", application.application, application.bus);
-        if identities.iter().any(|identity| policy.is_excluded(identity)) {
+        if identities
+            .iter()
+            .any(|identity| policy.is_excluded(identity))
+        {
             applications.insert(key, json!({ "excluded": true }));
             continue;
         }
@@ -132,7 +135,10 @@ pub fn survey() -> Result<Value, String> {
     // runtime that registers and exposes nothing is seen as such.
     if let Ok(all) = desktop.client().applications() {
         for node in all {
-            if applications.keys().any(|key| key.ends_with(&format!("({})", node.bus))) {
+            if applications
+                .keys()
+                .any(|key| key.ends_with(&format!("({})", node.bus)))
+            {
                 continue;
             }
             let application = desktop.application(&node.bus);

@@ -707,9 +707,11 @@ impl Client {
     ///
     /// The application did not answer.
     pub fn parent(&self, node: &Node) -> Result<Option<Node>, BusError> {
-        Ok(Node::from_value(
-            &self.property(node, iface::ACCESSIBLE, "Parent")?,
-        ))
+        Ok(Node::from_value(&self.property(
+            node,
+            iface::ACCESSIBLE,
+            "Parent",
+        )?))
     }
 
     /// The element's place among its parent's children.
@@ -892,7 +894,11 @@ impl Client {
             node,
             iface::EDITABLE_TEXT,
             "InsertText",
-            vec![Value::I32(position), Value::string(text), Value::I32(length)],
+            vec![
+                Value::I32(position),
+                Value::string(text),
+                Value::I32(length),
+            ],
         )
     }
 

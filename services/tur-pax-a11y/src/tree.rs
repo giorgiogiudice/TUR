@@ -221,12 +221,16 @@ pub fn role_matches(filter: &str, role: u32) -> bool {
         || (filter == "checkbox" && UiRole::from_atspi(role) == UiRole::CheckBox)
 }
 
+/// A window as a query is matched against: its identifier, its title and
+/// its application's identifiers.
+pub type Candidate = (String, String, Vec<String>);
+
 /// Which of `candidates` a window query names: an identifier, an exact
 /// title, a part of a title, or an application. Each candidate is
 /// `(identifier, title, identities)`.
 pub fn choose_window(
     query: &str,
-    candidates: &[(String, String, Vec<String>)],
+    candidates: &[Candidate],
 ) -> Result<usize, Miss> {
     let query = query.trim();
     let lower = query.to_lowercase();
@@ -237,7 +241,7 @@ pub fn choose_window(
             .collect::<Vec<String>>()
             .join(", ")
     };
-    let rules: [&dyn Fn(&(String, String, Vec<String>)) -> bool; 4] = [
+    let rules: [&dyn Fn(&Candidate) -> bool; 4] = [
         &|(id, _, _)| id == query,
         &|(_, title, _)| title == query,
         &|(_, title, _)| !lower.is_empty() && title.to_lowercase().contains(&lower),
@@ -428,10 +432,10 @@ impl Desktop {
     ///
     /// None or several match; or the registry did not answer.
     pub fn find_window(&mut self, query: &str) -> Result<Window, Miss> {
-        let windows = self
-            .windows()
-            .map_err(|error| Miss::not_found(format!("the windows could not be listed: {error}")))?;
-        let candidates: Vec<(String, String, Vec<String>)> = windows
+        let windows = self.windows().map_err(|error| {
+            Miss::not_found(format!("the windows could not be listed: {error}"))
+        })?;
+        let candidates: Vec<Candidate> = windows
             .iter()
             .map(|window| {
                 let mut names = vec![
@@ -537,7 +541,13 @@ impl Desktop {
         })
     }
 
-    fn visit(&mut self, node: &Node, window: &str, depth: usize, budget: &mut Budget) -> Vec<Value> {
+    fn visit(
+        &mut self,
+        node: &Node,
+        window: &str,
+        depth: usize,
+        budget: &mut Budget,
+    ) -> Vec<Value> {
         if depth > MAX_DEPTH || budget.spent() {
             budget.truncated = budget.truncated || depth > MAX_DEPTH;
             return Vec::new();
@@ -687,7 +697,8 @@ impl Desktop {
         }
         let mut budget = Budget::new(MAX_NODES, Arc::clone(&self.stopped));
         let all = self.elements(window, &mut budget);
-        let typed = |facts: &Facts| role_filter.is_none_or(|filter| role_matches(filter, facts.role));
+        let typed =
+            |facts: &Facts| role_filter.is_none_or(|filter| role_matches(filter, facts.role));
         let chosen: Vec<(Node, Facts)> = match name {
             Some(name) => {
                 let exact: Vec<(Node, Facts)> = all
@@ -838,12 +849,28 @@ mod tests {
         assert!(role_matches("  ", 32));
     }
 
-    fn candidates() -> Vec<(String, String, Vec<String>)> {
+    fn candidates() -> Vec<Candidate> {
         vec![
-            ("w1".to_owned(), "Settings".to_owned(), vec!["org.tur.Settings".to_owned(), "tur-settings".to_owned()]),
-            ("w2".to_owned(), "Compose — TUR test mail".to_owned(), vec!["tur-a11y-mail".to_owned()]),
-            ("w3".to_owned(), "Untitled Document 1 - Text Editor".to_owned(), vec!["org.gnome.TextEditor".to_owned()]),
-            ("w4".to_owned(), "Document 2 - Text Editor".to_owned(), vec!["org.gnome.TextEditor".to_owned()]),
+            (
+                "w1".to_owned(),
+                "Settings".to_owned(),
+                vec!["org.tur.Settings".to_owned(), "tur-settings".to_owned()],
+            ),
+            (
+                "w2".to_owned(),
+                "Compose — TUR test mail".to_owned(),
+                vec!["tur-a11y-mail".to_owned()],
+            ),
+            (
+                "w3".to_owned(),
+                "Untitled Document 1 - Text Editor".to_owned(),
+                vec!["org.gnome.TextEditor".to_owned()],
+            ),
+            (
+                "w4".to_owned(),
+                "Document 2 - Text Editor".to_owned(),
+                vec!["org.gnome.TextEditor".to_owned()],
+            ),
         ]
     }
 
@@ -855,12 +882,21 @@ mod tests {
         assert_eq!(choose_window("test mail", &list), Ok(1));
         assert_eq!(choose_window("tur-a11y-mail", &list), Ok(1));
         assert_eq!(choose_window("Untitled", &list), Ok(2));
-        assert_eq!(choose_window("text editor", &list).map_err(|miss| miss.code), Err("ambiguous"));
-        assert_eq!(choose_window("org.gnome.TextEditor", &list).map_err(|miss| miss.code), Err("ambiguous"));
+        assert_eq!(
+            choose_window("text editor", &list).map_err(|miss| miss.code),
+            Err("ambiguous")
+        );
+        assert_eq!(
+            choose_window("org.gnome.TextEditor", &list).map_err(|miss| miss.code),
+            Err("ambiguous")
+        );
         let miss = choose_window("Firefox", &list).expect_err("no such window");
         assert_eq!(miss.code, "not_found");
         assert!(miss.message.contains("w1 \"Settings\""));
-        assert_eq!(choose_window("", &list).map_err(|miss| miss.code), Err("not_found"));
+        assert_eq!(
+            choose_window("", &list).map_err(|miss| miss.code),
+            Err("not_found")
+        );
     }
 
     #[test]

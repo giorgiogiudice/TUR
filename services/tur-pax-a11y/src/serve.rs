@@ -190,7 +190,8 @@ impl Bridge {
         match request.op.as_str() {
             "resolve" => {
                 let target = self.resolve(&call)?;
-                serde_json::to_value(target).map_err(|error| Refusal::new("failed", error.to_string()))
+                serde_json::to_value(target)
+                    .map_err(|error| Refusal::new("failed", error.to_string()))
             }
             "perform" => {
                 let target = request
@@ -260,7 +261,10 @@ impl Bridge {
     fn reread(&mut self, target: &Target) -> Result<(Window, Option<(Node, Facts)>), Refusal> {
         let window = self.desktop.find_window(&target.window)?;
         if window.id != target.window {
-            return Err(Refusal::new("changed", "the window is not the one decided on"));
+            return Err(Refusal::new(
+                "changed",
+                "the window is not the one decided on",
+            ));
         }
         if target.element.is_empty() {
             return Ok((window, None));
@@ -272,10 +276,9 @@ impl Bridge {
         if in_window != window.id {
             return Err(Refusal::new("changed", "the element is in another window"));
         }
-        let facts = self
-            .desktop
-            .facts(&node)
-            .map_err(|error| Refusal::new("changed", format!("the element cannot be read: {error}")))?;
+        let facts = self.desktop.facts(&node).map_err(|error| {
+            Refusal::new("changed", format!("the element cannot be read: {error}"))
+        })?;
         if facts.states.has(state::DEFUNCT) {
             return Err(Refusal::new("changed", "the element no longer exists"));
         }
@@ -286,7 +289,10 @@ impl Bridge {
     /// there.
     fn point(&self, window: &Window, rect: [i32; 4], caption: &str, dwell: bool) {
         let Some(pid) = window.application.pid else {
-            log(&format!("arrived=false highlight=no-process window={}", window.id));
+            log(&format!(
+                "arrived=false highlight=no-process window={}",
+                window.id
+            ));
             return;
         };
         let before = self.overlay.arrivals();
@@ -328,15 +334,13 @@ impl Bridge {
         //    again below, on what is read now.
         second_decision(call, decided)?;
         // 3. The indicator.
-        self.overlay
-            .ensure()
-            .map_err(|message| {
-                if self.stopped.load(Ordering::SeqCst) {
-                    Refusal::new("stopped", message)
-                } else {
-                    Refusal::new("unavailable", message)
-                }
-            })?;
+        self.overlay.ensure().map_err(|message| {
+            if self.stopped.load(Ordering::SeqCst) {
+                Refusal::new("stopped", message)
+            } else {
+                Refusal::new("unavailable", message)
+            }
+        })?;
         let result = self.carry_out(call, decided);
         self.overlay.idle();
         // A stop that came while the call was under way wins.
@@ -347,7 +351,10 @@ impl Bridge {
     fn carry_out(&mut self, call: &InterfaceCall, decided: &Target) -> Result<Value, Refusal> {
         if call.tool == InterfaceTool::ListWindows {
             if *decided != self.desktop_target() {
-                return Err(Refusal::new("changed", "the registry is not the one decided on"));
+                return Err(Refusal::new(
+                    "changed",
+                    "the registry is not the one decided on",
+                ));
             }
             self.overlay.activity("observing", None);
             return self.list();
@@ -375,8 +382,14 @@ impl Bridge {
         let stopped = self.desktop.stop_flag();
         match call.tool {
             InterfaceTool::ReadWindow => {
-                self.overlay.activity("observing", Some((pid, &window.title)));
-                self.point(&window, self.window_rect(&window), "P@x is reading this window", false);
+                self.overlay
+                    .activity("observing", Some((pid, &window.title)));
+                self.point(
+                    &window,
+                    self.window_rect(&window),
+                    "P@x is reading this window",
+                    false,
+                );
                 let nodes = call
                     .arguments
                     .get("max_nodes")
@@ -391,8 +404,14 @@ impl Bridge {
                 Ok(read)
             }
             InterfaceTool::Find => {
-                self.overlay.activity("observing", Some((pid, &window.title)));
-                self.point(&window, self.window_rect(&window), "P@x is reading this window", false);
+                self.overlay
+                    .activity("observing", Some((pid, &window.title)));
+                self.point(
+                    &window,
+                    self.window_rect(&window),
+                    "P@x is reading this window",
+                    false,
+                );
                 let mut budget = Budget::new(DEFAULT_NODES, stopped);
                 let found = self.desktop.find(
                     &window,
@@ -409,7 +428,8 @@ impl Bridge {
                 let Some((node, facts)) = element else {
                     return Err(Refusal::new("not_found", "no element has the keyboard"));
                 };
-                self.overlay.activity("observing", Some((pid, &window.title)));
+                self.overlay
+                    .activity("observing", Some((pid, &window.title)));
                 if let Ok(rect) = self.desktop.client().extents(&node) {
                     self.point(&window, rect, "P@x is reading this", false);
                 }
@@ -428,18 +448,9 @@ impl Bridge {
                 };
                 let operation = call.tool.operation();
                 self.overlay.activity("acting", Some((pid, &window.title)));
-                let rect = self
-                    .desktop
-                    .client()
-                    .extents(&node)
-                    .unwrap_or([0, 0, 1, 1]);
+                let rect = self.desktop.client().extents(&node).unwrap_or([0, 0, 1, 1]);
                 // 4. The pointer travels to the element and rests there.
-                self.point(
-                    &window,
-                    rect,
-                    &format!("P@x: {}", operation.as_str()),
-                    true,
-                );
+                self.point(&window, rect, &format!("P@x: {}", operation.as_str()), true);
                 self.check_stopped()?;
                 log(&format!(
                     "act op={} element={} window={}",
@@ -486,10 +497,12 @@ impl Bridge {
     }
 
     fn list(&mut self) -> Result<Value, Refusal> {
-        let windows = self
-            .desktop
-            .windows()
-            .map_err(|error| Refusal::new("unavailable", format!("the registry did not answer: {error}")))?;
+        let windows = self.desktop.windows().map_err(|error| {
+            Refusal::new(
+                "unavailable",
+                format!("the registry did not answer: {error}"),
+            )
+        })?;
         let policy = UserPolicy::default();
         let mut listed = Vec::new();
         let mut left_out = 0;
@@ -500,7 +513,9 @@ impl Bridge {
             // The built-in lists apply here already; the user's lists are
             // applied by the task loop.
             if application.owner == "administrator"
-                || identities.iter().any(|identity| policy.is_excluded(identity))
+                || identities
+                    .iter()
+                    .any(|identity| policy.is_excluded(identity))
             {
                 left_out += 1;
                 continue;
@@ -616,7 +631,10 @@ mod tests {
             arguments: object(json!({ "window": "w1", "element": "e2" })),
         };
         assert!(second_decision(&press, &target("Bold", 43)).is_ok());
-        for name in ["Send", "Delete", "Buy now", "Pay", "Install", "Submit", "Confirm", "Sign", "Transfer", "Remove", "OK", ""] {
+        for name in [
+            "Send", "Delete", "Buy now", "Pay", "Install", "Submit", "Confirm", "Sign", "Transfer",
+            "Remove", "OK", "",
+        ] {
             let refused = second_decision(&press, &target(name, 43)).expect_err(name);
             assert_eq!(refused.code, "refused", "{name}");
         }
@@ -661,13 +679,34 @@ mod tests {
         let decided = target("Bold", 43);
         assert!(same_target(&decided, &decided.clone()));
         for changed in [
-            Target { name: "Send".to_owned(), ..decided.clone() },
-            Target { role: 62, ..decided.clone() },
-            Target { description: "Sends".to_owned(), ..decided.clone() },
-            Target { default_control: true, ..decided.clone() },
-            Target { window_title: "Pay".to_owned(), ..decided.clone() },
-            Target { owner: "unknown".to_owned(), ..decided.clone() },
-            Target { also_known_as: vec!["x".to_owned()], ..decided.clone() },
+            Target {
+                name: "Send".to_owned(),
+                ..decided.clone()
+            },
+            Target {
+                role: 62,
+                ..decided.clone()
+            },
+            Target {
+                description: "Sends".to_owned(),
+                ..decided.clone()
+            },
+            Target {
+                default_control: true,
+                ..decided.clone()
+            },
+            Target {
+                window_title: "Pay".to_owned(),
+                ..decided.clone()
+            },
+            Target {
+                owner: "unknown".to_owned(),
+                ..decided.clone()
+            },
+            Target {
+                also_known_as: vec!["x".to_owned()],
+                ..decided.clone()
+            },
         ] {
             assert!(!same_target(&decided, &changed), "{changed:?}");
         }
@@ -683,6 +722,9 @@ mod tests {
         assert_eq!(lines.len(), 1);
         let reply: BridgeReply = serde_json::from_str(lines[0]).expect("a reply");
         assert!(!reply.ok);
-        assert_eq!(reply.error.map(|error| error.code), Some("failed".to_owned()));
+        assert_eq!(
+            reply.error.map(|error| error.code),
+            Some("failed".to_owned())
+        );
     }
 }

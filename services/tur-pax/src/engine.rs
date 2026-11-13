@@ -216,7 +216,8 @@ pub fn classify(action: &Action, context: &Context, policy: &UserPolicy) -> Acti
 /// Whether the target application is sensitive under any of the identifiers
 /// it is known by.
 fn is_sensitive_target(ui: &UiAction, policy: &UserPolicy) -> bool {
-    ui.identities().any(|identity| policy.is_sensitive(identity))
+    ui.identities()
+        .any(|identity| policy.is_sensitive(identity))
 }
 
 /// The class of an accessibility or screen action (addendum section 5.1).
@@ -1079,7 +1080,13 @@ mod tests {
     #[test]
     fn typing_a_line_break_or_a_direction_change_is_consequential() {
         for text in [
-            "hello\n", "hello\r", "a\tb", "x\u{2028}", "x\u{2029}", "x\u{202e}", "x\u{2066}",
+            "hello\n",
+            "hello\r",
+            "a\tb",
+            "x\u{2028}",
+            "x\u{2029}",
+            "x\u{202e}",
+            "x\u{2066}",
             "\u{1b}[A",
         ] {
             let target = bridge(UiOperation::Type, UiRole::Text, "", text);

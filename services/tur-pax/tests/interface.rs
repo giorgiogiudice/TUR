@@ -105,9 +105,18 @@ fn targets() -> HashMap<String, Target> {
     add("Send", element("org.example.Editor", "Send", 43, false));
     add("Delete", element("org.example.Editor", "Delete", 43, false));
     add("Body", element("org.example.Editor", "", 61, true));
-    add("Password", element("org.example.Editor", "Password", 40, true));
-    add("Folders", element("org.example.Editor", "Folders", 91, false));
-    add("General", element("org.example.Editor", "General", 37, false));
+    add(
+        "Password",
+        element("org.example.Editor", "Password", 40, true),
+    );
+    add(
+        "Folders",
+        element("org.example.Editor", "Folders", 91, false),
+    );
+    add(
+        "General",
+        element("org.example.Editor", "General", 37, false),
+    );
     let mut vault = element("python3", "", 0, false);
     vault.also_known_as = vec!["org.keepassxc.KeePassXC".to_owned()];
     vault.window_title = "Passwords".to_owned();
@@ -258,7 +267,11 @@ fn send_and_delete_are_refused_and_nothing_happens() {
     );
     assert_eq!(
         harness.decisions("TUR_ERROR_CODE"),
-        ["TUR-AI-POLICY-006", "TUR-AI-POLICY-006", "TUR-AI-POLICY-006"]
+        [
+            "TUR-AI-POLICY-006",
+            "TUR-AI-POLICY-006",
+            "TUR-AI-POLICY-006"
+        ]
     );
     assert!(harness.trail_text().contains("pattern send"));
     assert!(harness.trail_text().contains("pattern delete"));
@@ -326,7 +339,11 @@ fn moving_the_keyboard_expanding_and_selecting_are_class_1() {
         calls(
             "",
             vec![
-                call("toolu_1", "ui_focus", r#"{"window": "Notes", "name": "Body"}"#),
+                call(
+                    "toolu_1",
+                    "ui_focus",
+                    r#"{"window": "Notes", "name": "Body"}"#,
+                ),
                 call(
                     "toolu_2",
                     "ui_expand",
@@ -451,7 +468,10 @@ fn a_call_whose_target_is_not_found_never_becomes_an_action() {
 #[test]
 fn an_unattended_task_does_not_use_the_accessibility_tree() {
     let server = FakeServer::start(vec![
-        calls("", vec![call("toolu_1", "ui_read_window", r#"{"window": "Notes"}"#)]),
+        calls(
+            "",
+            vec![call("toolu_1", "ui_read_window", r#"{"window": "Notes"}"#)],
+        ),
         says("Skipped."),
     ]);
     let (mut harness, performed) = harness();
@@ -471,8 +491,16 @@ fn a_stop_while_the_bridge_works_ends_the_task() {
         calls(
             "",
             vec![
-                call("toolu_1", "ui_press", r#"{"window": "Notes", "name": "Bold"}"#),
-                call("toolu_2", "ui_press", r#"{"window": "Notes", "name": "Bold"}"#),
+                call(
+                    "toolu_1",
+                    "ui_press",
+                    r#"{"window": "Notes", "name": "Bold"}"#,
+                ),
+                call(
+                    "toolu_2",
+                    "ui_press",
+                    r#"{"window": "Notes", "name": "Bold"}"#,
+                ),
             ],
         ),
         says("Never sent."),
@@ -558,7 +586,9 @@ fn nothing_above_class_one_is_performed_through_the_interface_in_any_situation()
                 let proposed: Vec<common::Call> = every_interface_call()
                     .iter()
                     .enumerate()
-                    .map(|(index, (name, arguments))| call(&format!("toolu_{index}"), name, arguments))
+                    .map(|(index, (name, arguments))| {
+                        call(&format!("toolu_{index}"), name, arguments)
+                    })
                     .collect();
                 let count = proposed.len();
                 let server = FakeServer::start(vec![calls("", proposed), says("Finished.")]);
@@ -630,9 +660,7 @@ fn the_stop_control_abandons_a_call_in_flight_and_kills_the_bridge() {
         ),
     )
     .expect("the stand-in");
-    let mut permissions = std::fs::metadata(&program)
-        .expect("metadata")
-        .permissions();
+    let mut permissions = std::fs::metadata(&program).expect("metadata").permissions();
     std::os::unix::fs::PermissionsExt::set_mode(&mut permissions, 0o755);
     std::fs::set_permissions(&program, permissions).expect("executable");
 

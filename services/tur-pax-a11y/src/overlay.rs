@@ -185,7 +185,12 @@ impl Overlay {
                 CALL,
             )
             .ok()
-            .and_then(|reply| reply.body.first().and_then(|value| value.unwrapped().as_bool()))
+            .and_then(|reply| {
+                reply
+                    .body
+                    .first()
+                    .and_then(|value| value.unwrapped().as_bool())
+            })
             .unwrap_or(false)
     }
 
@@ -218,7 +223,13 @@ impl Overlay {
     /// # Errors
     ///
     /// The overlay could not place the highlight.
-    pub fn highlight(&self, pid: u32, title: &str, rect: [i32; 4], caption: &str) -> Result<u32, String> {
+    pub fn highlight(
+        &self,
+        pid: u32,
+        title: &str,
+        rect: [i32; 4],
+        caption: &str,
+    ) -> Result<u32, String> {
         // One highlight at a time: what was pointed at before goes.
         let _ = self.call("Clear", vec![Value::string(self.lease()), Value::U32(0)]);
         let width = f64::from(rect[2].max(1));
@@ -372,7 +383,12 @@ mod tests {
         let stop = AtomicBool::new(false);
         // Another connection's signals do nothing.
         watch(
-            &signal(":1.9", OVERLAY, "LeaseEnded", vec![Value::string("L1"), Value::string("hidden")]),
+            &signal(
+                ":1.9",
+                OVERLAY,
+                "LeaseEnded",
+                vec![Value::string("L1"), Value::string("hidden")],
+            ),
             &state,
             &stop,
         );
@@ -398,7 +414,12 @@ mod tests {
         assert_eq!(locked(&state.0).arrivals, 1);
         assert!(!stop.load(Ordering::SeqCst));
         watch(
-            &signal(":1.7", OVERLAY, "LeaseEnded", vec![Value::string("L1"), Value::string("hidden")]),
+            &signal(
+                ":1.7",
+                OVERLAY,
+                "LeaseEnded",
+                vec![Value::string("L1"), Value::string("hidden")],
+            ),
             &state,
             &stop,
         );
@@ -414,7 +435,11 @@ mod tests {
                 BUS_NAME,
                 BUS_NAME,
                 "NameOwnerChanged",
-                vec![Value::string(OVERLAY), Value::string(":1.7"), Value::string("")],
+                vec![
+                    Value::string(OVERLAY),
+                    Value::string(":1.7"),
+                    Value::string(""),
+                ],
             ),
             &state,
             &stop,
@@ -422,13 +447,21 @@ mod tests {
         assert!(stop.load(Ordering::SeqCst));
 
         let stop = AtomicBool::new(false);
-        watch(&signal(":1.7", OVERLAY, "StopRequested", Vec::new()), &state, &stop);
+        watch(
+            &signal(":1.7", OVERLAY, "StopRequested", Vec::new()),
+            &state,
+            &stop,
+        );
         assert!(stop.load(Ordering::SeqCst));
 
         // Before any lease nothing is listened to.
         let state = shared("", "");
         let stop = AtomicBool::new(false);
-        watch(&signal(":1.7", OVERLAY, "StopRequested", Vec::new()), &state, &stop);
+        watch(
+            &signal(":1.7", OVERLAY, "StopRequested", Vec::new()),
+            &state,
+            &stop,
+        );
         assert!(!stop.load(Ordering::SeqCst));
     }
 }

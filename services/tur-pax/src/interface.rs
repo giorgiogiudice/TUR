@@ -283,7 +283,9 @@ impl InterfaceTool {
 
     /// The tool of a name.
     pub fn from_name(name: &str) -> Option<Self> {
-        InterfaceTool::ALL.into_iter().find(|tool| tool.name() == name)
+        InterfaceTool::ALL
+            .into_iter()
+            .find(|tool| tool.name() == name)
     }
 
     /// What the tool does to its target.
@@ -866,7 +868,9 @@ pub fn screen_windows(output: &Value, policy: &UserPolicy) -> (Value, usize) {
         // checked against the lists.
         if identities.is_empty()
             || owner == "administrator"
-            || identities.iter().any(|identity| policy.is_excluded(identity))
+            || identities
+                .iter()
+                .any(|identity| policy.is_excluded(identity))
         {
             left_out += 1;
             continue;
@@ -877,7 +881,10 @@ pub fn screen_windows(output: &Value, policy: &UserPolicy) -> (Value, usize) {
                 shown.insert(key.to_owned(), value.clone());
             }
         }
-        if identities.iter().any(|identity| policy.is_sensitive(identity)) {
+        if identities
+            .iter()
+            .any(|identity| policy.is_sensitive(identity))
+        {
             shown.insert("title".to_owned(), json!(""));
             shown.insert("sensitive".to_owned(), json!(true));
         }

@@ -58,7 +58,9 @@ impl DesktopTable {
             .collect();
         if let Ok(home) = std::env::var("HOME") {
             directories.push(format!("{home}/.local/share/applications"));
-            directories.push(format!("{home}/.local/share/flatpak/exports/share/applications"));
+            directories.push(format!(
+                "{home}/.local/share/flatpak/exports/share/applications"
+            ));
         }
         let mut read = 0;
         for directory in directories {
@@ -147,11 +149,17 @@ pub fn exec_program(exec: &str) -> String {
     let mut index = 0;
     if words.first().map(|word| base_name(word)) == Some("env") {
         index = 1;
-        while words.get(index).is_some_and(|word| word.contains('=') || word.starts_with('-')) {
+        while words
+            .get(index)
+            .is_some_and(|word| word.contains('=') || word.starts_with('-'))
+        {
             index += 1;
         }
     }
-    let program = words.get(index).map(|word| base_name(word)).unwrap_or_default();
+    let program = words
+        .get(index)
+        .map(|word| base_name(word))
+        .unwrap_or_default();
     if program == "flatpak" && words.get(index + 1) == Some(&"run") {
         // The application identifier is the first word that is not an
         // option.
@@ -275,7 +283,9 @@ mod tests {
         assert_eq!(exec_program("/usr/bin/firefox %u"), "firefox");
         assert_eq!(exec_program("env GDK_BACKEND=x11 FOO=1 gedit %U"), "gedit");
         assert_eq!(
-            exec_program("/usr/bin/flatpak run --branch=stable --command=keepassxc org.keepassxc.KeePassXC"),
+            exec_program(
+                "/usr/bin/flatpak run --branch=stable --command=keepassxc org.keepassxc.KeePassXC"
+            ),
             "org.keepassxc.KeePassXC"
         );
         assert_eq!(exec_program(""), "");
@@ -290,12 +300,27 @@ mod tests {
     fn a_desktop_file_matches_by_program_or_window_class() {
         let table = DesktopTable {
             entries: vec![
-                ("org.kde.konsole".to_owned(), "konsole".to_owned(), String::new()),
-                ("firefox".to_owned(), "firefox".to_owned(), "firefox".to_owned()),
-                ("org.example.Wm".to_owned(), "launcher".to_owned(), "wmclass".to_owned()),
+                (
+                    "org.kde.konsole".to_owned(),
+                    "konsole".to_owned(),
+                    String::new(),
+                ),
+                (
+                    "firefox".to_owned(),
+                    "firefox".to_owned(),
+                    "firefox".to_owned(),
+                ),
+                (
+                    "org.example.Wm".to_owned(),
+                    "launcher".to_owned(),
+                    "wmclass".to_owned(),
+                ),
             ],
         };
-        let programs: BTreeSet<String> = ["konsole", "wmclass"].iter().map(|s| (*s).to_owned()).collect();
+        let programs: BTreeSet<String> = ["konsole", "wmclass"]
+            .iter()
+            .map(|s| (*s).to_owned())
+            .collect();
         assert_eq!(
             table.matching(&programs),
             ["org.example.Wm", "org.kde.konsole"]
@@ -310,8 +335,10 @@ mod tests {
         assert_eq!(others, ["konsole"]);
 
         // No desktop file: the name on the bus, then the program.
-        let process: BTreeSet<String> =
-            ["python3", "python3.14"].iter().map(|s| (*s).to_owned()).collect();
+        let process: BTreeSet<String> = ["python3", "python3.14"]
+            .iter()
+            .map(|s| (*s).to_owned())
+            .collect();
         let (main, others) = identities("tur-a11y-mail", &process, &[]);
         assert_eq!(main, "tur-a11y-mail");
         assert_eq!(others, ["python3", "python3.14"]);
@@ -328,7 +355,8 @@ mod tests {
 
     #[test]
     fn a_flatpak_identifier_is_read() {
-        let info = "[Application]\nname=org.keepassxc.KeePassXC\nruntime=x\n\n[Instance]\nname=other\n";
+        let info =
+            "[Application]\nname=org.keepassxc.KeePassXC\nruntime=x\n\n[Instance]\nname=other\n";
         assert_eq!(
             flatpak_application(info).as_deref(),
             Some("org.keepassxc.KeePassXC")

@@ -54,9 +54,17 @@ impl NotDone {
 /// link, "activate" for a menu item.
 pub fn action_names(operation: UiOperation) -> &'static [&'static str] {
     match operation {
-        UiOperation::Press => &["press", "click", "activate", "jump", "toggle", "push", "open"],
+        UiOperation::Press => &[
+            "press", "click", "activate", "jump", "toggle", "push", "open",
+        ],
         UiOperation::Expand => &["expand", "expand or contract", "toggle", "open", "activate"],
-        UiOperation::Collapse => &["collapse", "expand or contract", "toggle", "close", "activate"],
+        UiOperation::Collapse => &[
+            "collapse",
+            "expand or contract",
+            "toggle",
+            "close",
+            "activate",
+        ],
         UiOperation::Select => &["select", "switch", "activate", "click", "press", "jump"],
         UiOperation::Focus => &["setfocus", "set focus", "focus"],
         _ => &[],
@@ -151,7 +159,9 @@ pub fn perform(
         }
         UiOperation::Scroll => {
             if !facts.offers(iface::COMPONENT) {
-                return Err(NotDone::not_offered("the element has no position to scroll to"));
+                return Err(NotDone::not_offered(
+                    "the element has no position to scroll to",
+                ));
             }
             match client.scroll_to(node) {
                 Ok(true) => Ok("scrolled into view".to_owned()),
@@ -165,7 +175,10 @@ pub fn perform(
             let expanded = facts.states.has(state::EXPANDED);
             let want = operation == UiOperation::Expand;
             if facts.states.has(state::EXPANDABLE) && expanded == want {
-                return Ok(format!("it was already {}", if want { "expanded" } else { "collapsed" }));
+                return Ok(format!(
+                    "it was already {}",
+                    if want { "expanded" } else { "collapsed" }
+                ));
             }
             by_action(client, node, facts, operation).map(|name| format!("did {name:?}"))
         }
@@ -205,7 +218,9 @@ fn type_text(
     stopped: &AtomicBool,
 ) -> Result<String, NotDone> {
     if !facts.offers(iface::TEXT) && !facts.offers(iface::EDITABLE_TEXT) {
-        return Err(NotDone::not_offered("the element offers no text to type into"));
+        return Err(NotDone::not_offered(
+            "the element offers no text to type into",
+        ));
     }
     // The field takes the keyboard first, as it would for a person: some
     // toolkits (Firefox) take text only into the field that has it.
@@ -216,7 +231,11 @@ fn type_text(
         let before = client.text(node, 4000).unwrap_or_default();
         let count = client.character_count(node).unwrap_or(0).max(0);
         let caret = client.caret_offset(node).unwrap_or(-1);
-        let mut position = if (0..=count).contains(&caret) { caret } else { count };
+        let mut position = if (0..=count).contains(&caret) {
+            caret
+        } else {
+            count
+        };
         let parts = pieces(text);
         let total = parts.len();
         for (done, piece) in parts.into_iter().enumerate() {
@@ -242,7 +261,10 @@ fn type_text(
         // short wait, the whole text is set instead: what it was, with the
         // new text at the caret.
         if arrived(client, node, text) {
-            return Ok(format!("typed {} characters at the caret", text.chars().count()));
+            return Ok(format!(
+                "typed {} characters at the caret",
+                text.chars().count()
+            ));
         }
         let at = usize::try_from(position)
             .unwrap_or(0)
@@ -282,10 +304,7 @@ fn type_text(
 /// Whether `text` is in the field now, or within half a second.
 fn arrived(client: &Client, node: &Node, text: &str) -> bool {
     for _ in 0..6 {
-        if client
-            .text(node, 4000)
-            .is_ok_and(|now| now.contains(text))
-        {
+        if client.text(node, 4000).is_ok_and(|now| now.contains(text)) {
             return true;
         }
         std::thread::sleep(std::time::Duration::from_millis(100));
@@ -303,16 +322,37 @@ mod tests {
 
     #[test]
     fn each_toolkit_s_name_for_pressing_is_found() {
-        assert_eq!(choose_action(UiOperation::Press, &offered(&["Press", "SetFocus"])), Some(0));
-        assert_eq!(choose_action(UiOperation::Press, &offered(&["click"])), Some(0));
-        assert_eq!(choose_action(UiOperation::Press, &offered(&["SetFocus", "jump"])), Some(1));
-        assert_eq!(choose_action(UiOperation::Press, &offered(&["Toggle", "Press"])), Some(1));
-        // A list row of Qt Quick offers only to take the keyboard.
-        assert_eq!(choose_action(UiOperation::Press, &offered(&["SetFocus"])), None);
-        assert_eq!(choose_action(UiOperation::Press, &[]), None);
-        assert_eq!(choose_action(UiOperation::Focus, &offered(&["Press", "SetFocus"])), Some(1));
         assert_eq!(
-            choose_action(UiOperation::Expand, &offered(&["activate", "expand or contract"])),
+            choose_action(UiOperation::Press, &offered(&["Press", "SetFocus"])),
+            Some(0)
+        );
+        assert_eq!(
+            choose_action(UiOperation::Press, &offered(&["click"])),
+            Some(0)
+        );
+        assert_eq!(
+            choose_action(UiOperation::Press, &offered(&["SetFocus", "jump"])),
+            Some(1)
+        );
+        assert_eq!(
+            choose_action(UiOperation::Press, &offered(&["Toggle", "Press"])),
+            Some(1)
+        );
+        // A list row of Qt Quick offers only to take the keyboard.
+        assert_eq!(
+            choose_action(UiOperation::Press, &offered(&["SetFocus"])),
+            None
+        );
+        assert_eq!(choose_action(UiOperation::Press, &[]), None);
+        assert_eq!(
+            choose_action(UiOperation::Focus, &offered(&["Press", "SetFocus"])),
+            Some(1)
+        );
+        assert_eq!(
+            choose_action(
+                UiOperation::Expand,
+                &offered(&["activate", "expand or contract"])
+            ),
             Some(1)
         );
         assert_eq!(choose_action(UiOperation::Type, &offered(&["press"])), None);

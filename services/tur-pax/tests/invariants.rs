@@ -139,7 +139,13 @@ const INTERFACE_ACTS: [InterfaceAct; 21] = [
     act_case(UiOperation::Focus, UiRole::Button, "Send", "", true),
     // Expanding, collapsing, selecting: judged by the name.
     act_case(UiOperation::Expand, UiRole::TreeItem, "Folders", "", false),
-    act_case(UiOperation::Collapse, UiRole::TreeItem, "Folders", "", false),
+    act_case(
+        UiOperation::Collapse,
+        UiRole::TreeItem,
+        "Folders",
+        "",
+        false,
+    ),
     act_case(UiOperation::Select, UiRole::PageTab, "General", "", false),
     act_case(UiOperation::Select, UiRole::ListItem, "", "", true),
     // Pressing: a control with a readable, ordinary name.
@@ -163,13 +169,25 @@ const INTERFACE_ACTS: [InterfaceAct; 21] = [
     // secret, not a terminal, not a field whose name matches the tables.
     act_case(UiOperation::Type, UiRole::Text, "", "hello", false),
     act_case(UiOperation::Type, UiRole::Text, "Search", "hello\n", true),
-    act_case(UiOperation::Type, UiRole::PasswordText, "Password", "hello", true),
+    act_case(
+        UiOperation::Type,
+        UiRole::PasswordText,
+        "Password",
+        "hello",
+        true,
+    ),
     InterfaceAct {
         editable: false,
         ..act_case(UiOperation::Type, UiRole::Text, "Message", "hello", true)
     },
     act_case(UiOperation::Type, UiRole::Terminal, "", "ls", true),
-    act_case(UiOperation::Type, UiRole::Text, "Amount to transfer", "10", true),
+    act_case(
+        UiOperation::Type,
+        UiRole::Text,
+        "Amount to transfer",
+        "10",
+        true,
+    ),
     // Reading a window through the bridge.
     act_case(UiOperation::Read, UiRole::Window, "", "", false),
 ];
