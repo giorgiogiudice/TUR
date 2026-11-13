@@ -238,9 +238,10 @@ def windows_entry(args, machine, qmp, result, out, work, serial_log, elapsed, fi
         standin = re.search(r"TUR-WINDOWS-STANDIN: started file=(\S+)", transcript.text)
         if standin:
             break
-        # The menu on the screen first, then the key: once the menu was seen
-        # on the serial port, or after eight seconds without it.
-        if menu_seen is not None or time.monotonic() - started > 8:
+        # The key from four seconds after power-on (a key pressed before
+        # GRUB's menu waits for it), or as soon as the menu is seen on the
+        # serial port; a picture of the screen just before the first press.
+        if menu_seen is not None or time.monotonic() - started > 4:
             if not shot_taken:
                 try:
                     result["screenshots"]["boot-menu"] = vm.screenshot(qmp, work, out / "boot-menu.png")
@@ -253,6 +254,10 @@ def windows_entry(args, machine, qmp, result, out, work, serial_log, elapsed, fi
             except Exception:
                 pass
         time.sleep(0.4)
+    # The stand-in may have written its line and powered off between two looks.
+    time.sleep(1)
+    transcript.pump()
+    standin = re.search(r"TUR-WINDOWS-STANDIN: started file=(\S+)", transcript.text)
     entry = result["windows_entry"]
     entry.update({"menu_seen_on_serial_seconds": menu_seen, "presses": pressed})
     if standin:
@@ -275,8 +280,10 @@ def windows_entry(args, machine, qmp, result, out, work, serial_log, elapsed, fi
         device = re.search(r"TUR-WINDOWS-STANDIN: device=(\S+)", transcript.text)
         entry["file"] = standin.group(1)
         entry["device"] = device.group(1) if device else None
+        partition = re.search(r"TUR-WINDOWS-STANDIN: partition=(\d+) guid=([0-9A-Fa-f-]{36})", transcript.text)
         partuuid = re.search(r"HD\(\d+,GPT,([0-9A-Fa-f-]{36})", entry["device"] or "")
-        entry["partition_uuid"] = partuuid.group(1).upper() if partuuid else None
+        entry["partition_number"] = int(partition.group(1)) if partition else None
+        entry["partition_uuid"] = (partition.group(2) if partition else partuuid.group(1) if partuuid else "").upper() or None
         try:
             machine.process.wait(timeout=30)
             entry["powered_off_by_itself"] = True

@@ -32,6 +32,20 @@ EFI_STATUS efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE *system)
             device = DevicePathToStr(path);
     }
     Print(L"\r\nTUR-WINDOWS-STANDIN: started file=%s\r\n", file);
+    // The partition it came from, on a short line of its own (a console
+    // line is 80 characters; the whole device path is longer).
+    if (loaded != NULL) {
+        EFI_DEVICE_PATH *node = DevicePathFromHandle(loaded->DeviceHandle);
+        while (node != NULL && !IsDevicePathEnd(node)) {
+            if (DevicePathType(node) == MEDIA_DEVICE_PATH && DevicePathSubType(node) == MEDIA_HARDDRIVE_DP) {
+                HARDDRIVE_DEVICE_PATH *hd = (HARDDRIVE_DEVICE_PATH *)node;
+                if (hd->SignatureType == SIGNATURE_TYPE_GUID)
+                    Print(L"TUR-WINDOWS-STANDIN: partition=%d guid=%g\r\n", hd->PartitionNumber,
+                          (EFI_GUID *)hd->Signature);
+            }
+            node = NextDevicePathNode(node);
+        }
+    }
     Print(L"TUR-WINDOWS-STANDIN: device=%s\r\n", device);
     Print(L"TUR-WINDOWS-STANDIN: this is TUR's test program, not Windows; powering off\r\n");
     uefi_call_wrapper(BS->Stall, 1, 3000000);
