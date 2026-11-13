@@ -495,6 +495,8 @@ fn the_command_refuses_before_downloading_what_cannot_be_used() {
         "tiny-test",
         "--json",
         "--no-serve",
+        "--context",
+        "512",
         "--catalogue",
         catalogue.to_str().expect("UTF-8"),
         "--models-dir",
