@@ -5,13 +5,18 @@
 # made from this file and the Containerfile. See desktop/README.md, "The
 # builder image", before changing anything here.
 #
+# The base comes from TUR's mirror, ghcr.io/giorgiogiudice/tur-mirror-fedora
+# (.github/actions/use-base-mirror): quay.io drops a digest about a day after
+# Fedora moves the tag. base-mirror.yml copies a new digest when this file
+# changes in a pull request.
+#
 # The base is the Fedora 45 container, the same release as the OS image's base
 # (image/base.lock), so that the libraries the tests run against are those of
 # the system the programs will run on.
 BASE_IMAGE=quay.io/fedora/fedora
 BASE_TAG=45
-BASE_DIGEST=sha256:fa773d10382c082ff2cccaf7982a5c162f11f296f91274b994357f2d3d473770
-BASE_VERIFIED=2026-11-12
+BASE_DIGEST=sha256:e15959f36d52307f176f8c068009f6f1451c3b238b37a1f03e56dbfa4526e8b1
+BASE_VERIFIED=2026-11-13
 
 # Raise this to rebuild the image with today's packages without changing
 # anything else. Expect to refresh builder.packages and, if Qt or a font

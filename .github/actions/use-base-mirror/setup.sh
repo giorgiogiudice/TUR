@@ -3,14 +3,14 @@
 #
 # Part of .github/actions/use-base-mirror (see action.yml there).
 #
-# Environment: TOKEN (read access to the mirror), ACTOR, MIRROR (for example
-# ghcr.io/giorgiogiudice/tur-base), LOCK (image/base.lock).
+# Environment: TOKEN (read access to the mirrors), ACTOR.
 #
-# Writes the containers-registries.conf(5) drop-in
+# Writes the containers-registries.conf(5) drop-in that pins.py drop-in
+# makes from mirrors.tsv, one table per upstream repository:
 #
 #   [[registry]]
-#   prefix = "<BASE_IMAGE>"
-#   location = "<BASE_IMAGE>"
+#   prefix = "<UPSTREAM>"
+#   location = "<UPSTREAM>"
 #   mirror-by-digest-only = true
 #   [[registry.mirror]]
 #   location = "<MIRROR>"
@@ -22,14 +22,12 @@
 # second; a pull by tag never uses the mirror.
 set -euo pipefail
 
-: "${TOKEN:?}" "${ACTOR:?}" "${MIRROR:?}" "${LOCK:?}"
+: "${TOKEN:?}" "${ACTOR:?}"
 
-# shellcheck source=/dev/null
-. "$LOCK"
-: "${BASE_IMAGE:?not set in $LOCK}"
-
-registry="${MIRROR%%/*}"
-name=50-tur-base-mirror.conf
+here="$(dirname "$0")"
+# Every mirror is in GitHub's registry (mirrors.tsv).
+registry=ghcr.io
+name=50-tur-mirrors.conf
 
 # Credentials. podman, buildah and skopeo share one auth file, chosen by
 # containers-auth.json(5): $XDG_RUNTIME_DIR/containers/auth.json when
@@ -44,12 +42,12 @@ echo "XDG_RUNTIME_DIR: runner user ${XDG_RUNTIME_DIR:-unset}, under sudo $(sudo 
 user_ok=yes
 if ! printf '%s' "$TOKEN" | skopeo login --username "$ACTOR" --password-stdin "$registry"; then
     user_ok=no
-    echo "::warning title=Base image mirror::the runner user could not log in to ${registry}; rootless pulls of the base come from ${BASE_IMAGE} only"
+    echo "::warning title=Image mirrors::the runner user could not log in to ${registry}; rootless pulls by digest come from the upstream registries only, unless a mirror is public"
 fi
 root_ok=yes
 if ! printf '%s' "$TOKEN" | sudo env -u XDG_RUNTIME_DIR skopeo login --username "$ACTOR" --password-stdin "$registry"; then
     root_ok=no
-    echo "::warning title=Base image mirror::root could not log in to ${registry}; the base comes from ${BASE_IMAGE} only"
+    echo "::warning title=Image mirrors::root could not log in to ${registry}; pulls by digest come from the upstream registries only"
 fi
 if [ "$user_ok" = no ] && [ "$(sudo printenv XDG_RUNTIME_DIR || true)" != "" ]; then
     root_ok=no  # root reads the runner user's file, which has no credentials
@@ -61,19 +59,7 @@ if [ "$root_ok" = no ]; then
     exit 0
 fi
 
-conf=$(cat <<EOF
-# Written by .github/actions/use-base-mirror (TUR CI). See image/README.md,
-# "The base image and its mirror". A pull of ${BASE_IMAGE} by digest tries
-# the mirror first, then ${BASE_IMAGE} itself. Pulls by tag do not use it.
-[[registry]]
-prefix = "${BASE_IMAGE}"
-location = "${BASE_IMAGE}"
-mirror-by-digest-only = true
-
-[[registry.mirror]]
-location = "${MIRROR}"
-EOF
-)
+conf="$(python3 -I "${here}/pins.py" drop-in)"
 
 sudo mkdir -p /etc/containers/registries.conf.d
 printf '%s\n' "$conf" | sudo tee "/etc/containers/registries.conf.d/${name}" >/dev/null
@@ -95,5 +81,5 @@ echo "root:     ${root_view}"
 if user_view="$(registries env)"; then
     echo "rootless: ${user_view}"
 else
-    echo "::warning title=Base image mirror::rootless podman info failed; rootless podman may not work on this runner"
+    echo "::warning title=Image mirrors::rootless podman info failed; rootless podman may not work on this runner"
 fi

@@ -269,6 +269,9 @@ jobs:
     name: Operate applications through the accessibility tree, under KWin
     runs-on: ubuntu-24.04
     timeout-minutes: 75
+    permissions:
+      contents: read
+      packages: read   # the builder's base from TUR's mirror (ghcr.io)
     env:
       CARGO_TERM_COLOR: never
       CARGO_INCREMENTAL: "0"
@@ -294,6 +297,13 @@ jobs:
         with:
           path: ${{ env.BUILDER_DIR }}
           key: ${{ steps.key.outputs.key }}
+
+      # The pinned Fedora base from TUR's mirror: TUR_BUILD_CONTEXTS.
+      - uses: ./.github/actions/use-base-mirror
+        if: steps.cache.outputs.cache-hit != 'true'
+        with:
+          check: "false"
+          images: desktop/ci/builder.lock
 
       - name: Build the builder image, if the cache has none
         if: steps.cache.outputs.cache-hit != 'true'

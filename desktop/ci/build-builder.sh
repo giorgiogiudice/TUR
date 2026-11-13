@@ -17,7 +17,13 @@ image=${BUILDER:-localhost/tur-desktop-builder:ci}
 base="${BASE_IMAGE}@${BASE_DIGEST}"
 echo "base: $base (tag $BASE_TAG, verified $BASE_VERIFIED), builder revision $BUILDER_REVISION"
 
-docker build --pull --build-arg "BASE=$base" -t "$image" -f "$here/builder/Containerfile" "$here/builder"
+# TUR_BUILD_CONTEXTS, from .github/actions/use-base-mirror: --build-context
+# flags that take the base from TUR's mirror, which keeps the digest after
+# quay.io has dropped it. The FROM line still names the base by its quay.io
+# reference; only where the bytes come from changes.
+echo "contexts: ${TUR_BUILD_CONTEXTS:-none (the base comes from $BASE_IMAGE)}"
+# shellcheck disable=SC2086 # TUR_BUILD_CONTEXTS is a list of flags, one word each
+docker build --pull ${TUR_BUILD_CONTEXTS:-} --build-arg "BASE=$base" -t "$image" -f "$here/builder/Containerfile" "$here/builder"
 
 mkdir -p "$dir"
 docker run --rm "$image" cat /usr/share/tur-builder/packages.tsv > "$dir/packages.tsv"
