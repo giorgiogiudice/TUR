@@ -689,7 +689,8 @@ label_on() {
 }
 
 keep_log() {
-    local device="$1" id="$2" root mnt="${SESSION}/target" var="" dest label="" file status=0 contexts made=""
+    local device="$1" id="$2" root mnt="${SESSION}/target" var="" dest label="" label_from=none file status=0 contexts made=""
+    local copied=0 labelled=yes unmounted=yes state
     local candidate
     kept_log_path=""
     root="$(root_partition "${device}")"
@@ -714,34 +715,44 @@ keep_log() {
     # the deployment's policy.
     if [ -d "${var}/log" ] && command -v getfattr > /dev/null 2>&1; then
         label="$(getfattr --only-values -h -n security.selinux "${var}/log" 2> /dev/null | tr -d '\000')"
+        [ -n "${label}" ] && label_from=disk
     fi
     if [ -z "${label}" ]; then
-        for contexts in "${mnt}"/ostree/deploy/*/deploy/*/etc/selinux/targeted/contexts/files/file_contexts; do
+        for contexts in "${mnt}"/ostree/deploy/*/deploy/*/etc/selinux/targeted/contexts/files/file_contexts \
+            "${mnt}"/ostree/deploy/*/deploy/*/usr/etc/selinux/targeted/contexts/files/file_contexts; do
             [ -f "${contexts}" ] || continue
             label="$(awk '$1 == "/var/log(/.*)?" { print $NF; exit }' "${contexts}")"
-            [ -n "${label}" ] && break
+            if [ -n "${label}" ]; then
+                label_from="${contexts#"${mnt}"}"
+                break
+            fi
         done
     fi
     [ -d "${var}/log" ] || made="${var}/log"
+    mark "log-keep var=${var#"${mnt}"} var_holds=\"$(find "${var}" -mindepth 1 -maxdepth 1 -printf '%f ' 2> /dev/null)\" var_attributes=\"$(lsattr -d "${var}" 2> /dev/null | cut -d' ' -f1)\" label_from=${label_from} label=${label:-none}"
     dest="${var}/log/tur-installer/${id}"
-    mkdir -p "${dest}" || status=1
+    mkdir -p "${dest}" 2>> "${LOG}" || { status=1; mark "log-keep mkdir=failed $(tail -n 1 "${LOG}")"; }
     for file in "${LOG}" "${INSTALL_LOG}" "${SESSION}"/*.json "${WIZARD_TRANSCRIPT}"; do
-        [ -f "${file}" ] && cp "${file}" "${dest}/" 2>> "${LOG}"
+        if [ -f "${file}" ]; then
+            if cp "${file}" "${dest}/" 2>> "${LOG}"; then copied=$((copied + 1)); else status=1; fi
+        fi
     done
     if [ -n "${made}" ]; then chmod 0755 "${made}"; fi
     chmod 0750 "${var}/log/tur-installer" "${dest}" 2> /dev/null
     chmod 0640 "${dest}"/* 2> /dev/null
     if [ -n "${label}" ]; then
         for file in ${made:+"${made}"} "${var}/log/tur-installer" "${dest}" "${dest}"/*; do
-            label_on "${file}" "${label}" || status=1
+            label_on "${file}" "${label}" || { status=1; labelled=no; }
         done
     else
         status=1
+        labelled=no
     fi
     kept_log_path="/var/log/tur-installer/${id}"
     sync
-    umount "${mnt}" 2>> "${LOG}" || status=1
-    mark "log-kept result=$([ "${status}" -eq 0 ] && echo yes || echo partly) path=${kept_log_path} selinux_label=${label:-none} made_var_log=$([ -n "${made}" ] && echo yes || echo no)"
+    umount "${mnt}" 2>> "${LOG}" || { status=1; unmounted=no; }
+    state="$(dumpe2fs -h "${root}" 2> /dev/null | sed -n 's/^Filesystem state:[[:space:]]*//p')"
+    mark "log-kept result=$([ "${status}" -eq 0 ] && echo yes || echo partly) path=${kept_log_path} files=${copied} selinux_label=${label:-none} labelled=${labelled} made_var_log=$([ -n "${made}" ] && echo yes || echo no) unmounted=${unmounted} filesystem_state=\"${state}\""
     return "${status}"
 }
 

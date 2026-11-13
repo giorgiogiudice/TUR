@@ -86,6 +86,13 @@ def inspect(disk: str, out: pathlib.Path) -> int:
         facts["casefold"] = "casefold" in facts["features"]
         run("mount", "-o", "ro,noload", root, str(mnt))
         mounted = True
+        facts["state_root_var"] = {
+            str(var.relative_to(mnt)): sorted(child.name for child in var.iterdir())
+            for var in sorted(mnt.glob("ostree/deploy/*/var")) if var.is_dir()
+        }
+        facts["filesystem_state"] = next(
+            (line.split(":", 1)[1].strip() for line in run("dumpe2fs", "-h", root).splitlines()
+             if line.startswith("Filesystem state:")), None)
         kept = sorted(mnt.glob("ostree/deploy/*/var/log/tur-installer/*"))
         facts["installer_log_directories"] = [str(path.relative_to(mnt)) for path in kept]
         if kept:

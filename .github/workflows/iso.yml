@@ -327,6 +327,8 @@ jobs:
         continue-on-error: true
         run: |
           status=0
+          # Made here, as the runner's user: the start below writes into it.
+          mkdir -p "$OUT/casefold/first-start"
           sudo python3 tests/iso/installed-root.py casefold "$LIVE_DISK" "$OUT/casefold" || status=$?
           if [ "$status" -eq 0 ]; then
             python3 tests/iso/boot-installed.py --disk "$LIVE_DISK" --work "$WORK/vm" --out "$OUT/casefold/first-start" \

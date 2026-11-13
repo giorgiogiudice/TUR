@@ -125,9 +125,21 @@ Kit.Page {
             flick.contentY = Math.min(furthest, bottom + room - flick.height)
     }
 
+    function revealFocus(): void {
+        wizard.reveal(wizard.focusItem)
+    }
+
     padding: 0
 
     onFocusItemChanged: wizard.reveal(wizard.focusItem)
+
+    // A screen is laid out in the frames after it is loaded.
+    Timer {
+        id: revealLater
+
+        interval: 100
+        onTriggered: wizard.revealFocus()
+    }
 
     Connections {
         target: wizard.engine
@@ -393,8 +405,13 @@ Kit.Page {
                         }
                         onLoaded: {
                             const loaded = screen.item as WizardScreen
-                            if (loaded !== null && loaded.initialFocus !== null)
+                            if (loaded !== null && loaded.initialFocus !== null) {
                                 loaded.initialFocus.forceActiveFocus(Qt.TabFocusReason)
+                                // Once the screen is laid out: the control
+                                // with the keyboard is in sight (the
+                                // confirmation's field is below the fold).
+                                revealLater.restart()
+                            }
                             Transcript.write("screen-ready name=" + wizard.step)
                         }
                     }
