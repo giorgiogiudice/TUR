@@ -1,0 +1,46 @@
+{
+  "licence": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+  "model": "gemma-4-e2b",
+  "signals": [
+    {
+      "args": [
+        "gemma-4-e2b",
+        {
+          "bytes_done": 0,
+          "bytes_to_download": 4336349920,
+          "bytes_total": 4336349920,
+          "code": null,
+          "event": "plan",
+          "file": null,
+          "free_bytes": 1000000000000,
+          "kind": "ensure-event",
+          "message": "plan gemma-4-e2b",
+          "model": "gemma-4-e2b",
+          "schema_version": 1,
+          "state": null
+        }
+      ],
+      "member": "LocalModelProgress"
+    },
+    {
+      "args": [
+        "gemma-4-e2b",
+        {
+          "bytes_done": null,
+          "bytes_to_download": null,
+          "bytes_total": null,
+          "code": "TUR-AI-LOCAL-029",
+          "event": "cancelled",
+          "file": null,
+          "free_bytes": null,
+          "kind": "ensure-event",
+          "message": "cancelled gemma-4-e2b",
+          "model": "gemma-4-e2b",
+          "schema_version": 1,
+          "state": null
+        }
+      ],
+      "member": "LocalModelProgress"
+    }
+  ]
+}

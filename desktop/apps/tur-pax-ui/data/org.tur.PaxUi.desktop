@@ -1,0 +1,42 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# The launcher entry of tur-pax-ui, and P@x's keys (docs/architecture/
+# desktop-experience.md, 9.1; the owner's answer 17.1.2). KDE's shortcut
+# service reads X-KDE-Shortcuts from the entry and from each action: the
+# entry's key opens the ask bar, the action "stop" stops P@x's task, the
+# action "keys" shows P@x's keys on its indicator. Every key here is the one
+# desktop/kit/pax/commands.json gives for the command X-TUR-Pax-Command
+# names; desktop/kit/pax/gen_commands.py --check fails if they disagree.
+# Installed as /usr/share/applications/org.tur.PaxUi.desktop.
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=P@x
+GenericName=Assistant
+Comment=Ask TUR's assistant to do something on this computer, or to show you how
+Exec=tur-pax-ui --mode ask
+Icon=org.tur.Pax
+Terminal=false
+Categories=Utility;
+Keywords=assistant;P@x;pax;help;ask;AI;
+StartupNotify=false
+SingleMainWindow=true
+X-KDE-Shortcuts=Meta+Space
+X-TUR-Pax-Command=ask
+Actions=stop;keys;setup;
+
+[Desktop Action stop]
+Name=Stop P@x
+Exec=tur-pax-ui --stop
+X-KDE-Shortcuts=Meta+Esc
+X-TUR-Pax-Command=stop
+
+[Desktop Action keys]
+Name=Show P@x's keys
+Exec=tur-pax-ui --show-keys
+X-KDE-Shortcuts=Meta+/
+X-TUR-Pax-Command=keys
+
+[Desktop Action setup]
+Name=Set up P@x
+Exec=tur-pax-ui --mode setup

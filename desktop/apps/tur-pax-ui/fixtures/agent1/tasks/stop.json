@@ -1,0 +1,115 @@
+{
+  "licence": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+  "request": "Wait for a while.",
+  "signals": [
+    {
+      "args": [
+        "t-1794571292-3",
+        {
+          "answer": "",
+          "attended": true,
+          "cost": null,
+          "currency": null,
+          "error_code": null,
+          "finished_at": null,
+          "message": "",
+          "outcome": null,
+          "request": "Wait for a while.",
+          "schedule": null,
+          "started_at": 1794571292,
+          "state": "working",
+          "steps": [],
+          "task": "t-1794571292-3",
+          "texts": [],
+          "usage": {
+            "cached_input_tokens": 0,
+            "input_tokens": 0,
+            "output_tokens": 0
+          }
+        }
+      ],
+      "member": "TaskStarted"
+    },
+    {
+      "args": [
+        "working"
+      ],
+      "member": "StateChanged"
+    },
+    {
+      "args": [
+        "t-1794571292-3",
+        {
+          "audit_id": "t-1794571292-3#2",
+          "class": 0,
+          "decision": "allowed",
+          "detail": "Run command [\"/usr/bin/sleep\" \"45\"] in the read-only sandbox",
+          "error_code": null,
+          "exit_code": null,
+          "index": 1,
+          "message": null,
+          "output_bytes": 0,
+          "reason": "observe_permitted",
+          "result": null,
+          "service": "org.tur.Pax1",
+          "state": "running",
+          "tier": 4,
+          "title": "Run one program in a read-only sandbox and return what it prints",
+          "tool": "run_readonly_command",
+          "truncated": false,
+          "withheld": 0
+        }
+      ],
+      "member": "ActionProposed"
+    },
+    {
+      "args": [
+        "t-1794571292-3",
+        {
+          "answer": "",
+          "attended": true,
+          "cost": null,
+          "currency": null,
+          "error_code": "TUR-AI-TASK-003",
+          "finished_at": 1794571293,
+          "message": "The assistant stopped because the task was cancelled.",
+          "outcome": "cancelled",
+          "request": "Wait for a while.",
+          "schedule": null,
+          "started_at": 1794571292,
+          "state": "finished",
+          "steps": [
+            {
+              "audit_id": "t-1794571292-3#2",
+              "class": 0,
+              "decision": "allowed",
+              "detail": "Run command [\"/usr/bin/sleep\" \"45\"] in the read-only sandbox",
+              "error_code": null,
+              "exit_code": null,
+              "index": 1,
+              "message": null,
+              "output_bytes": 0,
+              "reason": "observe_permitted",
+              "result": null,
+              "service": "org.tur.Pax1",
+              "state": "running",
+              "tier": 4,
+              "title": "Run one program in a read-only sandbox and return what it prints",
+              "tool": "run_readonly_command",
+              "truncated": false,
+              "withheld": 0
+            }
+          ],
+          "task": "t-1794571292-3",
+          "texts": [],
+          "usage": {
+            "cached_input_tokens": 0,
+            "input_tokens": 0,
+            "output_tokens": 0
+          }
+        }
+      ],
+      "member": "TaskFinished"
+    }
+  ]
+}

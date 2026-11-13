@@ -1,0 +1,1855 @@
+{
+  "licence": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+  "replies": {
+    "CancelLocalModel": {
+      "reply": []
+    },
+    "Enable 1": {
+      "error": "org.tur.Agent1.Error.TUR_AI_SERVICE_002",
+      "message": "TUR-AI-SERVICE-002: the version named is not the version of the text in use"
+    },
+    "GetConsentText anthropic": {
+      "reply": [
+        "2",
+        "What P@x sends to Anthropic\n\nTo do what you ask, P@x sends these to Anthropic over an encrypted connection:\n- what you ask, as text;\n- pictures of the window P@x is working in, or of the screen when a task needs it;\n- the names and states of buttons and other controls in that window;\n- the results of the tools and commands P@x runs for you;\n- the things P@x remembers that matter to the task.\n\nNever sent:\n- the sound of your voice (speech is turned into text on this computer);\n- the trusted screen, sign-in prompts and password managers;\n- windows of applications you exclude;\n- passwords and keys stored by the system;\n- support bundles, unless you attach one yourself.\n\nIn this version\nP@x cannot see or use the screen yet, so no pictures and no names of controls are sent. It uses TUR's own tools and commands that only read.\n\nReminders and scheduled tasks\nA scheduled task runs when you may not be there, also while the screen is locked. It can look things up and make changes that can be undone. What it reads is sent to Anthropic like the results of any other task. Anything else it would need waits for you.\n\nMemory\nMemory stays on this computer. When something P@x remembers matters to a task, it is sent to Anthropic with that task. That includes things P@x read somewhere and you chose to keep: they are sent again whenever they matter.\n\nOther programs\nOn this desktop, any program you run can see your screen and use the keyboard and pointer. TUR limits what P@x may do. It cannot limit other programs you start.\n\nWhat Anthropic keeps\nP@x asks every provider not to store your conversations where the provider offers that choice. P@x sends Anthropic the whole conversation with each request. The interface P@x uses has no setting for storing a conversation, so there is nothing for P@x to switch off.\nAnthropic's terms are not reviewed by TUR: TUR has not read what Anthropic keeps, for how long, whether it trains on it, or where it processes it. Read them before you go on.\nWhat Anthropic keeps anyway, and for how long, is governed by Anthropic's terms, not by TUR. TUR cannot control it.\nAnthropic's data terms: https://www.anthropic.com/legal/commercial-terms\n\nYou can see everything P@x did in Settings ▸ P@x ▸ Activity, and stop P@x at any time.\n"
+      ]
+    },
+    "GetConsentText deepseek": {
+      "reply": [
+        "2",
+        "What P@x sends to DeepSeek\n\nTo do what you ask, P@x sends these to DeepSeek over an encrypted connection:\n- what you ask, as text;\n- pictures of the window P@x is working in, or of the screen when a task needs it;\n- the names and states of buttons and other controls in that window;\n- the results of the tools and commands P@x runs for you;\n- the things P@x remembers that matter to the task.\n\nNever sent:\n- the sound of your voice (speech is turned into text on this computer);\n- the trusted screen, sign-in prompts and password managers;\n- windows of applications you exclude;\n- passwords and keys stored by the system;\n- support bundles, unless you attach one yourself.\n\nIn this version\nP@x cannot see or use the screen yet, so no pictures and no names of controls are sent. It uses TUR's own tools and commands that only read.\n\nReminders and scheduled tasks\nA scheduled task runs when you may not be there, also while the screen is locked. It can look things up and make changes that can be undone. What it reads is sent to DeepSeek like the results of any other task. Anything else it would need waits for you.\n\nMemory\nMemory stays on this computer. When something P@x remembers matters to a task, it is sent to DeepSeek with that task. That includes things P@x read somewhere and you chose to keep: they are sent again whenever they matter.\n\nOther programs\nOn this desktop, any program you run can see your screen and use the keyboard and pointer. TUR limits what P@x may do. It cannot limit other programs you start.\n\nWhat DeepSeek keeps\nP@x asks every provider not to store your conversations where the provider offers that choice. P@x sends DeepSeek the whole conversation with each request. The interface P@x uses has no setting that asks a service not to store a conversation.\nWhat DeepSeek's terms say, as TUR read them on 2026-11-12:\n- whether it keeps what it is sent: Yes. Its privacy policy says it collects and stores what you send (prompts, inputs, uploaded files) with your account; its API terms say nothing more specific.\n- for how long: No fixed period: as long as necessary to provide its services, and for as long as you have an account.\n- whether it trains models on it: It may. Its privacy policy names training and improving its models among the uses of your data and gives a right to opt out; the opt-out its terms describe ('Improve the model for everyone') is a setting of its chat product, and none for the API was found.\n- where it processes it: The People's Republic of China, by Hangzhou DeepSeek Artificial Intelligence Co., Ltd.\nThis is TUR's summary. DeepSeek's own terms govern, and they can change.\nWhat DeepSeek keeps anyway, and for how long, is governed by DeepSeek's terms, not by TUR. TUR cannot control it.\nDeepSeek's data terms: https://cdn.deepseek.com/policies/en-US/deepseek-privacy-policy.html\n\nYou can see everything P@x did in Settings ▸ P@x ▸ Activity, and stop P@x at any time.\n"
+      ]
+    },
+    "GetConsentText local": {
+      "reply": [
+        "2",
+        "What P@x sends to Local AI on this computer\n\nTo do what you ask, P@x sends these to Local AI on this computer, which runs on this computer:\n- what you ask, as text;\n- pictures of the window P@x is working in, or of the screen when a task needs it;\n- the names and states of buttons and other controls in that window;\n- the results of the tools and commands P@x runs for you;\n- the things P@x remembers that matter to the task.\n\nNever sent:\n- the sound of your voice (speech is turned into text on this computer);\n- the trusted screen, sign-in prompts and password managers;\n- windows of applications you exclude;\n- passwords and keys stored by the system;\n- support bundles, unless you attach one yourself.\n\nIn this version\nP@x cannot see or use the screen yet, so no pictures and no names of controls are sent. It uses TUR's own tools and commands that only read.\n\nReminders and scheduled tasks\nA scheduled task runs when you may not be there, also while the screen is locked. It can look things up and make changes that can be undone. What it reads is sent to Local AI on this computer like the results of any other task. Anything else it would need waits for you.\n\nMemory\nMemory stays on this computer. When something P@x remembers matters to a task, it is sent to Local AI on this computer with that task. That includes things P@x read somewhere and you chose to keep: they are sent again whenever they matter.\n\nOther programs\nOn this desktop, any program you run can see your screen and use the keyboard and pointer. TUR limits what P@x may do. It cannot limit other programs you start.\n\nWhat Local AI on this computer keeps\nLocal AI on this computer runs on this computer. What P@x sends it stays on this computer: no company receives it. TUR checked that its address is this computer; what Local AI on this computer itself keeps on this computer is up to how it was set up.\n\nYou can see everything P@x did in Settings ▸ P@x ▸ Activity, and stop P@x at any time.\n"
+      ]
+    },
+    "GetConsentText openai": {
+      "reply": [
+        "2",
+        "What P@x sends to OpenAI\n\nTo do what you ask, P@x sends these to OpenAI over an encrypted connection:\n- what you ask, as text;\n- pictures of the window P@x is working in, or of the screen when a task needs it;\n- the names and states of buttons and other controls in that window;\n- the results of the tools and commands P@x runs for you;\n- the things P@x remembers that matter to the task.\n\nNever sent:\n- the sound of your voice (speech is turned into text on this computer);\n- the trusted screen, sign-in prompts and password managers;\n- windows of applications you exclude;\n- passwords and keys stored by the system;\n- support bundles, unless you attach one yourself.\n\nIn this version\nP@x cannot see or use the screen yet, so no pictures and no names of controls are sent. It uses TUR's own tools and commands that only read.\n\nReminders and scheduled tasks\nA scheduled task runs when you may not be there, also while the screen is locked. It can look things up and make changes that can be undone. What it reads is sent to OpenAI like the results of any other task. Anything else it would need waits for you.\n\nMemory\nMemory stays on this computer. When something P@x remembers matters to a task, it is sent to OpenAI with that task. That includes things P@x read somewhere and you chose to keep: they are sent again whenever they matter.\n\nOther programs\nOn this desktop, any program you run can see your screen and use the keyboard and pointer. TUR limits what P@x may do. It cannot limit other programs you start.\n\nWhat OpenAI keeps\nP@x asks every provider not to store your conversations where the provider offers that choice. OpenAI's interface stores what it is sent unless it is asked not to. P@x asks it not to, with every request.\nOpenAI's terms are not reviewed by TUR: TUR has not read what OpenAI keeps, for how long, whether it trains on it, or where it processes it. Read them before you go on.\nWhat OpenAI keeps anyway, and for how long, is governed by OpenAI's terms, not by TUR. TUR cannot control it.\nOpenAI's data terms: https://developers.openai.com/api/docs/guides/your-data\n\nYou can see everything P@x did in Settings ▸ P@x ▸ Activity, and stop P@x at any time.\n"
+      ]
+    },
+    "GetGenerationSettings anthropic claude-opus-5-5": {
+      "reply": [
+        {
+          "accepts": {
+            "effort": {
+              "provider_default": "medium",
+              "values": [
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+              ]
+            },
+            "max_output_tokens": {
+              "max": 128000,
+              "min": 1
+            },
+            "stop": {
+              "max": 4
+            }
+          },
+          "adapter": "anthropic",
+          "checked": "2026-11-13",
+          "chosen": {},
+          "declared": true,
+          "effective": {},
+          "max_output_tokens": 8192,
+          "model": "claude-opus-5-5",
+          "notices": [],
+          "problem": null,
+          "provider": "anthropic",
+          "sources": [
+            "https://platform.claude.com/docs/en/build-with-claude/effort",
+            "https://platform.claude.com/docs/en/build-with-claude/extended-thinking",
+            "https://platform.claude.com/docs/en/api/migration-2026-10-21"
+          ]
+        }
+      ]
+    },
+    "GetGenerationSettings deepseek deepseek-flash": {
+      "reply": [
+        {
+          "accepts": {
+            "effort": {
+              "provider_default": "high",
+              "sampling_only_with": [
+                "none"
+              ],
+              "values": [
+                "none",
+                "low",
+                "high",
+                "max"
+              ]
+            },
+            "max_output_tokens": {
+              "max": 393216,
+              "min": 1
+            },
+            "stop": {
+              "max": 16
+            },
+            "temperature": {
+              "max": 2.0,
+              "min": 0.0
+            },
+            "top_p": {
+              "max": 1.0,
+              "min": 0.01
+            }
+          },
+          "adapter": "openai-chat",
+          "checked": "2026-11-13",
+          "chosen": {},
+          "declared": true,
+          "effective": {},
+          "max_output_tokens": 8192,
+          "model": "deepseek-flash",
+          "notices": [
+            "This model takes temperature, top-p and top-k only when its reasoning effort is none; while it reasons it refuses or ignores them."
+          ],
+          "problem": null,
+          "provider": "deepseek",
+          "sources": [
+            "https://api-docs.deepseek.com/api/create-chat-completion",
+            "https://api-docs.deepseek.com/guides/thinking_mode"
+          ]
+        }
+      ]
+    },
+    "GetGenerationSettings local qwen3-0.6b": {
+      "reply": [
+        {
+          "accepts": {
+            "context_tokens": {
+              "default": 8192,
+              "max": 32768,
+              "min": 2048
+            },
+            "effort": {
+              "default": "none",
+              "values": [
+                "none",
+                "medium"
+              ]
+            },
+            "max_output_tokens": {
+              "max": 8192,
+              "min": 1
+            },
+            "stop": {
+              "max": 8
+            },
+            "temperature": {
+              "default": 0.7,
+              "max": 2.0,
+              "min": 0.0
+            },
+            "top_k": {
+              "default": 20,
+              "max": 1000,
+              "min": 0
+            },
+            "top_p": {
+              "default": 0.8,
+              "max": 1.0,
+              "min": 0.0
+            }
+          },
+          "adapter": "openai-chat",
+          "checked": "2026-11-13",
+          "chosen": {},
+          "declared": true,
+          "effective": {
+            "context_tokens": 8192,
+            "effort": "none",
+            "temperature": 0.7,
+            "top_k": 20,
+            "top_p": 0.8
+          },
+          "max_output_tokens": 1024,
+          "model": "qwen3-0.6b",
+          "notices": [],
+          "problem": null,
+          "provider": "local",
+          "sources": [
+            "https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md",
+            "services/tur-ai-local/catalogue"
+          ]
+        }
+      ]
+    },
+    "GetGenerationSettings openai gpt-6-luna": {
+      "reply": [
+        {
+          "accepts": {
+            "effort": {
+              "provider_default": "medium",
+              "sampling_only_with": [
+                "none"
+              ],
+              "values": [
+                "none",
+                "low",
+                "medium",
+                "high"
+              ]
+            },
+            "temperature": {
+              "max": 2.0,
+              "min": 0.0
+            },
+            "top_p": {
+              "max": 1.0,
+              "min": 0.0
+            }
+          },
+          "adapter": "openai",
+          "checked": "2026-11-13",
+          "chosen": {},
+          "declared": true,
+          "effective": {},
+          "max_output_tokens": 8192,
+          "model": "gpt-6-luna",
+          "notices": [
+            "This model takes temperature, top-p and top-k only when its reasoning effort is none; while it reasons it refuses or ignores them."
+          ],
+          "problem": null,
+          "provider": "openai",
+          "sources": [
+            "https://developers.openai.com/api/reference/resources/responses/methods/create",
+            "https://developers.openai.com/api/docs/guides/reasoning",
+            "https://developers.openai.com/api/docs/guides/latest-model"
+          ]
+        }
+      ]
+    },
+    "HasKey anthropic": {
+      "reply": [
+        false
+      ]
+    },
+    "ListActivity 20": {
+      "reply": [
+        [
+          {
+            "attended": true,
+            "entries": [
+              {
+                "action": null,
+                "class": null,
+                "decision": null,
+                "error_code": null,
+                "event": "task_started",
+                "message": "tur-pax: task_started provider_id=anthropic attended=yes",
+                "n": 1,
+                "outcome": null,
+                "reason": null,
+                "result": null,
+                "sandbox": null,
+                "schedule": null,
+                "setting": null,
+                "tier": null,
+                "time": 1794571291,
+                "value": null,
+                "withheld": null
+              },
+              {
+                "action": "org.tur.Test1:test_observe",
+                "class": 0,
+                "decision": "allowed",
+                "error_code": null,
+                "event": "decision",
+                "message": "tur-pax: allowed org.tur.Test1:test_observe (class 0, tier 1): observe_permitted; no arguments",
+                "n": 2,
+                "outcome": null,
+                "reason": null,
+                "result": null,
+                "sandbox": null,
+                "schedule": null,
+                "setting": null,
+                "tier": 1,
+                "time": 1794571291,
+                "value": null,
+                "withheld": null
+              },
+              {
+                "action": "org.tur.Test1:test_observe",
+                "class": null,
+                "decision": null,
+                "error_code": null,
+                "event": "executed",
+                "message": "tur-pax: executed action=org.tur.Test1:test_observe result=ok exit=0 output_bytes=55 truncated=no withheld=0",
+                "n": 3,
+                "outcome": null,
+                "reason": null,
+                "result": "ok",
+                "sandbox": null,
+                "schedule": null,
+                "setting": null,
+                "tier": null,
+                "time": 1794571291,
+                "value": null,
+                "withheld": 0
+              },
+              {
+                "action": "org.tur.Test1:test_consequential",
+                "class": 2,
+                "decision": "refused",
+                "error_code": "TUR-AI-POLICY-006",
+                "event": "decision",
+                "message": "tur-pax: refused org.tur.Test1:test_consequential (class 2, tier 1): trusted_path_unavailable; arguments recipient=string, subject=string",
+                "n": 4,
+                "outcome": null,
+                "reason": null,
+                "result": null,
+                "sandbox": null,
+                "schedule": null,
+                "setting": null,
+                "tier": 1,
+                "time": 1794571291,
+                "value": null,
+                "withheld": null
+              },
+              {
+                "action": null,
+                "class": null,
+                "decision": null,
+                "error_code": null,
+                "event": "task_finished",
+                "message": "tur-pax: task_finished provider_id=anthropic outcome=completed steps=2 requests=2 tokens=140",
+                "n": 5,
+                "outcome": "completed",
+                "reason": null,
+                "result": null,
+                "sandbox": null,
+                "schedule": null,
+                "setting": null,
+                "tier": null,
+                "time": 1794571291,
+                "value": null,
+                "withheld": null
+              }
+            ],
+            "error_code": null,
+            "kind": "task",
+            "outcome": "completed",
+            "provider": "anthropic",
+            "provider_id": "anthropic",
+            "schedule": null,
+            "started_at": 1794571291,
+            "task": "t-1794571291-2"
+          },
+          {
+            "attended": true,
+            "entries": [
+              {
+                "action": null,
+                "class": null,
+                "decision": null,
+                "error_code": null,
+                "event": "task_started",
+                "message": "tur-pax: task_started provider_id=anthropic attended=yes",
+                "n": 1,
+                "outcome": null,
+                "reason": null,
+                "result": null,
+                "sandbox": null,
+                "schedule": null,
+                "setting": null,
+                "tier": null,
+                "time": 1794571291,
+                "value": null,
+                "withheld": null
+              },
+              {
+                "action": "org.tur.Test1:test_observe",
+                "class": 0,
+                "decision": "allowed",
+                "error_code": null,
+                "event": "decision",
+                "message": "tur-pax: allowed org.tur.Test1:test_observe (class 0, tier 1): observe_permitted; no arguments",
+                "n": 2,
+                "outcome": null,
+                "reason": null,
+                "result": null,
+                "sandbox": null,
+                "schedule": null,
+                "setting": null,
+                "tier": 1,
+                "time": 1794571291,
+                "value": null,
+                "withheld": null
+              },
+              {
+                "action": "org.tur.Test1:test_observe",
+                "class": null,
+                "decision": null,
+                "error_code": null,
+                "event": "executed",
+                "message": "tur-pax: executed action=org.tur.Test1:test_observe result=ok exit=0 output_bytes=55 truncated=no withheld=0",
+                "n": 3,
+                "outcome": null,
+                "reason": null,
+                "result": "ok",
+                "sandbox": null,
+                "schedule": null,
+                "setting": null,
+                "tier": null,
+                "time": 1794571291,
+                "value": null,
+                "withheld": 0
+              },
+              {
+                "action": "org.tur.Test1:test_reversible",
+                "class": 1,
+                "decision": "allowed",
+                "error_code": null,
+                "event": "decision",
+                "message": "tur-pax: allowed org.tur.Test1:test_reversible (class 1, tier 1): reversible_permitted; arguments value=string",
+                "n": 4,
+                "outcome": null,
+                "reason": null,
+                "result": null,
+                "sandbox": null,
+                "schedule": null,
+                "setting": null,
+                "tier": 1,
+                "time": 1794571291,
+                "value": null,
+                "withheld": null
+              },
+              {
+                "action": "org.tur.Test1:test_reversible",
+                "class": null,
+                "decision": null,
+                "error_code": null,
+                "event": "executed",
+                "message": "tur-pax: executed action=org.tur.Test1:test_reversible result=ok exit=0 output_bytes=51 truncated=no withheld=0",
+                "n": 5,
+                "outcome": null,
+                "reason": null,
+                "result": "ok",
+                "sandbox": null,
+                "schedule": null,
+                "setting": null,
+                "tier": null,
+                "time": 1794571291,
+                "value": null,
+                "withheld": 0
+              },
+              {
+                "action": null,
+                "class": null,
+                "decision": null,
+                "error_code": null,
+                "event": "task_finished",
+                "message": "tur-pax: task_finished provider_id=anthropic outcome=completed steps=2 requests=2 tokens=140",
+                "n": 6,
+                "outcome": "completed",
+                "reason": null,
+                "result": null,
+                "sandbox": null,
+                "schedule": null,
+                "setting": null,
+                "tier": null,
+                "time": 1794571291,
+                "value": null,
+                "withheld": null
+              }
+            ],
+            "error_code": null,
+            "kind": "task",
+            "outcome": "completed",
+            "provider": "anthropic",
+            "provider_id": "anthropic",
+            "schedule": null,
+            "started_at": 1794571291,
+            "task": "t-1794571291-1"
+          },
+          {
+            "attended": null,
+            "entries": [
+              {
+                "action": null,
+                "class": null,
+                "decision": null,
+                "error_code": null,
+                "event": "setting_changed",
+                "message": "tur-pax: setting_changed setting=enabled value=on",
+                "n": 1,
+                "outcome": null,
+                "reason": null,
+                "result": null,
+                "sandbox": null,
+                "schedule": null,
+                "setting": "enabled",
+                "tier": null,
+                "time": 1794571291,
+                "value": "on",
+                "withheld": null
+              },
+              {
+                "action": null,
+                "class": null,
+                "decision": null,
+                "error_code": null,
+                "event": "setting_changed",
+                "message": "tur-pax: setting_changed setting=key value=set",
+                "n": 2,
+                "outcome": null,
+                "reason": null,
+                "result": null,
+                "sandbox": null,
+                "schedule": null,
+                "setting": "key",
+                "tier": null,
+                "time": 1794571291,
+                "value": "set",
+                "withheld": null
+              }
+            ],
+            "error_code": null,
+            "kind": "settings",
+            "outcome": null,
+            "provider": "-",
+            "provider_id": null,
+            "schedule": null,
+            "started_at": 1794571291,
+            "task": "settings"
+          }
+        ]
+      ]
+    },
+    "ListLocalModels": {
+      "reply": [
+        {
+          "in_progress": null,
+          "message": "Qwen3 0.6B is the best fit for this computer.",
+          "models": [
+            {
+              "capabilities": [
+                "chat",
+                "tools"
+              ],
+              "download_bytes": 639446688,
+              "fit": null,
+              "good_for": null,
+              "id": "qwen3-0.6b",
+              "install_problem": null,
+              "installed": "absent",
+              "licence": {
+                "id": "Apache-2.0",
+                "restrictions": "none",
+                "restricts_use": false,
+                "summary": "Apache License 2.0."
+              },
+              "memory_bytes": null,
+              "name": "Qwen3 0.6B",
+              "parameters": null,
+              "publisher": "Qwen (Alibaba Cloud)",
+              "quantisation": null,
+              "repository": "https://huggingface.co/Qwen/Qwen3-0.6B-GGUF",
+              "settings": {
+                "context_tokens": {
+                  "default": 8192,
+                  "max": 32768,
+                  "min": 2048
+                },
+                "effort": {
+                  "default": "none",
+                  "values": [
+                    "none",
+                    "medium"
+                  ]
+                },
+                "max_output_tokens": {
+                  "max": 8192,
+                  "min": 1
+                },
+                "stop": {
+                  "max": 8
+                },
+                "temperature": {
+                  "default": 0.7,
+                  "max": 2.0,
+                  "min": 0.0
+                },
+                "top_k": {
+                  "default": 20,
+                  "max": 1000,
+                  "min": 0
+                },
+                "top_p": {
+                  "default": 0.8,
+                  "max": 1.0,
+                  "min": 0.0
+                }
+              },
+              "thinking": "hybrid",
+              "tier": {
+                "message": "Qwen3 0.6B fits and runs well.",
+                "model": "qwen3-0.6b",
+                "reasons": [],
+                "tier": "runs-well"
+              },
+              "usable_by_pax": true
+            },
+            {
+              "capabilities": [
+                "chat",
+                "tools",
+                "vision"
+              ],
+              "download_bytes": 2988524864,
+              "fit": null,
+              "good_for": null,
+              "id": "ministral-3-3b",
+              "install_problem": null,
+              "installed": "absent",
+              "licence": {
+                "id": "Apache-2.0",
+                "restrictions": "The publisher's model card adds one sentence under its licence.",
+                "restricts_use": true,
+                "summary": "Apache License 2.0."
+              },
+              "memory_bytes": null,
+              "name": "Ministral 3 3B Instruct",
+              "parameters": null,
+              "publisher": "Mistral AI",
+              "quantisation": null,
+              "repository": "https://huggingface.co/mistralai/Ministral-3-3B-Instruct-2512-GGUF",
+              "settings": {
+                "context_tokens": {
+                  "default": 8192,
+                  "max": 131072,
+                  "min": 2048
+                },
+                "max_output_tokens": {
+                  "max": 8192,
+                  "min": 1
+                },
+                "stop": {
+                  "max": 8
+                },
+                "temperature": {
+                  "default": 0.05,
+                  "max": 2.0,
+                  "min": 0.0
+                },
+                "top_k": {
+                  "max": 1000,
+                  "min": 0
+                },
+                "top_p": {
+                  "max": 1.0,
+                  "min": 0.0
+                }
+              },
+              "thinking": "none",
+              "tier": {
+                "message": "Ministral 3 3B Instruct fits and runs well.",
+                "model": "ministral-3-3b",
+                "reasons": [],
+                "tier": "runs-well"
+              },
+              "usable_by_pax": true
+            },
+            {
+              "capabilities": [
+                "chat",
+                "tools",
+                "vision"
+              ],
+              "download_bytes": 4336349920,
+              "fit": null,
+              "good_for": null,
+              "id": "gemma-4-e2b",
+              "install_problem": null,
+              "installed": "installed",
+              "licence": {
+                "id": "Apache-2.0",
+                "restrictions": "none",
+                "restricts_use": false,
+                "summary": "Apache License 2.0."
+              },
+              "memory_bytes": null,
+              "name": "Gemma 4 E2B",
+              "parameters": null,
+              "publisher": "Google DeepMind",
+              "quantisation": null,
+              "repository": "https://huggingface.co/google/gemma-4-E2B-it-qat-q4_0-gguf",
+              "settings": {
+                "context_tokens": {
+                  "default": 8192,
+                  "max": 131072,
+                  "min": 2048
+                },
+                "effort": {
+                  "default": "none",
+                  "values": [
+                    "none",
+                    "medium"
+                  ]
+                },
+                "max_output_tokens": {
+                  "max": 8192,
+                  "min": 1
+                },
+                "stop": {
+                  "max": 8
+                },
+                "temperature": {
+                  "default": 1.0,
+                  "max": 2.0,
+                  "min": 0.0
+                },
+                "top_k": {
+                  "default": 64,
+                  "max": 1000,
+                  "min": 0
+                },
+                "top_p": {
+                  "default": 0.95,
+                  "max": 1.0,
+                  "min": 0.0
+                }
+              },
+              "thinking": "hybrid",
+              "tier": {
+                "message": "Gemma 4 E2B fits but will be slow.",
+                "model": "gemma-4-e2b",
+                "reasons": [],
+                "tier": "slow"
+              },
+              "usable_by_pax": true
+            }
+          ],
+          "reasons": [
+            "Memory: enough."
+          ],
+          "recommended": "qwen3-0.6b",
+          "vision_model": null
+        }
+      ]
+    },
+    "ListModels": {
+      "reply": [
+        {
+          "note": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0. An EXAMPLE, not a maintained price list. Model names and prices were read on 2026-11-12 from each provider's own pricing page (prices_url) and are the standard, pay-as-you-go prices in USD per million tokens. Each provider changes them without notice. Where a provider charges by prompt length, the price for the shortest prompts is given, which is what a task of P@x normally sends: Anthropic none; OpenAI up to 272K input tokens; Google none for the models listed. A model listed without prices has a price this format cannot state truthfully: tiered by prompt length (claude-haiku-5-5), or announced to change within weeks (gemini-4-carbon, from 2026-12-01). P@x then limits it in tokens. max_output_tokens is P@x's own limit for one response, chosen to bound what one response can cost; it is not the provider's maximum. No model here has been run with TUR: tested_with_tur is false everywhere. Each provider is an identifier with an adapter family (ADR-0004, amended 2026-11-12). The presets of the OpenAI-compatible family (adapter openai-chat) were read from each service's own documentation on 2026-11-12; the pages are in docs/architecture/pax-providers.md, section 14. Their prices are EXAMPLES too: DeepSeek's are its peak rates (off-peak rates are half; peak is 01:00-04:00 and 06:00-10:00 UTC on weekdays), and its page shows them in dollars without naming the currency; xAI's and Mistral's are for prompts under 200K tokens where the page tiers them. Context sizes are as the pages write them (1M read as 1000000, 256k as 256000). capabilities are what the pages declare, not what TUR measured. data_terms are TUR's summary of the pages named in sources, read on reviewed_on; the three companies' entries have none, so their consent text says their terms are not reviewed by TUR. The two local presets point at the standard addresses of Ollama (127.0.0.1:11434) and llama.cpp's llama-server (127.0.0.1:9931), take no key, and declare nothing about tools: that depends on the model and on how the server was started. The preset local is TUR's own local AI, tur-ai-local (docs/architecture/local-ai.md): its address 127.0.0.1:39281, its key read from the file tur-ai-local writes in the session's runtime directory each time it starts a model (runtime_key_file, never the password store), and its models the chat models of its catalogue that call tools, with the context size it serves (8192 tokens) and an output limit of 1024 tokens chosen by P@x.",
+          "prices_as_of": "2026-11-12",
+          "problem": null,
+          "providers": [
+            {
+              "adapter": "anthropic",
+              "base_url": null,
+              "capabilities": null,
+              "data_terms": null,
+              "data_terms_reviewed": false,
+              "data_terms_url": "https://www.anthropic.com/legal/commercial-terms",
+              "id": "anthropic",
+              "key_required": true,
+              "key_source": "keyring",
+              "key_url": "https://platform.claude.com/settings/keys",
+              "keyring_item": "anthropic",
+              "models": [
+                {
+                  "can_act": null,
+                  "can_see": null,
+                  "capabilities": {},
+                  "label": "Claude Opus 5.5",
+                  "max_output_tokens": 8192,
+                  "model": "claude-opus-5-5",
+                  "notices": [],
+                  "prices": {
+                    "cached_input_per_million": 0.2,
+                    "currency": "USD",
+                    "input_per_million": 4.0,
+                    "output_per_million": 20.0
+                  },
+                  "tested_with_tur": false
+                },
+                {
+                  "can_act": null,
+                  "can_see": null,
+                  "capabilities": {},
+                  "label": "Claude Sonnet 5.5",
+                  "max_output_tokens": 8192,
+                  "model": "claude-sonnet-5-5",
+                  "notices": [],
+                  "prices": {
+                    "cached_input_per_million": 0.1,
+                    "currency": "USD",
+                    "input_per_million": 2.0,
+                    "output_per_million": 10.0
+                  },
+                  "tested_with_tur": false
+                },
+                {
+                  "can_act": null,
+                  "can_see": null,
+                  "capabilities": {},
+                  "label": "Claude Haiku 5.5",
+                  "max_output_tokens": 8192,
+                  "model": "claude-haiku-5-5",
+                  "notices": [],
+                  "prices": null,
+                  "tested_with_tur": false
+                }
+              ],
+              "name": "Anthropic",
+              "origin": "listed",
+              "prices_url": "https://platform.claude.com/docs/en/about-claude/pricing",
+              "runs_locally": false,
+              "runtime_key_file": null
+            },
+            {
+              "adapter": "google",
+              "base_url": null,
+              "capabilities": null,
+              "data_terms": null,
+              "data_terms_reviewed": false,
+              "data_terms_url": "https://aistudio.google.com/docs/terms",
+              "id": "google",
+              "key_required": true,
+              "key_source": "keyring",
+              "key_url": "https://aistudio.google.com/apikey",
+              "keyring_item": "google",
+              "models": [
+                {
+                  "can_act": null,
+                  "can_see": null,
+                  "capabilities": {},
+                  "label": "Gemini 3.5 Flash-Lite",
+                  "max_output_tokens": 8192,
+                  "model": "gemini-3.5-flash-lite",
+                  "notices": [],
+                  "prices": {
+                    "cached_input_per_million": 0.03,
+                    "currency": "USD",
+                    "input_per_million": 0.3,
+                    "output_per_million": 2.5
+                  },
+                  "tested_with_tur": false
+                },
+                {
+                  "can_act": null,
+                  "can_see": null,
+                  "capabilities": {},
+                  "label": "Gemini 4 Carbon",
+                  "max_output_tokens": 8192,
+                  "model": "gemini-4-carbon",
+                  "notices": [],
+                  "prices": null,
+                  "tested_with_tur": false
+                }
+              ],
+              "name": "Google",
+              "origin": "listed",
+              "prices_url": "https://aistudio.google.com/docs/pricing",
+              "runs_locally": false,
+              "runtime_key_file": null
+            },
+            {
+              "adapter": "openai",
+              "base_url": null,
+              "capabilities": null,
+              "data_terms": null,
+              "data_terms_reviewed": false,
+              "data_terms_url": "https://developers.openai.com/api/docs/guides/your-data",
+              "id": "openai",
+              "key_required": true,
+              "key_source": "keyring",
+              "key_url": null,
+              "keyring_item": "openai",
+              "models": [
+                {
+                  "can_act": null,
+                  "can_see": null,
+                  "capabilities": {},
+                  "label": "GPT-6.1 Sol",
+                  "max_output_tokens": 8192,
+                  "model": "gpt-6.1-sol",
+                  "notices": [],
+                  "prices": {
+                    "cached_input_per_million": 0.1,
+                    "currency": "USD",
+                    "input_per_million": 2.0,
+                    "output_per_million": 10.0
+                  },
+                  "tested_with_tur": false
+                },
+                {
+                  "can_act": null,
+                  "can_see": null,
+                  "capabilities": {},
+                  "label": "GPT-6 Luna",
+                  "max_output_tokens": 8192,
+                  "model": "gpt-6-luna",
+                  "notices": [],
+                  "prices": {
+                    "cached_input_per_million": 0.01,
+                    "currency": "USD",
+                    "input_per_million": 0.1,
+                    "output_per_million": 0.5
+                  },
+                  "tested_with_tur": false
+                }
+              ],
+              "name": "OpenAI",
+              "origin": "listed",
+              "prices_url": "https://developers.openai.com/api/docs/pricing",
+              "runs_locally": false,
+              "runtime_key_file": null
+            },
+            {
+              "adapter": "openai-chat",
+              "base_url": "https://api.deepseek.com",
+              "capabilities": {
+                "context_tokens": 1000000,
+                "streaming_tool_calls": true,
+                "tool_calling": true
+              },
+              "data_terms": {
+                "processing_location": "The People's Republic of China, by Hangzhou DeepSeek Artificial Intelligence Co., Ltd.",
+                "retention": "No fixed period: as long as necessary to provide its services, and for as long as you have an account.",
+                "reviewed_on": "2026-11-12",
+                "sources": [
+                  "https://cdn.deepseek.com/policies/en-US/deepseek-privacy-policy.html",
+                  "https://cdn.deepseek.com/policies/en-US/deepseek-terms-of-use.html",
+                  "https://cdn.deepseek.com/policies/en-US/deepseek-open-platform-terms-of-service.html"
+                ],
+                "stores_requests": "Yes. Its privacy policy says it collects and stores what you send (prompts, inputs, uploaded files) with your account; its API terms say nothing more specific.",
+                "terms_url": "https://cdn.deepseek.com/policies/en-US/deepseek-privacy-policy.html",
+                "trains_on_data": "It may. Its privacy policy names training and improving its models among the uses of your data and gives a right to opt out; the opt-out its terms describe ('Improve the model for everyone') is a setting of its chat product, and none for the API was found."
+              },
+              "data_terms_reviewed": true,
+              "data_terms_url": "https://cdn.deepseek.com/policies/en-US/deepseek-privacy-policy.html",
+              "id": "deepseek",
+              "key_required": true,
+              "key_source": "keyring",
+              "key_url": null,
+              "keyring_item": "deepseek",
+              "models": [
+                {
+                  "can_act": true,
+                  "can_see": true,
+                  "capabilities": {
+                    "context_tokens": 1000000,
+                    "image_input": true,
+                    "streaming_tool_calls": true,
+                    "tool_calling": true
+                  },
+                  "label": "DeepSeek V4.1 Flash",
+                  "max_output_tokens": 8192,
+                  "model": "deepseek-flash",
+                  "notices": [],
+                  "prices": {
+                    "cached_input_per_million": 0.006,
+                    "currency": "USD",
+                    "input_per_million": 0.3,
+                    "output_per_million": 1.2
+                  },
+                  "tested_with_tur": false
+                },
+                {
+                  "can_act": true,
+                  "can_see": false,
+                  "capabilities": {
+                    "context_tokens": 1000000,
+                    "image_input": false,
+                    "streaming_tool_calls": true,
+                    "tool_calling": true
+                  },
+                  "label": "DeepSeek V4 Pro",
+                  "max_output_tokens": 8192,
+                  "model": "deepseek-v4-pro",
+                  "notices": [
+                    "This model takes no images, as its provider's entry declares, so P@x will not offer it control of the screen."
+                  ],
+                  "prices": {
+                    "cached_input_per_million": 0.044,
+                    "currency": "USD",
+                    "input_per_million": 1.32,
+                    "output_per_million": 3.96
+                  },
+                  "tested_with_tur": false
+                }
+              ],
+              "name": "DeepSeek",
+              "origin": "listed",
+              "prices_url": "https://api-docs.deepseek.com/quick_start/pricing",
+              "runs_locally": false,
+              "runtime_key_file": null
+            },
+            {
+              "adapter": "openai-chat",
+              "base_url": "https://api.mistral.ai/v1",
+              "capabilities": {
+                "tool_calling": true
+              },
+              "data_terms": {
+                "processing_location": "Not committed for the global address used here; providers in the European Union are preferred, with exceptions. Its EU and US addresses keep processing in that region.",
+                "retention": "For the time needed to answer, then 30 rolling days.",
+                "reviewed_on": "2026-11-12",
+                "sources": [
+                  "https://legal.mistral.ai/terms/privacy-policy",
+                  "https://legal.mistral.ai/terms/commercial-terms-of-service",
+                  "https://docs.mistral.ai/inference/regional-inference.md",
+                  "https://docs.mistral.ai/admin/monitor-comply/zero-data-retention.md"
+                ],
+                "stores_requests": "Yes, to monitor abuse, unless zero data retention has been granted (on request, for paid plans).",
+                "terms_url": "https://legal.mistral.ai/terms/privacy-policy",
+                "trains_on_data": "Its privacy policy lists training its models on your input and output, subject to your opt-out; its commercial terms say customer data is not used unless you opted in or did not opt out, depending on the product. Whether paid API use is trained on by default was not settled from what TUR read."
+              },
+              "data_terms_reviewed": true,
+              "data_terms_url": "https://legal.mistral.ai/terms/privacy-policy",
+              "id": "mistral",
+              "key_required": true,
+              "key_source": "keyring",
+              "key_url": null,
+              "keyring_item": "mistral",
+              "models": [
+                {
+                  "can_act": true,
+                  "can_see": true,
+                  "capabilities": {
+                    "context_tokens": 256000,
+                    "image_input": true,
+                    "tool_calling": true
+                  },
+                  "label": "Mistral Small",
+                  "max_output_tokens": 8192,
+                  "model": "mistral-small-2603",
+                  "notices": [],
+                  "prices": {
+                    "currency": "USD",
+                    "input_per_million": 0.15,
+                    "output_per_million": 0.6
+                  },
+                  "tested_with_tur": false
+                },
+                {
+                  "can_act": true,
+                  "can_see": true,
+                  "capabilities": {
+                    "context_tokens": 1000000,
+                    "image_input": true,
+                    "tool_calling": true
+                  },
+                  "label": "Mistral Large 4",
+                  "max_output_tokens": 8192,
+                  "model": "mistral-large-4",
+                  "notices": [],
+                  "prices": {
+                    "cached_input_per_million": 0.07,
+                    "currency": "USD",
+                    "input_per_million": 0.7,
+                    "output_per_million": 2.1
+                  },
+                  "tested_with_tur": false
+                }
+              ],
+              "name": "Mistral AI",
+              "origin": "listed",
+              "prices_url": "https://docs.mistral.ai/inference/pricing.md",
+              "runs_locally": false,
+              "runtime_key_file": null
+            },
+            {
+              "adapter": "openai-chat",
+              "base_url": "https://api.x.ai/v1",
+              "capabilities": {
+                "streaming_tool_calls": false,
+                "tool_calling": true
+              },
+              "data_terms": {
+                "processing_location": "Not guaranteed: requests may be routed between regions. Its US address keeps processing in the United States.",
+                "retention": "30 days, then deleted automatically.",
+                "reviewed_on": "2026-11-12",
+                "sources": [
+                  "https://docs.x.ai/developers/faq/security.md",
+                  "https://docs.x.ai/developers/advanced-api-usage/regions.md"
+                ],
+                "stores_requests": "Yes: requests and responses are kept, encrypted, for abuse auditing, unless a team administrator switches on zero data retention.",
+                "terms_url": "https://docs.x.ai/developers/faq/security.md",
+                "trains_on_data": "No, not without your explicit permission."
+              },
+              "data_terms_reviewed": true,
+              "data_terms_url": "https://docs.x.ai/developers/faq/security.md",
+              "id": "xai",
+              "key_required": true,
+              "key_source": "keyring",
+              "key_url": null,
+              "keyring_item": "xai",
+              "models": [
+                {
+                  "can_act": true,
+                  "can_see": true,
+                  "capabilities": {
+                    "context_tokens": 1000000,
+                    "image_input": true,
+                    "streaming_tool_calls": false,
+                    "tool_calling": true
+                  },
+                  "label": "Grok 4.3",
+                  "max_output_tokens": 8192,
+                  "model": "grok-4.3",
+                  "notices": [],
+                  "prices": {
+                    "cached_input_per_million": 0.2,
+                    "currency": "USD",
+                    "input_per_million": 1.25,
+                    "output_per_million": 2.5
+                  },
+                  "tested_with_tur": false
+                },
+                {
+                  "can_act": true,
+                  "can_see": true,
+                  "capabilities": {
+                    "context_tokens": 500000,
+                    "image_input": true,
+                    "streaming_tool_calls": false,
+                    "tool_calling": true
+                  },
+                  "label": "Grok 4.7",
+                  "max_output_tokens": 8192,
+                  "model": "grok-4.7",
+                  "notices": [],
+                  "prices": {
+                    "cached_input_per_million": 0.5,
+                    "currency": "USD",
+                    "input_per_million": 2.0,
+                    "output_per_million": 6.0
+                  },
+                  "tested_with_tur": false
+                }
+              ],
+              "name": "xAI",
+              "origin": "listed",
+              "prices_url": "https://docs.x.ai/developers/pricing.md",
+              "runs_locally": false,
+              "runtime_key_file": null
+            },
+            {
+              "adapter": "openai-chat",
+              "base_url": "https://api.groq.com/openai/v1",
+              "capabilities": {
+                "streaming_tool_calls": true,
+                "tool_calling": true
+              },
+              "data_terms": {
+                "processing_location": "The United States (customer data is kept in Google Cloud buckets in the US).",
+                "retention": "Up to 30 days for those logs.",
+                "reviewed_on": "2026-11-12",
+                "sources": [
+                  "https://console.groq.com/docs/your-data",
+                  "https://console.groq.com/docs/legal/services-agreement"
+                ],
+                "stores_requests": "No by default for inference requests; logs for reliability and abuse may be kept. Zero data retention can be switched on in its data controls.",
+                "terms_url": "https://console.groq.com/docs/your-data",
+                "trains_on_data": "No: its services agreement does not permit it to train on inputs or outputs without explicit permission."
+              },
+              "data_terms_reviewed": true,
+              "data_terms_url": "https://console.groq.com/docs/your-data",
+              "id": "groq",
+              "key_required": true,
+              "key_source": "keyring",
+              "key_url": null,
+              "keyring_item": "groq",
+              "models": [
+                {
+                  "can_act": true,
+                  "can_see": false,
+                  "capabilities": {
+                    "context_tokens": 131072,
+                    "image_input": false,
+                    "streaming_tool_calls": true,
+                    "tool_calling": true
+                  },
+                  "label": "GPT-OSS 120B on Groq",
+                  "max_output_tokens": 8192,
+                  "model": "openai/gpt-oss-120b",
+                  "notices": [
+                    "This model takes no images, as its provider's entry declares, so P@x will not offer it control of the screen."
+                  ],
+                  "prices": {
+                    "currency": "USD",
+                    "input_per_million": 0.15,
+                    "output_per_million": 0.6
+                  },
+                  "tested_with_tur": false
+                },
+                {
+                  "can_act": true,
+                  "can_see": true,
+                  "capabilities": {
+                    "context_tokens": 131072,
+                    "image_input": true,
+                    "streaming_tool_calls": true,
+                    "tool_calling": true
+                  },
+                  "label": "Qwen 3.8 27B on Groq (preview)",
+                  "max_output_tokens": 8192,
+                  "model": "qwen/qwen3.8-27b",
+                  "notices": [],
+                  "prices": {
+                    "currency": "USD",
+                    "input_per_million": 0.8,
+                    "output_per_million": 4.0
+                  },
+                  "tested_with_tur": false
+                }
+              ],
+              "name": "Groq",
+              "origin": "listed",
+              "prices_url": "https://console.groq.com/docs/models",
+              "runs_locally": false,
+              "runtime_key_file": null
+            },
+            {
+              "adapter": "openai-chat",
+              "base_url": "https://openrouter.ai/api/v1",
+              "capabilities": {
+                "streaming_tool_calls": true,
+                "tool_calling": true
+              },
+              "data_terms": {
+                "processing_location": "Not stated; each request goes to an upstream service chosen by routing.",
+                "retention": "At least three months for logging you opted in to. The upstream service's own retention applies to what it receives.",
+                "reviewed_on": "2026-11-12",
+                "sources": [
+                  "https://openrouter.ai/docs/guides/privacy/data-collection.md",
+                  "https://openrouter.ai/docs/guides/features/input-output-logging.md",
+                  "https://openrouter.ai/docs/guides/privacy/provider-logging.md",
+                  "https://openrouter.ai/docs/guides/features/zdr.md"
+                ],
+                "stores_requests": "Not by OpenRouter, unless you opt in to logging or content is flagged as possible abuse material. The service it routes each request to has its own policy.",
+                "terms_url": "https://openrouter.ai/docs/guides/privacy/data-collection.md",
+                "trains_on_data": "OpenRouter's use for product improvement is off by default. Upstream services have their own policies; those that train on data can be blocked in its settings."
+              },
+              "data_terms_reviewed": true,
+              "data_terms_url": "https://openrouter.ai/docs/guides/privacy/data-collection.md",
+              "id": "openrouter",
+              "key_required": true,
+              "key_source": "keyring",
+              "key_url": null,
+              "keyring_item": "openrouter",
+              "models": [
+                {
+                  "can_act": true,
+                  "can_see": true,
+                  "capabilities": {
+                    "context_tokens": 262144,
+                    "image_input": true,
+                    "streaming_tool_calls": true,
+                    "tool_calling": true
+                  },
+                  "label": "Mistral Small through OpenRouter",
+                  "max_output_tokens": 8192,
+                  "model": "mistralai/mistral-small-2603",
+                  "notices": [],
+                  "prices": {
+                    "currency": "USD",
+                    "input_per_million": 0.15,
+                    "output_per_million": 0.6
+                  },
+                  "tested_with_tur": false
+                },
+                {
+                  "can_act": true,
+                  "can_see": true,
+                  "capabilities": {
+                    "context_tokens": 1000000,
+                    "image_input": true,
+                    "streaming_tool_calls": true,
+                    "tool_calling": true
+                  },
+                  "label": "Grok 4.3 through OpenRouter",
+                  "max_output_tokens": 8192,
+                  "model": "x-ai/grok-4.3",
+                  "notices": [],
+                  "prices": {
+                    "currency": "USD",
+                    "input_per_million": 1.25,
+                    "output_per_million": 2.5
+                  },
+                  "tested_with_tur": false
+                }
+              ],
+              "name": "OpenRouter",
+              "origin": "listed",
+              "prices_url": null,
+              "runs_locally": false,
+              "runtime_key_file": null
+            },
+            {
+              "adapter": "openai-chat",
+              "base_url": "https://api.together.ai/v1",
+              "capabilities": {
+                "streaming_tool_calls": true,
+                "tool_calling": true
+              },
+              "data_terms": {
+                "processing_location": "Not stated in general; North American data centres for some models; a US-only address is offered.",
+                "retention": "No period stated; stored data can be deleted at any time.",
+                "reviewed_on": "2026-11-12",
+                "sources": [
+                  "https://docs.together.ai/docs/privacy-and-security.md",
+                  "https://docs.together.ai/docs/zero-data-retention.md"
+                ],
+                "stores_requests": "Yes by default: prompts and responses are stored and may be used for product improvements, unless prompt storage is switched off (zero data retention).",
+                "terms_url": "https://docs.together.ai/docs/privacy-and-security.md",
+                "trains_on_data": "Sharing data to train other models is opt-in and off by default."
+              },
+              "data_terms_reviewed": true,
+              "data_terms_url": "https://docs.together.ai/docs/privacy-and-security.md",
+              "id": "together",
+              "key_required": true,
+              "key_source": "keyring",
+              "key_url": null,
+              "keyring_item": "together",
+              "models": [
+                {
+                  "can_act": true,
+                  "can_see": false,
+                  "capabilities": {
+                    "context_tokens": 131072,
+                    "image_input": false,
+                    "streaming_tool_calls": true,
+                    "tool_calling": true
+                  },
+                  "label": "GPT-OSS 120B on Together",
+                  "max_output_tokens": 8192,
+                  "model": "openai/gpt-oss-120b",
+                  "notices": [
+                    "This model takes no images, as its provider's entry declares, so P@x will not offer it control of the screen."
+                  ],
+                  "prices": {
+                    "currency": "USD",
+                    "input_per_million": 0.15,
+                    "output_per_million": 0.6
+                  },
+                  "tested_with_tur": false
+                },
+                {
+                  "can_act": true,
+                  "can_see": true,
+                  "capabilities": {
+                    "context_tokens": 262144,
+                    "image_input": true,
+                    "streaming_tool_calls": true,
+                    "tool_calling": true
+                  },
+                  "label": "Qwen 3.5 9B on Together",
+                  "max_output_tokens": 8192,
+                  "model": "Qwen/Qwen3.5-9B",
+                  "notices": [],
+                  "prices": {
+                    "currency": "USD",
+                    "input_per_million": 0.17,
+                    "output_per_million": 0.25
+                  },
+                  "tested_with_tur": false
+                }
+              ],
+              "name": "Together AI",
+              "origin": "listed",
+              "prices_url": "https://docs.together.ai/docs/serverless/models.md",
+              "runs_locally": false,
+              "runtime_key_file": null
+            },
+            {
+              "adapter": "openai-chat",
+              "base_url": "http://127.0.0.1:11434/v1",
+              "capabilities": null,
+              "data_terms": {
+                "runs_locally": true
+              },
+              "data_terms_reviewed": false,
+              "data_terms_url": null,
+              "id": "ollama",
+              "key_required": false,
+              "key_source": "none",
+              "key_url": null,
+              "keyring_item": "ollama",
+              "models": [],
+              "name": "Ollama on this computer",
+              "origin": "listed",
+              "prices_url": null,
+              "runs_locally": true,
+              "runtime_key_file": null
+            },
+            {
+              "adapter": "openai-chat",
+              "base_url": "http://127.0.0.1:9931/v1",
+              "capabilities": null,
+              "data_terms": {
+                "runs_locally": true
+              },
+              "data_terms_reviewed": false,
+              "data_terms_url": null,
+              "id": "llama-server",
+              "key_required": false,
+              "key_source": "none",
+              "key_url": null,
+              "keyring_item": "llama-server",
+              "models": [],
+              "name": "llama.cpp server on this computer",
+              "origin": "listed",
+              "prices_url": null,
+              "runs_locally": true,
+              "runtime_key_file": null
+            },
+            {
+              "adapter": "openai-chat",
+              "base_url": "http://127.0.0.1:39281/v1",
+              "capabilities": {
+                "context_tokens": 8192,
+                "image_input": false,
+                "streaming_tool_calls": true,
+                "tool_calling": true
+              },
+              "data_terms": {
+                "runs_locally": true
+              },
+              "data_terms_reviewed": false,
+              "data_terms_url": null,
+              "id": "local",
+              "key_required": true,
+              "key_source": "runtime_file",
+              "key_url": null,
+              "keyring_item": "local",
+              "models": [
+                {
+                  "can_act": true,
+                  "can_see": false,
+                  "capabilities": {
+                    "context_tokens": 8192,
+                    "image_input": false,
+                    "streaming_tool_calls": true,
+                    "tool_calling": true
+                  },
+                  "label": "Qwen3 4B",
+                  "max_output_tokens": 1024,
+                  "model": "qwen3-4b",
+                  "notices": [
+                    "This model takes no images, as its provider's entry declares, so P@x will not offer it control of the screen."
+                  ],
+                  "prices": null,
+                  "tested_with_tur": false
+                },
+                {
+                  "can_act": true,
+                  "can_see": true,
+                  "capabilities": {
+                    "context_tokens": 8192,
+                    "image_input": true,
+                    "streaming_tool_calls": true,
+                    "tool_calling": true
+                  },
+                  "label": "Qwen3-VL 2B Instruct",
+                  "max_output_tokens": 1024,
+                  "model": "qwen3-vl-2b-instruct",
+                  "notices": [],
+                  "prices": null,
+                  "tested_with_tur": false
+                },
+                {
+                  "can_act": true,
+                  "can_see": false,
+                  "capabilities": {
+                    "context_tokens": 8192,
+                    "image_input": false,
+                    "streaming_tool_calls": true,
+                    "tool_calling": true
+                  },
+                  "label": "Granite 4.0 1B",
+                  "max_output_tokens": 1024,
+                  "model": "granite-4.0-1b",
+                  "notices": [
+                    "This model takes no images, as its provider's entry declares, so P@x will not offer it control of the screen."
+                  ],
+                  "prices": null,
+                  "tested_with_tur": false
+                },
+                {
+                  "can_act": true,
+                  "can_see": false,
+                  "capabilities": {
+                    "context_tokens": 8192,
+                    "image_input": false,
+                    "streaming_tool_calls": true,
+                    "tool_calling": true
+                  },
+                  "label": "Qwen3 0.6B",
+                  "max_output_tokens": 1024,
+                  "model": "qwen3-0.6b",
+                  "notices": [
+                    "This model takes no images, as its provider's entry declares, so P@x will not offer it control of the screen."
+                  ],
+                  "prices": null,
+                  "tested_with_tur": false
+                },
+                {
+                  "can_act": true,
+                  "can_see": true,
+                  "capabilities": {
+                    "context_tokens": 8192,
+                    "image_input": true,
+                    "streaming_tool_calls": true,
+                    "tool_calling": true
+                  },
+                  "label": "Ministral 3 3B Instruct",
+                  "max_output_tokens": 1024,
+                  "model": "ministral-3-3b",
+                  "notices": [],
+                  "prices": null,
+                  "tested_with_tur": false
+                },
+                {
+                  "can_act": true,
+                  "can_see": true,
+                  "capabilities": {
+                    "context_tokens": 8192,
+                    "image_input": true,
+                    "streaming_tool_calls": true,
+                    "tool_calling": true
+                  },
+                  "label": "Gemma 4 E2B",
+                  "max_output_tokens": 1024,
+                  "model": "gemma-4-e2b",
+                  "notices": [],
+                  "prices": null,
+                  "tested_with_tur": false
+                },
+                {
+                  "can_act": true,
+                  "can_see": true,
+                  "capabilities": {
+                    "context_tokens": 8192,
+                    "image_input": true,
+                    "streaming_tool_calls": true,
+                    "tool_calling": true
+                  },
+                  "label": "Gemma 4 E4B",
+                  "max_output_tokens": 1024,
+                  "model": "gemma-4-e4b",
+                  "notices": [],
+                  "prices": null,
+                  "tested_with_tur": false
+                },
+                {
+                  "can_act": true,
+                  "can_see": true,
+                  "capabilities": {
+                    "context_tokens": 8192,
+                    "image_input": true,
+                    "streaming_tool_calls": true,
+                    "tool_calling": true
+                  },
+                  "label": "Gemma 4 26B A4B",
+                  "max_output_tokens": 1024,
+                  "model": "gemma-4-26b-a4b",
+                  "notices": [],
+                  "prices": null,
+                  "tested_with_tur": false
+                },
+                {
+                  "can_act": true,
+                  "can_see": false,
+                  "capabilities": {
+                    "context_tokens": 8192,
+                    "image_input": false,
+                    "streaming_tool_calls": true,
+                    "tool_calling": true
+                  },
+                  "label": "Qwen3 30B A3B",
+                  "max_output_tokens": 1024,
+                  "model": "qwen3-30b-a3b",
+                  "notices": [
+                    "This model takes no images, as its provider's entry declares, so P@x will not offer it control of the screen."
+                  ],
+                  "prices": null,
+                  "tested_with_tur": false
+                }
+              ],
+              "name": "Local AI on this computer",
+              "origin": "listed",
+              "prices_url": null,
+              "runs_locally": true,
+              "runtime_key_file": "tur-ai-local/api-key"
+            }
+          ],
+          "status": "example"
+        }
+      ]
+    },
+    "ListProviderModels anthropic false": {
+      "reply": [
+        {
+          "fetched_at": null,
+          "models": [
+            {
+              "can_act": null,
+              "can_see": null,
+              "in_list": true,
+              "label": "Claude Opus 5.5",
+              "model": "claude-opus-5-5",
+              "offered_by_provider": false,
+              "price_known": true,
+              "settings_declared": true,
+              "tested_with_tur": false
+            },
+            {
+              "can_act": null,
+              "can_see": null,
+              "in_list": true,
+              "label": "Claude Sonnet 5.5",
+              "model": "claude-sonnet-5-5",
+              "offered_by_provider": false,
+              "price_known": true,
+              "settings_declared": true,
+              "tested_with_tur": false
+            },
+            {
+              "can_act": null,
+              "can_see": null,
+              "in_list": true,
+              "label": "Claude Haiku 5.5",
+              "model": "claude-haiku-5-5",
+              "offered_by_provider": false,
+              "price_known": false,
+              "settings_declared": true,
+              "tested_with_tur": false
+            }
+          ],
+          "origin": "listed",
+          "provider": "anthropic",
+          "source": "list"
+        }
+      ]
+    },
+    "ListProviderModels deepseek false": {
+      "reply": [
+        {
+          "fetched_at": null,
+          "models": [
+            {
+              "can_act": true,
+              "can_see": true,
+              "in_list": true,
+              "label": "DeepSeek V4.1 Flash",
+              "model": "deepseek-flash",
+              "offered_by_provider": false,
+              "price_known": true,
+              "settings_declared": true,
+              "tested_with_tur": false
+            },
+            {
+              "can_act": true,
+              "can_see": false,
+              "in_list": true,
+              "label": "DeepSeek V4 Pro",
+              "model": "deepseek-v4-pro",
+              "offered_by_provider": false,
+              "price_known": true,
+              "settings_declared": true,
+              "tested_with_tur": false
+            }
+          ],
+          "origin": "listed",
+          "provider": "deepseek",
+          "source": "list"
+        }
+      ]
+    },
+    "ListProviderModels local false": {
+      "reply": [
+        {
+          "fetched_at": null,
+          "models": [
+            {
+              "can_act": true,
+              "can_see": false,
+              "in_list": true,
+              "label": "Qwen3 4B",
+              "model": "qwen3-4b",
+              "offered_by_provider": false,
+              "price_known": false,
+              "settings_declared": true,
+              "tested_with_tur": false
+            },
+            {
+              "can_act": true,
+              "can_see": true,
+              "in_list": true,
+              "label": "Qwen3-VL 2B Instruct",
+              "model": "qwen3-vl-2b-instruct",
+              "offered_by_provider": false,
+              "price_known": false,
+              "settings_declared": true,
+              "tested_with_tur": false
+            },
+            {
+              "can_act": true,
+              "can_see": false,
+              "in_list": true,
+              "label": "Granite 4.0 1B",
+              "model": "granite-4.0-1b",
+              "offered_by_provider": false,
+              "price_known": false,
+              "settings_declared": true,
+              "tested_with_tur": false
+            },
+            {
+              "can_act": true,
+              "can_see": false,
+              "in_list": true,
+              "label": "Qwen3 0.6B",
+              "model": "qwen3-0.6b",
+              "offered_by_provider": false,
+              "price_known": false,
+              "settings_declared": true,
+              "tested_with_tur": false
+            },
+            {
+              "can_act": true,
+              "can_see": true,
+              "in_list": true,
+              "label": "Ministral 3 3B Instruct",
+              "model": "ministral-3-3b",
+              "offered_by_provider": false,
+              "price_known": false,
+              "settings_declared": true,
+              "tested_with_tur": false
+            },
+            {
+              "can_act": true,
+              "can_see": true,
+              "in_list": true,
+              "label": "Gemma 4 E2B",
+              "model": "gemma-4-e2b",
+              "offered_by_provider": false,
+              "price_known": false,
+              "settings_declared": true,
+              "tested_with_tur": false
+            },
+            {
+              "can_act": true,
+              "can_see": true,
+              "in_list": true,
+              "label": "Gemma 4 E4B",
+              "model": "gemma-4-e4b",
+              "offered_by_provider": false,
+              "price_known": false,
+              "settings_declared": true,
+              "tested_with_tur": false
+            },
+            {
+              "can_act": true,
+              "can_see": true,
+              "in_list": true,
+              "label": "Gemma 4 26B A4B",
+              "model": "gemma-4-26b-a4b",
+              "offered_by_provider": false,
+              "price_known": false,
+              "settings_declared": true,
+              "tested_with_tur": false
+            },
+            {
+              "can_act": true,
+              "can_see": false,
+              "in_list": true,
+              "label": "Qwen3 30B A3B",
+              "model": "qwen3-30b-a3b",
+              "offered_by_provider": false,
+              "price_known": false,
+              "settings_declared": true,
+              "tested_with_tur": false
+            }
+          ],
+          "origin": "listed",
+          "provider": "local",
+          "source": "list"
+        }
+      ]
+    },
+    "ListProviderModels openai false": {
+      "reply": [
+        {
+          "fetched_at": null,
+          "models": [
+            {
+              "can_act": null,
+              "can_see": null,
+              "in_list": true,
+              "label": "GPT-6.1 Sol",
+              "model": "gpt-6.1-sol",
+              "offered_by_provider": false,
+              "price_known": true,
+              "settings_declared": true,
+              "tested_with_tur": false
+            },
+            {
+              "can_act": null,
+              "can_see": null,
+              "in_list": true,
+              "label": "GPT-6 Luna",
+              "model": "gpt-6-luna",
+              "offered_by_provider": false,
+              "price_known": true,
+              "settings_declared": true,
+              "tested_with_tur": false
+            }
+          ],
+          "origin": "listed",
+          "provider": "openai",
+          "source": "list"
+        }
+      ]
+    },
+    "SetGenerationSettings anthropic claude-opus-5-5 {\"temperature\":0.3}": {
+      "error": "org.tur.Agent1.Error.TUR_AI_SERVICE_006",
+      "message": "TUR-AI-SERVICE-006: This model does not take a temperature."
+    },
+    "SetGenerationSettings openai gpt-6-luna {\"temperature\":0.3}": {
+      "error": "org.tur.Agent1.Error.TUR_AI_SERVICE_006",
+      "message": "TUR-AI-SERVICE-006: This model takes temperature, top-p and top-k only when its reasoning effort is none; while it reasons it refuses or ignores them. Set the reasoning effort to none first."
+    },
+    "SetKey anthropic two words": {
+      "error": "org.tur.Agent1.Error.TUR_AI_KEY_004",
+      "message": "TUR-AI-KEY-004: the text is empty, too long, or holds a space or a character a key cannot have"
+    },
+    "UseLocalModel gemma-4-e2b {}": {
+      "reply": [
+        "l-8"
+      ]
+    },
+    "UseLocalModel ministral-3-3b {\"accept_licence\":true,\"download_bytes\":2988524864}": {
+      "reply": [
+        "l-7"
+      ]
+    },
+    "UseLocalModel ministral-3-3b {\"download_bytes\":2988524864}": {
+      "error": "org.tur.Agent1.Error.TUR_AI_SERVICE_006",
+      "message": "TUR-AI-SERVICE-006: the licence of Ministral 3 3B Instruct restricts its use: The publisher's model card adds one sentence under its licence. It needs the person's acceptance: accept_licence true"
+    },
+    "UseLocalModel qwen3-0.6b ": {
+      "error": "org.tur.Agent1.Error.TUR_AI_SERVICE_006",
+      "message": "TUR-AI-SERVICE-006: Qwen3 0.6B is not on this computer yet: it downloads 0.6 GB (639446688 bytes) from https://huggingface.co/Qwen/Qwen3-0.6B-GGUF. Tell the person first, then name the size: download_bytes 639446688"
+    },
+    "UseLocalModel qwen3-0.6b {\"download_bytes\":639446688}": {
+      "reply": [
+        "l-6"
+      ]
+    }
+  }
+}

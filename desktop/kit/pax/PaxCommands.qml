@@ -15,9 +15,9 @@ QtObject {
 
     // Every command, in the order of commands.json.
     readonly property var commands: [
-        { id: "stop", keys: "Meta+Esc", action: qsTranslate("PaxCommands", "Stop P@x"), bound: false },
-        { id: "ask", keys: "Meta+Space", action: qsTranslate("PaxCommands", "Ask P@x"), bound: false },
+        { id: "stop", keys: "Meta+Esc", action: qsTranslate("PaxCommands", "Stop P@x"), bound: true },
+        { id: "ask", keys: "Meta+Space", action: qsTranslate("PaxCommands", "Ask P@x"), bound: true },
         { id: "talk", keys: "Hold Meta+Space", action: qsTranslate("PaxCommands", "Talk to P@x while held"), bound: false },
-        { id: "keys", keys: "Meta+/", action: qsTranslate("PaxCommands", "Show P@x's keys"), bound: false }
+        { id: "keys", keys: "Meta+/", action: qsTranslate("PaxCommands", "Show P@x's keys"), bound: true }
     ]
 }

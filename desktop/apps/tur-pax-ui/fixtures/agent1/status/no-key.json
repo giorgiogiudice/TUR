@@ -1,0 +1,66 @@
+{
+  "licence": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+  "recorded": {
+    "abilities": {
+      "act": null,
+      "notices": [],
+      "see": null
+    },
+    "adapter": "anthropic",
+    "consent": {
+      "accepted_at": 1794571291,
+      "accepted_for": "anthropic",
+      "accepted_version": "2",
+      "current": true,
+      "text_version": "2"
+    },
+    "enabled": true,
+    "generation": {
+      "problem": null,
+      "settings": {}
+    },
+    "interface_version": 1,
+    "key": "not_set",
+    "local_model": null,
+    "model": "scripted-model",
+    "model_listed": false,
+    "model_tested": false,
+    "price_known": false,
+    "problem": null,
+    "proposals": 0,
+    "provider": "anthropic",
+    "provider_name": "Anthropic",
+    "provider_origin": "listed",
+    "ready": false,
+    "running": null,
+    "session_locked": null,
+    "spending": {
+      "currency": null,
+      "day": "2026-11-13",
+      "day_limit": {
+        "cost": null,
+        "tokens": 2000000
+      },
+      "day_limit_reached": false,
+      "month": {
+        "cost": 0.0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "responses": 0
+      },
+      "prices_as_of": "2026-11-12",
+      "prices_status": "example",
+      "task_limit": {
+        "cost": null,
+        "tokens": 400000
+      },
+      "today": {
+        "cost": 0.0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "responses": 0
+      }
+    },
+    "state": "idle"
+  }
+}

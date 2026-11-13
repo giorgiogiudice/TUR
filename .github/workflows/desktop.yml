@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
 #
-# Desktop (D-01, D-02, D-04, D-15): the licence boundary, the settings registries,
+# Desktop (D-01, D-02, D-04, D-15, D-17): the licence boundary, the settings registries,
 # the build and tests of the Qt programs under desktop/, their screenshots,
 # and the tests that run them under a real KWin.
 # Nothing under desktop/ is ever compiled or run anywhere else. See
@@ -17,6 +17,10 @@ on:
       - "schemas/settings-registry.schema.json"
       - ".github/workflows/desktop.yml"
       - "services/tur-apps/**"
+      # P@x's window is tested against the real service (pax-ui-end-to-end)
+      # and its fixture is checked against what the service says.
+      - "services/tur-pax/**"
+      - "tests/pax/**"
   pull_request:
     paths:
       - "desktop/**"
@@ -25,6 +29,10 @@ on:
       - ".github/workflows/desktop.yml"
       # The application centre's end-to-end job runs the real tur-apps.
       - "services/tur-apps/**"
+      # P@x's window is tested against the real service (pax-ui-end-to-end)
+      # and its fixture is checked against what the service says.
+      - "services/tur-pax/**"
+      - "tests/pax/**"
   schedule:
     # Weekly, on the default branch. An Actions cache that is not used for a
     # week is dropped, and with it the builder image the reference images
@@ -391,4 +399,117 @@ jobs:
         with:
           name: desktop-centre-e2e
           path: ${{ env.OUT }}/centre-e2e
+          if-no-files-found: warn
+
+  # P@x's window, tur-pax-ui (task D-17; docs/architecture/tur-pax-ui.md,
+  # section 7), against the real P@x session service: `tur-pax serve` on a
+  # private session bus, started by the bus, with the real Secret Service
+  # (gnome-keyring), the read-only sandbox (bubblewrap) and the scripted
+  # provider, exactly as the pax workflow runs it (tests/pax/service_e2e.py,
+  # which desktop/tests/pax-ui/e2e.py reuses). First the service's answers
+  # are recorded and compared with tur-pax-ui's fixture; then tur-pax-ui,
+  # built in the builder image, asks it something, watches its steps and
+  # stops a task, from the container, over the bus's socket in the checkout.
+  # No model is called and no key exists.
+  pax-ui-end-to-end:
+    name: P@x's window against the real service
+    needs: builder
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      CARGO_TERM_COLOR: never
+      CARGO_INCREMENTAL: "0"
+      DEBIAN_FRONTEND: noninteractive
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Install bubblewrap, a message bus and a Secret Service
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap util-linux dbus-daemon gnome-keyring python3-dbus python3-gi
+          mkdir -p "$OUT/pax-ui-e2e"
+          dpkg-query -W -f '${Package} ${Version}\n' bubblewrap dbus-daemon gnome-keyring python3-dbus | tee "$OUT/pax-ui-e2e/versions.txt"
+
+      - name: Sandbox preflight
+        run: tests/pax/sandbox-preflight.sh "$OUT/pax-ui-e2e/sandbox-preflight.txt"
+
+      - name: Toolchain
+        working-directory: services/tur-pax
+        run: |
+          rustup show active-toolchain || rustup toolchain install
+          rustc --version; cargo --version
+
+      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            services/tur-pax/target
+          key: pax-ui-e2e-${{ hashFiles('rust-toolchain.toml', 'services/tur-pax/Cargo.lock') }}
+          restore-keys: pax-ui-e2e-
+
+      - name: Build tur-pax
+        run: |
+          (cd services/tur-pax && cargo build --locked --bin tur-pax)
+          ls -l services/tur-pax/target/debug/tur-pax
+
+      - name: The test service's tool program and a runtime directory
+        run: |
+          sudo install -m 0755 tests/pax/tur-pax-test-tool /usr/bin/tur-pax-test-tool
+          uid="$(id -u)"
+          sudo mkdir -p "/run/user/$uid"
+          sudo chown "$uid" "/run/user/$uid"
+          sudo chmod 0700 "/run/user/$uid"
+
+      - name: Record the service's answers and compare them with the fixture
+        id: record
+        run: |
+          python3 desktop/tests/pax-ui/e2e.py record \
+            --tur-pax services/tur-pax/target/debug/tur-pax \
+            --work-dir "$RUNNER_TEMP/pax-ui-e2e" \
+            --evidence "$OUT/pax-ui-e2e"
+
+      - name: Fetch the builder image
+        if: ${{ !cancelled() }}
+        uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: ${{ env.BUILDER_DIR }}
+          key: ${{ needs.builder.outputs.key }}
+          fail-on-cache-miss: true
+
+      - name: Load the builder image
+        if: ${{ !cancelled() }}
+        run: desktop/ci/load-builder.sh "$BUILDER_DIR"
+
+      - name: Configure and build
+        id: build
+        if: ${{ !cancelled() }}
+        run: desktop/ci/in-builder.sh desktop/ci/build.sh ci
+
+      - name: tur-pax-ui asks the service, sees its steps and stops a task
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          python3 desktop/tests/pax-ui/e2e.py ui \
+            --tur-pax services/tur-pax/target/debug/tur-pax \
+            --work-dir "$RUNNER_TEMP/pax-ui-e2e" \
+            --evidence "$OUT/pax-ui-e2e" \
+            --build desktop/build/ci
+
+      - name: Summary
+        if: always()
+        run: |
+          for phase in record ui; do
+            if [ -f "$OUT/pax-ui-e2e/$phase-summary.md" ]; then
+              cat "$OUT/pax-ui-e2e/$phase-summary.md" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "### P@x's window against the real service: $phase did not run" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: desktop-pax-ui-e2e
+          path: ${{ env.OUT }}/pax-ui-e2e
           if-no-files-found: warn

@@ -122,8 +122,8 @@ allow cmake turkitpax             desktop/apps/tur-settings/**   LicenseRef-TUR-
 # Gold is P@x and nothing else (design, section 5.1). The gold tokens and the
 # components drawn in them are the module Tur.Kit.Pax; only P@x's surfaces,
 # the gallery and the tests may import it.
-allow qml Tur.Kit.Pax             desktop/kit/pax/**,desktop/kit/gallery/**,desktop/kit/tests/**,desktop/apps/pax-ui/**,desktop/apps/pax-overlay/**,desktop/apps/tur-pax-overlay/**,desktop/apps/pax-approve/**   LicenseRef-TUR-Noncommercial-1.0.0
-allow cmake turkitpax             desktop/kit/**,desktop/apps/pax-ui/**,desktop/apps/pax-overlay/**,desktop/apps/tur-pax-overlay/**,desktop/apps/pax-approve/**   LicenseRef-TUR-Noncommercial-1.0.0
+allow qml Tur.Kit.Pax             desktop/kit/pax/**,desktop/kit/gallery/**,desktop/kit/tests/**,desktop/apps/pax-ui/**,desktop/apps/tur-pax-ui/**,desktop/apps/pax-overlay/**,desktop/apps/tur-pax-overlay/**,desktop/apps/pax-approve/**   LicenseRef-TUR-Noncommercial-1.0.0
+allow cmake turkitpax             desktop/kit/**,desktop/apps/pax-ui/**,desktop/apps/tur-pax-ui/**,desktop/apps/pax-overlay/**,desktop/apps/tur-pax-overlay/**,desktop/apps/pax-approve/**   LicenseRef-TUR-Noncommercial-1.0.0
 allow soname libturkitpax.so*     *                            LicenseRef-TUR-Noncommercial-1.0.0
 
 # P@x's overlay, tur-pax-overlay (design, sections 9.3 to 9.6; task D-15):
@@ -150,6 +150,23 @@ allow soname libLayerShellQtInterface.so.6 *                   LGPL-2.1-only OR 
 allow cmake KWayland              desktop/apps/tur-pax-overlay/CMakeLists.txt   LGPL-2.1-only OR LGPL-3.0-only
 allow cmake Plasma::KWaylandClient desktop/apps/tur-pax-overlay/CMakeLists.txt,desktop/tests/compositor/CMakeLists.txt   LGPL-2.1-only OR LGPL-3.0-only
 allow soname libKWaylandClient.so.6 *                          LGPL-2.1-only OR LGPL-3.0-only
+
+# P@x's window, tur-pax-ui (design, sections 9.1, 9.2 and 9.12; task D-17):
+# its own QML module and library, under the project licence. It talks to
+# P@x's service, org.tur.Agent1, and offers org.tur.PaxUi1, over Qt D-Bus
+# (LGPL-3.0-only), allowed above. The program links one library of KDE's,
+# dynamically, by the program and not by its module: LayerShellQt, for the
+# layer-shell surface of the ask bar and the panel (design 9.2). Its licence
+# was read file by file at the Plasma/6.8 tags (v6.8.2) for the overlay on
+# 12 November 2026 (docs/architecture/tur-pax-overlay.md, section 8): every
+# source file of src/ is "LGPL-2.1-only OR LGPL-3.0-only OR
+# LicenseRef-KDE-Accepted-LGPL"; its protocol file is MIT. The stand-in for
+# org.tur.Agent1 its tests start (tests/fixture) links Qt Core and Qt D-Bus.
+allow qml Tur.PaxUi               desktop/apps/tur-pax-ui/**   LicenseRef-TUR-Noncommercial-1.0.0
+allow cmake turpaxui              desktop/apps/tur-pax-ui/**   LicenseRef-TUR-Noncommercial-1.0.0
+allow soname libturpaxui.so*      *                            LicenseRef-TUR-Noncommercial-1.0.0
+allow cmake LayerShellQt          desktop/apps/tur-pax-ui/CMakeLists.txt   LGPL-2.1-only OR LGPL-3.0-only
+allow cmake LayerShellQt::Interface desktop/apps/tur-pax-ui/CMakeLists.txt LGPL-2.1-only OR LGPL-3.0-only
 
 # TUR's graphical installer, tur-installer (design, section 11.5; task D-23;
 # ADR-0018, amendment of 13 November 2026): its own QML module and library,

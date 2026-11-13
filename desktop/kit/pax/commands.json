@@ -1,13 +1,13 @@
 {
   "licence": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
-  "about": "P@x's keyboard commands: the one source of the keys P@x's indicator shows and of the bindings that make them work (desktop-experience.md, 17.1, answer 2: the stop combination is visible at all times while P@x is on, and the full list is one action away from the indicator). gen_commands.py turns this file into PaxCommands.qml for the programs that show the keys; a program that binds a key (a desktop file's X-KDE-Shortcuts, a global-shortcut registration) takes it from here, and gen_commands.py --check fails if a binding file in the repository disagrees with this one. 'bound' says whether anything binds the key yet. 'verified' says whether the key was checked to be free in Plasma 6.8's defaults.",
+  "about": "P@x's keyboard commands: the one source of the keys P@x's indicator shows and of the bindings that make them work (desktop-experience.md, 17.1, answer 2: the stop combination is visible at all times while P@x is on, and the full list is one action away from the indicator). gen_commands.py turns this file into PaxCommands.qml for the programs that show the keys; a program that binds a key (a desktop file's X-KDE-Shortcuts, a global-shortcut registration) takes it from here, and gen_commands.py --check fails if a binding file in the repository disagrees with this one. 'bound' says whether a shipped file binds the key (the image does not install the desktop programs yet, issue #59). 'verified' says whether the key was checked to be free in Plasma 6.8's defaults.",
   "commands": [
     {
       "id": "stop",
       "keys": "Meta+Esc",
       "action": "Stop P@x",
-      "boundBy": "the stop control: a global shortcut, or the physical input witness (design 9.8; owner's answer 17.1.2)",
-      "bound": false,
+      "boundBy": "the stop control: for now a global shortcut, the action \"stop\" of tur-pax-ui's desktop file (X-KDE-Shortcuts), which runs tur-pax-ui --stop (task D-17); later the physical input witness (design 9.8; owner's answer 17.1.2)",
+      "bound": true,
       "verified": false
     },
     {
@@ -15,7 +15,7 @@
       "keys": "Meta+Space",
       "action": "Ask P@x",
       "boundBy": "tur-pax-ui's desktop file, X-KDE-Shortcuts (design 9.1; task D-17)",
-      "bound": false,
+      "bound": true,
       "verified": false
     },
     {
@@ -30,8 +30,8 @@
       "id": "keys",
       "keys": "Meta+/",
       "action": "Show P@x's keys",
-      "boundBy": "tur-pax-ui (task D-17), which calls org.tur.PaxOverlay1.ShowCommands; until then `tur-pax-overlay --commands`",
-      "bound": false,
+      "boundBy": "the action \"keys\" of tur-pax-ui's desktop file (X-KDE-Shortcuts), which runs tur-pax-ui --show-keys and so calls org.tur.PaxOverlay1.ShowCommands (task D-17)",
+      "bound": true,
       "verified": false
     }
   ]

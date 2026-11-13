@@ -1,0 +1,140 @@
+{
+  "licence": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+  "model": "qwen3-0.6b",
+  "signals": [
+    {
+      "args": [
+        "qwen3-0.6b",
+        {
+          "bytes_done": 0,
+          "bytes_to_download": 639446688,
+          "bytes_total": 639446688,
+          "code": null,
+          "event": "plan",
+          "file": null,
+          "free_bytes": 1000000000000,
+          "kind": "ensure-event",
+          "message": "plan qwen3-0.6b",
+          "model": "qwen3-0.6b",
+          "schema_version": 1,
+          "state": null
+        }
+      ],
+      "member": "LocalModelProgress"
+    },
+    {
+      "args": [
+        "qwen3-0.6b",
+        {
+          "bytes_done": 319723344,
+          "bytes_to_download": null,
+          "bytes_total": 639446688,
+          "code": null,
+          "event": "progress",
+          "file": null,
+          "free_bytes": null,
+          "kind": "ensure-event",
+          "message": "progress qwen3-0.6b",
+          "model": "qwen3-0.6b",
+          "schema_version": 1,
+          "state": null
+        }
+      ],
+      "member": "LocalModelProgress"
+    },
+    {
+      "args": [
+        "qwen3-0.6b",
+        {
+          "bytes_done": 639446688,
+          "bytes_to_download": null,
+          "bytes_total": 639446688,
+          "code": null,
+          "event": "verified",
+          "file": "qwen3-0.6b.gguf",
+          "free_bytes": null,
+          "kind": "ensure-event",
+          "message": "verified qwen3-0.6b",
+          "model": "qwen3-0.6b",
+          "schema_version": 1,
+          "state": null
+        }
+      ],
+      "member": "LocalModelProgress"
+    },
+    {
+      "args": [
+        "qwen3-0.6b",
+        {
+          "bytes_done": 639446688,
+          "bytes_to_download": null,
+          "bytes_total": 639446688,
+          "code": "TUR-AI-LOCAL-023",
+          "event": "installed",
+          "file": null,
+          "free_bytes": null,
+          "kind": "ensure-event",
+          "message": "installed qwen3-0.6b",
+          "model": "qwen3-0.6b",
+          "schema_version": 1,
+          "state": null
+        }
+      ],
+      "member": "LocalModelProgress"
+    },
+    {
+      "args": [
+        "qwen3-0.6b",
+        {
+          "bytes_done": null,
+          "bytes_to_download": null,
+          "bytes_total": null,
+          "code": null,
+          "event": "starting",
+          "file": null,
+          "free_bytes": null,
+          "kind": "ensure-event",
+          "message": "starting qwen3-0.6b",
+          "model": "qwen3-0.6b",
+          "schema_version": 1,
+          "state": null
+        }
+      ],
+      "member": "LocalModelProgress"
+    },
+    {
+      "args": [
+        "qwen3-0.6b",
+        {
+          "bytes_done": null,
+          "bytes_to_download": null,
+          "bytes_total": null,
+          "code": "TUR-AI-LOCAL-026",
+          "event": "ready",
+          "file": null,
+          "free_bytes": null,
+          "kind": "ensure-event",
+          "message": "ready qwen3-0.6b",
+          "model": "qwen3-0.6b",
+          "schema_version": 1,
+          "state": null
+        }
+      ],
+      "member": "LocalModelProgress"
+    },
+    {
+      "args": [
+        "qwen3-0.6b",
+        {
+          "consent_needed": true,
+          "event": "in-use",
+          "kind": "pax-event",
+          "message": "Qwen3 0.6B is ready on this computer and chosen for P@x. Read and accept what P@x sends to local AI to switch P@x on.",
+          "model": "qwen3-0.6b",
+          "provider": "local"
+        }
+      ],
+      "member": "LocalModelProgress"
+    }
+  ]
+}

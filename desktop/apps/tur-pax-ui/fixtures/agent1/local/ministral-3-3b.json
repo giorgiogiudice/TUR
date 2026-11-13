@@ -1,0 +1,140 @@
+{
+  "licence": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+  "model": "ministral-3-3b",
+  "signals": [
+    {
+      "args": [
+        "ministral-3-3b",
+        {
+          "bytes_done": 0,
+          "bytes_to_download": 2988524864,
+          "bytes_total": 2988524864,
+          "code": null,
+          "event": "plan",
+          "file": null,
+          "free_bytes": 1000000000000,
+          "kind": "ensure-event",
+          "message": "plan ministral-3-3b",
+          "model": "ministral-3-3b",
+          "schema_version": 1,
+          "state": null
+        }
+      ],
+      "member": "LocalModelProgress"
+    },
+    {
+      "args": [
+        "ministral-3-3b",
+        {
+          "bytes_done": 1494262432,
+          "bytes_to_download": null,
+          "bytes_total": 2988524864,
+          "code": null,
+          "event": "progress",
+          "file": null,
+          "free_bytes": null,
+          "kind": "ensure-event",
+          "message": "progress ministral-3-3b",
+          "model": "ministral-3-3b",
+          "schema_version": 1,
+          "state": null
+        }
+      ],
+      "member": "LocalModelProgress"
+    },
+    {
+      "args": [
+        "ministral-3-3b",
+        {
+          "bytes_done": 2988524864,
+          "bytes_to_download": null,
+          "bytes_total": 2988524864,
+          "code": null,
+          "event": "verified",
+          "file": "ministral-3-3b.gguf",
+          "free_bytes": null,
+          "kind": "ensure-event",
+          "message": "verified ministral-3-3b",
+          "model": "ministral-3-3b",
+          "schema_version": 1,
+          "state": null
+        }
+      ],
+      "member": "LocalModelProgress"
+    },
+    {
+      "args": [
+        "ministral-3-3b",
+        {
+          "bytes_done": 2988524864,
+          "bytes_to_download": null,
+          "bytes_total": 2988524864,
+          "code": "TUR-AI-LOCAL-023",
+          "event": "installed",
+          "file": null,
+          "free_bytes": null,
+          "kind": "ensure-event",
+          "message": "installed ministral-3-3b",
+          "model": "ministral-3-3b",
+          "schema_version": 1,
+          "state": null
+        }
+      ],
+      "member": "LocalModelProgress"
+    },
+    {
+      "args": [
+        "ministral-3-3b",
+        {
+          "bytes_done": null,
+          "bytes_to_download": null,
+          "bytes_total": null,
+          "code": null,
+          "event": "starting",
+          "file": null,
+          "free_bytes": null,
+          "kind": "ensure-event",
+          "message": "starting ministral-3-3b",
+          "model": "ministral-3-3b",
+          "schema_version": 1,
+          "state": null
+        }
+      ],
+      "member": "LocalModelProgress"
+    },
+    {
+      "args": [
+        "ministral-3-3b",
+        {
+          "bytes_done": null,
+          "bytes_to_download": null,
+          "bytes_total": null,
+          "code": "TUR-AI-LOCAL-026",
+          "event": "ready",
+          "file": null,
+          "free_bytes": null,
+          "kind": "ensure-event",
+          "message": "ready ministral-3-3b",
+          "model": "ministral-3-3b",
+          "schema_version": 1,
+          "state": null
+        }
+      ],
+      "member": "LocalModelProgress"
+    },
+    {
+      "args": [
+        "ministral-3-3b",
+        {
+          "consent_needed": true,
+          "event": "in-use",
+          "kind": "pax-event",
+          "message": "Ministral 3 3B Instruct is ready on this computer and chosen for P@x. Read and accept what P@x sends to local AI to switch P@x on.",
+          "model": "ministral-3-3b",
+          "provider": "local"
+        }
+      ],
+      "member": "LocalModelProgress"
+    }
+  ]
+}
