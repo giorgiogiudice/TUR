@@ -6,7 +6,7 @@
 # Fedora moves quay.io/fedora/fedora-kinoite:45 every day, and quay.io removes
 # the manifest the tag pointed to about a day later. A pin in image/base.lock
 # therefore stops resolving within a day or two. This workflow copies the
-# pinned digest, unchanged (skopeo copy --all --preserve-digests), to a private
+# pinned digest, unchanged (skopeo copy --all --preserve-digests), to a
 # package in GitHub's registry, ghcr.io/giorgiogiudice/tur-base, while quay.io
 # still has it. The workflows that build the image declare that package as a
 # digest-only mirror of quay.io/fedora/fedora-kinoite
@@ -67,7 +67,9 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Lint
-        run: shellcheck -x .github/actions/use-base-mirror/*.sh
+        run: |
+          shellcheck -x .github/actions/use-base-mirror/*.sh
+          python3 -m py_compile .github/actions/use-base-mirror/upstream.py
 
       - name: Log in to the mirror's registry
         env:
@@ -129,14 +131,16 @@ jobs:
             --format '{{index .Labels "org.opencontainers.image.version"}}' "docker://${MIRROR}@${BASE_DIGEST}")"
           exit "$fail"
 
-      - name: The mirror is not public
+      # The package was meant to be private; GitHub created it public (see
+      # docs/reports/base-mirror-1.md). This step records which it is.
+      - name: Can the mirror be read without credentials?
         run: |
           # shellcheck source=/dev/null
           . image/base.lock
           if out=$(skopeo inspect --raw --no-creds "docker://${MIRROR}@${BASE_DIGEST}" 2>&1 >/dev/null); then
-            echo "::warning title=Base image mirror is public::${MIRROR} can be read without credentials. It is meant to be private (image/README.md)."
+            echo "::warning title=Base image mirror is public::${MIRROR} can be read without credentials."
           else
-            echo "an anonymous read is refused, as it should be: ${out##*$'\n'}"
+            echo "an anonymous read is refused (the package is private): ${out##*$'\n'}"
           fi
 
       - name: Summary
@@ -188,9 +192,8 @@ jobs:
           fi
           # shellcheck source=/dev/null
           . image/base.lock
-          echo "--- quay.io alone, without the mirror (must fail):"
-          none=$(mktemp); echo "# empty" > "$none"
-          if CONTAINERS_REGISTRIES_CONF="$none" skopeo inspect --raw "docker://${BASE_IMAGE}@${BASE_DIGEST}" >/dev/null; then
+          echo "--- quay.io asked directly for the pin (must fail):"
+          if python3 -I .github/actions/use-base-mirror/upstream.py "${BASE_IMAGE}@${BASE_DIGEST}"; then
             echo "quay.io answered"; exit 1
           fi
 

@@ -245,9 +245,11 @@ TUR keeps its own copy of every digest it pins:
   registry. It holds unmodified copies of Fedora's image, made with
   `skopeo copy --all --preserve-digests`, so each has exactly the digest it has
   on quay.io, for every platform in the index. Each digest is tagged twice:
-  with its version (`45.20261113.0`) and as `sha256-<hex>`. The package is
-  private and is used only by TUR's CI: the repository's workflows read it with
-  their own token; nobody else can.
+  with its version (`45.20261113.0`) and as `sha256-<hex>`. It is there for
+  TUR's CI, whose workflows read it with their own token. It was meant to be
+  private, but GitHub created it **public**, as it does for a package that a
+  public repository's workflow publishes with its own token: anyone can pull
+  these copies of Fedora's unmodified image (docs/reports/base-mirror-1.md).
 - **The `base-mirror` workflow** copies the digest in `base.lock` whenever the
   file changes: on a pull request from this repository, on the push to `main`,
   and by hand. It checks that the mirror returns the same digest by digest and

@@ -31,19 +31,13 @@ case "$digest" in sha256:*) ;; *) echo "::error::not a reference by digest: ${re
 as=()
 if [ "${AS_ROOT:-yes}" = yes ]; then as=(sudo); fi
 
-# A registries.conf with nothing in it: with CONTAINERS_REGISTRIES_CONF set,
-# no drop-in is read, so the upstream registry is asked alone.
-plain="$(mktemp)"
-echo "# no registries, no mirrors" > "$plain"
-chmod 644 "$plain"
-
 err="$(mktemp)"
-trap 'rm -f "$plain" "$err"' EXIT
+trap 'rm -f "$err"' EXIT
 
-# probe LABEL REF [env...]: one line saying whether REF's manifest is there.
+# probe LABEL REF: one line saying whether REF's manifest is in the mirror.
 probe() {
-    local label="$1" what="$2"; shift 2
-    if "${as[@]}" env "$@" skopeo inspect --raw --retry-times 2 "docker://${what}" 2>"$err" >/dev/null; then
+    local label="$1" what="$2"
+    if "${as[@]}" skopeo inspect --raw --retry-times 2 "docker://${what}" 2>"$err" >/dev/null; then
         printf '%-10s %s present\n' "$label" "$what"
         return 0
     fi
@@ -61,7 +55,9 @@ probe() {
 echo "base:      ${ref}"
 in_mirror=yes; in_upstream=yes
 probe "mirror:" "${MIRROR}@${digest}" || in_mirror=no
-probe "upstream:" "${image}@${digest}" "CONTAINERS_REGISTRIES_CONF=${plain}" || in_upstream=no
+# The upstream registry, asked directly: skopeo would ask the mirror first.
+up="$(python3 -I "$(dirname "$0")/upstream.py" "${image}@${digest}")" || in_upstream=no
+printf '%-10s %s %s\n' "upstream:" "${image}@${digest}" "$up"
 
 # As podman will see it: the base reference, with the drop-in in effect.
 if got="$("${as[@]}" skopeo inspect --raw --retry-times 2 "docker://${ref}" 2>"$err" | sha256sum | cut -d' ' -f1)" \
