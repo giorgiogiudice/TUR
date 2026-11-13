@@ -31,6 +31,8 @@ on:
   pull_request:
     paths:
       - "tests/windows-drivers/**"
+      - "third-party/wdf/**"
+      - "third-party/wine-patches/**"
       - ".github/workflows/windows-drivers.yml"
   workflow_dispatch:
     inputs:
@@ -56,6 +58,42 @@ env:
   FEDORA_IMAGE: registry.fedoraproject.org/fedora:45@sha256:fa773d10382c082ff2cccaf7982a5c162f11f296f91274b994357f2d3d473770
 
 jobs:
+  # The second experiment (docs/reports/windows-drivers-2.md): the KMDF
+  # runtime built from Microsoft's MIT-licensed Windows-Driver-Frameworks
+  # source with clang/lld, and Wine 11.20's ntoskrnl.exe plus a new
+  # wdfldr.sys built with TUR's patch set (third-party/wine-patches). No
+  # Microsoft binary is downloaded; the sources are fetched at pinned
+  # commits. Green when the build record was written; how far the build got
+  # is the finding.
+  kmdf-build:
+    name: KMDF runtime from MIT source, Wine with the KMDF patch set (build)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Build in Fedora 45
+        run: |
+          mkdir -p "$RUNNER_TEMP/kmdf"
+          docker run --rm -v "$GITHUB_WORKSPACE:/src:ro" -v "$RUNNER_TEMP/kmdf:/work" \
+            "$FEDORA_IMAGE" bash /src/tests/windows-drivers/kmdf/ci-build.sh
+          sudo chown -R "$(id -u):$(id -g)" "$RUNNER_TEMP/kmdf"
+          cat "$RUNNER_TEMP/kmdf/kmdf-evidence/summary.md" >> "$GITHUB_STEP_SUMMARY" || true
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: kmdf-build-evidence
+          path: ${{ runner.temp }}/kmdf/kmdf-evidence/
+          if-no-files-found: warn
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: kmdf-binaries
+          path: ${{ runner.temp }}/kmdf/kmdf-artifact/
+          if-no-files-found: warn
+          retention-days: 7
+
   fedora-wine:
     name: Windows USB and HID drivers in Wine's user-space driver host (Fedora 45 Wine)
     runs-on: ubuntu-24.04

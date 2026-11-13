@@ -1,0 +1,4 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# Order in which build-wine.sh applies the patches.
+0001-ntoskrnl.exe-Run-DPCs-queued-with-KeInsertQueueDpc.patch
+0002-wdfldr.sys-Add-a-Kernel-Mode-Driver-Framework-loader.patch

@@ -1,0 +1,228 @@
+SPDX-License-Identifier: LGPL-2.1-or-later
+A patch to Wine (https://gitlab.winehq.org/wine/wine), under Wine's licence;
+see README.md and COPYING.LIB in this directory. Applied with `git apply`,
+which ignores these lines.
+
+From 210b1b158d75986261bb39aacc1dcc5a07b05fd6 Mon Sep 17 00:00:00 2001
+From: TUR experiment <tur-experiment@users.noreply.github.com>
+Date: Fri, 13 Nov 2026 09:03:44 +0300
+Subject: [PATCH 1/2] ntoskrnl.exe: Run DPCs queued with KeInsertQueueDpc.
+
+KeInsertQueueDpc returned TRUE without ever calling the deferred routine,
+so a driver's deferred work silently never happened (bug 49394 was closed
+by that stub). Run queued DPCs in queue order on one thread of the driver
+host, as on one processor, and implement KeRemoveQueueDpc and
+KeFlushQueuedDpcs on the same queue.
+---
+ dlls/ntoskrnl.exe/ntoskrnl.c        | 133 +++++++++++++++++++++++++++-
+ dlls/ntoskrnl.exe/ntoskrnl.exe.spec |   2 +-
+ include/ddk/wdm.h                   |   3 +
+ 3 files changed, 133 insertions(+), 5 deletions(-)
+
+diff --git a/dlls/ntoskrnl.exe/ntoskrnl.c b/dlls/ntoskrnl.exe/ntoskrnl.c
+index b4058c0..2bbd5fd 100644
+--- a/dlls/ntoskrnl.exe/ntoskrnl.c
++++ b/dlls/ntoskrnl.exe/ntoskrnl.c
+@@ -2785,12 +2785,127 @@ LONG WINAPI KeInsertQueue(PRKQUEUE Queue, PLIST_ENTRY Entry)
+     return 0;
+ }
+ 
++/* DPCs queued with KeInsertQueueDpc run in queue order on one thread of the
++ * driver host, as they would on one processor. A queued DPC is marked by a
++ * non-NULL DpcData, as on Windows; it can be queued again as soon as its
++ * routine has been called. */
++static CRITICAL_SECTION dpc_cs;
++static CRITICAL_SECTION_DEBUG dpc_cs_debug =
++{
++    0, 0, &dpc_cs,
++    { &dpc_cs_debug.ProcessLocksList, &dpc_cs_debug.ProcessLocksList },
++      0, 0, { (DWORD_PTR)(__FILE__ ": dpc_cs") }
++};
++static CRITICAL_SECTION dpc_cs = { &dpc_cs_debug, -1, 0, 0, 0, 0 };
++static CONDITION_VARIABLE dpc_queued = CONDITION_VARIABLE_INIT;
++static CONDITION_VARIABLE dpc_idle = CONDITION_VARIABLE_INIT;
++static KDPC *dpc_head, *dpc_tail;
++static DWORD dpc_thread_id;
++static BOOL dpc_running;
++
++static KDPC *next_dpc( KDPC *dpc )
++{
++    return dpc->DpcListEntry.Next ? CONTAINING_RECORD( dpc->DpcListEntry.Next, KDPC, DpcListEntry ) : NULL;
++}
++
++static DWORD WINAPI dpc_thread_proc( void *arg )
++{
++    PKDEFERRED_ROUTINE routine;
++    void *context, *arg1, *arg2;
++    KDPC *dpc;
++
++    SetThreadDescription( GetCurrentThread(), L"wine_ntoskrnl_dpc" );
++
++    EnterCriticalSection( &dpc_cs );
++    for (;;)
++    {
++        while (!dpc_head) SleepConditionVariableCS( &dpc_queued, &dpc_cs, INFINITE );
++
++        dpc = dpc_head;
++        if (!(dpc_head = next_dpc( dpc ))) dpc_tail = NULL;
++        dpc->DpcListEntry.Next = NULL;
++        routine = dpc->DeferredRoutine;
++        context = dpc->DeferredContext;
++        arg1 = dpc->SystemArgument1;
++        arg2 = dpc->SystemArgument2;
++        dpc->DpcData = NULL;
++        dpc_running = TRUE;
++        LeaveCriticalSection( &dpc_cs );
++
++        TRACE( "calling dpc %p routine %p(%p, %p, %p)\n", dpc, routine, context, arg1, arg2 );
++        routine( dpc, context, arg1, arg2 );
++        TRACE( "dpc %p done\n", dpc );
++
++        EnterCriticalSection( &dpc_cs );
++        dpc_running = FALSE;
++        if (!dpc_head) WakeAllConditionVariable( &dpc_idle );
++    }
++    return 0;
++}
++
+ /***********************************************************************
+  *           KeInsertQueueDpc   (NTOSKRNL.EXE.@)
+  */
+-BOOLEAN WINAPI KeInsertQueueDpc(PRKDPC Dpc, PVOID SystemArgument1, PVOID SystemArgument2)
++BOOLEAN WINAPI KeInsertQueueDpc( KDPC *dpc, void *arg1, void *arg2 )
++{
++    HANDLE thread;
++
++    TRACE( "dpc %p, arg1 %p, arg2 %p\n", dpc, arg1, arg2 );
++
++    EnterCriticalSection( &dpc_cs );
++    if (dpc->DpcData)
++    {
++        LeaveCriticalSection( &dpc_cs );
++        return FALSE;
++    }
++    if (!dpc_thread_id)
++    {
++        if (!(thread = CreateThread( NULL, 0, dpc_thread_proc, NULL, 0, &dpc_thread_id )))
++        {
++            ERR( "failed to create the DPC thread, error %lu\n", GetLastError() );
++            LeaveCriticalSection( &dpc_cs );
++            return FALSE;
++        }
++        CloseHandle( thread );
++    }
++    dpc->SystemArgument1 = arg1;
++    dpc->SystemArgument2 = arg2;
++    dpc->DpcData = &dpc_head;
++    dpc->DpcListEntry.Next = NULL;
++    if (dpc_tail) dpc_tail->DpcListEntry.Next = &dpc->DpcListEntry;
++    else dpc_head = dpc;
++    dpc_tail = dpc;
++    WakeConditionVariable( &dpc_queued );
++    LeaveCriticalSection( &dpc_cs );
++    return TRUE;
++}
++
++/***********************************************************************
++ *           KeRemoveQueueDpc   (NTOSKRNL.EXE.@)
++ */
++BOOLEAN WINAPI KeRemoveQueueDpc( KDPC *dpc )
+ {
+-    FIXME( "stub: (%p %p %p)\n", Dpc, SystemArgument1, SystemArgument2 );
++    KDPC *prev = NULL, *cur;
++
++    TRACE( "dpc %p\n", dpc );
++
++    EnterCriticalSection( &dpc_cs );
++    if (!dpc->DpcData)
++    {
++        LeaveCriticalSection( &dpc_cs );
++        return FALSE;
++    }
++    for (cur = dpc_head; cur && cur != dpc; cur = next_dpc( cur )) prev = cur;
++    if (cur)
++    {
++        if (prev) prev->DpcListEntry.Next = dpc->DpcListEntry.Next;
++        else dpc_head = next_dpc( dpc );
++        if (dpc_tail == dpc) dpc_tail = prev;
++        dpc->DpcListEntry.Next = NULL;
++    }
++    dpc->DpcData = NULL;
++    if (!dpc_head && !dpc_running) WakeAllConditionVariable( &dpc_idle );
++    LeaveCriticalSection( &dpc_cs );
+     return TRUE;
+ }
+ 
+@@ -3722,11 +3837,15 @@ MM_SYSTEMSIZE WINAPI MmQuerySystemSize(void)
+  */
+ void WINAPI KeInitializeDpc(KDPC *dpc, PKDEFERRED_ROUTINE deferred_routine, void *deferred_context)
+ {
+-    FIXME("dpc %p, deferred_routine %p, deferred_context %p semi-stub.\n",
++    TRACE("dpc %p, deferred_routine %p, deferred_context %p.\n",
+             dpc, deferred_routine, deferred_context);
+ 
++    dpc->Importance = MediumImportance;
++    dpc->Number = 0;
++    dpc->DpcListEntry.Next = NULL;
+     dpc->DeferredRoutine = deferred_routine;
+     dpc->DeferredContext = deferred_context;
++    dpc->DpcData = NULL;
+ }
+ 
+ /***********************************************************************
+@@ -4678,7 +4797,13 @@ NTSTATUS WINAPI SeLocateProcessImageName(PEPROCESS process, UNICODE_STRING **ima
+  */
+ void WINAPI KeFlushQueuedDpcs(void)
+ {
+-    FIXME("stub!\n");
++    TRACE("\n");
++
++    EnterCriticalSection( &dpc_cs );
++    /* a DPC routine that flushes would wait for itself */
++    if (GetCurrentThreadId() != dpc_thread_id)
++        while (dpc_head || dpc_running) SleepConditionVariableCS( &dpc_idle, &dpc_cs, INFINITE );
++    LeaveCriticalSection( &dpc_cs );
+ }
+ 
+ /*********************************************************************
+diff --git a/dlls/ntoskrnl.exe/ntoskrnl.exe.spec b/dlls/ntoskrnl.exe/ntoskrnl.exe.spec
+index 785f511..90af2b6 100644
+--- a/dlls/ntoskrnl.exe/ntoskrnl.exe.spec
++++ b/dlls/ntoskrnl.exe/ntoskrnl.exe.spec
+@@ -644,7 +644,7 @@
+ @ stdcall KeRemoveDeviceQueue(ptr)
+ @ stub KeRemoveEntryDeviceQueue
+ @ stub KeRemoveQueue
+-@ stub KeRemoveQueueDpc
++@ stdcall KeRemoveQueueDpc(ptr)
+ @ stub KeRemoveSystemServiceTable
+ @ stdcall KeResetEvent(ptr)
+ @ stub KeRestoreFloatingPointState
+diff --git a/include/ddk/wdm.h b/include/ddk/wdm.h
+index bce1342..c5590da 100644
+--- a/include/ddk/wdm.h
++++ b/include/ddk/wdm.h
+@@ -1960,6 +1960,7 @@ BOOLEAN   WINAPI KeCancelTimer(KTIMER*);
+ void      WINAPI KeClearEvent(PRKEVENT);
+ NTSTATUS  WINAPI KeDelayExecutionThread(KPROCESSOR_MODE,BOOLEAN,LARGE_INTEGER*);
+ void      WINAPI KeEnterCriticalRegion(void);
++void      WINAPI KeFlushQueuedDpcs(void);
+ void      WINAPI KeGenericCallDpc(PKDEFERRED_ROUTINE,PVOID);
+ ULONG     WINAPI KeGetCurrentProcessorNumber(void);
+ PKTHREAD  WINAPI KeGetCurrentThread(void);
+@@ -1971,6 +1972,7 @@ void      WINAPI KeInitializeSemaphore(PRKSEMAPHORE,LONG,LONG);
+ void      WINAPI KeInitializeTimerEx(PKTIMER,TIMER_TYPE);
+ void      WINAPI KeInitializeTimer(KTIMER*);
+ BOOLEAN   WINAPI KeInsertDeviceQueue(KDEVICE_QUEUE*,KDEVICE_QUEUE_ENTRY*);
++BOOLEAN   WINAPI KeInsertQueueDpc(KDPC*,void*,void*);
+ void      WINAPI KeLeaveCriticalRegion(void);
+ ULONG     WINAPI KeQueryActiveProcessorCountEx(USHORT);
+ KAFFINITY WINAPI KeQueryActiveProcessors(void);
+@@ -1984,6 +1986,7 @@ LONG      WINAPI KeReleaseSemaphore(PRKSEMAPHORE,KPRIORITY,LONG,BOOLEAN);
+ void      WINAPI KeReleaseSpinLock(KSPIN_LOCK*,KIRQL);
+ void      WINAPI KeReleaseSpinLockFromDpcLevel(KSPIN_LOCK*);
+ KDEVICE_QUEUE_ENTRY * WINAPI KeRemoveDeviceQueue(KDEVICE_QUEUE*);
++BOOLEAN   WINAPI KeRemoveQueueDpc(KDPC*);
+ LONG      WINAPI KeResetEvent(PRKEVENT);
+ void      WINAPI KeRevertToUserAffinityThread(void);
+ void      WINAPI KeRevertToUserAffinityThreadEx(KAFFINITY affinity);
