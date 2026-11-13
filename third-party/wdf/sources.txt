@@ -189,3 +189,4 @@ shared/targets/usb/km/fxusbpipekm.cpp
 shared/targets/usb/usbutil.cpp
 compat/tur-wdf-missing.cpp
 compat/tur-wdf-entry.c
+compat/tur-usbdex.c

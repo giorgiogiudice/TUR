@@ -21,7 +21,7 @@ typedef ULONG WDF_BUILD_NUMBER;
 /* The framework hands its client a PWDF_DRIVER_GLOBALS through this type. */
 typedef struct _WDF_COMPONENT_GLOBALS *PWDF_COMPONENT_GLOBALS;
 
-typedef size_t WDF_STRUCT_INFO, *PWDF_STRUCT_INFO;
+/* WDF_STRUCT_INFO comes from the public wdftypes.h. */
 
 typedef struct _WDF_INTERFACE_HEADER {
     const GUID *InterfaceType;

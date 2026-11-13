@@ -39,6 +39,17 @@ NTKERNELAPI PVOID NTAPI ExAllocatePool2(_In_ POOL_FLAGS Flags, _In_ SIZE_T Numbe
 #define ExInitializeDriverRuntime(RuntimeFlags) ((void)(RuntimeFlags))
 #endif
 
+/* MmGetSystemAddressForMdlSafe priority flag (Windows 8). */
+#ifndef MdlMappingNoExecute
+#define MdlMappingNoExecute 0x40000000
+#endif
+
+/* KeQuerySystemTimePrecise (Windows 8). */
+#ifndef _TUR_KE_QUERY_SYSTEM_TIME_PRECISE
+#define _TUR_KE_QUERY_SYSTEM_TIME_PRECISE
+NTKERNELAPI VOID NTAPI KeQuerySystemTimePrecise(_Out_ PLARGE_INTEGER CurrentTime);
+#endif
+
 /* ntstrsafe.h's UNICODE_STRING functions, as documented. */
 #ifndef _TUR_RTL_UNICODE_STRING_SAFE
 #define _TUR_RTL_UNICODE_STRING_SAFE

@@ -117,7 +117,9 @@ common=(-O1 -g0
     -ferror-limit=0 -w -Wno-error
     -I"${work}/gen" -include "${tp}/compat/tur-wdf-prelude.h")
 for d in "${incdirs[@]}"; do common+=(-I"${d}"); done
-cxxflags=(-std=gnu++14 -nostdinc++ -fms-compatibility -fdelayed-template-parsing -fno-exceptions -fno-rtti
+# -fms-compatibility alone would hide __GNUC__ from mingw-w64's headers,
+# which then lose their GNU attribute and intrinsic definitions.
+cxxflags=(-std=gnu++14 -nostdinc++ -fms-compatibility -fgnuc-version=4.2.1 -fdelayed-template-parsing -fno-exceptions -fno-rtti
     -fno-threadsafe-statics -fno-sized-deallocation -fno-use-cxa-atexit)
 
 {
