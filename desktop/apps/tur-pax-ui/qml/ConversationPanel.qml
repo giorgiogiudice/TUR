@@ -70,8 +70,13 @@ Kit.Page {
         }
 
         function onTaskChanged(): void {
-            if (!panel.conversation.running)
-                busyNote.visible = false
+            if (panel.conversation.running)
+                return
+            busyNote.visible = false
+            // Stop and Pause go when the task ends; the keyboard they had
+            // goes to the field, not nowhere.
+            if (stopButton.activeFocus || pauseButton.activeFocus)
+                input.forceActiveFocus(Qt.TabFocusReason)
         }
     }
 
@@ -312,6 +317,8 @@ Kit.Page {
                     }
 
                     Kit.Button {
+                        id: pauseButton
+
                         objectName: "pauseButton"
                         text: panel.conversation.paused ? Words.resume : Words.pause
                         onClicked: {

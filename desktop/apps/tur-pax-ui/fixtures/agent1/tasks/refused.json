@@ -4,22 +4,22 @@
   "signals": [
     {
       "args": [
-        "t-1794556151-7",
+        "t-1794571291-2",
         {
           "answer": "",
-          "attended": false,
+          "attended": true,
           "cost": null,
           "currency": null,
           "error_code": null,
           "finished_at": null,
           "message": "",
           "outcome": null,
-          "request": "Send the report to Marta and tidy the disk.",
-          "schedule": "s-00000002",
-          "started_at": 1794556151,
+          "request": "Read the value and send the report to Marta.",
+          "schedule": null,
+          "started_at": 1794571291,
           "state": "working",
           "steps": [],
-          "task": "t-1794556151-7",
+          "task": "t-1794571291-2",
           "texts": [],
           "usage": {
             "cached_input_tokens": 0,
@@ -38,9 +38,17 @@
     },
     {
       "args": [
-        "t-1794556151-7",
+        "t-1794571291-2",
+        "interim",
+        "I will read the value, then send the report."
+      ],
+      "member": "TextAdded"
+    },
+    {
+      "args": [
+        "t-1794571291-2",
         {
-          "audit_id": "t-1794556151-7#2",
+          "audit_id": "t-1794571291-2#2",
           "class": 0,
           "decision": "allowed",
           "detail": "Call tool \"test_observe\" of service \"org.tur.Test1\" with arguments {}",
@@ -64,9 +72,9 @@
     },
     {
       "args": [
-        "t-1794556151-7",
+        "t-1794571291-2",
         {
-          "audit_id": "t-1794556151-7#3",
+          "audit_id": "t-1794571291-2#3",
           "class": 0,
           "decision": "allowed",
           "detail": "Call tool \"test_observe\" of service \"org.tur.Test1\" with arguments {}",
@@ -90,9 +98,9 @@
     },
     {
       "args": [
-        "t-1794556151-7",
+        "t-1794571291-2",
         {
-          "audit_id": "t-1794556151-7#4",
+          "audit_id": "t-1794571291-2#4",
           "class": 2,
           "decision": "refused",
           "detail": "Call tool \"test_consequential\" of service \"org.tur.Test1\" with arguments {\"recipient\":\"marta@example.org\",\"subject\":\"Report\"}",
@@ -116,9 +124,9 @@
     },
     {
       "args": [
-        "t-1794556151-7",
+        "t-1794571291-2",
         {
-          "audit_id": "t-1794556151-7#5",
+          "audit_id": "t-1794571291-2#4",
           "class": 2,
           "decision": "refused",
           "detail": "Call tool \"test_consequential\" of service \"org.tur.Test1\" with arguments {\"recipient\":\"marta@example.org\",\"subject\":\"Report\"}",
@@ -142,83 +150,31 @@
     },
     {
       "args": [
-        "t-1794556151-7",
-        {
-          "audit_id": "t-1794556151-7#6",
-          "class": 3,
-          "decision": "refused",
-          "detail": "Call tool \"test_system_critical\" of service \"org.tur.Test1\" with arguments {\"volume_id\":\"vol-1\"}",
-          "error_code": "TUR-AI-POLICY-006",
-          "exit_code": null,
-          "index": 3,
-          "message": "The assistant cannot ask for your approval in a way that is safe on this system, so it does only things that can be undone.",
-          "output_bytes": 0,
-          "reason": "trusted_path_unavailable",
-          "result": null,
-          "service": "org.tur.Test1",
-          "state": "refused",
-          "tier": 1,
-          "title": "Format the test volume",
-          "tool": "test_system_critical",
-          "truncated": false,
-          "withheld": 0
-        }
-      ],
-      "member": "ActionProposed"
-    },
-    {
-      "args": [
-        "t-1794556151-7",
-        {
-          "audit_id": "t-1794556151-7#6",
-          "class": 3,
-          "decision": "refused",
-          "detail": "Call tool \"test_system_critical\" of service \"org.tur.Test1\" with arguments {\"volume_id\":\"vol-1\"}",
-          "error_code": "TUR-AI-POLICY-006",
-          "exit_code": null,
-          "index": 3,
-          "message": "The assistant cannot ask for your approval in a way that is safe on this system, so it does only things that can be undone.",
-          "output_bytes": 0,
-          "reason": "trusted_path_unavailable",
-          "result": null,
-          "service": "org.tur.Test1",
-          "state": "refused",
-          "tier": 1,
-          "title": "Format the test volume",
-          "tool": "test_system_critical",
-          "truncated": false,
-          "withheld": 0
-        }
-      ],
-      "member": "ActionCompleted"
-    },
-    {
-      "args": [
-        "t-1794556151-7",
+        "t-1794571291-2",
         "answer",
-        "Done what I could."
+        "I read the value. Sending the report needs your approval, which I cannot ask for here."
       ],
       "member": "TextAdded"
     },
     {
       "args": [
-        "t-1794556151-7",
+        "t-1794571291-2",
         {
-          "answer": "Done what I could.",
-          "attended": false,
+          "answer": "I read the value. Sending the report needs your approval, which I cannot ask for here.",
+          "attended": true,
           "cost": null,
           "currency": null,
           "error_code": null,
-          "finished_at": 1794556151,
+          "finished_at": 1794571291,
           "message": "",
           "outcome": "completed",
-          "request": "Send the report to Marta and tidy the disk.",
-          "schedule": "s-00000002",
-          "started_at": 1794556151,
+          "request": "Read the value and send the report to Marta.",
+          "schedule": null,
+          "started_at": 1794571291,
           "state": "finished",
           "steps": [
             {
-              "audit_id": "t-1794556151-7#3",
+              "audit_id": "t-1794571291-2#3",
               "class": 0,
               "decision": "allowed",
               "detail": "Call tool \"test_observe\" of service \"org.tur.Test1\" with arguments {}",
@@ -238,7 +194,7 @@
               "withheld": 0
             },
             {
-              "audit_id": "t-1794556151-7#5",
+              "audit_id": "t-1794571291-2#4",
               "class": 2,
               "decision": "refused",
               "detail": "Call tool \"test_consequential\" of service \"org.tur.Test1\" with arguments {\"recipient\":\"marta@example.org\",\"subject\":\"Report\"}",
@@ -256,33 +212,17 @@
               "tool": "test_consequential",
               "truncated": false,
               "withheld": 0
-            },
-            {
-              "audit_id": "t-1794556151-7#6",
-              "class": 3,
-              "decision": "refused",
-              "detail": "Call tool \"test_system_critical\" of service \"org.tur.Test1\" with arguments {\"volume_id\":\"vol-1\"}",
-              "error_code": "TUR-AI-POLICY-006",
-              "exit_code": null,
-              "index": 3,
-              "message": "The assistant cannot ask for your approval in a way that is safe on this system, so it does only things that can be undone.",
-              "output_bytes": 0,
-              "reason": "trusted_path_unavailable",
-              "result": null,
-              "service": "org.tur.Test1",
-              "state": "refused",
-              "tier": 1,
-              "title": "Format the test volume",
-              "tool": "test_system_critical",
-              "truncated": false,
-              "withheld": 0
             }
           ],
-          "task": "t-1794556151-7",
+          "task": "t-1794571291-2",
           "texts": [
             {
+              "kind": "interim",
+              "text": "I will read the value, then send the report."
+            },
+            {
               "kind": "answer",
-              "text": "Done what I could."
+              "text": "I read the value. Sending the report needs your approval, which I cannot ask for here."
             }
           ],
           "usage": {

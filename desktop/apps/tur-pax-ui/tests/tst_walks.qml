@@ -23,7 +23,7 @@ Item {
     id: root
 
     width: 1100
-    height: 5200
+    height: 9000
 
     PaxHost {
         id: host

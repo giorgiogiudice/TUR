@@ -1,6 +1,9 @@
 {
   "licence": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
   "replies": {
+    "CancelLocalModel": {
+      "reply": []
+    },
     "Enable 1": {
       "error": "org.tur.Agent1.Error.TUR_AI_SERVICE_002",
       "message": "TUR-AI-SERVICE-002: the version named is not the version of the text in use"
@@ -9,6 +12,24 @@
       "reply": [
         "2",
         "What P@x sends to Anthropic\n\nTo do what you ask, P@x sends these to Anthropic over an encrypted connection:\n- what you ask, as text;\n- pictures of the window P@x is working in, or of the screen when a task needs it;\n- the names and states of buttons and other controls in that window;\n- the results of the tools and commands P@x runs for you;\n- the things P@x remembers that matter to the task.\n\nNever sent:\n- the sound of your voice (speech is turned into text on this computer);\n- the trusted screen, sign-in prompts and password managers;\n- windows of applications you exclude;\n- passwords and keys stored by the system;\n- support bundles, unless you attach one yourself.\n\nIn this version\nP@x cannot see or use the screen yet, so no pictures and no names of controls are sent. It uses TUR's own tools and commands that only read.\n\nReminders and scheduled tasks\nA scheduled task runs when you may not be there, also while the screen is locked. It can look things up and make changes that can be undone. What it reads is sent to Anthropic like the results of any other task. Anything else it would need waits for you.\n\nMemory\nMemory stays on this computer. When something P@x remembers matters to a task, it is sent to Anthropic with that task. That includes things P@x read somewhere and you chose to keep: they are sent again whenever they matter.\n\nOther programs\nOn this desktop, any program you run can see your screen and use the keyboard and pointer. TUR limits what P@x may do. It cannot limit other programs you start.\n\nWhat Anthropic keeps\nP@x asks every provider not to store your conversations where the provider offers that choice. P@x sends Anthropic the whole conversation with each request. The interface P@x uses has no setting for storing a conversation, so there is nothing for P@x to switch off.\nAnthropic's terms are not reviewed by TUR: TUR has not read what Anthropic keeps, for how long, whether it trains on it, or where it processes it. Read them before you go on.\nWhat Anthropic keeps anyway, and for how long, is governed by Anthropic's terms, not by TUR. TUR cannot control it.\nAnthropic's data terms: https://www.anthropic.com/legal/commercial-terms\n\nYou can see everything P@x did in Settings ▸ P@x ▸ Activity, and stop P@x at any time.\n"
+      ]
+    },
+    "GetConsentText deepseek": {
+      "reply": [
+        "2",
+        "What P@x sends to DeepSeek\n\nTo do what you ask, P@x sends these to DeepSeek over an encrypted connection:\n- what you ask, as text;\n- pictures of the window P@x is working in, or of the screen when a task needs it;\n- the names and states of buttons and other controls in that window;\n- the results of the tools and commands P@x runs for you;\n- the things P@x remembers that matter to the task.\n\nNever sent:\n- the sound of your voice (speech is turned into text on this computer);\n- the trusted screen, sign-in prompts and password managers;\n- windows of applications you exclude;\n- passwords and keys stored by the system;\n- support bundles, unless you attach one yourself.\n\nIn this version\nP@x cannot see or use the screen yet, so no pictures and no names of controls are sent. It uses TUR's own tools and commands that only read.\n\nReminders and scheduled tasks\nA scheduled task runs when you may not be there, also while the screen is locked. It can look things up and make changes that can be undone. What it reads is sent to DeepSeek like the results of any other task. Anything else it would need waits for you.\n\nMemory\nMemory stays on this computer. When something P@x remembers matters to a task, it is sent to DeepSeek with that task. That includes things P@x read somewhere and you chose to keep: they are sent again whenever they matter.\n\nOther programs\nOn this desktop, any program you run can see your screen and use the keyboard and pointer. TUR limits what P@x may do. It cannot limit other programs you start.\n\nWhat DeepSeek keeps\nP@x asks every provider not to store your conversations where the provider offers that choice. P@x sends DeepSeek the whole conversation with each request. The interface P@x uses has no setting that asks a service not to store a conversation.\nWhat DeepSeek's terms say, as TUR read them on 2026-11-12:\n- whether it keeps what it is sent: Yes. Its privacy policy says it collects and stores what you send (prompts, inputs, uploaded files) with your account; its API terms say nothing more specific.\n- for how long: No fixed period: as long as necessary to provide its services, and for as long as you have an account.\n- whether it trains models on it: It may. Its privacy policy names training and improving its models among the uses of your data and gives a right to opt out; the opt-out its terms describe ('Improve the model for everyone') is a setting of its chat product, and none for the API was found.\n- where it processes it: The People's Republic of China, by Hangzhou DeepSeek Artificial Intelligence Co., Ltd.\nThis is TUR's summary. DeepSeek's own terms govern, and they can change.\nWhat DeepSeek keeps anyway, and for how long, is governed by DeepSeek's terms, not by TUR. TUR cannot control it.\nDeepSeek's data terms: https://cdn.deepseek.com/policies/en-US/deepseek-privacy-policy.html\n\nYou can see everything P@x did in Settings ▸ P@x ▸ Activity, and stop P@x at any time.\n"
+      ]
+    },
+    "GetConsentText local": {
+      "reply": [
+        "2",
+        "What P@x sends to Local AI on this computer\n\nTo do what you ask, P@x sends these to Local AI on this computer, which runs on this computer:\n- what you ask, as text;\n- pictures of the window P@x is working in, or of the screen when a task needs it;\n- the names and states of buttons and other controls in that window;\n- the results of the tools and commands P@x runs for you;\n- the things P@x remembers that matter to the task.\n\nNever sent:\n- the sound of your voice (speech is turned into text on this computer);\n- the trusted screen, sign-in prompts and password managers;\n- windows of applications you exclude;\n- passwords and keys stored by the system;\n- support bundles, unless you attach one yourself.\n\nIn this version\nP@x cannot see or use the screen yet, so no pictures and no names of controls are sent. It uses TUR's own tools and commands that only read.\n\nReminders and scheduled tasks\nA scheduled task runs when you may not be there, also while the screen is locked. It can look things up and make changes that can be undone. What it reads is sent to Local AI on this computer like the results of any other task. Anything else it would need waits for you.\n\nMemory\nMemory stays on this computer. When something P@x remembers matters to a task, it is sent to Local AI on this computer with that task. That includes things P@x read somewhere and you chose to keep: they are sent again whenever they matter.\n\nOther programs\nOn this desktop, any program you run can see your screen and use the keyboard and pointer. TUR limits what P@x may do. It cannot limit other programs you start.\n\nWhat Local AI on this computer keeps\nLocal AI on this computer runs on this computer. What P@x sends it stays on this computer: no company receives it. TUR checked that its address is this computer; what Local AI on this computer itself keeps on this computer is up to how it was set up.\n\nYou can see everything P@x did in Settings ▸ P@x ▸ Activity, and stop P@x at any time.\n"
+      ]
+    },
+    "GetConsentText openai": {
+      "reply": [
+        "2",
+        "What P@x sends to OpenAI\n\nTo do what you ask, P@x sends these to OpenAI over an encrypted connection:\n- what you ask, as text;\n- pictures of the window P@x is working in, or of the screen when a task needs it;\n- the names and states of buttons and other controls in that window;\n- the results of the tools and commands P@x runs for you;\n- the things P@x remembers that matter to the task.\n\nNever sent:\n- the sound of your voice (speech is turned into text on this computer);\n- the trusted screen, sign-in prompts and password managers;\n- windows of applications you exclude;\n- passwords and keys stored by the system;\n- support bundles, unless you attach one yourself.\n\nIn this version\nP@x cannot see or use the screen yet, so no pictures and no names of controls are sent. It uses TUR's own tools and commands that only read.\n\nReminders and scheduled tasks\nA scheduled task runs when you may not be there, also while the screen is locked. It can look things up and make changes that can be undone. What it reads is sent to OpenAI like the results of any other task. Anything else it would need waits for you.\n\nMemory\nMemory stays on this computer. When something P@x remembers matters to a task, it is sent to OpenAI with that task. That includes things P@x read somewhere and you chose to keep: they are sent again whenever they matter.\n\nOther programs\nOn this desktop, any program you run can see your screen and use the keyboard and pointer. TUR limits what P@x may do. It cannot limit other programs you start.\n\nWhat OpenAI keeps\nP@x asks every provider not to store your conversations where the provider offers that choice. OpenAI's interface stores what it is sent unless it is asked not to. P@x asks it not to, with every request.\nOpenAI's terms are not reviewed by TUR: TUR has not read what OpenAI keeps, for how long, whether it trains on it, or where it processes it. Read them before you go on.\nWhat OpenAI keeps anyway, and for how long, is governed by OpenAI's terms, not by TUR. TUR cannot control it.\nOpenAI's data terms: https://developers.openai.com/api/docs/guides/your-data\n\nYou can see everything P@x did in Settings ▸ P@x ▸ Activity, and stop P@x at any time.\n"
       ]
     },
     "GetGenerationSettings anthropic claude-opus-5-5": {
@@ -51,6 +72,164 @@
         }
       ]
     },
+    "GetGenerationSettings deepseek deepseek-flash": {
+      "reply": [
+        {
+          "accepts": {
+            "effort": {
+              "provider_default": "high",
+              "sampling_only_with": [
+                "none"
+              ],
+              "values": [
+                "none",
+                "low",
+                "high",
+                "max"
+              ]
+            },
+            "max_output_tokens": {
+              "max": 393216,
+              "min": 1
+            },
+            "stop": {
+              "max": 16
+            },
+            "temperature": {
+              "max": 2.0,
+              "min": 0.0
+            },
+            "top_p": {
+              "max": 1.0,
+              "min": 0.01
+            }
+          },
+          "adapter": "openai-chat",
+          "checked": "2026-11-13",
+          "chosen": {},
+          "declared": true,
+          "effective": {},
+          "max_output_tokens": 8192,
+          "model": "deepseek-flash",
+          "notices": [
+            "This model takes temperature, top-p and top-k only when its reasoning effort is none; while it reasons it refuses or ignores them."
+          ],
+          "problem": null,
+          "provider": "deepseek",
+          "sources": [
+            "https://api-docs.deepseek.com/api/create-chat-completion",
+            "https://api-docs.deepseek.com/guides/thinking_mode"
+          ]
+        }
+      ]
+    },
+    "GetGenerationSettings local qwen3-0.6b": {
+      "reply": [
+        {
+          "accepts": {
+            "context_tokens": {
+              "default": 8192,
+              "max": 32768,
+              "min": 2048
+            },
+            "effort": {
+              "default": "none",
+              "values": [
+                "none",
+                "medium"
+              ]
+            },
+            "max_output_tokens": {
+              "max": 8192,
+              "min": 1
+            },
+            "stop": {
+              "max": 8
+            },
+            "temperature": {
+              "default": 0.7,
+              "max": 2.0,
+              "min": 0.0
+            },
+            "top_k": {
+              "default": 20,
+              "max": 1000,
+              "min": 0
+            },
+            "top_p": {
+              "default": 0.8,
+              "max": 1.0,
+              "min": 0.0
+            }
+          },
+          "adapter": "openai-chat",
+          "checked": "2026-11-13",
+          "chosen": {},
+          "declared": true,
+          "effective": {
+            "context_tokens": 8192,
+            "effort": "none",
+            "temperature": 0.7,
+            "top_k": 20,
+            "top_p": 0.8
+          },
+          "max_output_tokens": 1024,
+          "model": "qwen3-0.6b",
+          "notices": [],
+          "problem": null,
+          "provider": "local",
+          "sources": [
+            "https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md",
+            "services/tur-ai-local/catalogue"
+          ]
+        }
+      ]
+    },
+    "GetGenerationSettings openai gpt-6-luna": {
+      "reply": [
+        {
+          "accepts": {
+            "effort": {
+              "provider_default": "medium",
+              "sampling_only_with": [
+                "none"
+              ],
+              "values": [
+                "none",
+                "low",
+                "medium",
+                "high"
+              ]
+            },
+            "temperature": {
+              "max": 2.0,
+              "min": 0.0
+            },
+            "top_p": {
+              "max": 1.0,
+              "min": 0.0
+            }
+          },
+          "adapter": "openai",
+          "checked": "2026-11-13",
+          "chosen": {},
+          "declared": true,
+          "effective": {},
+          "max_output_tokens": 8192,
+          "model": "gpt-6-luna",
+          "notices": [
+            "This model takes temperature, top-p and top-k only when its reasoning effort is none; while it reasons it refuses or ignores them."
+          ],
+          "problem": null,
+          "provider": "openai",
+          "sources": [
+            "https://developers.openai.com/api/reference/resources/responses/methods/create",
+            "https://developers.openai.com/api/docs/guides/reasoning",
+            "https://developers.openai.com/api/docs/guides/latest-model"
+          ]
+        }
+      ]
+    },
     "HasKey anthropic": {
       "reply": [
         false
@@ -77,7 +256,7 @@
                 "schedule": null,
                 "setting": null,
                 "tier": null,
-                "time": 1794556079,
+                "time": 1794571291,
                 "value": null,
                 "withheld": null
               },
@@ -96,7 +275,7 @@
                 "schedule": null,
                 "setting": null,
                 "tier": 1,
-                "time": 1794556079,
+                "time": 1794571291,
                 "value": null,
                 "withheld": null
               },
@@ -115,7 +294,115 @@
                 "schedule": null,
                 "setting": null,
                 "tier": null,
-                "time": 1794556079,
+                "time": 1794571291,
+                "value": null,
+                "withheld": 0
+              },
+              {
+                "action": "org.tur.Test1:test_consequential",
+                "class": 2,
+                "decision": "refused",
+                "error_code": "TUR-AI-POLICY-006",
+                "event": "decision",
+                "message": "tur-pax: refused org.tur.Test1:test_consequential (class 2, tier 1): trusted_path_unavailable; arguments recipient=string, subject=string",
+                "n": 4,
+                "outcome": null,
+                "reason": null,
+                "result": null,
+                "sandbox": null,
+                "schedule": null,
+                "setting": null,
+                "tier": 1,
+                "time": 1794571291,
+                "value": null,
+                "withheld": null
+              },
+              {
+                "action": null,
+                "class": null,
+                "decision": null,
+                "error_code": null,
+                "event": "task_finished",
+                "message": "tur-pax: task_finished provider_id=anthropic outcome=completed steps=2 requests=2 tokens=140",
+                "n": 5,
+                "outcome": "completed",
+                "reason": null,
+                "result": null,
+                "sandbox": null,
+                "schedule": null,
+                "setting": null,
+                "tier": null,
+                "time": 1794571291,
+                "value": null,
+                "withheld": null
+              }
+            ],
+            "error_code": null,
+            "kind": "task",
+            "outcome": "completed",
+            "provider": "anthropic",
+            "provider_id": "anthropic",
+            "schedule": null,
+            "started_at": 1794571291,
+            "task": "t-1794571291-2"
+          },
+          {
+            "attended": true,
+            "entries": [
+              {
+                "action": null,
+                "class": null,
+                "decision": null,
+                "error_code": null,
+                "event": "task_started",
+                "message": "tur-pax: task_started provider_id=anthropic attended=yes",
+                "n": 1,
+                "outcome": null,
+                "reason": null,
+                "result": null,
+                "sandbox": null,
+                "schedule": null,
+                "setting": null,
+                "tier": null,
+                "time": 1794571291,
+                "value": null,
+                "withheld": null
+              },
+              {
+                "action": "org.tur.Test1:test_observe",
+                "class": 0,
+                "decision": "allowed",
+                "error_code": null,
+                "event": "decision",
+                "message": "tur-pax: allowed org.tur.Test1:test_observe (class 0, tier 1): observe_permitted; no arguments",
+                "n": 2,
+                "outcome": null,
+                "reason": null,
+                "result": null,
+                "sandbox": null,
+                "schedule": null,
+                "setting": null,
+                "tier": 1,
+                "time": 1794571291,
+                "value": null,
+                "withheld": null
+              },
+              {
+                "action": "org.tur.Test1:test_observe",
+                "class": null,
+                "decision": null,
+                "error_code": null,
+                "event": "executed",
+                "message": "tur-pax: executed action=org.tur.Test1:test_observe result=ok exit=0 output_bytes=55 truncated=no withheld=0",
+                "n": 3,
+                "outcome": null,
+                "reason": null,
+                "result": "ok",
+                "sandbox": null,
+                "schedule": null,
+                "setting": null,
+                "tier": null,
+                "time": 1794571291,
                 "value": null,
                 "withheld": 0
               },
@@ -134,7 +421,7 @@
                 "schedule": null,
                 "setting": null,
                 "tier": 1,
-                "time": 1794556079,
+                "time": 1794571291,
                 "value": null,
                 "withheld": null
               },
@@ -153,7 +440,7 @@
                 "schedule": null,
                 "setting": null,
                 "tier": null,
-                "time": 1794556079,
+                "time": 1794571291,
                 "value": null,
                 "withheld": 0
               },
@@ -172,7 +459,7 @@
                 "schedule": null,
                 "setting": null,
                 "tier": null,
-                "time": 1794556079,
+                "time": 1794571291,
                 "value": null,
                 "withheld": null
               }
@@ -183,8 +470,8 @@
             "provider": "anthropic",
             "provider_id": "anthropic",
             "schedule": null,
-            "started_at": 1794556079,
-            "task": "t-1794556079-1"
+            "started_at": 1794571291,
+            "task": "t-1794571291-1"
           },
           {
             "attended": null,
@@ -204,7 +491,7 @@
                 "schedule": null,
                 "setting": "enabled",
                 "tier": null,
-                "time": 1794556079,
+                "time": 1794571291,
                 "value": "on",
                 "withheld": null
               },
@@ -214,7 +501,7 @@
                 "decision": null,
                 "error_code": null,
                 "event": "setting_changed",
-                "message": "tur-pax: setting_changed setting=key value=removed",
+                "message": "tur-pax: setting_changed setting=key value=set",
                 "n": 2,
                 "outcome": null,
                 "reason": null,
@@ -223,26 +510,7 @@
                 "schedule": null,
                 "setting": "key",
                 "tier": null,
-                "time": 1794556079,
-                "value": "removed",
-                "withheld": null
-              },
-              {
-                "action": null,
-                "class": null,
-                "decision": null,
-                "error_code": null,
-                "event": "setting_changed",
-                "message": "tur-pax: setting_changed setting=key value=set",
-                "n": 3,
-                "outcome": null,
-                "reason": null,
-                "result": null,
-                "sandbox": null,
-                "schedule": null,
-                "setting": "key",
-                "tier": null,
-                "time": 1794556079,
+                "time": 1794571291,
                 "value": "set",
                 "withheld": null
               }
@@ -253,7 +521,7 @@
             "provider": "-",
             "provider_id": null,
             "schedule": null,
-            "started_at": 1794556079,
+            "started_at": 1794571291,
             "task": "settings"
           }
         ]
@@ -1369,6 +1637,185 @@
         }
       ]
     },
+    "ListProviderModels deepseek false": {
+      "reply": [
+        {
+          "fetched_at": null,
+          "models": [
+            {
+              "can_act": true,
+              "can_see": true,
+              "in_list": true,
+              "label": "DeepSeek V4.1 Flash",
+              "model": "deepseek-flash",
+              "offered_by_provider": false,
+              "price_known": true,
+              "settings_declared": true,
+              "tested_with_tur": false
+            },
+            {
+              "can_act": true,
+              "can_see": false,
+              "in_list": true,
+              "label": "DeepSeek V4 Pro",
+              "model": "deepseek-v4-pro",
+              "offered_by_provider": false,
+              "price_known": true,
+              "settings_declared": true,
+              "tested_with_tur": false
+            }
+          ],
+          "origin": "listed",
+          "provider": "deepseek",
+          "source": "list"
+        }
+      ]
+    },
+    "ListProviderModels local false": {
+      "reply": [
+        {
+          "fetched_at": null,
+          "models": [
+            {
+              "can_act": true,
+              "can_see": false,
+              "in_list": true,
+              "label": "Qwen3 4B",
+              "model": "qwen3-4b",
+              "offered_by_provider": false,
+              "price_known": false,
+              "settings_declared": true,
+              "tested_with_tur": false
+            },
+            {
+              "can_act": true,
+              "can_see": true,
+              "in_list": true,
+              "label": "Qwen3-VL 2B Instruct",
+              "model": "qwen3-vl-2b-instruct",
+              "offered_by_provider": false,
+              "price_known": false,
+              "settings_declared": true,
+              "tested_with_tur": false
+            },
+            {
+              "can_act": true,
+              "can_see": false,
+              "in_list": true,
+              "label": "Granite 4.0 1B",
+              "model": "granite-4.0-1b",
+              "offered_by_provider": false,
+              "price_known": false,
+              "settings_declared": true,
+              "tested_with_tur": false
+            },
+            {
+              "can_act": true,
+              "can_see": false,
+              "in_list": true,
+              "label": "Qwen3 0.6B",
+              "model": "qwen3-0.6b",
+              "offered_by_provider": false,
+              "price_known": false,
+              "settings_declared": true,
+              "tested_with_tur": false
+            },
+            {
+              "can_act": true,
+              "can_see": true,
+              "in_list": true,
+              "label": "Ministral 3 3B Instruct",
+              "model": "ministral-3-3b",
+              "offered_by_provider": false,
+              "price_known": false,
+              "settings_declared": true,
+              "tested_with_tur": false
+            },
+            {
+              "can_act": true,
+              "can_see": true,
+              "in_list": true,
+              "label": "Gemma 4 E2B",
+              "model": "gemma-4-e2b",
+              "offered_by_provider": false,
+              "price_known": false,
+              "settings_declared": true,
+              "tested_with_tur": false
+            },
+            {
+              "can_act": true,
+              "can_see": true,
+              "in_list": true,
+              "label": "Gemma 4 E4B",
+              "model": "gemma-4-e4b",
+              "offered_by_provider": false,
+              "price_known": false,
+              "settings_declared": true,
+              "tested_with_tur": false
+            },
+            {
+              "can_act": true,
+              "can_see": true,
+              "in_list": true,
+              "label": "Gemma 4 26B A4B",
+              "model": "gemma-4-26b-a4b",
+              "offered_by_provider": false,
+              "price_known": false,
+              "settings_declared": true,
+              "tested_with_tur": false
+            },
+            {
+              "can_act": true,
+              "can_see": false,
+              "in_list": true,
+              "label": "Qwen3 30B A3B",
+              "model": "qwen3-30b-a3b",
+              "offered_by_provider": false,
+              "price_known": false,
+              "settings_declared": true,
+              "tested_with_tur": false
+            }
+          ],
+          "origin": "listed",
+          "provider": "local",
+          "source": "list"
+        }
+      ]
+    },
+    "ListProviderModels openai false": {
+      "reply": [
+        {
+          "fetched_at": null,
+          "models": [
+            {
+              "can_act": null,
+              "can_see": null,
+              "in_list": true,
+              "label": "GPT-6.1 Sol",
+              "model": "gpt-6.1-sol",
+              "offered_by_provider": false,
+              "price_known": true,
+              "settings_declared": true,
+              "tested_with_tur": false
+            },
+            {
+              "can_act": null,
+              "can_see": null,
+              "in_list": true,
+              "label": "GPT-6 Luna",
+              "model": "gpt-6-luna",
+              "offered_by_provider": false,
+              "price_known": true,
+              "settings_declared": true,
+              "tested_with_tur": false
+            }
+          ],
+          "origin": "listed",
+          "provider": "openai",
+          "source": "list"
+        }
+      ]
+    },
     "SetGenerationSettings anthropic claude-opus-5-5 {\"temperature\":0.3}": {
       "error": "org.tur.Agent1.Error.TUR_AI_SERVICE_006",
       "message": "TUR-AI-SERVICE-006: This model does not take a temperature."
@@ -1383,21 +1830,25 @@
     },
     "UseLocalModel gemma-4-e2b {}": {
       "reply": [
-        "l-13"
+        "l-8"
       ]
     },
     "UseLocalModel ministral-3-3b {\"accept_licence\":true,\"download_bytes\":2988524864}": {
       "reply": [
-        "l-14"
+        "l-7"
       ]
     },
     "UseLocalModel ministral-3-3b {\"download_bytes\":2988524864}": {
+      "error": "org.tur.Agent1.Error.TUR_AI_SERVICE_006",
+      "message": "TUR-AI-SERVICE-006: the licence of Ministral 3 3B Instruct restricts its use: The publisher's model card adds one sentence under its licence. It needs the person's acceptance: accept_licence true"
+    },
+    "UseLocalModel qwen3-0.6b ": {
       "error": "org.tur.Agent1.Error.TUR_AI_SERVICE_006",
       "message": "TUR-AI-SERVICE-006: Qwen3 0.6B is not on this computer yet: it downloads 0.6 GB (639446688 bytes) from https://huggingface.co/Qwen/Qwen3-0.6B-GGUF. Tell the person first, then name the size: download_bytes 639446688"
     },
     "UseLocalModel qwen3-0.6b {\"download_bytes\":639446688}": {
       "reply": [
-        "l-12"
+        "l-6"
       ]
     }
   }

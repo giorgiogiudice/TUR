@@ -497,6 +497,14 @@ def run_ui(arguments, checks):
             str(build / "apps" / "tur-pax-ui" / "tests" / "tst_paxui"),
             "-input", str(ROOT / "desktop" / "apps" / "tur-pax-ui" / "tests" / "e2e" / "e2e_ask_stop.qml"),
         ]
+        # What the container sees of the bus, for the record.
+        probe = subprocess.run(
+            [str(ROOT / "desktop" / "ci" / "in-builder.sh"), "sh", "-c",
+             f"id; ls -la {bus_directory}; busctl --address={service.bus.address} call {AGENT} {AGENT_PATH} {AGENT}"
+             " GetStatus 2>&1 | head -c 600; echo"],
+            cwd=ROOT, capture_output=True, text=True, timeout=120)
+        (evidence / "e2e-probe.txt").write_text(probe.stdout + probe.stderr)
+        print("probe from the container:\n" + probe.stdout + probe.stderr, flush=True)
         started = time.time()
         ran = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, timeout=600)
         (evidence / "e2e-qml.log").write_text(ran.stdout + ran.stderr)
@@ -531,6 +539,8 @@ def run_ui(arguments, checks):
     finally:
         stop_watching.set()
         service.stop()
+        if service.bus and service.bus.log.exists():
+            shutil.copy(service.bus.log, evidence / "e2e-bus.log")
         shutil.rmtree(bus_directory, ignore_errors=True)
 
 

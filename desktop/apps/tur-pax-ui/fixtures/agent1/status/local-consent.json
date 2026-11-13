@@ -38,7 +38,7 @@
       "error_code": "TUR-AI-SERVICE-001",
       "message": "P@x is switched off. Switch it on in its settings first."
     },
-    "proposals": 1,
+    "proposals": 0,
     "provider": "local",
     "provider_name": "Local AI on this computer",
     "provider_origin": "listed",
@@ -55,9 +55,9 @@
       "day_limit_reached": false,
       "month": {
         "cost": 0.00076,
-        "input_tokens": 560,
-        "output_tokens": 420,
-        "responses": 14
+        "input_tokens": 320,
+        "output_tokens": 240,
+        "responses": 8
       },
       "prices_as_of": "2026-11-12",
       "prices_status": "example",
@@ -67,9 +67,9 @@
       },
       "today": {
         "cost": 0.00076,
-        "input_tokens": 560,
-        "output_tokens": 420,
-        "responses": 14
+        "input_tokens": 320,
+        "output_tokens": 240,
+        "responses": 8
       }
     },
     "state": "off"

@@ -8,7 +8,7 @@
     },
     "adapter": "anthropic",
     "consent": {
-      "accepted_at": 1794556079,
+      "accepted_at": 1794571291,
       "accepted_for": "anthropic",
       "accepted_version": "2",
       "current": true,
@@ -17,9 +17,7 @@
     "enabled": true,
     "generation": {
       "problem": null,
-      "settings": {
-        "effort": "high"
-      }
+      "settings": {}
     },
     "interface_version": 1,
     "key": "set",
@@ -29,7 +27,7 @@
     "model_tested": false,
     "price_known": true,
     "problem": null,
-    "proposals": 1,
+    "proposals": 0,
     "provider": "anthropic",
     "provider_name": "Anthropic",
     "provider_origin": "listed",
@@ -45,10 +43,10 @@
       },
       "day_limit_reached": false,
       "month": {
-        "cost": 0.0,
-        "input_tokens": 520,
-        "output_tokens": 390,
-        "responses": 13
+        "cost": 0.00076,
+        "input_tokens": 320,
+        "output_tokens": 240,
+        "responses": 8
       },
       "prices_as_of": "2026-11-12",
       "prices_status": "example",
@@ -57,10 +55,10 @@
         "tokens": null
       },
       "today": {
-        "cost": 0.0,
-        "input_tokens": 520,
-        "output_tokens": 390,
-        "responses": 13
+        "cost": 0.00076,
+        "input_tokens": 320,
+        "output_tokens": 240,
+        "responses": 8
       }
     },
     "state": "idle"

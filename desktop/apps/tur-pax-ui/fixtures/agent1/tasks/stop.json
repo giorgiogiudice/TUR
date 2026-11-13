@@ -4,7 +4,7 @@
   "signals": [
     {
       "args": [
-        "t-1794556079-2",
+        "t-1794571292-3",
         {
           "answer": "",
           "attended": true,
@@ -14,12 +14,12 @@
           "finished_at": null,
           "message": "",
           "outcome": null,
-          "request": "Wait for a while. tur-pax-e2e-c83aac58",
+          "request": "Wait for a while.",
           "schedule": null,
-          "started_at": 1794556079,
+          "started_at": 1794571292,
           "state": "working",
           "steps": [],
-          "task": "t-1794556079-2",
+          "task": "t-1794571292-3",
           "texts": [],
           "usage": {
             "cached_input_tokens": 0,
@@ -38,9 +38,9 @@
     },
     {
       "args": [
-        "t-1794556079-2",
+        "t-1794571292-3",
         {
-          "audit_id": "t-1794556079-2#2",
+          "audit_id": "t-1794571292-3#2",
           "class": 0,
           "decision": "allowed",
           "detail": "Run command [\"/usr/bin/sleep\" \"45\"] in the read-only sandbox",
@@ -64,23 +64,23 @@
     },
     {
       "args": [
-        "t-1794556079-2",
+        "t-1794571292-3",
         {
           "answer": "",
           "attended": true,
           "cost": null,
           "currency": null,
           "error_code": "TUR-AI-TASK-003",
-          "finished_at": 1794556080,
+          "finished_at": 1794571293,
           "message": "The assistant stopped because the task was cancelled.",
           "outcome": "cancelled",
-          "request": "Wait for a while. tur-pax-e2e-c83aac58",
+          "request": "Wait for a while.",
           "schedule": null,
-          "started_at": 1794556079,
+          "started_at": 1794571292,
           "state": "finished",
           "steps": [
             {
-              "audit_id": "t-1794556079-2#2",
+              "audit_id": "t-1794571292-3#2",
               "class": 0,
               "decision": "allowed",
               "detail": "Run command [\"/usr/bin/sleep\" \"45\"] in the read-only sandbox",
@@ -100,7 +100,7 @@
               "withheld": 0
             }
           ],
-          "task": "t-1794556079-2",
+          "task": "t-1794571292-3",
           "texts": [],
           "usage": {
             "cached_input_tokens": 0,

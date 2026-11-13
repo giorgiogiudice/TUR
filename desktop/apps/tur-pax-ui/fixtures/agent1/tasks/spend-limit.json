@@ -4,7 +4,7 @@
   "signals": [
     {
       "args": [
-        "t-1794556080-3",
+        "t-1794571293-4",
         {
           "answer": "",
           "attended": true,
@@ -16,10 +16,10 @@
           "outcome": null,
           "request": "Read the value again and again.",
           "schedule": null,
-          "started_at": 1794556080,
+          "started_at": 1794571293,
           "state": "working",
           "steps": [],
-          "task": "t-1794556080-3",
+          "task": "t-1794571293-4",
           "texts": [],
           "usage": {
             "cached_input_tokens": 0,
@@ -38,7 +38,7 @@
     },
     {
       "args": [
-        "t-1794556080-3",
+        "t-1794571293-4",
         "interim",
         "Again."
       ],
@@ -46,9 +46,9 @@
     },
     {
       "args": [
-        "t-1794556080-3",
+        "t-1794571293-4",
         {
-          "audit_id": "t-1794556080-3#2",
+          "audit_id": "t-1794571293-4#2",
           "class": 0,
           "decision": "allowed",
           "detail": "Call tool \"test_observe\" of service \"org.tur.Test1\" with arguments {}",
@@ -72,9 +72,9 @@
     },
     {
       "args": [
-        "t-1794556080-3",
+        "t-1794571293-4",
         {
-          "audit_id": "t-1794556080-3#3",
+          "audit_id": "t-1794571293-4#3",
           "class": 0,
           "decision": "allowed",
           "detail": "Call tool \"test_observe\" of service \"org.tur.Test1\" with arguments {}",
@@ -98,7 +98,7 @@
     },
     {
       "args": [
-        "t-1794556080-3",
+        "t-1794571293-4",
         "interim",
         "Again."
       ],
@@ -106,9 +106,9 @@
     },
     {
       "args": [
-        "t-1794556080-3",
+        "t-1794571293-4",
         {
-          "audit_id": "t-1794556080-3#4",
+          "audit_id": "t-1794571293-4#4",
           "class": 0,
           "decision": "allowed",
           "detail": "Call tool \"test_observe\" of service \"org.tur.Test1\" with arguments {}",
@@ -132,9 +132,9 @@
     },
     {
       "args": [
-        "t-1794556080-3",
+        "t-1794571293-4",
         {
-          "audit_id": "t-1794556080-3#5",
+          "audit_id": "t-1794571293-4#5",
           "class": 0,
           "decision": "allowed",
           "detail": "Call tool \"test_observe\" of service \"org.tur.Test1\" with arguments {}",
@@ -158,7 +158,7 @@
     },
     {
       "args": [
-        "t-1794556080-3",
+        "t-1794571293-4",
         "notice",
         "P@x stopped: today's spending limit was reached."
       ],
@@ -166,23 +166,23 @@
     },
     {
       "args": [
-        "t-1794556080-3",
+        "t-1794571293-4",
         {
           "answer": "",
           "attended": true,
           "cost": null,
           "currency": null,
           "error_code": "TUR-AI-SPEND-001",
-          "finished_at": 1794556080,
+          "finished_at": 1794571293,
           "message": "P@x stopped: today's spending limit was reached.",
           "outcome": "spend_limit",
           "request": "Read the value again and again.",
           "schedule": null,
-          "started_at": 1794556080,
+          "started_at": 1794571293,
           "state": "finished",
           "steps": [
             {
-              "audit_id": "t-1794556080-3#3",
+              "audit_id": "t-1794571293-4#3",
               "class": 0,
               "decision": "allowed",
               "detail": "Call tool \"test_observe\" of service \"org.tur.Test1\" with arguments {}",
@@ -202,7 +202,7 @@
               "withheld": 0
             },
             {
-              "audit_id": "t-1794556080-3#5",
+              "audit_id": "t-1794571293-4#5",
               "class": 0,
               "decision": "allowed",
               "detail": "Call tool \"test_observe\" of service \"org.tur.Test1\" with arguments {}",
@@ -222,7 +222,7 @@
               "withheld": 0
             }
           ],
-          "task": "t-1794556080-3",
+          "task": "t-1794571293-4",
           "texts": [
             {
               "kind": "interim",

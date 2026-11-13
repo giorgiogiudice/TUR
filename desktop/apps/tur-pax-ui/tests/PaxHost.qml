@@ -58,6 +58,16 @@ Item {
         { name: "setup-ready", view: "setup", status: "ready", step: "ready", where: "cloud", provider: "anthropic", model: "claude-opus-5-5" }
     ]
 
+    // What was asked in each recorded task (fixtures/agent1/tasks), so that
+    // the request typed here is the one the service started.
+    readonly property var requests: ({
+        "two-tools": "Set the value for the night.",
+        "refused": "Read the value and send the report to Marta.",
+        "stop": "Wait for a while.",
+        "spend-limit": "Read the value again and again.",
+        "priced": "Think about it."
+    })
+
     property Item stage: null
     readonly property Item view: host.stage !== null ? host.stage.view : null
     readonly property AgentClient client: host.stage !== null ? host.stage.client : null
@@ -191,7 +201,7 @@ Item {
             return
         }
         if (state.task) {
-            const request = state.ask || "Do it."
+            const request = state.ask || host.requests[state.task]
             host.conversation.ask(request)
             if (state.stop) {
                 test.tryVerify(() => host.conversation.running && host.conversation.entriesOf("step").length > 0, 10000,

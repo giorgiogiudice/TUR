@@ -8,7 +8,7 @@
     },
     "adapter": "anthropic",
     "consent": {
-      "accepted_at": 1794556079,
+      "accepted_at": 1794571291,
       "accepted_for": "anthropic",
       "accepted_version": "2",
       "current": true,
@@ -39,14 +39,14 @@
       "day": "2026-11-13",
       "day_limit": {
         "cost": null,
-        "tokens": 310
+        "tokens": 450
       },
       "day_limit_reached": true,
       "month": {
         "cost": 0.0,
-        "input_tokens": 200,
-        "output_tokens": 150,
-        "responses": 5
+        "input_tokens": 280,
+        "output_tokens": 210,
+        "responses": 7
       },
       "prices_as_of": "2026-11-12",
       "prices_status": "example",
@@ -56,9 +56,9 @@
       },
       "today": {
         "cost": 0.0,
-        "input_tokens": 200,
-        "output_tokens": 150,
-        "responses": 5
+        "input_tokens": 280,
+        "output_tokens": 210,
+        "responses": 7
       }
     },
     "state": "idle"

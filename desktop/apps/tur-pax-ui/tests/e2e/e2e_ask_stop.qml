@@ -65,6 +65,14 @@ Item {
 
         function test_ask_see_the_steps_then_stop() {
             client.start()
+            tryVerify(() => client.presence !== AgentClient.Unknown, 10000, "the service was looked for")
+            console.info("TUR-E2E presence " + client.presence + " " + client.presenceDetail)
+            let answer = null
+            client.call("GetStatus", [], function (reply) {
+                answer = reply
+            })
+            tryVerify(() => answer !== null, 30000, "GetStatus was answered")
+            console.info("TUR-E2E GetStatus ok=" + answer.ok + " code=" + answer.code + " message=" + answer.message)
             tryVerify(() => client.statusKnown, 30000, "the service answered")
             compare(client.status.ready, true, "P@x is on, with a key: " + JSON.stringify(client.status.problem))
 

@@ -63,6 +63,11 @@ Item {
 
         function test_render(data) {
             Kit.Theme.light = data.light
+            // Tall enough while the state is reached that nothing scrolls:
+            // the software renderer can leave a picture of a scrolled item
+            // behind (seen in the first pictures of the panel).
+            host.height = 5000
+            wait(0)
             host.reach(data.state, this)
             const minimum = data.state.view === "bar" ? 1 : 780
             host.height = Math.max(minimum, Math.ceil(host.naturalHeight))

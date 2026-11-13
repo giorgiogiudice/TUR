@@ -520,7 +520,12 @@ Kit.Page {
         SetupConsent {
             client: flow.client
             provider: flow.provider
-            providerName: flow.where === "local" ? "" : flow.providerName
+            providerName: {
+                if (flow.where !== "local")
+                    return flow.providerName
+                const entry = (flow.catalogue.providers || []).find(item => item.id === "local")
+                return entry ? String(entry.name) : ""
+            }
             onBackRequested: flow.goTo("limits")
             onDone: flow.goTo("ready")
         }
