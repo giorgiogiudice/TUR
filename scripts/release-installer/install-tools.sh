@@ -6,7 +6,8 @@
 #
 #   cosign  COSIGN_VERSION, COSIGN_SHA256  (Apache-2.0; the same release the
 #           image publishing pins)
-#   rclone  RCLONE_VERSION, RCLONE_SHA256  (MIT; the linux-amd64 zip)
+#   rclone  TUR_RCLONE_VERSION, TUR_RCLONE_SHA256  (MIT; the linux-amd64 zip;
+#           not RCLONE_*: rclone reads every RCLONE_* variable as a flag)
 #
 # A download whose SHA-256 differs stops the job.
 set -euo pipefail
@@ -17,9 +18,9 @@ curl -sSfL -o "${tmp}/cosign" \
 echo "${COSIGN_SHA256:?}  ${tmp}/cosign" | sha256sum -c -
 sudo install -m 0755 "${tmp}/cosign" /usr/local/bin/cosign
 
-zip="rclone-${RCLONE_VERSION:?}-linux-amd64"
-curl -sSfL -o "${tmp}/rclone.zip" "https://github.com/rclone/rclone/releases/download/${RCLONE_VERSION}/${zip}.zip"
-echo "${RCLONE_SHA256:?}  ${tmp}/rclone.zip" | sha256sum -c -
+zip="rclone-${TUR_RCLONE_VERSION:?}-linux-amd64"
+curl -sSfL -o "${tmp}/rclone.zip" "https://github.com/rclone/rclone/releases/download/${TUR_RCLONE_VERSION}/${zip}.zip"
+echo "${TUR_RCLONE_SHA256:?}  ${tmp}/rclone.zip" | sha256sum -c -
 unzip -q -j "${tmp}/rclone.zip" "${zip}/rclone" -d "${tmp}"
 sudo install -m 0755 "${tmp}/rclone" /usr/local/bin/rclone
 rm -rf "${tmp}"
