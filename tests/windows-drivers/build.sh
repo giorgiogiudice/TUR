@@ -44,11 +44,22 @@ echo "== kmdfprobe.sys"
     -L"${out}" -lwdfldr -lntoskrnl -lgcc
 
 echo "== programs"
-"${cc}" "${common[@]}" -municode -o "${out}/twdinst.exe" "${here}/app/twdinst.c" -lsetupapi -lnewdev
-"${cc}" "${common[@]}" -o "${out}/twdtest.exe" "${here}/app/twdtest.c" -lsetupapi
-"${cc}" "${common[@]}" -o "${out}/hidtest.exe" "${here}/app/hidtest.c" -lsetupapi -lhid
-"${cc}" "${common[@]}" -o "${out}/winusbtest.exe" "${here}/app/winusbtest.c" -lsetupapi -lwinusb ||
-    echo "winusbtest.exe: not built (the harness records it)"
+# Every program is attempted, so one run shows every compiler error.
+failed=()
+program() { # name source libraries... (a leading -municode is a compiler flag)
+    local name="$1" source="$2" flags=()
+    shift 2
+    if [ "${1:-}" = -municode ]; then
+        flags=(-municode)
+        shift
+    fi
+    "${cc}" "${common[@]}" "${flags[@]}" -o "${out}/${name}" "${here}/app/${source}" "$@" -lsetupapi ||
+        failed+=("${name}")
+}
+program twdinst.exe twdinst.c -municode -lnewdev
+program twdtest.exe twdtest.c
+program hidtest.exe hidtest.c -lhid
+program winusbtest.exe winusbtest.c -lwinusb
 
 cp "${here}/driver/twdusb.inf" "${here}/driver/kmdfprobe.inf" "${out}/"
 
@@ -62,3 +73,7 @@ cp "${here}/driver/twdusb.inf" "${here}/driver/kmdfprobe.inf" "${out}/"
 } >"${out}/imports.txt"
 cat "${out}/imports.txt"
 ls -l "${out}"
+if [ "${#failed[@]}" -gt 0 ]; then
+    echo "not built: ${failed[*]}" >&2
+    exit 1
+fi

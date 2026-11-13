@@ -8,14 +8,16 @@
 //   twdinst.exe diinstall INF       DiInstallDriverW (newdev)
 //   twdinst.exe files               the staged INFs and installed .sys files
 //   twdinst.exe devices             every device setupapi knows whose
-//                                   instance ID starts with USB\ or HID\
+//                                   instance ID starts with "USB\" or "HID\"
 //
 // Every line it prints starts with "TWDINST ". Exit status 0 when the call
 // it was asked to make reported success.
 #include <windows.h>
 #include <setupapi.h>
 #include <newdev.h>
+#include <cfgmgr32.h>
 #include <stdio.h>
+#include <string.h>
 #include <wchar.h>
 
 static void list_files(const wchar_t *pattern)
@@ -41,6 +43,7 @@ static void print_property(HDEVINFO set, SP_DEVINFO_DATA *dev, DWORD property, c
         return;
     }
     buffer[size / sizeof(wchar_t)] = 0;
+    buffer[size / sizeof(wchar_t) + 1] = 0;
     if (type == REG_MULTI_SZ) {
         wchar_t *p;
         for (p = buffer; *p; p += wcslen(p) + 1)
@@ -48,7 +51,9 @@ static void print_property(HDEVINFO set, SP_DEVINFO_DATA *dev, DWORD property, c
     } else if (type == REG_SZ) {
         wprintf(L"TWDINST   %ls: %ls\n", name, buffer);
     } else if (type == REG_DWORD) {
-        wprintf(L"TWDINST   %ls: %#lx\n", name, *(DWORD *)buffer);
+        DWORD value;
+        memcpy(&value, buffer, sizeof(value));
+        wprintf(L"TWDINST   %ls: %#lx\n", name, value);
     }
 }
 
