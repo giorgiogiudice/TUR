@@ -534,7 +534,8 @@ def s_kmdf(h: Harness, sys_name: str, inf_name: str, name: str, title: str) -> N
     logs = sc.logs()
     stem = sys_name.split(".")[0]
     matched = [l for l in logs.splitlines() if "WDFLDR" in l.upper() and ("not found" in l or "err:" in l)]
-    load_failed = [l for l in logs.splitlines() if "Failed to load driver" in l or "failed to create driver" in l]
+    load_failed = [l for l in logs.splitlines()
+                   if ("Failed to load driver" in l or "failed to create driver" in l) and stem in l]
     sc.check("service-installed", stem in read(sc.dir / "twdinst-devices.out"),
              "Wine's PnP manager installed the package for the device (service name in the device list)")
     sc.check("driver-entry-ran", f"{stem}: DriverEntry" in logs or "osrusbfx2: DriverEntry" in logs,

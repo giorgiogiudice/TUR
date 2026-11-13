@@ -76,6 +76,28 @@ cat >"${work}/shim/twd-kmdf-shim.h" <<'EOF'
 #define WPP_INIT_TRACING(d, r)
 #define WPP_CLEANUP(d)
 EOF
+# Windows file names are case-insensitive and the headers rely on it
+# (wdf.h includes "WdfQueryInterface.h"; the file is wdfqueryinterface.h):
+# a link under the spelling each #include uses.
+python3 -I - "${work}/shim" "${wdfinc}" "${sample}/inc" "${sample}/driver" "${ddk}" "$(dirname "${ddk}")" <<'PY'
+import os, re, sys
+shim, dirs = sys.argv[1], sys.argv[2:]
+exact, lower = set(), {}
+for d in dirs:
+    for name in os.listdir(d):
+        exact.add(name)
+        lower.setdefault(name.lower(), os.path.join(d, name))
+wanted = set()
+for d in dirs[:4]:
+    for name in os.listdir(d):
+        if name.lower().endswith((".h", ".c")):
+            text = open(os.path.join(d, name), encoding="latin-1").read()
+            wanted.update(re.findall(r'#\s*include\s*[<"]([^>"/\\]+)[>"]', text))
+for name in sorted(wanted):
+    if name not in exact and name.lower() in lower and not os.path.exists(os.path.join(shim, name)):
+        os.symlink(lower[name.lower()], os.path.join(shim, name))
+        print(f"case link: {name} -> {lower[name.lower()]}")
+PY
 note "shims: $(ls "${work}/shim" | tr '\n' ' ')"
 
 cflags=(-c -O1 -w -fms-extensions -D_AMD64_ -DAMD64 -D_WIN64 -DNTDDI_VERSION=0x0A000000 -D_WIN32_WINNT=0x0A00
