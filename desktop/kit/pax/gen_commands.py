@@ -169,13 +169,23 @@ def self_test(data: dict) -> int:
         "action no command": ("X-TUR-Pax-Command=ask\nX-KDE-Shortcuts=Meta+Space\n\n[Desktop Action keys]\n"
                               "X-KDE-Shortcuts=Meta+/\n", "names no X-TUR-Pax-Command"),
     }
+    # The cases judge each file on its own: with nothing marked bound, so
+    # that a command another file would bind does not count against it.
+    unbound = json.loads(json.dumps(data))
+    for command in unbound["commands"]:
+        command["bound"] = False
+    stop_bound = json.loads(json.dumps(unbound))
+    for command in stop_bound["commands"]:
+        command["bound"] = command["id"] == "stop"
+    cases["marked bound, bound by nothing"] = ("X-KDE-Shortcuts=Meta+Space\nX-TUR-Pax-Command=ask\n",
+                                               "command stop is marked bound and no file binds it")
     failures = 0
     for name, (body, expected) in cases.items():
         with tempfile.TemporaryDirectory() as holder:
             root = pathlib.Path(holder)
             (root / "desktop" / "apps").mkdir(parents=True)
             (root / "desktop" / "apps" / "org.tur.PaxUi.desktop").write_text("[Desktop Entry]\n" + body)
-            _, problems = bindings(data, root)
+            _, problems = bindings(stop_bound if name == "marked bound, bound by nothing" else unbound, root)
         ok = (not problems) if expected is None else any(expected in problem for problem in problems)
         if not ok:
             failures += 1

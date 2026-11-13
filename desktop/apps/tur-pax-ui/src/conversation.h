@@ -9,7 +9,7 @@
 #include <QVariantMap>
 #include <QtQml/qqmlregistration.h>
 
-class AgentClient;
+#include "agentclient.h"
 
 // What the conversation panel shows (desktop-experience.md, 9.2), built
 // from what org.tur.Agent1 signals, in the order it signals it:

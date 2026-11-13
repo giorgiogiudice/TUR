@@ -313,7 +313,7 @@ class Recorder:
         self.checks.check("record", "P@x switched on with the consent text's version", error is None, error)
         self.status("no-key")
         self.record("SetKey", "ss", "anthropic", "two words")
-        _, error = service.call("SetKey", "ss", "anthropic", KEY)
+        _, error, _ = service.call("SetKey", "ss", "anthropic", KEY)
         self.checks.check("record", "the key is in the Secret Service", error is None, error)
         self.status("ready")
 
