@@ -22,7 +22,7 @@ use tur_pax_memory::{
 };
 
 use common::{
-    FakeServer, TEST_ADAPTERS, TEST_KEY, TEST_MANIFEST, call, calls, first_user_texts, says,
+    FakeServer, TEST_ADAPTERS, TEST_KEY, TEST_MANIFEST, Wire, call, calls, first_user_texts, says,
 };
 
 const EXIT_COMPLETED: i32 = 0;
@@ -584,4 +584,196 @@ fn chat_keeps_the_conversation_between_requests() {
     );
     assert_eq!(audit[0]["TUR_AI_TASK"], "task-cli-1");
     assert_eq!(audit[2]["TUR_AI_TASK"], "task-cli-2");
+}
+
+// ------------------------------------------ providers named, keys not kept
+
+/// A key a model server on this computer wrote for the person.
+const LOCAL_KEY: &str = "tur-ai-local-key-0123456789abcdef";
+
+/// A model list with one provider like the `local` preset, at `server`.
+fn local_list(server: &FakeServer) -> String {
+    format!(
+        r#"{{ "schema_version": 1, "status": "example", "prices_as_of": "2026-11-12",
+             "providers": [{{
+                "id": "local", "adapter": "openai-chat", "name": "Local AI on this computer",
+                "base_url": "{}/v1", "runtime_key_file": "tur-ai-local/api-key",
+                "capabilities": {{ "tool_calling": true }},
+                "data_terms": {{ "runs_locally": true }},
+                "models": [{{ "model": "qwen3-4b", "max_output_tokens": 256 }}]
+             }}] }}"#,
+        server.base_url()
+    )
+}
+
+/// The command line of a task for a provider named by its identifier.
+fn listed_options(files: &Files) -> Vec<String> {
+    // Not a configuration file: the model list's entry.
+    let mut options: Vec<String> = files.options().into_iter().skip(2).collect();
+    options.extend(
+        [
+            "--provider",
+            "local",
+            "--model",
+            "qwen3-4b",
+            "--models",
+            files.path("models.json").as_str(),
+        ]
+        .map(str::to_owned),
+    );
+    options
+}
+
+#[test]
+fn a_provider_of_the_model_list_is_sent_the_key_its_model_server_wrote() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let server = FakeServer::start_on(Wire::OpenAiChat, vec![says("Hello from this computer.")]);
+    let files = Files::new("listed", &server);
+    fs::write(files.root.join("models.json"), local_list(&server)).expect("a file");
+    let runtime = files.root.join("run");
+    let key_file = runtime.join("tur-ai-local/api-key");
+
+    // The model server is not running: there is no key file, and nothing
+    // starts. The error names the file, and no key is looked for anywhere
+    // else.
+    let not_served = finish(
+        files
+            .program()
+            .env("XDG_RUNTIME_DIR", &runtime)
+            .arg("run")
+            .arg("Hello.")
+            .args(listed_options(&files)),
+    );
+    assert_eq!(not_served.status, EXIT_NOT_STARTED, "{}", not_served.stdout);
+    assert!(
+        not_served.stderr.contains("TUR-AI-PROVIDER-012"),
+        "{}",
+        not_served.stderr
+    );
+    assert!(
+        not_served
+            .stderr
+            .contains("tur-ai-local/api-key does not exist"),
+        "{}",
+        not_served.stderr
+    );
+    assert!(server.requests().is_empty());
+
+    // It runs, and wrote its key for the person alone.
+    fs::create_dir_all(key_file.parent().expect("a directory")).expect("a directory");
+    fs::write(&key_file, format!("{LOCAL_KEY}\n")).expect("the key file");
+    fs::set_permissions(&key_file, fs::Permissions::from_mode(0o600)).expect("its mode");
+    let run = finish(
+        files
+            .program()
+            .env("XDG_RUNTIME_DIR", &runtime)
+            .arg("run")
+            .arg("Hello.")
+            .arg("--json")
+            .args(listed_options(&files)),
+    );
+    assert_eq!(run.status, EXIT_COMPLETED, "{}", run.stderr);
+    let document: Value = serde_json::from_str(run.stdout.trim()).expect("one JSON document");
+    assert_eq!(document["answer"], "Hello from this computer.");
+    assert_eq!(document["provider"], "openai-chat");
+    assert_eq!(document["provider_id"], "local");
+    assert_eq!(document["model"], "qwen3-4b");
+    let requests = server.requests();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0].path, "/v1/chat/completions");
+    // The key from the file, not the one in the environment.
+    assert_eq!(
+        requests[0].authorization.as_deref(),
+        Some(format!("Bearer {LOCAL_KEY}").as_str())
+    );
+    assert_eq!(requests[0].json()["model"], "qwen3-4b");
+    // The trail names the provider by its identifier, beside its family.
+    let audit = files.audit();
+    assert_eq!(events(&audit), ["task_started", "task_finished"]);
+    for entry in &audit {
+        assert_eq!(entry["TUR_AI_PROVIDER"], "openai-chat");
+    }
+    assert_eq!(audit[0]["TUR_AI_PROVIDER_ID"], "local");
+    assert_eq!(audit[1]["TUR_AI_PROVIDER_ID"], "local");
+    let trail = fs::read_to_string(files.root.join("audit.jsonl")).expect("the audit log");
+    assert!(!trail.contains(LOCAL_KEY));
+    assert!(!run.stdout.contains(LOCAL_KEY) && !run.stderr.contains(LOCAL_KEY));
+
+    // A key file others can read is not the person's key.
+    fs::set_permissions(&key_file, fs::Permissions::from_mode(0o644)).expect("its mode");
+    let shared = finish(
+        files
+            .program()
+            .env("XDG_RUNTIME_DIR", &runtime)
+            .arg("run")
+            .arg("Hello.")
+            .args(listed_options(&files)),
+    );
+    assert_eq!(shared.status, EXIT_NOT_STARTED);
+    assert!(
+        shared
+            .stderr
+            .contains("can be read by others than its owner"),
+        "{}",
+        shared.stderr
+    );
+    assert!(!shared.stderr.contains(LOCAL_KEY));
+    assert_eq!(server.requests().len(), 1);
+}
+
+#[test]
+fn no_key_sends_no_credential_and_the_trail_names_the_family() {
+    let server = FakeServer::start_on(Wire::OpenAiChat, vec![says("No key needed here.")]);
+    let files = Files::new("no-key", &server);
+    let run = finish(
+        files
+            .program()
+            .arg("run")
+            .arg("Hello.")
+            .arg("--no-key")
+            .args(files.options()),
+    );
+    assert_eq!(run.status, EXIT_COMPLETED, "{}", run.stderr);
+    assert!(
+        run.stdout
+            .contains("task task-cli: provider openai-chat, model"),
+        "{}",
+        run.stdout
+    );
+    let requests = server.requests();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0].authorization, None);
+    // Named by a configuration file, the provider is its family.
+    let audit = files.audit();
+    assert_eq!(audit[0]["TUR_AI_PROVIDER_ID"], "openai-chat");
+
+    // Only the compatible family can do without a key, and --no-key does
+    // not go with a key variable.
+    let anthropic = FakeServer::start(vec![says("unused")]);
+    let files = Files::new("no-key-anthropic", &anthropic);
+    let refused = finish(
+        files
+            .program()
+            .arg("run")
+            .arg("Hello.")
+            .arg("--no-key")
+            .args(files.options()),
+    );
+    assert_eq!(refused.status, EXIT_NOT_STARTED, "{}", refused.stdout);
+    let both = finish(
+        files
+            .program()
+            .arg("run")
+            .arg("Hello.")
+            .args(["--no-key", "--key-env", "TUR_PAX_API_KEY"])
+            .args(files.options()),
+    );
+    assert_eq!(both.status, EXIT_USAGE);
+    // --provider takes no configuration file, and needs a model.
+    let mut options = files.options();
+    options.extend(["--provider".to_owned(), "local".to_owned()]);
+    let usage = finish(files.program().arg("run").arg("Hello.").args(options));
+    assert_eq!(usage.status, EXIT_USAGE);
+    assert!(anthropic.requests().is_empty());
 }

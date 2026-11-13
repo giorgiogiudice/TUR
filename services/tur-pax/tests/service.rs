@@ -218,6 +218,7 @@ impl World {
         paths.extra_manifests = Some(tools.join("manifests"));
         paths.extra_adapters = Some(tools.join("adapters"));
         paths.models = vec![root.join("models.json")];
+        paths.runtime = Some(root.join("run"));
         let mut initial = Settings::default();
         settings(&mut initial);
         initial
@@ -1186,6 +1187,7 @@ fn a_provider_added_by_hand_is_used_by_its_identifier_and_keyring_item() {
             base_url: Some(base_url),
             keyring_item: Some("compat-key".to_owned()),
             key_required: true,
+            runtime_key_file: None,
             send_back_reasoning: false,
             capabilities: None,
             data_terms: None,
@@ -1540,4 +1542,97 @@ fn a_model_server_on_this_computer_needs_no_key_and_says_so() {
     assert_eq!(result["answer"], "Hello from here.");
     assert!(!world.keys.is_set("ollama").expect("asked"));
     assert_eq!(server.requests()[0].path, "/v1/chat/completions");
+    assert_eq!(server.requests()[0].authorization, None);
+}
+
+#[test]
+fn a_model_served_by_tur_ai_local_is_sent_the_key_from_its_file() {
+    use std::os::unix::fs::PermissionsExt;
+
+    const LOCAL_KEY: &str = "tur-ai-local-key-0123456789abcdef";
+    let server = FakeServer::start_on(Wire::OpenAiChat, vec![says("Hello from tur-ai-local.")]);
+    let list = format!(
+        r#"{{ "schema_version": 1, "status": "example", "prices_as_of": "2026-11-12",
+             "providers": [{{
+                "id": "local", "adapter": "openai-chat", "name": "Local AI on this computer",
+                "base_url": "{}/v1", "runtime_key_file": "tur-ai-local/api-key",
+                "data_terms": {{ "runs_locally": true }},
+                "models": [{{ "model": "qwen3-4b" }}]
+             }}] }}"#,
+        server.base_url()
+    );
+    let models = ModelList::from_json(&list).expect("a model list");
+    let world = with_models("tur-ai-local", &list, |settings| {
+        settings
+            .set_provider("local", "qwen3-4b", &models)
+            .expect("a provider");
+    });
+    // Nothing leaves this computer, and the consent text says so.
+    let (version, text) = world.core.consent("local").expect("the text");
+    assert!(
+        text.contains("P@x sends these to Local AI on this computer, which runs on this computer:")
+    );
+    assert!(text.contains("no company receives it"));
+    world.core.enable(&version).expect("switched on");
+
+    // tur-ai-local serves no model: there is no key file, so no task.
+    let status = world.core.status();
+    assert_eq!(status["key"], "file_missing");
+    assert_eq!(status["ready"], false);
+    let refused = world
+        .core
+        .start_task("Hello.", "")
+        .expect_err("no key file");
+    assert!(
+        refused
+            .detail
+            .contains("tur-ai-local/api-key does not exist"),
+        "{}",
+        refused.detail
+    );
+    assert_eq!(code(refused), "TUR-AI-PROVIDER-012");
+    assert!(server.requests().is_empty());
+
+    // It serves one, and wrote its key for the person alone.
+    let key_file = world.root.join("run/tur-ai-local/api-key");
+    fs::create_dir_all(key_file.parent().expect("a directory")).expect("a directory");
+    fs::write(&key_file, format!("{LOCAL_KEY}\n")).expect("the key file");
+    fs::set_permissions(&key_file, fs::Permissions::from_mode(0o600)).expect("its mode");
+    let status = world.core.status();
+    assert_eq!(status["key"], "in_file");
+    assert_eq!(status["ready"], true);
+    let listed = world.core.models();
+    assert_eq!(listed["providers"][0]["key_source"], "runtime_file");
+    assert_eq!(
+        listed["providers"][0]["runtime_key_file"],
+        "tur-ai-local/api-key"
+    );
+
+    let result = world.run("Hello.");
+    assert_eq!(result["outcome"], "completed");
+    assert_eq!(result["answer"], "Hello from tur-ai-local.");
+    let requests = server.requests();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(
+        requests[0].authorization.as_deref(),
+        Some(format!("Bearer {LOCAL_KEY}").as_str())
+    );
+    // The key went to the password store nowhere, and is in no file of
+    // P@x's: only in the one tur-ai-local wrote.
+    assert!(!world.keys.is_set("local").expect("asked"));
+    for (path, bytes) in world.every_file() {
+        if path != key_file {
+            assert!(
+                !String::from_utf8_lossy(&bytes).contains(LOCAL_KEY),
+                "{}",
+                path.display()
+            );
+        }
+    }
+    // The trail names the provider by its identifier, beside its family.
+    let started = world.trail_events("task_started");
+    assert_eq!(started[0]["TUR_AI_PROVIDER_ID"], "local");
+    assert_eq!(started[0]["TUR_AI_PROVIDER"], "openai-chat");
+    let finished = world.trail_events("task_finished");
+    assert_eq!(finished[0]["TUR_AI_PROVIDER_ID"], "local");
 }

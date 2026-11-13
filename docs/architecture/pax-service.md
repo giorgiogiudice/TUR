@@ -161,7 +161,9 @@ decided).
 `message`: why a task cannot start, if it cannot), `consent` (`current`,
 `text_version`, `accepted_version`, `accepted_for`, `accepted_at`), `provider`
 (the identifier), `provider_name`, `adapter`, `provider_origin`, `model`, `model_listed`, `model_tested`, `price_known`, `key`
-(`set`, `not_set`, `unknown`, `not_needed` for a server that takes no key),
+(`set`, `not_set`, `unknown`, `not_needed` for a server that takes no key,
+`in_file` and `file_missing` for a model server on this computer that writes
+its key to a file: section 5),
 `abilities` (`act`, `see`: what the model's entry declares, `null` when
 nothing is; `notices`: the plain sentences that say what P@x will not
 attempt with it), `session_locked`, `running`, `spending`
@@ -267,6 +269,30 @@ a reply or a signal of `org.tur.Agent1`.
 | Locked, prompt dismissed | `TUR-AI-KEY-003`. The store asks the person; P@x waits up to two minutes and cannot answer the prompt |
 | Not a key | `TUR-AI-KEY-004` (empty, a space, a character a header cannot hold). The text is not repeated |
 
+**A key that is not the person's: a model server on this computer.** The
+`local` preset (`tur-ai-local`, [local-ai.md](local-ai.md)) needs a key and
+keeps none in the password store. `tur-ai-local serve` makes a random
+256-bit access key each time it starts a model, writes it to
+`$XDG_RUNTIME_DIR/tur-ai-local/api-key` (mode 0600) and starts `llama-server`
+with `--api-key-file`. The entry names that file, relative to the runtime
+directory (`runtime_key_file`: `tur-ai-local/api-key`), and the service reads
+it for each task (`settings::runtime_key`, with the provider layer's
+`FileKeySource`). Why not the password store: the key is not the person's to
+give or keep; it changes with every start, is worthless once the engine
+stops, and lives in a folder that is the person's alone and is emptied at
+log-out. A copy in the store would be stale after the next start, and would
+outlive the engine. The rules: the file is read only for an address of this
+computer (the entry's must be a loopback address, and a gateway address in
+the settings that is not stops the task); it must be a regular file, not a
+link, no larger than a key, with no permission for the group or others; the
+name cannot leave the runtime directory (no `.` or `..` part, a safe set of
+characters). The error names the file and never its content
+(`TUR-AI-PROVIDER-012`); `GetStatus` says `in_file` while the file is there
+and `file_missing` when it is not (no model is served), and `ready` follows
+it. `ListModels` gives each provider's `key_source` (`keyring`,
+`runtime_file`, `none`) and its `runtime_key_file`. The paths come from
+`XDG_RUNTIME_DIR` (`Paths::runtime`).
+
 **What is not protected.** The secret goes to and from the store in the
 `plain` transfer of the Secret Service: unencrypted on the bus. The encrypted
 transfer would hide it only from a program that watches the bus, and every
@@ -338,6 +364,11 @@ Three events are new (`trail.rs`):
 | `held_for_return` | An unattended task proposed an action it may not take alone; it was not performed and is kept for the person | `TUR_AI_ACTION`, `TUR_AI_CLASS`, `TUR_AI_REASON` |
 | `schedule_run` | The runner handled a schedule that was due | `TUR_AI_SCHEDULE`, `TUR_AI_KIND`, `TUR_AI_OUTCOME` (`completed`, `deferred`, `failed`, `skipped_missed`, `still_due`), `TUR_AI_LATE`, `TUR_AI_HELD`, `TUR_AI_SCHEDULED_FOR`, `TUR_AI_ATTENDED=no`, `TUR_ERROR_CODE` |
 | `setting_changed` | The person changed the switch, the provider, the key, a limit, a schedule or a memory entry | `TUR_AI_SETTING`, `TUR_AI_VALUE` (`on`, `set`, `removed`, …: never a value that is a secret, never a key) |
+
+A task's `task_started` and `task_finished` records name the provider in use
+by its identifier, `TUR_AI_PROVIDER_ID` (`deepseek`, `local`), beside the
+adapter family every record carries in `TUR_AI_PROVIDER`; the activity view
+(`ListActivity`) gives it as `provider_id`.
 
 A scheduled task's own task records carry `TUR_AI_ATTENDED=no`. The arguments
 of an action held for the person go to the run record they read on return,

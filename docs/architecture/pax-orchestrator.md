@@ -265,7 +265,17 @@ event.
 | `catalogue_show` | 0 | `tur-catalogue … show --json -- <id>` | the same |
 | `catalogue_route` | 0 | `tur-catalogue … route --json -- <id>` | the same |
 | `runtime_inspect_file` | 0 | `tur-runtime inspect --json -- <path>` | `services/tur-runtime` |
+| `diag_report_prepare` | 0 | `tur-diag report prepare --preview --json --prepared-by=pax [--title=…] [--description=…] [--component=…] [--error-code=…] [--from-boot-health]` (a preview: nothing is saved or sent) | `services/tur-diagnostics` |
+| `diag_report_list` | 0 | `tur-diag report list --json` | the same |
+| `apps_list_installed` | 0 | `tur-apps list --json` | `services/tur-apps` |
+| `apps_plan` | 0 | `tur-apps --catalogue /usr/share/tur/catalogue plan --offline --json -- <id>` | the same |
+| `ai_local_status` | 0 | `tur-ai-local status --json` | `services/tur-ai-local` |
+| `ai_local_models` | 0 | `tur-ai-local models --json --catalogue-only` | the same |
+| `ai_local_recommend` | 0 | `tur-ai-local recommend --json` | the same |
 | `run_readonly_command` | 0 | built in: any argument vector, in the read-only sandbox | built in |
+
+The table is for a reader. Nothing in P@x lists these tools or these
+components: the tests discover them (below).
 
 **Every component ships its own tools.** A component that has tools for P@x
 holds two files beside its code: the manifest, `agent-tools.json`, and the
@@ -276,6 +286,37 @@ with P@x's loader, checks every class, and holds every command line an adapter
 builds against the program the component has just built: the subcommand must
 be one the program lists and each option one its help describes. Where the
 tool can be run on a fixture, it is run.
+
+**One rule, and discovery instead of lists.** A component's tool set is
+`services/<component>/agent-tools.json` with `agent-tools.adapter.json`
+beside it, at the component's root, and nowhere else. P@x's own tests do
+not list components or tool names: `services/tur-pax/tests/tools.rs` reads
+`services/` with the program's own reader (`read_tool_sets`), loads every
+discovered set as one registry with the command tool, and holds invariants
+over the whole set:
+
+- every tool declares a class; every offered tool (it has an adapter) is
+  class 0, and the tools without an adapter are exactly those above class 0;
+- no adapter puts on its command line a word or option that sends, installs,
+  removes, stages, applies or otherwise changes something (`send`, `--yes`,
+  `install`, `remove`, `stage`, `apply`, `mount`, `serve`, `--output`, … 46
+  words, compared without dashes and before `=`) unless its tool is class 2
+  or more; P@x's test service, whose class 2 and 3 tools do say `send` and
+  `format`, shows the rule refuses them when declared lower;
+- every program and path is in the sandbox's system view, and every adapter
+  field is one the published format declares;
+- no file named like a tool file is anywhere else in a component (a parked
+  `pax/` directory or an `agent-tools.next.json`); the one exception is
+  named in the test with its reason (`tur-update`, see §12);
+- every input schema fits llama.cpp's tool grammar (§4.4).
+
+The tests that look at particular tools (the command line a call becomes;
+that a model's value cannot become an option) name those tools and nothing
+else; a component that adds a tool, or ships tools for the first time,
+needs no change in `tur-pax`. `tests/pax/e2e.py` discovers the same way
+and checks that every discovered set is installed as its component has it;
+the `pax` workflow installs every discovered set and builds and installs
+every program an adapter names, from the component that ships it.
 
 Installed, each component has a directory of its own under one directory of
 tool sets, and `tur-pax run` reads them all (`registry::read_tool_sets`):
@@ -295,8 +336,10 @@ a manifest and no adapters is loaded and none of its tools is offered; one
 with adapters and no manifest is an error; one with neither is not a tool set.
 `--manifests DIR` and `--adapters DIR` still name flat directories of further
 files, one per service, read in addition; the tests use them for their own
-services. Nothing installs the tool sets on the image yet; the `pax` workflow
-installs them on its runner and lets `tur-pax` find them by default.
+services. The image installs the tool set of each component of
+`image/programs.tsv` that has one at its root (`image/programs.sh`); the
+`pax` workflow installs every discovered set on its runner and lets
+`tur-pax` find them by default.
 
 Declared by a component but not offered, because no program performs them yet:
 `storage_mount`, `storage_unmount`, `storage_unlock`. They are every shipped
@@ -362,6 +405,39 @@ it. The program then runs in the read-only sandbox, like a command.
 
 `kind` exists so that the D-Bus kind can be added when the services exist. The
 manifests already name the D-Bus method each tool will call.
+
+### 4.4 What a model server's tool grammar accepts
+
+A model server that constrains a model's tool call with a grammar turns each
+offered tool's input schema into that grammar. llama.cpp does this for every
+request that offers tools (`common/json-schema-to-grammar.cpp`), and its
+grammar parser refuses large repetitions: at the release TUR pins, b9840,
+`src/llama-grammar.cpp` has `#define MAX_REPETITION_THRESHOLD 2000`, refuses
+`x{m,n}` when `m` or `n` is above it ("number of repetitions exceeds sane
+defaults, please reduce the number of repetitions"), and refuses any
+repetition whose count times the number of rules the repeated item made
+reaches it. A string's `maxLength` (or `minLength`) N becomes `char{0,N}`, one
+rule repeated N times; an array's `maxItems` M becomes
+`item ("," space item){0,M-1}`, a group of up to three new rules. One schema
+over the limit makes llama-server refuse every request that offers it
+(`TUR-AI-PROVIDER-004`): the command tool's argv items (4096) did, and so did
+`runtime_inspect_file`'s path (4096), `diag_report_prepare`'s description
+(4000), `keep_note`'s text (4000) and the two proposals' text (2000, which is
+the limit itself).
+
+So every shipped schema keeps string bounds at **1999 or less** and array
+bounds at **667 or less**, and `tools::every_shipped_tool_schema_fits_llama_cpp_s_tool_grammar`
+holds every manifest of every component (wherever its files are), P@x's own
+tools and the test fixture to it; `tools::the_grammar_check_knows_llama_cpp_s_limits`
+holds the check itself to the numbers above. The bounds lowered: argv items
+4096 → 1999, `runtime_inspect_file` path 4096 → 1999 (a path longer than
+1 999 characters cannot be inspected through P@x; the program itself still
+takes up to 4 096 bytes), `diag_report_prepare` description 4000 → 1999
+(`tur-diag` takes 4 000; the person can write more when they review the
+report), `keep_note` text 4000 → 1999, `propose_reminder` message and
+`propose_scheduled_task` request 2000 → 1999. None of these breaks a use
+TUR knows of, so no tool is left out for any provider; a `grammar_limited`
+switch that would leave a tool out for some servers is not built.
 
 ## 5. The read-only sandbox
 
@@ -542,13 +618,20 @@ nothing is started.
 | `TUR_AI_EVENT` | Written when | Fields beyond `MESSAGE`, `TUR_AI_TASK`, `TUR_AI_PROVIDER` |
 |---|---|---|
 | `decision` | The engine decided an action | Those of agent-policy.md section 8: `TUR_AI_ACTION`, `TUR_AI_CLASS`, `TUR_AI_DECISION`, `TUR_AI_TIER`, `TUR_AI_SANDBOX`, `TUR_AI_ATTENDED`, `TUR_ERROR_CODE` |
-| `task_started` | A task begins | `TUR_AI_ATTENDED` |
+| `task_started` | A task begins | `TUR_AI_PROVIDER_ID`, `TUR_AI_ATTENDED` |
 | `proposal_rejected` | A tool call did not become an action | `TUR_AI_ACTION` (the name, if it is an identifier; otherwise `<invalid>`), `TUR_AI_REASON`, `TUR_ERROR_CODE` |
 | `approval_unavailable` | The engine asked, wanted authentication or deferred | `TUR_AI_ACTION`, `TUR_AI_CLASS`, `TUR_AI_DECISION`, `TUR_ERROR_CODE` |
 | `executed` | An allowed action was performed, or tried: the action-outcome event (`audit::ActionOutcome`) | `TUR_AI_ACTION`, `TUR_AI_RESULT` (`ok`, `failed`, `timed_out`, `not_started`), `TUR_AI_EXIT`, `TUR_AI_OUTPUT_BYTES`, `TUR_AI_TRUNCATED`, `TUR_AI_WITHHELD` (a count), `TUR_ERROR_CODE` if it did not end well |
 | `output_withheld` | Part of what an action returned was withheld; follows the `executed` event of that action (`audit::OutputWithheld`) | `TUR_AI_ACTION`, `TUR_AI_WITHHELD`, `TUR_AI_WITHHELD_KINDS`, `TUR_ERROR_CODE` = `TUR-AI-OUTPUT-001` |
 | `response_discarded` | A response was discarded whole | `TUR_AI_REASON` (`refusal`, `error`, `output_limit`), `TUR_AI_DISCARDED_CALLS`, `TUR_ERROR_CODE` |
-| `task_finished` | A task ends | `TUR_AI_OUTCOME`, `TUR_AI_STEPS`, `TUR_AI_REQUESTS`, `TUR_AI_TOKENS`, `TUR_ERROR_CODE` |
+| `task_finished` | A task ends | `TUR_AI_PROVIDER_ID`, `TUR_AI_OUTCOME`, `TUR_AI_STEPS`, `TUR_AI_REQUESTS`, `TUR_AI_TOKENS`, `TUR_ERROR_CODE` |
+
+`TUR_AI_PROVIDER` is the adapter family (`openai-chat`), on every record.
+`TUR_AI_PROVIDER_ID` is the provider's identifier (`deepseek`, `local`): the
+model list's or the person's entry in the session service and in
+`tur-pax run --provider`; the family when `tur-pax run` was given only a
+configuration file. It is written when the task starts and when it ends;
+every other record of the task carries the same `TUR_AI_TASK`.
 
 An event never holds a request, an answer, an argument value, a command line or
 any output. A name the model made up is written only if it is an identifier.
@@ -592,6 +675,9 @@ Tests: `orchestrator` = `services/tur-pax/tests/orchestrator.rs`; `injection` =
 | Arguments have one reading (agent-policy.md, `strict`) | The provider layer: `ToolCalls::end`, `provider::parse_data`. Behind it, `orchestrator::one_reading` | `tur-pax-providers`: `toolcalls::tests`, conformance "a repeated key…" for each adapter. Here: unit `orchestrator::tests::arguments_must_have_one_reading`, `…the_text_of_a_call_is_the_one_delivered_with_it…`; `injection::a_repeated_key_never_reaches_the_loop_as_a_call`; `wires::a_repeated_key_discards_the_whole_response_through_every_adapter`, `…at_depth…`; `pax` `repeated-key`, `openai-repeated-key`, `google-repeated-key` |
 | The loop behaves the same through every adapter (§10) | The loop is written against the neutral interface only | `wires::*` (each of the three wire formats, arguments streamed and delivered whole); `pax` `openai-adapter`, `google-adapter` |
 | An adapter builds an argument vector; a value cannot become an option | `Adapter::argv` | unit `adapter::tests`; `tools::a_value_from_the_model_cannot_become_an_option…` |
+| Every component's tool set is found by one rule and the whole set holds the invariants of §4.2 | `read_tool_sets`; the tests list no component | `tools::the_source_tree_is_read_as_a_directory_of_tool_sets`, `…tool_files_live_only_at_the_root_of_a_component`, `…every_tool_has_a_class_and_every_offered_tool_only_observes`, `…no_adapter_sends_or_changes_anything_unless_its_class_says_so`; `pax` "tool sets", "controls" (every program an installed adapter names) |
+| Every input schema fits llama.cpp's tool grammar (§4.4) | The manifests and P@x's built-in tools | `tools::every_shipped_tool_schema_fits_llama_cpp_s_tool_grammar`, `…the_grammar_check_knows_llama_cpp_s_limits`; the `local-ai` workflow (llama-server's log has no grammar error) |
+| The provider's identifier is in the trail | `TaskRequest::provider_id` | `run_cli::a_provider_of_the_model_list_is_sent_the_key_its_model_server_wrote`, `…no_key_sends_no_credential…`; `service::a_model_served_by_tur_ai_local…` |
 | The key is not printed or logged | The provider layer's `ApiKey`; the trail holds no request | `run_cli::run_prints_the_answer…`; `pax` "the key appears in no transcript, error output or trail" |
 
 The injection scenarios, as the task names them:
@@ -693,7 +779,9 @@ change: they were accepted when the two components were added.
 | Component | Change | Until then |
 |---|---|---|
 | `tur-pax-providers` | Done: tool-call arguments are parsed strictly and the argument text comes with the call (`ToolCallEnd.arguments_text`). | – |
-| `tur-diagnostics`, `tur-catalogue`, `tur-runtime` | Done: each ships `agent-tools.json` and `agent-tools.adapter.json`, as `tur-storage` and `tur-device-manager` do. | – |
+| `tur-diagnostics`, `tur-catalogue`, `tur-runtime` | Done: each ships `agent-tools.json` and `agent-tools.adapter.json`, as `tur-storage` and `tur-device-manager` do. `tur-diagnostics` ships its two report tools there too. | – |
+| `tur-apps`, `tur-ai-local` | Done: their tool sets are at their roots. Not in the image until their programs are (`image/programs.tsv`). | – |
+| `tur-update` | Its tool set waits in `services/tur-update/pax/`: `tur-update` is in the image, so at its root its tools would be installed at once, and the image's smoke test (`tests/image/smoke.sh`, "five components have their assistant tools installed") and the boot test (`tests/boot/report.py`, `tool_manifests`: five) would fail. Moving it is two renames, two path changes in its `tests/agent_tools.rs` and `tests/interfaces.rs`, the deletion of `NOT_YET_AT_THE_ROOT` in `tur-pax/tests/tools.rs`, and those two counts (six). | Not offered by default. |
 | `tur-storage` | Done: `volumes --live` and `decide --live` ask `lsblk` about this machine; access is spelled `read-only` and `read-write` on the command line as in the manifest; `storage_preview_mount` has an adapter. | – |
 | `tur-device-manager` | Done: `tur-device list [--category C]...` and `tur-device get <id>`, with adapters for `device_list` and `device_get`. | – |
 | The image | Install each component's two tool files to `/usr/share/tur/pax/tools/<component>/`, the catalogue to `/usr/share/tur/catalogue`; make sure `bubblewrap` and `prlimit` are present. | `tur-pax run --tools DIR`. |
