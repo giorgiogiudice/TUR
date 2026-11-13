@@ -15,7 +15,7 @@ use serde_json::Value;
 
 use crate::action::{
     Action, CommandAction, PrivilegedOperation, PrivilegedRequestKind, SECRET_PLACEHOLDER, Sandbox,
-    TypedOperation, UiAction, UiActionKind, WorkingContext,
+    TypedOperation, UiAction, UiActionKind, UiOperation, UiRole, WorkingContext,
 };
 use crate::class::ActionClass;
 use crate::context::{Context, Presence, Timestamp, WindowOwner};
@@ -47,7 +47,7 @@ pub fn decide(action: &Action, context: &Context, policy: &UserPolicy, now: Time
         Action::Tool(_) | Action::Command(_) | Action::Operation(_) | Action::Agent(_) => None,
     };
     if let Some(ui) = ui {
-        if policy.is_excluded(&ui.application) {
+        if ui.identities().any(|identity| policy.is_excluded(identity)) {
             return Decision::refuse(class, Refusal::ExcludedApplication);
         }
         if context.target_window_owner == WindowOwner::Administrator {
@@ -180,7 +180,7 @@ pub fn decide(action: &Action, context: &Context, policy: &UserPolicy, now: Time
     if let Some(ui) = ui
         && !context.model_flags_consequential
         && context.target_window_owner == WindowOwner::User
-        && !policy.is_sensitive(&ui.application)
+        && !is_sensitive_target(ui, policy)
         && policy.relaxation_for(&ui.application) == Some(RelaxationLevel::Consequential)
     {
         return Decision::allow(class, Reason::RelaxedByUserPolicy);
@@ -213,31 +213,91 @@ pub fn classify(action: &Action, context: &Context, policy: &UserPolicy) -> Acti
     }
 }
 
+/// Whether the target application is sensitive under any of the identifiers
+/// it is known by.
+fn is_sensitive_target(ui: &UiAction, policy: &UserPolicy) -> bool {
+    ui.identities().any(|identity| policy.is_sensitive(identity))
+}
+
 /// The class of an accessibility or screen action (addendum section 5.1).
 ///
 /// Never above class 2: privileged prompts reject emulated input, and a window
 /// of a process with administrator rights is refused before the class matters.
+///
+/// An action whose detail states an operation is judged further by what the
+/// accessibility bus says about its target (`pax-accessibility.md`, section
+/// 5). Every rule of that judgement can only raise the class.
 fn ui_class(ui: &UiAction, context: &Context, policy: &UserPolicy) -> ActionClass {
-    if policy.is_sensitive(&ui.application) {
+    if is_sensitive_target(ui, policy) {
         return ActionClass::Consequential;
     }
     match ui.kind {
         UiActionKind::Observe => ActionClass::Observe,
         UiActionKind::Act => {
-            // When in doubt, ask: a control whose name cannot be read, a name
-            // or a window title that matches the pattern table, or a window
-            // whose owner the compositor did not report.
-            let illegible = !is_legible(&ui.control);
-            let matches_pattern = match_consequential(&ui.control).is_some()
-                || match_consequential(&ui.window_title).is_some();
-            let owner_unknown = context.target_window_owner == WindowOwner::Unknown;
-            if illegible || matches_pattern || owner_unknown {
+            if acting_is_consequential(ui, context) {
                 ActionClass::Consequential
             } else {
                 ActionClass::Reversible
             }
         }
     }
+}
+
+/// Whether acting on the target of `ui` is consequential: when in doubt,
+/// ask.
+fn acting_is_consequential(ui: &UiAction, context: &Context) -> bool {
+    let detail = &ui.detail;
+    // The rules for every action: a window whose owner the compositor did
+    // not report, a window title, a name or a description that matches the
+    // pattern tables, the default control of a dialog, and a terminal.
+    if context.target_window_owner == WindowOwner::Unknown
+        || match_consequential(&ui.window_title).is_some()
+        || match_consequential(&ui.control).is_some()
+        || match_consequential(&detail.description).is_some()
+        || detail.default_control
+        || detail.role == UiRole::Terminal
+    {
+        return true;
+    }
+    let named = !ui.control.is_empty();
+    let legible = is_legible(&ui.control);
+    match detail.operation {
+        // A name that cannot be read (section 5.1, review item 1).
+        UiOperation::Unspecified
+        | UiOperation::Read
+        | UiOperation::Expand
+        | UiOperation::Collapse
+        | UiOperation::Select => !legible,
+        // Moving the keyboard or the view changes nothing in the
+        // application: an element without a name may be focused or
+        // scrolled, one with a name that cannot be read may not.
+        UiOperation::Focus | UiOperation::Scroll => named && !legible,
+        // A press is judged from the name of a control: only a control
+        // whose role says it can be pressed, and whose name can be read.
+        UiOperation::Press => !legible || !detail.role.is_pressable(),
+        // Typing inserts text and submits nothing, as long as the text
+        // holds no line break or other control character (Enter submits a
+        // form or sends a message), the field takes text, and the field is
+        // not for a secret. The field may have no name; a name it has must
+        // be readable.
+        UiOperation::Type => {
+            detail.role != UiRole::Text
+                || !detail.editable
+                || detail.text.is_empty()
+                || detail.text.chars().any(is_control_like)
+                || (named && !legible)
+        }
+    }
+}
+
+/// A character that is not text to insert: a control character, a line or
+/// paragraph separator, or a character that changes the reading direction.
+fn is_control_like(c: char) -> bool {
+    c.is_control()
+        || matches!(
+            c,
+            '\u{2028}' | '\u{2029}' | '\u{200e}' | '\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}'
+        )
 }
 
 /// The class of a command. It comes from the sandbox, never from the text.
@@ -265,7 +325,7 @@ fn privileged_class(operation: PrivilegedOperation) -> ActionClass {
 fn is_well_formed(action: &Action) -> bool {
     match action {
         Action::Tool(call) => !call.service.is_empty() && !call.tool.is_empty(),
-        Action::Accessibility(ui) | Action::ScreenInput(ui) => !ui.application.trim().is_empty(),
+        Action::Accessibility(ui) | Action::ScreenInput(ui) => is_well_formed_ui(ui),
         Action::Command(command) => command
             .argv
             .first()
@@ -273,6 +333,15 @@ fn is_well_formed(action: &Action) -> bool {
         Action::Operation(operation) => operation.is_well_formed(),
         Action::Agent(_) => true,
     }
+}
+
+/// A UI action names its application; an operation it states goes with its
+/// kind; text goes with typing, and only with typing.
+fn is_well_formed_ui(ui: &UiAction) -> bool {
+    let operation = ui.detail.operation;
+    !ui.application.trim().is_empty()
+        && operation.kind().is_none_or(|kind| kind == ui.kind)
+        && (operation == UiOperation::Type) == !ui.detail.text.is_empty()
 }
 
 fn permitted(class: ActionClass) -> Reason {
@@ -308,12 +377,28 @@ pub fn describe(action: &Action) -> String {
 }
 
 fn describe_ui(ui: &UiAction, tier: &str) -> String {
-    let verb = match ui.kind {
-        UiActionKind::Observe => "Read",
-        UiActionKind::Act => "Act on",
+    let verb = match (ui.kind, ui.detail.operation) {
+        (UiActionKind::Observe, _) => "Read",
+        (UiActionKind::Act, UiOperation::Focus) => "Focus",
+        (UiActionKind::Act, UiOperation::Scroll) => "Scroll to",
+        (UiActionKind::Act, UiOperation::Expand) => "Expand",
+        (UiActionKind::Act, UiOperation::Collapse) => "Collapse",
+        (UiActionKind::Act, UiOperation::Select) => "Select",
+        (UiActionKind::Act, UiOperation::Press) => "Press",
+        (UiActionKind::Act, UiOperation::Type) => "Type into",
+        (UiActionKind::Act, UiOperation::Unspecified | UiOperation::Read) => "Act on",
+    };
+    let role = match ui.detail.role {
+        UiRole::Unknown => String::new(),
+        role => format!(" ({})", role.as_str()),
+    };
+    let typed = if ui.detail.operation == UiOperation::Type {
+        format!(" the text {}", quoted(&ui.detail.text))
+    } else {
+        String::new()
     };
     format!(
-        "{verb} control {} in window {} of application {}, {tier}",
+        "{verb} control {}{role}{typed} in window {} of application {}, {tier}",
         quoted(&ui.control),
         quoted(&ui.window_title),
         quoted(&ui.application)
@@ -507,6 +592,7 @@ mod tests {
                     window_title: text.to_owned(),
                     control: text.to_owned(),
                     kind: UiActionKind::Act,
+                    detail: crate::action::UiDetail::default(),
                 }),
                 typed(TypedOperationKind::NetworkProfileReset, text, None),
                 typed(
@@ -639,6 +725,7 @@ mod tests {
             window_title: String::new(),
             control: "OK".to_owned(),
             kind: UiActionKind::Observe,
+            detail: crate::action::UiDetail::default(),
         });
         let mut no_tool = tool(ActionClass::Observe);
         if let Action::Tool(call) = &mut no_tool {
@@ -849,6 +936,7 @@ mod tests {
                 window_title: "Devices".to_owned(),
                 control: "Bold".to_owned(),
                 kind,
+                detail: crate::action::UiDetail::default(),
             };
             for action in [
                 Action::Accessibility(target.clone()),
@@ -885,6 +973,196 @@ mod tests {
                     ),
                 }
             }
+        }
+    }
+
+    fn bridge(operation: UiOperation, role: UiRole, control: &str, text: &str) -> UiAction {
+        UiAction {
+            application: "org.example.Editor".to_owned(),
+            window_title: "Notes".to_owned(),
+            control: control.to_owned(),
+            kind: operation.kind().unwrap_or(UiActionKind::Act),
+            detail: crate::action::UiDetail {
+                operation,
+                role,
+                editable: role == UiRole::Text,
+                text: text.to_owned(),
+                ..crate::action::UiDetail::default()
+            },
+        }
+    }
+
+    #[test]
+    fn a_bridge_action_that_does_not_hold_together_is_refused_as_incomplete() {
+        let mut read_that_acts = bridge(UiOperation::Read, UiRole::Window, "", "");
+        read_that_acts.kind = UiActionKind::Act;
+        let mut press_that_observes = bridge(UiOperation::Press, UiRole::Button, "Bold", "");
+        press_that_observes.kind = UiActionKind::Observe;
+        let typing_nothing = bridge(UiOperation::Type, UiRole::Text, "", "");
+        let pressing_with_text = bridge(UiOperation::Press, UiRole::Button, "Bold", "hello");
+        for target in [
+            read_that_acts,
+            press_that_observes,
+            typing_nothing,
+            pressing_with_text,
+        ] {
+            let decision = decide(
+                &Action::Accessibility(target.clone()),
+                &trusted(),
+                &UserPolicy::default(),
+                NOW,
+            );
+            assert_eq!(
+                decision.reason(),
+                Reason::Refused(Refusal::MalformedAction),
+                "{target:?}"
+            );
+        }
+        // An unspecified operation goes with either kind, as before.
+        for kind in UiActionKind::ALL {
+            let target = UiAction::new("org.example.Editor", "Notes", "Bold", kind);
+            let decision = decide(
+                &Action::Accessibility(target),
+                &trusted(),
+                &UserPolicy::default(),
+                NOW,
+            );
+            assert!(decision.is_allow(), "{kind:?}");
+        }
+    }
+
+    #[test]
+    fn every_identifier_of_the_application_is_matched_against_the_lists() {
+        let policy = UserPolicy::default();
+        // A terminal known to the bus by its program name, and to the
+        // built-in list by its desktop file: sensitive.
+        let mut terminal = bridge(UiOperation::Type, UiRole::Text, "", "hello");
+        terminal.application = "konsole".to_owned();
+        terminal
+            .detail
+            .also_known_as
+            .push("org.kde.konsole".to_owned());
+        let decision = decide(&Action::Accessibility(terminal), &trusted(), &policy, NOW);
+        assert_eq!(decision.class(), ActionClass::Consequential);
+        assert!(!decision.is_allow());
+
+        // A password manager under another name: excluded, even from being
+        // read.
+        let mut vault = bridge(UiOperation::Read, UiRole::Window, "", "");
+        vault.application = "python3".to_owned();
+        vault
+            .detail
+            .also_known_as
+            .push("org.keepassxc.KeePassXC".to_owned());
+        let decision = decide(&Action::Accessibility(vault), &trusted(), &policy, NOW);
+        assert_eq!(
+            decision.reason(),
+            Reason::Refused(Refusal::ExcludedApplication)
+        );
+
+        // A relaxation of the main identifier does not reach an application
+        // that is sensitive under another.
+        let relaxed = UserPolicy::from_json(
+            r#"{"schema_version":1,"mode":"normal","relaxations":[{"application":"konsole","class":2}]}"#,
+        )
+        .expect("a valid policy");
+        let mut terminal = bridge(UiOperation::Press, UiRole::Button, "Send", "");
+        terminal.application = "konsole".to_owned();
+        terminal
+            .detail
+            .also_known_as
+            .push("org.kde.konsole".to_owned());
+        let decision = decide(&Action::Accessibility(terminal), &trusted(), &relaxed, NOW);
+        assert_eq!(decision.reason(), Reason::ConsequentialNeedsConfirmation);
+    }
+
+    #[test]
+    fn typing_a_line_break_or_a_direction_change_is_consequential() {
+        for text in [
+            "hello\n", "hello\r", "a\tb", "x\u{2028}", "x\u{2029}", "x\u{202e}", "x\u{2066}",
+            "\u{1b}[A",
+        ] {
+            let target = bridge(UiOperation::Type, UiRole::Text, "", text);
+            assert_eq!(
+                classify(
+                    &Action::Accessibility(target),
+                    &trusted(),
+                    &UserPolicy::default()
+                ),
+                ActionClass::Consequential,
+                "{text:?}"
+            );
+        }
+        for text in ["hello", "Grüße, ça va? 你好", "a — b “c”"] {
+            let target = bridge(UiOperation::Type, UiRole::Text, "", text);
+            assert_eq!(
+                classify(
+                    &Action::Accessibility(target),
+                    &trusted(),
+                    &UserPolicy::default()
+                ),
+                ActionClass::Reversible,
+                "{text:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_prompt_of_a_bridge_action_says_what_it_does_and_hides_nothing() {
+        let target = bridge(UiOperation::Type, UiRole::Text, "To", "a\u{202e}b");
+        assert_eq!(
+            describe(&Action::Accessibility(target)),
+            "Type into control \"To\" (text) the text \"a\\u{202e}b\" in window \"Notes\" of application \"org.example.Editor\", through the accessibility tree"
+        );
+        let target = bridge(UiOperation::Press, UiRole::Button, "Send", "");
+        assert_eq!(
+            describe(&Action::Accessibility(target)),
+            "Press control \"Send\" (button) in window \"Notes\" of application \"org.example.Editor\", through the accessibility tree"
+        );
+    }
+
+    #[test]
+    fn every_atspi_role_has_a_category_and_the_ones_that_matter_are_right() {
+        for role in 0..=140 {
+            // Every number maps to something; nothing panics.
+            let _ = UiRole::from_atspi(role);
+        }
+        for (number, role) in [
+            (43, UiRole::Button),
+            (62, UiRole::ToggleButton),
+            (7, UiRole::CheckBox),
+            (35, UiRole::MenuItem),
+            (88, UiRole::Link),
+            (37, UiRole::PageTab),
+            (32, UiRole::ListItem),
+            (61, UiRole::Text),
+            (79, UiRole::Text),
+            (94, UiRole::Text),
+            (40, UiRole::PasswordText),
+            (60, UiRole::Terminal),
+            (23, UiRole::Window),
+            (16, UiRole::Window),
+            (67, UiRole::Unknown),
+            (0, UiRole::Unknown),
+            (39, UiRole::Other),
+        ] {
+            assert_eq!(UiRole::from_atspi(number), role, "{number}");
+        }
+        for role in UiRole::ALL {
+            let pressable = role.is_pressable();
+            let expected = !matches!(
+                role,
+                UiRole::Unknown
+                    | UiRole::Slider
+                    | UiRole::Text
+                    | UiRole::PasswordText
+                    | UiRole::Terminal
+                    | UiRole::ScrollArea
+                    | UiRole::Label
+                    | UiRole::Window
+                    | UiRole::Other
+            );
+            assert_eq!(pressable, expected, "{role:?}");
         }
     }
 }

@@ -26,6 +26,13 @@ on:
       - "schemas/pax-*.json"
       - "rust-toolchain.toml"
       - ".github/workflows/pax.yml"
+      # The accessibility job runs these desktop programs and builds them in
+      # the desktop builder image.
+      - "desktop/apps/tur-settings/**"
+      - "desktop/apps/tur-pax-overlay/**"
+      - "desktop/kit/**"
+      - "desktop/ci/builder/**"
+      - "desktop/ci/builder.lock"
   pull_request:
     paths:
       # tur-pax, its providers and memory, and every component: which of
@@ -38,6 +45,13 @@ on:
       - "schemas/pax-*.json"
       - "rust-toolchain.toml"
       - ".github/workflows/pax.yml"
+      # The accessibility job runs these desktop programs and builds them in
+      # the desktop builder image.
+      - "desktop/apps/tur-settings/**"
+      - "desktop/apps/tur-pax-overlay/**"
+      - "desktop/kit/**"
+      - "desktop/ci/builder/**"
+      - "desktop/ci/builder.lock"
   workflow_dispatch:
 
 permissions:
@@ -240,4 +254,107 @@ jobs:
         with:
           name: pax-evidence
           path: ${{ runner.temp }}/pax-e2e/evidence/
+          if-no-files-found: warn
+
+  # P@x through the accessibility tree (docs/architecture/pax-accessibility.md,
+  # docs/reports/pax-7.md): the real tur-pax and tur-pax-a11y, against the
+  # scripted provider, operating tur-settings (Qt Quick), a GTK 3 window,
+  # gnome-text-editor (GTK 4) and Firefox under a headless KWin, with a real
+  # session bus, the accessibility bus and its registry, and P@x's indicator
+  # (tur-pax-overlay). Wine's notepad is measured. Runs in the desktop
+  # builder image (Fedora 45, the KWin the TUR image ships) with the
+  # accessibility stack and the applications added (tests/pax/a11y/
+  # Containerfile). No model is called.
+  accessibility:
+    name: Operate applications through the accessibility tree, under KWin
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    env:
+      CARGO_TERM_COLOR: never
+      CARGO_INCREMENTAL: "0"
+      BUILDER: localhost/tur-desktop-builder:ci
+      BUILDER_DIR: builder-image
+      A11Y_IMAGE: localhost/tur-pax-a11y-test:ci
+      OUT: out/desktop
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Builder image cache key
+        id: key
+        # The same key as the desktop workflow's builder job, so that the
+        # image it keeps in the cache is the one used here.
+        run: |
+          key="desktop-builder-${{ hashFiles('desktop/ci/builder/Containerfile', 'desktop/ci/builder.lock') }}"
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+          echo "$key"
+
+      - name: Fetch the builder image
+        id: cache
+        uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: ${{ env.BUILDER_DIR }}
+          key: ${{ steps.key.outputs.key }}
+
+      - name: Build the builder image, if the cache has none
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: desktop/ci/build-builder.sh "$BUILDER_DIR"
+
+      - name: Load the builder image
+        run: desktop/ci/load-builder.sh "$BUILDER_DIR"
+
+      - name: The test image (accessibility bus, GTK, Firefox, Wine)
+        run: |
+          docker build --build-arg "BUILDER=$BUILDER" -t "$A11Y_IMAGE" -f tests/pax/a11y/Containerfile tests/pax/a11y
+          docker run --rm "$A11Y_IMAGE" sh -c 'rpm -q at-spi2-core at-spi2-atk gtk3 gtk4 gnome-text-editor firefox wine kwin qt6-qtbase'
+
+      - name: A render device for KWin's software renderer
+        run: |
+          [ -e /dev/udmabuf ] || sudo modprobe udmabuf
+          sudo chmod 0666 /dev/udmabuf
+          ls -l /dev/udmabuf
+
+      - name: Toolchain
+        working-directory: services/tur-pax
+        run: |
+          rustup show active-toolchain || rustup toolchain install
+          rustc --version; cargo --version
+
+      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            services/tur-pax/target
+            services/tur-pax-a11y/target
+          key: pax-a11y-${{ hashFiles('rust-toolchain.toml', 'services/tur-pax/Cargo.lock', 'services/tur-pax-a11y/Cargo.lock') }}
+          restore-keys: pax-a11y-
+
+      - name: Build tur-pax and the accessibility bridge
+        # On the runner; the programs run in the container (Fedora 45's
+        # C library is newer than the runner's, so they run there as built).
+        run: |
+          (cd services/tur-pax && cargo build --locked --bin tur-pax)
+          (cd services/tur-pax-a11y && cargo build --locked)
+          ls -l services/tur-pax/target/debug/tur-pax services/tur-pax-a11y/target/debug/tur-pax-a11y
+
+      - name: P@x through the accessibility tree
+        run: |
+          mkdir -p "$OUT/a11y"
+          BUILDER="$A11Y_IMAGE" TUR_DEVICE=/dev/udmabuf desktop/ci/in-builder.sh sh tests/pax/a11y/run.sh ci "$OUT/a11y"
+
+      - name: Summary
+        if: always()
+        run: |
+          if [ -f "$OUT/a11y/report.md" ]; then
+            cat "$OUT/a11y/report.md" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### P@x through the accessibility tree: nothing was reported" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: pax-accessibility
+          path: ${{ env.OUT }}/a11y
           if-no-files-found: warn

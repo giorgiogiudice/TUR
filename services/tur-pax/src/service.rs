@@ -1767,6 +1767,9 @@ impl Core {
                 observer: &mut observer,
                 budget: &mut budget,
                 assistant: &mut assistant,
+                // The session service does not offer the interface tools
+                // yet (docs/architecture/pax-accessibility.md, section 9).
+                interface: &mut crate::interface::NoInterface,
             };
             let request = TaskRequest {
                 task_id: &job.id,

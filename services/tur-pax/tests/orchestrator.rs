@@ -1250,6 +1250,7 @@ fn the_orchestrator_has_no_switch_for_the_trusted_path() {
         "trail.rs",
         "faults.rs",
         "textui.rs",
+        "interface.rs",
     ];
     for name in modules {
         let text = source(name);

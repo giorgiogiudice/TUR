@@ -51,6 +51,7 @@ fn act(application: &str, window_title: &str, control: &str) -> Action {
         window_title: window_title.to_owned(),
         control: control.to_owned(),
         kind: UiActionKind::Act,
+        detail: tur_pax::UiDetail::default(),
     })
 }
 
@@ -60,6 +61,7 @@ fn observe(application: &str) -> Action {
         window_title: "Window".to_owned(),
         control: String::new(),
         kind: UiActionKind::Observe,
+        detail: tur_pax::UiDetail::default(),
     })
 }
 
