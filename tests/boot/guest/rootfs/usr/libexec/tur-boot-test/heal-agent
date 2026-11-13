@@ -25,7 +25,7 @@
 #              socket and an unconfirmed administrator are refused; with
 #              --yes old logs are deleted, which does not help, and the
 #              service says so; the fill is removed and the fault clears
-#   crash      a TUR program (tur-diag) killed with SIGSEGV: no remedy; a
+#   crash      a TUR program (tur-diag) killed with SIGABRT: no remedy; a
 #              report is offered; nothing reaches a stand-in receiver until
 #              the person sends with --yes; the upload is kept for the host
 #              to look for planted personal values
@@ -147,7 +147,8 @@ if [ "${name}" = phase-b ]; then
     as_user notices-fixed.json tur-diag heal notices --json
     cap status-fixed.json tur-diag heal status --json
     systemctl unmask tur-heal.timer
-    put timer_unmasked "$(systemctl is-enabled tur-heal.timer 2>&1)"
+    systemctl start tur-heal.timer
+    put timer_restored "$(systemctl is-active tur-heal.timer 2>&1)"
     cap coredumps-phase-b.txt coredumpctl list --no-pager
     send
     for _ in 1 2 3; do sleep 1; say "HEAL-COMPLETE report=${name}"; done
@@ -157,12 +158,18 @@ if [ "${name}" = phase-b ]; then
 fi
 
 # ---- the product as installed ------------------------------------------------------------
+# The image enables them by links under /usr/lib, which `systemctl
+# is-enabled` reports as "disabled": the links are what counts.
+units=/usr/lib/systemd
+wanted() { if [ -L "$1" ]; then echo yes; else echo no; fi; }
+put timer_wanted "$(wanted "${units}/system/timers.target.wants/tur-heal.timer")"
 put timer_enabled "$(systemctl is-enabled tur-heal.timer 2>&1)"
 put timer_active "$(systemctl is-active tur-heal.timer 2>&1)"
+put socket_wanted "$(wanted "${units}/system/sockets.target.wants/tur-heal-request.socket")"
 put socket_enabled "$(systemctl is-enabled tur-heal-request.socket 2>&1)"
 put socket_active "$(systemctl is-active tur-heal-request.socket 2>&1)"
 put socket_path "$(stat -c '%A %U' /run/tur/heal.socket 2>&1)"
-put notify_path_enabled "$(systemctl --global is-enabled tur-heal-notify.path 2>&1)"
+put notify_path_wanted "$(wanted "${units}/user/default.target.wants/tur-heal-notify.path")"
 cap tmpfiles.txt bash -c 'ls -ld /var/log/tur/heal /var/lib/tur/heal'
 cap units.txt systemctl cat tur-heal.service tur-heal.timer tur-heal-request.socket tur-heal-request@.service
 cap timer-list.txt systemctl list-timers tur-heal.timer --all --no-pager
@@ -270,10 +277,15 @@ put planted_user "${test_user}"
 put planted_mac "$(grep -hv '^00:00:00:00:00:00$' /sys/class/net/*/address 2> /dev/null | head -n1)"
 put planted_machine_id "$(cat /etc/machine-id)"
 as_user plant.txt logger -p user.err "heal-test planted: ${test_user} kept /home/${test_user}/Private/notes.txt from ${planted_ip}"
-sleep 600 | /usr/bin/tur-diag heal handle > /dev/null 2>&1 &
+# SIGABRT, what a Rust program that aborts gets. Not SIGSEGV: Rust's own
+# handler for it (stack overflow detection) resets it and returns, so a
+# SIGSEGV sent with kill does not end the program (measured in heal run
+# 43480677457). The core limit is raised so that systemd-coredump keeps
+# the core as well as its record.
+sleep 600 | bash -c 'ulimit -c unlimited; exec /usr/bin/tur-diag heal handle' > /dev/null 2>&1 &
 crashed_pid=$!
-sleep 1
-kill -SEGV "${crashed_pid}"
+sleep 2
+kill -ABRT "${crashed_pid}"
 wait "${crashed_pid}" 2> /dev/null
 put crash_exit "$?"
 pkill -f 'sleep 600' 2> /dev/null

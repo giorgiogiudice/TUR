@@ -322,6 +322,27 @@ fn perform(
     }
 }
 
+/// How many systemd units are in the failed state, as `tur-diag status`
+/// counts them.
+fn count_failed_units(machine: &dyn Machine) -> Option<u64> {
+    let output = machine
+        .run(
+            "systemctl",
+            &[
+                "list-units",
+                "--state=failed",
+                "--all",
+                "--no-legend",
+                "--plain",
+                "--no-pager",
+            ],
+        )
+        .ok()
+        .filter(crate::host::CommandOutput::success)?;
+    let text = String::from_utf8_lossy(&output.stdout);
+    u64::try_from(text.lines().filter(|line| !line.trim().is_empty()).count()).ok()
+}
+
 /// Runs every check of the catalogue once. With `repair`, a fault's
 /// automatic remedy is applied, at most as often per boot as the catalogue
 /// allows. Faults that cleared are resolved; one that cleared, or came back,
@@ -338,6 +359,10 @@ pub fn scan(
     state.build_id.clone_from(&running.build_id);
     state.version.clone_from(&running.version);
     state.boot_id.clone_from(&running.boot_id);
+    state.failed_units = count_failed_units(machine);
+    state.failed_units_utc = state
+        .failed_units
+        .map(|_| format_utc(machine.now()));
     let mut lines = Vec::new();
     for fault in &catalogue.faults {
         let finding = run_check(machine, &fault.check);

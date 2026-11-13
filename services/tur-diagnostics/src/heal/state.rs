@@ -49,6 +49,14 @@ pub struct HealState {
     pub version: Option<String>,
     /// The boot it was last written in.
     pub boot_id: Option<String>,
+    /// How many systemd units were in the failed state at the last scan,
+    /// counted as root. `tur-diag status` shows it where `systemctl` cannot
+    /// be asked, as in P@x's sandbox (issue #57).
+    #[serde(default)]
+    pub failed_units: Option<u64>,
+    /// When that count was made, UTC.
+    #[serde(default)]
+    pub failed_units_utc: Option<String>,
     /// Every fault seen, newest last.
     pub faults: Vec<FaultRecord>,
     /// What happened, newest last.

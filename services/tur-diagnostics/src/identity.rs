@@ -25,6 +25,12 @@ const BOOT_ID_FILE: &str = "/proc/sys/kernel/random/boot_id";
 const HOSTNAME_FILES: [&str; 2] = ["/proc/sys/kernel/hostname", "/etc/hostname"];
 const MACHINE_ID_FILE: &str = "/etc/machine-id";
 const PASSWD_FILE: &str = "/etc/passwd";
+const PROCESS_STATUS_FILE: &str = "/proc/self/status";
+
+/// Where TUR's healing service writes its state, with the number of failed
+/// units it counted as root (docs/architecture/self-healing.md, section 6).
+/// It lies under `/var/log`, which P@x's read-only sandbox shows.
+pub const HEAL_STATE_FILE: &str = "/var/log/tur/heal/state.json";
 
 const SMALL_FILE_BYTES: usize = 64 * 1024;
 const PASSWD_BYTES: usize = 4 * 1024 * 1024;
@@ -108,8 +114,28 @@ pub struct Status {
     #[serde(flatten)]
     pub identity: Identity,
     /// How many systemd units are in the failed state, or `null` when
-    /// `systemctl` could not be asked.
+    /// neither `systemctl` nor the healing service's last count could be
+    /// read.
     pub failed_units: Option<u64>,
+    /// `null` when `failed_units` was counted now; otherwise when TUR's
+    /// healing service counted it (UTC). Inside P@x's sandbox `systemctl`
+    /// cannot reach the service manager, and the service's count is used.
+    pub failed_units_as_of: Option<String>,
+}
+
+/// Whether this process is known to run without administrator rights: its
+/// effective UID, from `/proc/self/status`, is not 0. When that cannot be
+/// read, it is not known.
+pub fn known_not_root(host: &dyn Host) -> bool {
+    host.read_file(PROCESS_STATUS_FILE, SMALL_FILE_BYTES)
+        .ok()
+        .and_then(|content| {
+            String::from_utf8_lossy(&content.data).lines().find_map(|line| {
+                let ids = line.strip_prefix("Uid:")?;
+                ids.split_whitespace().nth(1)?.parse::<u32>().ok()
+            })
+        })
+        .is_some_and(|uid| uid != 0)
 }
 
 fn read_trimmed(host: &dyn Host, path: &str) -> Option<String> {
@@ -119,7 +145,15 @@ fn read_trimmed(host: &dyn Host, path: &str) -> Option<String> {
 }
 
 /// The booted deployment's ostree checksum and image digest, from `bootc`.
+///
+/// `bootc` is started only as root. It needs root to answer, and its SELinux
+/// type has a domain of its own (`install_t`): started from a process that
+/// may gain no new privileges, as in P@x's sandbox, the change of domain is
+/// refused and recorded as a denial on every call (issue #57).
 fn deployment(host: &dyn Host) -> (Option<String>, Option<String>) {
+    if known_not_root(host) {
+        return (None, None);
+    }
     let Ok(output) = host.run("bootc", &["status", "--format=json"], PROBE_LIMITS) else {
         return (None, None);
     };
@@ -169,6 +203,15 @@ pub fn gather_identity(host: &dyn Host) -> Identity {
     }
 }
 
+/// The number of failed units TUR's healing service counted last, and when.
+fn failed_units_of_the_healing_service(host: &dyn Host) -> Option<(u64, String)> {
+    let content = host.read_file(HEAL_STATE_FILE, PASSWD_BYTES).ok()?;
+    let state: Value = serde_json::from_slice(&content.data).ok()?;
+    let count = state.get("failed_units")?.as_u64()?;
+    let when = state.get("failed_units_utc")?.as_str()?.to_owned();
+    Some((count, when))
+}
+
 /// Counts the systemd units in the failed state.
 fn failed_units(host: &dyn Host) -> Option<u64> {
     let args = [
@@ -190,9 +233,17 @@ fn failed_units(host: &dyn Host) -> Option<u64> {
 
 /// Gathers everything `tur-diag status` shows.
 pub fn gather_status(host: &dyn Host) -> Status {
+    let (failed_units, failed_units_as_of) = match failed_units(host) {
+        Some(count) => (Some(count), None),
+        None => match failed_units_of_the_healing_service(host) {
+            Some((count, when)) => (Some(count), Some(when)),
+            None => (None, None),
+        },
+    };
     Status {
         identity: gather_identity(host),
-        failed_units: failed_units(host),
+        failed_units,
+        failed_units_as_of,
     }
 }
 
@@ -210,9 +261,10 @@ pub fn render_status(status: &Status) -> String {
     };
     let kernel = identity.kernel_release.as_deref().unwrap_or(UNKNOWN);
     let architecture = &identity.architecture;
-    let failed = match status.failed_units {
-        Some(count) => count.to_string(),
-        None => "unknown (systemctl could not be asked)".to_owned(),
+    let failed = match (status.failed_units, &status.failed_units_as_of) {
+        (Some(count), None) => count.to_string(),
+        (Some(count), Some(when)) => format!("{count} (counted by TUR's healing service, {when})"),
+        (None, _) => "unknown (systemctl could not be asked)".to_owned(),
     };
     let rows = [
         ("TUR build", build),
@@ -443,6 +495,39 @@ mod tests {
         assert_eq!(gather_status(&host).failed_units, Some(0));
         let broken = FakeHost::new().with_failing_command("systemctl", 1, "no bus");
         assert_eq!(gather_status(&broken).failed_units, None);
+    }
+
+    #[test]
+    fn bootc_is_not_started_without_administrator_rights() {
+        // Issue #57: in P@x's sandbox, with no new privileges, starting
+        // bootc is refused by SELinux and recorded as a denial.
+        let ordinary = tur_host().with_file("/proc/self/status", "Name:\ttur-diag\nUid:\t1000\t1000\t1000\t1000\n");
+        assert!(known_not_root(&ordinary));
+        assert_eq!(gather_identity(&ordinary).tur.deployment_checksum, None);
+        let root = tur_host().with_file("/proc/self/status", "Uid:\t0\t0\t0\t0\n");
+        assert!(!known_not_root(&root));
+        assert_eq!(
+            gather_identity(&root).tur.deployment_checksum.as_deref(),
+            Some("feedc0de")
+        );
+        // Not known (no /proc here): bootc is asked, as before.
+        assert!(!known_not_root(&tur_host()));
+    }
+
+    #[test]
+    fn without_the_service_manager_the_healing_services_count_is_used() {
+        let state = r#"{"failed_units": 3, "failed_units_utc": "2026-11-13T10:00:00Z"}"#;
+        let sandboxed = FakeHost::new()
+            .with_failing_command("systemctl", 1, "Failed to connect to bus")
+            .with_file(HEAL_STATE_FILE, state);
+        let status = gather_status(&sandboxed);
+        assert_eq!(status.failed_units, Some(3));
+        assert_eq!(status.failed_units_as_of.as_deref(), Some("2026-11-13T10:00:00Z"));
+        assert!(render_status(&status).contains("counted by TUR's healing service"));
+        // Counted now when systemctl answers.
+        let live = FakeHost::new().with_command("systemctl", "").with_file(HEAL_STATE_FILE, state);
+        let status = gather_status(&live);
+        assert_eq!((status.failed_units, status.failed_units_as_of), (Some(0), None));
     }
 
     #[test]

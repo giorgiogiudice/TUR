@@ -33,6 +33,18 @@ tur-diag heal status|catalogue|explain|scan|apply|undo|notices|report ...   (sel
   number of failed systemd units. On a host that is not TUR it says so and still
   reports the rest. Values that cannot be read are shown as unknown, or `null` in
   JSON.
+  - `bootc` is started only as root (issue #57). It answers only to root,
+    and its SELinux domain (`install_t`) cannot be entered from a process
+    that may gain no new privileges, as in P@x's sandbox, where trying was
+    recorded as a denial on every call. Without administrator rights the
+    deployment fields are unknown, and in a bundle `system/deployment.json`
+    is listed as missing (`permission_denied`, "started only as root"). A
+    process whose UID cannot be read still tries.
+  - Where `systemctl` cannot reach the service manager (P@x's sandbox has
+    no `/run`), the failed units are the count TUR's healing service made
+    as root at its last scan, read from `/var/log/tur/heal/state.json`; the
+    JSON then gives its time in `failed_units_as_of` (`null` when counted
+    now) and the text says so ([self-healing.md](self-healing.md)).
 - `collect` writes a new file with mode 0600. It refuses to overwrite an existing
   file. `--since-boot` leaves out data from earlier boots (the previous boot's
   journal and the pstore listing).

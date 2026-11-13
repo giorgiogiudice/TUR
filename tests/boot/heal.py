@@ -189,13 +189,16 @@ def main() -> int:
           f"phase A: {len(sa)} facts, phase B: {len(sb)} facts; outcome {seen['outcome']}")
 
     # ---- the product as installed ------------------------------------------------------
-    check("P1", "the healing timer and the request socket are enabled and active; the session's notice watcher "
-          "is enabled for every user",
-          sa.get("timer_enabled") in ("enabled", "static") and sa.get("timer_active") == "active"
-          and sa.get("socket_enabled") in ("enabled", "static") and sa.get("socket_active") == "active"
-          and sa.get("notify_path_enabled") in ("enabled", "static"),
-          {key: sa.get(key) for key in ("timer_enabled", "timer_active", "socket_enabled", "socket_active",
-                                        "socket_path", "notify_path_enabled")})
+    # The image enables them by links under /usr/lib/systemd, which
+    # `systemctl is-enabled` reports as "disabled" (measured, heal run
+    # 43480677457): the links and the active state are what count.
+    check("P1", "the healing timer and the request socket are wanted by the image and active; the session's "
+          "notice watcher is wanted for every user",
+          sa.get("timer_wanted") == "yes" and sa.get("timer_active") == "active"
+          and sa.get("socket_wanted") == "yes" and sa.get("socket_active") == "active"
+          and sa.get("notify_path_wanted") == "yes",
+          {key: sa.get(key) for key in ("timer_wanted", "timer_enabled", "timer_active", "socket_wanted",
+                                        "socket_enabled", "socket_active", "socket_path", "notify_path_wanted")})
     baseline = document(a / "state-baseline.json")
     present = [item["code"] for item in (baseline or {}).get("faults", []) if item.get("state") != "resolved"]
     check("P2", "tur-heal.service ran through systemd and found none of the five faults before any was injected",
@@ -295,7 +298,7 @@ def main() -> int:
 
     # ---- 5. a crash: a report offered, sent only with consent, redacted --------------------------
     item = record(document(a / "state-crash.json"), CRASH)
-    check("C1", "tur-diag killed with SIGSEGV: the service found the crash, tried nothing, offered a report",
+    check("C1", "tur-diag killed with SIGABRT: the service found the crash, tried nothing, offered a report",
           "tur-diag" in text(a / "coredumps.txt") and item.get("state") == "report-offered"
           and item.get("subjects") == ["tur-diag"] and not item.get("applied"),
           f"record {item.get('state')}, subjects {item.get('subjects')}, evidence {item.get('evidence')}")
@@ -370,7 +373,7 @@ def main() -> int:
           f"missing {sorted(wanted - kinds)}; {len(notices_a)} notices")
     check("N2", "desktop delivery of notices (gdbus to the notification service)", False,
           "NOT RUN: no graphical session in this test", required=False)
-    check("Z1", "the timer was put back", sb.get("timer_unmasked") == "enabled", sb.get("timer_unmasked"),
+    check("Z1", "the timer was put back", sb.get("timer_restored") == "active", sb.get("timer_restored"),
           required=False)
 
     passed = all(c["passed"] for c in checks if c["required"])

@@ -547,7 +547,13 @@ fn a_crash_of_a_tur_program_has_no_remedy_and_ends_as_an_offered_report() {
     assert!(shown[0].body.starts_with("tur-diag crashed."), "{}", shown[0].body);
     assert_eq!(shown[0].actions, [format!("tur-diag heal report {CRASH}")]);
     // Nothing is ever sent from here: no command but the checks ran.
-    let checks = ["systemctl is-", "timedatectl show ", "df ", "coredumpctl list "];
+    let checks = [
+        "systemctl is-",
+        "systemctl list-units --state=failed ",
+        "timedatectl show ",
+        "df ",
+        "coredumpctl list ",
+    ];
     for line in machine.ran() {
         assert!(checks.iter().any(|check| line.starts_with(check)), "{line}");
     }
@@ -678,4 +684,29 @@ fn the_state_round_trips_and_the_status_lists_only_what_is_not_resolved() {
     assert_eq!(view.faults[0].remedies[0].id, "enable-network-time");
     // A check that cannot run changes nothing and is not a fault.
     assert!(state.active(SERVICE).is_none() && state.active(SPACE).is_none());
+    // systemctl could not count the failed units here: no count is kept.
+    assert_eq!(loaded.failed_units, None);
+}
+
+#[test]
+fn the_scan_keeps_the_count_of_failed_units_for_status_in_the_sandbox() {
+    let dir = TempDir::new("failed-units");
+    let paths = dir.paths();
+    let machine = base().with_command(
+        "systemctl list-units --state=failed --all --no-legend --plain --no-pager",
+        printed("foo.service loaded failed failed Foo\nbar.mount loaded failed failed Bar\n"),
+    );
+    let mut state = empty_state();
+    scan(&machine, &catalogue(), &paths, &mut state, &running("b1"), &Fixes::default(), false);
+    state.save(&paths.state).expect("saved");
+    // What tur-diag status reads where systemctl cannot be asked.
+    let host = crate::FakeHost::new()
+        .with_failing_command("systemctl", 1, "Failed to connect to bus")
+        .with_file(
+            crate::identity::HEAL_STATE_FILE,
+            &fs::read_to_string(&paths.state).expect("the state"),
+        );
+    let status = crate::gather_status(&host);
+    assert_eq!(status.failed_units, Some(2));
+    assert!(status.failed_units_as_of.is_some());
 }

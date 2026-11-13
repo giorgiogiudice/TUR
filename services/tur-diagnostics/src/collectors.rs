@@ -329,6 +329,12 @@ pub struct Collected {
     pub text: String,
 }
 
+/// Programs a collector starts only with administrator rights: `bootc`
+/// answers only to root, and its SELinux domain cannot be entered from a
+/// process that may gain no new privileges, such as P@x's sandbox, where
+/// trying is recorded as a denial (issue #57).
+pub const ROOT_ONLY_PROGRAMS: &[&str] = &["bootc"];
+
 /// Runs every collector. A collector that fails becomes an entry in the
 /// second list; it never stops the others.
 pub fn run_collectors(
@@ -371,6 +377,15 @@ pub fn run_collector(
         return absent(
             MissingReason::ForbiddenPath,
             format!("{path} is outside the locations a collector may read"),
+        );
+    }
+    if let Source::Command { program, .. } = collector.source
+        && ROOT_ONLY_PROGRAMS.contains(&program)
+        && crate::identity::known_not_root(host)
+    {
+        return absent(
+            MissingReason::PermissionDenied,
+            format!("{program} is started only as root (issue #57); run tur-diag as root for it"),
         );
     }
     if options.since_boot && collector.previous_boot {
