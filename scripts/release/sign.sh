@@ -89,7 +89,7 @@ for path in sys.argv[1:3]:
         critical = entry["critical"]
         assert critical["identity"]["docker-reference"] == sys.argv[3], critical
         assert critical["image"]["docker-manifest-digest"] == sys.argv[4], critical
-        assert entry["optional"].get("Bundle"), "no Rekor entry"
+        assert (entry.get("optional") or {}).get("Bundle"), "no Rekor entry"
 print("both signatures name", sys.argv[3], "and", sys.argv[4], "and have a Rekor entry")
 PY
 

@@ -7,11 +7,12 @@
 #
 #   scripts/release/publish.sh FROM_REPOSITORY DIGEST TO_REPOSITORY BUILD_ID CHANNEL
 #
-# Nothing is rebuilt or re-signed: the manifest, the layers and the signature
-# tags (sha256-<digest>.sig and .att) are copied byte for byte
-# (skopeo --preserve-digests refuses any copy that would change a digest),
-# and the digest under the build ID and under the channel is read back from
-# the destination and compared with DIGEST.
+# Nothing is rebuilt or re-signed: the manifest and the layers are copied
+# byte for byte (skopeo --preserve-digests refuses any copy that would change
+# a digest), the signature tags (sha256-<digest>.sig and .att) with
+# `cosign copy --only=sig,att` (cosign 3.1 marks the command deprecated); the
+# digest under the build ID, under the channel and of each signature tag is
+# read back from the destination and compared.
 #
 # The build ID tag is immutable: if it exists already, it must name DIGEST
 # (a re-run), or the script stops before writing anything. The channel tag
@@ -50,11 +51,19 @@ if [ -z "${existing}" ]; then
 else
     echo "${to}:${build_id} already names ${digest}"
 fi
+# The signature and attestation tags are copied with cosign, which copies its
+# own artifacts as they are, then read back and compared.
+if [ "${from}" != "${to}" ]; then
+    http=()
+    case "${from} ${to}" in *localhost:* | *127.0.0.1:*) http=(--allow-http-registry) ;; esac
+    cosign copy --only=sig,att --force "${http[@]}" "${from}@${digest}" "${to}"
+fi
 for suffix in sig att; do
     tag="sha256-${digest#sha256:}.${suffix}"
-    if digest_of "${from}:${tag}" > /dev/null; then
-        copy "${from}:${tag}" "${to}:${tag}"
-        echo "copied ${tag}"
+    if got="$(digest_of "${from}:${tag}")"; then
+        test "$(digest_of "${to}:${tag}" || true)" = "${got}" \
+            || { echo "${to}:${tag} is not ${from}:${tag}" >&2; exit 1; }
+        echo "${to}:${tag} -> ${got}"
     fi
 done
 copy "${to}@${digest}" "${to}:${channel}"
