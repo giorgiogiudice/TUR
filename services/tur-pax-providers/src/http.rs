@@ -170,6 +170,103 @@ impl Transport {
     }
 }
 
+/// The most bytes read from a JSON document a provider sends in answer to a
+/// GET, such as its list of models.
+const DOCUMENT_LIMIT: u64 = 8 * 1024 * 1024;
+
+/// One GET of a JSON document.
+pub(crate) struct Fetch<'a> {
+    /// The provider, recorded in errors.
+    pub(crate) provider: ProviderId,
+    /// The full URL.
+    pub(crate) url: &'a str,
+    /// How the key is sent.
+    pub(crate) auth: Auth,
+    /// Further fixed headers.
+    pub(crate) headers: &'a [(&'static str, &'static str)],
+    /// Maps an error status to a typed error.
+    pub(crate) classify: Classifier,
+}
+
+impl Transport {
+    /// Fetch a JSON document and return its text, retried like a
+    /// conversation request. The key, if one is given, goes in the header
+    /// the family documents and is removed from anything the provider sends
+    /// back before it is read.
+    pub(crate) fn get_text(
+        &self,
+        fetch: &Fetch<'_>,
+        key: Option<&ApiKey>,
+    ) -> Result<String, ProviderError> {
+        let mut attempt: u32 = 1;
+        loop {
+            let error = match self.get_attempt(fetch, key) {
+                Ok(text) => return Ok(text),
+                Err(error) => error,
+            };
+            let Some(delay) = retry_delay(&self.retry, &error, attempt) else {
+                return Err(error);
+            };
+            std::thread::sleep(delay);
+            attempt += 1;
+        }
+    }
+
+    fn get_attempt(&self, fetch: &Fetch<'_>, key: Option<&ApiKey>) -> Result<String, ProviderError> {
+        let secret = key.map_or("", ApiKey::expose);
+        let mut request = self
+            .agent
+            .get(fetch.url)
+            .header("accept", "application/json");
+        if key.is_some() {
+            let (name, value) = match fetch.auth {
+                Auth::Header(name) => (name, Zeroizing::new(secret.to_owned())),
+                Auth::Bearer => ("authorization", Zeroizing::new(format!("Bearer {secret}"))),
+            };
+            let mut credential = HeaderValue::from_str(&value).map_err(|_| {
+                ProviderError::new(ErrorKind::KeyUnavailable)
+                    .with_detail("the key cannot be sent as an HTTP header")
+                    .with_provider(fetch.provider)
+            })?;
+            credential.set_sensitive(true);
+            request = request.header(name, credential);
+        }
+        for (name, value) in fetch.headers {
+            request = request.header(*name, *value);
+        }
+        let response = request
+            .call()
+            .map_err(|error| transport_error(&error).with_provider(fetch.provider))?;
+        let status = response.status().as_u16();
+        let delay = retry_after(response.headers());
+        let limit = if (200..300).contains(&status) {
+            DOCUMENT_LIMIT
+        } else {
+            ERROR_BODY_LIMIT
+        };
+        let text = response
+            .into_body()
+            .into_with_config()
+            .limit(limit)
+            .lossy_utf8(true)
+            .read_to_string()
+            .map_err(|error| transport_error(&error).with_provider(fetch.provider))?;
+        let text = if secret.is_empty() {
+            text
+        } else {
+            text.replace(secret, REDACTED)
+        };
+        if (200..300).contains(&status) {
+            return Ok(text);
+        }
+        Err((fetch.classify)(status, &text)
+            .with_provider(fetch.provider)
+            .with_status(status)
+            .with_retry_after(delay)
+            .scrubbed(secret))
+    }
+}
+
 /// The delay before the next attempt, or `None` if there is to be none.
 fn retry_delay(policy: &RetryPolicy, error: &ProviderError, attempt: u32) -> Option<Duration> {
     if !error.is_retryable() || attempt >= policy.max_attempts {

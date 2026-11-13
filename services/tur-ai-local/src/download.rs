@@ -51,6 +51,9 @@ pub enum DownloadError {
     },
     /// The file could not be written, read or renamed.
     Storage(String),
+    /// The person asked for the download to stop. What was received is
+    /// kept under the temporary name, for the next attempt to go on from.
+    Cancelled,
 }
 
 impl DownloadError {
@@ -61,6 +64,7 @@ impl DownloadError {
             DownloadError::Size { .. } => AiLocalCode::SizeMismatch,
             DownloadError::Digest { .. } => AiLocalCode::DigestMismatch,
             DownloadError::Storage(_) => AiLocalCode::StorageFailed,
+            DownloadError::Cancelled => AiLocalCode::Cancelled,
         }
     }
 }
@@ -77,6 +81,7 @@ impl std::fmt::Display for DownloadError {
                 write!(f, "SHA-256 {found}; the catalogue gives {expected}")
             }
             DownloadError::Storage(detail) => write!(f, "storage: {detail}"),
+            DownloadError::Cancelled => f.write_str("stopped on request"),
         }
     }
 }
@@ -283,6 +288,240 @@ pub fn import(
     }
     let mut reader = File::open(source).map_err(|error| storage(source, &error))?;
     write_checked(&mut reader, file, destination, progress)
+}
+
+/// Which addresses a download may come from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Scheme {
+    /// `https` only, redirects included: what every command uses.
+    HttpsOnly,
+    /// Also plain `http` to a loopback address. For tests of this library
+    /// against a server on the test machine; no command offers it.
+    AllowLoopbackHttp,
+}
+
+impl Scheme {
+    /// Whether a download may start at `url`.
+    pub fn allows(self, url: &str) -> bool {
+        if url.starts_with("https://") {
+            return true;
+        }
+        if self == Scheme::HttpsOnly {
+            return false;
+        }
+        let Some(rest) = url.strip_prefix("http://") else {
+            return false;
+        };
+        let authority = rest.split('/').next().unwrap_or("");
+        let host = authority.rsplit_once(':').map_or(authority, |(host, _)| host);
+        host == "localhost"
+            || host
+                .trim_start_matches('[')
+                .trim_end_matches(']')
+                .parse::<std::net::IpAddr>()
+                .is_ok_and(|address| address.is_loopback())
+    }
+}
+
+/// The HTTP client for a resumable download.
+pub fn agent_for(scheme: Scheme) -> ureq::Agent {
+    ureq::Agent::config_builder()
+        .https_only(scheme == Scheme::HttpsOnly)
+        .http_status_as_error(false)
+        .max_redirects(10)
+        .user_agent(USER_AGENT)
+        .timeout_connect(Some(Duration::from_secs(30)))
+        .timeout_recv_response(Some(Duration::from_secs(60)))
+        .timeout_per_read(Some(Duration::from_secs(120)))
+        .build()
+        .into()
+}
+
+/// The digest of the first bytes of a file: what an earlier attempt
+/// received.
+fn hash_file(path: &Path, hasher: &mut Sha256) -> Result<u64, DownloadError> {
+    let mut file = File::open(path).map_err(|error| storage(path, &error))?;
+    let mut buffer = vec![0u8; 1 << 20];
+    let mut total = 0u64;
+    loop {
+        let read = match file.read(&mut buffer) {
+            Ok(0) => break,
+            Ok(read) => read,
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+            Err(error) => return Err(storage(path, &error)),
+        };
+        hasher.update(&buffer[..read]);
+        total += read as u64;
+    }
+    Ok(total)
+}
+
+/// Check the whole temporary file and give it its final name, or delete it.
+fn finish(
+    temporary: &Path,
+    destination: &Path,
+    hasher: Sha256,
+    expected: &ModelFile,
+) -> Result<(), DownloadError> {
+    let found = hex(&hasher.finalize());
+    if found != expected.sha256 {
+        let _ = fs::remove_file(temporary);
+        return Err(DownloadError::Digest {
+            expected: expected.sha256.clone(),
+            found,
+        });
+    }
+    fs::rename(temporary, destination).map_err(|error| {
+        let _ = fs::remove_file(temporary);
+        storage(destination, &error)
+    })
+}
+
+/// The bytes of the temporary file of `destination`, if one is there.
+pub fn partial_bytes(destination: &Path) -> u64 {
+    fs::metadata(part_path(destination)).map_or(0, |metadata| metadata.len())
+}
+
+/// Download `file` to `destination`, going on from what an earlier attempt
+/// left under the temporary name.
+///
+/// What is already there is hashed again and the rest is asked for with an
+/// HTTP range request; a server that answers with the whole file instead is
+/// read from the start. The size and the SHA-256 digest of the whole file
+/// are checked before it gets its final name, as for [`download`]. A file
+/// that turns out longer than the catalogue's, or of another digest, is
+/// deleted. A connection that breaks, and a stop the person asked for
+/// (`cancelled` is asked after every piece), keep what was received, for the
+/// next attempt. `progress` is called with the bytes of the file so far.
+///
+/// # Errors
+///
+/// [`DownloadError`]; `Cancelled` when `cancelled` said so.
+pub fn download_resumable(
+    agent: &ureq::Agent,
+    scheme: Scheme,
+    file: &ModelFile,
+    destination: &Path,
+    cancelled: &dyn Fn() -> bool,
+    progress: &mut dyn FnMut(u64),
+) -> Result<(), DownloadError> {
+    if !scheme.allows(&file.url) {
+        return Err(DownloadError::Network("the URL is not https".to_owned()));
+    }
+    let temporary = part_path(destination);
+    let mut have = partial_bytes(destination);
+    if have > file.size_bytes {
+        let _ = fs::remove_file(&temporary);
+        have = 0;
+    }
+    let mut hasher = Sha256::new();
+    if have > 0 {
+        have = hash_file(&temporary, &mut hasher)?;
+        progress(have);
+    }
+    if have == file.size_bytes {
+        return finish(&temporary, destination, hasher, file);
+    }
+    if cancelled() {
+        return Err(DownloadError::Cancelled);
+    }
+    let mut request = agent.get(file.url.as_str());
+    if have > 0 {
+        request = request.header("range", format!("bytes={have}-"));
+    }
+    let response = request
+        .call()
+        .map_err(|error| DownloadError::Network(error.to_string()))?;
+    let status = response.status().as_u16();
+    let header = |name: &str| {
+        response
+            .headers()
+            .get(name)
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_owned)
+    };
+    let resumed = match status {
+        206 if have > 0 => {
+            let expected_range = format!("bytes {have}-{}/{}", file.size_bytes - 1, file.size_bytes);
+            if header("content-range").as_deref().map(str::trim) != Some(expected_range.as_str()) {
+                // Not the part that was asked for: start again next time.
+                let _ = fs::remove_file(&temporary);
+                return Err(DownloadError::Network(
+                    "the server sent another part of the file than the one asked for".to_owned(),
+                ));
+            }
+            true
+        }
+        200 => false,
+        other => return Err(DownloadError::Status(other)),
+    };
+    if !resumed && have > 0 {
+        have = 0;
+        hasher = Sha256::new();
+    }
+    let remaining = file.size_bytes - have;
+    if let Some(announced) = header("content-length").and_then(|value| value.trim().parse::<u64>().ok())
+        && announced != remaining
+    {
+        let _ = fs::remove_file(&temporary);
+        return Err(DownloadError::Size {
+            expected: file.size_bytes,
+            found: have.saturating_add(announced),
+        });
+    }
+    let output = if resumed {
+        fs::OpenOptions::new().append(true).open(&temporary)
+    } else {
+        File::create(&temporary)
+    }
+    .map_err(|error| storage(&temporary, &error))?;
+    let mut writer = BufWriter::with_capacity(1 << 20, output);
+    let mut reader = response.into_body().into_reader();
+    let mut buffer = vec![0u8; 1 << 20];
+    let mut total = have;
+    let flush = |writer: BufWriter<File>| -> Result<(), DownloadError> {
+        let file = writer
+            .into_inner()
+            .map_err(|error| storage(&temporary, error.error()))?;
+        file.sync_all().map_err(|error| storage(&temporary, &error))
+    };
+    loop {
+        if cancelled() {
+            flush(writer)?;
+            return Err(DownloadError::Cancelled);
+        }
+        let read = match reader.read(&mut buffer) {
+            Ok(0) => break,
+            Ok(read) => read,
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+            Err(error) => {
+                flush(writer)?;
+                return Err(DownloadError::Network(error.to_string()));
+            }
+        };
+        total += read as u64;
+        if total > file.size_bytes {
+            drop(writer);
+            let _ = fs::remove_file(&temporary);
+            return Err(DownloadError::Size {
+                expected: file.size_bytes,
+                found: total,
+            });
+        }
+        hasher.update(&buffer[..read]);
+        writer
+            .write_all(&buffer[..read])
+            .map_err(|error| storage(&temporary, &error))?;
+        progress(total);
+    }
+    flush(writer)?;
+    if total < file.size_bytes {
+        return Err(DownloadError::Network(format!(
+            "the connection closed after {total} of {} bytes",
+            file.size_bytes
+        )));
+    }
+    finish(&temporary, destination, hasher, file)
 }
 
 #[cfg(test)]

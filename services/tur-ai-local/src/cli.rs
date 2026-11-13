@@ -21,6 +21,11 @@
 //! * `serve MODEL`: run the model with the engine on the loopback interface
 //!   until it is idle or stopped.
 //! * `stop`: stop the model being served.
+//! * `ensure MODEL`: everything a person's choice of a model needs, in one
+//!   step: the licence and the memory checked, the disk's free space
+//!   checked, the files downloaded (going on from a partial download) and
+//!   checked, and the engine started; its progress as JSON lines.
+//! * `cancel`: ask a running `ensure` to stop.
 //!
 //! Every command prints text, or JSON with `--json`
 //! (`schemas/ai-local-report.schema.json`). `serve --json` prints one JSON
@@ -43,6 +48,7 @@ use crate::SCHEMA_VERSION;
 use crate::catalogue::{Capability, Catalogue, INSTALLED_CATALOGUE, Model, Tested, Thinking};
 use crate::codes::{AiLocalCode, CodeEntry, registry};
 use crate::download::{self, DownloadError};
+use crate::ensure;
 use crate::engine::{self, DEFAULT_ENGINE, DEFAULT_PORT, Launch, Listen, Reasoning};
 use crate::fit::{self, DEFAULT_CONTEXT, Fit, Recommendation, Verdict};
 use crate::hardware::{self, Hardware, Source};
@@ -117,6 +123,11 @@ pub enum Command {
     Status(JsonArgs),
     /// Stop the model being served
     Stop(JsonArgs),
+    /// Make a model ready to use: download it if needed (going on from a
+    /// partial download), check it, and start it
+    Ensure(EnsureArgs),
+    /// Ask a running ensure to stop
+    Cancel(JsonArgs),
     /// List the TUR-AI-LOCAL error codes
     Codes(JsonArgs),
 }
@@ -262,6 +273,43 @@ pub struct ServeArgs {
     pub reasoning: ReasoningArg,
 }
 
+/// Arguments of `ensure`.
+#[derive(Debug, Args)]
+pub struct EnsureArgs {
+    /// The model's id
+    #[arg(value_name = "MODEL")]
+    pub model: String,
+    /// Print one JSON object per line instead of text
+    #[arg(long)]
+    pub json: bool,
+    /// Accept the use restrictions of the model's licence, which the
+    /// catalogue shows
+    #[arg(long)]
+    pub accept_licence: bool,
+    /// The context size, in tokens
+    #[arg(long, value_name = "TOKENS", default_value_t = DEFAULT_CONTEXT,
+          value_parser = clap::value_parser!(u32).range(512..=1_048_576))]
+    pub context: u32,
+    /// Download and check only; do not start the engine
+    #[arg(long)]
+    pub no_serve: bool,
+    /// The port to listen on
+    #[arg(long, value_name = "PORT", default_value_t = DEFAULT_PORT,
+          value_parser = clap::value_parser!(u16).range(1..))]
+    pub port: u16,
+    /// Stop after this many seconds without a request
+    #[arg(long, value_name = "SECONDS", default_value_t = DEFAULT_IDLE_STOP.as_secs(),
+          value_parser = clap::value_parser!(u64).range(5..))]
+    pub idle_stop: u64,
+    /// Give up if the model is not loaded after this many seconds
+    #[arg(long, value_name = "SECONDS", default_value_t = DEFAULT_START_TIMEOUT.as_secs(),
+          value_parser = clap::value_parser!(u64).range(5..))]
+    pub start_timeout: u64,
+    /// Whether the model may think before it answers
+    #[arg(long, value_enum, value_name = "WHEN", default_value = "off")]
+    pub reasoning: ReasoningArg,
+}
+
 /// Why a command failed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Failure {
@@ -347,6 +395,8 @@ where
         Command::Serve(args) => serve_command(places, args, stdout),
         Command::Status(args) => status_command(places, args, stdout),
         Command::Stop(args) => stop_command(places, args, stdout),
+        Command::Ensure(args) => ensure_command(places, args, stdout),
+        Command::Cancel(args) => cancel_command(places, args, stdout),
         Command::Codes(args) => codes_command(args, stdout),
     };
     match result {
@@ -630,6 +680,9 @@ pub struct ModelView {
     pub install_problem: Option<String>,
     /// Whether it fits; null when the memory could not be read.
     pub fit: Option<Fit>,
+    /// How it suits this computer: runs well, slow, does not fit; null when
+    /// the memory could not be read, and for an embeddings model.
+    pub tier: Option<fit::ModelTier>,
     /// What TUR measured.
     pub tested: Vec<Tested>,
 }
@@ -639,6 +692,7 @@ fn model_view(
     store: Option<&Store>,
     hardware: Option<&Hardware>,
     context: u32,
+    tiers: &[fit::ModelTier],
 ) -> ModelView {
     let (installed, install_problem) = match store {
         Some(store) => {
@@ -683,6 +737,7 @@ fn model_view(
         installed,
         install_problem,
         fit: hardware.map(|hardware| fit::judge(model, hardware, context)),
+        tier: tiers.iter().find(|tier| tier.model == model.id).cloned(),
         tested: model.tested.clone(),
     }
 }
@@ -720,10 +775,15 @@ fn models_command(places: &Places, args: &ModelsArgs, out: &mut dyn Write) -> Re
     };
     let hardware = hardware::read(&hardware_source(places)).ok();
     let context = args.context.context;
+    let build = fit::EngineBuild::from_backends(&engine::backends(&engine_program(places)));
+    let tiers = hardware
+        .as_ref()
+        .map(|hardware| fit::tiers(&catalogue, hardware, context, build))
+        .unwrap_or_default();
     let models: Vec<ModelView> = catalogue
         .models
         .iter()
-        .map(|model| model_view(model, store.as_ref(), hardware.as_ref(), context))
+        .map(|model| model_view(model, store.as_ref(), hardware.as_ref(), context, &tiers))
         .collect();
     let other_folders: Vec<String> = store
         .as_ref()
@@ -777,6 +837,9 @@ fn models_command(places: &Places, args: &ModelsArgs, out: &mut dyn Write) -> Re
         if let Some(fit) = &view.fit {
             text.push_str(&format!("  {}\n", fit.message));
         }
+        if let Some(tier) = &view.tier {
+            text.push_str(&format!("  {} {}\n", tier.message, tier.reasons.last().map_or("", String::as_str)));
+        }
     }
     for name in &other_folders {
         text.push_str(&format!(
@@ -803,8 +866,8 @@ fn recommend_command(
 ) -> Result<(), Failure> {
     let catalogue = load_catalogue(places)?;
     let hardware = read_hardware(places)?;
-    let engine_cpu = fit::EngineCpu::from_backends(&engine::backends(&engine_program(places)));
-    let recommendation = fit::recommend(&catalogue, &hardware, args.context, engine_cpu);
+    let build = fit::EngineBuild::from_backends(&engine::backends(&engine_program(places)));
+    let recommendation = fit::recommend(&catalogue, &hardware, args.context, build);
     if args.json {
         return write_json(
             out,
@@ -825,6 +888,13 @@ fn recommend_command(
     }
     if let Some(id) = &recommendation.embeddings_model {
         text.push_str(&format!("For search by meaning (embeddings): {id}.\n"));
+    }
+    text.push_str("\nEvery model, for this computer:\n");
+    for tier in &recommendation.tiers {
+        text.push_str(&format!("{} [{}] {}\n", tier.model, tier.tier, tier.message));
+        for reason in &tier.reasons {
+            text.push_str(&format!("  {reason}\n"));
+        }
     }
     write_text(out, &text)
 }
@@ -1525,6 +1595,291 @@ fn stop_command(places: &Places, args: &JsonArgs, out: &mut dyn Write) -> Result
         );
     }
     write_text(out, &format!("{code}\n{message}\n"))
+}
+
+// ------------------------------------------------------------------ ensure
+
+fn reasoning_text(reasoning: ReasoningArg) -> &'static str {
+    match reasoning {
+        ReasoningArg::On => "on",
+        ReasoningArg::Off => "off",
+        ReasoningArg::Auto => "auto",
+    }
+}
+
+/// The first code a failed `serve` printed on its standard error.
+fn code_in(text: &str) -> Option<AiLocalCode> {
+    text.lines()
+        .find_map(|line| AiLocalCode::from_text(line.split_whitespace().next().unwrap_or("")))
+}
+
+fn ensure_command(places: &Places, args: &EnsureArgs, out: &mut dyn Write) -> Result<(), Failure> {
+    let json = args.json;
+    let id = args.model.clone();
+    let mut write_error: Option<Failure> = None;
+    let mut emit = |event: ensure::EnsureEvent| {
+        let result = if json {
+            write_line_json(out, &event)
+        } else {
+            write_text(out, &format!("{}\n", event.message))
+        };
+        if let Err(failure) = result {
+            write_error = Some(failure);
+        }
+    };
+    let outcome = ensure_steps(places, args, &mut emit);
+    if let Err(Failure::Coded { code, detail }) = &outcome {
+        let event = if *code == AiLocalCode::Cancelled {
+            ensure::EnsureEvent::new("cancelled", &id, code.entry().user_message)
+        } else {
+            ensure::EnsureEvent::new(
+                "failed",
+                &id,
+                format!("{} {detail}", code.entry().user_message),
+            )
+        };
+        emit(event.with_code(*code));
+    }
+    drop(emit);
+    if let Some(failure) = write_error {
+        return Err(failure);
+    }
+    outcome
+}
+
+fn ensure_steps(
+    places: &Places,
+    args: &EnsureArgs,
+    emit: &mut dyn FnMut(ensure::EnsureEvent),
+) -> Result<(), Failure> {
+    let catalogue = load_catalogue(places)?;
+    let model = find_model(&catalogue, &args.model)?;
+    if args.context > model.context_length {
+        return Err(Failure::Usage(format!(
+            "{} supports a context of at most {} tokens",
+            model.id, model.context_length
+        )));
+    }
+    if model.licence.restricts_use() && !args.accept_licence {
+        return Err(Failure::coded(
+            AiLocalCode::LicenceNotAccepted,
+            format!(
+                "{} ({}): {}",
+                model.licence.id, model.licence.url, model.licence.restrictions
+            ),
+        ));
+    }
+    // A model that can never run here is not downloaded.
+    let hardware = read_hardware(places)?;
+    let fit = fit::judge(model, &hardware, args.context);
+    if fit.verdict == Verdict::TooLarge {
+        return Err(Failure::coded(AiLocalCode::TooLarge, fit.message));
+    }
+    let runtime = serve::runtime_dir(places.runtime_dir.as_deref());
+    if let Some(runtime) = &runtime {
+        store::create_private_dir(runtime).map_err(|error| storage_failure(runtime, &error))?;
+        // A stop asked of an earlier ensure is not this one's.
+        let _ = std::fs::remove_file(runtime.join(ensure::CANCEL_FILE));
+    }
+    let cancel_file = runtime
+        .as_ref()
+        .map(|runtime| runtime.join(ensure::CANCEL_FILE));
+    let cancelled = || cancel_file.as_ref().is_some_and(|file| file.exists());
+
+    let store = require_store(places)?;
+    let agent = download::agent_for(download::Scheme::HttpsOnly);
+    let options = ensure::FetchOptions {
+        agent: &agent,
+        scheme: download::Scheme::HttpsOnly,
+        free_space: &ensure::free_space,
+        cancelled: &cancelled,
+    };
+    ensure::fetch_model(&store, model, &options, &mut *emit)
+        .map_err(|error| Failure::coded(error.code, error.detail))?;
+    if args.no_serve {
+        return Ok(());
+    }
+
+    let runtime = runtime.ok_or_else(|| {
+        Failure::coded(
+            AiLocalCode::RuntimeDirMissing,
+            "XDG_RUNTIME_DIR is not set and no --runtime-dir was given",
+        )
+    })?;
+    // Already served as asked: nothing to start.
+    if let Some(state) = serve::read_state(&runtime)
+        && serve::supervisor_running(&state)
+    {
+        if state.model == model.id && state.context == args.context {
+            let mut ready = ensure::EnsureEvent::new(
+                "ready",
+                &model.id,
+                format!("{} is already running on this computer.", model.name),
+            )
+            .with_code(AiLocalCode::Serving);
+            ready.state = Some(state);
+            emit(ready);
+            return Ok(());
+        }
+        emit(ensure::EnsureEvent::new(
+            "stopping",
+            &model.id,
+            format!(
+                "Stopping {}, which is running now, to start {}.",
+                state.model, model.name
+            ),
+        ));
+        serve::request_stop(&runtime, Duration::from_secs(30))
+            .map_err(|error| Failure::coded(error.code, error.detail))?;
+    }
+    let fit = fit::judge(model, &read_hardware(places)?, args.context);
+    if fit.verdict != Verdict::Fits {
+        return Err(Failure::coded(fit.code, fit.message));
+    }
+    if cancelled() {
+        return Err(Failure::coded(
+            AiLocalCode::Cancelled,
+            "stopped before the engine was started",
+        ));
+    }
+    emit(ensure::EnsureEvent::new(
+        "starting",
+        &model.id,
+        format!("Starting {}.", model.name),
+    ));
+    let program = std::env::current_exe()
+        .map_err(|error| Failure::coded(AiLocalCode::EngineFailed, error.to_string()))?;
+    let mut command = std::process::Command::new(program);
+    command
+        .arg("serve")
+        .arg(&model.id)
+        .arg("--json")
+        .args(["--context", &args.context.to_string()])
+        .args(["--port", &args.port.to_string()])
+        .args(["--idle-stop", &args.idle_stop.to_string()])
+        .args(["--start-timeout", &args.start_timeout.to_string()])
+        .args(["--reasoning", reasoning_text(args.reasoning)])
+        .arg("--catalogue")
+        .arg(&catalogue.directory)
+        .arg("--models-dir")
+        .arg(&store.root)
+        .arg("--runtime-dir")
+        .arg(runtime.parent().unwrap_or(runtime.as_path()));
+    if let Some(engine) = &places.engine {
+        command.arg("--engine").arg(engine);
+    }
+    if let Some(root) = &places.root {
+        command.arg("--root").arg(root);
+    }
+    if let Some(vulkaninfo) = &places.vulkaninfo {
+        command.arg("--vulkaninfo").arg(vulkaninfo);
+    }
+    let output = runtime.join("serve.out");
+    let errors = runtime.join("serve.err");
+    let output_file =
+        std::fs::File::create(&output).map_err(|error| storage_failure(&output, &error))?;
+    let errors_file =
+        std::fs::File::create(&errors).map_err(|error| storage_failure(&errors, &error))?;
+    {
+        use std::os::unix::process::CommandExt;
+        // Its own process group: a signal to the caller's terminal, or the
+        // end of this command, does not reach the model it started.
+        command.process_group(0);
+    }
+    let mut child = command
+        .stdin(std::process::Stdio::null())
+        .stdout(output_file)
+        .stderr(errors_file)
+        .spawn()
+        .map_err(|error| Failure::coded(AiLocalCode::EngineFailed, error.to_string()))?;
+    let started = std::time::Instant::now();
+    let limit = Duration::from_secs(args.start_timeout.saturating_add(30));
+    loop {
+        if let Some(state) = serve::read_state(&runtime)
+            && state.supervisor_pid == child.id()
+            && state.model == model.id
+        {
+            let mut ready = ensure::EnsureEvent::new(
+                "ready",
+                &model.id,
+                format!(
+                    "{} is running on {}. It stops after {} seconds without a request.",
+                    model.name,
+                    state
+                        .base_url
+                        .clone()
+                        .or_else(|| state.socket.clone())
+                        .unwrap_or_default(),
+                    state.idle_stop_seconds
+                ),
+            )
+            .with_code(AiLocalCode::Serving);
+            ready.state = Some(state);
+            emit(ready);
+            return Ok(());
+        }
+        if let Ok(Some(status)) = child.try_wait() {
+            let text = std::fs::read_to_string(&errors).unwrap_or_default();
+            return Err(Failure::coded(
+                code_in(&text).unwrap_or(AiLocalCode::EngineFailed),
+                format!(
+                    "the model could not be started ({status}): {}",
+                    text.lines().take(12).collect::<Vec<_>>().join(" ")
+                ),
+            ));
+        }
+        if cancelled() {
+            let _ = serve::request_stop(&runtime, Duration::from_secs(30));
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(Failure::coded(
+                AiLocalCode::Cancelled,
+                "stopped while the engine was starting",
+            ));
+        }
+        if started.elapsed() > limit {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(Failure::coded(
+                AiLocalCode::EngineFailed,
+                format!("the model was not ready after {} seconds", limit.as_secs()),
+            ));
+        }
+        std::thread::sleep(Duration::from_millis(250));
+    }
+}
+
+#[derive(Serialize)]
+struct CancelReport {
+    schema_version: u32,
+    kind: &'static str,
+    code: AiLocalCode,
+    message: String,
+}
+
+fn cancel_command(places: &Places, args: &JsonArgs, out: &mut dyn Write) -> Result<(), Failure> {
+    let runtime = serve::runtime_dir(places.runtime_dir.as_deref()).ok_or_else(|| {
+        Failure::coded(
+            AiLocalCode::RuntimeDirMissing,
+            "XDG_RUNTIME_DIR is not set and no --runtime-dir was given",
+        )
+    })?;
+    store::create_private_dir(&runtime).map_err(|error| storage_failure(&runtime, &error))?;
+    let file = runtime.join(ensure::CANCEL_FILE);
+    std::fs::write(&file, b"cancel\n").map_err(|error| storage_failure(&file, &error))?;
+    let message = "A running ensure was asked to stop. What it downloaded is kept.".to_owned();
+    if args.json {
+        return write_json(
+            out,
+            &CancelReport {
+                schema_version: SCHEMA_VERSION,
+                kind: "cancel",
+                code: AiLocalCode::Cancelled,
+                message,
+            },
+        );
+    }
+    write_text(out, &format!("{}\n{message}\n", AiLocalCode::Cancelled))
 }
 
 // ------------------------------------------------------------------- codes

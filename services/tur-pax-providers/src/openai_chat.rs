@@ -73,7 +73,7 @@ pub const CAPABILITIES: Capabilities = Capabilities {
         provider_tool: None,
         implemented: false,
     },
-    model_discovery: false,
+    model_discovery: true,
     speech_services: false,
 };
 
@@ -162,6 +162,7 @@ fn request_body(request: &Request, send_back_reasoning: bool) -> Result<Value, P
         "stream": true,
         "stream_options": { "include_usage": true },
     });
+    crate::generation::apply_openai_chat(&request.generation, &mut body);
     if !request.tools.is_empty() {
         let tools: Vec<Value> = request
             .tools
@@ -753,6 +754,7 @@ mod tests {
             messages,
             tools: Vec::new(),
             max_output_tokens: 512,
+            generation: crate::generation::Generation::default(),
         }
     }
 

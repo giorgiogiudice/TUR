@@ -26,14 +26,16 @@ const INVALID_PLAIN_HTTP: &str = include_str!("data/invalid-plain-http.json");
 const FULL_CHAT: &str = include_str!("data/full-openai-chat.json");
 
 /// Every source file of the library and the binary.
-const SOURCES: [(&str, &str); 17] = [
+const SOURCES: [(&str, &str); 19] = [
     ("anthropic.rs", include_str!("../src/anthropic.rs")),
     ("cli.rs", include_str!("../src/cli.rs")),
     ("config.rs", include_str!("../src/config.rs")),
     ("error.rs", include_str!("../src/error.rs")),
+    ("generation.rs", include_str!("../src/generation.rs")),
     ("google.rs", include_str!("../src/google.rs")),
     ("http.rs", include_str!("../src/http.rs")),
     ("lib.rs", include_str!("../src/lib.rs")),
+    ("listing.rs", include_str!("../src/listing.rs")),
     ("main.rs", include_str!("../src/main.rs")),
     ("model.rs", include_str!("../src/model.rs")),
     ("openai.rs", include_str!("../src/openai.rs")),

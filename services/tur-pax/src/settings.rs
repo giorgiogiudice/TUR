@@ -699,6 +699,7 @@ impl ProviderEntry {
             retry: RetryPolicy::default(),
             prices,
             task_limit: None,
+            generation: tur_pax_providers::Generation::default(),
         }
     }
 
@@ -1158,6 +1159,7 @@ impl Settings {
             retry: RetryPolicy::default(),
             prices,
             task_limit: Some(task_limit),
+            generation: tur_pax_providers::Generation::default(),
         };
         config.validate().map_err(|error| Fault {
             code: error.kind().error_code(),

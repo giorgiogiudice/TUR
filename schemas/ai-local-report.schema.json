@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/giorgiogiudice/TUR/schemas/ai-local-report.schema.json",
   "title": "TUR local AI documents",
-  "description": "JSON documents emitted by tur-ai-local with --json: the hardware (hardware), the model catalogue with what is downloaded and what fits (models), the recommendation (recommend), the judgement on one model (check), the result of a download or import (pull), of a check of downloaded files (verify), of a removal (remove), the events of serving a model, one object per line (serve), the state of the service (status), the result of a stop (stop) and the TUR-AI-LOCAL-* registry (codes). A failure is not a document: it is printed on standard error with its code and the exit status is 1. null means absent or not known.",
+  "description": "JSON documents emitted by tur-ai-local with --json: the hardware (hardware), the model catalogue with what is downloaded and what fits (models), the recommendation (recommend), the judgement on one model (check), the result of a download or import (pull), of a check of downloaded files (verify), of a removal (remove), the events of serving a model, one object per line (serve), the state of the service (status), the result of a stop (stop), the events of making a model ready, one object per line (ensure), the request to stop an ensure (cancel) and the TUR-AI-LOCAL-* registry (codes). A failure is not a document: it is printed on standard error with its code and the exit status is 1. null means absent or not known.",
   "oneOf": [
     { "$ref": "#/$defs/hardware_report" },
     { "$ref": "#/$defs/models_report" },
@@ -14,6 +14,8 @@
     { "$ref": "#/$defs/serve_event" },
     { "$ref": "#/$defs/status_report" },
     { "$ref": "#/$defs/stop_report" },
+    { "$ref": "#/$defs/ensure_event" },
+    { "$ref": "#/$defs/cancel_report" },
     { "$ref": "#/$defs/code_report" }
   ],
   "$defs": {
@@ -185,7 +187,7 @@
       "required": [
         "id", "name", "publisher", "repository", "revision", "quantisation", "parameters",
         "capabilities", "thinking", "context_length", "download_bytes", "memory_bytes", "files",
-        "languages", "languages_note", "good_for", "licence", "installed", "install_problem", "fit", "tested"
+        "languages", "languages_note", "good_for", "licence", "installed", "install_problem", "fit", "tier", "tested"
       ],
       "properties": {
         "id": { "type": "string" },
@@ -212,26 +214,45 @@
         },
         "install_problem": { "$ref": "#/$defs/nullable_string" },
         "fit": { "description": "null when the memory could not be read.", "oneOf": [{ "$ref": "#/$defs/fit" }, { "type": "null" }] },
+        "tier": { "description": "How the model suits this computer; null when the memory could not be read, and for an embeddings model.", "oneOf": [{ "$ref": "#/$defs/model_tier" }, { "type": "null" }] },
         "tested": { "type": "array", "items": { "$ref": "#/$defs/tested" } }
       }
     },
     "recommendation": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["model", "code", "message", "reasons", "cpu_budget_bytes", "engine_cpu", "vision_model", "embeddings_model", "fits"],
+      "required": ["model", "code", "message", "reasons", "cpu_budget_bytes", "engine_cpu", "engine_vulkan", "vision_model", "embeddings_model", "fits", "tiers"],
       "properties": {
         "model": { "description": "The model recommended for conversation with P@x (chat and tools); null when none fits.", "$ref": "#/$defs/nullable_string" },
         "code": { "$ref": "#/$defs/code" },
         "message": { "type": "string" },
         "reasons": { "$ref": "#/$defs/string_list" },
-        "cpu_budget_bytes": { "description": "The largest model file expected to answer at a usable speed on this processor.", "$ref": "#/$defs/bytes" },
+        "cpu_budget_bytes": { "description": "The largest model file expected to answer at a usable speed on this processor, by the first slice's rule of thumb. Reported; the choice follows tiers.", "$ref": "#/$defs/bytes" },
         "engine_cpu": {
           "description": "The engine's processor build, from its libraries: variants (chosen at run time, fast kernels used), single (one library; Fedora 45's build has no AVX2 kernels and counts as slow), unknown (engine not found).",
           "enum": ["variants", "single", "unknown"]
         },
+        "engine_vulkan": { "description": "The engine has a Vulkan backend, so a graphics processor can be used.", "type": "boolean" },
         "vision_model": { "$ref": "#/$defs/nullable_string" },
         "embeddings_model": { "$ref": "#/$defs/nullable_string" },
-        "fits": { "type": "array", "items": { "$ref": "#/$defs/fit" } }
+        "fits": { "type": "array", "items": { "$ref": "#/$defs/fit" } },
+        "tiers": { "description": "How every model that converses suits this computer.", "type": "array", "items": { "$ref": "#/$defs/model_tier" } }
+      }
+    },
+    "model_tier": {
+      "description": "How one model suits this computer: runs-well (fits in the memory and answers at 8 tokens a second or faster), slow (fits, answers more slowly), does-not-fit (needs more memory than the computer has). The speed is measured (a catalogue measurement for the same kind of engine build, scaled to this processor) or estimated (from the bytes read for each token and the device).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model", "tier", "device", "tokens_per_second", "basis", "fits_now", "message", "reasons"],
+      "properties": {
+        "model": { "type": "string" },
+        "tier": { "enum": ["runs-well", "slow", "does-not-fit"] },
+        "device": { "type": ["string", "null"], "enum": ["processor", "graphics-card", "integrated-graphics", null] },
+        "tokens_per_second": { "type": ["number", "null"] },
+        "basis": { "type": ["string", "null"], "enum": ["measured", "estimated", null] },
+        "fits_now": { "description": "It fits in the memory free now, not only in the total.", "type": "boolean" },
+        "message": { "type": "string" },
+        "reasons": { "$ref": "#/$defs/string_list" }
       }
     },
     "file_result": {
@@ -427,6 +448,37 @@
         "code": { "$ref": "#/$defs/code" },
         "message": { "type": "string" },
         "model": { "$ref": "#/$defs/nullable_string" }
+      }
+    },
+    "ensure_event": {
+      "description": "One line of ensure --json. plan: what is downloaded and the free disk space, before anything is; progress: bytes so far; verified: one file has the catalogue's size and digest; installed or already-present: the model is ready to serve; stopping: another model is stopped first; starting; ready: the engine answers, with its state; failed or cancelled: the last line, with the code that is also printed on standard error.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "kind", "event", "model", "code", "message", "file", "bytes_done", "bytes_total", "bytes_to_download", "free_bytes", "state"],
+      "properties": {
+        "schema_version": { "$ref": "#/$defs/schema_version" },
+        "kind": { "const": "ensure-event" },
+        "event": { "enum": ["plan", "progress", "verified", "installed", "already-present", "stopping", "starting", "ready", "failed", "cancelled"] },
+        "model": { "type": "string" },
+        "code": { "type": ["string", "null"], "pattern": "^TUR-AI-LOCAL-[0-9]{3}$" },
+        "message": { "type": "string" },
+        "file": { "$ref": "#/$defs/nullable_string" },
+        "bytes_done": { "$ref": "#/$defs/nullable_bytes" },
+        "bytes_total": { "$ref": "#/$defs/nullable_bytes" },
+        "bytes_to_download": { "$ref": "#/$defs/nullable_bytes" },
+        "free_bytes": { "description": "The free space of the disk that holds the models folder; null when it could not be read.", "$ref": "#/$defs/nullable_bytes" },
+        "state": { "oneOf": [{ "$ref": "#/$defs/state" }, { "type": "null" }] }
+      }
+    },
+    "cancel_report": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "kind", "code", "message"],
+      "properties": {
+        "schema_version": { "$ref": "#/$defs/schema_version" },
+        "kind": { "const": "cancel" },
+        "code": { "$ref": "#/$defs/code" },
+        "message": { "type": "string" }
       }
     },
     "code_report": {
