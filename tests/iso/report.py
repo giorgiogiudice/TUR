@@ -710,21 +710,29 @@ def check_live(name: str, label: str, out: pathlib.Path, checks: Checks, windows
 
 
 def check_casefold(out: pathlib.Path, checks: Checks) -> dict:
-    """Informational: the installed disk given ext4's casefold feature, started."""
+    """Informational: the installed disk given ext4's casefold feature, started.
+
+    What GRUB says on the serial port decides what happened: the journal read
+    from the disk afterwards may hold only the earlier start of the same disk."""
     facts = load(out / "casefold" / "casefold.json")
     start = load(out / "casefold" / "first-start" / "first-start.json")
+    serial_path = out / "casefold" / "first-start" / "serial.log"
+    serial = serial_path.read_text(errors="replace") if serial_path.exists() else ""
+    grub_error = re.search(r"error: [^\n]*grub_search_fs_uuid[^\n]*\n?[^\n]*", serial)
+    grub_prompt = "grub>" in serial
     checks.add(
         "casefold.experiment",
         "Informational (issue 81): the installed root given ext4's casefold feature afterwards (tune2fs -O "
-        "casefold -E encoding=utf8, unmounted), then started: whether a rendered screen appears",
+        "casefold -E encoding=utf8, unmounted), then started: what happened (recorded; GRUB reads /boot from "
+        "this filesystem)",
         (facts.get("casefold") is True and start is not None) if facts else None,
-        f"tune2fs: {(facts or {}).get('tune2fs')}; e2fsck after: status {((facts or {}).get('e2fsck_after') or {}).get('status')}; "
-        f"start: outcome {(start or {}).get('outcome')}, rendered after {(start or {}).get('rendered_first_seen_seconds')} s",
+        f"tune2fs: {(facts or {}).get('tune2fs')}; features after: casefold {(facts or {}).get('casefold')}; "
+        f"start: outcome {(start or {}).get('outcome')}; GRUB on the serial port: "
+        f"{grub_error.group(0).strip() if grub_error else 'no error'}; GRUB prompt: {grub_prompt}",
         False,
     )
-    first = check_first_start("casefold", "Informational (issue 81): the installed disk with casefold on its root, "
-                              "started", out, checks, required=False)
-    return {"casefold": facts, "start_outcome": (start or {}).get("outcome"), "first_start": first}
+    return {"casefold": facts, "start_outcome": (start or {}).get("outcome"),
+            "grub_error": grub_error.group(0).strip() if grub_error else None, "grub_prompt": grub_prompt}
 
 
 def main() -> int:
