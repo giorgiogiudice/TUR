@@ -174,6 +174,11 @@ pub struct TaskLimits {
     pub max_seconds: u64,
     /// The most tool calls of one response that are looked at.
     pub max_calls_per_response: usize,
+    /// The most bytes of one tool's result the model is sent, for a model
+    /// with a small context; `None` sends what the tool's own limit let
+    /// through (an adapter's `max_output_bytes`, up to 256 KiB). See
+    /// [`TaskLimits::with_context`].
+    pub tool_result_bytes: Option<usize>,
 }
 
 impl Default for TaskLimits {
@@ -182,6 +187,37 @@ impl Default for TaskLimits {
             max_steps: 12,
             max_seconds: 300,
             max_calls_per_response: 8,
+            tool_result_bytes: None,
+        }
+    }
+}
+
+/// The least a tool's result is cut to, whatever the context.
+pub const MIN_TOOL_RESULT_BYTES: usize = 2048;
+
+/// The most bytes of one tool's result a model whose context holds
+/// `context_tokens` tokens is sent: an eighth of the context, counted at
+/// four bytes a token (JSON text runs at three to four), and never less than
+/// [`MIN_TOOL_RESULT_BYTES`]. A local model with 8 192 tokens gets 4 096
+/// bytes; a model with 200 000 tokens 100 000.
+pub fn tool_result_budget(context_tokens: u64) -> usize {
+    usize::try_from(context_tokens.saturating_mul(4) / 8)
+        .unwrap_or(usize::MAX)
+        .max(MIN_TOOL_RESULT_BYTES)
+}
+
+impl TaskLimits {
+    /// These limits for a model whose context holds `context_tokens` tokens,
+    /// as its entry in the model list declares or the person chose: one
+    /// tool's result is cut to [`tool_result_budget`]. A tool may print up
+    /// to 256 KiB, which would not fit a local model's 8 192 tokens at all.
+    /// `None` (nothing declared) leaves the results as the tools' limits
+    /// let them through.
+    #[must_use]
+    pub fn with_context(self, context_tokens: Option<u64>) -> Self {
+        TaskLimits {
+            tool_result_bytes: context_tokens.map(tool_result_budget),
+            ..self
         }
     }
 }
@@ -909,6 +945,53 @@ impl Performed {
     /// The text of the tool result: the output inside a frame that says what
     /// it is.
     fn text(&self) -> String {
+        json!({ "tur_pax_tool_result": self.body() }).to_string()
+    }
+
+    /// The text of the tool result in at most `budget` bytes, for a model
+    /// with a small context ([`TaskLimits::tool_result_bytes`]). The frame is
+    /// kept; the program's output, as the JSON text it is, and its error
+    /// output are cut at a character and sent as strings, and the result
+    /// says it was cut and why. `None` when the whole result fits.
+    fn text_within(&self, budget: usize) -> Option<String> {
+        let whole = self.text();
+        if whole.len() <= budget {
+            return None;
+        }
+        let output = match &self.output {
+            Value::String(text) => text.clone(),
+            Value::Null => String::new(),
+            other => other.to_string(),
+        };
+        let mut body = self.body();
+        body.insert("truncated".to_owned(), json!(true));
+        body.insert(
+            "cut".to_owned(),
+            json!(format!(
+                "The result was cut to {budget} bytes to fit the model's context: the output below \
+                 is the beginning of the program's output, as text."
+            )),
+        );
+        if !self.stderr.is_empty() {
+            let keep = char_floor(&self.stderr, budget / 8);
+            body.insert("stderr".to_owned(), json!(&self.stderr[..keep]));
+        }
+        let mut keep = char_floor(&output, budget);
+        loop {
+            body.insert("output".to_owned(), json!(&output[..keep]));
+            let text = json!({ "tur_pax_tool_result": &body }).to_string();
+            if text.len() <= budget || keep == 0 {
+                return Some(text);
+            }
+            // Escapes make the text longer than what was kept: take off
+            // what is over, at least one byte, and try again.
+            let over = (text.len() - budget).max(1);
+            keep = char_floor(&output, keep.saturating_sub(over));
+        }
+    }
+
+    /// The frame of the tool result.
+    fn body(&self) -> Map<String, Value> {
         let mut body = Map::new();
         body.insert("notice".to_owned(), json!(UNTRUSTED_NOTICE));
         body.insert("status".to_owned(), json!(self.state));
@@ -922,8 +1005,17 @@ impl Performed {
             body.insert("stderr".to_owned(), json!(self.stderr));
         }
         body.insert("output".to_owned(), self.output.clone());
-        json!({ "tur_pax_tool_result": body }).to_string()
+        body
     }
+}
+
+/// The largest index at most `index` that is a character boundary of `text`.
+fn char_floor(text: &str, index: usize) -> usize {
+    let mut index = index.min(text.len());
+    while !text.is_char_boundary(index) {
+        index -= 1;
+    }
+    index
 }
 
 /// The task loop and everything it works with.
@@ -1519,7 +1611,19 @@ impl Orchestrator<'_> {
                 report.output_bytes = performed.bytes;
                 report.truncated = performed.truncated;
                 report.withheld = performed.withheld.len();
-                let text = performed.text();
+                // A model with a small context is sent a result cut to fit
+                // it, and the report says it was cut.
+                let text = match self
+                    .limits
+                    .tool_result_bytes
+                    .and_then(|budget| performed.text_within(budget))
+                {
+                    Some(cut) => {
+                        report.truncated = true;
+                        cut
+                    }
+                    None => performed.text(),
+                };
                 if performed.ok {
                     ToolResult::text(call.id.clone(), call.name.clone(), text)
                 } else {
@@ -2029,5 +2133,60 @@ mod tests {
             Performed::not_started("no sandbox").code(),
             Some(TaskCode::SandboxUnavailable)
         );
+    }
+
+    #[test]
+    fn a_result_is_cut_to_fit_a_small_context() {
+        // The budget scales with the context and has a floor.
+        assert_eq!(tool_result_budget(8192), 4096);
+        assert_eq!(tool_result_budget(200_000), 100_000);
+        assert_eq!(tool_result_budget(1000), MIN_TOOL_RESULT_BYTES);
+        let limits = TaskLimits::default();
+        assert_eq!(limits.tool_result_bytes, None);
+        assert_eq!(
+            limits.with_context(Some(8192)).tool_result_bytes,
+            Some(4096)
+        );
+        assert_eq!(limits.with_context(None), limits);
+
+        // A large structured output, with characters of more than one byte
+        // and characters JSON escapes.
+        let devices: Vec<Value> = (0..400)
+            .map(|n| json!({ "id": format!("pci-{n:04}"), "name": "Contrôleur \"réseau\" ✓", "notes": "a\tb\nc" }))
+            .collect();
+        let performed = Performed {
+            state: "ok",
+            ok: true,
+            exit: Some(0),
+            output: json!({ "devices": devices }),
+            stderr: "warning: ".repeat(2000),
+            detail: None,
+            bytes: 60_000,
+            truncated: false,
+            withheld: Vec::new(),
+            code: None,
+        };
+        assert!(performed.text().len() > 4096);
+        let cut = performed.text_within(4096).expect("cut");
+        assert!(cut.len() <= 4096, "{} bytes", cut.len());
+        let value: Value = serde_json::from_str(&cut).expect("still JSON");
+        let frame = &value["tur_pax_tool_result"];
+        assert_eq!(frame["notice"], UNTRUSTED_NOTICE);
+        assert_eq!(frame["status"], "ok");
+        assert_eq!(frame["truncated"], true);
+        assert!(frame["cut"].as_str().expect("why").contains("4096 bytes"));
+        let output = frame["output"].as_str().expect("the output as text");
+        assert!(output.starts_with("{\"devices\":[{"), "{output}");
+        assert!(output.len() > 1000, "most of the room goes to the output");
+        assert!(frame["stderr"].as_str().expect("stderr").len() <= 4096 / 8);
+
+        // A result that fits is not touched.
+        let small = Performed {
+            output: json!({ "devices": [] }),
+            stderr: String::new(),
+            bytes: 14,
+            ..performed
+        };
+        assert_eq!(small.text_within(4096), None);
     }
 }
