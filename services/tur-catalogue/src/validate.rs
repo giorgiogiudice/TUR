@@ -26,7 +26,7 @@ use crate::codes::{Code, Problem};
 use crate::date::{Date, MIN_YEAR};
 use crate::model::{
     AndroidStore, Edition, EditionKind, Entry, EntryKind, Obtain, Rating, Record, Reference,
-    Reporter, SCHEMA_VERSION,
+    Reporter, Route, SCHEMA_VERSION,
 };
 use crate::search::normalise;
 use crate::url::{check_https_url, is_direct_download};
@@ -600,6 +600,46 @@ fn check_android(findings: &mut Findings, label: &str, edition: &Edition, class:
     }
 }
 
+/// The most remedies a `tur-autopilot` record may name.
+const MAX_REMEDIES: usize = 16;
+
+/// Whether `text` names a remedy of `tur-runtime`'s catalogue: lower-case
+/// words joined by hyphens, optionally followed by `:` and a DLL's name.
+fn is_remedy_label(text: &str) -> bool {
+    let (id, parameter) = match text.split_once(':') {
+        Some((id, parameter)) => (id, Some(parameter)),
+        None => (text, None),
+    };
+    let id_ok = !id.is_empty()
+        && id.len() <= 64
+        && id
+            .split('-')
+            .all(|word| !word.is_empty() && word.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit()));
+    let parameter_ok = parameter.is_none_or(|parameter| {
+        !parameter.is_empty()
+            && parameter.len() <= 64
+            && parameter
+                .bytes()
+                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || matches!(b, b'_' | b'.' | b'-'))
+    });
+    id_ok && parameter_ok
+}
+
+/// Whether `text` is a runtime version token such as `wine-9.0` or
+/// `GE-Proton10-20`.
+fn is_version_token(text: &str) -> bool {
+    !text.is_empty()
+        && text.len() <= 64
+        && text
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-' | b'+' | b'~'))
+}
+
+/// Whether `text` is a SHA-256 digest in lower-case hexadecimal.
+fn is_sha256(text: &str) -> bool {
+    text.len() == 64 && text.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+}
+
 /// Checks one compatibility record, including the honesty rule.
 fn check_record(
     findings: &mut Findings,
@@ -608,6 +648,15 @@ fn check_record(
     record: &Record,
     today: Date,
 ) {
+    if record.reported_by != Reporter::TurAutopilot
+        && (!record.remedies.is_empty()
+            || record.runtime_version.is_some()
+            || record.evidence_sha256.is_some())
+    {
+        findings.invalid(format!(
+            "{what}: remedies, runtime_version and evidence_sha256 belong to tur-autopilot records"
+        ));
+    }
     if !edition.routes().contains(&record.route) {
         let possible: Vec<&str> = edition
             .routes()
@@ -704,6 +753,64 @@ fn check_record(
                         "{what}: TUR is not an external source; a TUR test is reported_by = \"tur-test\" with a test report"
                     ),
                 );
+            }
+        }
+        Reporter::TurAutopilot => {
+            if !matches!(record.route, Route::Wine | Route::Proton) {
+                findings.invalid(format!(
+                    "{what}: a tur-autopilot record is about the wine or proton route"
+                ));
+            }
+            if record.rating != Rating::Unknown {
+                findings.add(
+                    Code::UnsourcedRating,
+                    format!(
+                        "{what}: a tur-autopilot record states settings, not a rating; its rating is unknown"
+                    ),
+                );
+            }
+            if record.remedies.is_empty() || record.remedies.len() > MAX_REMEDIES {
+                findings.invalid(format!(
+                    "{what}: a tur-autopilot record names 1 to {MAX_REMEDIES} remedies"
+                ));
+            }
+            let mut seen = Vec::new();
+            for remedy in &record.remedies {
+                if !is_remedy_label(remedy) || seen.contains(&remedy) {
+                    findings.invalid(format!(
+                        "{what}: remedy \"{}\" is not a remedy name such as dll-builtin:d3dx9_43, or is named twice",
+                        printable(remedy)
+                    ));
+                }
+                seen.push(remedy);
+            }
+            match &record.runtime_version {
+                Some(version) if is_version_token(version) => {}
+                _ => findings.invalid(format!(
+                    "{what}: a tur-autopilot record states runtime_version, such as wine-9.0"
+                )),
+            }
+            match &record.evidence_sha256 {
+                Some(digest) if is_sha256(digest) => {}
+                _ => findings.invalid(format!(
+                    "{what}: a tur-autopilot record states evidence_sha256, 64 lower-case hexadecimal digits"
+                )),
+            }
+            if let Some(path) = &record.test_report
+                && !is_report_path(path)
+            {
+                findings.add(
+                    Code::UnsourcedRating,
+                    format!(
+                        "{what}: test_report \"{}\" is not a report path under docs/reports/ or tests/",
+                        printable(path)
+                    ),
+                );
+            }
+            if has_source {
+                findings.invalid(format!(
+                    "{what}: a tur-autopilot record carries no external source fields"
+                ));
             }
         }
         Reporter::TurTest => {
@@ -992,6 +1099,9 @@ mod tests {
             version_tested: None,
             date: "2026-11-12".to_owned(),
             notes: None,
+            remedies: Vec::new(),
+            runtime_version: None,
+            evidence_sha256: None,
         }
     }
 
@@ -1007,6 +1117,9 @@ mod tests {
             version_tested: None,
             date: "2026-11-12".to_owned(),
             notes: None,
+            remedies: Vec::new(),
+            runtime_version: None,
+            evidence_sha256: None,
         }
     }
 
@@ -1022,6 +1135,9 @@ mod tests {
             version_tested: Some("1.2.3".to_owned()),
             date: "2026-11-12".to_owned(),
             notes: None,
+            remedies: Vec::new(),
+            runtime_version: None,
+            evidence_sha256: None,
         }
     }
 
@@ -1044,6 +1160,67 @@ mod tests {
         let mut edition = windows();
         edition.records.push(record);
         entry(vec![edition])
+    }
+
+    fn autopilot(route: Route) -> Record {
+        Record {
+            route,
+            rating: Rating::Unknown,
+            reported_by: Reporter::TurAutopilot,
+            source_name: None,
+            source_url: None,
+            source_rating: None,
+            test_report: None,
+            version_tested: Some("1.0".to_owned()),
+            date: "2026-11-12".to_owned(),
+            notes: Some("Measured once, on one machine.".to_owned()),
+            remedies: vec![
+                "dll-builtin:d3dx9_43".to_owned(),
+                "windows-version-win11".to_owned(),
+            ],
+            runtime_version: Some("wine-9.0".to_owned()),
+            evidence_sha256: Some("ab".repeat(32)),
+        }
+    }
+
+    #[test]
+    fn an_autopilot_record_states_settings_and_never_a_rating() {
+        assert!(codes(&with_record(autopilot(Route::Wine))).is_empty());
+        let mut reported = autopilot(Route::Wine);
+        reported.test_report = Some("docs/reports/autopilot-1.md".to_owned());
+        assert!(codes(&with_record(reported)).is_empty());
+
+        let mut rated = autopilot(Route::Wine);
+        rated.rating = Rating::Good;
+        assert!(codes(&with_record(rated)).contains(&Code::UnsourcedRating));
+        let mut bare = autopilot(Route::Wine);
+        bare.remedies.clear();
+        assert!(messages(&with_record(bare)).contains("remedies"));
+        let mut odd = autopilot(Route::Wine);
+        odd.remedies = vec!["Run winetricks".to_owned()];
+        assert!(messages(&with_record(odd)).contains("not a remedy name"));
+        let mut twice = autopilot(Route::Wine);
+        twice.remedies = vec!["dpi-120".to_owned(), "dpi-120".to_owned()];
+        assert!(messages(&with_record(twice)).contains("named twice"));
+        let mut unmeasured = autopilot(Route::Wine);
+        unmeasured.runtime_version = None;
+        assert!(messages(&with_record(unmeasured)).contains("runtime_version"));
+        let mut undigested = autopilot(Route::Wine);
+        undigested.evidence_sha256 = Some("XYZ".to_owned());
+        assert!(messages(&with_record(undigested)).contains("evidence_sha256"));
+        let mut sourced = autopilot(Route::Wine);
+        sourced.source_name = Some("ProtonDB".to_owned());
+        assert!(messages(&with_record(sourced)).contains("external source"));
+        let mut guest = autopilot(Route::WindowsGuest);
+        guest.route = Route::WindowsGuest;
+        assert!(messages(&with_record(guest)).contains("wine or proton"));
+        // The fields belong to autopilot records only.
+        let mut external = external(Route::Wine, Rating::Usable);
+        external.remedies = vec!["dpi-120".to_owned()];
+        assert!(messages(&with_record(external)).contains("belong to tur-autopilot"));
+        assert!(is_remedy_label("dll-builtin:d3dx9_43"));
+        assert!(!is_remedy_label("dll-builtin:"));
+        assert!(!is_remedy_label("Dpi"));
     }
 
     #[test]

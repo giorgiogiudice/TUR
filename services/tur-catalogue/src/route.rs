@@ -464,6 +464,48 @@ pub struct RouteOption {
     /// `reason`, sentence by sentence, as codes with their parameters. The
     /// same parts always give the same `reason`.
     pub reason_parts: Vec<ReasonPart>,
+    /// The settings TUR's compatibility autopilot found this route needs,
+    /// from the most recent `tur-autopilot` record. Left out when there is
+    /// none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub settings: Option<AutopilotSettings>,
+}
+
+/// What a `tur-autopilot` record says about a route: the application passed
+/// TUR's check in a throwaway copy of its prefix with these settings. Not a
+/// rating.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct AutopilotSettings {
+    /// The remedies, as `tur-runtime` names them.
+    pub remedies: Vec<String>,
+    /// The runtime version it was measured with.
+    pub runtime_version: String,
+    /// The version of the application.
+    pub version_tested: Option<String>,
+    /// The day of the measurement.
+    pub date: String,
+    /// The SHA-256 of the evidence.
+    pub evidence_sha256: String,
+    /// The test report, when the record names one.
+    pub test_report: Option<String>,
+}
+
+/// The settings of the most recent `tur-autopilot` record for a route of an
+/// edition.
+pub fn autopilot_settings(edition: &Edition, route: Route) -> Option<AutopilotSettings> {
+    edition
+        .records
+        .iter()
+        .filter(|record| record.route == route && record.reported_by == Reporter::TurAutopilot)
+        .max_by(|a, b| a.date.cmp(&b.date))
+        .map(|record| AutopilotSettings {
+            remedies: record.remedies.clone(),
+            runtime_version: record.runtime_version.clone().unwrap_or_default(),
+            version_tested: record.version_tested.clone(),
+            date: record.date.clone(),
+            evidence_sha256: record.evidence_sha256.clone().unwrap_or_default(),
+            test_report: record.test_report.clone(),
+        })
 }
 
 impl RouteOption {
@@ -771,10 +813,11 @@ fn requirement_caveat_text(
 /// before an external report, then the most recent, then the first written.
 fn best_record(edition: &Edition, route: Route) -> Option<&Record> {
     let mut best: Option<&Record> = None;
+    // A tur-autopilot record states settings, never a rating.
     for record in edition
         .records
         .iter()
-        .filter(|record| record.route == route)
+        .filter(|record| record.route == route && record.reported_by != Reporter::TurAutopilot)
     {
         let better = match best {
             None => true,
@@ -782,7 +825,7 @@ fn best_record(edition: &Edition, route: Route) -> Option<&Record> {
                 let rank = |record: &Record| match record.reported_by {
                     Reporter::TurTest => 2u8,
                     Reporter::External => 1,
-                    Reporter::Nobody => 0,
+                    Reporter::Nobody | Reporter::TurAutopilot => 0,
                 };
                 (rank(record), record.date.as_str()) > (rank(current), current.date.as_str())
             }
@@ -799,7 +842,7 @@ fn rating_of(edition: &Edition, route: Route) -> (Rating, RatingSource) {
         return (Rating::Unknown, RatingSource::Unrated);
     };
     let source = match record.reported_by {
-        Reporter::Nobody => RatingSource::Unrated,
+        Reporter::Nobody | Reporter::TurAutopilot => RatingSource::Unrated,
         Reporter::External => RatingSource::External {
             name: record.source_name.clone().unwrap_or_default(),
             url: record.source_url.clone().unwrap_or_default(),
@@ -1081,6 +1124,7 @@ fn evaluate(
             code: why.code,
             params: why.params,
         }],
+        settings: autopilot_settings(edition, route),
     }
 }
 
@@ -1465,6 +1509,7 @@ fn no_route(entry: &Entry, host: &HostFacts, blocked: &[RouteOption]) -> RouteOp
         alternative: Some(alternative),
         reason_code: ReasonCode::NoRoute,
         reason_parts: parts,
+        settings: None,
     }
 }
 
@@ -1753,6 +1798,9 @@ mod tests {
             version_tested: None,
             date: "2026-11-12".to_owned(),
             notes: None,
+            remedies: Vec::new(),
+            runtime_version: None,
+            evidence_sha256: None,
         });
         edition
     }
@@ -2578,6 +2626,9 @@ mod tests {
             version_tested: Some("1.0".to_owned()),
             date: "2024-06-01".to_owned(),
             notes: None,
+            remedies: Vec::new(),
+            runtime_version: None,
+            evidence_sha256: None,
         });
         let entry = super::tests::entry(Category::Productivity, vec![edition]);
         let options = run(&entry, &full_host(), &Preferences::default());
@@ -2592,6 +2643,62 @@ mod tests {
         let options = run(&entry, &full_host(), &Preferences::default());
         assert_eq!(options[0].rating, Rating::Unknown);
         assert_eq!(options[0].rating_source, RatingSource::Unrated);
+        assert_eq!(options[0].settings, None);
+    }
+
+    #[test]
+    fn an_autopilot_record_gives_settings_and_never_a_rating() {
+        let mut edition = windows();
+        let measured = |date: &str, remedies: &[&str]| Record {
+            route: Route::Wine,
+            rating: Rating::Unknown,
+            reported_by: Reporter::TurAutopilot,
+            source_name: None,
+            source_url: None,
+            source_rating: None,
+            test_report: None,
+            version_tested: Some("1.0".to_owned()),
+            date: date.to_owned(),
+            notes: None,
+            remedies: remedies.iter().map(|remedy| (*remedy).to_owned()).collect(),
+            runtime_version: Some("wine-9.0".to_owned()),
+            evidence_sha256: Some("cd".repeat(32)),
+        };
+        edition.records.push(measured("2026-11-01", &["dpi-120"]));
+        edition.records.push(measured("2026-11-13", &["windows-version-win11"]));
+        let entry = super::tests::entry(Category::Productivity, vec![edition.clone()]);
+        let options = run(&entry, &full_host(), &Preferences::default());
+        let wine = options
+            .iter()
+            .find(|option| option.route == Route::Wine)
+            .unwrap();
+        // The rating is untouched: unknown, from nobody.
+        assert_eq!(wine.rating, Rating::Unknown);
+        assert_eq!(wine.rating_source, RatingSource::Unrated);
+        // The most recent record's settings are carried.
+        let settings = wine.settings.as_ref().unwrap();
+        assert_eq!(settings.remedies, ["windows-version-win11"]);
+        assert_eq!(settings.runtime_version, "wine-9.0");
+        assert_eq!(settings.date, "2026-11-13");
+        // Other routes carry none.
+        assert!(
+            options
+                .iter()
+                .filter(|option| option.route != Route::Wine)
+                .all(|option| option.settings.is_none())
+        );
+        // An external rating still rates the route, beside the settings.
+        let edition = rated(edition, Route::Wine, Rating::Usable);
+        let entry = super::tests::entry(Category::Productivity, vec![edition]);
+        let options = run(&entry, &full_host(), &Preferences::default());
+        let wine = options
+            .iter()
+            .find(|option| option.route == Route::Wine)
+            .unwrap();
+        assert_eq!(wine.rating, Rating::Usable);
+        assert!(wine.settings.is_some());
+        let json = serde_json::to_value(wine).unwrap();
+        assert_eq!(json["settings"]["remedies"][0], "windows-version-win11");
     }
 
     #[test]

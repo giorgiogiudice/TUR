@@ -79,7 +79,7 @@ pub use model::{
 };
 pub use route::{
     ALTERNATIVE_TEXT_IDS, Alternative, AlternativeKind, CAVEAT_TEXT_IDS, Caveat, CaveatCode,
-    Outlook, Params, Prerequisite, PrerequisiteCode, RatingSource, ReasonCode, ReasonPart,
+    AutopilotSettings, Outlook, Params, Prerequisite, PrerequisiteCode, RatingSource, ReasonCode, ReasonPart,
     RouteOption, RouteRequest, Severity, recommended, requirement_severity, route,
 };
 pub use search::{MatchKind, SearchHit, search};

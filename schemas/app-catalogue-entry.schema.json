@@ -54,8 +54,8 @@
         },
         "rating": { "$ref": "#/$defs/rating" },
         "reported_by": {
-          "description": "Who the record comes from. nobody: the record only states that the rating is unknown. external: a named external source, with the URL that was checked; never TUR. tur-test: TUR's own test, with a reference to its test report.",
-          "enum": ["nobody", "external", "tur-test"]
+          "description": "Who the record comes from. nobody: the record only states that the rating is unknown. external: a named external source, with the URL that was checked; never TUR. tur-test: TUR's own test, with a reference to its test report. tur-autopilot: TUR's compatibility autopilot (tur-runtime app autopilot): the application passed TUR's check in a throwaway copy of its prefix with the settings in remedies; never a rating, so the rating is unknown.",
+          "enum": ["nobody", "external", "tur-test", "tur-autopilot"]
         },
         "source_name": {
           "description": "External: the name of the source, for example ProtonDB.",
@@ -90,9 +90,47 @@
           "description": "Free-text notes.",
           "$ref": "#/$defs/text",
           "maxLength": 1000
+        },
+        "remedies": {
+          "description": "TUR autopilot: the remedies the application passed with, as tur-runtime's remedy catalogue names them, a DLL after a colon where the remedy takes one (dll-builtin:d3dx9_43). See docs/architecture/compat-autopilot.md.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*(:[a-z0-9_.-]{1,64})?$", "maxLength": 130 }
+        },
+        "runtime_version": {
+          "description": "TUR autopilot: the runtime version the measurement was made with, such as wine-9.0.",
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._+~-]{1,64}$"
+        },
+        "evidence_sha256": {
+          "description": "TUR autopilot: the SHA-256 of the evidence in the autopilot's result (its attempts, serialised as compact JSON).",
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
         }
       },
       "allOf": [
+        {
+          "if": { "properties": { "reported_by": { "const": "tur-autopilot" } } },
+          "then": {
+            "required": ["remedies", "runtime_version", "evidence_sha256"],
+            "properties": {
+              "route": { "enum": ["wine", "proton"] },
+              "rating": { "const": "unknown" },
+              "source_name": false,
+              "source_url": false,
+              "source_rating": false
+            }
+          },
+          "else": {
+            "properties": {
+              "remedies": false,
+              "runtime_version": false,
+              "evidence_sha256": false
+            }
+          }
+        },
         {
           "if": { "properties": { "reported_by": { "const": "nobody" } } },
           "then": {

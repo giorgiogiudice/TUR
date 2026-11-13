@@ -29,6 +29,38 @@ A record with `reported_by = "tur-test"` must give `test_report`, the path of
 the test report in this repository, and the report must exist. Without it the
 entry is refused (`TUR-DESKTOP-CATALOGUE-006`).
 
+### Records from TUR's compatibility autopilot
+
+`tur-runtime app autopilot` tries known remedies for a Windows application
+that fails, in throwaway copies of its prefix, and writes what made it pass
+as a record in this format
+([compat-autopilot.md](../docs/architecture/compat-autopilot.md)):
+
+```toml
+[[editions.records]]
+route = "wine"
+rating = "unknown"
+reported_by = "tur-autopilot"
+version_tested = "1.0"
+date = "2026-11-13"
+remedies = ["dll-builtin:d3dx9_43", "windows-version-win11"]
+runtime_version = "wine-9.0"
+evidence_sha256 = "<64 hexadecimal digits>"
+notes = "..."
+```
+
+Such a record states settings, never a rating: its rating must be `unknown`,
+its route `wine` or `proton`, and it must name 1 to 16 `remedies` (as
+`tur-runtime`'s remedy catalogue names them, with a DLL after a colon where
+the remedy takes one), the `runtime_version` it was measured with and the
+`evidence_sha256` of its result. `test_report` is optional: a record a person
+shares from their own machine has none; one TUR measured in CI names its
+report. The router never rates a route from it; it shows the settings beside
+the route (`settings` in `tur-catalogue route --json`). The three fields are
+refused on any other kind of record (`TUR-DESKTOP-CATALOGUE-003`), and a
+rating on a `tur-autopilot` record is refused as unsourced
+(`TUR-DESKTOP-CATALOGUE-006`).
+
 An entry with every route unknown is a good entry. An invented rating is not.
 The same holds for requirements and editions: enter what a reference shows,
 and say in `notes` what could not be checked.

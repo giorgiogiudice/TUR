@@ -133,6 +133,10 @@ fn no_seed_record_claims_tur_s_own_test_without_a_test_report() {
                     assert!(record.source_url.is_some(), "{}", entry.id);
                     assert!(record.test_report.is_none(), "{}", entry.id);
                 }
+                Reporter::TurAutopilot => {
+                    assert_eq!(record.rating, Rating::Unknown, "{}", entry.id);
+                    assert!(!record.remedies.is_empty(), "{}", entry.id);
+                }
                 Reporter::TurTest => {
                     let report = record
                         .test_report
@@ -516,6 +520,10 @@ fn the_schema_and_the_rust_types_name_the_same_fields() {
         version_tested: None,
         date: "2026-11-12".to_owned(),
         notes: None,
+        // Set, so that the fields are written and compared with the schema.
+        remedies: vec!["windows-version-win11".to_owned()],
+        runtime_version: Some("wine-9.0".to_owned()),
+        evidence_sha256: Some("0".repeat(64)),
     });
     edition.references.push(Reference {
         title: "A page".to_owned(),
@@ -670,7 +678,7 @@ fn the_schema_and_the_rust_types_list_the_same_values() {
             "reported_by",
             (
                 names(&record["reported_by"]["enum"]),
-                sorted(&Reporter::ALL.map(Reporter::as_str)),
+                sorted(&Reporter::EVERY.map(Reporter::as_str)),
             ),
         ),
     ]);

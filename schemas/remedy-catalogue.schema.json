@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/giorgiogiudice/TUR/schemas/remedy-catalogue.schema.json",
+  "$comment": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+  "title": "TUR compatibility remedy catalogue",
+  "description": "The remedies tur-runtime's compatibility autopilot tries in throwaway copies of an application's prefix (docs/architecture/compat-autopilot.md). Each is a declarative, reversible change: registry values under HKEY_CURRENT_USER, environment variables of a launch, a case-insensitive drive C:, or the ntsync device left out of the sandbox. None downloads, installs or runs anything. Rules the schema cannot express (unique identifiers, placeholders, the environment rules of a launch, words no remedy may contain) are checked by tur-runtime's validator.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "checked", "remedies", "microsoft_components"],
+  "properties": {
+    "$comment": { "description": "The licence of the file and what it is.", "type": "string" },
+    "schema_version": { "const": 1 },
+    "checked": { "$ref": "#/$defs/date" },
+    "remedies": { "type": "array", "minItems": 1, "maxItems": 256, "items": { "$ref": "#/$defs/remedy" } },
+    "microsoft_components": { "type": "array", "items": { "$ref": "#/$defs/microsoft_component" } }
+  },
+  "$defs": {
+    "date": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+    "identifier": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$", "maxLength": 64 },
+    "text": { "type": "string", "minLength": 1, "maxLength": 2000, "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$" },
+    "failure_class": {
+      "description": "A failure class of tur-runtime's classifier (services/tur-runtime/src/failure.rs), each with the code TUR-WINDOWS-COMPAT-0NN.",
+      "enum": [
+        "prefix-unusable", "dll-missing", "microsoft-component-missing", "dotnet-runtime-missing",
+        "dll-load-failed", "dll-init-failed", "unimplemented-function", "crash", "exited-with-error",
+        "no-window", "hung", "check-failed"
+      ]
+    },
+    "hint": {
+      "enum": [
+        "windows-version", "display-size", "dpi", "locale-ja", "locale-zh-cn", "locale-zh-tw", "locale-ko",
+        "case-collision", "audio", "direct3d", "fonts", "dll-beside-program"
+      ]
+    },
+    "remedy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id", "title", "description", "kind", "group", "runtimes", "addresses", "hints", "order",
+        "automatic", "reverting", "sources"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "title": { "$ref": "#/$defs/text" },
+        "description": { "$ref": "#/$defs/text" },
+        "kind": {
+          "description": "registry: values written into the prefix with Wine's reg import. environment: variables of the application's launches. drive-c-case-folding: drive C: rebuilt with the ext4 case-folding attribute. hide-ntsync: /dev/ntsync left out of the sandbox.",
+          "enum": ["registry", "environment", "drive-c-case-folding", "hide-ntsync"]
+        },
+        "group": { "description": "Remedies of one group are alternatives and are never combined.", "$ref": "#/$defs/identifier" },
+        "runtimes": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["wine", "proton"] } },
+        "addresses": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/failure_class" } },
+        "hints": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/hint" } },
+        "needs_hint": { "description": "Tried only when one of its hints is present.", "type": "boolean" },
+        "parameter": { "description": "dll: the DLL the evidence names fills {dll}.", "enum": ["dll"] },
+        "order": { "type": "integer", "minimum": 0, "maximum": 10000 },
+        "registry": { "type": "array", "items": { "$ref": "#/$defs/registry_value" } },
+        "environment": { "type": "array", "items": { "$ref": "#/$defs/environment_value" } },
+        "requires": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "enum": ["x11-display", "wine-builtin-dll", "dll-beside-program", "case-folding-file-system", "ntsync-device", "font-file"] }
+        },
+        "font_file": { "type": "string", "pattern": "^[A-Za-z0-9._-]+$", "maxLength": 128 },
+        "automatic": { "description": "Whether the autopilot tries it by itself.", "type": "boolean" },
+        "reverting": { "$ref": "#/$defs/text" },
+        "sources": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/source" } }
+      }
+    },
+    "registry_value": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "name", "type", "value"],
+      "properties": {
+        "key": { "description": "May hold {exe}, the program's file name.", "type": "string", "pattern": "^HKEY_CURRENT_USER\\\\[^\\u0000-\\u001f\"\\[\\]]+$", "maxLength": 512 },
+        "name": { "description": "May be {dll}.", "type": "string", "pattern": "^[^\\u0000-\\u001f\"\\[\\]]+$", "maxLength": 512 },
+        "type": { "enum": ["string", "dword"] },
+        "value": { "description": "For a dword, a decimal number.", "type": "string", "pattern": "^[^\\u0000-\\u001f\"\\[\\]]*$", "maxLength": 512 }
+      }
+    },
+    "environment_value": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "value"],
+      "properties": {
+        "name": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,127}$" },
+        "value": { "type": "string", "maxLength": 4096, "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]*$" }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "reference", "detail", "checked"],
+      "properties": {
+        "kind": { "enum": ["wine-source", "wine-release-notes", "proton-readme", "tur-measurement"] },
+        "reference": { "description": "An https address, or a document of this repository under docs/.", "type": "string", "pattern": "^(https://|docs/)", "maxLength": 500 },
+        "detail": { "description": "What the source says, in TUR's words.", "$ref": "#/$defs/text" },
+        "checked": { "$ref": "#/$defs/date" }
+      }
+    },
+    "microsoft_component": {
+      "description": "A Microsoft redistributable TUR cannot supply. A DLL belongs to it when its name without .dll is one of the prefixes followed by nothing or by a digit, and this Wine has no implementation of that name.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "dll_prefixes", "note"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "dll_prefixes": { "type": "array", "minItems": 1, "items": { "type": "string", "pattern": "^[a-z0-9_.-]+$" } },
+        "note": { "type": "string", "maxLength": 1000 }
+      }
+    }
+  }
+}

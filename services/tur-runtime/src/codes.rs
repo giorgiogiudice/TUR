@@ -133,11 +133,29 @@ pub enum Code {
     InstallRequestInvalid,
     /// The application's own uninstaller failed or ran out of time.
     UninstallerFailed,
+    /// No remedy the autopilot tried made the application pass its check.
+    AutopilotNoRemedy,
+    /// The application needs a Microsoft component that TUR cannot supply; the Windows guest is the route.
+    AutopilotUnsuppliable,
+    /// No autopilot result has this identifier.
+    AutopilotResultMissing,
+    /// An autopilot result is unreadable, not valid, or does not match its evidence or the application.
+    AutopilotResultInvalid,
+    /// The result found no remedy, so there is nothing to apply.
+    AutopilotNothingToApply,
+    /// The autopilot's check file is unreadable or not valid.
+    AutopilotCheckInvalid,
+    /// The autopilot cannot run for this application here: not a Wine application, no display for a window check, or another runtime version than the result's.
+    AutopilotUnavailable,
+    /// Remedies are already applied to the application; they are undone before others are applied.
+    AutopilotAlreadyApplied,
+    /// No remedies are applied to the application, so there is nothing to undo.
+    AutopilotNotApplied,
 }
 
 impl Code {
     /// Every code this component can report.
-    pub const ALL: [Code; 55] = [
+    pub const ALL: [Code; 64] = [
         Code::Unreadable,
         Code::Damaged,
         Code::LimitExceeded,
@@ -193,6 +211,15 @@ impl Code {
         Code::UninstallIncomplete,
         Code::InstallRequestInvalid,
         Code::UninstallerFailed,
+        Code::AutopilotNoRemedy,
+        Code::AutopilotUnsuppliable,
+        Code::AutopilotResultMissing,
+        Code::AutopilotResultInvalid,
+        Code::AutopilotNothingToApply,
+        Code::AutopilotCheckInvalid,
+        Code::AutopilotUnavailable,
+        Code::AutopilotAlreadyApplied,
+        Code::AutopilotNotApplied,
     ];
 
     /// The code as text, for example `TUR-WINDOWS-RUNTIME-001`.
@@ -253,6 +280,15 @@ impl Code {
             Code::UninstallIncomplete => "TUR-WINDOWS-APP-009",
             Code::InstallRequestInvalid => "TUR-WINDOWS-APP-010",
             Code::UninstallerFailed => "TUR-WINDOWS-APP-011",
+            Code::AutopilotNoRemedy => "TUR-WINDOWS-AUTOPILOT-001",
+            Code::AutopilotUnsuppliable => "TUR-WINDOWS-AUTOPILOT-002",
+            Code::AutopilotResultMissing => "TUR-WINDOWS-AUTOPILOT-003",
+            Code::AutopilotResultInvalid => "TUR-WINDOWS-AUTOPILOT-004",
+            Code::AutopilotNothingToApply => "TUR-WINDOWS-AUTOPILOT-005",
+            Code::AutopilotCheckInvalid => "TUR-WINDOWS-AUTOPILOT-006",
+            Code::AutopilotUnavailable => "TUR-WINDOWS-AUTOPILOT-007",
+            Code::AutopilotAlreadyApplied => "TUR-WINDOWS-AUTOPILOT-008",
+            Code::AutopilotNotApplied => "TUR-WINDOWS-AUTOPILOT-009",
         }
     }
 
@@ -316,6 +352,15 @@ impl Code {
             Code::UninstallIncomplete => "Something was left behind by the removal",
             Code::InstallRequestInvalid => "A value given for the installation is not allowed",
             Code::UninstallerFailed => "The application's own uninstaller failed",
+            Code::AutopilotNoRemedy => "No remedy made the application pass its check",
+            Code::AutopilotUnsuppliable => "The application needs a Microsoft component TUR cannot supply",
+            Code::AutopilotResultMissing => "No autopilot result has this identifier",
+            Code::AutopilotResultInvalid => "The autopilot result is unreadable or not valid",
+            Code::AutopilotNothingToApply => "The result found no remedy to apply",
+            Code::AutopilotCheckInvalid => "The check file is unreadable or not valid",
+            Code::AutopilotUnavailable => "The autopilot cannot run for this application here",
+            Code::AutopilotAlreadyApplied => "Remedies are already applied to this application",
+            Code::AutopilotNotApplied => "No remedies are applied to this application",
         }
     }
 
@@ -404,6 +449,19 @@ mod tests {
             .map(|number| format!("TUR-WINDOWS-APP-{number:03}"))
             .collect();
         assert_eq!(application, expected);
+    }
+
+    #[test]
+    fn the_autopilot_codes_are_numbered_in_order() {
+        let autopilot: Vec<&str> = Code::ALL
+            .iter()
+            .map(|code| code.as_str())
+            .filter(|code| code.starts_with("TUR-WINDOWS-AUTOPILOT-"))
+            .collect();
+        let expected: Vec<String> = (1..=9)
+            .map(|number| format!("TUR-WINDOWS-AUTOPILOT-{number:03}"))
+            .collect();
+        assert_eq!(autopilot, expected);
     }
 
     #[test]
