@@ -388,7 +388,7 @@ impl Bridge {
                     &window,
                     self.window_rect(&window),
                     "P@x is reading this window",
-                    false,
+                    true,
                 );
                 let nodes = call
                     .arguments
@@ -410,7 +410,7 @@ impl Bridge {
                     &window,
                     self.window_rect(&window),
                     "P@x is reading this window",
-                    false,
+                    true,
                 );
                 let mut budget = Budget::new(DEFAULT_NODES, stopped);
                 let found = self.desktop.find(
@@ -431,7 +431,7 @@ impl Bridge {
                 self.overlay
                     .activity("observing", Some((pid, &window.title)));
                 if let Ok(rect) = self.desktop.client().extents(&node) {
-                    self.point(&window, rect, "P@x is reading this", false);
+                    self.point(&window, rect, "P@x is reading this", true);
                 }
                 let described = self.desktop.describe(&node, &window.id, &facts);
                 Ok(json!({

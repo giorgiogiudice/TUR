@@ -233,12 +233,14 @@ overlay says it is **shown** (the lease rule, addendum A section 19, item
 every perform is answered `unavailable`.
 
 - Reading a window: the activity "observing" framing that window, a
-  highlight over the whole window, and P@x's pointer travelling to it.
+  highlight over the whole window, and P@x's pointer travelling to it and
+  resting there 600 ms before the window is read.
 - Acting on an element: the activity "acting" framing the window, a
   highlight round the element's rectangle (its `GetExtents` in window
   coordinates, placed by the overlay on the window KWin reports for the
   application's process and title, or for its process alone) with the
-  caption "P@x: press" (or the operation), the pointer travelling to it;
+  caption "P@x: press" (or the operation), the pointer travelling to it
+  (one highlight at a time: the previous one is cleared first);
   the bridge waits for `PointerArrived` (2.5 s at most), **rests 600 ms**
   so the person sees where P@x is about to act, acts, and shows a click
   ring. The highlight stays 4 seconds.
@@ -300,6 +302,21 @@ could not be resolved is a `proposal_rejected` event and never a decision.
    emitted).
 4. **Scrolling** needs `Component.ScrollTo` (at-spi2 2.28 and later); Qt does
    not answer it.
+4a. **Firefox's page fields do not take text through the accessibility
+   tree** (Firefox 160, measured): `EditableText.InsertText` and
+   `SetTextContents` are answered "done" and nothing arrives in the field.
+   ATK's insert is a function without a result and at-spi2-atk answers true
+   whatever happened; the bridge reads the field back and reports the
+   failure (`text_now_contains_typed_text`, `TUR-AI-INTERFACE-003`). Focus
+   and pressing work in Firefox pages. Some toolkits also answer
+   `GetActions` with a key binding where the action's name belongs
+   (Firefox through at-spi2-atk: `;;`); the bridge then asks `GetName`.
+4b. **Wine exposes nothing** (Wine 11.20 as Fedora 45 ships it, its own
+   notepad on Wine's Wayland driver, measured): no application appears on
+   the accessibility bus. Windows programs stay on the third way of acting.
+4c. **P@x's own indicator is on the accessibility bus** (tur-pax-overlay, a
+   Qt Quick program, with one window). Listing the windows shows it; it has
+   nothing to press.
 5. **Positions** are in window coordinates and placed by the overlay on the
    window KWin reports for the application's process and title; a program
    that draws its own decoration and shadow is off by the shadow

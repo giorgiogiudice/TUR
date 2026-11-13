@@ -228,10 +228,7 @@ pub type Candidate = (String, String, Vec<String>);
 /// Which of `candidates` a window query names: an identifier, an exact
 /// title, a part of a title, or an application. Each candidate is
 /// `(identifier, title, identities)`.
-pub fn choose_window(
-    query: &str,
-    candidates: &[Candidate],
-) -> Result<usize, Miss> {
+pub fn choose_window(query: &str, candidates: &[Candidate]) -> Result<usize, Miss> {
     let query = query.trim();
     let lower = query.to_lowercase();
     let listing = || {
