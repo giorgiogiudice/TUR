@@ -8,10 +8,9 @@ named ghcr.io/giorgiogiudice/tur only with a sigstore signature that verifies
 with release.pub and is recorded in Sigstore's public transparency log, whose
 key is rekor.pub. Images from anywhere else are not affected.
 
-release.pub   TUR's release key, the public half. Its private half is held
-              by the release workflow on GitHub and nowhere else. Absent until
-              the project's owner creates it: until then every image from
-              ghcr.io/giorgiogiudice/tur is refused.
+release.pub   TUR's release key, the public half (ECDSA P-256), made by the
+              project's owner. Its private half is held by the release
+              workflow on GitHub and by the owner offline, nowhere else.
 rekor.pub     The public key of Sigstore's Rekor transparency log at
               https://rekor.sigstore.dev, as Sigstore's signed trust root
               names it. The policy uses it to check offline that a signature
