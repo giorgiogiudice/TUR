@@ -71,7 +71,7 @@ use crate::orchestrator::{
     NoAssistant, NoBudget, NoControl, NoObserver, Observer, Orchestrator, ReportItem, Situation,
     SystemTaskClock, TaskLimits, TaskOutcome, TaskReport, TaskRequest,
 };
-use crate::policy::UserPolicy;
+use crate::policy::{PolicySource, UserPolicy, policy_store_file, process_uid};
 use crate::registry::{ToolFiles, ToolRegistry, read_tool_sets};
 use crate::sandbox::{Grant, GrantRules};
 use crate::settings::{
@@ -440,8 +440,14 @@ fn build(args: &TaskArgs, err: &mut dyn Write) -> io::Result<Result<Setup, Vec<F
         )
     });
 
-    // The policy. A file that cannot be used leaves observation only.
-    let policy = match &args.policy {
+    // The policy: the system's policy store, made stricter by the file
+    // given, never less strict. A file that cannot be used leaves
+    // observation only.
+    let store = process_uid()
+        .map(policy_store_file)
+        .map_or(PolicySource::Absent, |path| PolicySource::read(&path));
+    let stored = UserPolicy::in_force(&store, &PolicySource::Absent);
+    let own = match &args.policy {
         None => UserPolicy::default(),
         Some(path) => {
             let loaded = read_file(path)
@@ -466,6 +472,7 @@ fn build(args: &TaskArgs, err: &mut dyn Write) -> io::Result<Result<Setup, Vec<F
             }
         }
     };
+    let policy = stored.tightened_by(&own);
 
     // What the commands of the task may read.
     let home = std::env::var_os("HOME").map(PathBuf::from);

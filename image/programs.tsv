@@ -21,5 +21,6 @@ services/tur-runtime	tur-runtime	/usr/bin/tur-runtime
 services/tur-update	tur-update	/usr/bin/tur-update
 services/tur-pax	tur-pax	/usr/bin/tur-pax
 services/tur-pax-memory	tur-pax-memory	/usr/bin/tur-pax-memory
+services/tur-pax-policy	tur-pax-policy	/usr/bin/tur-pax-policy
 services/tur-pax-providers	tur-pax-providers	/usr/libexec/tur/tur-pax-providers
 installer/tur-installer-core	tur-installer	/usr/libexec/tur/tur-installer

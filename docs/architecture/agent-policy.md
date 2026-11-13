@@ -9,8 +9,8 @@ This document describes the policy engine as implemented: what it takes as input
 what it decides, which properties are guaranteed and by which test, the two file
 formats, and what the engine cannot guarantee by itself.
 
-The engine implements sections 5, 6, 11 and 17 to 21 of the AI control layer
-design ("addendum A") as of **revision 8**. Where those leave a case undefined,
+The engine implements sections 5, 6, 11 and 17 to 23 of the AI control layer
+design ("addendum A") as of **revision 10**. Where those leave a case undefined,
 the stricter behaviour was chosen. Every such choice is listed in
 [section 10](#10-interpretations). What sections 18 to 21 changed in the engine,
 and what is left, is in [section 11](#11-known-limits), limit 16.
@@ -43,7 +43,7 @@ call for the same action gives `ask` or `authenticate` again.
 | "Secret" mark on the content of a typed operation | The orchestrator, for a value the user entered on a protected surface | No |
 | Application, window and control of a UI action | The compositor or the accessibility bus | No |
 | Context | Session manager, compositor, and the system component that owns the repair-session record and the standing approvals | Only the "consequential" hint |
-| User policy | The policy file, owned by that component and written through system settings on the trusted path | No |
+| User policy | The policy store (`/var/lib/tur-pax-policy/<uid>/policy.json`, written only by root through polkit; [pax-policy-store.md](pax-policy-store.md)), made stricter by the person's own file | No |
 | Time | The caller's clock | No |
 
 The assistant's memory is not an input. Nothing recalled from memory can reach the
@@ -172,6 +172,7 @@ nature; see [section 11](#11-known-limits), limit 4.
 | Presence | Attended (the user is present and asked for the task) or unattended (a scheduled task or reminder firing) |
 | Session locked | The session is locked |
 | Trusted session proven (`trusted_session_proven`) | A separate trusted session exists and has been proven (addendum A section 19, item 2). See below. |
+| Approval sheet proven (`approval_sheet_proven`) | The class 2 approval sheet on the desktop exists and has been proven (addendum A section 23, item 1; desktop task D-18). The lower of the two levels. See below. |
 | Repair session | Purpose, opening time, expiry and an "ended" mark, if the user opened one |
 | Standing approvals (`HeldApprovals`) | The approvals of the schedule that started the task, as the policy store holds them. Empty unless read from a policy store, and none exists yet. See below. |
 | Model hint | The model flagged the action as consequential |
@@ -211,6 +212,19 @@ the field: the task loop builds its context with it false, and
 the engine would decide, and performs nothing. The refusal that results from it
 being false keeps its name and code (`trusted_path_unavailable`,
 `TUR-AI-POLICY-006`).
+
+**The two levels (addendum A section 23, item 1).** The owner decided that a
+class 2 action is approved on the desktop, in an approval sheet protected by
+TUR's own code, while class 3, opening a repair session and anything that
+loosens P@x stay on the trusted screen. The engine has one input for each
+level. `approval_sheet_proven` lets an **attended class 2 action that is not a
+privileged request** be asked, and nothing else. Class 3, a privileged request
+(it needs a repair session), an unattended class 2 action (only a standing
+approval, granted on the trusted screen, could allow it) and a relaxation of
+the user policy (rule 10c) need `trusted_session_proven`. No shipped code sets
+either; `tur-pax policy check --approval-sheet-proven` asks the what-if
+question. Test: `the_approval_sheet_lets_an_attended_class_2_action_be_asked_and_nothing_more`
+(`tests/invariants.rs`), over the whole input space.
 
 **Standing approvals and the policy store.** Addendum A section 18, item 1:
 standing approvals are held by the separate system component that owns the
@@ -393,7 +407,7 @@ The rules are evaluated in this order. The first that applies decides.
 | 3b | Accessibility or screen action on a window of a process with administrator rights | refuse | `privileged_window` |
 | 3c | Accessibility or screen action while the session is locked | refuse | `session_locked` |
 | 4 | Mode is observe-only and the class is above 0 | refuse | `observe_only` |
-| 5 | The trusted path is not available and the class is 2 or 3 | refuse | `trusted_path_unavailable` |
+| 5 | Class 3, a privileged request, or an unattended class 2 action, without a proven trusted session; an attended class 2 action without a proven trusted session or approval sheet | refuse | `trusted_path_unavailable` |
 | 6a | Class 3, proposed as a privileged request | refuse | `system_critical_as_command` |
 | 6b | Class 3, unattended or locked | refuse | `system_critical_unattended` |
 | 6c | Class 3, otherwise | authenticate | `system_critical_needs_authentication` |
@@ -412,7 +426,7 @@ The rules are evaluated in this order. The first that applies decides.
 | 9e | Unattended, class 2, otherwise | defer | `unattended_without_standing_approval` |
 | 10a | Attended, mode ask-every-action | ask | `ask_every_action_mode` |
 | 10b | Attended, class 0 or 1 | allow | `observe_permitted`, `reversible_permitted` |
-| 10c | Attended, class 2, accessibility or screen action in an application relaxed to class 2; the application is not sensitive, the window is known to belong to the user, and the model did not flag the action | allow | `relaxed_by_user_policy` |
+| 10c | Attended, class 2, accessibility or screen action in an application relaxed to class 2; a proven trusted session; the application is not sensitive, the window is known to belong to the user, and the model did not flag the action | allow | `relaxed_by_user_policy` |
 | 10d | Attended, class 2, otherwise | ask | `consequential_needs_confirmation` |
 
 Consequences worth stating:
@@ -621,6 +635,11 @@ again, and never the text the model produced.
 ## 7. User policy file
 
 Schema: [`schemas/agent-policy.schema.json`](../../schemas/agent-policy.schema.json).
+
+Where it is read: the policy store, `/var/lib/tur-pax-policy/<uid>/policy.json`,
+which only root writes, through polkit; and the person's own file,
+`~/.config/tur/pax/policy.json` (or `tur-pax run --policy`), which can only make
+it stricter (interpretation 68; [pax-policy-store.md](pax-policy-store.md)).
 
 ```json
 {
@@ -861,7 +880,7 @@ it changed. Choices 39 onward were made while aligning the engine with revision 
 | 27a | An unattended task that proposes a record on the user's word | Deferred (`unattended_memory_not_observed`), not refused: the entry is offered to the user on return, as a deferred action is. | New (section 18, item 4). |
 | 27b | A standing approval given to `policy check` | Checked for its form, then ignored. | New (section 18, item 1). |
 | 28 | Unattended class 2 without the trusted path | Refused, not deferred. | Kept. |
-| 29 | Class 2 confirmation without the trusted path | Refused. | Kept. |
+| 29 | Class 2 confirmation without the trusted path | Refused. | **Amended** by addendum A section 23, item 1, which names two levels: an attended class 2 action that is not a privileged request may be asked when the approval sheet **or** the trusted session is proven; everything else above class 1 needs the trusted session. Refused otherwise. |
 | 30 | `TUR_AI_DECISION` for a decision that is not final | `confirmation_required`, `authentication_required`, `deferred`. | Kept; now the design (section 17, item 11). |
 | 31 | `TUR_AI_TIER` for a command and for an agent operation | 4 and 0. | Kept; now the design. A typed operation is tier 4 too (57). |
 | 32 | An audit record that cannot be written | The action is refused. | Kept. |
@@ -898,6 +917,9 @@ it changed. Choices 39 onward were made while aligning the engine with revision 
 | 63 | The default control of a dialog (`STATE_IS_DEFAULT`) | Class 2 whatever its name: it affirms the dialog, like "OK". | New; extends 49. |
 | 64 | A pattern in an element's description, not its name | Class 2, as for the name. | New. |
 | 65 | A UI action whose operation does not go with its kind, typing with no text, or text with another operation | Incomplete: refused (rule 1). | New. |
+| 66 | An unattended class 2 action with only the approval sheet proven | Refused, as without it. A standing approval is a loosening granted on the trusted screen, and nobody is at the sheet. | New (section 23, item 1). |
+| 67 | A relaxation with only the approval sheet proven | Does not apply: the action is asked. A relaxation is a loosening made on the trusted screen. | New (section 23, item 1). |
+| 68 | The person's own policy file and the policy store disagree | The stricter mode (observe-only over ask-every-action over normal), both lists of exclusions and of sensitive applications, the store's relaxations only. A file that cannot be used, in either place, means observe-only. | New ([pax-policy-store.md](pax-policy-store.md), section 4). |
 
 ## 11. Known limits
 
@@ -1022,10 +1044,13 @@ What this engine cannot guarantee by itself.
     compared with one.
 
 16. **Revisions 5 to 8 of addendum A: implemented, with what is left.** Section
-    18, items 1, 3 and 4, and section 19, item 2, are implemented as sections
-    2.2, 2.3 and 4 describe. What is left: (a) the policy store itself does not
-    exist, so standing approvals cannot be honoured at all, and the stand-in
-    store of the tests is the only evidence of what the engine does with one;
+    18, items 1, 3 and 4, section 19, item 2, and section 23, item 1, are
+    implemented as sections 2.2, 2.3 and 4 describe. What is left: (a) the
+    policy store exists ([pax-policy-store.md](pax-policy-store.md)) and holds
+    the person's policy, which P@x applies; it also holds standing approvals,
+    but the task loop does not read them, so they cannot be honoured, and the
+    stand-in store of the tests is the only evidence of what the engine does
+    with one;
     (b) the engine is told which kind of memory entry an operation concerns by
     whoever builds the action. Since pax-3 one caller exists: the session
     service's tool `keep_note` is the operation "record an entry on the

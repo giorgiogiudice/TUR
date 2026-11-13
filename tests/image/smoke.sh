@@ -159,7 +159,7 @@ check "no TUR file under /etc"                bash -c '! ls -d /etc/tur* /usr/et
 # into the image"). The list the build wrote is in the image.
 programs=/usr/lib/tur/programs.tsv
 check "the list of TUR programs is in the image" test -s "${programs}"
-check "eleven programs are listed"            bash -c '[ "$(grep -c -v "^#" "$1")" = 11 ]' _ "${programs}"
+check "twelve programs are listed"            bash -c '[ "$(grep -c -v "^#" "$1")" = 12 ]' _ "${programs}"
 echo "--- TUR programs"
 while IFS=$'\t' read -r program path component tools; do
     case "${program}" in "#"* | "") continue ;; esac

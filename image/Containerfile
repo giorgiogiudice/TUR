@@ -50,6 +50,7 @@ COPY services/tur-device-manager/ /src/services/tur-device-manager/
 COPY services/tur-diagnostics/ /src/services/tur-diagnostics/
 COPY services/tur-pax/ /src/services/tur-pax/
 COPY services/tur-pax-memory/ /src/services/tur-pax-memory/
+COPY services/tur-pax-policy/ /src/services/tur-pax-policy/
 COPY services/tur-pax-providers/ /src/services/tur-pax-providers/
 COPY services/tur-runtime/ /src/services/tur-runtime/
 COPY services/tur-storage/ /src/services/tur-storage/

@@ -914,6 +914,31 @@ def check_components(ev: Evidence, checks: Checks, args) -> dict:
         "(the provider's address is a closed port: getting that far means the grant was accepted)",
         required=False,
     )
+    store_modes = text("policy-store-modes.out").split()
+    store_shown = document("policy-store-show.out") or {}
+    shown_policy = store_shown.get("policy") or {}
+    add(
+        "pax_policy_store",
+        "P@x's policy store (ADR-0028): /var/lib/tur-pax-policy belongs to root; the person cannot write it; "
+        "written as root for the person pkexec names, it is root's, readable by the person's group only, and "
+        "the person reads it back",
+        first_line("policy-store-root.out").startswith("root:root 755 ")
+        and codes.get("policy-store-person-write") == 3
+        and codes.get("policy-store-root-write") == 0
+        and len(store_modes) >= 6
+        and store_modes[0].startswith("root:")
+        and store_modes[1] == "750"
+        and store_modes[3].startswith("root:")
+        and store_modes[4] == "640"
+        and codes.get("policy-store-show") == 0
+        and shown_policy.get("excluded_applications") == ["org.example.BootTest"]
+        and codes.get("policy-store-person-touch") not in (None, 0),
+        f"store: {first_line('policy-store-root.out')}; as the person: exit {codes.get('policy-store-person-write')} "
+        f"({first_line('policy-store-person-write.err', 160)}); as root through PKEXEC_UID: exit "
+        f"{codes.get('policy-store-root-write')} ({first_line('policy-store-root-write.err', 160)}); modes: "
+        f"{' '.join(store_modes)}; shown: {json.dumps(shown_policy)[:160]}; appending as the person: exit "
+        f"{codes.get('policy-store-person-touch')}",
+    )
 
     # ---- what SELinux refused, and what failed, while they ran ----------------------------------
     denials = [" ".join(line.split()) for line in guest.text("components-avc.txt").splitlines() if "avc:" in line]
