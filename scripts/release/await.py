@@ -111,6 +111,17 @@ def rehearse_with(repo: str, image_run: dict, why: str) -> int:
     return 0 if "boot" in others else 1
 
 
+def fallback(repo: str, branch: str, why: str) -> int:
+    """The branch's latest image run whose commit was also booted by CI."""
+    found = api(repo, f"/actions/workflows/image.yml/runs?branch={branch}"
+                      "&event=pull_request&status=success&per_page=15")["workflow_runs"]
+    for run in found:
+        if any(r["name"] == "boot" and r["conclusion"] == "success" for r in runs_for(repo, run["head_sha"])):
+            return rehearse_with(repo, run, why)
+    output(release="false", reason=f"{why}, and no earlier commit of {branch} was both built and booted")
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("sha")
@@ -132,10 +143,7 @@ def main() -> int:
         chosen = latest(runs_for(repo, args.sha), events)
         waited = time.monotonic() - started
         if "image" not in chosen and waited > 300 and args.fallback_branch and args.event == "pull_request":
-            found = api(repo, f"/actions/workflows/image.yml/runs?branch={args.fallback_branch}"
-                              "&event=pull_request&status=success&per_page=1")["workflow_runs"]
-            if found:
-                return rehearse_with(repo, found[0], "the image workflow did not run on this commit")
+            return fallback(repo, args.fallback_branch, "the image workflow did not run on this commit")
         if "image" not in chosen and waited > 300:
             output(release="false", reason="the image workflow did not run on this commit: no image to release")
             summary("Nothing to release: the `image` workflow did not run on this commit.")
@@ -163,6 +171,8 @@ def main() -> int:
         summary("Not released: " + ", ".join(failed))
         return 1
     if chosen["image"]["conclusion"] != "success" or chosen.get("boot", {}).get("conclusion") != "success":
+        if args.fallback_branch and args.event == "pull_request":
+            return fallback(repo, args.fallback_branch, "the boot workflow did not run on this commit")
         output(release="false", reason="this commit's image was not both built (image) and booted (boot) by CI", **ids)
         summary("Nothing to release: the image of this commit was not both built and booted by CI.")
         return 0

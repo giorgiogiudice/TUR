@@ -3,6 +3,7 @@
 """Prove that re-chunking changed how the image is cut, not what it holds.
 
     sudo scripts/release/compare-trees.py TESTED PUBLISHED OUT_JSON
+    scripts/release/compare-trees.py --self-test
 
 Both are images in containers-storage. Each is mounted read-only (podman
 image mount) and walked; every file, directory and link is described by its
@@ -10,9 +11,13 @@ type, permissions, owner, group, size, the SHA-256 of its content (files)
 and its target (links). Modification times are left out: OSTree, which
 re-chunking goes through, sets every one to the same value.
 
-Differences are listed in OUT_JSON. The few that OSTree makes by design
-are named in EXPECTED below, each with its reason, and do not fail the
-comparison; anything else does (exit status 1). Run as root, in CI only.
+Differences are listed in OUT_JSON. The one kind re-chunking makes by
+design, OSTree's own object store under /sysroot/ostree/repo/objects, is
+named in EXPECTED below with its reason and does not fail the comparison;
+anything else does (exit status 1): a file under /usr or /etc that differs
+in content, permissions, owner or link target, or that is only in one of
+the two. --self-test proves that on two small trees. Run as root, in CI
+only.
 """
 
 from __future__ import annotations
@@ -25,15 +30,16 @@ import stat
 import subprocess
 import sys
 
-# What OSTree changes by design when it commits a root file system, each
-# with the reason. A path pattern (fnmatch, "*" crosses "/") and the kind of
-# difference allowed there: "missing" (only in the tested image), "added"
-# (only in the published one) or "changed".
+# What re-chunking changes by design, with the reason. A path pattern
+# (fnmatch, "*" crosses "/") and the kind of difference allowed there:
+# "missing" (only in the tested image), "added" (only in the published one)
+# or "changed". Measured in release run 43336236365: these are the only
+# differences, and no file outside them differs.
 EXPECTED: list[tuple[str, str, str]] = [
-    ("/var/*", "missing",
-     "/var belongs to the installed system; bootc images keep no content there (bootc container lint warns)"),
-    ("/sysroot", "added", "OSTree's mount point for the physical root"),
-    ("/ostree", "added", "OSTree's link to /sysroot/ostree"),
+    ("/sysroot/ostree/repo/objects/*", kind,
+     "OSTree's object store of the commit the image is made from: the base's commit in the tested image, "
+     "the re-chunked image's own commit in the published one. It is built from the files compared here")
+    for kind in ("missing", "added", "changed")
 ]
 
 
@@ -73,7 +79,41 @@ def mount(image: str) -> str:
                           text=True).stdout.strip()
 
 
+def compare(tested: dict, published: dict) -> list[dict]:
+    differences = []
+    for path in sorted(set(tested) | set(published)):
+        a, b = tested.get(path), published.get(path)
+        if a == b:
+            continue
+        kind = "missing" if b is None else "added" if a is None else "changed"
+        differences.append({"path": path, "kind": kind, "tested": a, "published": b,
+                            "expected": expected(path, kind)})
+    return differences
+
+
+def self_test() -> int:
+    """The allowance is narrow: a change anywhere else is caught."""
+    import tempfile
+    with tempfile.TemporaryDirectory() as a, tempfile.TemporaryDirectory() as b:
+        for root, text, obj in ((a, "one", "x.commit"), (b, "two", "y.commit")):
+            for d in ("usr/lib", "etc", "sysroot/ostree/repo/objects/ab"):
+                os.makedirs(os.path.join(root, d))
+            for f in ("usr/lib/same", "etc/same"):
+                open(os.path.join(root, f), "w").write("same")
+            open(os.path.join(root, "usr/lib/file"), "w").write(text)
+            open(os.path.join(root, "etc/conf"), "w").write(text)
+            open(os.path.join(root, "sysroot/ostree/repo/objects/ab", obj), "w").write(text)
+        os.chmod(os.path.join(b, "etc/same"), 0o600)
+        found = {d["path"]: bool(d["expected"]) for d in compare(describe(a), describe(b))}
+    want = {"/usr/lib/file": False, "/etc/conf": False, "/etc/same": False,
+            "/sysroot/ostree/repo/objects/ab/x.commit": True, "/sysroot/ostree/repo/objects/ab/y.commit": True}
+    print("self-test:", "passed" if found == want else f"FAILED: {found}")
+    return 0 if found == want else 1
+
+
 def main() -> int:
+    if sys.argv[1:] == ["--self-test"]:
+        return self_test()
     if len(sys.argv) != 4:
         sys.exit(__doc__)
     tested_ref, published_ref, out = sys.argv[1:]
@@ -86,14 +126,7 @@ def main() -> int:
     finally:
         for ref in roots:
             subprocess.run(["podman", "image", "unmount", ref], capture_output=True)
-    differences = []
-    for path in sorted(set(tested) | set(published)):
-        a, b = tested.get(path), published.get(path)
-        if a == b:
-            continue
-        kind = "missing" if b is None else "added" if a is None else "changed"
-        differences.append({"path": path, "kind": kind, "tested": a, "published": b,
-                            "expected": expected(path, kind)})
+    differences = compare(tested, published)
     unexpected = [d for d in differences if not d["expected"]]
     files = sum(1 for e in tested.values() if e[0] == "file")
     size = sum(e[4] for e in tested.values() if e[0] == "file")

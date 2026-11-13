@@ -302,6 +302,16 @@ The fixtures are the image under release with one label added
 (`scripts/release/variant.py`): same layers, another digest each, because a
 signature belongs to a digest.
 
+**Rehearsing without waiting.** A full run waits for every workflow on the
+commit. Two shortcuts run only the release job, against an image CI already
+built and tested, and never publish: a manual run of `release` with the
+input `image_run` (the ID of a successful run of the `image` workflow; the
+boot and rollback runs of the same commit are used alongside), and, on a
+pull request, a commit that changes only the release itself (the image
+workflow does not run on it, and the branch's latest successful image run
+is used). The workflow file must be on `main` for the manual run to be
+offered.
+
 **While publishing is off** the release key does not exist. The job makes a
 throwaway key pair, signs with it, and the guest gets its public half on a
 tmpfs over `/usr/share/tur/signing` (the image's own files plus that key):

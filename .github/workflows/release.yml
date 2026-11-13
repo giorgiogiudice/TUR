@@ -87,6 +87,7 @@ jobs:
           shellcheck -x scripts/release/*.sh tests/boot/guest/rootfs/usr/libexec/tur-boot-test/signed-update-agent \
             tests/boot/guest/rootfs/usr/libexec/tur-boot-test/guest-agent
           python3 -m py_compile scripts/release/*.py tests/boot/signed-update.py tests/image/marks.py image/signing/policy.py
+          python3 scripts/release/compare-trees.py --self-test
 
   await:
     name: Wait for every workflow on this commit

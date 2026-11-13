@@ -188,11 +188,18 @@ def podman() -> list[str]:
 
 
 def run(args: list[str], **kwargs) -> str:
-    return subprocess.run(args, check=True, capture_output=True, text=True, **kwargs).stdout
+    result = subprocess.run(args, capture_output=True, text=True, **kwargs)
+    if result.returncode != 0:
+        sys.exit(f"{' '.join(args[:6])} ... failed ({result.returncode}): {result.stderr.strip()[-1500:]}")
+    return result.stdout
 
 
 def fedora_logos_digests(base: str) -> dict[str, str]:
     """SHA-256 of each file of fedora-logos, as the base image's package database records it."""
+    # Where the image was not just built (the release workflow), the base is
+    # not in the store yet: fetch it by its pinned digest.
+    if subprocess.run(podman() + ["image", "exists", base], capture_output=True).returncode != 0:
+        run(podman() + ["pull", "--quiet", base])
     out = run(podman() + ["run", "--rm", "--network", "none", base, "rpm", "-q", "--dump", "fedora-logos"])
     digests = {}
     for line in out.splitlines():
