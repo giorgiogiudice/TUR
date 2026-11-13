@@ -95,6 +95,10 @@ pub enum Code {
     PrefixPinned,
     /// The named backup does not exist for this application.
     BackupMissing,
+    /// Case-insensitive file names were asked for and the file system holding the prefix cannot provide them. Reported; the prefix is created case-sensitive.
+    CaseFoldUnsupported,
+    /// Case-insensitive file names were asked for and the prefix's drive C: could not be given them for another reason. Reported; the prefix is created case-sensitive.
+    CaseFoldFailed,
     /// The effective user is root; Wine and Proton are never run as root.
     RunningAsRoot,
     /// The sandbox cannot be built because `bwrap` is not installed. Nothing is run without it.
@@ -133,7 +137,7 @@ pub enum Code {
 
 impl Code {
     /// Every code this component can report.
-    pub const ALL: [Code; 53] = [
+    pub const ALL: [Code; 55] = [
         Code::Unreadable,
         Code::Damaged,
         Code::LimitExceeded,
@@ -170,6 +174,8 @@ impl Code {
         Code::PrefixRuntimeMismatch,
         Code::PrefixPinned,
         Code::BackupMissing,
+        Code::CaseFoldUnsupported,
+        Code::CaseFoldFailed,
         Code::RunningAsRoot,
         Code::SandboxMissing,
         Code::GrantRefused,
@@ -228,6 +234,8 @@ impl Code {
             Code::PrefixRuntimeMismatch => "TUR-WINDOWS-PREFIX-006",
             Code::PrefixPinned => "TUR-WINDOWS-PREFIX-007",
             Code::BackupMissing => "TUR-WINDOWS-PREFIX-008",
+            Code::CaseFoldUnsupported => "TUR-WINDOWS-PREFIX-009",
+            Code::CaseFoldFailed => "TUR-WINDOWS-PREFIX-010",
             Code::RunningAsRoot => "TUR-SECURITY-SANDBOX-001",
             Code::SandboxMissing => "TUR-SECURITY-SANDBOX-002",
             Code::GrantRefused => "TUR-SECURITY-SANDBOX-003",
@@ -287,6 +295,10 @@ impl Code {
             Code::PrefixRuntimeMismatch => "The prefix is on another runtime version",
             Code::PrefixPinned => "The prefix is pinned to its runtime version",
             Code::BackupMissing => "The backup does not exist",
+            Code::CaseFoldUnsupported => {
+                "The file system holding the prefix cannot make file names case-insensitive"
+            }
+            Code::CaseFoldFailed => "The prefix's drive C: could not be made case-insensitive",
             Code::RunningAsRoot => "Windows software is never run as root",
             Code::SandboxMissing => "bubblewrap is not installed",
             Code::GrantRefused => "The directory cannot be granted to an application",

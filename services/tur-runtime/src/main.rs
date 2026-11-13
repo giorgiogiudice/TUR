@@ -48,6 +48,7 @@ use serde::Serialize;
 use serde_json::{Value, json};
 
 use tur_runtime::app_record::{AppRecord, SourceRecord, load_record};
+use tur_runtime::casefold::{CaseFoldRecord, CaseFolding, probe as probe_case_folding};
 use tur_runtime::desktop::desktop_entry;
 use tur_runtime::discover::{discover, snapshot};
 use tur_runtime::exec::{Forward, SystemExecutor, supervise};
@@ -237,6 +238,14 @@ enum AppCommand {
         /// application.
         #[arg(long)]
         no_network: bool,
+        /// Make the prefix's drive C: case-insensitive where the file
+        /// system can (ext4 with the casefold feature); see --no-casefold.
+        #[arg(long, conflicts_with = "no_casefold")]
+        casefold: bool,
+        /// Leave the prefix's drive C: an ordinary directory, in which Wine
+        /// emulates case-insensitivity.
+        #[arg(long)]
+        no_casefold: bool,
         /// How long the installer may take, in seconds.
         #[arg(long, value_name = "SECONDS", default_value_t = 900)]
         timeout: u64,
@@ -350,6 +359,14 @@ enum PrefixCommand {
         /// Do not share the host's network with the application.
         #[arg(long)]
         no_network: bool,
+        /// Make the prefix's drive C: case-insensitive where the file
+        /// system can (ext4 with the casefold feature); see --no-casefold.
+        #[arg(long, conflicts_with = "no_casefold")]
+        casefold: bool,
+        /// Leave the prefix's drive C: an ordinary directory, in which Wine
+        /// emulates case-insensitivity.
+        #[arg(long)]
+        no_casefold: bool,
         /// Show this directory to the application, read-only.
         #[arg(long, value_name = "DIR")]
         grant: Vec<String>,
@@ -740,6 +757,23 @@ impl Session {
         }
     }
 
+    /// Whether the application's drive C: is case-insensitive now, as a
+    /// choice for a prefix that replaces it: a reset or a restore keeps it
+    /// as it was. Unknown counts as not.
+    fn live_case_folding(&self) -> CaseFolding {
+        let drive_c = self.app.prefix.join("drive_c");
+        let folded = self
+            .host
+            .lsattr
+            .as_deref()
+            .and_then(|lsattr| probe_case_folding(lsattr, &drive_c));
+        if folded == Some(true) {
+            CaseFolding::Try
+        } else {
+            CaseFolding::Off
+        }
+    }
+
     fn executor(&self, forward: Forward) -> SystemExecutor {
         SystemExecutor::new(&self.dirs)
             .with_command_log(self.app.operations_log())
@@ -783,7 +817,14 @@ fn run_prefix(command: PrefixCommand) -> u8 {
     let mut executor = session.executor(Forward::LogOnly);
     let report = run_plan(&planned.plan, &mut executor);
     if json {
-        print_json(&document(false, &planned, Some(&report)));
+        let mut body = document(false, &planned, Some(&report));
+        if let Some(record) = &report.case_folding {
+            body["warnings"] = case_folding_warnings(record);
+        }
+        print_json(&body);
+    }
+    if let Some(record) = &report.case_folding {
+        report_case_folding(json, record);
     }
     if let Some(failure) = &report.failure {
         let message = failure_message(failure, executor.last_output());
@@ -819,6 +860,34 @@ fn run_prefix(command: PrefixCommand) -> u8 {
         }
     }
     EXIT_OK
+}
+
+/// Says what became of making drive C: case-insensitive. A file system that
+/// cannot is not a failure: the line goes to standard error with its code,
+/// and with `--json` the report already carries the record.
+fn report_case_folding(json: bool, record: &CaseFoldRecord) {
+    if json {
+        return;
+    }
+    print_line(&format!("drive C: {}", record.summary()));
+    if let Some(code) = record.reason.code() {
+        print_error_line(&format!(
+            "warning[{}]: {}; the prefix was created case-sensitive",
+            code.error_code(),
+            record.reason.describe()
+        ));
+    }
+}
+
+/// The warnings a case-folding record gives rise to, for a JSON report.
+fn case_folding_warnings(record: &CaseFoldRecord) -> Value {
+    match record.reason.code() {
+        Some(code) => json!([{
+            "code": code.as_str(),
+            "message": record.reason.describe(),
+        }]),
+        None => json!([]),
+    }
 }
 
 /// Reports a failure that follows a JSON report already printed: the report
@@ -905,6 +974,8 @@ fn plan_prefix_in(
             graphics,
             pin,
             no_network,
+            casefold,
+            no_casefold,
             grant,
             grant_rw,
             ..
@@ -940,6 +1011,7 @@ fn plan_prefix_in(
                 graphics,
                 network: !no_network,
                 grants,
+                case_folding: CaseFolding::from_options(*casefold, *no_casefold),
             };
             let (plan, _) = planner.create(&settings, exists)?;
             return Ok(Planned::of(plan));
@@ -951,7 +1023,11 @@ fn plan_prefix_in(
             if !session.app.backup_archive(name).is_file() {
                 return Err(PlanError::BackupMissing { name: name.clone() });
             }
-            return session.planner().restore(name, exists).map(Planned::of);
+            let case_folding = session.live_case_folding();
+            return session
+                .planner()
+                .restore(name, exists, case_folding)
+                .map(Planned::of);
         }
         _ => {}
     }
@@ -965,7 +1041,8 @@ fn plan_prefix_in(
         PrefixCommand::Verify { .. } => Planned::of(planner.verify(&metadata)?),
         PrefixCommand::Repair { .. } => Planned::of(planner.repair(&metadata, &installed()?)?),
         PrefixCommand::Reset { no_backup, .. } => {
-            Planned::of(planner.reset(&metadata, &installed()?, !no_backup)?)
+            let case_folding = session.live_case_folding();
+            Planned::of(planner.reset(&metadata, &installed()?, !no_backup, case_folding)?)
         }
         PrefixCommand::Migrate { .. } => Planned::of(planner.migrate(&metadata, &installed()?)?),
         PrefixCommand::Backup { .. } => {
@@ -1245,6 +1322,8 @@ fn run_app(command: AppCommand) -> u8 {
             main_exe,
             portable,
             no_network,
+            casefold,
+            no_casefold,
             timeout,
             keep_failed,
             launcher,
@@ -1256,6 +1335,7 @@ fn run_app(command: AppCommand) -> u8 {
             main_exe: main_exe.as_deref(),
             portable,
             no_network,
+            case_folding: CaseFolding::from_options(casefold, no_casefold),
             timeout,
             keep_failed,
             launcher: &launcher,
@@ -1299,6 +1379,7 @@ struct InstallArguments<'a> {
     main_exe: Option<&'a str>,
     portable: bool,
     no_network: bool,
+    case_folding: CaseFolding,
     timeout: u64,
     keep_failed: bool,
     launcher: &'a str,
@@ -1362,6 +1443,7 @@ fn run_app_install(arguments: &InstallArguments<'_>) -> u8 {
             graphics: GraphicsBackend::Auto,
             network: !arguments.no_network,
             grants: Vec::new(),
+            case_folding: arguments.case_folding,
         };
         let (create, metadata) = session.planner().create(&settings, exists)?;
         let run = plan_installer_run(
@@ -1434,6 +1516,10 @@ fn run_app_install(arguments: &InstallArguments<'_>) -> u8 {
         );
     }
     let prefix_seconds = started.elapsed().as_secs_f64();
+    let case_folding = report
+        .case_folding
+        .clone()
+        .unwrap_or_else(CaseFoldRecord::not_requested);
     let before = snapshot(&session.app.prefix);
 
     // 2. The installer.
@@ -1471,6 +1557,7 @@ fn run_app_install(arguments: &InstallArguments<'_>) -> u8 {
             },
             method: run.method,
             arguments: run.arguments.clone(),
+            case_folding: Some(case_folding.clone()),
         },
     );
     let installed = match described {
@@ -1521,6 +1608,8 @@ fn run_app_install(arguments: &InstallArguments<'_>) -> u8 {
                 "prefix": prefix_seconds,
                 "installer": installer_seconds,
             },
+            "case_folding": case_folding,
+            "warnings": case_folding_warnings(&case_folding),
             "notes": installed.notes,
         }));
     } else {
@@ -1538,6 +1627,7 @@ fn run_app_install(arguments: &InstallArguments<'_>) -> u8 {
             "  main program: {} ({})",
             record.main_executable_windows, record.main_executable_reason
         ));
+        print_line(&format!("  drive C: {}", case_folding.summary()));
         print_line(&format!("  record: {}", session.app.record.display()));
         print_line(&format!(
             "  launcher entry: {} (staged; installed it would be {entry_destination})",
@@ -1549,6 +1639,13 @@ fn run_app_install(arguments: &InstallArguments<'_>) -> u8 {
         ));
         for note in &installed.notes {
             print_line(&format!("  note: {note}"));
+        }
+        if let Some(code) = case_folding.reason.code() {
+            print_error_line(&format!(
+                "warning[{}]: {}; the application was installed in a case-sensitive prefix",
+                code.error_code(),
+                case_folding.reason.describe()
+            ));
         }
     }
     EXIT_OK
@@ -1612,6 +1709,13 @@ fn run_app_show(app_id: &str, json: bool) -> u8 {
             ),
         );
         line("installer kind", record.install.kind.label());
+        line(
+            "drive C",
+            &record.case_folding.as_ref().map_or_else(
+                || "not recorded (installed before case folding was recorded)".to_owned(),
+                CaseFoldRecord::summary,
+            ),
+        );
         line("launcher entry", &record.launcher.desktop_entry);
     }
     EXIT_OK
