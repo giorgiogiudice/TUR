@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# The height of the new account's panel (plasma-org.kde.plasma.desktop-appletsrc
+# beside this file): 44 pixels at a scale of 1, room for the launcher's and
+# the applications' icons with a margin. Plasma keeps a panel's size here,
+# under the panel's number (shell/panelview.cpp), and floats it by default.
+
+[PlasmaViews][Panel 1][Defaults]
+thickness=44

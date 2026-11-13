@@ -1,0 +1,52 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# The panel of a new account (desktop-experience.md, 7.1): one panel along the
+# bottom, floating as Plasma draws it; from left to right the launcher with
+# TUR's mark, the pinned applications (Files, Firefox, Settings) with the
+# running ones after them, the system tray and the clock. Nothing else.
+#
+# Data, not a layout script: Plasma reads this file from the account's own
+# ~/.config only (it is copied there when the account is made, from
+# /etc/skel), and a file with a panel in it stops Plasma from laying out its
+# own default panel. The desktop itself is made by Plasma for the account's
+# activity, with the global theme's wallpaper. An existing account is never
+# laid out again: a person's panel is theirs. Plasma rewrites this file as
+# soon as anything on the panel changes, without these comments.
+
+[Containments][1]
+activityId=
+formfactor=2
+immutability=1
+lastScreen=0
+location=4
+plugin=org.kde.panel
+wallpaperplugin=org.kde.image
+
+[Containments][1][General]
+AppletOrder=2;3;4;5;6
+
+[Containments][1][Applets][2]
+immutability=1
+plugin=org.kde.plasma.kickoff
+
+[Containments][1][Applets][2][Configuration][General]
+icon=tur-logo-icon
+
+[Containments][1][Applets][3]
+immutability=1
+plugin=org.kde.plasma.icontasks
+
+[Containments][1][Applets][3][Configuration][General]
+launchers=applications:org.kde.dolphin.desktop,applications:org.mozilla.firefox.desktop,applications:systemsettings.desktop
+
+[Containments][1][Applets][4]
+immutability=1
+plugin=org.kde.plasma.marginsseparator
+
+[Containments][1][Applets][5]
+immutability=1
+plugin=org.kde.plasma.systemtray
+
+[Containments][1][Applets][6]
+immutability=1
+plugin=org.kde.plasma.digitalclock

@@ -1,0 +1,18 @@
+{
+    "X-TUR-Licence": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+    "X-TUR-About": "TUR's dark global theme: data only (desktop/data/README.md). The default.",
+    "KPackageStructure": "Plasma/LookAndFeel",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "TUR project authors"
+            }
+        ],
+        "Category": "",
+        "Description": "TUR's dark global theme: the system in blue on near-black",
+        "Id": "org.tur.dark",
+        "License": "LicenseRef-TUR-Noncommercial-1.0.0",
+        "Name": "TUR Dark",
+        "Website": "https://github.com/giorgiogiudice/TUR"
+    }
+}
