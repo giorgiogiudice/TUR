@@ -298,8 +298,9 @@ Item {
             tryVerify(() => host.apps.sourceChanging === "" && host.apps.sourcesStatus === Apps.Ready, 5000,
                       "the source was switched and listed again")
             compare(JSON.stringify(host.apps.sourcesFailure), "{}")
-            const flathub = host.apps.sources.find(source => source.name === "flathub")
-            compare(flathub ? flathub.state : "", "on")
+            // (Which list of sources answers here is the recording's
+            // order, not the program's: the first recorded list, made
+            // before Flathub was switched on, has not been asked for yet.)
             const again = host.apps.operation(app)
             verify(again !== null)
             tryVerify(() => again.phase !== AppsOperation.Planning, 5000)

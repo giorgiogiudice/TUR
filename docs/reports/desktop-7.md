@@ -13,10 +13,12 @@ Subsystem:        Application centre (desktop/apps/tur-centre); install
 Build ID:         not applicable: no image is built for this change
 Source revision:  the head of feat/centre-install (pull request 101). The
                   end-to-end results, recordings and pictures below come
-                  from desktop run 43426720987 on def9d7c; the commit after
-                  it adds the references, this report, a test's wait and
-                  one button's condition, and every workflow ran again on
-                  it (the pull request lists those runs)
+                  from desktop run 43426720987 on def9d7c; the commits
+                  after it add the references, this report, two test
+                  corrections and one button's condition; the screenshots
+                  and the end-to-end job passed again on 4a968b6 (desktop
+                  run 43428734577), and every workflow ran again on the
+                  head commit (the pull request lists those runs)
 
 SUMMARY
 - What changed: the Install button installs. It runs tur-apps' plan and
@@ -91,7 +93,11 @@ TESTS
 - Desktop, Build, lint and test: 45 test programs. On def9d7c, 44 passed;
   centre-qml had 282 of 284 functions pass, the two failures being a test
   that pressed a button before its row was laid out and a threshold of 20
-  options where the fixtures have 19; both corrected in the next commit.
+  options where the fixtures have 19. On 4a968b6 one function failed: the
+  same test asserted which recorded list of sources answers after the
+  switch, which is the recording's order, not the program's; the assertion
+  was removed. The pull request's checks on its head commit are the final
+  word.
   New: tst_centre_apps (13 functions), tst_install (10), tst_routerwords
   (5), four centre-starts tests; tst_walks over 22 states (contrast: every
   new state 0 failures in both variants; keyboard; 200 % and
