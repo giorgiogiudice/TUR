@@ -6,7 +6,7 @@ which ignores these lines.
 From 0dde74acee351ceb15068c1b4da487d9ab6c1a21 Mon Sep 17 00:00:00 2001
 From: TUR experiment <tur-experiment@users.noreply.github.com>
 Date: Fri, 13 Nov 2026 10:41:47 +0300
-Subject: [PATCH 08/11] wineusb.sys: Handle power IRPs.
+Subject: [PATCH 08/12] wineusb.sys: Handle power IRPs.
 
 Power IRPs to a USB device's PDO were completed by the default handler
 with STATUS_INVALID_DEVICE_REQUEST, which fails the start of any function

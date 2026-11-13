@@ -50,7 +50,10 @@ _spec = importlib.util.spec_from_file_location("twd_harness", HERE.parent / "har
 twd = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(twd)
 
-DEBUG_KMDF = ("+wdfldr,+ntoskrnl,+plugplay,+loaddll,+wineusb,+usbd,+seh,warn+debugstr,err+all,fixme+all")
+# No +ntoskrnl: its spin-lock and DPC traces made 14 GB in one run when a
+# queue re-queued its DPC forever (run 43390973700); warnings, errors and
+# FIXMEs from it are still logged.
+DEBUG_KMDF = ("+wdfldr,+plugplay,+loaddll,+wineusb,+usbd,+seh,warn+debugstr,err+all,fixme+all")
 FX2_VID, FX2_PID = 0x0547, 0x1002
 twd.EXCERPT_PATTERNS += [r"wdfldr", r"WDF\[", r"kmdftest:", r"fxstub", r"OsrFx", r"osrusbfx2", r"Wdf01000",
                          r"seh:", r"Unhandled exception", r"unimplemented function", r"page fault"]

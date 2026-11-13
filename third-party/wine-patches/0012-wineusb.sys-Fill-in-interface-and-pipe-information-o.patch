@@ -1,0 +1,105 @@
+SPDX-License-Identifier: LGPL-2.1-or-later
+A patch to Wine (https://gitlab.winehq.org/wine/wine), under Wine's licence;
+see README.md and COPYING.LIB in this directory. Applied with `git apply`,
+which ignores these lines.
+
+From 639e64363cb8208c843c7cd80bb335b07d645202 Mon Sep 17 00:00:00 2001
+From: TUR experiment <tur-experiment@users.noreply.github.com>
+Date: Fri, 13 Nov 2026 11:28:20 +0300
+Subject: [PATCH 12/12] wineusb.sys: Fill in interface and pipe information on
+ SELECT_CONFIGURATION.
+
+On Windows the bus driver fills the interface and pipe information of a
+select-configuration request from the descriptors. wineusb.sys only made
+pipe handles from what the caller had put there, which only callers using
+usbd.sys's USBD_CreateConfigurationRequestEx had; the Kernel-Mode Driver
+Framework builds the request itself and got endpoint 0, packet size 0 and
+control pipes. Also set the configuration and interface handles and walk
+every interface in the request, not only the first.
+---
+ dlls/wineusb.sys/unixlib.c | 62 ++++++++++++++++++++++++++++++++++++--
+ 1 file changed, 59 insertions(+), 3 deletions(-)
+
+diff --git a/dlls/wineusb.sys/unixlib.c b/dlls/wineusb.sys/unixlib.c
+index 1d6c646..af253ba 100644
+--- a/dlls/wineusb.sys/unixlib.c
++++ b/dlls/wineusb.sys/unixlib.c
+@@ -523,6 +523,9 @@ static NTSTATUS usb_submit_urb(void *args)
+         case URB_FUNCTION_SELECT_CONFIGURATION:
+         {
+             struct _URB_SELECT_CONFIGURATION *req = &urb->UrbSelectConfiguration;
++            USBD_INTERFACE_INFORMATION *iface = &req->Interface;
++            const char *end = (const char *)urb + urb->UrbHeader.Length;
++            struct libusb_config_descriptor *config = NULL;
+             ULONG i;
+ 
+             /* FIXME: In theory, we'd call libusb_set_configuration() here, but
+@@ -531,12 +534,65 @@ static NTSTATUS usb_submit_urb(void *args)
+              * we should skip setting that if and only if the configuration is
+              * already active? */
+ 
+-            for (i = 0; i < req->Interface.NumberOfPipes; ++i)
++            if (!req->ConfigurationDescriptor)
++                return STATUS_SUCCESS;
++
++            /* As on Windows, the bus driver fills in the interface and pipe
++             * information from the descriptors: callers that build the URB
++             * themselves (the Kernel-Mode Driver Framework does) leave it
++             * zeroed, and usbd.sys's USBD_CreateConfigurationRequestEx only
++             * happens to prefill it. */
++            if ((ret = libusb_get_active_config_descriptor(libusb_get_device(handle), &config)) < 0)
++                WARN("Failed to get configuration descriptor: %s\n", libusb_strerror(ret));
++            req->ConfigurationHandle = (USBD_CONFIGURATION_HANDLE)(ULONG_PTR)(0x100 | req->ConfigurationDescriptor->bConfigurationValue);
++
++            while ((const char *)iface + FIELD_OFFSET(USBD_INTERFACE_INFORMATION, Pipes) <= end && iface->Length)
+             {
+-                USBD_PIPE_INFORMATION *pipe = &req->Interface.Pipes[i];
+-                pipe->PipeHandle = make_pipe_handle(pipe->EndpointAddress, pipe->PipeType);
++                const struct libusb_interface_descriptor *desc = NULL;
++                int n;
++
++                for (n = 0; config && n < config->bNumInterfaces; ++n)
++                {
++                    const struct libusb_interface *alts = &config->interface[n];
++                    int a;
++
++                    for (a = 0; a < alts->num_altsetting; ++a)
++                        if (alts->altsetting[a].bInterfaceNumber == iface->InterfaceNumber
++                                && alts->altsetting[a].bAlternateSetting == iface->AlternateSetting)
++                            desc = &alts->altsetting[a];
++                }
++                if (desc)
++                {
++                    iface->Class = desc->bInterfaceClass;
++                    iface->SubClass = desc->bInterfaceSubClass;
++                    iface->Protocol = desc->bInterfaceProtocol;
++                    if (iface->NumberOfPipes > desc->bNumEndpoints)
++                        iface->NumberOfPipes = desc->bNumEndpoints;
++                }
++                iface->InterfaceHandle = (USBD_INTERFACE_HANDLE)(ULONG_PTR)(0x10000 | (iface->InterfaceNumber << 8) | iface->AlternateSetting);
++
++                for (i = 0; i < iface->NumberOfPipes; ++i)
++                {
++                    USBD_PIPE_INFORMATION *pipe = &iface->Pipes[i];
++
++                    if ((const char *)(pipe + 1) > end) break;
++                    if (desc)
++                    {
++                        const struct libusb_endpoint_descriptor *ep = &desc->endpoint[i];
++
++                        pipe->EndpointAddress = ep->bEndpointAddress;
++                        pipe->MaximumPacketSize = ep->wMaxPacketSize;
++                        pipe->Interval = ep->bInterval;
++                        pipe->PipeType = ep->bmAttributes & LIBUSB_TRANSFER_TYPE_MASK;
++                        if (!pipe->MaximumTransferSize) pipe->MaximumTransferSize = 0x10000;
++                    }
++                    pipe->PipeHandle = make_pipe_handle(pipe->EndpointAddress, pipe->PipeType);
++                }
++
++                iface = (USBD_INTERFACE_INFORMATION *)((char *)iface + iface->Length);
+             }
+ 
++            if (config) libusb_free_config_descriptor(config);
+             return STATUS_SUCCESS;
+         }
+ 

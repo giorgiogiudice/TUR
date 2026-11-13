@@ -20,7 +20,7 @@ SUMMARY
   Driver Framework runtime (Wdf01000.sys) from Microsoft's MIT-licensed
   Windows-Driver-Frameworks source with an open toolchain (clang, lld,
   mingw-w64 headers), builds Wine 11.20's ntoskrnl.exe, wineusb.sys and a
-  new wdfldr.sys (the KMDF loader) with an eleven-patch Wine patch set, and
+  new wdfldr.sys (the KMDF loader) with a twelve-patch Wine patch set, and
   runs KMDF drivers against emulated USB devices in Fedora 45's Wine.
 - Why: experiment 1 (windows-drivers-1) found that every KMDF driver fails
   to load in Wine because WDFLDR.SYS and Wdf01000.sys are Microsoft
@@ -29,7 +29,7 @@ SUMMARY
 FILES
 - Added: third-party/wdf/** (MIT: Microsoft's LICENSE, patches, compat/
   stand-ins, sources.txt), third-party/wine-patches/** (LGPL-2.1-or-later:
-  COPYING.LIB, eleven patches, series), tests/windows-drivers/kmdf/**,
+  COPYING.LIB, twelve patches, series), tests/windows-drivers/kmdf/**,
   docs/reports/windows-drivers-2.md
 - Modified: .github/workflows/windows-drivers.yml (jobs kmdf-build,
   kmdf-run; path triggers), tests/windows-drivers/virtual-usb/
@@ -58,7 +58,24 @@ NEXT SAFE ACTION
 
 ## The answer so far
 
-- **Iteration 8 (run 43388872919, commit `abbbb69`) is the first in which
+- **Iteration 9 (run 43390973700, commit `be3cd7e`): a KMDF driver started
+  in Wine.** `kmdftest.sys`, on the KMDF runtime built from Microsoft's MIT
+  source, logged in order: `DriverEntry`, `WdfDriverCreate returned
+  0x00000000`, `DriverEntry returned 0x00000000`, `EvtDriverDeviceAdd`,
+  `WdfDeviceCreate returned 0x00000000`, `WdfIoQueueCreate` and
+  `WdfDeviceCreateDeviceInterface` 0, `EvtDevicePrepareHardware`,
+  `WdfUsbTargetDeviceCreateWithParameters` 0, the device descriptor read
+  over USB (1209:0001, bcdUSB 0200), `WdfUsbTargetDeviceSelectConfig` 0,
+  **`EvtDeviceD0Entry from D4`**; the framework's PnP and power state
+  machines ran through their start states, and the test program opened the
+  device interface (check `device-interface-found` PASS). Then the I/O
+  queue looped: its DPC re-queued itself forever (section 2.7, a header
+  problem, not Wine's), the test program's first IOCTL never completed, the
+  trace grew to 14 GB and the job was killed before the FX2 scenario.
+  Iteration 10 fixes the cause (`compat/wdm.h`), caps logs, and fills in
+  pipe information in `wineusb.sys` (patch 0012; the pipes came back as
+  endpoint 0, packet size 0).
+- **Iteration 8 (run 43388872919, commit `abbbb69`) was the first in which
   KMDF code ran in Wine.** Measured in the `kmdftest` scenario:
   - `Wdf01000.sys` built (1,507,328 bytes) and loaded native in Wine;
   - `WdfRegisterLibrary` 1.33.0 succeeded;
@@ -70,9 +87,9 @@ NEXT SAFE ACTION
   ntoskrnl.exe.MmIsDriverVerifying" (9 distinct FIXMEs in `fixmes.txt`), so
   `WdfDriverCreate` never returned. The FX2 scenario stopped at the same
   call, so the sample's test program found no device interface (error
-  0x2e). Patch 0011 (iteration 9) implements `MmIsDriverVerifying` (FALSE,
-  as Windows without Driver Verifier) and every other aborting stub the
-  framework imports.
+  0x2e). Patch 0011 implements `MmIsDriverVerifying` (FALSE, as Windows
+  without Driver Verifier) and every other aborting stub the framework
+  imports.
 - **The published framework source is not buildable as it stands.** It is
   "source for debugging": the WDK's private and generated headers, the
   loader (WdfLdr.sys) and the driver stub (WdfDriverEntry.lib) are not in
@@ -94,7 +111,7 @@ NEXT SAFE ACTION
   are in neither Wine nor mingw-w64's libraries and were found at the link.
   The TUR patches add all of the missing ones (0007, 0009, 0010) and
   replace every aborting stub (0001, 0004, 0011).
-- **The Wine side**: eleven patches to Wine 11.20 (`ntoskrnl.exe`, a new
+- **The Wine side**: twelve patches to Wine 11.20 (`ntoskrnl.exe`, a new
   `wdfldr.sys`, `wineusb.sys`), all of which also apply to Wine master
   (section 4). They are installed over Fedora 45's Wine in the CI container.
 
@@ -187,6 +204,19 @@ DMA version 3 (the members appended to `DMA_OPERATIONS` and
 `compat/tur-ddk-additions.h` (through a wrapping `ntddk.h`), `usbdlib.h`,
 `usbdrivr.h`, `tur-wdf-prelude.h`.
 
+### 2.7 Inline kernel accessors that read a kernel's processor block
+
+Found at run time (iteration 9), not at compile time: on x86-64 mingw-w64's
+`wdm.h` defines `KeGetCurrentThread` (and `PsGetCurrentThread` through it)
+as an inline read of `gs:[0x188]`, the current thread in a real kernel's
+processor control region. In Wine's driver host `gs` is the thread's TEB,
+where that offset is zero in every thread. Every thread therefore looked
+like the same NULL thread, `FxCallbackLock::IsOwner` answered "owner" for an
+unowned lock, and an I/O queue deferred its dispatch to a DPC that deferred
+again, forever. `compat/wdm.h` wraps mingw-w64's `wdm.h` and makes both
+names call ntoskrnl's exports (iteration 10). A driver built with the WDK's
+own headers calls the import and never had this problem.
+
 ## 3. Compiling Wdf01000.sys: the error trend
 
 Fedora 45 container, clang 23.1.5 (`--target=x86_64-w64-mingw32`,
@@ -223,6 +253,7 @@ both also apply to master `cc5d1d86` (checked in every build).
 | 0008 `wineusb.sys: Handle power IRPs.` | set/query power succeed on PDOs, the bus FDO passes them down | without it every KMDF USB driver's start fails at D0 |
 | 0009 `ntoskrnl.exe: Add power framework functions that report it unavailable.` | `PoFxRegisterDevice` fails with `STATUS_NOT_SUPPORTED`; the ten functions that take its handle do nothing | imported by the framework (`poxinterfacekm.cpp`); without them the image does not load |
 | 0010 `ntoskrnl.exe: Add more functions the KMDF runtime imports.` | `ExAllocateTimer` fails (callers use `KeSetTimer` timers), `ExSetTimer`/`ExCancelTimer`/`ExDeleteTimer`, `IoGetActivityIdIrp`/`IoSetActivityIdIrp`, `IoGetInitiatorProcess`, `IoQueryFullDriverPath` (from the loader entry), `VfIsRuleClassEnabled` (FALSE), `VfCheckNxPoolType` | the link of iteration 7 |
+| 0012 `wineusb.sys: Fill in interface and pipe information on SELECT_CONFIGURATION.` | fills each interface's class/subclass/protocol and each pipe's endpoint, packet size, interval and type from the active configuration descriptor, sets configuration and interface handles, walks every interface in the request | iteration 9: the framework builds the request itself, and its pipes came back as endpoint 0, packet size 0, control; Wine had relied on usbd.sys's `USBD_CreateConfigurationRequestEx` prefilling them |
 | 0011 `ntoskrnl.exe: Implement the remaining stubs the KMDF runtime imports.` | `MmIsDriverVerifying` returns FALSE (no Driver Verifier, as on Windows without it); `MmSizeOfMdl`, `IoBuildPartialMdl`, `IoSetCompletionRoutineEx`, `KeGetRecommendedSharedDataAlignment`, `MmLockPagable{Data,Image}Section`, the error-log and WMI-event functions (no event log, no WMI), `WmiTraceMessageVa`, `IoInvalidateDeviceState`, `IoRequestDeviceEject`, `IoRegisterLastChanceShutdownNotification`, `IoGetDmaAdapter` (no adapters), `KeSynchronizeExecution` and the interrupt spin locks (interrupts are never connected), the `KdDebuggerNotPresent` variable | iteration 8: `WdfDriverCreate` called `MmIsDriverVerifying`, a `stub`, and the driver host aborted; the rest were the other `stub` imports in 5.2, each an abort waiting to happen |
 
 A correction to an earlier iteration of this report: patch 0009 was first
@@ -298,8 +329,28 @@ handler, so a power IRP to a USB device fails with
 | Scenario | Status |
 |---|---|
 | Overlay of the patched `ntoskrnl.exe`, `wineusb.sys` and new `wdfldr.sys` over Fedora 45's Wine | PASS (run 43382377329 onwards) |
-| `kmdftest.sys` (minimal KMDF USB driver) on the loopback device 1209:0001 | iteration 8: loaded, bound, `DriverEntry` ran; aborted in `WdfDriverCreate` (`MmIsDriverVerifying`) |
-| Microsoft's `kmdf_fx2` sample and its `testapp.c` on the FX2-like device 0547:1002 | iteration 8: loaded and bound the same way; aborted at the same call; `testapp` error 0x2e (no device interface) |
+| `kmdftest.sys` (minimal KMDF USB driver) on the loopback device 1209:0001 | iteration 9: **started** (through `EvtDeviceD0Entry`), device interface opened; first IOCTL hung (queue DPC loop, section 2.7) |
+| Microsoft's `kmdf_fx2` sample and its `testapp.c` on the FX2-like device 0547:1002 | iteration 8: aborted at `MmIsDriverVerifying`; iteration 9: not reached (job killed) |
+
+Iteration 9, step by step (`kmdftest`, from the driver host's log):
+
+| Step | Result |
+|---|---|
+| load, bind, `DriverEntry` (as iteration 8) | PASS |
+| `WdfDriverCreate` | PASS, returned 0 ("WDF[4]: FxIFR logging started") |
+| `EvtDriverDeviceAdd` → `WdfDeviceCreate`, `WdfIoQueueCreate`, `WdfDeviceCreateDeviceInterface` | PASS, all 0; PnP state 0x100 → 0x105 |
+| `IRP_MN_START_DEVICE` → PnP states 0x106, 0x108 → `EvtDevicePrepareHardware` | PASS |
+| `WdfUsbTargetDeviceCreateWithParameters` (four `IOCTL_INTERNAL_USB_SUBMIT_URB` to `wineusb.sys`) | PASS; device descriptor 1209:0001 bcdUSB 0200; `GET_STATUS_FROM_DEVICE` unhandled by wineusb (FIXME, tolerated) |
+| `WdfUsbTargetDeviceSelectConfig` | returned 0, but both pipes reported endpoint 0x00, packet size 0 (patch 0012) |
+| power policy 0x500 → 0x501, power 0x300 → 0x316 → 0x30f → `EvtDeviceD0Entry from D4` → 0x310, 0x311, 0x367, 0x312, "Power resume all queues" | PASS |
+| `kmdftest.exe`: device interface found and opened | PASS |
+| first IOCTL (`INFO`) | hung: the queue's DPC re-queued itself ("Presentation lock … already held, deferring to dpc or workitem") until the 240 s timeout; 14 GB of `+ntoskrnl` trace; the harness was killed reading it (exit 137) |
+
+New FIXMEs in iteration 9, none fatal: `ExCreateCallback`/`ExRegisterCallback`
+(stubs; the framework's power-state callback), `wineusb` `pdo_pnp`
+"Unhandled minor function 0x8" (`IRP_MN_QUERY_INTERFACE`; the framework
+does without the USBDI interface), `usb_submit_urb` "Unhandled function
+0x13" (`GET_STATUS_FROM_DEVICE`), `PoSetPowerState`, `IoWMIRegistrationControl`.
 
 Iteration 8, step by step (`kmdftest`, from the driver host's log):
 
@@ -350,9 +401,9 @@ in run 43382377329.
 
 ## 8. Effort and next steps (as of this iteration)
 
-1. Iteration 9: `WdfDriverCreate` with patch 0011, then `EvtDriverDeviceAdd`,
-   `WdfDeviceCreate`, `EvtDevicePrepareHardware`, `EvtDeviceD0Entry`, the
-   `kmdftest` IOCTLs, and the FX2 test program.
+1. Iteration 10: the `kmdftest` IOCTLs (INFO, ECHO, VENDOR over the bulk
+   and control pipes, SELFTEST of `WDFDPC`/`WDFTIMER`/`WDFWORKITEM`) with
+   `compat/wdm.h` and patch 0012; then the FX2 sample and its test program.
 2. Each run iteration so far exposed one layer; the report records them.
 
 ## 9. Limits
