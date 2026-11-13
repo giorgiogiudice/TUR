@@ -34,7 +34,7 @@ echo "gnu-efi: $(dpkg-query -W -f='${Version}' gnu-efi 2> /dev/null || echo unkn
 
 gcc -I"${include}" -I"${include}/x86_64" -I"${include}/protocol" \
     -fpic -ffreestanding -fno-stack-protector -fno-stack-check -fshort-wchar -mno-red-zone \
-    -maccumulate-outgoing-args -DEFI_FUNCTION_WRAPPER -DGNU_EFI_USE_MS_ABI -Wall -O2 \
+    -maccumulate-outgoing-args -DEFI_FUNCTION_WRAPPER -Wall -O2 \
     -c "${src}" -o "${work}/standin.o"
 ld -shared -Bsymbolic -nostdlib -znocombreloc -T "${lds}" "${crt0}" "${work}/standin.o" \
     -L"${libdir}" -lefi -lgnuefi -o "${work}/standin.so"

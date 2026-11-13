@@ -770,7 +770,7 @@ jobs:
           python3 tests/iso/windows-disk.py record "$WORK/shared.raw" "$d/before.json"
           status=0
           python3 tests/iso/install.py windows-setup --medium "$MEDIUM" --medium-as usb \
-            --windows-serial tur-boot-test --windows-partition 1 \
+            --windows-serial tur-boot-test --windows-partition 1 --windows-last \
             --disk "$WORK/shared.raw" --work "$WORK/vm" --out "$d/windows-setup" || status=$?
           if [ "$status" -eq 0 ]; then
             python3 tests/iso/install.py same-disk --medium "$MEDIUM" --medium-as usb --no-bootindex \
@@ -932,7 +932,7 @@ jobs:
           python3 tests/iso/windows-disk.py record "$WORK/pristine.raw" "$OUT/before.json"
           cp --sparse=always "$WORK/pristine.raw" "$WORK/setup.raw"
           python3 tests/iso/install.py windows-setup --medium "$MEDIUM" --medium-as usb \
-            --windows-serial tur-boot-test --windows-partition 1 \
+            --windows-serial tur-boot-test --windows-partition 1 --windows-last \
             --disk "$WORK/setup.raw" --work "$WORK/vm" --out "$OUT/setup"
           rm -f "$WORK/setup.raw"
 

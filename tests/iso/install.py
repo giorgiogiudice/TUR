@@ -496,6 +496,20 @@ def scenario_windows_setup(s: Session) -> None:
     s.type_line(command)
     match = s.wait(r"efibootmgr-create-status-(\d+)", 60, "efibootmgr")
     facts["efibootmgr_status"] = int(match.group(1))
+    if s.args.windows_last:
+        # efibootmgr puts a new entry first. With the Windows Boot Manager
+        # stand-in on the disk itself (same-disk scenarios) the firmware
+        # would then start it, not the medium: move the entry to the end of
+        # the boot order, as if the person had chosen the stick in the
+        # firmware's boot menu. The entry itself is what the tests compare.
+        s.type_line(
+            "o=$(efibootmgr | sed -n 's/^BootOrder: //p' | tr , '\\n' | grep -v \"^$(efibootmgr | sed -n "
+            "'s/^Boot\\([0-9A-F]*\\)\\* Windows Boot Manager.*/\\1/p')$\" | paste -sd,); "
+            "efibootmgr -o \"$o,$(efibootmgr | sed -n 's/^Boot\\([0-9A-F]*\\)\\* Windows Boot Manager.*/\\1/p')\" "
+            "> /dev/ttyS0 2>&1; echo efibootmgr-order-status-$? > /dev/ttyS0"
+        )
+        match = s.wait(r"efibootmgr-order-status-(\d+)", 60, "efibootmgr -o")
+        facts["efibootmgr_order_status"] = int(match.group(1))
     s.type_line("efibootmgr -v > /dev/ttyS0 2>&1")
     time.sleep(3)
     s.shot("windows-entry-created")
@@ -731,6 +745,7 @@ def main() -> int:
     ap.add_argument("--variables-from", help="start from these firmware variables")
     ap.add_argument("--windows-serial", default=WINDOWS_SERIAL, help="windows-setup: the disk of the Windows entry")
     ap.add_argument("--windows-partition", default="1", help="windows-setup: its EFI system partition's number")
+    ap.add_argument("--windows-last", action="store_true", help="windows-setup: put the entry last in the boot order")
     ap.add_argument("--cut-at", choices=sorted(CUTS), default="partition", help="same-disk-cut: where to cut the power")
     ap.add_argument("--cut-delay", type=float, default=0.0, help="same-disk-cut: seconds after reaching --cut-at")
     ap.add_argument("--cpus", type=int, default=2)

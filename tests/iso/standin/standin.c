@@ -15,7 +15,8 @@
 #include <efi.h>
 #include <efilib.h>
 
-EFI_STATUS EFIAPI efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE *system)
+// Called by gnu-efi's start code with the System V convention: not EFIAPI.
+EFI_STATUS efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE *system)
 {
     EFI_LOADED_IMAGE *loaded = NULL;
     CHAR16 *file = L"unknown";
