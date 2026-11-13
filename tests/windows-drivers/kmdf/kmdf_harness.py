@@ -232,6 +232,18 @@ def s_fx2(h, k: Kmdf, fx2_log: pathlib.Path | None) -> None:
         sc.check("built", False, "osrusbfx2.sys or Wdf01000.sys was not built")
         sc.finish()
         return
+    # kernelbase.dll with patch 0016 (DeviceIoControl without an OVERLAPPED
+    # waits, as on Windows; the sample's test program relies on it), for
+    # this scenario only, then Fedora's is put back.
+    kb_src, kb_dst = k.build / "kernelbase.dll", wine_pe_dir() / "kernelbase.dll"
+    kb_saved = sc.dir / "fedora-kernelbase.dll.saved"
+    if kb_src.exists() and kb_dst.exists():
+        shutil.copy2(kb_dst, kb_saved)
+        shutil.copy2(kb_src, kb_dst)
+        sc.check("overlay-kernelbase.dll", sha256(kb_dst) == sha256(kb_src),
+                 f"{kb_dst}: Fedora's {sha256(kb_saved)[:12]} replaced by {sha256(kb_src)[:12]} for this scenario")
+    else:
+        sc.check("overlay-kernelbase.dll", False, "not built")
     g = fx2_gadget()
     h.grant(g["node"])
     h.boot(sc, "boot-init", init=True)
@@ -289,6 +301,9 @@ def s_fx2(h, k: Kmdf, fx2_log: pathlib.Path | None) -> None:
         sc.check(f"sample-step:{step}", bool(hit), hit[:300])
     h.kill(sc)
     h.revoke(g["node"])
+    if kb_saved.exists():
+        shutil.copy2(kb_saved, kb_dst)
+        kb_saved.unlink()
     sc.finish()
 
 

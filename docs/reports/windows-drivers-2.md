@@ -20,7 +20,7 @@ SUMMARY
   Driver Framework runtime (Wdf01000.sys) from Microsoft's MIT-licensed
   Windows-Driver-Frameworks source with an open toolchain (clang, lld,
   mingw-w64 headers), builds Wine 11.20's ntoskrnl.exe, wineusb.sys and a
-  new wdfldr.sys (the KMDF loader) with a fifteen-patch Wine patch set, and
+  new wdfldr.sys (the KMDF loader) with a sixteen-patch Wine patch set, and
   runs KMDF drivers against emulated USB devices in Fedora 45's Wine.
 - Why: experiment 1 (windows-drivers-1) found that every KMDF driver fails
   to load in Wine because WDFLDR.SYS and Wdf01000.sys are Microsoft
@@ -29,7 +29,7 @@ SUMMARY
 FILES
 - Added: third-party/wdf/** (MIT: Microsoft's LICENSE, patches, compat/
   stand-ins, sources.txt), third-party/wine-patches/** (LGPL-2.1-or-later:
-  COPYING.LIB, fifteen patches, series), tests/windows-drivers/kmdf/**,
+  COPYING.LIB, sixteen patches, series), tests/windows-drivers/kmdf/**,
   docs/reports/windows-drivers-2.md
 - Modified: .github/workflows/windows-drivers.yml (jobs kmdf-build,
   kmdf-run; path triggers), tests/windows-drivers/virtual-usb/
@@ -58,6 +58,32 @@ NEXT SAFE ACTION
 
 ## The answer so far
 
+- **Iteration 11 (run 43395168698, commit `97d5434`): the goal is met for
+  the minimal driver and largely for Microsoft's sample.** No crash, no
+  unimplemented call in either scenario.
+  - `kmdftest.sys`: every check PASS (28 of 28 in the scenario): load,
+    bind, `DriverEntry` → `WdfDriverCreate` → `EvtDriverDeviceAdd` →
+    `WdfDeviceCreate` → `EvtDevicePrepareHardware` (USB target, descriptor,
+    configuration; pipes bulk IN 0x81, bulk OUT 0x01) → `EvtDeviceD0Entry`;
+    IOCTLs answered; **`WDFDPC`, `WDFTIMER` (fired after 100 ms) and
+    `WDFWORKITEM` ran**; **bulk echo of 64 and 512 bytes** through the
+    loopback device and a **vendor control transfer** (32 bytes) worked.
+  - Microsoft's unmodified `kmdf_fx2` sample on the FX2-like device:
+    `DriverEntry`, `EvtDriverDeviceAdd`, **`EvtDevicePrepareHardware`**
+    (pipes selected: interrupt, bulk out, bulk in), **`EvtDeviceD0Entry`**
+    ("coming from WdfPowerDeviceD3Final"), its continuous reader on the
+    interrupt pipe received the switch changes ("SwitchState 2"), and **its
+    test program read and wrote**: `testapp -u` dumped the descriptors,
+    `testapp -r 64 -w 64 -c 10` wrote and read back 64-byte buffers
+    (exit 0), and the bar-graph request reached the device ("vendor OUT
+    set-bargraph 0xff"). In the interactive menu run the test program then
+    stopped: its first `DeviceIoControl` returned `ERROR_IO_PENDING`
+    because it opens the device for overlapped I/O and calls without an
+    `OVERLAPPED`, which Windows waits for and Wine's `kernelbase` did not
+    (patch 0016), so the switch and 7-segment requests were never sent.
+  - 17 distinct FIXMEs, all non-fatal (callback objects, WMI registration,
+    bug-check reason callbacks, optional interrupt functions, power state
+    notification, `IRP_MN_QUERY_INTERFACE` and an ID type in `wineusb`).
 - **Iteration 10 (run 43393835772, commit `7ec6962`): a KMDF driver
   answered I/O in Wine.** With `compat/wdm.h` the queue loop is gone.
   `kmdftest.sys` started as before and its test program got real answers:
@@ -131,7 +157,7 @@ NEXT SAFE ACTION
   are in neither Wine nor mingw-w64's libraries and were found at the link.
   The TUR patches add all of the missing ones (0007, 0009, 0010) and
   replace every aborting stub (0001, 0004, 0011).
-- **The Wine side**: fifteen patches to Wine 11.20 (`ntoskrnl.exe`, a new
+- **The Wine side**: sixteen patches to Wine 11.20 (`ntoskrnl.exe`, a new
   `wdfldr.sys`, `wineusb.sys`), all of which also apply to Wine master
   (section 4). They are installed over Fedora 45's Wine in the CI container.
 
@@ -277,6 +303,7 @@ both also apply to master `cc5d1d86` (checked in every build).
 | 0013 `wineusb.sys: Handle URB_FUNCTION_CONTROL_TRANSFER and URB_FUNCTION_GET_STATUS_FROM_DEVICE.` | submits the generic control transfer (the caller's setup packet; direction flag and buffer length take precedence, as on Windows) and the device get-status request on the default control pipe | the framework sends every driver control transfer (`WdfUsbTargetDeviceSendControlTransferSynchronously`, `WdfUsbTargetDeviceFormatRequestForControlTransfer`, which the FX2 sample uses for its bar graph, switches and 7-segment display) as `URB_FUNCTION_CONTROL_TRANSFER`, which wineusb rejected; get-status was the FIXME of iteration 9; found reading the framework's source |
 | 0014 `ntoskrnl.exe: Implement ExAllocateTimer, ExSetTimer, ExCancelTimer and ExDeleteTimer.` | the Windows 8.1 timer interface on top of `KeSetTimerEx` and a DPC that calls the callback (replacing 0010's failing versions) | iteration 10: the framework creates every timer of a 1.13+ client with `ExAllocateTimer`; `WdfTimerCreate` failed |
 | 0015 `ntoskrnl.exe: Return NTSTATUS codes from IoGetDeviceProperty.` | maps setupapi's Win32 errors (`ERROR_INSUFFICIENT_BUFFER` → `STATUS_BUFFER_TOO_SMALL`, a missing property → `STATUS_OBJECT_NAME_NOT_FOUND`, ...) | iteration 10: a missing friendly name came back as 13, "success"; the FX2 sample then used a NULL memory object and the framework bugchecked. A Wine bug for any driver |
+| 0016 `kernelbase: Wait for a pending DeviceIoControl called without an OVERLAPPED.` | as `ReadFile`/`WriteFile` already do in Wine, and as Windows does | iteration 11: the FX2 test program opens its device overlapped and calls `DeviceIoControl` without an `OVERLAPPED`; the framework pends every request, so the call failed with `ERROR_IO_PENDING`. Installed for the FX2 scenario only (Fedora ships Staging's `kernelbase`; this is plain 11.20 plus the patch) |
 | 0011 `ntoskrnl.exe: Implement the remaining stubs the KMDF runtime imports.` | `MmIsDriverVerifying` returns FALSE (no Driver Verifier, as on Windows without it); `MmSizeOfMdl`, `IoBuildPartialMdl`, `IoSetCompletionRoutineEx`, `KeGetRecommendedSharedDataAlignment`, `MmLockPagable{Data,Image}Section`, the error-log and WMI-event functions (no event log, no WMI), `WmiTraceMessageVa`, `IoInvalidateDeviceState`, `IoRequestDeviceEject`, `IoRegisterLastChanceShutdownNotification`, `IoGetDmaAdapter` (no adapters), `KeSynchronizeExecution` and the interrupt spin locks (interrupts are never connected), the `KdDebuggerNotPresent` variable | iteration 8: `WdfDriverCreate` called `MmIsDriverVerifying`, a `stub`, and the driver host aborted; the rest were the other `stub` imports in 5.2, each an abort waiting to happen |
 
 A correction to an earlier iteration of this report: patch 0009 was first
@@ -352,8 +379,8 @@ handler, so a power IRP to a USB device fails with
 | Scenario | Status |
 |---|---|
 | Overlay of the patched `ntoskrnl.exe`, `wineusb.sys` and new `wdfldr.sys` over Fedora 45's Wine | PASS (run 43382377329 onwards) |
-| `kmdftest.sys` (minimal KMDF USB driver) on the loopback device 1209:0001 | iteration 9: **started** (through `EvtDeviceD0Entry`); iteration 10: **IOCTLs answered**, `WDFDPC` and `WDFWORKITEM` ran; timer and USB data transfers failed (patches 0014, 0012–0013 with the `wineusb.so` overlay) |
-| Microsoft's `kmdf_fx2` sample and its `testapp.c` on the FX2-like device 0547:1002 | iteration 10: `DriverEntry`, `EvtDriverDeviceAdd`, then `WDF_VIOLATION` from a Wine `IoGetDeviceProperty` bug (patch 0015) |
+| `kmdftest.sys` (minimal KMDF USB driver) on the loopback device 1209:0001 | iteration 9: started; iteration 10: IOCTLs, `WDFDPC`, `WDFWORKITEM`; **iteration 11: all PASS**, including `WDFTIMER`, bulk echo 64/512 bytes and a vendor control transfer |
+| Microsoft's `kmdf_fx2` sample and its `testapp.c` on the FX2-like device 0547:1002 | iteration 10: `WDF_VIOLATION` (Wine `IoGetDeviceProperty` bug, patch 0015); **iteration 11: `EvtDevicePrepareHardware`, `EvtDeviceD0Entry`, interrupt reads, test program's descriptor dump and bulk write/read PASS, bar graph set**; menu run stopped at `ERROR_IO_PENDING` (patch 0016) |
 
 Iteration 10, `kmdftest.exe` checks: `device-interface-found`, `ioctl-info`
 (44 bytes), `prepare-hardware-ran` (events 0x7), `d0-entry-ran` (1),
@@ -434,10 +461,8 @@ in run 43382377329.
 
 ## 8. Effort and next steps (as of this iteration)
 
-1. Iteration 11: the timer (0014), the USB data path with `wineusb.so`
-   overlaid (0012–0013: pipe information, control transfers), the FX2
-   sample past `EvtDriverDeviceAdd` (0015) to `EvtDevicePrepareHardware`,
-   `EvtDeviceD0Entry` and its test program.
+1. Iteration 12: the FX2 test program's menu run (bar graph, switches,
+   7-segment display, switch interrupt message) with patch 0016.
 2. Each run iteration so far exposed one layer; the report records them.
 
 ## 9. Limits

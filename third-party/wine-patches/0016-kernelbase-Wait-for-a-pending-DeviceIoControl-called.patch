@@ -1,0 +1,41 @@
+SPDX-License-Identifier: LGPL-2.1-or-later
+A patch to Wine (https://gitlab.winehq.org/wine/wine), under Wine's licence;
+see README.md and COPYING.LIB in this directory. Applied with `git apply`,
+which ignores these lines.
+
+From 38b0c6f1687abcd66dc1ae1074acfd556a8afd43 Mon Sep 17 00:00:00 2001
+From: TUR experiment <tur-experiment@users.noreply.github.com>
+Date: Fri, 13 Nov 2026 11:49:11 +0300
+Subject: [PATCH 16/16] kernelbase: Wait for a pending DeviceIoControl called
+ without an OVERLAPPED.
+
+As ReadFile and WriteFile already do, and as Windows does. Microsoft's
+kmdf_fx2 sample test program opens its device for overlapped I/O and
+then calls DeviceIoControl without an OVERLAPPED structure; the
+Kernel-Mode Driver Framework pends every request it presents to a
+queue, so the call failed with ERROR_IO_PENDING although the request
+completed.
+---
+ dlls/kernelbase/file.c | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/dlls/kernelbase/file.c b/dlls/kernelbase/file.c
+index 7b0f0a6..5a57c0e 100644
+--- a/dlls/kernelbase/file.c
++++ b/dlls/kernelbase/file.c
+@@ -4404,6 +4404,15 @@ BOOL WINAPI DECLSPEC_HOTPATCH DeviceIoControl( HANDLE handle, DWORD code, void *
+         status = NtDeviceIoControlFile( handle, event, NULL, cvalue, piosb, code,
+                                         in_buff, in_count, out_buff, out_count );
+ 
++    /* As on Windows (and as ReadFile does): a call without an OVERLAPPED
++     * structure waits for the request to finish, even on a handle opened for
++     * overlapped I/O. */
++    if (status == STATUS_PENDING && !overlapped)
++    {
++        WaitForSingleObject( handle, INFINITE );
++        status = piosb->Status;
++    }
++
+     if (returned && !NT_ERROR(status)) *returned = piosb->Information;
+     if (status == STATUS_PENDING || !NT_SUCCESS( status )) return set_ntstatus( status );
+     return TRUE;

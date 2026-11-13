@@ -6,7 +6,7 @@ which ignores these lines.
 From eb1e5e3bf6e7fc518660d96d32c4193e0e46e801 Mon Sep 17 00:00:00 2001
 From: TUR experiment <tur-experiment@users.noreply.github.com>
 Date: Fri, 13 Nov 2026 10:08:22 +0300
-Subject: [PATCH 06/15] ntoskrnl.exe: Add IoOpenDriverRegistryKey.
+Subject: [PATCH 06/16] ntoskrnl.exe: Add IoOpenDriverRegistryKey.
 
 Drivers built for Windows 10 2004 and later, the Kernel-Mode Driver
 Framework among them, open their Parameters key with it; without it the

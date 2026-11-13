@@ -15,3 +15,4 @@
 0013-wineusb.sys-Handle-URB_FUNCTION_CONTROL_TRANSFER-and.patch
 0014-ntoskrnl.exe-Implement-ExAllocateTimer-ExSetTimer-Ex.patch
 0015-ntoskrnl.exe-Return-NTSTATUS-codes-from-IoGetDeviceP.patch
+0016-kernelbase-Wait-for-a-pending-DeviceIoControl-called.patch
