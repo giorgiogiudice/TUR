@@ -232,7 +232,9 @@ an id that is not a number); the medium is verified and laid out; it is
 signed with a throwaway key (and keyless on pull requests) and the
 signatures verify, while a changed file does not; the notes render with the
 download address and the verification commands; the upload is multipart
-(ETag `-5`) and every object is read back through its public address; the
+(ETag `-5`) and every object is read back through its public address, with
+the bucket policy of section 4, step 3, applied to the stand-in; a bucket
+whose objects are not public fails the read-back; the
 same upload again is accepted and different content under the same name is
 refused; the read-back detects an object of the right size with the wrong
 content, and a wrong Content-Type; the pre-release is created on the source

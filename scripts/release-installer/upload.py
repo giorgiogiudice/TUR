@@ -34,6 +34,7 @@ import os
 import pathlib
 import subprocess
 import sys
+import urllib.error
 import urllib.request
 
 CONTENT_TYPES = {
@@ -96,11 +97,15 @@ def read_back(remote: str, url: str, size: int, sha: str, kind: str) -> None:
         raise SystemExit(f"read back {remote}: the storage reports {stat.get('Size')} bytes, expected {size}")
     request = urllib.request.Request(url, headers={"User-Agent": "tur-release-installer"})
     digest, count = hashlib.sha256(), 0
-    with urllib.request.urlopen(request, timeout=600) as response:
-        served = response.headers.get("Content-Type", "")
-        while chunk := response.read(8 << 20):
-            digest.update(chunk)
-            count += len(chunk)
+    try:
+        with urllib.request.urlopen(request, timeout=600) as response:
+            served = response.headers.get("Content-Type", "")
+            while chunk := response.read(8 << 20):
+                digest.update(chunk)
+                count += len(chunk)
+    except urllib.error.HTTPError as error:
+        raise SystemExit(f"read back {url}: HTTP {error.code}. Can anyone download the bucket's objects? "
+                         "(docs/releases/README.md, section 4, step 3)") from None
     if count != size or digest.hexdigest() != sha:
         raise SystemExit(f"read back {url}: {count} bytes, SHA-256 {digest.hexdigest()}; expected {size} bytes, {sha}")
     if served.split(";")[0].strip() != kind.split(";")[0].strip():

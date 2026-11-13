@@ -64,6 +64,14 @@ docker run -d --name tur-moto -p 127.0.0.1:5000:5000 "${moto_image}" > /dev/null
 for _ in $(seq 60); do curl -sf "${s3}/" > /dev/null && break; sleep 1; done
 curl -sf "${s3}/" > /dev/null || { docker logs tur-moto; fail "moto did not start"; }
 curl -sf -X PUT "${s3}/tur-downloads" > /dev/null
+# The bucket policy docs/releases/README.md (section 4, step 3) tells the owner
+# to add: anyone may get objects, nobody may list. moto applies it to
+# anonymous requests; objects are stored with a private ACL, as rclone writes them.
+cat > "${work}/policy.json" <<'EOF'
+{"Version": "2012-10-17", "Statement": [{"Sid": "PublicReadObjects", "Effect": "Allow", "Principal": "*",
+  "Action": ["s3:GetObject"], "Resource": ["arn:aws:s3:::tur-downloads/*"]}]}
+EOF
+curl -sf -X PUT --data-binary @"${work}/policy.json" "${s3}/tur-downloads?policy" > /dev/null
 echo "moto: $(docker image inspect -f '{{index .RepoDigests 0}}' "${moto_image}")"
 
 run() {  # id path branch event conclusion head_repo
@@ -183,6 +191,10 @@ cp "${work}/release/${sums}" "${work}/changed/${sums}"
 echo "# changed" >> "${work}/changed/${sums}"
 refused "rclone copyto failed" python3 "${here}/upload.py" "${work}/changed" "releases/${version}" "${work}/x.json" "${sums}"
 pass "an object is never replaced by different content"
+curl -sf -X PUT "${s3}/tur-private" > /dev/null
+refused "HTTP 403" env TUR_DOWNLOADS_BUCKET=tur-private TUR_DOWNLOADS_PUBLIC_URL="${s3}/tur-private" \
+    python3 "${here}/upload.py" "${work}/release" "releases/${version}" "${work}/x.json" "${sums}"
+pass "a bucket whose objects are not public fails the read-back"
 
 readback() {  # remote-key local-file content-type
     python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import upload, hashlib, pathlib
