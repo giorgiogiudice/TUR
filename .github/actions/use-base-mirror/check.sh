@@ -66,7 +66,9 @@ probe "upstream:" "${image}@${digest}" "CONTAINERS_REGISTRIES_CONF=${plain}" || 
 # As podman will see it: the base reference, with the drop-in in effect.
 if got="$("${as[@]}" skopeo inspect --raw --retry-times 2 "docker://${ref}" 2>"$err" | sha256sum | cut -d' ' -f1)" \
         && [ "sha256:${got}" = "${digest}" ]; then
-    if [ "$in_mirror" = yes ]; then from="the mirror"; else from="${image}"; fi
+    if [ "$in_mirror" = yes ]; then from="the mirror"
+    elif [ "$in_upstream" = yes ]; then from="${image}"
+    else from="a source the probes above did not reach"; fi
     echo "resolves:  yes, to ${digest}, from ${from} (the mirror is tried first)"
     if [ "$in_mirror" = no ]; then
         echo "::notice title=Base image not mirrored yet::${ref} comes from ${image}; base-mirror.yml copies it to ${MIRROR} when image/base.lock changes."

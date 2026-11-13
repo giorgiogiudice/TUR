@@ -31,17 +31,28 @@ set -euo pipefail
 registry="${MIRROR%%/*}"
 name=50-tur-base-mirror.conf
 
-# Credentials. podman and skopeo share an auth file: for root
-# /run/containers/0/auth.json, for the runner user
-# $XDG_RUNTIME_DIR/containers/auth.json. The token is passed on standard input
-# and never on a command line.
+# Credentials. podman, buildah and skopeo share one auth file, chosen by
+# containers-auth.json(5): $XDG_RUNTIME_DIR/containers/auth.json when
+# XDG_RUNTIME_DIR is set, otherwise /run/containers/$UID/auth.json. On the
+# hosted runners sudo keeps the runner user's XDG_RUNTIME_DIR, so `sudo podman`
+# reads the runner user's file. Log in as the runner user first, so that
+# $XDG_RUNTIME_DIR/containers is the runner user's (a root-owned directory
+# there breaks rootless podman), then as root without XDG_RUNTIME_DIR, for a
+# root that does not inherit it. skopeo login touches no container storage.
+# The token is passed on standard input, never on a command line.
+echo "XDG_RUNTIME_DIR: runner user ${XDG_RUNTIME_DIR:-unset}, under sudo $(sudo printenv XDG_RUNTIME_DIR || echo unset)"
+user_ok=yes
+if ! printf '%s' "$TOKEN" | skopeo login --username "$ACTOR" --password-stdin "$registry"; then
+    user_ok=no
+    echo "::warning title=Base image mirror::the runner user could not log in to ${registry}; rootless pulls of the base come from ${BASE_IMAGE} only"
+fi
 root_ok=yes
-if ! printf '%s' "$TOKEN" | sudo podman login --username "$ACTOR" --password-stdin "$registry" >/dev/null; then
+if ! printf '%s' "$TOKEN" | sudo env -u XDG_RUNTIME_DIR skopeo login --username "$ACTOR" --password-stdin "$registry"; then
     root_ok=no
     echo "::warning title=Base image mirror::root could not log in to ${registry}; the base comes from ${BASE_IMAGE} only"
 fi
-if ! printf '%s' "$TOKEN" | podman login --username "$ACTOR" --password-stdin "$registry" >/dev/null; then
-    echo "::warning title=Base image mirror::the runner user could not log in to ${registry}; rootless pulls of the base come from ${BASE_IMAGE} only"
+if [ "$user_ok" = no ] && [ "$(sudo printenv XDG_RUNTIME_DIR || true)" != "" ]; then
+    root_ok=no  # root reads the runner user's file, which has no credentials
 fi
 if [ "$root_ok" = no ]; then
     # Without credentials the mirror would only answer "unauthorized" before
@@ -73,7 +84,16 @@ printf '%s\n' "$conf" > "${user_dir}/${name}"
 echo "drop-in /etc/containers/registries.conf.d/${name} and ${user_dir}/${name}:"
 printf '%s\n' "$conf" | sed 's/^/  /'
 
-# What podman made of it, as root and as the runner user. A file it cannot
-# parse makes these fail, and the step with them.
-echo "root:     $(sudo podman info --format '{{json .Registries}}' | python3 -c 'import json,sys; r=json.load(sys.stdin); print(json.dumps({k: v for k, v in r.items() if k != "search"}))')"
-echo "rootless: $(podman info --format '{{json .Registries}}' | python3 -c 'import json,sys; r=json.load(sys.stdin); print(json.dumps({k: v for k, v in r.items() if k != "search"}))')"
+# What podman made of it, as root and as the runner user. A drop-in podman
+# cannot parse makes this fail, and the step with it.
+registries() {
+    "$@" podman info --format '{{json .Registries}}' \
+        | python3 -c 'import json,sys; r=json.load(sys.stdin); print(json.dumps({k: v for k, v in r.items() if k != "search"}))'
+}
+root_view="$(registries sudo)"
+echo "root:     ${root_view}"
+if user_view="$(registries env)"; then
+    echo "rootless: ${user_view}"
+else
+    echo "::warning title=Base image mirror::rootless podman info failed; rootless podman may not work on this runner"
+fi

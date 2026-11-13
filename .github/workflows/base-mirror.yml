@@ -286,7 +286,7 @@ jobs:
           age = (today - born).days
           limit = int(os.environ["MAX_AGE_DAYS"])
           stale = current != pinned and age > limit
-          print(f"pinned:  {image}@{pinned} ({pinned_version}), {age} days old")
+          print(f"pinned:  {image}@{pinned} ({pinned_version}), {age} day{'s' if age != 1 else ''} old")
           print(f"current: {image}:{tag} = {current} ({current_version}, created {created})")
           print("verdict:", "re-pin" if stale else ("up to date" if current == pinned else f"within {limit} days"))
 
@@ -306,15 +306,6 @@ jobs:
                          if "pull_request" not in i and i["title"].startswith(prefix)]
           for i in open_issues:
               print(f"open reminder: #{i['number']} {i['title']}")
-
-          if not stale:
-              for i in open_issues:
-                  print(f"would close #{i['number']}" if not write else f"closing #{i['number']}")
-                  if write:
-                      api("POST", f"/issues/{i['number']}/comments",
-                          {"body": f"The pin is now {pinned_version} ({age} days old). Closing. ({os.environ['RUN_URL']})"})
-                      api("PATCH", f"/issues/{i['number']}", {"state": "closed", "state_reason": "completed"})
-              raise SystemExit(0)
 
           title = f"{prefix}{age} days old"
           body = f"""The base image pinned in `image/base.lock` is {age} days old. Fedora moves `{image}:{tag}` every day, mostly with security updates.
@@ -337,8 +328,19 @@ jobs:
           Checked by {os.environ['RUN_URL']}. The weekly check updates this issue and closes it once the pin is at most {limit} days old.
           """
           if not write:
+              # A pull request only reports, and shows the issue a weekly run
+              # would write if the pin were stale.
+              print("dry run: the issue tracker is not changed")
+              print(f"if stale, the issue would read:\n--- {title}\n{body}---")
+          if not stale:
+              for i in open_issues:
+                  print(f"would close #{i['number']}" if not write else f"closing #{i['number']}")
+                  if write:
+                      api("POST", f"/issues/{i['number']}/comments",
+                          {"body": f"The pin is now {pinned_version} ({age} days old). Closing. ({os.environ['RUN_URL']})"})
+                      api("PATCH", f"/issues/{i['number']}", {"state": "closed", "state_reason": "completed"})
+          elif not write:
               print(f"would {'update #' + str(open_issues[0]['number']) if open_issues else 'open an issue'}: {title}")
-              print(body)
           elif open_issues:
               api("PATCH", f"/issues/{open_issues[0]['number']}", {"title": title, "body": body})
               print(f"updated #{open_issues[0]['number']}: {title}")
