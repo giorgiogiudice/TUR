@@ -336,18 +336,19 @@ mod tests {
 
     #[test]
     fn the_command_line_is_read_strictly() {
-        for good in [
-            &["show"][..],
+        let good_lists: [&[&str]; 6] = [
+            &["show"],
             &["show", "--json"],
             &["set-policy"],
             &["set-approvals", "--root", "/tmp/x"],
             &["clear-approvals", "--schedule", "s-00000001"],
             &["approvals-for", "--schedule", "s-1", "--task", "a task"],
-        ] {
+        ];
+        for good in good_lists {
             assert!(parse(&args(good)).is_ok(), "{good:?}");
         }
-        for bad in [
-            &[][..],
+        let bad_lists: [&[&str]; 10] = [
+            &[],
             &["approve"],
             &["show", "--verbose"],
             &["set-policy", "--json"],
@@ -357,7 +358,8 @@ mod tests {
             &["approvals-for", "--schedule", "s-1"],
             &["show", "--task", "x"],
             &["show", "--root"],
-        ] {
+        ];
+        for bad in bad_lists {
             assert!(parse(&args(bad)).is_err(), "{bad:?}");
         }
     }

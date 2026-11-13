@@ -159,12 +159,12 @@ fn every_class_is_exercised_with_the_trusted_path() {
 #[test]
 fn the_approval_sheet_alone_asks_an_attended_class_2_action_and_nothing_more() {
     // Addendum A section 23, item 1: the lower of the two levels.
-    let expected = [
-        (OBSERVE, &[][..], "allow", EXIT_ALLOW),
-        (REVERSIBLE, &[][..], "allow", EXIT_ALLOW),
-        (CONSEQUENTIAL, &[][..], "ask", EXIT_ASK),
-        (CONSEQUENTIAL, &["--unattended"][..], "refuse", EXIT_REFUSE),
-        (SYSTEM_CRITICAL, &[][..], "refuse", EXIT_REFUSE),
+    let expected: [(&str, &[&str], &str, i32); 5] = [
+        (OBSERVE, &[], "allow", EXIT_ALLOW),
+        (REVERSIBLE, &[], "allow", EXIT_ALLOW),
+        (CONSEQUENTIAL, &[], "ask", EXIT_ASK),
+        (CONSEQUENTIAL, &["--unattended"], "refuse", EXIT_REFUSE),
+        (SYSTEM_CRITICAL, &[], "refuse", EXIT_REFUSE),
     ];
     for (tool, more, decision, exit) in expected {
         let mut flags = vec!["--approval-sheet-proven"];
