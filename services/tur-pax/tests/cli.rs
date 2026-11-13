@@ -173,7 +173,10 @@ fn the_approval_sheet_alone_asks_an_attended_class_2_action_and_nothing_more() {
         assert_eq!(status, exit, "{tool} {more:?}");
         assert_eq!(text(&document, "decision"), decision, "{tool} {more:?}");
         if decision == "refuse" {
-            assert_eq!(document["error_code"], "TUR-AI-POLICY-006", "{tool} {more:?}");
+            assert_eq!(
+                document["error_code"], "TUR-AI-POLICY-006",
+                "{tool} {more:?}"
+            );
         }
     }
 }

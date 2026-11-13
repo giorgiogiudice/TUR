@@ -527,8 +527,8 @@ impl Store {
     /// [`StoreError::Io`] if it cannot be written. Nothing is changed then.
     pub fn write_policy(&self, owner: &Owner, text: &str) -> Result<(), StoreError> {
         let value = check_policy(text)?;
-        let mut bytes = serde_json::to_vec_pretty(&value)
-            .map_err(|_| invalid("it cannot be written back"))?;
+        let mut bytes =
+            serde_json::to_vec_pretty(&value).map_err(|_| invalid("it cannot be written back"))?;
         bytes.push(b'\n');
         self.write_document(owner, POLICY_FILE, &bytes)
     }
@@ -665,7 +665,9 @@ fn read_document(path: &Path) -> Result<Option<String>, StoreError> {
 
 /// The user this process runs as, from the owner of `/proc/self`.
 pub fn process_uid() -> Option<u32> {
-    fs::metadata("/proc/self").ok().map(|metadata| metadata.uid())
+    fs::metadata("/proc/self")
+        .ok()
+        .map(|metadata| metadata.uid())
 }
 
 /// A person's primary group, from the system's account database
@@ -739,8 +741,8 @@ mod tests {
 
     #[test]
     fn approvals_are_read_strictly() {
-        let good = Approvals::from_json(&approvals_text(r#"{"to": "a@example.org"}"#))
-            .expect("approvals");
+        let good =
+            Approvals::from_json(&approvals_text(r#"{"to": "a@example.org"}"#)).expect("approvals");
         assert_eq!(good.schedules.len(), 1);
         for bad in [
             approvals_text(r#"{"to": "a@example.org", "to": "b@example.org"}"#),
@@ -763,8 +765,8 @@ mod tests {
 
     #[test]
     fn approvals_apply_to_their_schedule_with_its_task_only() {
-        let approvals = Approvals::from_json(&approvals_text(r#"{"to": "a@example.org"}"#))
-            .expect("approvals");
+        let approvals =
+            Approvals::from_json(&approvals_text(r#"{"to": "a@example.org"}"#)).expect("approvals");
         assert_eq!(
             approvals
                 .for_schedule("s-00000001", "Send the weekly report")
@@ -805,7 +807,10 @@ mod tests {
             parse_group("ada:x:1000:1001:Ada:/var/home/ada:/bin/bash", 1000),
             Some(1001)
         );
-        assert_eq!(parse_group("ada:x:1000:1000:Ada:/home/ada:/bin/bash", 1001), None);
+        assert_eq!(
+            parse_group("ada:x:1000:1000:Ada:/home/ada:/bin/bash", 1001),
+            None
+        );
         assert_eq!(parse_group("", 1000), None);
         assert_eq!(parse_group("broken", 1000), None);
     }

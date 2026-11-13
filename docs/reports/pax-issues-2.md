@@ -107,7 +107,17 @@ NEXT SAFE ACTION
 
 ## Runs
 
-Filled in as the runs finish; see the pull request.
+Head `1412666` (the runs of the first head, `b40233f`, were cancelled by it):
+
+| Workflow | Run | Result |
+|---|---|---|
+| rust, services/tur-pax-policy | 43501224679 (job 132172536104) | clippy and every test passed on CI's corrected tree (unit 5 + 2, store.rs 5, doc test 1); failed only at "Fail if fixes were needed": the new Cargo.lock and rustfmt, applied in the next commit |
+| rust, services/tur-pax | 43501224679 (job 132172536028) | tests passed on the corrected tree; rustfmt only, applied in the next commit |
+| pax, desktop | see the pull request | pass |
+| image, boot, rollback, iso | see the pull request | failed at "Build image": `cargo fetch --locked` had no Cargo.lock for services/tur-pax-policy. Fixed in the next commit |
+
+Next head (Cargo.lock and rustfmt applied): its runs are listed in the pull
+request.
 
 ## The issues
 

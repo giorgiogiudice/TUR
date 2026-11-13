@@ -57,7 +57,10 @@ fn own_uid() -> u32 {
 }
 
 fn show(root: &Path) -> Value {
-    let run = program(&["show", "--json", "--root", root.to_str().expect("text")], None);
+    let run = program(
+        &["show", "--json", "--root", root.to_str().expect("text")],
+        None,
+    );
     assert_eq!(run.status, 0, "{}", run.stderr);
     serde_json::from_str(&run.stdout).expect("JSON")
 }
@@ -89,7 +92,10 @@ fn a_policy_is_stored_closed_to_others_and_read_back() {
     assert_eq!(run.status, 0, "{}", run.stderr);
     let shown = show(&root);
     assert_eq!(shown["policy"]["mode"], "observe_only");
-    assert_eq!(shown["policy"]["excluded_applications"][0], "org.example.Bank");
+    assert_eq!(
+        shown["policy"]["excluded_applications"][0],
+        "org.example.Bank"
+    );
 
     let dir = root.join(own_uid().to_string());
     let file = dir.join("policy.json");
@@ -98,7 +104,13 @@ fn a_policy_is_stored_closed_to_others_and_read_back() {
     // Nothing is left beside it.
     let names: Vec<String> = fs::read_dir(&dir)
         .expect("dir")
-        .map(|entry| entry.expect("entry").file_name().to_string_lossy().into_owned())
+        .map(|entry| {
+            entry
+                .expect("entry")
+                .file_name()
+                .to_string_lossy()
+                .into_owned()
+        })
         .collect();
     assert_eq!(names, ["policy.json"]);
     let _ = fs::remove_dir_all(&root);
@@ -170,10 +182,20 @@ fn standing_approvals_apply_to_their_schedule_and_its_task_and_can_be_taken_away
         ("s-00000001", "Send the weekly report to everyone"),
         ("s-00000002", "Send the weekly report"),
     ] {
-        assert_eq!(lookup(schedule, task), serde_json::json!([]), "{schedule} {task}");
+        assert_eq!(
+            lookup(schedule, task),
+            serde_json::json!([]),
+            "{schedule} {task}"
+        );
     }
     let run = program(
-        &["clear-approvals", "--schedule", "s-00000001", "--root", root_text],
+        &[
+            "clear-approvals",
+            "--schedule",
+            "s-00000001",
+            "--root",
+            root_text,
+        ],
         None,
     );
     assert_eq!(run.status, 0, "{}", run.stderr);

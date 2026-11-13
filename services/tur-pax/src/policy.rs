@@ -426,7 +426,9 @@ pub fn policy_store_file(uid: u32) -> PathBuf {
 
 /// The user this process runs as, from the owner of `/proc/self`.
 pub fn process_uid() -> Option<u32> {
-    fs::metadata("/proc/self").ok().map(|metadata| metadata.uid())
+    fs::metadata("/proc/self")
+        .ok()
+        .map(|metadata| metadata.uid())
 }
 
 /// What reading a policy file found.
@@ -1223,7 +1225,10 @@ mod tests {
         assert_eq!(own_only.excluded_applications, ["org.example.Bank"]);
         assert!(own_only.relaxations.is_empty());
         // The store's relaxations apply; the own file cannot loosen the mode.
-        let both = UserPolicy::in_force(&text("ask_every_action", relaxed), &text("normal", excluded));
+        let both = UserPolicy::in_force(
+            &text("ask_every_action", relaxed),
+            &text("normal", excluded),
+        );
         assert_eq!(both.mode, Mode::AskEveryAction);
         assert_eq!(both.relaxations.len(), 1);
         assert_eq!(both.excluded_applications, ["org.example.Bank"]);

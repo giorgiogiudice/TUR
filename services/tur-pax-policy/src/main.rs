@@ -127,14 +127,18 @@ enum Writer {
     Escalate,
 }
 
-fn writer(running_as: Option<u32>, root: Option<&str>, pkexec_uid: Option<&str>) -> Result<Writer, String> {
+fn writer(
+    running_as: Option<u32>,
+    root: Option<&str>,
+    pkexec_uid: Option<&str>,
+) -> Result<Writer, String> {
     match (running_as, root) {
         (None, _) => Err("the user this program runs as cannot be read".to_owned()),
         (Some(0), Some(_)) => Err("--root is for tests and is refused when run as root".to_owned()),
         (Some(0), None) => {
-            let person = pkexec_uid
-                .and_then(|text| text.parse::<u32>().ok())
-                .ok_or("run as root, a change is made only through pkexec, for the person who started it")?;
+            let person = pkexec_uid.and_then(|text| text.parse::<u32>().ok()).ok_or(
+                "run as root, a change is made only through pkexec, for the person who started it",
+            )?;
             if person == 0 {
                 return Err("root has no P@x policy to change".to_owned());
             }
@@ -155,7 +159,9 @@ fn read_stdin() -> Result<String, String> {
         .read_to_string(&mut text)
         .map_err(|_| "standard input could not be read as text".to_owned())?;
     if text.len() > MAX_DOCUMENT_BYTES {
-        return Err(format!("the document is larger than {MAX_DOCUMENT_BYTES} bytes"));
+        return Err(format!(
+            "the document is larger than {MAX_DOCUMENT_BYTES} bytes"
+        ));
     }
     Ok(text)
 }
@@ -173,7 +179,10 @@ fn show(request: &Request) -> ExitCode {
         eprintln!("tur-pax-policy: the user this program runs as cannot be read");
         return ExitCode::from(EXIT_STORE);
     };
-    let store = request.root.as_deref().map_or_else(Store::system, Store::at);
+    let store = request
+        .root
+        .as_deref()
+        .map_or_else(Store::system, Store::at);
     let policy = match store.read_policy(uid) {
         Ok(policy) => policy,
         Err(error) => return store_error(&error),
@@ -199,7 +208,10 @@ fn show(request: &Request) -> ExitCode {
             "policy": policy_value,
             "approvals": approvals,
         });
-        println!("{}", serde_json::to_string_pretty(&document).unwrap_or_default());
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&document).unwrap_or_default()
+        );
     } else {
         println!("store: {}", store.person_dir(uid).display());
         match &policy {
@@ -223,7 +235,11 @@ fn show(request: &Request) -> ExitCode {
 
 fn change(request: &Request, arguments: &[String]) -> ExitCode {
     let pkexec_uid = env::var("PKEXEC_UID").ok();
-    let how = match writer(process_uid(), request.root.as_deref(), pkexec_uid.as_deref()) {
+    let how = match writer(
+        process_uid(),
+        request.root.as_deref(),
+        pkexec_uid.as_deref(),
+    ) {
         Ok(how) => how,
         Err(problem) => {
             eprintln!("tur-pax-policy: {problem}");
@@ -238,7 +254,9 @@ fn change(request: &Request, arguments: &[String]) -> ExitCode {
                 Ok(status) => match status.code() {
                     Some(code @ 1..=3) => ExitCode::from(code as u8),
                     _ => {
-                        eprintln!("tur-pax-policy: the change was not authorised; nothing was changed");
+                        eprintln!(
+                            "tur-pax-policy: the change was not authorised; nothing was changed"
+                        );
                         ExitCode::from(EXIT_NOT_AUTHORISED)
                     }
                 },
@@ -284,7 +302,8 @@ fn change(request: &Request, arguments: &[String]) -> ExitCode {
             Err(problem) => Err(StoreError::Invalid(problem)),
         },
         "set-approvals" => match read_stdin() {
-            Ok(text) => Approvals::from_json(&text).and_then(|approvals| store.write_approvals(&owner, &approvals)),
+            Ok(text) => Approvals::from_json(&text)
+                .and_then(|approvals| store.write_approvals(&owner, &approvals)),
             Err(problem) => Err(StoreError::Invalid(problem)),
         },
         _ => {
@@ -296,7 +315,11 @@ fn change(request: &Request, arguments: &[String]) -> ExitCode {
     };
     match result {
         Ok(()) => {
-            let _ = writeln!(io::stdout(), "changed: {}", store.person_dir(owner.uid).display());
+            let _ = writeln!(
+                io::stdout(),
+                "changed: {}",
+                store.person_dir(owner.uid).display()
+            );
             ExitCode::from(EXIT_OK)
         }
         Err(error) => store_error(&error),
@@ -305,11 +328,17 @@ fn change(request: &Request, arguments: &[String]) -> ExitCode {
 
 fn main() -> ExitCode {
     let arguments: Vec<String> = env::args().skip(1).collect();
-    if arguments.iter().any(|argument| argument == "--help" || argument == "-h") {
+    if arguments
+        .iter()
+        .any(|argument| argument == "--help" || argument == "-h")
+    {
         print!("{USAGE}");
         return ExitCode::from(EXIT_OK);
     }
-    if arguments.iter().any(|argument| argument == "--version" || argument == "-V") {
+    if arguments
+        .iter()
+        .any(|argument| argument == "--version" || argument == "-V")
+    {
         println!("tur-pax-policy {}", env!("CARGO_PKG_VERSION"));
         return ExitCode::from(EXIT_OK);
     }
