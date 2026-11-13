@@ -1,0 +1,317 @@
+#!/usr/bin/bash
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# TUR self-healing test agent (docs/architecture/self-healing.md, ADR-0027).
+# Present only in the boot-test image.
+#
+# tests/boot/heal.py starts the prepared disk with opt/org.tur/heal in QEMU's
+# fw_cfg; guest-agent hands over to this script. On the booted product image
+# it injects real faults, one after another, and lets TUR's own healing
+# service (tur-heal.service, started through systemd as its timer would)
+# find, repair and verify them; P@x and the person act through the
+# service's socket (tur-heal-request.socket) as they would on a desktop:
+#
+#   service    chronyd killed (SIGKILL), with systemd's own restart switched
+#              off for this boot by a drop-in in /run: the service restarts
+#              it by itself, verifies, and a second scan sees it held
+#   time       network time switched off (timedatectl set-ntp false): found,
+#              not repaired by itself; P@x (scripted provider, installed
+#              tur-pax, the image's tools) asks the service to repair it
+#   resolver   /etc/resolv.conf replaced by a plain file, as a VPN client
+#              leaves it: found; the person repairs it with 'tur-diag heal
+#              apply' (as the test user, so through the socket), undoes it,
+#              repairs it again
+#   space      /var filled with fallocate to leave ~700 MiB: found; the
+#              socket and an unconfirmed administrator are refused; with
+#              --yes old logs are deleted, which does not help, and the
+#              service says so; the fill is removed and the fault clears
+#   crash      a TUR program (tur-diag) killed with SIGSEGV: no remedy; a
+#              report is offered; nothing reaches a stand-in receiver until
+#              the person sends with --yes; the upload is kept for the host
+#              to look for planted personal values
+#   fix link   a fixes list naming the crash's code, over the image's own,
+#              and the crash's record marked as seen on a previous build:
+#              in this boot it comes back (report offered again); after a
+#              restart it stays away (fixed by the update)
+#
+# It decides nothing: tests/boot/heal.py turns the facts into checks.
+#
+# What is test plumbing: the chronyd drop-in in /run; the stand-in receiver
+# and /etc/tur/problem-reports.conf; the planted host name and log line; the
+# tmpfs over /usr/share/tur/heal and the rewritten build of one record; the
+# timer masked so that the service runs only when this agent starts it.
+#
+# Markers (all start with "TUR-BOOT-TEST: "): HEAL-START, HEAL-STEP,
+# HEAL-REPORT, HEAL-RESTARTING, HEAL-COMPLETE, HEAL-PROBLEM.
+set -u
+
+port="/dev/virtio-ports/org.tur.boottest"
+state=/var/lib/tur-heal-test
+heal_state=/var/log/tur/heal/state.json
+test_user=turtest
+receiver_port=8471
+receiver="http://127.0.0.1:${receiver_port}"
+planted_host=heal-planted-7f3a2c
+planted_ip=81.2.69.142
+crash=TUR-DIAG-CRASH-001
+
+say() { printf 'TUR-BOOT-TEST: %s\n' "$*"; }
+uptime_s() { cut -d' ' -f1 /proc/uptime; }
+
+mkdir -p "${state}"
+if [ -e "${state}/phase-a-done" ]; then name=phase-b; else name=phase-a; fi
+out="${state}/report/${name}"
+rm -rf "${out}"
+mkdir -p "${out}"
+status="${out}/status"
+: > "${status}"
+put() { printf '%s=%s\n' "$1" "$2" >> "${status}"; }
+# cap NAME COMMAND...: keep what a command prints; note its exit status.
+cap() {
+    local file="$1" rc
+    shift
+    timeout 300 "$@" > "${out}/${file}" 2> "${out}/${file}.err" < /dev/null
+    rc=$?
+    printf '%s\t%s\n' "${file}" "${rc}" >> "${out}/exit-status.tsv"
+    return "${rc}"
+}
+uid="$(id -u "${test_user}" 2> /dev/null)"
+home="$(getent passwd "${test_user}" | cut -d: -f6)"
+# as_user FILE COMMAND...: the same, as the test user, with what a session has.
+as_user() {
+    local file="$1"
+    shift
+    cap "${file}" runuser -u "${test_user}" -- env "HOME=${home}" "XDG_RUNTIME_DIR=/run/user/${uid}" \
+        "PATH=/usr/bin:/bin" "$@"
+}
+scan() {
+    local label="$1"
+    systemctl start tur-heal.service
+    put "scan_${label}_rc" "$?"
+    cp "${heal_state}" "${out}/state-${label}.json" 2> /dev/null
+}
+send() {
+    local start="${SECONDS}"
+    until [ -e "${port}" ] || [ $((SECONDS - start)) -ge 20 ]; do sleep 1; done
+    journalctl -b --no-pager -o short-monotonic > "${out}/journal.txt" 2>&1
+    if [ -e "${port}" ] && tar -C "${state}/report" -cf - "${name}" > "${port}"; then
+        say "HEAL-REPORT report=${name}"
+    else
+        say "HEAL-PROBLEM the report ${name} could not be sent"
+    fi
+    sync
+}
+mark_previous_build() {
+    # Test plumbing: the record of the crash as if it had been seen on the
+    # version before an update.
+    python3 - "${heal_state}" "${crash}" <<'PY'
+import json, sys
+path, code = sys.argv[1], sys.argv[2]
+state = json.load(open(path))
+for record in state["faults"]:
+    if record["code"] == code and record["state"] != "resolved":
+        record["build_id"] = "tur-heal-test-previous-build"
+json.dump(state, open(path, "w"), indent=2)
+PY
+}
+fixes_over_image() {
+    # Test plumbing: an image whose fixes list names the crash's code.
+    local tmp
+    tmp="$(mktemp -d)"
+    cp -a /usr/share/tur/heal/. "${tmp}/"
+    printf '%s\n' "{\"schema_version\": 1, \"about\": \"heal test\", \"fixes\": [{\"code\": \"${crash}\", \"summary\": \"heal test: the crash is fixed\"}]}" \
+        > "${tmp}/fixes.json"
+    mount -t tmpfs -o mode=0755 tur-heal-test-fixes /usr/share/tur/heal
+    cp -a "${tmp}/." /usr/share/tur/heal/
+    chmod 0644 /usr/share/tur/heal/*
+    cp /usr/share/tur/heal/fixes.json "${out}/fixes-used.json"
+}
+
+say "HEAL-START report=${name} uptime=$(uptime_s)"
+put build_id "$(sed -n 's/^TUR_BUILD_ID=//p' /usr/lib/tur/release)"
+put version "$(sed -n 's/^TUR_VERSION=//p' /usr/lib/tur/release)"
+start="${SECONDS}"
+until [ "$(systemctl show -p ActiveState --value tur-boot-mark-good.service)" = active ] \
+    || [ $((SECONDS - start)) -ge 480 ]; do
+    sleep 2
+done
+put mark_good "$(systemctl show -p ActiveState --value tur-boot-mark-good.service)"
+loginctl enable-linger "${test_user}"
+for _ in $(seq 1 30); do [ -d "/run/user/${uid}" ] && break; sleep 1; done
+
+if [ "${name}" = phase-b ]; then
+    # ---- after the restart: the fault the update addresses stays away ------------
+    fixes_over_image
+    mark_previous_build
+    scan fixed
+    as_user notices-fixed.json tur-diag heal notices --json
+    cap status-fixed.json tur-diag heal status --json
+    systemctl unmask tur-heal.timer
+    put timer_unmasked "$(systemctl is-enabled tur-heal.timer 2>&1)"
+    cap coredumps-phase-b.txt coredumpctl list --no-pager
+    send
+    for _ in 1 2 3; do sleep 1; say "HEAL-COMPLETE report=${name}"; done
+    sleep 600
+    systemctl poweroff
+    exit 0
+fi
+
+# ---- the product as installed ------------------------------------------------------------
+put timer_enabled "$(systemctl is-enabled tur-heal.timer 2>&1)"
+put timer_active "$(systemctl is-active tur-heal.timer 2>&1)"
+put socket_enabled "$(systemctl is-enabled tur-heal-request.socket 2>&1)"
+put socket_active "$(systemctl is-active tur-heal-request.socket 2>&1)"
+put socket_path "$(stat -c '%A %U' /run/tur/heal.socket 2>&1)"
+put notify_path_enabled "$(systemctl --global is-enabled tur-heal-notify.path 2>&1)"
+cap tmpfiles.txt bash -c 'ls -ld /var/log/tur/heal /var/lib/tur/heal'
+cap units.txt systemctl cat tur-heal.service tur-heal.timer tur-heal-request.socket tur-heal-request@.service
+cap timer-list.txt systemctl list-timers tur-heal.timer --all --no-pager
+# From here the service runs when this agent starts it, as its timer would.
+systemctl stop tur-heal.timer
+systemctl mask tur-heal.timer
+scan baseline
+cap status-baseline.json tur-diag heal status --json
+
+# ---- 1. a failed service: repaired by the service itself ------------------------------------
+say "HEAL-STEP service uptime=$(uptime_s)"
+put chronyd_before "$(systemctl is-active chronyd.service)"
+mkdir -p /run/systemd/system/chronyd.service.d
+printf '[Service]\nRestart=no\n' > /run/systemd/system/chronyd.service.d/99-tur-heal-test.conf
+systemctl daemon-reload
+systemctl kill --signal=SIGKILL chronyd.service
+for _ in $(seq 1 20); do [ "$(systemctl is-failed chronyd.service)" = failed ] && break; sleep 1; done
+put chronyd_injected "$(systemctl is-active chronyd.service)"
+scan service
+put chronyd_after_scan "$(systemctl is-active chronyd.service)"
+sleep 5
+scan service-held
+put chronyd_after_second_scan "$(systemctl is-active chronyd.service)"
+rm -rf /run/systemd/system/chronyd.service.d
+systemctl daemon-reload
+
+# ---- 2. network time off: P@x asks the service --------------------------------------------
+say "HEAL-STEP time uptime=$(uptime_s)"
+timedatectl set-ntp false
+put ntp_injected "$(timedatectl show -p NTP --value)"
+scan time
+put ntp_after_scan "$(timedatectl show -p NTP --value)"
+mkdir -p "${out}/pax"
+chown "${test_user}" "${out}/pax"
+as_user heal-pax.out /usr/libexec/tur-boot-test/heal-pax "${out}/pax"
+put heal_pax_rc "$(tail -n1 "${out}/exit-status.tsv" | cut -f2)"
+put ntp_after_pax "$(timedatectl show -p NTP --value)"
+cp "${heal_state}" "${out}/state-time-pax.json"
+
+# ---- 3. the resolver file replaced: the person repairs, undoes, repairs --------------------
+say "HEAL-STEP resolver uptime=$(uptime_s)"
+put resolver_original "$(readlink /etc/resolv.conf || echo not-a-link)"
+original_target="$(readlink /etc/resolv.conf)"
+rm -f /etc/resolv.conf
+printf '# written by a VPN client (heal test)\nnameserver 192.0.2.53\n' > /etc/resolv.conf
+put resolver_injected_sha256 "$(sha256sum /etc/resolv.conf | cut -d' ' -f1)"
+scan resolver
+put resolver_after_scan "$(readlink /etc/resolv.conf || echo file)"
+as_user resolver-apply.json tur-diag heal apply TUR-NETWORK-RESOLVER-001 restore-resolver-link --json
+put resolver_apply_rc "$(tail -n1 "${out}/exit-status.tsv" | cut -f2)"
+put resolver_after_apply "$(readlink /etc/resolv.conf || echo file)"
+put resolver_label_after_apply "$(stat -c %C /etc/resolv.conf 2>&1)"
+cap resolver-lookup.txt getent ahosts localhost
+as_user resolver-undo.json tur-diag heal undo TUR-NETWORK-RESOLVER-001 restore-resolver-link --json
+put resolver_undo_rc "$(tail -n1 "${out}/exit-status.tsv" | cut -f2)"
+put resolver_after_undo_sha256 "$(if [ -L /etc/resolv.conf ]; then echo link; else sha256sum /etc/resolv.conf | cut -d' ' -f1; fi)"
+as_user resolver-apply-again.json tur-diag heal apply TUR-NETWORK-RESOLVER-001 restore-resolver-link --json
+put resolver_apply_again_rc "$(tail -n1 "${out}/exit-status.tsv" | cut -f2)"
+put resolver_final "$(readlink /etc/resolv.conf || echo file)"
+if [ "$(readlink /etc/resolv.conf)" != "${original_target}" ] && [ -n "${original_target}" ]; then
+    ln -sfn "${original_target}" /etc/resolv.conf
+fi
+cp "${heal_state}" "${out}/state-resolver.json"
+
+# ---- 4. the disk almost full: only the person, as administrator, may delete logs ----------
+say "HEAL-STEP space uptime=$(uptime_s)"
+available="$(df -B1 --output=avail /var | tail -n1 | tr -d ' ')"
+fill=$((available - 700 * 1024 * 1024))
+put space_available_before "${available}"
+if [ "${fill}" -gt 0 ] && fallocate -l "${fill}" /var/tmp/tur-heal-test-fill; then
+    put space_filled yes
+else
+    put space_filled "no (${fill})"
+fi
+put space_available_filled "$(df -B1 --output=avail /var | tail -n1 | tr -d ' ')"
+scan space
+as_user space-socket.json tur-diag heal apply TUR-STORAGE-SPACE-001 vacuum-journal --json
+put space_socket_rc "$(tail -n1 "${out}/exit-status.tsv" | cut -f2)"
+put journal_before "$(journalctl --disk-usage 2>&1 | tail -n1)"
+cap space-unconfirmed.json tur-diag heal apply TUR-STORAGE-SPACE-001 vacuum-journal --json
+put space_unconfirmed_rc "$(tail -n1 "${out}/exit-status.tsv" | cut -f2)"
+put journal_after_unconfirmed "$(journalctl --disk-usage 2>&1 | tail -n1)"
+cap space-confirmed.json tur-diag heal apply TUR-STORAGE-SPACE-001 vacuum-journal --yes --json
+put space_confirmed_rc "$(tail -n1 "${out}/exit-status.tsv" | cut -f2)"
+put journal_after_confirmed "$(journalctl --disk-usage 2>&1 | tail -n1)"
+rm -f /var/tmp/tur-heal-test-fill
+sync
+put space_available_after "$(df -B1 --output=avail /var | tail -n1 | tr -d ' ')"
+scan space-cleared
+
+# ---- 5. a TUR program crashes: no remedy, a report is offered, sent only by the person -----
+say "HEAL-STEP crash uptime=$(uptime_s)"
+mkdir -p "${state}/receiver" /etc/tur
+setsid /usr/libexec/tur-boot-test/heal-receiver "${receiver_port}" "${state}/receiver" \
+    > "${out}/receiver.log" 2>&1 < /dev/null &
+receiver_pid=$!
+printf 'RECEIVER_URL=%s\n' "${receiver}" > /etc/tur/problem-reports.conf
+count() { if [ -f "${state}/receiver/requests.jsonl" ]; then wc -l < "${state}/receiver/requests.jsonl"; else echo 0; fi; }
+# Personal values a report must not carry: the host name, the account, an
+# address, the network card's hardware address, the machine ID.
+hostnamectl set-hostname "${planted_host}"
+put planted_host "${planted_host}"
+put planted_ip "${planted_ip}"
+put planted_user "${test_user}"
+put planted_mac "$(grep -hv '^00:00:00:00:00:00$' /sys/class/net/*/address 2> /dev/null | head -n1)"
+put planted_machine_id "$(cat /etc/machine-id)"
+as_user plant.txt logger -p user.err "heal-test planted: ${test_user} kept /home/${test_user}/Private/notes.txt from ${planted_ip}"
+sleep 600 | /usr/bin/tur-diag heal handle > /dev/null 2>&1 &
+crashed_pid=$!
+sleep 1
+kill -SEGV "${crashed_pid}"
+wait "${crashed_pid}" 2> /dev/null
+put crash_exit "$?"
+pkill -f 'sleep 600' 2> /dev/null
+for _ in $(seq 1 30); do
+    coredumpctl list --no-pager /usr/bin/tur-diag > /dev/null 2>&1 && break
+    sleep 1
+done
+cap coredumps.txt coredumpctl list --no-pager
+put receiver_count_start "$(count)"
+scan crash
+put receiver_count_after_scan "$(count)"
+as_user crash-report.json tur-diag heal report "${crash}" --json
+put crash_report_rc "$(tail -n1 "${out}/exit-status.tsv" | cut -f2)"
+put receiver_count_after_prepare "$(count)"
+prepared="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("prepared_file") or "")' "${out}/crash-report.json" 2> /dev/null)"
+put prepared_file "${prepared}"
+cp "${prepared}" "${out}/prepared.tar.zst" 2> /dev/null
+as_user send-unconfirmed.txt tur-diag report send --to "${receiver}" "${prepared}"
+put send_unconfirmed_rc "$(tail -n1 "${out}/exit-status.tsv" | cut -f2)"
+put receiver_count_after_unconfirmed "$(count)"
+as_user send-confirmed.txt tur-diag report send --to "${receiver}" --yes "${prepared}"
+put send_confirmed_rc "$(tail -n1 "${out}/exit-status.tsv" | cut -f2)"
+put receiver_count_after_send "$(count)"
+cp "${state}/receiver/requests.jsonl" "${out}/receiver-requests.jsonl" 2> /dev/null
+cp "${state}/receiver"/upload-*.bin "${out}/" 2> /dev/null
+as_user report-list.json tur-diag report list --json
+kill "${receiver_pid}" 2> /dev/null
+
+# ---- 6. the fix link: an update that names the code, the crash in this boot -----------------
+say "HEAL-STEP fix-link uptime=$(uptime_s)"
+fixes_over_image
+mark_previous_build
+scan recurred
+as_user notices-a.json tur-diag heal notices --json --mark-shown
+cap status-a.json tur-diag heal status --json
+umount /usr/share/tur/heal
+
+touch "${state}/phase-a-done"
+send
+say "HEAL-RESTARTING uptime=$(uptime_s)"
+systemctl reboot

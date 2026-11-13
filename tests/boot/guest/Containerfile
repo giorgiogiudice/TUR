@@ -46,7 +46,9 @@ COPY services/tur-device-manager/tests/fixtures/laptop/ /usr/share/tur-pax-e2e/l
 RUN set -eu; \
     chmod 0755 /usr/libexec/tur-boot-test/guest-agent /usr/libexec/tur-boot-test/scenario-agent \
         /usr/libexec/tur-boot-test/component-checks /usr/libexec/tur-boot-test/make-pe-fixture \
-        /usr/libexec/tur-boot-test/signed-update-agent; \
+        /usr/libexec/tur-boot-test/signed-update-agent \
+        /usr/libexec/tur-boot-test/heal-agent /usr/libexec/tur-boot-test/heal-pax \
+        /usr/libexec/tur-boot-test/heal-receiver; \
     install -m 0644 /usr/share/tur-pax-e2e/repo/tests/pax/probe_sockets.py /usr/share/tur-pax-e2e/probe_sockets.py; \
     install -m 0755 /usr/share/tur-pax-e2e/repo/tests/pax/tur-pax-test-tool /usr/bin/tur-pax-test-tool; \
     find /usr/share/tur-pax-e2e -type d -exec chmod 0755 {} +; \

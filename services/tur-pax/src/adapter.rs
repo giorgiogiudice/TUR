@@ -5,8 +5,16 @@
 //! A manifest says what a tool is: its name, its class and the shape of its
 //! input. It names a D-Bus method, and the services that will answer those
 //! methods do not exist yet. An adapter says how the tool is performed today.
-//! There is one kind, `command`: run a TUR command-line program, in the
-//! read-only sandbox, and return what it prints.
+//! There are two kinds:
+//!
+//! * `command`: run a TUR command-line program, in the read-only sandbox,
+//!   and return what it prints;
+//! * `request`: hand the validated input, as one line of JSON, to a TUR
+//!   service over its Unix socket under `/run/tur/`, and return its answer
+//!   (ADR-0027). The service decides and performs; P@x only asks, after the
+//!   engine allowed the call by the class its manifest declares. The
+//!   request is `{"schema_version": 1, "tool": <name>, "arguments": <the
+//!   validated input>}`; nothing else can be put into it.
 //!
 //! An adapter is data, in a file described by
 //! `schemas/pax-tool-adapter.schema.json`:
@@ -91,7 +99,10 @@ struct RawFile {
 struct RawAdapter {
     tool: String,
     kind: String,
-    program: String,
+    #[serde(default)]
+    program: Option<String>,
+    #[serde(default)]
+    socket: Option<String>,
     #[serde(default)]
     arguments: Vec<RawArgument>,
     #[serde(default)]
@@ -192,11 +203,25 @@ impl Feed {
     }
 }
 
+/// The directory every socket of a `request` adapter lies in.
+pub const REQUEST_SOCKET_DIR: &str = "/run/tur/";
+
+/// How a tool is performed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AdapterKind {
+    /// A program run in the read-only sandbox.
+    Command,
+    /// A request to a TUR service over its Unix socket.
+    Request,
+}
+
 /// How one tool is performed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Adapter {
     tool: String,
+    kind: AdapterKind,
     program: String,
+    socket: Option<String>,
     arguments: Vec<ArgumentTemplate>,
     success_exit_codes: Vec<i32>,
     reads: Vec<String>,
@@ -287,19 +312,68 @@ impl AdapterFile {
     }
 }
 
+/// Whether `path` is a socket a `request` adapter may name: a plain
+/// absolute path inside [`REQUEST_SOCKET_DIR`].
+pub fn is_request_socket(path: &str) -> bool {
+    is_plain_absolute(path)
+        && path
+            .strip_prefix(REQUEST_SOCKET_DIR)
+            .is_some_and(|rest| !rest.is_empty())
+}
+
 fn convert(raw: RawAdapter, at: &str) -> Result<Adapter, Vec<Fault>> {
     let mut problems = Vec::new();
-    if raw.kind != "command" {
-        problems.push(fault(
-            TaskCode::AdapterParse,
-            format!("{at}.kind must be \"command\", the one kind this build performs"),
-        ));
-    }
-    if !is_plain_absolute(&raw.program) || raw.program == "/" {
-        problems.push(fault(
-            TaskCode::AdapterProgram,
-            format!("{at}.program must be the full path of a program"),
-        ));
+    let kind = match raw.kind.as_str() {
+        "command" => AdapterKind::Command,
+        "request" => AdapterKind::Request,
+        _ => {
+            problems.push(fault(
+                TaskCode::AdapterParse,
+                format!("{at}.kind must be \"command\" or \"request\", the kinds this build performs"),
+            ));
+            AdapterKind::Command
+        }
+    };
+    let program = raw.program.clone().unwrap_or_default();
+    match kind {
+        AdapterKind::Command => {
+            if !is_plain_absolute(&program) || program == "/" {
+                problems.push(fault(
+                    TaskCode::AdapterProgram,
+                    format!("{at}.program must be the full path of a program"),
+                ));
+            }
+            if raw.socket.is_some() {
+                problems.push(fault(
+                    TaskCode::AdapterParse,
+                    format!("{at}.socket belongs to a request adapter"),
+                ));
+            }
+        }
+        AdapterKind::Request => {
+            if !raw.socket.as_deref().is_some_and(is_request_socket) {
+                problems.push(fault(
+                    TaskCode::AdapterProgram,
+                    format!("{at}.socket must be the full path of a socket under {REQUEST_SOCKET_DIR}"),
+                ));
+            }
+            // A request carries the validated input and nothing else: no
+            // program, no command line, nothing read, nothing fed.
+            if raw.program.is_some()
+                || !raw.arguments.is_empty()
+                || !raw.reads.is_empty()
+                || raw.feed.is_some()
+                || raw.success_exit_codes.is_some()
+            {
+                problems.push(fault(
+                    TaskCode::AdapterParse,
+                    format!(
+                        "{at}: a request adapter has only tool, kind, socket, timeout_seconds \
+                         and max_output_bytes"
+                    ),
+                ));
+            }
+        }
     }
     for path in &raw.reads {
         if !is_plain_absolute(path) || path == "/" {
@@ -406,7 +480,9 @@ fn convert(raw: RawAdapter, at: &str) -> Result<Adapter, Vec<Fault>> {
     if problems.is_empty() {
         Ok(Adapter {
             tool: raw.tool,
-            program: raw.program,
+            kind,
+            program,
+            socket: raw.socket,
             arguments,
             success_exit_codes,
             reads: raw.reads,
@@ -425,9 +501,30 @@ impl Adapter {
         &self.tool
     }
 
-    /// The program that is run.
+    /// How the tool is performed.
+    pub fn kind(&self) -> AdapterKind {
+        self.kind
+    }
+
+    /// The program that is run. Empty for a request adapter.
     pub fn program(&self) -> &str {
         &self.program
+    }
+
+    /// The socket a request adapter sends to.
+    pub fn socket(&self) -> Option<&str> {
+        self.socket.as_deref()
+    }
+
+    /// The one line a request adapter sends for a call: the tool's name and
+    /// its input as validated, and nothing else.
+    pub fn request_line(&self, input: &Map<String, Value>) -> String {
+        let request = serde_json::json!({
+            "schema_version": 1,
+            "tool": self.tool,
+            "arguments": Value::Object(input.clone()),
+        });
+        format!("{request}\n")
     }
 
     /// The argument templates, in order.
@@ -511,6 +608,9 @@ impl Adapter {
     /// value that cannot be passed safely is refused here: the call is not
     /// performed.
     pub fn argv(&self, input: &Map<String, Value>) -> Result<Vec<String>, Fault> {
+        if self.kind == AdapterKind::Request {
+            return Err(refused("a request adapter runs no program"));
+        }
         let mut argv = vec![self.program.clone()];
         for argument in &self.arguments {
             match argument {
@@ -978,6 +1078,63 @@ mod tests {
         ] {
             let problems = AdapterFile::from_json(text).expect_err(text);
             assert_eq!(problems[0].code.as_str(), code, "{text}");
+        }
+    }
+    #[test]
+    fn a_request_adapter_names_a_socket_under_run_tur_and_nothing_else() {
+        let file = |adapter: &str| {
+            format!(r#"{{"schema_version":1,"service":"org.tur.Example1","adapters":[{adapter}]}}"#)
+        };
+        let accepted = AdapterFile::from_json(&file(
+            r#"{"tool":"example_show","kind":"request","socket":"/run/tur/example.socket"}"#,
+        ))
+        .expect("a request adapter");
+        let adapter = &accepted.adapters()[0];
+        assert_eq!(adapter.kind(), AdapterKind::Request);
+        assert_eq!(adapter.socket(), Some("/run/tur/example.socket"));
+        assert_eq!(adapter.program(), "");
+        // It runs no program: there is no command line to build.
+        let refused = adapter
+            .argv(&input(json!({ "id": "x" })))
+            .expect_err("no command line");
+        assert_eq!(refused.code.as_str(), "TUR-AI-TOOL-002");
+        // The request is the tool's name and its validated input, nothing else.
+        let line = adapter.request_line(&input(json!({ "id": "x" })));
+        assert!(line.ends_with('\n'));
+        let request: Value = serde_json::from_str(line.trim_end()).expect("JSON");
+        assert_eq!(
+            request,
+            json!({ "schema_version": 1, "tool": "example_show", "arguments": { "id": "x" } })
+        );
+
+        for (adapter, code) in [
+            (r#"{"tool":"t","kind":"request"}"#, "TUR-AI-ADAPTER-005"),
+            (r#"{"tool":"t","kind":"request","socket":"/run/user/1000/bus"}"#, "TUR-AI-ADAPTER-005"),
+            (r#"{"tool":"t","kind":"request","socket":"/run/tur/"}"#, "TUR-AI-ADAPTER-005"),
+            (r#"{"tool":"t","kind":"request","socket":"/run/tur/../dbus/x"}"#, "TUR-AI-ADAPTER-005"),
+            (
+                r#"{"tool":"t","kind":"request","socket":"/run/tur/x","program":"/usr/bin/x"}"#,
+                "TUR-AI-ADAPTER-001",
+            ),
+            (
+                r#"{"tool":"t","kind":"request","socket":"/run/tur/x","arguments":[{"literal":"a"}]}"#,
+                "TUR-AI-ADAPTER-001",
+            ),
+            (
+                r#"{"tool":"t","kind":"request","socket":"/run/tur/x","reads":["/usr/share"]}"#,
+                "TUR-AI-ADAPTER-001",
+            ),
+            (
+                r#"{"tool":"t","kind":"command","program":"/usr/bin/x","socket":"/run/tur/x"}"#,
+                "TUR-AI-ADAPTER-001",
+            ),
+            (r#"{"tool":"t","kind":"command"}"#, "TUR-AI-ADAPTER-005"),
+        ] {
+            let problems = AdapterFile::from_json(&file(adapter)).expect_err(adapter);
+            assert!(
+                problems.iter().any(|problem| problem.code.as_str() == code),
+                "{adapter}: {problems:?}"
+            );
         }
     }
 }
