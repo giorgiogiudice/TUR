@@ -3,12 +3,12 @@
 #
 # Make a disposable disk image laid out as Windows 10 or 11 leaves a disk
 # after its own "Shrink Volume", without any Microsoft file: the test disk of
-# "install TUR beside Windows on the same disk" (ADR-0028).
+# "install TUR beside Windows on the same disk" (ADR-0029).
 #
 #   tests/iso/make-windows-shared-disk.sh DISK_IMAGE STANDIN_EFI [options]
 #
-#     --size-gib N      size of the disk (default 36)
-#     --free-gib N      free space after the Windows partition (default 24; 0: none)
+#     --size-gib N      size of the disk (default 42)
+#     --free-gib N      free space after the Windows partition (default 30; 0: none)
 #     --esp-mib N       size of the EFI system partition (default 100: Windows'
 #                       own size on a disk with 512-byte sectors)
 #     --esp-fill-mib N  data in Windows' files on it (default 26, about what
@@ -36,7 +36,7 @@ set -euo pipefail
 disk="${1:?disk image path required}"
 standin="${2:?the stand-in EFI program is required}"
 shift 2
-size_gib=36 free_gib=24 esp_mib=100 esp_fill_mib=26 bitlocker_c=no
+size_gib=42 free_gib=30 esp_mib=100 esp_fill_mib=26 bitlocker_c=no
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --size-gib) size_gib="$2"; shift 2 ;;

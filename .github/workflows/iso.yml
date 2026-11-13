@@ -15,7 +15,7 @@
 #             that the boot test's checks and boot-health scenarios can run on
 #             a disk installed from a medium.
 #   beside    the product medium, installing beside Windows on the same disk
-#             (ADR-0028): refusals, an installation, TUR's first start and
+#             (ADR-0029): refusals, an installation, TUR's first start and
 #             "Windows" in TUR's boot menu, the disk compared with what it
 #             held before after each.
 #   beside-faults
@@ -109,7 +109,8 @@ jobs:
             installer/iso/rootfs/usr/libexec/tur-installer/tur-install-engine \
             installer/iso/rootfs/usr/libexec/tur-installer/tur-live-transcript \
             installer/iso/rootfs/usr/libexec/tur-installer/tur-installer-wizard \
-            installer/iso/rootfs/usr/lib/tur-installer/engine.sh
+            installer/iso/rootfs/usr/lib/tur-installer/engine.sh \
+            image/rootfs/usr/bin/tur-dualboot
           python3 -m py_compile installer/iso/*.py tests/iso/*.py
 
   product:
@@ -664,7 +665,7 @@ jobs:
           path: out/iso-proof/
           if-no-files-found: warn
 
-  # TUR beside Windows on the same disk (ADR-0028, issue 64 step 1). The disk
+  # TUR beside Windows on the same disk (ADR-0029, issue 64 step 1). The disk
   # is laid out as Windows leaves it after its own "Shrink Volume"
   # (tests/iso/make-windows-shared-disk.sh: no Microsoft file; its
   # bootmgfw.efi is TUR's stand-in program, tests/iso/standin). It is
@@ -761,6 +762,9 @@ jobs:
       # The firmware first gets a "Windows Boot Manager" entry for the disk's
       # EFI system partition, as Windows setup would have made it; every
       # later start runs without a boot order from QEMU (tests/iso/isovm.py).
+      # After the installation, from the medium's command line: tur-dualboot
+      # default windows / tur, then restart-windows (BootNext): the stand-in
+      # must start once, and the first start after it must be TUR again.
       - name: "Beside Windows, text installer: install, compare, first start, compare, Windows entry, compare"
         if: ${{ !cancelled() && env.MEDIUM != '' }}
         run: |
@@ -773,7 +777,7 @@ jobs:
             --windows-serial tur-boot-test --windows-partition 1 --windows-last \
             --disk "$WORK/shared.raw" --work "$WORK/vm" --out "$d/windows-setup" || status=$?
           if [ "$status" -eq 0 ]; then
-            python3 tests/iso/install.py same-disk --medium "$MEDIUM" --medium-as usb --no-bootindex \
+            python3 tests/iso/install.py same-disk --dualboot-after --medium "$MEDIUM" --medium-as usb --no-bootindex \
               --variables-from "$d/windows-setup/host/OVMF_VARS.after.fd" \
               --disk "$WORK/shared.raw" --work "$WORK/vm" --out "$d/install" || status=$?
           fi
@@ -798,6 +802,8 @@ jobs:
       # The graphical installer in the live session, driven with the keyboard.
       # This disk's Windows partition carries BitLocker's signature, as an
       # encrypted C: shows, so the confirmation shows the BitLocker note.
+      # Windows is chosen to start by default: the first start must be the
+      # stand-in for Windows Boot Manager, started by the firmware.
       - name: "Beside Windows, graphical installer: install, compare, first start, compare"
         if: ${{ !cancelled() && env.MEDIUM != '' }}
         run: |
@@ -807,11 +813,19 @@ jobs:
             > "$d/windows-disk.txt"
           python3 tests/iso/windows-disk.py record "$WORK/live-shared.raw" "$d/before.json"
           status=0
-          python3 tests/iso/live.py beside --medium "$MEDIUM" --medium-as usb \
+          python3 tests/iso/install.py windows-setup --medium "$MEDIUM" --medium-as usb \
+            --windows-serial tur-boot-test --windows-partition 1 --windows-last \
+            --disk "$WORK/live-shared.raw" --work "$WORK/vm" --out "$d/windows-setup" || status=$?
+          python3 tests/iso/live.py beside --default-system windows --medium "$MEDIUM" --medium-as usb \
+            --no-bootindex --variables-from "$d/windows-setup/host/OVMF_VARS.after.fd" \
             --disk "$WORK/live-shared.raw" --work "$WORK/vm" --out "$d" || status=$?
           python3 tests/iso/windows-disk.py compare "$d/before.json" "$WORK/live-shared.raw" "$d/compare-install.json" || status=$?
           if [ "$status" -eq 0 ]; then
-            python3 tests/iso/boot-installed.py --no-bootindex --variables-from "$d/host/OVMF_VARS.after.fd" \
+            # Windows was chosen as the default: the firmware starts the
+            # stand-in for Windows Boot Manager by itself (w is pressed too,
+            # in case TUR's menu came instead; the report tells which).
+            python3 tests/iso/boot-installed.py --no-bootindex --windows-entry --timeout 180 \
+              --variables-from "$d/host/OVMF_VARS.after.fd" \
               --disk "$WORK/live-shared.raw" --work "$WORK/vm" --out "$d/first-start" || status=$?
             sudo python3 tests/boot/inspect-disk.py postmortem "$WORK/live-shared.raw" "$d/first-start"
             python3 tests/iso/windows-disk.py compare "$d/before.json" "$WORK/live-shared.raw" "$d/compare-first-start.json" || status=$?
@@ -856,7 +870,7 @@ jobs:
           path: out/iso-beside/
           if-no-files-found: warn
 
-  # Power cuts while installing beside Windows (ADR-0028): QEMU is stopped
+  # Power cuts while installing beside Windows (ADR-0029): QEMU is stopped
   # at once at each step. After every cut, Windows' partitions, its files on
   # the EFI system partition and its firmware entry must be as they were.
   beside-faults:

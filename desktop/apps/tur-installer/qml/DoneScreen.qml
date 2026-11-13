@@ -14,8 +14,9 @@ WizardScreen {
 
     required property Engine engine
     required property var disk
-    // "erase" or "beside" (Windows; ADR-0028).
+    // "erase" or "beside" (Windows; ADR-0029).
     property string mode: "erase"
+    property string defaultSystem: "tur"
 
     readonly property string outcome: screen.engine.installState
     readonly property bool success: screen.outcome === "success"
@@ -104,7 +105,9 @@ WizardScreen {
         objectName: "windowsAfterInstall"
         Layout.fillWidth: true
         visible: screen.success && screen.mode === "beside"
-        text: qsTr("The computer now starts TUR's menu, which offers TUR and Windows. Choose “Windows” there, or press W while the menu shows. Windows is also still in the computer's own boot menu.")
+        text: screen.defaultSystem === "windows"
+              ? qsTr("The computer now starts Windows by default. Start TUR from the computer's boot menu (“TUR”). In TUR, you can change which system starts by default.")
+              : qsTr("The computer now starts TUR by default. To start Windows, use “Restart into Windows” in TUR, or choose “Windows” in TUR's start menu (press W while it shows). Windows is also still in the computer's own boot menu.")
         paragraph: true
         wrapMode: Text.Wrap
     }

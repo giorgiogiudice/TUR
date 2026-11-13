@@ -5,7 +5,7 @@
     tests/iso/windows-disk.py record DISK OUT.json
     tests/iso/windows-disk.py compare BEFORE.json DISK OUT.json [--expect-added]
 
-The proof of "install TUR beside Windows on the same disk" (ADR-0028):
+The proof of "install TUR beside Windows on the same disk" (ADR-0029):
 everything Windows had must be byte-for-byte where it was.
 
 `record` reads, from the host, without starting anything:

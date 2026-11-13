@@ -22,4 +22,4 @@
 {"event": "stage", "stage": "boot-menu"}
 {"event": "stage", "stage": "check"}
 {"event": "stage", "stage": "record"}
-{"event": "result", "outcome": "success", "code": "", "message": "TUR is installed beside Windows.", "disk_state": "installed", "mode": "beside", "status": 0, "seconds": 71, "device": "/dev/vda", "partition": "/dev/vda5", "log_on_disk": "/var/log/tur-installer/20261113T201500Z-5e6f7a8b"}
+{"event": "result", "outcome": "success", "code": "", "message": "TUR is installed beside Windows.", "disk_state": "installed", "mode": "beside", "default": "tur", "status": 0, "seconds": 71, "device": "/dev/vda", "partition": "/dev/vda5", "log_on_disk": "/var/log/tur-installer/20261113T201500Z-5e6f7a8b"}

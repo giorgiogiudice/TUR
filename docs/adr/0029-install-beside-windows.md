@@ -1,7 +1,7 @@
-# ADR-0028: Installing beside Windows on the same disk: the free space Windows made, its EFI system partition shared, Windows in TUR's boot menu
+# ADR-0029: Installing beside Windows on the same disk: the free space Windows made, its EFI system partition shared, Windows in TUR's boot menu
 
 - **Status:** Proposed
-- **Date:** 2026-11-13
+- **Date:** 2026-11-13; owner's decisions 2026-11-14
 - **Specification sections:** §5.2, §6.1 to §6.3, §13.3 (dual boot), §19.5,
   §28.1, §28.5; issue 64 (step 1), issue 76, issue 99; amends
   [ADR-0018](0018-first-installer-medium.md) and
@@ -97,10 +97,22 @@ is BSD-3-Clause in `installer/iso/third-party-licensed/grub/`. It has the key
 
 **The firmware boot order.** bootupd puts "TUR" first and leaves "Windows
 Boot Manager" second (issue 76 asked whether TUR should leave the order as it
-found it). Kept as bootupd does it: TUR's menu, which offers Windows, is what
-starts. The alternative (Windows first, TUR from the firmware's one-time
-menu) is an owner decision below, and the right one for a BitLocker disk if
-the recovery-key prompt is not acceptable.
+found it). **The person chooses** (owner's decision, below): both installers
+ask which system starts by default, and the installer sets the firmware's
+boot order with `tur-dualboot default tur|windows` (the chosen system first,
+the other second, every other entry after them in its old order). GRUB's
+default is not changed: it would move the entry numbers boot counting uses.
+The same command changes it later on TUR.
+
+**Starting Windows from TUR without the BitLocker prompt.** GRUB cannot set
+`BootNext`, and a Windows started through shim and GRUB is measured
+differently. **"Restart into Windows"** (owner's decision, below):
+`tur-dualboot restart-windows` sets the firmware's `BootNext` to "Windows
+Boot Manager" and restarts; the firmware starts Windows' own boot manager
+once, as it does at power-on, and the boot after follows the boot order
+again (UEFI: `BootNext` is deleted when it is used). The "Windows" entry of
+TUR's menu stays, and on a disk that holds BitLocker its title says
+"Windows (may ask for the BitLocker recovery key)".
 
 **The order of writing, for a power cut at any moment.** Record (the GPT and
 the SHA-256 of every file on the ESP), then one GPT entry for the free space
@@ -114,8 +126,8 @@ writing; the ESP is writable only inside bootupd and for the one rename.
 ## Decision
 
 TUR's installer medium offers, for a disk that holds Windows (an ESP with
-`EFI/Microsoft/Boot`) and has at least 20 GiB of free space, **"Use the free
-space beside Windows"**. With its own typed phrase, `BESIDE` and the end of
+`EFI/Microsoft/Boot`) and has at least **25 GiB** of free space, **"Use the
+free space beside Windows"**, and asks which system starts by default. With its own typed phrase, `BESIDE` and the end of
 the disk's serial number, it makes one partition in the largest free
 stretch, ext4 in it, runs
 
@@ -125,8 +137,11 @@ bootc install to-filesystem --source-imgref oci:/run/initramfs/live/payload:payl
 ```
 
 shares Windows' ESP, puts Windows' `EFI/Boot/bootx64.efi` back, writes
-"Windows" into TUR's boot menu, and checks that every partition entry and
-every ESP file Windows had is unchanged. Both installers do it, from
+"Windows" into TUR's boot menu, checks that every partition entry and every
+ESP file Windows had is unchanged, and sets the default system. The image
+carries `/usr/bin/tur-dualboot` (status, `default tur|windows`,
+`restart-windows`; polkit action `org.tur.dualboot`, an administrator's
+password), which the installer uses and the person uses later. Both installers do it, from
 `engine.sh` (`beside_look`, `run_beside`). Nothing else changes: erasing a
 whole disk still runs `to-disk` as before.
 
@@ -137,7 +152,7 @@ crate):
 |---|---|
 | `TUR-INSTALL-BESIDE-001` | The disk has no GPT (Windows starts the BIOS way) |
 | `TUR-INSTALL-BESIDE-002` | Not exactly one ESP, or no Windows Boot Manager on it |
-| `TUR-INSTALL-BESIDE-003` | The largest free stretch is smaller than 20 GiB; the message says how to shrink Windows |
+| `TUR-INSTALL-BESIDE-003` | The largest free stretch is smaller than 25 GiB; the message says how to shrink Windows |
 | `TUR-INSTALL-BESIDE-004` | The ESP has too little free space for TUR's boot loader |
 | `TUR-INSTALL-BESIDE-005` | The ESP already holds `EFI/fedora` |
 | `TUR-INSTALL-BESIDE-006` | After writing, an entry or a file Windows had is different (the installation stops and says so) |
@@ -149,16 +164,21 @@ crate):
 - The installed root is ADR-0013's layout without the BIOS boot partition:
   `--auto` installs the EFI boot loader only. BIOS boot from this disk is not
   possible (TUR is UEFI-only, §4.1).
-- The computer starts TUR's menu first; "Windows" in it starts Windows' own
-  boot manager. **With BitLocker, Windows may then ask for its recovery
-  key** (upstream bug above); the confirmation says so, and the firmware's
-  own boot menu still starts Windows without it. A TUR command "Restart into
-  Windows" that sets `BootNext` (which does not change the measurements) is
-  the follow-up that removes this.
+- The computer starts the system the person chose. From TUR, "Restart into
+  Windows" (`pkexec tur-dualboot restart-windows`) starts Windows through
+  the firmware, without the BitLocker prompt; "Windows" in TUR's menu starts
+  it through GRUB, and **with BitLocker Windows may then ask for its
+  recovery key** (upstream bug above): the entry's title says so. A page in
+  TUR's Settings for both is a follow-up (TUR Settings is another
+  component); until then the command line.
 - bootupd records shim as `EFI/BOOT/BOOTX64.EFI` in `/boot/bootupd-state.json`.
-  TUR does not run `bootupctl update` today; when the update manager does
-  (ADR-0013, consequences), it must not overwrite Windows' fallback file
-  again. Recorded as a follow-up.
+  The base image's `bootloader-update.service` runs `bootupctl update` at
+  start (TUR only keeps it from running during a trial boot), and bootupd
+  applies the difference between its record and the new files to the ESP:
+  **a later update that changes shim writes shim over Windows'
+  `EFI/Boot/bootx64.efi` again**. Windows' own entry, which starts
+  `EFI/Microsoft/Boot/bootmgfw.efi`, is not affected. Recorded as a
+  follow-up: put Windows' copy back after such an update.
 - `sfdisk` writes the protective MBR again with the GPT; on a disk Windows
   partitioned its bytes may change (it holds no Windows data). Measured and
   reported, not judged.
@@ -199,11 +219,18 @@ Windows leaves a disk after Shrink Volume
 (`tests/iso/make-windows-shared-disk.sh`): 100 MiB ESP holding 26 MiB of
 files under Windows' names and a stand-in for `bootmgfw.efi` and
 `EFI/Boot/bootx64.efi` (TUR's own test program, `tests/iso/standin`, not a
-Microsoft binary), MSR, NTFS made by ntfs-3g with known files, 24 GiB free,
+Microsoft binary), MSR, NTFS made by ntfs-3g with known files, 30 GiB free,
 recovery partition at the end:
 
 - refusals: no free space, a too-full ESP: listed with the reason, not
   offered, the disks byte-identical;
+- the default system: TUR chosen in the text installer (TUR's menu at the
+  first start), Windows chosen in the graphical one (the firmware starts the
+  stand-in at the first start, the boot order is Windows Boot Manager, TUR);
+- `tur-dualboot default windows`, `default tur` and `restart-windows`, run
+  as root from the medium's command line after an installation: BootNext
+  set, the stand-in started once by the firmware, then the next start is TUR
+  again, BootNext gone;
 - the text installer and the graphical one install beside Windows; the erase
   phrase does not confirm it;
 - `tests/iso/windows-disk.py` compares the disk with what it held before,
@@ -219,6 +246,10 @@ recovery partition at the end:
 
 **Not shown**, recorded as not run:
 
+- Real BitLocker: whether Windows asks for its key when started from TUR's
+  menu, and that it does not after "Restart into Windows". **NOT RUN.**
+- `tur-dualboot` run on an installed TUR through pkexec (it was run as root
+  from the medium, whose system is the same image).
 - Real Windows: that Windows Boot Manager started from TUR's menu goes on to
   start Windows; that Windows accepts the shared ESP and the new partition;
   BitLocker's prompt; Fast Startup or hibernation; Windows' own updates of
@@ -234,9 +265,26 @@ recovery partition at the end:
 - Real firmware: whether it keeps the entry bootupd adds, and how it shows
   the boot order.
 
-## Step 2: shrinking Windows from the installer (not decided here)
+## Owner's decisions, 14 November 2026
 
-Planned in issue 64 and to get its own ADR: `ntfsresize` (ntfs-3g), only
+1. **Boot order: the person decides.** Both installers ask which system
+   starts by default, TUR or Windows; the installer sets the firmware's boot
+   order; `tur-dualboot default` changes it later. A Settings page is a
+   follow-up.
+2. **BitLocker: "Restart into Windows"** through the firmware's `BootNext`
+   (`tur-dualboot restart-windows`). The GRUB entry stays, titled to say it
+   may ask for the BitLocker recovery key when the disk holds BitLocker.
+3. **Shrinking Windows from the installer is to be offered** (step 2, pull
+   request 116): ntfsresize on the medium, the choice in both installers,
+   every refusal in plain words with what to do, a size picker that keeps
+   the minimum, a typed confirmation, and a strong recommendation to back up
+   first. Tested on volumes made by mkfs.ntfs, not on a real Windows volume.
+4. **Minimum free space for TUR: 25 GiB.**
+
+## Step 2: shrinking Windows from the installer
+
+Offered (owner's decision 3); built in pull request 116 and recorded in
+TUR-012: `ntfsresize` (ntfs-3g), only
 after `ntfsresize --info` and `--no-action` succeed; refusing a BitLocker
 volume (`-FVE-FS-`) and a hibernated or dirty volume (Fast Startup); keeping
 a margin over the reported minimum; resizing the filesystem first, then the

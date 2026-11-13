@@ -39,7 +39,7 @@ What the run does:
      install"; follows the stages; screenshot of every screen.
   6. On the result, "Restart now". QEMU stops at the reset.
 
-The scenario "beside" (ADR-0028) has one disk, laid out as Windows leaves it
+The scenario "beside" (ADR-0029) has one disk, laid out as Windows leaves it
 after Shrink Volume (tests/iso/make-windows-shared-disk.sh), as the main disk
 "tur-boot-test". It chooses that disk, then "Use the free space beside
 Windows", goes on to the confirmation, types the disk's erase phrase (the
@@ -521,6 +521,12 @@ class Run:
         live["mode_chosen"] = "beside"
         time.sleep(1)
         self.shot("disks-beside-chosen")
+        if self.args.default_system == "windows":
+            self.press("defaultWindowsOption")
+            self.wait(r"TUR-WIZARD: default-chosen system=windows", 30, "Windows to be chosen as the default")
+            live["default_chosen"] = "windows"
+            time.sleep(1)
+            self.shot("disks-beside-windows-default")
         self.press("continueButton")
         self.screen_ready("account")
         since = len(self.pump())
@@ -646,6 +652,7 @@ def main() -> int:
     ap.add_argument("--extra-disk", action="append", default=[], metavar="PATH=SERIAL")
     ap.add_argument("--no-bootindex", action="store_true")
     ap.add_argument("--variables-from")
+    ap.add_argument("--default-system", choices=["tur", "windows"], default="tur", help="beside: the default system")
     ap.add_argument("--cpus", type=int, default=2)
     ap.add_argument("--memory", type=int, default=6144, help="MiB; the live desktop and the installation together")
     ap.add_argument("--qemu", default="qemu-system-x86_64")

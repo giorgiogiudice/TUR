@@ -18,7 +18,7 @@ import Tur.Kit as Kit
 //    once it writes;
 //  - a failure shows its code, what state the disk is in, and the way to save
 //    the log to a USB stick; a refusal before writing leads back to the disks;
-//  - beside Windows (ADR-0028): offered only on a disk that holds Windows and
+//  - beside Windows (ADR-0029): offered only on a disk that holds Windows and
 //    has room, with the reason when not; its own phrase, which the erase
 //    phrase does not match; a failure says Windows was not written to.
 Item {
@@ -276,7 +276,15 @@ Item {
             compare(wizard.mode, "beside")
             verify(beside.selected)
             verify(!control(wizard, "eraseOption").selected)
-            verify(beside.subtitle.indexOf("24.0 GiB") >= 0, beside.subtitle)
+            verify(beside.subtitle.indexOf("30.0 GiB") >= 0, beside.subtitle)
+            // Which system starts by default: TUR unless the person chooses Windows.
+            verify(control(wizard, "defaultTurOption").selected)
+            compare(wizard.defaultSystem, "tur")
+            press("defaultWindowsOption")
+            compare(wizard.defaultSystem, "windows")
+            verify(control(wizard, "defaultWindowsOption").selected)
+            press("defaultTurOption")
+            compare(wizard.defaultSystem, "tur")
             press("eraseOption")
             compare(wizard.mode, "erase", "and back to erasing")
         }
@@ -297,7 +305,8 @@ Item {
             compare(findChild(wizard, "confirmPhrase").text, "BESIDE BOOTTEST")
             compare(install.text, "Install beside Windows")
             verify(control(wizard, "besideNothingDestroyed").visible, "it says nothing on the disk is destroyed")
-            verify(control(wizard, "besideNewPartition").text.indexOf("24.0 GiB") >= 0)
+            verify(control(wizard, "besideNewPartition").text.indexOf("30.0 GiB") >= 0)
+            verify(control(wizard, "besideDefaultSystem").text.indexOf("starts TUR by default") >= 0)
             verify(!control(wizard, "windowsWarning").visible, "no BitLocker on this disk")
             field.text = "ERASE BOOTTEST"
             verify(!install.enabled, "the erase phrase does not confirm installing beside Windows")

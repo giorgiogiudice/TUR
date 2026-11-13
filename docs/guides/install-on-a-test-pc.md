@@ -410,7 +410,7 @@ TUR can go into **free space on the Windows disk that you make in Windows
 first**. The installer does not shrink Windows; Windows does that itself,
 safely, including with BitLocker. Windows, its files and its partitions are
 kept; TUR adds its start-up files to Windows' EFI system partition and a
-"Windows" entry to its own start menu ([ADR-0028](../adr/0028-install-beside-windows.md),
+"Windows" entry to its own start menu ([ADR-0029](../adr/0029-install-beside-windows.md),
 [TUR-011](../reports/TUR-011.md)).
 
 **Tested in a virtual machine only**, on a disk laid out as Windows leaves
@@ -422,10 +422,10 @@ not with Secure Boot on. You are the first to try it with Windows.
    7, points 1 and 2).
 2. **Shut Windows down fully**: hold Shift while you choose Shut down. (A
    normal shut down with Fast Startup leaves Windows half-asleep.)
-3. **Make room in Windows.** At least 20 GiB; 60 GiB or more is better for
+3. **Make room in Windows.** At least 25 GiB; 60 GiB or more is better for
    using TUR. Right-click Start, **Disk Management**, right-click the Windows
-   partition (C:), **Shrink Volume**, enter the amount in MB (20 GiB is
-   20480), **Shrink**. The free space appears as "Unallocated", usually
+   partition (C:), **Shrink Volume**, enter the amount in MB (25 GiB is
+   25600), **Shrink**. The free space appears as "Unallocated", usually
    between C: and a small recovery partition. Leave it unallocated: do not
    make a new volume in it.
 4. **Start from the installer stick** (section 4) and go through section 5.
@@ -433,21 +433,28 @@ not with Secure Boot on. You are the first to try it with Windows.
    space beside Windows**; it says how much free space it found. If it is
    not available, the screen says why: not enough free space (step 3), or
    Windows' EFI system partition is too full, or holds another Linux's
-   start-up files.
+   start-up files. Then choose **When you switch the computer on**: **Start
+   TUR** or **Start Windows** (in the text installer: 1 or 2).
 5. **The confirmation** says that everything on the disk is kept, where TUR
    goes, and what is added to the EFI system partition. Type the phrase it
    shows, **BESIDE** and the end of the disk's serial number (the erase
    phrase does not work here), and choose **Install beside Windows**.
    In the text installer, choose the disk's number, then **1**.
-6. **Starting either system.** The computer then starts TUR's menu first. It
-   lists TUR and **Windows**; choose Windows with the arrow keys and Enter,
-   or press **w** while the menu shows (it waits 5 seconds). Windows is also
-   still in the computer's own boot menu (section 7, point 7), as "Windows
-   Boot Manager". **If Windows uses BitLocker**, starting it from TUR's menu
-   may make it ask for the recovery key each time; start it from the
-   computer's boot menu instead, or move "Windows Boot Manager" back to the
-   top of the boot order in the firmware setup and start TUR from the boot
-   menu (its entry is "TUR").
+6. **Starting either system.** The computer starts the system you chose.
+   - From TUR, to start Windows once: open a terminal and run
+     `pkexec tur-dualboot restart-windows` (your password is asked). The
+     computer restarts straight into Windows, as it does at power-on, so
+     BitLocker does not ask for its key; the next start is your default
+     again.
+   - TUR's start menu also lists **Windows** (press **w** while it shows; it
+     waits 5 seconds). **If Windows uses BitLocker**, the entry says it may
+     ask for the BitLocker recovery key, and it may, every time: use
+     "Restart into Windows" instead.
+   - To change which system starts by default: `pkexec tur-dualboot default
+     windows` (or `tur`). `tur-dualboot status` shows what is set. A page in
+     TUR's Settings is to come.
+   - Windows and TUR are also in the computer's own boot menu (section 7,
+     point 7), as "Windows Boot Manager" and "TUR".
 7. **If the installation stops** (a power cut, an error), Windows' partitions
    were not written to and Windows still starts from the computer's boot
    menu. The free space then holds an unfinished partition named "TUR":

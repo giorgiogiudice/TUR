@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
 //
 // A stand-in for Windows Boot Manager, for the "beside Windows on the same
-// disk" tests of the installer medium (tests/iso, ADR-0028). It is NOT a
+// disk" tests of the installer medium (tests/iso, ADR-0029). It is NOT a
 // Microsoft program and contains no Microsoft code: a few lines of TUR's own
 // that a test disk carries at EFI/Microsoft/Boot/bootmgfw.efi, where Windows
 // keeps its boot manager.

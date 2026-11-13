@@ -29,7 +29,7 @@
 #
 #   - or, on a disk that holds Windows and has free space the person made in
 #     Windows, installs TUR into that space only, sharing Windows' EFI system
-#     partition (ADR-0028; "beside Windows" below): one new partition, then
+#     partition (ADR-0029; "beside Windows" below): one new partition, then
 #     `bootc install to-filesystem`, then "Windows" in TUR's boot menu;
 #   - checks the result has an EFI system partition and a root partition, and
 #     keeps the installer's log on the installed disk, under
@@ -262,7 +262,7 @@ run_checks() {
 
 d_name=() d_model=() d_serial=() d_wwn=() d_size=() d_tran=() d_byid=() d_status=() d_code=() d_why=() d_index=()
 d_holds=() d_words=() d_windows=() d_bitlocker=() d_linux=() d_ntfs=() d_parts=()
-# Installing into the free space beside Windows (ADR-0028), per disk: whether
+# Installing into the free space beside Windows (ADR-0029), per disk: whether
 # it is possible, why not, the free stretch (bytes), the EFI system partition
 # that is shared, its size, free space and what TUR's boot loader needs there,
 # and the partitions just before and after the free stretch.
@@ -514,7 +514,7 @@ dump_inventory() {
 # phrase_of SERIAL WWN SIZE [WORD]: the phrase that confirms what is done to
 # a disk: WORD ("ERASE" unless given) and the last eight letters and digits
 # of its serial number, or of its WWN when it has no serial number. Installing
-# into the free space beside Windows is confirmed with "BESIDE" (ADR-0028).
+# into the free space beside Windows is confirmed with "BESIDE" (ADR-0029).
 phrase_of() {
     local source cleaned word="${4:-ERASE}"
     for source in "$1" "$2"; do
@@ -539,7 +539,7 @@ beside_phrase_for() {
     phrase_of "${d_serial[$1]}" "${d_wwn[$1]}" "${d_size[$1]}" BESIDE
 }
 
-# ---- beside Windows: looking (ADR-0028) -------------------------------------------
+# ---- beside Windows: looking (ADR-0029) -------------------------------------------
 #
 # TUR can be installed into free space that the person made on a Windows disk
 # with Windows' own Shrink Volume. Only the free space is written, plus TUR's
@@ -554,6 +554,11 @@ readonly LOADER_FILES_USR=/usr/lib/efi
 # takes, for FAT's rounding and for Windows' own updates of its files there.
 readonly ESP_MARGIN_BYTES=$((4 * 1024 * 1024))
 readonly WINDOWS_ENTRY_TEMPLATE="${INSTALLER_DIR}/grub/windows-entry.cfg.in"
+# The least free space TUR is installed into beside Windows (the owner's
+# decision of 14 November 2026: 25 GiB).
+readonly BESIDE_MIN_BYTES=$((25 * 1024 * 1024 * 1024))
+# The firmware's default and "Restart into Windows" (ADR-0029); in the image.
+readonly DUALBOOT=/usr/bin/tur-dualboot
 readonly TUR_PARTLABEL=TUR
 
 # esp_look PARTITION COMMAND...: run COMMAND inside an EFI system partition
@@ -681,9 +686,9 @@ beside_look() {
         [ "${b_before}" != - ] || b_before=""
         [ "${b_after}" != - ] || b_after=""
     fi
-    if [ "${b_size}" -lt "${min_target_bytes:-0}" ]; then
+    if [ "${b_size}" -lt "${BESIDE_MIN_BYTES}" ]; then
         b_code=TUR-INSTALL-BESIDE-003
-        b_why="the largest free space on the disk is $(human "${b_size}"); TUR needs $(human "${min_target_bytes:-0}"). Make room in Windows: Disk Management, right-click the Windows partition, Shrink Volume"
+        b_why="the largest free space on the disk is $(human "${b_size}"); TUR needs $(human "${BESIDE_MIN_BYTES}"). Make room in Windows: Disk Management, right-click the Windows partition, Shrink Volume"
         return 1
     fi
     if [ "${b_esp_free}" -lt "${needed}" ]; then
@@ -977,7 +982,7 @@ keep_log() {
     return "${status}"
 }
 
-# ---- beside Windows: writing (ADR-0028) -------------------------------------------
+# ---- beside Windows: writing (ADR-0029) -------------------------------------------
 #
 # The order, chosen so that a power cut at any moment leaves Windows as it
 # was (each step's effect on the disk, if it is cut short):
@@ -1059,14 +1064,17 @@ esp_put_back() {
         exit "$rc"' _ "$1" "${ESP_PROBE}" "$2" "$3"
 }
 
-# run_beside DEVICE START SIZE [POLL_FUNCTION]: install TUR into the free
-# stretch START..START+SIZE (bytes) of DEVICE, which `revalidate` and
-# `beside_revalidate` returned, sharing the EFI system partition b_esp. Sets
+# run_beside DEVICE START SIZE [POLL_FUNCTION] [DEFAULT]: install TUR into the
+# free stretch START..START+SIZE (bytes) of DEVICE, which `revalidate` and
+# `beside_revalidate` returned, sharing the EFI system partition b_esp.
+# DEFAULT ("tur", the default, or "windows") is the system the computer then
+# starts by default (the firmware's boot order, set with tur-dualboot). Sets
 # install_status, install_seconds, beside_partition, beside_disk_state
 # (untouched, partial or installed) and, on failure, beside_code and
 # beside_message.
 run_beside() {
-    local device="$1" start="$2" size="$3" poll="${4:-}" sector part esp="${b_esp}" esp_uuid="${b_esp_uuid}"
+    local device="$1" start="$2" size="$3" poll="${4:-}" default_system="${5:-tur}" sector part esp="${b_esp}" esp_uuid="${b_esp_uuid}"
+    local title="Windows" one magic
     local before_table="${SESSION}/beside-table-before.txt" after_table="${SESSION}/beside-table-after.txt"
     local esp_before="${SESSION}/beside-esp-before.sha256" esp_after="${SESSION}/beside-esp-after.sha256"
     local fallback="${SESSION}/beside-fallback.efi" fallback_path="" fallback_sum="" now root_mnt="${SESSION}/beside-root"
@@ -1184,13 +1192,22 @@ run_beside() {
     # /boot/grub2/custom.cfg after the menu entries (41_custom.cfg), so the
     # entry comes after TUR's and boot counting's entry numbers stay as they
     # are (ADR-0014).
-    mark "beside step=boot-menu esp_uuid=${esp_uuid}"
+    # With BitLocker on the disk, the entry says that Windows may ask for its
+    # recovery key when started from here (the owner's decision, 14 November
+    # 2026); "Restart into Windows" (tur-dualboot) does not.
+    for one in $(lsblk -ln -o PATH,TYPE "${device}" 2> /dev/null | awk '$2 == "part" { print $1 }'); do
+        magic="$(head -c 11 "${one}" 2> /dev/null | tail -c 8 | tr -d '\000')"
+        if [ "${magic}" = "-FVE-FS-" ] || [ "$(lsblk -dn -o FSTYPE "${one}" 2> /dev/null)" = BitLocker ]; then
+            title="Windows (may ask for the BitLocker recovery key)"
+        fi
+    done
+    mark "beside step=boot-menu esp_uuid=${esp_uuid} title=\"${title}\""
     mount -o remount,rw "${root_mnt}" 2>> "${LOG}"
     grub_dir="${root_mnt}/boot/grub2"
     if [ ! -f "${grub_dir}/grub.cfg" ] || [ ! -f "${WINDOWS_ENTRY_TEMPLATE}" ] || [ -z "${esp_uuid}" ]; then
         mark "beside boot-menu result=no grub_cfg=$([ -f "${grub_dir}/grub.cfg" ] && echo yes || echo no) template=$([ -f "${WINDOWS_ENTRY_TEMPLATE}" ] && echo yes || echo no)"
     else
-        sed "s/@ESP_UUID@/${esp_uuid}/g" "${WINDOWS_ENTRY_TEMPLATE}" > "${grub_dir}/custom.cfg.tmp" \
+        sed "s/@ESP_UUID@/${esp_uuid}/g; s/@WINDOWS_TITLE@/${title}/g" "${WINDOWS_ENTRY_TEMPLATE}" > "${grub_dir}/custom.cfg.tmp" \
             && sync && mv -f "${grub_dir}/custom.cfg.tmp" "${grub_dir}/custom.cfg"
         label="$(getfattr --only-values -h -n security.selinux "${grub_dir}/grub.cfg" 2> /dev/null | tr -d '\000')"
         if [ -n "${label}" ]; then label_on "${grub_dir}/custom.cfg" "${label}"; fi
@@ -1212,6 +1229,13 @@ run_beside() {
         mark "beside windows-files changed=\"$(printf '%s' "${changed}" | tr '\n' '|')\""
         beside_fail TUR-INSTALL-BESIDE-006 "A file of Windows on the EFI system partition, or a partition entry, is different after the installation."
         return 1
+    fi
+    # 8. Which system the computer starts by default: the person's choice.
+    mark "beside step=default system=${default_system}"
+    if [ -x "${DUALBOOT}" ]; then
+        mark "beside default $("${DUALBOOT}" default "${default_system}" 2>&1 | tr '\n' ' ')"
+    else
+        mark "beside default result=no reason=no-tur-dualboot"
     fi
     entries="$(efibootmgr 2> /dev/null)"
     order="$(printf '%s\n' "${entries}" | sed -n 's/^BootOrder: //p')"

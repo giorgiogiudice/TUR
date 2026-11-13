@@ -27,8 +27,11 @@ Kit.Page {
     // The disk chosen on the disk screen, as the engine listed it.
     property var chosenDisk: ({})
     // How to install on it: "erase" the whole disk, or "beside" Windows, into
-    // the free space the engine found there (ADR-0028).
+    // the free space the engine found there (ADR-0029).
     property string mode: "erase"
+    // Beside Windows: the system the computer starts by default, "tur" or
+    // "windows" (the owner's decision of 14 November 2026: the person chooses).
+    property string defaultSystem: "tur"
 
     readonly property var steps: [
         { name: "welcome", title: qsTr("Welcome") },
@@ -181,6 +184,8 @@ Kit.Page {
             engine: wizard.engine
             chosenName: String(wizard.chosenDisk.name || "")
             mode: wizard.mode
+            defaultSystem: wizard.defaultSystem
+            onDefaultChosen: chosen => wizard.defaultSystem = chosen
             onDiskChosen: disk => {
                 // Another disk, or the same disk listed again: beside
                 // Windows only while the engine still offers it there.
@@ -209,9 +214,10 @@ Kit.Page {
         ConfirmScreen {
             disk: wizard.chosenDisk
             mode: wizard.mode
+            defaultSystem: wizard.defaultSystem
             onBackRequested: wizard.goTo("disk")
             onEraseRequested: phrase => {
-                wizard.engine.install(wizard.chosenDisk, phrase, wizard.mode)
+                wizard.engine.install(wizard.chosenDisk, phrase, wizard.mode, wizard.defaultSystem)
                 wizard.goTo("install")
             }
         }
@@ -234,6 +240,7 @@ Kit.Page {
             engine: wizard.engine
             disk: wizard.chosenDisk
             mode: wizard.mode
+            defaultSystem: wizard.defaultSystem
             onRestartRequested: wizard.engine.restart()
             onPowerOffRequested: wizard.engine.powerOff()
             onSaveLogRequested: wizard.openSaveLog()

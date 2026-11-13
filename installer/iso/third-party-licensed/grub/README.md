@@ -26,7 +26,7 @@ an optical drive, it looks in the disc's ISO 9660 filesystem.
 
 `windows-entry.cfg.in` is the "Windows" entry of TUR's own boot menu on a
 computer where TUR was installed beside Windows on the same disk
-([ADR-0028](../../../../docs/adr/0028-install-beside-windows.md)). It too is
+([ADR-0029](../../../../docs/adr/0029-install-beside-windows.md)). It too is
 GRUB script, written for TUR and not derived from another project's file.
 
 | Source | Installed as |

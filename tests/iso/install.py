@@ -37,7 +37,7 @@ Scenarios:
               described as Windows; choosing it must show the Windows warning,
               and the test goes back there without typing the phrase. Then it
               installs onto the blank disk.
-  same-disk   ADR-0028: one disk laid out as Windows leaves it after "Shrink
+  same-disk   ADR-0029: one disk laid out as Windows leaves it after "Shrink
               Volume" (tests/iso/make-windows-shared-disk.sh) is the main
               disk. It must be listed with room beside Windows; choosing it
               asks how; "1" (beside Windows) leads to the confirmation, where
@@ -49,6 +49,13 @@ Scenarios:
               (and --cut-delay seconds more). What happened before the cut is
               in result.json; tests/iso/windows-disk.py then compares the
               disk with what it held before.
+              With --dualboot-after, at the last screen it opens the command
+              line and runs TUR's command for two systems (ADR-0029, in the
+              image, which the medium's environment is): "default windows",
+              "default tur" (each followed by "status"), then
+              "restart-windows", which sets the firmware's BootNext and
+              restarts; the run then waits for the stand-in for Windows Boot
+              Manager to start, which powers the machine off.
   beside-refused
               Disks laid out as Windows on which installing beside Windows is
               not possible (no free space; a full EFI system partition). Each
@@ -566,7 +573,7 @@ def scenario_beside_windows(s: Session) -> None:
 
 
 def beside_phrase(serial: str) -> str:
-    """The phrase that confirms installing beside Windows (ADR-0028),
+    """The phrase that confirms installing beside Windows (ADR-0029),
     computed independently of the installer: "BESIDE" and the end of the
     serial number, as the erase phrase is "ERASE" and the same end."""
     return "BESIDE " + isovm.confirmation_phrase(serial).split(" ", 1)[1]
@@ -606,6 +613,11 @@ def beside_to_install(s: Session) -> dict:
     s.type_line("1")
     match = s.wait(r'TUR-INSTALLER: mode chosen=(\w+)', 60, "the choice of beside Windows")
     facts["mode_chosen"] = match.group(1)
+    s.wait_prompt("default")
+    s.shot("default-system")
+    s.type_line("1" if s.args.default_system == "tur" else "2")
+    match = s.wait(r'TUR-INSTALLER: default chosen=(\w+)', 60, "the choice of the default system")
+    facts["default_chosen"] = match.group(1)
     match = s.wait(r'TUR-INSTALLER: confirm name=\S+ by_id=(\S+) phrase="([^"]*)" mode=beside[^\n]*', 60,
                    "the beside-Windows confirmation")
     s.wait_prompt("confirm")
@@ -658,6 +670,9 @@ def scenario_same_disk(s: Session) -> None:
     s.shot("done" if facts["result"] == "success" else "failed")
     if facts["result"] != "success":
         raise Stop("the installer reported a failure")
+    if s.args.dualboot_after:
+        dualboot_after(s)
+        return
     s.type_line("", "nothing")
     facts["powered_off_by_installer"] = s.wait_power_off()
     if not facts["powered_off_by_installer"]:
@@ -686,6 +701,32 @@ def scenario_same_disk_cut(s: Session) -> None:
     facts["cut"]["last_states"] = s.transcript.states()[-8:]
     facts["cut"]["last_screen_lines"] = s.transcript.screen_lines()[-6:]
     s.step(f"power cut at {where} (+{s.args.cut_delay} s); last state lines: {facts['cut']['last_states'][-3:]}")
+
+
+def dualboot_after(s: Session) -> None:
+    """tur-dualboot run as root from the installer's command line after the
+    installation, as an administrator would run it with pkexec on TUR."""
+    facts = s.result["facts"]
+    s.type_line("shell")
+    s.wait(r"TUR-INSTALLER: shell=started", 60, "the command line")
+    time.sleep(2)
+    for number, command in enumerate(("status", "default windows", "status", "default tur", "status")):
+        s.type_line(f"tur-dualboot {command} > /dev/ttyS0 2>&1; echo dualboot-{number}-$? > /dev/ttyS0")
+        match = s.wait(rf"dualboot-{number}-(\d+)", 60, f"tur-dualboot {command}")
+        facts.setdefault("dualboot", []).append({"command": command, "status": int(match.group(1))})
+    s.shot("dualboot")
+    s.type_line("tur-dualboot restart-windows > /dev/ttyS0 2>&1")
+    # The machine restarts; the firmware starts BootNext's entry, once.
+    match = s.wait(r"TUR-WINDOWS-STANDIN: started file=(\S+)", 300, "the stand-in for Windows Boot Manager")
+    facts["restart_windows"] = {"standin_file": match.group(1)}
+    found = s.wait(r"TUR-WINDOWS-STANDIN: partition=(\d+) guid=([0-9A-Fa-f-]{36})", 30, "the stand-in's partition")
+    facts["restart_windows"]["standin_partition_uuid"] = found.group(2).upper()
+    facts["restart_windows"]["powered_off_by_standin"] = s.wait_power_off(60)
+    if not facts["restart_windows"]["powered_off_by_standin"]:
+        s.machine.quit()
+    facts["dualboot_lines"] = [line.strip() for line in s.transcript.text.split("\n")
+                               if line.strip().startswith(("default=", "tur_entry=", "windows_entry=", "boot_order=",
+                                                           "boot_next=", "tur-dualboot:"))]
 
 
 def scenario_beside_refused(s: Session) -> None:
@@ -746,6 +787,10 @@ def main() -> int:
     ap.add_argument("--windows-serial", default=WINDOWS_SERIAL, help="windows-setup: the disk of the Windows entry")
     ap.add_argument("--windows-partition", default="1", help="windows-setup: its EFI system partition's number")
     ap.add_argument("--windows-last", action="store_true", help="windows-setup: put the entry last in the boot order")
+    ap.add_argument("--default-system", choices=["tur", "windows"], default="tur",
+                    help="same-disk: the system the computer starts by default")
+    ap.add_argument("--dualboot-after", action="store_true",
+                    help="same-disk: tur-dualboot default and restart-windows after the installation")
     ap.add_argument("--cut-at", choices=sorted(CUTS), default="partition", help="same-disk-cut: where to cut the power")
     ap.add_argument("--cut-delay", type=float, default=0.0, help="same-disk-cut: seconds after reaching --cut-at")
     ap.add_argument("--cpus", type=int, default=2)

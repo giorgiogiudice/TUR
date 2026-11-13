@@ -432,7 +432,7 @@ bool Engine::cancellable() const
            && (m_stage.isEmpty() || m_stage == QStringLiteral("revalidate"));
 }
 
-void Engine::install(const QVariantMap &disk, const QString &phrase, const QString &mode)
+void Engine::install(const QVariantMap &disk, const QString &phrase, const QString &mode, const QString &defaultSystem)
 {
     if (m_installRun && m_installRun->running())
         return;
@@ -453,7 +453,9 @@ void Engine::install(const QVariantMap &disk, const QString &phrase, const QStri
         const QVariantMap room = disk.value(QStringLiteral("beside")).toMap();
         arguments << QStringLiteral("--mode") << QStringLiteral("beside")
                   << QStringLiteral("--region-start") << QString::number(room.value(QStringLiteral("free_start")).toLongLong())
-                  << QStringLiteral("--region-size") << QString::number(room.value(QStringLiteral("free_size")).toLongLong());
+                  << QStringLiteral("--region-size") << QString::number(room.value(QStringLiteral("free_size")).toLongLong())
+                  << QStringLiteral("--default")
+                  << (defaultSystem == QStringLiteral("windows") ? QStringLiteral("windows") : QStringLiteral("tur"));
     }
     arguments << QStringList {
         QStringLiteral("--by-id"), disk.value(QStringLiteral("by_id")).toString(),

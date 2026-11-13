@@ -19,7 +19,8 @@ Item {
     //   step     the screen
     //   chosen   the disk chosen before it, by kernel name
     //   install  the recorded installation to run
-    //   mode     how: "erase" (default) or "beside" Windows (ADR-0028)
+    //   mode     how: "erase" (default) or "beside" Windows (ADR-0029)
+    //   system   beside Windows: the system started by default (default tur)
     readonly property var states: [
         { name: "welcome", step: "welcome" },
         { name: "computer", step: "computer" },
@@ -37,6 +38,8 @@ Item {
         { name: "done-refused", step: "done", chosen: "vda", install: "install-refused" },
         { name: "disks-windows-chosen", fixture: "same-disk", step: "disk", chosen: "vda" },
         { name: "disks-beside-chosen", fixture: "same-disk", step: "disk", chosen: "vda", mode: "beside" },
+        { name: "disks-beside-windows-first", fixture: "same-disk", step: "disk", chosen: "vda", mode: "beside",
+          system: "windows" },
         { name: "disks-beside-not-possible", fixture: "same-disk", step: "disk", chosen: "vdb" },
         { name: "confirm-beside", fixture: "same-disk", step: "confirm", chosen: "vda", mode: "beside" },
         { name: "installing-beside", fixture: "same-disk", step: "install", chosen: "vda", mode: "beside",
@@ -162,10 +165,11 @@ Item {
                 throw new Error("the fixture has no disk " + state.chosen)
             host.wizard.chosenDisk = chosen
             host.wizard.mode = state.mode || "erase"
+            host.wizard.defaultSystem = state.system || "tur"
             if (state.install) {
                 host.wizard.goTo("confirm")
                 host.engine.install(chosen, state.mode === "beside" ? chosen.beside.phrase : chosen.phrase,
-                                    state.mode || "erase")
+                                    state.mode || "erase", state.system || "tur")
                 host.wizard.goTo("install")
             } else {
                 host.wizard.goTo(state.step)

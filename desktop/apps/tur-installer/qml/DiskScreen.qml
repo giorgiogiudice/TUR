@@ -9,7 +9,7 @@ import Tur.Kit as Kit
 // installer runs from is shown and cannot be chosen. Then how: "Erase this
 // disk and install TUR", or, on a disk that holds Windows with free space
 // beside it, "Use the free space beside Windows" (issue 64, step 1;
-// ADR-0028). When that cannot be done on the chosen disk, the screen says why
+// ADR-0029). When that cannot be done on the chosen disk, the screen says why
 // and what to do.
 WizardScreen {
     id: screen
@@ -19,6 +19,8 @@ WizardScreen {
     property string chosenName
     // How: "erase" or "beside".
     property string mode: "erase"
+    // Beside Windows: which system starts by default, "tur" or "windows".
+    property string defaultSystem: "tur"
 
     readonly property var chosenDisk: {
         for (const disk of screen.engine.disks) {
@@ -30,6 +32,7 @@ WizardScreen {
 
     signal diskChosen(var disk)
     signal modeChosen(string mode)
+    signal defaultChosen(string system)
     signal backRequested()
     signal continueRequested()
 
@@ -179,6 +182,62 @@ WizardScreen {
                 }
             }
         }
+    }
+
+    // --- beside Windows: which system starts -----------------------------------------
+    Kit.Label {
+        Layout.fillWidth: true
+        Layout.topMargin: Kit.Theme.spaceRelated
+        visible: screen.mode === "beside" && Words.besidePossible(screen.chosenDisk)
+        text: qsTr("When you switch the computer on")
+        kind: Kit.Label.Heading
+    }
+
+    Kit.Card {
+        Layout.fillWidth: true
+        visible: screen.mode === "beside" && Words.besidePossible(screen.chosenDisk)
+        padding: Kit.Theme.spaceRelated
+
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: Kit.Theme.spaceGrid
+
+            Kit.ListRow {
+                objectName: "defaultTurOption"
+                Layout.fillWidth: true
+                text: qsTr("Start TUR")
+                subtitle: qsTr("TUR's start menu also offers Windows.")
+                selected: screen.defaultSystem !== "windows"
+                focusPolicy: Qt.StrongFocus
+                onClicked: {
+                    screen.defaultChosen("tur")
+                    Transcript.write("default-chosen system=tur")
+                }
+            }
+
+            Kit.ListRow {
+                objectName: "defaultWindowsOption"
+                Layout.fillWidth: true
+                text: qsTr("Start Windows")
+                subtitle: qsTr("Start TUR from the computer's boot menu.")
+                selected: screen.defaultSystem === "windows"
+                focusPolicy: Qt.StrongFocus
+                onClicked: {
+                    screen.defaultChosen("windows")
+                    Transcript.write("default-chosen system=windows")
+                }
+            }
+        }
+    }
+
+    Kit.Label {
+        objectName: "defaultExplanation"
+        Layout.fillWidth: true
+        visible: screen.mode === "beside" && Words.besidePossible(screen.chosenDisk)
+        text: qsTr("You can change this later in TUR. To start Windows from TUR once, use “Restart into Windows”: it starts Windows the way the computer itself does, so BitLocker does not ask for its recovery key.")
+        tone: Kit.Label.Secondary
+        paragraph: true
+        wrapMode: Text.Wrap
     }
 
     Kit.Label {

@@ -27,7 +27,7 @@ firmware variables an earlier run left, without a boot order from QEMU. It
 writes the firmware's boot entries before and after to
 OUT_DIR/host/efivars-before.json and efivars-after.json.
 
-With --windows-entry (ADR-0028, a disk with TUR installed beside Windows) it
+With --windows-entry (ADR-0029, a disk with TUR installed beside Windows) it
 instead chooses "Windows" in TUR's boot menu, by its key "w", pressed a few
 times a second once the menu is on the screen (or after a few seconds if the
 serial port does not show it), as a person would. The test disk holds a

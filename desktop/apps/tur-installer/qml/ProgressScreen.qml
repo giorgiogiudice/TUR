@@ -15,7 +15,7 @@ WizardScreen {
 
     required property Engine engine
     required property var disk
-    // "erase" or "beside" (Windows; ADR-0028).
+    // "erase" or "beside" (Windows; ADR-0029).
     property string mode: "erase"
 
     // When each stage was first seen, for the time it took.

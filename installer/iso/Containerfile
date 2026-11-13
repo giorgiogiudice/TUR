@@ -97,7 +97,7 @@ COPY installer/iso/rootfs/ /
 COPY --from=wizard /out/ /
 
 # The "Windows" entry the installer writes into TUR's boot menu when it
-# installs beside Windows (ADR-0028). GRUB script: BSD-3-Clause, see
+# installs beside Windows (ADR-0029). GRUB script: BSD-3-Clause, see
 # installer/iso/third-party-licensed/grub/README.md.
 COPY installer/iso/third-party-licensed/grub/windows-entry.cfg.in installer/iso/third-party-licensed/grub/LICENSE \
      /usr/lib/tur-installer/grub/
@@ -122,7 +122,7 @@ RUN set -eu; \
     chmod 0755 /usr/libexec/tur-installer/tur-install /usr/libexec/tur-installer/tur-install-engine \
         /usr/libexec/tur-installer/tur-installer-wizard /usr/libexec/tur-installer/tur-live-transcript; \
     chmod 0644 /usr/lib/tur-installer/engine.sh; \
-    # What the installation beside Windows runs (ADR-0028).
+    # What the installation beside Windows runs (ADR-0029).
     test -f /usr/lib/tur-installer/grub/windows-entry.cfg.in; \
     for tool in sfdisk wipefs mkfs.ext4 blkid efibootmgr unshare; do command -v "${tool}"; done; \
     test -n "${PAYLOAD_TARGET_IMGREF}"; test -n "${PAYLOAD_IMAGE_ID}"; \

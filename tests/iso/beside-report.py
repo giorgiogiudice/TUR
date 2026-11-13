@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
 """Judge the "beside Windows on the same disk" runs of the iso workflow
-(ADR-0028) from the facts they recorded, and write a summary.
+(ADR-0029) from the facts they recorded, and write a summary.
 
     tests/iso/beside-report.py --job beside --out out/iso-beside
     tests/iso/beside-report.py --job faults --out out/iso-beside-faults
@@ -152,7 +152,7 @@ def beside(out: pathlib.Path, checks: Checks, facts: dict) -> None:
     erase = f.get("erase_phrase_on_beside") or {}
     checks.add("shared", "the disk's erase phrase does not confirm installing beside Windows",
                erase.get("result") == "mismatch", str(erase))
-    states = f.get("beside_states", [])
+    states = [x.removeprefix("beside ") for x in f.get("beside_states", [])]
     checks.add("shared", "the installer's own check: Windows' files and partition entries unchanged",
                any(state.startswith("windows-files unchanged=yes") for state in states),
                next((s for s in states if s.startswith("windows-files")), "no line"))
@@ -160,11 +160,30 @@ def beside(out: pathlib.Path, checks: Checks, facts: dict) -> None:
     checks.add("shared", "\"Windows\" written into TUR's boot menu, and grub.cfg reads that file",
                "result=yes" in menu and "sourced=yes" in menu, menu)
     checks.add("shared", "the installer's lines", None, " / ".join(states)[:1200])
+    checks.add("shared", "TUR chosen to start by default", f.get("default_chosen") == "tur", str(f.get("default_chosen")))
+    title = next((s for s in states if s.startswith("step=boot-menu")), "")
+    checks.add("shared", "the menu entry is plain \"Windows\" (no BitLocker on this disk)", 'title="Windows"' in title, title)
+    runs = f.get("dualboot") or []
+    checks.add("shared", "tur-dualboot status / default windows / default tur ran", bool(runs) and all(
+        item["status"] == 0 for item in runs), str(runs))
+    checks.add("shared", "tur-dualboot's lines", None, " / ".join(f.get("dualboot_lines") or [])[:800])
+    restart = f.get("restart_windows") or {}
+    checks.add("shared", "Restart into Windows (BootNext): the firmware started Windows Boot Manager's file",
+               str(restart.get("standin_file", "")).lower().endswith("\\efi\\microsoft\\boot\\bootmgfw.efi"),
+               str(restart))
+    checks.add("shared", "... from the shared EFI system partition",
+               bool(facts["esp_partuuid"]) and restart.get("standin_partition_uuid") == facts["esp_partuuid"],
+               f"{restart.get('standin_partition_uuid')} / ESP {facts['esp_partuuid']}")
+    after_vars = (install.get("firmware_boot_entries") or {}).get("after") or {}
+    checks.add("shared", "BootNext was used once: gone afterwards, TUR first again",
+               after_vars.get("boot_next") is None and (after_vars.get("boot_order_descriptions") or [None])[0] == "TUR",
+               f"boot_next {after_vars.get('boot_next')}; order {after_vars.get('boot_order_descriptions')}")
     judge_firmware(checks, "shared", install, require_tur=True)
     judge_compare(checks, "shared", load(shared / "compare-install.json"), "after the installation")
 
     first = load(shared / "first-start" / "first-start.json")
-    checks.add("shared", "TUR starts from the disk (first start, no medium)", (first or {}).get("outcome") == "rendered",
+    checks.add("shared", "TUR starts from the disk (first start, no medium; the start after Restart into Windows)",
+               (first or {}).get("outcome") == "rendered",
                f"{(first or {}).get('outcome')}; rendered after {(first or {}).get('rendered_first_seen_seconds')} s")
     judge_compare(checks, "shared", load(shared / "compare-first-start.json"), "after TUR's first start")
 
@@ -192,8 +211,21 @@ def beside(out: pathlib.Path, checks: Checks, facts: dict) -> None:
         checks.add("live", "the BESIDE phrase enables it", (lv.get("phrase_typed") or {}).get("erase_enabled") == "yes",
                    str(lv.get("phrase_typed")))
         judge_compare(checks, "live", load(live / "compare-install.json"), "after the installation")
-        start = load(live / "first-start" / "first-start.json")
-        checks.add("live", "TUR starts from the disk", (start or {}).get("outcome") == "rendered", str((start or {}).get("outcome")))
+        checks.add("live", "Windows chosen to start by default", lv.get("default_chosen") == "windows",
+                   str(lv.get("default_chosen")))
+        states = [x.removeprefix("beside ") for x in lf.get("beside_states") or []]
+        title = next((s for s in states if s.startswith("step=boot-menu")), "")
+        checks.add("live", "the menu entry warns about the BitLocker recovery key (BitLocker's signature on C:)",
+                   "BitLocker recovery key" in title, title)
+        order = ((result.get("firmware_boot_entries") or {}).get("after") or {}).get("boot_order_descriptions") or []
+        checks.add("live", "the firmware's boot order: Windows Boot Manager first, TUR second",
+                   order[:2] == ["Windows Boot Manager", "TUR"], str(order))
+        start = load(live / "first-start" / "first-start.json") or {}
+        entry = start.get("windows_entry") or {}
+        checks.add("live", "the first start is Windows (the stand-in, started by the firmware)",
+                   start.get("outcome") == "windows-started" and entry.get("partition_uuid") == esp_partuuid(load(live / "before.json")),
+                   f"{start.get('outcome')}; {entry.get('file')} {entry.get('partition_uuid')}")
+        judge_compare(checks, "live", load(live / "compare-first-start.json"), "after the first start")
 
 
 def faults(out: pathlib.Path, checks: Checks, facts: dict) -> None:
@@ -230,7 +262,7 @@ def main() -> int:
     (beside if args.job == "beside" else faults)(out, checks, facts)
     failed = checks.failed()
     title = {"beside": "TUR beside Windows on the same disk", "faults": "Power cuts while installing beside Windows"}
-    summary = [f"## {title[args.job]} (ADR-0028)", "", checks.markdown(), "",
+    summary = [f"## {title[args.job]} (ADR-0029)", "", checks.markdown(), "",
                f"**{'FAILED: ' + str(len(failed)) + ' check(s)' if failed else 'All required checks passed.'}**", "",
                "The Windows disk is a stand-in made by tests/iso/make-windows-shared-disk.sh: no Microsoft file, "
                "and its bootmgfw.efi is TUR's test program (tests/iso/standin). Real Windows, BitLocker and "

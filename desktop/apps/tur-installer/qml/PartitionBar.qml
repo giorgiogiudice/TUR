@@ -17,7 +17,7 @@ Item {
     // Draw the layout TUR will write instead: BIOS boot, EFI system, root.
     property bool after: false
     // With `after`: TUR goes into this free space (the engine's "beside":
-    // free_start and free_size in bytes) and the partitions stay (ADR-0028).
+    // free_start and free_size in bytes) and the partitions stay (ADR-0029).
     property var besideRegion: null
 
     readonly property var blocks: {

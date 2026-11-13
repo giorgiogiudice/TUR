@@ -123,8 +123,12 @@ def boot_entries(path: pathlib.Path) -> dict:
             }
     order_raw = current.get("BootOrder", b"")
     order = [f"{number:04X}" for number in struct.unpack(f"<{len(order_raw) // 2}H", order_raw)] if order_raw else []
+    next_raw = current.get("BootNext", b"")
+    boot_next = f"{struct.unpack('<H', next_raw[:2])[0]:04X}" if len(next_raw) >= 2 else None
     return {
         "file": str(path),
+        "boot_next": boot_next,
+        "boot_next_description": entries.get(boot_next, {}).get("description") if boot_next else None,
         "boot_order": order,
         "boot_order_descriptions": [entries.get(number, {}).get("description") for number in order],
         "entries": entries,

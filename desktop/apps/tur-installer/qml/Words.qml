@@ -110,7 +110,7 @@ QtObject {
         }
     }
 
-    // Installing into the free space beside Windows (ADR-0028): the engine
+    // Installing into the free space beside Windows (ADR-0029): the engine
     // lists, for a disk that holds Windows, whether it can be done and why not.
     function besidePossible(disk: var): bool {
         return disk !== null && disk !== undefined && disk.beside !== undefined && disk.beside !== null
@@ -131,7 +131,7 @@ QtObject {
             return qsTr("TUR could not find exactly one EFI system partition with Windows' start-up files on this disk.")
         case "TUR-INSTALL-BESIDE-003":
             return qsTr("Not enough free space: the largest free space is %1, and TUR needs %2. Make room in Windows first: open Disk Management, right-click the Windows partition and choose Shrink Volume.")
-                .arg(words.size(room.free_size || 0)).arg(words.size(disk.minimum || 21474836480))
+                .arg(words.size(room.free_size || 0)).arg(words.size(room.min_bytes || 26843545600))
         case "TUR-INSTALL-BESIDE-004":
             return qsTr("Windows' EFI system partition is too full for TUR's start-up files: %1 free, %2 needed.")
                 .arg(words.size(room.esp_free || 0)).arg(words.size(room.esp_needed || 0))

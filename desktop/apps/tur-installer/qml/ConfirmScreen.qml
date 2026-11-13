@@ -15,7 +15,7 @@ import Tur.Kit as Kit
 // path; what is on it now; what will be on it; what will be destroyed; a
 // separate warning when it holds Windows or BitLocker. Then the phrase the
 // engine derived from the disk's identity, "ERASE" and the end of its serial
-// number. Installing beside Windows (ADR-0028) is confirmed on the same
+// number. Installing beside Windows (ADR-0029) is confirmed on the same
 // screen, which then says that everything on the disk is kept, where TUR goes
 // and what is added to Windows' EFI system partition, with its own phrase,
 // "BESIDE" and the same end. The button is enabled only when the typed text matches exactly;
@@ -28,6 +28,8 @@ WizardScreen {
     required property var disk
     // "erase" the whole disk, or "beside" Windows.
     property string mode: "erase"
+    // Beside Windows: "tur" or "windows", the system started by default.
+    property string defaultSystem: "tur"
 
     readonly property bool beside: screen.mode === "beside" && Words.besidePossible(screen.disk)
     readonly property var room: screen.beside ? screen.disk.beside : ({})
@@ -52,7 +54,8 @@ WizardScreen {
         Transcript.write("confirm-shown name=" + screen.disk.name + " by_id=" + screen.disk.by_id + " phrase=\""
                          + screen.phrase + "\" windows_warning=" + (screen.windows ? "yes" : "no")
                          + " holds_data=" + (Words.holdsData(screen.disk) ? "yes" : "no")
-                         + " mode=" + (screen.beside ? "beside" : "erase"))
+                         + " mode=" + (screen.beside ? "beside" : "erase")
+                         + (screen.beside ? " default=" + screen.defaultSystem : ""))
     }
 
     Rectangle {
@@ -231,9 +234,12 @@ WizardScreen {
                 }
 
                 Kit.Label {
+                    objectName: "besideDefaultSystem"
                     Layout.fillWidth: true
                     visible: screen.beside
-                    text: qsTr("The computer starts TUR's menu first, which offers TUR and Windows. Windows stays in the computer's own boot menu.")
+                    text: screen.defaultSystem === "windows"
+                          ? qsTr("The computer starts Windows by default. TUR is started from the computer's boot menu, as “TUR”.")
+                          : qsTr("The computer starts TUR by default; TUR's menu also offers Windows. Windows stays in the computer's own boot menu.")
                     wrapMode: Text.Wrap
                 }
 
@@ -298,12 +304,12 @@ WizardScreen {
                 Layout.fillWidth: true
                 visible: screen.windows
                 severity: Kit.Message.Warning
-                title: screen.beside ? qsTr("Windows on this disk uses BitLocker.")
+                title: screen.beside ? qsTr("Windows on this disk uses BitLocker. Have its recovery key ready.")
                        : screen.disk.windows ? qsTr("This disk holds Windows. Erasing it removes Windows and everything on it.")
                        : qsTr("This disk holds data encrypted with BitLocker. Erasing it destroys that data.")
-                reason: screen.beside ? qsTr("Starting Windows from TUR's menu changes what BitLocker checks when the computer starts, so Windows may ask for its BitLocker recovery key.")
+                reason: screen.beside ? qsTr("Starting Windows from TUR's start menu changes what BitLocker checks when the computer starts, so Windows may ask for its recovery key there. “Restart into Windows” in TUR, and the computer's own boot menu, start Windows without that.")
                         : screen.disk.bitlocker ? qsTr("It also holds a volume encrypted with BitLocker, which is lost with it.") : ""
-                whatToDo: screen.beside ? qsTr("Have the recovery key ready before you go on. Or start Windows from the computer's own boot menu.")
+                whatToDo: screen.beside ? qsTr("Find the recovery key before you go on: on your Microsoft account's devices page, or with “manage-bde -protectors -get C:” in Windows.")
                           : Words.besidePossible(screen.disk) ? qsTr("To keep Windows, go back and choose “Use the free space beside Windows”.")
                           : qsTr("To keep Windows, go back and choose another disk.")
                 supportBundleAvailable: false

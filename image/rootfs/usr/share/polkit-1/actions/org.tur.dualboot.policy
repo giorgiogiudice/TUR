@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0 -->
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<!--
+  TUR and Windows on one computer (ADR-0029): `pkexec tur-dualboot ...`
+  changes which system starts by default, or restarts into Windows once
+  through the firmware's BootNext. It writes firmware boot variables only.
+  An administrator's password, kept for a few minutes.
+-->
+<policyconfig>
+  <vendor>TUR</vendor>
+  <action id="org.tur.dualboot">
+    <description>Choose which system the computer starts</description>
+    <message>Authentication is required to change which system this computer starts.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/tur-dualboot</annotate>
+  </action>
+</policyconfig>
