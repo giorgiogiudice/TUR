@@ -23,7 +23,7 @@ fn read(path: &Path) -> String {
 }
 
 fn manifest() -> Value {
-    serde_json::from_str(&read(&component().join("pax/agent-tools.json"))).expect("valid JSON")
+    serde_json::from_str(&read(&component().join("agent-tools.json"))).expect("valid JSON")
 }
 
 fn dbus_xml() -> String {

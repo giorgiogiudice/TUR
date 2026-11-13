@@ -86,6 +86,8 @@ NEXT SAFE ACTION
   let tur-centre's Install button run `tur-apps install --events`.
 ```
 
+> **Later (TUR-010):** the tool files this report puts under `pax/` were moved to the component's top level (pax-5 for tur-apps and tur-ai-local, TUR-010 for tur-update), where P@x discovers every component's tools, and the image installs them.
+
 ## Runs
 
 Every workflow ran on hosted `ubuntu-24.04` runners (image ubuntu24

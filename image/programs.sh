@@ -17,6 +17,10 @@
 #                                                tools, where it ships them
 #                                                as agent-tools.json
 #     /usr/share/tur/catalogue/                  the application catalogue
+#     what image/files.tsv lists                 data and units of the
+#                                                components: P@x's model
+#                                                list and units, the local
+#                                                AI model catalogue
 #     /usr/share/licenses/tur/                   TUR's licence and notice
 #     /usr/share/licenses/tur-third-party/       the licence files of every
 #                                                third-party crate compiled
@@ -38,6 +42,7 @@ tab="$(printf '\t')"
 
 mkdir -p "${work}"
 grep -v '^#' "${table}" | grep -v '^[[:space:]]*$' > "${work}/programs.tsv"
+grep -v '^#' "${src}/image/files.tsv" | grep -v '^[[:space:]]*$' > "${work}/files.tsv"
 
 check_toolchain() {
     want="$(sed -n 's/^channel = "\(.*\)"$/\1/p' /pin/rust-toolchain.toml)"
@@ -109,6 +114,23 @@ build() {
     for entry in "${src}"/catalogue/*.toml; do
         install -D -m 0644 "${entry}" "${out}/usr/share/tur/catalogue/$(basename "${entry}")"
     done
+
+    # Data and units of the components (image/files.tsv), each where its
+    # program looks for it. A pattern is expanded here, in name order.
+    while IFS="${tab}" read -r source destination; do
+        matched=0
+        # shellcheck disable=SC2086  # a pattern, expanded on purpose
+        for file in ${src}/${source}; do
+            if [ ! -f "${file}" ]; then continue; fi
+            install -D -m 0644 "${file}" "${out}${destination}/$(basename "${file}")"
+            echo "== ${source}: ${destination}/$(basename "${file}")"
+            matched=$((matched + 1))
+        done
+        if [ "${matched}" -eq 0 ]; then
+            echo "image/files.tsv: no file matches ${source}" >&2
+            exit 1
+        fi
+    done < "${work}/files.tsv"
 
     # The licence of TUR's own programs, and its required notice.
     install -D -m 0644 "${src}/LICENSE.md" "${out}/usr/share/licenses/tur/LICENSE.md"

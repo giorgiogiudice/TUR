@@ -16,6 +16,8 @@ on:
       # Programs compiled into the image (image/programs.tsv), what they are
       # compiled with, and what is installed beside them. Each is run on the
       # booted system, the P@x end-to-end test among them.
+      - "services/tur-ai-local/**"
+      - "services/tur-apps/**"
       - "services/tur-boot-health/**"
       - "services/tur-catalogue/**"
       - "services/tur-device-manager/**"
@@ -44,6 +46,8 @@ on:
       # Programs compiled into the image (image/programs.tsv), what they are
       # compiled with, and what is installed beside them. Each is run on the
       # booted system, the P@x end-to-end test among them.
+      - "services/tur-ai-local/**"
+      - "services/tur-apps/**"
       - "services/tur-boot-health/**"
       - "services/tur-catalogue/**"
       - "services/tur-device-manager/**"
@@ -101,7 +105,7 @@ jobs:
   boot:
     name: Install to disk and boot under UEFI in QEMU/KVM
     runs-on: ubuntu-24.04
-    timeout-minutes: 100
+    timeout-minutes: 130
     permissions:
       contents: read
       packages: read
@@ -199,8 +203,14 @@ jobs:
         # boot counter set by hand (ADR-0014, step 2 of the design's brief). The
         # third waits about three minutes for the automount behind /boot to expire.
         # In the second, TUR's own programs are run as an ordinary user, the
-        # P@x end-to-end test among them (docs/reports/TUR-006.md).
-        run: python3 tests/boot/run-vm.py --disk "$WORK/disk.raw" --work "$WORK" --out "$OUT" --timeout 3000
+        # P@x end-to-end test among them (docs/reports/TUR-006.md), P@x's
+        # session service test, and P@x through local AI with a real model on
+        # the engine the image carries. The guest has 8 GiB: tur-ai-local
+        # serves a model only when its need (2.15 GB for Qwen3 0.6B) and a
+        # reserve of 1 GiB fit in the memory free at that moment
+        # (TUR-AI-LOCAL-006 otherwise), and 3.2 GB free is more than a 4 GiB
+        # guest can be counted on to have. What was free is recorded.
+        run: python3 tests/boot/run-vm.py --disk "$WORK/disk.raw" --work "$WORK" --out "$OUT" --timeout 3600 --memory 8192
 
       - name: Recover the journal from the disk
         if: always()

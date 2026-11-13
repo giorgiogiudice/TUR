@@ -15,6 +15,8 @@ file, and is identified by the SPDX header of each file
 
 - `image/third-party-licensed/grub/`: the GRUB configuration fragment that
   counts boot attempts (BSD-3-Clause). It is in the image.
+- `image/third-party-licensed/llama.cpp/`: the text of the Apache License 2.0,
+  which goes with the local AI engine below. It is in the image.
 - `services/tur-update/tests/fixtures/bootc-upstream/`: fourteen test samples
   converted from bootc's source tree (MIT OR Apache-2.0). Test data only; not
   in the image.
@@ -46,6 +48,14 @@ commercially where those licences allow it.
 | Licence review, obligations and open questions | [`docs/dependencies/licence-review.md`](docs/dependencies/licence-review.md) |
 | The exact contents of a given build | The SPDX file `sbom.spdx.json` produced with that build |
 | Licence texts and copyright notices of each package | Installed by each package under `/usr/share/licenses/` in the image |
+
+One program in the image is not a Fedora package: **llama.cpp's
+`llama-server`**, the engine of local AI, which the image build compiles from
+llama.cpp's source at a pinned version (`image/engine/`; image/README.md, "The
+local AI engine"). It is under llama.cpp's licence (MIT) and contains code
+under MIT, Apache-2.0, MIT-0 or public domain, and the Unlicense; the texts and
+notices are in `/usr/share/licenses/llama.cpp/` in the image, and the SBOM
+lists it with its source archive and that archive's SHA-256.
 
 ### Fedora's marks
 

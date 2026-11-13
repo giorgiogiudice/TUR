@@ -14,7 +14,11 @@ image"). This adds to the SPDX document, from what the built image holds:
   /usr/share/licenses/tur-third-party/crates.tsv, with the licence the crate
   declares and the SHA-256 of the crate file, as Cargo.lock pins it, and one
   for the Rust standard library;
-- a STATIC_LINK relationship from each program to each crate in it.
+- a STATIC_LINK relationship from each program to each crate in it;
+- one package for each piece of third-party software the image build compiles
+  from source, from /usr/lib/tur/built-from-source.tsv: today llama.cpp, the
+  engine of local AI (image/engine/), with its version, licence, source
+  archive and that archive's SHA-256.
 
 It also holds every crate's licence against an allow-list and exits 1 if one
 is not on it. TUR's programs carry a noncommercial licence and link their
@@ -42,6 +46,7 @@ PODMAN = shlex.split(os.environ.get("PODMAN", "podman"))
 TUR_LICENCE = "LicenseRef-TUR-Noncommercial-1.0.0"
 PROGRAMS = "/usr/lib/tur/programs.tsv"
 CRATES = "/usr/share/licenses/tur-third-party/crates.tsv"
+BUILT = "/usr/lib/tur/built-from-source.tsv"
 
 # Licences a crate may have when it is linked statically into a program under
 # the TUR licence: permissive ones, whose conditions are met by shipping the
@@ -151,6 +156,7 @@ def main() -> int:
 
     programs = rows(in_image(args.image, "/bin/bash", "-c", PROBE))
     crates = rows(in_image(args.image, "cat", CRATES))
+    built = rows(in_image(args.image, "/bin/bash", "-c", f"cat {BUILT} 2>/dev/null || true"))
     if not programs or not crates:
         print(f"the image has no {PROGRAMS} or no {CRATES}", file=sys.stderr)
         return 1
@@ -248,6 +254,31 @@ def main() -> int:
                 }
             )
 
+    # Third-party software compiled from source in the image build. It is
+    # not linked into TUR's programs: it is a program of its own, under its
+    # own licence, with its licence files where the table says.
+    for name, version, licence, source, sha256, where, licence_files in built:
+        if not acceptable(licence):
+            refused.append(f"{name} {version}: {licence} (built from source in the image)")
+        ident = spdx_id("tur-built", name, version)
+        packages.append(
+            {
+                "SPDXID": ident,
+                "name": name,
+                "versionInfo": version,
+                "supplier": "NOASSERTION",
+                "downloadLocation": source,
+                "filesAnalyzed": False,
+                "checksums": [{"algorithm": "SHA256", "checksumValue": sha256}],
+                "licenseConcluded": "NOASSERTION",
+                "licenseDeclared": licence,
+                "copyrightText": "NOASSERTION",
+                "sourceInfo": f"compiled from this source archive in the image build (image/engine/); installed in "
+                f"{where}; licence files in {licence_files}; the checksum is that of the source archive",
+            }
+        )
+        relationships.append({"spdxElementId": root, "relatedSpdxElementId": ident, "relationshipType": "CONTAINS"})
+
     path.write_text(json.dumps(document, indent=1) + "\n")
     if args.csv:
         with open(args.csv, "w", encoding="utf-8", newline="") as handle:
@@ -259,9 +290,11 @@ def main() -> int:
     without = sorted(f"{crate} {version}" for (crate, version), entry in linked.items() if entry["files"] == 0)
     print(f"TUR programs added to the SBOM: {len(programs)}")
     print(f"crates added to the SBOM: {len(linked)} (the Rust standard library included)")
+    print(f"built from source in the image: {', '.join(f'{row[0]} {row[1]} ({row[2]})' for row in built) or 'nothing'}")
     print(f"crates that ship no licence file of their own: {', '.join(without) or 'none'}")
     if refused:
-        print("crates whose licence is not on the allow-list of scripts/sbom-programs.py:", file=sys.stderr)
+        print("crates or built software whose licence is not on the allow-list of scripts/sbom-programs.py:",
+              file=sys.stderr)
         for line in refused:
             print(f"  - {line}", file=sys.stderr)
         return 1

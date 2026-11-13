@@ -52,7 +52,13 @@ string_enum! {
 /// The backends a build of the engine has, from the `libggml-*.so`
 /// libraries beside the program or in the library directory next to its
 /// own: for example `cpu`, `cpu-haswell`, `vulkan`, `hip`.
+///
+/// A link is followed first: on TUR the engine is `/usr/bin/llama-server`,
+/// a link to the directory the image build puts llama.cpp in, with its
+/// backends (`/usr/libexec/tur/llama.cpp/`; image/README.md, "The local AI
+/// engine").
 pub fn backends(program: &Path) -> Vec<String> {
+    let program = fs::canonicalize(program).unwrap_or_else(|_| program.to_path_buf());
     let Some(bin) = program.parent() else {
         return Vec::new();
     };
@@ -268,6 +274,34 @@ mod tests {
         assert!(check_socket(Path::new("/run/user/1000/tur-ai-local/api.sock")).is_ok());
         assert!(check_socket(Path::new("relative.sock")).is_err());
         assert!(check_socket(Path::new("/tmp/not-a-socket")).is_err());
+    }
+
+    #[test]
+    fn the_backends_are_found_beside_the_program_a_link_points_to() {
+        let root =
+            std::env::temp_dir().join(format!("tur-ai-local-backends-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let real = root.join("libexec/llama.cpp");
+        let bin = root.join("bin");
+        fs::create_dir_all(&real).expect("a directory");
+        fs::create_dir_all(&bin).expect("a directory");
+        for name in [
+            "llama-server",
+            "libggml-base.so.0",
+            "libggml-cpu-haswell.so",
+            "libggml-cpu-x64.so",
+            "libggml-vulkan.so",
+        ] {
+            fs::write(real.join(name), b"").expect("a file");
+        }
+        std::os::unix::fs::symlink("../libexec/llama.cpp/llama-server", bin.join("llama-server"))
+            .expect("a link");
+        let expected = ["cpu-haswell", "cpu-x64", "vulkan"];
+        assert_eq!(backends(&bin.join("llama-server")), expected);
+        assert_eq!(backends(&real.join("llama-server")), expected);
+        // A program that is not there is looked for where it was named.
+        assert!(backends(&bin.join("absent")).is_empty());
+        let _ = fs::remove_dir_all(&root);
     }
 
     #[test]
