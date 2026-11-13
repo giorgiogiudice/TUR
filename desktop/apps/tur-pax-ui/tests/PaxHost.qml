@@ -259,7 +259,11 @@ Item {
             // model"; the download screen follows.
             flow.goTo("local")
             test.tryVerify(() => test.findChild(flow, "localModel-" + state.local) !== null, 10000, "the local models were listed")
-            test.mouseClick(test.findChild(flow, "localModel-" + state.local))
+            // Chosen as a click would choose it; a click itself could land on
+            // another card while the list is still being laid out.
+            const list = test.findChild(flow, "setupScreen").item
+            list.chosenId = state.local
+            test.wait(50)
             test.mouseClick(test.findChild(flow, "continueButton"))
             test.tryVerify(() => flow.step === "download", 10000, "the model is being made ready")
             if (state.localHold !== undefined)
@@ -296,8 +300,7 @@ Item {
             test.wait(30)
             const found = test.findChild(flow, (state.step === "local" ? "localModel-" : "provider-") + state.choose)
             test.verify(found !== null, "there is a choice " + state.choose)
-            const card = state.step === "local" ? found : test.findChild(found, "providerChoice")
-            test.mouseClick(card)
+            screen.item.chosenId = state.choose
         }
         if (state.type) {
             for (const name in state.type) {

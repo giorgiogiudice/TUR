@@ -150,6 +150,12 @@ class Service:
             "model": "scripted-model", "base_url": self.provider.base_url,
         }, indent=2))
         self.bus = Bus(self.work, "session", directory=self.bus_directory)
+        # The window connects from the builder container, which Docker
+        # confines with its AppArmor profile; a bus that mediates by AppArmor
+        # refuses such a peer ("Access denied", seen in CI). The test's bus
+        # does not mediate; the service still serves only its own user.
+        config = self.bus.config.read_text()
+        self.bus.config.write_text(config.replace("</busconfig>", '  <apparmor mode="disabled"/>\n</busconfig>'))
         models = ROOT / "services" / "tur-pax" / "data" / "models.json"
         (self.bus.services / f"{AGENT}.service").write_text(
             "[D-BUS Service]\n"
@@ -272,7 +278,13 @@ class Recorder:
                                                   if s["member"] == "TaskFinished" and s["args"][0] == task], 60)
         self.checks.check("record", f"task {name} finished", bool(finished))
         time.sleep(0.5)
-        recorded = [{"member": s["member"], "args": s["args"]} for s in self.service.signals_since(start)
+        # From the task's start to its end, and nothing of the task before
+        # it (whose last StateChanged may come late): the same every run.
+        window = self.service.signals_since(start)
+        first = next((i for i, s in enumerate(window) if s["member"] == "TaskStarted" and s["args"][0] == task), 0)
+        last = next((i for i, s in enumerate(window) if s["member"] == "TaskFinished" and s["args"][0] == task),
+                    len(window) - 1)
+        recorded = [{"member": s["member"], "args": s["args"]} for s in window[first:last + 1]
                     if s["member"] != "LocalModelProgress"]
         self.tasks[name] = {"request": request, "signals": recorded}
         return finished[0]["args"][1] if finished else {}

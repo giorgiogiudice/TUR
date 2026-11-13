@@ -110,12 +110,6 @@
         }
       ],
       "member": "TaskFinished"
-    },
-    {
-      "args": [
-        "idle"
-      ],
-      "member": "StateChanged"
     }
   ]
 }

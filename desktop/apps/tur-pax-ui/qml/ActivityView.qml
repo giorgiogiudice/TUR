@@ -31,7 +31,9 @@ Item {
             view.loaded = true
             if (reply.ok) {
                 view.problem = ""
-                view.tasks = Array.isArray(reply.value) ? reply.value : []
+                // A list from C++ is a sequence, not always a JavaScript array.
+                const list = reply.value
+                view.tasks = list && list.length !== undefined ? Array.prototype.slice.call(list) : []
             } else {
                 view.problem = reply.message
                 view.tasks = []
