@@ -54,6 +54,10 @@ refused() {
 }
 
 cleanup() {
+    local status=$?
+    if [ "${status}" -ne 0 ]; then
+        echo "::group::moto, last 80 lines"; docker logs --tail 80 tur-moto 2>&1 || true; echo "::endgroup::"
+    fi
     docker rm -f tur-moto > /dev/null 2>&1 || true
     if [ -n "${fake_pid:-}" ]; then kill "${fake_pid}" 2> /dev/null || true; fi
 }
@@ -71,7 +75,9 @@ cat > "${work}/policy.json" <<'EOF'
 {"Version": "2012-10-17", "Statement": [{"Sid": "PublicReadObjects", "Effect": "Allow", "Principal": "*",
   "Action": ["s3:GetObject"], "Resource": ["arn:aws:s3:::tur-downloads/*"]}]}
 EOF
-curl -sf -X PUT --data-binary @"${work}/policy.json" "${s3}/tur-downloads?policy" > /dev/null
+curl -sf -X PUT -H "Content-Type: application/json" --data-binary @"${work}/policy.json" \
+    "${s3}/tur-downloads?policy" > /dev/null
+curl -sf "${s3}/tur-downloads?policy" | python3 -c 'import json, sys; assert json.load(sys.stdin)["Statement"][0]["Sid"] == "PublicReadObjects"'
 echo "moto: $(docker image inspect -f '{{index .RepoDigests 0}}' "${moto_image}")"
 
 run() {  # id path branch event conclusion head_repo
