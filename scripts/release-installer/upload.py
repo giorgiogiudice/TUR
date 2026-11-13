@@ -6,9 +6,14 @@
 
 Each DIR/FILE goes to <bucket>/PREFIX/FILE with rclone (pinned by the
 workflow), as a multipart upload above TUR_S3_UPLOAD_CUTOFF (default 200M) in
-parts of TUR_S3_CHUNK_SIZE (default 64M). `--immutable` makes rclone refuse to
-replace an object that exists with different content; an identical one is
-left as it is, so a release that stopped after uploading can be run again.
+parts of TUR_S3_CHUNK_SIZE (default 64M).
+
+A released file is never replaced. Before uploading, the folder is listed:
+an object that is already there is read back (below) and must be this file
+exactly, or the script stops; an identical one is left as it is, so a release
+that stopped after uploading can be run again. (rclone's `--immutable` does
+not do this for `copyto`: measured in CI, it replaced an object with
+different content. `--ignore-existing` stays as a second barrier.)
 
 After each upload the object is read back before anything else happens:
 
@@ -91,10 +96,25 @@ def sha256_file(path: pathlib.Path) -> str:
     return digest.hexdigest()
 
 
+class Mismatch(SystemExit):
+    """The object in the bucket is not the local file."""
+
+
+def listing(folder: str) -> dict[str, int]:
+    """Name -> size of the objects directly in a folder of the bucket ({} if there is none)."""
+    result = subprocess.run(["rclone", "lsjson", "--files-only", folder], env=rclone_env(), check=False,
+                            text=True, stdout=subprocess.PIPE)
+    if result.returncode == 3:  # rclone: directory not found
+        return {}
+    if result.returncode != 0:
+        raise SystemExit(f"rclone lsjson failed (exit {result.returncode})")
+    return {entry["Name"]: entry["Size"] for entry in json.loads(result.stdout or "[]")}
+
+
 def read_back(remote: str, url: str, size: int, sha: str, kind: str) -> None:
     stat = json.loads(rclone("lsjson", "--stat", remote, capture=True))
     if stat.get("Size") != size:
-        raise SystemExit(f"read back {remote}: the storage reports {stat.get('Size')} bytes, expected {size}")
+        raise Mismatch(f"read back {remote}: the storage reports {stat.get('Size')} bytes, expected {size}")
     request = urllib.request.Request(url, headers={"User-Agent": "tur-release-installer"})
     digest, count = hashlib.sha256(), 0
     try:
@@ -107,9 +127,9 @@ def read_back(remote: str, url: str, size: int, sha: str, kind: str) -> None:
         raise SystemExit(f"read back {url}: HTTP {error.code}. Can anyone download the bucket's objects? "
                          "(docs/releases/README.md, section 4, step 3)") from None
     if count != size or digest.hexdigest() != sha:
-        raise SystemExit(f"read back {url}: {count} bytes, SHA-256 {digest.hexdigest()}; expected {size} bytes, {sha}")
+        raise Mismatch(f"read back {url}: {count} bytes, SHA-256 {digest.hexdigest()}; expected {size} bytes, {sha}")
     if served.split(";")[0].strip() != kind.split(";")[0].strip():
-        raise SystemExit(f"read back {url}: served as {served!r}, expected {kind!r}")
+        raise Mismatch(f"read back {url}: served as {served!r}, expected {kind!r}")
     print(f"read back: {url}: {count} bytes, SHA-256 {sha}, {served}")
 
 
@@ -123,6 +143,7 @@ def main() -> int:
     cutoff = os.environ.get("TUR_S3_UPLOAD_CUTOFF", "200M")
     chunk = os.environ.get("TUR_S3_CHUNK_SIZE", "64M")
     rclone("version")
+    present = listing(f"turdl:{bucket}/{prefix}")
     uploaded = []
     for name in sys.argv[4:]:
         path = folder / name
@@ -130,12 +151,19 @@ def main() -> int:
         key = f"{prefix}/{name}"
         remote = f"turdl:{bucket}/{key}"
         url = f"{public}/{key}"
-        print(f"== upload {name} ({size} bytes) to {key}")
-        rclone("copyto", "--immutable", "--checksum", "--stats-one-line", "--stats", "60s",
-               "--s3-upload-cutoff", cutoff, "--s3-chunk-size", chunk, "--s3-upload-concurrency", "4",
-               "--header-upload", f"Content-Type: {kind}",
-               str(path), remote)
-        read_back(remote, url, size, sha, kind)
+        if name in present:
+            print(f"== {key} is already in the bucket: checking that it is this file")
+            try:
+                read_back(remote, url, size, sha, kind)
+            except Mismatch as error:
+                raise SystemExit(f"{key} exists with other content; a released file is never replaced. {error}")
+        else:
+            print(f"== upload {name} ({size} bytes) to {key}")
+            rclone("copyto", "--ignore-existing", "--stats-one-line", "--stats", "60s",
+                   "--s3-upload-cutoff", cutoff, "--s3-chunk-size", chunk, "--s3-upload-concurrency", "4",
+                   "--header-upload", f"Content-Type: {kind}",
+                   str(path), remote)
+            read_back(remote, url, size, sha, kind)
         uploaded.append({"name": name, "key": key, "url": url, "bytes": size, "sha256": sha})
     out.write_text(json.dumps(uploaded, indent=2) + "\n")
     return 0

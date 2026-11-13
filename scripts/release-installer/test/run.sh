@@ -184,31 +184,32 @@ echo "== upload and read back (S3 stand-in)"
 export TUR_DOWNLOADS_ENDPOINT="${s3}" TUR_DOWNLOADS_BUCKET=tur-downloads TUR_DOWNLOADS_ACCESS_KEY=test \
     TUR_DOWNLOADS_SECRET_KEY=test TUR_DOWNLOADS_PUBLIC_URL="${s3}/tur-downloads" TUR_DOWNLOADS_PROVIDER=Other \
     TUR_S3_UPLOAD_CUTOFF=8M TUR_S3_CHUNK_SIZE=5M
-upload_files=("${iso}" "${sums}" "${manifest}")
-for f in "${work}"/release/*.sigstore.json "${work}/release/${base}.release-key.pub"; do upload_files+=("$(basename "${f}")"); done
-python3 "${here}/upload.py" "${work}/release" "releases/${version}" "${work}/uploads.json" "${upload_files[@]}"
-etag="$(curl -sfI "${s3}/tur-downloads/releases/${version}/${iso}" | tr -d '\r' | sed -n 's/^[Ee][Tt]ag: *//p')"
-case "${etag}" in *-5\"|*-5) ;; *) fail "the medium was not uploaded in five parts (ETag ${etag})" ;; esac
-pass "multipart upload (ETag ${etag}), every object read back through its public address"
-python3 "${here}/upload.py" "${work}/release" "releases/${version}" "${work}/uploads-again.json" "${upload_files[@]}" > /dev/null
-pass "uploading the same files again is accepted (a stopped release can be repeated)"
-mkdir -p "${work}/changed"
-cp "${work}/release/${sums}" "${work}/changed/${sums}"
-echo "# changed" >> "${work}/changed/${sums}"
-refused "rclone copyto failed" python3 "${here}/upload.py" "${work}/changed" "releases/${version}" "${work}/x.json" "${sums}"
-pass "an object is never replaced by different content"
-curl -sf -X PUT "${s3}/tur-private" > /dev/null
-refused "HTTP 403" env TUR_DOWNLOADS_BUCKET=tur-private TUR_DOWNLOADS_PUBLIC_URL="${s3}/tur-private" \
-    python3 "${here}/upload.py" "${work}/release" "releases/${version}" "${work}/x.json" "${sums}"
-pass "a bucket whose objects are not public fails the read-back"
-
 readback() {  # remote-key local-file content-type
     python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import upload, hashlib, pathlib
 p = pathlib.Path(sys.argv[3])
 upload.read_back("turdl:tur-downloads/" + sys.argv[2], sys.argv[5] + "/" + sys.argv[2], p.stat().st_size,
                  hashlib.sha256(p.read_bytes()).hexdigest(), sys.argv[4])' "${here}" "$1" "$2" "$3" "${s3}/tur-downloads"
 }
+upload_files=("${iso}" "${sums}" "${manifest}")
+for f in "${work}"/release/*.sigstore.json "${work}/release/${base}.release-key.pub"; do upload_files+=("$(basename "${f}")"); done
+python3 "${here}/upload.py" "${work}/release" "releases/${version}" "${work}/uploads.json" "${upload_files[@]}"
+etag="$(curl -sfI "${s3}/tur-downloads/releases/${version}/${iso}" | tr -d '\r' | sed -n 's/^[Ee][Tt]ag: *//p')"
+case "${etag}" in *-5\"|*-5) ;; *) fail "the medium was not uploaded in five parts (ETag ${etag})" ;; esac
+pass "multipart upload (ETag ${etag}), every object read back through its public address"
+again="$(python3 "${here}/upload.py" "${work}/release" "releases/${version}" "${work}/uploads-again.json" "${upload_files[@]}")"
+[ "$(grep -c "is already in the bucket" <<< "${again}")" -eq "${#upload_files[@]}" ] || { echo "${again}"; fail "files uploaded again"; }
+pass "uploading the same files again is accepted (a stopped release can be repeated)"
+mkdir -p "${work}/changed"
+cp "${work}/release/${sums}" "${work}/changed/${sums}"
+echo "# changed" >> "${work}/changed/${sums}"
+refused "a released file is never replaced" python3 "${here}/upload.py" "${work}/changed" "releases/${version}" "${work}/x.json" "${sums}"
 readback "releases/${version}/${sums}" "${work}/release/${sums}" "text/plain" > /dev/null
+pass "an object is never replaced by different content (and is still the original)"
+curl -sf -X PUT "${s3}/tur-private" > /dev/null
+refused "HTTP 403" env TUR_DOWNLOADS_BUCKET=tur-private TUR_DOWNLOADS_PUBLIC_URL="${s3}/tur-private" \
+    python3 "${here}/upload.py" "${work}/release" "releases/${version}" "${work}/x.json" "${sums}"
+pass "a bucket whose objects are not public fails the read-back"
+
 same_size="$(head -c "$(stat -c %s "${work}/release/${sums}")" /dev/zero | tr '\0' 'x')"
 curl -sf -X PUT -H "Content-Type: text/plain" --data-binary "${same_size}" "${s3}/tur-downloads/probe/sums" > /dev/null
 refused "SHA-256" readback "probe/sums" "${work}/release/${sums}" "text/plain"
