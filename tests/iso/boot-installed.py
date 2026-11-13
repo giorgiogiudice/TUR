@@ -27,6 +27,16 @@ firmware variables an earlier run left, without a boot order from QEMU. It
 writes the firmware's boot entries before and after to
 OUT_DIR/host/efivars-before.json and efivars-after.json.
 
+With --windows-entry (ADR-0028, a disk with TUR installed beside Windows) it
+instead chooses "Windows" in TUR's boot menu, by its key "w", pressed a few
+times a second once the menu is on the screen (or after a few seconds if the
+serial port does not show it), as a person would. The test disk holds a
+stand-in for Windows Boot Manager (tests/iso/standin, not a Microsoft
+program) that writes "TUR-WINDOWS-STANDIN: started file=... device=..." and
+powers the machine off. The outcome is then "windows-started" with the file
+and device path it reports, or "tur-started" when a rendered screen came
+instead. Exit status 0 for either: tests/iso/beside-report.py judges.
+
 It writes OUT_DIR/first-start.json and the screenshots, and exits 0 if a
 rendered screen was seen. tests/boot/inspect-disk.py then reads the journal
 from the disk, and tests/iso/report.py decides what it all shows.
@@ -61,6 +71,7 @@ def main() -> int:
     ap.add_argument("--no-bootindex", action="store_true")
     ap.add_argument("--variables-from")
     ap.add_argument("--timeout", type=int, default=600, help="seconds allowed until a rendered screen")
+    ap.add_argument("--windows-entry", action="store_true", help="choose Windows in TUR's boot menu (key w)")
     ap.add_argument("--run-on", type=int, default=75, help="seconds to keep running after the rendered screen")
     ap.add_argument("--cpus", type=int, default=2)
     ap.add_argument("--memory", type=int, default=4096, help="MiB")
@@ -128,7 +139,7 @@ def main() -> int:
         ]
         (out / "first-start.json").write_text(json.dumps(result, indent=2) + "\n")
         print(f"[{elapsed():7.1f}s] outcome: {outcome}", flush=True)
-        return 0 if outcome == "rendered" else 1
+        return 0 if outcome in ("rendered", "windows-started", "tur-started") else 1
 
     print(f"{machine.version}\n$ {' '.join(machine.command())}", flush=True)
     try:
@@ -138,6 +149,9 @@ def main() -> int:
         machine.quit()
         return finish("qemu-failed")
     result["kvm"] = qmp.command("query-kvm")
+
+    if args.windows_entry:
+        return windows_entry(args, machine, qmp, result, out, work, serial_log, elapsed, finish)
 
     rendered_at = None
     confirmed = False
@@ -202,6 +216,83 @@ def main() -> int:
         result["shutdown_seconds"] = round(elapsed() - asked, 1)
     print(f"[{elapsed():7.1f}s] power-off: {result['shutdown']}", flush=True)
     return finish("rendered")
+
+
+def windows_entry(args, machine, qmp, result, out, work, serial_log, elapsed, finish) -> int:
+    """Choose "Windows" in TUR's boot menu and see what starts."""
+    import re
+
+    transcript = isovm.Transcript(serial_log)
+    menu_seen = None
+    shot_taken = False
+    pressed = 0
+    started = time.monotonic()
+    deadline = started + args.timeout
+    standin = None
+    result["windows_entry"] = {"key": "w"}
+    while time.monotonic() < deadline and machine.alive():
+        transcript.pump()
+        if menu_seen is None and re.search(r"\bWindows\b", transcript.text) and not re.search(r"TUR-WINDOWS-STANDIN",
+                                                                                         transcript.text):
+            menu_seen = elapsed()
+        standin = re.search(r"TUR-WINDOWS-STANDIN: started file=(\S+)", transcript.text)
+        if standin:
+            break
+        # The menu on the screen first, then the key: once the menu was seen
+        # on the serial port, or after eight seconds without it.
+        if menu_seen is not None or time.monotonic() - started > 8:
+            if not shot_taken:
+                try:
+                    result["screenshots"]["boot-menu"] = vm.screenshot(qmp, work, out / "boot-menu.png")
+                except Exception as error:  # evidence only
+                    result["screenshots"]["boot-menu"] = {"error": str(error)}
+                shot_taken = True
+            try:
+                qmp.command("send-key", keys=[{"type": "qcode", "data": "w"}], **{"hold-time": 60})
+                pressed += 1
+            except Exception:
+                pass
+        time.sleep(0.4)
+    entry = result["windows_entry"]
+    entry.update({"menu_seen_on_serial_seconds": menu_seen, "presses": pressed})
+    if standin:
+        entry["started_seconds"] = elapsed()
+        # The stand-in prints its device path, then powers off three seconds later.
+        end = time.monotonic() + 20
+        device = None
+        while time.monotonic() < end:
+            transcript.pump()
+            device = re.search(r"TUR-WINDOWS-STANDIN: device=(\S+)", transcript.text)
+            if device or not machine.alive():
+                break
+            time.sleep(0.3)
+        if machine.alive():
+            try:
+                result["screenshots"]["windows-standin"] = vm.screenshot(qmp, work, out / "windows-standin.png")
+            except Exception as error:  # evidence only
+                result["screenshots"]["windows-standin"] = {"error": str(error)}
+        transcript.pump()
+        device = re.search(r"TUR-WINDOWS-STANDIN: device=(\S+)", transcript.text)
+        entry["file"] = standin.group(1)
+        entry["device"] = device.group(1) if device else None
+        partuuid = re.search(r"HD\(\d+,GPT,([0-9A-Fa-f-]{36})", entry["device"] or "")
+        entry["partition_uuid"] = partuuid.group(1).upper() if partuuid else None
+        try:
+            machine.process.wait(timeout=30)
+            entry["powered_off_by_itself"] = True
+        except Exception:
+            entry["powered_off_by_itself"] = False
+        machine.quit()
+        return finish("windows-started")
+    if machine.alive():
+        try:
+            result["screenshots"]["at-end"] = vm.screenshot(qmp, work, out / "windows-entry-at-end.png")
+            result["screenshots"]["at-end"]["looks_rendered"] = result["screenshots"]["at-end"].get("looks_rendered")
+        except Exception as error:  # diagnosis only
+            result["screenshots"]["at-end"] = {"error": str(error)}
+    rendered = bool(result["screenshots"].get("at-end", {}).get("looks_rendered"))
+    machine.quit()
+    return finish("tur-started" if rendered else "nothing-started")
 
 
 if __name__ == "__main__":

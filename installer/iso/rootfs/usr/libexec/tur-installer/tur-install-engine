@@ -10,6 +10,9 @@
 #     pkexec /usr/libexec/tur-installer/tur-install-engine install \
 #         --by-id /dev/disk/by-id/... --serial S --wwn W --size BYTES \
 #         --fingerprint F --phrase "ERASE ..."
+#     pkexec /usr/libexec/tur-installer/tur-install-engine install --mode beside \
+#         --region-start BYTES --region-size BYTES --by-id ... --phrase "BESIDE ..."
+#         (into the free space beside Windows; ADR-0028)
 #
 # polkit allows it, without a password, to the live session's user only, in
 # an active local session (org.tur.installer.engine; the rule exists only on
@@ -23,7 +26,7 @@
 #   {"event":"checks","blocking":[{"code":...,"text":...}],...}
 #   {"event":"disk", ... one per whole disk ...}
 #   {"event":"disks","total":N,"selectable":M,"minimum_bytes":B}
-#   {"event":"stage","stage":"revalidate|prepare|copy|bootloader|finish|check|record"}
+#   {"event":"stage","stage":"revalidate|prepare|copy|bootloader|finish|boot-menu|check|record"}
 #   {"event":"line","text":...}            a line of bootc's output
 #   {"event":"written","bytes":N}          bytes written to the disk so far
 #   {"event":"cancel","accepted":true|false}
@@ -142,7 +145,7 @@ partition_kind() {
 }
 
 do_disks() {
-    local i part parts tree phrase print
+    local i part parts tree phrase print beside
     mark "engine disks"
     scan_disks
     dump_inventory
@@ -158,7 +161,13 @@ do_disks() {
             phrase="$(phrase_for "${i}")"
             print="$(fingerprint "${d_name[i]}")"
         fi
-        tree="{\"event\":\"disk\",\"name\":$(js "${d_name[i]}"),\"model\":$(js "${d_model[i]}"),\"serial\":$(js "${d_serial[i]}"),\"serial_end\":$(js "$(serial_end "${i}")"),\"wwn\":$(js "${d_wwn[i]}"),\"size\":${d_size[i]:-0},\"transport\":$(js "${d_tran[i]}"),\"by_id\":$(js "${d_byid[i]}"),\"status\":$(js "${d_status[i]}"),\"code\":$(js "${d_code[i]}"),\"why\":$(js "${d_why[i]}"),\"holds\":$(js "${d_holds[i]}"),\"words\":$(js "${d_words[i]}"),\"windows\":$([ "${d_windows[i]}" = yes ] && echo true || echo false),\"bitlocker\":$([ "${d_bitlocker[i]}" = yes ] && echo true || echo false),\"linux\":${d_linux[i]:-0},\"ntfs\":${d_ntfs[i]:-0},\"partition_count\":${d_parts[i]:-0},\"phrase\":$(js "${phrase}"),\"fingerprint\":$(js "${print}"),\"partitions\":[${parts}]}"
+        # Installing into the free space beside Windows (ADR-0028): offered
+        # for a disk that holds Windows, with what was found, or why not.
+        beside=null
+        if [ "${d_status[i]}" = ok ] && [ "${d_windows[i]}" = yes ]; then
+            beside="{\"possible\":$([ "${d_beside[i]}" = yes ] && echo true || echo false),\"code\":$(js "${d_bcode[i]}"),\"why\":$(js "${d_bwhy[i]}"),\"free_start\":$(number "${d_bstart[i]}"),\"free_size\":$(number "${d_bsize[i]}"),\"before\":$(js "${d_bbefore[i]}"),\"after\":$(js "${d_bafter[i]}"),\"esp\":$(js "${d_besp[i]##*/}"),\"esp_size\":$(number "${d_bespsize[i]}"),\"esp_free\":$(number "${d_bespfree[i]}"),\"esp_needed\":$(number "${d_bneed[i]}"),\"phrase\":$(js "$([ "${d_beside[i]}" = yes ] && beside_phrase_for "${i}")")}"
+        fi
+        tree="{\"event\":\"disk\",\"name\":$(js "${d_name[i]}"),\"model\":$(js "${d_model[i]}"),\"serial\":$(js "${d_serial[i]}"),\"serial_end\":$(js "$(serial_end "${i}")"),\"wwn\":$(js "${d_wwn[i]}"),\"size\":${d_size[i]:-0},\"transport\":$(js "${d_tran[i]}"),\"by_id\":$(js "${d_byid[i]}"),\"status\":$(js "${d_status[i]}"),\"code\":$(js "${d_code[i]}"),\"why\":$(js "${d_why[i]}"),\"holds\":$(js "${d_holds[i]}"),\"words\":$(js "${d_words[i]}"),\"windows\":$([ "${d_windows[i]}" = yes ] && echo true || echo false),\"bitlocker\":$([ "${d_bitlocker[i]}" = yes ] && echo true || echo false),\"linux\":${d_linux[i]:-0},\"ntfs\":${d_ntfs[i]:-0},\"partition_count\":${d_parts[i]:-0},\"phrase\":$(js "${phrase}"),\"fingerprint\":$(js "${print}"),\"beside\":${beside},\"partitions\":[${parts}]}"
         emit "${tree}"
     done
     emit "{\"event\":\"disks\",\"total\":${#d_name[@]},\"selectable\":${selectable},\"minimum_bytes\":${min_target_bytes:-0}}"
@@ -228,10 +237,16 @@ install_poll() {
     fi
 }
 
+# The stages of an installation beside Windows, from engine.sh.
+beside_stage() { set_stage "$1"; }
+
 do_install() {
-    local by_id="" serial="" wwn="" size="" print="" phrase="" expected id
+    local by_id="" serial="" wwn="" size="" print="" phrase="" expected id mode=erase region_start="" region_size=""
     while [ "$#" -gt 0 ]; do
         case "$1" in
+            --mode) mode="$2"; shift 2 ;;
+            --region-start) region_start="$2"; shift 2 ;;
+            --region-size) region_size="$2"; shift 2 ;;
             --by-id) by_id="$2"; shift 2 ;;
             --serial) serial="$2"; shift 2 ;;
             --wwn) wwn="$2"; shift 2 ;;
@@ -245,7 +260,14 @@ do_install() {
         esac
     done
     case "${size}" in '' | *[!0-9]*) size=0 ;; esac
-    mark "engine install by_id=${by_id}"
+    case "${mode}" in
+        erase | beside) ;;
+        *)
+            result refused TUR-INSTALL-CONFIRM-001 "Unknown installation mode ${mode}; nothing was changed." untouched
+            exit 2
+            ;;
+    esac
+    mark "engine install by_id=${by_id} mode=${mode}"
     set_stage revalidate
     # The image on the medium, again: the graphical installer checked it at
     # its start, possibly long ago.
@@ -260,13 +282,19 @@ do_install() {
         exit 3
     fi
     device_name="${target_device##*/}"
-    expected="$(phrase_of "$(prop "${device_name}" SERIAL)" "$(prop "${device_name}" WWN)" "$(prop "${device_name}" SIZE)")"
+    if [ "${mode}" = beside ] && ! beside_revalidate "${region_start}" "${region_size}"; then
+        mark "revalidate result=refused code=${engine_code} mode=beside"
+        result refused "${engine_code}" "${engine_message} Nothing was changed." untouched
+        exit 3
+    fi
+    expected="$(phrase_of "$(prop "${device_name}" SERIAL)" "$(prop "${device_name}" WWN)" "$(prop "${device_name}" SIZE)" \
+        "$([ "${mode}" = beside ] && echo BESIDE || echo ERASE)")"
     if [ "${phrase}" != "${expected}" ]; then
-        mark "confirm result=mismatch code=TUR-INSTALL-CONFIRM-001 frontend=graphical"
+        mark "confirm result=mismatch code=TUR-INSTALL-CONFIRM-001 frontend=graphical mode=${mode}"
         result refused TUR-INSTALL-CONFIRM-001 "The confirmation does not name this disk. Nothing was changed." untouched
         exit 3
     fi
-    mark "confirm result=accepted frontend=graphical"
+    mark "confirm result=accepted frontend=graphical mode=${mode}"
     if cancel_requested; then
         emit '{"event":"cancel","accepted":true}'
         mark "cancel accepted=yes stage=${stage}"
@@ -274,6 +302,10 @@ do_install() {
         exit 4
     fi
     # From here on the disk is written.
+    if [ "${mode}" = beside ]; then
+        do_install_beside
+        return
+    fi
     set_stage prepare
     written_start="$(sectors_written "${device_name}")"
     run_install "${target_device}" install_poll
@@ -294,6 +326,30 @@ do_install() {
     keep_log "${target_device}" "${id}"
     mark "result=success seconds=${install_seconds} device=${target_device}"
     result success "" "TUR is installed." installed "\"status\":0,\"seconds\":${install_seconds},\"device\":$(js "${target_device}"),\"log_on_disk\":$(js "${kept_log_path}")"
+}
+
+# do_install_beside: the rest of an installation into the free space beside
+# Windows (engine.sh, run_beside), after the checks of do_install.
+do_install_beside() {
+    local id
+    written_start="$(sectors_written "${device_name}")"
+    if ! run_beside "${target_device}" "${region_start}" "${region_size}" install_poll; then
+        mark "result=failed code=${beside_code}"
+        result failed "${beside_code}" "${beside_message}" "${beside_disk_state}" "\"mode\":\"beside\",\"status\":${install_status},\"seconds\":${install_seconds},\"partition\":$(js "${beside_partition}")"
+        exit 5
+    fi
+    set_stage check
+    if ! check_installed "${target_device}"; then
+        mark "result=failed code=TUR-INSTALL-MEDIUM-002"
+        result failed TUR-INSTALL-MEDIUM-002 "The installer reported success, but the disk does not have the partitions an installed TUR has." partial "\"mode\":\"beside\""
+        exit 5
+    fi
+    record_root_features "${target_device}"
+    set_stage record
+    id="$(session_id)"
+    keep_log "${target_device}" "${id}"
+    mark "result=success seconds=${install_seconds} device=${target_device} mode=beside partition=${beside_partition}"
+    result success "" "TUR is installed beside Windows." installed "\"mode\":\"beside\",\"status\":0,\"seconds\":${install_seconds},\"device\":$(js "${target_device}"),\"partition\":$(js "${beside_partition}"),\"log_on_disk\":$(js "${kept_log_path}")"
 }
 
 # ---- the log, to a USB stick -----------------------------------------------------
@@ -394,7 +450,7 @@ case "${1:-}" in
         do_install "$@"
         ;;
     *)
-        echo "usage: tur-install-engine check | disks | sticks | save-log --to PATH | install --by-id PATH --serial S --wwn W --size BYTES --fingerprint F --phrase PHRASE" >&2
+        echo "usage: tur-install-engine check | disks | sticks | save-log --to PATH | install [--mode erase|beside --region-start BYTES --region-size BYTES] --by-id PATH --serial S --wwn W --size BYTES --fingerprint F --phrase PHRASE" >&2
         exit 2
         ;;
 esac

@@ -37,6 +37,27 @@ Scenarios:
               described as Windows; choosing it must show the Windows warning,
               and the test goes back there without typing the phrase. Then it
               installs onto the blank disk.
+  same-disk   ADR-0028: one disk laid out as Windows leaves it after "Shrink
+              Volume" (tests/iso/make-windows-shared-disk.sh) is the main
+              disk. It must be listed with room beside Windows; choosing it
+              asks how; "1" (beside Windows) leads to the confirmation, where
+              the erase phrase is refused and the "BESIDE" phrase installs
+              TUR into the free space. Powers off as the last screen says.
+  same-disk-cut
+              The same, but the power is cut (QEMU stopped at once, with no
+              warning to the guest) when the installation reaches --cut-at
+              (and --cut-delay seconds more). What happened before the cut is
+              in result.json; tests/iso/windows-disk.py then compares the
+              disk with what it held before.
+  beside-refused
+              Disks laid out as Windows on which installing beside Windows is
+              not possible (no free space; a full EFI system partition). Each
+              must be listed with the reason and code, choosing one must go
+              straight to the erase confirmation, which the test leaves with
+              Enter. Every disk's SHA-256 is compared before and after.
+
+--windows-serial and --windows-partition name the disk and partition of the
+"Windows Boot Manager" entry windows-setup creates (default: windows-disk-a, 1).
 
 --extra-disk PATH=SERIAL adds a writable disk; --no-bootindex starts the
 machine with no boot order from QEMU (see tests/iso/isovm.py for why);
@@ -468,7 +489,7 @@ def scenario_windows_setup(s: Session) -> None:
     s.wait(r"TUR-INSTALLER: shell=started", 60, "the command line")
     time.sleep(2)
     command = (
-        f"efibootmgr --create --disk /dev/disk/by-id/virtio-{WINDOWS_SERIAL} --part 1 "
+        f"efibootmgr --create --disk /dev/disk/by-id/virtio-{s.args.windows_serial} --part {s.args.windows_partition} "
         "--loader '\\EFI\\Microsoft\\Boot\\bootmgfw.efi' --label 'Windows Boot Manager' "
         "> /dev/ttyS0 2>&1; echo efibootmgr-create-status-$? > /dev/ttyS0"
     )
@@ -530,7 +551,164 @@ def scenario_beside_windows(s: Session) -> None:
         s.machine.quit()
 
 
+def beside_phrase(serial: str) -> str:
+    """The phrase that confirms installing beside Windows (ADR-0028),
+    computed independently of the installer: "BESIDE" and the end of the
+    serial number, as the erase phrase is "ERASE" and the same end."""
+    return "BESIDE " + isovm.confirmation_phrase(serial).split(" ", 1)[1]
+
+
+# Where the power is cut in same-disk-cut: a state line or a line of bootc's
+# output on the installer's screen, mirrored to the serial port.
+CUTS = {
+    "record": r"TUR-INSTALLER: beside step=record ",
+    "partition": r"TUR-INSTALLER: beside step=partition ",
+    "partitioned": r"TUR-INSTALLER: beside step=partitioned ",
+    "filesystem": r"TUR-INSTALLER: beside step=filesystem ",
+    "deploy": r"TUR-INSTALLER: beside step=deploy ",
+    "bootloader": r"Installing bootloader via bootupd",
+    "deployed": r"TUR-INSTALLER: beside step=deployed ",
+    "boot-menu": r"TUR-INSTALLER: beside step=boot-menu ",
+    "check": r"TUR-INSTALLER: beside step=check",
+}
+
+
+def beside_to_install(s: Session) -> dict:
+    """From the start of the medium to the start of an installation beside
+    Windows on the main disk. Returns the main disk as listed."""
+    facts = s.result["facts"]
+    s.to_welcome()
+    target = s.to_disks()
+    s.shot("disks")
+    beside = [isovm.fields(state) for state in s.transcript.states() if state.startswith("beside ")]
+    facts["beside_as_listed"] = beside
+    mine = next((item for item in reversed(beside) if target and item.get("name") == target.get("name")), None)
+    facts["target_beside"] = mine
+    if not target or target.get("status") != "ok" or not mine or mine.get("possible") != "yes":
+        raise Stop(f"the Windows disk is not offered for installing beside Windows: {target} {mine}")
+    s.type_line(target["index"])
+    s.wait_prompt("mode")
+    s.shot("mode")
+    s.type_line("1")
+    match = s.wait(r'TUR-INSTALLER: mode chosen=(\w+)', 60, "the choice of beside Windows")
+    facts["mode_chosen"] = match.group(1)
+    match = s.wait(r'TUR-INSTALLER: confirm name=\S+ by_id=(\S+) phrase="([^"]*)" mode=beside[^\n]*', 60,
+                   "the beside-Windows confirmation")
+    s.wait_prompt("confirm")
+    expected = beside_phrase(DISK_SERIAL)
+    facts["confirmation"] = {
+        "by_id": match.group(1),
+        "phrase_shown": match.group(2),
+        "phrase_computed_by_the_test": expected,
+        "phrase_matches": match.group(2) == expected,
+        "line": match.group(0),
+    }
+    s.shot("confirm-beside")
+    # The erase phrase of the same disk must not confirm this.
+    erase = isovm.confirmation_phrase(DISK_SERIAL)
+    s.type_line(erase)
+    match = s.wait(r"TUR-INSTALLER: confirm result=(\w+)(?: code=(\S+))?", 60, "the answer to the erase phrase")
+    facts["erase_phrase_on_beside"] = {"typed": erase, "result": match.group(1), "code": match.group(2)}
+    if match.group(1) != "mismatch":
+        raise Stop("the erase phrase was accepted for installing beside Windows")
+    time.sleep(1.5)
+    s.wait_prompt("confirm")
+    s.type_line(expected)
+    s.wait(r"TUR-INSTALLER: confirm result=accepted mode=beside", 60, "the confirmation to be accepted")
+    s.wait(r"TUR-INSTALLER: beside revalidated ", 120, "the disk to be looked at again")
+    return target
+
+
+def collect_beside(s: Session) -> None:
+    facts = s.result["facts"]
+    facts["beside_states"] = [state for state in s.transcript.states() if state.startswith("beside ")]
+
+
+def scenario_same_disk(s: Session) -> None:
+    facts = s.result["facts"]
+    beside_to_install(s)
+    match = s.wait(r'TUR-INSTALLER: installing device=(\S+) command="([^"]*)"', 300, "the installation to start")
+    facts["install_device"], facts["install_command"] = match.group(1), match.group(2)
+    install_started = s.elapsed()
+    time.sleep(20)
+    s.shot("installing")
+    match = s.wait(r"TUR-INSTALLER: install-finished status=(\d+) seconds=(\d+)", 2400, "the installation to finish")
+    facts["install_status"], facts["install_seconds"] = int(match.group(1)), int(match.group(2))
+    facts["install_seconds_seen_by_host"] = round(s.elapsed() - install_started, 1)
+    match = s.wait(r"TUR-INSTALLER: result=(success|failed)\b[^\n]*", 600, "the result")
+    facts["result"] = match.group(1)
+    facts["result_line"] = match.group(0)
+    collect_beside(s)
+    s.step(f"installer result: {match.group(0)}")
+    s.wait_prompt("finished" if facts["result"] == "success" else "failed", 60)
+    s.shot("done" if facts["result"] == "success" else "failed")
+    if facts["result"] != "success":
+        raise Stop("the installer reported a failure")
+    s.type_line("", "nothing")
+    facts["powered_off_by_installer"] = s.wait_power_off()
+    if not facts["powered_off_by_installer"]:
+        s.machine.quit()
+
+
+def scenario_same_disk_cut(s: Session) -> None:
+    facts = s.result["facts"]
+    where = s.args.cut_at
+    facts["cut"] = {"at": where, "pattern": CUTS[where], "delay_seconds": s.args.cut_delay}
+    beside_to_install(s)
+    s.wait(CUTS[where], 2400, f"the installation to reach {where}")
+    reached = s.elapsed()
+    if s.args.cut_delay:
+        time.sleep(s.args.cut_delay)
+    # A power cut: the machine is frozen at once and QEMU killed. Nothing in
+    # the guest is told; whatever its page cache held is lost.
+    try:
+        s.qmp.command("stop")
+    except Exception as error:  # the kill below is what counts
+        s.say(f"QMP stop failed: {error}")
+    s.machine.kill()
+    facts["cut"].update({"reached_at_seconds": reached, "cut_at_seconds": s.elapsed()})
+    s.transcript.pump()
+    collect_beside(s)
+    facts["cut"]["last_states"] = s.transcript.states()[-8:]
+    facts["cut"]["last_screen_lines"] = s.transcript.screen_lines()[-6:]
+    s.step(f"power cut at {where} (+{s.args.cut_delay} s); last state lines: {facts['cut']['last_states'][-3:]}")
+
+
+def scenario_beside_refused(s: Session) -> None:
+    facts = s.result["facts"]
+    disks = [s.args.disk] + [item.split("=", 1)[0] for item in s.args.extra_disk]
+    facts["disk_sha256_before"] = {path: isovm.sha256(path) for path in disks}
+    s.to_welcome()
+    s.to_disks()
+    s.shot("disks-no-room-beside")
+    beside = [isovm.fields(state) for state in s.transcript.states() if state.startswith("beside ")]
+    facts["beside_as_listed"] = beside
+    for disk in facts.get("disks", []):
+        if disk.get("status") != "ok" or not disk.get("index", "").isdigit():
+            continue
+        s.type_line(disk["index"])
+        match = s.wait(r"TUR-INSTALLER: (prompt|waiting) screen=(mode|confirm)\b", 60, "the next screen")
+        facts.setdefault("next_screen", {})[disk.get("serial", "?")] = match.group(2)
+        time.sleep(1.0)
+        if match.group(2) == "mode":
+            raise Stop(f"installing beside Windows was offered on {disk.get('serial')}")
+        s.type_line("", "nothing")
+        s.wait(r"TUR-INSTALLER: confirm result=back", 60, "going back")
+        s.wait_prompt("disks")
+    s.type_line("off")
+    s.wait(r"TUR-INSTALLER: power-off", 60, "the power-off")
+    facts["powered_off_by_installer"] = s.wait_power_off()
+    if not facts["powered_off_by_installer"]:
+        s.machine.quit()
+    facts["installing_seen"] = bool(s.transcript.search(r"TUR-INSTALLER: installing "))
+    facts["disk_sha256_after"] = {path: isovm.sha256(path) for path in disks}
+    facts["disks_unchanged"] = facts["disk_sha256_before"] == facts["disk_sha256_after"]
+
+
 SCENARIOS = {
+    "same-disk": scenario_same_disk,
+    "same-disk-cut": scenario_same_disk_cut,
+    "beside-refused": scenario_beside_refused,
     "install": scenario_install,
     "refuse": scenario_refuse,
     "too-small": scenario_too_small,
@@ -551,6 +729,10 @@ def main() -> int:
     ap.add_argument("--extra-disk", action="append", default=[], metavar="PATH=SERIAL", help="a further writable disk")
     ap.add_argument("--no-bootindex", action="store_true", help="pass QEMU no boot order (OVMF then keeps BootOrder)")
     ap.add_argument("--variables-from", help="start from these firmware variables")
+    ap.add_argument("--windows-serial", default=WINDOWS_SERIAL, help="windows-setup: the disk of the Windows entry")
+    ap.add_argument("--windows-partition", default="1", help="windows-setup: its EFI system partition's number")
+    ap.add_argument("--cut-at", choices=sorted(CUTS), default="partition", help="same-disk-cut: where to cut the power")
+    ap.add_argument("--cut-delay", type=float, default=0.0, help="same-disk-cut: seconds after reaching --cut-at")
     ap.add_argument("--cpus", type=int, default=2)
     ap.add_argument("--memory", type=int, default=4096, help="MiB")
     ap.add_argument("--qemu", default="qemu-system-x86_64")

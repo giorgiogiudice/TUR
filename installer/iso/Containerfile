@@ -96,6 +96,12 @@ RUN set -eu; \
 COPY installer/iso/rootfs/ /
 COPY --from=wizard /out/ /
 
+# The "Windows" entry the installer writes into TUR's boot menu when it
+# installs beside Windows (ADR-0028). GRUB script: BSD-3-Clause, see
+# installer/iso/third-party-licensed/grub/README.md.
+COPY installer/iso/third-party-licensed/grub/windows-entry.cfg.in installer/iso/third-party-licensed/grub/LICENSE \
+     /usr/lib/tur-installer/grub/
+
 # The graphical installer's recorded engine answers, only for the check
 # below, which loads its window with this image's Qt.
 COPY desktop/apps/tur-installer/fixtures/ /usr/share/tur-installer-check/fixtures/
@@ -116,6 +122,9 @@ RUN set -eu; \
     chmod 0755 /usr/libexec/tur-installer/tur-install /usr/libexec/tur-installer/tur-install-engine \
         /usr/libexec/tur-installer/tur-installer-wizard /usr/libexec/tur-installer/tur-live-transcript; \
     chmod 0644 /usr/lib/tur-installer/engine.sh; \
+    # What the installation beside Windows runs (ADR-0028).
+    test -f /usr/lib/tur-installer/grub/windows-entry.cfg.in; \
+    for tool in sfdisk wipefs mkfs.ext4 blkid efibootmgr unshare; do command -v "${tool}"; done; \
     test -n "${PAYLOAD_TARGET_IMGREF}"; test -n "${PAYLOAD_IMAGE_ID}"; \
     test -n "${PAYLOAD_INDEX_SHA256}"; test -n "${PAYLOAD_BLOB_COUNT}"; \
     test -n "${MIN_TARGET_BYTES}"; test -n "${MEDIUM_LABEL}"; \

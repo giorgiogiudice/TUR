@@ -27,6 +27,10 @@
 #       bootc install to-disk --source-imgref oci:<medium>/payload:payload \
 #           --target-imgref <name> --generic-image --wipe [--filesystem ext4] <disk>
 #
+#   - or, on a disk that holds Windows and has free space the person made in
+#     Windows, installs TUR into that space only, sharing Windows' EFI system
+#     partition (ADR-0028; "beside Windows" below): one new partition, then
+#     `bootc install to-filesystem`, then "Windows" in TUR's boot menu;
 #   - checks the result has an EFI system partition and a root partition, and
 #     keeps the installer's log on the installed disk, under
 #     /var/log/tur-installer/<session> (specification 28.3).
@@ -258,6 +262,12 @@ run_checks() {
 
 d_name=() d_model=() d_serial=() d_wwn=() d_size=() d_tran=() d_byid=() d_status=() d_code=() d_why=() d_index=()
 d_holds=() d_words=() d_windows=() d_bitlocker=() d_linux=() d_ntfs=() d_parts=()
+# Installing into the free space beside Windows (ADR-0028), per disk: whether
+# it is possible, why not, the free stretch (bytes), the EFI system partition
+# that is shared, its size, free space and what TUR's boot loader needs there,
+# and the partitions just before and after the free stretch.
+d_beside=() d_bcode=() d_bwhy=() d_bstart=() d_bsize=() d_besp=() d_bespuuid=() d_bespfree=() d_bespsize=()
+d_bneed=() d_bafter=() d_bbefore=()
 selectable=0
 
 prop() {
@@ -412,6 +422,8 @@ scan_disks() {
     udevadm settle --timeout=15 > /dev/null 2>&1
     d_name=() d_model=() d_serial=() d_wwn=() d_size=() d_tran=() d_byid=() d_status=() d_code=() d_why=() d_index=()
     d_holds=() d_words=() d_windows=() d_bitlocker=() d_linux=() d_ntfs=() d_parts=()
+    d_beside=() d_bcode=() d_bwhy=() d_bstart=() d_bsize=() d_besp=() d_bespuuid=() d_bespfree=() d_bespsize=()
+    d_bneed=() d_bafter=() d_bbefore=()
     selectable=0
     live=" $(live_disks | sort -u | tr '\n' ' ')"
     while read -r name type; do
@@ -469,6 +481,16 @@ scan_disks() {
         d_linux[i]="${linux_count}"
         d_ntfs[i]="${ntfs_count}"
         mark "disk index=${d_index[i]} name=${name} size=${d_size[i]} serial=\"${serial}\" transport=${d_tran[i]:-unknown} status=${status} code=${code:-none} by_id=${link:-none} partitions=${d_parts[i]} holds=${words}"
+        d_beside[i]=no d_bcode[i]="" d_bwhy[i]="" d_bstart[i]=0 d_bsize[i]=0 d_besp[i]="" d_bespuuid[i]=""
+        d_bespfree[i]=0 d_bespsize[i]=0 d_bneed[i]=0 d_bafter[i]="" d_bbefore[i]=""
+        if [ "${status}" = ok ] && [ "${windows}" = yes ]; then
+            beside_look "${name}"
+            d_beside[i]="${b_possible}" d_bcode[i]="${b_code}" d_bwhy[i]="${b_why}"
+            d_bstart[i]="${b_start}" d_bsize[i]="${b_size}" d_besp[i]="${b_esp}" d_bespuuid[i]="${b_esp_uuid}"
+            d_bespfree[i]="${b_esp_free}" d_bespsize[i]="${b_esp_size}" d_bneed[i]="${b_needed}"
+            d_bafter[i]="${b_after}" d_bbefore[i]="${b_before}"
+            mark "beside index=${d_index[i]} name=${name} possible=${b_possible} code=${b_code:-none} free_start=${b_start} free_size=${b_size} after=${b_after:-none} before=${b_before:-none} esp=${b_esp:-none} esp_uuid=${b_esp_uuid:-none} esp_size=${b_esp_size} esp_free=${b_esp_free} esp_needed=${b_needed} why=\"${b_why}\""
+        fi
     done < <(lsblk -dn -o NAME,TYPE 2> /dev/null)
     selectable="${index}"
     mark "disks total=${#d_name[@]} selectable=${selectable}"
@@ -489,25 +511,188 @@ dump_inventory() {
         done
 }
 
-# phrase_of SERIAL WWN SIZE: the phrase that confirms erasing a disk: "ERASE"
-# and the last eight letters and digits of its serial number, or of its WWN
-# when it has no serial number.
+# phrase_of SERIAL WWN SIZE [WORD]: the phrase that confirms what is done to
+# a disk: WORD ("ERASE" unless given) and the last eight letters and digits
+# of its serial number, or of its WWN when it has no serial number. Installing
+# into the free space beside Windows is confirmed with "BESIDE" (ADR-0028).
 phrase_of() {
-    local source cleaned
+    local source cleaned word="${4:-ERASE}"
     for source in "$1" "$2"; do
         cleaned="$(printf '%s' "${source}" | tr -cd '[:alnum:]' | tr '[:lower:]' '[:upper:]')"
         if [ -n "${cleaned}" ]; then
             if [ "${#cleaned}" -gt 8 ]; then cleaned="${cleaned: -8}"; fi
-            echo "ERASE ${cleaned}"
+            echo "${word} ${cleaned}"
             return
         fi
     done
-    echo "ERASE $3"
+    echo "${word} $3"
 }
 
 # phrase_for I: the phrase for disk I of the last scan.
 phrase_for() {
     phrase_of "${d_serial[$1]}" "${d_wwn[$1]}" "${d_size[$1]}"
+}
+
+# beside_phrase_for I: the phrase that confirms installing beside Windows on
+# disk I of the last scan.
+beside_phrase_for() {
+    phrase_of "${d_serial[$1]}" "${d_wwn[$1]}" "${d_size[$1]}" BESIDE
+}
+
+# ---- beside Windows: looking (ADR-0028) -------------------------------------------
+#
+# TUR can be installed into free space that the person made on a Windows disk
+# with Windows' own Shrink Volume. Only the free space is written, plus TUR's
+# own files added to the EFI system partition Windows already has; no Windows
+# partition is changed, moved or resized. Everything in this section reads
+# only.
+
+readonly ALIGN_BYTES=$((1024 * 1024))
+readonly LOADER_FILES=/usr/lib/bootupd/updates/EFI
+readonly LOADER_FILES_USR=/usr/lib/efi
+# Room kept free on the EFI system partition beyond what TUR's boot loader
+# takes, for FAT's rounding and for Windows' own updates of its files there.
+readonly ESP_MARGIN_BYTES=$((4 * 1024 * 1024))
+readonly WINDOWS_ENTRY_TEMPLATE="${INSTALLER_DIR}/grub/windows-entry.cfg.in"
+readonly TUR_PARTLABEL=TUR
+
+# esp_look PARTITION COMMAND...: run COMMAND inside an EFI system partition
+# mounted read-only, in a mount namespace of its own that ends with the
+# command (as has_microsoft_boot does). The command runs in the partition's
+# top directory. Status 90: the partition could not be mounted.
+esp_look() {
+    local part="$1"
+    shift
+    mkdir -p "${ESP_PROBE}"
+    # shellcheck disable=SC2016  # expanded by the inner shell
+    unshare --mount --propagation private /bin/sh -c '
+        part="$1" dir="$2"
+        shift 2
+        mount -t vfat -o ro,nodev,nosuid,noexec "$part" "$dir" 2> /dev/null || exit 90
+        cd "$dir" || exit 91
+        "$@"
+        rc=$?
+        cd /
+        umount "$dir" 2> /dev/null
+        exit "$rc"' _ "${part}" "${ESP_PROBE}" "$@"
+}
+
+# esp_manifest PARTITION: every file on an EFI system partition with its
+# SHA-256, sorted by path ("HASH  ./PATH").
+esp_manifest() {
+    # shellcheck disable=SC2016  # expanded by the inner shell
+    esp_look "$1" /bin/sh -c 'find . -type f -print0 | sort -z | xargs -0 -r sha256sum'
+}
+
+# loader_bytes: what TUR's boot loader takes on an EFI system partition, as
+# bootupd copies it from this root (the same files as the payload's:
+# build-medium.sh checks them file by file), each file rounded up to 4 KiB.
+loader_bytes() {
+    local source="${LOADER_FILES}"
+    [ -d "${source}" ] || source="${LOADER_FILES_USR}"
+    find "${source}" -type f -printf '%s\n' 2> /dev/null \
+        | awk '{ total += int(($1 + 4095) / 4096) * 4096 } END { print total + 0 }'
+}
+
+# free_region NAME: the largest stretch of disk NAME that no partition uses,
+# shrunk to whole MiB, as "START_BYTES SIZE_BYTES"; nothing if there is none.
+free_region() {
+    local name="$1" sector start end sectors first last best_start=0 best_size=0
+    sector="$(blockdev --getss "/dev/${name}" 2> /dev/null)"
+    sector="${sector:-512}"
+    while read -r start end sectors; do
+        first=$(((start * sector + ALIGN_BYTES - 1) / ALIGN_BYTES * ALIGN_BYTES))
+        last=$(((end + 1) * sector / ALIGN_BYTES * ALIGN_BYTES))
+        if [ "${last}" -gt "${first}" ] && [ $((last - first)) -gt "${best_size}" ]; then
+            best_start="${first}" best_size=$((last - first))
+        fi
+    done < <(sfdisk --list-free "/dev/${name}" 2> /dev/null \
+        | awk '$1 ~ /^[0-9]+$/ && $2 ~ /^[0-9]+$/ && $3 ~ /^[0-9]+$/ { print $1, $2, $3 }')
+    if [ "${best_size}" -gt 0 ]; then echo "${best_start} ${best_size}"; fi
+}
+
+# neighbours NAME START SIZE: the partitions just before and just after a
+# stretch of disk NAME ("BEFORE AFTER", "-" for none).
+neighbours() {
+    local name="$1" start="$2" size="$3" part pstart psize before=- after=- before_end=-1 after_start=-1
+    while read -r part; do
+        # lsblk's START is in 512-byte units whatever the disk's sectors are.
+        pstart=$(($(prop "${part}" START) * 512))
+        psize="$(prop "${part}" SIZE)"
+        if [ $((pstart + psize)) -le "${start}" ] && [ $((pstart + psize)) -gt "${before_end}" ]; then
+            before="${part}" before_end=$((pstart + psize))
+        fi
+        if [ "${pstart}" -ge $((start + size)) ] && { [ "${after_start}" -lt 0 ] || [ "${pstart}" -lt "${after_start}" ]; }; then
+            after="${part}" after_start="${pstart}"
+        fi
+    done < <(lsblk -ln -o NAME,TYPE "/dev/${name}" 2> /dev/null | awk '$2 == "part" { print $1 }')
+    echo "${before} ${after}"
+}
+
+# beside_look NAME: can TUR be installed into free space on disk NAME, beside
+# the Windows on it? Sets b_possible (yes or no), b_code and b_why when not,
+# and what was found: b_start and b_size (the free stretch, bytes), b_before
+# and b_after (its neighbours), b_esp (the EFI system partition), b_esp_uuid,
+# b_esp_size, b_esp_free, b_needed (what TUR needs on it). Reads only.
+beside_look() {
+    local name="$1" pttype part esps=() region needed fallback=0 df_line pair
+    b_possible=no b_code="" b_why="" b_start=0 b_size=0 b_before="" b_after="" b_esp="" b_esp_uuid=""
+    b_esp_size=0 b_esp_free=0 b_needed=0
+    pttype="$(prop "${name}" PTTYPE)"
+    if [ "${pttype}" != gpt ]; then
+        b_code=TUR-INSTALL-BESIDE-001
+        b_why="the disk has no GPT partition table (${pttype:-none}): Windows on it starts in the old BIOS way, and TUR starts only by UEFI"
+        return 1
+    fi
+    while read -r part; do
+        [ -b "/dev/${part}" ] || continue
+        if [ "$(prop "${part}" PARTTYPE | tr '[:upper:]' '[:lower:]')" = "${ESP_GUID}" ]; then esps+=("${part}"); fi
+    done < <(lsblk -ln -o NAME,TYPE "/dev/${name}" 2> /dev/null | awk '$2 == "part" { print $1 }')
+    if [ "${#esps[@]}" -ne 1 ]; then
+        b_code=TUR-INSTALL-BESIDE-002
+        b_why="the disk has ${#esps[@]} EFI system partitions; TUR shares one, and only when there is exactly one"
+        return 1
+    fi
+    b_esp="/dev/${esps[0]}"
+    b_esp_uuid="$(prop "${esps[0]}" UUID)"
+    if ! esp_look "${b_esp}" test -f EFI/Microsoft/Boot/bootmgfw.efi; then
+        b_code=TUR-INSTALL-BESIDE-002
+        b_why="the EFI system partition does not hold Windows Boot Manager (EFI/Microsoft/Boot/bootmgfw.efi)"
+        return 1
+    fi
+    if esp_look "${b_esp}" test -e EFI/fedora; then
+        b_code=TUR-INSTALL-BESIDE-005
+        b_why="the EFI system partition already holds another Linux system's start-up files (EFI/fedora), which TUR's would replace"
+        return 1
+    fi
+    df_line="$(esp_look "${b_esp}" df -B1 --output=size,avail . 2> /dev/null | tail -n 1)"
+    read -r b_esp_size b_esp_free <<< "${df_line}"
+    b_esp_size="${b_esp_size:-0}" b_esp_free="${b_esp_free:-0}"
+    # Windows' fallback boot loader is set aside and put back afterwards,
+    # through a copy beside it: room for that copy too.
+    fallback="$(esp_look "${b_esp}" stat -c %s EFI/BOOT/BOOTX64.EFI 2> /dev/null || echo 0)"
+    needed=$(($(loader_bytes) + ${fallback:-0} + ESP_MARGIN_BYTES))
+    b_needed="${needed}"
+    region="$(free_region "${name}")"
+    if [ -n "${region}" ]; then
+        read -r b_start b_size <<< "${region}"
+        pair="$(neighbours "${name}" "${b_start}" "${b_size}")"
+        b_before="${pair% *}" b_after="${pair#* }"
+        [ "${b_before}" != - ] || b_before=""
+        [ "${b_after}" != - ] || b_after=""
+    fi
+    if [ "${b_size}" -lt "${min_target_bytes:-0}" ]; then
+        b_code=TUR-INSTALL-BESIDE-003
+        b_why="the largest free space on the disk is $(human "${b_size}"); TUR needs $(human "${min_target_bytes:-0}"). Make room in Windows: Disk Management, right-click the Windows partition, Shrink Volume"
+        return 1
+    fi
+    if [ "${b_esp_free}" -lt "${needed}" ]; then
+        b_code=TUR-INSTALL-BESIDE-004
+        b_why="the EFI system partition has $(human "${b_esp_free}") free; TUR's start-up files need $(human "${needed}")"
+        return 1
+    fi
+    b_possible=yes
+    return 0
 }
 
 # ---- before writing ---------------------------------------------------------------
@@ -605,9 +790,19 @@ install_words() {
 # with the process ID (empty after the end). Sets `install_status` and
 # `install_seconds`; returns the status.
 run_install() {
-    local device="$1" poll="${2:-}" pid started inhibitor=""
+    local device="$1" poll="${2:-}"
     local -a install_command_words=()
     install_words "${device}"
+    run_words "${device}" "${poll}" "${install_command_words[@]}"
+}
+
+# run_words DEVICE POLL_FUNCTION WORD...: run the installation command WORDS
+# for DEVICE (run_install's body, shared with run_beside). POLL_FUNCTION may
+# be empty.
+run_words() {
+    local device="$1" poll="${2:-}" pid started inhibitor=""
+    shift 2
+    local -a install_command_words=("$@")
     install_command="${install_command_words[*]}"
     : > "${INSTALL_LOG}"
     chmod 0644 "${INSTALL_LOG}" 2> /dev/null
@@ -754,7 +949,8 @@ keep_log() {
     mark "log-keep var=${var#"${mnt}"} var_holds=\"$(find "${var}" -mindepth 1 -maxdepth 1 -printf '%f ' 2> /dev/null)\" var_attributes=\"$(lsattr -d "${var}" 2> /dev/null | cut -d' ' -f1)\" label_from=${label_from} label=${label:-none}"
     dest="${var}/log/tur-installer/${id}"
     mkdir -p "${dest}" 2>> "${LOG}" || { status=1; mark "log-keep mkdir=failed $(tail -n 1 "${LOG}")"; }
-    for file in "${LOG}" "${INSTALL_LOG}" "${SESSION}"/*.json "${WIZARD_TRANSCRIPT}"; do
+    for file in "${LOG}" "${INSTALL_LOG}" "${SESSION}"/*.json "${WIZARD_TRANSCRIPT}" \
+        "${SESSION}"/beside-table-*.txt "${SESSION}"/beside-esp-*.sha256; do
         if [ -f "${file}" ]; then
             if cp "${file}" "${dest}/" 2>> "${LOG}"; then copied=$((copied + 1)); else status=1; fi
         fi
@@ -779,6 +975,251 @@ keep_log() {
     state="$(dumpe2fs -h "${root}" 2> /dev/null | sed -n 's/^Filesystem state:[[:space:]]*//p')"
     mark "log-kept result=$([ "${status}" -eq 0 ] && echo yes || echo partly) path=${kept_log_path} files=${copied} selinux_label=${label:-none} labelled=${labelled} made_var_log=$([ -n "${made}" ] && echo yes || echo no) unmounted=${unmounted} filesystem_state=\"${state}\""
     return "${status}"
+}
+
+# ---- beside Windows: writing (ADR-0028) -------------------------------------------
+#
+# The order, chosen so that a power cut at any moment leaves Windows as it
+# was (each step's effect on the disk, if it is cut short):
+#
+#   1. record     nothing is written: the partition table and the SHA-256 of
+#                 every file on the EFI system partition, kept in the session
+#   2. partition  one GPT entry is added for the free stretch (sfdisk
+#                 --append); GPT keeps two copies with checksums, so a cut
+#                 leaves the old table or the new one. No existing entry, and
+#                 no byte outside the free stretch and the GPT, is written
+#   3. filesystem ext4 is made inside the new partition only
+#   4. deploy     bootc install to-filesystem into it; bootc's last step is
+#                 the boot loader: bootupd adds EFI/fedora and EFI/BOOT/fbx64.efi
+#                 to the shared EFI system partition, replaces
+#                 EFI/BOOT/BOOTX64.EFI (Windows' fallback copy of its boot
+#                 manager) with shim, and adds a "TUR" firmware boot entry at
+#                 the front of the boot order. Nothing under EFI/Microsoft is
+#                 written, and the "Windows Boot Manager" entry stays
+#   5. fallback   Windows' own EFI/BOOT/BOOTX64.EFI is put back, through a
+#                 copy and a rename
+#   6. boot-menu  a "Windows" entry in TUR's boot menu (/boot/grub2/custom.cfg
+#                 on TUR's partition)
+#   7. check      every file that was on the EFI system partition is
+#                 byte-identical, and every partition entry that was there is
+#                 unchanged
+#
+# Windows' partitions are never opened for writing. The EFI system partition
+# is mounted writable only inside bootupd (step 4) and for the rename of
+# step 5.
+
+beside_code=""
+beside_message=""
+beside_partition=""
+beside_disk_state=untouched
+
+# beside_fail CODE MESSAGE: why the installation beside Windows stopped.
+beside_fail() {
+    beside_code="$1" beside_message="$2"
+    mark "beside result=failed code=$1 disk_state=${beside_disk_state} message=\"$2\""
+    return 1
+}
+
+# The front end's stage line, if it has one (tur-install-engine does).
+beside_stage_hook() {
+    if declare -F beside_stage > /dev/null; then beside_stage "$1"; fi
+}
+
+# beside_revalidate START SIZE: after `revalidate` (the same disk, the same
+# partitions), installing beside Windows must still be possible, into the
+# same free stretch.
+beside_revalidate() {
+    local name="${target_device##*/}"
+    if ! beside_look "${name}"; then
+        engine_code="${b_code}"
+        engine_message="TUR can no longer be installed beside Windows on this disk: ${b_why}."
+        return 1
+    fi
+    if [ "${b_start}" != "$1" ] || [ "${b_size}" != "$2" ]; then
+        engine_code=TUR-INSTALL-CONFIRM-004
+        engine_message="The free space on the disk is not the one you confirmed."
+        return 1
+    fi
+    mark "beside revalidated name=${name} start=$1 size=$2 esp=${b_esp} esp_uuid=${b_esp_uuid}"
+    return 0
+}
+
+# esp_put_back PARTITION SOURCE PATH: write SOURCE to PATH on an EFI system
+# partition through a copy beside it and a rename, so that a power cut leaves
+# the old file or the new one. The only write to the partition outside bootupd.
+esp_put_back() {
+    mkdir -p "${ESP_PROBE}"
+    # shellcheck disable=SC2016  # expanded by the inner shell
+    unshare --mount --propagation private /bin/sh -c '
+        mount -t vfat -o rw,nodev,nosuid,noexec "$1" "$2" || exit 90
+        dir="$(dirname "$2/$4")"
+        cp "$3" "$dir/TURCOPY.TMP" && sync && mv -f "$dir/TURCOPY.TMP" "$2/$4" && sync
+        rc=$?
+        umount "$2" || rc=95
+        exit "$rc"' _ "$1" "${ESP_PROBE}" "$2" "$3"
+}
+
+# run_beside DEVICE START SIZE [POLL_FUNCTION]: install TUR into the free
+# stretch START..START+SIZE (bytes) of DEVICE, which `revalidate` and
+# `beside_revalidate` returned, sharing the EFI system partition b_esp. Sets
+# install_status, install_seconds, beside_partition, beside_disk_state
+# (untouched, partial or installed) and, on failure, beside_code and
+# beside_message.
+run_beside() {
+    local device="$1" start="$2" size="$3" poll="${4:-}" sector part esp="${b_esp}" esp_uuid="${b_esp_uuid}"
+    local before_table="${SESSION}/beside-table-before.txt" after_table="${SESSION}/beside-table-after.txt"
+    local esp_before="${SESSION}/beside-esp-before.sha256" esp_after="${SESSION}/beside-esp-after.sha256"
+    local fallback="${SESSION}/beside-fallback.efi" fallback_path="" fallback_sum="" now root_mnt="${SESSION}/beside-root"
+    local grub_dir changed fs_uuid label entries order
+    local -a words=()
+    beside_code="" beside_message="" beside_partition="" beside_disk_state=untouched install_status=1 install_seconds=0
+    sector="$(blockdev --getss "${device}" 2> /dev/null)"
+    sector="${sector:-512}"
+
+    # 1. What is there now.
+    mark "beside step=record device=${device} esp=${esp}"
+    if ! sfdisk --dump "${device}" > "${before_table}" 2>> "${LOG}"; then
+        beside_fail TUR-INSTALL-MEDIUM-002 "The partition table could not be read. Nothing was changed."
+        return 1
+    fi
+    if ! esp_manifest "${esp}" > "${esp_before}" 2>> "${LOG}" || [ ! -s "${esp_before}" ]; then
+        beside_fail TUR-INSTALL-MEDIUM-002 "The EFI system partition could not be read. Nothing was changed."
+        return 1
+    fi
+    rm -f "${fallback}"
+    fallback_path="$(awk '{ p = substr($0, 67) } tolower(p) == "./efi/boot/bootx64.efi" { print substr(p, 3); exit }' "${esp_before}")"
+    if [ -n "${fallback_path}" ]; then
+        esp_look "${esp}" cat "${fallback_path}" > "${fallback}" 2>> "${LOG}"
+        fallback_sum="$(sha256sum "${fallback}" | cut -c1-64)"
+        if ! grep -qxF "${fallback_sum}  ./${fallback_path}" "${esp_before}"; then
+            beside_fail TUR-INSTALL-MEDIUM-002 "Windows' fallback boot loader (${fallback_path}) could not be copied. Nothing was changed."
+            return 1
+        fi
+    fi
+    mark "beside recorded partitions=$(grep -c '^/dev/' "${before_table}") esp_files=$(wc -l < "${esp_before}") fallback=${fallback_path:-none} fallback_sha256=${fallback_sum:-none}"
+
+    # 2. One new partition entry, for the free stretch.
+    beside_stage_hook prepare
+    mark "beside step=partition start=${start} size=${size} first_sector=$((start / sector)) sectors=$((size / sector)) sector_size=${sector}"
+    beside_disk_state=partial
+    if ! printf 'start=%s, size=%s, type=%s, name="%s"\n' "$((start / sector))" "$((size / sector))" \
+        "${ROOT_GUID^^}" "${TUR_PARTLABEL}" \
+        | sfdisk --append --wipe never --wipe-partitions never "${device}" >> "${LOG}" 2>&1; then
+        beside_disk_state=unknown
+        beside_fail TUR-INSTALL-MEDIUM-002 "The new partition could not be added to the partition table."
+        return 1
+    fi
+    udevadm settle --timeout=30 > /dev/null 2>&1
+    sfdisk --dump "${device}" > "${after_table}" 2>> "${LOG}"
+    changed="$(grep -vxF -f "${after_table}" "${before_table}")"
+    if [ -n "${changed}" ]; then
+        beside_disk_state=unknown
+        mark "beside table-changed lines=\"$(printf '%s' "${changed}" | tr '\n' '|')\""
+        beside_fail TUR-INSTALL-BESIDE-006 "An entry of the partition table that was there before is different now. The installation was stopped."
+        return 1
+    fi
+    part="$(lsblk -ln -o PATH,START,TYPE "${device}" 2> /dev/null | awk -v s=$((start / 512)) '$3 == "part" && $2 == s { print $1; exit }')"
+    if [ -z "${part}" ] || [ "$(lsblk -dn -b -o SIZE "${part}" 2> /dev/null | tr -d ' ')" != "${size}" ] \
+        || [ "$(lsblk -dn -o PARTLABEL "${part}" 2> /dev/null | sed 's/[[:space:]]*$//')" != "${TUR_PARTLABEL}" ]; then
+        beside_fail TUR-INSTALL-MEDIUM-002 "The new partition is not where it was written (${part:-not found})."
+        return 1
+    fi
+    beside_partition="${part}"
+    mark "beside step=partitioned partition=${part} entries_unchanged=$(grep -c '^/dev/' "${before_table}")"
+
+    # 3. Its filesystem: ext4, made as bootc makes TUR's root (-O verity).
+    mark "beside step=filesystem partition=${part}"
+    wipefs -a "${part}" >> "${LOG}" 2>&1
+    if ! mkfs.ext4 -F -q -L root -O verity "${part}" >> "${LOG}" 2>&1; then
+        beside_fail TUR-INSTALL-MEDIUM-002 "The filesystem could not be made on the new partition."
+        return 1
+    fi
+    udevadm settle --timeout=30 > /dev/null 2>&1
+    fs_uuid="$(blkid -p -s UUID -o value "${part}" 2> /dev/null)"
+    mark "beside step=filesystem-made partition=${part} uuid=${fs_uuid}"
+
+    # 4. TUR, with bootc; its last step adds the boot loader to the shared EFI
+    # system partition and the firmware entry. Without --generic-image:
+    # bootc then asks bootupd for the EFI boot loader only (--auto: the
+    # medium was started by UEFI) and a firmware entry (--update-firmware).
+    mkdir -p "${root_mnt}"
+    if ! mount -t ext4 "${part}" "${root_mnt}" 2>> "${LOG}"; then
+        beside_fail TUR-INSTALL-MEDIUM-002 "The new filesystem could not be mounted."
+        return 1
+    fi
+    beside_stage_hook copy
+    mark "beside step=deploy root=${root_mnt}"
+    words=(bootc install to-filesystem
+        --source-imgref "oci:${PAYLOAD_DIR}:${payload_ref}"
+        --target-imgref "${payload_target}"
+        "${root_mnt}")
+    run_words "${device}" "${poll}" "${words[@]}"
+    if [ "${install_status}" -ne 0 ]; then
+        umount "${root_mnt}" 2>> "${LOG}"
+        beside_fail TUR-INSTALL-MEDIUM-002 "bootc stopped with an error (status ${install_status}) after ${install_seconds} s."
+        return 1
+    fi
+    mark "beside step=deployed seconds=${install_seconds}"
+
+    # 5. Windows' fallback boot loader, as it was.
+    beside_stage_hook boot-menu
+    if [ -n "${fallback_path}" ]; then
+        now="$(esp_look "${esp}" sha256sum "${fallback_path}" 2> /dev/null | cut -c1-64)"
+        if [ "${now}" = "${fallback_sum}" ]; then
+            mark "beside step=fallback state=unchanged path=${fallback_path}"
+        else
+            mark "beside step=fallback state=replaced-by-bootupd path=${fallback_path} now=${now:-none}"
+            if ! esp_put_back "${esp}" "${fallback}" "${fallback_path}" >> "${LOG}" 2>&1; then
+                install_status=1
+                beside_fail TUR-INSTALL-BESIDE-006 "Windows' fallback boot loader (${fallback_path}) could not be put back."
+                umount "${root_mnt}" 2>> "${LOG}"
+                return 1
+            fi
+            now="$(esp_look "${esp}" sha256sum "${fallback_path}" 2> /dev/null | cut -c1-64)"
+            mark "beside step=fallback-restored path=${fallback_path} sha256=${now:-none} same=$([ "${now}" = "${fallback_sum}" ] && echo yes || echo no)"
+        fi
+    fi
+
+    # 6. "Windows" in TUR's boot menu. bootupd's grub.cfg sources
+    # /boot/grub2/custom.cfg after the menu entries (41_custom.cfg), so the
+    # entry comes after TUR's and boot counting's entry numbers stay as they
+    # are (ADR-0014).
+    mark "beside step=boot-menu esp_uuid=${esp_uuid}"
+    mount -o remount,rw "${root_mnt}" 2>> "${LOG}"
+    grub_dir="${root_mnt}/boot/grub2"
+    if [ ! -f "${grub_dir}/grub.cfg" ] || [ ! -f "${WINDOWS_ENTRY_TEMPLATE}" ] || [ -z "${esp_uuid}" ]; then
+        mark "beside boot-menu result=no grub_cfg=$([ -f "${grub_dir}/grub.cfg" ] && echo yes || echo no) template=$([ -f "${WINDOWS_ENTRY_TEMPLATE}" ] && echo yes || echo no)"
+    else
+        sed "s/@ESP_UUID@/${esp_uuid}/g" "${WINDOWS_ENTRY_TEMPLATE}" > "${grub_dir}/custom.cfg.tmp" \
+            && sync && mv -f "${grub_dir}/custom.cfg.tmp" "${grub_dir}/custom.cfg"
+        label="$(getfattr --only-values -h -n security.selinux "${grub_dir}/grub.cfg" 2> /dev/null | tr -d '\000')"
+        if [ -n "${label}" ]; then label_on "${grub_dir}/custom.cfg" "${label}"; fi
+        mark "beside boot-menu result=yes sourced=$(grep -q 'custom.cfg' "${grub_dir}/grub.cfg" && echo yes || echo no) label=${label:-none} sha256=$(sha256sum "${grub_dir}/custom.cfg" | cut -c1-64)"
+    fi
+    sync
+    mount -o remount,ro "${root_mnt}" 2>> "${LOG}"
+    umount "${root_mnt}" 2>> "${LOG}"
+
+    # 7. Windows as it was.
+    beside_stage_hook check
+    mark "beside step=check"
+    esp_manifest "${esp}" > "${esp_after}" 2>> "${LOG}"
+    changed="$(grep -vxF -f "${esp_after}" "${esp_before}")"
+    sfdisk --dump "${device}" > "${after_table}" 2>> "${LOG}"
+    if [ -n "${changed}" ] || [ -n "$(grep -vxF -f "${after_table}" "${before_table}")" ]; then
+        beside_disk_state=installed
+        install_status=1
+        mark "beside windows-files changed=\"$(printf '%s' "${changed}" | tr '\n' '|')\""
+        beside_fail TUR-INSTALL-BESIDE-006 "A file of Windows on the EFI system partition, or a partition entry, is different after the installation."
+        return 1
+    fi
+    entries="$(efibootmgr 2> /dev/null)"
+    order="$(printf '%s\n' "${entries}" | sed -n 's/^BootOrder: //p')"
+    mark "beside firmware boot_order=${order:-none} tur=\"$(printf '%s\n' "${entries}" | grep -m1 -E '^Boot[0-9A-F]{4}\*? TUR' | cut -c1-8)\" windows=\"$(printf '%s\n' "${entries}" | grep -m1 'Windows Boot Manager' | cut -c1-8)\""
+    mark "beside windows-files unchanged=yes files=$(wc -l < "${esp_before}") added=$(grep -cvxF -f "${esp_before}" "${esp_after}") entries=$(grep -c '^/dev/' "${before_table}")"
+    beside_disk_state=installed
+    install_status=0
+    return 0
 }
 
 # A name for this installation, for the log directory on the installed disk.
