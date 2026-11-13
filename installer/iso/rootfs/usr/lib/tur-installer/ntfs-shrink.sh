@@ -4,10 +4,10 @@
 # Shrinking a Windows (NTFS) partition to make room for TUR: issue 64, step 2
 # (ADR-0029, "Step 2"). A library: it decides whether a volume may be shrunk,
 # to what size, and shrinks it in an order meant to survive a power cut at
-# every step. **The installer does not offer it yet**: the medium does not
-# carry ntfs-3g, and no screen asks for it. It is tested on crafted NTFS
-# images only (tests/iso/ntfs-shrink-test.sh); nothing here has met a real
-# Windows volume.
+# every step. engine.sh sources it (shrink_look, run_shrink): both
+# installers offer "Make room by shrinking Windows". It is tested on NTFS
+# volumes made by mkfs.ntfs only (tests/iso/ntfs-shrink-test.py, and the
+# iso workflow's beside job); nothing here has met a real Windows volume.
 #
 # Needs ntfs-3g's ntfsprogs (ntfsresize, ntfscat, ntfsinfo), sfdisk and
 # blockdev. Defines no output functions: the caller may define
