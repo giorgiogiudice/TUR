@@ -1270,8 +1270,14 @@ mod tests {
         let merged = temp.path().join("tur/runtime/autopilot/a.b/x/merged");
         fs::create_dir_all(merged.join("drive_c/App/plugins")).unwrap();
         merge_copy(&from, &merged).unwrap();
-        assert_eq!(fs::read(merged.join("drive_c/App/Plugins/one.txt")).unwrap(), b"one");
-        assert_eq!(fs::read(merged.join("drive_c/App/plugins/two.txt")).unwrap(), b"two");
+        assert_eq!(
+            fs::read(merged.join("drive_c/App/Plugins/one.txt")).unwrap(),
+            b"one"
+        );
+        assert_eq!(
+            fs::read(merged.join("drive_c/App/plugins/two.txt")).unwrap(),
+            b"two"
+        );
         assert_eq!(
             fs::read_link(merged.join("drive_c/App/link")).unwrap(),
             Path::new("../file.txt")

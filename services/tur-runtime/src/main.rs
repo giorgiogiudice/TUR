@@ -61,9 +61,9 @@ use tur_runtime::autopilot::{
 };
 use tur_runtime::autopilot_run::{
     CopyTrials, WindowProbe, applied_file, copy_paths, create_private_dir, fingerprint, font_files,
-    merge_copy,
-    import_registry, make_base, probe_case_folding as probe_folding_ability, reg_import_command,
-    remove_tree, results_dir, static_facts, trial_settings_text, wine_builtin_dlls,
+    import_registry, make_base, merge_copy, probe_case_folding as probe_folding_ability,
+    reg_import_command, remove_tree, results_dir, static_facts, trial_settings_text,
+    wine_builtin_dlls,
 };
 use tur_runtime::casefold::{
     CaseFoldRecord, CaseFolding, chattr_command, probe as probe_case_folding,
