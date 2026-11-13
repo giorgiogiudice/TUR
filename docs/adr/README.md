@@ -40,6 +40,8 @@ the [specification](../architecture/specification.md).
 | [0021](0021-local-ai.md) | Local AI: models that run on the computer, for P@x and for every application | Accepted |
 | [0023](0023-publishing-signed-updates.md) | Publishing updates: signed images in a public registry, on channels | Accepted |
 | [0024](0024-problem-reports.md) | Problem reports: prepared by P@x, sent only with consent, to a private receiver | Accepted |
+| [0025](0025-live-session-and-graphical-installer.md) | The installer medium's live session and graphical installer | Proposed |
+| [0026](0026-windows-device-drivers-in-user-space.md) | Windows device drivers: hand-off and HID first, a user-space driver host only as an experiment | Proposed |
 
 ## Open questions from the specification
 
