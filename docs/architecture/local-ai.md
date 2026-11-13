@@ -344,7 +344,7 @@ without Vulkan):
 | qwen3-0.6b | runs well, not now | runs well (measured, ×60/36) |
 | qwen3-4b | does not fit | runs well, 24.7 tokens/s (measured) |
 | ministral-3-3b | does not fit | runs well, 15.2 tokens/s (measured in this work: 9.11 on the 4-processor runner, ×60/36) |
-| gemma-4-e2b | does not fit | runs well, 39.7 tokens/s |
+| gemma-4-e2b | does not fit | runs well, 42.6 tokens/s (measured in this work: 25.55 on the 4-processor runner, ×60/36) |
 | gemma-4-e4b | does not fit | runs well, 20.7 tokens/s |
 | gemma-4-26b-a4b | does not fit | runs well, 27.5 tokens/s; **recommended** |
 | qwen3-30b-a3b | does not fit | runs well, 29.9 tokens/s, but not in the memory free now |

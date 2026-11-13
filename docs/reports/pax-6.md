@@ -78,7 +78,26 @@ RECOVERY
 
 ## Runs
 
-RUNS_TABLE
+| Workflow | Run | Commit | Result |
+|---|---|---|---|
+| `local-ai` | 43341975820 | `68f720e` | Job "ministral-3-3b, ensure": pass, the real download (below). The other jobs were cancelled by the next push |
+| `local-ai` | 43346627935 | `46635e8` | "ministral-3-3b, ensure": pass (from the cache: `already-present`, `starting`, `ready`; the task completed). "Engine comparison": pass, Gemma 4 E2B measured (below) with the first list |
+| `pax` | 43344490864 | `af32da3` | Pass: e2e 393 checks; session service 140 checks (103 before), the scenarios `models-and-settings` and `local-model` included |
+| `rust` | 43344490832 | `af32da3` | Fail: clippy (a needless dereference in `fit.rs`), a test variable shadowing a helper, rustfmt. tur-pax: every test passed (239 unit, 24 in `service`); only formatting |
+| `rust` | 43346130236 | `4ac4cab` | Fail: one test of `ensure` gave the tiny model a context it does not have (exit 2 instead of 1); the providers' `check` test expected "model discovery: no" |
+| `rust` | 43346627945 | `46635e8` | Pass: tur-pax, tur-ai-local, tur-pax-providers and every other component |
+| `image`, `boot` | 43341975862, 43341975821 and later | every commit | Fail before building anything of TUR: `quay.io/fedora/fedora-kinoite@sha256:f857f6c5…` (the pin in `image/base.lock`) is "manifest unknown" at quay.io; see "Limits" |
+| all | see the pull request | the head commit | the final state is recorded in the pull request's description |
+
+**Gemma 4 E2B on llama.cpp b9840** (run 43346627935, job "Engine
+comparison", the table of `local_ai_ci.py`, llama.cpp's own CPU build on
+the 4-processor runner): downloaded from Google's repository and checked in
+54.1 s (4.34 GB), loaded in 2.5 s; 128 tokens at 25.55 tokens a second, the
+prompt at 125.0; a well-formed tool call, streamed too, and an answer that
+used the tool result; the colour of a red image named (image input through
+the projector); peak memory 5.68 GB against the estimate of 7.41 GB. So the
+pinned engine version runs Gemma 4. The measurement is in its catalogue
+entry, and its tier is now measured.
 
 ## The new models
 
@@ -143,7 +162,7 @@ card, which therefore does not count):
 | qwen3-vl-2b-instruct | does not fit | runs well (measured) | runs well (measured) |
 | qwen3-4b | does not fit | runs well, about 24.7 tokens/s (measured) | runs well (measured) |
 | ministral-3-3b | does not fit | runs well, 15.2 (measured here) | runs well, 15.2 (measured) |
-| gemma-4-e2b | does not fit | runs well, 39.7 | runs well, 39.7 |
+| gemma-4-e2b | does not fit | runs well, 42.6 (measured here) | runs well, 42.6 (measured) |
 | gemma-4-e4b | does not fit | runs well, 20.7; **recommended** | runs well, 20.7 |
 | gemma-4-26b-a4b | does not fit | does not fit | runs well, 27.5; **recommended** |
 | qwen3-30b-a3b | does not fit | does not fit | runs well, 29.9, not in the memory free now |

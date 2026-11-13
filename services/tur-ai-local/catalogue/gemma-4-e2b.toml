@@ -69,3 +69,18 @@ summary = "Apache License 2.0. You may use, copy, change and share the model for
 restrictions = "none"
 evidence = "The model card header at the pinned revision declares apache-2.0, with license_link https://ai.google.dev/gemma/docs/gemma_4_license; that address redirects to https://ai.google.dev/gemma/apache_2, which is the Apache License 2.0 text, read on 2026-11-13. Google's Gemma Terms of Use (https://ai.google.dev/gemma/terms, last modified 2026-04-01) say that they apply to the Gemma models listed in their appendix and: \"For Gemma 4 terms, see the Gemma 4 license.\" The Gemma Prohibited Use Policy belongs to those terms, so it does not apply to Gemma 4. The repository holds no licence file and is not gated."
 checked = "2026-11-13"
+
+[[tested]]
+date = "2026-11-13"
+report = "docs/reports/pax-6.md"
+run = "https://github.com/giorgiogiudice/TUR/actions/runs/43346627935"
+engine = "llama-server b9840 from llama.cpp's own release llama-b9840-bin-ubuntu-x64 (processor variants, AVX2 kernels used)"
+hardware = "GitHub-hosted ubuntu-24.04 runner: AMD EPYC 7763, 4 logical processors (2 cores), AVX2 and FMA, 16.8 GB of memory, no graphics processor"
+context = 8192
+generation_tokens_per_second = 25.55
+prompt_tokens_per_second = 125.03
+peak_memory_bytes = 5679255552
+tool_call = "yes"
+image_input = "yes"
+embeddings = "not-tested"
+notes = "The local-ai workflow's table (local_ai_ci.py): downloaded and checked in 54.1 s, loaded in 2.5 s; 128 tokens generated in 6.28 s wall time from a 159-token prompt; a well-formed tool call, streamed too, and an answer that used the tool's result; the colour of a red image named."
