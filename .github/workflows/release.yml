@@ -17,6 +17,11 @@
 #             copied to where it is published and read back.
 # 3. promote  (manual, with a build ID) points `stable` at a published build.
 #
+# To rehearse without waiting for every workflow again: start the workflow by
+# hand with `image_run` (a run of the image workflow that passed), or, on a
+# pull request, push a commit that changes only the release itself: the
+# branch's latest successful image run is then used. Neither ever publishes.
+#
 # Publishing is off until the owner sets the repository variable
 # TUR_PUBLISH=1 (publishing.md, section 8). Until then, and always on pull
 # requests, the release job runs in full against its own registry and its
@@ -41,6 +46,11 @@ on:
     inputs:
       promote:
         description: "A published build ID to promote to stable (empty: release this commit to testing)"
+        type: string
+        required: false
+        default: ""
+      image_run:
+        description: "Rehearse with this run of the image workflow, without waiting (never publishes)"
         type: string
         required: false
         default: ""
@@ -92,6 +102,7 @@ jobs:
       image_run: ${{ steps.await.outputs.image_run }}
       boot_run: ${{ steps.await.outputs.boot_run }}
       rollback_run: ${{ steps.await.outputs.rollback_run }}
+      rehearsal: ${{ steps.await.outputs.rehearsal }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -100,9 +111,15 @@ jobs:
         id: await
         env:
           GH_TOKEN: ${{ github.token }}
+          IMAGE_RUN: ${{ inputs.image_run }}
+          HEAD_REF: ${{ github.head_ref }}
         run: |
+          shortcut=()
+          if [ -n "$IMAGE_RUN" ]; then shortcut=(--image-run "$IMAGE_RUN"); fi
+          if [ -n "$HEAD_REF" ]; then shortcut=(--fallback-branch "$HEAD_REF"); fi
           python3 scripts/release/await.py \
-            "${{ github.event.pull_request.head.sha || github.sha }}" "${{ github.event_name }}" --timeout 16200
+            "${{ github.event.pull_request.head.sha || github.sha }}" "${{ github.event_name }}" --timeout 16200 \
+            "${shortcut[@]}"
 
   release:
     name: Re-chunk, sign, prove on a booted guest, publish
@@ -116,7 +133,7 @@ jobs:
       id-token: write   # keyless signing with this workflow's own identity
       packages: write   # pushing to ghcr.io, only with TUR_PUBLISH=1
     env:
-      PUBLISH: ${{ vars.TUR_PUBLISH == '1' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && '1' || '0' }}
+      PUBLISH: ${{ vars.TUR_PUBLISH == '1' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && needs.await.outputs.rehearsal != 'true' && '1' || '0' }}
       OUT: out/release
       LOCAL: localhost:5000/tur
     steps:

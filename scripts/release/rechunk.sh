@@ -88,8 +88,12 @@ started="$(date +%s)"
         loaded="$(podman image inspect --format "{{.Id}}" localhost/tur:tested)"
         echo "loaded:    sha256:${loaded}"
         [ "${loaded}" = "${TUR_IMAGE_ID}" ] || { echo "the archive is not the tested image" >&2; exit 1; }
+        # The output must be a containers-storage image: rpm-ostree opens
+        # the output reference first, to reuse a previous chunking, and fails
+        # on an OCI layout that does not exist yet.
         rpm-ostree compose build-chunked-oci --bootc --format-version 2 "$@" \
-            --from localhost/tur:tested --output "oci:/run/tur-output/${TUR_OUT}"
+            --from localhost/tur:tested --output containers-storage:localhost/tur:published
+        skopeo copy --quiet containers-storage:localhost/tur:published "oci:/run/tur-output/${TUR_OUT}:latest"
     ' _ "${labels[@]}" "${plan[@]}"
 echo "re-chunked in $(( $(date +%s) - started )) s"
 sudo rm -rf "${store}"

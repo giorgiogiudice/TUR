@@ -22,7 +22,15 @@ The image may be released only when
   each workflow runs only when its paths changed), and nothing is still
   running.
 
-Writes `release=true|false`, `reason`, and the run IDs of image, boot and
+Two ways to rehearse without waiting, never used for publishing (the run
+then writes `rehearsal=true`): --image-run takes a run of the image
+workflow that already passed (a manual run of the release workflow), and
+--fallback-branch, on a pull request whose commit did not run the image
+workflow (it changed only the release itself), takes the branch's latest
+successful image run. Boot and rollback runs of that run's commit are used
+alongside.
+
+Writes `release=true|false`, `rehearsal`, `reason`, and the run IDs of image, boot and
 rollback to $GITHUB_OUTPUT, and a table to $GITHUB_STEP_SUMMARY. Exits 1 when
 a workflow failed, so that the release run says so; exits 0 with
 release=false when there is simply nothing to release. GH_TOKEN (actions:
@@ -42,14 +50,18 @@ IGNORED = {"release", "gate", "pax-live"}
 GOOD = {"success", "skipped", "neutral"}
 
 
+def api(repo: str, path: str) -> dict:
+    req = urllib.request.Request(
+        f"https://api.github.com/repos/{repo}{path}",
+        headers={"Authorization": f"Bearer {os.environ['GH_TOKEN']}", "Accept": "application/vnd.github+json"})
+    with urllib.request.urlopen(req, timeout=60) as response:
+        return json.load(response)
+
+
 def runs_for(repo: str, sha: str) -> list[dict]:
     found, page = [], 1
     while True:
-        req = urllib.request.Request(
-            f"https://api.github.com/repos/{repo}/actions/runs?head_sha={sha}&per_page=100&page={page}",
-            headers={"Authorization": f"Bearer {os.environ['GH_TOKEN']}", "Accept": "application/vnd.github+json"})
-        with urllib.request.urlopen(req, timeout=60) as response:
-            batch = json.load(response)["workflow_runs"]
+        batch = api(repo, f"/actions/runs?head_sha={sha}&per_page=100&page={page}")["workflow_runs"]
         found += batch
         if len(batch) < 100 or page >= 5:
             return found
@@ -80,14 +92,38 @@ def summary(text: str) -> None:
             stream.write(text + "\n")
 
 
+def rehearse_with(repo: str, image_run: dict, why: str) -> int:
+    """Use an image run that already passed (a rehearsal, never published)."""
+    if image_run.get("name") != "image" or image_run.get("conclusion") != "success":
+        output(release="false", reason=f"run {image_run.get('id')} is not a successful run of the image workflow")
+        return 1
+    others = {}
+    for run in runs_for(repo, image_run["head_sha"]):
+        if run["name"] in ("boot", "rollback") and run["conclusion"] == "success":
+            if run["name"] not in others or run["id"] > others[run["name"]]["id"]:
+                others[run["name"]] = run
+    reason = (f"rehearsal ({why}) with the image tested by image run {image_run['id']} "
+              f"(commit {image_run['head_sha'][:12]})")
+    output(release="true", rehearsal="true", reason=reason, image_run=str(image_run["id"]),
+           boot_run=str(others["boot"]["id"]) if "boot" in others else "",
+           rollback_run=str(others["rollback"]["id"]) if "rollback" in others else "")
+    summary("Rehearsal: " + reason + ". Nothing is published from such a run.")
+    return 0 if "boot" in others else 1
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("sha")
     ap.add_argument("event", choices=["push", "workflow_dispatch", "pull_request"])
     ap.add_argument("--timeout", type=int, default=4 * 3600)
     ap.add_argument("--first-wait", type=int, default=45, help="seconds for the other workflows to be created")
+    ap.add_argument("--image-run", help="do not wait: rehearse with this run of the image workflow (manual runs)")
+    ap.add_argument("--fallback-branch", help="pull requests: when the image workflow did not run on this commit, "
+                                              "rehearse with its latest successful run on this branch")
     args = ap.parse_args()
     repo = os.environ["GITHUB_REPOSITORY"]
+    if args.image_run:
+        return rehearse_with(repo, api(repo, f"/actions/runs/{args.image_run}"), "a person asked for it")
     events = {"pull_request"} if args.event == "pull_request" else {"push", "workflow_dispatch"}
     started = time.monotonic()
     time.sleep(args.first_wait)
@@ -95,6 +131,11 @@ def main() -> int:
     while True:
         chosen = latest(runs_for(repo, args.sha), events)
         waited = time.monotonic() - started
+        if "image" not in chosen and waited > 300 and args.fallback_branch and args.event == "pull_request":
+            found = api(repo, f"/actions/workflows/image.yml/runs?branch={args.fallback_branch}"
+                              "&event=pull_request&status=success&per_page=1")["workflow_runs"]
+            if found:
+                return rehearse_with(repo, found[0], "the image workflow did not run on this commit")
         if "image" not in chosen and waited > 300:
             output(release="false", reason="the image workflow did not run on this commit: no image to release")
             summary("Nothing to release: the `image` workflow did not run on this commit.")
@@ -125,7 +166,7 @@ def main() -> int:
         output(release="false", reason="this commit's image was not both built (image) and booted (boot) by CI", **ids)
         summary("Nothing to release: the image of this commit was not both built and booted by CI.")
         return 0
-    output(release="true", reason="every workflow on this commit passed", **ids)
+    output(release="true", rehearsal="false", reason="every workflow on this commit passed", **ids)
     return 0
 
 
