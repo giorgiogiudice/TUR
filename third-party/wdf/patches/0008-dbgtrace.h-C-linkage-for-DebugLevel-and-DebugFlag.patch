@@ -1,0 +1,25 @@
+SPDX-License-Identifier: MIT
+Change to Microsoft's Windows-Driver-Frameworks (MIT), TUR build; see ../README.md.
+
+dbgtrace.h declares DebugLevel and DebugFlag with C++ linkage;
+fxobject.cpp defines them inside extern "C". MSVC accepts the mismatch;
+they are declared with C linkage here.
+
+diff --git a/src/framework/shared/inc/private/common/dbgtrace.h b/src/framework/shared/inc/private/common/dbgtrace.h
+index ed55b2a..8ec31c7 100644
+--- a/src/framework/shared/inc/private/common/dbgtrace.h
++++ b/src/framework/shared/inc/private/common/dbgtrace.h
+@@ -93,7 +93,13 @@ DoTraceLevelMessage    (
+ #define WPP_CLEANUP(DriverObject)
+ #endif
+ 
++//
++// TUR build: C linkage, as fxobject.cpp defines them inside extern "C"
++// (MSVC accepts the mismatch, clang and GCC do not).
++//
++extern "C" {
+ extern ULONG DebugLevel;
+ extern ULONG DebugFlag;
++}
+ 
+ #endif

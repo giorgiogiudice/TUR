@@ -137,9 +137,9 @@ typedef VOID NTAPI PO_FX_DEVICE_POWER_REQUIRED_CALLBACK(_In_ PVOID Context);
 typedef PO_FX_DEVICE_POWER_REQUIRED_CALLBACK *PPO_FX_DEVICE_POWER_REQUIRED_CALLBACK;
 typedef VOID NTAPI PO_FX_DEVICE_POWER_NOT_REQUIRED_CALLBACK(_In_ PVOID Context);
 typedef PO_FX_DEVICE_POWER_NOT_REQUIRED_CALLBACK *PPO_FX_DEVICE_POWER_NOT_REQUIRED_CALLBACK;
-typedef NTSTATUS NTAPI PO_FX_DIRECTED_POWER_UP_CALLBACK(_In_ PVOID Context, _In_ ULONG Flags);
+typedef VOID NTAPI PO_FX_DIRECTED_POWER_UP_CALLBACK(_In_ PVOID Context, _In_ ULONG Flags);
 typedef PO_FX_DIRECTED_POWER_UP_CALLBACK *PPO_FX_DIRECTED_POWER_UP_CALLBACK;
-typedef NTSTATUS NTAPI PO_FX_DIRECTED_POWER_DOWN_CALLBACK(_In_ PVOID Context, _In_ ULONG Flags);
+typedef VOID NTAPI PO_FX_DIRECTED_POWER_DOWN_CALLBACK(_In_ PVOID Context, _In_ ULONG Flags);
 typedef PO_FX_DIRECTED_POWER_DOWN_CALLBACK *PPO_FX_DIRECTED_POWER_DOWN_CALLBACK;
 #define PO_FX_VERSION_V3 3
 #define PO_FX_DEVICE_FLAG_RESERVED_1             0x0000000000000001ULL
@@ -161,6 +161,35 @@ typedef struct _PO_FX_DEVICE_V3 {
     ULONG ComponentCount;
     PO_FX_COMPONENT_V2 Components[ANYSIZE_ARRAY];
 } PO_FX_DEVICE_V3, *PPO_FX_DEVICE_V3;
+#define PO_FX_UNKNOWN_POWER 0xFFFFFFFF
+#define PO_FX_UNKNOWN_TIME  0xFFFFFFFFFFFFFFFFULL
+typedef struct _PO_FX_DEVICE_V1 {
+    ULONG Version;
+    ULONG ComponentCount;
+    PPO_FX_COMPONENT_ACTIVE_CONDITION_CALLBACK ComponentActiveConditionCallback;
+    PPO_FX_COMPONENT_IDLE_CONDITION_CALLBACK ComponentIdleConditionCallback;
+    PPO_FX_COMPONENT_IDLE_STATE_CALLBACK ComponentIdleStateCallback;
+    PPO_FX_DEVICE_POWER_REQUIRED_CALLBACK DevicePowerRequiredCallback;
+    PPO_FX_DEVICE_POWER_NOT_REQUIRED_CALLBACK DevicePowerNotRequiredCallback;
+    PPO_FX_POWER_CONTROL_CALLBACK PowerControlCallback;
+    PVOID DeviceContext;
+    PO_FX_COMPONENT_V1 Components[ANYSIZE_ARRAY];
+} PO_FX_DEVICE_V1, *PPO_FX_DEVICE_V1;
+typedef PO_FX_DEVICE_V1 PO_FX_DEVICE, *PPO_FX_DEVICE;
+NTKERNELAPI NTSTATUS NTAPI PoFxRegisterDevice(_In_ PDEVICE_OBJECT Pdo, _In_ PPO_FX_DEVICE Device, _Out_ POHANDLE *Handle);
+NTKERNELAPI VOID NTAPI PoFxUnregisterDevice(_In_ POHANDLE Handle);
+NTKERNELAPI VOID NTAPI PoFxStartDevicePowerManagement(_In_ POHANDLE Handle);
+NTKERNELAPI VOID NTAPI PoFxSetDeviceIdleTimeout(_In_ POHANDLE Handle, _In_ ULONGLONG IdleTimeout);
+NTKERNELAPI VOID NTAPI PoFxReportDevicePoweredOn(_In_ POHANDLE Handle);
+NTKERNELAPI VOID NTAPI PoFxActivateComponent(_In_ POHANDLE Handle, _In_ ULONG Component, _In_ ULONG Flags);
+NTKERNELAPI VOID NTAPI PoFxIdleComponent(_In_ POHANDLE Handle, _In_ ULONG Component, _In_ ULONG Flags);
+NTKERNELAPI VOID NTAPI PoFxCompleteIdleState(_In_ POHANDLE Handle, _In_ ULONG Component);
+NTKERNELAPI VOID NTAPI PoFxCompleteIdleCondition(_In_ POHANDLE Handle, _In_ ULONG Component);
+NTKERNELAPI VOID NTAPI PoFxCompleteDevicePowerNotRequired(_In_ POHANDLE Handle);
+NTKERNELAPI VOID NTAPI PoFxCompleteDirectedPowerDown(_In_ POHANDLE Handle);
+typedef struct _POWER_PLATFORM_INFORMATION {
+    BOOLEAN AoAc;
+} POWER_PLATFORM_INFORMATION, *PPOWER_PLATFORM_INFORMATION;
 #endif
 
 /* D3cold support interface (Windows 8). */
@@ -202,6 +231,56 @@ typedef struct _D3COLD_SUPPORT_INTERFACE {
     PGET_D3COLD_LAST_TRANSITION_STATUS GetLastTransitionStatus;
 } D3COLD_SUPPORT_INTERFACE, *PD3COLD_SUPPORT_INTERFACE;
 #define D3COLD_SUPPORT_INTERFACE_VERSION 1
+
+/* Device capabilities with the deepest wakeable D-state per S-state, as
+   the framework gathers them (supportkm.cpp). */
+typedef struct _STACK_DEVICE_CAPABILITIES {
+    DEVICE_CAPABILITIES DeviceCaps;
+    DEVICE_WAKE_DEPTH DeepestWakeableDstate[PowerSystemMaximum];
+} STACK_DEVICE_CAPABILITIES, *PSTACK_DEVICE_CAPABILITIES;
+
+static __inline DEVICE_POWER_STATE MapWakeDepthToDstate(DEVICE_WAKE_DEPTH WakeDepth)
+{
+    static const DEVICE_POWER_STATE map[DeviceWakeDepthMaximum] = {
+        PowerDeviceD0, PowerDeviceD0, PowerDeviceD1, PowerDeviceD2, PowerDeviceD3, PowerDeviceD3
+    };
+    if (WakeDepth < 0 || WakeDepth >= DeviceWakeDepthMaximum) {
+        return PowerDeviceUnspecified;
+    }
+    return map[WakeDepth];
+}
+
+/* DEVICE_CAPABILITIES in its Windows 8 layout (mingw-w64's ends its bits at
+   NoDisplayInUI); used through a cast where the framework sets a newer bit. */
+typedef struct _TUR_DEVICE_CAPABILITIES {
+    USHORT Size;
+    USHORT Version;
+    ULONG DeviceD1:1, DeviceD2:1, LockSupported:1, EjectSupported:1, Removable:1, DockDevice:1, UniqueID:1,
+          SilentInstall:1, RawDeviceOK:1, SurpriseRemovalOK:1, WakeFromD0:1, WakeFromD1:1, WakeFromD2:1,
+          WakeFromD3:1, HardwareDisabled:1, NonDynamic:1, WarmEjectSupported:1, NoDisplayInUI:1, Reserved1:1,
+          WakeFromInterrupt:1, SecureDevice:1, ChildOfVgaEnabledBridge:1, DecodeIoOnBoot:1, Reserved:9;
+} TUR_DEVICE_CAPABILITIES, *PTUR_DEVICE_CAPABILITIES;
+
+/* IO_RESOURCE_DESCRIPTOR's interrupt member in its Windows 7 layout
+   (processor groups); the union keeps its size. */
+typedef struct _TUR_IO_RESOURCE_INTERRUPT {
+    ULONG MinimumVector;
+    ULONG MaximumVector;
+    USHORT AffinityPolicy;
+    USHORT Group;
+    IRQ_PRIORITY PriorityPolicy;
+    KAFFINITY TargetedProcessors;
+} TUR_IO_RESOURCE_INTERRUPT_LAYOUT, *PTUR_IO_RESOURCE_INTERRUPT_LAYOUT;
+#define TUR_IO_RESOURCE_INTERRUPT(Descriptor) ((PTUR_IO_RESOURCE_INTERRUPT_LAYOUT)&(Descriptor)->u.Interrupt)
+
+/* Interfaces and flags. No bus driver in Wine answers these interfaces. */
+DEFINE_GUID(GUID_REENUMERATE_SELF_INTERFACE_STANDARD,
+    0x2aeb0243, 0x6a6e, 0x486b, 0x82, 0xfc, 0xd8, 0x15, 0xf6, 0xb9, 0x70, 0x06);
+DEFINE_GUID(GUID_SECURE_DRIVER_INTERFACE,
+    0x7a5e4c01, 0x1d2b, 0x4f6a, 0x9a, 0x01, 0x54, 0x55, 0x52, 0x00, 0x00, 0x10);
+#ifndef PNP_DEVICE_ASSIGNED_TO_GUEST
+#define PNP_DEVICE_ASSIGNED_TO_GUEST 0x00000100
+#endif
 DEFINE_GUID(GUID_D3COLD_SUPPORT_INTERFACE, 0xb38290e5, 0x3cd0, 0x4f9d, 0x99, 0x37, 0xf5, 0xfe, 0x2b, 0x44, 0xd4, 0x7a);
 #endif
 

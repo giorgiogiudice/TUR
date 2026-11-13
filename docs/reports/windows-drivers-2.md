@@ -64,8 +64,8 @@ NEXT SAFE ACTION
   live only in WDK libraries. Every gap is listed in section 2; each one is
   filled in this branch by a stand-in or a small patch, written from the
   framework's own use of it.
-- **Compile status (latest finished iteration): 0 of 180 files compile, 811
-  errors.** The error count went 106,913 → 529 → 46,584 → 811 (section 3):
+- **Compile status (latest finished iteration): 149 of 180 files compile,
+  89 errors.** The error count went 106,913 → 529 → 46,584 → 811 → 89 (section 3):
   each round removes a layer and exposes the next. `Wdf01000.sys` has not
   been linked yet.
 - **The Wine side builds**: Wine 11.20's `ntoskrnl.exe` with real DPCs and a
@@ -125,6 +125,7 @@ files are in `third-party/wdf/patches/` (MIT).
 | `shared/inc/private/common/fxglobals.h` | `StateSeparationDetection` member and its enumeration | 0005 |
 | `shared/inc/private/common/fxregkey.hpp` | `VerifyStateSeparationRegistryPolicy` (called, declared nowhere) | 0004 |
 | `shared/core/fxrequestapi.cpp` | `WDF_REQUEST_REUSE_MUST_COMPLETE` (defined only in `fxrequest.cpp`) | 0006 |
+| `shared/inc/private/common/fxforward.hpp` | `enum FxWmiInstanceAction` forward-declared, defined nowhere | 0010 |
 
 ### 2.4 MSVC-only code
 
@@ -133,6 +134,8 @@ files are in `third-party/wdf/patches/` (MIT).
 | `wdfdevice.h` uses `WDF_REQUEST_TYPE`, a forward-declared enum, by value | 0001 (GCC/clang get the definition early) |
 | six member functions without a return type (implicit int) | 0003 |
 | aligned array of a 1-byte type with 16-byte alignment | 0007 |
+| `DebugLevel`/`DebugFlag` declared C++, defined C | 0008 |
+| members newer than mingw-w64's structures (`WakeFromInterrupt`, interrupt policy) | 0009, through compat layouts |
 | `-fms-compatibility` hides `__GNUC__` from mingw-w64's headers | build flag `-fgnuc-version=4.2.1` |
 | `#include "km\..."` backslashes, case-insensitive names | build script: separator normalisation, `incmap.py` links |
 | SAL annotations mingw-w64 does not define | `salgen.py`, 133 empty definitions |
@@ -173,7 +176,8 @@ plus three of `compat/`).
 | 2 (`2ef0349`, 43379819341) | 3 | 529 | `cobbled.hpp`, `wdftriage.h` missing; `WDF_REQUEST_TYPE`; an `MmMapLockedPagesSpecifyCache` overload |
 | 3 (`6faf383`, 43380816664) | 4 | 46,584 | `FxIrp` incomplete (the blanked class head) cascading through every class |
 | 4 (`80a5c2c`, 43382377329) | 0 | 811 | `FxIrp::m_Irp` private; my `DMA_COMPLETION_STATUS`; `device_common.h`; token pasting |
-| 5 (`33cca51`) | *pending* | *pending* | |
+| 5 (`265e616`, 43383650067) | 149 | 89 | Windows 8–10 kernel types mingw-w64 lacks (`STACK_DEVICE_CAPABILITIES`, power framework v1/v3 functions, `WakeFromInterrupt`, interrupt policy fields), one more undefined enumeration (`FxWmiInstanceAction`), a linkage mismatch |
+| 6 | *pending* | *pending* | |
 
 ## 4. The Wine patch set
 
@@ -190,6 +194,9 @@ both also apply to master `cc5d1d86` (checked in every build).
 | 0005 `ntoskrnl.exe: Add KeQuerySystemTimePrecise.` | not exported before | imported by the framework (Mx layer) |
 | 0006 `ntoskrnl.exe: Add IoOpenDriverRegistryKey.` | not exported before; opens or creates `Parameters` (or `State`) under the service key | imported by the framework (`fxglobals.h`) |
 
+Iteration 5: all six applied (and apply to master), but `ntoskrnl.exe` did
+not link: patch 0006 called `ZwOpenKey`/`ZwCreateKey`/`ZwClose`, which
+ntoskrnl itself only forwards to ntdll; fixed to `Nt*` in iteration 6.
 Built in CI (`build-wine.sh`: Wine's tools, `ntoskrnl.exe`, `wdfldr.sys`
 only) and put over Fedora 45's Wine in the throw-away container
 (`/usr/lib64/wine-wow64/wine/x86_64-windows/`, measured in run

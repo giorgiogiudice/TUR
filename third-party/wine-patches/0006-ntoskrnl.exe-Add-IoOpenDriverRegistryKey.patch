@@ -3,7 +3,7 @@ A patch to Wine (https://gitlab.winehq.org/wine/wine), under Wine's licence;
 see README.md and COPYING.LIB in this directory. Applied with `git apply`,
 which ignores these lines.
 
-From df3035ba02457de7fef2161cf2279d7c3bb7f999 Mon Sep 17 00:00:00 2001
+From eb1e5e3bf6e7fc518660d96d32c4193e0e46e801 Mon Sep 17 00:00:00 2001
 From: TUR experiment <tur-experiment@users.noreply.github.com>
 Date: Fri, 13 Nov 2026 10:08:22 +0300
 Subject: [PATCH 6/6] ntoskrnl.exe: Add IoOpenDriverRegistryKey.
@@ -19,7 +19,7 @@ driver's service key.
  3 files changed, 39 insertions(+)
 
 diff --git a/dlls/ntoskrnl.exe/ntoskrnl.c b/dlls/ntoskrnl.exe/ntoskrnl.c
-index 6faade5..a1611f6 100644
+index 6faade5..783d370 100644
 --- a/dlls/ntoskrnl.exe/ntoskrnl.c
 +++ b/dlls/ntoskrnl.exe/ntoskrnl.c
 @@ -1161,6 +1161,43 @@ PVOID WINAPI IoGetDriverObjectExtension( PDRIVER_OBJECT DriverObject,
@@ -55,10 +55,10 @@ index 6faade5..a1611f6 100644
 +
 +    InitializeObjectAttributes( &attr, &driver_object->DriverExtension->ServiceKeyName,
 +                                OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL );
-+    if ((status = ZwOpenKey( &service, KEY_CREATE_SUB_KEY, &attr ))) return status;
++    if ((status = NtOpenKey( &service, KEY_CREATE_SUB_KEY, &attr ))) return status;
 +    InitializeObjectAttributes( &attr, &name, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, service, NULL );
-+    status = ZwCreateKey( key, access, &attr, 0, NULL, REG_OPTION_NON_VOLATILE, NULL );
-+    ZwClose( service );
++    status = NtCreateKey( key, access, &attr, 0, NULL, REG_OPTION_NON_VOLATILE, NULL );
++    NtClose( service );
 +    return status;
 +}
 +

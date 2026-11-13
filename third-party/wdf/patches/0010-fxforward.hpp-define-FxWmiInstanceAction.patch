@@ -1,0 +1,28 @@
+SPDX-License-Identifier: MIT
+Change to Microsoft's Windows-Driver-Frameworks (MIT), TUR build; see ../README.md.
+
+fxforward.hpp forward-declares enum FxWmiInstanceAction without an
+underlying type (an MSVC extension) and nothing defines it; it is
+defined here with the two values the sources use.
+
+diff --git a/src/framework/shared/inc/private/common/fxforward.hpp b/src/framework/shared/inc/private/common/fxforward.hpp
+index b61d032..1d4b5d6 100644
+--- a/src/framework/shared/inc/private/common/fxforward.hpp
++++ b/src/framework/shared/inc/private/common/fxforward.hpp
+@@ -119,7 +119,15 @@ class  IFxHasCallbacks;
+ class  IFxMemory;
+ 
+ enum FxObjectType;
+-enum FxWmiInstanceAction;
++//
++// TUR build: forward-declared here and defined nowhere in the published
++// sources (MSVC accepts an opaque enumeration without an underlying type).
++// The values are the two the sources use.
++//
++enum FxWmiInstanceAction : int {
++    AddInstance = 0,
++    RemoveInstance = 1,
++};
+ enum FxDriverObjectUmFlags : USHORT;
+ 
+ PVOID

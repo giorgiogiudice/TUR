@@ -88,3 +88,6 @@ __inline VOID SleepstudyHelper_ResetComponentsStartTime(SS_COMPONENT Component)
 {
     UNREFERENCED_PARAMETER(Component);
 }
+
+#define SLEEPSTUDY_POOL_TAG 'SSxF'
+#define FRIENDLY_NAME_MAX_LENGTH 256

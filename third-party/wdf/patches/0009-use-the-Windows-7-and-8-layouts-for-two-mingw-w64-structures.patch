@@ -1,0 +1,50 @@
+SPDX-License-Identifier: MIT
+Change to Microsoft's Windows-Driver-Frameworks (MIT), TUR build; see ../README.md.
+
+Two fields sets use members mingw-w64's structures predate: the
+Windows 7 interrupt policy fields of IO_RESOURCE_DESCRIPTOR
+(interruptobjectkm.cpp) and DEVICE_CAPABILITIES.WakeFromInterrupt
+(Windows 8, fxpkgfdo.cpp). They go through compat definitions of the
+current layouts (TUR_IO_RESOURCE_INTERRUPT, TUR_DEVICE_CAPABILITIES).
+
+diff --git a/src/framework/shared/irphandlers/pnp/fxpkgfdo.cpp b/src/framework/shared/irphandlers/pnp/fxpkgfdo.cpp
+index f5dc3ba..9c859a7 100644
+--- a/src/framework/shared/irphandlers/pnp/fxpkgfdo.cpp
++++ b/src/framework/shared/irphandlers/pnp/fxpkgfdo.cpp
+@@ -597,7 +597,11 @@ FxPkgFdo::HandleQueryCapabilities(
+         // ACPI will relinquish control of wake responsiblity
+         //
+         if (SupportsWakeInterrupt()) {
+-            pCaps->WakeFromInterrupt = TRUE;
++            //
++            // TUR build: mingw-w64's DEVICE_CAPABILITIES predates this bit;
++            // TUR_DEVICE_CAPABILITIES (compat) is the Windows 8 layout.
++            //
++            ((PTUR_DEVICE_CAPABILITIES) pCaps)->WakeFromInterrupt = TRUE;
+         }
+     }
+ 
+diff --git a/src/framework/shared/irphandlers/pnp/km/interruptobjectkm.cpp b/src/framework/shared/irphandlers/pnp/km/interruptobjectkm.cpp
+index de953b5..cb3933d 100644
+--- a/src/framework/shared/irphandlers/pnp/km/interruptobjectkm.cpp
++++ b/src/framework/shared/irphandlers/pnp/km/interruptobjectkm.cpp
+@@ -272,10 +272,15 @@ Return Value:
+         (IoResourceDescriptor->Flags & CM_RESOURCE_INTERRUPT_POLICY_INCLUDED) == 0x0) {
+ 
+         IoResourceDescriptor->Flags |= CM_RESOURCE_INTERRUPT_POLICY_INCLUDED;
+-        IoResourceDescriptor->u.Interrupt.AffinityPolicy      = (IRQ_DEVICE_POLICY)m_Policy;
+-        IoResourceDescriptor->u.Interrupt.PriorityPolicy      = (IRQ_PRIORITY)m_Priority;
+-        IoResourceDescriptor->u.Interrupt.TargetedProcessors  = m_Processors.Mask;
+-        IoResourceDescriptor->u.Interrupt.Group               = m_Processors.Group;
++        //
++        // TUR build: mingw-w64's IO_RESOURCE_DESCRIPTOR has Windows XP's
++        // interrupt fields only; TUR_IO_RESOURCE_INTERRUPT (compat) is the
++        // Windows 7 layout of the same union member.
++        //
++        TUR_IO_RESOURCE_INTERRUPT(IoResourceDescriptor)->AffinityPolicy      = (USHORT)m_Policy;
++        TUR_IO_RESOURCE_INTERRUPT(IoResourceDescriptor)->PriorityPolicy      = (IRQ_PRIORITY)m_Priority;
++        TUR_IO_RESOURCE_INTERRUPT(IoResourceDescriptor)->TargetedProcessors  = m_Processors.Mask;
++        TUR_IO_RESOURCE_INTERRUPT(IoResourceDescriptor)->Group               = m_Processors.Group;
+     }
+ }
+ 
