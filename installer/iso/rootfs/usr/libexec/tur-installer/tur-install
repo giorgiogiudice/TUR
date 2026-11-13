@@ -238,6 +238,11 @@ screen_disks() {
             else
                 say "       beside Windows: not possible: ${d_bwhy[i]} (${d_bcode[i]})"
             fi
+            if [ "${d_shrink[i]:-no}" = yes ]; then
+                say "       shrinking Windows: possible, up to $(human "${d_sturmax[i]}") for TUR"
+            else
+                say "       shrinking Windows: not possible: ${d_swhy[i]} (${d_scode[i]})"
+            fi
         fi
         if [ "${d_status[i]}" != ok ]; then
             say "       cannot be chosen: ${d_why[i]} (${d_code[i]})"
@@ -272,7 +277,7 @@ screen_disks() {
             chosen="${i}"
             mode=erase
             mark "choice result=ok index=${answer} name=${d_name[i]}"
-            if [ "${d_beside[i]}" = yes ]; then state=mode; else state=confirm; fi
+            if [ "${d_beside[i]}" = yes ] || [ "${d_shrink[i]:-no}" = yes ]; then state=mode; else state=confirm; fi
             return 0
         fi
     done
@@ -287,15 +292,36 @@ screen_mode() {
     local i="${chosen}"
     screen mode "keep Windows, or erase the disk"
     say "  Disk: ${d_model[i]:-unnamed disk}, $(human "${d_size[i]}"), serial $(serial_end "${i}")"
-    say "  This disk holds Windows and has $(human "${d_bsize[i]}") of free space."
+    say "  This disk holds Windows. Free space on it: $(human "${d_bsize[i]}")."
     say ""
-    say "  [1]  Use the free space beside Windows. Windows and its files are kept."
-    say "       TUR goes into the free space; TUR's start menu offers Windows too."
+    if [ "${d_beside[i]}" = yes ]; then
+        say "  [1]  Use the free space beside Windows. Windows and its files are kept."
+        say "       TUR goes into the free space; TUR's start menu offers Windows too."
+    fi
     say "  [2]  Erase the whole disk. Windows and everything on the disk is lost."
+    if [ "${d_shrink[i]:-no}" = yes ]; then
+        say "  [3]  Make room by shrinking Windows, then install TUR beside it. Windows'"
+        say "       files are kept, but BACK UP FIRST: shrinking moves Windows' data."
+    fi
     say ""
-    ask "Type 1 or 2, then Enter. (Enter alone goes back) "
+    ask "Type the number, then Enter. (Enter alone goes back) "
     case "${answer}" in
+        3)
+            if [ "${d_shrink[i]:-no}" != yes ]; then
+                say "\"3\" is not offered for this disk."
+                sleep 3
+                return 0
+            fi
+            mode=shrink
+            mark "mode chosen=shrink name=${d_name[i]}"
+            state=size
+            ;;
         1)
+            if [ "${d_beside[i]}" != yes ]; then
+                say "\"1\" is not offered for this disk."
+                sleep 3
+                return 0
+            fi
             mode=beside
             mark "mode chosen=beside name=${d_name[i]}"
             state=default
@@ -318,6 +344,133 @@ screen_mode() {
     esac
 }
 
+# How much room to make for TUR by shrinking Windows.
+tur_size=0
+screen_size() {
+    local i="${chosen}" low high gib
+    low=$(((d_sturmin[i] + 1073741823) / 1073741824))
+    high=$((d_sturmax[i] / 1073741824))
+    screen size "how much room to make for TUR"
+    say "  Windows' partition ${d_spart[i]##*/} is $(human "${d_ssize[i]}"). It can give TUR"
+    say "  between ${low} GiB and ${high} GiB; $(human "${NTFS_MARGIN_BYTES}") stay free for Windows."
+    say ""
+    ask "Type the size for TUR in GiB (${low} to ${high}), then Enter. (Enter alone: ${low}; \"back\": go back) "
+    case "${answer}" in
+        back)
+            mark "size chosen=back"
+            state=mode
+            return 0
+            ;;
+        "") gib="${low}" ;;
+        *[!0-9]*)
+            mark "size chosen=invalid"
+            say "\"${answer}\" is not a whole number of GiB."
+            sleep 3
+            return 0
+            ;;
+        *) gib="${answer}" ;;
+    esac
+    if [ "${gib}" -lt "${low}" ] || [ "${gib}" -gt "${high}" ]; then
+        mark "size chosen=out-of-range gib=${gib}"
+        say "${gib} GiB is not between ${low} and ${high}."
+        sleep 3
+        return 0
+    fi
+    tur_size=$((gib * 1073741824))
+    mark "size chosen=${tur_size} gib=${gib}"
+    state=default
+}
+
+# The confirmation of shrinking Windows and installing beside it.
+screen_confirm_shrink() {
+    local i="${chosen}" phrase line new
+    screen confirm "confirm shrinking Windows"
+    phrase="$(shrink_phrase_for "${i}")"
+    confirmed_fingerprint="$(fingerprint "${d_name[i]}")"
+    new=$((d_ssize[i] - tur_size))
+    say "  Disk:       ${d_model[i]:-unnamed disk}"
+    say "  Capacity:   $(human "${d_size[i]}") (${d_size[i]} bytes)"
+    say "  Serial:     ${d_serial[i]:-none reported}${d_wwn[i]:+   WWN: ${d_wwn[i]}}"
+    say "  Path:       ${d_byid[i]}"
+    say ""
+    say "  On this disk now:"
+    while IFS= read -r line; do
+        say "     ${line}"
+    done < <(contents "${d_name[i]}")
+    say ""
+    say "  What will be done:"
+    say "   - Windows' partition ${d_spart[i]##*/} is shrunk from $(human "${d_ssize[i]}") to about"
+    say "     $(human "${new}") with ntfsresize; its files are moved inside it, not deleted"
+    say "   - TUR goes into the $(human "${tur_size}") made free, as beside Windows"
+    if [ "${default_system}" = tur ]; then
+        say "   - the computer starts TUR by default; Windows' entry stays"
+    else
+        say "   - the computer starts Windows by default; a \"TUR\" entry follows it"
+    fi
+    say "   - Windows checks its partition (chkdsk) the next time it starts"
+    say ""
+    say "  !!! BACK UP FIRST. A backup of everything on this disk is strongly"
+    say "  recommended. If the power fails while Windows' data is being moved,"
+    say "  Windows' partition can be damaged. This was tested only on volumes made"
+    say "  by Linux tools, not on a real Windows volume."
+    say ""
+    mark "confirm name=${d_name[i]} by_id=${d_byid[i]} phrase=\"${phrase}\" mode=shrink tur_size=${tur_size} default=${default_system}"
+    say "To shrink Windows and install TUR beside it, type exactly:  ${phrase}"
+    ask "(Enter alone goes back and changes nothing) > "
+    if [ -z "${answer}" ]; then
+        mark "confirm result=back"
+        state=disks
+        return 0
+    fi
+    if [ "${answer}" != "${phrase}" ]; then
+        mark "confirm result=mismatch code=TUR-INSTALL-CONFIRM-001"
+        say ""
+        say "TUR-INSTALL-CONFIRM-001"
+        say "That is not the phrase. Nothing was changed."
+        sleep 4
+        return 0
+    fi
+    mark "confirm result=accepted mode=shrink"
+    state=install
+}
+
+screen_install_shrink() {
+    local i="${chosen}"
+    revalidate_chosen
+    if ! shrink_revalidate "${tur_size}"; then
+        fail "${engine_code}" "${engine_message}" "Nothing was changed."
+    fi
+    screen installing "shrinking Windows and installing TUR beside it"
+    say "  Disk: ${d_model[i]:-unnamed disk}, $(human "${d_size[i]}")"
+    say "  Do not power off and do not remove the medium. First Windows' partition"
+    say "  is shrunk, then TUR is installed. This takes several minutes."
+    say ""
+    shown=0
+    last_mark=0
+    install_started="${SECONDS}"
+    if ! run_shrink "${target_device}" "${tur_size}" show_new_lines "${default_system}"; then
+        case "${beside_disk_state}" in
+            untouched) fail "${beside_code}" "${beside_message}" "Nothing was changed." ;;
+            windows-check)
+                fail "${beside_code}" "${beside_message}" \
+                    "Windows' partition was being shrunk. Start Windows and let it check its" \
+                    "disk before you try again."
+                ;;
+            *)
+                fail "${beside_code}" "${beside_message}" \
+                    "Windows was shrunk. The free space now holds an unfinished TUR partition" \
+                    "(${beside_partition:-see the log}); delete it in Windows' Disk Management."
+                ;;
+        esac
+    fi
+    if ! check_installed "${target_device}"; then
+        fail TUR-INSTALL-MEDIUM-002 "The installer reported success, but the disk does not have the partitions an installed TUR has."
+    fi
+    record_root_features "${target_device}"
+    keep_log "${target_device}" "$(session_id)"
+    state=finished
+}
+
 # Which system starts when the computer is switched on (beside Windows).
 default_system=tur
 screen_default() {
@@ -338,7 +491,7 @@ screen_default() {
             ;;
         "")
             mark "default chosen=back"
-            state=mode
+            if [ "${mode}" = shrink ]; then state=size; else state=mode; fi
             ;;
         *)
             if common "${answer}"; then return 0; fi
@@ -414,6 +567,10 @@ screen_confirm() {
     local i="${chosen}" phrase line
     if [ "${mode}" = beside ]; then
         screen_confirm_beside
+        return
+    fi
+    if [ "${mode}" = shrink ]; then
+        screen_confirm_shrink
         return
     fi
     screen confirm "confirm erasing this disk"
@@ -572,6 +729,10 @@ screen_install() {
         screen_install_beside
         return
     fi
+    if [ "${mode}" = shrink ]; then
+        screen_install_shrink
+        return
+    fi
     revalidate_chosen
     screen installing "installing TUR"
     say "  Disk: ${d_model[i]:-unnamed disk}, $(human "${d_size[i]}")"
@@ -603,7 +764,7 @@ install_seconds=0
 screen_finished() {
     local i="${chosen}" line
     screen finished "TUR is installed"
-    if [ "${mode}" = beside ]; then
+    if [ "${mode}" = beside ] || [ "${mode}" = shrink ]; then
         say "TUR ${tur_version:-?} (build ${tur_build_id:-?}) was installed beside Windows in ${install_seconds} s on:"
     else
         say "TUR ${tur_version:-?} (build ${tur_build_id:-?}) was installed in ${install_seconds} s on:"
@@ -624,7 +785,10 @@ screen_finished() {
     say "  2. Remove the installer medium."
     say "  3. Switch the computer on. The first start shows a setup screen that"
     say "     creates your user account."
-    if [ "${mode}" = beside ]; then
+    if [ "${mode}" = shrink ]; then
+        say "  Windows checks its shrunk partition the first time it starts: let it."
+    fi
+    if [ "${mode}" = beside ] || [ "${mode}" = shrink ]; then
         say "  To start Windows from TUR: \"tur-dualboot restart-windows\""
         say "  (no BitLocker prompt), or \"Windows\" in TUR's start menu (key w)."
         say "  Change which system starts by default: \"pkexec tur-dualboot default\"."
@@ -663,6 +827,7 @@ while :; do
         disks) screen_disks ;;
         mode) screen_mode ;;
         default) screen_default ;;
+        size) screen_size ;;
         confirm) screen_confirm ;;
         install) screen_install ;;
         finished) screen_finished ;;

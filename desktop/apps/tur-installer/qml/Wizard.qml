@@ -32,6 +32,8 @@ Kit.Page {
     // Beside Windows: the system the computer starts by default, "tur" or
     // "windows" (the owner's decision of 14 November 2026: the person chooses).
     property string defaultSystem: "tur"
+    // Shrinking Windows: the room for TUR, in whole GiB (0: not chosen).
+    property int turGiB: 0
 
     readonly property var steps: [
         { name: "welcome", title: qsTr("Welcome") },
@@ -185,11 +187,15 @@ Kit.Page {
             chosenName: String(wizard.chosenDisk.name || "")
             mode: wizard.mode
             defaultSystem: wizard.defaultSystem
+            turGiB: wizard.turGiB
             onDefaultChosen: chosen => wizard.defaultSystem = chosen
+            onTurSizeChosen: gib => wizard.turGiB = gib
             onDiskChosen: disk => {
                 // Another disk, or the same disk listed again: beside
                 // Windows only while the engine still offers it there.
-                if (String(disk.name || "") !== String(wizard.chosenDisk.name || "") || !Words.besidePossible(disk))
+                if (String(disk.name || "") !== String(wizard.chosenDisk.name || "")
+                    || (wizard.mode === "beside" && !Words.besidePossible(disk))
+                    || (wizard.mode === "shrink" && !Words.shrinkPossible(disk)))
                     wizard.mode = "erase"
                 wizard.chosenDisk = disk
             }
@@ -215,9 +221,10 @@ Kit.Page {
             disk: wizard.chosenDisk
             mode: wizard.mode
             defaultSystem: wizard.defaultSystem
+            turGiB: wizard.turGiB
             onBackRequested: wizard.goTo("disk")
             onEraseRequested: phrase => {
-                wizard.engine.install(wizard.chosenDisk, phrase, wizard.mode, wizard.defaultSystem)
+                wizard.engine.install(wizard.chosenDisk, phrase, wizard.mode, wizard.defaultSystem, wizard.turGiB * 1073741824)
                 wizard.goTo("install")
             }
         }

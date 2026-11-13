@@ -787,7 +787,9 @@ jobs:
         if: ${{ !cancelled() && env.MEDIUM != '' }}
         run: |
           mkdir -p "$OUT/refused"
-          tests/iso/make-windows-shared-disk.sh "$WORK/nofree.raw" "$WORK/standin.efi" --free-gib 0 \
+          # No free space, and C: carries BitLocker's signature, so that the
+          # installer cannot shrink it either (TUR-INSTALL-SHRINK-001).
+          tests/iso/make-windows-shared-disk.sh "$WORK/nofree.raw" "$WORK/standin.efi" --free-gib 0 --bitlocker-c \
             > "$OUT/refused/nofree-disk.txt"
           tests/iso/make-windows-shared-disk.sh "$WORK/espfull.raw" "$WORK/standin.efi" --esp-fill-mib 94 \
             > "$OUT/refused/espfull-disk.txt"
@@ -870,6 +872,36 @@ jobs:
             python3 tests/iso/windows-disk.py compare "$d/before.json" "$WORK/live-shared.raw" "$d/compare-first-start.json" || status=$?
           fi
           rm -f "$WORK/live-shared.raw"
+          exit "$status"
+
+      # Issue 64, step 2: no free space, a large Windows partition holding
+      # little; the installer shrinks it (ntfsresize on the medium) and puts
+      # TUR into the space freed. Compared afterwards: the Windows partition
+      # shrunk in place with every file of its root unchanged (ntfscat, as
+      # root), the other partitions byte-identical, the ESP's files kept.
+      - name: "Shrinking Windows from the installer (text installer): install, compare, first start"
+        if: ${{ !cancelled() && env.MEDIUM != '' }}
+        run: |
+          d="$OUT/shrink"
+          mkdir -p "$d"
+          tests/iso/make-windows-shared-disk.sh "$WORK/shrink.raw" "$WORK/standin.efi" --size-gib 56 --free-gib 0 \
+            > "$d/windows-disk.txt"
+          sudo python3 tests/iso/windows-disk.py record "$WORK/shrink.raw" "$d/before.json"
+          status=0
+          python3 tests/iso/install.py windows-setup --medium "$MEDIUM" --medium-as usb \
+            --windows-serial tur-boot-test --windows-partition 1 --windows-last \
+            --disk "$WORK/shrink.raw" --work "$WORK/vm" --out "$d/windows-setup" || status=$?
+          python3 tests/iso/install.py shrink --tur-gib 26 --medium "$MEDIUM" --medium-as usb --no-bootindex \
+            --variables-from "$d/windows-setup/host/OVMF_VARS.after.fd" \
+            --disk "$WORK/shrink.raw" --work "$WORK/vm" --out "$d/install" || status=$?
+          sudo python3 tests/iso/windows-disk.py compare "$d/before.json" "$WORK/shrink.raw" "$d/compare-install.json" \
+            --shrunk 3 || status=$?
+          if [ "$status" -eq 0 ]; then
+            python3 tests/iso/boot-installed.py --no-bootindex --variables-from "$d/install/host/OVMF_VARS.after.fd" \
+              --disk "$WORK/shrink.raw" --work "$WORK/vm" --out "$d/first-start" || status=$?
+          fi
+          sudo chown -R "$(id -u):$(id -g)" "$d"
+          rm -f "$WORK/shrink.raw"
           exit "$status"
 
       - name: Report

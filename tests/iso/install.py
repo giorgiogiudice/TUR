@@ -56,6 +56,11 @@ Scenarios:
               "restart-windows", which sets the firmware's BootNext and
               restarts; the run then waits for the stand-in for Windows Boot
               Manager to start, which powers the machine off.
+  shrink      Issue 64, step 2: the main disk is laid out as Windows with no
+              free space and a large, nearly empty Windows partition. It must be
+              offered for shrinking; "3" (shrink), --tur-gib GiB, the default
+              system, then the "SHRINK" phrase (the erase and beside phrases are
+              refused), the installation.
   beside-refused
               Disks laid out as Windows on which installing beside Windows is
               not possible (no free space; a full EFI system partition). Each
@@ -729,6 +734,66 @@ def dualboot_after(s: Session) -> None:
                                                            "boot_next=", "tur-dualboot:"))]
 
 
+def scenario_shrink(s: Session) -> None:
+    facts = s.result["facts"]
+    s.to_welcome()
+    target = s.to_disks()
+    s.shot("disks-shrink")
+    shrink = [isovm.fields(state) for state in s.transcript.states() if state.startswith("shrink index=")]
+    facts["shrink_as_listed"] = shrink
+    mine = next((item for item in reversed(shrink) if target and item.get("name") == target.get("name")), None)
+    facts["target_shrink"] = mine
+    if not target or not mine or mine.get("possible") != "yes":
+        raise Stop(f"the Windows disk is not offered for shrinking: {target} {mine}")
+    s.type_line(target["index"])
+    s.wait_prompt("mode")
+    s.shot("mode-shrink")
+    s.type_line("3")
+    s.wait(r"TUR-INSTALLER: mode chosen=shrink", 60, "the choice of shrinking")
+    s.wait_prompt("size")
+    s.shot("size")
+    s.type_line(str(s.args.tur_gib))
+    match = s.wait(r"TUR-INSTALLER: size chosen=(\S+)", 60, "the size")
+    facts["size_chosen"] = match.group(1)
+    s.wait_prompt("default")
+    s.type_line("1" if s.args.default_system == "tur" else "2")
+    s.wait(r"TUR-INSTALLER: default chosen=", 60, "the default system")
+    match = s.wait(r'TUR-INSTALLER: confirm name=\S+ by_id=(\S+) phrase="([^"]*)" mode=shrink[^\n]*', 60,
+                   "the shrink confirmation")
+    s.wait_prompt("confirm")
+    expected = "SHRINK " + isovm.confirmation_phrase(DISK_SERIAL).split(" ", 1)[1]
+    facts["confirmation"] = {"phrase_shown": match.group(2), "phrase_computed_by_the_test": expected,
+                             "phrase_matches": match.group(2) == expected, "line": match.group(0)}
+    s.shot("confirm-shrink")
+    refusals = []
+    for wrong in (isovm.confirmation_phrase(DISK_SERIAL), beside_phrase(DISK_SERIAL)):
+        s.type_line(wrong)
+        result = s.wait(r"TUR-INSTALLER: confirm result=(\w+)", 60, "the answer to a wrong phrase")
+        refusals.append({"typed": wrong, "result": result.group(1)})
+        time.sleep(1.5)
+        s.wait_prompt("confirm")
+    facts["wrong_phrases"] = refusals
+    if any(item["result"] != "mismatch" for item in refusals):
+        raise Stop(f"a wrong phrase was accepted: {refusals}")
+    s.type_line(expected)
+    s.wait(r"TUR-INSTALLER: confirm result=accepted mode=shrink", 60, "the confirmation")
+    s.wait(r"TUR-INSTALLER: shrink revalidated ", 300, "the disk to be looked at again")
+    match = s.wait(r"TUR-INSTALLER: shrink result=(\w+)[^\n]*", 1800, "the shrink")
+    facts["shrink_line"] = match.group(0)
+    match = s.wait(r"TUR-INSTALLER: result=(success|failed)\b[^\n]*", 2400, "the result")
+    facts["result"] = match.group(1)
+    facts["result_line"] = match.group(0)
+    facts["shrink_states"] = [state for state in s.transcript.states() if state.startswith(("shrink ", "beside "))]
+    s.wait_prompt("finished" if facts["result"] == "success" else "failed", 60)
+    s.shot("done-shrink" if facts["result"] == "success" else "failed")
+    if facts["result"] != "success":
+        raise Stop("the installer reported a failure")
+    s.type_line("", "nothing")
+    facts["powered_off_by_installer"] = s.wait_power_off()
+    if not facts["powered_off_by_installer"]:
+        s.machine.quit()
+
+
 def scenario_beside_refused(s: Session) -> None:
     facts = s.result["facts"]
     disks = [s.args.disk] + [item.split("=", 1)[0] for item in s.args.extra_disk]
@@ -738,6 +803,7 @@ def scenario_beside_refused(s: Session) -> None:
     s.shot("disks-no-room-beside")
     beside = [isovm.fields(state) for state in s.transcript.states() if state.startswith("beside ")]
     facts["beside_as_listed"] = beside
+    facts["shrink_as_listed"] = [isovm.fields(state) for state in s.transcript.states() if state.startswith("shrink index=")]
     for disk in facts.get("disks", []):
         if disk.get("status") != "ok" or not disk.get("index", "").isdigit():
             continue
@@ -764,6 +830,7 @@ SCENARIOS = {
     "same-disk": scenario_same_disk,
     "same-disk-cut": scenario_same_disk_cut,
     "beside-refused": scenario_beside_refused,
+    "shrink": scenario_shrink,
     "install": scenario_install,
     "refuse": scenario_refuse,
     "too-small": scenario_too_small,
@@ -787,6 +854,7 @@ def main() -> int:
     ap.add_argument("--windows-serial", default=WINDOWS_SERIAL, help="windows-setup: the disk of the Windows entry")
     ap.add_argument("--windows-partition", default="1", help="windows-setup: its EFI system partition's number")
     ap.add_argument("--windows-last", action="store_true", help="windows-setup: put the entry last in the boot order")
+    ap.add_argument("--tur-gib", type=int, default=26, help="shrink: the room for TUR in GiB")
     ap.add_argument("--default-system", choices=["tur", "windows"], default="tur",
                     help="same-disk: the system the computer starts by default")
     ap.add_argument("--dualboot-after", action="store_true",
