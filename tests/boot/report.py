@@ -987,7 +987,11 @@ def check_components(ev: Evidence, checks: Checks, args) -> dict:
             for task in tasks
         ]
         serve = status.get(f"local_{model}_serve")
+        verdict = status.get(f"local_{model}_verdict", "")
+        pull_said = first_line(f"local-{model}-pull.err")
+        serve_said = first_line(f"local-{model}-serve.err")
         local_runs[model] = {
+            "verdict": verdict,
             "serve": serve,
             "exit_status": codes.get(f"pax-local-{model}"),
             "pull_seconds": status.get(f"local_{model}_pull_seconds"),
@@ -996,27 +1000,66 @@ def check_components(ev: Evidence, checks: Checks, args) -> dict:
             "failed_checks": local_failed,
             "tasks": tasks,
         }
+        # What is expected follows from what tur-ai-local said of the model on
+        # this machine before anything was done.
+        if verdict == "fits":
+            expected = "served, and P@x's run through the local preset passes"
+            passed = (
+                codes.get(f"local-{model}-pull") == 0
+                and serve == "ready"
+                and codes.get(f"pax-local-{model}") == 0
+                and bool(local_checks)
+                and not local_failed
+            )
+        elif verdict == "not-now":
+            expected = "downloaded, then refused by serve with TUR-AI-LOCAL-006 (not in the memory free now)"
+            passed = (
+                codes.get(f"local-{model}-pull") == 0
+                and serve == "not ready"
+                and serve_said == "TUR-AI-LOCAL-006"
+                and codes.get(f"local-{model}-serve") not in (None, 0)
+            )
+        elif verdict == "too-large":
+            expected = "refused by pull with TUR-AI-LOCAL-005 (more than this computer has), nothing downloaded"
+            passed = (
+                codes.get(f"local-{model}-pull") not in (None, 0)
+                and pull_said == "TUR-AI-LOCAL-005"
+                and codes.get(f"local-{model}-verify") not in (None, 0)
+                and serve == "not ready"
+            )
+        else:
+            expected = "a verdict from tur-ai-local check"
+            passed = False
         add(
             f"pax_local_model_{model}",
-            f"P@x asks {model} on the image's engine through the local preset (downloaded from its publisher "
-            "and checked), with every installed tool set, and TUR's checks of tests/pax/local_model.py pass",
-            codes.get(f"local-{model}-pull") == 0
-            and serve == "ready"
-            and codes.get(f"pax-local-{model}") == 0
-            and bool(local_checks)
-            and not local_failed,
+            f"local model {model}: tur-ai-local's verdict on this machine is honoured, and a model that fits "
+            "answers P@x through the local preset on the image's engine (downloaded from its publisher and "
+            "checked, every installed tool set, TUR's checks of tests/pax/local_model.py)",
+            passed,
+            f"verdict {verdict or 'none'}: expected {expected}; "
             f"memory available before: {status.get(f'local_{model}_mem_available_kib')} KiB; pull: exit status "
-            f"{codes.get(f'local-{model}-pull')} in {status.get(f'local_{model}_pull_seconds')} s; serve: {serve} "
-            f"after {status.get(f'local_{model}_serve_seconds')} s ({first_line(f'local-{model}-serve.err')}); "
+            f"{codes.get(f'local-{model}-pull')} in {status.get(f'local_{model}_pull_seconds')} s"
+            f"{' (' + pull_said + ')' if pull_said else ''}; serve: {serve} "
+            f"after {status.get(f'local_{model}_serve_seconds')} s{' (' + serve_said + ')' if serve_said else ''}; "
             f"P@x: exit status {codes.get(f'pax-local-{model}')}; "
             + (f"failed: {' | '.join(local_failed[:6])}; " if local_failed else "")
             + ("; ".join(measured) or "no task ran"),
         )
+    answered = [
+        model
+        for model, run in local_runs.items()
+        if run["verdict"] == "fits" and run["serve"] == "ready" and run["exit_status"] == 0 and not run["failed_checks"]
+    ]
+    verdicts = ", ".join(f"{model} {run['verdict'] or '?'}" for model, run in local_runs.items())
+    # Required where the machine is sized for it (the boot workflow's guest,
+    # --require-local-answer); elsewhere, as on the installer medium's smaller
+    # guest, a refusal that matches the verdict is the expected result.
     add(
-        "pax_local_models_ran",
-        "P@x was run against local models on the installed system",
-        bool(local_runs),
-        f"models: {', '.join(local_runs) or 'none'}",
+        "pax_local_model_answered",
+        "P@x got an answer from at least one local model on the image's engine",
+        bool(answered),
+        f"answered: {', '.join(answered) or 'none'}; verdicts: {verdicts or 'no model was tried'}",
+        required=bool(getattr(args, "require_local_answer", False)),
     )
 
     # ---- P@x end to end -------------------------------------------------------------------------
@@ -1482,6 +1525,8 @@ def main() -> int:
     ap.add_argument("--expected-build-id", default="")
     ap.add_argument("--expected-failed-units")
     ap.add_argument("--timing", action="append", default=[], help="NAME=SECONDS, recorded as given")
+    ap.add_argument("--require-local-answer", action="store_true",
+                    help="require that P@x got an answer from a local model (a guest sized for one)")
     args = ap.parse_args()
 
     out = pathlib.Path(args.out)

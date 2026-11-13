@@ -278,13 +278,19 @@ local_model() {
     local model="$1" tasks="$2" seconds="$3" start serve_pid rc
     put "local_${model}_started_uptime" "$(cut -d' ' -f1 /proc/uptime)"
     put "local_${model}_mem_available_kib" "$(awk '/^MemAvailable:/ { print $2 }' /proc/meminfo)"
+    # What tur-ai-local says of this model on this machine before anything
+    # is done: fits, not-now (not in the memory free now) or too-large. The
+    # report expects what follows from it: a model that fits is served and
+    # answers P@x; one that does not is refused with that code, by pull
+    # (too-large: nothing is downloaded) or by serve (not-now).
+    run "local-${model}-check" tur-ai-local check "${model}" --json
+    put "local_${model}_verdict" "$(jq -r '.fit.verdict // empty' "${out}/local-${model}-check.out" 2> /dev/null)"
     start="${SECONDS}"
     # Downloaded through the virtual machine's network.
     timeout 1200 tur-ai-local pull "${model}" > "${out}/local-${model}-pull.out" 2> "${out}/local-${model}-pull.err" < /dev/null
     printf '%s\t%s\n' "local-${model}-pull" "$?" >> "${out}/exit-status.tsv"
     put "local_${model}_pull_seconds" "$((SECONDS - start))"
     run "local-${model}-verify" tur-ai-local verify "${model}"
-    run "local-${model}-check" tur-ai-local check "${model}" --json
     start="${SECONDS}"
     tur-ai-local serve "${model}" --json --idle-stop 1800 \
         > "${out}/local-${model}-serve.out" 2> "${out}/local-${model}-serve.err" < /dev/null &
