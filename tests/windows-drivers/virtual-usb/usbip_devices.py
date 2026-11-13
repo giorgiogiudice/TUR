@@ -26,10 +26,21 @@ kernel's Documentation/usb/usbip_protocol.rst):
              reports on interrupt IN 0x81 / OUT 0x01. Input reports start
              with "TURHID" and a counter; every output report is written to
              hid-output.log
+  0547:1002  (only with --devices ...,fx2) a device that behaves like the
+             OSR USB-FX2 learning kit as Microsoft's kmdf_fx2 sample driver
+             uses it: interrupt IN 0x81 (1 byte of switch state, sent when
+             the switches change; they change every 2 s here), bulk OUT
+             0x06 looped back on bulk IN 0x88, and the board's vendor
+             requests (0xD4 read 7-segment, 0xD6 read switches, 0xD7 read
+             bar graph, 0xD8 set bar graph, 0xD9 is high speed, 0xDA
+             re-enumerate, 0xDB set 7-segment). Written from the sample's
+             osrusbfx2.h and ioctl.c and OSR's published description of the
+             board's firmware; every vendor request is written to fx2.log
 
-  usbip_devices.py run --log-dir DIR     plug them in, serve until SIGTERM
-                                         (DIR/ready appears when all three
-                                         are enumerated)
+  usbip_devices.py run --log-dir DIR [--devices loopback,sourcesink,hid]
+                                         plug them in, serve until SIGTERM
+                                         (DIR/ready appears, holding the
+                                         count, when all are enumerated)
   usbip_devices.py show                  the devices as the host sees them
 
 Runs as root (vhci_hcd's attach file is root's) on a throw-away CI runner.
@@ -52,6 +63,7 @@ import threading
 import time
 
 VID = 0x1209
+FX2_VID, FX2_PID = 0x0547, 0x1002
 CMD_SUBMIT, CMD_UNLINK, RET_SUBMIT, RET_UNLINK = 1, 2, 3, 4
 DIR_OUT, DIR_IN = 0, 1
 EPIPE, ECONNRESET = 32, 104
@@ -80,8 +92,8 @@ def string_desc(text: str) -> bytes:
     return bytes([2 + len(data), 3]) + data
 
 
-def device_desc(pid: int) -> bytes:
-    return struct.pack("<BBHBBBBHHHBBBB", 18, 1, 0x0200, 0, 0, 0, 64, VID, pid, 0x0100, 1, 2, 3, 1)
+def device_desc(pid: int, vid: int = VID) -> bytes:
+    return struct.pack("<BBHBBBBHHHBBBB", 18, 1, 0x0200, 0, 0, 0, 64, vid, pid, 0x0100, 1, 2, 3, 1)
 
 
 def config_desc(interface_and_endpoints: bytes, num_interfaces: int = 1) -> bytes:
@@ -95,6 +107,8 @@ def endpoint(address: int, attributes: int, max_packet: int, interval: int) -> b
 
 class Device:
     """One emulated USB device: descriptors, control requests, endpoints."""
+
+    vid = VID
 
     def __init__(self, pid: int, product: str, log: "Log") -> None:
         self.pid, self.product, self.log = pid, product, log
@@ -111,7 +125,7 @@ class Device:
             if request == 6:  # GET_DESCRIPTOR
                 dtype, dindex = value >> 8, value & 0xFF
                 if dtype == 1:
-                    return 0, device_desc(self.pid)[:length]
+                    return 0, device_desc(self.pid, self.vid)[:length]
                 if dtype == 2:
                     return 0, self.descriptors()[:length]
                 if dtype == 3:
@@ -256,6 +270,82 @@ class Hid(Device):
         return self.report()[:length]
 
 
+class Fx2(Device):
+    """Behaves like the OSR USB-FX2 board as kmdf_fx2 uses it."""
+
+    vid = FX2_VID
+    # Vendor requests (the sample's osrusbfx2.h).
+    READ_7SEG, READ_SWITCHES, READ_BARGRAPH, SET_BARGRAPH = 0xD4, 0xD6, 0xD7, 0xD8
+    IS_HIGH_SPEED, REENUMERATE, SET_7SEG = 0xD9, 0xDA, 0xDB
+
+    def __init__(self, log: "Log", fx2_log: pathlib.Path) -> None:
+        super().__init__(FX2_PID, "TUR FX2-like board", log)
+        self.fx2_log = fx2_log
+        self.queue: list[bytes] = []
+        self.bargraph = 0
+        self.seven_segment = 0
+        self.switches = 0x01
+        self.reported = None
+        self.changed = time.monotonic()
+
+    def descriptors(self) -> bytes:
+        return config_desc(bytes([9, 4, 0, 0, 3, 0xFF, 0, 0, 0]) + endpoint(0x81, 3, 1, 1) +
+                           endpoint(0x06, 2, 512, 0) + endpoint(0x88, 2, 512, 0))
+
+    def record(self, text: str) -> None:
+        with open(self.fx2_log, "a", encoding="utf-8") as f:
+            f.write(f"{time.time():.3f} {text}\n")
+
+    def class_or_vendor(self, request_type, request, value, index, length, data):
+        if request_type == 0xC0:
+            reply = {self.READ_7SEG: self.seven_segment, self.READ_SWITCHES: self.switches,
+                     self.READ_BARGRAPH: self.bargraph, self.IS_HIGH_SPEED: 1}.get(request)
+            if reply is not None:
+                self.record(f"vendor IN {request:#04x} -> {reply:#04x}")
+                return 0, bytes([reply])[:length]
+        if request_type == 0x40:
+            if request == self.SET_BARGRAPH and data:
+                self.bargraph = data[0]
+                self.record(f"vendor OUT set-bargraph {self.bargraph:#04x}")
+                return 0, b""
+            if request == self.SET_7SEG and data:
+                self.seven_segment = data[0]
+                self.record(f"vendor OUT set-7segment {self.seven_segment:#04x}")
+                return 0, b""
+            if request == self.REENUMERATE:
+                self.record("vendor OUT re-enumerate (ignored)")
+                return 0, b""
+        self.record(f"vendor request type {request_type:#04x} request {request:#04x}: stall")
+        return -EPIPE, b""
+
+    # USB/IP gives the endpoint number; the direction comes separately.
+    def bulk_out(self, ep: int, data: bytes) -> int:
+        if ep != 6:
+            return -EPIPE
+        if data:
+            self.queue.append(bytes(data))
+        return 0
+
+    def bulk_in(self, ep: int, length: int) -> bytes | None:
+        if ep == 1:
+            # The switch state, whenever it changed: every 2 s here.
+            if time.monotonic() - self.changed > 2.0:
+                self.switches = ((self.switches << 1) | (self.switches >> 7)) & 0xFF
+                self.changed = time.monotonic()
+            if self.reported == self.switches:
+                return None
+            self.reported = self.switches
+            self.record(f"interrupt IN switches {self.switches:#04x}")
+            return bytes([self.switches])[:length]
+        if not self.queue:
+            return None
+        chunk = self.queue.pop(0)
+        if len(chunk) > length:
+            self.queue.insert(0, chunk[length:])
+            chunk = chunk[:length]
+        return chunk
+
+
 class Log:
     def __init__(self, path: pathlib.Path) -> None:
         self.path = path
@@ -390,7 +480,7 @@ def ours() -> list[str]:
     found = []
     for d in sorted(glob.glob("/sys/bus/usb/devices/*")):
         try:
-            if open(f"{d}/idVendor").read().strip() == f"{VID:04x}":
+            if open(f"{d}/idVendor").read().strip() in (f"{VID:04x}", f"{FX2_VID:04x}"):
                 found.append(d)
         except OSError:
             pass
@@ -411,20 +501,23 @@ def show() -> None:
     subprocess.run("ls -l /dev/bus/usb/*/* /dev/hidraw* 2>/dev/null | sed 's/^/  /'", shell=True, check=False)
 
 
-def run(log_dir: pathlib.Path) -> int:
+def run(log_dir: pathlib.Path, names: list[str]) -> int:
     log_dir.mkdir(parents=True, exist_ok=True)
     log = Log(log_dir / "usbip-devices.log")
     subprocess.run(["modprobe", "vhci-hcd"], check=True)
     vhci = vhci_dir()
     ports = free_hs_ports(vhci)
     log.write(f"vhci_hcd ready; free high-speed ports {ports}")
-    if len(ports) < 3:
-        raise SystemExit(f"need three free vhci ports, have {ports}")
-    devices = [Loopback(log), SourceSink(log), Hid(log, log_dir / "hid-output.log")]
+    if len(ports) < len(names):
+        raise SystemExit(f"need {len(names)} free vhci ports, have {ports}")
+    make = {"loopback": lambda: Loopback(log), "sourcesink": lambda: SourceSink(log),
+            "hid": lambda: Hid(log, log_dir / "hid-output.log"), "fx2": lambda: Fx2(log, log_dir / "fx2.log")}
+    devices = [make[n]() for n in names]
     (log_dir / "hid-output.log").touch()
+    (log_dir / "fx2.log").touch()
     connections = [attach(d, p, log) for d, p in zip(devices, ports)]
     deadline = time.monotonic() + 30
-    while time.monotonic() < deadline and len(ours()) < 3:
+    while time.monotonic() < deadline and len(ours()) < len(devices):
         time.sleep(0.5)
     subprocess.run(["udevadm", "settle"], check=False)
     time.sleep(1)
@@ -461,6 +554,8 @@ def main() -> int:
     sub = ap.add_subparsers(dest="command", required=True)
     r = sub.add_parser("run")
     r.add_argument("--log-dir", required=True)
+    r.add_argument("--devices", default="loopback,sourcesink,hid",
+                   help="comma-separated: loopback, sourcesink, hid, fx2")
     sub.add_parser("show")
     sub.add_parser("probe")
     args = ap.parse_args()
@@ -470,7 +565,7 @@ def main() -> int:
     if args.command == "probe":
         probe()
         return 0
-    return run(pathlib.Path(args.log_dir))
+    return run(pathlib.Path(args.log_dir), [n for n in args.devices.split(",") if n])
 
 
 if __name__ == "__main__":

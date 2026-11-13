@@ -1,0 +1,84 @@
+SPDX-License-Identifier: MIT
+Change to Microsoft's Windows-Driver-Frameworks (MIT), TUR build; see ../README.md.
+
+Public KMDF 1.33 headers: wdfdevice.h forward-declares the enum
+WDF_REQUEST_TYPE and then uses it by value in FORCEINLINE functions,
+which MSVC accepts and GCC and clang reject (an incomplete type). For
+GCC and clang the definition from wdfrequest.h is given in wdfdevice.h
+and wdfrequest.h skips its own; MSVC sees the headers unchanged.
+
+diff --git a/src/publicinc/wdf/kmdf/1.33/wdfdevice.h b/src/publicinc/wdf/kmdf/1.33/wdfdevice.h
+index f4bda21..f41e0aa 100644
+--- a/src/publicinc/wdf/kmdf/1.33/wdfdevice.h
++++ b/src/publicinc/wdf/kmdf/1.33/wdfdevice.h
+@@ -548,7 +548,50 @@ typedef enum _WDF_RELEASE_HARDWARE_ORDER_ON_FAILURE {
+ // Declare empty definitions so that they may be referenced by
+ // routines before they are defined.
+ //
++#if defined(__GNUC__) || defined(__clang__)
++//
++// GCC and clang treat a forward-declared enum as an incomplete type, and
++// FORCEINLINE functions below take WDF_REQUEST_TYPE by value: the
++// definition from wdfrequest.h is given here for them.
++//
++typedef enum _WDF_REQUEST_TYPE {
++    WdfRequestTypeCreate = 0x0,
++    WdfRequestTypeCreateNamedPipe = 0x1,
++    WdfRequestTypeClose = 0x2,
++    WdfRequestTypeRead = 0x3,
++    WdfRequestTypeWrite = 0x4,
++    WdfRequestTypeQueryInformation = 0x5,
++    WdfRequestTypeSetInformation = 0x6,
++    WdfRequestTypeQueryEA = 0x7,
++    WdfRequestTypeSetEA = 0x8,
++    WdfRequestTypeFlushBuffers = 0x9,
++    WdfRequestTypeQueryVolumeInformation = 0xa,
++    WdfRequestTypeSetVolumeInformation = 0xb,
++    WdfRequestTypeDirectoryControl = 0xc,
++    WdfRequestTypeFileSystemControl = 0xd,
++    WdfRequestTypeDeviceControl = 0xe,
++    WdfRequestTypeDeviceControlInternal = 0xf,
++    WdfRequestTypeShutdown = 0x10,
++    WdfRequestTypeLockControl = 0x11,
++    WdfRequestTypeCleanup = 0x12,
++    WdfRequestTypeCreateMailSlot = 0x13,
++    WdfRequestTypeQuerySecurity = 0x14,
++    WdfRequestTypeSetSecurity = 0x15,
++    WdfRequestTypePower = 0x16,
++    WdfRequestTypeSystemControl = 0x17,
++    WdfRequestTypeDeviceChange = 0x18,
++    WdfRequestTypeQueryQuota = 0x19,
++    WdfRequestTypeSetQuota = 0x1A,
++    WdfRequestTypePnp = 0x1B,
++    WdfRequestTypeOther =0x1C,
++    WdfRequestTypeUsb = 0x40,
++    WdfRequestTypeNoFormat = 0xFF,
++    WdfRequestTypeMax,
++} WDF_REQUEST_TYPE;
++#define _WDF_REQUEST_TYPE_DEFINED
++#else
+ typedef enum _WDF_REQUEST_TYPE WDF_REQUEST_TYPE;
++#endif
+ 
+ 
+ typedef
+diff --git a/src/publicinc/wdf/kmdf/1.33/wdfrequest.h b/src/publicinc/wdf/kmdf/1.33/wdfrequest.h
+index c503868..3e8a3e7 100644
+--- a/src/publicinc/wdf/kmdf/1.33/wdfrequest.h
++++ b/src/publicinc/wdf/kmdf/1.33/wdfrequest.h
+@@ -53,6 +53,7 @@ WDF_EXTERN_C_START
+ // Types
+ //
+ 
++#ifndef _WDF_REQUEST_TYPE_DEFINED
+ typedef enum _WDF_REQUEST_TYPE {
+     WdfRequestTypeCreate = 0x0,
+     WdfRequestTypeCreateNamedPipe = 0x1,
+@@ -87,6 +88,7 @@ typedef enum _WDF_REQUEST_TYPE {
+     WdfRequestTypeNoFormat = 0xFF,
+     WdfRequestTypeMax,
+ } WDF_REQUEST_TYPE;
++#endif // _WDF_REQUEST_TYPE_DEFINED
+ 
+ typedef enum _WDF_REQUEST_REUSE_FLAGS {
+     WDF_REQUEST_REUSE_NO_FLAGS = 0x00000000,

@@ -92,4 +92,16 @@ static __inline NTSTATUS RtlUnicodeStringCopy(PUNICODE_STRING DestinationString,
 
 #ifdef __cplusplus
 }
+
+/* The framework passes MmGetSystemAddressForMdlSafe a priority ORed with
+   MdlMappingNoExecute, an unsigned long; MSVC converts it to the
+   MM_PAGE_PRIORITY parameter of mingw-w64's prototype silently, a standard
+   C++ compiler does not. This overload takes the ULONG and converts. */
+static __inline PVOID MmMapLockedPagesSpecifyCache(PMDL MemoryDescriptorList, KPROCESSOR_MODE AccessMode,
+                                                   MEMORY_CACHING_TYPE CacheType, PVOID BaseAddress,
+                                                   ULONG BugCheckOnFailure, ULONG Priority)
+{
+    return MmMapLockedPagesSpecifyCache(MemoryDescriptorList, AccessMode, CacheType, BaseAddress,
+                                        BugCheckOnFailure, (MM_PAGE_PRIORITY) Priority);
+}
 #endif

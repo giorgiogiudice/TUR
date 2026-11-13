@@ -57,12 +57,6 @@ note "source: ${WDF_REPO} ${WDF_COMMIT} ($(git -C "${src}" log -1 --format=%cs))
 cmp -s "${src}/LICENSE" "${tp}/LICENSE" && note "licence: MIT, identical to third-party/wdf/LICENSE" ||
     note "licence: DIFFERS from third-party/wdf/LICENSE"
 
-# Windows file names are case-insensitive and #include lines use backslashes;
-# normalise the separators (a mechanical change, not a patch), then apply
-# the patches.
-grep -rlE '^\s*#\s*include\s*[<"][^>"]*\\' "${src}/src" | while read -r f; do
-    sed -i -E '/^\s*#\s*include/ s#\\#/#g' "${f}"
-done
 for p in "${tp}"/patches/*.patch; do
     [ -e "${p}" ] || continue
     if git -C "${src}" apply --whitespace=nowarn "${p}"; then
@@ -71,6 +65,11 @@ for p in "${tp}"/patches/*.patch; do
         note "patch: $(basename "${p}") FAILED to apply"
         exit 1
     fi
+done
+# #include lines use backslashes; normalise the separators (a mechanical
+# change, made after the patches so that they apply to Microsoft's text).
+grep -rlE '^\s*#\s*include\s*[<"][^>"]*\\' "${src}/src" | while read -r f; do
+    sed -i -E '/^\s*#\s*include/ s#\\#/#g' "${f}"
 done
 
 fw="${src}/src/framework"
