@@ -281,7 +281,9 @@ over, with reasons), every attempt (remedies, outcome, failure, exit status,
 window, timings for copying, setting the remedies and running, the log's name
 and SHA-256), what was found, the real prefix's fingerprints before and after,
 `evidence_sha256` and the total time. `evidence_sha256` is the SHA-256 of the
-attempts serialised as compact JSON; a result whose attempts do not match it
+attempts serialised as compact JSON, every time in it written as whole
+milliseconds (a time read back from JSON can differ in its last digit); a
+result whose attempts do not match it
 is refused by `--apply` and `--results`.
 
 The fingerprint of the real prefix and private home is the SHA-256 of every

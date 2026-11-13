@@ -3,7 +3,7 @@
   "$id": "https://github.com/giorgiogiudice/TUR/schemas/remedy-result.schema.json",
   "$comment": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
   "title": "TUR autopilot result",
-  "description": "The measured result of one run of tur-runtime's compatibility autopilot (docs/architecture/compat-autopilot.md): the application, the runtime, what failed in an unchanged copy of its prefix, every attempt with its remedies, outcome, timings and log digest, what made the check pass, and the fingerprints of the real prefix before and after, which must be equal. Written as autopilot/<app-id>/<time>/result.json under tur-runtime's data directory, never visible to the application. evidence_sha256 is the SHA-256 of the attempts serialised as compact JSON; a result whose attempts do not match it is refused.",
+  "description": "The measured result of one run of tur-runtime's compatibility autopilot (docs/architecture/compat-autopilot.md): the application, the runtime, what failed in an unchanged copy of its prefix, every attempt with its remedies, outcome, timings and log digest, what made the check pass, and the fingerprints of the real prefix before and after, which must be equal. Written as autopilot/<app-id>/<time>/result.json under tur-runtime's data directory, never visible to the application. evidence_sha256 is the SHA-256 of the attempts serialised as compact JSON, with every time written as whole milliseconds; a result whose attempts do not match it is refused.",
   "type": "object",
   "additionalProperties": false,
   "required": [

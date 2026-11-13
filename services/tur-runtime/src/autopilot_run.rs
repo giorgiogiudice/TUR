@@ -552,20 +552,32 @@ pub fn make_base(
         chattr: chattr.map(Path::to_path_buf),
         reflink: true,
     };
+    // Whether the file system shares blocks is found out on the private
+    // home, which is copied with cp whatever drive C: is.
+    let home = base.join("home");
+    if copier.copy_tree(&real.home, &home).is_err() {
+        remove_tree(dirs, &home)?;
+        copier.reflink = false;
+        copier.copy_tree(&real.home, &home)?;
+    }
     let prefix = base.join("prefix");
-    if copier
-        .copy_prefix(&real.prefix, &prefix, case_folded)
-        .is_err()
-    {
-        // No copy-on-write here: start again with an ordinary copy.
+    if let Err(problem) = copier.copy_prefix(&real.prefix, &prefix, case_folded) {
+        if !copier.reflink {
+            return Err(problem);
+        }
+        // No copy-on-write here after all: start again with an ordinary copy.
         remove_tree(dirs, &prefix)?;
         copier.reflink = false;
         copier.copy_prefix(&real.prefix, &prefix, case_folded)?;
     }
-    copier.copy_tree(&real.home, &base.join("home"))?;
     let seconds = started.elapsed().as_secs_f64();
-    let (bytes, files) = tree_size(&[&prefix, &base.join("home")]);
-    let method = if copier.reflink { "reflink" } else { "copy" };
+    let (bytes, files) = tree_size(&[&prefix, &home]);
+    // A case-folded drive C: is copied file by file (merge_copy).
+    let method = if copier.reflink && !case_folded {
+        "reflink"
+    } else {
+        "copy"
+    };
     let snapshot = SnapshotInfo {
         method: method.to_owned(),
         seconds,

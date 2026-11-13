@@ -105,7 +105,7 @@
           "pattern": "^[A-Za-z0-9._+~-]{1,64}$"
         },
         "evidence_sha256": {
-          "description": "TUR autopilot: the SHA-256 of the evidence in the autopilot's result (its attempts, serialised as compact JSON).",
+          "description": "TUR autopilot: the SHA-256 of the evidence in the autopilot's result (its attempts, serialised as compact JSON with times in whole milliseconds).",
           "type": "string",
           "pattern": "^[0-9a-f]{64}$"
         }

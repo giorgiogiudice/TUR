@@ -896,11 +896,28 @@ pub fn search(
 /// The SHA-256 of the evidence: every attempt as the result records it,
 /// logs by their digests.
 pub fn evidence_digest(attempts: &[Attempt]) -> String {
-    sha256_hex(
-        serde_json::to_string(attempts)
-            .unwrap_or_default()
-            .as_bytes(),
-    )
+    // Times are digested in whole milliseconds: a number written and read
+    // back as JSON may come back one unit in the last place off, and the
+    // digest must survive that.
+    fn canonical(value: serde_json::Value) -> serde_json::Value {
+        match value {
+            serde_json::Value::Number(number) if number.is_f64() => {
+                let milliseconds = (number.as_f64().unwrap_or(0.0) * 1000.0).round();
+                serde_json::Value::String(format!("{milliseconds:.0}ms"))
+            }
+            serde_json::Value::Array(items) => {
+                serde_json::Value::Array(items.into_iter().map(canonical).collect())
+            }
+            serde_json::Value::Object(map) => serde_json::Value::Object(
+                map.into_iter()
+                    .map(|(key, value)| (key, canonical(value)))
+                    .collect(),
+            ),
+            other => other,
+        }
+    }
+    let value = canonical(serde_json::to_value(attempts).unwrap_or_default());
+    sha256_hex(value.to_string().as_bytes())
 }
 
 /// How the throwaway copies were made.

@@ -104,7 +104,7 @@ fn check_against_the_program(tool: &str, line: &[String], subcommand: &[&str]) {
         let flag = format!("--{name}");
         assert!(
             subcommand_help.contains(&flag) || program_help.contains(&flag),
-            "{tool}: {flag} is not an option of `{subcommand}`:\n{subcommand_help}"
+            "{tool}: {flag} is not an option of `{subcommand:?}`:\n{subcommand_help}"
         );
     }
 }
