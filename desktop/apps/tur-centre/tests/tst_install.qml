@@ -290,9 +290,12 @@ Item {
             const switchOn = findChild(view, "operationSwitchOn")
             verify(switchOn.visible)
             compare(switchOn.text, "Switch on Flathub and try again")
+            // The message has just appeared: let its row of buttons be laid
+            // out before one of them is pressed.
+            waitForRendering(view)
             mouseClick(switchOn)
             // Switched on, then the plan again: the recorded second plan.
-            tryVerify(() => host.apps.sourceChanging === "" && host.apps.sourcesStatus !== Apps.Loading, 5000,
+            tryVerify(() => host.apps.sourceChanging === "" && host.apps.sourcesStatus === Apps.Ready, 5000,
                       "the source was switched and listed again")
             compare(JSON.stringify(host.apps.sourcesFailure), "{}")
             const flathub = host.apps.sources.find(source => source.name === "flathub")

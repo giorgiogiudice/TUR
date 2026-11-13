@@ -72,7 +72,7 @@ something else. That is the design's risk 17.
 ## 2. The backend interface
 
 ```cpp
-struct CatalogueRequest { Command command; QString subject; };   // Search, Show, Route
+struct CatalogueRequest { Command command; QString subject; };   // Search, Show, Route, Validate
 struct CatalogueReply   { Failure failure; int exitStatus; QByteArray output, errorOutput; ... };
 
 class CatalogueSource : public QObject {
@@ -85,7 +85,7 @@ Q_SIGNALS:
 
 | Source | Used | Answers by |
 |---|---|---|
-| `ProcessSource` | The program, by default | Running `tur-catalogue [--catalogue DIR] <search\|show\|route> --json [--host FILE] [--prefs FILE] -- <subject>` |
+| `ProcessSource` | The program, by default | Running `tur-catalogue [--catalogue DIR] <search\|show\|route> --json [--host FILE] [--prefs FILE] -- <subject>`, and `validate --json` (no subject) |
 | `FixtureSource` | Tests, the screenshot job, `tur-centre --fixture DIR` | Looking the question up in a directory of recorded answers (section 4) |
 
 Everything above the interface is the same for both, which is what makes a
@@ -382,7 +382,7 @@ the reason.
 | Progress: "Downloading · 310 MB of 1.1 GB" (8.5) | For a Flatpak, "Downloading and installing" with an indeterminate bar and flatpak's own line ("installing runtime/…") | flatpak's command line gives no machine-readable progress (app-install-backend.md); a bar with numbers appears for a pinned download, which has a total |
 | Chrome "installed from Google's own source and updated by it" (17.1, answer 4) | Installed per user from Flathub; Flatpak downloads Google's package from dl.google.com at installation (the "extra data" of Flathub's manifest); the package around it is maintained by Flathub's volunteers, not by Google, and the page and the plan say so | Google publishes no Flatpak; its own Linux packages are an RPM repository, which on an atomic system means layering a system package for every user with administrator rights and a restart, and `tur-apps` installs per user. The browser itself does come from Google's server |
 | Host facts are detected (8.10, requirement 2) | When the router was told nothing, a warning the design does not have: "TUR has not checked what this computer has. How this application will run here is an assumption, and may turn out differently." | Nothing detects them yet, and "How it will run" must not read as a fact about this computer when it is not one |
-| Error text comes from the code's registry entry (5.6) | The catalogue's own title and message for its codes; for this program's seven codes, sentences in `answers.cpp` | No registry exists yet |
+| Error text comes from the code's registry entry (5.6) | The catalogue's own title and message for its codes; for this program's eight codes, sentences in `answers.cpp` and `apps.cpp`; for `tur-apps`' codes, the centre's title for the code and `tur-apps`' message | No registry exists yet |
 | "Tell the project you need it" opens the project's issue page (8.3) | Hands `https://github.com/giorgiogiudice/TUR/issues` to the browser | The design does not give the address |
 | Icons are Breeze's; TUR draws the five rating icons and neutral glyphs for kinds of application (5.4) | The kit's glyphs; the two rating icons the kit lacks are drawn in `RatingGlyph.qml`; a tile with the first letter of the name stands for an application | As for the kit: nothing recolours a Breeze icon without KIconThemes. The catalogue has no icons |
 | The header has a menu sign and a magnifier in the field (8.3) | Neither | The side list does not collapse; the magnifier is decoration |

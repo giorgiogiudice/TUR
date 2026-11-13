@@ -98,7 +98,8 @@ ColumnLayout {
         Kit.Button {
             objectName: "installedRowUpdateButton"
             Layout.alignment: Qt.AlignTop
-            visible: row.offerUpdate && row.ours && !row.working
+            visible: row.offerUpdate && row.ours && !row.working && !!row.application.update
+                     && row.application.update.available === true
             text: qsTr("Update")
             onClicked: row.updateRequested()
         }

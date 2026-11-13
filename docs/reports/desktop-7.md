@@ -11,7 +11,12 @@ Subsystem:        Application centre (desktop/apps/tur-centre); install
                   backend (services/tur-apps, two small changes); catalogue
                   (one entry, validate --json); desktop CI (a new job)
 Build ID:         not applicable: no image is built for this change
-Source revision:  @@HEAD@@ (feat/centre-install, pull request 101)
+Source revision:  the head of feat/centre-install (pull request 101). The
+                  end-to-end results, recordings and pictures below come
+                  from desktop run 43426720987 on def9d7c; the commit after
+                  it adds the references, this report, a test's wait and
+                  one button's condition, and every workflow ran again on
+                  it (the pull request lists those runs)
 
 SUMMARY
 - What changed: the Install button installs. It runs tur-apps' plan and
@@ -67,11 +72,39 @@ FILES
 BUILD
 - Command: desktop/ci/build.sh ci and ci-sanitize (workflow desktop);
   cargo build/clippy/test (workflows rust, apps)
-- Result: @@BUILD@@
+- Result: success in every run since 28a5f11 (both presets; the
+  compositor job builds too); qmllint: no warnings
 - Warnings: none from the compilers, clippy or qmllint (a warning fails)
 
 TESTS
-@@TESTS@@
+- tur-apps (rust workflow): every test passes, with two new ones
+  (a_cancelled_flatpak_installation_is_stopped_and_takes_back_what_it_added;
+  exec::tests::a_program_is_stopped_with_what_it_started_when_asked), an
+  extended update test (measured against the installed commit; a runtime
+  it brings in is removed with the application) and
+  ops::tests::terminal_control_sequences_are_not_activity.
+- tur-catalogue (rust workflow): validate --json (tests/cli.rs); the
+  fixtures are the router's output, with validate.json and the three new
+  applications.
+- apps workflow (tur-apps against the real flatpak and Wine, unchanged
+  scripts): pass.
+- Desktop, Build, lint and test: 45 test programs. On def9d7c, 44 passed;
+  centre-qml had 282 of 284 functions pass, the two failures being a test
+  that pressed a button before its row was laid out and a threshold of 20
+  options where the fixtures have 19; both corrected in the next commit.
+  New: tst_centre_apps (13 functions), tst_install (10), tst_routerwords
+  (5), four centre-starts tests; tst_walks over 22 states (contrast: every
+  new state 0 failures in both variants; keyboard; 200 % and
+  right-to-left text).
+- Screenshots: 271 rendered, rendered twice and identical; 118 centre
+  pictures new or changed (66 new: 11 new states x 6; 52 changed: the line
+  under the button, the side list, Home), looked at and committed as
+  references from run 43426720987. Every other picture matches.
+- End to end (job centre-e2e, run 43426720987): 12 of 12 checks pass;
+  table below.
+- Boot, image, installer tests: run by CI on the pull request because the
+  catalogue changed; nothing here touches the image.
+- Hardware tests: NOT RUN.
 
 DIAGNOSTICS
 - Artifacts: desktop-centre-e2e (summary.md, every log, the recordings,
@@ -117,7 +150,83 @@ tur-centre (QML + C++, the person's session)
 
 Why a child process and not `org.tur.Apps1`: tur-centre.md, section 2a.
 
-@@RESULTS@@
+## End to end (desktop run 43426720987)
+
+The job `centre-e2e`: the Fedora 45 builder image as a privileged
+container with the network, `dnf install flatpak xorg-x11-server-Xvfb …`;
+tur-apps and tur-catalogue built on the runner; the centre's QML module and
+C++ driven by `tst_centre -input tests/e2e/e2e_*.qml` on Xvfb (xcb), under
+a session bus of its own, as a fresh user, through the centre's own
+controls (`mouseClick` on its buttons and switch). flatpak 1.18.4
+(`1.19.0^really1.18.4-1.fc45`), bubblewrap 0.13.1, curl 8.21.0, Qt 6.11.2.
+
+| Check | Result |
+|---|---|
+| the recordings were made, and every expectation of record.py was met (below) | pass |
+| the centre: e2e_install: Sources, Flathub's switch, the page, Install, the plan, progress, Installed, Open, the Installed view | pass |
+| the game's window appeared after Open (`"Chromium B.S.U.": ("chromium-bsu" "chromium-bsu") 800x600`) | pass |
+| flatpak lists the application for this user | pass |
+| nothing was installed system-wide | pass |
+| flatpak put the earlier commit bee584343a60… in place | pass |
+| the centre: e2e_update: the Updates view lists it; Update; `updated: true`; up to date after | pass |
+| the centre: e2e_remove: Remove's question with "Keep" chosen; removed; Install again; Cancel once flatpak reported its first operation; "Cancelled. Nothing was installed." | pass |
+| its data is still there after Remove (kept by default) | pass |
+| no reference the centre installed is left after Remove and the cancel | pass |
+| no deployment of the application is left | pass |
+| no record of tur-apps is left | pass |
+
+What record.py checked while recording (the same run): with Flathub not
+added the plan is refused with TUR-DESKTOP-APPS-008; Flathub switched on;
+the plan made; installed; the update moved the application to another
+commit; removed, its data kept, nothing tur-apps installed left; cancelled
+with TUR-DESKTOP-APPS-013 after flatpak's first line ("installing
+runtime/net.sourceforge.chromium_bsu.Locale/x86_64/stable"), nothing
+installed, flatpak lists nothing; **Google Chrome installed per user from
+Flathub** (Flatpak fetched Google's package from dl.google.com; added the
+app, the 25.08 runtime and its GL extensions) **and removed, nothing of it
+left**; the stand-in's failure half-way reported with TUR-DESKTOP-APPS-010.
+
+The earlier commit is put in place with `flatpak update --commit` by the
+test itself; the runtime 25.08 it brought in is listed in
+`logs/brought-in-by-the-downgrade.txt` and is the only thing left at the
+end (`logs/left-at-the-end.txt`).
+
+### What the runs found and what was fixed
+
+1. **A cancel was triggered by a terminal sequence.** flatpak 1.18 writes
+   `ESC[?25h` even without a terminal; tur-apps forwarded it as activity,
+   the recorder cancelled on it, and the centre would have shown it.
+   tur-apps now drops control sequences from activity lines.
+2. **An update after a commit moved outside tur-apps said "not updated".**
+   tur-apps compared the new commit with the one recorded at installation.
+   It now compares with the installed commit before the update.
+3. **What an update brought in was left behind by removal.** tur-apps now
+   records references an update adds, so that removal takes them too
+   (stand-in test).
+4. **Two lists at once returned the older answer.** The centre asked
+   `list` again when a view opened while the first was still running; it
+   now asks once, and afresh after a change.
+
+### Pictures of the real program
+
+| | |
+|---|---|
+| ![Sources, Flathub on](assets/desktop-7/e2e-2-sources-flathub-on.png) Sources after the person turned Flathub's switch on (it was "Not added" for the fresh user) | ![The plan](assets/desktop-7/e2e-4-plan.png) The plan, from the real tur-apps and Flathub: 5.6 MB and the 282.7 MB runtime, what it may reach, how it is removed |
+| ![Installing](assets/desktop-7/e2e-5-installing.png) Progress in place of the button: flatpak's own line, Cancel offered | ![The game opened](assets/desktop-7/e2e-opened-window-later.png) "Open": the game's window over the centre, which says it is installed and what is on this computer |
+| ![Updated](assets/desktop-7/e2e-9-updated.png) Updates: updated from the earlier commit | ![Remove's question](assets/desktop-7/e2e-11-remove-question.png) Remove asks one question, keeping chosen |
+| ![Removed](assets/desktop-7/e2e-12-removed.png) Removed, its settings and documents kept | ![Cancelled](assets/desktop-7/e2e-14-cancelled.png) Installed again and cancelled: nothing was installed |
+
+All in the artifact `desktop-centre-e2e` of the run, with the others
+(1-sources, 3-application, 6-installed, 7-installed-view, 8-updates,
+10-on-this-computer, 13-cancelling). Looked at, one by one. The cancel was
+answered within the 300 ms the picture waits, so 13 and 14 are the same.
+
+The pictures of every state rendered from the recordings, in the kit's
+matrix, are `desktop/tests/screenshots/centre-*.png`: for example
+`centre-install-plan-light-ltr-1x.png`, `centre-install-progress-dark-ltr-1x.png`,
+`centre-install-failed-dark-ltr-1x.png`, `centre-remove-question-light-ltr-1x.png`,
+`centre-sources-dark-rtl-long-1x.png` (right to left, lengthened strings),
+`centre-home-dark-ltr-1x.png` (Chrome's card).
 
 ## The Chrome decision
 
