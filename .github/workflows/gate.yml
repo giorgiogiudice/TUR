@@ -25,6 +25,16 @@ permissions:
   statuses: write
   pull-requests: read
 
+# One evaluation per commit waits; a newer one cancels it (issue #114). Every
+# evaluation reads the whole run list again, so a cancelled one loses nothing:
+# the newest, which starts after the latest workflow finished, sets the status.
+# workflow_run evaluations run in main's context and are not checks of the
+# pull request; the pull_request one is, so it has a group of its own and is
+# never cancelled by them.
+concurrency:
+  group: gate-${{ github.event_name }}-${{ github.event.workflow_run.head_sha || github.event.pull_request.head.sha }}
+  cancel-in-progress: ${{ github.event_name == 'workflow_run' }}
+
 jobs:
   evaluate:
     runs-on: ubuntu-24.04
@@ -68,6 +78,16 @@ jobs:
                   continue
               if r["name"] not in latest or r["id"] > latest[r["name"]]["id"]:
                   latest[r["name"]] = r
+          # An evaluation that replaced a cancelled one knows only its own
+          # trigger's result from the event; a run that finished just before
+          # (whose own evaluation was the one cancelled) may still be listed
+          # as running. Ask for each such run again, by itself, after a
+          # pause, so that no finished run is left counted as pending.
+          unfinished = [n for n, r in latest.items() if r["status"] != "completed"]
+          if unfinished and os.environ["EVENT"] == "workflow_run":
+              time.sleep(15)
+              for n in unfinished:
+                  latest[n] = call("GET", f"/actions/runs/{latest[n]['id']}")
           pending = sorted(n for n, r in latest.items() if r["status"] != "completed")
           failed = sorted(f"{n} ({r['conclusion']})" for n, r in latest.items()
                           if r["status"] == "completed"
