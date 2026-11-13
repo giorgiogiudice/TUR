@@ -10,7 +10,9 @@ Subsystem:        Desktop programs (desktop/apps/tur-pax-ui), P@x's keys
                   (desktop/kit/pax), desktop CI
 Build ID:         CI only (desktop workflow; no image build: the image does
                   not install desktop programs yet, issue #59)
-Source revision:  feat/pax-ui, pull request 102; head HEAD-PENDING
+Source revision:  feat/pax-ui, pull request 102; head is the commit after 533a059,
+                  which adds the four re-accepted pictures and fills this
+                  report; the code is 533a059's
 
 SUMMARY
 - What changed: P@x has a window. tur-pax-ui is the ask bar (Meta+Space);
@@ -53,12 +55,20 @@ FILES
 
 BUILD
 - desktop workflow, builder image (Fedora 45, Qt 6.11.2), warnings as
-  errors, and again with AddressSanitizer and UBSan: RUNS-PENDING
+  errors, and again with AddressSanitizer and UBSan: success, desktop
+  run 43445883484 (job 131955349694)
 
 TESTS
-- Unit and QML tests: RUNS-PENDING
-- Screenshots: RUNS-PENDING
-- End to end against the real tur-pax serve: RUNS-PENDING
+- Unit and QML tests: 55 of 55 ctest programs pass, and 55 of 55 under
+  the sanitizers (1404 test functions in the plain run); qmllint: no
+  warnings. Desktop run 43445883484
+- Screenshots: 58 new references (29 states, dark and light), each
+  looked at; every picture rendered twice and identical. Run 43445883484
+  differed only on the four re-worded pictures, accepted from it
+- End to end against the real tur-pax serve: record 31 of 31 checks,
+  the fixture equal to the recording; ui 11 of 11 checks: the rows came
+  one by one (1, 2, 3, 4, 5, 6), stopped 50 ms after Stop, the sandboxed
+  command killed. Run 43445883484, job 131955349359
 - Hardware tests: NOT RUN. Under KWin: NOT RUN for tur-pax-ui. On the
   image: NOT RUN (not installed).
 
@@ -105,13 +115,13 @@ or the scripted model's. Each picture was looked at.
 | Presence; parsed replies; refusals as codes and the service's sentence; signals drive the conversation | `tst_paxui_client`, on a private bus with the stand-in | pass |
 | A key reaches the service and stays nowhere in the client | `tst_paxui_client` (every property read back), `tst_setup` (the field is emptied; the stand-in notes only the length) | pass |
 | The stop key stops a running task and never starts P@x's service | `tst_paxui_client` (`tur-pax-ui --stop`, with an activation file the bus could use) | pass |
-| Streaming in order, one row at a time; a refused step with its reason and code; stop mid-step; the day's limit said once | `tst_paxui_conversation` (recorded signals), `tst_conversation.qml` (the panel), end to end (the real service) | RESULT-PENDING |
-| Consent with its version; local tiers, sizes, licences; download progress and cancel; provider terms; settings validation and the service's refusal; limits | `tst_setup.qml` | RESULT-PENDING |
-| Contrast in both variants; gold only inside P@x's marks; keyboard and accessible names in both directions; no clipped text at 200 % and right-to-left long | `tst_walks.qml`, 29 states | RESULT-PENDING |
+| Streaming in order, one row at a time; a refused step with its reason and code; stop mid-step; the day's limit said once | `tst_paxui_conversation` (recorded signals), `tst_conversation.qml` (the panel), end to end (the real service) | pass |
+| Consent with its version; local tiers, sizes, licences; download progress and cancel; provider terms; settings validation and the service's refusal; limits | `tst_setup.qml` | pass |
+| Contrast in both variants; gold only inside P@x's marks; keyboard and accessible names in both directions; no clipped text at 200 % and right-to-left long | `tst_walks.qml`, 29 states | pass |
 | The program loads every view with no QML warning, with no session bus | `pax-ui-starts-*` | pass |
 | The keys in the desktop file are `commands.json`'s | `gen_commands.py --check` and `--self-test` (`boundary` job) | pass |
-| The fixture is what the service says | `e2e.py record` (`pax-ui-end-to-end`) | RESULT-PENDING |
-| Against the real `tur-pax serve`: asked, steps streamed, stopped within 2 s, the command killed | `e2e.py ui` + `e2e_ask_stop.qml` | RESULT-PENDING |
+| The fixture is what the service says | `e2e.py record` (`pax-ui-end-to-end`) | pass |
+| Against the real `tur-pax serve`: asked, steps streamed, stopped within 2 s, the command killed | `e2e.py ui` + `e2e_ask_stop.qml` | pass |
 
 ## What CI found on the way
 
@@ -200,4 +210,17 @@ in the activity; no code on a `TextAdded` notice.
 
 ## CI runs
 
-RUNS-PENDING
+| Workflow | Run | Commit | Result |
+|---|---|---|---|
+| desktop | 43420786400 | fc649ac | failure: one compile error; gen_commands self-test |
+| desktop | 43421515197 | 29d955d | failure: the temporary fixture; the e2e recording worked (30 of 31) |
+| desktop | 43424271552 | 78d485d | failure: e2e bus refused the container (AppArmor); recording drift |
+| desktop | 43435903329 | 8cdb1d5 | failure: e2e first task too fast to see; one test compare; no references (pictures accepted from it) |
+| desktop | 43445883484 | 533a059 | every job passes but Screenshots, which differed only on the four re-worded pictures |
+| pax | 43445883438 | 533a059 | success (both jobs, the accessibility job included) |
+| rust | 43445883632 | 533a059 | success |
+| iso | 43445883486 | 533a059 | success |
+| gate | 43445883386 | 533a059 | success at its pull-request evaluation |
+
+The head commit after 533a059 changes four pictures and this report; its runs
+are the ones the pull request shows.
