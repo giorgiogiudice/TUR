@@ -25,7 +25,7 @@
 //! each a call the bridge answers in a fixed way. See
 //! `docs/architecture/pax-accessibility.md`.
 
-use std::io::{self, BufRead, BufReader, Write};
+use std::io::{self, BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
