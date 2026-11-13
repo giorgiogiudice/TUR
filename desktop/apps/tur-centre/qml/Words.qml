@@ -142,10 +142,27 @@ QtObject {
     // Every rating is shown with its source, the source's own word and the
     // date. `source` is the router's `rating_source`, or one record of the
     // catalogue turned into the same shape by recordSource().
-    function sourceSentence(source: var): string {
+    //
+    // `rating` is the rating the source is given for. TUR's own test that
+    // entered no rating ("unknown") is said as that, so that it does not read
+    // as a rating (issue #67). A record of TUR's compatibility autopilot is
+    // never a rating: it says with which settings the application started
+    // (compat-autopilot.md, section 8; issue #98).
+    function sourceSentence(source: var, rating: var): string {
         if (!source || source.kind === "unrated")
             return qsTr("Nobody has reported on this way of running it. It may still work.")
         const day = words.longDate(source.date)
+        if (source.kind === "tur-autopilot") {
+            //: %1 is a date. The autopilot is TUR's program that looks for settings with which a Windows application starts.
+            return qsTr("Works with these settings · found by TUR's compatibility autopilot on %1 · not a rating").arg(day)
+        }
+        if (source.kind === "tur-test" && rating === "unknown") {
+            if (source.version_tested)
+                //: %1 is a date, %2 a version of the application.
+                return qsTr("Tested by TUR on %1 with version %2 · TUR has not rated how well it works").arg(day).arg(source.version_tested)
+            //: %1 is a date.
+            return qsTr("Tested by TUR on %1 · TUR has not rated how well it works").arg(day)
+        }
         if (source.kind === "tur-test") {
             if (source.version_tested)
                 //: %1 is a date, %2 a version of the application.
@@ -188,8 +205,146 @@ QtObject {
                 version_tested: record.version_tested,
                 date: record.date
             }
+        if (record.reported_by === "tur-autopilot")
+            return {
+                kind: "tur-autopilot",
+                remedies: record.remedies ?? [],
+                runtime_version: record.runtime_version,
+                version_tested: record.version_tested,
+                date: record.date
+            }
         return { kind: "unrated" }
     }
+
+    // --- Works with these settings (TUR's compatibility autopilot) ---------
+    //
+    // The router's `settings` of an option: the remedies of the most recent
+    // autopilot record, which TUR found the application to start with. Not
+    // a rating (compat-autopilot.md, section 8).
+    function settingsSentence(settings: var): string {
+        if (!settings)
+            return ""
+        //: %1 is a date, %2 the version of the compatibility layer it was measured with, for example wine-9.0.
+        return qsTr("Found by TUR's compatibility autopilot on %1 with %2. Measured once, on one computer; not a rating.")
+            .arg(words.longDate(settings.date)).arg(settings.runtime_version)
+    }
+
+    // --- Installing (section 8.5) ------------------------------------------
+
+    // The routes tur-apps installs by. Every other is refused by it before
+    // anything is done (app-install-backend.md), so the button does not
+    // offer to.
+    readonly property var installableRoutes: ["flatpak", "wine"]
+
+    function installable(route: string): bool {
+        return words.installableRoutes.indexOf(route) >= 0
+    }
+
+    // A number of bytes, as the reader's locale writes a size: 5.6 MB.
+    function size(bytes: var): string {
+        if (bytes === null || bytes === undefined || bytes < 0)
+            return ""
+        return Qt.locale().formattedDataSize(bytes, 1, Locale.DataSizeSIFormat)
+    }
+
+    // What is happening, by tur-apps' step: the label of the progress.
+    function stepLabel(kind: int, step: string, route: string): string {
+        switch (step) {
+        case "download":
+            return qsTr("Downloading")
+        case "verify":
+            return qsTr("Checking the download")
+        case "install":
+            return route === "wine" ? qsTr("Setting it up in the Windows compatibility layer")
+                                    : qsTr("Downloading and installing")
+        case "record":
+            return qsTr("Finishing")
+        case "update":
+            return qsTr("Updating")
+        case "keep":
+            return qsTr("Keeping its settings and documents")
+        case "uninstall":
+            return qsTr("Removing")
+        case "unused":
+            return qsTr("Removing what nothing else uses")
+        }
+        if (kind === AppsOperation.Update)
+            return qsTr("Updating")
+        if (kind === AppsOperation.Remove)
+            return qsTr("Removing")
+        return qsTr("Starting")
+    }
+
+    // What an application may reach, by the kind tur-apps gives each
+    // permission (app-install-backend.md, "The plan"): the same words for
+    // every route (section 8.4).
+    readonly property var accessKinds: ({
+        "files": qsTr("Files"),
+        "devices": qsTr("Devices"),
+        "network": qsTr("Network"),
+        "display": qsTr("Display"),
+        "sound": qsTr("Sound"),
+        "services": qsTr("Services of the session"),
+        "other": qsTr("Other")
+    })
+
+    function accessKind(kind: string): string {
+        return words.lookUp(words.accessKinds, kind) || kind
+    }
+
+    // An edition's licence and who packages it, from the catalogue.
+    function licenceSentence(edition: var): string {
+        if (!edition)
+            return ""
+        if (edition.licence === "open-source")
+            return qsTr("Open source.")
+        if (edition.licence === "proprietary")
+            return qsTr("Proprietary: the publisher's terms apply.")
+        return qsTr("The catalogue does not say under which licence it is published.")
+    }
+
+    function packagingSentence(edition: var): string {
+        if (!edition)
+            return ""
+        if (edition.packaging === "publisher")
+            return qsTr("Packaged by its publisher.")
+        if (edition.packaging === "community")
+            return qsTr("Packaged by volunteers, not by its publisher.")
+        return ""
+    }
+
+    // Whether an update is known: tur-apps' `update` of a listed
+    // application.
+    function updateState(update: var): string {
+        if (!update || update.checked !== true)
+            return qsTr("Not checked")
+        if (update.available === true && update.version)
+            //: %1 is the version an update brings.
+            return qsTr("An update is available: version %1").arg(update.version)
+        if (update.available === true)
+            return qsTr("An update is available")
+        return qsTr("Up to date")
+    }
+
+    // The state of a source, for this person (`tur-apps sources`).
+    readonly property var sourceStates: ({
+        "on": qsTr("On"),
+        "off": qsTr("Off"),
+        "not-added": qsTr("Not added")
+    })
+
+    function sourceState(state: string): string {
+        return words.lookUp(words.sourceStates, state) || state
+    }
+
+    // --- Chrome, for people coming from Windows (section 17.1, answer 4) ---
+
+    readonly property string chromeId: "com.google.chrome"
+
+    readonly property string chromeOffer: qsTr("Coming from Windows? Google Chrome can be installed with one action. Firefox is TUR's browser; Chrome is offered, not included.")
+
+    // Said wherever Chrome is offered or planned: where it comes from.
+    readonly property string chromeOrigin: qsTr("Chrome is made by Google, and Google's terms apply to it. TUR does not include it. Flatpak downloads it from Google's own server while it installs; the package around it is kept by Flathub's volunteers, not by Google. It is updated the same way.")
 
     // A day the catalogue writes as 2026-11-12, as the reader's locale writes
     // a date in full, without the day of the week: 12 November 2026.
@@ -228,7 +383,10 @@ QtObject {
         const obtain = edition && edition.obtain ? edition.obtain : ""
         if (words.storeNames[obtain] !== undefined)
             return "open-store"
-        if (obtain === "publisher-page")
+        // A free installer the catalogue pins (its address, size and
+        // SHA-256) is downloaded by TUR from the publisher; otherwise the
+        // person fetches it.
+        if (obtain === "publisher-page" && !(option.route === "wine" && edition.installer))
             return "publisher-page"
         if (option.outlook === "doubtful")
             return "install-anyway"
@@ -315,7 +473,8 @@ QtObject {
                 qsTr("An experimental macOS layer exists in TUR and is switched off.")
             ]
         }
-        return option && option.reason ? [option.reason] : []
+        const reason = RouterWords.reason(option)
+        return reason.length > 0 ? [reason] : []
     }
 
     // What the person can do instead: the router's alternative, in the form

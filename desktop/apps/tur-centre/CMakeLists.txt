@@ -24,6 +24,17 @@ set(centre_qml
     qml/BackButton.qml
     qml/AppTile.qml
     qml/FailureMessage.qml
+    qml/RouterWords.qml
+    qml/ChoiceRow.qml
+    qml/InstallSheet.qml
+    qml/RemoveSheet.qml
+    qml/InstallerDialog.qml
+    qml/OperationBlock.qml
+    qml/OnThisComputer.qml
+    qml/InstalledRow.qml
+    qml/InstalledView.qml
+    qml/UpdatesView.qml
+    qml/SourcesView.qml
 )
 
 # The sources are in qml/; the module is flat, so that every type sees every
@@ -32,7 +43,7 @@ foreach(file IN LISTS centre_qml)
     get_filename_component(name ${file} NAME)
     set_source_files_properties(${file} PROPERTIES QT_RESOURCE_ALIAS ${name})
 endforeach()
-set_source_files_properties(qml/Words.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
+set_source_files_properties(qml/Words.qml qml/RouterWords.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 
 # NO_CACHEGEN: no ahead-of-time compilation of QML to C++ (desktop/README.md).
 qt_add_qml_module(turcentre

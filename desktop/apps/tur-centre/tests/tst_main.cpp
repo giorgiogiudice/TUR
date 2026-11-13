@@ -12,6 +12,8 @@
 #include <QQmlEngine>
 #include <QString>
 #include <QStyleHints>
+#include <QVariantMap>
+#include <QtGlobal>
 #include <QtQuickTest/quicktest.h>
 
 class Setup : public QObject
@@ -41,6 +43,17 @@ public Q_SLOTS:
         // (unit/helper.cpp), for the states only a failing program reaches.
         engine->rootContext()->setContextProperty(QStringLiteral("centreHelper"),
                                                   QStringLiteral(TUR_CENTRE_HELPER));
+        // The end-to-end test (tests/e2e, desktop/ci/centre-e2e) is given
+        // the real programs and catalogue in the environment; elsewhere
+        // these are empty and it is not run.
+        engine->rootContext()->setContextProperty(
+            QStringLiteral("centreEndToEnd"),
+            QVariantMap {
+                { QStringLiteral("apps"), qEnvironmentVariable("TUR_CENTRE_E2E_APPS") },
+                { QStringLiteral("catalogueProgram"), qEnvironmentVariable("TUR_CENTRE_E2E_CATALOGUE_PROGRAM") },
+                { QStringLiteral("catalogue"), qEnvironmentVariable("TUR_CENTRE_E2E_CATALOGUE") },
+                { QStringLiteral("updateExpected"), qEnvironmentVariable("TUR_CENTRE_E2E_UPDATE_EXPECTED") == QLatin1String("1") },
+            });
     }
 };
 

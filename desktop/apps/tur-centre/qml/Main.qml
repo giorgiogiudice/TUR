@@ -19,6 +19,10 @@ Window {
     property string hostFacts
     property string preferences
 
+    // Where installing is done: tur-apps, or recorded runs of it.
+    property string appsFixture
+    property string appsProgram: "tur-apps"
+
     // What to open: tur-centre:home, tur-centre:search?q=..., tur-centre:app/<id>.
     property string address
 
@@ -51,11 +55,24 @@ Window {
         preferences: window.preferences
     }
 
+    // tur-apps, run as a program of this session: it installs per user.
+    // The same catalogue, host facts and preferences as the router's.
+    Apps {
+        id: installer
+
+        fixture: window.appsFixture
+        program: window.appsProgram
+        catalogueDirectory: window.catalogueDirectory
+        hostFacts: window.hostFacts
+        preferences: window.preferences
+    }
+
     Shell {
         id: shell
 
         anchors.fill: parent
         catalogue: answers
+        apps: installer
         onUrlRequested: url => Qt.openUrlExternally(url)
     }
 }
