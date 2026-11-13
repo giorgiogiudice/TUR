@@ -499,6 +499,10 @@ class Harness:
                     arrival = len([text for text in lines if "TUR-A11Y arrived=" in text])
                     if on_arrival is not None:
                         on_arrival(arrival)
+                    else:
+                        # The highlight fades in when the pointer arrives;
+                        # the bridge rests 600 ms before it acts.
+                        time.sleep(0.3)
                     shot = self.shooter.take(f"{name}-{arrival}")
                     shot["log"] = line.strip()
                     shots.append(shot)
@@ -844,7 +848,19 @@ class Harness:
             for app in after.get("applications", [])
             if any(word in " ".join([app.get("application", "")] + app.get("also_known_as", [])).lower() for word in ("wine", "notepad"))
         ]
-        processes = subprocess.run(["ps", "-eo", "pid,comm"], capture_output=True, text=True).stdout
+        def comm(entry):
+            try:
+                return (entry / "comm").read_text().strip()
+            except OSError:
+                return ""
+
+        processes = "\n".join(
+            f"{entry.name} {comm(entry)}" for entry in pathlib.Path("/proc").iterdir() if entry.name.isdigit()
+        )
+        self.results["coverage"]["wine_survey_after"] = [
+            {"application": app.get("application"), "toolkit": app.get("toolkit"), "windows": len(app.get("windows", []))}
+            for app in after.get("applications", [])
+        ]
         self.results["coverage"]["wine"] = {
             "wineboot_status": boot.returncode,
             "new_applications_on_the_bus": new,

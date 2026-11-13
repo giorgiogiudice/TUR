@@ -467,6 +467,8 @@ impl Bridge {
                 if operation == UiOperation::Type {
                     // Whether the text arrived, read back from the field.
                     let now = self.desktop.client().text(&node, 4000).unwrap_or_default();
+                    // Read back as the person would see it, after the
+                    // application has taken it.
                     answer.insert(
                         "text_now_contains_typed_text".to_owned(),
                         json!(now.contains(call.text())),

@@ -207,7 +207,13 @@ fn type_text(
     if !facts.offers(iface::TEXT) && !facts.offers(iface::EDITABLE_TEXT) {
         return Err(NotDone::not_offered("the element offers no text to type into"));
     }
+    // The field takes the keyboard first, as it would for a person: some
+    // toolkits (Firefox) take text only into the field that has it.
+    if facts.offers(iface::COMPONENT) && !facts.states.has(state::FOCUSED) {
+        let _ = client.grab_focus(node);
+    }
     if facts.offers(iface::EDITABLE_TEXT) {
+        let before = client.text(node, 4000).unwrap_or_default();
         let count = client.character_count(node).unwrap_or(0).max(0);
         let caret = client.caret_offset(node).unwrap_or(-1);
         let mut position = if (0..=count).contains(&caret) { caret } else { count };
@@ -231,7 +237,29 @@ fn type_text(
             }
             position += i32::try_from(piece.chars().count()).unwrap_or(0);
         }
-        return Ok(format!("typed {} characters at the caret", text.chars().count()));
+        // An application may take the text after it has answered (Firefox
+        // passes it to the page's process). If it is not there after a
+        // short wait, the whole text is set instead: what it was, with the
+        // new text at the caret.
+        if arrived(client, node, text) {
+            return Ok(format!("typed {} characters at the caret", text.chars().count()));
+        }
+        let at = usize::try_from(position)
+            .unwrap_or(0)
+            .saturating_sub(text.chars().count())
+            .min(before.chars().count());
+        let head: String = before.chars().take(at).collect();
+        let tail: String = before.chars().skip(at).collect();
+        return match client.set_text_contents(node, &format!("{head}{text}{tail}")) {
+            Ok(true) if arrived(client, node, text) => Ok(format!(
+                "set the field's text with {} characters inserted at the caret",
+                text.chars().count()
+            )),
+            Ok(_) => Err(NotDone::failed(
+                "the application answered that it took the text, and the text is not in the field",
+            )),
+            Err(error) => Err(NotDone::bus("setting the text", &error)),
+        };
     }
     // A toolkit that does not say it offers editable text may still take
     // the whole text (Qt Quick does, through its fallback): the text is
@@ -249,6 +277,20 @@ fn type_text(
             "the field takes no text through the accessibility tree: {error}"
         ))),
     }
+}
+
+/// Whether `text` is in the field now, or within half a second.
+fn arrived(client: &Client, node: &Node, text: &str) -> bool {
+    for _ in 0..6 {
+        if client
+            .text(node, 4000)
+            .is_ok_and(|now| now.contains(text))
+        {
+            return true;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    false
 }
 
 #[cfg(test)]
