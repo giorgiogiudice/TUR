@@ -1,0 +1,12 @@
+; SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+;
+; Import definitions for the KMDF loader, written from the exports named in
+; Windows-Driver-Frameworks' fxldr.h. Used only to link kmdfprobe.sys; no
+; Microsoft file is involved.
+LIBRARY "WDFLDR.SYS"
+EXPORTS
+WdfVersionBind
+WdfVersionUnbind
+WdfVersionBindClass
+WdfVersionUnbindClass
+WdfLdrQueryInterface

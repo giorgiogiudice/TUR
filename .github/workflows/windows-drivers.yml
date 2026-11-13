@@ -1,0 +1,129 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Experiment (docs/reports/windows-drivers-1.md): can Windows USB and HID
+# device drivers run as ordinary user-space programs under Wine's driver
+# host (winedevice.exe, ntoskrnl.exe, wineusb.sys, winebus.sys), never in a
+# kernel?
+#
+# On the runner: the kernel's own USB gadget framework makes three virtual
+# USB devices (dummy_hcd + configfs; tests/windows-drivers/gadget/gadget.sh):
+# a bulk loopback, a source/sink with vendor control requests, and a
+# vendor-defined HID device. Those are the only things loaded into the
+# runner's kernel: stock modules (dummy_hcd, libcomposite, usb_f_ss_lb,
+# usb_f_hid), nothing built here and no Windows driver.
+#
+# In a Fedora 45 container with Fedora 45's Wine: a WDM USB function driver
+# and test programs written for this experiment, a KMDF binding probe and a
+# best-effort mingw-w64 build of Microsoft's kmdf_fx2 sample are built with
+# mingw-w64; tests/windows-drivers/harness.py then installs them in Wine
+# prefixes, grants and withdraws device access, runs a bubblewrap sandbox
+# shaped like tur-runtime's, and records what worked.
+#
+# The job is green when the harness ran; a negative result is recorded as a
+# finding in the results table, not as a failed job. No Microsoft binary is
+# downloaded or used; Microsoft's sample sources (MS-PL, MIT) are fetched at
+# pinned commits and not committed.
+name: windows-drivers
+
+on:
+  pull_request:
+    paths:
+      - "tests/windows-drivers/**"
+      - ".github/workflows/windows-drivers.yml"
+  workflow_dispatch:
+    inputs:
+      only:
+        description: "Comma-separated harness scenarios (empty: all)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-drivers-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Fedora 45's container image, by digest (tag 45 on 13 November 2026).
+  FEDORA_IMAGE: registry.fedoraproject.org/fedora:45@sha256:fa773d10382c082ff2cccaf7982a5c162f11f296f91274b994357f2d3d473770
+
+jobs:
+  fedora-wine:
+    name: Windows USB and HID drivers in Wine's user-space driver host (Fedora 45 Wine)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Scratch directory
+        run: |
+          mkdir -p "$RUNNER_TEMP/twd/evidence"
+          echo "WORK=$RUNNER_TEMP/twd" >> "$GITHUB_ENV"
+
+      - name: What the runner's kernel offers for virtual USB devices
+        run: |
+          sudo bash tests/windows-drivers/gadget/gadget.sh probe | tee "$WORK/evidence/kernel-probe.txt"
+          if ! modinfo dummy_hcd >/dev/null 2>&1; then
+            echo "dummy_hcd is not in the installed modules; installing the kernel's extra modules package" \
+              | tee -a "$WORK/evidence/kernel-probe.txt"
+            sudo apt-get update
+            sudo apt-get install -y "linux-modules-extra-$(uname -r)" 2>&1 | tail -n 5 | tee -a "$WORK/evidence/kernel-probe.txt"
+            sudo bash tests/windows-drivers/gadget/gadget.sh probe | tee -a "$WORK/evidence/kernel-probe.txt"
+          fi
+          { echo '### Kernel'; echo '```'; cat "$WORK/evidence/kernel-probe.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Virtual USB devices (dummy_hcd + configfs gadgets)
+        run: |
+          sudo bash tests/windows-drivers/gadget/gadget.sh up 2>&1 | tee "$WORK/evidence/gadgets.txt"
+          { echo '### Virtual USB devices'; echo '```'; cat "$WORK/evidence/gadgets.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Let bubblewrap make user namespaces in the container
+        # Ubuntu 24.04 denies unprivileged user namespaces to unconfined
+        # programs, which a privileged container's are. This throw-away
+        # runner lifts the restriction (remedy 2 of
+        # tests/windows-runtime/sandbox-preflight.sh).
+        run: |
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 | tee "$WORK/evidence/userns.txt" || true
+
+      - name: Experiment in Fedora 45 with Fedora's Wine
+        env:
+          TWD_ONLY: ${{ github.event.inputs.only }}
+        run: |
+          sudo dmesg --clear || true
+          docker run --rm --privileged --network host \
+            -e TWD_ONLY \
+            -v /dev:/dev -v /sys:/sys -v /run/udev:/run/udev:ro \
+            -v "$GITHUB_WORKSPACE:/src:ro" -v "$WORK:/work" \
+            "$FEDORA_IMAGE" bash /src/tests/windows-drivers/fedora-run.sh
+
+      - name: Kernel log and devices afterwards
+        if: always()
+        run: |
+          sudo dmesg | grep -iE 'usb|gadget|dummy|hid|configfs' | tail -n 400 > "$WORK/evidence/dmesg.txt" || true
+          sudo bash tests/windows-drivers/gadget/gadget.sh show > "$WORK/evidence/gadgets-after.txt" 2>&1 || true
+          sudo chown -R "$(id -u):$(id -g)" "$WORK" || true
+          grep -E 'did not claim|usbfs|interface' "$WORK/evidence/dmesg.txt" | sort | uniq -c | sort -rn | head -n 20 || true
+
+      - name: Results
+        if: always()
+        run: |
+          if [ -f "$WORK/evidence/results.md" ]; then
+            cat "$WORK/evidence/results.md" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No results were written." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ -f "$WORK/evidence/kmdf-fx2/summary.txt" ]; then
+            { echo '### kmdf_fx2 with mingw-w64'; echo '```'; cat "$WORK/evidence/kmdf-fx2/summary.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: windows-drivers-evidence
+          path: ${{ runner.temp }}/twd/evidence/
+          if-no-files-found: warn
+
+      - name: Remove the virtual devices
+        if: always()
+        run: sudo bash tests/windows-drivers/gadget/gadget.sh down || true
