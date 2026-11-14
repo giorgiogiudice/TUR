@@ -70,7 +70,7 @@ jobs:
           shellcheck --version | sed -n 2p
           shellcheck -x tests/boot/guest/rootfs/usr/libexec/tur-boot-test/heal-agent
           python3 -m py_compile tests/boot/heal.py
-          for script in heal-pax heal-receiver; do
+          for script in heal-pax heal-receiver heal-notifications; do
             python3 -c 'import ast, sys; ast.parse(open(sys.argv[1]).read(), sys.argv[1])' \
               "tests/boot/guest/rootfs/usr/libexec/tur-boot-test/${script}"
           done

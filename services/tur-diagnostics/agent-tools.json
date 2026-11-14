@@ -117,6 +117,17 @@
       }
     },
     {
+      "name": "heal_history",
+      "description": "Show what TUR's self-healing did on this computer, newest first, in plain words: what it found, what it repaired by itself and whether the repair held, what the person and P@x applied or undid, and the reports offered. Reads only. At the start of a conversation, call it and tell the person about anything they may not have seen, in particular anything TUR did by itself.",
+      "class": 0,
+      "method": "History",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
       "name": "heal_apply_remedy",
       "description": "Ask TUR's healing service to apply one repair to a problem it has found, and check that the repair worked. The service refuses a problem that is not present now, a repair that cannot be undone (only the person can apply those, as administrator) and a repair asked for too often. Tell the person what the repair changes before asking for it.",
       "class": 1,

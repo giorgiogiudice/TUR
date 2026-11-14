@@ -91,9 +91,15 @@ pub enum Actor {
     Service,
     /// A person with administrator rights, at the command line.
     Administrator,
-    /// A request through the healing service's socket: P@x's tool, or a
-    /// person's own `tur-diag heal apply` without administrator rights.
+    /// A request through the healing service's socket that does not say it
+    /// is the person's own: P@x's tools (`heal_apply_remedy`,
+    /// `heal_undo_remedy`), or another program of that account.
     Request,
+    /// The person's own `tur-diag heal apply` or `undo` without
+    /// administrator rights, through the same socket. The request says so
+    /// itself; it decides only how the history names who acted, never what
+    /// may be done.
+    Person,
 }
 
 /// One fault, from when it was found until it was resolved.
@@ -178,6 +184,9 @@ pub struct Event {
     /// Who acted, if anyone did.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub by: Option<Actor>,
+    /// The account that asked, for a request through the socket.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub uid: Option<u32>,
 }
 
 /// The kinds of event.
@@ -205,9 +214,11 @@ pub enum EventKind {
 }
 
 impl EventKind {
-    /// Whether the person is told about it.
+    /// Whether the person may be told about it. Every kind but `cleared`;
+    /// `held` only for a repair TUR made by itself (the notice says the
+    /// automatic repair held), see `engine::notices`.
     pub const fn is_notice(self) -> bool {
-        !matches!(self, EventKind::Held | EventKind::Cleared)
+        !matches!(self, EventKind::Cleared)
     }
 }
 
@@ -347,6 +358,7 @@ impl HealState {
             version: self.version.clone(),
             remedy: remedy.map(str::to_owned),
             by,
+            uid: None,
         });
         seq
     }

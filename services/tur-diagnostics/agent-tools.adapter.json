@@ -115,6 +115,26 @@
       ]
     },
     {
+      "tool": "heal_history",
+      "kind": "command",
+      "program": "/usr/bin/tur-diag",
+      "arguments": [
+        {
+          "literal": "heal"
+        },
+        {
+          "literal": "history"
+        },
+        {
+          "literal": "--json"
+        },
+        {
+          "literal": "--limit=50"
+        }
+      ],
+      "max_output_bytes": 262144
+    },
+    {
       "tool": "heal_apply_remedy",
       "kind": "request",
       "socket": "/run/tur/heal.socket",

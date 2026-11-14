@@ -4,9 +4,10 @@
 //! it the adapters that perform them with this component's own program,
 //! `agent-tools.adapter.json`.
 //!
-//! Seven tools: `diag_get_status`; the two read-only problem report tools,
+//! Eight tools: `diag_get_status`; the two read-only problem report tools,
 //! `diag_report_prepare` (a preview only) and `diag_report_list`; and the
-//! four of self-healing (ADR-0027): `heal_list_faults` and `heal_explain`,
+//! five of self-healing (ADR-0027): `heal_list_faults`, `heal_explain` and
+//! `heal_history`,
 //! which read, and `heal_apply_remedy` and `heal_undo_remedy`, class 1,
 //! which are requests to TUR's healing service over its socket: the service
 //! decides and performs. Sending a report is not a tool (ADR-0024).
@@ -122,12 +123,13 @@ fn check_against_the_program(tool: &str, line: &[String], subcommands: &[&str]) 
 }
 
 /// The tools P@x is offered, in the order of the manifest.
-const OFFERED: [&str; 7] = [
+const OFFERED: [&str; 8] = [
     "diag_get_status",
     "diag_report_prepare",
     "diag_report_list",
     "heal_list_faults",
     "heal_explain",
+    "heal_history",
     "heal_apply_remedy",
     "heal_undo_remedy",
 ];
@@ -144,12 +146,13 @@ const NOT_OFFERED: [&str; 0] = [];
 /// Every tool with the class the manifest declares. Preparing a report is a
 /// preview and listing reports reads a local list: both observe. Sending is
 /// class 2 (ADR-0024) and is not a tool at all.
-const CLASSES: [(&str, u64); 7] = [
+const CLASSES: [(&str, u64); 8] = [
     ("diag_get_status", 0),
     ("diag_report_prepare", 0),
     ("diag_report_list", 0),
     ("heal_list_faults", 0),
     ("heal_explain", 0),
+    ("heal_history", 0),
     ("heal_apply_remedy", 1),
     ("heal_undo_remedy", 1),
 ];
@@ -214,6 +217,12 @@ fn cases() -> Vec<Case> {
             json!({}),
             vec!["heal", "status"],
             vec!["/usr/bin/tur-diag", "heal", "status", "--json"],
+        ),
+        (
+            "heal_history",
+            json!({}),
+            vec!["heal", "history"],
+            vec!["/usr/bin/tur-diag", "heal", "history", "--json", "--limit=50"],
         ),
         (
             "heal_explain",
