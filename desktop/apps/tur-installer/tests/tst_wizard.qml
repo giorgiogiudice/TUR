@@ -345,12 +345,15 @@ Item {
             wizard.turGiB = 30
             verify(control(wizard, "continueButton").enabled)
             verify(control(wizard, "defaultTurOption").visible, "the default system is asked here too")
+            verify(!control(wizard, "shrinkExplanation").visible, "nothing to explain when it is possible")
         }
 
         function test_shrink_refused_says_why() {
             const wizard = enter("disks-windows-chosen")
             verify(!control(wizard, "shrinkWindowsOption").enabled, "Windows' partition is too full to give 25 GiB")
-            compare(Words.shrinkWhyNot(host.disk("vda")).indexOf("too full") >= 0, true)
+            const why = control(wizard, "shrinkExplanation")
+            verify(why.visible, "the reason is on the screen")
+            verify(why.text.indexOf("too full") >= 0, why.text)
         }
 
         function test_confirm_shrink_windows() {
@@ -365,6 +368,7 @@ Item {
             verify(!install.enabled, "the erase phrase does not confirm shrinking")
             field.text = "BESIDE OWSDISKA"
             verify(!install.enabled, "nor the beside phrase")
+            field.text = ""
             for (const key of "SHRINK OWSDISKA")
                 keyClick(key === " " ? Qt.Key_Space : key, key === " " ? Qt.NoModifier : Qt.ShiftModifier)
             verify(install.enabled)

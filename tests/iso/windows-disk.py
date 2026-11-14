@@ -108,11 +108,11 @@ def ntfs_files(disk: pathlib.Path, offset: int, size: int) -> dict:
                str(disk)).stdout.strip()
     found: dict = {}
     try:
-        names = run("ntfsls", loop, check=False).stdout.split("\n")
+        names = run("ntfsls", "--force", loop, check=False).stdout.split("\n")
         for name in (n.strip() for n in names):
             if not name or name.startswith("$") or name in (".", ".."):
                 continue
-            data = subprocess.run(["ntfscat", loop, name], capture_output=True)
+            data = subprocess.run(["ntfscat", "--force", loop, name], capture_output=True)
             found[name] = hashlib.sha256(data.stdout).hexdigest() if data.returncode == 0 else None
     finally:
         run("losetup", "--detach", loop, check=False)
@@ -178,17 +178,16 @@ def compare(before: dict, after: dict, shrunk: int | None = None) -> dict:
         if old["number"] == shrunk:
             same_but_size = new is not None and all(new[k] == old[k] for k in ("number", "start", "type", "uuid", "name", "attrs"))
             files_before, files_after = old.get("ntfs_files") or {}, (new or {}).get("ntfs_files") or {}
-            kept = sorted(name for name, digest in files_before.items() if files_after.get(name) == digest)
+            same_files = sorted(name for name, digest in files_before.items() if files_after.get(name) == digest)
             item.update({"shrunk": True, "same_entry_but_size": same_but_size,
                          "sectors_before": old["size"], "sectors_after": (new or {}).get("size"),
-                         "files_before": len(files_before), "files_unchanged": len(kept),
-                         "files_changed_or_missing": sorted(set(files_before) - set(kept))})
-            if not same_but_size or (new or {}).get("size", 0) > old["size"]:
+                         "files_before": len(files_before), "files_unchanged": len(same_files),
+                         "files_changed_or_missing": sorted(set(files_before) - set(same_files))})
+            if not same_but_size or (new or {}).get("size", old["size"]) >= old["size"]:
                 checks["problems"].append(f"partition {old['number']}: not shrunk in place")
-            if not files_before or len(kept) != len(files_before):
+            if not files_before or len(same_files) != len(files_before):
                 checks["problems"].append(f"partition {old['number']}: files changed or missing after the shrink")
-            kept_items = checks.setdefault("windows_partitions", [])
-            kept_items.append(item)
+            kept.append(item)
             continue
         if not same_entry:
             checks["problems"].append(f"partition {old['number']}: its table entry changed or is gone")
@@ -214,7 +213,7 @@ def compare(before: dict, after: dict, shrunk: int | None = None) -> dict:
             if not same_bytes:
                 checks["problems"].append(f"partition {old['number']} ({old['name']}): its bytes changed")
         kept.append(item)
-    checks["windows_partitions"] = checks.get("windows_partitions", []) + kept
+    checks["windows_partitions"] = kept
     added = [entry for number, entry in sorted(now.items()) if number not in {old["number"] for old in before["partitions"]}]
     placed = []
     for entry in added:

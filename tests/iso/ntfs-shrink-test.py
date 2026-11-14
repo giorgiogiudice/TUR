@@ -154,7 +154,7 @@ def fill_far(image: Image, work: pathlib.Path) -> dict[str, str]:
 def file_hashes(image: Image, names: list[str]) -> dict[str, str | None]:
     found = {}
     for name in names:
-        done = subprocess.run(["ntfscat", image.part(2), name], capture_output=True)
+        done = subprocess.run(["ntfscat", "--force", image.part(2), name], capture_output=True)
         found[name] = hashlib.sha256(done.stdout).hexdigest() if done.returncode == 0 else None
     return found
 
@@ -201,6 +201,7 @@ def main() -> int:
                                            "output": dry.stdout[-1500:]}
         check("dry-run", "ntfsresize --no-action changes no byte", base.partition_sha(2) == before_ntfs,
               f"status {dry.returncode}")
+        run("sync")
         run("cp", "--sparse=always", str(base.path), str(work / "far-pristine.raw"))
         started = time.monotonic()
         shrink = library("ntfs_shrink", base.loop, "2", base.part(2), str(new))

@@ -236,7 +236,8 @@ WizardScreen {
                 id: sizeField
 
                 objectName: "turSizeField"
-                Layout.maximumWidth: 240
+                Layout.fillWidth: true
+                Layout.maximumWidth: 440
                 label: qsTr("Room for TUR, in GiB")
                 text: screen.turGiB > 0 ? String(screen.turGiB) : ""
                 inputMethodHints: Qt.ImhDigitsOnly
@@ -327,9 +328,18 @@ WizardScreen {
               : Words.besidePossible(screen.chosenDisk)
                 ? qsTr("Beside Windows, TUR goes into the free space you made in Windows. Windows' partitions and files stay as they are; TUR adds its start-up files to Windows' EFI system partition. When the computer starts, TUR's menu offers TUR and Windows.")
                 : Words.besideWhyNot(screen.chosenDisk)
-                  + (screen.chosenDisk !== null && screen.chosenDisk.windows && !Words.shrinkPossible(screen.chosenDisk)
-                     ? " " + qsTr("Shrinking Windows from here is not possible either: %1").arg(Words.shrinkWhyNot(screen.chosenDisk))
-                     : "")
+        tone: Kit.Label.Secondary
+        paragraph: true
+        wrapMode: Text.Wrap
+    }
+
+    // Why Windows cannot be shrunk from here, and what to do, when it cannot.
+    Kit.Label {
+        objectName: "shrinkExplanation"
+        Layout.fillWidth: true
+        visible: screen.chosenDisk !== null && screen.chosenDisk.windows === true && !Words.shrinkPossible(screen.chosenDisk)
+        text: screen.chosenDisk !== null && screen.chosenDisk.windows === true
+              ? qsTr("Shrinking Windows from here is not possible. %1").arg(Words.shrinkWhyNot(screen.chosenDisk)) : ""
         tone: Kit.Label.Secondary
         paragraph: true
         wrapMode: Text.Wrap
