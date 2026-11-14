@@ -184,12 +184,14 @@ jobs:
       - name: Install Wine with its 32-bit support, bubblewrap and a display
         # Distribution packages only. Most installers are 32-bit programs
         # whatever they install, so Wine's 32-bit half is needed here; the
-        # launch-path job above runs without it.
+        # launch-path job above runs without it. OpenSSH's server and
+        # PuTTY's key tool are for WinSCP's check: a throwaway SFTP server
+        # on the loopback interface, run as the runner's user.
         run: |
           sudo dpkg --add-architecture i386
           sudo apt-get update
           sudo apt-get install -y wine wine64 wine32:i386 bubblewrap unzip \
-            xvfb x11-utils openbox wmctrl imagemagick
+            xvfb x11-utils openbox wmctrl imagemagick openssh-server openssh-client putty-tools
 
       - name: Versions
         run: |
@@ -200,10 +202,12 @@ jobs:
             echo "wine: $(wine --version 2>/dev/null | head -n 1)"
             echo "bubblewrap: $(bwrap --version)"
             echo "unzip: $(unzip -v | head -n 1)"
+            echo "openssh: $(ssh -V 2>&1)"
+            echo "puttygen: $(puttygen --version 2>&1 | head -n 1)"
             echo "python: $(python3 --version)"
             echo "packages:"
             dpkg-query -W -f '  ${Package}:${Architecture} ${Version}\n' wine wine64 wine32 libwine \
-              bubblewrap unzip xvfb openbox wmctrl imagemagick 2>&1 || true
+              bubblewrap unzip xvfb openbox wmctrl imagemagick openssh-server putty-tools 2>&1 || true
             echo "wine programs:"
             ls -l /usr/bin/wine /usr/bin/wineserver /usr/lib/wine/ 2>&1 | sed 's/^/  /' || true
             echo "ntsync device: $(ls -l /dev/ntsync 2>&1)"
@@ -296,7 +300,8 @@ jobs:
           sudo dpkg --add-architecture i386
           sudo apt-get update
           sudo apt-get install -y wine wine64 wine32:i386 bubblewrap unzip \
-            xvfb x11-utils openbox wmctrl imagemagick gcc-mingw-w64-x86-64 e2fsprogs
+            xvfb x11-utils openbox wmctrl imagemagick gcc-mingw-w64-x86-64 e2fsprogs \
+            openssh-server openssh-client putty-tools
 
       - name: Versions
         run: |
