@@ -1,0 +1,43 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0 -->
+<!-- A plain, well-labelled web form for the vision test of the winsee
+     experiment (docs/reports/exp-winsee-1.md). It sends nothing anywhere;
+     linux_labels.py photographs Firefox showing it and reads where its
+     controls are from the accessibility tree. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>TUR winsee form</title>
+<style>
+  body { font: 16px sans-serif; margin: 28px; max-width: 760px; }
+  p { margin: 14px 0; }
+  label { margin-right: 10px; }
+  input[type=text] { font: 16px sans-serif; width: 300px; }
+  button { font: 16px sans-serif; margin-right: 10px; padding: 4px 12px; }
+  select { font: 16px sans-serif; }
+</style>
+</head>
+<body>
+<h1>Book a meeting room</h1>
+<p><label for="who">Your name</label><input id="who" type="text"></p>
+<p><label for="topic">Meeting topic</label><input id="topic" type="text"></p>
+<p>
+  <label for="room">Room</label>
+  <select id="room"><option>Small room</option><option>Large room</option><option>Auditorium</option></select>
+</p>
+<p>
+  <input id="projector" type="checkbox"><label for="projector">Projector needed</label>
+  <input id="catering" type="checkbox"><label for="catering">Order coffee</label>
+</p>
+<p>
+  <input id="morning" type="radio" name="when" checked><label for="morning">Morning</label>
+  <input id="afternoon" type="radio" name="when"><label for="afternoon">Afternoon</label>
+</p>
+<p>
+  <button type="button">Check availability</button>
+  <button type="button">Clear form</button>
+  <a href="#rules">Room rules</a>
+</p>
+<p id="rules">Rooms are free of charge. This page is part of a test.</p>
+</body>
+</html>
