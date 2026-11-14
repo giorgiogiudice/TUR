@@ -63,8 +63,17 @@ class Automation:
             self.live = {}
         elements = []
         note = {}
-        root = self.auto.ElementFromHandleBuildCache(hwnd, self._request(view))
-        stack = [(root, 0, None)]
+        try:
+            root = self.auto.ElementFromHandleBuildCache(hwnd, self._request(view))
+            stack = [(root, 0, None)]
+        except comtypes.COMError as error:
+            # Some providers refuse a whole subtree in one cached request:
+            # ask for every element as a flat list instead (the depth is then unknown).
+            note["flat"] = f"the cached subtree was refused ({error.hresult & 0xFFFFFFFF:#x})"
+            request = self._request(view)
+            request.TreeScope = 1
+            found = self.auto.ElementFromHandle(hwnd).FindAllBuildCache(7, request.TreeFilter, request)
+            stack = [(found.GetElement(index), 0 if index == 0 else 1, None) for index in range(found.Length - 1, -1, -1)] if found else []
         while stack and len(elements) < max_nodes:
             element, depth, parent = stack.pop()
             identifier = f"u{self.reads}.{len(elements)}"

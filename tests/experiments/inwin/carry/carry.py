@@ -105,6 +105,9 @@ def shortcuts_in(directories, recurse=False):
                     row.update(parse_url(path.read_text(encoding="utf-8", errors="replace")))
             except (ValueError, struct.error, OSError) as error:
                 row["error"] = f"{type(error).__name__}: {error}"
+            # Where the icon would come from: the named icon file, else the target itself.
+            source = os.path.expandvars(row.get("icon_location") or row.get("iconfile") or row.get("target") or "")
+            row["icon_source_kind"] = pathlib.Path(source).suffix.lower() if source and os.path.isfile(source) else ("missing" if source else "none")
             rows.append(row)
     return rows
 
@@ -184,6 +187,25 @@ def desktop_icons_live():
     read = uia.Automation().read(view)
     items = [{"name": e["name"], "screen": e.get("screen")} for e in read["elements"] if e["role"] == "list item"]
     return {"list_view_items": count, "icons": items, "milliseconds": read["milliseconds"]}
+
+
+def layout_fingerprint():
+    """The registry's record of the desktop's layout, as hashes: has Explorer written it down?"""
+    found = {}
+    try:
+        with winreg.OpenKey(HKCU, DESKTOP_BAG) as key:
+            index = 0
+            while True:
+                try:
+                    name, value, _ = winreg.EnumValue(key, index)
+                except OSError:
+                    break
+                index += 1
+                if isinstance(value, bytes):
+                    found[name] = {"bytes": len(value), "sha256": hashlib.sha256(value).hexdigest()[:16], "names_our_shortcuts": b"T\0U\0R\0 \0T\0e\0s\0t\0" in value}
+    except OSError as error:
+        found["error"] = str(error)
+    return found
 
 
 def taskband_order(blob):
@@ -506,8 +528,18 @@ def fixture(directory):
         view = desktop_list_view()
         notes["desktop_list_view"] = bool(view)
         if view:
-            user32.PostMessageW(wt.HWND(view), 0x100, 0x74, 0)  # F5: show the new files
-            time.sleep(3)
+            user32.GetParent.restype = ctypes.c_void_p
+            user32.GetParent.argtypes = [ctypes.c_void_p]
+            shell_view = user32.GetParent(view)
+
+            def refresh():
+                # The desktop's own Refresh command, and the F5 key for good measure.
+                user32.SendMessageTimeoutW(wt.HWND(shell_view), 0x0111, 0x7103, 0, 2, 5000, None)
+                user32.PostMessageW(wt.HWND(view), 0x100, 0x74, 0)
+                time.sleep(3)
+
+            notes["layout_before"] = layout_fingerprint()
+            refresh()
             before = desktop_icons_live()
             notes["icons_before"] = before
             wanted = {"TUR Test Notepad": (300, 200), "TUR Test Folder": (500, 300), "TUR Test Site": (700, 120)}
@@ -520,9 +552,10 @@ def fixture(directory):
             time.sleep(1)
             notes["moved"] = moved
             notes["icons_after_move"] = desktop_icons_live()
-            user32.PostMessageW(wt.HWND(view), 0x100, 0x74, 0)  # F5 again: does Explorer write the layout down?
-            time.sleep(3)
+            notes["layout_after_move"] = layout_fingerprint()
+            refresh()  # does Explorer write the layout down when the desktop is refreshed?
             notes["icons_after_refresh"] = desktop_icons_live()
+            notes["layout_after_refresh"] = layout_fingerprint()
     except Exception as error:  # the fixture's limits are a finding
         notes["desktop_icons_error"] = f"{type(error).__name__}: {str(error)[:300]}"
     (directory / "fixture.json").write_text(json.dumps(notes, indent=1), encoding="utf-8")
