@@ -72,13 +72,27 @@ jobs:
       matrix:
         os: [windows-2025, windows-2022]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 50
+    timeout-minutes: 75
     steps:
-      # Only this experiment's directory: the repository holds file names
-      # Windows cannot create (a device-manager fixture with ':' in it).
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          sparse-checkout: tests/experiments/wincli
+      # Only this experiment's directory, and by hand: the repository holds
+      # a file name Windows cannot create (a device-manager fixture with ':'
+      # in it, issue 130), and git on Windows refuses the whole checkout
+      # over it, sparse or not, unless core.protectNTFS is off. The file is
+      # never written: it is outside the sparse set.
+      - name: Check out this experiment's directory only
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git init -q .
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}"
+          git config core.protectNTFS false
+          git config core.autocrlf false
+          git sparse-checkout set tests/experiments/wincli
+          auth="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          git -c "http.https://github.com/.extraheader=${auth}" fetch -q --depth=1 --filter=blob:none origin "${GITHUB_REF}"
+          git -c "http.https://github.com/.extraheader=${auth}" checkout -q FETCH_HEAD
+          git log -1 --format='%H %s'
+          ls tests/experiments/wincli
 
       - name: Versions
         shell: pwsh
@@ -156,7 +170,7 @@ jobs:
 
       - name: Candidates in Fedora 45 with Fedora's Wine
         run: |
-          docker run --rm --privileged --network host \
+          docker run --rm --privileged --network host --pid host \
             -e WINCLI_ONLY -e WINCLI_FRESH \
             -v /run/systemd:/run/systemd -v /run/dbus:/run/dbus \
             -v "$GITHUB_WORKSPACE:/src:ro" -v "$WORK:/work" \

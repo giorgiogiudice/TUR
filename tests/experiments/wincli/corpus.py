@@ -350,10 +350,10 @@ t("schtasks-delete", "schtasks /delete /tn TurWincliTest /f", probes(r"(?i)SUCCE
 t("shutdown-help", "shutdown /?", probes(r"^\s+/s\s", r"^\s+/r\s", r"^\s+/t\s", r"^\s+/a\s"), helptext=True)
 t("winget-version", "winget --version", probes(r"^v\d+\.\d+"))
 t("winget-search", "winget search --id 7zip.7zip -e --accept-source-agreements --disable-interactivity",
-  probes(r"7zip\.7zip"), timeout=240)
+  probes(r"7zip\.7zip"), timeout=180)
 t("winget-install",
   "winget install --id 7zip.7zip -e --accept-source-agreements --accept-package-agreements "
-  "--disable-interactivity --silent", rw=True, timeout=420, files="skip")
+  "--disable-interactivity --silent", rw=True, timeout=300, files="skip")
 t("getmac", "getmac", probes(MAC))
 t("arp", "arp -a", probes(r"^Interface: " + IPV4))
 t("netstat", "netstat -an", probes(r"^\s+TCP\s+\S+:\d+\s+\S+\s+LISTENING"))

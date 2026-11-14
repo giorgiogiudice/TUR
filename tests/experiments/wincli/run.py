@@ -251,8 +251,15 @@ def run_corpus(cand: Candidate, entries: list[dict], out_dir: pathlib.Path, suff
     raw: dict = {}
     timeouts_in_a_row = 0
     aborted = None
+
+    def save() -> None:
+        (out_dir / f"shapes{suffix}.json").write_text(json.dumps(shapes, indent=1, sort_keys=True))
+        (out_dir / f"raw{suffix}.json").write_text(json.dumps(raw, indent=1, sort_keys=True))
+
     for n, entry in enumerate(entries, 1):
         ident = entry["id"]
+        if n % 20 == 0:
+            save()  # a job that runs out of time keeps what it measured
         if aborted:
             shapes[ident] = {"notrun": aborted}
             continue
@@ -281,8 +288,7 @@ def run_corpus(cand: Candidate, entries: list[dict], out_dir: pathlib.Path, suff
             aborted = "not run: the candidate timed out six times in a row and was stopped"
         print(f"[{cand.name}{suffix}] {n}/{len(entries)} {ident} exit={result['exit']} "
               f"{result['secs']}s{' TIMEOUT' if result['timeout'] else ''}", flush=True)
-    (out_dir / f"shapes{suffix}.json").write_text(json.dumps(shapes, indent=1, sort_keys=True))
-    (out_dir / f"raw{suffix}.json").write_text(json.dumps(raw, indent=1, sort_keys=True))
+    save()
 
 
 def main() -> int:
@@ -308,6 +314,7 @@ def main() -> int:
     started = time.time()
     ok = cand.bring_up()
     cand.meta["entries"] = len(entries)
+    (out_dir / "meta.json").write_text(json.dumps(cand.meta, indent=1, sort_keys=True))
     if not ok:
         note = "not run: the candidate did not start (see meta.json)"
         (out_dir / "shapes.json").write_text(json.dumps({e["id"]: {"notrun": note} for e in entries}, indent=1))

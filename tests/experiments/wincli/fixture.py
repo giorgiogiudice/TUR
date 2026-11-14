@@ -15,6 +15,7 @@ import os
 import pathlib
 import shutil
 import stat
+import sys
 
 # Windows line endings on purpose: these are "files on a Windows PC".
 FILES: dict[str, str] = {
@@ -59,8 +60,11 @@ def build(root: pathlib.Path) -> None:
     if root.is_symlink():
         root.unlink()
     elif root.exists():
+        # The hook is `onexc` from Python 3.12 (Fedora 45 has 3.15, where
+        # the older name is gone); both pass (function, path, error).
+        hook = {"onexc": _force_remove} if sys.version_info >= (3, 12) else {"onerror": _force_remove}
         for _ in range(3):
-            shutil.rmtree(root, onerror=_force_remove)
+            shutil.rmtree(root, **hook)
             if not root.exists():
                 break
     root.mkdir(parents=True, exist_ok=True)

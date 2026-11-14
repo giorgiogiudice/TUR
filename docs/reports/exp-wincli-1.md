@@ -1,14 +1,16 @@
 <!-- SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0 -->
 # exp-wincli-1 — TUR's terminal behaves like a Windows PC's (experiment)
 
-> **Status: built and registered; NOT YET MEASURED.** The hypothesis, the
-> kill criterion, the corpus, the judge, five candidates, the prototype and
-> the safety tests are on pull request 125 (commit `602849c` and later).
-> No CI run has produced a result yet: the first (43537757872) failed on
-> Windows at checkout and never got a Linux runner, the second
-> (43538182154) never started (section 12); the repository's queue held 62
-> runs. **Every number in this report is NOT RUN until a run is named
-> next to it.** Sections 1,
+> **Status: built and registered; the corpus has NOT YET BEEN MEASURED.**
+> The hypothesis, the kill criterion, the corpus, the judge, five
+> candidates, the prototype and the safety tests are on pull request 125.
+> Three CI runs so far (section 12); the third (43542007242) is the first
+> in which anything ran: the Linux job built the three Windows programs
+> and confirmed versions, then stopped before the first command because
+> Wine would not create a Windows environment in a directory owned by
+> another user; both Windows jobs failed at checkout again. Both causes
+> are fixed in the commit that carries this version. **Every pass rate
+> in this report is NOT RUN until a run is named next to it.** Sections 1,
 > 2, 6, 8, 9 and 10 (method, design, proposed rules, licence facts) do not
 > depend on the numbers; sections 3, 4, 5 and 7 are placeholders.
 
@@ -41,15 +43,18 @@ FILES
 BUILD
 - Command: none on a development machine. In CI: mingw-w64 builds
   turrun.exe, turshim.exe and hello.exe in a Fedora 45 container.
-- Result: NOT RUN (no runner yet)
+- Result: the three programs build (run 43542007242: mingw64-gcc 16.2.1;
+  turrun.exe 294,481 bytes, turshim.exe 145,032, hello.exe 291,579). They
+  have not been run yet.
+- Warnings: none printed
 
 TESTS
 - Unit tests: the pure-Python parts (shape reduction, scoring, path
   translation, the safety verdicts for all 43 cases) were exercised on the
   development machine with the Python interpreter only; nothing was
   compiled, and no Wine, PowerShell or container was run there.
-- Integration tests: NOT RUN (workflow exp-wincli; no run has got past
-  checkout yet, see section 12)
+- Integration tests: NOT RUN (workflow exp-wincli; run 43542007242 stopped
+  before the first command, see section 12)
 - Boot tests: NOT RUN (nothing here can affect boot)
 - Hardware tests: NOT RUN (not applicable)
 - Performance tests: NOT RUN (seconds per command are recorded by the run)
@@ -80,16 +85,21 @@ candidate per group against real Windows, which architecture wins for which
 group, whether the hypothesis is supported, partly supported or killed, and
 what the prototype adds over the parts it is built from.
 
-What can be said before measuring, from upstream sources read on
-14 November 2026:
+What can be said before the corpus has run, from upstream sources read on
+14 November 2026 and from the one Linux job that got as far as printing
+versions (run 43542007242):
 
+- **Fedora 45's Wine is `wine-11.20 (Staging)`** (package
+  `wine-11.20-1.fc45`), its Python is 3.15.2, and PowerShell 7.6.10 for
+  Linux starts in the Fedora 45 container and reports its version.
 - **Of the 42 tool names in the corpus, Wine 11.20 has 31 as programs of
   its own** (`arp`, `attrib`, `certutil`, `chcp`, `dism`, `fc`, `find`,
   `findstr`, `fsutil`, `hostname`, `icacls`, `ipconfig`, `net`,
   `netstat`, `ping`, `powershell`, `reg`, `robocopy`, `sc`, `schtasks`,
   `setx`, `shutdown`, `sort`, `subst`, `systeminfo`, `taskkill`,
   `tasklist`, `where`, `whoami`, `wmic`, `xcopy`; from the `programs/`
-  directory of the `wine-11.20` tag) and `more` built into its cmd. It
+  directory of the `wine-11.20` tag, and the same in Fedora's package as
+  listed by run 43542007242) and `more` built into its cmd. It
   has no `tracert`, `nslookup`, `tar`, `curl`, `tree`, `getmac`, `route`,
   `winget`, `sfc` or `chkdsk`. Its `powershell.exe` is a stub. How well
   the 31 behave is what the run measures.
@@ -361,6 +371,43 @@ The design the prototype argues for, to be kept or changed by section 4:
    engine like any other (ADR-0012). P@x never gets to run a refused
    command: R1 refusals are final for it too.
 
+### 8.1 A third backend: the person's own Windows
+
+The owner has since decided TUR's direction: TUR is installed beside the
+person's Windows, as the floor under it, and their own Windows runs inside
+TUR on the same desktop. That gives the router a third place to send a
+command: **the person's real Windows, when it is running under TUR**. It
+is exact by construction for anything about Windows itself; the
+Windows-against-Windows control of section 3 is the measure of how exact
+(NOT RUN). No such guest exists in CI, so nothing below is measured: it
+is where the router should prefer which backend, to be tested when the
+guest exists.
+
+| The command is about | Prefer | Why |
+|---|---|---|
+| **Windows itself**: its updates and repair (`sfc`, `dism`, `chkdsk` of Windows' own volume, `usoclient`, `Get-WindowsUpdate`, `Get-HotFix`), its packages (`winget`, `Get-AppxPackage`), its services, accounts, policies, tasks and event log (`sc`, `net user`, `gpupdate`, `gpresult`, `schtasks`, `Get-WinEvent`, `wevtutil`), its registry, its drivers (`driverquery`, `pnputil`), and every cmdlet of the Windows-only modules (`NetTCPIP`, `DnsClient`, `Storage`, `LocalAccounts`, CIM classes TUR has no data for) | the person's Windows, when it is running; otherwise an explanation that says "this is about your Windows: start it and I will run it there" | Wine can only imitate these, and TUR's own answer ("a read-only image has nothing to repair") is true of TUR but not of the Windows the person is asking about |
+| **This computer**: network, hardware, processes on the desktop, power (`ipconfig`, `getmac`, `route`, `ping`, `tracert`, `systeminfo`'s hardware, `tasklist`, `shutdown`, `Get-NetAdapter`, `Win32_Processor`, `Win32_ComputerSystem`) | TUR's own commands | Windows inside TUR sees virtual hardware and a virtual network; the true answer is TUR's. `shutdown` typed in TUR's terminal must not be taken as "turn my Windows off" silently: it is answered, and offers both |
+| **Files and programs** (`dir`, `copy`, `findstr`, `robocopy`, batch files, `tar`, `curl`, most PowerShell) | where the files are: the Windows environment (Wine) or PowerShell on TUR for the home folder and its mapped folders; the person's Windows for paths on Windows' own drive | starting a guest to copy a file in the home folder costs seconds and memory for nothing; a path on Windows' drive means the guest's file system is the authority while it runs |
+| **Disks, partitions, boot** (R1) | neither: refused in TUR's terminal, and **not forwarded** to the person's Windows either | with Windows installed beside TUR, `diskpart` or `bcdedit` inside that Windows can reach the real disk and the real boot entries. The person can still open Windows' own terminal inside their Windows; TUR does not carry such a line there |
+| **Installing applications** (`winget install X`) | ask once: TUR's application centre (the plan from `tur-apps`), or "into your Windows" | both are honest meanings now; the router must not pick silently |
+
+Three consequences for the design:
+
+1. **Two Windows, named apart.** The terminal's Windows mode must say
+   which Windows a prompt talks to ("Windows environment" for Wine,
+   "your Windows" for the guest); `C:\` is a different drive in each.
+   The router's answer to a Windows-itself command when the guest is not
+   running is an explanation plus an offer to start it, never a silent
+   fallback to Wine's imitation.
+2. **The corpus is the test for this backend too.** The same harness can
+   drive the guest through its helper and score it against the judge; the
+   expectation is the Windows-against-Windows ceiling, at the price of
+   the guest's start-up time and memory. NOT RUN.
+3. **Nothing changes for licensing commands.** A command typed for the
+   person's Windows is a command in their Windows, with no special
+   handling by TUR in either direction; TUR still neither automates nor
+   documents activation.
+
 ## 9. What productising would take
 
 - **`tur-winshell` as a TUR program** (Rust, its own workspace under
@@ -469,7 +516,15 @@ existing Proton precedent.
   values; they cannot prove equivalence.
 - **The container is not TUR**: Fedora 45 with Fedora's Wine, run as
   root, on Ubuntu's kernel, with the runner's systemd reached through a
-  socket; no desktop, no `tur-runtime` sandbox, no TUR image.
+  socket; no desktop, no `tur-runtime` sandbox, no TUR image. In run
+  43542007242 the service manager could not be reached from the container
+  ("Failed to connect to system scope bus via local transport"); the
+  container now shares the runner's process namespace, and whether that
+  is enough is NOT RUN. If it is not, `Get-Service` and `Win32_Service`
+  will show only the Windows environment's services and the report will
+  say so.
+- **No guest**: the third backend of section 8.1 (the person's own
+  Windows) is design only.
 - **Linux exit statuses keep eight bits**; Windows exit codes have 32.
   The harness reads the full code from a file; a shell pipeline on Linux
   cannot.
@@ -486,12 +541,14 @@ existing Proton precedent.
 |---|---|---|---|
 | 43537757872 | `c2192cf` | first push: registration, corpus, harness, candidates | Both Windows jobs got a runner within three minutes and **failed at checkout**: the repository contains a path Windows cannot create (`services/tur-device-manager/tests/fixtures/laptop/sys/bus/pci/devices/0000:00:00.0`). The Linux job was cancelled in the queue. Nothing measured |
 | 43538182154 | `602849c` | telemetry off; WMI-through-COM probes | never started: it waited behind the first run, whose scorecard job (`if: always()`) sat in the queue for an Ubuntu runner. Superseded |
-| (next) | this commit | Windows jobs check out only `tests/experiments/wincli`; the scorecard no longer runs for a superseded run; the held-out set, behind a switch | NOT RUN when this version was written |
+| 43542007242 | `a4996c3` | Windows jobs with `sparse-checkout`; the scorecard no longer runs for a superseded run; the held-out set, behind a switch | **Windows**: both jobs failed at checkout again: git on Windows refuses the checkout over that path, sparse or not, unless `core.protectNTFS` is off (found by the `inwin` spike; issue 130). **Linux**: packages installed (Wine `wine-11.20 (Staging)`, mingw64-gcc 16.2.1, Python 3.15.2), PowerShell 7.6.10 for Linux started, the three Windows programs built; then Wine refused to create the Windows environment ("'/work' is not owned by you, refusing to create a configuration directory there") and the script stopped. The runner's systemd was not reachable from the container. No command of the corpus ran |
+| (next) | this commit | Windows jobs check out by hand with `core.protectNTFS` off; Windows environments under a directory root owns; the container shares the runner's process namespace; Python 3.15's `shutil.rmtree`; results saved every 20 commands | NOT RUN when this version was written |
 
 A finding outside the experiment: **the repository cannot be checked out
-on Windows** (the device-manager fixture's `0000:00:00.0` directories).
-Any future job on a Windows runner needs a sparse checkout, as this
-workflow now does.
+on Windows** by `actions/checkout`, sparse or not (the device-manager
+fixture's `0000:00:00.0` directories; issue 130). A job on a Windows
+runner has to check out by hand with `core.protectNTFS` off and a sparse
+set, as this workflow now does, until the fixture is renamed.
 
 Upstream versions pinned or observed: Fedora 45 container image
 `sha256:fa773d10…3770`; Wine 11.20 (Fedora 45, per the task; the run

@@ -5,7 +5,7 @@
 # container with Fedora 45's own Wine (the Wine TUR would ship). Started by
 # .github/workflows/exp-wincli.yml as
 #
-#   docker run --privileged --network host \
+#   docker run --privileged --network host --pid host \
 #       -v /run/systemd:/run/systemd -v /run/dbus:/run/dbus \
 #       -v CHECKOUT:/src:ro -v WORK:/work fedora:45@sha256:... \
 #       bash /src/tests/experiments/wincli/fedora-run.sh
@@ -15,16 +15,23 @@
 # thrown away with the runner. Nothing is committed or redistributed.
 #
 # The container is privileged for two cheap tests only: registering
-# binfmt_misc handlers and reading the runner's service manager. The
-# runner's network is shared so that ipconfig and friends see a real one.
+# binfmt_misc handlers and reading the runner's service manager (which also
+# needs the runner's process namespace: systemd refuses a caller whose
+# process it cannot see). The runner's network is shared so that ipconfig
+# and friends see a real one.
+#
+# Windows environments live under /opt/wincli, which root owns: Wine
+# refuses to create one in a directory that belongs to somebody else, and
+# WORK belongs to the runner's user.
 set -euo pipefail
 
 src=/src/tests/experiments/wincli
 work=/work
 ev="${work}/evidence"
 build="${work}/build"
-mkdir -p "${ev}" "${build}" "${work}/p"
-export PYTHONDONTWRITEBYTECODE=1 WINEDEBUG=-all LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 TZ=UTC
+base=/opt/wincli
+mkdir -p "${ev}" "${build}" "${base}/p"
+export PYTHONDONTWRITEBYTECODE=1 WINEDEBUG=-all TZ=UTC
 # PowerShell reports usage to Microsoft and looks for updates unless told not
 # to; TUR never uploads anything silently, and neither does this test.
 export POWERSHELL_TELEMETRY_OPTOUT=1 POWERSHELL_UPDATECHECK=Off
@@ -36,6 +43,8 @@ dnf -y --setopt=install_weak_deps=False install \
     python3 iproute iputils traceroute bind-utils procps-ng findutils util-linux tar unzip curl \
     systemd glibc-langpack-en libicu openssl-libs krb5-libs zlib coreutils \
     >"${ev}/dnf.log" 2>&1 || { tail -n 60 "${ev}/dnf.log"; exit 1; }
+# The judge's language, now that the locale is installed.
+export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
 
 echo "== PowerShell 7 (unpacked from the workflow's download)"
 mkdir -p "${work}/pwsh-linux" "${work}/pwsh-win"
@@ -69,9 +78,14 @@ done
 ls -l "${build}" | tee -a "${ev}/build.log"
 
 echo "== a Windows environment to copy"
-template="${work}/prefix-template"
+template="${base}/prefix-template"
 WINEPREFIX="${template}" WINEDLLOVERRIDES="mscoree=;mshtml=" wineboot -u >"${ev}/wineboot.log" 2>&1 || true
 WINEPREFIX="${template}" wineserver -w || true
+if [ ! -d "${template}/drive_c/windows" ] || [ ! -d "${template}/dosdevices" ]; then
+    echo "Wine did not create a Windows environment:"
+    tail -n 40 "${ev}/wineboot.log"
+    exit 1
+fi
 mkdir -p "${template}/drive_c/turrun" "${template}/drive_c/turshim"
 cp "${build}/turrun.exe" "${template}/drive_c/turrun/"
 # TUR's own commands inside the Windows environment: one bridge program
@@ -83,7 +97,7 @@ done
 ls "${template}/drive_c" "${template}/dosdevices" | tee -a "${ev}/versions.txt"
 
 prefix_for() {
-    local dir="${work}/p/$1"
+    local dir="${base}/p/$1"
     cp -a "${template}" "${dir}"
     if [ "$2" = "plain" ]; then rm -rf "${dir}/drive_c/turshim"; fi
     WINEPREFIX="${dir}" wineserver -p >/dev/null 2>&1 || true
