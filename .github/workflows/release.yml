@@ -3,8 +3,12 @@
 # Release (ADR-0023; docs/architecture/publishing.md): publish the image CI
 # built and tested, as a signed update, to ghcr.io/giorgiogiudice/tur.
 #
-# 1. await    waits until every other workflow on the commit has finished and
-#             decides whether its image may be released (scripts/release/await.py).
+# 1. await    decides, once and in seconds, whether the commit's image may be
+#             released: every other workflow on the commit has finished and
+#             passed, and the image was built and booted. It never waits on a
+#             runner (issue #114): it runs each time a workflow on main
+#             finishes, says "not yet" while others are running, and lets the
+#             release go ahead on the event that completes the set.
 # 2. release  takes the image the `image` workflow tested (its OCI archive,
 #             checked against the image ID that workflow recorded), re-chunks
 #             it so that no layer holds what a later one removed, checks every
@@ -17,31 +21,45 @@
 #             copied to where it is published and read back.
 # 3. promote  (manual, with a build ID) points `stable` at a published build.
 #
-# To rehearse without waiting for every workflow again: start the workflow by
-# hand with `image_run` (a run of the image workflow that passed), or, on a
-# pull request, push a commit that changes only the release itself: the
-# branch's latest successful image run is then used. Neither ever publishes.
+# What starts it:
+#   - workflow_run: a workflow on main has finished. Only a run that a push
+#     to main started counts (the job's `if`); the commit is the one that run
+#     was for (github.event.workflow_run.head_sha), and that commit's scripts
+#     are checked out. This event runs main's copy of this file, in main's
+#     context: github.ref is refs/heads/main whatever started the run, so
+#     nothing here decides by github.ref alone. A workflow that runs on main
+#     and is missing from the list below is still counted, but when it is
+#     the last to finish nothing starts the release: start it by hand.
+#   - pull_request, only when the pull request changes the release itself:
+#     a rehearsal, decided at once. It takes this commit's image if all its
+#     workflows have already passed, else the latest image of the branch that
+#     was built and booted; with neither, nothing happens (start one by hand
+#     with `image_run`). It runs the pull request's copy of this file. A
+#     rehearsal from workflow_run was not chosen: it would run main's copy,
+#     not the one under review, with the pull request's scripts under main's
+#     token.
+#   - workflow_dispatch: with `promote`, promotion; with `image_run`, a
+#     rehearsal with that run of the image workflow; with neither, the same
+#     decision as for main, once, for the commit it is started on.
 #
 # Publishing is off until the owner sets the repository variable
 # TUR_PUBLISH=1 (publishing.md, section 8). Until then, and always on pull
-# requests, the release job runs in full against its own registry and its
-# own throwaway keys, and nothing leaves the job.
+# requests and with `image_run`, the release job runs in full against its own
+# registry and its own throwaway keys, and nothing leaves the job.
 name: release
 
 on:
-  push:
+  workflow_run:
+    workflows: [rust, image, boot, rollback, pax, desktop, windows-runtime, update, apps, iso, local-ai, reports, release-installer, windows-drivers, base-mirror]
+    types: [completed]
     branches: [main]
   pull_request:
     paths:
       - ".github/workflows/release.yml"
-      - ".github/workflows/image.yml"
       - "scripts/release/**"
       - "image/signing/**"
       - "image/rootfs/usr/share/tur/signing/**"
       - "image/rootfs/usr/share/containers/**"
-      - "tests/boot/signed-update.py"
-      - "tests/boot/guest/**"
-      - "tests/image/marks.py"
   workflow_dispatch:
     inputs:
       promote:
@@ -50,17 +68,20 @@ on:
         required: false
         default: ""
       image_run:
-        description: "Rehearse with this run of the image workflow, without waiting (never publishes)"
+        description: "Rehearse with this run of the image workflow (never publishes)"
         type: string
         required: false
         default: ""
 
 permissions: {}
 
+# One run per commit (workflow_run) or per ref. For a commit of main, a newer
+# evaluation replaces an older one; it reads every run again, so nothing is
+# lost. A person's promotion is never cancelled. The release job has a group
+# of its own (below), so that an evaluation of another commit cannot cancel
+# a release in progress.
 concurrency:
-  group: release-${{ github.event_name }}-${{ github.ref }}-${{ inputs.promote || 'testing' }}
-  # A newer commit supersedes an older one that is still waiting; a person's
-  # promotion is never cancelled.
+  group: release-${{ github.event_name }}-${{ github.event.workflow_run.head_sha || github.ref }}-${{ inputs.promote || 'testing' }}
   cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
 
 env:
@@ -69,32 +90,23 @@ env:
   COSIGN_SHA256: 424e2c97d0b45fd7a6b608a87f090f35633f4c23ece5f092d48bba11aaf4bbfa
   REGISTRY_IMAGE: docker.io/library/registry:3.1.1@sha256:325b4b29b041e82803abeb703e201655e4e23ab83264ec1a7c9ddb0a5b14a6e0
   PODMAN: sudo podman
+  # The commit whose image is released and whose scripts run: for
+  # workflow_run, the commit of the run that finished; empty otherwise (the
+  # event's own commit).
+  COMMIT: ${{ github.event.workflow_run.head_sha }}
 
 jobs:
-  lint:
-    name: Lint the release scripts
-    if: ${{ !inputs.promote }}
+  await:
+    name: Decide, once, whether this commit's image may be released
+    # workflow_run: only for a run that a push to main started, in this
+    # repository. A pull request's branch named main is a pull_request run.
+    if: >-
+      ${{ !inputs.promote && (github.event_name != 'workflow_run' ||
+          (github.event.workflow_run.event == 'push' &&
+           github.event.workflow_run.head_branch == 'main' &&
+           github.event.workflow_run.head_repository.full_name == github.repository)) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          persist-credentials: false
-      - name: Lint
-        run: |
-          shellcheck -x scripts/release/*.sh tests/boot/guest/rootfs/usr/libexec/tur-boot-test/signed-update-agent \
-            tests/boot/guest/rootfs/usr/libexec/tur-boot-test/guest-agent
-          python3 -m py_compile scripts/release/*.py tests/boot/signed-update.py tests/image/marks.py image/signing/policy.py
-          python3 scripts/release/compare-trees.py --self-test
-          python3 tests/image/marks.py --self-test
-
-  await:
-    name: Wait for every workflow on this commit
-    if: ${{ !inputs.promote }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 300
     permissions:
       actions: read
       contents: read
@@ -108,20 +120,137 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
+          ref: ${{ env.COMMIT }}
           persist-credentials: false
-      - name: Wait, then decide
+      # The rules are those of scripts/release/await.py, whose functions this
+      # uses; what differs is that nothing here waits. A run that is not
+      # finished means "not yet" (main: the event of the last workflow to
+      # finish decides) or "an earlier image of the branch" (pull request).
+      - name: Decide
         id: await
         env:
           GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          SHA: ${{ github.event.workflow_run.head_sha || github.event.pull_request.head.sha || github.sha }}
           IMAGE_RUN: ${{ inputs.image_run }}
           HEAD_REF: ${{ github.head_ref }}
+          TRIGGER_ID: ${{ github.event.workflow_run.id }}
+          TRIGGER_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          TRIGGER_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
         run: |
-          shortcut=()
-          if [ -n "$IMAGE_RUN" ]; then shortcut=(--image-run "$IMAGE_RUN"); fi
-          if [ -n "$HEAD_REF" ]; then shortcut=(--fallback-branch "$HEAD_REF"); fi
-          python3 scripts/release/await.py \
-            "${{ github.event.pull_request.head.sha || github.sha }}" "${{ github.event_name }}" --timeout 16200 \
-            "${shortcut[@]}"
+          python3 - <<'PY'
+          import importlib.util, os, sys, time
+
+          spec = importlib.util.spec_from_file_location("release_await", "scripts/release/await.py")
+          rules = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(rules)
+
+          repo, event, sha = os.environ["GITHUB_REPOSITORY"], os.environ["EVENT"], os.environ["SHA"]
+          if os.environ.get("IMAGE_RUN"):
+              sys.exit(rules.rehearse_with(repo, rules.api(repo, f"/actions/runs/{os.environ['IMAGE_RUN']}"),
+                                           "a person asked for it"))
+          pull_request = event == "pull_request"
+          events = {"pull_request"} if pull_request else {"push", "workflow_dispatch"}
+          trigger = None
+          if os.environ.get("TRIGGER_ID"):
+              trigger = (os.environ["TRIGGER_ID"], os.environ.get("TRIGGER_ATTEMPT") or "1",
+                         os.environ["TRIGGER_CONCLUSION"])
+
+          def read():
+              chosen = rules.latest(rules.runs_for(repo, sha), events)
+              # The run whose end started this evaluation has finished, but
+              # the list may not say so yet: its result is in the event, for
+              # the attempt the event is about.
+              for name, run in chosen.items():
+                  if (trigger and run["status"] != "completed" and str(run["id"]) == trigger[0]
+                          and str(run.get("run_attempt", 1)) == trigger[1]):
+                      chosen[name] = dict(run, status="completed", conclusion=trigger[2])
+              return chosen
+
+          def unfinished(chosen):
+              return sorted(n for n, r in chosen.items() if r["status"] != "completed")
+
+          def no(reason, code=0):
+              rules.output(release="false", reason=reason)
+              rules.summary("Not released: " + reason)
+              sys.exit(code)
+
+          if pull_request:
+              time.sleep(30)  # let the commit's other runs be created
+          chosen = read()
+          if event == "workflow_run":
+              # A run that finished a moment ago can still be listed as
+              # running, and the evaluation its own event started may be the
+              # one this one replaced: look twice more before believing it.
+              for _ in range(2):
+                  if not unfinished(chosen):
+                      break
+                  time.sleep(15)
+                  chosen = read()
+          pending = unfinished(chosen)
+          print(", ".join(f"{n}={r['status'] if r['status'] != 'completed' else r['conclusion']}"
+                          for n, r in sorted(chosen.items())) or "no other workflow on this commit", flush=True)
+
+          if event == "workflow_run":
+              # As before, when a newer push cancelled the run that waited:
+              # only main's newest commit is released.
+              tip = rules.api(repo, "/branches/main")["commit"]["sha"]
+              if tip != sha:
+                  no(f"main has moved on to {tip[:12]}; {sha[:12]} is not released")
+          if "image" not in chosen:
+              if pull_request:
+                  sys.exit(rules.fallback(repo, os.environ["HEAD_REF"], "the image workflow did not run on this commit"))
+              no("the image workflow did not run on this commit: no image to release")
+          if pending:
+              if pull_request:
+                  sys.exit(rules.fallback(repo, os.environ["HEAD_REF"],
+                                          "this commit's workflows have not finished (" + ", ".join(pending) + ")"))
+              no("not yet: still running: " + ", ".join(pending)
+                 + (". The release starts when the last of them has finished" if event == "workflow_run"
+                    else ". Start this again when they have finished"))
+
+          table = ["| Workflow | Run | Result |", "|---|---|---|"]
+          table += [f"| {n} | [{r['id']}]({r['html_url']}) | {r['conclusion']} |" for n, r in sorted(chosen.items())]
+          rules.summary("### Workflows on this commit\n\n" + "\n".join(table) + "\n")
+          failed = sorted(f"{n} ({r['conclusion']})" for n, r in chosen.items() if r["conclusion"] not in rules.GOOD)
+          ids = {f"{n}_run": str(chosen[n]["id"]) if n in chosen else "" for n in ("image", "boot", "rollback")}
+          if failed:
+              rules.output(release="false", reason="not every workflow passed: " + ", ".join(failed), **ids)
+              rules.summary("Not released: " + ", ".join(failed))
+              sys.exit(1)
+          if chosen["image"]["conclusion"] != "success" or chosen.get("boot", {}).get("conclusion") != "success":
+              if pull_request:
+                  sys.exit(rules.fallback(repo, os.environ["HEAD_REF"], "the boot workflow did not run on this commit"))
+              rules.output(release="false",
+                           reason="this commit's image was not both built (image) and booted (boot) by CI", **ids)
+              rules.summary("Nothing to release: the image of this commit was not both built and booted by CI.")
+              sys.exit(0)
+          rules.output(release="true", rehearsal="false", reason="every workflow on this commit passed", **ids)
+          PY
+
+  # On a pull request, always (it is the check of the scripts under review);
+  # otherwise only when there is something to release, so that an evaluation
+  # that says "not yet" takes one short job and no more.
+  lint:
+    name: Lint the release scripts
+    needs: await
+    if: ${{ !cancelled() && !inputs.promote && needs.await.result != 'skipped' && (github.event_name == 'pull_request' || needs.await.outputs.release == 'true') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ env.COMMIT }}
+          persist-credentials: false
+      - name: Lint
+        run: |
+          shellcheck -x scripts/release/*.sh tests/boot/guest/rootfs/usr/libexec/tur-boot-test/signed-update-agent \
+            tests/boot/guest/rootfs/usr/libexec/tur-boot-test/guest-agent
+          python3 -m py_compile scripts/release/*.py tests/boot/signed-update.py tests/image/marks.py image/signing/policy.py
+          python3 scripts/release/compare-trees.py --self-test
+          python3 tests/image/marks.py --self-test
 
   release:
     name: Re-chunk, sign, prove on a booted guest, publish
@@ -129,18 +258,29 @@ jobs:
     if: ${{ needs.await.outputs.release == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 180
+    # One release at a time per branch or ref: on main, a newer commit's
+    # release replaces an older one still in progress, as a newer push did
+    # before. Evaluations are not in this group and cancel nothing here.
+    concurrency:
+      group: release-job-${{ github.event_name }}-${{ github.event.workflow_run.head_branch || github.ref }}
+      cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
     permissions:
       contents: read
       actions: read     # the artifacts of the image, boot and rollback runs
       id-token: write   # keyless signing with this workflow's own identity
       packages: write   # pushing to ghcr.io, only with TUR_PUBLISH=1
     env:
-      PUBLISH: ${{ vars.TUR_PUBLISH == '1' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && needs.await.outputs.rehearsal != 'true' && '1' || '0' }}
+      # Publishing: only with TUR_PUBLISH=1, never for a rehearsal, and only
+      # for main: a run that a push to main started (workflow_run: github.ref
+      # is main for every such event, so the run that finished is asked what
+      # it was), or a run started by hand on main. Never on a pull request.
+      PUBLISH: ${{ vars.TUR_PUBLISH == '1' && needs.await.outputs.rehearsal != 'true' && ((github.event_name == 'workflow_run' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == github.repository) || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')) && '1' || '0' }}
       OUT: out/release
       LOCAL: localhost:5000/tur
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
+          ref: ${{ env.COMMIT }}
           persist-credentials: false
 
       # The pinned base, for the marks check (fedora-logos' checksums come

@@ -61,6 +61,13 @@ concurrency:
 jobs:
   evaluate:
     name: record the gate status (not the verdict)
+    # Only runs that a pull request or a push started are counted, so the end
+    # of any other run (a scheduled one, one started by hand, release's
+    # evaluations, which workflow_run starts) changes nothing: no evaluation,
+    # and no runner.
+    if: >-
+      ${{ github.event_name != 'workflow_run' ||
+          github.event.workflow_run.event == 'pull_request' || github.event.workflow_run.event == 'push' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
