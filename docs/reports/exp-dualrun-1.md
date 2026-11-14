@@ -3,10 +3,12 @@
 
 > **Status: registered and built; no measurement has finished.** Pull request
 > 131. The hypotheses were committed first (`01d0df6`), before any run. At
-> hand-back the runners had about 120 runs queued: the synthetic job and the
-> licence-terms stage were queued and had not started, and the experiment
-> stage had not been dispatched, because its precondition (reading the
-> evaluation's licence terms) had not been met. **Every number in this report
+> hand-back (14 November 2026, 03:55 UTC) the runners had about 120 runs
+> queued and none of this branch's had started in 50 minutes: the synthetic
+> job (workflow `exp-dualrun`, job `lint`, on the pull request's head) and
+> the licence-terms stage (run 43549695840, dispatched at 03:04 UTC) were
+> queued, and the experiment stage had not been dispatched, because its
+> precondition (reading the evaluation's licence terms) had not been met. **Every number in this report
 > that would come from CI is marked NOT RUN.** What is in this report today is
 > the design, the prototype, the experiment as written, and what was
 > established from sources. Section 5 says exactly which run fills which
@@ -49,8 +51,8 @@ BUILD
 - Warnings: none
 
 TESTS
-- Unit tests: NOT RUN (the synthetic job, 30 cases, was queued; run
-  43552240554 and its successors)
+- Unit tests: NOT RUN (the synthetic job, 30 cases, was queued: workflow
+  exp-dualrun, job lint, on the pull request's head commit)
 - Integration tests: NOT RUN (stage `experiment` not dispatched: see the
   status above and section 2)
 - Boot tests: NOT RUN (nothing here changes TUR's boot)
@@ -74,11 +76,13 @@ KNOWN LIMITATIONS
 - Section 13.
 
 NEXT SAFE ACTION
-- Let the queued synthetic job and the `terms` stage finish; read the terms
-  it prints; if they allow evaluation and testing use, dispatch
-  `stage=experiment, terms_read=yes`; then fill section 5. Nothing on the
-  owner's PC before that, and then only steps 1 to 3 of section 10, which
-  cannot write to his disk.
+- Let the queued synthetic job and the `terms` stage (run 43549695840)
+  finish; fix what the synthetic job finds; read the terms the other
+  prints (its job summary and artifact exp-dualrun-terms); if they plainly
+  allow evaluation and testing use, dispatch workflow exp-dualrun on
+  exp/dualrun with stage=experiment and terms_read=yes; then fill
+  section 5. Nothing on the owner's PC before that, and then only steps 1
+  to 3 of section 10, which cannot write to his disk.
 ```
 
 ## The answer
