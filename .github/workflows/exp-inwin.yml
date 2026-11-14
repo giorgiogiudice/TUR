@@ -1,0 +1,201 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Experiment inwin (docs/reports/exp-inwin-1.md): TUR as the solid floor
+# under the person's own Windows, seen from the Windows side. Everything
+# here runs on GitHub's Windows runners, which are real Windows.
+#
+# bridge   tur-winbridge.exe of the winsee experiment (pull request 126,
+#          pinned by commit), built unmodified for real Windows with the
+#          runner's mingw-w64. TUR's own program; nothing of Microsoft's.
+# see      P@x's guest agent: what UI Automation and the plain window tree
+#          give for real applications, with actions sent and verified; the
+#          window list a seamless desktop needs and how fast it can be kept
+#          current (agent/seer.py, agent/desk.py).
+# way-in   The "get TUR" checker, which only reads (checker/check.py), and
+#          the reader of what TUR can carry over from a Windows desktop
+#          (carry/carry.py), each run with three sets of rights.
+#
+# Nothing changes a disk, a boot entry or a Windows setting, except that
+# the way-in job sets a test wallpaper and puts three test shortcuts on the
+# throwaway runner's desktop, and makes and removes one local account.
+# Pictures of Microsoft's applications are kept one day, for counting by
+# eye; the kept artifacts hold counts, rectangles, paths and hashes. Green
+# means the measurement ran; the numbers are the finding.
+name: exp-inwin
+
+on:
+  pull_request:
+    paths:
+      - "tests/experiments/inwin/**"
+      - ".github/workflows/exp-inwin.yml"
+  workflow_dispatch:
+    inputs:
+      only:
+        description: "Regular expression of agent scenarios to run (empty: all)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: exp-inwin-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # The winsee experiment's commit whose bridge is built here (pull request 126).
+  WINSEE_COMMIT: 622bfa677d8401a0cefdb147ca478a07950ab130
+  PYTHONUTF8: "1"
+  PYTHONIOENCODING: "utf-8"
+  INWIN_ONLY: ${{ github.event.inputs.only }}
+
+jobs:
+  bridge:
+    name: Build the winsee bridge for real Windows
+    runs-on: windows-2025
+    timeout-minutes: 15
+    steps:
+      # Only what is needed: the repository holds file names Windows cannot
+      # create (a device-manager fixture with ':' in it).
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ env.WINSEE_COMMIT }}
+          sparse-checkout: tests/experiments/winsee
+
+      - name: Build with the runner's mingw-w64
+        shell: bash
+        run: |
+          gcc --version | head -n 1
+          mkdir -p "$RUNNER_TEMP/shim"
+          for tool in gcc objdump; do
+            if ! command -v "x86_64-w64-mingw32-$tool" >/dev/null 2>&1; then
+              printf '#!/bin/sh\nexec %s "$@"\n' "$tool" > "$RUNNER_TEMP/shim/x86_64-w64-mingw32-$tool"
+              chmod +x "$RUNNER_TEMP/shim/x86_64-w64-mingw32-$tool"
+            fi
+          done
+          export PATH="$RUNNER_TEMP/shim:$PATH"
+          bash tests/experiments/winsee/bridge/build.sh "$RUNNER_TEMP/bridge" || echo "::warning::the bridge's build reported a failure; see build.json"
+          rm -rf "$RUNNER_TEMP/bridge/obj"
+          ls -l "$RUNNER_TEMP/bridge"
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: inwin-bridge
+          path: ${{ runner.temp }}/bridge/
+          retention-days: 7
+          if-no-files-found: error
+
+  see:
+    name: Guest agent on ${{ matrix.os }}
+    needs: bridge
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2025, windows-2022, windows-11-arm]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          sparse-checkout: tests/experiments/inwin
+
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: inwin-bridge
+          path: ${{ runner.temp }}/bridge
+
+      - name: The runner
+        shell: pwsh
+        run: |
+          cmd /c ver
+          "interactive: $([Environment]::UserInteractive); session: $((Get-Process -Id $PID).SessionId); user: $env:USERNAME"
+          python --version
+          python -m pip install --disable-pip-version-check --no-deps --require-hashes -r tests/experiments/inwin/requirements.txt
+
+      - name: Applications, from their publishers, by hash
+        shell: pwsh
+        run: python tests/experiments/inwin/agent/fetch.py --dir "$env:RUNNER_TEMP\dl"
+
+      - name: Read and operate real applications
+        shell: pwsh
+        run: |
+          python tests/experiments/inwin/agent/seer.py --out "$env:RUNNER_TEMP\see\out" --raw "$env:RUNNER_TEMP\see\raw" --bridge "$env:RUNNER_TEMP\bridge" --downloads "$env:RUNNER_TEMP\dl" --only "$env:INWIN_ONLY"
+          if (Test-Path "$env:RUNNER_TEMP\see\out\see.md") { Get-Content "$env:RUNNER_TEMP\see\out\see.md" | Add-Content $env:GITHUB_STEP_SUMMARY }
+          exit 0
+
+      - name: The window list and how fast it can be kept current
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: |
+          python tests/experiments/inwin/agent/desk.py --out "$env:RUNNER_TEMP\see\out" --target "$env:RUNNER_TEMP\bridge\tw-controls.exe"
+          if (Test-Path "$env:RUNNER_TEMP\see\out\desk.md") { Get-Content "$env:RUNNER_TEMP\see\out\desk.md" | Add-Content $env:GITHUB_STEP_SUMMARY }
+          exit 0
+
+      - name: Counts, tables, and the reads and pictures of open-source applications
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: ${{ !cancelled() }}
+        with:
+          name: inwin-see-${{ matrix.os }}
+          path: |
+            ${{ runner.temp }}/see/out/
+            ${{ runner.temp }}/see/raw/open/
+          if-no-files-found: warn
+
+      - name: Reads and pictures of Microsoft's applications (one day, for counting by eye)
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: ${{ !cancelled() }}
+        with:
+          name: inwin-see-microsoft-${{ matrix.os }}
+          path: ${{ runner.temp }}/see/raw/microsoft/
+          retention-days: 1
+          if-no-files-found: warn
+
+  way-in:
+    name: Checker and carry-over reader on ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2025, windows-2022, windows-11-arm]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          sparse-checkout: tests/experiments/inwin
+
+      - name: The runner
+        shell: pwsh
+        run: |
+          cmd /c ver
+          "interactive: $([Environment]::UserInteractive); session: $((Get-Process -Id $PID).SessionId); user: $env:USERNAME"
+          python --version
+          python -m pip install --disable-pip-version-check --no-deps --require-hashes -r tests/experiments/inwin/requirements.txt
+
+      - name: The checker, with three sets of rights
+        shell: pwsh
+        run: |
+          python tests/experiments/inwin/rights.py --script checker/check.py --name checker --out "$env:RUNNER_TEMP\wayin"
+          if (Test-Path "$env:RUNNER_TEMP\wayin\checker-rights.md") { Get-Content "$env:RUNNER_TEMP\wayin\checker-rights.md" | Add-Content $env:GITHUB_STEP_SUMMARY }
+          exit 0
+
+      - name: A test wallpaper and test shortcuts of TUR's own on this desktop
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: |
+          python tests/experiments/inwin/carry/carry.py --fixture "$env:RUNNER_TEMP\wayin\fixture"
+          exit 0
+
+      - name: The carry-over reader, with three sets of rights
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: |
+          python tests/experiments/inwin/rights.py --script carry/carry.py --name carry --out "$env:RUNNER_TEMP\wayin"
+          if (Test-Path "$env:RUNNER_TEMP\wayin\carry-rights.md") { Get-Content "$env:RUNNER_TEMP\wayin\carry-rights.md" | Add-Content $env:GITHUB_STEP_SUMMARY }
+          exit 0
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: ${{ !cancelled() }}
+        with:
+          name: inwin-wayin-${{ matrix.os }}
+          path: ${{ runner.temp }}/wayin/
+          if-no-files-found: warn
