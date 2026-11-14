@@ -16,7 +16,7 @@ Subsystem:        Windows compatibility (Wine's driver host), as a test
 Build ID:         not applicable: this task builds no image
 Source revision:  branch exp-drvsynth, pull request 122. First full run:
                   workflow run 43536094203 on 4f14f1c. The run the
-                  committed hand-off captures come from: RUN2_ID on RUN2_SHA.
+                  committed hand-off captures come from: 43540502703 on fb1b93f.
 
 SUMMARY
 - What changed: a test bench for the hypothesis "given only a recording of
@@ -56,7 +56,9 @@ TESTS
 - Unit tests: none (no TUR component).
 - Integration tests: workflow exp-drvsynth, run 43536094203: job capture
   (145 of 145 checks PASS) and job score (suite valid: reference 18/18,
-  wrong-replay 0/18, wrong-quirks 10/18 as designed). Run RUN2_ID: RUN2_RESULT.
+  wrong-replay 0/18, wrong-quirks 10/18 as designed). Run 43540502703
+  (fb1b93f): capture green (all checks PASS), score green with the same
+  18/18, 0/18 and 10/18 (suite valid).
 - Boot tests: NOT RUN. Nothing here can affect boot.
 - Hardware tests: NOT RUN. The device is emulated (USB/IP); it does not
   exist as hardware.
@@ -126,9 +128,10 @@ a kernel.
 
 ## 3. Captures
 
-From run 43536094203 (the committed bundle is from run RUN2_ID; same
-sessions, fresh device-chosen values; its sizes are in
-`handoff/captures/index.md`):
+From run 43536094203. The committed bundle is from run 43540502703: same
+sessions, fresh device-chosen values; 1,180 USB events (session 07 has 118 rather
+than 120, a matter of timing), 99,848 bytes of pcapng and 94,581 bytes
+of text; per-session figures in `handoff/captures/index.md`.
 
 | Session | Title | User actions | USB events | pcapng bytes |
 |---|---|---|---|---|
@@ -217,7 +220,7 @@ number and list of features passed. One trial is one data point.
   throw-away runner; the candidate's code should still be read before it is
   scored, since a malicious candidate could try other channels.
 - **Timing-based checks** (the event watch) depend on the runner; the
-  reference passed in every run so far, which is two runs.
+  reference passed 18/18 in both runs so far (43536094203, 43540502703).
 - The capture job's KMDF runtime build took under two minutes on the
   runner that built it (the windows-drivers report measured about 25); it
   is cached either way.

@@ -1,0 +1,87 @@
+{
+  "session": 10,
+  "title": "Frost alert and a last picture",
+  "capture": "session-10.pcapng",
+  "text": "session-10.txt",
+  "clock": "seconds since the capture started",
+  "entries": [
+    {
+      "from": 0.501,
+      "did": "set the temperature alert to -5.0 degrees",
+      "to": 1.021,
+      "shown": [
+        "alert -5.0"
+      ]
+    },
+    {
+      "from": 1.721,
+      "did": "asked for the temperature alert",
+      "to": 2.241,
+      "shown": [
+        "-5.0"
+      ]
+    },
+    {
+      "from": 2.942,
+      "did": "watched the gadget for 6 seconds",
+      "to": 8.979,
+      "shown": [
+        "alert -3.25"
+      ]
+    },
+    {
+      "at": 4.993,
+      "did": "the gadget (outdoors) warmed up past the alert temperature"
+    },
+    {
+      "from": 9.68,
+      "did": "set the temperature alert to 30 degrees",
+      "to": 10.199,
+      "shown": [
+        "alert 30.0"
+      ]
+    },
+    {
+      "from": 10.9,
+      "did": "asked for the temperature alert",
+      "to": 11.416,
+      "shown": [
+        "30.0"
+      ]
+    },
+    {
+      "from": 12.117,
+      "did": "switched the temperature alert off",
+      "to": 12.637,
+      "shown": [
+        "alert off"
+      ]
+    },
+    {
+      "from": 13.338,
+      "did": "showed the letters 'TUR' with a line under them",
+      "picture": [
+        "fff.f..f.fff....",
+        ".f..f..f.f..f...",
+        ".f..f..f.fff....",
+        ".f..f..f.f.f....",
+        ".f...ff..f..f...",
+        "................",
+        "5555555555555555",
+        "................"
+      ],
+      "to": 13.354,
+      "shown": [
+        "image shown"
+      ]
+    },
+    {
+      "from": 14.054,
+      "did": "asked for the display brightness",
+      "to": 14.067,
+      "shown": [
+        "20"
+      ]
+    }
+  ]
+}

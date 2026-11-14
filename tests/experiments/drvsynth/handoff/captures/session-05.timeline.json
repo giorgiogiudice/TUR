@@ -1,0 +1,97 @@
+{
+  "session": 5,
+  "title": "Notes",
+  "capture": "session-05.pcapng",
+  "text": "session-05.txt",
+  "clock": "seconds since the capture started",
+  "entries": [
+    {
+      "from": 0.5,
+      "did": "listed the stored notes (none)",
+      "to": 0.513,
+      "shown": []
+    },
+    {
+      "from": 1.213,
+      "did": "stored the note 'hello' in slot 0",
+      "to": 1.233,
+      "shown": [
+        "note 0 stored"
+      ]
+    },
+    {
+      "from": 1.933,
+      "did": "stored the note 'Buy milk and eggs' in slot 3",
+      "to": 1.952,
+      "shown": [
+        "note 3 stored"
+      ]
+    },
+    {
+      "from": 2.653,
+      "did": "listed the stored notes",
+      "to": 2.666,
+      "shown": [
+        "0 5",
+        "3 17"
+      ]
+    },
+    {
+      "from": 3.367,
+      "did": "read the note in slot 0",
+      "to": 3.378,
+      "shown": [
+        "hello"
+      ]
+    },
+    {
+      "from": 4.079,
+      "did": "read the note in slot 3",
+      "to": 4.094,
+      "shown": [
+        "Buy milk and eggs"
+      ]
+    },
+    {
+      "from": 4.794,
+      "did": "stored a long note in slot 7: 'The quick brown fox jumps over the lazy dog. Pack my box with five dozen liquor jugs! 0123456789'",
+      "to": 4.811,
+      "shown": [
+        "note 7 stored"
+      ]
+    },
+    {
+      "from": 5.511,
+      "did": "read the note in slot 7",
+      "to": 5.526,
+      "shown": [
+        "The quick brown fox jumps over the lazy dog. Pack my box with five dozen liquor jugs! 0123456789"
+      ]
+    },
+    {
+      "from": 6.227,
+      "did": "tried to read slot 5, which is empty",
+      "to": 6.241,
+      "shown": [
+        "empty"
+      ]
+    },
+    {
+      "from": 6.942,
+      "did": "deleted the note in slot 3",
+      "to": 6.954,
+      "shown": [
+        "note 3 deleted"
+      ]
+    },
+    {
+      "from": 7.655,
+      "did": "listed the stored notes",
+      "to": 7.668,
+      "shown": [
+        "0 5",
+        "7 96"
+      ]
+    }
+  ]
+}

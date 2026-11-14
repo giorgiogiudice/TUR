@@ -1,0 +1,123 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# session-09.pcapng: readable form of the pcapng capture beside this file
+# (Linux usbmon, one line per event; the pcapng is the complete record).
+#
+# time    seconds since the capture started (the timeline uses the same clock)
+# ev      S = transfer submitted by the host, C = completed, E = submission error
+# xfer    ctrl, bulk, intr (interrupt) or iso, with the direction (in = device to host)
+# ep      endpoint number;  dev = device address on the bus
+# urb     the last 4 hex digits of the transfer's id: an S and its C share it
+# setup   control submissions: bmRequestType bRequest wValue wIndex wLength
+#         (wValue, wIndex, wLength as 16-bit numbers, i.e. already byte-swapped)
+# status  completions: 0 = success, negative = Linux errno (-32 stall, -2 cancelled ...)
+# len     bytes requested (S) or transferred (C)
+# data    the bytes, in hex, in the order they crossed the bus
+#
+   0.510085 S ctrl-in  ep00 dev002 urb=a840 setup=c0 01 0000 0000 0008 len=8
+   0.510356 C ctrl-in  ep00 dev002 urb=a840 status=0 len=8 data=03 fa 52 f2 be 01 10 08
+   0.510460 S ctrl-out ep00 dev002 urb=a840 setup=40 02 b361 26a2 0000 len=0
+   0.510569 C ctrl-out ep00 dev002 urb=a840 status=0 len=0
+   0.510818 S bulk-out ep02 dev002 urb=a840 len=6 data=9c 02 01 01 1c 5e
+   0.510907 C bulk-out ep02 dev002 urb=a840 status=0 len=6
+   0.510971 S bulk-in  ep01 dev002 urb=a840 len=512
+   0.511054 C bulk-in  ep01 dev002 urb=a840 status=0 len=16 data=9d 0c 01 00 03 01 04 10 08 08 12 11 00 00 e2 b2
+   0.511359 S ctrl-out ep00 dev002 urb=9f00 setup=40 03 0000 0000 0000 len=0
+   0.511450 C ctrl-out ep00 dev002 urb=9f00 status=0 len=0
+   1.224965 S ctrl-in  ep00 dev002 urb=96c0 setup=c0 01 0000 0000 0008 len=8
+   1.225265 C ctrl-in  ep00 dev002 urb=96c0 status=0 len=8 data=03 dc e0 2d 48 01 10 08
+   1.225389 S ctrl-out ep00 dev002 urb=90c0 setup=40 02 6897 627c 0000 len=0
+   1.225480 C ctrl-out ep00 dev002 urb=90c0 status=0 len=0
+   1.225677 S bulk-out ep02 dev002 urb=9840 len=7 data=9c 03 01 10 01 9d 6f
+   1.225743 C bulk-out ep02 dev002 urb=9840 status=0 len=7
+   1.225814 S bulk-in  ep01 dev002 urb=a780 len=512
+   1.225859 C bulk-in  ep01 dev002 urb=a780 status=0 len=7 data=9d 03 01 00 01 7d 5f
+   1.476520 S ctrl-out ep00 dev002 urb=9cc0 setup=40 03 0000 0000 0000 len=0
+   1.476809 C ctrl-out ep00 dev002 urb=9cc0 status=0 len=0
+   2.192482 S ctrl-in  ep00 dev002 urb=2e40 setup=c0 01 0000 0000 0008 len=8
+   2.192806 C ctrl-in  ep00 dev002 urb=2e40 status=0 len=8 data=03 97 cf b2 35 01 10 08
+   2.192878 S ctrl-out ep00 dev002 urb=2cc0 setup=40 02 db72 8b13 0000 len=0
+   2.192990 C ctrl-out ep00 dev002 urb=2cc0 status=0 len=0
+   2.193262 S bulk-out ep02 dev002 urb=4180 len=6 data=9c 02 01 11 2c 6e
+   2.193358 C bulk-out ep02 dev002 urb=4180 status=0 len=6
+   2.193419 S bulk-in  ep01 dev002 urb=9300 len=512
+   2.193484 C bulk-in  ep01 dev002 urb=9300 status=0 len=7 data=9d 03 01 00 01 7d 5f
+   2.193653 S bulk-out ep02 dev002 urb=4180 len=7 data=9c 03 02 10 00 9f 6f
+   2.193720 C bulk-out ep02 dev002 urb=4180 status=0 len=7
+   2.193788 S bulk-in  ep01 dev002 urb=2cc0 len=512
+   2.193852 C bulk-in  ep01 dev002 urb=2cc0 status=0 len=7 data=9d 03 02 00 00 7f 5f
+   2.444513 S bulk-out ep02 dev002 urb=2e40 len=7 data=9c 03 03 21 14 d8 95
+   2.444681 C bulk-out ep02 dev002 urb=2e40 status=0 len=7
+   2.444798 S bulk-in  ep01 dev002 urb=9cc0 len=512
+   2.444832 C bulk-in  ep01 dev002 urb=9cc0 status=0 len=6 data=9d 02 03 00 1f 5f
+   2.444975 S bulk-out ep02 dev002 urb=4180 len=7 data=9c 03 04 10 01 a6 72
+   2.445029 C bulk-out ep02 dev002 urb=4180 status=0 len=7
+   2.445088 S bulk-in  ep01 dev002 urb=4180 len=512
+   2.445138 C bulk-in  ep01 dev002 urb=4180 status=0 len=7 data=9d 03 04 00 01 86 62
+   2.695761 S ctrl-out ep00 dev002 urb=9300 setup=40 03 0000 0000 0000 len=0
+   2.696059 C ctrl-out ep00 dev002 urb=9300 status=0 len=0
+   3.412149 S ctrl-in  ep00 dev002 urb=9300 setup=c0 01 0000 0000 0008 len=8
+   3.412451 C ctrl-in  ep00 dev002 urb=9300 status=0 len=8 data=03 9f 3b 70 d2 01 10 08
+   3.412555 S ctrl-out ep00 dev002 urb=9300 setup=40 02 232c 0a0f 0000 len=0
+   3.412746 C ctrl-out ep00 dev002 urb=9300 status=0 len=0
+   3.413041 S bulk-out ep02 dev002 urb=9300 len=6 data=9c 02 01 11 2c 6e
+   3.413104 C bulk-out ep02 dev002 urb=9300 status=0 len=6
+   3.413191 S bulk-in  ep01 dev002 urb=a840 len=512
+   3.413224 C bulk-in  ep01 dev002 urb=a840 status=0 len=7 data=9d 03 01 00 01 7d 5f
+   3.413435 S bulk-out ep02 dev002 urb=a840 len=7 data=9c 03 02 21 01 c2 81
+   3.413473 C bulk-out ep02 dev002 urb=a840 status=0 len=7
+   3.413526 S bulk-in  ep01 dev002 urb=a840 len=512
+   3.413567 C bulk-in  ep01 dev002 urb=a840 status=0 len=6 data=9d 02 02 00 1d 5e
+   3.413756 S ctrl-out ep00 dev002 urb=a840 setup=40 03 0000 0000 0000 len=0
+   3.413820 C ctrl-out ep00 dev002 urb=a840 status=0 len=0
+   4.133002 S ctrl-in  ep00 dev002 urb=9300 setup=c0 01 0000 0000 0008 len=8
+   4.133239 C ctrl-in  ep00 dev002 urb=9300 status=0 len=8 data=03 d9 fb 61 75 01 10 08
+   4.133361 S ctrl-out ep00 dev002 urb=9300 setup=40 02 c114 02db 0000 len=0
+   4.133457 C ctrl-out ep00 dev002 urb=9300 status=0 len=0
+   4.133728 S bulk-out ep02 dev002 urb=4180 len=6 data=9c 02 01 30 4b 8d
+   4.133789 C bulk-out ep02 dev002 urb=4180 status=0 len=6
+   4.133866 S bulk-in  ep01 dev002 urb=9300 len=512
+   4.133922 C bulk-in  ep01 dev002 urb=9300 status=0 len=14 data=9d 0a 01 00 07 9e e0 01 02 00 00 00 73 f2
+   4.134239 S ctrl-out ep00 dev002 urb=9300 setup=40 03 0000 0000 0000 len=0
+   4.134303 C ctrl-out ep00 dev002 urb=9300 status=0 len=0
+   4.845897 S ctrl-in  ep00 dev002 urb=4180 setup=c0 01 0000 0000 0008 len=8
+   4.846157 C ctrl-in  ep00 dev002 urb=4180 status=0 len=8 data=03 4c 29 e7 13 01 10 08
+   4.846261 S ctrl-out ep00 dev002 urb=4180 setup=40 02 11ce 5077 0000 len=0
+   4.846359 C ctrl-out ep00 dev002 urb=4180 status=0 len=0
+   5.846786 C intr-in  ep03 dev002 urb=76c0 status=0 len=8 data=03 0d 01 17 11 14 00 00
+   5.846875 S intr-in  ep03 dev002 urb=4180 len=8
+   6.392706 C intr-in  ep03 dev002 urb=2600 status=0 len=8 data=01 0e 01 54 00 00 00 00
+   6.392769 S intr-in  ep03 dev002 urb=9300 len=8
+   6.847468 C intr-in  ep03 dev002 urb=4180 status=0 len=8 data=03 0f 01 18 11 14 00 00
+   6.847575 S intr-in  ep03 dev002 urb=a840 len=8
+   7.847906 C intr-in  ep03 dev002 urb=9300 status=0 len=8 data=03 10 01 19 11 14 00 00
+   7.848130 S intr-in  ep03 dev002 urb=ab40 len=8
+   7.888673 C intr-in  ep03 dev002 urb=a840 status=0 len=8 data=01 11 01 0c 00 00 00 00
+   7.888757 S intr-in  ep03 dev002 urb=a600 len=8
+   8.848879 C intr-in  ep03 dev002 urb=ab40 status=0 len=8 data=03 12 01 1a 11 14 00 00
+   8.848955 S intr-in  ep03 dev002 urb=9540 len=8
+   9.849332 C intr-in  ep03 dev002 urb=a600 status=0 len=8 data=03 13 01 1b 11 14 00 00
+   9.849447 S intr-in  ep03 dev002 urb=7480 len=8
+  10.850160 C intr-in  ep03 dev002 urb=9540 status=0 len=8 data=03 14 01 1c 11 14 00 00
+  10.850250 S intr-in  ep03 dev002 urb=7000 len=8
+  10.865674 S ctrl-out ep00 dev002 urb=9540 setup=40 03 0000 0000 0000 len=0
+  10.865921 C ctrl-out ep00 dev002 urb=9540 status=0 len=0
+  11.577648 S ctrl-in  ep00 dev002 urb=a600 setup=c0 01 0000 0000 0008 len=8
+  11.577949 C ctrl-in  ep00 dev002 urb=a600 status=0 len=8 data=03 14 93 50 e5 01 10 08
+  11.578070 S ctrl-out ep00 dev002 urb=ab40 setup=40 02 c739 1b69 0000 len=0
+  11.578261 C ctrl-out ep00 dev002 urb=ab40 status=0 len=0
+  11.578506 S bulk-out ep02 dev002 urb=a840 len=6 data=9c 02 01 11 2c 6e
+  11.578560 C bulk-out ep02 dev002 urb=a840 status=0 len=6
+  11.578637 S bulk-in  ep01 dev002 urb=9300 len=512
+  11.578663 C bulk-in  ep01 dev002 urb=9300 status=0 len=7 data=9d 03 01 00 01 7d 5f
+  11.578829 S ctrl-out ep00 dev002 urb=2d80 setup=40 03 0000 0000 0000 len=0
+  11.578923 C ctrl-out ep00 dev002 urb=2d80 status=0 len=0
+  12.294519 S ctrl-in  ep00 dev002 urb=4180 setup=c0 01 0000 0000 0008 len=8
+  12.294784 C ctrl-in  ep00 dev002 urb=4180 status=0 len=8 data=03 16 00 71 92 01 10 08
+  12.294885 S ctrl-out ep00 dev002 urb=2600 setup=40 02 230b 7b27 0000 len=0
+  12.295024 C ctrl-out ep00 dev002 urb=2600 status=0 len=0
+  12.295160 S bulk-out ep02 dev002 urb=2300 len=7 data=9c 03 01 10 00 9c 6e
+  12.295228 C bulk-out ep02 dev002 urb=2300 status=0 len=7
+  12.295265 S bulk-in  ep01 dev002 urb=70c0 len=512
+  12.295313 C bulk-in  ep01 dev002 urb=70c0 status=0 len=7 data=9d 03 01 00 00 7c 5e
+  12.545979 S ctrl-out ep00 dev002 urb=2480 setup=40 03 0000 0000 0000 len=0
+  12.546294 C ctrl-out ep00 dev002 urb=2480 status=0 len=0
