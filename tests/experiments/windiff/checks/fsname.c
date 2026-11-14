@@ -312,16 +312,16 @@ static void g_streams(void)
     wd_mkfile(L"s.txt", "main");
     h = wd_open(L"s.txt:alt", GENERIC_READ | GENERIC_WRITE, WD_RWD, CREATE_NEW, 0);
     EMIT_H("create-stream", h);
-    ok = WriteFile(h, "stream-data", 11, &n, NULL);
-    wd_emit("write-stream", "%s", wd_res(ok));
+    ok = wd_ok(WriteFile(h, "stream-data", 11, &n, NULL));
+    wd_emit("write-stream", "%s", wd_was());
     CLOSE(h);
     h = wd_open(L"s.txt", GENERIC_READ, WD_RWD, OPEN_EXISTING, 0);
     wd_emit("main-size-after-stream-write", "%lu", GetFileSize(h, NULL));
     CLOSE(h);
     h = wd_open(L"s.txt:alt", GENERIC_READ, WD_RWD, OPEN_EXISTING, 0);
     memset(buf, 0, sizeof(buf)); n = 0;
-    ok = ReadFile(h, buf, 30, &n, NULL);
-    wd_emit("read-stream", "%s n=%lu %s", wd_res(ok), n, buf);
+    ok = wd_ok(ReadFile(h, buf, 30, &n, NULL));
+    wd_emit("read-stream", "%s n=%lu %s", wd_was(), n, buf);
     CLOSE(h);
     h = wd_open(L"s.txt::$DATA", GENERIC_READ, WD_RWD, OPEN_EXISTING, 0);
     EMIT_H("open-default-stream-by-name", h);
@@ -388,8 +388,8 @@ static void g_streams(void)
     {
         struct { DWORD next, namelen; LARGE_INTEGER size, alloc; WCHAR name[200]; } si;
         memset(&si, 0, sizeof(si));
-        ok = GetFileInformationByHandleEx(h, FileStreamInfo, &si, sizeof(si));
-        wd_emit("FileStreamInfo-plain-file", ok ? "ok next=%lu %s size=%lu" : "e=%lu", ok ? si.next : GetLastError(),
+        ok = wd_ok(GetFileInformationByHandleEx(h, FileStreamInfo, &si, sizeof(si)));
+        wd_emit("FileStreamInfo-plain-file", ok ? "ok next=%lu %s size=%lu" : "e=%lu", ok ? si.next : wd_last,
                 ok ? wd_u8n(si.name, si.namelen / 2) : "", si.size.LowPart);
     }
     CLOSE(h);
@@ -583,7 +583,7 @@ static void g_pathcch(void)
 static void g_volume(void)
 {
     WCHAR buf[600], name[300], fs[64];
-    DWORD n, serial, complen, flags, spc, bps, fc, tc;
+    DWORD n, serial, complen, flags, spc, bps, fc, tc, e;
     UINT u;
     BOOL ok;
     static const struct { const char *id; const WCHAR *p; } roots[] = {
@@ -601,58 +601,58 @@ static void g_volume(void)
         wd_emit(id, "%u", GetDriveTypeW(roots[i].p));
         _snprintf(id, sizeof(id), "GetVolumeInformation.%s", roots[i].id);
         fs[0] = 0;
-        ok = GetVolumeInformationW(roots[i].p, name, 290, &serial, &complen, &flags, fs, 60);
-        wd_emit(id, ok ? "ok fs=%s maxlen=%lu" : "e=%lu", ok ? wd_u8(fs) : (const char *)(ULONG_PTR)GetLastError(), complen);
+        ok = wd_ok(GetVolumeInformationW(roots[i].p, name, 290, &serial, &complen, &flags, fs, 60));
+        wd_emit(id, ok ? "ok fs=%s maxlen=%lu" : "e=%lu", ok ? wd_u8(fs) : (const char *)(ULONG_PTR)wd_last, complen);
         _snprintf(id, sizeof(id), "GetDiskFreeSpace.%s", roots[i].id);
         EMIT_B(id, GetDiskFreeSpaceW(roots[i].p, &spc, &bps, &fc, &tc));
         _snprintf(id, sizeof(id), "GetVolumePathName.%s", roots[i].id);
         buf[0] = 0;
-        ok = GetVolumePathNameW(roots[i].p, buf, 590);
-        wd_emit(id, "%s %s", wd_res(ok), ok ? wd_path(buf) : "");
+        ok = wd_ok(GetVolumePathNameW(roots[i].p, buf, 590));
+        wd_emit(id, "%s %s", wd_was(), ok ? wd_path(buf) : "");
     }
     wd_emit("GetDriveType.null", "%u", GetDriveTypeW(NULL));
-    ok = GetVolumeInformationW(L"C:\\", NULL, 0, NULL, &complen, &flags, NULL, 0);
+    ok = wd_ok(GetVolumeInformationW(L"C:\\", NULL, 0, NULL, &complen, &flags, NULL, 0));
     wd_emit("volume-flags-C", ok ? "ok case-preserved=%d case-sensitive=%d unicode=%d acls=%d streams=%d hardlinks=%d sparse=%d reparse=%d" : "e=%lu",
-            ok ? !!(flags & FILE_CASE_PRESERVED_NAMES) : (int)GetLastError(), !!(flags & FILE_CASE_SENSITIVE_SEARCH),
+            ok ? !!(flags & FILE_CASE_PRESERVED_NAMES) : (int)wd_last, !!(flags & FILE_CASE_SENSITIVE_SEARCH),
             !!(flags & FILE_UNICODE_ON_DISK), !!(flags & FILE_PERSISTENT_ACLS), !!(flags & FILE_NAMED_STREAMS),
             !!(flags & FILE_SUPPORTS_HARD_LINKS), !!(flags & FILE_SUPPORTS_SPARSE_FILES), !!(flags & FILE_SUPPORTS_REPARSE_POINTS));
-    ok = GetVolumeInformationW(L"C:\\", name, 2, NULL, NULL, NULL, fs, 60);
-    wd_emit("GetVolumeInformation.small-name-buffer", "%s", wd_res(ok));
-    ok = GetVolumeInformationW(L"C:\\", name, 290, NULL, NULL, NULL, fs, 2);
-    wd_emit("GetVolumeInformation.small-fs-buffer", "%s", wd_res(ok));
+    ok = wd_ok(GetVolumeInformationW(L"C:\\", name, 2, NULL, NULL, NULL, fs, 60));
+    wd_emit("GetVolumeInformation.small-name-buffer", "%s", wd_was());
+    ok = wd_ok(GetVolumeInformationW(L"C:\\", name, 290, NULL, NULL, NULL, fs, 2));
+    wd_emit("GetVolumeInformation.small-fs-buffer", "%s", wd_was());
     buf[0] = 0;
-    ok = GetVolumeNameForVolumeMountPointW(L"C:\\", buf, 590);
-    wd_emit("GetVolumeNameForVolumeMountPoint", "%s len=%d prefix=%s", wd_res(ok), lstrlenW(buf), wd_u8n(buf, 11));
-    ok = GetVolumeNameForVolumeMountPointW(L"C:", buf, 590);
-    wd_emit("GetVolumeNameForVolumeMountPoint-no-backslash", "%s", wd_res(ok));
+    ok = wd_ok(GetVolumeNameForVolumeMountPointW(L"C:\\", buf, 590));
+    wd_emit("GetVolumeNameForVolumeMountPoint", "%s len=%d prefix=%s", wd_was(), lstrlenW(buf), wd_u8n(buf, 11));
+    ok = wd_ok(GetVolumeNameForVolumeMountPointW(L"C:", buf, 590));
+    wd_emit("GetVolumeNameForVolumeMountPoint-no-backslash", "%s", wd_was());
     n = GetLogicalDrives();
     wd_emit("GetLogicalDrives-has-C", "%d", !!(n & 4));
 
     /* temporary names */
-    u = GetTempFileNameW(L".", L"abcdef", 0, buf);
+    u = GetTempFileNameW(L".", L"abcdef", 0, buf); e = GetLastError();
     wd_emit("GetTempFileName.unique-0", u ? "ok prefix=%s len=%d exists=%d" : "e=%lu",
-            u ? wd_u8n(buf, 5) : (const char *)(ULONG_PTR)GetLastError(), lstrlenW(buf), GetFileAttributesW(buf) != INVALID_FILE_ATTRIBUTES);
-    u = GetTempFileNameW(L".", L"ab", 0x1234, buf);
-    wd_emit("GetTempFileName.unique-given", u ? "ok %u %s exists=%d" : "e=%lu", u ? u : (UINT)GetLastError(), wd_u8(buf),
+            u ? wd_u8n(buf, 5) : (const char *)(ULONG_PTR)e, lstrlenW(buf), GetFileAttributesW(buf) != INVALID_FILE_ATTRIBUTES);
+    u = GetTempFileNameW(L".", L"ab", 0x1234, buf); e = GetLastError();
+    wd_emit("GetTempFileName.unique-given", u ? "ok %u %s exists=%d" : "e=%lu", u ? u : (UINT)e, wd_u8(buf),
             GetFileAttributesW(buf) != INVALID_FILE_ATTRIBUTES);
-    u = GetTempFileNameW(L".", L"ab", 0x12345, buf);
-    wd_emit("GetTempFileName.unique-17-bits", u ? "ok %u %s" : "e=%lu", u ? u : (UINT)GetLastError(), wd_u8(buf));
-    u = GetTempFileNameW(L".", L"ab", 0x10000, buf);
-    wd_emit("GetTempFileName.unique-0x10000", u ? "ok %u %s" : "e=%lu", u ? u : (UINT)GetLastError(), wd_u8(buf));
-    u = GetTempFileNameW(L".", NULL, 7, buf);
-    wd_emit("GetTempFileName.null-prefix", u ? "ok %u %s" : "e=%lu", u ? u : (UINT)GetLastError(), wd_u8(buf));
-    u = GetTempFileNameW(L".", L"", 7, buf);
-    wd_emit("GetTempFileName.empty-prefix", u ? "ok %u %s" : "e=%lu", u ? u : (UINT)GetLastError(), wd_u8(buf));
-    u = GetTempFileNameW(L"nodir", L"ab", 0, buf);
-    wd_emit("GetTempFileName.missing-directory", u ? "ok" : "e=%lu", GetLastError());
-    u = GetTempFileNameW(L"nodir", L"ab", 5, buf);
-    wd_emit("GetTempFileName.missing-directory-unique-given", u ? "ok %s" : "e=%lu", u ? wd_u8(buf) : (const char *)(ULONG_PTR)GetLastError());
-    u = GetTempFileNameW(L"", L"ab", 5, buf);
-    wd_emit("GetTempFileName.empty-directory", u ? "ok %s" : "e=%lu", u ? wd_u8(buf) : (const char *)(ULONG_PTR)GetLastError());
-    u = GetTempFileNameW(L".\\", L"a.b", 5, buf);
-    wd_emit("GetTempFileName.dot-in-prefix", u ? "ok %s" : "e=%lu", u ? wd_u8(buf) : (const char *)(ULONG_PTR)GetLastError());
-    u = GetTempFileNameW(L"C:\\wd\\..\\wd", L"ab", 5, buf);
-    wd_emit("GetTempFileName.directory-not-normalised", u ? "ok %s" : "e=%lu", u ? wd_u8(buf) : (const char *)(ULONG_PTR)GetLastError());
+    u = GetTempFileNameW(L".", L"ab", 0x12345, buf); e = GetLastError();
+    wd_emit("GetTempFileName.unique-17-bits", u ? "ok %u %s" : "e=%lu", u ? u : (UINT)e, wd_u8(buf));
+    u = GetTempFileNameW(L".", L"ab", 0x10000, buf); e = GetLastError();
+    wd_emit("GetTempFileName.unique-0x10000", u ? "ok %u %s" : "e=%lu", u ? u : (UINT)e, wd_u8(buf));
+    u = GetTempFileNameW(L".", NULL, 7, buf); e = GetLastError();
+    wd_emit("GetTempFileName.null-prefix", u ? "ok %u %s" : "e=%lu", u ? u : (UINT)e, wd_u8(buf));
+    u = GetTempFileNameW(L".", L"", 7, buf); e = GetLastError();
+    wd_emit("GetTempFileName.empty-prefix", u ? "ok %u %s" : "e=%lu", u ? u : (UINT)e, wd_u8(buf));
+    u = GetTempFileNameW(L"nodir", L"ab", 0, buf); e = GetLastError();
+    wd_emit("GetTempFileName.missing-directory", u ? "ok" : "e=%lu", e);
+    u = GetTempFileNameW(L"nodir", L"ab", 5, buf); e = GetLastError();
+    wd_emit("GetTempFileName.missing-directory-unique-given", u ? "ok %s" : "e=%lu", u ? wd_u8(buf) : (const char *)(ULONG_PTR)e);
+    u = GetTempFileNameW(L"", L"ab", 5, buf); e = GetLastError();
+    wd_emit("GetTempFileName.empty-directory", u ? "ok %s" : "e=%lu", u ? wd_u8(buf) : (const char *)(ULONG_PTR)e);
+    u = GetTempFileNameW(L".\\", L"a.b", 5, buf); e = GetLastError();
+    wd_emit("GetTempFileName.dot-in-prefix", u ? "ok %s" : "e=%lu", u ? wd_u8(buf) : (const char *)(ULONG_PTR)e);
+    u = GetTempFileNameW(L"C:\\wd\\..\\wd", L"ab", 5, buf); e = GetLastError();
+    wd_emit("GetTempFileName.directory-not-normalised", u ? "ok %s" : "e=%lu", u ? wd_u8(buf) : (const char *)(ULONG_PTR)e);
     n = GetTempPathW(590, buf);
     wd_emit("GetTempPath.ends-with-backslash", "%d", n && buf[n - 1] == '\\');
     n = GetTempPathW(2, buf);

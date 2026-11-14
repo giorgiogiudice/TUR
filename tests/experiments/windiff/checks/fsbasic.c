@@ -157,8 +157,8 @@ static void g_delete(void)
     h2 = wd_open(L"d3", GENERIC_READ, WD_RWD, OPEN_EXISTING, FILE_FLAG_DELETE_ON_CLOSE);
     EMIT_H("doc.second-handle-is-doc", h2); CLOSE(h2);
     wd_emit("doc.attr-after-doc-handle-closed", "%s", wd_attr(L"d3"));
-    ok = ReadFile(h, buf, 1, &n, NULL);
-    wd_emit("doc.read-through-first-handle", ok ? "ok n=%lu" : "e=%lu", ok ? n : GetLastError());
+    ok = wd_ok(ReadFile(h, buf, 1, &n, NULL));
+    wd_emit("doc.read-through-first-handle", ok ? "ok n=%lu" : "e=%lu", ok ? n : wd_last);
     CLOSE(h);
     wd_emit("doc.attr-at-end", "%s", wd_attr(L"d3"));
     wd_clean();
@@ -194,10 +194,10 @@ static void g_delete(void)
     wd_emit("open.share-rwd.listing-after-delete", "%s", wd_ls(L"."));
     h2 = wd_open(L"o2", GENERIC_WRITE, WD_RWD, CREATE_NEW, 0);
     EMIT_H("open.share-rwd.create-same-name", h2); CLOSE(h2);
-    ok = GetFileInformationByHandle(h, &bi);
-    wd_emit("open.share-rwd.links-after-delete", ok ? "links=%lu" : "e=%lu", ok ? bi.nNumberOfLinks : GetLastError());
-    ok = ReadFile(h, buf, 1, &n, NULL);
-    wd_emit("open.share-rwd.read-after-delete", ok ? "ok n=%lu" : "e=%lu", ok ? n : GetLastError());
+    ok = wd_ok(GetFileInformationByHandle(h, &bi));
+    wd_emit("open.share-rwd.links-after-delete", ok ? "links=%lu" : "e=%lu", ok ? bi.nNumberOfLinks : wd_last);
+    ok = wd_ok(ReadFile(h, buf, 1, &n, NULL));
+    wd_emit("open.share-rwd.read-after-delete", ok ? "ok n=%lu" : "e=%lu", ok ? n : wd_last);
     EMIT_B("open.share-rwd.DeleteFile-again", DeleteFileW(L"o2"));
     CLOSE(h);
     wd_emit("open.share-rwd.attr-after-close", "%s", wd_attr(L"o2"));
@@ -258,7 +258,7 @@ static void g_delete(void)
     wd_emit("disp.attr-while-pending", "%s", wd_attr(L"h1"));
     h2 = wd_open(L"h1", GENERIC_READ, WD_RWD, OPEN_EXISTING, 0);
     EMIT_H("disp.open-while-pending", h2); CLOSE(h2);
-    ok = GetFileInformationByHandleEx(h, FileStandardInfo, &si, sizeof(si));
+    ok = wd_ok(GetFileInformationByHandleEx(h, FileStandardInfo, &si, sizeof(si)));
     if (ok) wd_emit("disp.FileStandardInfo-while-pending", "pending=%d links=%lu", si.DeletePending, si.NumberOfLinks);
     else wd_emit("disp.FileStandardInfo-while-pending", "e=%lu", GetLastError());
     di.del = FALSE;
@@ -371,10 +371,10 @@ static void g_create(void)
     SetLastError(0xdeadbeef);
     n = GetFileSize(h, NULL);
     wd_emit("dir.GetFileSize", "%lu gle=%lu", n, n == INVALID_FILE_SIZE ? GetLastError() : 0);
-    ok = ReadFile(h, buf, 1, &n, NULL);
-    wd_emit("dir.ReadFile", "%s", wd_res(ok));
-    ok = WriteFile(h, "x", 1, &n, NULL);
-    wd_emit("dir.WriteFile", "%s", wd_res(ok));
+    ok = wd_ok(ReadFile(h, buf, 1, &n, NULL));
+    wd_emit("dir.ReadFile", "%s", wd_was());
+    ok = wd_ok(WriteFile(h, "x", 1, &n, NULL));
+    wd_emit("dir.WriteFile", "%s", wd_was());
     EMIT_B("dir.FlushFileBuffers", FlushFileBuffers(h));
     EMIT_B("dir.SetEndOfFile", SetEndOfFile(h));
     CLOSE(h);
@@ -409,8 +409,8 @@ static void g_create(void)
     /* access and flag combinations */
     h = wd_open(L"f", 0, 0, OPEN_EXISTING, 0);
     EMIT_H("access.none", h);
-    ok = ReadFile(h, buf, 1, &n, NULL);
-    wd_emit("access.none.ReadFile", "%s", wd_res(ok));
+    ok = wd_ok(ReadFile(h, buf, 1, &n, NULL));
+    wd_emit("access.none.ReadFile", "%s", wd_was());
     wd_emit("access.none.GetFileSize", "%lu", GetFileSize(h, NULL));
     CLOSE(h);
     h = wd_open(L"f", MAXIMUM_ALLOWED, 0, OPEN_EXISTING, 0);
@@ -424,13 +424,13 @@ static void g_create(void)
     h = wd_open(L"f", GENERIC_READ, 0x8, OPEN_EXISTING, 0);
     EMIT_H("share.invalid-bit", h); CLOSE(h);
     h = wd_open(L"f", GENERIC_READ, 0, OPEN_EXISTING, FILE_FLAG_OVERLAPPED);
-    ok = ReadFile(h, buf, 1, &n, NULL);
-    wd_emit("flags.overlapped-read-without-overlapped", "%s", wd_res(ok));
+    ok = wd_ok(ReadFile(h, buf, 1, &n, NULL));
+    wd_emit("flags.overlapped-read-without-overlapped", "%s", wd_was());
     CLOSE(h);
     h = wd_open(L"f", GENERIC_READ, 0, OPEN_EXISTING, FILE_FLAG_NO_BUFFERING);
     EMIT_H("flags.no-buffering-open", h);
-    ok = ReadFile(h, buf, 1, &n, NULL);
-    wd_emit("flags.no-buffering-read-1-byte", "%s", wd_res(ok));
+    ok = wd_ok(ReadFile(h, buf, 1, &n, NULL));
+    wd_emit("flags.no-buffering-read-1-byte", "%s", wd_was());
     CLOSE(h);
     h = wd_open(L"f", GENERIC_READ, 0, OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_SEQUENTIAL_SCAN | FILE_FLAG_RANDOM_ACCESS);
     EMIT_H("flags.reparse-sequential-random", h); CLOSE(h);
@@ -466,8 +466,8 @@ static void g_attrs(void)
     {
         wd_mkfile(L"f", "x");
         _snprintf(id, sizeof(id), "file.set-0x%lx", values[i]);
-        ok = SetFileAttributesW(L"f", values[i]);
-        wd_emit(id, "%s then %s", wd_res(ok), wd_attr(L"f"));
+        ok = wd_ok(SetFileAttributesW(L"f", values[i]));
+        wd_emit(id, "%s then %s", wd_was(), wd_attr(L"f"));
         SetFileAttributesW(L"f", FILE_ATTRIBUTE_NORMAL);
         DeleteFileW(L"f");
     }
@@ -475,8 +475,8 @@ static void g_attrs(void)
     {
         if (values[i] & (FILE_ATTRIBUTE_COMPRESSED | FILE_ATTRIBUTE_ENCRYPTED | 0x80000000)) continue;
         _snprintf(id, sizeof(id), "dir.set-0x%lx", values[i]);
-        ok = SetFileAttributesW(L"d", values[i]);
-        wd_emit(id, "%s then %s", wd_res(ok), wd_attr(L"d"));
+        ok = wd_ok(SetFileAttributesW(L"d", values[i]));
+        wd_emit(id, "%s then %s", wd_was(), wd_attr(L"d"));
         SetFileAttributesW(L"d", FILE_ATTRIBUTE_DIRECTORY);
     }
     EMIT_B("set-on-missing", SetFileAttributesW(L"nofile", FILE_ATTRIBUTE_NORMAL));
@@ -491,11 +491,11 @@ static void g_attrs(void)
     wd_emit("get-root", "%s", wd_attr(L"C:\\"));
     wd_emit("get-drive-only", "%s", wd_attr(L"C:"));
     EMIT_B("GetFileAttributesEx-invalid-level", GetFileAttributesExW(L"f", (GET_FILEEX_INFO_LEVELS)1, &fad));
-    ok = GetFileAttributesExW(L"f", GetFileExInfoStandard, &fad);
-    wd_emit("GetFileAttributesEx", ok ? "ok a=0x%lx size=%lu" : "e=%lu", ok ? fad.dwFileAttributes : GetLastError(),
+    ok = wd_ok(GetFileAttributesExW(L"f", GetFileExInfoStandard, &fad));
+    wd_emit("GetFileAttributesEx", ok ? "ok a=0x%lx size=%lu" : "e=%lu", ok ? fad.dwFileAttributes : wd_last,
             fad.nFileSizeLow);
-    ok = GetFileAttributesExW(L"d", GetFileExInfoStandard, &fad);
-    wd_emit("GetFileAttributesEx-dir", ok ? "ok a=0x%lx size=%lu" : "e=%lu", ok ? fad.dwFileAttributes : GetLastError(),
+    ok = wd_ok(GetFileAttributesExW(L"d", GetFileExInfoStandard, &fad));
+    wd_emit("GetFileAttributesEx-dir", ok ? "ok a=0x%lx size=%lu" : "e=%lu", ok ? fad.dwFileAttributes : wd_last,
             fad.nFileSizeLow);
 
     /* what read-only means */
@@ -512,8 +512,8 @@ static void g_attrs(void)
     EMIT_H("readonly.open-WRITE_DAC", h); CLOSE(h);
     h = wd_open(L"f", GENERIC_READ, WD_RWD, OPEN_EXISTING, 0);
     EMIT_H("readonly.open-GENERIC_READ", h);
-    ok = WriteFile(h, "x", 1, &n, NULL);
-    wd_emit("readonly.write-through-read-handle", "%s", wd_res(ok));
+    ok = wd_ok(WriteFile(h, "x", 1, &n, NULL));
+    wd_emit("readonly.write-through-read-handle", "%s", wd_was());
     CLOSE(h);
     EMIT_B("readonly.MoveFile", MoveFileW(L"f", L"g"));
     EMIT_B("readonly.MoveFile-back", MoveFileW(L"g", L"f"));
@@ -551,34 +551,34 @@ static void g_times(void)
         t = ft_of(dates[i].y, dates[i].mo, dates[i].d, 12);
         t.dwLowDateTime += 1234567;
         _snprintf(id, sizeof(id), "write-time.%s", dates[i].n);
-        ok = SetFileTime(h, NULL, NULL, &t);
+        ok = wd_ok(SetFileTime(h, NULL, NULL, &t));
         memset(&w, 0, sizeof(w));
         GetFileTime(h, &c, &a, &w);
-        wd_emit(id, "%s %s", wd_res(ok), CompareFileTime(&t, &w) ? ft_str(&w) : "roundtrip");
+        wd_emit(id, "%s %s", wd_was(), CompareFileTime(&t, &w) ? ft_str(&w) : "roundtrip");
         _snprintf(id, sizeof(id), "creation-time.%s", dates[i].n);
-        ok = SetFileTime(h, &t, NULL, NULL);
+        ok = wd_ok(SetFileTime(h, &t, NULL, NULL));
         memset(&c, 0, sizeof(c));
         GetFileTime(h, &c, &a, &w);
-        wd_emit(id, "%s %s", wd_res(ok), CompareFileTime(&t, &c) ? ft_str(&c) : "roundtrip");
+        wd_emit(id, "%s %s", wd_was(), CompareFileTime(&t, &c) ? ft_str(&c) : "roundtrip");
         _snprintf(id, sizeof(id), "access-time.%s", dates[i].n);
-        ok = SetFileTime(h, NULL, &t, NULL);
+        ok = wd_ok(SetFileTime(h, NULL, &t, NULL));
         memset(&a, 0, sizeof(a));
         GetFileTime(h, &c, &a, &w);
-        wd_emit(id, "%s %s", wd_res(ok), CompareFileTime(&t, &a) ? ft_str(&a) : "roundtrip");
+        wd_emit(id, "%s %s", wd_was(), CompareFileTime(&t, &a) ? ft_str(&a) : "roundtrip");
     }
     t = ft_of(2001, 2, 3, 4);
     SetFileTime(h, &t, &t, &t);
     EMIT_B("set-all-null", SetFileTime(h, NULL, NULL, NULL));
     t2.dwLowDateTime = t2.dwHighDateTime = 0;
-    ok = SetFileTime(h, NULL, NULL, &t2);
+    ok = wd_ok(SetFileTime(h, NULL, NULL, &t2));
     GetFileTime(h, &c, &a, &w);
-    wd_emit("set-zero-write-time", "%s %s", wd_res(ok), CompareFileTime(&t, &w) ? ft_str(&w) : "unchanged");
+    wd_emit("set-zero-write-time", "%s %s", wd_was(), CompareFileTime(&t, &w) ? ft_str(&w) : "unchanged");
     t2.dwLowDateTime = t2.dwHighDateTime = 0xffffffff;
-    ok = SetFileTime(h, NULL, NULL, &t2);
+    ok = wd_ok(SetFileTime(h, NULL, NULL, &t2));
     WriteFile(h, "y", 1, &n, NULL);
     FlushFileBuffers(h);
     GetFileTime(h, &c, &a, &w);
-    wd_emit("write-after-set-minus-one", "%s %s", wd_res(ok), CompareFileTime(&t, &w) ? "write time changed" : "unchanged");
+    wd_emit("write-after-set-minus-one", "%s %s", wd_was(), CompareFileTime(&t, &w) ? "write time changed" : "unchanged");
     CLOSE(h);
     h = wd_open(L"t", GENERIC_READ, WD_RWD, OPEN_EXISTING, 0);
     GetFileTime(h, &c, &a, &w);
@@ -608,11 +608,11 @@ static void g_times(void)
     t.dwLowDateTime = 0; t.dwHighDateTime = 0x80000000;
     EMIT_B("FileTimeToSystemTime-high-bit", FileTimeToSystemTime(&t, &st));
     t.dwLowDateTime = 0xffffffff; t.dwHighDateTime = 0x7fffffff;
-    ok = FileTimeToSystemTime(&t, &st);
-    wd_emit("FileTimeToSystemTime-max", ok ? "ok year=%u" : "e=%lu", ok ? (unsigned)st.wYear : (unsigned)GetLastError());
+    ok = wd_ok(FileTimeToSystemTime(&t, &st));
+    wd_emit("FileTimeToSystemTime-max", ok ? "ok year=%u" : "e=%lu", ok ? (unsigned)st.wYear : (unsigned)wd_last);
     t.dwLowDateTime = 0; t.dwHighDateTime = 0;
-    ok = FileTimeToSystemTime(&t, &st);
-    wd_emit("FileTimeToSystemTime-zero", ok ? "ok %u-%u-%u dow=%u" : "e=%lu", ok ? (unsigned)st.wYear : (unsigned)GetLastError(),
+    ok = wd_ok(FileTimeToSystemTime(&t, &st));
+    wd_emit("FileTimeToSystemTime-zero", ok ? "ok %u-%u-%u dow=%u" : "e=%lu", ok ? (unsigned)st.wYear : (unsigned)wd_last,
             st.wMonth, st.wDay, st.wDayOfWeek);
     memset(&st, 0, sizeof(st)); st.wYear = 2024; st.wMonth = 13; st.wDay = 1;
     EMIT_B("SystemTimeToFileTime-month-13", SystemTimeToFileTime(&st, &t));
@@ -634,32 +634,32 @@ static void g_times(void)
     t = ft_of(1979, 12, 31, 23);
     EMIT_B("FileTimeToDosDateTime-1979", FileTimeToDosDateTime(&t, &dd, &dt));
     t = ft_of(1980, 1, 1, 0);
-    ok = FileTimeToDosDateTime(&t, &dd, &dt);
-    wd_emit("FileTimeToDosDateTime-1980", ok ? "ok %04x %04x" : "e=%lu", ok ? (unsigned)dd : (unsigned)GetLastError(), dt);
+    ok = wd_ok(FileTimeToDosDateTime(&t, &dd, &dt));
+    wd_emit("FileTimeToDosDateTime-1980", ok ? "ok %04x %04x" : "e=%lu", ok ? (unsigned)dd : (unsigned)wd_last, dt);
     t = ft_of(2107, 12, 31, 23);
-    ok = FileTimeToDosDateTime(&t, &dd, &dt);
-    wd_emit("FileTimeToDosDateTime-2107", ok ? "ok %04x %04x" : "e=%lu", ok ? (unsigned)dd : (unsigned)GetLastError(), dt);
+    ok = wd_ok(FileTimeToDosDateTime(&t, &dd, &dt));
+    wd_emit("FileTimeToDosDateTime-2107", ok ? "ok %04x %04x" : "e=%lu", ok ? (unsigned)dd : (unsigned)wd_last, dt);
     t = ft_of(2108, 1, 1, 0);
     EMIT_B("FileTimeToDosDateTime-2108", FileTimeToDosDateTime(&t, &dd, &dt));
     t = ft_of(2001, 2, 3, 4);
     t.dwLowDateTime += 10000000; /* an odd second */
-    ok = FileTimeToDosDateTime(&t, &dd, &dt);
-    wd_emit("FileTimeToDosDateTime-odd-second", ok ? "ok %04x %04x" : "e=%lu", ok ? (unsigned)dd : (unsigned)GetLastError(), dt);
-    ok = DosDateTimeToFileTime(0x0021, 0, &t);
-    wd_emit("DosDateTimeToFileTime-1980-01-01", "%s %s", wd_res(ok), ok ? ft_str(&t) : "");
+    ok = wd_ok(FileTimeToDosDateTime(&t, &dd, &dt));
+    wd_emit("FileTimeToDosDateTime-odd-second", ok ? "ok %04x %04x" : "e=%lu", ok ? (unsigned)dd : (unsigned)wd_last, dt);
+    ok = wd_ok(DosDateTimeToFileTime(0x0021, 0, &t));
+    wd_emit("DosDateTimeToFileTime-1980-01-01", "%s %s", wd_was(), ok ? ft_str(&t) : "");
     EMIT_B("DosDateTimeToFileTime-zero-date", DosDateTimeToFileTime(0, 0, &t));
     EMIT_B("DosDateTimeToFileTime-month-0", DosDateTimeToFileTime(0x0001, 0, &t));
     EMIT_B("DosDateTimeToFileTime-month-13", DosDateTimeToFileTime(0x01a1, 0, &t));
     EMIT_B("DosDateTimeToFileTime-hour-24", DosDateTimeToFileTime(0x0021, 0xc000, &t));
     EMIT_B("DosDateTimeToFileTime-second-60", DosDateTimeToFileTime(0x0021, 0x001e, &t));
-    ok = DosDateTimeToFileTime(0xff9f, 0xbf7d, &t);
-    wd_emit("DosDateTimeToFileTime-max", "%s %s", wd_res(ok), ok ? ft_str(&t) : "");
+    ok = wd_ok(DosDateTimeToFileTime(0xff9f, 0xbf7d, &t));
+    wd_emit("DosDateTimeToFileTime-max", "%s %s", wd_was(), ok ? ft_str(&t) : "");
     t.dwLowDateTime = 0; t.dwHighDateTime = 0;
-    ok = FileTimeToLocalFileTime(&t, &loc);
-    wd_emit("FileTimeToLocalFileTime-zero", "%s", wd_res(ok));
+    ok = wd_ok(FileTimeToLocalFileTime(&t, &loc));
+    wd_emit("FileTimeToLocalFileTime-zero", "%s", wd_was());
     t.dwLowDateTime = 0xffffffff; t.dwHighDateTime = 0x7fffffff;
-    ok = LocalFileTimeToFileTime(&t, &loc);
-    wd_emit("LocalFileTimeToFileTime-max", "%s", wd_res(ok));
+    ok = wd_ok(LocalFileTimeToFileTime(&t, &loc));
+    wd_emit("LocalFileTimeToFileTime-max", "%s", wd_was());
 }
 
 /* ---- hard links and file identity ------------------------------------- */
@@ -697,16 +697,16 @@ static void g_links(void)
     EMIT_B("delete-one-link-while-open", DeleteFileW(L"a"));
     GetFileInformationByHandle(h2, &b);
     wd_emit("links-after-delete", "b=%lu", b.nNumberOfLinks);
-    ok = GetFileInformationByHandleEx(h2, FileStandardInfo, &si, sizeof(si));
+    ok = wd_ok(GetFileInformationByHandleEx(h2, FileStandardInfo, &si, sizeof(si)));
     wd_emit("FileStandardInfo", ok ? "ok links=%lu pending=%d dir=%d eof=%lu" : "e=%lu",
-            ok ? si.NumberOfLinks : GetLastError(), si.DeletePending, si.Directory, si.EndOfFile.LowPart);
+            ok ? si.NumberOfLinks : wd_last, si.DeletePending, si.Directory, si.EndOfFile.LowPart);
     memset(&ni, 0, sizeof(ni));
-    ok = GetFileInformationByHandleEx(h2, FileNameInfo, &ni, sizeof(ni));
-    wd_emit("FileNameInfo", ok ? "ok len=%lu %s" : "e=%lu", ok ? ni.len : GetLastError(), ok ? wd_u8n(ni.name, ni.len / 2) : "");
-    ok = GetFileInformationByHandleEx(h2, FileNameInfo, &ni, 8);
-    wd_emit("FileNameInfo-small-buffer", "%s", wd_res(ok));
-    ok = GetFileInformationByHandleEx(h2, (FILE_INFO_BY_HANDLE_CLASS)99, &ni, sizeof(ni));
-    wd_emit("GetFileInformationByHandleEx-bad-class", "%s", wd_res(ok));
+    ok = wd_ok(GetFileInformationByHandleEx(h2, FileNameInfo, &ni, sizeof(ni)));
+    wd_emit("FileNameInfo", ok ? "ok len=%lu %s" : "e=%lu", ok ? ni.len : wd_last, ok ? wd_u8n(ni.name, ni.len / 2) : "");
+    ok = wd_ok(GetFileInformationByHandleEx(h2, FileNameInfo, &ni, 8));
+    wd_emit("FileNameInfo-small-buffer", "%s", wd_was());
+    ok = wd_ok(GetFileInformationByHandleEx(h2, (FILE_INFO_BY_HANDLE_CLASS)99, &ni, sizeof(ni)));
+    wd_emit("GetFileInformationByHandleEx-bad-class", "%s", wd_was());
     {
         static const struct { const char *n; DWORD f; } fl[] = {
             {"dos", 0}, {"none", 4 /* VOLUME_NAME_NONE */}, {"guid", 1}, {"nt", 2}, {"opened", 8}, {"bad", 0x40},
@@ -729,9 +729,9 @@ static void g_links(void)
     CLOSE(h); CLOSE(h2);
     h = wd_open(L"d", GENERIC_READ, WD_RWD, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS);
     memset(&a, 0, sizeof(a));
-    ok = GetFileInformationByHandle(h, &a);
+    ok = wd_ok(GetFileInformationByHandle(h, &a));
     wd_emit("dir.GetFileInformationByHandle", ok ? "ok links=%lu a=0x%lx size=%lu" : "e=%lu",
-            ok ? a.nNumberOfLinks : GetLastError(), a.dwFileAttributes, a.nFileSizeLow);
+            ok ? a.nNumberOfLinks : wd_last, a.dwFileAttributes, a.nFileSizeLow);
     CLOSE(h);
     SetLastError(0xdeadbeef);
     n = GetFileType(INVALID_HANDLE_VALUE);
@@ -771,7 +771,7 @@ static void g_rename(void)
     CLOSE(h);
     h = wd_open(L"b", GENERIC_READ, WD_RWD, OPEN_EXISTING, 0);
     EMIT_B("MoveFileEx-replace-target-open-share-rwd", MoveFileExW(L"a", L"b", MOVEFILE_REPLACE_EXISTING));
-    ok = ReadFile(h, buf, 1, &n, NULL);
+    ok = wd_ok(ReadFile(h, buf, 1, &n, NULL));
     wd_emit("read-replaced-target-through-old-handle", ok && n == 1 ? "ok '%c'" : "failed", buf[0]);
     CLOSE(h);
     wd_clean();
@@ -900,12 +900,12 @@ static void g_io(void)
     LONG high;
 
     h = wd_open(L"io", GENERIC_READ | GENERIC_WRITE, WD_RWD, CREATE_NEW, 0);
-    n = 99; ok = WriteFile(h, "x", 0, &n, NULL);
-    wd_emit("write-0-bytes", "%s n=%lu", wd_res(ok), n);
-    n = 99; ok = ReadFile(h, buf, 10, &n, NULL);
-    wd_emit("read-at-end", "%s n=%lu", wd_res(ok), n);
-    n = 99; ok = ReadFile(h, NULL, 0, &n, NULL);
-    wd_emit("read-0-bytes-null-buffer", "%s n=%lu", wd_res(ok), n);
+    n = 99; ok = wd_ok(WriteFile(h, "x", 0, &n, NULL));
+    wd_emit("write-0-bytes", "%s n=%lu", wd_was(), n);
+    n = 99; ok = wd_ok(ReadFile(h, buf, 10, &n, NULL));
+    wd_emit("read-at-end", "%s n=%lu", wd_was(), n);
+    n = 99; ok = wd_ok(ReadFile(h, NULL, 0, &n, NULL));
+    wd_emit("read-0-bytes-null-buffer", "%s n=%lu", wd_was(), n);
     SetLastError(0xdeadbeef);
     pos = SetFilePointer(h, -1, NULL, FILE_BEGIN);
     wd_emit("seek-negative", "%lx gle=%lu", pos, GetLastError());
@@ -916,27 +916,27 @@ static void g_io(void)
     SetLastError(0xdeadbeef);
     pos = SetFilePointer(h, 10, NULL, FILE_END);
     wd_emit("seek-past-end", "%lu size=%lu", pos, GetFileSize(h, NULL));
-    ok = WriteFile(h, "Z", 1, &n, NULL);
-    wd_emit("write-past-end", "%s size=%lu", wd_res(ok), GetFileSize(h, NULL));
+    ok = wd_ok(WriteFile(h, "Z", 1, &n, NULL));
+    wd_emit("write-past-end", "%s size=%lu", wd_was(), GetFileSize(h, NULL));
     SetFilePointer(h, 0, NULL, FILE_BEGIN);
     memset(buf, 'q', sizeof(buf));
-    ok = ReadFile(h, buf, 20, &n, NULL);
-    wd_emit("read-the-gap", "%s n=%lu first=%d last=%c", wd_res(ok), n, buf[0], buf[10]);
+    ok = wd_ok(ReadFile(h, buf, 20, &n, NULL));
+    wd_emit("read-the-gap", "%s n=%lu first=%d last=%c", wd_was(), n, buf[0], buf[10]);
     SetLastError(0xdeadbeef);
     pos = SetFilePointer(h, 0, NULL, 3);
     wd_emit("seek-bad-method", "%lx gle=%lu", pos, GetLastError());
     li.QuadPart = 5;
-    ok = SetFilePointerEx(h, li, &out, 7);
-    wd_emit("SetFilePointerEx-bad-method", "%s", wd_res(ok));
+    ok = wd_ok(SetFilePointerEx(h, li, &out, 7));
+    wd_emit("SetFilePointerEx-bad-method", "%s", wd_was());
     li.QuadPart = -5;
-    ok = SetFilePointerEx(h, li, &out, FILE_BEGIN);
-    wd_emit("SetFilePointerEx-negative", "%s", wd_res(ok));
+    ok = wd_ok(SetFilePointerEx(h, li, &out, FILE_BEGIN));
+    wd_emit("SetFilePointerEx-negative", "%s", wd_was());
     li.QuadPart = 0x7fffffffffffffffLL;
-    ok = SetFilePointerEx(h, li, &out, FILE_BEGIN);
-    wd_emit("SetFilePointerEx-max", "%s", wd_res(ok));
+    ok = wd_ok(SetFilePointerEx(h, li, &out, FILE_BEGIN));
+    wd_emit("SetFilePointerEx-max", "%s", wd_was());
     EMIT_B("SetEndOfFile-at-max", SetEndOfFile(h));
-    ok = WriteFile(h, "x", 1, &n, NULL);
-    wd_emit("write-at-max", "%s", wd_res(ok));
+    ok = wd_ok(WriteFile(h, "x", 1, &n, NULL));
+    wd_emit("write-at-max", "%s", wd_was());
     SetFilePointer(h, 3, NULL, FILE_BEGIN);
     EMIT_B("SetEndOfFile-truncate", SetEndOfFile(h));
     wd_emit("size-after-truncate", "%lu", GetFileSize(h, NULL));
@@ -955,17 +955,17 @@ static void g_io(void)
     EMIT_B("LockFile-beyond-end", LockFile(h, 1000, 0, 10, 0));
     h2 = wd_open(L"io", GENERIC_READ | GENERIC_WRITE, WD_RWD, OPEN_EXISTING, 0);
     SetFilePointer(h2, 0, NULL, FILE_BEGIN);
-    ok = ReadFile(h2, buf, 2, &n, NULL);
-    wd_emit("read-before-locked-range", "%s n=%lu", wd_res(ok), ok ? n : 0);
+    ok = wd_ok(ReadFile(h2, buf, 2, &n, NULL));
+    wd_emit("read-before-locked-range", "%s n=%lu", wd_was(), ok ? n : 0);
     SetFilePointer(h2, 0, NULL, FILE_BEGIN);
-    ok = ReadFile(h2, buf, 4, &n, NULL);
-    wd_emit("read-into-locked-range", "%s", wd_res(ok));
+    ok = wd_ok(ReadFile(h2, buf, 4, &n, NULL));
+    wd_emit("read-into-locked-range", "%s", wd_was());
     SetFilePointer(h2, 3, NULL, FILE_BEGIN);
-    ok = WriteFile(h2, "w", 1, &n, NULL);
-    wd_emit("write-locked-range-other-handle", "%s", wd_res(ok));
+    ok = wd_ok(WriteFile(h2, "w", 1, &n, NULL));
+    wd_emit("write-locked-range-other-handle", "%s", wd_was());
     SetFilePointer(h, 3, NULL, FILE_BEGIN);
-    ok = WriteFile(h, "w", 1, &n, NULL);
-    wd_emit("write-locked-range-owner-handle", "%s", wd_res(ok));
+    ok = wd_ok(WriteFile(h, "w", 1, &n, NULL));
+    wd_emit("write-locked-range-owner-handle", "%s", wd_was());
     EMIT_B("LockFile-other-handle-conflict", LockFile(h2, 3, 0, 1, 0));
     EMIT_B("UnlockFile-other-handle", UnlockFile(h2, 2, 0, 4, 0));
     EMIT_B("UnlockFile-part-of-range", UnlockFile(h, 2, 0, 2, 0));
@@ -989,22 +989,22 @@ static void g_io(void)
     /* access checks on handles */
     wd_mkfile(L"f", "0123456789");
     h = wd_open(L"f", GENERIC_READ, WD_RWD, OPEN_EXISTING, 0);
-    ok = WriteFile(h, "x", 1, &n, NULL);
-    wd_emit("write-through-read-handle", "%s", wd_res(ok));
+    ok = wd_ok(WriteFile(h, "x", 1, &n, NULL));
+    wd_emit("write-through-read-handle", "%s", wd_was());
     EMIT_B("FlushFileBuffers-read-handle", FlushFileBuffers(h));
     EMIT_B("SetEndOfFile-read-handle", SetEndOfFile(h));
     EMIT_B("LockFile-read-handle", LockFile(h, 0, 0, 1, 0));
     CLOSE(h);
     h = wd_open(L"f", GENERIC_WRITE, WD_RWD, OPEN_EXISTING, 0);
-    ok = ReadFile(h, buf, 1, &n, NULL);
-    wd_emit("read-through-write-handle", "%s", wd_res(ok));
+    ok = wd_ok(ReadFile(h, buf, 1, &n, NULL));
+    wd_emit("read-through-write-handle", "%s", wd_was());
     EMIT_B("FlushFileBuffers-write-handle", FlushFileBuffers(h));
     wd_emit("GetFileSize-write-handle", "%lu", GetFileSize(h, NULL));
     CLOSE(h);
     h = wd_open(L"f", FILE_APPEND_DATA, WD_RWD, OPEN_EXISTING, 0);
     SetFilePointer(h, 0, NULL, FILE_BEGIN);
-    ok = WriteFile(h, "AP", 2, &n, NULL);
-    wd_emit("append-handle-write-at-0", "%s size=%lu", wd_res(ok), GetFileSize(h, NULL));
+    ok = wd_ok(WriteFile(h, "AP", 2, &n, NULL));
+    wd_emit("append-handle-write-at-0", "%s size=%lu", wd_was(), GetFileSize(h, NULL));
     EMIT_B("append-handle-SetEndOfFile", (SetFilePointer(h, 2, NULL, FILE_BEGIN), SetEndOfFile(h)));
     CLOSE(h);
     h = wd_open(L"f", GENERIC_READ, WD_RWD, OPEN_EXISTING, 0);
@@ -1014,10 +1014,10 @@ static void g_io(void)
     CLOSE(h);
 
     /* invalid handles */
-    ok = WriteFile(INVALID_HANDLE_VALUE, "x", 1, &n, NULL);
-    wd_emit("WriteFile-invalid-handle", "%s", wd_res(ok));
-    ok = ReadFile(NULL, buf, 1, &n, NULL);
-    wd_emit("ReadFile-null-handle", "%s", wd_res(ok));
+    ok = wd_ok(WriteFile(INVALID_HANDLE_VALUE, "x", 1, &n, NULL));
+    wd_emit("WriteFile-invalid-handle", "%s", wd_was());
+    ok = wd_ok(ReadFile(NULL, buf, 1, &n, NULL));
+    wd_emit("ReadFile-null-handle", "%s", wd_was());
     EMIT_B("CloseHandle-null", CloseHandle(NULL));
     EMIT_B("CloseHandle-invalid", CloseHandle(INVALID_HANDLE_VALUE));
     EMIT_B("FlushFileBuffers-invalid", FlushFileBuffers(INVALID_HANDLE_VALUE));
@@ -1031,29 +1031,29 @@ static void g_io(void)
     /* overlapped handles, synchronously awaited */
     h = wd_open(L"f", GENERIC_READ | GENERIC_WRITE, WD_RWD, OPEN_EXISTING, FILE_FLAG_OVERLAPPED);
     memset(&ov, 0, sizeof(ov)); ov.Offset = 1000;
-    ok = ReadFile(h, buf, 4, &n, &ov);
-    if (!ok && GetLastError() == ERROR_IO_PENDING) ok = GetOverlappedResult(h, &ov, &n, TRUE);
-    wd_emit("overlapped-read-past-end", "%s", wd_res(ok));
+    ok = wd_ok(ReadFile(h, buf, 4, &n, &ov));
+    if (!ok && wd_last == ERROR_IO_PENDING) ok = wd_ok(GetOverlappedResult(h, &ov, &n, TRUE));
+    wd_emit("overlapped-read-past-end", "%s", wd_was());
     memset(&ov, 0, sizeof(ov)); ov.Offset = 2;
     n = 0;
-    ok = ReadFile(h, buf, 4, &n, &ov);
-    if (!ok && GetLastError() == ERROR_IO_PENDING) ok = GetOverlappedResult(h, &ov, &n, TRUE);
-    wd_emit("overlapped-read-at-2", "%s n=%lu", wd_res(ok), n);
+    ok = wd_ok(ReadFile(h, buf, 4, &n, &ov));
+    if (!ok && wd_last == ERROR_IO_PENDING) ok = wd_ok(GetOverlappedResult(h, &ov, &n, TRUE));
+    wd_emit("overlapped-read-at-2", "%s n=%lu", wd_was(), n);
     memset(&ov, 0, sizeof(ov)); ov.Offset = 8;
     n = 0;
-    ok = ReadFile(h, buf, 40, &n, &ov);
-    if (!ok && GetLastError() == ERROR_IO_PENDING) ok = GetOverlappedResult(h, &ov, &n, TRUE);
-    wd_emit("overlapped-read-short", "%s n=%lu", wd_res(ok), n);
+    ok = wd_ok(ReadFile(h, buf, 40, &n, &ov));
+    if (!ok && wd_last == ERROR_IO_PENDING) ok = wd_ok(GetOverlappedResult(h, &ov, &n, TRUE));
+    wd_emit("overlapped-read-short", "%s n=%lu", wd_was(), n);
     wd_emit("overlapped-file-pointer", "%lu", SetFilePointer(h, 0, NULL, FILE_CURRENT));
     CLOSE(h);
 
     /* the NUL device */
     h = wd_open(L"NUL", GENERIC_READ | GENERIC_WRITE, WD_RWD, OPEN_EXISTING, 0);
     EMIT_H("nul.open", h);
-    n = 99; ok = WriteFile(h, "hello", 5, &n, NULL);
-    wd_emit("nul.write", "%s n=%lu", wd_res(ok), n);
-    n = 99; ok = ReadFile(h, buf, 5, &n, NULL);
-    wd_emit("nul.read", "%s n=%lu", wd_res(ok), n);
+    n = 99; ok = wd_ok(WriteFile(h, "hello", 5, &n, NULL));
+    wd_emit("nul.write", "%s n=%lu", wd_was(), n);
+    n = 99; ok = wd_ok(ReadFile(h, buf, 5, &n, NULL));
+    wd_emit("nul.read", "%s n=%lu", wd_was(), n);
     wd_emit("nul.GetFileType", "%lu", GetFileType(h));
     SetLastError(0xdeadbeef);
     n = GetFileSize(h, NULL);

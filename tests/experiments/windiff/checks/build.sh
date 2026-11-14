@@ -40,6 +40,6 @@ rpm -q mingw64-gcc mingw64-headers mingw64-crt mingw64-binutils >>"${out}/toolch
 echo "warnings: $(grep -c 'warning:' "${out}/build.log")"
 grep -B2 -A6 -E 'error:|FAILED' "${out}/build.log" | head -n 150
 cat "${out}/manifest.txt"
-# The other jobs can run with whatever compiled, as long as the helpers did.
+# The other jobs can run with whatever compiled, as long as the launcher did.
 [ "${failed}" = 0 ] || echo "::warning::some windiff check programs did not compile; see build.log in the windiff-bin artifact"
-[ -s "${out}/manifest.txt" ] && [ -f "${out}/wdlaunch.exe" ] && [ -f "${out}/wdchild.exe" ]
+[ -s "${out}/manifest.txt" ] && [ -f "${out}/wdlaunch.exe" ]

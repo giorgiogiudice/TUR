@@ -125,6 +125,27 @@ static const char *wd_res(BOOL ok)
 }
 static const char *wd_hres(HANDLE h) { return wd_res(h != INVALID_HANDLE_VALUE && h != NULL); }
 
+/* For a result that is kept in a variable: `ok = wd_ok(Api(...))` records
+ * the last error at once, and wd_was() gives "ok" or that error later, so
+ * that calls made in between cannot change what is reported. */
+static DWORD wd_last;
+static BOOL wd_last_ok = TRUE;
+static BOOL wd_ok(BOOL ok)
+{
+    wd_last = ok ? 0 : GetLastError();
+    wd_last_ok = ok;
+    return ok;
+}
+static const char *wd_was(void)
+{
+    static char b[8][32];
+    static int i;
+    char *p = b[i++ & 7];
+    if (wd_last_ok) return "ok";
+    _snprintf(p, 32, "e=%lu", wd_last);
+    return p;
+}
+
 #define EMIT_B(id, ok) wd_emit(id, "%s", wd_res(ok))
 #define EMIT_H(id, h)  wd_emit(id, "%s", wd_hres(h))
 #define CLOSE(h) do { if ((h) != INVALID_HANDLE_VALUE && (h) != NULL) CloseHandle(h); (h) = INVALID_HANDLE_VALUE; } while (0)

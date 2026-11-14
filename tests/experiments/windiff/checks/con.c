@@ -149,28 +149,28 @@ static void c_modes(void)
     char id[80];
     HANDLE f;
 
-    ok = GetConsoleMode(cin, &saved_in);
-    wd_emit("input.default", ok ? "0x%lx" : "e=%lu", ok ? saved_in : GetLastError());
-    ok = GetConsoleMode(cout, &saved_out);
-    wd_emit("output.default", ok ? "0x%lx" : "e=%lu", ok ? saved_out : GetLastError());
+    ok = wd_ok(GetConsoleMode(cin, &saved_in));
+    wd_emit("input.default", ok ? "0x%lx" : "e=%lu", ok ? saved_in : wd_last);
+    ok = wd_ok(GetConsoleMode(cout, &saved_out));
+    wd_emit("output.default", ok ? "0x%lx" : "e=%lu", ok ? saved_out : wd_last);
     for (i = 0; i < ARRAY_SIZE(in_modes); i++)
     {
         SetConsoleMode(cin, saved_in);
         _snprintf(id, sizeof(id), "input.set-%s", in_modes[i].n);
-        ok = SetConsoleMode(cin, in_modes[i].v);
+        ok = wd_ok(SetConsoleMode(cin, in_modes[i].v));
         m = 0xdead;
         GetConsoleMode(cin, &m);
-        wd_emit(id, "%s get=0x%lx", wd_res(ok), m);
+        wd_emit(id, "%s get=0x%lx", wd_was(), m);
     }
     SetConsoleMode(cin, saved_in);
     for (i = 0; i < ARRAY_SIZE(out_modes); i++)
     {
         SetConsoleMode(cout, saved_out);
         _snprintf(id, sizeof(id), "output.set-%s", out_modes[i].n);
-        ok = SetConsoleMode(cout, out_modes[i].v);
+        ok = wd_ok(SetConsoleMode(cout, out_modes[i].v));
         m = 0xdead;
         GetConsoleMode(cout, &m);
-        wd_emit(id, "%s get=0x%lx", wd_res(ok), m);
+        wd_emit(id, "%s get=0x%lx", wd_was(), m);
     }
     SetConsoleMode(cout, saved_out);
     EMIT_B("GetConsoleMode-invalid-handle", GetConsoleMode(INVALID_HANDLE_VALUE, &m));
@@ -185,11 +185,11 @@ static void c_modes(void)
     for (i = 0; i < ARRAY_SIZE(cps); i++)
     {
         _snprintf(id, sizeof(id), "cp.set-output-%u", cps[i]);
-        ok = SetConsoleOutputCP(cps[i]);
-        wd_emit(id, "%s get=%u", wd_res(ok), GetConsoleOutputCP());
+        ok = wd_ok(SetConsoleOutputCP(cps[i]));
+        wd_emit(id, "%s get=%u", wd_was(), GetConsoleOutputCP());
         _snprintf(id, sizeof(id), "cp.set-input-%u", cps[i]);
-        ok = SetConsoleCP(cps[i]);
-        wd_emit(id, "%s get=%u", wd_res(ok), GetConsoleCP());
+        ok = wd_ok(SetConsoleCP(cps[i]));
+        wd_emit(id, "%s get=%u", wd_was(), GetConsoleCP());
     }
 }
 
@@ -208,23 +208,23 @@ static void c_screen(void)
     int i;
     HANDLE sb;
 
-    ok = GetConsoleScreenBufferInfo(cout, &info);
+    ok = wd_ok(GetConsoleScreenBufferInfo(cout, &info));
     if (!ok) wd_emit("info", "e=%lu", GetLastError());
     else wd_emit("info", "size=%dx%d cursor=%d,%d attr=0x%x window=%d,%d-%d,%d max=%dx%d", info.dwSize.X, info.dwSize.Y,
                  info.dwCursorPosition.X, info.dwCursorPosition.Y, info.wAttributes, info.srWindow.Left, info.srWindow.Top,
                  info.srWindow.Right, info.srWindow.Bottom, info.dwMaximumWindowSize.X, info.dwMaximumWindowSize.Y);
     memset(&infoex, 0, sizeof(infoex));
     infoex.cbSize = sizeof(infoex);
-    ok = GetConsoleScreenBufferInfoEx(cout, &infoex);
+    ok = wd_ok(GetConsoleScreenBufferInfoEx(cout, &infoex));
     wd_emit("infoex", ok ? "ok popup=0x%x fullscreen=%d color0=%06lx color7=%06lx color15=%06lx" : "e=%lu",
-            ok ? (unsigned)infoex.wPopupAttributes : (unsigned)GetLastError(), infoex.bFullscreenSupported,
+            ok ? (unsigned)infoex.wPopupAttributes : (unsigned)wd_last, infoex.bFullscreenSupported,
             infoex.ColorTable[0], infoex.ColorTable[7], infoex.ColorTable[15]);
     infoex.cbSize = 10;
     EMIT_B("infoex-bad-size", GetConsoleScreenBufferInfoEx(cout, &infoex));
     c = GetLargestConsoleWindowSize(cout);
     wd_emit("largest-window-nonzero", "%d", c.X > 0 && c.Y > 0);
-    ok = GetConsoleCursorInfo(cout, &ci);
-    wd_emit("cursor-info", ok ? "size=%lu visible=%d" : "e=%lu", ok ? ci.dwSize : GetLastError(), ci.bVisible);
+    ok = wd_ok(GetConsoleCursorInfo(cout, &ci));
+    wd_emit("cursor-info", ok ? "size=%lu visible=%d" : "e=%lu", ok ? ci.dwSize : wd_last, ci.bVisible);
     ci.dwSize = 0; ci.bVisible = TRUE;
     EMIT_B("cursor-info-size-0", SetConsoleCursorInfo(cout, &ci));
     ci.dwSize = 101;
@@ -311,30 +311,30 @@ static void c_screen(void)
 
     home();
     c.X = 78; c.Y = 0;
-    n = 99; ok = WriteConsoleOutputCharacterW(cout, L"abcdef", 6, c, &n);
-    wd_emit("output-character.runs-onto-next-row", "%s n=%lu row1=[%s]", wd_res(ok), n, row(1, 10));
+    n = 99; ok = wd_ok(WriteConsoleOutputCharacterW(cout, L"abcdef", 6, c, &n));
+    wd_emit("output-character.runs-onto-next-row", "%s n=%lu row1=[%s]", wd_was(), n, row(1, 10));
     c.X = 78; c.Y = 24;
-    n = 99; ok = WriteConsoleOutputCharacterW(cout, L"abcdef", 6, c, &n);
-    wd_emit("output-character.runs-off-the-end", "%s n=%lu", wd_res(ok), n);
+    n = 99; ok = wd_ok(WriteConsoleOutputCharacterW(cout, L"abcdef", 6, c, &n));
+    wd_emit("output-character.runs-off-the-end", "%s n=%lu", wd_was(), n);
     c.X = 0; c.Y = 30;
-    n = 99; ok = WriteConsoleOutputCharacterW(cout, L"abc", 3, c, &n);
-    wd_emit("output-character.outside-buffer", "%s n=%lu", wd_res(ok), n);
-    n = 99; ok = ReadConsoleOutputCharacterW(cout, line, 10, c, &n);
-    wd_emit("read-character.outside-buffer", "%s n=%lu", wd_res(ok), n);
+    n = 99; ok = wd_ok(WriteConsoleOutputCharacterW(cout, L"abc", 3, c, &n));
+    wd_emit("output-character.outside-buffer", "%s n=%lu", wd_was(), n);
+    n = 99; ok = wd_ok(ReadConsoleOutputCharacterW(cout, line, 10, c, &n));
+    wd_emit("read-character.outside-buffer", "%s n=%lu", wd_was(), n);
     c.X = 75; c.Y = 24;
-    n = 99; ok = ReadConsoleOutputCharacterW(cout, line, 10, c, &n);
-    wd_emit("read-character.runs-off-the-end", "%s n=%lu", wd_res(ok), n);
+    n = 99; ok = wd_ok(ReadConsoleOutputCharacterW(cout, line, 10, c, &n));
+    wd_emit("read-character.runs-off-the-end", "%s n=%lu", wd_was(), n);
     c.X = 0; c.Y = 2;
-    n = 99; ok = FillConsoleOutputCharacterW(cout, '#', 100, c, &n);
-    wd_emit("fill.100-cells", "%s n=%lu row3=[%s]", wd_res(ok), n, row(3, 30));
-    n = 99; ok = FillConsoleOutputAttribute(cout, 0x4e, 3, c, &n);
-    wd_emit("fill.attribute", "%s n=%lu", wd_res(ok), n);
+    n = 99; ok = wd_ok(FillConsoleOutputCharacterW(cout, '#', 100, c, &n));
+    wd_emit("fill.100-cells", "%s n=%lu row3=[%s]", wd_was(), n, row(3, 30));
+    n = 99; ok = wd_ok(FillConsoleOutputAttribute(cout, 0x4e, 3, c, &n));
+    wd_emit("fill.attribute", "%s n=%lu", wd_was(), n);
     memset(attrs, 0, sizeof(attrs));
-    n = 99; ok = ReadConsoleOutputAttribute(cout, attrs, 5, c, &n);
-    wd_emit("read-attribute", "%s n=%lu %x %x %x %x %x", wd_res(ok), n, attrs[0], attrs[1], attrs[2], attrs[3], attrs[4]);
+    n = 99; ok = wd_ok(ReadConsoleOutputAttribute(cout, attrs, 5, c, &n));
+    wd_emit("read-attribute", "%s n=%lu %x %x %x %x %x", wd_was(), n, attrs[0], attrs[1], attrs[2], attrs[3], attrs[4]);
     c.X = 0; c.Y = 24;
-    n = 99; ok = FillConsoleOutputCharacterW(cout, '#', 200, c, &n);
-    wd_emit("fill.past-the-end", "%s n=%lu", wd_res(ok), n);
+    n = 99; ok = wd_ok(FillConsoleOutputCharacterW(cout, '#', 200, c, &n));
+    wd_emit("fill.past-the-end", "%s n=%lu", wd_was(), n);
 
     home();
     EMIT_B("attribute.set", SetConsoleTextAttribute(cout, 0x1c));
@@ -386,11 +386,11 @@ static void c_screen(void)
     /* a second screen buffer */
     sb = CreateConsoleScreenBuffer(GENERIC_READ | GENERIC_WRITE, WD_RW, NULL, CONSOLE_TEXTMODE_BUFFER, NULL);
     EMIT_B("second-buffer.create", sb != INVALID_HANDLE_VALUE);
-    ok = GetConsoleScreenBufferInfo(sb, &info);
-    wd_emit("second-buffer.info", ok ? "size=%dx%d cursor=%d,%d attr=0x%x" : "e=%lu", ok ? info.dwSize.X : (int)GetLastError(),
+    ok = wd_ok(GetConsoleScreenBufferInfo(sb, &info));
+    wd_emit("second-buffer.info", ok ? "size=%dx%d cursor=%d,%d attr=0x%x" : "e=%lu", ok ? info.dwSize.X : (int)wd_last,
             info.dwSize.Y, info.dwCursorPosition.X, info.dwCursorPosition.Y, info.wAttributes);
-    n = 0; ok = WriteConsoleW(sb, L"hidden", 6, &n, NULL);
-    wd_emit("second-buffer.write-while-inactive", "%s n=%lu", wd_res(ok), n);
+    n = 0; ok = wd_ok(WriteConsoleW(sb, L"hidden", 6, &n, NULL));
+    wd_emit("second-buffer.write-while-inactive", "%s n=%lu", wd_was(), n);
     EMIT_B("second-buffer.activate", SetConsoleActiveScreenBuffer(sb));
     EMIT_B("second-buffer.activate-input-handle", SetConsoleActiveScreenBuffer(cin));
     EMIT_B("second-buffer.reactivate-first", SetConsoleActiveScreenBuffer(cout));
@@ -426,8 +426,8 @@ static void c_vt(void)
     home();
     wr(L"\x1b[5;10Hx");
     wd_emit("off.cursor-sequence-is-printed", "%s", cur());
-    ok = SetConsoleMode(cout, m | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
-    wd_emit("on.enable", "%s", wd_res(ok));
+    ok = wd_ok(SetConsoleMode(cout, m | ENABLE_VIRTUAL_TERMINAL_PROCESSING));
+    wd_emit("on.enable", "%s", wd_was());
     home();
     wr(L"\x1b[5;10H");
     wd_emit("on.cursor-position", "%s", cur());
@@ -545,14 +545,14 @@ static const char *read_line(BOOL use_readfile)
     if (WaitForSingleObject(cin, 3000) != WAIT_OBJECT_0) return "nothing to read";
     if (use_readfile)
     {
-        ok = ReadFile(cin, abuf, 60, &n, NULL);
+        ok = wd_ok(ReadFile(cin, abuf, 60, &n, NULL));
         if (!ok) { _snprintf(out, sizeof(out), "e=%lu", GetLastError()); return out; }
         len = _snprintf(out, 32, "n=%lu ", n);
         for (i = 0; i < n; i++) len += _snprintf(out + len, 8, "%02x ", (unsigned char)abuf[i]);
     }
     else
     {
-        ok = ReadConsoleW(cin, wbuf, 60, &n, NULL);
+        ok = wd_ok(ReadConsoleW(cin, wbuf, 60, &n, NULL));
         if (!ok) { _snprintf(out, sizeof(out), "e=%lu", GetLastError()); return out; }
         len = _snprintf(out, 32, "n=%lu ", n);
         for (i = 0; i < n; i++) len += _snprintf(out + len, 8, "%04x ", wbuf[i]);
@@ -572,23 +572,23 @@ static void c_input(void)
 
     GetConsoleMode(cin, &saved);
     EMIT_B("flush", FlushConsoleInputBuffer(cin));
-    n = 99; ok = GetNumberOfConsoleInputEvents(cin, &n);
-    wd_emit("events-after-flush", "%s n=%lu", wd_res(ok), n);
+    n = 99; ok = wd_ok(GetNumberOfConsoleInputEvents(cin, &n));
+    wd_emit("events-after-flush", "%s n=%lu", wd_was(), n);
     wd_emit("wait-with-no-input", "%lu", WaitForSingleObject(cin, 0));
-    n = 99; ok = PeekConsoleInputW(cin, rec, 16, &n);
-    wd_emit("peek-with-no-input", "%s n=%lu", wd_res(ok), n);
+    n = 99; ok = wd_ok(PeekConsoleInputW(cin, rec, 16, &n));
+    wd_emit("peek-with-no-input", "%s n=%lu", wd_was(), n);
     EMIT_B("write-input", type(L"ab"));
     n = 99; GetNumberOfConsoleInputEvents(cin, &n);
     wd_emit("events-after-two-keys", "%lu", n);
     wd_emit("wait-with-input", "%lu", WaitForSingleObject(cin, 0));
-    n = 0; ok = PeekConsoleInputW(cin, rec, 16, &n);
+    n = 0; ok = wd_ok(PeekConsoleInputW(cin, rec, 16, &n));
     len = 0;
     for (i = 0; i < n && i < 16; i++)
         len += _snprintf(list + len, 16, "%c%c ", rec[i].Event.KeyEvent.bKeyDown ? 'd' : 'u', (char)rec[i].Event.KeyEvent.uChar.UnicodeChar);
     list[len] = 0;
-    wd_emit("peek", "%s n=%lu %s", wd_res(ok), n, list);
-    n = 0; ok = ReadConsoleInputW(cin, rec, 1, &n);
-    wd_emit("read-one-record", "%s n=%lu", wd_res(ok), n);
+    wd_emit("peek", "%s n=%lu %s", wd_was(), n, list);
+    n = 0; ok = wd_ok(ReadConsoleInputW(cin, rec, 1, &n));
+    wd_emit("read-one-record", "%s n=%lu", wd_was(), n);
     n = 99; GetNumberOfConsoleInputEvents(cin, &n);
     wd_emit("events-after-reading-one", "%lu", n);
     FlushConsoleInputBuffer(cin);
@@ -640,25 +640,25 @@ static void c_input(void)
     rec[2].EventType = FOCUS_EVENT; rec[2].Event.FocusEvent.bSetFocus = TRUE;
     rec[3].EventType = MENU_EVENT;
     rec[4].EventType = 0x40; /* not an event type */
-    n = 99; ok = WriteConsoleInputW(cin, rec, 5, &n);
-    wd_emit("other-records.write", "%s n=%lu", wd_res(ok), n);
-    n = 0; ok = ReadConsoleInputW(cin, rec, 16, &n);
+    n = 99; ok = wd_ok(WriteConsoleInputW(cin, rec, 5, &n));
+    wd_emit("other-records.write", "%s n=%lu", wd_was(), n);
+    n = 0; ok = wd_ok(ReadConsoleInputW(cin, rec, 16, &n));
     len = 0;
     for (i = 0; i < n && i < 16; i++) len += _snprintf(list + len, 16, "0x%x ", rec[i].EventType);
     list[len] = 0;
-    wd_emit("other-records.read-back", "%s n=%lu %s", wd_res(ok), n, list);
+    wd_emit("other-records.read-back", "%s n=%lu %s", wd_was(), n, list);
     FlushConsoleInputBuffer(cin);
-    n = 99; ok = WriteConsoleInputW(cin, rec, 0, &n);
-    wd_emit("write-zero-records", "%s n=%lu", wd_res(ok), n);
-    n = 99; ok = WriteConsoleInputW(cout, rec, 1, &n);
-    wd_emit("write-input-to-output-handle", "%s", wd_res(ok));
-    n = 99; ok = ReadConsoleInputW(cout, rec, 1, &n);
-    wd_emit("read-input-from-output-handle", "%s", wd_res(ok));
+    n = 99; ok = wd_ok(WriteConsoleInputW(cin, rec, 0, &n));
+    wd_emit("write-zero-records", "%s n=%lu", wd_was(), n);
+    n = 99; ok = wd_ok(WriteConsoleInputW(cout, rec, 1, &n));
+    wd_emit("write-input-to-output-handle", "%s", wd_was());
+    n = 99; ok = wd_ok(ReadConsoleInputW(cout, rec, 1, &n));
+    wd_emit("read-input-from-output-handle", "%s", wd_was());
     EMIT_B("flush-output-handle", FlushConsoleInputBuffer(cout));
-    n = 99; ok = GetNumberOfConsoleInputEvents(cout, &n);
-    wd_emit("events-of-output-handle", "%s", wd_res(ok));
-    n = 0; ok = GetNumberOfConsoleMouseButtons(&n);
-    wd_emit("mouse-buttons", "%s", wd_res(ok));
+    n = 99; ok = wd_ok(GetNumberOfConsoleInputEvents(cout, &n));
+    wd_emit("events-of-output-handle", "%s", wd_was());
+    n = 0; ok = wd_ok(GetNumberOfConsoleMouseButtons(&n));
+    wd_emit("mouse-buttons", "%s", wd_was());
     SetConsoleMode(cin, saved);
     (void)m;
 }
@@ -693,23 +693,23 @@ static void c_misc(void)
     wd_emit("handle.SetFilePointer", "%lx gle=%lu", n, GetLastError());
     EMIT_B("handle.FlushFileBuffers-output", FlushFileBuffers(cout));
     EMIT_B("handle.FlushFileBuffers-input", FlushFileBuffers(cin));
-    n = 99; ok = WriteFile(cin, "x", 1, &n, NULL);
-    wd_emit("handle.WriteFile-to-input", "%s", wd_res(ok));
-    n = 99; ok = ReadFile(cout, buf, 1, &n, NULL);
-    wd_emit("handle.ReadFile-from-output", "%s", wd_res(ok));
-    n = 99; ok = WriteFile(cout, "ok", 2, &n, NULL);
-    wd_emit("handle.WriteFile-to-output", "%s n=%lu", wd_res(ok), n);
-    n = 99; ok = WriteConsoleW(cout, L"", 0, &n, NULL);
-    wd_emit("handle.WriteConsole-zero", "%s n=%lu", wd_res(ok), n);
-    n = 99; ok = WriteConsoleW(cin, L"x", 1, &n, NULL);
-    wd_emit("handle.WriteConsole-to-input", "%s", wd_res(ok));
-    n = 99; ok = WriteConsoleW(INVALID_HANDLE_VALUE, L"x", 1, &n, NULL);
-    wd_emit("handle.WriteConsole-invalid", "%s", wd_res(ok));
+    n = 99; ok = wd_ok(WriteFile(cin, "x", 1, &n, NULL));
+    wd_emit("handle.WriteFile-to-input", "%s", wd_was());
+    n = 99; ok = wd_ok(ReadFile(cout, buf, 1, &n, NULL));
+    wd_emit("handle.ReadFile-from-output", "%s", wd_was());
+    n = 99; ok = wd_ok(WriteFile(cout, "ok", 2, &n, NULL));
+    wd_emit("handle.WriteFile-to-output", "%s n=%lu", wd_was(), n);
+    n = 99; ok = wd_ok(WriteConsoleW(cout, L"", 0, &n, NULL));
+    wd_emit("handle.WriteConsole-zero", "%s n=%lu", wd_was(), n);
+    n = 99; ok = wd_ok(WriteConsoleW(cin, L"x", 1, &n, NULL));
+    wd_emit("handle.WriteConsole-to-input", "%s", wd_was());
+    n = 99; ok = wd_ok(WriteConsoleW(INVALID_HANDLE_VALUE, L"x", 1, &n, NULL));
+    wd_emit("handle.WriteConsole-invalid", "%s", wd_was());
     h = wd_open(L"plain.txt", GENERIC_READ | GENERIC_WRITE, WD_RWD, CREATE_ALWAYS, 0);
-    n = 99; ok = WriteConsoleW(h, L"x", 1, &n, NULL);
-    wd_emit("handle.WriteConsole-to-file", "%s", wd_res(ok));
-    n = 99; ok = ReadConsoleW(h, wbuf, 1, &n, NULL);
-    wd_emit("handle.ReadConsole-from-file", "%s", wd_res(ok));
+    n = 99; ok = wd_ok(WriteConsoleW(h, L"x", 1, &n, NULL));
+    wd_emit("handle.WriteConsole-to-file", "%s", wd_was());
+    n = 99; ok = wd_ok(ReadConsoleW(h, wbuf, 1, &n, NULL));
+    wd_emit("handle.ReadConsole-from-file", "%s", wd_was());
     CLOSE(h);
 
     /* opening the console by name */
@@ -717,8 +717,8 @@ static void c_misc(void)
     EMIT_H("open.CONOUT", h); CLOSE(h);
     h = wd_open(L"conout$", GENERIC_WRITE, 0, OPEN_EXISTING, 0);
     EMIT_H("open.conout-lower-write-only-no-share", h);
-    ok = GetConsoleMode(h, &n);
-    wd_emit("open.GetConsoleMode-write-only-handle", "%s", wd_res(ok));
+    ok = wd_ok(GetConsoleMode(h, &n));
+    wd_emit("open.GetConsoleMode-write-only-handle", "%s", wd_was());
     CLOSE(h);
     h = wd_open(L"CONOUT$", 0, 0, OPEN_EXISTING, 0);
     EMIT_H("open.CONOUT-no-access", h); CLOSE(h);
@@ -745,8 +745,8 @@ static void c_misc(void)
     EMIT_H("open.CONOUT-in-a-directory", h); CLOSE(h);
     h = wd_open(L"CONERR$", GENERIC_READ | GENERIC_WRITE, WD_RW, OPEN_EXISTING, 0);
     EMIT_H("open.CONERR", h); CLOSE(h);
-    ok = DuplicateHandle(GetCurrentProcess(), cout, GetCurrentProcess(), &h2, 0, FALSE, DUPLICATE_SAME_ACCESS);
-    wd_emit("handle.DuplicateHandle", "%s", wd_res(ok));
+    ok = wd_ok(DuplicateHandle(GetCurrentProcess(), cout, GetCurrentProcess(), &h2, 0, FALSE, DUPLICATE_SAME_ACCESS));
+    wd_emit("handle.DuplicateHandle", "%s", wd_was());
     if (ok)
     {
         wd_emit("handle.duplicate-is-console", "%s", wd_res(GetConsoleMode(h2, &n)));
@@ -769,18 +769,18 @@ static void c_misc(void)
     EMIT_B("AttachConsole-self", AttachConsole(GetCurrentProcessId()));
     EMIT_B("AttachConsole-bad-pid", AttachConsole(3));
     EMIT_B("AllocConsole-while-attached", AllocConsole());
-    ok = GetCurrentConsoleFont(cout, FALSE, &font);
-    wd_emit("font.GetCurrentConsoleFont", "%s", wd_res(ok));
+    ok = wd_ok(GetCurrentConsoleFont(cout, FALSE, &font));
+    wd_emit("font.GetCurrentConsoleFont", "%s", wd_was());
     memset(&hist, 0, sizeof(hist)); hist.cbSize = sizeof(hist);
-    ok = GetConsoleHistoryInfo(&hist);
-    wd_emit("history.get", ok ? "ok size=%u buffers=%u flags=%lu" : "e=%lu", ok ? hist.HistoryBufferSize : (UINT)GetLastError(),
+    ok = wd_ok(GetConsoleHistoryInfo(&hist));
+    wd_emit("history.get", ok ? "ok size=%u buffers=%u flags=%lu" : "e=%lu", ok ? hist.HistoryBufferSize : (UINT)wd_last,
             hist.NumberOfHistoryBuffers, hist.dwFlags);
     hist.cbSize = 4;
     EMIT_B("history.bad-size", GetConsoleHistoryInfo(&hist));
-    ok = GetConsoleSelectionInfo(&sel);
-    wd_emit("selection", ok ? "ok flags=%lu" : "e=%lu", ok ? sel.dwFlags : GetLastError());
-    n = 99; ok = GetConsoleDisplayMode(&n);
-    wd_emit("display-mode", ok ? "ok %lu" : "e=%lu", ok ? n : GetLastError());
+    ok = wd_ok(GetConsoleSelectionInfo(&sel));
+    wd_emit("selection", ok ? "ok flags=%lu" : "e=%lu", ok ? sel.dwFlags : wd_last);
+    n = 99; ok = wd_ok(GetConsoleDisplayMode(&n));
+    wd_emit("display-mode", ok ? "ok %lu" : "e=%lu", ok ? n : wd_last);
     EMIT_B("alias.add", AddConsoleAliasW((WCHAR *)L"wd", (WCHAR *)L"echo windiff", (WCHAR *)L"cmd.exe"));
     wbuf[0] = 0;
     n = GetConsoleAliasW((WCHAR *)L"wd", wbuf, sizeof(wbuf), (WCHAR *)L"cmd.exe");

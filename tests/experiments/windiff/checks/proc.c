@@ -116,25 +116,25 @@ static void g_cmdline(void)
     {
         _snwprintf(cmd, 11990, L"\"%ls\" %ls", child_exe, tails[i].tail);
         set_child(tails[i].id, L"argv");
-        if (!spawn(NULL, cmd, 0, NULL, NULL, NULL, TRUE, &code))
+        if (!wd_ok(spawn(NULL, cmd, 0, NULL, NULL, NULL, TRUE, &code)))
         {
             _snprintf(id, sizeof(id), "%s.start", tails[i].id);
-            wd_emit(id, "e=%lu", GetLastError());
+            wd_emit(id, "e=%lu", wd_last);
         }
         forward();
     }
     for (i = 0; i < ARRAY_SIZE(zero); i++)
     {
         set_child(zero[i].id, L"argv");
-        if (!spawn(child_exe, zero[i].cmd, 0, NULL, NULL, NULL, TRUE, &code))
+        if (!wd_ok(spawn(child_exe, zero[i].cmd, 0, NULL, NULL, NULL, TRUE, &code)))
         {
             _snprintf(id, sizeof(id), "%s.start", zero[i].id);
-            wd_emit(id, "e=%lu", GetLastError());
+            wd_emit(id, "e=%lu", wd_last);
         }
         forward();
     }
     set_child("argv0-null-command-line", L"argv");
-    if (!spawn(child_exe, NULL, 0, NULL, NULL, NULL, TRUE, &code)) wd_emit("argv0-null-command-line.start", "e=%lu", GetLastError());
+    if (!wd_ok(spawn(child_exe, NULL, 0, NULL, NULL, NULL, TRUE, &code))) wd_emit("argv0-null-command-line.start", "e=%lu", wd_last);
     forward();
     _snwprintf(cmd, 11990, L"%ls a", child_exe);
     set_child("argv0-unquoted", L"argv");
@@ -157,10 +157,10 @@ static void resolve(const char *id, const WCHAR *app, const WCHAR *cmdline, cons
     BOOL ok;
 
     set_child(id, L"which");
-    ok = spawn(app, cmdline, 0, NULL, dir, NULL, TRUE, &code);
+    ok = wd_ok(spawn(app, cmdline, 0, NULL, dir, NULL, TRUE, &code));
     _snprintf(cid, sizeof(cid), "%s.start", id);
     if (ok) wd_emit(cid, "started code=%lu", code);
-    else wd_emit(cid, "e=%lu", GetLastError());
+    else wd_emit(cid, "e=%lu", wd_last);
     forward();
 }
 
@@ -290,10 +290,10 @@ static void env_child(const char *id, const WCHAR *vars, DWORD flags, void *env)
     set_child(id, L"env");
     SetEnvironmentVariableW(L"WD_VARS", vars);
     _snwprintf(cmd, 690, L"\"%ls\"", child_exe);
-    ok = spawn(NULL, cmd, flags, env, NULL, NULL, TRUE, &code);
+    ok = wd_ok(spawn(NULL, cmd, flags, env, NULL, NULL, TRUE, &code));
     _snprintf(cid, sizeof(cid), "%s.start", id);
     if (ok) wd_emit(cid, "started code=%lu", code);
-    else wd_emit(cid, "e=%lu", GetLastError());
+    else wd_emit(cid, "e=%lu", wd_last);
     forward();
 }
 
@@ -328,10 +328,10 @@ static void env_block(const char *id, const WCHAR *vars, const WCHAR *extra, BOO
 
     if (!unicode) WideCharToMultiByte(CP_ACP, 0, wblock, n, ablock, sizeof(ablock), NULL, NULL);
     _snwprintf(cmd, 690, L"\"%ls\"", child_exe);
-    ok = spawn(NULL, cmd, flag ? CREATE_UNICODE_ENVIRONMENT : 0, unicode ? (void *)wblock : (void *)ablock, NULL, NULL, TRUE, &code);
+    ok = wd_ok(spawn(NULL, cmd, flag ? CREATE_UNICODE_ENVIRONMENT : 0, unicode ? (void *)wblock : (void *)ablock, NULL, NULL, TRUE, &code));
     _snprintf(cid, sizeof(cid), "%s.start", id);
     if (ok) wd_emit(cid, "started code=%lu", code);
-    else wd_emit(cid, "e=%lu", GetLastError());
+    else wd_emit(cid, "e=%lu", wd_last);
     forward();
 }
 
@@ -480,8 +480,8 @@ static void g_exit(void)
         _snwprintf(mode, 99, L"exit:%ls", kinds[i]);
         set_child("x", mode);
         _snprintf(id, sizeof(id), "code.%s", wd_u8(kinds[i]));
-        if (spawn(NULL, cmd, 0, NULL, NULL, NULL, TRUE, &code)) wd_emit(id, "0x%08lx", code);
-        else wd_emit(id, "e=%lu", GetLastError());
+        if (wd_ok(spawn(NULL, cmd, 0, NULL, NULL, NULL, TRUE, &code))) wd_emit(id, "0x%08lx", code);
+        else wd_emit(id, "e=%lu", wd_last);
     }
 
     /* a child that is still running */
@@ -549,10 +549,10 @@ static void startup(const char *id, DWORD flags, STARTUPINFOW *psi, BOOL inherit
 
     set_child(id, L"startup");
     _snwprintf(cmd, 690, L"\"%ls\"", child_exe);
-    ok = spawn(NULL, cmd, flags, NULL, dir, psi, inherit, &code);
+    ok = wd_ok(spawn(NULL, cmd, flags, NULL, dir, psi, inherit, &code));
     _snprintf(cid, sizeof(cid), "%s.start", id);
     if (ok) wd_emit(cid, "started code=%lu", code);
-    else wd_emit(cid, "e=%lu", GetLastError());
+    else wd_emit(cid, "e=%lu", wd_last);
     forward();
 }
 
