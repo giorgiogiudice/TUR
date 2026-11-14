@@ -200,12 +200,21 @@ def taskband_order(blob):
 
 def start_layout():
     """Windows' own export of the Start menu's pins: its shape, not its text."""
-    target = pathlib.Path(os.environ.get("TEMP", ".")) / "inwin-start-layout.out"
-    if target.exists():
-        target.unlink()
-    powershell(f"Export-StartLayout -Path '{target}'; 'done'" + JSON)
-    text = target.read_text(encoding="utf-8-sig", errors="replace")
-    result = {"bytes": len(text)}
+    text = None
+    problems = []
+    for extension in ("xml", "json"):  # Windows 10 insists on the first, Windows 11 writes the second
+        target = pathlib.Path(os.environ.get("TEMP", ".")) / f"inwin-start-layout.{extension}"
+        if target.exists():
+            target.unlink()
+        try:
+            powershell(f"Export-StartLayout -Path '{target}'; 'done'" + JSON)
+            text = target.read_text(encoding="utf-8-sig", errors="replace")
+            break
+        except (RuntimeError, OSError) as error:
+            problems.append(f"{extension}: {str(error)[:120]}")
+    if text is None:
+        raise RuntimeError("; ".join(problems))
+    result = {"bytes": len(text), "asked_for": extension}
     if text.lstrip().startswith("{"):
         data = json.loads(text)
         pins = data.get("pinnedList", [])

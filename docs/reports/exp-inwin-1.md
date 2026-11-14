@@ -84,9 +84,96 @@ NOT RUN.
 
 NOT RUN.
 
-## 5. The interface between TUR and the guest agent
+## 5. The interface between TUR and the guest agent (proposal; not built)
 
-Not written yet.
+For the `dualrun` engineer, who owns the design of the session. This is
+what the measurements of sections 3 and 4 suggest, and what the host must
+hold to whatever the measurements say.
+
+**Where things sit.** P@x's service, its policy engine, the model and its
+keys stay on TUR, outside the virtual machine. In shape B the policy
+engine is again *under* the applications it controls, which is the
+property TUR inside Windows would have given up (section 9). Inside
+Windows there is only an agent that holds no authority: it answers
+requests and performs what TUR already decided, as the winsee bridge does
+under Wine.
+
+**Two parts inside Windows.**
+
+- A *service part* that owns the channel to TUR, starts with Windows and
+  starts the session part in each signed-in session.
+- A *session part* that runs on the person's desktop with the person's
+  rights. It reads windows, performs actions and reports events. Section
+  3.4 measures what an agent without administrator rights can do to a
+  window of a program that has them; that result decides whether the
+  session part needs Windows' "UI access" right (a signed program in a
+  protected folder), which is a signing cost for TUR and not a technical
+  unknown.
+
+**Transport.** A virtio serial port named for TUR
+(`org.tur.guest.0`), not a network socket: it exists before the guest has
+a network, no other machine can reach it, and inside Windows it can be
+restricted to the service part. It needs the virtio serial driver in the
+guest, which is an added driver (dualrun's H4 measures how far Windows
+goes with none). Where no driver may be added, the same messages go over
+a host-only network address with a key made at installation; the
+messages do not change.
+
+**Messages.** One JSON object a line, as the winsee bridge speaks, each
+with a number; the agent's events carry a sequence number so that a lost
+one is noticed.
+
+| Direction | Message | Carries |
+|---|---|---|
+| TUR to agent | `hello` | protocol version; the agent answers with its version, Windows' build, the session's rights |
+| | `windows.list` | every top-level window: an identifier, rectangle and visible frame, title, class, program, z-order, whether it is on the taskbar, minimised, hidden by the compositor |
+| | `windows.watch` | start sending the events below |
+| | `window.read` | one window's controls in tur-pax-a11y's node model, by tier (UI Automation, then the window tree), with a node budget |
+| | `element.act` | an action on a node, **with what TUR believes the node is** (name, kind, rectangle); the agent re-reads the node and refuses if it is no longer that |
+| | `point.inspect` | what is at a screen point (winsee's rule for anything proposed by vision) |
+| | `window.content` | the pixels of one window, also when it is covered (section 4.3) |
+| | `icon.get` | a window's or an application's icon as raw pixels with a size |
+| | `apps.list`, `open` | the Start menu's entries; start one; open a file with its default application |
+| Agent to TUR | `window.created`, `.destroyed`, `.moved`, `.titled`, `.minimised`, `.restored`, `.foreground`, `.reordered` | the window's identifier and the new fact |
+| | `session.locked`, `.unlocked`, `.secure-desktop` | the agent cannot see or act on the lock screen or a consent prompt; TUR must show the guest's whole screen for that moment and P@x must stop |
+
+**What TUR must never trust from the guest.** Windows is the less trusted
+side: anything that runs as SYSTEM inside it can speak on the channel, and
+a compromised Windows can lie in every message.
+
+1. *Everything read is data, never instruction.* Names, values and text
+   of controls go to the model marked as content from an application, as
+   P@x already does for Linux applications, and never change what P@x is
+   allowed to do.
+2. *A decision about TUR is never made from a guest's claim.* The policy
+   engine may classify an action inside Windows from what the agent read
+   (pressing "Delete" is class 2), but anything that crosses out of the
+   guest (a file leaving a shared folder, the clipboard, a link opened on
+   TUR, a device handed over, a credential) is decided from facts TUR
+   holds itself.
+3. *Geometry decides only where guest pixels may go, never where TUR's
+   go.* A lying guest can report any rectangle. Guest pixels are drawn
+   only inside windows TUR's compositor marks as belonging to Windows, in
+   a mark the guest cannot draw, and never above TUR's own confirmation
+   surfaces: P@x's confirmation, the authorisation dialog, the lock
+   screen.
+4. *Titles and icons are untrusted pictures and strings.* Length-limited,
+   stripped of control characters, icons rebuilt on TUR from raw pixels
+   with a size limit; nothing from the guest is parsed by a complex
+   decoder on TUR.
+5. *The agent is believed about the guest only as far as the guest
+   matters.* An action it reports done may not have happened. Where the
+   result matters outside Windows, TUR checks it outside Windows (the
+   file on the volume, the layer's contents).
+6. *Volume.* Every message has a size limit and events a rate limit;
+   section 4.2's numbers say how many events one drag produces.
+7. *Nothing secret goes in.* No model key, no P@x memory, no policy
+   store. A request names an action; it never carries why.
+
+**What the guest may ask of TUR.** Nothing, in the first version. A
+request from inside Windows to open something on TUR is a later feature
+with its own decision record, because it is the direction in which a
+compromised guest reaches out.
 
 ## 6. The way in from Windows
 
@@ -102,7 +189,63 @@ Not written yet.
 
 ## 9. Shape A (TUR inside Windows): what was learned, and why B
 
-Not written yet.
+**Nothing in this section was measured.** It is what Microsoft's
+documents, source and release notes said on 14 November 2026, read before
+the owner's decision. It is kept so the reasoning is not lost.
+
+| Question | What the documents say | Source |
+|---|---|---|
+| May TUR be distributed as a WSL distribution? | Yes. WSL is MIT-licensed since May 2025. A distribution is a root file system in a `.wsl` file that "can be distributed however you please"; a person installs it by double click or `wsl --install --from-file`. Redistributing WSL's own installer is not granted anywhere that was found, and is not needed | microsoft/WSL `LICENSE`; learn.microsoft.com, "Build a custom Linux distribution for WSL" |
+| Which Windows? | WSL 3.0.5 (3 November 2026) installs on Windows 10 from build 19041 and on Windows 11, Home editions included; one package for both. Graphical applications need Windows 10 build 19044 or later | microsoft/WSL releases and `wslinstall` source; WSL FAQ; "Run Linux GUI apps" |
+| Can TUR's image run there as it is? | No. WSL takes a flat root file system and brings its own kernel and its own start-up: "The archive should not contain a kernel or an initramfs". TUR's image is a bootc image whose updates, rollback and boot health belong to its own boot. Inside WSL none of that exists; updates would be a second mechanism | the same guide |
+| The kernel | Microsoft's, 6.18.58, one for every distribution of the Windows account. `CONFIG_ANDROID_BINDER_IPC` is not set and `CONFIG_NTSYNC` is not set: TUR's Android container route and Wine's fast synchronisation are not there. A custom kernel can be named in `.wslconfig`, but it then replaces the kernel under the person's other distributions and Docker Desktop too | `arch/x86/configs/config-wsl` in microsoft/WSL2-Linux-Kernel, branch 6.18; "Advanced settings configuration in WSL" |
+| The desktop | WSLg shows single application windows: "does not provide a full desktop experience". No system tray (an issue open since 2021), no Windows input methods, its own scaling path. The repository had packaging commits only in 2026 | microsoft/wslg README and issues |
+| Devices | USB only through a third-party tool, one device at a time, an administrator's step per device. Disks only whole and only with administrator rights. Files across the boundary are slow by Microsoft's own description | learn.microsoft.com, "Connect USB devices", "Mount a Linux disk in WSL 2", "Comparing WSL versions" |
+| Android | Microsoft's own Android subsystem ended on 5 March 2025; nothing replaced it. Waydroid in WSL2 is a community recipe with a custom kernel and software rendering | learn.microsoft.com, "Windows Subsystem for Android"; a community gist |
+| Runners | `windows-2025` has WSL 3.0.5 preinstalled and WSL2 was reported working there; `windows-11-arm` not | actions/runner-images; Vampire/setup-wsl |
+
+**Why B, in engineering terms.** The owner's sentence is "Linux is more
+solid", and the table agrees:
+
+1. *The floor.* In shape A the floor is Windows and Microsoft's kernel.
+   TUR's first priority (the system boots reliably and recovers) and its
+   rule that the Linux kernel is the single authority for hardware cannot
+   be kept by a guest. In shape B they hold, and Windows gains them:
+   layers, undo, repair from outside.
+2. *The assistant's safety.* On Windows the policy engine would run
+   beside or inside the system whose applications it controls, and any
+   program with administrator rights could alter it. In shape B it sits
+   outside the virtual machine.
+3. *What the person gets.* Shape A adds Linux applications in windows and
+   an assistant. It cannot protect Windows, cannot carry Android by the
+   container route without replacing Microsoft's kernel, and cannot be
+   TUR's own desktop.
+4. *Dependence.* A product that lives inside WSL lasts as long as
+   Microsoft ships WSL in that form. Microsoft ended its own Android
+   subsystem with a year's notice, and in September 2026 shipped its own
+   container runtime in WSL, the place Docker Desktop had occupied.
+5. *Cost.* Two shapes are two update mechanisms, two display paths, two
+   support matrices, for a very small team.
+
+What shape A had that B does not: nothing to lose on the first day. That
+need is real and is answered differently in section 8 (the way in only
+reads until the person agrees; nothing of Windows is deleted; Windows
+still starts by itself).
+
+**A "try TUR in a window first" preview.** A plain virtual-machine
+appliance of TUR for Windows (not WSL) is nearly free to produce from the
+same image, and it is the wrong demonstration. Inside a virtual machine
+on Windows, TUR cannot show the person's own Windows running inside it,
+which is the promise; graphics are unaccelerated; Android by container
+may not start. It would show a slow Linux desktop to exactly the person
+TUR wants to convince otherwise. Hyper-V's manager is also absent from
+Home editions, so it would lean on a third-party hypervisor. The preview
+that shows the real thing at no risk is TUR's **live medium**: started
+from a USB stick, it changes nothing, runs on the person's real hardware,
+and can show the checker's findings and the person's own wallpaper and
+shortcuts read from the disk (section 7). Recommendation: do not build
+the appliance now; revisit it only as a by-product for reviewers and the
+press once the image is public.
 
 ## 10. Limits
 

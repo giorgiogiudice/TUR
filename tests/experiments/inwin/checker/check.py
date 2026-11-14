@@ -141,8 +141,9 @@ def main():
     if value("firmware-type") == "bios":
         advice.append("This PC starts in legacy BIOS mode: TUR installs beside Windows only on UEFI PCs.")
     space = value("system-drive-space") or {}
-    if space and space.get("free_gib", 0) < 60:
-        advice.append(f"Only {space.get('free_gib')} GiB are free on the Windows drive: TUR needs about 60 GiB of it.")
+    if space and space.get("free_gib", 0) < 41:
+        # The installer's own limits (pull requests 112 and 116): 25 GiB for TUR, 16 GiB left free for Windows.
+        advice.append(f"Only {space.get('free_gib')} GiB are free on the Windows drive: TUR needs 25 GiB of it and leaves Windows 16 GiB free.")
     if value("fast-startup (registry)") == 1:
         advice.append("Fast Startup is on: it must be switched off before another system touches this disk.")
     lock = value("bitlocker (shell property)")

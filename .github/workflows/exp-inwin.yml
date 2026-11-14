@@ -55,12 +55,21 @@ jobs:
     runs-on: windows-2025
     timeout-minutes: 15
     steps:
-      # Only what is needed: the repository holds file names Windows cannot
-      # create (a device-manager fixture with ':' in it).
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          ref: ${{ env.WINSEE_COMMIT }}
-          sparse-checkout: tests/experiments/winsee
+      # Only what is needed, and by hand: the repository holds a file name
+      # Windows cannot create (a device-manager fixture with ':' in it),
+      # and git on Windows refuses the whole checkout over it, sparse or
+      # not, unless core.protectNTFS is off. The file is never written:
+      # it is outside the sparse set.
+      - name: Check out the winsee experiment's directory at its pinned commit
+        shell: bash
+        run: |
+          git init -q .
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}"
+          git config core.protectNTFS false
+          git sparse-checkout set tests/experiments/winsee
+          git fetch -q --depth=1 --filter=blob:none origin "${WINSEE_COMMIT}"
+          git checkout -q FETCH_HEAD
+          git log -1 --format='%H %s'
 
       - name: Build with the runner's mingw-w64
         shell: bash
@@ -95,9 +104,16 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          sparse-checkout: tests/experiments/inwin
+      - name: Check out this experiment's directory only (see the bridge job)
+        shell: bash
+        run: |
+          git init -q .
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}"
+          git config core.protectNTFS false
+          git sparse-checkout set tests/experiments/inwin
+          git fetch -q --depth=1 --filter=blob:none origin "${GITHUB_REF}"
+          git checkout -q FETCH_HEAD
+          git log -1 --format='%H %s'
 
       - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
@@ -159,9 +175,16 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          sparse-checkout: tests/experiments/inwin
+      - name: Check out this experiment's directory only (see the bridge job)
+        shell: bash
+        run: |
+          git init -q .
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}"
+          git config core.protectNTFS false
+          git sparse-checkout set tests/experiments/inwin
+          git fetch -q --depth=1 --filter=blob:none origin "${GITHUB_REF}"
+          git checkout -q FETCH_HEAD
+          git log -1 --format='%H %s'
 
       - name: The runner
         shell: pwsh

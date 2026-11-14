@@ -138,6 +138,82 @@ class Listener(threading.Thread):
         return None
 
 
+def covered_content(out):
+    """Can the content of a window that another window covers be had from
+    inside Windows, without Remote Desktop? Each kind of window is put in
+    front and pictured from the screen (the reference), then covered by a
+    Notepad window and asked for its own content (PrintWindow)."""
+    rows = []
+    cover_process = subprocess.Popen(["notepad.exe"])
+    time.sleep(3)
+    cover = None
+    kinds = []
+    data = pathlib.Path.home()
+    subprocess.Popen(["explorer.exe", str(data)])
+    subprocess.Popen(["cmd.exe", "/c", "start", "ms-settings:"])
+    edge = r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
+    edge_process = None
+    if pathlib.Path(edge).exists():
+        page = (pathlib.Path(__file__).resolve().parent / "form.html").as_uri()
+        edge_process = subprocess.Popen([edge, f"--user-data-dir={out / 'edge-profile'}", "--no-first-run", "--no-default-browser-check", "--new-window", page])
+    time.sleep(8)
+    for window in win.top_windows():
+        if window["exe"] == "notepad.exe" and cover is None and window["title"]:
+            cover = window
+        elif window["class"] == "CabinetWClass":
+            kinds.append(("Explorer (classic frame, modern content)", window))
+        elif window["class"] == "ApplicationFrameWindow" and "settings" in window["title"].lower():
+            kinds.append(("Settings (XAML)", window))
+        elif "tur inwin form" in window["title"].lower():
+            kinds.append(("Edge (Chromium, composited)", window))
+        elif window["exe"] == "tw-controls.exe":
+            kinds.append(("TUR's test window (classic Win32)", window))
+    if cover is None:
+        return [{"error": "no covering window"}]
+    for label, window in kinds:
+        hwnd = window["hwnd"]
+        row = {"window": label}
+        try:
+            win.ShowWindow(hwnd, 9)
+            win.SetWindowPos(hwnd, None, 80, 60, 760, 560, 0x0004)
+            win.SetForegroundWindow(hwnd)
+            time.sleep(1.5)
+            reference = win.grab(win.rect_of(hwnd))
+            ok, front = win.print_window(hwnd)
+            row["in_front_differs_from_screen"] = round(win.differing(win.crop(reference, 16), win.crop(front, 16)), 4)
+            win.ShowWindow(cover["hwnd"], 9)
+            win.SetWindowPos(cover["hwnd"], None, 60, 40, 820, 620, 0x0004)
+            win.SetForegroundWindow(cover["hwnd"])
+            time.sleep(1.2)
+            on_screen = win.grab(win.rect_of(hwnd))
+            row["screen_shows_the_cover"] = round(win.differing(win.crop(reference, 16), win.crop(on_screen, 16)), 4)
+            times = []
+            for _ in range(8):
+                began = time.perf_counter()
+                ok, covered = win.print_window(hwnd)
+                times.append((time.perf_counter() - began) * 1000)
+            row["print_window_ok"] = ok
+            row["covered_differs_from_reference"] = round(win.differing(win.crop(reference, 16), win.crop(covered, 16)), 4)
+            row["covered_black_share"] = round(win.black_share(win.crop(covered, 16)), 4)
+            row["capture"] = quantiles(times)
+            row["pixels"] = [covered[2], covered[3]]
+            win.ShowWindow(hwnd, 6)
+            time.sleep(0.8)
+            ok, minimised = win.print_window(hwnd)
+            row["minimised_size"] = [minimised[2], minimised[3]]
+            win.ShowWindow(hwnd, 9)
+        except Exception as error:
+            row["error"] = f"{type(error).__name__}: {str(error)[:200]}"
+        rows.append(row)
+    for label, window in kinds:
+        if "test window" not in label:
+            win.PostMessageW(window["hwnd"], win.WM_CLOSE, 0, 0)
+    cover_process.kill()
+    if edge_process is not None:
+        subprocess.run(["taskkill.exe", "/f", "/t", "/pid", str(edge_process.pid)], capture_output=True)
+    return rows
+
+
 def quantiles(values):
     if not values:
         return None
@@ -179,6 +255,11 @@ def main():
             listing(icons)
             times.append((time.perf_counter() - began) * 1000)
         result[label] = quantiles(times)
+
+    try:
+        result["covered_content"] = covered_content(out)
+    except Exception as error:
+        result["covered_content"] = [{"error": f"{type(error).__name__}: {str(error)[:300]}"}]
 
     # Events against polling.
     listener = Listener()
@@ -252,6 +333,11 @@ def main():
     lines += ["", "| z | class | program | on taskbar | cloaked | rect | frame | icon |", "|---|---|---|---|---|---|---|---|"]
     for row in rows[:40]:
         lines.append(f"| {row['z']} | {row['class'][:28]} | {row['exe']} | {row['on_taskbar']} | {row['cloaked']} | {row['rect']} | {row['frame']} | {json.dumps(row.get('icon'))} |")
+    lines += ["", "### The content of a covered window, asked of the window itself (PrintWindow)", "",
+              "Share of pixels that differ from the picture of the same window when it was in front (0 is identical).", "",
+              "| Window | In front: differs from the screen | Covered: the screen differs (the cover is there) | Covered: PrintWindow differs from the reference | Black | One capture | Pixels |", "|---|---|---|---|---|---|---|"]
+    for row in result.get("covered_content", []):
+        lines.append(f"| {row.get('window', '-')} | {row.get('in_front_differs_from_screen')} | {row.get('screen_shows_the_cover')} | {row.get('covered_differs_from_reference')} | {row.get('covered_black_share')} | {json.dumps(row.get('capture'))} | {row.get('pixels')} {row.get('error', '')} |")
     (out / "desk.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     print("\n".join(lines))
 

@@ -283,6 +283,55 @@ def save_png(path, picture):
         out.write(chunk(b"IEND", b""))
 
 
+PrintWindow = _fn(user32, "PrintWindow", wt.BOOL, P, P, wt.UINT)
+
+
+def print_window(hwnd):
+    """A window's own content, asked of the window (PrintWindow with
+    PW_RENDERFULLCONTENT), whether or not anything covers it."""
+    rect = rect_of(hwnd)
+    width, height = max(rect[2], 1), max(rect[3], 1)
+    screen = GetDC(None)
+    memory = CreateCompatibleDC(screen)
+    bitmap = CreateCompatibleBitmap(screen, width, height)
+    old = SelectObject(memory, bitmap)
+    ok = PrintWindow(hwnd, memory, 2)
+    SelectObject(memory, old)
+    header = BITMAPINFOHEADER()
+    header.biSize = ctypes.sizeof(BITMAPINFOHEADER)
+    header.biWidth = width
+    header.biHeight = -height
+    header.biPlanes = 1
+    header.biBitCount = 32
+    pixels = ctypes.create_string_buffer(width * height * 4)
+    GetDIBits(memory, bitmap, 0, height, pixels, ctypes.byref(header), 0)
+    DeleteObject(bitmap)
+    DeleteDC(memory)
+    ReleaseDC(None, screen)
+    return bool(ok), (rect[0], rect[1], width, height, bytearray(pixels.raw))
+
+
+def crop(picture, margin):
+    """The picture without `margin` pixels on every side."""
+    x, y, width, height, data = picture
+    if width <= 2 * margin or height <= 2 * margin:
+        return picture
+    out = bytearray()
+    for row in range(margin, height - margin):
+        out += data[(row * width + margin) * 4:(row * width + width - margin) * 4]
+    return x + margin, y + margin, width - 2 * margin, height - 2 * margin, out
+
+
+def black_share(picture):
+    data = picture[4]
+    total = black = 0
+    for offset in range(0, len(data) - 4, 4 * 11):
+        total += 1
+        if data[offset] == 0 and data[offset + 1] == 0 and data[offset + 2] == 0:
+            black += 1
+    return black / max(total, 1)
+
+
 def picture_hash(picture):
     return hashlib.sha256(bytes(picture[4])).hexdigest()
 
