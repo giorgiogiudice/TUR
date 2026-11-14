@@ -56,6 +56,9 @@ env:
   PWSH_LINUX_SHA256: e261cabc91c78a9afe8d1e5f24731ab0d38204735ab2ec94b0af55102652e10d
   PWSH_WIN_SHA256: 7d871531806eb1646264e4bbabd9f0c30c23355591bc756bb9909448c29ae166
   WINCLI_ONLY: ${{ github.event.inputs.only }}
+  # "1" adds the held-out commands of corpus.py. Set only for the last run
+  # of the experiment, after which nothing is tuned.
+  WINCLI_FRESH: "0"
   # PowerShell reports usage to Microsoft and looks for updates unless told
   # not to. Off on the judge and on the candidates alike.
   POWERSHELL_TELEMETRY_OPTOUT: "1"
@@ -71,7 +74,11 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 50
     steps:
+      # Only this experiment's directory: the repository holds file names
+      # Windows cannot create (a device-manager fixture with ':' in it).
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          sparse-checkout: tests/experiments/wincli
 
       - name: Versions
         shell: pwsh
@@ -150,7 +157,7 @@ jobs:
       - name: Candidates in Fedora 45 with Fedora's Wine
         run: |
           docker run --rm --privileged --network host \
-            -e WINCLI_ONLY \
+            -e WINCLI_ONLY -e WINCLI_FRESH \
             -v /run/systemd:/run/systemd -v /run/dbus:/run/dbus \
             -v "$GITHUB_WORKSPACE:/src:ro" -v "$WORK:/work" \
             "$FEDORA_IMAGE" bash /src/tests/experiments/wincli/fedora-run.sh
@@ -179,7 +186,9 @@ jobs:
   score:
     name: Scorecard
     needs: [truth, candidates]
-    if: always()
+    # Also when a job above failed, but not when the run was superseded: a
+    # job that always runs would hold the concurrency group for the queue.
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:

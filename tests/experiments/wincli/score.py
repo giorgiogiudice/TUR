@@ -110,7 +110,8 @@ def main() -> int:
     results: dict[str, dict] = {}
     for entry in entries:
         ident = entry["id"]
-        row: dict = {"group": entry["group"], "cmd": entry["cmd"], "rw": entry["rw"], "verdicts": {}}
+        row: dict = {"group": entry["group"], "cmd": entry["cmd"], "rw": entry["rw"], "fresh": entry["fresh"],
+                     "verdicts": {}}
         if ident in invalid:
             row["invalid"] = invalid[ident]
         for name in ORDER:
@@ -145,12 +146,17 @@ def main() -> int:
 
     # ------------------------------------------------------- scorecard --
     lines: list[str] = []
+    held_out = {e["id"] for e in entries if e["fresh"]}
+    entries = [e for e in entries if not e["fresh"]]
+    fresh_results = {i: r for i, r in results.items() if i in held_out and r["verdicts"]}
+    results = {i: r for i, r in results.items() if i not in held_out}
+    invalid_main = {i: w for i, w in invalid.items() if i not in held_out}
     counts = collections.Counter(e["group"] for e in entries)
     changing = sum(1 for e in entries if e["rw"])
     lines += ["## Scorecard", "",
               f"Corpus: {len(entries)} commands ({counts['cmd']} cmd, {counts['tools']} tools, {counts['ps']} "
               f"PowerShell); {changing} state-changing, {len(entries) - changing} read-only. "
-              f"{len(invalid)} checks do not hold on the judge itself and are not counted; "
+              f"{len(invalid_main)} checks do not hold on the judge itself and are not counted; "
               f"{sum(1 for e in entries if not e['truth'])} repair commands have no ground truth.", ""]
     for name in ["truth", "windows-other"] + ORDER[2:]:
         meta = metas.get(name) or {}
@@ -160,9 +166,9 @@ def main() -> int:
             lines.append(f"- `{name}`: {json.dumps(keep)}; started: {start.get('ok')}")
     lines.append("")
 
-    def tally(name: str, group: str | None):
+    def tally(name: str, group: str | None, rows=None):
         tally_counter = collections.Counter()
-        for row in results.values():
+        for row in (results if rows is None else rows).values():
             if group and row["group"] != group:
                 continue
             verdict = row["verdicts"].get(name)
@@ -186,6 +192,19 @@ def main() -> int:
                          f"{rate:.1f} % |" if scored else
                          f"| {LABEL[name]} | {group or '**all it ran**'} | 0 | 0 | 0 | 0 | {tc['NOT RUN']} | 0 | NOT RUN |")
     lines.append("")
+
+    if fresh_results:
+        lines += ["### Held-out set", "",
+                  f"{len(fresh_results)} commands written before any result was seen and run only now; nothing was "
+                  "tuned on them.", "", "| Candidate | PASS | PARTIAL | ANSWER | FAIL | NOT RUN | Scored | Pass rate |",
+                  "|---|---|---|---|---|---|---|---|"]
+        for name in ORDER + ["oracle"]:
+            tc = tally(name, None, fresh_results)
+            scored = tc["PASS"] + tc["PARTIAL"] + tc["ANSWER"] + tc["FAIL"]
+            if scored:
+                lines.append(f"| {LABEL[name]} | {tc['PASS']} | {tc['PARTIAL']} | {tc['ANSWER']} | {tc['FAIL']} | "
+                             f"{tc['NOT RUN']} | {scored} | {100.0 * tc['PASS'] / scored:.1f} % |")
+        lines.append("")
 
     # The router: what is left unexplained.
     router_rows = [(i, r) for i, r in results.items() if "router" in r["verdicts"]]
@@ -235,13 +254,13 @@ def main() -> int:
                       "|---|" + "---|" * (len(ORDER) + 1)]
     short = {"PASS": "pass", "PARTIAL": "partial", "ANSWER": "answer", "FAIL": "FAIL", "NOT RUN": "not run",
              "INVALID": "invalid"}
-    for ident, row in results.items():
+    for ident, row in {**results, **fresh_results}.items():
         cells = [short.get(row["verdicts"].get(n, {}).get("verdict"), "") for n in ORDER + ["oracle"]]
         gap.append(f"| `{ident}` | " + " | ".join(cells) + " |")
     gap += ["", "## What each candidate got wrong", ""]
     for name in ORDER[2:]:
         gap += [f"### {LABEL[name]}", "", "| Command | Line | Verdict | What differed |", "|---|---|---|---|"]
-        for ident, row in results.items():
+        for ident, row in {**results, **fresh_results}.items():
             verdict = row["verdicts"].get(name)
             if not verdict or verdict["verdict"] in ("PASS", "INVALID"):
                 continue

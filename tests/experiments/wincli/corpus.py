@@ -82,7 +82,7 @@ def _add(group, shell, ident, cmd, *cmp, rw=False, pre=None, files="hash", timeo
     CORPUS.append({
         "id": ident, "group": group, "shell": shell, "cmd": cmd, "cmp": list(cmp), "rw": rw,
         "pre": pre, "files": files, "timeout": timeout, "help": helptext, "truth": truth,
-        "exact": exact,
+        "exact": exact, "fresh": False,
     })
 
 
@@ -612,6 +612,78 @@ p("ps1-run", r".\scripts\hello.ps1", text())
 p("ps1-args", r"& .\scripts\hello.ps1 -Name World", text())
 p("bat-from-ps", r".\scripts\hello.bat", text())
 
+# ------------------------------------------------------------- fresh ----
+# A held-out set, written on 14 November 2026 before any result of the
+# main corpus was seen. It is run only when WINCLI_FRESH=1 (the last run of
+# the experiment), so that nothing in tur-winshell, its commands or the
+# module can have been tuned on it. `fresh` keeps these out of the main
+# scorecard; they get their own table.
+
+_main = len(CORPUS)
+
+c("f-dir-md", r"dir /b docs\*.md", text())
+c("f-for-tokens", 'for /f "tokens=*" %i in (notes.txt) do @echo line: %i', text())
+c("f-for-down", "for /l %i in (5,-1,1) do @echo %i", text())
+c("f-if-differ", 'if not "a"=="b" echo differ', text())
+c("f-if-nested", "if exist docs (if exist src echo both)", text())
+c("f-copy-b", "copy /b notes.txt+data.csv both.bin", rw=True)
+c("f-md-rd", r"md a\b & rd /s /q a & if not exist a echo gone", text(), rw=True)
+c("f-cd-var", r"echo %cd%\notes.txt", text())
+c("f-set-a-div", "set /a 100/7", text())
+c("f-find-v", 'echo abc | find /v "x"', text("ws"))
+c("f-ren-dir", "ren docs documents & dir /b /ad", text(), rw=True)
+c("f-move-y", "move /y notes.txt src & dir /b src", text(drop=[r"(?i)moved"]), rw=True)
+c("f-userdomain", "echo %USERDOMAIN%", probes(r"^[^%\s]+$"))
+t("f-findstr-e", 'findstr /e "a" notes.txt', text())
+t("f-findstr-b", 'findstr /b /i "a" notes.txt', text())
+t("f-find-vc", 'find /v /c "zzz" data.csv', text("ci"))
+t("f-where-q", "where /q nosuch_tur || echo missing", text())
+t("f-attrib-a", "attrib -a notes.txt & attrib notes.txt", text("ws"), rw=True)
+t("f-xcopy-file", "xcopy notes.txt backup\\ /y & dir /b backup", probes(r"^notes\.txt$"), rw=True)
+t("f-robocopy-s", "robocopy src dst /s /njh /njs /ndl /nfl /np & dir /b dst", text(), rw=True)
+t("f-certutil-sha1", "certutil -hashfile data.csv SHA1",
+  probes(r"(?i)^" + r"\s?".join(re.findall("..", __import__("hashlib").sha1(fixture.FILES["data.csv"].encode()).hexdigest())) + r"$"))
+t("f-reg-default", r"reg add HKCU\Software\TurWincliTest /ve /d default /f & reg query HKCU\Software\TurWincliTest /ve",
+  probes(r"^\s+\(Default\)\s+REG_SZ\s+default$"), rw=True)
+t("f-tasklist-list", 'tasklist /fo list | findstr /b "PID:"', probes(r"^PID:\s+\d+"))
+t("f-ping-4", "ping -n 1 -4 localhost", probes(r"Reply from 127\.0\.0\.1"))
+t("f-nslookup-ns", "nslookup -type=ns example.com", probes(r"nameserver = \S+"))
+t("f-host-who", "hostname & whoami", probes(r"^\S+$", r"^[^\\\s]+\\[^\\\s]+$"))
+t("f-curl-type", 'curl -s -o NUL -w "%{content_type}" https://example.com', probes(r"text/html"))
+t("f-tar-two", "tar -cf a.tar notes.txt data.csv & tar -tf a.tar", text("sort"), rw=True, files="names")
+p("f-gci-ext", "Get-ChildItem -Recurse -File | Where-Object Extension -eq '.c' | Select-Object -ExpandProperty Name",
+  text("sort"))
+p("f-gci-container", "Get-ChildItem | Where-Object PSIsContainer | Select-Object -ExpandProperty Name", text("sort"))
+p("f-gc-skip", "(Get-Content data.csv | Select-Object -Skip 1).Count", text())
+p("f-gc-match", "Get-Content notes.txt | Where-Object { $_ -match 'a$' }", text())
+p("f-gc-first", "Get-Content data.csv | Select-Object -First 1", text())
+p("f-getfiles", "(Get-Item docs).GetFiles().Count", text())
+p("f-test-container", "Test-Path docs -PathType Container", text())
+p("f-gci-md", "Get-ChildItem -Recurse -Filter *.md -Name", text())
+p("f-new-deep", r"New-Item -ItemType File -Path a\b\c.txt -Force | Out-Null; Test-Path a\b\c.txt", text(), rw=True)
+p("f-copy-wild", r"Copy-Item src\*.c docs; (Get-ChildItem docs -File).Count", text(), rw=True)
+p("f-date-uformat", 'Get-Date -UFormat "%Y"', probes(r"^20\d\d$"))
+p("f-format-n2", '"{0:N2}" -f 1234.5', text())
+p("f-int-add", '[int]"42" + 1', text())
+p("f-join", "$a = 1,2,3; $a -join '-'", text())
+p("f-substring", '"hello".ToUpper().Substring(0,3)', text())
+p("f-proc-first", "Get-Process | Sort-Object Id | Select-Object -First 1 -ExpandProperty Id", probes(r"^\d+$"))
+p("f-cim-csname", "(Get-CimInstance Win32_OperatingSystem).CSName", probes(r"^\S+$"))
+p("f-cim-deviceid", "Get-CimInstance Win32_LogicalDisk | Select-Object -ExpandProperty DeviceID", probes(r"^C:$"))
+p("f-svc-many", "(Get-Service | Measure-Object).Count -gt 5", text())
+p("f-env-windir", "$env:windir", text("ci"))
+p("f-username", "[Environment]::UserName", probes(r"^\S+$"))
+p("f-reg-currentversion",
+  r"Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' | Select-Object -ExpandProperty CurrentVersion",
+  probes(r"^\d+\.\d+"))
+p("f-reg-test-ms", r"Test-Path 'HKLM:\SOFTWARE\Microsoft'", text())
+p("f-iwr-head", "(Invoke-WebRequest https://example.com -Method Head).StatusCode", text())
+p("f-env-count", "(Get-ChildItem Env: | Measure-Object).Count -gt 10", text())
+p("f-whoami-sid", "whoami /user | Select-String 'S-1-5'", probes(r"S-1-5-\d+"))
+
+for _entry in CORPUS[_main:]:
+    _entry["fresh"] = True
+
 
 def by_id() -> dict[str, dict]:
     return {entry["id"]: entry for entry in CORPUS}
@@ -620,6 +692,8 @@ def by_id() -> dict[str, dict]:
 if __name__ == "__main__":
     import collections
 
-    counts = collections.Counter(entry["group"] for entry in CORPUS)
-    changing = sum(1 for entry in CORPUS if entry["rw"])
-    print(f"{len(CORPUS)} commands: {dict(counts)}; {changing} state-changing, {len(CORPUS) - changing} read-only")
+    main = [entry for entry in CORPUS if not entry["fresh"]]
+    counts = collections.Counter(entry["group"] for entry in main)
+    changing = sum(1 for entry in main if entry["rw"])
+    print(f"{len(main)} commands: {dict(counts)}; {changing} state-changing, {len(main) - changing} read-only; "
+          f"{len(CORPUS) - len(main)} more held out")

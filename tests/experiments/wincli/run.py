@@ -299,6 +299,8 @@ def main() -> int:
     entries = [e for e in corpus.CORPUS if e["group"] in GROUPS[args.candidate]]
     if args.candidate in ("truth", "ps51"):
         entries = [e for e in entries if e["truth"]]
+    if os.environ.get("WINCLI_FRESH") != "1":
+        entries = [e for e in entries if not e["fresh"]]
     if args.only:
         entries = [e for e in entries if re.search(args.only, e["id"])]
 
