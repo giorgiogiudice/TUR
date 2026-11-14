@@ -45,8 +45,9 @@ FILES
 - Modified: services/tur-pax/src/{context,engine,cli,orchestrator,policy,
   service,settings,textui}.rs, services/tur-pax/tests/{invariants,cli,
   orchestrator,agent1_interface}.rs, image/{Containerfile,
-  Containerfile.containerignore,programs.tsv}, tests/image/smoke.sh (twelve
-  programs), tests/boot/guest/.../component-checks, tests/boot/report.py,
+  Containerfile.containerignore,programs.tsv}, tests/image/smoke.sh (the
+  program in /usr/bin), .github/workflows/{image,boot}.yml (path lists),
+  tests/boot/guest/.../component-checks, tests/boot/report.py,
   docs/architecture/{agent-policy,ai-control-layer,pax-service}.md
 - Removed: nothing
 
@@ -116,8 +117,21 @@ Head `1412666` (the runs of the first head, `b40233f`, were cancelled by it):
 | pax, desktop | see the pull request | pass |
 | image, boot, rollback, iso | see the pull request | failed at "Build image": `cargo fetch --locked` had no Cargo.lock for services/tur-pax-policy. Fixed in the next commit |
 
-Next head (Cargo.lock and rustfmt applied): its runs are listed in the pull
-request.
+Head `054ce27` (Cargo.lock and rustfmt applied): every workflow passed: rust,
+pax, image, boot (check `components.pax_policy_store` on the installed
+system), iso, rollback, desktop. The run numbers are on the pull request.
+
+Head after merging `origin/main` (pull requests 107, 108, 110, 115 and others
+had landed): conflicts in `services/tur-pax/src/policy.rs` (both tests kept),
+`tests/image/smoke.sh` (main's program count, read from `programs.tsv`) and the
+boot test's `component-checks` (the store's block moved to the end, after
+every run of P@x, the session service and the local models included). Also in
+that commit: the owner's decision in ADR-0028, `services/tur-pax-policy/**`
+in the path lists of the image and boot workflows, `tur-pax-policy` in the
+smoke test's list of programs in `/usr/bin`. Its runs are on the pull
+request; on that day main's `desktop` and `pax` (accessibility job) workflows
+failed at building their builder image for a reason outside this change (a
+pinned Fedora digest gone from quay.io; pull request 111).
 
 ## The issues
 

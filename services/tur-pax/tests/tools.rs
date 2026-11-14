@@ -17,8 +17,9 @@
 //!
 //! * the whole set loads as one registry, with no service or name used twice;
 //! * every tool declares a class; every tool that is offered (it has an
-//!   adapter) only observes, class 0, and every tool above class 0 has no
-//!   adapter and so is not offered;
+//!   adapter) only observes, class 0, except a tool performed by a request
+//!   to a TUR service (ADR-0027), which may be class 1 and never more; every
+//!   other tool above class 0 has no adapter and so is not offered;
 //! * no adapter puts on a command line a word or an option that sends,
 //!   installs, removes, stages, applies or otherwise changes something,
 //!   unless its tool's class is 2 or more;
@@ -41,6 +42,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use serde_json::{Map, Value, json};
+use tur_pax::adapter::{AdapterKind, is_request_socket};
 use tur_pax::registry::{
     ADAPTER_FILE, AssistantTools, MANIFEST_FILE, Performer, ToolFiles, ToolRegistry, read_tool_sets,
 };
@@ -49,19 +51,6 @@ use tur_pax::{Action, ActionClass};
 
 /// The adapter file format, as published.
 const ADAPTER_SCHEMA: &str = include_str!("../../../schemas/pax-tool-adapter.schema.json");
-
-/// Tool files that are not yet where the rule puts them, with the reason.
-///
-/// `tur-update` keeps its tools one directory down, in `pax/`, because
-/// `tur-update` is a program of the image (`image/programs.tsv`): at the
-/// component's root its tools would be installed into the image at once, and
-/// the image's smoke test and the boot test still count five installed tool
-/// sets (`tests/image/smoke.sh`, `tests/boot/report.py`), which this change
-/// may not edit. Moving them is a rename and the deletion of these two lines.
-const NOT_YET_AT_THE_ROOT: [&str; 2] = [
-    "tur-update/pax/agent-tools.json",
-    "tur-update/pax/agent-tools.adapter.json",
-];
 
 /// The `services` directory of the source tree.
 fn services() -> PathBuf {
@@ -124,6 +113,21 @@ fn declared_classes() -> BTreeMap<String, u64> {
         }
     }
     classes
+}
+
+/// The tools performed by a request to a TUR service rather than a
+/// program in the sandbox.
+fn request_tools() -> Vec<String> {
+    let mut found = Vec::new();
+    for text in shipped().adapters {
+        let file: Value = serde_json::from_str(&text).expect("an adapter file is JSON");
+        for adapter in file["adapters"].as_array().expect("adapters") {
+            if adapter["kind"] == "request" {
+                found.push(adapter["tool"].as_str().expect("a tool").to_owned());
+            }
+        }
+    }
+    found
 }
 
 fn object(value: Value) -> Map<String, Value> {
@@ -243,17 +247,13 @@ fn tool_files_live_only_at_the_root_of_a_component() {
             let parts: Vec<&str> = path.split('/').collect();
             let by_the_rule =
                 parts.len() == 2 && (parts[1] == MANIFEST_FILE || parts[1] == ADAPTER_FILE);
-            !by_the_rule && !NOT_YET_AT_THE_ROOT.contains(&path.as_str())
+            !by_the_rule
         })
         .collect();
     assert!(
         misplaced.is_empty(),
         "tool files outside a component's root: {misplaced:?}"
     );
-    // The exceptions are real files, not stale entries.
-    for path in NOT_YET_AT_THE_ROOT {
-        assert!(found.iter().any(|known| known == path), "{path} is gone");
-    }
 }
 
 #[test]
@@ -329,10 +329,17 @@ fn every_tool_has_a_class_and_every_offered_tool_only_observes() {
     }
 
     // Offered: every tool with an adapter, and the command tool. Each only
-    // observes, so nothing above class 1 (nor above class 0) is offered.
+    // observes, except a tool a TUR service performs on request, which may
+    // change what it is asked to and is class 1 (ADR-0027). Nothing above
+    // class 1 is offered.
+    let requests = request_tools();
     let offered = registry.offered();
     for tool in &offered {
-        assert_eq!(tool.class, ActionClass::Observe, "{}", tool.name);
+        if requests.contains(&tool.name) {
+            assert!(tool.class <= ActionClass::Reversible, "{}", tool.name);
+        } else {
+            assert_eq!(tool.class, ActionClass::Observe, "{}", tool.name);
+        }
     }
     assert!(
         offered
@@ -340,7 +347,7 @@ fn every_tool_has_a_class_and_every_offered_tool_only_observes() {
             .any(|tool| tool.name == "run_readonly_command")
     );
     for tool in &offered {
-        if tool.name != "run_readonly_command" {
+        if tool.name != "run_readonly_command" && !requests.contains(&tool.name) {
             assert_eq!(classes.get(&tool.name), Some(&0), "{}", tool.name);
         }
     }
@@ -352,7 +359,7 @@ fn every_tool_has_a_class_and_every_offered_tool_only_observes() {
     unavailable.sort();
     let above_observe: Vec<String> = classes
         .iter()
-        .filter(|(_, class)| **class > 0)
+        .filter(|(name, class)| **class > 0 && !requests.contains(name))
         .map(|(name, _)| name.clone())
         .collect();
     assert_eq!(unavailable, above_observe);
@@ -642,6 +649,11 @@ fn every_shipped_program_and_path_is_in_the_system_view_of_the_sandbox() {
     for text in shipped().adapters {
         let file = tur_pax::adapter::AdapterFile::from_json(&text).expect("a valid adapter file");
         for adapter in file.adapters() {
+            if adapter.kind() == AdapterKind::Request {
+                let socket = adapter.socket().unwrap_or_default();
+                assert!(is_request_socket(socket), "{socket}");
+                continue;
+            }
             assert!(
                 is_system_visible(adapter.program()),
                 "{}",
@@ -698,7 +710,11 @@ fn the_shipped_adapters_use_only_what_the_published_format_describes() {
                     }
                 }
             }
-            assert_eq!(adapter["kind"], "command");
+            assert!(
+                adapter["kind"] == "command" || adapter["kind"] == "request",
+                "{}",
+                adapter["kind"]
+            );
         }
     }
 }

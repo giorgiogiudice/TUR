@@ -3,8 +3,14 @@
 # Release (ADR-0023; docs/architecture/publishing.md): publish the image CI
 # built and tested, as a signed update, to ghcr.io/giorgiogiudice/tur.
 #
-# 1. await    waits until every other workflow on the commit has finished and
-#             decides whether its image may be released (scripts/release/await.py).
+# 1. await    decides, once and in seconds, whether an image may be released.
+#             On main that is the image of the newest commit of main that
+#             has one: every other workflow on that commit has finished and
+#             passed, the image was built and booted, and the commit has not
+#             been released yet. It never waits on a runner (issue #114): it
+#             runs each time a workflow on main finishes, says "not yet"
+#             while others are running, and lets the release go ahead on the
+#             event that completes the set.
 # 2. release  takes the image the `image` workflow tested (its OCI archive,
 #             checked against the image ID that workflow recorded), re-chunks
 #             it so that no layer holds what a later one removed, checks every
@@ -17,31 +23,60 @@
 #             copied to where it is published and read back.
 # 3. promote  (manual, with a build ID) points `stable` at a published build.
 #
-# To rehearse without waiting for every workflow again: start the workflow by
-# hand with `image_run` (a run of the image workflow that passed), or, on a
-# pull request, push a commit that changes only the release itself: the
-# branch's latest successful image run is then used. Neither ever publishes.
+# What starts it:
+#   - workflow_run: a workflow on main has finished. Only a run that a push
+#     to main started counts (the job's `if`). This event runs main's copy
+#     of this file, in main's context: github.ref is refs/heads/main
+#     whatever started the run, so nothing here decides by github.ref alone.
+#     What is decided is not the event's commit but main: the newest commit
+#     of main that has a run of the image workflow (queued, running or
+#     finished). Commits above it that have none (documents, CI files) do
+#     not matter, so a docs-only commit on top does not stop the release of
+#     the one below; a commit above it with an image run is the one to
+#     release, when its workflows have finished. That commit's scripts are
+#     checked out for the release, and the image, its build ID and the
+#     commit it names are that commit's.
+#     A commit is released once. The run that decides to release it records
+#     the commit status "release" on it ("pending", then "success" or
+#     "failure" from the release job); an evaluation that finds an earlier
+#     run that released the commit, or is on its way to, stops. A release
+#     that failed does not count, and an image that was only rehearsed
+#     (publishing was off) is released again once publishing is on.
+#     A workflow that runs on main and is missing from the list below is
+#     still counted, but when it is the last to finish nothing starts the
+#     release until the next workflow on main finishes: start it by hand.
+#   - pull_request, only when the pull request changes the release itself:
+#     a rehearsal, decided at once. It takes this commit's image if all its
+#     workflows have already passed, else the latest image of the branch that
+#     was built and booted; with neither, nothing happens (start one by hand
+#     with `image_run`). It runs the pull request's copy of this file. A
+#     rehearsal from workflow_run was not chosen: it would run main's copy,
+#     not the one under review, with the pull request's scripts under main's
+#     token.
+#   - workflow_dispatch: with `promote`, promotion; with `image_run`, a
+#     rehearsal with that run of the image workflow; with neither, on main,
+#     the same decision as for workflow_run (the newest commit of main with
+#     an image, not necessarily the commit it is started on; the summary
+#     says which), and on another branch the decision for that commit.
 #
 # Publishing is off until the owner sets the repository variable
 # TUR_PUBLISH=1 (publishing.md, section 8). Until then, and always on pull
-# requests, the release job runs in full against its own registry and its
-# own throwaway keys, and nothing leaves the job.
+# requests and with `image_run`, the release job runs in full against its own
+# registry and its own throwaway keys, and nothing leaves the job.
 name: release
 
 on:
-  push:
+  workflow_run:
+    workflows: [rust, image, boot, rollback, pax, desktop, windows-runtime, update, apps, iso, local-ai, reports, release-installer, windows-drivers, base-mirror, heal]
+    types: [completed]
     branches: [main]
   pull_request:
     paths:
       - ".github/workflows/release.yml"
-      - ".github/workflows/image.yml"
       - "scripts/release/**"
       - "image/signing/**"
       - "image/rootfs/usr/share/tur/signing/**"
       - "image/rootfs/usr/share/containers/**"
-      - "tests/boot/signed-update.py"
-      - "tests/boot/guest/**"
-      - "tests/image/marks.py"
   workflow_dispatch:
     inputs:
       promote:
@@ -50,18 +85,27 @@ on:
         required: false
         default: ""
       image_run:
-        description: "Rehearse with this run of the image workflow, without waiting (never publishes)"
+        description: "Rehearse with this run of the image workflow (never publishes)"
         type: string
         required: false
         default: ""
 
 permissions: {}
 
+# Pull requests and runs by hand: one run per ref; a newer push to a pull
+# request replaces the run of the older one; a person's run or promotion is
+# never cancelled.
+#
+# workflow_run: no group for the run as a whole (the run's own ID makes the
+# group unique). A group is taken when a run is created, before any job's
+# `if`: with one group per commit, the end of ANY run on main for that
+# commit (a scheduled one, one started by hand, a workflow run again) would
+# cancel a release in progress, even though its own evaluation is then
+# skipped. Instead, the evaluation (job await) and the release (job release)
+# each have a group of their own: evaluations only ever cancel evaluations.
 concurrency:
-  group: release-${{ github.event_name }}-${{ github.ref }}-${{ inputs.promote || 'testing' }}
-  # A newer commit supersedes an older one that is still waiting; a person's
-  # promotion is never cancelled.
-  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
+  group: release-${{ github.event_name }}-${{ github.event_name == 'workflow_run' && github.run_id || github.ref }}-${{ inputs.promote || 'testing' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   PUBLISHED_REPOSITORY: ghcr.io/giorgiogiudice/tur
@@ -71,35 +115,38 @@ env:
   PODMAN: sudo podman
 
 jobs:
-  lint:
-    name: Lint the release scripts
-    if: ${{ !inputs.promote }}
+  await:
+    name: Decide, once, whether this commit's image may be released
+    # workflow_run: only for a run that a push to main started, in this
+    # repository. A pull request's branch named main is a pull_request run.
+    if: >-
+      ${{ !inputs.promote && (github.event_name != 'workflow_run' ||
+          (github.event.workflow_run.event == 'push' &&
+           github.event.workflow_run.head_branch == 'main' &&
+           github.event.workflow_run.head_repository.full_name == github.repository)) }}
+    # The newest evaluation for main wins. Every one of them decides the same
+    # thing, whatever commit its event is about (the newest commit of main
+    # with an image), and reads everything again, so the one it replaces
+    # loses nothing. Only evaluations are in this group, and only those that
+    # the `if` above lets through for main (any other gets a group of its
+    # own, whether or not a skipped job takes one): an evaluation can cancel
+    # an evaluation, never a release.
+    concurrency:
+      group: >-
+        release-await-${{ (github.event_name == 'workflow_run' &&
+            github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' &&
+            github.event.workflow_run.head_repository.full_name == github.repository)
+          && 'main' || github.run_id }}
+      cancel-in-progress: true
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          persist-credentials: false
-      - name: Lint
-        run: |
-          shellcheck -x scripts/release/*.sh tests/boot/guest/rootfs/usr/libexec/tur-boot-test/signed-update-agent \
-            tests/boot/guest/rootfs/usr/libexec/tur-boot-test/guest-agent
-          python3 -m py_compile scripts/release/*.py tests/boot/signed-update.py tests/image/marks.py image/signing/policy.py
-          python3 scripts/release/compare-trees.py --self-test
-          python3 tests/image/marks.py --self-test
-
-  await:
-    name: Wait for every workflow on this commit
-    if: ${{ !inputs.promote }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 300
-    permissions:
       actions: read
       contents: read
+      statuses: write   # the commit status "release" on the commit it releases
     outputs:
       release: ${{ steps.await.outputs.release }}
+      commit: ${{ steps.await.outputs.commit }}
       reason: ${{ steps.await.outputs.reason }}
       image_run: ${{ steps.await.outputs.image_run }}
       boot_run: ${{ steps.await.outputs.boot_run }}
@@ -109,19 +156,240 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
-      - name: Wait, then decide
+      # The rules are those of scripts/release/await.py, whose functions this
+      # uses; what differs is that nothing here waits. A run that is not
+      # finished means "not yet" (main: the event of the last workflow to
+      # finish decides) or "an earlier image of the branch" (pull request).
+      # `commit` is the commit to release when that is not the event's own
+      # (main); the other jobs check it out.
+      - name: Decide
         id: await
         env:
           GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          SHA: ${{ github.event.workflow_run.head_sha || github.event.pull_request.head.sha || github.sha }}
+          REF: ${{ github.ref }}
+          PUBLISHING: ${{ vars.TUR_PUBLISH == '1' }}
           IMAGE_RUN: ${{ inputs.image_run }}
           HEAD_REF: ${{ github.head_ref }}
+          TRIGGER_ID: ${{ github.event.workflow_run.id }}
+          TRIGGER_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          TRIGGER_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          RELEASE_JOB: Re-chunk, sign, prove on a booted guest, publish
+          LINT_JOB: Lint the release scripts
         run: |
-          shortcut=()
-          if [ -n "$IMAGE_RUN" ]; then shortcut=(--image-run "$IMAGE_RUN"); fi
-          if [ -n "$HEAD_REF" ]; then shortcut=(--fallback-branch "$HEAD_REF"); fi
-          python3 scripts/release/await.py \
-            "${{ github.event.pull_request.head.sha || github.sha }}" "${{ github.event_name }}" --timeout 16200 \
-            "${shortcut[@]}"
+          python3 - <<'PY'
+          import importlib.util, json, os, re, sys, time, urllib.request
+
+          spec = importlib.util.spec_from_file_location("release_await", "scripts/release/await.py")
+          rules = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(rules)
+
+          repo, event, sha = os.environ["GITHUB_REPOSITORY"], os.environ["EVENT"], os.environ["SHA"]
+          mine = os.environ["GITHUB_RUN_ID"]
+          if os.environ.get("IMAGE_RUN"):
+              sys.exit(rules.rehearse_with(repo, rules.api(repo, f"/actions/runs/{os.environ['IMAGE_RUN']}"),
+                                           "a person asked for it"))
+          pull_request = event == "pull_request"
+          # main: a workflow that a push to main started has finished, or a person
+          # started this on main. What is decided is then not the event's commit but
+          # main: the newest commit of main that has an image.
+          main = event == "workflow_run" or (event == "workflow_dispatch" and os.environ["REF"] == "refs/heads/main")
+          events = {"pull_request"} if pull_request else {"push", "workflow_dispatch"}
+          trigger = None
+          if os.environ.get("TRIGGER_ID"):
+              trigger = (os.environ["TRIGGER_ID"], os.environ.get("TRIGGER_ATTEMPT") or "1",
+                         os.environ["TRIGGER_CONCLUSION"])
+
+          def no(reason, code=0, **more):
+              rules.output(release="false", reason=reason, **more)
+              rules.summary("Not released: " + reason)
+              sys.exit(code)
+
+          if main:
+              # The newest commit of main with a run of the image workflow, whatever
+              # that run's state. Commits above it without one (documents, CI files)
+              # do not matter; a commit above it with one is the one to release, when
+              # its workflows have finished.
+              commits = [c["sha"] for c in rules.api(repo, "/commits?sha=main&per_page=100")]
+              with_image = {r["head_sha"] for r in
+                            rules.api(repo, "/actions/workflows/image.yml/runs?branch=main&per_page=100")["workflow_runs"]
+                            if r["event"] in events}
+              behind = next((i for i, c in enumerate(commits) if c in with_image), None)
+              if behind is None:
+                  no("none of main's last 100 commits has a run of the image workflow: no image to release")
+              was, sha = sha, commits[behind]
+              chosen_text = (f"The commit: {sha}, the newest commit of main with an image "
+                             f"({'main itself' if behind == 0 else f'{behind} commit(s) behind main, {commits[0][:12]}, which have none'}).")
+              print(chosen_text + ("" if was == sha or event != "workflow_run" else f" This event is about {was[:12]}."), flush=True)
+              rules.summary(chosen_text)
+
+          def read():
+              chosen = rules.latest(rules.runs_for(repo, sha), events)
+              # The run whose end started this evaluation has finished, but the list
+              # may not say so yet: its result is in the event, for the attempt the
+              # event is about.
+              for name, run in chosen.items():
+                  if (trigger and run["status"] != "completed" and str(run["id"]) == trigger[0]
+                          and str(run.get("run_attempt", 1)) == trigger[1]):
+                      chosen[name] = dict(run, status="completed", conclusion=trigger[2])
+              return chosen
+
+          def unfinished(chosen):
+              return sorted(n for n, r in chosen.items() if r["status"] != "completed")
+
+          if pull_request:
+              time.sleep(30)  # let the commit's other runs be created
+          chosen = read()
+          if event == "workflow_run":
+              # A run that finished a moment ago can still be listed as running, and
+              # the evaluation its own event started may be the one this one
+              # replaced: look three more times before believing it.
+              for _ in range(3):
+                  if not unfinished(chosen):
+                      break
+                  time.sleep(15)
+                  chosen = read()
+          pending = unfinished(chosen)
+          print(", ".join(f"{n}={r['status'] if r['status'] != 'completed' else r['conclusion']}"
+                          for n, r in sorted(chosen.items())) or "no other workflow on this commit", flush=True)
+
+          if "image" not in chosen:
+              if pull_request:
+                  sys.exit(rules.fallback(repo, os.environ["HEAD_REF"], "the image workflow did not run on this commit"))
+              no("the image workflow did not run on this commit: no image to release")
+          if pending:
+              if pull_request:
+                  sys.exit(rules.fallback(repo, os.environ["HEAD_REF"],
+                                          "this commit's workflows have not finished (" + ", ".join(pending) + ")"))
+              no(f"not yet: {sha[:12]}: still running: " + ", ".join(pending)
+                 + (". The release starts when the last of them has finished" if event == "workflow_run"
+                    else ". Start this again when they have finished"))
+
+          table = ["| Workflow | Run | Result |", "|---|---|---|"]
+          table += [f"| {n} | [{r['id']}]({r['html_url']}) | {r['conclusion']} |" for n, r in sorted(chosen.items())]
+          rules.summary("### Workflows on this commit\n\n" + "\n".join(table) + "\n")
+          failed = sorted(f"{n} ({r['conclusion']})" for n, r in chosen.items() if r["conclusion"] not in rules.GOOD)
+          ids = {f"{n}_run": str(chosen[n]["id"]) if n in chosen else "" for n in ("image", "boot", "rollback")}
+          if failed:
+              rules.output(release="false", reason=f"{sha[:12]}: not every workflow passed: " + ", ".join(failed), **ids)
+              rules.summary("Not released: " + ", ".join(failed))
+              # Red once, for the event that is about this commit, not for every
+              # later event on main.
+              sys.exit(0 if event == "workflow_run" and not any(str(r["id"]) == trigger[0] for r in chosen.values()) else 1)
+          if chosen["image"]["conclusion"] != "success" or chosen.get("boot", {}).get("conclusion") != "success":
+              if pull_request:
+                  sys.exit(rules.fallback(repo, os.environ["HEAD_REF"], "the boot workflow did not run on this commit"))
+              rules.output(release="false",
+                           reason="this commit's image was not both built (image) and booted (boot) by CI", **ids)
+              rules.summary("Nothing to release: the image of this commit was not both built and booted by CI.")
+              sys.exit(0)
+
+          if main:
+              # A commit is released once. Releases are recorded on the commit as the
+              # commit status "release": "pending" by the run that decides to release
+              # it (here), "success" or "failure" by that run's release job. Whoever
+              # finds an earlier run that released the commit, or is on its way to,
+              # stops; a release that failed does not count. An image that was only
+              # rehearsed (publishing was off) is released again once publishing is on.
+              publishing = os.environ.get("PUBLISHING") == "true"
+              here = f"{os.environ['GITHUB_SERVER_URL']}/{repo}/actions/runs/{mine}"
+
+              def recorded():
+                  """Run ID -> (ID of its first status, its statuses), other runs only."""
+                  runs = {}
+                  for st in rules.api(repo, f"/commits/{sha}/statuses?per_page=100"):
+                      m = re.search(r"/actions/runs/(\d+)", st.get("target_url") or "")
+                      if st["context"] == "release" and m and m.group(1) != mine:
+                          first, sts = runs.get(m.group(1), (st["id"], []))
+                          runs[m.group(1)] = (min(first, st["id"]), sts + [st])
+                  return runs
+
+              def state(run_id, statuses):
+                  done = [st for st in statuses if st["state"] == "success"]
+                  if done:
+                      rehearsed = not any((st.get("description") or "").startswith("published") for st in done)
+                      return None if rehearsed and publishing else "released"
+                  if any(st["state"] in ("failure", "error") for st in statuses):
+                      return None
+                  run = rules.api(repo, f"/actions/runs/{run_id}")
+                  jobs = {j["name"]: j for j in rules.api(repo, f"/actions/runs/{run_id}/jobs?per_page=30")["jobs"]}
+                  job, lint = jobs.get(os.environ["RELEASE_JOB"]), jobs.get(os.environ["LINT_JOB"])
+                  decide = next((j for n, j in jobs.items() if n.startswith("Decide")), None)
+                  if job and job["conclusion"] == "success":  # its last status is missing
+                      return None if publishing else "released"
+                  if run["status"] == "completed" or (job and job["status"] == "completed"):
+                      return None
+                  if decide and decide["conclusion"] in ("failure", "cancelled"):
+                      return None
+                  if lint and lint["conclusion"] in ("failure", "cancelled", "skipped"):
+                      return None
+                  return "in progress"
+
+              def earlier(before=None):
+                  for run_id, (first, statuses) in sorted(recorded().items(), key=lambda kv: kv[1][0]):
+                      if before is not None and first > before:
+                          continue
+                      found = state(run_id, statuses)
+                      if found:
+                          return run_id, found
+                  return None
+
+              def record(state_, text, url):
+                  print(f"commit status release on {sha[:12]}: {state_} - {text}", flush=True)
+                  if os.environ.get("RELEASE_DRY_RUN"):  # for reading a decision by hand
+                      return 1 << 62
+                  req = urllib.request.Request(
+                      f"https://api.github.com/repos/{repo}/statuses/{sha}", method="POST",
+                      data=json.dumps({"state": state_, "context": "release", "description": text[:140], "target_url": url}).encode(),
+                      headers={"Authorization": f"Bearer {os.environ['GH_TOKEN']}", "Accept": "application/vnd.github+json"})
+                  with urllib.request.urlopen(req, timeout=60) as response:
+                      return json.load(response)["id"]
+
+              def stop(found):
+                  run_id, what = found
+                  no(f"{sha[:12]} was already released by run {run_id}" if what == "released"
+                     else f"a release of {sha[:12]} is in progress (run {run_id})", commit=sha, **ids)
+
+              found = earlier()
+              if found:
+                  stop(found)
+              my_status = record("pending", f"run {mine} is releasing this commit", here)
+              # Two evaluations can come this far at the same moment (one started by
+              # hand, say). The one whose status is the earlier goes on; the other
+              # sees it here and stops.
+              time.sleep(5)
+              found = earlier(before=my_status)
+              if found:
+                  record("pending", f"run {found[0]} is releasing this commit", f"{here.rsplit('/', 1)[0]}/{found[0]}")
+                  stop(found)
+          rules.output(release="true", rehearsal="false", reason=f"every workflow on {sha[:12]} passed",
+                       commit=sha if main else "", **ids)
+          PY
+
+  # On a pull request, always (it is the check of the scripts under review);
+  # otherwise only when there is something to release, so that an evaluation
+  # that says "not yet" takes one short job and no more.
+  lint:
+    name: Lint the release scripts
+    needs: await
+    if: ${{ !cancelled() && !inputs.promote && needs.await.result != 'skipped' && (github.event_name == 'pull_request' || needs.await.outputs.release == 'true') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ needs.await.outputs.commit }}
+          persist-credentials: false
+      - name: Lint
+        run: |
+          shellcheck -x scripts/release/*.sh tests/boot/guest/rootfs/usr/libexec/tur-boot-test/signed-update-agent \
+            tests/boot/guest/rootfs/usr/libexec/tur-boot-test/guest-agent
+          python3 -m py_compile scripts/release/*.py tests/boot/signed-update.py tests/image/marks.py image/signing/policy.py
+          python3 scripts/release/compare-trees.py --self-test
+          python3 tests/image/marks.py --self-test
 
   release:
     name: Re-chunk, sign, prove on a booted guest, publish
@@ -129,18 +397,30 @@ jobs:
     if: ${{ needs.await.outputs.release == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 180
+    # One release at a time per branch or ref: on main, a newer commit's
+    # release replaces an older one still in progress, as a newer push did
+    # before. Evaluations are not in this group and cancel nothing here.
+    concurrency:
+      group: release-job-${{ github.event_name }}-${{ github.event.workflow_run.head_branch || github.ref }}
+      cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
     permissions:
       contents: read
       actions: read     # the artifacts of the image, boot and rollback runs
       id-token: write   # keyless signing with this workflow's own identity
       packages: write   # pushing to ghcr.io, only with TUR_PUBLISH=1
+      statuses: write   # the commit status "release" on the released commit
     env:
-      PUBLISH: ${{ vars.TUR_PUBLISH == '1' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && needs.await.outputs.rehearsal != 'true' && '1' || '0' }}
+      # Publishing: only with TUR_PUBLISH=1, never for a rehearsal, and only
+      # for main: a run that a push to main started (workflow_run: github.ref
+      # is main for every such event, so the run that finished is asked what
+      # it was), or a run started by hand on main. Never on a pull request.
+      PUBLISH: ${{ vars.TUR_PUBLISH == '1' && needs.await.outputs.rehearsal != 'true' && ((github.event_name == 'workflow_run' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == github.repository) || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')) && '1' || '0' }}
       OUT: out/release
       LOCAL: localhost:5000/tur
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
+          ref: ${{ needs.await.outputs.commit }}
           persist-credentials: false
 
       # The pinned base, for the marks check (fedora-logos' checksums come
@@ -326,7 +606,8 @@ jobs:
           if [ "$PUBLISH" = 1 ]; then
             key=env://TUR_RELEASE_KEY
             pub=image/rootfs/usr/share/tur/signing/release.pub
-            cosign public-key --key env://TUR_RELEASE_KEY > "$keys/from-secret.pub"
+            cosign public-key --key env://TUR_RELEASE_KEY > "$keys/from-secret.pub" \
+              || { echo "the secret TUR_RELEASE_SIGNING_PASSWORD does not open the key in TUR_RELEASE_SIGNING_KEY (publishing.md, section 8)"; exit 1; }
             cmp "$keys/from-secret.pub" "$pub" \
               || { echo "the secret key is not the one whose public half the image carries"; exit 1; }
           else
@@ -394,10 +675,14 @@ jobs:
 
       - name: Summary
         if: always()
+        env:
+          RELEASED_COMMIT: ${{ needs.await.outputs.commit || github.event.pull_request.head.sha || github.sha }}
+          DECISION: ${{ needs.await.outputs.reason }}
         run: |
           {
             echo "### Release of ${BUILD_ID:-?}"
             echo
+            echo "- commit: \`${RELEASED_COMMIT}\` (${DECISION})"
             echo "- tested image: \`sha256:${IMAGE_ID:-?}\` (image workflow run ${{ needs.await.outputs.image_run }})"
             echo "- published digest: \`${DIGEST:-not made}\`"
             echo "- publishing: $([ "$PUBLISH" = 1 ] && echo "on, to $PUBLISHED_REPOSITORY" || echo "off (rehearsal)")"
@@ -405,6 +690,34 @@ jobs:
             if [ -f "$OUT/signed-update/summary.md" ]; then cat "$OUT/signed-update/summary.md"; fi
             if [ -f "$OUT/signing/signing.env" ]; then echo; echo '```'; cat "$OUT/signing/signing.env"; echo '```'; fi
           } >> "$GITHUB_STEP_SUMMARY"
+
+      # What a later evaluation reads to know that this commit was released,
+      # or that its release failed (job await). Only for main's releases.
+      - name: Record the release on the commit
+        if: ${{ always() && needs.await.outputs.commit != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASED: ${{ needs.await.outputs.commit }}
+          RESULT: ${{ job.status }}
+        run: |
+          python3 - <<'PY'
+          import json, os, urllib.request
+          e = os.environ
+          run = e["GITHUB_RUN_ID"]
+          if e["RESULT"] != "success":
+              state, text = "failure", f"release run {run}: {e['RESULT']}"
+          elif e["PUBLISH"] == "1":
+              state, text = "success", f"published as {e.get('BUILD_ID', '?')} by run {run}"
+          else:
+              state, text = "success", f"rehearsed by run {run} (publishing is off)"
+          print(state, "-", text)
+          req = urllib.request.Request(
+              f"https://api.github.com/repos/{e['GITHUB_REPOSITORY']}/statuses/{e['RELEASED']}", method="POST",
+              data=json.dumps({"state": state, "context": "release", "description": text[:140],
+                               "target_url": f"{e['GITHUB_SERVER_URL']}/{e['GITHUB_REPOSITORY']}/actions/runs/{run}"}).encode(),
+              headers={"Authorization": f"Bearer {e['GH_TOKEN']}", "Accept": "application/vnd.github+json"})
+          urllib.request.urlopen(req, timeout=60).read()
+          PY
 
       - name: Diagnostics on failure
         if: failure()

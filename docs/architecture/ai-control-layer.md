@@ -853,8 +853,9 @@ an earlier section says otherwise, this section governs.
 The built-in lists of sensitive and excluded applications and of protected units
 were checked against upstream sources and Fedora package file lists on
 12 November 2026 ([agent-policy.md](agent-policy.md), section 2.5). Fourteen
-identifiers could not be verified and are marked there. None has been checked on
-the TUR image.
+identifiers could not be verified and are marked there. On 13 November 2026 the
+lists were held against the TUR image and corrected (same section); the
+fourteen are not installed there and stay unverified.
 
 ## 23. The owner's decisions on approval and stopping (12 November 2026)
 

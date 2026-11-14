@@ -108,7 +108,9 @@ known_applications! {
     /// file list of a Debian package on packages.debian.org (sid unless
     /// stated); `FH` the application is published on Flathub under this
     /// identifier (flathub.org/api/v2/appstream); `AUR:` a PKGBUILD on
-    /// aur.archlinux.org, a secondary source.
+    /// aur.archlinux.org, a secondary source; `TUR:` the TUR image itself, as
+    /// `tests/image/identifiers.py` read it (image workflow run 43479278136,
+    /// 2026-11-13).
     table SENSITIVE_APPLICATION_SOURCES;
     // KDE Plasma.
     ("org.kde.konsole", DesktopFile, "KDE:utilities/konsole desktop/org.kde.konsole.desktop; FP44:konsole; FH"),
@@ -117,6 +119,11 @@ known_applications! {
     ("yakuake", Program, "FP44:yakuake /usr/bin/yakuake"),
     ("org.kde.krunner", DesktopFile, "KDE:plasma/plasma-workspace krunner/org.kde.krunner.desktop.cmake, installed under kglobalaccel"),
     ("krunner", Program, "FP44:plasma-workspace /usr/bin/krunner"),
+    // Found on the TUR image (issue 58): a console that runs JavaScript in the
+    // desktop shell, and the settings page of the login screen.
+    ("org.kde.plasma-interactiveconsole", DesktopFile, "TUR: /usr/share/applications/org.kde.plasma-interactiveconsole.desktop; it runs scripts in plasmashell"),
+    ("plasma-interactiveconsole", Program, "TUR: /usr/bin/plasma-interactiveconsole"),
+    ("kcm_plasmalogin", DesktopFile, "TUR: /usr/share/applications/kcm_plasmalogin.desktop, the login screen's settings (systemsettings kcm_plasmalogin)"),
     // GNOME.
     ("org.gnome.Terminal", DesktopFile, "GNOME:GNOME/gnome-terminal data/; FP44:gnome-terminal"),
     ("org.gnome.Terminal.Preferences", DesktopFile, "GNOME:GNOME/gnome-terminal data/; FP44:gnome-terminal"),
@@ -312,6 +319,11 @@ known_applications! {
     ("pinentry-qt5", Program, "GH:gpg/pinentry qt5/Makefile.am"),
     ("pinentry-gnome3", Program, "GH:gpg/pinentry gnome3/Makefile.am; FP44:pinentry-gnome3"),
     ("pinentry-gtk-2", Program, "GH:gpg/pinentry gtk+-2/Makefile.am; in no Fedora 44 or Debian sid package"),
+    // Found on the TUR image (issue 58): KWallet's prompt for a secret, and
+    // the dialog that asks for the administrator's password to run a program.
+    ("org.kde.secretprompter", DesktopFile, "TUR: /usr/share/applications/org.kde.secretprompter.desktop"),
+    ("ksecretprompter", Program, "TUR: /usr/bin/ksecretprompter"),
+    ("kdesu", Program, "TUR: /usr/bin/kdesu; it asks for the administrator's password"),
 }
 
 /// The global mode.
@@ -1264,6 +1276,35 @@ mod tests {
             policy_store_file(1000),
             Path::new("/var/lib/tur-pax-policy/1000/policy.json")
         );
+    }
+
+    #[test]
+    fn what_the_image_showed_is_covered() {
+        // Found on the TUR image by tests/image/identifiers.py (issue 58).
+        let policy = UserPolicy::default();
+        for application in [
+            "org.kde.secretprompter",
+            "org.kde.secretprompter.desktop",
+            "ksecretprompter",
+            "kdesu",
+        ] {
+            assert!(policy.is_excluded(application), "{application}");
+        }
+        for application in [
+            "org.kde.plasma-interactiveconsole",
+            "plasma-interactiveconsole",
+            "kcm_plasmalogin",
+        ] {
+            assert!(policy.is_sensitive(application), "{application}");
+            assert!(!policy.is_excluded(application), "{application}");
+        }
+        // Judged and left off: no window to act in (pam_kwallet_init,
+        // kwallet-query), or a settings page that runs nothing
+        // (kcm_krunnersettings).
+        for application in ["pam_kwallet_init", "kwallet-query", "kcm_krunnersettings"] {
+            assert!(!policy.is_excluded(application), "{application}");
+            assert!(!policy.is_sensitive(application), "{application}");
+        }
     }
 
     #[test]

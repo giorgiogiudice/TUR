@@ -16,12 +16,15 @@ on:
       # Programs compiled into the image (image/programs.tsv), what they are
       # compiled with, and what is installed beside them. Each is run on the
       # booted system, the P@x end-to-end test among them.
+      - "services/tur-ai-local/**"
+      - "services/tur-apps/**"
       - "services/tur-boot-health/**"
       - "services/tur-catalogue/**"
       - "services/tur-device-manager/**"
       - "services/tur-diagnostics/**"
       - "services/tur-pax/**"
       - "services/tur-pax-memory/**"
+      - "services/tur-pax-policy/**"
       - "services/tur-pax-providers/**"
       - "services/tur-runtime/**"
       - "services/tur-storage/**"
@@ -44,12 +47,15 @@ on:
       # Programs compiled into the image (image/programs.tsv), what they are
       # compiled with, and what is installed beside them. Each is run on the
       # booted system, the P@x end-to-end test among them.
+      - "services/tur-ai-local/**"
+      - "services/tur-apps/**"
       - "services/tur-boot-health/**"
       - "services/tur-catalogue/**"
       - "services/tur-device-manager/**"
       - "services/tur-diagnostics/**"
       - "services/tur-pax/**"
       - "services/tur-pax-memory/**"
+      - "services/tur-pax-policy/**"
       - "services/tur-pax-providers/**"
       - "services/tur-runtime/**"
       - "services/tur-storage/**"
@@ -101,7 +107,7 @@ jobs:
   boot:
     name: Install to disk and boot under UEFI in QEMU/KVM
     runs-on: ubuntu-24.04
-    timeout-minutes: 100
+    timeout-minutes: 150
     permissions:
       contents: read
       packages: read
@@ -199,8 +205,16 @@ jobs:
         # boot counter set by hand (ADR-0014, step 2 of the design's brief). The
         # third waits about three minutes for the automount behind /boot to expire.
         # In the second, TUR's own programs are run as an ordinary user, the
-        # P@x end-to-end test among them (docs/reports/TUR-006.md).
-        run: python3 tests/boot/run-vm.py --disk "$WORK/disk.raw" --work "$WORK" --out "$OUT" --timeout 3000
+        # P@x end-to-end test among them (docs/reports/TUR-006.md), P@x's
+        # session service test, and P@x through local AI with a real model on
+        # the engine the image carries. The guest has 10 GiB: tur-ai-local
+        # serves a model only when its need and a reserve of 1 GiB fit in the
+        # memory free at that moment (TUR-AI-LOCAL-006 otherwise): Qwen3 0.6B
+        # needs 2.15 GB, Qwen3 4B 6.15 GB, and with 8 GiB 7.05 GB was free
+        # (run 43487318802). What was free is recorded; the report requires
+        # an answer from a local model here (--require-local-answer) and,
+        # for each model, the result its verdict on this machine calls for.
+        run: python3 tests/boot/run-vm.py --disk "$WORK/disk.raw" --work "$WORK" --out "$OUT" --timeout 4800 --memory 10240
 
       - name: Recover the journal from the disk
         if: always()
@@ -214,7 +228,7 @@ jobs:
       - name: Boot report
         if: always()
         run: |
-          python3 tests/boot/report.py --work "${WORK:-$RUNNER_TEMP}" --out "$OUT" \
+          python3 tests/boot/report.py --work "${WORK:-$RUNNER_TEMP}" --out "$OUT" --require-local-answer \
             --expected-build-id "${BUILD_ID:-}" \
             --expected-failed-units tests/boot/expected-failed-units.txt \
             --timing "image_build_seconds=${IMAGE_BUILD_SECONDS:-}" \

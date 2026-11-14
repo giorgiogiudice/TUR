@@ -187,8 +187,25 @@ it:
 A refusal has `"status": "refused"`, a machine-readable `reason`, the `TUR-AI-*`
 code and the sentence the user is shown.
 
+**A result cut to fit the model's context.** A tool may print up to 256 KiB
+(an adapter's `max_output_bytes`), which a local model's 8 192 tokens could
+not hold at all. When the model's context is known (`context_tokens`, as the
+person chose it for a model on this computer or as the model list declares
+it), one tool's result is cut to a quarter of the context, counted at four
+bytes a token, never below 2 048 bytes (`orchestrator::tool_result_budget`:
+8 192 bytes for 8 192 tokens, 200 000 for 200 000; P@x's own request with
+every tool set is about 3 300 tokens). The frame stays; the
+program's output and its error output become the beginning of their text,
+cut at a character, with `"truncated": true` and a `cut` sentence that says
+why, and the task's report marks the call as truncated. A model with no
+declared context, or a provider given by a configuration file, gets the
+result as the tool's own limit let it through. The budget is per result,
+not for the whole conversation: a long task can still outgrow a small
+context, which the provider then reports as an error (TUR-010).
+
 **Limits.** Steps (responses asked for; default 12), wall-clock seconds (default
-300), tool calls looked at per response (default 8), and the spend limit of the
+300), tool calls looked at per response (default 8), the size of one tool's
+result for a model with a known context (above), and the spend limit of the
 provider configuration. The spend limit acts between responses, as addendum A
 section 10 says: the meter cuts a response as soon as the provider's reported
 usage passes the limit, and that response is then discarded whole.
@@ -267,6 +284,10 @@ event.
 | `runtime_inspect_file` | 0 | `tur-runtime inspect --json -- <path>` | `services/tur-runtime` |
 | `diag_report_prepare` | 0 | `tur-diag report prepare --preview --json --prepared-by=pax [--title=…] [--description=…] [--component=…] [--error-code=…] [--from-boot-health]` (a preview: nothing is saved or sent) | `services/tur-diagnostics` |
 | `diag_report_list` | 0 | `tur-diag report list --json` | the same |
+| `heal_list_faults` | 0 | `tur-diag heal status --json` (reads `/var/log/tur/heal/state.json`) | the same |
+| `heal_explain` | 0 | `tur-diag heal explain --json -- <code>` | the same |
+| `heal_apply_remedy` | 1 | a `request` adapter: `{"tool", "arguments": {code, remedy}}` to `/run/tur/heal.socket`; TUR's healing service decides and performs ([self-healing.md](self-healing.md), section 5) | the same |
+| `heal_undo_remedy` | 1 | the same, to undo | the same |
 | `apps_list_installed` | 0 | `tur-apps list --json` | `services/tur-apps` |
 | `apps_plan` | 0 | `tur-apps --catalogue /usr/share/tur/catalogue plan --offline --json -- <id>` | the same |
 | `ai_local_status` | 0 | `tur-ai-local status --json` | `services/tur-ai-local` |
@@ -471,6 +492,7 @@ rules, which are stricter here.
   --ro-bind-try /run/log/journal /run/log/journal   --ro-bind-try /run/udev /run/udev
   --ro-bind <granted path> <granted path>            (one for each grant)
   --tmpfs /tmp
+  --symlink /var/home /home                          (a system link, only if it leads to a grant)
   --remount-ro /  --chdir /
   -- /usr/bin/prlimit --cpu=10 --as=4294967296 --nproc=128 --nofile=256
                       --fsize=16777216 --core=0 -- <the command, as given>
@@ -494,10 +516,41 @@ rules, which are stricter here.
 
 `GrantRules` decides which paths a task may be given. A path is judged as it is
 written (`judge`, pure) after `admit` has made sure it exists, is a directory or
-a regular file, and is not reached through a symbolic link. The plan applies
-`judge` again to every grant it is handed, whatever admitted it, and the
-executor checks immediately before the start that a granted path still resolves
-to itself.
+a regular file, and is not reached through a symbolic link other than one of
+the system's own links at its start (below). The plan applies `judge` again to
+every grant it is handed, whatever admitted it, and the executor checks
+immediately before the start that a granted path still resolves to itself.
+
+**The system's links** (issue 56). On Fedora Atomic, and so on TUR, `/home` is
+a link to `var/home`; `/mnt`, `/opt`, `/srv`, `/root` and `/usr/local` are
+links into `/var` too. A person writes `/home/ada/Documents`. `GrantRules::new`
+reads these six names (`SYSTEM_LINKS`) and takes one only if it is a symbolic
+link owned by root, in a directory owned by root that nobody else can write,
+and its target is not the root, not a system tree (unless strictly inside
+`/var`, where an image-based system keeps these folders), not one of the other
+names and not a tree the sandbox shows from `/var` (`SystemLink::new`). Then:
+
+- `admit` accepts a path whose only link is that one, at its start; a link
+  anywhere after it is still refused. The grant holds the resolved path, where
+  the folder really is.
+- `judge` reads a path that lies in a link's target under the link's name:
+  `/var/home/ada/Documents` as `/home/ada/Documents`, `/var/mnt/data` as
+  `/mnt/data`, `/var/roothome` as `/root` (refused), `/var/usrlocal` as
+  `/usr/local` (refused). The home directory is known under both names. So the
+  two names of a folder always get the same answer, and nothing in `/var` that
+  is not behind one of these links becomes grantable.
+- The plan binds the folder at its real place and, when a grant lies behind a
+  top-level link, makes the same link in the sandbox (`--symlink /var/home
+  /home`), so a command can name the folder either way. The link shows nothing
+  by itself: beside the grant there is only the empty in-memory root.
+
+Tests: `sandbox::tests::on_an_image_based_system_a_folder_gets_the_same_answer_under_either_name`,
+`…a_link_that_could_widen_a_grant_is_not_taken`,
+`…the_sandbox_has_the_link_a_granted_folder_is_named_through`,
+`…a_grant_named_through_a_system_link_is_admitted_where_the_folder_really_is`;
+`pax` scenario `grant-through-system-link` (on the booted image, where `/home`
+is the real link, through the boot workflow); boot checks
+`pax_grant_through_home_link` and `pax_grant_through_home_link_still_refuses`.
 
 Refused:
 
@@ -738,7 +791,11 @@ The injection scenarios, as the task names them:
     decision stricter.
 15. **The adapter schema is not checked against the loader** beyond the shipped
     files using only fields the schema declares.
-16. **No undo.** Class 1 tools would need it; none ships.
+16. **Undo exists for one service's tools only.** The first class 1 tools,
+    `heal_apply_remedy` and `heal_undo_remedy` (ADR-0027,
+    [self-healing.md](self-healing.md)), are performed by a `request` adapter:
+    the healing service applies and undoes, and keeps what undoing needs. The
+    loop itself has no undo of its own.
 
 ## 10. Not built
 
@@ -844,7 +901,7 @@ Where the design was silent, the stricter reading was taken:
 | 14 | An unusable policy file | Observe only, with a warning. |
 | 15 | No audit file can be opened | Nothing starts. |
 | 16 | Recalling memory | Decided and recorded as `agent:memory_read`; left out if not allowed. |
-| 17 | Grants under `/run`, `/var`, `/tmp` | Refused, removable media included. |
+| 17 | Grants under `/run`, `/var`, `/tmp` | Refused, removable media included; except a folder behind one of the system's links, judged under the link's name ([5.2](#52-grants)). `/media`, a link to `run/media` on Fedora Atomic, is not among those links: removable media stay ungrantable (known gap 6). |
 | 18 | A home directory of `/`, `/home`, `/root` or a system tree | Not used as a home directory. |
 | 19 | More tool calls in one response than the limit | The extra ones are refused without being decided. |
 | 20 | Standing approvals, repair sessions | None is ever passed to the engine. |
