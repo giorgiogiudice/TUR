@@ -269,9 +269,12 @@ local AI, as the engine decision of issue #74 asked
 Not yet: a systemd user unit and `org.tur.AiLocal1`, so that `status` works
 from P@x's sandbox (section 8, item 4).
 
-The boot test downloads Qwen3 0.6B from its publisher on the installed
-system, serves it on the image's engine and has P@x ask it through the
-`local` preset; the results are in TUR-010.
+The boot test asks `tur-ai-local check` about Qwen3 0.6B and Qwen3 4B on
+the installed system and holds each to the verdict: a model that fits is
+downloaded from its publisher, served on the image's engine and asked by
+P@x through the `local` preset; one that does not is refused with
+`TUR-AI-LOCAL-006` (by `serve`) or `-005` (by `pull`). The results are in
+TUR-010.
 
 ## 10. The second list, and the tiers
 
