@@ -488,6 +488,26 @@ class Store:
         result["disk"] = disk_use([directory])
         return result
 
+    def copy_layer(self, source: str, ident: str) -> dict:
+        """A second layer with the same content: its trees, its registry
+        record, its home and its grants; fresh work directories (overlayfs
+        keeps a directory there that its owner cannot read)."""
+        origin, directory = self.layer(source), self.layer(ident)
+        rmtree(directory)
+        directory.mkdir(parents=True)
+        started = time.monotonic()
+        done = command(["cp", "-a", "--reflink=auto", str(origin / "root"), str(origin / "c"),
+                        str(origin / "regdelta"), str(origin / "home"), str(directory)], timeout=900)
+        for work in ("work-root", "work-c"):
+            (directory / work).mkdir()
+        meta = self.meta(source)
+        meta["id"] = ident
+        if meta.get("casefold") and self.settings.get("fold_work", True):
+            set_casefold(directory / "work-c")
+        self.save_meta(ident, meta)
+        return {"exit": done.returncode, "stderr": done.stderr[-500:],
+                "seconds": round(time.monotonic() - started, 3)}
+
     def drop_layer(self, ident: str) -> dict:
         started = time.monotonic()
         rmtree(self.layer(ident))

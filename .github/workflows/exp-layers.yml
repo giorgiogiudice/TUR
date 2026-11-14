@@ -19,8 +19,11 @@
 #
 # A pull request's path filter looks at the whole pull request, so a later
 # push that only touches the report would run both jobs again. The first step
-# of each job looks at what the push itself changed and, when it is nothing
-# of the experiment's, the job ends at once.
+# of each job looks for an earlier successful run on this branch that left
+# the job's evidence, and when nothing of the experiment's has changed since
+# the commit it measured, the job ends at once. A push that arrives while a
+# run is queued or running cancels it (the concurrency group) and is then
+# measured itself, because no finished measurement of that code exists.
 #
 # This is not the TUR image: no SELinux, no Plasma, no GPU.
 name: exp-layers
@@ -34,6 +37,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: exp-layers-${{ github.ref }}
@@ -51,19 +55,27 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 130
     steps:
-      - name: Did this push change the experiment?
+      - name: Is there a measurement of this code already?
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          ACTION: ${{ github.event.action }}
-          BEFORE: ${{ github.event.before }}
-          AFTER: ${{ github.event.after }}
+          BRANCH: ${{ github.head_ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          ARTIFACT: exp-layers-evidence
         run: |
           run=true
-          if [ "$GITHUB_EVENT_NAME" = pull_request ] && [ "$ACTION" = synchronize ] && [ -n "$BEFORE" ] && [ -n "$AFTER" ]; then
-            if files="$(gh api "repos/$REPO/compare/$BEFORE...$AFTER" --jq '.files[].filename')"; then
-              echo "$files"
-              if ! echo "$files" | grep -Eq '^(tests/experiments/layers/|\.github/workflows/exp-layers\.yml$)'; then
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            measured=""
+            for id in $(gh api "repos/$REPO/actions/workflows/exp-layers.yml/runs?branch=$BRANCH&event=pull_request&status=success&per_page=20" --jq '.workflow_runs[].id' || true); do
+              if gh api "repos/$REPO/actions/runs/$id/artifacts" --jq '.artifacts[].name' | grep -qx "$ARTIFACT"; then
+                measured="$(gh api "repos/$REPO/actions/runs/$id" --jq .head_sha)"
+                echo "run $id measured commit $measured"
+                break
+              fi
+            done
+            if [ -n "$measured" ] && files="$(gh api "repos/$REPO/compare/$measured...$HEAD_SHA" --jq '.files[].filename')"; then
+              echo "changed since then:"; echo "$files"
+              if ! echo "$files" | grep -Eq '^(tests/experiments/layers/|tests/windows-runtime/apps\.(py|json)$|\.github/workflows/exp-layers\.yml$)'; then
                 run=false
               fi
             fi
@@ -137,19 +149,27 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 100
     steps:
-      - name: Did this push change the experiment?
+      - name: Is there a measurement of this code already?
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          ACTION: ${{ github.event.action }}
-          BEFORE: ${{ github.event.before }}
-          AFTER: ${{ github.event.after }}
+          BRANCH: ${{ github.head_ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          ARTIFACT: exp-layers-kernel-evidence
         run: |
           run=true
-          if [ "$GITHUB_EVENT_NAME" = pull_request ] && [ "$ACTION" = synchronize ] && [ -n "$BEFORE" ] && [ -n "$AFTER" ]; then
-            if files="$(gh api "repos/$REPO/compare/$BEFORE...$AFTER" --jq '.files[].filename')"; then
-              echo "$files"
-              if ! echo "$files" | grep -Eq '^(tests/experiments/layers/|\.github/workflows/exp-layers\.yml$)'; then
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            measured=""
+            for id in $(gh api "repos/$REPO/actions/workflows/exp-layers.yml/runs?branch=$BRANCH&event=pull_request&status=success&per_page=20" --jq '.workflow_runs[].id' || true); do
+              if gh api "repos/$REPO/actions/runs/$id/artifacts" --jq '.artifacts[].name' | grep -qx "$ARTIFACT"; then
+                measured="$(gh api "repos/$REPO/actions/runs/$id" --jq .head_sha)"
+                echo "run $id measured commit $measured"
+                break
+              fi
+            done
+            if [ -n "$measured" ] && files="$(gh api "repos/$REPO/compare/$measured...$HEAD_SHA" --jq '.files[].filename')"; then
+              echo "changed since then:"; echo "$files"
+              if ! echo "$files" | grep -Eq '^(tests/experiments/layers/|tests/windows-runtime/apps\.(py|json)$|\.github/workflows/exp-layers\.yml$)'; then
                 run=false
               fi
             fi

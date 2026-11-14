@@ -150,6 +150,7 @@ class Bench:
         self.state_path = work / "state.json"
         self.state = json.loads(self.state_path.read_text()) if self.state_path.is_file() else {}
         self.stores: dict[str, Store] = {}
+        self.display_ok = True
 
     def store(self, variant: str = "ext4") -> Store:
         if variant not in self.stores:
@@ -295,7 +296,7 @@ class AppRun:
             self.stage("install", "fail", detail=f"no unattended mode for {kind}")
             return False
         before = self.own_disk()
-        done = self.store.run(self.kind, self.ident, argv, wine=wine, files=files, timeout=900,
+        done = self.store.run(self.kind, self.ident, argv, wine=wine, files=files, timeout=480,
                               label=f"install-{self.ident}")
         after = self.own_disk()
         exe = self.exe()
@@ -312,6 +313,9 @@ class AppRun:
         exe = self.exe()
         if exe is None:
             self.stage("launch", "fail", detail="the main program is not there")
+            return
+        if not self.bench.display_ok:
+            self.stage("launch", "not-run", detail="the virtual display or the tools that look at it are missing")
             return
         klass, wanted = exe.rsplit("/", 1)[1].lower(), self.app.get("window_title")
         try:
@@ -350,6 +354,9 @@ class AppRun:
             self.stage("check", "fail", detail="the main program is not there")
             return
         check = rt.CHECKS[self.app["check"]["kind"]]
+        if not self.bench.display_ok and self.app["check"]["kind"] in ("open-file-title", "putty-raw"):
+            self.stage("check", "not-run", detail="this check looks at a window, and there is no display")
+            return
         try:
             context = AppContext(self.store, self.world, self.app, self.kind, self.ident, exe,
                                  self.command(exe), self.evidence)
@@ -661,8 +668,7 @@ def phase_update(bench: Bench) -> dict:
                  prefix="keep-", existing=True)
     # 4. The naive way on layers: Wine updates a layer over the old base.
     if store.layer("h3-7zip-exe").is_dir():
-        layerlib.rmtree(store.layer("naive-7zip-exe"))
-        layerlib.command(["cp", "-a", str(store.layer("h3-7zip-exe")), str(store.layer("naive-7zip-exe"))])
+        store.copy_layer("h3-7zip-exe", "naive-7zip-exe")
         before = store.layer_disk("naive-7zip-exe")
         done = store.run("layer", "naive-7zip-exe", ["wine", "wineboot", "--update"], creating=True, timeout=1200,
                          label="update-naive-layer")
@@ -704,13 +710,7 @@ def phase_rebase(bench: Bench) -> dict:
                 entry["apps"][app] = {"status": "NOT RUN: no layer from the old Wine"}
                 continue
             try:
-                layerlib.rmtree(store.layer(ident))
-                started = time.monotonic()
-                copied = layerlib.command(["cp", "-a", str(source), str(store.layer(ident))], timeout=600)
-                meta = store.meta(ident)
-                meta["id"] = ident
-                store.save_meta(ident, meta)
-                copy_seconds = round(time.monotonic() - started, 2)
+                copied = store.copy_layer(f"h3-{app}", ident)
                 before = store.layer_disk(ident)
                 started = time.monotonic()
                 captured = store.capture(ident)
@@ -721,7 +721,7 @@ def phase_rebase(bench: Bench) -> dict:
                 (bench.evidence / "rebase" / f"{ident}.json").write_text(
                     json.dumps({"captured": captured, "files": files, "registry": registry}, indent=1))
                 entry["apps"][app] = {
-                    "copy_exit": copied.returncode, "copy_seconds": copy_seconds, "rebase_seconds": seconds,
+                    "copy_exit": copied["exit"], "copy_seconds": copied["seconds"], "rebase_seconds": seconds,
                     "capture_seconds": captured["seconds"], "files_seconds": files["seconds"],
                     "registry_seconds": registry["seconds"], "delta": captured["files"],
                     "conflicts": registry["conflicts"],
@@ -1237,6 +1237,11 @@ def main() -> int:
         # not need one still runs, and the launches say what happened.
         log(f"the virtual display could not be started: {error}")
         display = []
+    looked = rt.run(["xwininfo", "-display", rt.DISPLAY, "-root"], timeout=30)
+    bench.display_ok = looked.returncode == 0
+    if not bench.display_ok:
+        log(f"the virtual display cannot be looked at (xwininfo: {short(looked.stderr, 2)}); "
+            "launches and window checks are recorded as not run")
 
     def layered(bench: Bench) -> dict:
         store = bench.store()
