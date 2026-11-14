@@ -134,7 +134,7 @@ ntfs_target_bytes() {
 #   2. ntfsresize: moves clusters beyond the new end, then shrinks the
 #      filesystem and sets its dirty flag (Windows checks it at its next
 #      start). NOT safe against a power cut while clusters move: ntfsresize
-#      has no journal. Measured in tests/iso/ntfs-shrink-test.sh, not proven;
+#      has no journal. Measured in tests/iso/ntfs-shrink-test.py, not proven;
 #   3. the partition entry is made smaller (sfdisk -N, the start and
 #      everything else kept). A cut before this leaves a smaller volume in an
 #      unchanged partition, which Windows accepts;
@@ -155,7 +155,8 @@ ntfs_shrink() {
         return 1
     fi
     mark "shrink step=resize partition=${part} new=${new}"
-    if ! printf 'y\n' | ntfsresize --no-progress-bar --size "${new}" "${part}" > /dev/null 2>&1; then
+    # ntfsresize asks before it writes, and once more before it moves data.
+    if ! printf 'y\ny\n' | ntfsresize --no-progress-bar --size "${new}" "${part}" > /dev/null 2>&1; then
         s_code=TUR-INSTALL-SHRINK-007 s_why="ntfsresize failed while resizing. Do not use Windows' partition before Windows has checked it."
         mark "shrink result=failed code=${s_code}"
         return 1
