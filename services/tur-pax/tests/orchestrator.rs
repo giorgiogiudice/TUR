@@ -1259,6 +1259,8 @@ fn the_orchestrator_has_no_switch_for_the_trusted_path() {
         for forbidden in [
             "trusted_session_proven: true",
             "trusted_session_proven = true",
+            "approval_sheet_proven: true",
+            "approval_sheet_proven = true",
             "RepairSession {",
             "RepairSession::open",
             "StandingApproval {",
@@ -1293,6 +1295,7 @@ fn the_orchestrator_has_no_switch_for_the_trusted_path() {
             }
             .context();
             assert!(!context.trusted_session_proven);
+            assert!(!context.approval_sheet_proven);
             assert!(context.repair_session.is_none());
             assert!(context.standing_approvals.is_empty());
         }

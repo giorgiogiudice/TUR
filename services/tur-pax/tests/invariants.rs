@@ -662,6 +662,7 @@ fn contexts(
                                     presence,
                                     session_locked,
                                     trusted_session_proven,
+                                    approval_sheet_proven: false,
                                     repair_session: repair_session.clone(),
                                     standing_approvals: standing_approvals.clone(),
                                     model_flags_consequential,
@@ -1711,6 +1712,65 @@ fn losing_the_trusted_path_is_never_more_permissive() {
             }
         }
     }
+}
+
+/// Addendum section 23, item 1: the approval sheet is the lower of the two
+/// levels. With it and without the trusted session, the only thing that
+/// changes is that an attended class 2 action that is not a privileged
+/// request can be asked; nothing is allowed above class 1, nothing is
+/// offered for authentication, and nothing is less strict than with the
+/// trusted session alone.
+#[test]
+fn the_approval_sheet_lets_an_attended_class_2_action_be_asked_and_nothing_more() {
+    let space = Space::new();
+    let mut asked = 0_usize;
+    for case in &space.cases {
+        for neither in space
+            .contexts_for(case)
+            .iter()
+            .filter(|context| !context.trusted_session_proven)
+        {
+            let sheet = Context {
+                approval_sheet_proven: true,
+                ..neither.clone()
+            };
+            let trusted = Context {
+                trusted_session_proven: true,
+                ..neither.clone()
+            };
+            for policy in &space.policies {
+                let without = decide(&case.action, neither, policy, NOW);
+                let with = decide(&case.action, &sheet, policy, NOW);
+                let with_trusted = decide(&case.action, &trusted, policy, NOW);
+                let explain = format!(
+                    "{}\nwith the approval sheet => {with:?}",
+                    describe(case, neither, policy, &without)
+                );
+                assert!(
+                    !(with.is_allow() && with.class() >= ActionClass::Consequential),
+                    "{explain}"
+                );
+                assert!(
+                    !matches!(with.verdict(), Verdict::Authenticate { .. }),
+                    "{explain}"
+                );
+                assert!(
+                    with.strictness() >= with_trusted.strictness(),
+                    "{explain}\nwith the trusted session => {with_trusted:?}"
+                );
+                assert!(with.strictness() <= without.strictness(), "{explain}");
+                let attended_class_2 = with.class() == ActionClass::Consequential
+                    && neither.presence == Presence::Attended
+                    && case.privileged.is_none();
+                if !attended_class_2 {
+                    assert_eq!(with, without, "{explain}");
+                } else if with != without {
+                    asked += 1;
+                }
+            }
+        }
+    }
+    assert!(asked > 0);
 }
 
 #[test]

@@ -157,6 +157,31 @@ fn every_class_is_exercised_with_the_trusted_path() {
 }
 
 #[test]
+fn the_approval_sheet_alone_asks_an_attended_class_2_action_and_nothing_more() {
+    // Addendum A section 23, item 1: the lower of the two levels.
+    let expected: [(&str, &[&str], &str, i32); 5] = [
+        (OBSERVE, &[], "allow", EXIT_ALLOW),
+        (REVERSIBLE, &[], "allow", EXIT_ALLOW),
+        (CONSEQUENTIAL, &[], "ask", EXIT_ASK),
+        (CONSEQUENTIAL, &["--unattended"], "refuse", EXIT_REFUSE),
+        (SYSTEM_CRITICAL, &[], "refuse", EXIT_REFUSE),
+    ];
+    for (tool, more, decision, exit) in expected {
+        let mut flags = vec!["--approval-sheet-proven"];
+        flags.extend_from_slice(more);
+        let (status, document) = check(tool, &flags);
+        assert_eq!(status, exit, "{tool} {more:?}");
+        assert_eq!(text(&document, "decision"), decision, "{tool} {more:?}");
+        if decision == "refuse" {
+            assert_eq!(
+                document["error_code"], "TUR-AI-POLICY-006",
+                "{tool} {more:?}"
+            );
+        }
+    }
+}
+
+#[test]
 fn without_the_trusted_path_only_classes_0_and_1_run() {
     let expected = [
         (OBSERVE, "allow", EXIT_ALLOW, Value::Null),

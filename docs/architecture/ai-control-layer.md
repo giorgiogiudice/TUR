@@ -321,6 +321,16 @@ If any of these cannot be met with the compositor as shipped, the work to add it
 is proposed upstream first. Until all five hold, the assistant is limited to
 classes 0 and 1.
 
+*Amended by section 23, item 1 (and section 19, item 2).* There are two levels
+of confirmation. **The approval sheet**, on the desktop and protected by TUR's
+own code, approves an attended class 2 action. **The trusted screen**, a
+separate session outside the desktop, is where class 3 is authenticated, a
+repair session is opened and anything that loosens the assistant's limits is
+confirmed, standing approvals included. Each level is an input of the policy
+engine that is false until that path exists and is proven
+([agent-policy.md](agent-policy.md), section 2.3); until then the assistant
+performs nothing above class 1.
+
 ## 7. Threat model
 
 | Threat | Example | Mitigation |
@@ -843,8 +853,9 @@ an earlier section says otherwise, this section governs.
 The built-in lists of sensitive and excluded applications and of protected units
 were checked against upstream sources and Fedora package file lists on
 12 November 2026 ([agent-policy.md](agent-policy.md), section 2.5). Fourteen
-identifiers could not be verified and are marked there. None has been checked on
-the TUR image.
+identifiers could not be verified and are marked there. On 13 November 2026 the
+lists were held against the TUR image and corrected (same section); the
+fourteen are not installed there and stay unverified.
 
 ## 23. The owner's decisions on approval and stopping (12 November 2026)
 
