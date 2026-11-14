@@ -102,7 +102,7 @@ Get-ChildItem C:\dualrun\docs -File | ForEach-Object {
 Remove-Item C:\Users\Public\Documents -Recurse -Force
 Set-Content C:\dualrun\RANSOM-NOTE.txt 'all your files'
 $big = New-Object byte[] (64MB); (New-Object Random).NextBytes($big)
-1..4 | ForEach-Object { [IO.File]::WriteAllBytes("C:\dualrun\junk$_.bin", $big) }
+1..4 | ForEach-Object { [IO.File]::WriteAllBytes("C:\dualrun\junk$($_).bin", $big) }
 'destroyed'
 '''
 
@@ -115,7 +115,7 @@ New-Item -ItemType Directory -Force C:\dualrun\load | Out-Null
 while ($true) {
   $i++
   [IO.File]::WriteAllBytes("C:\dualrun\load\big$($i % 40).bin", $buf)
-  1..50 | ForEach-Object { Set-Content "C:\dualrun\load\small-$i-$_.txt" "x$i" }
+  1..50 | ForEach-Object { Set-Content "C:\dualrun\load\small-$i-$($_).txt" "x$i" }
   if ($i % 3 -eq 0) { Get-ChildItem C:\dualrun\load -Filter 'small-*' | Select-Object -First 80 | Remove-Item -Force }
   New-ItemProperty -Path 'HKCU:\Software\TurDualrun' -Name "v$($i % 20)" -Value $i -Force | Out-Null
 }

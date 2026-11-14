@@ -42,6 +42,7 @@ from dualrunlib.blockio import Dev  # noqa: E402
 
 LAUNCHER = str(HERE / "tur-dualrun")
 MIB = 1024 * 1024
+os.environ["MTOOLS_SKIP_CHECK"] = "1"      # mtools' geometry check does not apply to partitions
 RESULTS: list[dict] = []
 FACTS: dict = {}
 

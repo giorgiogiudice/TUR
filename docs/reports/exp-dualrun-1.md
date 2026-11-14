@@ -1035,9 +1035,11 @@ Nothing was built whose purpose is to defeat licensing. The questions:
 
 ## 12. Effort
 
-One session of design and writing; no CI iteration finished. About 4,000
-lines: the launcher and its library (about 1,500), the synthetic tests
-(about 500), the experiment (about 1,500), the guest side (about 300).
+One session of design and writing; no CI iteration finished. About 6,100
+lines: the launcher and its library (about 2,400), the synthetic tests
+(about 640), the experiment with its guest scripts, the seamless-desktop
+part and the summary (about 2,400), the workflow and CI helpers (about
+500), the guest side (about 250), and the registration.
 
 ## 13. Limits, and what was not run
 

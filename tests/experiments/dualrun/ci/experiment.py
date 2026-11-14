@@ -53,6 +53,7 @@ from dualrunlib.qmp import QmpError  # noqa: E402
 from winvm import Agent, AgentError, Machine  # noqa: E402
 
 LAUNCHER = str(HERE / "tur-dualrun")
+os.environ["MTOOLS_SKIP_CHECK"] = "1"      # mtools' geometry check does not apply to partitions
 MIB = 1024 * 1024
 GIB = 1024 * MIB
 
@@ -885,7 +886,7 @@ class Experiment:
                     script = f"Set-Content C:\\dualrun\\marker.txt '{marker}'; Add-Content C:\\dualrun\\docs\\doc01.txt '{marker}'"
                     if big_mb:
                         script += (f"; $b = New-Object byte[] (8MB); (New-Object Random).NextBytes($b); "
-                                   f"1..{big_mb // 8} | ForEach-Object {{ [IO.File]::WriteAllBytes(\"C:\\dualrun\\keep$_.bin\", $b) }}")
+                                   f"1..{big_mb // 8} | ForEach-Object {{ [IO.File]::WriteAllBytes(\"C:\\dualrun\\keep$($_).bin\", $b) }}")
                     g.machine.agent.ps(script + "; 'ok'", timeout=600)
                     result["written"] = True
                 except AgentError as error:
@@ -960,7 +961,7 @@ class Experiment:
                 original = found[0] if found else original
             garbage = self.vm / "garbage"
             garbage.write_bytes(b"this is not a boot configuration\n" * 300)
-            sh("sudo", "mcopy", "-o", "-i", esp, str(garbage), "::EFI/Microsoft/Boot/BCD")
+            sh("sudo", "env", "MTOOLS_SKIP_CHECK=1", "mcopy", "-o", "-i", esp, str(garbage), "::EFI/Microsoft/Boot/BCD")
             sh("sudo", "blockdev", "--flushbufs", esp, check=False)
         finally:
             sh("sudo", "losetup", "-d", loop, check=False)
@@ -970,7 +971,7 @@ class Experiment:
         loop = sh("sudo", "losetup", "--find", "--show", "--partscan", "--direct-io=on", str(self.disk)).stdout.strip()
         sh("sudo", "udevadm", "settle", check=False)
         try:
-            sh("sudo", "mcopy", "-o", "-i", f"{loop}p1", str(original), "::EFI/Microsoft/Boot/BCD")
+            sh("sudo", "env", "MTOOLS_SKIP_CHECK=1", "mcopy", "-o", "-i", f"{loop}p1", str(original), "::EFI/Microsoft/Boot/BCD")
             sh("sudo", "blockdev", "--flushbufs", f"{loop}p1", check=False)
             five["restored_from_outside"] = True
         except RuntimeError as error:

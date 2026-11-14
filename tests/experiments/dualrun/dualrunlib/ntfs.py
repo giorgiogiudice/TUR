@@ -273,9 +273,18 @@ class Ntfs:
                 if a.start_vcn != 0 or block_size not in (512, 1024, 2048, 4096, 8192, 16384, 32768, 65536):
                     raise NtfsError("the root directory index is in a form this program does not read")
                 total = sum(count for count, _ in a.runs) * self.cluster
-                for offset in range(0, total - block_size + 1, block_size):
+                # Which index blocks are in use: the directory's own bitmap. A block that is
+                # not in use may hold anything; one that is in use must read correctly.
+                bitmaps = [b for b in attrs if b.type == 0xB0 and b.name == "$I30"]
+                bitmap = self.read_attribute(bitmaps[0], 0, bitmaps[0].real_size) if bitmaps else None
+                for number, offset in enumerate(range(0, total - block_size + 1, block_size)):
+                    if bitmap is not None:
+                        if number // 8 >= len(bitmap) or not bitmap[number // 8] >> (number % 8) & 1:
+                            continue
                     raw = bytearray(self.read_runs(a.runs, offset, block_size))
                     if raw[:4] != b"INDX":
+                        if bitmap is not None:
+                            raise NtfsError("an index block of the root directory that is in use is not readable")
                         continue
                     try:
                         walk(bytes(_fixup(raw, "index block")), 24)
