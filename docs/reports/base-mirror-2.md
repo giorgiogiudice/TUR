@@ -224,6 +224,8 @@ KNOWN LIMITATIONS
 NEXT SAFE ACTION
 - Owner: decide whether the mirror and builder packages may stay public
   (package settings), and the source-offer question above.
-- Merge pull request 107 and this one in either order; after 107, its
-  local-ai comment "this container image has no mirror" is out of date.
+- Pull request 107 merged first; its local-ai comment ("this container
+  image has no mirror") is corrected here. Main is merged in, with the
+  event-driven release of pull request 115; docs/architecture/publishing.md,
+  section 3, describes it.
 ```

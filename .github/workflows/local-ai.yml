@@ -48,7 +48,8 @@ env:
   # quay.io/fedora/fedora:45, read on 2026-11-13. The tag is a manifest list.
   # The digest read on 2026-11-12 (sha256:fa773d10…) was gone from quay.io a
   # day later ("manifest unknown"), as image/README.md describes for the
-  # base; this container image has no mirror (docs/reports/TUR-010.md).
+  # base. Since base-mirror-2 this image has a mirror too, and the jobs pull
+  # it from there (FEDORA_IMAGE_PULL).
   FEDORA_IMAGE: quay.io/fedora/fedora:45@sha256:e15959f36d52307f176f8c068009f6f1451c3b238b37a1f03e56dbfa4526e8b1
   # The engine as Fedora 45 packages it (f45 and f45-updates, 2026-11-12).
   LLAMA_CPP_RPM: llama-cpp-b9840-2.fc45

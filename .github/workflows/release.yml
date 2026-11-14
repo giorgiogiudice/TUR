@@ -579,7 +579,10 @@ jobs:
         if: ${{ !cancelled() && steps.rechunk.outcome == 'success' }}
         run: |
           mkdir -p "$WORK/registry"
-          docker run -d --name tur-registry -p 5000:5000 -v "$WORK/registry:/var/lib/registry" "$REGISTRY_IMAGE_PULL"
+          # The commit being released is checked out, and its copy of the
+          # action may be older than this file and set no REGISTRY_IMAGE_PULL.
+          docker run -d --name tur-registry -p 5000:5000 -v "$WORK/registry:/var/lib/registry" \
+            "${REGISTRY_IMAGE_PULL:-$REGISTRY_IMAGE}"
           for _ in $(seq 30); do curl -sf http://localhost:5000/v2/ > /dev/null && break; sleep 1; done
           skopeo copy --quiet --preserve-digests --dest-tls-verify=false \
             "oci:$WORK/published:latest" "docker://$LOCAL:$BUILD_ID"
