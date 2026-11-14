@@ -61,7 +61,8 @@ built to be. It is an ambitious project, and it is at the beginning.
 TUR is betting on five things no desktop operating system does today. Each one
 is being built in the open, and each claim below links to the test that shows
 it. The full story, with what is *not* proven yet, is in
-[Goals and breakthroughs](docs/breakthroughs.md).
+[Goals and breakthroughs](docs/breakthroughs.md). What is being tried next,
+as hypotheses that may fail, is on [the frontier page](docs/frontier.md).
 
 | The bet | Why it matters | Shown so far |
 |---|---|---|
@@ -319,6 +320,7 @@ the [AI control layer design](docs/architecture/ai-control-layer.md) and the
 - [Architecture specification](docs/architecture/specification.md) — the project baseline
 - [Decision records](docs/adr/README.md) — what was decided, and why
 - [Goals and breakthroughs](docs/breakthroughs.md) — the five bets, and what has been shown
+- [The frontier](docs/frontier.md) — hypotheses under test, and why TUR does not need a new kernel
 - [P@x: the AI control layer](docs/architecture/ai-control-layer.md) and its [policy engine](docs/architecture/agent-policy.md)
 - [P@x operating applications](docs/architecture/pax-accessibility.md) · [local AI](docs/architecture/local-ai.md)
 - [Compatibility autopilot](docs/architecture/compat-autopilot.md) · [Windows guest](docs/architecture/windows-guest.md) · [Android runtime](docs/architecture/android-runtime.md)
