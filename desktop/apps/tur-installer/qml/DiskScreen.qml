@@ -21,6 +21,17 @@ WizardScreen {
     property string mode: "erase"
     // Beside Windows: which system starts by default, "tur" or "windows".
     property string defaultSystem: "tur"
+    // Shrinking Windows: the room for TUR in GiB.
+    property int turGiB: 0
+
+    readonly property int turMinGiB: Words.shrinkPossible(screen.chosenDisk)
+                                     ? Math.ceil(Number(screen.chosenDisk.shrink.tur_min || 0) / 1073741824) : 0
+    readonly property int turMaxGiB: Words.shrinkPossible(screen.chosenDisk)
+                                     ? Math.floor(Number(screen.chosenDisk.shrink.tur_max || 0) / 1073741824) : 0
+    readonly property bool sizeOk: screen.mode !== "shrink"
+                                   || (screen.turGiB >= screen.turMinGiB && screen.turGiB <= screen.turMaxGiB && screen.turMinGiB > 0)
+    readonly property bool keepsWindows: (screen.mode === "beside" && Words.besidePossible(screen.chosenDisk))
+                                         || (screen.mode === "shrink" && Words.shrinkPossible(screen.chosenDisk))
 
     readonly property var chosenDisk: {
         for (const disk of screen.engine.disks) {
@@ -33,6 +44,7 @@ WizardScreen {
     signal diskChosen(var disk)
     signal modeChosen(string mode)
     signal defaultChosen(string system)
+    signal turSizeChosen(int gib)
     signal backRequested()
     signal continueRequested()
 
@@ -181,6 +193,73 @@ WizardScreen {
                     Transcript.write("mode-chosen mode=beside")
                 }
             }
+
+            Kit.ListRow {
+                objectName: "shrinkWindowsOption"
+                Layout.fillWidth: true
+                text: qsTr("Make room by shrinking Windows")
+                subtitle: Words.shrinkPossible(screen.chosenDisk)
+                          ? qsTr("Keeps Windows' files. Back up first.")
+                          : qsTr("Not available on this disk.")
+                enabled: Words.shrinkPossible(screen.chosenDisk)
+                selected: screen.mode === "shrink" && Words.shrinkPossible(screen.chosenDisk)
+                focusPolicy: Qt.StrongFocus
+                onClicked: {
+                    screen.modeChosen("shrink")
+                    if (screen.turGiB < screen.turMinGiB || screen.turGiB > screen.turMaxGiB)
+                        screen.turSizeChosen(screen.turMinGiB)
+                    Transcript.write("mode-chosen mode=shrink")
+                }
+            }
+        }
+    }
+
+    // --- shrinking Windows: how much room ------------------------------------------
+    Kit.Card {
+        Layout.fillWidth: true
+        visible: screen.mode === "shrink" && Words.shrinkPossible(screen.chosenDisk)
+        padding: Kit.Theme.spaceRelated
+
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: Kit.Theme.spaceGrid
+
+            Kit.Label {
+                Layout.fillWidth: true
+                text: qsTr("Windows' partition is %1. It can give TUR between %2 GiB and %3 GiB; %4 stay free for Windows.")
+                    .arg(Words.size(Number(screen.chosenDisk !== null && screen.chosenDisk.shrink ? screen.chosenDisk.shrink.size || 0 : 0)))
+                    .arg(screen.turMinGiB).arg(screen.turMaxGiB).arg(Words.size(17179869184))
+                wrapMode: Text.Wrap
+            }
+
+            Kit.TextField {
+                id: sizeField
+
+                objectName: "turSizeField"
+                Layout.fillWidth: true
+                Layout.maximumWidth: 440
+                label: qsTr("Room for TUR, in GiB")
+                text: screen.turGiB > 0 ? String(screen.turGiB) : ""
+                inputMethodHints: Qt.ImhDigitsOnly
+                validator: IntValidator {
+                    bottom: 1
+                    top: 100000
+                }
+                helperText: qsTr("From %1 to %2.").arg(screen.turMinGiB).arg(screen.turMaxGiB)
+                errorText: screen.sizeOk ? "" : qsTr("Type a whole number from %1 to %2.").arg(screen.turMinGiB).arg(screen.turMaxGiB)
+                onTextEdited: {
+                    screen.turSizeChosen(parseInt(sizeField.text) || 0)
+                    Transcript.write("size-chosen gib=" + (parseInt(sizeField.text) || 0))
+                }
+            }
+
+            Kit.Label {
+                objectName: "shrinkBackupNote"
+                Layout.fillWidth: true
+                text: qsTr("A backup of everything on this disk is strongly recommended before Windows is shrunk: if the power fails while Windows' data is moved, Windows' partition can be damaged.")
+                kind: Kit.Label.Strong
+                wrapMode: Text.Wrap
+            }
         }
     }
 
@@ -188,14 +267,14 @@ WizardScreen {
     Kit.Label {
         Layout.fillWidth: true
         Layout.topMargin: Kit.Theme.spaceRelated
-        visible: screen.mode === "beside" && Words.besidePossible(screen.chosenDisk)
+        visible: screen.keepsWindows
         text: qsTr("When you switch the computer on")
         kind: Kit.Label.Heading
     }
 
     Kit.Card {
         Layout.fillWidth: true
-        visible: screen.mode === "beside" && Words.besidePossible(screen.chosenDisk)
+        visible: screen.keepsWindows
         padding: Kit.Theme.spaceRelated
 
         ColumnLayout {
@@ -233,7 +312,7 @@ WizardScreen {
     Kit.Label {
         objectName: "defaultExplanation"
         Layout.fillWidth: true
-        visible: screen.mode === "beside" && Words.besidePossible(screen.chosenDisk)
+        visible: screen.keepsWindows
         text: qsTr("You can change this later in TUR. To start Windows from TUR once, use “Restart into Windows”: it starts Windows the way the computer itself does, so BitLocker does not ask for its recovery key.")
         tone: Kit.Label.Secondary
         paragraph: true
@@ -244,9 +323,23 @@ WizardScreen {
         objectName: "besideExplanation"
         Layout.fillWidth: true
         visible: screen.chosenDisk !== null
-        text: Words.besidePossible(screen.chosenDisk)
-              ? qsTr("Beside Windows, TUR goes into the free space you made in Windows. Windows' partitions and files stay as they are; TUR adds its start-up files to Windows' EFI system partition. When the computer starts, TUR's menu offers TUR and Windows.")
-              : Words.besideWhyNot(screen.chosenDisk)
+        text: screen.mode === "shrink"
+              ? qsTr("The installer shrinks Windows' partition with ntfsresize, then puts TUR into the space it frees, as beside Windows. Windows checks its partition the next time it starts.")
+              : Words.besidePossible(screen.chosenDisk)
+                ? qsTr("Beside Windows, TUR goes into the free space you made in Windows. Windows' partitions and files stay as they are; TUR adds its start-up files to Windows' EFI system partition. When the computer starts, TUR's menu offers TUR and Windows.")
+                : Words.besideWhyNot(screen.chosenDisk)
+        tone: Kit.Label.Secondary
+        paragraph: true
+        wrapMode: Text.Wrap
+    }
+
+    // Why Windows cannot be shrunk from here, and what to do, when it cannot.
+    Kit.Label {
+        objectName: "shrinkExplanation"
+        Layout.fillWidth: true
+        visible: screen.chosenDisk !== null && screen.chosenDisk.windows === true && !Words.shrinkPossible(screen.chosenDisk)
+        text: screen.chosenDisk !== null && screen.chosenDisk.windows === true
+              ? qsTr("Shrinking Windows from here is not possible. %1").arg(Words.shrinkWhyNot(screen.chosenDisk)) : ""
         tone: Kit.Label.Secondary
         paragraph: true
         wrapMode: Text.Wrap
@@ -285,7 +378,7 @@ WizardScreen {
             Layout.minimumWidth: implicitWidth
             text: qsTr("Continue")
             kind: Kit.Button.Primary
-            enabled: screen.chosenDisk !== null && screen.engine.disksState === "done"
+            enabled: screen.chosenDisk !== null && screen.engine.disksState === "done" && screen.sizeOk
             Keys.onReturnPressed: continueButton.clicked()
             Keys.onEnterPressed: continueButton.clicked()
             onClicked: screen.continueRequested()

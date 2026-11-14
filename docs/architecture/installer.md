@@ -60,7 +60,18 @@ ESP and a "TUR" firmware entry first in the boot order), puts Windows'
 ESP file Windows had is unchanged, and sets the default system with the
 image's `tur-dualboot default` (which the person also uses later, with
 `restart-windows` for "Restart into Windows" through the firmware's
-BootNext). Its state lines start `TUR-INSTALLER: beside `. Never `--replace=alongside`: it deletes the ESP's `EFI` directory.
+BootNext). Its state lines start `TUR-INSTALLER: beside `.
+
+**Shrinking Windows to make room** (issue 64, step 2; ADR-0029). For a
+Windows disk whose ESP checks pass, `disks` also lists `"shrink":
+{possible, code, why, partition, size, ntfs_min, tur_min, tur_max,
+phrase}` (`shrink_look`: the largest "Microsoft basic data" partition
+holding NTFS, `ntfs_look` of `ntfs-shrink.sh`, 16 GiB kept free for
+Windows). `install --mode shrink --tur-size B --default ... --phrase
+"SHRINK ..."` checks again, shrinks the partition (`ntfs_shrink`: dry run,
+filesystem, partition entry, table compared) and runs `run_beside` in the
+space freed. Refusals `TUR-INSTALL-SHRINK-001` to `-008`. The medium
+carries ntfsprogs for it; the image does not. Never `--replace=alongside`: it deletes the ESP's `EFI` directory.
 
 The installation log (the engine's log, bootc's output, the graphical
 installer's state lines) is copied to `/var/log/tur-installer/<session>/`

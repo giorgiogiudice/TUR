@@ -30,10 +30,21 @@ WizardScreen {
     property string mode: "erase"
     // Beside Windows: "tur" or "windows", the system started by default.
     property string defaultSystem: "tur"
+    // Shrinking Windows: the room for TUR in GiB.
+    property int turGiB: 0
+    readonly property bool shrink: screen.mode === "shrink" && Words.shrinkPossible(screen.disk)
 
-    readonly property bool beside: screen.mode === "beside" && Words.besidePossible(screen.disk)
-    readonly property var room: screen.beside ? screen.disk.beside : ({})
-    readonly property string phrase: screen.beside ? String(screen.room.phrase || "") : String(screen.disk.phrase || "")
+    readonly property bool beside: (screen.mode === "beside" && Words.besidePossible(screen.disk))
+                                   || (screen.mode === "shrink" && Words.shrinkPossible(screen.disk))
+    readonly property var room: screen.mode === "beside" && screen.beside ? screen.disk.beside : ({
+        free_size: screen.turGiB * 1073741824,
+        before: screen.disk.shrink ? String(screen.disk.shrink.partition || "") : "",
+        esp: screen.disk.beside ? String(screen.disk.beside.esp || "") : "",
+        esp_needed: screen.disk.beside ? Number(screen.disk.beside.esp_needed || 0) : 0,
+        esp_free: screen.disk.beside ? Number(screen.disk.beside.esp_free || 0) : 0
+    })
+    readonly property string phrase: screen.shrink ? String(screen.disk.shrink.phrase || "")
+                                     : screen.beside ? String(screen.room.phrase || "") : String(screen.disk.phrase || "")
     readonly property bool matches: screen.phrase.length > 0 && field.text === screen.phrase
     readonly property bool windows: screen.beside ? screen.disk.bitlocker === true
                                                   : screen.disk.windows === true || screen.disk.bitlocker === true
@@ -54,7 +65,7 @@ WizardScreen {
         Transcript.write("confirm-shown name=" + screen.disk.name + " by_id=" + screen.disk.by_id + " phrase=\""
                          + screen.phrase + "\" windows_warning=" + (screen.windows ? "yes" : "no")
                          + " holds_data=" + (Words.holdsData(screen.disk) ? "yes" : "no")
-                         + " mode=" + (screen.beside ? "beside" : "erase")
+                         + " mode=" + (screen.shrink ? "shrink" : screen.beside ? "beside" : "erase")
                          + (screen.beside ? " default=" + screen.defaultSystem : ""))
     }
 
@@ -77,7 +88,8 @@ WizardScreen {
 
             Kit.Label {
                 Layout.fillWidth: true
-                text: screen.beside ? qsTr("Install TUR beside Windows") : qsTr("Erase this disk and install TUR")
+                text: screen.shrink ? qsTr("Shrink Windows and install TUR beside it")
+                      : screen.beside ? qsTr("Install TUR beside Windows") : qsTr("Erase this disk and install TUR")
                 kind: Kit.Label.Title
                 tone: Kit.Label.Negative
                 wrapMode: Text.Wrap
@@ -179,8 +191,9 @@ WizardScreen {
                     Layout.fillWidth: true
                     diskSize: Math.max(1, screen.diskSize)
                     after: true
-                    partitions: screen.beside ? (screen.disk.partitions || []) : []
-                    besideRegion: screen.beside ? screen.room : null
+                    partitions: screen.beside && !screen.shrink ? (screen.disk.partitions || []) : []
+                    besideRegion: screen.beside && !screen.shrink ? screen.room : null
+                    visible: !screen.shrink
                 }
 
                 Kit.Label {
@@ -210,6 +223,17 @@ WizardScreen {
                     text: qsTr("A new partition table, written by bootc, the installer TUR's image carries. Not encrypted: encryption is not available in this version.")
                     kind: Kit.Label.Small
                     tone: Kit.Label.Secondary
+                    wrapMode: Text.Wrap
+                }
+
+                Kit.Label {
+                    objectName: "shrinkWindowsLine"
+                    Layout.fillWidth: true
+                    visible: screen.shrink
+                    text: qsTr("%1 · Windows' partition, shrunk from %2 to about %3 with ntfsresize. Its files are moved inside it, not deleted. Windows checks it the next time it starts.")
+                        .arg(String(screen.room.before || ""))
+                        .arg(Words.size(screen.disk.shrink ? Number(screen.disk.shrink.size || 0) : 0))
+                        .arg(Words.size(Math.max(0, (screen.disk.shrink ? Number(screen.disk.shrink.size || 0) : 0) - screen.turGiB * 1073741824)))
                     wrapMode: Text.Wrap
                 }
 
@@ -265,11 +289,24 @@ WizardScreen {
                     tone: Kit.Label.Secondary
                 }
 
+                Kit.Message {
+                    objectName: "shrinkBackupWarning"
+                    Layout.fillWidth: true
+                    visible: screen.shrink
+                    severity: Kit.Message.Warning
+                    title: qsTr("Back up first. A backup of everything on this disk is strongly recommended.")
+                    reason: qsTr("Shrinking moves Windows' data inside its partition. If the power fails or the disk fails while it moves, Windows' partition can be damaged. The installer refuses a volume that Windows has not shut down fully, but it was tested only on volumes made by Linux tools, not on a real Windows volume.")
+                    whatToDo: qsTr("Copy what you cannot lose to another disk before you go on. Keep the computer on mains power.")
+                    supportBundleAvailable: false
+                }
+
                 Kit.Label {
                     objectName: "besideNothingDestroyed"
                     Layout.fillWidth: true
                     visible: screen.beside
-                    text: qsTr("Nothing that is on the disk now. No partition is deleted, moved or shrunk, and Windows' partitions are not written to.")
+                    text: screen.shrink
+                          ? qsTr("No file is deleted. Windows' partition is made smaller; nothing else of Windows is written to.")
+                          : qsTr("Nothing that is on the disk now. No partition is deleted, moved or shrunk, and Windows' partitions are not written to.")
                     wrapMode: Text.Wrap
                 }
 
@@ -384,14 +421,16 @@ WizardScreen {
 
                     objectName: "eraseButton"
                     Layout.minimumWidth: implicitWidth
-                    text: screen.beside ? qsTr("Install beside Windows") : qsTr("Erase disk and install")
+                    text: screen.shrink ? qsTr("Shrink Windows and install")
+                          : screen.beside ? qsTr("Install beside Windows") : qsTr("Erase disk and install")
                     kind: Kit.Button.Destructive
                     enabled: screen.matches
                     onEnabledChanged: Transcript.write("erase-button enabled=" + (eraseButton.enabled ? "yes" : "no"))
                     onClicked: {
                         if (!screen.matches)
                             return
-                        Transcript.write("erase-confirmed name=" + screen.disk.name + " mode=" + (screen.beside ? "beside" : "erase"))
+                        Transcript.write("erase-confirmed name=" + screen.disk.name + " mode="
+                                         + (screen.shrink ? "shrink" : screen.beside ? "beside" : "erase"))
                         screen.eraseRequested(field.text)
                     }
                 }

@@ -142,6 +142,36 @@ QtObject {
         }
     }
 
+    // Shrinking Windows to make room (issue 64, step 2).
+    function shrinkPossible(disk: var): bool {
+        return disk !== null && disk !== undefined && disk.shrink !== undefined && disk.shrink !== null
+               && disk.shrink.possible === true
+    }
+
+    // Why Windows cannot be shrunk, in words, with what to do.
+    function shrinkWhyNot(disk: var): string {
+        if (disk === null || disk === undefined || !disk.windows)
+            return qsTr("Only on a disk that holds Windows.")
+        const room = disk.shrink || {}
+        switch (String(room.code || "")) {
+        case "":
+            return room.possible === true ? "" : qsTr("Not available on this disk.")
+        case "TUR-INSTALL-SHRINK-001":
+            return qsTr("Windows' partition is encrypted with BitLocker, which the installer cannot shrink. Shrink it from Windows (Disk Management, Shrink Volume), or turn BitLocker off in Windows first.")
+        case "TUR-INSTALL-SHRINK-003":
+            return qsTr("Windows is hibernated, or was shut down with Fast Startup. Start Windows, then shut it down fully: hold Shift while you choose Shut down. Or turn off Fast Startup in Windows' power options.")
+        case "TUR-INSTALL-SHRINK-004":
+            return qsTr("Windows has marked its partition to be checked. Start Windows, let it check the disk, then shut it down fully (hold Shift while you choose Shut down).")
+        case "TUR-INSTALL-SHRINK-005":
+            return qsTr("Windows' partition is too full to give TUR %1 and keep room for Windows. Delete or move files in Windows, or install TUR on another disk.")
+                .arg(words.size(room.tur_min || 26843545600))
+        default:
+            if (String(room.code || "").startsWith("TUR-INSTALL-BESIDE-"))
+                return words.besideWhyNot(disk)
+            return String(room.why || "")
+        }
+    }
+
     function holdsData(disk: var): bool {
         return (disk.partition_count || 0) > 0
     }

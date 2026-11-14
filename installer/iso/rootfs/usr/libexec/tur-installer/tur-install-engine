@@ -146,7 +146,7 @@ partition_kind() {
 }
 
 do_disks() {
-    local i part parts tree phrase print beside
+    local i part parts tree phrase print beside shrink
     mark "engine disks"
     scan_disks
     dump_inventory
@@ -165,10 +165,12 @@ do_disks() {
         # Installing into the free space beside Windows (ADR-0029): offered
         # for a disk that holds Windows, with what was found, or why not.
         beside=null
+        shrink=null
         if [ "${d_status[i]}" = ok ] && [ "${d_windows[i]}" = yes ]; then
+            shrink="{\"possible\":$([ "${d_shrink[i]}" = yes ] && echo true || echo false),\"code\":$(js "${d_scode[i]}"),\"why\":$(js "${d_swhy[i]}"),\"partition\":$(js "${d_spart[i]##*/}"),\"size\":$(number "${d_ssize[i]}"),\"ntfs_min\":$(number "${d_sntfsmin[i]}"),\"tur_min\":$(number "${d_sturmin[i]}"),\"tur_max\":$(number "${d_sturmax[i]}"),\"phrase\":$(js "$([ "${d_shrink[i]}" = yes ] && shrink_phrase_for "${i}")")}"
             beside="{\"possible\":$([ "${d_beside[i]}" = yes ] && echo true || echo false),\"code\":$(js "${d_bcode[i]}"),\"why\":$(js "${d_bwhy[i]}"),\"free_start\":$(number "${d_bstart[i]}"),\"free_size\":$(number "${d_bsize[i]}"),\"before\":$(js "${d_bbefore[i]}"),\"after\":$(js "${d_bafter[i]}"),\"esp\":$(js "${d_besp[i]##*/}"),\"esp_size\":$(number "${d_bespsize[i]}"),\"esp_free\":$(number "${d_bespfree[i]}"),\"esp_needed\":$(number "${d_bneed[i]}"),\"min_bytes\":${BESIDE_MIN_BYTES},\"phrase\":$(js "$([ "${d_beside[i]}" = yes ] && beside_phrase_for "${i}")")}"
         fi
-        tree="{\"event\":\"disk\",\"name\":$(js "${d_name[i]}"),\"model\":$(js "${d_model[i]}"),\"serial\":$(js "${d_serial[i]}"),\"serial_end\":$(js "$(serial_end "${i}")"),\"wwn\":$(js "${d_wwn[i]}"),\"size\":${d_size[i]:-0},\"transport\":$(js "${d_tran[i]}"),\"by_id\":$(js "${d_byid[i]}"),\"status\":$(js "${d_status[i]}"),\"code\":$(js "${d_code[i]}"),\"why\":$(js "${d_why[i]}"),\"holds\":$(js "${d_holds[i]}"),\"words\":$(js "${d_words[i]}"),\"windows\":$([ "${d_windows[i]}" = yes ] && echo true || echo false),\"bitlocker\":$([ "${d_bitlocker[i]}" = yes ] && echo true || echo false),\"linux\":${d_linux[i]:-0},\"ntfs\":${d_ntfs[i]:-0},\"partition_count\":${d_parts[i]:-0},\"phrase\":$(js "${phrase}"),\"fingerprint\":$(js "${print}"),\"beside\":${beside},\"partitions\":[${parts}]}"
+        tree="{\"event\":\"disk\",\"name\":$(js "${d_name[i]}"),\"model\":$(js "${d_model[i]}"),\"serial\":$(js "${d_serial[i]}"),\"serial_end\":$(js "$(serial_end "${i}")"),\"wwn\":$(js "${d_wwn[i]}"),\"size\":${d_size[i]:-0},\"transport\":$(js "${d_tran[i]}"),\"by_id\":$(js "${d_byid[i]}"),\"status\":$(js "${d_status[i]}"),\"code\":$(js "${d_code[i]}"),\"why\":$(js "${d_why[i]}"),\"holds\":$(js "${d_holds[i]}"),\"words\":$(js "${d_words[i]}"),\"windows\":$([ "${d_windows[i]}" = yes ] && echo true || echo false),\"bitlocker\":$([ "${d_bitlocker[i]}" = yes ] && echo true || echo false),\"linux\":${d_linux[i]:-0},\"ntfs\":${d_ntfs[i]:-0},\"partition_count\":${d_parts[i]:-0},\"phrase\":$(js "${phrase}"),\"fingerprint\":$(js "${print}"),\"beside\":${beside},\"shrink\":${shrink},\"partitions\":[${parts}]}"
         emit "${tree}"
     done
     emit "{\"event\":\"disks\",\"total\":${#d_name[@]},\"selectable\":${selectable},\"minimum_bytes\":${min_target_bytes:-0}}"
@@ -242,13 +244,14 @@ install_poll() {
 beside_stage() { set_stage "$1"; }
 
 do_install() {
-    local by_id="" serial="" wwn="" size="" print="" phrase="" expected id mode=erase region_start="" region_size="" default_system=tur
+    local by_id="" serial="" wwn="" size="" print="" phrase="" expected id mode=erase region_start="" region_size="" default_system=tur tur_size=0
     while [ "$#" -gt 0 ]; do
         case "$1" in
             --mode) mode="$2"; shift 2 ;;
             --region-start) region_start="$2"; shift 2 ;;
             --region-size) region_size="$2"; shift 2 ;;
             --default) default_system="$2"; shift 2 ;;
+            --tur-size) tur_size="$2"; shift 2 ;;
             --by-id) by_id="$2"; shift 2 ;;
             --serial) serial="$2"; shift 2 ;;
             --wwn) wwn="$2"; shift 2 ;;
@@ -270,7 +273,7 @@ do_install() {
             ;;
     esac
     case "${mode}" in
-        erase | beside) ;;
+        erase | beside | shrink) ;;
         *)
             result refused TUR-INSTALL-CONFIRM-001 "Unknown installation mode ${mode}; nothing was changed." untouched
             exit 2
@@ -296,8 +299,15 @@ do_install() {
         result refused "${engine_code}" "${engine_message} Nothing was changed." untouched
         exit 3
     fi
-    expected="$(phrase_of "$(prop "${device_name}" SERIAL)" "$(prop "${device_name}" WWN)" "$(prop "${device_name}" SIZE)" \
-        "$([ "${mode}" = beside ] && echo BESIDE || echo ERASE)")"
+    case "${tur_size}" in '' | *[!0-9]*) tur_size=0 ;; esac
+    if [ "${mode}" = shrink ] && ! shrink_revalidate "${tur_size}"; then
+        mark "revalidate result=refused code=${engine_code} mode=shrink"
+        result refused "${engine_code}" "${engine_message} Nothing was changed." untouched
+        exit 3
+    fi
+    local word=ERASE
+    case "${mode}" in beside) word=BESIDE ;; shrink) word=SHRINK ;; esac
+    expected="$(phrase_of "$(prop "${device_name}" SERIAL)" "$(prop "${device_name}" WWN)" "$(prop "${device_name}" SIZE)" "${word}")"
     if [ "${phrase}" != "${expected}" ]; then
         mark "confirm result=mismatch code=TUR-INSTALL-CONFIRM-001 frontend=graphical mode=${mode}"
         result refused TUR-INSTALL-CONFIRM-001 "The confirmation does not name this disk. Nothing was changed." untouched
@@ -311,7 +321,7 @@ do_install() {
         exit 4
     fi
     # From here on the disk is written.
-    if [ "${mode}" = beside ]; then
+    if [ "${mode}" = beside ] || [ "${mode}" = shrink ]; then
         do_install_beside
         return
     fi
@@ -342,9 +352,15 @@ do_install() {
 do_install_beside() {
     local id
     written_start="$(sectors_written "${device_name}")"
-    if ! run_beside "${target_device}" "${region_start}" "${region_size}" install_poll "${default_system}"; then
+    local ok=yes
+    if [ "${mode}" = shrink ]; then
+        run_shrink "${target_device}" "${tur_size}" install_poll "${default_system}" || ok=no
+    else
+        run_beside "${target_device}" "${region_start}" "${region_size}" install_poll "${default_system}" || ok=no
+    fi
+    if [ "${ok}" = no ]; then
         mark "result=failed code=${beside_code}"
-        result failed "${beside_code}" "${beside_message}" "${beside_disk_state}" "\"mode\":\"beside\",\"status\":${install_status},\"seconds\":${install_seconds},\"partition\":$(js "${beside_partition}")"
+        result failed "${beside_code}" "${beside_message}" "${beside_disk_state}" "\"mode\":$(js "${mode}"),\"status\":${install_status},\"seconds\":${install_seconds},\"partition\":$(js "${beside_partition}")"
         exit 5
     fi
     set_stage check
@@ -357,8 +373,8 @@ do_install_beside() {
     set_stage record
     id="$(session_id)"
     keep_log "${target_device}" "${id}"
-    mark "result=success seconds=${install_seconds} device=${target_device} mode=beside partition=${beside_partition}"
-    result success "" "TUR is installed beside Windows." installed "\"mode\":\"beside\",\"default\":$(js "${default_system}"),\"status\":0,\"seconds\":${install_seconds},\"device\":$(js "${target_device}"),\"partition\":$(js "${beside_partition}"),\"log_on_disk\":$(js "${kept_log_path}")"
+    mark "result=success seconds=${install_seconds} device=${target_device} mode=${mode} partition=${beside_partition}"
+    result success "" "TUR is installed beside Windows." installed "\"mode\":$(js "${mode}"),\"default\":$(js "${default_system}"),\"status\":0,\"seconds\":${install_seconds},\"device\":$(js "${target_device}"),\"partition\":$(js "${beside_partition}"),\"log_on_disk\":$(js "${kept_log_path}")"
 }
 
 # ---- the log, to a USB stick -----------------------------------------------------
@@ -459,7 +475,7 @@ case "${1:-}" in
         do_install "$@"
         ;;
     *)
-        echo "usage: tur-install-engine check | disks | sticks | save-log --to PATH | install [--mode erase|beside --region-start BYTES --region-size BYTES --default tur|windows] --by-id PATH --serial S --wwn W --size BYTES --fingerprint F --phrase PHRASE" >&2
+        echo "usage: tur-install-engine check | disks | sticks | save-log --to PATH | install [--mode erase|beside|shrink --region-start BYTES --region-size BYTES --tur-size BYTES --default tur|windows] --by-id PATH --serial S --wwn W --size BYTES --fingerprint F --phrase PHRASE" >&2
         exit 2
         ;;
 esac

@@ -93,6 +93,12 @@ if ! declare -F mark > /dev/null; then
     mark() { transcript "TUR-INSTALLER: $1"; }
 fi
 
+# Shrinking Windows' partition to make room (issue 64, step 2; ADR-0029).
+if [ -f "${INSTALLER_DIR}/ntfs-shrink.sh" ]; then
+    # shellcheck source=installer/iso/rootfs/usr/lib/tur-installer/ntfs-shrink.sh
+    . "${INSTALLER_DIR}/ntfs-shrink.sh"
+fi
+
 human() {
     awk -v b="$1" 'BEGIN {
         split("B KiB MiB GiB TiB", unit, " ");
@@ -268,6 +274,9 @@ d_holds=() d_words=() d_windows=() d_bitlocker=() d_linux=() d_ntfs=() d_parts=(
 # and the partitions just before and after the free stretch.
 d_beside=() d_bcode=() d_bwhy=() d_bstart=() d_bsize=() d_besp=() d_bespuuid=() d_bespfree=() d_bespsize=()
 d_bneed=() d_bafter=() d_bbefore=()
+# Shrinking Windows to make room: whether, why not, the Windows partition,
+# what TUR may get.
+d_shrink=() d_scode=() d_swhy=() d_spart=() d_ssize=() d_sntfsmin=() d_sturmin=() d_sturmax=()
 selectable=0
 
 prop() {
@@ -424,6 +433,7 @@ scan_disks() {
     d_holds=() d_words=() d_windows=() d_bitlocker=() d_linux=() d_ntfs=() d_parts=()
     d_beside=() d_bcode=() d_bwhy=() d_bstart=() d_bsize=() d_besp=() d_bespuuid=() d_bespfree=() d_bespsize=()
     d_bneed=() d_bafter=() d_bbefore=()
+    d_shrink=() d_scode=() d_swhy=() d_spart=() d_ssize=() d_sntfsmin=() d_sturmin=() d_sturmax=()
     selectable=0
     live=" $(live_disks | sort -u | tr '\n' ' ')"
     while read -r name type; do
@@ -483,6 +493,7 @@ scan_disks() {
         mark "disk index=${d_index[i]} name=${name} size=${d_size[i]} serial=\"${serial}\" transport=${d_tran[i]:-unknown} status=${status} code=${code:-none} by_id=${link:-none} partitions=${d_parts[i]} holds=${words}"
         d_beside[i]=no d_bcode[i]="" d_bwhy[i]="" d_bstart[i]=0 d_bsize[i]=0 d_besp[i]="" d_bespuuid[i]=""
         d_bespfree[i]=0 d_bespsize[i]=0 d_bneed[i]=0 d_bafter[i]="" d_bbefore[i]=""
+        d_shrink[i]=no d_scode[i]="" d_swhy[i]="" d_spart[i]="" d_ssize[i]=0 d_sntfsmin[i]=0 d_sturmin[i]=0 d_sturmax[i]=0
         if [ "${status}" = ok ] && [ "${windows}" = yes ]; then
             beside_look "${name}"
             d_beside[i]="${b_possible}" d_bcode[i]="${b_code}" d_bwhy[i]="${b_why}"
@@ -490,6 +501,10 @@ scan_disks() {
             d_bespfree[i]="${b_esp_free}" d_bespsize[i]="${b_esp_size}" d_bneed[i]="${b_needed}"
             d_bafter[i]="${b_after}" d_bbefore[i]="${b_before}"
             mark "beside index=${d_index[i]} name=${name} possible=${b_possible} code=${b_code:-none} free_start=${b_start} free_size=${b_size} after=${b_after:-none} before=${b_before:-none} esp=${b_esp:-none} esp_uuid=${b_esp_uuid:-none} esp_size=${b_esp_size} esp_free=${b_esp_free} esp_needed=${b_needed} why=\"${b_why}\""
+            shrink_look "${name}"
+            d_shrink[i]="${w_possible}" d_scode[i]="${w_code}" d_swhy[i]="${w_why}" d_spart[i]="${w_part}"
+            d_ssize[i]="${w_size}" d_sntfsmin[i]="${w_ntfs_min}" d_sturmin[i]="${w_tur_min}" d_sturmax[i]="${w_tur_max}"
+            mark "shrink index=${d_index[i]} name=${name} possible=${w_possible} code=${w_code:-none} partition=${w_part:-none} size=${w_size} ntfs_min=${w_ntfs_min} tur_min=${w_tur_min} tur_max=${w_tur_max} why=\"${w_why}\""
         fi
     done < <(lsblk -dn -o NAME,TYPE 2> /dev/null)
     selectable="${index}"
@@ -531,6 +546,11 @@ phrase_of() {
 # phrase_for I: the phrase for disk I of the last scan.
 phrase_for() {
     phrase_of "${d_serial[$1]}" "${d_wwn[$1]}" "${d_size[$1]}"
+}
+
+# shrink_phrase_for I: the phrase that confirms shrinking Windows on disk I.
+shrink_phrase_for() {
+    phrase_of "${d_serial[$1]}" "${d_wwn[$1]}" "${d_size[$1]}" SHRINK
 }
 
 # beside_phrase_for I: the phrase that confirms installing beside Windows on
@@ -697,6 +717,81 @@ beside_look() {
         return 1
     fi
     b_possible=yes
+    return 0
+}
+
+# ---- shrinking Windows to make room: looking (issue 64, step 2) ---------------------
+#
+# When the free space is not enough, the installer can make it: shrink the
+# Windows partition with ntfsresize (ntfs-shrink.sh), then install beside
+# Windows into the space freed. Offered only where installing beside Windows
+# could go on once there is room (the ESP checks of beside_look passed).
+
+# windows_partition NAME: the Windows partition of disk NAME: the largest
+# "Microsoft basic data" partition holding NTFS or BitLocker.
+windows_partition() {
+    local name="$1" part type size best="" best_size=0 magic
+    while read -r part; do
+        type="$(prop "${part}" PARTTYPE | tr '[:upper:]' '[:lower:]')"
+        [ "${type}" = ebd0a0a2-b9e5-4433-87c0-68b6b72699c7 ] || continue
+        magic="$(head -c 11 "/dev/${part}" 2> /dev/null | tail -c 8 | tr -d '\000')"
+        case "${magic}" in "NTFS    " | -FVE-FS-) ;; *) continue ;; esac
+        size="$(prop "${part}" SIZE)"
+        if [ "${size:-0}" -gt "${best_size}" ]; then best="${part}" best_size="${size}"; fi
+    done < <(lsblk -ln -o NAME,TYPE "/dev/${name}" 2> /dev/null | awk '$2 == "part" { print $1 }')
+    echo "${best}"
+}
+
+# shrink_look NAME: after beside_look NAME, can room be made by shrinking
+# Windows? Sets w_possible (yes or no), w_code and w_why when not, w_part
+# (/dev/...), w_number, w_start and w_size (bytes), w_end (the start of what
+# follows it), w_ntfs_min (smallest the volume may become, with the margin),
+# w_tur_min, w_tur_max (what TUR may get). Reads only.
+shrink_look() {
+    local name="$1" part following
+    w_possible=no w_code="" w_why="" w_part="" w_number="" w_start=0 w_size=0 w_end=0 w_ntfs_min=0
+    w_tur_min="${BESIDE_MIN_BYTES}" w_tur_max=0
+    if ! declare -F ntfs_look > /dev/null || ! command -v ntfsresize > /dev/null; then
+        w_code=TUR-INSTALL-SHRINK-002 w_why="this medium cannot shrink Windows (ntfsresize is missing)"
+        return 1
+    fi
+    case "${b_code}" in
+        "" | TUR-INSTALL-BESIDE-003) ;;
+        *)
+            w_code="${b_code}" w_why="${b_why}"
+            return 1
+            ;;
+    esac
+    part="$(windows_partition "${name}")"
+    if [ -z "${part}" ]; then
+        w_code=TUR-INSTALL-SHRINK-002 w_why="no Windows partition (NTFS) was found on this disk"
+        return 1
+    fi
+    w_part="/dev/${part}"
+    w_number="$(prop "${part}" PARTN)"
+    w_start=$(($(prop "${part}" START) * 512))
+    w_size="$(prop "${part}" SIZE)"
+    if ! ntfs_look "${w_part}"; then
+        w_code="${n_code}" w_why="${n_why}"
+        return 1
+    fi
+    # What follows the Windows partition: the next partition, or the end of
+    # the space partitions may use.
+    following="$(lsblk -ln -o NAME,TYPE "/dev/${name}" 2> /dev/null | awk '$2 == "part" { print $1 }' | while read -r p; do
+        echo $(($(prop "${p}" START) * 512))
+    done | sort -n | awk -v after=$((w_start + w_size)) '$1 >= after { print; exit }')"
+    if [ -z "${following}" ]; then
+        following=$((($(prop "${name}" SIZE) - ALIGN_BYTES) / ALIGN_BYTES * ALIGN_BYTES))
+    fi
+    w_end="${following}"
+    w_ntfs_min=$(((n_min + NTFS_MARGIN_BYTES + ALIGN_BYTES - 1) / ALIGN_BYTES * ALIGN_BYTES))
+    w_tur_max=$(((w_end - w_start - w_ntfs_min) / ALIGN_BYTES * ALIGN_BYTES))
+    if [ "${w_tur_max}" -lt "${w_tur_min}" ]; then
+        w_code=TUR-INSTALL-SHRINK-005
+        w_why="Windows' partition is too full to give TUR $(human "${w_tur_min}"): it can give $(human "$((w_tur_max > 0 ? w_tur_max : 0))") and keep $(human "${NTFS_MARGIN_BYTES}") free for Windows. Delete or move files in Windows, or install TUR on another disk"
+        return 1
+    fi
+    w_possible=yes
     return 0
 }
 
@@ -1244,6 +1339,66 @@ run_beside() {
     beside_disk_state=installed
     install_status=0
     return 0
+}
+
+# ---- shrinking Windows to make room: writing (issue 64, step 2) ---------------------
+
+# shrink_revalidate TUR_BYTES: after `revalidate`, shrinking must still be
+# possible and TUR_BYTES within what it can give.
+shrink_revalidate() {
+    local name="${target_device##*/}"
+    beside_look "${name}"
+    if ! shrink_look "${name}"; then
+        engine_code="${w_code}"
+        engine_message="Windows can no longer be shrunk on this disk: ${w_why}."
+        return 1
+    fi
+    if [ "$1" -lt "${w_tur_min}" ] || [ "$1" -gt "${w_tur_max}" ]; then
+        engine_code=TUR-INSTALL-SHRINK-005
+        engine_message="The size asked for TUR, $(human "$1"), is not between $(human "${w_tur_min}") and $(human "${w_tur_max}")."
+        return 1
+    fi
+    mark "shrink revalidated name=${name} partition=${w_part} tur=$1 tur_max=${w_tur_max}"
+    return 0
+}
+
+# run_shrink DEVICE TUR_BYTES [POLL] [DEFAULT]: shrink the Windows partition
+# shrink_look found so that TUR_BYTES are free after it (ntfs_shrink: a dry
+# run, the filesystem, then the partition entry), then install beside
+# Windows into that space (run_beside). Sets what run_beside sets; on a
+# failure while shrinking, beside_disk_state is untouched (the dry run
+# failed) or windows-check (Windows must check its partition at its next
+# start).
+run_shrink() {
+    local device="$1" tur="$2" poll="${3:-}" default_system="${4:-tur}" new region start size name
+    name="${device##*/}"
+    beside_code="" beside_message="" beside_partition="" beside_disk_state=untouched install_status=1 install_seconds=0
+    new=$(((w_end - w_start - tur) / ALIGN_BYTES * ALIGN_BYTES))
+    if [ "${new}" -lt "${w_ntfs_min}" ]; then
+        beside_fail TUR-INSTALL-SHRINK-005 "Windows' partition cannot be made that small. Nothing was changed."
+        return 1
+    fi
+    beside_stage_hook shrink
+    mark "shrink step=start partition=${w_part} from=${w_size} to=${new} tur=${tur}"
+    if ! ntfs_shrink "${device}" "${w_number}" "${w_part}" "${new}"; then
+        case "${s_code}" in
+            TUR-INSTALL-SHRINK-006) beside_disk_state=untouched ;;
+            *) beside_disk_state=windows-check ;;
+        esac
+        beside_fail "${s_code}" "${s_why}"
+        return 1
+    fi
+    udevadm settle --timeout=30 > /dev/null 2>&1
+    beside_look "${name}"
+    region="$(free_region "${name}")"
+    read -r start size <<< "${region:-0 0}"
+    mark "shrink step=done partition=${w_part} free_start=${start} free_size=${size}"
+    if [ "${b_possible}" != yes ]; then
+        beside_disk_state=windows-check
+        beside_fail "${b_code:-TUR-INSTALL-SHRINK-008}" "Windows was shrunk, but TUR cannot be installed into the space: ${b_why}. Windows checks its partition at its next start."
+        return 1
+    fi
+    run_beside "${device}" "${b_start}" "${b_size}" "${poll}" "${default_system}"
 }
 
 # A name for this installation, for the log directory on the installed disk.

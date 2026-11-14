@@ -21,6 +21,7 @@ Item {
     //   install  the recorded installation to run
     //   mode     how: "erase" (default) or "beside" Windows (ADR-0029)
     //   system   beside Windows: the system started by default (default tur)
+    //   gib      shrinking Windows: the room for TUR in GiB
     readonly property var states: [
         { name: "welcome", step: "welcome" },
         { name: "computer", step: "computer" },
@@ -46,7 +47,13 @@ Item {
           install: "install-beside-paused" },
         { name: "done-beside", fixture: "same-disk", step: "done", chosen: "vda", mode: "beside", install: "install-beside" },
         { name: "done-beside-failed", fixture: "same-disk", step: "done", chosen: "vda", mode: "beside",
-          install: "install-beside-failed" }
+          install: "install-beside-failed" },
+        { name: "disks-shrink-chosen", fixture: "same-disk", step: "disk", chosen: "vdb", mode: "shrink", gib: 26 },
+        { name: "confirm-shrink", fixture: "same-disk", step: "confirm", chosen: "vdb", mode: "shrink", gib: 26 },
+        { name: "done-shrink", fixture: "same-disk", step: "done", chosen: "vdb", mode: "shrink", gib: 26,
+          install: "install-shrink" },
+        { name: "done-shrink-failed", fixture: "same-disk", step: "done", chosen: "vdb", mode: "shrink", gib: 26,
+          install: "install-shrink-failed" }
     ]
 
     property Item stage: null
@@ -166,10 +173,12 @@ Item {
             host.wizard.chosenDisk = chosen
             host.wizard.mode = state.mode || "erase"
             host.wizard.defaultSystem = state.system || "tur"
+            host.wizard.turGiB = state.gib || 0
             if (state.install) {
                 host.wizard.goTo("confirm")
-                host.engine.install(chosen, state.mode === "beside" ? chosen.beside.phrase : chosen.phrase,
-                                    state.mode || "erase", state.system || "tur")
+                host.engine.install(chosen, state.mode === "beside" ? chosen.beside.phrase
+                                            : state.mode === "shrink" ? chosen.shrink.phrase : chosen.phrase,
+                                    state.mode || "erase", state.system || "tur", (state.gib || 0) * 1073741824)
                 host.wizard.goTo("install")
             } else {
                 host.wizard.goTo(state.step)

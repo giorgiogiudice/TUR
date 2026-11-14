@@ -29,7 +29,9 @@ WizardScreen {
         return found !== null ? found[1] : ""
     }
 
-    readonly property var stages: screen.mode === "beside"
+    readonly property var stages: screen.mode === "shrink"
+                                  ? ["revalidate", "shrink", "prepare", "copy", "bootloader", "finish", "boot-menu", "check", "record"]
+                                  : screen.mode === "beside"
                                   ? ["revalidate", "prepare", "copy", "bootloader", "finish", "boot-menu", "check", "record"]
                                   : ["revalidate", "prepare", "copy", "bootloader", "finish", "check", "record"]
 
@@ -87,7 +89,7 @@ WizardScreen {
 
     Kit.Label {
         Layout.fillWidth: true
-        text: (screen.mode === "beside"
+        text: (screen.mode === "beside" || screen.mode === "shrink"
                ? qsTr("Beside Windows, on %1. This takes a few minutes. Keep the computer switched on and the installation medium in place.")
                : qsTr("On %1. This takes a few minutes. Keep the computer switched on and the installation medium in place."))
               .arg(Words.diskLine(screen.disk))

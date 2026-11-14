@@ -3,7 +3,13 @@
 """What is on a disk image that holds Windows, and whether it is still there.
 
     tests/iso/windows-disk.py record DISK OUT.json
-    tests/iso/windows-disk.py compare BEFORE.json DISK OUT.json [--expect-added]
+    tests/iso/windows-disk.py compare BEFORE.json DISK OUT.json [--shrunk N]
+
+With --shrunk N (shrinking Windows from the installer, issue 64 step 2),
+partition N may be smaller, with the same start, type, UUID, name and
+attributes, and its bytes may differ; instead, every file in its NTFS root
+must have its SHA-256 (read with ntfscat through a read-only loop device:
+run as root, also for `record`).
 
 The proof of "install TUR beside Windows on the same disk" (ADR-0029):
 everything Windows had must be byte-for-byte where it was.
@@ -96,6 +102,23 @@ def esp_files(disk: pathlib.Path, offset: int, size: int) -> dict:
     return facts
 
 
+def ntfs_files(disk: pathlib.Path, offset: int, size: int) -> dict:
+    """The files in an NTFS volume's root and their SHA-256 (root only)."""
+    loop = run("losetup", "--find", "--show", "--read-only", "--offset", str(offset), "--sizelimit", str(size),
+               str(disk)).stdout.strip()
+    found: dict = {}
+    try:
+        names = run("ntfsls", "--force", loop, check=False).stdout.split("\n")
+        for name in (n.strip() for n in names):
+            if not name or name.startswith("$") or name in (".", ".."):
+                continue
+            data = subprocess.run(["ntfscat", "--force", loop, name], capture_output=True)
+            found[name] = hashlib.sha256(data.stdout).hexdigest() if data.returncode == 0 else None
+    finally:
+        run("losetup", "--detach", loop, check=False)
+    return found
+
+
 def record(disk: pathlib.Path) -> dict:
     table = json.loads(run("sfdisk", "--json", str(disk)).stdout)["partitiontable"]
     verify = run("sfdisk", "--verify", str(disk), check=False)
@@ -130,6 +153,10 @@ def record(disk: pathlib.Path) -> dict:
             "attrs": part.get("attrs", ""),
         }
         entry["sha256"] = sha256_range(disk, start * SECTOR, sectors * SECTOR)
+        with open(disk, "rb") as stream:
+            stream.seek(start * SECTOR + 3)
+            if stream.read(8) == b"NTFS    " and os.geteuid() == 0:
+                entry["ntfs_files"] = ntfs_files(disk, start * SECTOR, sectors * SECTOR)
         if entry["type"] == ESP:
             entry["esp"] = esp_files(disk, start * SECTOR, sectors * SECTOR)
         facts["partitions"].append(entry)
@@ -140,14 +167,28 @@ def key(entry: dict) -> tuple:
     return tuple(entry[name] for name in ("number", "start", "size", "type", "uuid", "name", "attrs"))
 
 
-def compare(before: dict, after: dict) -> dict:
-    checks: dict = {"problems": []}
+def compare(before: dict, after: dict, shrunk: int | None = None) -> dict:
+    checks: dict = {"problems": [], "shrunk_partition": shrunk}
     now = {entry["number"]: entry for entry in after["partitions"]}
     kept = []
     for old in before["partitions"]:
         new = now.get(old["number"])
         same_entry = new is not None and key(new) == key(old)
         item = {"number": old["number"], "name": old["name"], "type": old["type"], "entry_unchanged": same_entry}
+        if old["number"] == shrunk:
+            same_but_size = new is not None and all(new[k] == old[k] for k in ("number", "start", "type", "uuid", "name", "attrs"))
+            files_before, files_after = old.get("ntfs_files") or {}, (new or {}).get("ntfs_files") or {}
+            same_files = sorted(name for name, digest in files_before.items() if files_after.get(name) == digest)
+            item.update({"shrunk": True, "same_entry_but_size": same_but_size,
+                         "sectors_before": old["size"], "sectors_after": (new or {}).get("size"),
+                         "files_before": len(files_before), "files_unchanged": len(same_files),
+                         "files_changed_or_missing": sorted(set(files_before) - set(same_files))})
+            if not same_but_size or (new or {}).get("size", old["size"]) >= old["size"]:
+                checks["problems"].append(f"partition {old['number']}: not shrunk in place")
+            if not files_before or len(same_files) != len(files_before):
+                checks["problems"].append(f"partition {old['number']}: files changed or missing after the shrink")
+            kept.append(item)
+            continue
         if not same_entry:
             checks["problems"].append(f"partition {old['number']}: its table entry changed or is gone")
         if old.get("esp") is not None:
@@ -177,8 +218,14 @@ def compare(before: dict, after: dict) -> dict:
     placed = []
     for entry in added:
         last = entry["start"] + entry["size"] - 1
-        inside = any(region["start_sector"] <= entry["start"] and last <= region["end_sector"]
-                     for region in before["free_regions"])
+        regions = list(before["free_regions"])
+        if shrunk is not None:
+            # What the shrink freed counts as free space.
+            old = next(p for p in before["partitions"] if p["number"] == shrunk)
+            new = next((p for p in after["partitions"] if p["number"] == shrunk), old)
+            regions.append({"start_sector": new["start"] + new["size"], "end_sector": old["start"] + old["size"] - 1})
+            regions = merge(regions)
+        inside = any(region["start_sector"] <= entry["start"] and last <= region["end_sector"] for region in regions)
         placed.append({"number": entry["number"], "name": entry["name"], "type": entry["type"],
                        "start": entry["start"], "size": entry["size"], "inside_free_space_before": inside})
         if not inside:
@@ -194,6 +241,16 @@ def compare(before: dict, after: dict) -> dict:
     return checks
 
 
+def merge(regions: list[dict]) -> list[dict]:
+    out: list[dict] = []
+    for region in sorted(regions, key=lambda r: r["start_sector"]):
+        if out and region["start_sector"] <= out[-1]["end_sector"] + 1:
+            out[-1]["end_sector"] = max(out[-1]["end_sector"], region["end_sector"])
+        else:
+            out.append(dict(region))
+    return out
+
+
 def main() -> int:
     if len(sys.argv) >= 4 and sys.argv[1] == "record":
         facts = record(pathlib.Path(sys.argv[2]))
@@ -205,7 +262,8 @@ def main() -> int:
     if len(sys.argv) >= 5 and sys.argv[1] == "compare":
         before = json.loads(pathlib.Path(sys.argv[2]).read_text())
         after = record(pathlib.Path(sys.argv[3]))
-        result = compare(before, after)
+        shrunk = int(sys.argv[sys.argv.index("--shrunk") + 1]) if "--shrunk" in sys.argv else None
+        result = compare(before, after, shrunk)
         result["after"] = {k: v for k, v in after.items() if k != "partitions"}
         result["after_partitions"] = [{k: v for k, v in p.items() if k != "esp"} for p in after["partitions"]]
         pathlib.Path(sys.argv[4]).write_text(json.dumps(result, indent=2) + "\n")

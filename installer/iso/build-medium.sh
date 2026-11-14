@@ -278,7 +278,10 @@ if not same_files:
 if not any(p["name"] == "dracut-live" for p in added):
     problems.append("dracut-live was not added")
 for item in changed + removed:
-    if not re.fullmatch(r"dracut(-.*)?", item["name"]):
+    # dracut-live may bring a newer dracut; ntfsprogs (for shrinking Windows,
+    # ADR-0029) may bring a newer ntfs-3g library. Neither is read by
+    # `bootc install`.
+    if not re.fullmatch(r"dracut(-.*)?|ntfs-3g(-.*)?|ntfsprogs", item["name"]):
         problems.append(f"package {item['name']} differs from the payload")
 if problems:
     sys.exit("the installer environment is not the payload plus dracut-live: " + "; ".join(problems))

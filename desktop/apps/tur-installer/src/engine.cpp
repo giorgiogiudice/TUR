@@ -432,7 +432,8 @@ bool Engine::cancellable() const
            && (m_stage.isEmpty() || m_stage == QStringLiteral("revalidate"));
 }
 
-void Engine::install(const QVariantMap &disk, const QString &phrase, const QString &mode, const QString &defaultSystem)
+void Engine::install(const QVariantMap &disk, const QString &phrase, const QString &mode, const QString &defaultSystem,
+                     double turBytes)
 {
     if (m_installRun && m_installRun->running())
         return;
@@ -448,7 +449,14 @@ void Engine::install(const QVariantMap &disk, const QString &phrase, const QStri
     Q_EMIT outputChanged();
     Q_EMIT installChanged();
     const bool beside = mode == QStringLiteral("beside");
+    const bool shrink = mode == QStringLiteral("shrink");
     QStringList arguments;
+    if (shrink) {
+        arguments << QStringLiteral("--mode") << QStringLiteral("shrink")
+                  << QStringLiteral("--tur-size") << QString::number(static_cast<qint64>(turBytes))
+                  << QStringLiteral("--default")
+                  << (defaultSystem == QStringLiteral("windows") ? QStringLiteral("windows") : QStringLiteral("tur"));
+    }
     if (beside) {
         const QVariantMap room = disk.value(QStringLiteral("beside")).toMap();
         arguments << QStringLiteral("--mode") << QStringLiteral("beside")
@@ -466,10 +474,11 @@ void Engine::install(const QVariantMap &disk, const QString &phrase, const QStri
         QStringLiteral("--phrase"), phrase,
     };
     TranscriptFile::write(QStringLiteral("install-requested by_id=%1 mode=%2")
-                              .arg(disk.value(QStringLiteral("by_id")).toString(), beside ? QStringLiteral("beside")
-                                                                                           : QStringLiteral("erase")));
-    const QString fixtureFile = beside && m_installFixture == QStringLiteral("install") ? QStringLiteral("install-beside")
-                                                                                        : m_installFixture;
+                              .arg(disk.value(QStringLiteral("by_id")).toString(),
+                                   shrink ? QStringLiteral("shrink") : beside ? QStringLiteral("beside") : QStringLiteral("erase")));
+    QString fixtureFile = m_installFixture;
+    if (m_installFixture == QStringLiteral("install") && (beside || shrink))
+        fixtureFile = shrink ? QStringLiteral("install-shrink") : QStringLiteral("install-beside");
     m_installRun = start(QStringLiteral("install"), arguments, fixtureFile);
     connect(m_installRun, &EngineRun::event, this, &Engine::onInstallEvent);
     connect(m_installRun, &EngineRun::ended, this, [this](int exitCode, const QString &problem) {
@@ -601,6 +610,8 @@ QString Engine::stageTitle(const QString &stage) const
         return tr("Checking the installation");
     if (stage == QStringLiteral("record"))
         return tr("Keeping the installation record");
+    if (stage == QStringLiteral("shrink"))
+        return tr("Making room: shrinking Windows");
     if (stage == QStringLiteral("boot-menu"))
         return tr("Adding Windows to TUR's start menu");
     return stage;

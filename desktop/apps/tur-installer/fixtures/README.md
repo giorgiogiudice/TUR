@@ -13,7 +13,7 @@ the states in the middle of an installation.
 | Directory | What it is |
 |---|---|
 | `beside-windows/` | The virtual machine of `tests/iso`: the medium as a USB stick, a blank 20 GiB disk, and the Windows-like disk of `tests/iso/make-windows-disk.sh`. Installations that succeed, fail while copying, are refused because the disk changed, and are held while copying or before writing |
-| `same-disk/` | The virtual machine of the iso workflow's `beside` job (ADR-0029): the medium, a disk laid out by `tests/iso/make-windows-shared-disk.sh` (Windows after Shrink Volume, 30 GiB free: TUR can go beside Windows) and the same layout with no free space. Installations beside Windows that succeed, are held while copying, and fail while copying |
+| `same-disk/` | The virtual machine of the iso workflow's `beside` job (ADR-0029): the medium, a disk laid out by `tests/iso/make-windows-shared-disk.sh` (Windows after Shrink Volume, 30 GiB free: TUR can go beside Windows) and the same layout with no free space. Installations beside Windows that succeed, are held while copying, and fail while copying; on the second disk (50 GiB in the recorded answers), shrinking Windows: an installation that succeeds and one that fails while ntfsresize moves data |
 | `blocked/` | The checks of a computer with too little memory, started from a damaged medium |
 | `no-disk/` | The medium and one disk that is too small |
 

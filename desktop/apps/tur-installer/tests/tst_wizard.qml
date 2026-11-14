@@ -328,6 +328,63 @@ Item {
             verify(control(wizard, "windowsAfterInstall").visible, "the result says how to start Windows")
         }
 
+        function test_shrink_windows_with_a_size_that_keeps_the_minimum() {
+            const wizard = enter("disks-beside-not-possible")
+            const shrink = control(wizard, "shrinkWindowsOption")
+            verify(shrink.enabled, "no free space, but Windows can be shrunk")
+            press("shrinkWindowsOption")
+            compare(wizard.mode, "shrink")
+            compare(wizard.turGiB, 25, "the smallest room TUR needs is proposed")
+            verify(control(wizard, "shrinkBackupNote").visible, "the backup is recommended")
+            verify(control(wizard, "continueButton").enabled)
+            wizard.turGiB = 40
+            verify(!control(wizard, "continueButton").enabled, "more than Windows can give: no going on")
+            verify(control(wizard, "turSizeField").errorText.length > 0)
+            wizard.turGiB = 24
+            verify(!control(wizard, "continueButton").enabled, "less than TUR needs: no going on")
+            wizard.turGiB = 30
+            verify(control(wizard, "continueButton").enabled)
+            verify(control(wizard, "defaultTurOption").visible, "the default system is asked here too")
+            verify(!control(wizard, "shrinkExplanation").visible, "nothing to explain when it is possible")
+        }
+
+        function test_shrink_refused_says_why() {
+            const wizard = enter("disks-windows-chosen")
+            verify(!control(wizard, "shrinkWindowsOption").enabled, "Windows' partition is too full to give 25 GiB")
+            const why = control(wizard, "shrinkExplanation")
+            verify(why.visible, "the reason is on the screen")
+            verify(why.text.indexOf("too full") >= 0, why.text)
+        }
+
+        function test_confirm_shrink_windows() {
+            const wizard = enter("confirm-shrink")
+            const field = control(wizard, "phraseField")
+            const install = control(wizard, "eraseButton")
+            compare(findChild(wizard, "confirmPhrase").text, "SHRINK OWSDISKA")
+            verify(control(wizard, "shrinkBackupWarning").visible, "a backup is strongly recommended")
+            verify(control(wizard, "shrinkWindowsLine").text.indexOf("ntfsresize") >= 0)
+            compare(install.text, "Shrink Windows and install")
+            field.text = "ERASE OWSDISKA"
+            verify(!install.enabled, "the erase phrase does not confirm shrinking")
+            field.text = "BESIDE OWSDISKA"
+            verify(!install.enabled, "nor the beside phrase")
+            field.text = ""
+            for (const key of "SHRINK OWSDISKA")
+                keyClick(key === " " ? Qt.Key_Space : key, key === " " ? Qt.NoModifier : Qt.ShiftModifier)
+            verify(install.enabled)
+            press("eraseButton")
+            tryCompare(wizard, "step", "done", 10000)
+            compare(host.engine.installState, "success")
+            compare(host.engine.result.mode, "shrink")
+            verify(host.engine.stagesSeen.indexOf("shrink") >= 0, "the shrink stage was seen")
+        }
+
+        function test_shrink_failure_says_let_windows_check() {
+            const wizard = enter("done-shrink-failed")
+            compare(host.engine.result.disk_state, "windows-check")
+            verify(control(wizard, "failureMessage").whatToDo.indexOf("let it check its disk") >= 0)
+        }
+
         function test_beside_windows_failure_keeps_windows() {
             const wizard = enter("done-beside-failed")
             compare(host.engine.result.disk_state, "partial")
