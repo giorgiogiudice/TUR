@@ -312,6 +312,7 @@ Item {
             verify(!install.enabled, "the erase phrase does not confirm installing beside Windows")
             field.text = "beside boottest"
             verify(!install.enabled, "nor the phrase in lower case")
+            field.text = ""
             for (const key of "BESIDE BOOTTEST")
                 keyClick(key === " " ? Qt.Key_Space : key, key === " " ? Qt.NoModifier : Qt.ShiftModifier)
             compare(field.text, "BESIDE BOOTTEST")

@@ -119,7 +119,8 @@ cmd_restart_windows() {
     # Not root: through the helper polkit allows to the person at the
     # computer without a password (org.tur.dualboot.restart-windows).
     if [ "$(id -u)" -ne 0 ]; then
-        exec pkexec /usr/libexec/tur/tur-restart-windows "$@"
+        pkexec /usr/libexec/tur/tur-restart-windows "$@"
+        exit $?
     fi
     windows="$(entry_of "${WINDOWS_LABEL}")"
     [ -n "${windows}" ] || refuse "the firmware has no boot entry named \"${WINDOWS_LABEL}\""

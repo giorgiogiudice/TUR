@@ -1223,7 +1223,7 @@ run_beside() {
     esp_manifest "${esp}" > "${esp_after}" 2>> "${LOG}"
     changed="$(grep -vxF -f "${esp_after}" "${esp_before}")"
     sfdisk --dump "${device}" > "${after_table}" 2>> "${LOG}"
-    if [ -n "${changed}" ] || [ -n "$(grep -vxF -f "${after_table}" "${before_table}")" ]; then
+    if [ -n "${changed}" ] || grep -qvxF -f "${after_table}" "${before_table}"; then
         beside_disk_state=installed
         install_status=1
         mark "beside windows-files changed=\"$(printf '%s' "${changed}" | tr '\n' '|')\""

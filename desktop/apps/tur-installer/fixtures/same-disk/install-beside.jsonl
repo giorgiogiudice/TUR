@@ -1,25 +1,25 @@
-{"licence": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0", "what": "tur-install-engine install --mode beside into the free space of vda; written by hand in the engine's format; bootc's lines are assumed to be those of install to-disk (iso run 43291029560) and are to be compared with the ENGINE> lines of the iso workflow's beside job"}
-{"event": "stage", "stage": "revalidate"}
-{"event": "stage", "stage": "prepare"}
-{"event": "written", "bytes": 1048576}
-{"event": "stage", "stage": "copy"}
-{"event": "line", "text": "Installing image: docker://localhost/tur:20261113.g3223774"}
-{"event": "line", "text": "Initializing ostree layout"}
-{"event": "copy-total", "text": "70 (3.2 GB)"}
-{"event": "line", "text": "layers already present: 0; layers needed: 70 (3.2 GB)"}
-{"event": "written", "bytes": 2254857830}
-{"event": "written", "bytes": 5368709120}
-{"event": "line", "text": "Deploying container image...done (35 seconds)"}
-{"event": "stage", "stage": "bootloader"}
-{"event": "line", "text": "Bootloader: grub"}
-{"event": "line", "text": "Installing bootloader via bootupd"}
-{"event": "line", "text": "Installed: grub.cfg"}
-{"event": "stage", "stage": "finish"}
-{"event": "line", "text": "Trimming root"}
-{"event": "line", "text": "Finalizing filesystem root"}
-{"event": "line", "text": "Installation complete!"}
-{"event": "written", "bytes": 8053063680}
-{"event": "stage", "stage": "boot-menu"}
-{"event": "stage", "stage": "check"}
-{"event": "stage", "stage": "record"}
-{"event": "result", "outcome": "success", "code": "", "message": "TUR is installed beside Windows.", "disk_state": "installed", "mode": "beside", "default": "tur", "status": 0, "seconds": 71, "device": "/dev/vda", "partition": "/dev/vda5", "log_on_disk": "/var/log/tur-installer/20261113T201500Z-5e6f7a8b"}
+{"licence":"SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0","what":"tur-install-engine install --mode beside into the free space of vda; written by hand in the engine's format; bootc's lines are assumed to be those of install to-disk (iso run 43291029560) and are to be compared with the ENGINE> lines of the iso workflow's beside job"}
+{"event":"stage","stage":"revalidate"}
+{"event":"stage","stage":"prepare"}
+{"event":"written","bytes":1048576}
+{"event":"stage","stage":"copy"}
+{"event":"line","text":"Installing image: docker://localhost/tur:20261113.g3223774"}
+{"event":"line","text":"Initializing ostree layout"}
+{"event":"copy-total","text":"70 (3.2 GB)"}
+{"event":"line","text":"layers already present: 0; layers needed: 70 (3.2 GB)"}
+{"event":"written","bytes":2254857830}
+{"event":"written","bytes":5368709120}
+{"event":"line","text":"Deploying container image...done (35 seconds)"}
+{"event":"stage","stage":"bootloader"}
+{"event":"line","text":"Bootloader: grub"}
+{"event":"line","text":"Installing bootloader via bootupd"}
+{"event":"line","text":"Installed: grub.cfg"}
+{"event":"stage","stage":"finish"}
+{"event":"line","text":"Trimming root"}
+{"event":"line","text":"Finalizing filesystem root"}
+{"event":"line","text":"Installation complete!"}
+{"event":"written","bytes":8053063680}
+{"event":"stage","stage":"boot-menu"}
+{"event":"stage","stage":"check"}
+{"event":"stage","stage":"record"}
+{"event":"result","outcome":"success","code":"","message":"TUR is installed beside Windows.","disk_state":"installed","mode":"beside","default":"tur","status":0,"seconds":71,"device":"/dev/vda","partition":"/dev/vda5","log_on_disk":"/var/log/tur-installer/20261113T201500Z-5e6f7a8b"}
