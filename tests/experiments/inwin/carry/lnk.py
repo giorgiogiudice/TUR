@@ -48,13 +48,11 @@ def parse_lnk(data):
     if has["link_info"]:
         size, header, info_flags, _volume, local_base, _network, suffix = struct.unpack_from("<7I", data, offset)
         if info_flags & 1:
-            target = _ansi(data, offset + local_base)
+            target = _ansi(data, offset + local_base) + (_ansi(data, offset + suffix) if suffix else "")
             if header >= 0x24:
                 wide_base, wide_suffix = struct.unpack_from("<2I", data, offset + 0x1C)
                 if wide_base:
                     target = _wide(data, offset + wide_base) + (_wide(data, offset + wide_suffix) if wide_suffix else "")
-            elif suffix:
-                target += _ansi(data, offset + suffix)
             result["target"] = target
         elif info_flags & 2:
             result["network"] = True
