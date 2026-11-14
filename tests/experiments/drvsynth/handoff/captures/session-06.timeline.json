@@ -1,0 +1,107 @@
+{
+  "session": 6,
+  "title": "Pictures",
+  "capture": "session-06.pcapng",
+  "text": "session-06.txt",
+  "clock": "seconds since the capture started",
+  "entries": [
+    {
+      "from": 0.5,
+      "did": "showed a smiley on the display",
+      "picture": [
+        "....ffffffff....",
+        "..ff........ff..",
+        ".f..ff....ff..f.",
+        "f...ff....ff...f",
+        "f..............f",
+        "f..8........8..f",
+        ".f..88888888..f.",
+        "..ff........ff.."
+      ],
+      "to": 0.513,
+      "shown": [
+        "image shown"
+      ]
+    },
+    {
+      "from": 1.214,
+      "did": "showed a diagonal line",
+      "picture": [
+        "ff..............",
+        "..ff............",
+        "....ff..........",
+        "......ff........",
+        "........ff......",
+        "..........ff....",
+        "............ff..",
+        "..............ff"
+      ],
+      "to": 1.234,
+      "shown": [
+        "image shown"
+      ]
+    },
+    {
+      "from": 1.935,
+      "did": "showed a left-to-right brightness ramp",
+      "picture": [
+        ".123456789abcdef",
+        ".123456789abcdef",
+        ".123456789abcdef",
+        ".123456789abcdef",
+        ".123456789abcdef",
+        ".123456789abcdef",
+        ".123456789abcdef",
+        ".123456789abcdef"
+      ],
+      "to": 1.947,
+      "shown": [
+        "image shown"
+      ]
+    },
+    {
+      "from": 2.648,
+      "did": "lit only the top-left pixel, fully",
+      "picture": [
+        "f...............",
+        "................",
+        "................",
+        "................",
+        "................",
+        "................",
+        "................",
+        "................"
+      ],
+      "to": 2.665,
+      "shown": [
+        "image shown"
+      ]
+    },
+    {
+      "from": 3.365,
+      "did": "showed a pattern of brightness steps",
+      "picture": [
+        ".1.1.1.1.1.1.1.1",
+        "2323232323232323",
+        "4545454545454545",
+        "6767676767676767",
+        "8989898989898989",
+        "abababababababab",
+        "cdcdcdcdcdcdcdcd",
+        "efefefefefefefef"
+      ],
+      "to": 3.379,
+      "shown": [
+        "image shown"
+      ]
+    },
+    {
+      "from": 4.079,
+      "did": "cleared the display",
+      "to": 4.095,
+      "shown": [
+        "display cleared"
+      ]
+    }
+  ]
+}

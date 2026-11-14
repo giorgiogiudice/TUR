@@ -1,0 +1,89 @@
+{
+  "session": 3,
+  "title": "Night mode",
+  "capture": "session-03.pcapng",
+  "text": "session-03.txt",
+  "clock": "seconds since the capture started",
+  "entries": [
+    {
+      "from": 0.5,
+      "did": "switched to night mode",
+      "to": 0.765,
+      "shown": [
+        "mode night"
+      ]
+    },
+    {
+      "from": 1.465,
+      "did": "asked which mode the gadget is in",
+      "to": 1.479,
+      "shown": [
+        "night"
+      ]
+    },
+    {
+      "from": 2.179,
+      "did": "set the night-light level to 10",
+      "to": 2.196,
+      "shown": [
+        "night-level 10"
+      ]
+    },
+    {
+      "from": 2.896,
+      "did": "asked for the night-light level",
+      "to": 2.915,
+      "shown": [
+        "10"
+      ]
+    },
+    {
+      "from": 3.615,
+      "did": "set the night-light level to 3",
+      "to": 3.635,
+      "shown": [
+        "night-level 3"
+      ]
+    },
+    {
+      "from": 4.335,
+      "did": "set the (daytime) display brightness to 55 while in night mode",
+      "to": 4.855,
+      "shown": [
+        "brightness 55"
+      ]
+    },
+    {
+      "from": 5.555,
+      "did": "asked for the display brightness",
+      "to": 6.071,
+      "shown": [
+        "55"
+      ]
+    },
+    {
+      "from": 6.772,
+      "did": "asked for the night-light level",
+      "to": 6.79,
+      "shown": [
+        "3"
+      ]
+    },
+    {
+      "from": 7.49,
+      "did": "switched back to day mode",
+      "to": 7.755,
+      "shown": [
+        "mode day"
+      ]
+    },
+    {
+      "from": 8.456,
+      "did": "asked which mode the gadget is in",
+      "to": 8.472,
+      "shown": [
+        "day"
+      ]
+    }
+  ]
+}

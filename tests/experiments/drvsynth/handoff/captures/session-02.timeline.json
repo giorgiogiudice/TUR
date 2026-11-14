@@ -1,0 +1,73 @@
+{
+  "session": 2,
+  "title": "Brightness",
+  "capture": "session-02.pcapng",
+  "text": "session-02.txt",
+  "clock": "seconds since the capture started",
+  "entries": [
+    {
+      "from": 0.5,
+      "did": "set the display brightness to 40",
+      "to": 0.514,
+      "shown": [
+        "brightness 40"
+      ]
+    },
+    {
+      "from": 1.215,
+      "did": "asked for the display brightness",
+      "to": 1.228,
+      "shown": [
+        "40"
+      ]
+    },
+    {
+      "from": 1.929,
+      "did": "set the display brightness to 41",
+      "to": 1.945,
+      "shown": [
+        "brightness 41"
+      ]
+    },
+    {
+      "from": 2.645,
+      "did": "set the display brightness to 75",
+      "to": 2.663,
+      "shown": [
+        "brightness 75"
+      ]
+    },
+    {
+      "from": 3.363,
+      "did": "set the display brightness to 0",
+      "to": 3.381,
+      "shown": [
+        "brightness 0"
+      ]
+    },
+    {
+      "from": 4.082,
+      "did": "set the display brightness to 100",
+      "to": 4.094,
+      "shown": [
+        "brightness 100"
+      ]
+    },
+    {
+      "from": 4.795,
+      "did": "set the display brightness to 7",
+      "to": 4.807,
+      "shown": [
+        "brightness 7"
+      ]
+    },
+    {
+      "from": 5.508,
+      "did": "asked for the display brightness",
+      "to": 5.526,
+      "shown": [
+        "7"
+      ]
+    }
+  ]
+}

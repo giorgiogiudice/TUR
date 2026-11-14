@@ -1,0 +1,85 @@
+{
+  "session": 9,
+  "title": "Evening",
+  "capture": "session-09.pcapng",
+  "text": "session-09.txt",
+  "clock": "seconds since the capture started",
+  "entries": [
+    {
+      "from": 0.5,
+      "did": "asked for the device information",
+      "to": 0.512,
+      "shown": [
+        "firmware 3.1.4",
+        "uptime 4370"
+      ]
+    },
+    {
+      "from": 1.213,
+      "did": "switched to night mode",
+      "to": 1.478,
+      "shown": [
+        "mode night"
+      ]
+    },
+    {
+      "from": 2.178,
+      "did": "set the (daytime) display brightness to 20",
+      "to": 2.697,
+      "shown": [
+        "brightness 20"
+      ]
+    },
+    {
+      "from": 3.398,
+      "did": "set the night-light level to 1",
+      "to": 3.414,
+      "shown": [
+        "night-level 1"
+      ]
+    },
+    {
+      "from": 4.116,
+      "did": "read all sensors",
+      "to": 4.135,
+      "shown": [
+        "temperature 19.50",
+        "humidity 48.0",
+        "light 2"
+      ]
+    },
+    {
+      "from": 4.836,
+      "did": "watched the gadget for 6 seconds",
+      "to": 10.867,
+      "shown": [
+        "button 1 0.84",
+        "button 1 0.12"
+      ]
+    },
+    {
+      "at": 6.387,
+      "did": "pressed button 1 (about 0.8 s)"
+    },
+    {
+      "at": 7.887,
+      "did": "tapped button 1 very briefly"
+    },
+    {
+      "from": 11.568,
+      "did": "asked which mode the gadget is in",
+      "to": 11.579,
+      "shown": [
+        "night"
+      ]
+    },
+    {
+      "from": 12.28,
+      "did": "switched back to day mode",
+      "to": 12.547,
+      "shown": [
+        "mode day"
+      ]
+    }
+  ]
+}
