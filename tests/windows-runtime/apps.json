@@ -244,6 +244,66 @@
         "check": "pass",
         "uninstall": "pass"
       }
+    },
+    {
+      "id": "winscp-inno",
+      "app_id": "tur.test.winscp-inno",
+      "checked": "2026-11-14",
+      "name": "WinSCP",
+      "version": "6.7.1",
+      "publisher": "Martin Přikryl",
+      "toolkit": "Embarcadero C++Builder VCL",
+      "licence": "GPL-3.0-or-later. The icon set is not under the GPL: it may not be reused or redistributed apart from WinSCP",
+      "licence_source": "https://winscp.net/eng/docs/license",
+      "download_page": "https://winscp.net/eng/downloads.php",
+      "url": "https://downloads.sourceforge.net/project/winscp/WinSCP/6.7.1/WinSCP-6.7.1-Setup.exe",
+      "size": 13176776,
+      "sha256": "95ea85587c30ac6dd0c4b8148e16971f7854a6eee9e68298bf007566ebbe7603",
+      "hash_source": "https://winscp.net/download/WinSCP-6.7.1-ReadMe.txt, the release notes with checksums that the publisher's download page links to. The file comes from the project's SourceForge files, which the publisher's download page offers beside its own CDN, whose links carry an expiring token",
+      "expected_kind": "inno-setup",
+      "install_options": [],
+      "main_executable": "WinSCP.exe",
+      "window_title": "Login|WinSCP",
+      "check": {
+        "kind": "winscp-sftp",
+        "tool": "WinSCP.com"
+      },
+      "expected": {
+        "install": "pass",
+        "launch": "pass",
+        "check": "pass",
+        "uninstall": "pass"
+      }
+    },
+    {
+      "id": "winscp-zip",
+      "app_id": "tur.test.winscp-zip",
+      "checked": "2026-11-14",
+      "name": "WinSCP (portable)",
+      "version": "6.7.1",
+      "publisher": "Martin Přikryl",
+      "toolkit": "Embarcadero C++Builder VCL",
+      "licence": "GPL-3.0-or-later. The icon set is not under the GPL: it may not be reused or redistributed apart from WinSCP",
+      "licence_source": "https://winscp.net/eng/docs/license",
+      "download_page": "https://winscp.net/eng/downloads.php",
+      "url": "https://downloads.sourceforge.net/project/winscp/WinSCP/6.7.1/WinSCP-6.7.1-Portable.zip",
+      "size": 8833106,
+      "sha256": "e6d2f8e1249e41f3bf8638319bb9bd15a541a64720df0805cb0bebdedb5eda83",
+      "hash_source": "https://winscp.net/download/WinSCP-6.7.1-ReadMe.txt, the release notes with checksums that the publisher's download page links to. The file comes from the project's SourceForge files, which the publisher's download page offers beside its own CDN, whose links carry an expiring token",
+      "expected_kind": "portable-zip",
+      "install_options": [],
+      "main_executable": "WinSCP.exe",
+      "window_title": "Login|WinSCP",
+      "check": {
+        "kind": "winscp-sftp",
+        "tool": "WinSCP.com"
+      },
+      "expected": {
+        "install": "pass",
+        "launch": "pass",
+        "check": "pass",
+        "uninstall": "pass"
+      }
     }
   ]
 }
