@@ -27,10 +27,18 @@ COPY tests/boot/guest/rootfs/ /
 # itself with the files it reads from the repository, a fixture tree, the
 # socket probe and the program behind the test service. The test is not
 # changed for the guest; "repo" has the shape of the repository as far as the
-# test looks at it. /usr is read-only on the installed system, so these are
-# part of the test image.
+# test looks at it. The same holds for P@x's session-service test and for
+# P@x through local AI (tests/pax/service_e2e.py, tests/pax/local_model.py).
+# /usr is read-only on the installed system, so these are part of the test
+# image.
 COPY tests/pax/ /usr/share/tur-pax-e2e/repo/tests/pax/
 COPY services/tur-pax/tests/data/ /usr/share/tur-pax-e2e/repo/services/tur-pax/tests/data/
+COPY services/tur-pax/data/ /usr/share/tur-pax-e2e/repo/services/tur-pax/data/
+COPY services/tur-pax/interfaces/ /usr/share/tur-pax-e2e/repo/services/tur-pax/interfaces/
+COPY services/tur-ai-local/agent-tools.json services/tur-ai-local/agent-tools.adapter.json \
+     /usr/share/tur-pax-e2e/repo/services/tur-ai-local/
+COPY services/tur-apps/agent-tools.json services/tur-apps/agent-tools.adapter.json \
+     /usr/share/tur-pax-e2e/repo/services/tur-apps/
 COPY services/tur-catalogue/agent-tools.json services/tur-catalogue/agent-tools.adapter.json \
      /usr/share/tur-pax-e2e/repo/services/tur-catalogue/
 COPY services/tur-device-manager/agent-tools.json services/tur-device-manager/agent-tools.adapter.json \
@@ -41,7 +49,21 @@ COPY services/tur-runtime/agent-tools.json services/tur-runtime/agent-tools.adap
      /usr/share/tur-pax-e2e/repo/services/tur-runtime/
 COPY services/tur-storage/agent-tools.json services/tur-storage/agent-tools.adapter.json \
      /usr/share/tur-pax-e2e/repo/services/tur-storage/
+COPY services/tur-update/agent-tools.json services/tur-update/agent-tools.adapter.json \
+     /usr/share/tur-pax-e2e/repo/services/tur-update/
 COPY services/tur-device-manager/tests/fixtures/laptop/ /usr/share/tur-pax-e2e/laptop/
+
+# What P@x's session-service test (tests/pax/service_e2e.py) starts besides
+# the service: a private bus (dbus-daemon; the image's own session bus is
+# dbus-broker) and a password store that speaks the Secret Service
+# interface (gnome-keyring; the desktop's own is KWallet, which the test
+# does not drive). Only in this test image, from the base's repositories,
+# with the versions they hold on the day of the build; what came is listed.
+RUN dnf -y --setopt=install_weak_deps=False install dbus-daemon gnome-keyring && \
+    dnf clean all && \
+    rpm -q --qf '%{NAME}-%{VERSION}-%{RELEASE}.%{ARCH}\n' dbus-daemon gnome-keyring \
+        > /usr/share/tur-pax-e2e/added-packages.txt && \
+    cat /usr/share/tur-pax-e2e/added-packages.txt
 
 RUN set -eu; \
     chmod 0755 /usr/libexec/tur-boot-test/guest-agent /usr/libexec/tur-boot-test/scenario-agent \

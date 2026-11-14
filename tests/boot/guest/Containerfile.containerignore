@@ -4,6 +4,8 @@
 !tests/boot/guest/
 !tests/pax/
 !services/tur-pax/tests/data/
+!services/tur-pax/data/
+!services/tur-pax/interfaces/
 !services/*/agent-tools.json
 !services/*/agent-tools.adapter.json
 !services/tur-device-manager/tests/fixtures/laptop/

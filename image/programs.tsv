@@ -22,4 +22,6 @@ services/tur-update	tur-update	/usr/bin/tur-update
 services/tur-pax	tur-pax	/usr/bin/tur-pax
 services/tur-pax-memory	tur-pax-memory	/usr/bin/tur-pax-memory
 services/tur-pax-providers	tur-pax-providers	/usr/libexec/tur/tur-pax-providers
+services/tur-apps	tur-apps	/usr/bin/tur-apps
+services/tur-ai-local	tur-ai-local	/usr/bin/tur-ai-local
 installer/tur-installer-core	tur-installer	/usr/libexec/tur/tur-installer

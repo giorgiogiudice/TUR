@@ -10,9 +10,11 @@ Subsystem:        tur-diagnostics (tur-diag heal notify, history, decline;
                   notices), image user units, boot tests (heal workflow)
 Build ID:         20261113.g0649765eb57c (version 0.1.0-dev), the image the
                   heal workflow built and booted at 5ae57e3
-Source revision:  feat/self-healing-awareness; proven at 5ae57e3. One later
-                  commit holds two small fixes found in that run and this
-                  report; it is NOT yet proven (see "After the proven run")
+Source revision:  feat/self-healing-awareness; proven at 5ae57e3 and again
+                  at 133bdea (two small fixes found in the first run, see
+                  "After the first run"). Then merged with main (pull
+                  requests 108, 110, 115 and others had landed); the runs on
+                  the merge are in the pull request
 
 SUMMARY
 - What changed: the owner's rule "the user is always kept aware" made a
@@ -93,8 +95,12 @@ KNOWN LIMITATIONS
 
 NEXT SAFE ACTION
 - Lead: let rust run on the head; apply its rustfmt patch if it has one
-  (`scripts/dev/ci.py fixes RUN services/tur-diagnostics`); retarget the
-  pull request to main once 108 is merged.
+  (`scripts/dev/ci.py fixes RUN services/tur-diagnostics`). The pull
+  request targets main since 108 was merged.
+- The companion character planned for the bottom bar reads
+  `tur-diag heal notices --json` and `tur-diag heal history --json`: their
+  fields (notices: id, at_utc, code, kind, title, body, actions; history:
+  at_utc, code, kind, who, text) are to be kept stable; add, do not rename.
 ```
 
 ## What the guest test proves (heal run 43520110415, commit 5ae57e3)
@@ -131,10 +137,14 @@ The history as the person reads it (run 43520110415, shortened):
 2026-11-13T23:58:27Z [TUR]  Repaired: A system service stopped working (chronyd.service). Clears the failed state of the stopped service and starts it once. No setting is changed. Checked afterwards: it works.
 ```
 
-## After the proven run
+## After the first run
 
-Two defects seen in that run are fixed in the commit after 5ae57e3, which
-has not been through CI:
+Two defects seen in that run were fixed in 133bdea. On 133bdea heal
+(43538547754), boot (43538547714), image (43538547751), iso (43538547721),
+rollback (43538547723), pax (43538547708) and reports (43538547920) passed;
+release was cancelled; rust (43538547748) again never got a runner, so the
+Rust change of item 1 is compiled and run in the guest but its unit tests,
+clippy and rustfmt are still NOT RUN:
 
 1. The history named the one who made a repair as the one who later checked
    that it held ("[P@x] Checked again later: … held"). The check is TUR's;

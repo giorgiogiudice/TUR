@@ -167,6 +167,26 @@ run update-status-root-json sudo -n tur-update status --live --json --boot-healt
 run update-check-root-json sudo -n tur-update check --live --json --boot-health "${out}/boot-health-status.out"
 run update-commands tur-update commands
 
+# ---- tur-apps: what is installed for this user, the sources, a plan -----------------------
+# Nothing is installed: a plan says what installing would do, offline.
+cd / || exit 1
+run apps-list tur-apps list --json
+run apps-sources tur-apps sources --json
+run apps-plan tur-apps plan com.discord.discord --offline --json
+run apps-plan-text tur-apps plan org.libreoffice.libreoffice --offline
+cd "${out}" || exit 1
+
+# ---- tur-ai-local and its engine: this machine, the catalogue, what fits --------------------
+put mem_total_kib "$(awk '/^MemTotal:/ { print $2 }' /proc/meminfo)"
+put mem_available_kib "$(awk '/^MemAvailable:/ { print $2 }' /proc/meminfo)"
+run ai-hardware tur-ai-local hardware --json
+run ai-models tur-ai-local models --json
+run ai-recommend tur-ai-local recommend --json
+run ai-check tur-ai-local check qwen3-0.6b --json
+run ai-engine-version llama-server --version
+run ai-engine-devices llama-server --list-devices
+run ai-codes tur-ai-local codes
+
 # ---- the installer's core and the provider layer: they run, on real input ---------------
 run installer-lsblk lsblk --json --bytes --output-all
 run installer-inventory /usr/libexec/tur/tur-installer inventory --from "${out}/installer-lsblk.out" --json
@@ -195,6 +215,13 @@ run pax-grant-as-named tur-pax run "Say hello." --json --provider-config "${out}
     --audit-log "${out}/pax-grant-as-named.audit.jsonl" --grant-read "${named}"
 run pax-grant-resolved tur-pax run "Say hello." --json --provider-config "${out}/provider-closed.json" \
     --audit-log "${out}/pax-grant-resolved.audit.jsonl" --grant-read "${real_home}/Documents"
+# Through the same link, what must stay refused still is: a hidden folder of
+# the home directory, and the home directory itself.
+mkdir -p "${real_home}/.tur-boot-hidden"
+run pax-grant-hidden-named tur-pax run "Say hello." --json --provider-config "${out}/provider-closed.json" \
+    --audit-log "${out}/pax-grant-hidden-named.audit.jsonl" --grant-read "/home/$(id -un)/.tur-boot-hidden"
+run pax-grant-home-named tur-pax run "Say hello." --json --provider-config "${out}/provider-closed.json" \
+    --audit-log "${out}/pax-grant-home-named.audit.jsonl" --grant-read "/home/$(id -un)"
 unset TUR_PAX_API_KEY
 
 # ---- P@x end to end: tests/pax/e2e.py, as the pax workflow runs it ----------------------------
@@ -210,6 +237,117 @@ rc=$?
 printf '%s\t%s\n' "pax-e2e" "${rc}" >> "${out}/exit-status.tsv"
 put pax_e2e_exit_status "${rc}"
 put pax_e2e_finished_uptime "$(cut -d' ' -f1 /proc/uptime)"
+
+# ---- P@x's session service: tests/pax/service_e2e.py, as the pax workflow runs it ---------
+# On a private session bus of its own, with gnome-keyring as the password
+# store (the boot-test image adds it and dbus-daemon: tests/boot/guest/
+# Containerfile) and a scripted provider. The service is the installed
+# /usr/bin/tur-pax; the user's own service manager wakes its timers.
+service_e2e=/usr/share/tur-pax-e2e/repo/tests/pax/service_e2e.py
+mkdir -p "${out}/pax-service"
+put pax_service_started_uptime "$(cut -d' ' -f1 /proc/uptime)"
+timeout 900 python3 -B "${service_e2e}" \
+    --tur-pax /usr/bin/tur-pax \
+    --work-dir "${real_home}/tur-pax-service/work" \
+    --evidence "${out}/pax-service" > "${out}/pax-service-e2e.out" 2> "${out}/pax-service-e2e.err" < /dev/null
+rc=$?
+printf '%s\t%s\n' "pax-service-e2e" "${rc}" >> "${out}/exit-status.tsv"
+put pax_service_exit_status "${rc}"
+put pax_service_finished_uptime "$(cut -d' ' -f1 /proc/uptime)"
+rm -rf "${real_home}/tur-pax-service"
+
+# ---- P@x's session service on this user's own session bus ----------------------------------
+# Started by the bus from the installed activation file and user unit
+# (/usr/share/dbus-1/services/org.tur.Agent1.service, tur-pax.service), with
+# the installed model list. Nothing is switched on: the model lists only.
+export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=${XDG_RUNTIME_DIR}/bus}"
+put session_bus "${DBUS_SESSION_BUS_ADDRESS}"
+run pax-bus-models tur-pax models list --json
+run pax-bus-local tur-pax models list local --json
+run pax-bus-unit systemctl --user show tur-pax.service \
+    -p ActiveState -p SubState -p Result -p ExecMainStatus -p FragmentPath -p NRestarts
+run pax-bus-stop systemctl --user stop tur-pax.service
+# The catch-up timer, enabled for every user by the image: it ran after
+# the user's service manager started, and its one-shot command ended well.
+run pax-catchup systemctl --user show tur-pax-catchup.timer tur-pax-catchup.service \
+    -p Id -p UnitFileState -p ActiveState -p Result -p ExecMainStatus -p ExecMainStartTimestampMonotonic -p NextElapseUSecMonotonic
+
+# ---- P@x through local AI: a real model on the engine of the image --------------------------
+# What a person does: the smallest model of the catalogue is downloaded from
+# its publisher and checked, tur-ai-local serves it on llama-server, and P@x
+# asks it through the `local` preset of the installed model list, with every
+# installed tool set, in its sandbox (tests/pax/local_model.py, as the
+# local-ai workflow runs it). What the model answers is recorded and fails
+# nothing; what TUR is responsible for is checked (see that script).
+# local_model MODEL TASKS SECONDS: one model, downloaded, served, asked
+# through P@x, stopped and removed. Every record is named after the model.
+local_model() {
+    local model="$1" tasks="$2" seconds="$3" start serve_pid rc
+    put "local_${model}_started_uptime" "$(cut -d' ' -f1 /proc/uptime)"
+    put "local_${model}_mem_available_kib" "$(awk '/^MemAvailable:/ { print $2 }' /proc/meminfo)"
+    # What tur-ai-local says of this model on this machine before anything
+    # is done: fits, not-now (not in the memory free now) or too-large. The
+    # report expects what follows from it: a model that fits is served and
+    # answers P@x; one that does not is refused with that code, by pull
+    # (too-large: nothing is downloaded) or by serve (not-now).
+    run "local-${model}-check" tur-ai-local check "${model}" --json
+    put "local_${model}_verdict" "$(jq -r '.fit.verdict // empty' "${out}/local-${model}-check.out" 2> /dev/null)"
+    start="${SECONDS}"
+    # Downloaded through the virtual machine's network.
+    timeout 1200 tur-ai-local pull "${model}" > "${out}/local-${model}-pull.out" 2> "${out}/local-${model}-pull.err" < /dev/null
+    printf '%s\t%s\n' "local-${model}-pull" "$?" >> "${out}/exit-status.tsv"
+    put "local_${model}_pull_seconds" "$((SECONDS - start))"
+    run "local-${model}-verify" tur-ai-local verify "${model}"
+    start="${SECONDS}"
+    tur-ai-local serve "${model}" --json --idle-stop 1800 \
+        > "${out}/local-${model}-serve.out" 2> "${out}/local-${model}-serve.err" < /dev/null &
+    serve_pid=$!
+    until grep -q '"event":"ready"' "${out}/local-${model}-serve.out" 2> /dev/null \
+        || ! kill -0 "${serve_pid}" 2> /dev/null || [ $((SECONDS - start)) -ge 300 ]; do
+        sleep 1
+    done
+    put "local_${model}_serve_seconds" "$((SECONDS - start))"
+    if grep -q '"event":"ready"' "${out}/local-${model}-serve.out"; then
+        put "local_${model}_serve" ready
+        run "local-${model}-status" tur-ai-local status --json
+        timeout $((seconds * $(printf "%s\n" "${tasks}" | tr "," "\n" | wc -l) + 300)) python3 -B /usr/share/tur-pax-e2e/repo/tests/pax/local_model.py \
+            --tur-pax /usr/bin/tur-pax \
+            --models /usr/share/tur/pax/models.json \
+            --tools /usr/share/tur/pax/tools \
+            --fixture-manifests /usr/share/tur-pax-e2e/repo/tests/pax/manifests \
+            --fixture-adapters /usr/share/tur-pax-e2e/repo/tests/pax/adapters \
+            --runtime-dir "${XDG_RUNTIME_DIR}" \
+            --engine-log "${XDG_RUNTIME_DIR}/tur-ai-local/engine.log" \
+            --model "${model}" --engine "tur-image-llama.cpp-b9840" \
+            --tasks "${tasks}" --max-seconds "${seconds}" \
+            --work-dir "${real_home}/tur-pax-local/work" \
+            --evidence "${out}/pax-local-${model}" \
+            > "${out}/pax-local-${model}.out" 2> "${out}/pax-local-${model}.err" < /dev/null
+        rc=$?
+        printf '%s\t%s\n' "pax-local-${model}" "${rc}" >> "${out}/exit-status.tsv"
+        run "local-${model}-status-after" tur-ai-local status --json
+        cp "${XDG_RUNTIME_DIR}/tur-ai-local/engine.log" "${out}/local-${model}-engine.log" 2> /dev/null
+        run "local-${model}-stop" tur-ai-local stop
+        rm -rf "${real_home}/tur-pax-local"
+    else
+        # Refused (a code on its standard error), or not ready in five minutes.
+        put "local_${model}_serve" "not ready"
+        kill "${serve_pid}" 2> /dev/null
+    fi
+    wait "${serve_pid}" 2> /dev/null
+    printf '%s\t%s\n' "local-${model}-serve" "$?" >> "${out}/exit-status.tsv"
+    put "local_${model}_finished_uptime" "$(cut -d' ' -f1 /proc/uptime)"
+    run "local-${model}-remove" tur-ai-local remove "${model}"
+}
+
+# The smallest model of the catalogue (639 MB), with two tasks; then the
+# catalogue's first recommendation for an assistant that acts (Qwen3 4B,
+# 2.5 GB), which the local-ai workflow measured on its runner, with one.
+put local_models "qwen3-0.6b qwen3-4b"
+put local_started_uptime "$(cut -d' ' -f1 /proc/uptime)"
+local_model qwen3-0.6b local-ai,two-tools 480
+local_model qwen3-4b local-ai 900
+put local_finished_uptime "$(cut -d' ' -f1 /proc/uptime)"
 
 put finished_utc "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 touch "${out}/finished"

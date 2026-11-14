@@ -352,7 +352,7 @@ components() {
     # service manager it hands its own standard error to the system bus, and
     # SELinux does not let the bus daemon write to a file under /var/lib: the
     # first run of this test lost the connection that way (TUR-006).
-    timeout 2100 systemd-run --machine="${test_user}@.host" --user --wait --collect --quiet \
+    timeout 3600 systemd-run --machine="${test_user}@.host" --user --wait --collect --quiet \
         --unit=tur-component-checks /usr/libexec/tur-boot-test/component-checks "${dir}" \
         > /dev/null 2>&1 < /dev/null
     rc=$?
@@ -362,7 +362,7 @@ components() {
         rm -rf "${dir}"
         install -d -o "${test_user}" -g "${group}" -m 0755 "${dir}"
         echo "--- exit status ${rc}; systemd-run --uid=${test_user} -p PAMName=login" >> "${session}"
-        timeout 2100 systemd-run --wait --collect --quiet --unit=tur-component-checks-login \
+        timeout 3600 systemd-run --wait --collect --quiet --unit=tur-component-checks-login \
             --uid="${test_user}" -p PAMName=login -p "WorkingDirectory=${home}" \
             /usr/libexec/tur-boot-test/component-checks "${dir}" >> "${session}" 2>&1
         rc=$?
@@ -373,7 +373,7 @@ components() {
         rm -rf "${dir}"
         install -d -o "${test_user}" -g "${group}" -m 0755 "${dir}"
         echo "--- exit status ${rc}; runuser -l ${test_user}" >> "${session}"
-        timeout 2100 runuser -l "${test_user}" -c "/usr/libexec/tur-boot-test/component-checks '${dir}'" \
+        timeout 3600 runuser -l "${test_user}" -c "/usr/libexec/tur-boot-test/component-checks '${dir}'" \
             >> "${session}" 2>&1
         rc=$?
     fi

@@ -1674,6 +1674,15 @@ impl Core {
         let Some((entry, _)) = settings.current_provider(&models) else {
             return not_started(coded(TaskCode::ServiceNotConfigured));
         };
+        // The model's context, as the person chose it for a model on this
+        // computer or as its entry declares it: a tool's result is cut to
+        // fit it (TaskLimits::with_context).
+        let context_tokens = settings
+            .effective_values(&entry, &config.model)
+            .ok()
+            .and_then(|values| values.context_tokens)
+            .map(u64::from)
+            .or_else(|| entry.declared(&config.model).context_tokens);
         // A server that takes no key, such as a model server on this
         // computer, is sent none. One that writes its key to a file is sent
         // what the file holds now, and only at an address of this computer.
@@ -1793,7 +1802,7 @@ impl Core {
                 registry: &registry,
                 policy: &policy,
                 situation: job.situation,
-                limits: TaskLimits::default(),
+                limits: TaskLimits::default().with_context(context_tokens),
                 rules: &rules,
                 grants: &job.grants,
                 executor: &mut *executor,

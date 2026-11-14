@@ -52,19 +52,6 @@ use tur_pax::{Action, ActionClass};
 /// The adapter file format, as published.
 const ADAPTER_SCHEMA: &str = include_str!("../../../schemas/pax-tool-adapter.schema.json");
 
-/// Tool files that are not yet where the rule puts them, with the reason.
-///
-/// `tur-update` keeps its tools one directory down, in `pax/`, because
-/// `tur-update` is a program of the image (`image/programs.tsv`): at the
-/// component's root its tools would be installed into the image at once, and
-/// the image's smoke test and the boot test still count five installed tool
-/// sets (`tests/image/smoke.sh`, `tests/boot/report.py`), which this change
-/// may not edit. Moving them is a rename and the deletion of these two lines.
-const NOT_YET_AT_THE_ROOT: [&str; 2] = [
-    "tur-update/pax/agent-tools.json",
-    "tur-update/pax/agent-tools.adapter.json",
-];
-
 /// The `services` directory of the source tree.
 fn services() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("..")
@@ -260,17 +247,13 @@ fn tool_files_live_only_at_the_root_of_a_component() {
             let parts: Vec<&str> = path.split('/').collect();
             let by_the_rule =
                 parts.len() == 2 && (parts[1] == MANIFEST_FILE || parts[1] == ADAPTER_FILE);
-            !by_the_rule && !NOT_YET_AT_THE_ROOT.contains(&path.as_str())
+            !by_the_rule
         })
         .collect();
     assert!(
         misplaced.is_empty(),
         "tool files outside a component's root: {misplaced:?}"
     );
-    // The exceptions are real files, not stale entries.
-    for path in NOT_YET_AT_THE_ROOT {
-        assert!(found.iter().any(|known| known == path), "{path} is gone");
-    }
 }
 
 #[test]

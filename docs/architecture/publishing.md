@@ -362,7 +362,25 @@ Nothing below can be done by CI or an agent; each step is the owner's.
    Variables → New repository variable `TUR_PUBLISH` = `1`. From the next
    release run on `main`, the image goes to `ghcr.io/giorgiogiudice/tur`.
    The job refuses to publish if the secret is missing, if `release.pub` is
-   missing, or if the secret's public half is not `release.pub`.
+   missing, if the password secret does not open the key, or if the secret's
+   public half is not `release.pub`.
+
+   GitHub reads variables when a run is **created**, not when its jobs start:
+   a release run created before `TUR_PUBLISH` was set stays a rehearsal. Start
+   a new one (Actions → release → Run workflow on `main`) after setting it.
+
+   **Making the key on Windows.** Typing or pasting the password into cosign's
+   hidden prompt can store something other than what was meant (this happened
+   on 13 November 2026, and the key had to be made again). Set the password
+   first, as the release job does, then make the pair without a prompt:
+
+   ```powershell
+   $s = Read-Host "Password" -AsSecureString
+   $env:COSIGN_PASSWORD = [System.Net.NetworkCredential]::new("", $s).Password
+   .\cosign.exe generate-key-pair --output-key-prefix tur-release
+   .\cosign.exe public-key --key tur-release.key   # must print the public key
+   Remove-Item Env:COSIGN_PASSWORD
+   ```
 5. **Make the package public** after the first publication: on GitHub,
    your profile → Packages → `tur` → Package settings → Danger Zone → Change
    visibility → Public; and, on the same page, "Manage Actions access": the

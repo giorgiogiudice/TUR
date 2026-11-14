@@ -40,6 +40,22 @@ MARK = "TUR-BOOT-TEST: "
 ESP_GUID = "c12a7328-f81f-11d2-ba4b-00a0c93ec93b"
 BOOTS = ["first-boot", "second-boot", "third-boot"]
 SOFTWARE_RENDERERS = ("llvmpipe", "softpipe", "swrast", "lavapipe")
+ROOT = pathlib.Path(__file__).resolve().parents[2]
+
+
+def image_programs() -> tuple[list[str], list[str]]:
+    """The programs image/programs.tsv puts into the image, and the components
+    among them that ship assistant tools (agent-tools.json at the top of the
+    component), as the build installs them (image/programs.sh)."""
+    programs, tool_sets = [], []
+    for line in (ROOT / "image" / "programs.tsv").read_text().splitlines():
+        if not line.strip() or line.startswith("#"):
+            continue
+        component, program, _ = line.split("\t")
+        programs.append(program)
+        if (ROOT / component / "agent-tools.json").is_file():
+            tool_sets.append(pathlib.Path(component).name)
+    return programs, sorted(tool_sets)
 
 
 def props(text: str) -> dict[str, str]:
@@ -600,12 +616,13 @@ def check_components(ev: Evidence, checks: Checks, args) -> dict:
     )
 
     # ---- every program is there and runs ---------------------------------------------------
+    expected_programs, expected_tool_sets = image_programs()
     versions = [line.split("\t") for line in text("versions.tsv").splitlines() if line.strip()]
     bad = [row[0] for row in versions if len(row) < 4 or row[2] != "0" or not row[3].startswith(row[0] + " ")]
     add(
         "versions",
-        "every program of the image's list starts and prints its version",
-        len(versions) >= 11 and not bad,
+        "every program of the image's list (image/programs.tsv) starts and prints its version",
+        sorted(row[0] for row in versions) == sorted(expected_programs) and not bad,
         f"{len(versions)} programs: {', '.join(row[3] for row in versions if len(row) >= 4) or 'no data'}"
         + (f"; failed: {bad}" if bad else ""),
     )
@@ -843,10 +860,206 @@ def check_components(ev: Evidence, checks: Checks, args) -> dict:
     manifests = {name[len("pax-manifest-"):]: code for name, code in codes.items() if name.startswith("pax-manifest-")}
     add(
         "tool_manifests",
-        "tur-pax loads the assistant tools of each component, as installed",
-        len(manifests) == 5 and all(code == 0 for code in manifests.values()),
-        "; ".join(f"{name}: {first_line(f'pax-manifest-{name}.out') or 'exit status ' + str(code)}" for name, code in sorted(manifests.items()))
-        or "no data",
+        "tur-pax loads the assistant tools of each component of the image that ships them, as installed",
+        sorted(manifests) == expected_tool_sets and all(code == 0 for code in manifests.values()),
+        f"expected {', '.join(expected_tool_sets)}; "
+        + ("; ".join(f"{name}: {first_line(f'pax-manifest-{name}.out') or 'exit status ' + str(code)}" for name, code in sorted(manifests.items()))
+           or "no data"),
+    )
+
+    # ---- tur-apps --------------------------------------------------------------------------------
+    installed = document("apps-list.out") or {}
+    sources = document("apps-sources.out") or {}
+    plan = document("apps-plan.out") or {}
+    add(
+        "apps",
+        "tur-apps lists what is installed for the user and the sources, and plans an installation without "
+        "doing anything",
+        codes.get("apps-list") == 0
+        and installed.get("kind") == "installed"
+        and codes.get("apps-sources") == 0
+        and sources.get("kind") == "sources"
+        and codes.get("apps-plan") in (0, 3, 5, 6)
+        and (plan.get("kind") == "plan" or bool((plan.get("error") or {}).get("code"))),
+        f"list: exit status {codes.get('apps-list')}, {len(installed.get('applications') or [])} applications; "
+        f"sources: exit status {codes.get('apps-sources')}, "
+        f"{[source.get('name') for source in sources.get('sources') or [] if isinstance(source, dict)]}; plan "
+        f"com.discord.discord offline: exit status {codes.get('apps-plan')}, "
+        f"{plan.get('kind') or (plan.get('error') or {}).get('code')} "
+        f"{json.dumps(plan.get('route') or (plan.get('error') or {}).get('message'))[:200]}; "
+        f"text: {first_line('apps-plan-text.out') or first_line('apps-plan-text.err')}",
+    )
+
+    # ---- tur-ai-local and its engine ---------------------------------------------------------------
+    hardware = document("ai-hardware.out") or {}
+    engine = hardware.get("engine") or {}
+    cpu_backends = [name for name in engine.get("backends") or [] if str(name).startswith("cpu-")]
+    recommended = document("ai-recommend.out") or {}
+    catalogue = document("ai-models.out") or {}
+    engine_said = (text("ai-engine-version.out") + text("ai-engine-version.err")).strip()
+    add(
+        "ai_local",
+        "tur-ai-local finds the engine the image carries, with its processor variants and Vulkan, reads the "
+        "installed model catalogue and recommends a model",
+        codes.get("ai-hardware") == 0
+        and engine.get("present") is True
+        and engine.get("vulkan_backend") is True
+        and len(cpu_backends) >= 10
+        and codes.get("ai-models") == 0
+        and len(catalogue.get("models") or []) >= 5
+        and codes.get("ai-recommend") == 0
+        and codes.get("ai-engine-version") == 0,
+        f"engine {engine.get('program')}: present {engine.get('present')}, backends {engine.get('backends')}; "
+        f"{' / '.join(line for line in engine_said.splitlines() if line.startswith(('version', 'built with')))}; "
+        f"devices: {' / '.join(line.strip() for line in text('ai-engine-devices.out').splitlines() if line.strip())[:200]}; "
+        f"{len(catalogue.get('models') or [])} models in the catalogue; recommend: exit status "
+        f"{codes.get('ai-recommend')}, {json.dumps(recommended.get('conversation') or recommended.get('recommended'))[:200]}; "
+        f"memory {status.get('mem_total_kib')} KiB, available {status.get('mem_available_kib')} KiB",
+    )
+
+    # ---- P@x's session service --------------------------------------------------------------------
+    service = document("pax-service/service-checks.json") or {}
+    service_failed = [
+        f"{item.get('scenario')}: {item.get('check')}: {str(item.get('detail'))[:200]}"
+        for item in service.get("results") or []
+        if not item.get("passed")
+    ]
+    add(
+        "pax_service_e2e",
+        "P@x's session service test (tests/pax/service_e2e.py: private bus, gnome-keyring, scripted provider) "
+        "passes on the installed system with the installed tur-pax",
+        codes.get("pax-service-e2e") == 0 and service.get("failed") == 0 and (service.get("passed") or 0) >= 60,
+        f"exit status {codes.get('pax-service-e2e')}; {service.get('passed')} checks passed, {service.get('failed')} "
+        f"failed; wake timer: {service.get('timer')}; "
+        + (f"failed: {' | '.join(service_failed[:8])}" if service_failed else f"last line: {(text('pax-service-e2e.out').strip().splitlines() or ['no output'])[-1][:200]}"),
+    )
+    listed = document("pax-bus-models.out") or {}
+    providers = [entry.get("id") for entry in listed.get("providers") or [] if isinstance(entry, dict)]
+    local_offers = document("pax-bus-local.out")
+    unit = props(text("pax-bus-unit.out"))
+    add(
+        "pax_service_on_the_session_bus",
+        "the session bus starts P@x's service from the installed activation file and user unit, and it lists "
+        "the installed model list's providers, the local preset among them, and local AI's models",
+        codes.get("pax-bus-models") == 0
+        and "local" in providers
+        and codes.get("pax-bus-local") == 0
+        and bool(local_offers)
+        and unit.get("FragmentPath") == "/usr/lib/systemd/user/tur-pax.service",
+        f"models list: exit status {codes.get('pax-bus-models')}, providers {providers}; local: exit status "
+        f"{codes.get('pax-bus-local')}, {json.dumps(local_offers)[:240]}; unit: {unit}; "
+        f"{first_line('pax-bus-models.err')} {first_line('pax-bus-local.err')}",
+    )
+    catchup: dict[str, dict[str, str]] = {}
+    for block in text("pax-catchup.out").split("\n\n"):
+        values = props(block)
+        if values.get("Id"):
+            catchup[values["Id"]] = values
+    timer = catchup.get("tur-pax-catchup.timer", {})
+    oneshot = catchup.get("tur-pax-catchup.service", {})
+    add(
+        "pax_catchup",
+        "P@x's catch-up timer is enabled for the user, fired after the user's service manager started, and its "
+        "command ended without an error while P@x is off",
+        timer.get("ActiveState") == "active"
+        and oneshot.get("Result") == "success"
+        and oneshot.get("ExecMainStatus") == "0"
+        and oneshot.get("ExecMainStartTimestampMonotonic", "0") not in ("", "0"),
+        f"timer: {timer or 'no data'}; service: {oneshot or 'no data'}",
+    )
+
+    # ---- P@x through local AI, with real models on the engine of the image ----------------------
+    local_runs = {}
+    for model in status.get("local_models", "").split():
+        local = document(f"pax-local-{model}/pax-local-{model}.json") or {}
+        local_checks = local.get("checks") or []
+        local_failed = [
+            f"{item.get('name')}: {str(item.get('detail'))[:200]}"
+            for item in local_checks
+            if item.get("required") and not item.get("passed")
+        ]
+        tasks = (local.get("measurements") or {}).get("tasks") or []
+        measured = [
+            f"{task.get('task')}: {task.get('outcome')} in {task.get('seconds')} s, {task.get('requests')} requests, "
+            f"{task.get('input_tokens')}/{task.get('output_tokens')} tokens, calls "
+            f"{[(call.get('tool'), call.get('decision'), call.get('result')) for call in task.get('calls') or []]}, "
+            f"answer {str(task.get('answer'))[:160]!r}"
+            for task in tasks
+        ]
+        serve = status.get(f"local_{model}_serve")
+        verdict = status.get(f"local_{model}_verdict", "")
+        pull_said = first_line(f"local-{model}-pull.err")
+        serve_said = first_line(f"local-{model}-serve.err")
+        local_runs[model] = {
+            "verdict": verdict,
+            "serve": serve,
+            "exit_status": codes.get(f"pax-local-{model}"),
+            "pull_seconds": status.get(f"local_{model}_pull_seconds"),
+            "serve_seconds": status.get(f"local_{model}_serve_seconds"),
+            "memory_available_kib": status.get(f"local_{model}_mem_available_kib"),
+            "failed_checks": local_failed,
+            "tasks": tasks,
+        }
+        # What is expected follows from what tur-ai-local said of the model on
+        # this machine before anything was done.
+        if verdict == "fits":
+            expected = "served, and P@x's run through the local preset passes"
+            passed = (
+                codes.get(f"local-{model}-pull") == 0
+                and serve == "ready"
+                and codes.get(f"pax-local-{model}") == 0
+                and bool(local_checks)
+                and not local_failed
+            )
+        elif verdict == "not-now":
+            expected = "downloaded, then refused by serve with TUR-AI-LOCAL-006 (not in the memory free now)"
+            passed = (
+                codes.get(f"local-{model}-pull") == 0
+                and serve == "not ready"
+                and serve_said == "TUR-AI-LOCAL-006"
+                and codes.get(f"local-{model}-serve") not in (None, 0)
+            )
+        elif verdict == "too-large":
+            expected = "refused by pull with TUR-AI-LOCAL-005 (more than this computer has), nothing downloaded"
+            passed = (
+                codes.get(f"local-{model}-pull") not in (None, 0)
+                and pull_said == "TUR-AI-LOCAL-005"
+                and codes.get(f"local-{model}-verify") not in (None, 0)
+                and serve == "not ready"
+            )
+        else:
+            expected = "a verdict from tur-ai-local check"
+            passed = False
+        add(
+            f"pax_local_model_{model}",
+            f"local model {model}: tur-ai-local's verdict on this machine is honoured, and a model that fits "
+            "answers P@x through the local preset on the image's engine (downloaded from its publisher and "
+            "checked, every installed tool set, TUR's checks of tests/pax/local_model.py)",
+            passed,
+            f"verdict {verdict or 'none'}: expected {expected}; "
+            f"memory available before: {status.get(f'local_{model}_mem_available_kib')} KiB; pull: exit status "
+            f"{codes.get(f'local-{model}-pull')} in {status.get(f'local_{model}_pull_seconds')} s"
+            f"{' (' + pull_said + ')' if pull_said else ''}; serve: {serve} "
+            f"after {status.get(f'local_{model}_serve_seconds')} s{' (' + serve_said + ')' if serve_said else ''}; "
+            f"P@x: exit status {codes.get(f'pax-local-{model}')}; "
+            + (f"failed: {' | '.join(local_failed[:6])}; " if local_failed else "")
+            + ("; ".join(measured) or "no task ran"),
+        )
+    answered = [
+        model
+        for model, run in local_runs.items()
+        if run["verdict"] == "fits" and run["serve"] == "ready" and run["exit_status"] == 0 and not run["failed_checks"]
+    ]
+    verdicts = ", ".join(f"{model} {run['verdict'] or '?'}" for model, run in local_runs.items())
+    # Required where the machine is sized for it (the boot workflow's guest,
+    # --require-local-answer); elsewhere, as on the installer medium's smaller
+    # guest, a refusal that matches the verdict is the expected result.
+    add(
+        "pax_local_model_answered",
+        "P@x got an answer from at least one local model on the image's engine",
+        bool(answered),
+        f"answered: {', '.join(answered) or 'none'}; verdicts: {verdicts or 'no model was tried'}",
+        required=bool(getattr(args, "require_local_answer", False)),
     )
 
     # ---- P@x end to end -------------------------------------------------------------------------
@@ -912,7 +1125,21 @@ def check_components(ev: Evidence, checks: Checks, args) -> dict:
         f"{' '.join(named_text.split())[:360]} --grant-read {status.get('grant_resolved')}: exit status "
         f"{codes.get('pax-grant-resolved')}, {grant_resolved.get('error_code') or grant_resolved.get('outcome')} "
         "(the provider's address is a closed port: getting that far means the grant was accepted)",
-        required=False,
+    )
+    hidden_text = " ".join((text("pax-grant-hidden-named.out") + text("pax-grant-hidden-named.err")).split())
+    whole_text = " ".join((text("pax-grant-home-named.out") + text("pax-grant-home-named.err")).split())
+    add(
+        "pax_grant_through_home_link_still_refuses",
+        "through the same link, a hidden folder of the home directory and the home directory itself are still "
+        "refused (TUR-AI-SANDBOX-002)",
+        codes.get("pax-grant-hidden-named") not in (None, 0)
+        and "TUR-AI-SANDBOX-002" in hidden_text
+        and "hidden part" in hidden_text
+        and codes.get("pax-grant-home-named") not in (None, 0)
+        and "TUR-AI-SANDBOX-002" in whole_text
+        and "contains the home directory" in whole_text,
+        f"hidden folder: exit status {codes.get('pax-grant-hidden-named')}, {hidden_text[:240]}; home directory: "
+        f"exit status {codes.get('pax-grant-home-named')}, {whole_text[:240]}",
     )
 
     # ---- what SELinux refused, and what failed, while they ran ----------------------------------
@@ -931,6 +1158,8 @@ def check_components(ev: Evidence, checks: Checks, args) -> dict:
         spans = {
             "tur-diag status with no new privileges": ("nnp_probe_started_uptime", "nnp_probe_finished_uptime"),
             "the P@x end-to-end test": ("pax_e2e_started_uptime", "pax_e2e_finished_uptime"),
+            "P@x's session service test": ("pax_service_started_uptime", "pax_service_finished_uptime"),
+            "P@x through local AI": ("local_started_uptime", "local_finished_uptime"),
         }
         for name, (start, end) in spans.items():
             first, last = seconds(start), seconds(end)
@@ -989,6 +1218,13 @@ def check_components(ev: Evidence, checks: Checks, args) -> dict:
         "device_inventory_counts": counts,
         "device_findings": {"user": findings(problems), "root": findings(problems_root)},
         "storage_volumes": len(found),
+        "pax_service_e2e": {
+            "exit_status": codes.get("pax-service-e2e"),
+            "passed": service.get("passed"),
+            "failed": service.get("failed"),
+            "failed_checks": service_failed,
+        },
+        "pax_local_models": local_runs,
         "pax_e2e": {
             "exit_status": codes.get("pax-e2e"),
             "passed": results.get("passed"),
@@ -1303,6 +1539,8 @@ def main() -> int:
     ap.add_argument("--expected-build-id", default="")
     ap.add_argument("--expected-failed-units")
     ap.add_argument("--timing", action="append", default=[], help="NAME=SECONDS, recorded as given")
+    ap.add_argument("--require-local-answer", action="store_true",
+                    help="require that P@x got an answer from a local model (a guest sized for one)")
     args = ap.parse_args()
 
     out = pathlib.Path(args.out)
@@ -1467,6 +1705,9 @@ def main() -> int:
     def failed_text(units):
         return ", ".join(f"{u} (listed as expected)" if u in allowed else u for u in units) or "none"
 
+    local_summary = ", ".join(
+        f"{name} {run.get('serve')}" for name, run in components["pax_local_models"].items()
+    ) or "not run"
     facts = [
         ("Build ID", report["build_id"]),
         ("Kernel", report["kernel"]),
@@ -1490,7 +1731,9 @@ def main() -> int:
             "TUR programs (second boot)",
             f"run as {components['run_as']}, {components['selinux_context']}, SELinux {components['selinux_mode']}; "
             f"{len(components['programs'])} programs; P@x end to end: {components['pax_e2e']['passed']} passed, "
-            f"{components['pax_e2e']['failed']} failed; AVC denials while they ran: {len(components['avc_denials'])}",
+            f"{components['pax_e2e']['failed']} failed; session service: {components['pax_service_e2e']['passed']} "
+            f"passed, {components['pax_service_e2e']['failed']} failed; local model: "
+            f"{local_summary}; AVC denials while they ran: {len(components['avc_denials'])}",
         ),
     ]
     lines += ["", "| | |", "|---|---|"]
