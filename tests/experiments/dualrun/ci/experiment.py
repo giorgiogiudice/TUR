@@ -572,10 +572,11 @@ class Experiment:
         """A 1 GiB Linux partition with ext4 in the free space: what TUR's installer would add."""
         scenario = self.results["scenarios"]["install"]
         before = sh("sgdisk", "-p", str(self.disk)).stdout
-        sh("sgdisk", "-n", "0:0:+1G", "-t", "0:8300", "-c", "0:tur-root", str(self.disk))
+        # Type and name as the installer of pull request 112 makes it: Linux root (x86-64), "TUR".
+        sh("sgdisk", "-n", "0:0:+1G", "-t", "0:8304", "-c", "0:TUR", str(self.disk))
         listing = sh("sgdisk", "-p", str(self.disk)).stdout
         scenario["partition_table"] = listing.strip().splitlines()[-8:]
-        line = [l.split() for l in listing.splitlines() if "tur-root" in l][0]
+        line = [l.split() for l in listing.splitlines() if l.split() and l.split()[-1] == "TUR"][0]
         number, first, last = int(line[0]), int(line[1]), int(line[2])
         offset, size = first * 512, (last - first + 1) * 512
         made = sh("mkfs.ext4", "-q", "-F", "-L", "tur-root", "-E", f"offset={offset}", str(self.disk), f"{size // 1024}k",
