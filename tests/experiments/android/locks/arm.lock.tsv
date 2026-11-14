@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# Sample pinned from F-Droid index sha256 a504cce496d4b288a1f18a39a376014ae1e9cd539309457189712b9aeaac0b72 dated 2026-11-11T13:48:33.394000+00:00; preferred ABI arm64-v8a.
+package	group	version_name	version_code	sha256	size	file	nativecode	abi_class	min_sdk	target_sdk	name
+org.billthefarmer.editor	notes	1.98	198	343d17e11d0914e1a7708df2781580a0413e52501c0a41d91f7ef725d9615fe9	269122	org.billthefarmer.editor_198.apk	-	no native code	21	35	Editor
+org.moire.opensudoku	game	4.11.3	20261008	ac4c6c8d0bc9058c1cc8d8f4570dc51977b3bc51577a82a12b94e6ec7714b9f0	19398348	org.moire.opensudoku_20261008.apk	arm64-v8a	ARM only	26	37	Open Sudoku
+com.artifex.mupdf.viewer.app	tools	1.28.5a	270	18c1f0b47d89870ddbf3b93d4f4d444e479c686377c696ef54dbe0e73a7b0a0e	17128961	com.artifex.mupdf.viewer.app_270.apk	arm64-v8a,armeabi-v7a,x86	x86 32-bit only	21	36	MuPDF viewer
+com.shatteredpixel.shatteredpixeldungeon	game	4.0.2	922	ceef4cdd4beddcb3d85379ac004cb4ab5d918b89dc7366b4ce9c4a3585a5e78e	30275058	com.shatteredpixel.shatteredpixeldungeon_922.apk	arm64-v8a,armeabi-v7a,x86,x86_64	x86-64 native code	21	36	Shattered Pixel Dungeon

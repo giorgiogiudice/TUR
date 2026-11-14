@@ -139,12 +139,40 @@ asuser python3 "$HERE/../atl/vpointer.py" "$RUNDIR/vpointer.cmd" 1280 800 > "$OU
 sleep 1.5
 asuser swaymsg -t get_seats > "$OUT/sway-seats.json" 2>&1
 
+# Waydroid binds the session's PulseAudio socket into the container, and the
+# container does not start if the socket is absent ("Failed to mount
+# /run/user/N/pulse/native", run 43537684872). A desktop session always has
+# one; here a sound server is started with no sound card behind it.
+if [ ! -S "$RUNDIR/pulse/native" ]; then
+	if command -v pulseaudio >/dev/null; then
+		asuser pulseaudio --start --exit-idle-time=-1 > "$OUT/logs/sound-server.log" 2>&1
+		fact sound_server "pulseaudio, no sound card"
+	elif command -v pipewire-pulse >/dev/null; then
+		asuser pipewire > "$OUT/logs/sound-server.log" 2>&1 &
+		sleep 1
+		command -v wireplumber >/dev/null && (asuser wireplumber >> "$OUT/logs/sound-server.log" 2>&1 &)
+		asuser pipewire-pulse >> "$OUT/logs/sound-server.log" 2>&1 &
+		fact sound_server "pipewire-pulse, no sound card"
+	fi
+	for _ in $(seq 1 25); do
+		[ -S "$RUNDIR/pulse/native" ] && break
+		sleep 0.2
+	done
+	if [ ! -S "$RUNDIR/pulse/native" ]; then
+		# Last resort: something for the bind mount to find. Android then
+		# has no audio output, which a first screen does not need.
+		asuser mkdir -p "$RUNDIR/pulse"
+		asuser touch "$RUNDIR/pulse/native"
+		fact sound_server "none: an empty file stands in for the socket"
+	fi
+fi
+
 start_session() {
 	log "waydroid session start"
 	SESSION_T=$(date +%s)
 	asuser waydroid session start >> "$OUT/logs/session.log" 2>&1 &
 	local spid=$! booted=
-	for _ in $(seq 1 "${BOOT_TRIES:-150}"); do
+	for _ in $(seq 1 "${BOOT_TRIES:-240}"); do
 		sleep 2
 		if [ "$(ASH_TIMEOUT=10 ash 'getprop sys.boot_completed' | tr -d '\r' | tail -n 1)" = "1" ]; then
 			booted=1
@@ -169,7 +197,10 @@ else
 	# say so and try once more in permissive mode, recorded as such.
 	if command -v getenforce >/dev/null && [ "$(getenforce)" = "Enforcing" ]; then
 		ausearch -m avc -ts boot > "$OUT/logs/avc-enforcing.txt" 2>&1
+		journalctl -b --no-pager 2>/dev/null | grep -i 'avc:.*denied' >> "$OUT/logs/avc-enforcing.txt"
 		fact selinux_denials_enforcing "$(grep -c 'denied' "$OUT/logs/avc-enforcing.txt")"
+	fi
+	if command -v getenforce >/dev/null && [ "$(getenforce)" = "Enforcing" ] && grep -q denied "$OUT/logs/avc-enforcing.txt"; then
 		log "retrying with SELinux permissive"
 		asuser waydroid session stop >> "$OUT/logs/session.log" 2>&1
 		setenforce 0
@@ -187,6 +218,9 @@ collect() {
 	log "collecting logs"
 	ASH_TIMEOUT=60 ash 'logcat -d -t 4000' > "$OUT/logs/logcat-tail.txt" 2>&1
 	cp /var/lib/waydroid/waydroid.log "$OUT/logs/waydroid.log" 2>/dev/null
+	cat /var/lib/waydroid/lxc/waydroid/config* > "$OUT/logs/lxc-config.txt" 2>/dev/null
+	journalctl -u waydroid-container --no-pager 2>/dev/null | tail -n 200 > "$OUT/logs/container-journal.txt"
+	ASH_TIMEOUT=20 ash 'ps -A -o PID,RSS,NAME' > "$OUT/logs/android-processes.txt" 2>&1
 	dmesg | grep -iE 'binder|lxc|waydroid|apparmor="DENIED"|avc:' | tail -n 400 > "$OUT/logs/dmesg.txt" 2>&1
 	command -v ausearch >/dev/null && ausearch -m avc -ts boot > "$OUT/logs/avc.txt" 2>&1
 	command -v getenforce >/dev/null && fact selinux_at_end "$(getenforce)"

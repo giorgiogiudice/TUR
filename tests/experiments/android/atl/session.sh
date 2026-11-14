@@ -12,7 +12,9 @@ EV=/work/evidence
 mkdir -p "$HOME/.config/xdg-desktop-portal"
 printf '[preferred]\ndefault=gtk\n' > "$HOME/.config/xdg-desktop-portal/portals.conf"
 
-sway -c "$EXP/atl/sway.conf" > "$EV/sway.log" 2>&1 &
+sway_bin=/usr/local/bin/tur-sway
+[ -x "$sway_bin" ] || sway_bin=sway
+"$sway_bin" -c "$EXP/atl/sway.conf" > "$EV/sway.log" 2>&1 &
 for _ in $(seq 1 100); do
 	sock=$(ls "$XDG_RUNTIME_DIR" 2>/dev/null | grep -E '^wayland-[0-9]+$' | head -n 1)
 	[ -n "$sock" ] && break

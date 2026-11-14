@@ -39,6 +39,12 @@ apk info -v 2>/dev/null | sort > "$EV/alpine-packages.txt"
 	command -v android-translation-layer || echo "android-translation-layer: NOT INSTALLED (apk add status $rc)"
 } | tee -a "$EV/setup.txt"
 
+# Alpine gives /usr/bin/sway the file capability cap_sys_nice. A container
+# without that capability in its bounding set refuses to execute such a
+# file at all ("Operation not permitted", run 43537684872). A plain copy
+# carries no file capability.
+cp /usr/bin/sway /usr/local/bin/tur-sway && chmod 755 /usr/local/bin/tur-sway
+
 adduser -D -u 1000 tur 2>/dev/null
 chown -R tur /work/evidence
 mkdir -p /tmp/xdg-tur && chown tur /tmp/xdg-tur && chmod 700 /tmp/xdg-tur

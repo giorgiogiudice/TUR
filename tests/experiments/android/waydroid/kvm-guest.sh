@@ -74,8 +74,37 @@ fi
 log "guest up: $(gssh uname -r)"
 gssh 'cloud-init status --wait' > "$OUT/cloud-init.txt" 2>&1
 
+# The kernel of the Cloud image as released (7.2.11-300.fc45) has the C
+# binder driver built in (CONFIG_ANDROID_BINDER_IPC=y, run 43537684872).
+# TUR's image carries Fedora 45's updated kernel (7.3.3-300.fc45 when
+# android-runtime.md was written), where only the Rust driver exists. So
+# the guest takes Fedora's current kernel and restarts before the test.
+gssh 'uname -r; grep -E "CONFIG_ANDROID|CONFIG_RUST=" /lib/modules/$(uname -r)/config' > "$OUT/kernel-as-released.txt" 2>&1
+log "updating the guest's kernel"
+gssh 'sudo dnf upgrade -y "kernel*"' > "$OUT/dnf-kernel.log" 2>&1
+log "dnf status $?"
+gssh 'sudo systemctl reboot' 2>/dev/null
+sleep 15
+up=
+for _ in $(seq 1 60); do
+	if gssh true 2>/dev/null; then
+		up=1
+		break
+	fi
+	sleep 4
+done
+if [ -z "$up" ]; then
+	log "the guest did not come back after the kernel update"
+	tail -n 60 "$OUT/serial.log"
+	kill "$(cat "$WORK/qemu.pid")" 2>/dev/null
+	exit 0
+fi
+log "guest up again: $(gssh uname -r)"
+gssh 'uname -r; grep -E "CONFIG_ANDROID|CONFIG_RUST=" /lib/modules/$(uname -r)/config' > "$OUT/kernel-updated.txt" 2>&1
+cat "$OUT/kernel-updated.txt"
+
 log "installing Waydroid and a compositor from Fedora's repositories"
-gssh 'sudo dnf install -y waydroid sway grim wtype wl-clipboard unzip' > "$OUT/dnf.log" 2>&1
+gssh 'sudo dnf install -y waydroid sway grim wtype wl-clipboard unzip pipewire pipewire-pulseaudio wireplumber' > "$OUT/dnf.log" 2>&1
 log "dnf status $?"
 gssh 'rpm -q kernel-core waydroid waydroid-selinux lxc sway wlroots python3-gbinder libgbinder selinux-policy-targeted 2>&1; uname -r; getenforce' | tee "$OUT/guest-packages.txt"
 

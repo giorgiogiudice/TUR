@@ -554,6 +554,33 @@ def run_probe(probe: pathlib.Path, out: pathlib.Path, scale: float, phases: set[
     return res
 
 
+def canary(probe: pathlib.Path, out: pathlib.Path, scale: float, label: str) -> dict:
+    """Start the probe doing nothing and see whether its window has a picture."""
+    shots = out / "shots"
+    shots.mkdir(exist_ok=True)
+    stage = out / "stage"
+    stage.mkdir(exist_ok=True)
+    apk = stage / "org.tur.probe.apk"
+    shutil.copy(probe, apk)
+    app = App(apk, f"canary-{label}", out, extras=["--extra-string-key=phase=none"], scale=scale)
+    res: dict = {"renderer": label, "drawn": False}
+    try:
+        t = app.wait_window(90)
+        res["window_seconds"] = round(t, 2) if t is not None else None
+        if t is not None:
+            time.sleep(4 * scale)
+            w = app.find_window()
+            if w and screenshot(shots / f"canary-{label}.png", w["rect"]):
+                res["colours"] = colours(shots / f"canary-{label}.png")
+                res["drawn"] = res["colours"] > 8
+            res["alive"] = app.alive()
+        res["probe_lines"] = app.probe_lines()[:6]
+    finally:
+        res["exit_status_on_stop"] = app.stop()
+        res["log"] = log_findings(app.log)
+    return res
+
+
 def md_table(header: list[str], rows: list[list]) -> str:
     return fdroid_index.table(header, rows)
 
@@ -561,7 +588,7 @@ def md_table(header: list[str], rows: list[list]) -> str:
 def write_summary(out: pathlib.Path, results: list[dict], probe: dict | None, meta: dict) -> None:
     md = [f"## Android Translation Layer: {meta.get('title', 'run')}\n"]
     md.append(f"ATL package: `{meta.get('atl_version', '?')}`; machine architecture `{meta.get('machine')}`; "
-              f"time limits scaled by {meta.get('scale')}.\n")
+              f"time limits scaled by {meta.get('scale')}; renderer: {meta.get('renderer', 'not checked')}.\n")
     if results:
         n = len(results)
         win = sum(1 for r in results if r.get("window_seconds") is not None)
@@ -610,6 +637,21 @@ def main() -> int:
     # The probe first: it is small, and its facts are wanted even if the
     # sample later runs out of time.
     if args.probe and pathlib.Path(args.probe).exists():
+        # First, does anything get drawn at all? Without a GPU, GTK's
+        # default renderer may leave every window blank, which would say
+        # nothing about ATL. If the probe's window is blank or missing, the
+        # run goes on with GTK's software renderer, and says so.
+        try:
+            meta["canary"] = [canary(pathlib.Path(args.probe), out, args.scale, "default")]
+            if not meta["canary"][0]["drawn"] and "GSK_RENDERER" not in os.environ:
+                os.environ["GSK_RENDERER"] = "cairo"
+                meta["canary"].append(canary(pathlib.Path(args.probe), out, args.scale, "cairo"))
+                meta["renderer"] = "GSK_RENDERER=cairo (the probe's window was blank or missing with GTK's default renderer)"
+            else:
+                meta["renderer"] = "GTK's default"
+        except Exception as e:  # noqa: BLE001
+            meta["canary_error"] = repr(e)
+        save()
         try:
             probe_res = run_probe(pathlib.Path(args.probe), out, args.scale, set(args.probe_phases.split(",")))
         except Exception as e:  # noqa: BLE001 - a harness defect is recorded, the sample still runs

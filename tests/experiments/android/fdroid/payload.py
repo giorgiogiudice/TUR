@@ -21,6 +21,7 @@ Runs in CI only (AGENTS.md). Standard library only.
 from __future__ import annotations
 
 import collections
+import concurrent.futures
 import hashlib
 import http.server
 import json
@@ -159,24 +160,42 @@ def cmd_classify(index_path: str, n: str, seed: str, out_dir: str) -> int:
     names = sorted(idx["packages"])
     random.Random(seed).shuffle(names)
     results, failed, fetched_total = [], [], 0
-    for name in names:
-        if len(results) >= int(n):
-            break
+
+    def one(name: str):
+        """(row, entries, bytes fetched) or (row, None, error text) for one package; None if it has no APK."""
         row = fdroid_index.lock_row(name, "payload", idx["packages"][name], "x86_64")
         if row is None:
-            continue
+            return None
         try:
-            entries, fetched = central_directory(f"{REPO}/{row['file']}")
+            try:
+                entries, fetched = central_directory(f"{REPO}/{row['file']}")
+            except urllib.error.HTTPError:
+                # A release that has since moved to F-Droid's archive.
+                entries, fetched = central_directory(f"{fdroid_index.ARCHIVE}/{row['file']}")
         except Exception as e:  # noqa: BLE001 - one unreadable APK must not stop the survey
-            failed.append({"package": name, "error": str(e)[:200]})
-            continue
-        fetched_total += fetched
-        info = classify_entries(entries)
-        info.update({"package": name, "version_name": row["version_name"], "version_code": row["version_code"],
-                     "sha256": row["sha256"], "size": int(row["size"]), "file": row["file"],
-                     "categories": idx["packages"][name].get("metadata", {}).get("categories") or []})
-        results.append(info)
-        time.sleep(0.05)
+            return row, None, str(e)[:200]
+        return row, entries, fetched
+
+    # Six requests at a time, taken in the order of the shuffle, so that the
+    # sample is the same whatever the timing.
+    with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
+        for start in range(0, len(names), 24):
+            if len(results) >= int(n):
+                break
+            chunk = names[start:start + 24]
+            for name, answer in zip(chunk, pool.map(one, chunk)):
+                if answer is None or len(results) >= int(n):
+                    continue
+                row, entries, extra = answer
+                if entries is None:
+                    failed.append({"package": name, "error": extra})
+                    continue
+                fetched_total += extra
+                info = classify_entries(entries)
+                info.update({"package": name, "version_name": row["version_name"], "version_code": row["version_code"],
+                             "sha256": row["sha256"], "size": int(row["size"]), "file": row["file"],
+                             "categories": idx["packages"][name].get("metadata", {}).get("categories") or []})
+                results.append(info)
     total = len(results)
     (out / "payload-apps.json").write_text(json.dumps(results, indent=1) + "\n")
 

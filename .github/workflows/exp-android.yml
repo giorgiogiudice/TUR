@@ -59,10 +59,17 @@ defaults:
 
 env:
   EXP: tests/experiments/android
-  # Alpine edge, by digest (tag edge on 14 November 2026), an index with
-  # x86_64 and aarch64. Edge is a rolling repository: the package versions
+  # Alpine edge (tag edge on 14 November 2026, index sha256:020dfcba...),
+  # by the digest of each architecture's own manifest: docker refuses to
+  # hold one index digest for two platforms ("cannot overwrite digest",
+  # run 43537684872). Edge is a rolling repository: the package versions
   # installed are recorded in each run's evidence.
-  ALPINE_IMAGE: alpine@sha256:020dfcbaaf4cc1078bf2d9c7ba31a8466e334061dcd2f248001d68f79e52c000
+  ALPINE_AMD64: alpine@sha256:266f29255458134745f2bf588cb23ed1ed1768b96ff2580a05d70a8aba59e145
+  ALPINE_ARM64: alpine@sha256:42d86a3173522de4786cfba0b5d631dbadb3d03a86d218dafb070dafd9809c7e
+  # The F-Droid index the report's numbers come from (11 November 2026).
+  # The job uses its cached copy while the cache lives, so that a re-run
+  # counts the same index; without the cache it counts today's and says so.
+  FDROID_INDEX_PIN: a504cce496d4b288a1f18a39a376014ae1e9cd539309457189712b9aeaac0b72
   # QEMU 10.2.3 user-mode emulators and their binfmt_misc registration (tag
   # qemu-v10.2.3 on 14 November 2026). GPL-2.0.
   BINFMT_IMAGE: tonistiigi/binfmt@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0
@@ -83,8 +90,7 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/w/index" "$RUNNER_TEMP/w/evidence"
           echo "W=$RUNNER_TEMP/w" >> "$GITHUB_ENV"
-          sha=$(curl -fsS --retry 3 https://f-droid.org/repo/entry.json | python3 -c 'import json,sys; print(json.load(sys.stdin)["index"]["sha256"])')
-          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "sha=$FDROID_INDEX_PIN" >> "$GITHUB_OUTPUT"
 
       - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
@@ -93,7 +99,12 @@ jobs:
 
       - name: Native ABIs by category and year (hypothesis B)
         run: |
-          python3 "$EXP/fdroid/fdroid_index.py" fetch "$W/index"
+          if echo "$FDROID_INDEX_PIN  $W/index/index-v2.json" | sha256sum -c --status 2>/dev/null && [ -f "$W/index/index-meta.json" ]; then
+            echo "Using the pinned index from the cache." | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo "The pinned index is not in the cache: counting today's index instead." | tee -a "$GITHUB_STEP_SUMMARY"
+            python3 "$EXP/fdroid/fdroid_index.py" fetch "$W/index"
+          fi
           cp "$W/index/index-meta.json" "$W/evidence/"
           python3 "$EXP/fdroid/fdroid_index.py" stats "$W/index/index-v2.json" "$W/evidence" > /dev/null
           cat "$W/evidence/abi.md" >> "$GITHUB_STEP_SUMMARY"
@@ -140,11 +151,11 @@ jobs:
           PY
           while read -r pkg kind port; do
             [ -n "$chrome" ] || break
-            timeout 90 "$chrome" --headless=new --no-sandbox --disable-gpu --hide-scrollbars \
+            timeout 45 "$chrome" --headless=new --no-sandbox --disable-gpu --hide-scrollbars \
               --user-data-dir="$W/rehost/profile-$pkg-$kind" --window-size=412,915 --virtual-time-budget=12000 \
               --screenshot="$W/evidence/rehost/$pkg-$kind.png" "http://127.0.0.1:$port/index.html" \
               > "$W/evidence/rehost/$pkg-$kind.browser.log" 2>&1 < /dev/null || echo "$pkg $kind: browser status $?"
-            timeout 60 "$chrome" --headless=new --no-sandbox --disable-gpu --user-data-dir="$W/rehost/profile-$pkg-$kind-dom" \
+            timeout 40 "$chrome" --headless=new --no-sandbox --disable-gpu --user-data-dir="$W/rehost/profile-$pkg-$kind-dom" \
               --virtual-time-budget=12000 --dump-dom "http://127.0.0.1:$port/index.html" 2>/dev/null < /dev/null \
               | python3 -c 'import re,sys,html; t=sys.stdin.read(); t=re.sub(r"(?s)<(script|style)[^>]*>.*?</\1>","",t); t=html.unescape(re.sub(r"<[^>]+>"," ",t)); print(re.sub(r"\s+"," ",t)[:1500])' \
               > "$W/evidence/rehost/$pkg-$kind.text.txt" || true
@@ -199,12 +210,15 @@ jobs:
       - name: Applications under ATL in Alpine edge
         env:
           ATL_TITLE: ${{ matrix.set }} set, x86-64
-          ATL_PROBE: ${{ matrix.set == 'sample' && 'tur-probe.apk' || '' }}
+          ATL_PROBE: tur-probe.apk
+          # The sample set runs the probe through every phase; the random
+          # set only as the check that windows are drawn at all.
+          ATL_PROBE_PHASES: ${{ matrix.set == 'sample' && 'open,save,view,share,webview,bench' || 'none' }}
         run: |
-          docker run --rm --security-opt seccomp=unconfined --shm-size=2g \
-            -e ATL_TITLE -e ATL_PROBE \
+          docker run --rm --security-opt seccomp=unconfined --cap-add SYS_NICE --shm-size=2g \
+            -e ATL_TITLE -e ATL_PROBE -e ATL_PROBE_PHASES \
             -v "$GITHUB_WORKSPACE:/src:ro" -v "$W:/work" \
-            "$ALPINE_IMAGE" sh /src/tests/experiments/android/atl/run-in-alpine.sh
+            "$ALPINE_AMD64" sh /src/tests/experiments/android/atl/run-in-alpine.sh
 
       - name: Results
         if: always()
@@ -261,7 +275,9 @@ jobs:
           # workload, native against emulated: openssl's benchmark.
           for arch in amd64 arm64; do
             echo "== $arch" | tee -a "$W/evidence/openssl-speed.txt"
-            docker run --rm --platform "linux/$arch" "$ALPINE_IMAGE" sh -c \
+            image=$ALPINE_AMD64
+            [ "$arch" = arm64 ] && image=$ALPINE_ARM64
+            docker run --rm --platform "linux/$arch" "$image" sh -c \
               'apk add -q openssl >/dev/null 2>&1; uname -m; openssl speed -seconds 2 sha256 2>/dev/null | tail -n 2; openssl speed -seconds 2 rsa2048 2>/dev/null | tail -n 2' \
               2>&1 | tee -a "$W/evidence/openssl-speed.txt" || true
           done
@@ -273,10 +289,10 @@ jobs:
           ATL_SCALE: "5"
           ATL_PROBE_PHASES: bench
         run: |
-          docker run --rm --platform linux/arm64 --security-opt seccomp=unconfined --shm-size=2g \
+          docker run --rm --platform linux/arm64 --security-opt seccomp=unconfined --cap-add SYS_NICE --shm-size=2g \
             -e ATL_TITLE -e ATL_PROBE -e ATL_SCALE -e ATL_PROBE_PHASES \
             -v "$GITHUB_WORKSPACE:/src:ro" -v "$W:/work" \
-            "$ALPINE_IMAGE" sh /src/tests/experiments/android/atl/run-in-alpine.sh
+            "$ALPINE_ARM64" sh /src/tests/experiments/android/atl/run-in-alpine.sh
 
       - name: Results
         if: always()
@@ -334,7 +350,7 @@ jobs:
         run: |
           curl -fsS https://repo.waydro.id | sudo bash > "$W/evidence/waydroid-repo.txt" 2>&1 || true
           sudo apt-get update -q
-          sudo apt-get install -y waydroid sway grim wtype wl-clipboard imagemagick 2>&1 | tail -n 5
+          sudo apt-get install -y waydroid sway grim wtype wl-clipboard imagemagick pulseaudio 2>&1 | tail -n 5
           dpkg-query -W -f='${Package} ${Version}\n' waydroid lxc-utils python3-gbinder libgbinder sway grim 2>&1 | tee "$W/evidence/host-packages.txt"
 
       - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
