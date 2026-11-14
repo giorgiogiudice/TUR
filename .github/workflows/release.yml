@@ -52,14 +52,12 @@
 # requests and with `image_run`, the release job runs in full against its own
 # registry and its own throwaway keys, and nothing leaves the job.
 name: release
-# The commit in the run's name is how a later evaluation finds the release
-# runs of that commit (a workflow_run run's own head commit is main's tip).
-run-name: >-
-  ${{ github.event_name == 'workflow_run' && format('release {0}', github.event.workflow_run.head_sha)
-      || github.event.pull_request.title
-      || (inputs.promote && format('promote {0} to stable', inputs.promote))
-      || (inputs.image_run && format('rehearsal with image run {0}', inputs.image_run))
-      || format('release by hand on {0}', github.ref_name) }}
+# For a workflow_run run, the commit is in the run's name: that is how a
+# later evaluation finds the release runs of a commit (such a run's own head
+# commit is main's tip). Every other run keeps the name "release", by which
+# the gate and scripts/release/await.py know this workflow's runs: a run's
+# name is what the API reports as the workflow's.
+run-name: ${{ github.event_name == 'workflow_run' && format('release {0}', github.event.workflow_run.head_sha) || 'release' }}
 
 on:
   workflow_run:
@@ -283,7 +281,7 @@ jobs:
 
               others = rules.api(repo, "/actions/workflows/release.yml/runs?event=workflow_run&per_page=100")["workflow_runs"]
               for run in others:
-                  if str(run["id"]) == mine or run.get("display_title") != f"release {sha}":
+                  if str(run["id"]) == mine or f"release {sha}" not in (run.get("name"), run.get("display_title")):
                       continue
                   state = release_state(run["id"])
                   for _ in range(3):
