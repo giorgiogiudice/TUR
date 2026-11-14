@@ -263,7 +263,7 @@
       "expected_kind": "inno-setup",
       "install_options": [],
       "main_executable": "WinSCP.exe",
-      "window_title": "Login|WinSCP",
+      "window_title": "^Login$",
       "check": {
         "kind": "winscp-sftp",
         "tool": "WinSCP.com"
@@ -293,7 +293,7 @@
       "expected_kind": "portable-zip",
       "install_options": [],
       "main_executable": "WinSCP.exe",
-      "window_title": "Login|WinSCP",
+      "window_title": "^Login$",
       "check": {
         "kind": "winscp-sftp",
         "tool": "WinSCP.com"
