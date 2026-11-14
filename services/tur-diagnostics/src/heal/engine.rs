@@ -1196,7 +1196,12 @@ pub fn history(catalogue: &Catalogue, state: &HealState, person: &[PersonEntry])
                 .ok()
                 .and_then(|value| value.as_str().map(str::to_owned))
                 .unwrap_or_default(),
-            who: who(event.by, event.uid),
+            who: if event.kind == EventKind::Held {
+                // TUR made the later check, whoever made the repair.
+                Some("TUR".to_owned())
+            } else {
+                who(event.by, event.uid)
+            },
             text,
         });
     }

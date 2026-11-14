@@ -349,9 +349,11 @@ sleep 600 | bash -c 'ulimit -c unlimited; exec /usr/bin/tur-diag heal handle' > 
 crashed_pid=$!
 sleep 2
 kill -ABRT "${crashed_pid}"
+# The sleep that held the program's input open goes first: `wait` waits for
+# the whole pipeline (ten minutes, in heal runs 43494372499 and 43520110415).
+pkill -f 'sleep 600' 2> /dev/null
 wait "${crashed_pid}" 2> /dev/null
 put crash_exit "$?"
-pkill -f 'sleep 600' 2> /dev/null
 for _ in $(seq 1 30); do
     coredumpctl list --no-pager /usr/bin/tur-diag > /dev/null 2>&1 && break
     sleep 1
