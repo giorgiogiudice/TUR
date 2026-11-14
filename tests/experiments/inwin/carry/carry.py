@@ -516,11 +516,14 @@ def fixture(directory):
     desktop = pathlib.Path(desktop_dirs()[0])
     desktop.mkdir(parents=True, exist_ok=True)
     windir = os.environ.get("SystemRoot", r"C:\Windows")
-    made = powershell(
-        "$sh = New-Object -ComObject WScript.Shell; "
-        f"$a = $sh.CreateShortcut('{desktop}\\TUR Test Notepad.lnk'); $a.TargetPath = '{windir}\\System32\\notepad.exe'; "
-        f"$a.Arguments = 'inwin-argument.txt'; $a.WorkingDirectory = '{windir}'; $a.IconLocation = '{windir}\\System32\\shell32.dll,23'; $a.Save(); "
-        f"$b = $sh.CreateShortcut('{desktop}\\TUR Test Folder.lnk'); $b.TargetPath = '{windir}'; $b.Save(); 'made'" + JSON)
+    try:
+        made = powershell(
+            "$sh = New-Object -ComObject WScript.Shell; "
+            f"$a = $sh.CreateShortcut('{desktop}\\TUR Test Notepad.lnk'); $a.TargetPath = '{windir}\\System32\\notepad.exe'; "
+            f"$a.Arguments = 'inwin-argument.txt'; $a.WorkingDirectory = '{windir}'; $a.IconLocation = '{windir}\\System32\\shell32.dll,23'; $a.Save(); "
+            f"$b = $sh.CreateShortcut('{desktop}\\TUR Test Folder.lnk'); $b.TargetPath = '{windir}'; $b.Save(); 'made'" + JSON)
+    except Exception as error:
+        made = f"not made: {type(error).__name__}: {str(error)[:200]}"
     (desktop / "TUR Test Site.url").write_text("[InternetShortcut]\nURL=https://example.org/\n", encoding="ascii")
     notes["shortcuts"] = made
     time.sleep(2)

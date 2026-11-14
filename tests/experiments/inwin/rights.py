@@ -114,14 +114,14 @@ def main():
     target = PUBLIC / "out" / f"{arguments.name}-restricted.json"
     command = f'"{sys.executable}" "{script}" --out "{target}"'
     done = subprocess.run(["runas.exe", "/trustlevel:0x20000", command], capture_output=True, text=True, timeout=120)
-    notes["restricted_start"] = f"exit {done.returncode}"
-    results["restricted"] = wait_for(target, 420)
+    notes["restricted_start"] = f"runas exit {done.returncode}"
+    results["restricted"] = wait_for(target, 240 if done.returncode == 0 else 10)
 
     target = PUBLIC / "out" / f"{arguments.name}-standard.json"
     problem = run_standard(command.replace("-restricted.json", "-standard.json"), PUBLIC / "out")
     if problem:
         notes["standard_start"] = problem
-    results["standard"] = wait_for(target, 60 if problem else 300)
+    results["standard"] = wait_for(target, 10 if problem else 60)
     subprocess.run(["net.exe", "user", ACCOUNT, "/delete"], capture_output=True)
 
     for level, result in results.items():

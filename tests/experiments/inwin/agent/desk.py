@@ -17,6 +17,7 @@ import argparse
 import ctypes
 import ctypes.wintypes as wt
 import json
+import os
 import pathlib
 import statistics
 import subprocess
@@ -155,7 +156,7 @@ def covered_content(out):
     edge_process = None
     if pathlib.Path(edge).exists():
         page = (pathlib.Path(__file__).resolve().parent / "form.html").as_uri()
-        edge_process = subprocess.Popen([edge, f"--user-data-dir={out / 'edge-profile'}", "--no-first-run", "--no-default-browser-check", "--new-window", page])
+        edge_process = subprocess.Popen([edge, f"--user-data-dir={pathlib.Path(os.environ.get('TEMP', '.')) / 'inwin-edge-profile'}", "--no-first-run", "--no-default-browser-check", "--new-window", page])
     time.sleep(8)
     for window in win.top_windows():
         if window["exe"] == "notepad.exe" and cover is None and window["title"]:
