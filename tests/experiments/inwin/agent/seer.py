@@ -762,7 +762,7 @@ def main():
     parser.add_argument("--raw", required=True)
     parser.add_argument("--bridge", required=True)
     parser.add_argument("--downloads", required=True)
-    parser.add_argument("--only", default="")
+    parser.add_argument("--only", default=os.environ.get("INWIN_ONLY", ""))
     arguments = parser.parse_args()
     win.dpi_aware()
     Seer(arguments).run(arguments.only)

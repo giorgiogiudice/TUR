@@ -42,6 +42,7 @@ class Automation:
     def __init__(self):
         self.auto = comtypes.CoCreateInstance(U.CUIAutomation._reg_clsid_, interface=U.IUIAutomation, clsctx=comtypes.CLSCTX_INPROC_SERVER)
         self.live = {}
+        self.reads = 0
 
     def _request(self, view):
         request = self.auto.CreateCacheRequest()
@@ -55,14 +56,18 @@ class Automation:
         """One window as {"elements": [...], "milliseconds": n}. Elements
         keep a live reference in self.live under their id, for acting."""
         began = time.perf_counter()
-        self.live = {}
+        # Identifiers are unique across reads, so one from an earlier read
+        # still names the element it named then (or fails, if it is gone).
+        self.reads += 1
+        if len(self.live) > 60000:
+            self.live = {}
         elements = []
         note = {}
         root = self.auto.ElementFromHandleBuildCache(hwnd, self._request(view))
         stack = [(root, 0, None)]
         while stack and len(elements) < max_nodes:
             element, depth, parent = stack.pop()
-            identifier = f"u{len(elements)}"
+            identifier = f"u{self.reads}.{len(elements)}"
             node = self._node(element, identifier, depth, parent)
             elements.append(node)
             self.live[identifier] = element

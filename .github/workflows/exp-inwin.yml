@@ -135,7 +135,7 @@ jobs:
       - name: Read and operate real applications
         shell: pwsh
         run: |
-          python tests/experiments/inwin/agent/seer.py --out "$env:RUNNER_TEMP\see\out" --raw "$env:RUNNER_TEMP\see\raw" --bridge "$env:RUNNER_TEMP\bridge" --downloads "$env:RUNNER_TEMP\dl" --only "$env:INWIN_ONLY"
+          python tests/experiments/inwin/agent/seer.py --out "$env:RUNNER_TEMP\see\out" --raw "$env:RUNNER_TEMP\see\raw" --bridge "$env:RUNNER_TEMP\bridge" --downloads "$env:RUNNER_TEMP\dl"
           if (Test-Path "$env:RUNNER_TEMP\see\out\see.md") { Get-Content "$env:RUNNER_TEMP\see\out\see.md" | Add-Content $env:GITHUB_STEP_SUMMARY }
           exit 0
 
