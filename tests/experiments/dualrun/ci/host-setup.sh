@@ -12,8 +12,8 @@ set -euo pipefail
 mode="${1:-light}"
 
 sudo apt-get update -qq
-light=(dmsetup gdisk dosfstools mtools ntfs-3g e2fsprogs util-linux python3)
-heavy=(qemu-system-x86 qemu-utils ovmf swtpm xorriso wimtools tesseract-ocr
+light=(dmsetup gdisk dosfstools mtools ntfs-3g e2fsprogs util-linux python3 qemu-utils ovmf)
+heavy=(qemu-system-x86 swtpm p7zip-full xorriso wimtools tesseract-ocr
        python3-pil python3-pil.imagetk python3-tk xvfb openbox xdotool wmctrl
        x11-utils x11-apps xclip smbclient netpbm)
 if [ "$mode" = heavy ]; then
