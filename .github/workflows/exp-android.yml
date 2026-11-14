@@ -1,0 +1,442 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Experiment "android" (docs/reports/exp-android-1.md): three ways an
+# Android application could reach TUR's desktop, measured.
+#
+# fdroid        F-Droid's index says which native ABIs every package
+#               carries: the share of applications that need no ARM
+#               translation on an x86-64 computer, by category and by year.
+#               The ZIP directories of a random sample say what the
+#               applications are made of (Flutter, React Native, a web view
+#               around bundled web assets, ...), and a few web bundles are
+#               unpacked and shown in a browser with no Android at all.
+# atl           The Android Translation Layer (ATL) runs an APK as an
+#               ordinary Linux process with a native window: no Android
+#               system, no container. Thirty hand-picked and thirty random
+#               F-Droid applications, each started in a headless Wayland
+#               compositor in an Alpine container (Alpine packages ATL with
+#               its runtime), with a screenshot, times, memory and the
+#               accessibility tree; and a probe application for clipboard,
+#               notifications, input, files and resizing.
+# atl-arm64     The same, as 64-bit ARM under QEMU's user-mode emulation:
+#               an open-source route for ARM-only applications that needs
+#               no proprietary translation library. Speed included.
+# waydroid      Waydroid (a full Android system in a container) on the
+#               runner's own kernel: does it start in CI at all, and how far
+#               do the same applications get.
+# waydroid-f45  The same inside a KVM guest running Fedora 45's kernel,
+#               where the Rust binder driver is built in and SELinux is
+#               enforcing: the kernel TUR ships.
+#
+# A job is green when its harness ran; a negative result is a finding in
+# the results, not a failed job. Nothing proprietary is fetched: no Google
+# services, no Android image containing them, no ARM translation library.
+# The probe application is built here from tests/experiments/android/probe.
+name: exp-android
+
+on:
+  pull_request:
+    paths:
+      - "tests/experiments/android/**"
+      - ".github/workflows/exp-android.yml"
+  workflow_dispatch:
+    inputs:
+      jobs:
+        description: "Space-separated jobs to run (empty: all): fdroid atl atl-arm64 waydroid waydroid-f45"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: exp-android-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  EXP: tests/experiments/android
+  # Alpine edge, by digest (tag edge on 14 November 2026), an index with
+  # x86_64 and aarch64. Edge is a rolling repository: the package versions
+  # installed are recorded in each run's evidence.
+  ALPINE_IMAGE: alpine@sha256:020dfcbaaf4cc1078bf2d9c7ba31a8466e334061dcd2f248001d68f79e52c000
+  # QEMU 10.2.3 user-mode emulators and their binfmt_misc registration (tag
+  # qemu-v10.2.3 on 14 November 2026). GPL-2.0.
+  BINFMT_IMAGE: tonistiigi/binfmt@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0
+  FEDORA_CLOUD_URL: https://dl.fedoraproject.org/pub/fedora/linux/releases/45/Cloud/x86_64/images/Fedora-Cloud-Base-Generic-45-1.4.x86_64.qcow2
+  FEDORA_CLOUD_SHA256: 50bdc5e70f6a24f540932d15411c1c6ae9fcfa40fb990d876d83c5cc823b2ad0
+
+jobs:
+  fdroid:
+    name: "F-Droid: native ABIs, what applications are made of, a web bundle without Android"
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.jobs == '' || contains(inputs.jobs, 'fdroid') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Which index
+        id: index
+        run: |
+          mkdir -p "$RUNNER_TEMP/w/index" "$RUNNER_TEMP/w/evidence"
+          echo "W=$RUNNER_TEMP/w" >> "$GITHUB_ENV"
+          sha=$(curl -fsS --retry 3 https://f-droid.org/repo/entry.json | python3 -c 'import json,sys; print(json.load(sys.stdin)["index"]["sha256"])')
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: ${{ runner.temp }}/w/index
+          key: exp-android-fdroid-index-${{ steps.index.outputs.sha }}
+
+      - name: Native ABIs by category and year (hypothesis B)
+        run: |
+          python3 "$EXP/fdroid/fdroid_index.py" fetch "$W/index"
+          cp "$W/index/index-meta.json" "$W/evidence/"
+          python3 "$EXP/fdroid/fdroid_index.py" stats "$W/index/index-v2.json" "$W/evidence" > /dev/null
+          cat "$W/evidence/abi.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Lock files for the samples
+        run: |
+          mkdir -p "$W/evidence/locks"
+          python3 "$EXP/fdroid/fdroid_index.py" resolve "$W/index/index-v2.json" "$EXP/sample.txt" "$W/evidence/locks/sample.lock.tsv"
+          python3 "$EXP/fdroid/fdroid_index.py" resolve "$W/index/index-v2.json" "$EXP/arm-sample.txt" "$W/evidence/locks/arm.lock.tsv" --prefer-abi arm64-v8a
+          python3 "$EXP/fdroid/fdroid_index.py" random "$W/index/index-v2.json" 30 tur-android-1 "$W/evidence/locks/random.lock.tsv"
+
+      - name: What applications are made of (ZIP directories of 600 random applications)
+        run: |
+          python3 "$EXP/fdroid/payload.py" classify "$W/index/index-v2.json" 600 tur-android-payload-1 "$W/evidence" > /dev/null
+          cat "$W/evidence/payload.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Web bundles in a browser, without Android
+        run: |
+          mkdir -p "$W/rehost" "$W/evidence/rehost"
+          python3 "$EXP/fdroid/payload.py" rehost "$W/evidence" "$W/rehost" 4 > "$W/evidence/rehost/served.log" 2>&1 &
+          for _ in $(seq 1 120); do
+            [ -f "$W/rehost/served.json" ] && break
+            sleep 2
+          done
+          cat "$W/rehost/served.json" || true
+          chrome=$(command -v google-chrome || command -v chromium-browser || command -v chromium || true)
+          echo "browser: $chrome $($chrome --version 2>/dev/null)" | tee "$W/evidence/rehost/browser.txt"
+          python3 - "$W/rehost/served.json" <<'PY' > "$W/rehost/targets.txt" || true
+          import json, sys
+          for a in json.load(open(sys.argv[1])):
+              for kind, port in a["ports"].items():
+                  print(a["package"], kind, port)
+          PY
+          while read -r pkg kind port; do
+            [ -n "$chrome" ] || break
+            timeout 90 "$chrome" --headless=new --no-sandbox --disable-gpu --hide-scrollbars \
+              --user-data-dir="$W/rehost/profile-$pkg-$kind" --window-size=412,915 --virtual-time-budget=12000 \
+              --screenshot="$W/evidence/rehost/$pkg-$kind.png" "http://127.0.0.1:$port/index.html" \
+              > "$W/evidence/rehost/$pkg-$kind.browser.log" 2>&1 || echo "$pkg $kind: browser status $?"
+            timeout 60 "$chrome" --headless=new --no-sandbox --disable-gpu --user-data-dir="$W/rehost/profile-$pkg-$kind-dom" \
+              --virtual-time-budget=12000 --dump-dom "http://127.0.0.1:$port/index.html" 2>/dev/null \
+              | python3 -c 'import re,sys,html; t=sys.stdin.read(); t=re.sub(r"(?s)<(script|style)[^>]*>.*?</\1>","",t); t=html.unescape(re.sub(r"<[^>]+>"," ",t)); print(re.sub(r"\s+"," ",t)[:1500])' \
+              > "$W/evidence/rehost/$pkg-$kind.text.txt" || true
+          done < "$W/rehost/targets.txt"
+          touch "$W/rehost/stop"
+          cp "$W/rehost/served.json" "$W/evidence/rehost/" || true
+          for d in "$W"/rehost/*/; do
+            [ -f "$d/requests.log" ] && cp "$d/requests.log" "$W/evidence/rehost/$(basename "$d").requests.log"
+            [ -f "$d/requests-shim.log" ] && cp "$d/requests-shim.log" "$W/evidence/rehost/$(basename "$d").requests-shim.log"
+          done
+          ls -l "$W/evidence/rehost"
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: exp-android-fdroid
+          path: ${{ runner.temp }}/w/evidence/
+          if-no-files-found: warn
+
+  atl:
+    name: "ATL: ${{ matrix.set }} applications as native Linux processes"
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.jobs == '' || contains(inputs.jobs, 'atl') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        set: [sample, random]
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Scratch directory
+        run: |
+          mkdir -p "$RUNNER_TEMP/w/evidence" "$RUNNER_TEMP/w/probe" "$RUNNER_TEMP/w/apks"
+          echo "W=$RUNNER_TEMP/w" >> "$GITHUB_ENV"
+
+      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: ${{ runner.temp }}/w/apks
+          key: exp-android-apks-${{ matrix.set }}-${{ hashFiles('tests/experiments/android/locks/*.tsv', 'tests/experiments/android/*.txt') }}
+
+      - name: Pinned applications
+        run: |
+          bash "$EXP/ci/prepare.sh" "$W" "${{ matrix.set }}"
+          rm -rf "$W/index"
+          mkdir -p "$W/evidence/locks" && cp "$W"/locks/*.tsv "$W/evidence/locks/"
+          du -sh "$W/apks"
+
+      - name: Probe application
+        run: bash "$EXP/probe/build.sh" "$W/probe" || echo "::warning::the probe application did not build"
+
+      - name: Applications under ATL in Alpine edge
+        env:
+          ATL_TITLE: ${{ matrix.set }} set, x86-64
+          ATL_PROBE: ${{ matrix.set == 'sample' && 'tur-probe.apk' || '' }}
+        run: |
+          docker run --rm --security-opt seccomp=unconfined --shm-size=2g \
+            -e ATL_TITLE -e ATL_PROBE \
+            -v "$GITHUB_WORKSPACE:/src:ro" -v "$W:/work" \
+            "$ALPINE_IMAGE" sh /src/tests/experiments/android/atl/run-in-alpine.sh
+
+      - name: Results
+        if: always()
+        run: |
+          sudo chown -R "$(id -u):$(id -g)" "$W" || true
+          rm -rf "$W/evidence/data" "$W/evidence/stage"
+          cp "$W/probe/toolchain.txt" "$W/evidence/probe-toolchain.txt" 2>/dev/null || true
+          if [ -f "$W/evidence/results.md" ]; then
+            head -c 900000 "$W/evidence/results.md" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No ATL results were written." >> "$GITHUB_STEP_SUMMARY"
+            cat "$W/evidence/setup.txt" >> "$GITHUB_STEP_SUMMARY" || true
+          fi
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: exp-android-atl-${{ matrix.set }}
+          path: ${{ runner.temp }}/w/evidence/
+          if-no-files-found: warn
+
+  atl-arm64:
+    name: "ATL as 64-bit ARM under QEMU user-mode emulation"
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.jobs == '' || contains(inputs.jobs, 'atl-arm64') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Scratch directory
+        run: |
+          mkdir -p "$RUNNER_TEMP/w/evidence" "$RUNNER_TEMP/w/probe" "$RUNNER_TEMP/w/apks"
+          echo "W=$RUNNER_TEMP/w" >> "$GITHUB_ENV"
+
+      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: ${{ runner.temp }}/w/apks
+          key: exp-android-apks-arm-${{ hashFiles('tests/experiments/android/locks/*.tsv', 'tests/experiments/android/*.txt') }}
+
+      - name: Pinned applications (64-bit ARM builds)
+        run: |
+          bash "$EXP/ci/prepare.sh" "$W" arm
+          rm -rf "$W/index"
+          mkdir -p "$W/evidence/locks" && cp "$W"/locks/*.tsv "$W/evidence/locks/"
+
+      - name: Probe application
+        run: bash "$EXP/probe/build.sh" "$W/probe" || echo "::warning::the probe application did not build"
+
+      - name: QEMU user-mode emulation for aarch64 (binfmt_misc)
+        run: |
+          docker run --privileged --rm "$BINFMT_IMAGE" --install arm64 | tee "$W/evidence/binfmt.txt"
+          cat /proc/sys/fs/binfmt_misc/qemu-aarch64 | tee -a "$W/evidence/binfmt.txt"
+          # The emulator's own speed, on a plain integer and floating-point
+          # workload, native against emulated: openssl's benchmark.
+          for arch in amd64 arm64; do
+            echo "== $arch" | tee -a "$W/evidence/openssl-speed.txt"
+            docker run --rm --platform "linux/$arch" "$ALPINE_IMAGE" sh -c \
+              'apk add -q openssl >/dev/null 2>&1; uname -m; openssl speed -seconds 2 sha256 2>/dev/null | tail -n 2; openssl speed -seconds 2 rsa2048 2>/dev/null | tail -n 2' \
+              2>&1 | tee -a "$W/evidence/openssl-speed.txt" || true
+          done
+
+      - name: Applications under ATL, aarch64 userland on an x86-64 kernel
+        env:
+          ATL_TITLE: 64-bit ARM builds under QEMU user-mode emulation
+          ATL_PROBE: tur-probe-arm64.apk
+          ATL_SCALE: "5"
+          ATL_PROBE_PHASES: bench
+        run: |
+          docker run --rm --platform linux/arm64 --security-opt seccomp=unconfined --shm-size=2g \
+            -e ATL_TITLE -e ATL_PROBE -e ATL_SCALE -e ATL_PROBE_PHASES \
+            -v "$GITHUB_WORKSPACE:/src:ro" -v "$W:/work" \
+            "$ALPINE_IMAGE" sh /src/tests/experiments/android/atl/run-in-alpine.sh
+
+      - name: Results
+        if: always()
+        run: |
+          sudo chown -R "$(id -u):$(id -g)" "$W" || true
+          rm -rf "$W/evidence/data" "$W/evidence/stage"
+          if [ -f "$W/evidence/results.md" ]; then
+            head -c 900000 "$W/evidence/results.md" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No ATL results were written." >> "$GITHUB_STEP_SUMMARY"
+            cat "$W/evidence/setup.txt" >> "$GITHUB_STEP_SUMMARY" || true
+          fi
+          { echo '### Emulator speed (openssl speed)'; echo '```'; cat "$W/evidence/openssl-speed.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY" || true
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: exp-android-atl-arm64
+          path: ${{ runner.temp }}/w/evidence/
+          if-no-files-found: warn
+
+  waydroid:
+    name: "Waydroid on the runner's own kernel"
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.jobs == '' || contains(inputs.jobs, 'waydroid') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Scratch directory
+        run: |
+          mkdir -p "$RUNNER_TEMP/w/evidence" "$RUNNER_TEMP/w/apks/probe" "$RUNNER_TEMP/w/image-zips"
+          echo "W=$RUNNER_TEMP/w" >> "$GITHUB_ENV"
+
+      - name: What the runner's kernel offers for binder
+        run: |
+          {
+            echo "kernel: $(uname -r)"
+            echo "binder in /proc/filesystems: $(grep -c binder /proc/filesystems || true)"
+            grep -E 'CONFIG_ANDROID|CONFIG_ASHMEM' "/boot/config-$(uname -r)" || echo "no CONFIG_ANDROID line in the kernel configuration"
+            echo "module before installing anything: $(modinfo -n binder_linux 2>&1)"
+          } | tee "$W/evidence/runner-kernel.txt"
+          if ! modinfo binder_linux >/dev/null 2>&1; then
+            sudo apt-get update -q
+            sudo apt-get install -y "linux-modules-extra-$(uname -r)" 2>&1 | tail -n 3 | tee -a "$W/evidence/runner-kernel.txt"
+          fi
+          {
+            echo "module after linux-modules-extra: $(modinfo -n binder_linux 2>&1)"
+            sudo modprobe binder_linux 2>&1 && echo "modprobe binder_linux: ok"
+            echo "binder in /proc/filesystems: $(grep -c binder /proc/filesystems || true)"
+          } | tee -a "$W/evidence/runner-kernel.txt"
+          { echo '### Runner kernel'; echo '```'; cat "$W/evidence/runner-kernel.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Waydroid (upstream's package for Ubuntu) and a headless compositor
+        run: |
+          curl -fsS https://repo.waydro.id | sudo bash > "$W/evidence/waydroid-repo.txt" 2>&1 || true
+          sudo apt-get update -q
+          sudo apt-get install -y waydroid sway grim wtype wl-clipboard imagemagick 2>&1 | tail -n 5
+          dpkg-query -W -f='${Package} ${Version}\n' waydroid lxc-utils python3-gbinder libgbinder sway grim 2>&1 | tee "$W/evidence/host-packages.txt"
+
+      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: ${{ runner.temp }}/w/image-zips
+          key: exp-android-waydroid-images-20260927-20261022
+
+      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: ${{ runner.temp }}/w/apks
+          key: exp-android-apks-sample-${{ hashFiles('tests/experiments/android/locks/*.tsv', 'tests/experiments/android/*.txt') }}
+
+      - name: Android images (VANILLA, no Google software), pinned applications, probe
+        run: |
+          bash "$EXP/waydroid/fetch-images.sh" "$W/image-zips" "$W/images"
+          bash "$EXP/ci/prepare.sh" "$W" sample
+          rm -rf "$W/index"
+          mkdir -p "$W/evidence/locks" && cp "$W"/locks/*.tsv "$W/evidence/locks/"
+          bash "$EXP/probe/build.sh" "$W/apks/probe" || echo "::warning::the probe application did not build"
+
+      - name: Waydroid, headless, software rendering
+        run: |
+          sudo dmesg --clear || true
+          sudo bash "$EXP/waydroid/run.sh" "$W/evidence" "$W/images" "$W/apks" "$(id -un)" 0 "$W/locks/sample.lock.tsv"
+
+      - name: Results
+        if: always()
+        run: |
+          sudo chown -R "$(id -u):$(id -g)" "$W/evidence" || true
+          rm -rf "$W/apks/probe"
+          python3 "$EXP/waydroid/summary.py" "$W/evidence" "Waydroid on the runner's own kernel" >> "$GITHUB_STEP_SUMMARY" || true
+          # Contact sheets, so that a person can look at every first screen.
+          montage -label '%t' "$W"/evidence/shots/*.png -tile 4x2 -geometry 440x275+6+6 -background '#202020' -fill white \
+            "$W/evidence/sheet-%02d.png" || true
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: exp-android-waydroid
+          path: ${{ runner.temp }}/w/evidence/
+          if-no-files-found: warn
+
+  waydroid-f45:
+    name: "Waydroid in a KVM guest on Fedora 45's kernel (Rust binder, SELinux enforcing)"
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.jobs == '' || contains(inputs.jobs, 'waydroid-f45') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Scratch directory
+        run: |
+          mkdir -p "$RUNNER_TEMP/w/evidence" "$RUNNER_TEMP/w/apks/probe" "$RUNNER_TEMP/w/image-zips" "$RUNNER_TEMP/w/fedora"
+          echo "W=$RUNNER_TEMP/w" >> "$GITHUB_ENV"
+          df -h "$RUNNER_TEMP"
+
+      # Hosted runners expose /dev/kvm but not to the runner user; the udev
+      # rule is the method GitHub documents (as in the boot workflow).
+      - name: Enable KVM for the runner user
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          sudo udevadm settle
+          ls -la /dev/kvm | tee "$W/evidence/kvm.txt"
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils cloud-image-utils imagemagick 2>&1 | tail -n 3
+          qemu-system-x86_64 --version | head -n 1 | tee -a "$W/evidence/kvm.txt"
+
+      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: ${{ runner.temp }}/w/fedora
+          key: exp-android-fedora-cloud-45-1.4
+
+      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: ${{ runner.temp }}/w/image-zips
+          key: exp-android-waydroid-images-20260927-20261022
+
+      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: ${{ runner.temp }}/w/apks
+          key: exp-android-apks-sample-${{ hashFiles('tests/experiments/android/locks/*.tsv', 'tests/experiments/android/*.txt') }}
+
+      - name: Fedora 45 Cloud image, Android images, pinned applications, probe
+        run: |
+          if ! echo "$FEDORA_CLOUD_SHA256  $W/fedora/fedora.qcow2" | sha256sum -c --status 2>/dev/null; then
+            curl -fL --retry 3 -sS -o "$W/fedora/fedora.qcow2" "$FEDORA_CLOUD_URL"
+          fi
+          echo "$FEDORA_CLOUD_SHA256  $W/fedora/fedora.qcow2" | sha256sum -c
+          ln -sf "$W/fedora/fedora.qcow2" "$W/fedora.qcow2"
+          bash "$EXP/waydroid/fetch-images.sh" "$W/image-zips"
+          bash "$EXP/ci/prepare.sh" "$W" sample
+          rm -rf "$W/index"
+          mkdir -p "$W/evidence/locks" && cp "$W"/locks/*.tsv "$W/evidence/locks/"
+          bash "$EXP/probe/build.sh" "$W/apks/probe" || echo "::warning::the probe application did not build"
+
+      - name: Waydroid in the Fedora 45 guest
+        env:
+          MAX_APPS: "30"
+        run: bash "$EXP/waydroid/kvm-guest.sh" "$W" "$MAX_APPS" "$W/locks/sample.lock.tsv"
+
+      - name: Results
+        if: always()
+        run: |
+          rm -rf "$W/apks/probe"
+          python3 "$EXP/waydroid/summary.py" "$W/evidence" "Waydroid in a KVM guest on Fedora 45's kernel" >> "$GITHUB_STEP_SUMMARY" || true
+          montage -label '%t' "$W"/evidence/shots/*.png -tile 4x2 -geometry 440x275+6+6 -background '#202020' -fill white \
+            "$W/evidence/sheet-%02d.png" || true
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: exp-android-waydroid-f45
+          path: ${{ runner.temp }}/w/evidence/
+          if-no-files-found: warn
