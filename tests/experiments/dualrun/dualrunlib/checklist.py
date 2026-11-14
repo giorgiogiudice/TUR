@@ -329,7 +329,7 @@ def decide(facts: dict, *, mode: str = "direct", guest_mb: int = 4096, reserve_m
                         "TUR-DUALRUN-010",
                         f"{where}: hiberfil.sys begins with '{detail.get('magic_text')}' "
                         f"({detail.get('size')} bytes); journal clean: {state.get('journal_clean')}", part["index"]))
-            elif hibernation not in ("none", "empty", "used"):
+            elif hibernation not in ("none", "empty", "used") and not (experiment_allow_hibernated and mode == "protected"):
                 refusals.append(refusal(
                     "TUR-DUALRUN-013",
                     f"{where}: hibernation state '{hibernation}'; errors: {state.get('errors') or state.get('error')}",

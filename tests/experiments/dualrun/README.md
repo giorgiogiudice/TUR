@@ -200,7 +200,7 @@ pull request 112 must change.
 
 | Path | What |
 |---|---|
-| `tur-dualrun` | The prototype launcher: `inspect`, `check`, `attach`, `detach`, `recover`, `commit`, `discard`, `undo`, `qemu-args` |
+| `tur-dualrun` | The prototype launcher: `inspect`, `check`, `attach`, `detach`, `discard`, `commit`, `undo`, `esp-backup`, `vars`, `identity`, `run`, `recover` |
 | `dualrunlib/` | Read-only parsers (GPT, NTFS, FAT, registry hive for the boot configuration), firmware variables, the check-list, the device-mapper plan, sessions and layers |
 | `guest/` | The answer file template and TUR's test agent for Windows |
 | `ci/` | Host preparation, the download and terms stage, the synthetic tests (no Microsoft software), the experiment, the report tables |
