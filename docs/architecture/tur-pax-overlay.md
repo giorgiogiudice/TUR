@@ -453,8 +453,9 @@ facts are the AI control layer's section 19 seen from the other side.
 
 ## 10. Not built
 
-- Install rules, a D-Bus service file and the image (issue #51: no desktop
-  program is in the image).
+- (Built since, TUR-011: install rules, the D-Bus activation file
+  `data/org.tur.PaxOverlay1.service` and the image. The session bus starts
+  the overlay when something calls `org.tur.PaxOverlay1`.)
 - The lease rule's other half: the screen component that holds a lease and
   stops when it ends (milestone A2).
 - The owner check (section 6).

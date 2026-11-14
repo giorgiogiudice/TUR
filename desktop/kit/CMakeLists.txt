@@ -51,6 +51,7 @@ qt_add_qml_module(turkit
 )
 target_include_directories(turkit PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/tokens)
 target_link_libraries(turkit PUBLIC Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick PRIVATE Qt6::QuickControls2)
+tur_install_modules(turkit)
 
 add_subdirectory(pax)
 add_subdirectory(a11y)

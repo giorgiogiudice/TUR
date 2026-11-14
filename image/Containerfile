@@ -89,6 +89,32 @@ RUN /bin/sh /src/image/engine/llama-cpp.sh fetch
 # No network: compiled from the checked source with the tools above.
 RUN --network=none /bin/sh /src/image/engine/llama-cpp.sh build
 
+# ---- build stage: the desktop programs -------------------------------------------
+# tur-centre, tur-settings, tur-pax-ui and tur-pax-overlay (desktop/), built
+# on the base image itself against its own Qt and KDE libraries: the -devel
+# packages are asked for in exactly the builds the base has, and the stage
+# stops if Fedora's repositories no longer hold them (issue #59). The
+# compiler and the -devel packages stay in this stage. The stage also
+# downloads the two font packages of image/desktop/fonts.lock, which the
+# image installs below. See image/README.md, "The desktop programs".
+FROM ${BASE_IMAGE}@${BASE_DIGEST} AS desktop
+
+COPY image/desktop/ /src/image/desktop/
+
+# With network: the build tools and the -devel packages, and the fonts,
+# checked against their SHA-256. Nothing is compiled here.
+RUN /bin/sh /src/image/desktop/build.sh fetch
+
+COPY LICENSE.md NOTICE THIRD_PARTY_NOTICES.md /src/
+COPY desktop/ /src/desktop/
+
+# The commit's time, for the QML packed into the programs (build.sh).
+ARG TUR_SOURCE_DATE_EPOCH=0
+
+# No network: compiled from this repository with the tools above, installed
+# under /out, and checked: every program starts and loads its QML.
+RUN --network=none TUR_SOURCE_DATE_EPOCH="${TUR_SOURCE_DATE_EPOCH}" /bin/sh /src/image/desktop/build.sh build
+
 # ---- the image ------------------------------------------------------------------
 FROM ${BASE_IMAGE}@${BASE_DIGEST}
 
@@ -114,6 +140,20 @@ COPY --from=programs /out/ /
 # its libraries and backends in /usr/libexec/tur/llama.cpp, the link
 # /usr/bin/llama-server, its licences, and /usr/lib/tur/built-from-source.tsv.
 COPY --from=engine /out/ /
+
+# What the desktop stage made (image/desktop/build.sh): the four desktop
+# programs in /usr/bin, the libraries of their QML modules in /usr/lib64/tur,
+# their launcher entries, bus activation files and P@x's icon, and the two
+# lists /usr/lib/tur/desktop-programs.tsv and desktop-built-against.tsv.
+COPY --from=desktop /out/ /
+
+# The typefaces the programs name that the base does not carry: Inter and
+# JetBrains Mono, Fedora's packages, pinned in image/desktop/fonts.lock and
+# downloaded by the desktop stage.
+RUN --network=none \
+    --mount=type=bind,from=desktop,source=/rpms,target=/run/tur-fonts \
+    --mount=type=bind,source=image/desktop,target=/run/tur-desktop \
+    /bin/sh /run/tur-desktop/fonts.sh /run/tur-fonts "${TUR_BUILD_ID}"
 
 # Boot-attempt counting (ADR-0014). bootupd concatenates every *.cfg in
 # configs.d, sorted by name, into /boot/grub2/grub.cfg at installation. The
@@ -157,6 +197,12 @@ RUN set -eu; \
     # build).
     /usr/bin/llama-server --version || { echo "llama-server does not run in this image" >&2; exit 1; }; \
     /usr/bin/llama-server --list-devices; \
+    # The desktop programs were built against the base's Qt: each must
+    # start here, without a display.
+    for path in $(grep -v '^#' /usr/lib/tur/desktop-programs.tsv | cut -f2); do \
+        QT_QPA_PLATFORM=offscreen XDG_RUNTIME_DIR=/tmp "${path}" --version \
+            || { echo "${path} does not run in this image" >&2; exit 1; }; \
+    done; \
     # P@x's catch-up timer is enabled for every user (pax-service.md,
     # section 6): after sign-in it runs `tur-pax schedule wake`, which ends at
     # once while P@x is switched off. The link is what `systemctl --global

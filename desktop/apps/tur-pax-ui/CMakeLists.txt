@@ -73,6 +73,16 @@ target_compile_definitions(tur-pax-ui PRIVATE TUR_VERSION="${PROJECT_VERSION}")
 target_link_libraries(tur-pax-ui PRIVATE Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::DBus LayerShellQt::Interface)
 tur_link_qml_modules(tur-pax-ui turkit turkitpax turpaxui)
 
+# Into the image: the program, its module's library, its launcher entry with
+# P@x's keys, its bus activation file, its interface description and P@x's
+# icon, which the launcher entry names (tur-pax-ui.md, section 9).
+tur_install_program(tur-pax-ui)
+tur_install_modules(turpaxui)
+tur_install_data(applications data/org.tur.PaxUi.desktop)
+tur_install_data(dbus-1/services data/org.tur.PaxUi1.service)
+tur_install_data(dbus-1/interfaces dbus/org.tur.PaxUi1.xml)
+tur_install_data(icons/hicolor/scalable/apps data/icons/org.tur.Pax.svg)
+
 # The program loads each view and reports no QML warning, under the offscreen
 # platform, with no session bus: P@x's service is absent, which it says.
 foreach(shown ask panel activity setup)

@@ -323,6 +323,81 @@ def judge(out: pathlib.Path) -> list[dict]:
     else:
         check("the panel is dark in TUR Dark and light in TUR Light (pictures)", True, None,
               f"missing: {[str(p.name) for p in shots.values() if not p.exists()]}")
+    checks += judge_programs(out, facts, status)
+    return checks
+
+
+# TUR's desktop programs in the account's session (issue #59): the name the
+# guest's desktop check shows each under, what it is, and whether it is a
+# layer-shell surface (P@x's window and overlay) or an ordinary window.
+PROGRAMS = [
+    ("settings", "tur-settings, from its launcher entry", False),
+    ("centre", "tur-centre, from its launcher entry", False),
+    ("centre-app", "tur-centre on an application's page, by its link", False),
+    ("pax-ask", "tur-pax-ui's ask bar, from its launcher entry", True),
+    ("pax-setup", "tur-pax-ui's setup flow, asked of the running window", True),
+    ("pax-keys", "tur-pax-overlay showing P@x's keys, started by the session bus", True),
+]
+# The least share of the screen that must differ from the picture of the
+# desktop before the program was started: a window, and a layer-shell
+# surface, which is smaller.
+CHANGED_WINDOW, CHANGED_SURFACE = 0.05, 0.003
+
+
+def judge_programs(out: pathlib.Path, facts: pathlib.Path, status: dict[str, str]) -> list[dict]:
+    checks: list[dict] = []
+
+    def check(name: str, required: bool, ok: bool | None, detail: str) -> None:
+        checks.append({"name": name, "required": required,
+                       "result": "not-run" if ok is None else ("pass" if ok else "fail"), "detail": detail})
+
+    try:
+        splash = json.loads((out / "splash" / "splash.json").read_text())
+    except (OSError, ValueError):
+        splash = {}
+    pictures = {record.get("name"): record for record in splash.get("programs") or []}
+    directory = facts / "programs"
+    for name, what, surface in PROGRAMS:
+        pid = status.get(f"program_{name}_pid", "")
+        process = status.get(f"program_{name}_process", "?")
+        said = ""
+        for suffix in ("err", "out"):
+            path = directory / f"{name}.{suffix}"
+            if path.exists():
+                said += path.read_text(errors="replace")
+        said = " / ".join(line.strip() for line in said.splitlines() if line.strip())
+        check(f"{what}: the program runs in the session, as a Wayland client", True,
+              bool(pid) and status.get(f"program_{name}_wayland_client", "0") not in ("", "0")
+              and (not surface or status.get(f"program_{name}_layer_shell", "0") not in ("", "0")),
+              f"{process} pid {pid or 'none'}; Qt's Wayland client library mapped: "
+              f"{status.get(f'program_{name}_wayland_client', 'no data')}; LayerShellQt mapped: "
+              f"{status.get(f'program_{name}_layer_shell', 'no data')}; TUR's libraries: "
+              f"{status.get(f'program_{name}_tur_libraries', 'no data')}; it printed: {said[:300] or 'nothing'}")
+        record = pictures.get(name) or {}
+        changed = record.get("changed_from_light_desktop")
+        least = CHANGED_SURFACE if surface else CHANGED_WINDOW
+        check(f"{what}: the picture of the screen shows something the desktop did not", True,
+              None if record.get("file") is None or changed is None else changed >= least,
+              f"{record.get('file') or 'no picture'}; {changed} of the screen differs from the light desktop "
+              f"(at least {least}); at {record.get('at_seconds')} s")
+        warnings = [line for line in said.split(" / ") if "QML warning" in line or "qml:" in line.lower()]
+        check(f"{what}: no QML warning in the session", False, bool(pid) and not warnings,
+              f"{len(warnings)} line(s): {' / '.join(warnings)[:400] or 'none'}")
+    names = (directory / "bus-names.txt").read_text(errors="replace") if (directory / "bus-names.txt").exists() else ""
+    owned = sorted(set(re.findall(r"org\.tur\.[A-Za-z0-9.]+", names)))
+    check("P@x's window and its overlay are on the session bus while the window is open", True,
+          all(name in owned for name in ("org.tur.PaxUi1", "org.tur.PaxOverlay1")),
+          f"names owned: {', '.join(owned) or 'none'}")
+    unit = (directory / "tur-pax-unit.txt").read_text(errors="replace") \
+        if (directory / "tur-pax-unit.txt").exists() else ""
+    check("P@x's window started P@x's session service through the session bus", False,
+          "org.tur.Agent1" in owned and "ActiveState=active" in unit,
+          f"org.tur.Agent1 owned: {'org.tur.Agent1' in owned}; tur-pax.service: {' '.join(unit.split()) or 'no data'}")
+    icon = (directory / "icon-org.tur.Pax.path").read_text(errors="replace").strip() \
+        if (directory / "icon-org.tur.Pax.path").exists() else ""
+    check("the icon theme finds P@x's icon, org.tur.Pax", True, icon.endswith("org.tur.Pax.svg"),
+          f"kiconfinder6: {icon[:200] or 'no answer'}; picture for people: icon-org.tur.Pax.png "
+          f"(magick exit {status.get('icon_render_status')})")
     return checks
 
 

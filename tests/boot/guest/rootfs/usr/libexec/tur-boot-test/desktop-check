@@ -13,7 +13,9 @@
 # when the host has taken its picture of the dark desktop (at the uptime the
 # host passes through QEMU's fw_cfg), it switches the account to TUR Light
 # the way System Settings does, so that the host can take a second picture,
-# and records the colours again.
+# and records the colours again. After that it starts each of TUR's desktop
+# programs in that session, so that the host can take a picture of each
+# (issue #59).
 #
 # It decides nothing: tests/boot/splash.py on the host judges the facts. The
 # facts go to the host as a tar stream over the boot test's virtio-serial
@@ -168,10 +170,77 @@ facts "${out}/light"
 put light_facts_uptime "$(uptime_s)"
 for _ in 1 2 3; do say "DESKTOP-LIGHT-APPLIED uptime=$(uptime_s)"; sleep 1; done
 
-# --- send ------------------------------------------------------------------------
+# --- TUR's desktop programs, in this session (issue #59) ---------------------------
 # The host takes its picture of the light desktop within a few seconds of the
-# marker; the facts follow.
-sleep 30
+# marker above. Then each of TUR's desktop programs is started in the
+# account's Plasma session, from its launcher entry where it has one (gio
+# launch: what the launcher does with the entry's Exec line), as a Wayland
+# client of the session's KWin. When it has had time to draw, a marker tells
+# the host to take a picture of the screen, and what is known of the process
+# is recorded: that it runs, that it is a Wayland client, what it printed.
+# Nothing is decided here.
+sleep 10
+programs="${out}/programs"
+mkdir -p "${programs}"
+
+# show NAME PROCESS SECONDS COMMAND...: start, wait, record, tell the host.
+show() {
+    local name="$1" process="$2" settle="$3" pid
+    shift 3
+    printf '%s\n' "$*" > "${programs}/${name}.command"
+    runuser -u "${user}" -- env -i "${envs[@]}" "$@" \
+        > "${programs}/${name}.out" 2> "${programs}/${name}.err" < /dev/null &
+    sleep "${settle}"
+    pid="$(pgrep -u "${uid}" -x "${process}" | head -n1)"
+    put "program_${name}_process" "${process}"
+    put "program_${name}_pid" "${pid}"
+    if [ -n "${pid}" ]; then
+        put "program_${name}_wayland_client" "$(grep -c 'libQt6WaylandClient' "/proc/${pid}/maps" 2> /dev/null)"
+        put "program_${name}_layer_shell" "$(grep -c 'libLayerShellQtInterface' "/proc/${pid}/maps" 2> /dev/null)"
+        put "program_${name}_tur_libraries" "$(grep -o '/usr/lib64/tur/[a-z]*\.so' "/proc/${pid}/maps" 2> /dev/null | LC_ALL=C sort -u | tr '\n' ' ')"
+        tr '\0' ' ' < "/proc/${pid}/cmdline" > "${programs}/${name}.cmdline" 2> /dev/null
+    fi
+    ps -U "${uid}" -o pid,etimes,rss,comm,args > "${programs}/${name}.processes.txt" 2>&1
+    say "DESKTOP-PROGRAM-SHOWN ${name} pid=${pid:-none} uptime=$(uptime_s)"
+    sleep 9
+}
+# close PROCESS...: end them, as closing the window does.
+close() {
+    local process
+    for process in "$@"; do pkill -u "${uid}" -x "${process}" 2> /dev/null; done
+    sleep 2
+}
+
+show settings tur-settings 14 gio launch /usr/share/applications/org.tur.Settings.desktop
+close tur-settings
+show centre tur-centre 16 gio launch /usr/share/applications/org.tur.Centre.desktop
+close tur-centre
+# An application's page, by the centre's link scheme, on the installed catalogue.
+show centre-app tur-centre 16 tur-centre tur-centre:app/com.discord.discord
+close tur-centre
+# P@x's window: the ask bar from the launcher entry; then the setup flow,
+# asked of the running window as the entry's action does; then P@x's keys,
+# which the window asks the overlay to show: the session bus starts
+# tur-pax-overlay from its activation file.
+show pax-ask tur-pax-ui 14 gio launch /usr/share/applications/org.tur.PaxUi.desktop
+show pax-setup tur-pax-ui 12 tur-pax-ui --mode setup
+show pax-keys tur-pax-overlay 12 tur-pax-ui --show-keys
+as_user busctl --user list --no-legend 2> /dev/null | grep -E 'org\.tur\.' > "${programs}/bus-names.txt"
+as_user systemctl --user show tur-pax.service -p ActiveState -p SubState -p Result > "${programs}/tur-pax-unit.txt" 2>&1
+close tur-pax-ui tur-pax-overlay
+as_user systemctl --user stop tur-pax.service > /dev/null 2>&1
+# P@x's icon: where the icon theme finds it, and a picture of it for people.
+as_user kiconfinder6 org.tur.Pax > "${programs}/icon-org.tur.Pax.path" 2>&1
+timeout 60 magick -background none /usr/share/icons/hicolor/scalable/apps/org.tur.Pax.svg -resize 256x256 \
+    "${programs}/icon-org.tur.Pax.png" > "${programs}/icon-org.tur.Pax.err" 2>&1
+put icon_render_status "$?"
+journalctl -b --no-pager -o short-monotonic "_UID=${uid}" -g 'tur-(centre|settings|pax)' \
+    > "${programs}/journal.txt" 2>&1
+put programs_done_uptime "$(uptime_s)"
+say "DESKTOP-PROGRAMS-DONE uptime=$(uptime_s)"
+
+# --- send ------------------------------------------------------------------------
+sleep 5
 chmod -R a+rX "${out}"
 if [ -e "${port}" ] && tar -C /run -cf - tur-desktop-check > "${port}"; then
     for _ in 1 2 3; do say "DESKTOP-CHECK-DONE sent uptime=$(uptime_s)"; sleep 1; done

@@ -55,6 +55,34 @@ function(tur_link_qml_modules target)
     target_link_libraries(${target} PRIVATE ${ARGN})
 endfunction()
 
+# ---- installation: the programs that go into the TUR image ------------------
+# (image/desktop/; desktop/README.md, "Into the image".) They are installed as
+# one component, "image": each program in bin; the libraries of the QML
+# modules it is built from in a directory of TUR's own under the library
+# directory, which every program and library is given as its run path; and
+# each program's launcher entry, bus activation file, interface description
+# and icon. `cmake --install BUILD --component image` installs those and
+# nothing else: no test, no gallery, no probe, not the installer's wizard.
+include(GNUInstallDirs)
+set(TUR_INSTALL_LIBDIR "${CMAKE_INSTALL_LIBDIR}/tur"
+    CACHE STRING "Where the libraries of TUR's QML modules are installed, below the prefix")
+set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/${TUR_INSTALL_LIBDIR}")
+
+# tur_install_program(PROGRAM): the program, into bin.
+function(tur_install_program program)
+    install(TARGETS ${program} RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT image)
+endfunction()
+
+# tur_install_modules(LIBRARY...): the libraries of QML modules.
+function(tur_install_modules)
+    install(TARGETS ${ARGN} LIBRARY DESTINATION ${TUR_INSTALL_LIBDIR} COMPONENT image)
+endfunction()
+
+# tur_install_data(DESTINATION FILE...): data files, below share.
+function(tur_install_data destination)
+    install(FILES ${ARGN} DESTINATION ${CMAKE_INSTALL_DATADIR}/${destination} COMPONENT image)
+endfunction()
+
 enable_testing()
 
 add_subdirectory(kit)

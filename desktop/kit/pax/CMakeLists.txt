@@ -21,3 +21,4 @@ qt_add_qml_module(turkitpax
 )
 target_link_libraries(turkitpax PRIVATE Qt6::Core Qt6::Qml Qt6::Quick)
 add_dependencies(turkitpax turkit)
+tur_install_modules(turkitpax)
