@@ -334,32 +334,53 @@ image does not set. See TUR-008.
 `:45` tag every day, and quay.io removes the manifest it pointed to about a day
 later (13 November 2026: `sha256:f857f6c5…` answered "manifest unknown" and
 every image build failed). A digest is therefore only pullable from quay.io
-for a day or two after it stops being current.
+for a day or two after it stops being current. The same holds for the Fedora
+container `quay.io/fedora/fedora:45`, which other workflows pin.
 
-TUR keeps its own copy of every digest it pins:
+TUR keeps its own copy of every digest CI pins, not only the base's
+(docs/reports/base-mirror-2.md):
 
-- **The mirror** is the package `ghcr.io/giorgiogiudice/tur-base` in GitHub's
-  registry. It holds unmodified copies of Fedora's image, made with
-  `skopeo copy --all --preserve-digests`, so each has exactly the digest it has
-  on quay.io, for every platform in the index. Each digest is tagged twice:
-  with its version (`45.20261113.0`) and as `sha256-<hex>`. It is there for
-  TUR's CI, whose workflows read it with their own token. It was meant to be
-  private, but GitHub created it **public**, as it does for a package that a
-  public repository's workflow publishes with its own token: anyone can pull
-  these copies of Fedora's unmodified image (docs/reports/base-mirror-1.md).
-- **The `base-mirror` workflow** copies the digest in `base.lock` whenever the
-  file changes: on a pull request from this repository, on the push to `main`,
-  and by hand. It checks that the mirror returns the same digest by digest and
-  by both tags, and for each platform. Its job `through-mirror` then makes
-  quay.io unreachable, builds the image from the mirror alone and checks that
-  the image's `org.tur.base.*` labels still name quay.io and the pinned digest.
+- **The pins are found, not listed.** `.github/actions/use-base-mirror/pins.py`
+  reads every tracked file under `.github/`, `tests/` and `scripts/`, every
+  `*.lock` but `Cargo.lock` and every `Containerfile`. Each `sha256:` digest
+  there must be a reference written whole (`quay.io/fedora/fedora:45@sha256:…`)
+  or a group `P_IMAGE` / `P_DIGEST` (with `P_TAG`, `P_VERSION`) in one file, as
+  in `base.lock`, `desktop/ci/builder.lock` and the `RUST_*` arguments of the
+  Containerfile. A digest it does not understand fails the lint of
+  `base-mirror`; so does a pin whose repository has no mirror. Test fixtures
+  are not read; a line that names a digest on purpose without pulling it ends
+  with `pins.py: ignore`.
+- **The mirrors** are packages in GitHub's registry, one per upstream image,
+  listed in `.github/actions/use-base-mirror/mirrors.tsv`:
+  `ghcr.io/giorgiogiudice/tur-base` for the base,
+  `ghcr.io/giorgiogiudice/tur-mirror-fedora` for the Fedora container (from
+  quay.io and from registry.fedoraproject.org, which serve the same digests),
+  and `tur-mirror-rust`, `tur-mirror-debian`, `tur-mirror-registry` and
+  `tur-mirror-moto` for the images from Docker Hub. They hold unmodified
+  copies, made with `skopeo copy --all --preserve-digests`, so each has exactly
+  its upstream digest, for every platform in the index. Each digest is tagged
+  `sha256-<hex>`, and with its version where the pin has one (`45.20261113.0`).
+  They are there for TUR's CI, whose workflows read them with their own token.
+  `tur-base` was meant to be private, but GitHub created it **public**, as it
+  does for a package that a public repository's workflow publishes with its
+  own token: anyone can pull these copies of Fedora's unmodified image
+  (docs/reports/base-mirror-1.md). The other packages are created the same
+  way; the `mirror` job says, for each, whether it can be read without
+  credentials. Their visibility is the owner's setting.
+- **The `base-mirror` workflow** copies every pinned digest: on a pull request
+  from this repository and on the push to `main` when a workflow, a lock file,
+  a Containerfile or the action changes, every day, and by hand. It checks
+  that each mirror returns the same digest by digest, by each tag and for each
+  platform. When the base pin or the mechanism changes, its job
+  `through-mirror` makes quay.io unreachable, builds the image from the mirror
+  alone, checks that the image's `org.tur.base.*` labels still name quay.io and
+  the pinned digest, and that every quay.io pin resolves through its mirror.
 - **The action `.github/actions/use-base-mirror`** runs after checkout in every
-  job that pulls the base (`image`, `boot`, `rollback` and `update`; `iso`
-  does not use it yet, so its builds still depend on quay.io). It
-  logs podman and skopeo in to ghcr.io, as root and as the runner user, and
-  writes this [containers-registries.conf(5)][rc] drop-in to
-  `/etc/containers/registries.conf.d/` and to the runner user's
-  `~/.config/containers/registries.conf.d/`:
+  job that pulls a pinned image. It logs podman and skopeo in to ghcr.io, as
+  root and as the runner user, and writes a [containers-registries.conf(5)][rc]
+  drop-in to `/etc/containers/registries.conf.d/` and to the runner user's
+  `~/.config/containers/registries.conf.d/`, one table per line of
+  `mirrors.tsv`:
 
   ```toml
   [[registry]]
@@ -371,24 +392,37 @@ TUR keeps its own copy of every digest it pins:
   location = "ghcr.io/giorgiogiudice/tur-base"
   ```
 
-  A pull or build `FROM quay.io/fedora/fedora-kinoite@sha256:…` then asks the
-  mirror first and quay.io only when the mirror does not have the digest (the
-  mirrors are tried in order, the primary location last). A pull by tag never
-  uses the mirror. The reference the build uses does not change, so the labels,
-  the build manifest and the reproducibility check are the same as before.
-  The action also says, for the pinned digest, whether the mirror and quay.io
-  have it, and fails with an explanation when neither does.
-- **The weekly `pin-age` job** compares the pin with quay.io's current `:45`.
-  When the pin is more than seven days older, it opens (or updates) an issue
-  "Base image pin is N days old" with the new digest and version, and closes it
-  once the pin is fresh again. It opens an issue and not a pull request: a pull
-  request opened with the workflow's own token would not run CI.
+  A pull or build `FROM quay.io/fedora/fedora-kinoite@sha256:…` with podman
+  then asks the mirror first and quay.io only when the mirror does not have
+  the digest (the mirrors are tried in order, the primary location last). A
+  pull by tag never uses the mirror. The reference the build uses does not
+  change, so the labels, the build manifest and the reproducibility check are
+  the same as before. With `check` (the default) the action also says, for the
+  base pinned in `base.lock`, whether the mirror and quay.io have it, and fails
+  with an explanation when neither does.
+
+  docker reads no registries.conf. For the images a job names in `images`,
+  the action logs docker in to ghcr.io and gives it the mirror's reference
+  when the mirror has the digest (the same bytes: a digest names one
+  manifest): `FEDORA_IMAGE_PULL` for `FEDORA_IMAGE`, and, for `docker build`,
+  `TUR_BUILD_CONTEXTS`, `--build-context` flags that take each pinned `FROM`
+  image from there. Used by `image`, `boot`, `rollback`, `update`, `iso` and
+  `release` (podman), and by `local-ai`, `windows-drivers`, `release`,
+  `release-installer`, `reports`, `desktop` and `pax` (docker).
+- **The weekly `pin-age` job** compares every pin that has a tag with the
+  tag's current digest. When a tag moved on and the pinned image is more than
+  seven days old, it opens (or updates) one issue, "Pinned images: N to
+  re-pin…", with a table of every pin, and closes it when none is stale. It
+  opens an issue and not a pull request: a pull request opened with the
+  workflow's own token would not run CI.
 
 A digest that was never mirrored cannot be recovered once quay.io drops it;
 the job `through-mirror` checks that pulling one fails with that explanation.
 So merge a re-pin within a day of the digest it names, and let `base-mirror`
-run on the pull request before then. Only `base-mirror` writes to the package
-(`packages: write`); a job that pulls the base needs `packages: read`.
+run on the pull request before then (the daily run copies a pin that reached
+`main` without it, a day late at worst). Only `base-mirror` writes to the
+packages (`packages: write`); a job that pulls a pinned image needs
+`packages: read`.
 
 [rc]: https://github.com/containers/container-libs/blob/main/image/docs/containers-registries.conf.5.md
 

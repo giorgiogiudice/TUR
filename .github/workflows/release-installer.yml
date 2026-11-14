@@ -97,16 +97,26 @@ jobs:
     permissions:
       contents: read
       id-token: write # keyless signing of the fake medium, on pull requests only
+      packages: read  # TUR's mirror of moto (ghcr.io)
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
+      # moto from TUR's mirror, as MOTO_IMAGE_PULL (image/README.md, "The
+      # base image and its mirror").
+      - uses: ./.github/actions/use-base-mirror
+        with:
+          check: "false"
+          images: MOTO_IMAGE
       - name: Install cosign and rclone (pinned by SHA-256)
         run: scripts/release-installer/install-tools.sh
       - name: Pull the S3 stand-in (moto, pinned by digest)
+        env:
+          MOTO_IMAGE: ${{ env.MOTO_IMAGE_PULL }}
         run: docker pull --quiet "$MOTO_IMAGE"
       - name: Run the release path end to end
         env:
+          MOTO_IMAGE: ${{ env.MOTO_IMAGE_PULL }}
           TUR_TEST_KEYLESS: ${{ github.event_name == 'pull_request' && '1' || '0' }}
         run: scripts/release-installer/test/run.sh "$RUNNER_TEMP/release-test"
       - name: Keep what the test produced

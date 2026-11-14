@@ -199,8 +199,7 @@ Each of these is a place where what was built is not what
 
 | Design | Built | Why |
 |---|---|---|
-| The builder image is pushed to the project's registry and pinned by digest in `builder.lock` (15.3) | The base image is pinned by digest; the built image is kept in the Actions cache under a key made from the Containerfile and `builder.lock`; the versions the pictures depend on are recorded in `builder.packages` and compared on every run | Pushing needs a registry and write permission that this task could not set up or verify, and the project has a rule against publishing images before Fedora's marks are replaced. The cache gives the same image to every run until it is evicted; that weakness is a known gap |
-| A `builder` job that runs when the Containerfile changes, and weekly | A `builder` job in every run that does nothing when the image is cached (about 10 s), and a weekly run that keeps the cache alive | Follows from the row above |
+| A `builder` job that runs when the Containerfile changes, and weekly | A `builder` job in every run: the cached image (about 10 s), else the image pinned in `builder.lock` from the registry (`ghcr.io/giorgiogiudice/tur-desktop-builder`), else a build that is pushed and must then be pinned (the check "The builder image is pinned" fails until it is). Fedora's logo and release packages in it are replaced by Fedora's `generic-*` packages, because an image kept in a registry is a distributed one | A pinned digest has to come from a build in CI, since nothing is built elsewhere (base-mirror-2) |
 | In-session programs use `org.kde.breeze` and Kirigami; the kit "adds TUR's tokens and the components KDE has no equivalent for" (5.7) | The kit's controls, including a button, a text field, a check box and a switch, are TUR's own, built on Qt Quick Templates and drawn from the tokens. They do not depend on the style and look the same under `org.kde.breeze` and Basic | The kit must also serve the programs outside the session, which may use nothing from KDE (14.1), and AGENTS.md says "use Qt Quick with the project's own controls". A program inside the session still runs under `org.kde.breeze` and may use stock controls and Kirigami beside the kit's. Whether a kit button beside a Breeze button looks like one family is for the first in-session program (D-07) to judge, on a picture |
 | Icons are Breeze's, loaded from the system theme (5.4) | The kit draws its own nine line glyphs (four status signs, a check, two arrows, a cross) and P@x's mark | Outside a Plasma session nothing recolours a Breeze icon: Qt's own icon engine draws it in the theme's fixed dark grey, which cannot be read on a dark surface. The engine that recolours is in KIconThemes, which is on the forbidden list. Breeze's icons remain right for in-session programs, through Kirigami |
 | Three variants: dark, light, high contrast (15.4) | Dark and light. The high-contrast palette, and the trusted screen's and the boot splash's, are in `tokens.json` and checked for contrast, but there is no high-contrast `Theme` | The design gives four colours for high contrast, not a value for each of the seventeen roles. Mapping them is a design decision, wanted before D-06 |
@@ -268,11 +267,6 @@ Task D-01 was to settle the assumptions of the design's sections 5.7, 15.4 and
 
 ## 6. Known gaps
 
-- **The builder image is not in a registry.** If the Actions cache is evicted
-  the image is rebuilt with that day's Fedora packages, and a Qt or font
-  update can then change the pictures. `versions.sh` warns and the procedure
-  is documented, but the design's pinned digest is the real fix. It needs a
-  decision on where the project keeps images.
 - **No high-contrast variant** (X7), and so no high-contrast pictures.
 - **The kit does not follow an arbitrary system colour scheme.** Inside the
   session it is TUR dark or TUR light, by the desktop's preference. A user who

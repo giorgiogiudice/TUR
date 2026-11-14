@@ -164,22 +164,40 @@ shaped, and what the application centre does with them, is in
 `ci/builder/Containerfile`: Fedora 45, the same release as the OS image, with
 Qt 6, Kirigami, `qqc2-breeze-style`, the build tools and the fonts.
 
-- **Pinned:** the base image, by digest, in `ci/builder.lock`.
-- **Not pinned, and printed:** the packages. Fedora keeps only the newest
-  update of a package, so an exact version cannot be asked for. The image is
-  built once and kept in the Actions cache under a key made from the
-  Containerfile and `builder.lock`; every later run loads that same image. A
-  weekly run keeps the cache from expiring.
-- **Checked:** `ci/builder.packages` lists the versions of Qt, the text stack
-  and the fonts in the image the references were made with. `ci/versions.sh`
-  compares and warns on a difference.
+- **Pinned:** the base image, by digest, in `ci/builder.lock`, pulled from
+  TUR's mirror of it (`ghcr.io/giorgiogiudice/tur-mirror-fedora`; image/README.md,
+  "The base image and its mirror"), because quay.io drops a digest about a day
+  after Fedora moves the tag.
+- **Pinned:** the built image, by digest, in `ci/builder.lock`
+  (`BUILDER_IMAGE@BUILDER_DIGEST`, in TUR's registry). Every run takes that
+  image while its label `org.tur.builder.inputs` equals what
+  `ci/builder-inputs.sh` makes of the Containerfile, the base and
+  `BUILDER_REVISION`. The Actions cache only saves the other jobs a pull:
+  when it has lost the image (it is evicted when the repository's caches
+  pass their limit, even between the jobs of one run), each job takes the
+  image from the registry. An evicted cache costs a pull, not new pictures.
+- **Not pinned, and printed:** the packages inside, at the moment the image
+  is built. Fedora keeps only the newest update of a package, so an exact
+  version cannot be asked for; the pinned image keeps the ones it was built
+  with. `ci/builder.packages` lists the versions of Qt, the text stack and the
+  fonts in the image the references were made with; `ci/versions.sh` compares
+  and warns on a difference.
+- **Without Fedora's marks:** being kept in a registry, the image is a
+  distributed image derived from Fedora, so `fedora-logos` and the
+  `fedora-release` packages are replaced by Fedora's `generic-logos` and
+  `generic-release` (AGENTS.md; as in the OS image).
 
-The cache can still be lost (it is evicted when the repository's caches grow
-too large). The image is then rebuilt with the day's packages. If a picture
-changes because Qt or a font did, regenerate the references as above and
-update `builder.packages`, in a pull request of its own. To take newer
-packages on purpose, raise `BUILDER_REVISION` in `builder.lock`.
+To change the image (the Containerfile, the base pin or `BUILDER_REVISION`),
+change it in a pull request. The `builder` job finds that the pinned image
+was made from other inputs, builds a new one, tests with it, pushes it to
+TUR's registry (tagged `inputs-<hash of the inputs>`, which later runs of
+the same inputs take instead of building again) and prints the
+`BUILDER_DIGEST=` line; the check "The builder image is pinned" fails until
+that line is committed. If a picture changed
+because Qt or a font did, regenerate the references as above and update
+`builder.packages`, in the same pull request. To take newer packages on
+purpose, raise `BUILDER_REVISION`.
 
-The design asks for an image in the project's registry, pinned by digest.
-That is the better end state and is not done: see
-[desktop-kit.md](../docs/architecture/desktop-kit.md), "Known gaps".
+To see what a build from scratch gives today, start the desktop workflow by
+hand with `rebuild` set: it builds the image anew (through the mirror), runs
+every job with it, and keeps nothing.

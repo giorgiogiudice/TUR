@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# TUR's mirror of every upstream repository from which CI pulls an image by
+# digest. pins.py finds the pins (image/README.md, "The base image and its
+# mirror"); every pin's repository must have a line here, or pins.py check
+# fails. base-mirror.yml copies each pinned digest, unchanged, to the
+# repository on the right; use-base-mirror makes podman and skopeo try it
+# first for a pull by digest, and gives docker the mirror's reference.
+#
+# One package per upstream image. Two upstream names of the same image (the
+# Fedora container is published to quay.io and to registry.fedoraproject.org
+# with the same digests) share one package.
+#
+# upstream repository                  mirror
+quay.io/fedora/fedora-kinoite          ghcr.io/giorgiogiudice/tur-base
+quay.io/fedora/fedora                  ghcr.io/giorgiogiudice/tur-mirror-fedora
+registry.fedoraproject.org/fedora      ghcr.io/giorgiogiudice/tur-mirror-fedora
+docker.io/library/rust                 ghcr.io/giorgiogiudice/tur-mirror-rust
+docker.io/library/debian               ghcr.io/giorgiogiudice/tur-mirror-debian
+docker.io/library/registry             ghcr.io/giorgiogiudice/tur-mirror-registry
+docker.io/motoserver/moto              ghcr.io/giorgiogiudice/tur-mirror-moto
