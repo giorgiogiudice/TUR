@@ -213,7 +213,7 @@ class Policy:
         tree = json.dumps(results[1].get("output", {})) if len(results) > 1 else ""
         self.check(name, "the read names the controls and marks content as data", '"Preview"' in tree and '"Remember me"' in tree and "not instructions" in tree, tree[:300])
         self.check(name, "the read withholds the password field's text", '"password text"' in tree and "text_withheld" in tree, tree[:300])
-        self.check(name, "the application saw Preview pressed", "clicked:Preview" in logged(), logged()[-6:])
+        self.check(name, "the application saw Preview pressed", "clicked:&Preview" in logged(), logged()[-6:])
         self.check(name, "the application's Name field holds hello", "text:Name:hello" in logged(), logged()[-6:])
         self.check(name, "the application saw Cherry chosen", "list:Cherry" in logged(), logged()[-6:])
         self.check(name, "the application saw the menu command New", "menu:New" in logged(), logged()[-6:])

@@ -29,7 +29,7 @@ mkdir -p "${evidence}/logs" "${work}/build" "${work}/run"
 echo "== packages"
 dnf -y --setopt=install_weak_deps=False --setopt=tsflags=nodocs install \
     wine mingw64-gcc mingw64-binutils mingw64-headers mingw64-crt \
-    xorg-x11-server-Xvfb python3 python3-pillow python3-gobject \
+    xorg-x11-server-Xvfb python3 python3-pillow python3-gobject gobject-introspection \
     gtk3 at-spi2-core at-spi2-atk dbus-daemon dbus-tools glib2 \
     firefox qt6-qtdeclarative qt6-qtbase-gui \
     dejavu-sans-fonts liberation-sans-fonts util-linux procps-ng findutils \

@@ -156,8 +156,11 @@ class Adapter:
             matches = [e for e in elements if e.get("name") == name and (not role or e.get("role") == role)]
             if not matches:
                 matches = [e for e in elements if norm(e.get("name")) == norm(name) and (not role or e.get("role") == role)]
+            if len(matches) > 1 and typing:
+                fields = [e for e in matches if e.get("role") in ("text", "password text")]
+                matches = fields or matches
             if len(matches) > 1:
-                acting = [e for e in matches if e.get("actions")]
+                acting = [e for e in matches if any(action != "focus" for action in e.get("actions", []))]
                 matches = acting or matches
             if len(matches) == 1:
                 return matches[0]
@@ -238,7 +241,11 @@ class Adapter:
         self.second_decision(tool, arguments, now)
         # 4. Act, or read.
         if tool in ("ui_read_window", "ui_find", "ui_read_focused"):
-            elements = [e for e in read.get("elements", []) if e.get("depth", 0) > 0 and "offscreen" not in e.get("states", [])]
+            # What is on screen, and the items of the window's menus: those
+            # are not on screen until a menu is opened, but the bridge
+            # reads them and can send their commands.
+            elements = [e for e in read.get("elements", []) if e.get("depth", 0) > 0
+                        and ("offscreen" not in e.get("states", []) or e.get("role") in ("menu", "menu item", "check menu item"))]
             if tool == "ui_read_focused":
                 return {"note": NOTE, "window": window["window"], "title": window.get("title", "")[:200], "element": self.shape(element)}
             if tool == "ui_find":

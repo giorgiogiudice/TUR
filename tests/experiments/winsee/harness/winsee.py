@@ -106,32 +106,43 @@ def tier_summary(read):
 
 
 def score(truth, read, origin):
-    """How many of the controls a person sees a tier found: by name, and by
-    name and kind. A truth entry without a name is matched by the point
-    `at` (relative to the window) instead."""
-    shown = visible(read)
+    """How many of the controls a person sees in the screenshot a tier
+    found: by name, and by name and kind.
+
+    `truth` is a list of {"name", "group"}, or {"named": [[name, group],
+    ...], "unnamed": {group: count}}: the controls counted by eye in the
+    screenshot (harness/truth.json). A control that shows no name (a
+    toolbar icon, a text area) is found when the tier has an element of
+    its kind, with a rectangle, that no named control used."""
+    if isinstance(truth, dict):
+        named = [{"name": name, "group": kind} for name, kind in truth.get("named", [])]
+        unnamed = truth.get("unnamed", {})
+    else:
+        named, unnamed = truth, {}
+    shown = [e for e in visible(read) if e.get("depth", 0) > 0]
     by_name = by_kind = 0
     missing = []
-    for entry in truth:
-        if entry.get("name"):
-            candidates = [e for e in shown if norm(e.get("name")) == norm(entry["name"])]
-        else:
-            x, y = origin[0] + entry["at"][0], origin[1] + entry["at"][1]
-            candidates = [
-                e
-                for e in shown
-                if e.get("depth", 0) > 0
-                and e["screen"][0] <= x < e["screen"][0] + e["screen"][2]
-                and e["screen"][1] <= y < e["screen"][1] + e["screen"][3]
-                and group(e.get("role")) in INTERACTIVE
-            ]
+    used = set()
+    for entry in named:
+        candidates = [e for e in shown if norm(e.get("name")) == norm(entry["name"])]
+        of_kind = [e for e in candidates if group(e.get("role")) == entry["group"] and e["id"] not in used]
         if candidates:
             by_name += 1
-        if any(group(e.get("role")) == entry["group"] for e in candidates):
+        if of_kind:
             by_kind += 1
+            used.add(of_kind[0]["id"])
         else:
-            missing.append(f"{entry.get('name') or entry.get('at')} ({entry['group']})")
-    return {"truth": len(truth), "found": by_name, "found_with_kind": by_kind, "missing": missing}
+            missing.append(f"{entry['name']} ({entry['group']})")
+    for kind, count in unnamed.items():
+        available = [e for e in shown if group(e.get("role")) == kind and e["id"] not in used]
+        got = min(count, len(available))
+        used.update(e["id"] for e in available[:got])
+        by_name += got
+        by_kind += got
+        if got < count:
+            missing.append(f"{count - got} of {count} without a name ({kind})")
+    total = len(named) + sum(unnamed.values())
+    return {"truth": total, "found": by_name, "found_with_kind": by_kind, "missing": missing}
 
 
 class Harness:
@@ -411,7 +422,7 @@ class Harness:
             element = find(again(), role, name)
             return bool(element) and wanted in element.get("states", [])
 
-        self.do(app, "a push button", find(read, "push button", "Preview"), "press", lambda: ("clicked:Preview" in logged(), logged()[-2:]))
+        self.do(app, "a push button", find(read, "push button", "Preview"), "press", lambda: ("clicked:&Preview" in logged(), logged()[-2:]))
         self.do(app, "a check box", find(read, "check box", "Remember me"), "press",
                 lambda: ("check:Remember me:1" in logged() and state("check box", "Remember me", "checked"), logged()[-2:]))
         self.do(app, "a radio button", find(read, "radio button", "Medium"), "press",
@@ -648,9 +659,11 @@ class Harness:
         def editor():
             return find(again(), "text") or {}
 
-        self.do(app, "the text area", find(read, "text"), "type", lambda: ("hello winsee" in editor().get("text", ""), editor().get("text", "")[:80]), text="hello winsee")
+        # MSAA first: its put_accValue is WM_SETTEXT, which also clears the
+        # control's "modified" mark, and the save prompt at the end needs it.
         self.do(app, "the text area", find(read, "text"), "type", lambda: ("through MSAA" in editor().get("text", ""), editor().get("text", "")[:80]),
                 tier="msaa", text="typed through MSAA")
+        self.do(app, "the text area", find(read, "text"), "type", lambda: ("hello winsee" in editor().get("text", ""), editor().get("text", "")[:80]), text="hello winsee ")
         self.do(app, "the text area", find(read, "text"), "press", lambda: (False, "nothing to verify: UI Automation offers no pattern"), tier="uia")
         items = ["menu item", "check menu item"]
         self.do(app, "menu: select all", find(read, items, contains="select all"), "press",
@@ -667,12 +680,15 @@ class Harness:
         if dialog is not None:
             dialog_reads = self.capture(app, "notepad-font", dialog)
             dread = dialog_reads["win32"]
-            combos = [e for e in dread.get("elements", []) if e.get("role") == "combo box"]
-            entries = [e for e in dread.get("elements", []) if combos and e.get("parent") == combos[-1]["id"] and "selected" not in e.get("states", [])]
-            entry = entries[len(entries) // 2] if entries else None
-            self.do(app, "an entry of a list in the font dialog", entry, "select",
-                    lambda: (any(e.get("id") == entry["id"] and "selected" in e.get("states", []) for e in self.read(self.current(dialog)).get("elements", [])),
-                             f"entry {entry.get('name') if entry else None}"))
+            # The Size box always shows its list: an entry of it, on screen.
+            size = find(dread, "combo box", "Size")
+            lists = [e for e in dread.get("elements", []) if size and e.get("parent") == size["id"] and e.get("role") == "list"]
+            entries = [e for e in dread.get("elements", []) if lists and e.get("parent") == lists[0]["id"]
+                       and not {"offscreen", "selected"} & set(e.get("states", [])) and e.get("name") != (size or {}).get("text")]
+            entry = entries[0] if entries else None
+            self.do(app, "an entry of the Size list in the font dialog", entry, "select",
+                    lambda: ((find(self.read(self.current(dialog)), "combo box", "Size") or {}).get("text") == entry["name"],
+                             f"the Size box now holds {(find(self.read(self.current(dialog)), 'combo box', 'Size') or {}).get('text')!r}; chosen {entry['name']!r}"))
             self.display.shot(self.evidence / app / "notepad-font-after.png")
             self.do(app, "Cancel in the font dialog", find(dread, "push button", "Cancel"), "press", lambda: (self.wait_gone(dialog), "the dialog closed"))
         self.display.shot(self.evidence / app / "notepad-after.png")

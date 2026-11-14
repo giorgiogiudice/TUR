@@ -1105,9 +1105,9 @@ static const char *find_label(HWND hwnd, WCHAR *out, size_t cap)
         GetClassNameW(other, cls, 64);
         if (!is_static_class(cls))
             continue;
-        if (rc.right <= mine.left + 4 && rc.bottom > mine.top && rc.top < mine.bottom && mine.left - rc.right < 220)
+        if (rc.right <= mine.left + 4 && rc.bottom > mine.top && rc.top < mine.bottom && mine.left - rc.right < 80)
             distance = mine.left - rc.right; /* to the left, on the same row */
-        else if (rc.bottom <= mine.top + 2 && mine.top - rc.bottom < 28 && rc.left < mine.right && rc.right > mine.left)
+        else if (rc.bottom <= mine.top + 2 && mine.top - rc.bottom < 24 && rc.left < mine.right && rc.right > mine.left)
             distance = 300 + (mine.top - rc.bottom); /* above */
         if (distance >= 0 && distance < best_distance) {
             window_text(other, text, TW_NAME);
@@ -1200,7 +1200,9 @@ static void walk_window(tw_walk *w, HWND hwnd, const tw_node *parent, int depth)
     } else {
         code = smsg(hwnd, WM_GETDLGCODE, 0, 0);
         if (same(c, L"ComboLBox")) {
+            /* The list of a combo box that always shows it: a list box. */
             node->role = TW_ROLE_LIST;
+            items_listbox(w->ns, node, style);
         } else if (contains(c, L"ComboBoxEx")) {
             node->role = TW_ROLE_PANEL;
         } else if (contains(c, L"ComboBox")) {
@@ -1274,8 +1276,14 @@ static void walk_window(tw_walk *w, HWND hwnd, const tw_node *parent, int depth)
             node->role = TW_ROLE_PANEL;
         } else if (same(c, L"Scintilla") || contains(c, L"RichEdit")) {
             node->role = TW_ROLE_TEXT;
-            node->states |= TW_ST_EDITABLE | TW_ST_MULTILINE;
-            node->actions = TW_ACT_TYPE | TW_ACT_FOCUS;
+            node->states |= TW_ST_MULTILINE;
+            node->actions = TW_ACT_FOCUS;
+            if (contains(c, L"RichEdit") && (style & ES_READONLY)) {
+                node->states |= TW_ST_READONLY;
+            } else {
+                node->states |= TW_ST_EDITABLE;
+                node->actions |= TW_ACT_TYPE;
+            }
             if (text[0]) {
                 tw_copy(node->text, TW_TEXT, text);
                 node->has_text = 1;
