@@ -37,8 +37,9 @@ case "${shard}" in
 esac
 echo "== packages"
 # --skip-unavailable: a package Fedora 45 does not have is a finding (it is
-# listed below as not installed), not a failed job.
-if ! dnf -y --setopt=install_weak_deps=False --skip-unavailable install ${base} ${extra} > "${out}/dnf-${shard}.log" 2>&1; then
+# listed below as not installed), not a failed job. dnf5 takes the option
+# after the command, not before it.
+if ! dnf -y --setopt=install_weak_deps=False install --skip-unavailable ${base} ${extra} > "${out}/dnf-${shard}.log" 2>&1; then
     tail -n 40 "${out}/dnf-${shard}.log"
     echo "::error::dnf could not install the packages"
     exit 1
