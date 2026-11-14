@@ -338,11 +338,42 @@ for lock in "${LOCKS[@]}"; do
 done
 fact applications_run "$n"
 
+# ---------------------------------------------------------------- microG
+# microG is the open-source (Apache-2.0) reimplementation of Google Play
+# services; it is not Google's software. It answers under Google's package
+# name only if the Android image lets it present Google's signature
+# ("signature spoofing"), which LineageOS allows for microG alone. Does
+# Waydroid's image? The probe reports what an application sees.
+fact signature_spoofing_permission_in_image "$(ash 'pm list permissions' | grep -c FAKE_PACKAGE_SIGNATURE)"
+MICROG="$APKS/microg/gms.apk"
+if [ -f "$MICROG" ] && [ -f "$PROBE" ]; then
+	log "microG"
+	fact microg_install "$(install_apk "$MICROG")"
+	install_apk "$PROBE" >/dev/null
+	ash 'logcat -c' >/dev/null
+	ash 'am start -W -n org.tur.probe/.ProbeActivity --es phase none' > "$OUT/logs/start-probe-microg.txt" 2>&1
+	sleep 5
+	ash 'logcat -d -s TURPROBE' | tr -d '\r' | sed -E 's/.*TURPROBE: //' > "$OUT/probe-microg.txt"
+	fact microg_seen_by_application "$(grep -E '^google_play_services' "$OUT/probe-microg.txt" | tr '\n' ' ')"
+	ash 'dumpsys package com.google.android.gms' | tr -d '\r' | grep -iE 'FAKE_PACKAGE_SIGNATURE|versionName|signatures' | head -n 8 > "$OUT/microg-package.txt"
+	shot microg-probe
+	ash 'am force-stop org.tur.probe; pm uninstall org.tur.probe; pm uninstall com.google.android.gms' >/dev/null
+fi
+
 # ---------------------------------------------------------------- one window per application
 # Waydroid's multi-window mode gives each Android task its own Wayland
 # window, which is what TUR's design relies on. Best effort, at the end.
 if [ "${MULTI_WINDOW:-1}" = "1" ] && [ -f "$PROBE" ]; then
 	log "multi-window mode"
+	# Waydroid shares the clipboard only when the Python module pyclip is
+	# present; neither Fedora's nor upstream's package asks for it. The
+	# first session ran as packaged; this one has the module.
+	if command -v dnf >/dev/null; then
+		dnf install -y python3-pyclip > "$OUT/logs/pyclip.log" 2>&1
+	else
+		apt-get install -y python3-pyclip > "$OUT/logs/pyclip.log" 2>&1
+	fi
+	fact pyclip_present "$(python3 -c 'import pyclip; print("yes")' 2>&1 | tail -n 1)"
 	asuser waydroid prop set persist.waydroid.multi_windows true >> "$OUT/logs/session.log" 2>&1
 	asuser waydroid session stop >> "$OUT/logs/session.log" 2>&1
 	sleep 5
@@ -352,9 +383,17 @@ if [ "${MULTI_WINDOW:-1}" = "1" ] && [ -f "$PROBE" ]; then
 		fact multi_window_boot_seconds "$BOOT_SECONDS"
 		sleep 5
 		install_apk "$PROBE" >/dev/null
+		ash 'logcat -c' >/dev/null
 		ash 'am start -W -n org.tur.probe/.ProbeActivity --es phase basic' > "$OUT/logs/start-probe-multiwindow.txt" 2>&1
+		sleep 4
+		fact pyclip_clipboard_android_to_host "$(asuser timeout 5 wl-paste -n 2>&1 | head -c 100)"
+		asuser wl-copy tur-host-clip-456 2>> "$OUT/logs/grim.log" &
+		sleep 13
+		ash 'logcat -d -s TURPROBE' | tr -d '\r' | sed -E 's/.*TURPROBE: //' > "$OUT/probe-multiwindow.txt"
+		fact pyclip_clipboard_host_to_android "$(grep '^clipboard_get=' "$OUT/probe-multiwindow.txt" | tr '\n' ' ')"
+		fact multi_window_probe_layout "$(grep '^layout=' "$OUT/probe-multiwindow.txt" | tr '\n' ' ')"
 		ash 'am start -W -n com.android.settings/.Settings' >> "$OUT/logs/start-probe-multiwindow.txt" 2>&1
-		sleep 10
+		sleep 8
 		asuser swaymsg -t get_tree > "$OUT/multi-window-tree.json" 2>&1
 		fact multi_window_host_windows "$(grep -c '"app_id"' "$OUT/multi-window-tree.json")"
 		fact multi_window_app_ids "$(grep -oE '"app_id": *"[^"]*"' "$OUT/multi-window-tree.json" | sort -u | tr '\n' ' ')"

@@ -327,8 +327,19 @@ public class ProbeActivity extends Activity {
             say("external_files_dir_error", t);
         }
         try {
-            getPackageManager().getPackageInfo("com.google.android.gms", 0);
-            say("google_play_services", "present");
+            android.content.pm.PackageInfo pi = getPackageManager().getPackageInfo("com.google.android.gms",
+                    android.content.pm.PackageManager.GET_SIGNATURES);
+            String sha1 = "none";
+            if (pi.signatures != null && pi.signatures.length > 0) {
+                byte[] d = java.security.MessageDigest.getInstance("SHA-1").digest(pi.signatures[0].toByteArray());
+                StringBuilder hex = new StringBuilder();
+                for (byte x : d) {
+                    hex.append(String.format("%02x", x & 0xff));
+                }
+                sha1 = hex.toString();
+            }
+            // Google's own certificate is 38918a453d07199354f8b19af05ec6562ced5788.
+            say("google_play_services", "present, version " + pi.versionName + ", signer sha1 " + sha1);
         } catch (Throwable t) {
             say("google_play_services", "absent (" + t.getClass().getSimpleName() + ")");
         }

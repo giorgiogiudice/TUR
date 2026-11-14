@@ -8,6 +8,13 @@
 
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- From Android 11 an application sees another package only if it says
+         it wants to: the probe asks whether Play services (or microG under
+         that name) is installed. -->
+    <queries>
+        <package android:name="com.google.android.gms" />
+    </queries>
+
     <application
         android:label="TUR probe"
         android:hasCode="true"

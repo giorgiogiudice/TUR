@@ -343,6 +343,7 @@ jobs:
           rm -rf "$W/index"
           mkdir -p "$W/evidence/locks" && cp "$W"/locks/*.tsv "$W/evidence/locks/"
           bash "$EXP/probe/build.sh" "$W/apks/probe" || echo "::warning::the probe application did not build"
+          bash "$EXP/waydroid/fetch-microg.sh" "$W/apks/microg" || echo "::warning::microG was not downloaded"
 
       - name: Waydroid, headless, software rendering
         run: |
@@ -420,6 +421,7 @@ jobs:
           rm -rf "$W/index"
           mkdir -p "$W/evidence/locks" && cp "$W"/locks/*.tsv "$W/evidence/locks/"
           bash "$EXP/probe/build.sh" "$W/apks/probe" || echo "::warning::the probe application did not build"
+          bash "$EXP/waydroid/fetch-microg.sh" "$W/apks/microg" || echo "::warning::microG was not downloaded"
 
       - name: Waydroid in the Fedora 45 guest
         env:
