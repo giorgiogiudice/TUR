@@ -185,6 +185,14 @@ into the next update.
 
 ---
 
+## What comes next
+
+The ideas TUR is testing now, each written as a hypothesis that may fail
+(running applications' portable payloads without any compatibility layer, a
+Windows command line judged against real Windows, a compatibility layer that
+repairs itself, P@x operating Windows applications, Android by translation, and
+drivers learned from a recording) are on [the frontier page](frontier.md).
+
 ## The bigger goals
 
 These bets serve the goals TUR was started for
