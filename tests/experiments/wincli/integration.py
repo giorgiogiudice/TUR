@@ -270,13 +270,58 @@ def binfmt() -> None:
                 pass
 
 
+def wild() -> None:
+    """One cheap test of a wilder idea: under Wine, PowerShell's CIM cmdlets
+    need Windows' management infrastructure (mi.dll), which Wine does not
+    have, but the older .NET route to WMI goes through COM, which Wine does
+    implement. If that works, a small module could give PowerShell for
+    Windows under Wine its Get-CimInstance back."""
+    import re
+
+    import run as harness
+
+    cand = harness.Candidate("wine-pwsh")
+    if not cand.bring_up():
+        record("wild", "PowerShell 7 for Windows starts under Wine", False,
+               json.dumps(cand.meta.get("bring_up"))[:500])
+        return
+    record("wild", "PowerShell 7 for Windows starts under Wine", True, json.dumps(cand.wine_env))
+    probes = [
+        ("WMI through COM: Win32_OperatingSystem",
+         "([wmisearcher]'SELECT Caption, Version FROM Win32_OperatingSystem').Get() | "
+         "ForEach-Object { \"$($_.Caption) $($_.Version)\" }", r"\S+ \d+\.\d+"),
+        ("WMI through COM: Win32_Processor",
+         "([wmisearcher]'SELECT Name FROM Win32_Processor').Get() | ForEach-Object { $_.Name }", r"\S"),
+        ("WMI through COM: Win32_LogicalDisk",
+         "([wmisearcher]'SELECT DeviceID, Size FROM Win32_LogicalDisk').Get() | "
+         "ForEach-Object { \"$($_.DeviceID) $($_.Size)\" }", r"C: \d+"),
+        ("WMI through COM: number of Win32_Service",
+         "@(([wmisearcher]'SELECT Name FROM Win32_Service').Get()).Count", r"^[1-9]\d*\s*$"),
+        (".NET registry API", "[Microsoft.Win32.Registry]::LocalMachine.OpenSubKey("
+         "'SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion').GetValue('ProductName')", r"\S"),
+        (".NET service API", "[System.ServiceProcess.ServiceController]::GetServices().Count", r"^[1-9]\d*\s*$"),
+        ("why Get-CimInstance fails (information)",
+         "try { Get-CimInstance Win32_OperatingSystem -ErrorAction Stop | Out-Null; 'it works' } "
+         "catch { $_.Exception.GetType().Name + ': ' + $_.Exception.Message }", None),
+        ("what PowerShell thinks it runs on (information)", "$PSVersionTable.OS", None),
+    ]
+    for name, script, pattern in probes:
+        result = cand.run("ps", script, 240)
+        text = result["stdout"].strip()
+        if pattern is None:
+            record("wild", name, "info", text[:300] or result["stderr"].strip()[-300:])
+        else:
+            record("wild", name, bool(re.search(pattern, text, re.M)),
+                   f"exit={result['exit']} out={text[:200]!r} err={result['stderr'].strip()[-200:]!r}")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", required=True)
     args = parser.parse_args()
     out_dir = pathlib.Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
-    for step in (safety, paths, bridge, binfmt):
+    for step in (safety, paths, bridge, binfmt, wild):
         try:
             step()
         except Exception as err:  # noqa: BLE001 - one step must not hide the others

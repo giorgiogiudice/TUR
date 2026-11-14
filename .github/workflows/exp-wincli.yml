@@ -56,6 +56,10 @@ env:
   PWSH_LINUX_SHA256: e261cabc91c78a9afe8d1e5f24731ab0d38204735ab2ec94b0af55102652e10d
   PWSH_WIN_SHA256: 7d871531806eb1646264e4bbabd9f0c30c23355591bc756bb9909448c29ae166
   WINCLI_ONLY: ${{ github.event.inputs.only }}
+  # PowerShell reports usage to Microsoft and looks for updates unless told
+  # not to. Off on the judge and on the candidates alike.
+  POWERSHELL_TELEMETRY_OPTOUT: "1"
+  POWERSHELL_UPDATECHECK: "Off"
 
 jobs:
   truth:

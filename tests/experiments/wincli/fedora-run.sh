@@ -25,6 +25,9 @@ ev="${work}/evidence"
 build="${work}/build"
 mkdir -p "${ev}" "${build}" "${work}/p"
 export PYTHONDONTWRITEBYTECODE=1 WINEDEBUG=-all LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 TZ=UTC
+# PowerShell reports usage to Microsoft and looks for updates unless told not
+# to; TUR never uploads anything silently, and neither does this test.
+export POWERSHELL_TELEMETRY_OPTOUT=1 POWERSHELL_UPDATECHECK=Off
 only="${WINCLI_ONLY:-}"
 
 dnf -y --setopt=install_weak_deps=False install \
