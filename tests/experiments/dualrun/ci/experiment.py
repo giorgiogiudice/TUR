@@ -296,7 +296,8 @@ class Experiment:
         cfg = {
             "memory_mb": memory_mb, "cpus": cpus, "code": self.firmware["code"], "vars": str(variables),
             "identity": PC_IDENTITY if carried else GUEST_IDENTITY,
-            "hyperv_auto": hyperv, "hyperv": [], "balloon": balloon and hyperv, "no_sleep_states": True,
+            "hyperv_auto": hyperv, "hyperv": [], "no_sleep_states": True,
+            "balloon": balloon and hyperv and bool(self.results["meta"].get("qemu_has", {}).get("hv-balloon")),
             "disk": {"path": getattr(s, "overlay", None) if mode == "protected" else record["device"],
                      "format": "qcow2" if mode == "protected" else "raw", "controller": controller,
                      "serial": PC_DISK_SERIAL if carried else GUEST_DISK_SERIAL},
@@ -309,6 +310,8 @@ class Experiment:
         s.info.update(mode=mode, identity=identity, tpm=tpm, controller=controller, memory_mb=memory_mb, cpus=cpus)
         s.machine = Machine(f"guest-{tag}", cfg, self.out / "sessions" / tag, self.vm / "run" / tag, tpm_dir)
         self.log(f"guest start: {tag} (mode {mode}, identity {identity}, tpm {tpm}, {controller})")
+        # udev may have put the node's owner back after a change event; the helper set it once.
+        sh("sudo", "chown", str(self.uid), record["node"], check=False)
         try:
             s.machine.start()
         except RuntimeError as error:
