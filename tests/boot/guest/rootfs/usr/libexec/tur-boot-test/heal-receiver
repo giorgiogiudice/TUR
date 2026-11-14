@@ -1,0 +1,74 @@
+#!/usr/bin/python3
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+"""A stand-in for TUR's report receiver, for the self-healing test only.
+
+    heal-receiver PORT DIR
+
+Listens on 127.0.0.1:PORT. Every request, of any kind, is counted in
+DIR/requests.jsonl (method, path, length, the time); the body of an upload
+is kept as DIR/upload-N.bin. An upload to /v1/reports is answered as the
+real receiver answers (server/report-receiver; schemas/report-receiver.schema.json):
+202 with a receipt. It decides nothing: the host turns what it kept into
+checks. Present only in the boot-test image.
+"""
+
+import hashlib
+import json
+import sys
+import time
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
+
+PORT = int(sys.argv[1])
+DIR = Path(sys.argv[2])
+DIR.mkdir(parents=True, exist_ok=True)
+COUNT = DIR / "requests.jsonl"
+
+
+class Handler(BaseHTTPRequestHandler):
+    def log_message(self, *_):
+        pass
+
+    def record(self, body):
+        number = sum(1 for _ in COUNT.open()) + 1 if COUNT.exists() else 1
+        entry = {"n": number, "method": self.command, "path": self.path, "bytes": len(body), "at": time.time()}
+        with COUNT.open("a") as out:
+            out.write(json.dumps(entry) + "\n")
+        if body:
+            (DIR / f"upload-{number}.bin").write_bytes(body)
+        return number
+
+    def answer(self, status, document):
+        data = json.dumps(document).encode()
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def do_POST(self):
+        length = int(self.headers.get("Content-Length") or 0)
+        body = self.rfile.read(length) if length else b""
+        number = self.record(body)
+        if self.path != "/v1/reports":
+            self.answer(404, {"schema_version": 1, "code": "TUR-DIAG-RECEIVER-001", "message": "no such path"})
+            return
+        token = hashlib.sha256(body + str(number).encode()).hexdigest()
+        self.answer(
+            202,
+            {
+                "schema_version": 1,
+                "report_id": "R-" + token[:16],
+                "status_token": token,
+                "status_url": f"http://127.0.0.1:{PORT}/v1/reports/{token}",
+                "state": "received",
+                "retention_days": 90,
+            },
+        )
+
+    def do_GET(self):
+        self.record(b"")
+        self.answer(200, {"schema_version": 1, "state": "received", "fixed_in": None})
+
+
+HTTPServer(("127.0.0.1", PORT), Handler).serve_forever()

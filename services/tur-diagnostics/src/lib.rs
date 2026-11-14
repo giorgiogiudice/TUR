@@ -29,6 +29,7 @@
 pub mod bundle;
 pub mod collectors;
 pub mod error;
+pub mod heal;
 pub mod host;
 pub mod identity;
 pub mod manifest;

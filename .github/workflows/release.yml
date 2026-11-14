@@ -534,7 +534,8 @@ jobs:
           if [ "$PUBLISH" = 1 ]; then
             key=env://TUR_RELEASE_KEY
             pub=image/rootfs/usr/share/tur/signing/release.pub
-            cosign public-key --key env://TUR_RELEASE_KEY > "$keys/from-secret.pub"
+            cosign public-key --key env://TUR_RELEASE_KEY > "$keys/from-secret.pub" \
+              || { echo "the secret TUR_RELEASE_SIGNING_PASSWORD does not open the key in TUR_RELEASE_SIGNING_KEY (publishing.md, section 8)"; exit 1; }
             cmp "$keys/from-secret.pub" "$pub" \
               || { echo "the secret key is not the one whose public half the image carries"; exit 1; }
           else

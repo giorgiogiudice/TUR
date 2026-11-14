@@ -40,10 +40,13 @@ ENV CARGO_TARGET_DIR=/build/target \
 COPY rust-toolchain.toml /pin/rust-toolchain.toml
 COPY image/programs.tsv /src/image/programs.tsv
 COPY image/programs.sh /src/image/programs.sh
+COPY image/files.tsv /src/image/files.tsv
 COPY LICENSE.md NOTICE /src/
 COPY catalogue/ /src/catalogue/
 COPY crates/ /src/crates/
 COPY installer/tur-installer-core/ /src/installer/tur-installer-core/
+COPY services/tur-ai-local/ /src/services/tur-ai-local/
+COPY services/tur-apps/ /src/services/tur-apps/
 COPY services/tur-boot-health/ /src/services/tur-boot-health/
 COPY services/tur-catalogue/ /src/services/tur-catalogue/
 COPY services/tur-device-manager/ /src/services/tur-device-manager/
@@ -65,6 +68,27 @@ RUN /bin/sh /src/image/programs.sh fetch
 # does not match; --offline refuses to fetch anything.
 RUN --network=none /bin/sh /src/image/programs.sh build
 
+# ---- build stage: the local AI engine -------------------------------------------
+# llama.cpp's llama-server, the engine tur-ai-local starts (ADR-0021;
+# docs/architecture/local-ai.md, section 6), built from its source at the
+# version pinned in image/engine/llama-cpp.lock, with a processor backend for
+# every x86-64 level (chosen when it starts) and the Vulkan backend; no
+# HIP/ROCm. Built on the base image itself, so that it is linked against the
+# C and C++ libraries and the Vulkan loader the image has. The compilers come
+# from the base's own repositories and stay in this stage. See
+# image/README.md, "The local AI engine".
+FROM ${BASE_IMAGE}@${BASE_DIGEST} AS engine
+
+COPY image/engine/ /src/image/engine/
+COPY image/third-party-licensed/llama.cpp/ /src/image/third-party-licensed/llama.cpp/
+
+# With network: the build tools, and the source archive checked against its
+# SHA-256. Nothing is compiled here.
+RUN /bin/sh /src/image/engine/llama-cpp.sh fetch
+
+# No network: compiled from the checked source with the tools above.
+RUN --network=none /bin/sh /src/image/engine/llama-cpp.sh build
+
 # ---- the image ------------------------------------------------------------------
 FROM ${BASE_IMAGE}@${BASE_DIGEST}
 
@@ -85,6 +109,11 @@ COPY image/rootfs/ /
 # licence of TUR's own programs and the licence files of the third-party
 # crates compiled into them.
 COPY --from=programs /out/ /
+
+# What the engine stage made (image/engine/llama-cpp.sh): llama-server with
+# its libraries and backends in /usr/libexec/tur/llama.cpp, the link
+# /usr/bin/llama-server, its licences, and /usr/lib/tur/built-from-source.tsv.
+COPY --from=engine /out/ /
 
 # Boot-attempt counting (ADR-0014). bootupd concatenates every *.cfg in
 # configs.d, sorted by name, into /boot/grub2/grub.cfg at installation. The
@@ -118,11 +147,22 @@ RUN set -eu; \
     # The programs were linked against the C library of the toolchain image,
     # which is older than this image's. Each runs once here, so that a
     # program that cannot start stops the build and not a boot.
-    test "$(grep -c -v '^#' /usr/lib/tur/programs.tsv)" -ge 11; \
+    test "$(grep -c -v '^#' /usr/lib/tur/programs.tsv)" -ge 13; \
     chmod 0755 /usr/share/licenses/tur-grub-boot-count; \
     for path in $(grep -v '^#' /usr/lib/tur/programs.tsv | cut -f2); do \
         "${path}" --version || { echo "${path} does not run in this image" >&2; exit 1; }; \
     done; \
+    # The engine was compiled on the base: it must start here too, load its
+    # backends and say which devices it sees (none but the processor in a
+    # build).
+    /usr/bin/llama-server --version || { echo "llama-server does not run in this image" >&2; exit 1; }; \
+    /usr/bin/llama-server --list-devices; \
+    # P@x's catch-up timer is enabled for every user (pax-service.md,
+    # section 6): after sign-in it runs `tur-pax schedule wake`, which ends at
+    # once while P@x is switched off. The link is what `systemctl --global
+    # enable` makes, under /usr rather than /etc.
+    mkdir -p /usr/lib/systemd/user/timers.target.wants; \
+    ln -s ../tur-pax-catchup.timer /usr/lib/systemd/user/timers.target.wants/tur-pax-catchup.timer; \
     # Boot health (ADR-0014; design section 10). The program is also on the
     # PATH, for `status` and `acknowledge`.
     ln -s ../libexec/tur/tur-boot-health /usr/bin/tur-boot-health; \

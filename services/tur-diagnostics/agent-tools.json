@@ -7,7 +7,11 @@
       "description": "Show the state of this system in one view: the TUR build and version, the kernel, the boot identifier and how many system units have failed. Reads only; nothing is collected or sent anywhere.",
       "class": 0,
       "method": "GetStatus",
-      "input_schema": { "type": "object", "properties": {}, "additionalProperties": false }
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
     },
     {
       "name": "diag_report_prepare",
@@ -17,17 +21,49 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "title": { "type": "string", "description": "One line that names the problem.", "minLength": 1, "maxLength": 120 },
-          "description": { "type": "string", "description": "What happened, in one paragraph.", "maxLength": 1999 },
+          "title": {
+            "type": "string",
+            "description": "One line that names the problem.",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "description": {
+            "type": "string",
+            "description": "What happened, in one paragraph.",
+            "maxLength": 1999
+          },
           "component": {
             "type": "string",
             "enum": [
-              "android", "apps", "audio", "boot", "catalogue", "desktop", "device", "diag", "display",
-              "install", "network", "other", "pax", "runtime", "settings", "storage", "update", "windows"
+              "android",
+              "apps",
+              "audio",
+              "boot",
+              "catalogue",
+              "desktop",
+              "device",
+              "diag",
+              "display",
+              "install",
+              "network",
+              "other",
+              "pax",
+              "runtime",
+              "settings",
+              "storage",
+              "update",
+              "windows"
             ]
           },
-          "error_code": { "type": "string", "description": "A TUR error code such as TUR-BOOT-GATE-003, if one is known.", "maxLength": 64 },
-          "from_boot_health": { "type": "boolean", "description": "Make the report from boot health's notice of a failed update or a failed start." }
+          "error_code": {
+            "type": "string",
+            "description": "A TUR error code such as TUR-BOOT-GATE-003, if one is known.",
+            "maxLength": 64
+          },
+          "from_boot_health": {
+            "type": "boolean",
+            "description": "Make the report from boot health's notice of a failed update or a failed start."
+          }
         },
         "additionalProperties": false
       }
@@ -37,7 +73,122 @@
       "description": "List the problem reports this person has sent, with their last known state (received, filed, or fixed in a version), and those prepared but not sent. Reads only.",
       "class": 0,
       "method": "ListReports",
-      "input_schema": { "type": "object", "properties": {}, "additionalProperties": false }
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "heal_list_faults",
+      "description": "List the problems TUR's healing service has found on this computer and not yet resolved: what it saw, what was already done, and the repairs for each with their class and how they are undone; and the problems resolved recently. Reads only.",
+      "class": 0,
+      "method": "ListFaults",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "heal_explain",
+      "description": "Explain one problem TUR knows: what it is in plain words, each repair, what it changes, its class, whether TUR applies it by itself and how it is undone; and its record on this computer, if any. Reads only.",
+      "class": 0,
+      "method": "ExplainFault",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "The problem's code, as heal_list_faults shows it.",
+            "enum": [
+              "TUR-DESKTOP-SERVICE-001",
+              "TUR-NETWORK-TIME-001",
+              "TUR-NETWORK-RESOLVER-001",
+              "TUR-STORAGE-SPACE-001",
+              "TUR-DIAG-CRASH-001"
+            ]
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "heal_apply_remedy",
+      "description": "Ask TUR's healing service to apply one repair to a problem it has found, and check that the repair worked. The service refuses a problem that is not present now, a repair that cannot be undone (only the person can apply those, as administrator) and a repair asked for too often. Tell the person what the repair changes before asking for it.",
+      "class": 1,
+      "method": "ApplyRemedy",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "The problem's code, as heal_list_faults shows it.",
+            "enum": [
+              "TUR-DESKTOP-SERVICE-001",
+              "TUR-NETWORK-TIME-001",
+              "TUR-NETWORK-RESOLVER-001",
+              "TUR-STORAGE-SPACE-001",
+              "TUR-DIAG-CRASH-001"
+            ]
+          },
+          "remedy": {
+            "type": "string",
+            "description": "The repair's name, as heal_explain shows it.",
+            "enum": [
+              "start-failed-service",
+              "enable-network-time",
+              "restore-resolver-link",
+              "vacuum-journal"
+            ]
+          }
+        },
+        "required": [
+          "code",
+          "remedy"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "heal_undo_remedy",
+      "description": "Ask TUR's healing service to undo a repair that was applied, putting back what it changed. TUR then does not apply that repair by itself again until the problem is resolved.",
+      "class": 1,
+      "method": "UndoRemedy",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "The problem's code, as heal_list_faults shows it.",
+            "enum": [
+              "TUR-DESKTOP-SERVICE-001",
+              "TUR-NETWORK-TIME-001",
+              "TUR-NETWORK-RESOLVER-001",
+              "TUR-STORAGE-SPACE-001",
+              "TUR-DIAG-CRASH-001"
+            ]
+          },
+          "remedy": {
+            "type": "string",
+            "description": "The repair's name, as heal_explain shows it.",
+            "enum": [
+              "start-failed-service",
+              "enable-network-time",
+              "restore-resolver-link",
+              "vacuum-journal"
+            ]
+          }
+        },
+        "required": [
+          "code",
+          "remedy"
+        ],
+        "additionalProperties": false
+      }
     }
   ]
 }

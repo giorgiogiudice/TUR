@@ -15,9 +15,9 @@ hardware unless it says so.
 |---|---|---|
 | [1. Windows drivers without a Windows kernel](#1-windows-drivers-without-a-windows-kernel) | A device that only has a Windows driver works on TUR, safely | **Breakthrough in the lab**: real Windows USB drivers, including Microsoft's own KMDF sample, run as ordinary sandboxed programs |
 | [2. A compatibility autopilot](#2-a-compatibility-autopilot) | A Windows application that fails gets fixed by the computer, not by a forum search | **Working**: the right fix found in 12 of 12 fixable test cases, never touching the real copy |
-| [3. An assistant that can operate any application](#3-an-assistant-that-can-operate-any-application) | Say what you want; P@x does it in the applications you already use, within limits you can trust | **Working for Qt, GTK and Firefox**; Windows applications not yet |
+| [3. An assistant that can operate any application](#3-an-assistant-that-can-operate-any-application) | Say what you want; P@x does it in the applications you already use, within limits you can trust | **Working for Qt, GTK and Firefox**; **Windows applications measured in an experiment**: 95% of controls found, every action tried arrived |
 | [4. Private AI on your own computer](#4-private-ai-on-your-own-computer) | A capable assistant with no account, no bill and nothing leaving the machine | **Working**: models chosen to fit the hardware, downloaded on first use, P@x runs on them |
-| [5. A system that heals itself](#5-a-system-that-heals-itself) | A problem seen on one computer becomes a tested fix for every computer, automatically and with consent | **Parts built** (problem reports, signed updates, automatic rollback); the loop is not connected yet |
+| [5. A system that heals itself](#5-a-system-that-heals-itself) | A problem seen on one computer becomes a tested fix for every computer, automatically and with consent | **First loop working**: faults found, the safe one repaired and checked, the rest offered as a report you choose to send; signed updates and rollback proven |
 
 ---
 
@@ -71,8 +71,15 @@ As far as we know, KMDF drivers had not run in Wine before.
 - Not in the TUR image yet. Drivers for graphics, storage, networking and
   anything with kernel-level anti-cheat are out of scope: those stay with
   Linux's own drivers or a Windows virtual machine.
-- The Wine changes should go to the Wine project itself; the draft proposal is
-  in the [second report](reports/windows-drivers-2.md), section 10.
+- **These changes cannot go into Wine as they are.** The Wine project does
+  not accept code written by an AI model, because the copyright status of
+  such code is unsettled (its maintainer's statement on the developers' list,
+  9 April 2026). TUR's changes were written that way. So TUR carries them as
+  its own small patch queue, and what it can offer Wine is the findings: what
+  is missing, how real Windows behaves, and the proof that the approach
+  works. The draft proposal in the [second report](reports/windows-drivers-2.md),
+  section 10, was written before this was known and will be rewritten as a
+  report of findings.
 
 ## 2. A compatibility autopilot
 
@@ -128,10 +135,29 @@ What was shown:
 - P@x has carried out tasks with **the real Claude** and with **a real local
   model** (Qwen3 4B), besides hundreds of scripted checks on every change.
 
-**Not yet.** Windows applications show nothing to the accessibility interface
-under Wine, so P@x cannot see inside them yet; a bridge for that is planned.
-Typing into Firefox is reported as done but does not arrive. Approving a
-dangerous action from the desktop and voice control are not built yet.
+**Windows applications: first measurement (14 November 2026).** Windows
+applications show nothing to the accessibility interface under Wine, and
+Wine's own versions of Windows' two accessibility interfaces turned out to be
+nearly empty. So TUR tried a third way: a small program of its own, started
+inside the application's Windows environment, that reads the plain window
+structure every classic Windows program has. On five real applications
+(Wine's notepad, PuTTY, Notepad++, 7-Zip and an Inno Setup wizard) it found
+**163 of the 172 controls a person sees (95%)**, and **all 35 actions tried
+arrived** (press, type, select, tabs, toolbar buttons, menu commands), each
+confirmed in the application. P@x's own task loop and policy engine ran on
+top unchanged: a Delete button, a password field and "Replace…" were refused.
+A window that painted "Cancel" over a real "Delete" button fooled a click by
+position; with the rule "a position proposed from a picture never acts
+alone", the press was refused ([experiment](https://github.com/giorgiogiudice/TUR/pull/126)).
+
+This is one run. A confirming run with fixes to the test itself is waiting,
+and it has not been tried inside TUR's sandbox, on the TUR image, or on
+applications that draw their own controls (Electron, Qt, games).
+
+**Not yet.** Finding controls from a picture with a local vision model
+(measurement waiting). Typing into Firefox is reported as done but does not
+arrive. Approving a dangerous action from the desktop and voice control are
+not built yet.
 
 ## 4. Private AI on your own computer
 
@@ -152,8 +178,18 @@ Mistral, xAI, Groq, OpenRouter, Together and any other service that speaks the
 same language, added as data rather than code
 ([report](reports/pax-4.md)).
 
-**Next.** A faster engine built for TUR (with graphics-card support), and local
-speech so the assistant can work fully offline.
+**On the installed system (14 November 2026).** Local AI and TUR's own build
+of the engine (fourteen processor variants and Vulkan) are in the image. On an
+installed TUR in a virtual machine, P@x asked a local model (Qwen3 4B), the
+model called one of TUR's tools, and P@x answered from the result, with
+nothing leaving the machine. On that test machine's two processor cores the
+task took about eight minutes, which is too slow to use; a smaller model was
+fast but did not use tools. When a model does not fit the free memory, TUR
+refuses with a plain reason ([report](reports/TUR-010.md)).
+
+**Next.** A real computer with more cores and a graphics card (no model has
+run on a graphics card yet), and local speech so the assistant can work fully
+offline.
 
 ## 5. A system that heals itself
 
@@ -179,11 +215,40 @@ things worse.
   previous one by itself, proven in 26 failure scenarios on every change
   ([report](reports/TUR-005.md)).
 
-**Next.** Connecting them: P@x notices a fault, diagnoses it, repairs what it
-may, checks the repair held, and, with consent, sends the report that turns
-into the next update.
+**The first loop (14 November 2026).** A healing service, part of TUR and
+not of P@x, now connects them ([design](architecture/self-healing.md),
+[report](reports/heal-1.md)). On an installed TUR in a virtual machine, with
+faults injected on purpose:
+
+- a failed system service was found, restarted automatically and found still
+  running at the next check;
+- network time switched off and a replaced resolver file were found and left
+  for the person, repaired on request, and the resolver repair was undone to
+  the exact original file;
+- deleting logs on a full disk was refused without the person's approval;
+- a crashed TUR program became an offered report: nothing left the computer
+  until the person sent it, and what was sent matched what was shown;
+- after a simulated update, TUR checked again and said "the problem you
+  reported is fixed", or that it had happened again;
+- P@x listed the faults and ran the safe remedies through the service, and
+  was refused the one that needs approval.
+
+Only one repair is automatic: restarting a failed system service. Everything
+else waits for the person (the owner's decision).
+
+**Next.** A desktop notice for every automatic action and a history anyone can
+read (built, in review); more kinds of fault; a real update between two
+versions carrying a fix.
 
 ---
+
+## What comes next
+
+The ideas TUR is testing now, each written as a hypothesis that may fail
+(running applications' portable payloads without any compatibility layer, a
+Windows command line judged against real Windows, a compatibility layer that
+repairs itself, P@x operating Windows applications, Android by translation, and
+drivers learned from a recording) are on [the frontier page](frontier.md).
 
 ## The bigger goals
 
