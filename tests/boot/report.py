@@ -1125,7 +1125,21 @@ def check_components(ev: Evidence, checks: Checks, args) -> dict:
         f"{' '.join(named_text.split())[:360]} --grant-read {status.get('grant_resolved')}: exit status "
         f"{codes.get('pax-grant-resolved')}, {grant_resolved.get('error_code') or grant_resolved.get('outcome')} "
         "(the provider's address is a closed port: getting that far means the grant was accepted)",
-        required=False,
+    )
+    hidden_text = " ".join((text("pax-grant-hidden-named.out") + text("pax-grant-hidden-named.err")).split())
+    whole_text = " ".join((text("pax-grant-home-named.out") + text("pax-grant-home-named.err")).split())
+    add(
+        "pax_grant_through_home_link_still_refuses",
+        "through the same link, a hidden folder of the home directory and the home directory itself are still "
+        "refused (TUR-AI-SANDBOX-002)",
+        codes.get("pax-grant-hidden-named") not in (None, 0)
+        and "TUR-AI-SANDBOX-002" in hidden_text
+        and "hidden part" in hidden_text
+        and codes.get("pax-grant-home-named") not in (None, 0)
+        and "TUR-AI-SANDBOX-002" in whole_text
+        and "contains the home directory" in whole_text,
+        f"hidden folder: exit status {codes.get('pax-grant-hidden-named')}, {hidden_text[:240]}; home directory: "
+        f"exit status {codes.get('pax-grant-home-named')}, {whole_text[:240]}",
     )
 
     # ---- what SELinux refused, and what failed, while they ran ----------------------------------
