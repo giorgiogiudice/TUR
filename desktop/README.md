@@ -172,8 +172,10 @@ Qt 6, Kirigami, `qqc2-breeze-style`, the build tools and the fonts.
   (`BUILDER_IMAGE@BUILDER_DIGEST`, in TUR's registry). Every run takes that
   image while its label `org.tur.builder.inputs` equals what
   `ci/builder-inputs.sh` makes of the Containerfile, the base and
-  `BUILDER_REVISION`. The Actions cache only carries it from the `builder`
-  job to the others, so an evicted cache costs a pull, not new pictures.
+  `BUILDER_REVISION`. The Actions cache only saves the other jobs a pull:
+  when it has lost the image (it is evicted when the repository's caches
+  pass their limit, even between the jobs of one run), each job takes the
+  image from the registry. An evicted cache costs a pull, not new pictures.
 - **Not pinned, and printed:** the packages inside, at the moment the image
   is built. Fedora keeps only the newest update of a package, so an exact
   version cannot be asked for; the pinned image keeps the ones it was built
@@ -188,8 +190,10 @@ Qt 6, Kirigami, `qqc2-breeze-style`, the build tools and the fonts.
 To change the image (the Containerfile, the base pin or `BUILDER_REVISION`),
 change it in a pull request. The `builder` job finds that the pinned image
 was made from other inputs, builds a new one, tests with it, pushes it to
-TUR's registry and prints the `BUILDER_DIGEST=` line; the check "The builder
-image is pinned" fails until that line is committed. If a picture changed
+TUR's registry (tagged `inputs-<hash of the inputs>`, which later runs of
+the same inputs take instead of building again) and prints the
+`BUILDER_DIGEST=` line; the check "The builder image is pinned" fails until
+that line is committed. If a picture changed
 because Qt or a font did, regenerate the references as above and update
 `builder.packages`, in the same pull request. To take newer packages on
 purpose, raise `BUILDER_REVISION`.

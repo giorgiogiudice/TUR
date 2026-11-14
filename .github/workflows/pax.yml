@@ -298,9 +298,10 @@ jobs:
           path: ${{ env.BUILDER_DIR }}
           key: ${{ steps.key.outputs.key }}
 
-      # Without the cache: the image builder.lock pins, from TUR's registry;
-      # without a usable pin, built (desktop/README.md, "The builder image").
-      - name: The pinned builder image, if the cache has none
+      # Without the cache: from TUR's registry, the image builder.lock pins
+      # or the one a run pushed for these inputs; without either, built
+      # (desktop/README.md, "The builder image").
+      - name: The builder image from TUR's registry, if the cache has none
         id: fetch
         if: steps.cache.outputs.cache-hit != 'true'
         env:
@@ -328,6 +329,9 @@ jobs:
         run: desktop/ci/build-builder.sh "$BUILDER_DIR"
 
       - name: Load the builder image
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+          GHCR_USER: ${{ github.actor }}
         run: desktop/ci/load-builder.sh "$BUILDER_DIR"
 
       - name: The test image (accessibility bus, GTK, Firefox, Wine)

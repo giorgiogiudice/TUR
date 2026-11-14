@@ -10,11 +10,14 @@ Subsystem:        CI (ADR-0002): .github/actions/use-base-mirror,
                   the desktop builder image (desktop/ci, desktop-kit.md 15.3)
 Build ID:         none (no OS image is produced by this change; the image,
                   boot and rollback workflows built and booted it as usual)
-Source revision:  c7af116fe14e (pull request 111), the commit the
-                  measurements below come from. The commit that adds this
-                  report also pins the builder digest those runs pushed and
-                  retries a failed copy to ghcr.io; its runs are listed in the
-                  pull request.
+Source revision:  c7af116fe14e and 0fc8f7925cd8 (pull request 111), the
+                  commits the measurements below come from. The first has no
+                  cached and no pinned builder; the second pins the digest
+                  the first one's run pushed and retries a failed copy to
+                  ghcr.io. The commit after them makes the desktop jobs take
+                  the image from the registry when the cache has lost it
+                  (found on 0fc8f79, below); its runs are listed in the pull
+                  request.
 
 SUMMARY
 - What changed:
@@ -57,7 +60,10 @@ SUMMARY
      BUILDER_REVISION). Otherwise the builder job builds it (base through
      the mirror), pushes it and prints the line to pin; a new check "The
      builder image is pinned" fails until that line is committed. The
-     Actions cache only carries the image between the jobs of a run.
+     Actions cache only saves the other jobs a pull: a job that finds the
+     cache empty takes the image from the registry (load-builder.sh), the
+     pinned one or the one a run pushed for the same inputs
+     (tag inputs-<hash>).
      workflow_dispatch input `rebuild` builds from scratch, under a cache
      key of its own, and keeps nothing.
   7. Because a kept image in a registry is distributed, the builder replaces
@@ -91,7 +97,7 @@ FILES
 - Modified: .github/actions/use-base-mirror/action.yml, setup.sh, check.sh,
   upstream.py; .github/workflows/base-mirror.yml, desktop.yml, pax.yml,
   local-ai.yml, windows-drivers.yml, release.yml, release-installer.yml,
-  reports.yml; desktop/ci/builder.lock, build-builder.sh,
+  reports.yml; desktop/ci/builder.lock, build-builder.sh, load-builder.sh,
   builder/Containerfile; desktop/README.md; image/README.md ("The base image
   and its mirror"); docs/architecture/desktop-kit.md (the builder rows and
   the known gap).
@@ -139,7 +145,41 @@ TESTS (GitHub Actions, pull request 111, commit c7af116)
   ghcr.io "500 Internal Server Error" on a blob upload (fedora fa773d10,
   rust); skopeo does not retry those, so pins.py now retries a copy up to
   four times. pin-age (dry run) passed. through-mirror was skipped because
-  it needs the mirror job, which failed; it runs on the next commit.
+  it needs the mirror job, which failed.
+
+TESTS (commit 0fc8f79: builder pinned, copy retried)
+- base-mirror 43516829594, all three jobs passed. mirror: the two missing
+  copies made (fedora fa773d10 from registry.fedoraproject.org, rust), the
+  rest "already mirrored"; every pin checked by digest, tag and platform.
+  through-mirror: a never-mirrored digest failed in check.sh, pins.py
+  resolve and podman pull; with quay.io unreachable ("Connection refused"),
+  each quay.io pin (kinoite cbc9be8a, fedora e15959f3) resolved "from the
+  mirror" as root and as the runner user; docker pulled the builder's base
+  as ghcr.io/giorgiogiudice/tur-mirror-fedora@sha256:e15959f3...; the OS
+  image built in 552 s, labels and stored base name quay.io and the pinned
+  digest; smoke tests passed. pin-age (dry run): "Pinned images: 0 to
+  re-pin"; windows-drivers' fa773d10 "tag moved; within 7 days".
+- image 43516829971, boot 43516830109, rollback 43516829512 (all six jobs;
+  the storage error of the run before did not recur): passed.
+- local-ai 43516830061, windows-drivers 43516829967, release-installer
+  43516829645, reports 43516829525, pax 43516829945: passed.
+- desktop 43516829979: the builder job found no cache, took the pinned
+  image from the registry ("pinned: ghcr.io/giorgiogiudice/
+  tur-desktop-builder@sha256:e319e96c...", "builder image: pinned", pulled
+  in 35 s) and saved it to the cache. The other jobs then waited hours for
+  a runner, and the first to start, "P@x's window against the real
+  service", FAILED: "Failed to restore cache entry ... fail-on-cache-miss".
+  The entry had been evicted in between (the repository's caches stood at
+  9.2 GB of the 10 GB limit, 57 entries). This is the weakness issue 38
+  describes, inside one run. Fixed in the next commit: a job that finds the
+  cache empty takes the image from the registry, so the cache is no longer
+  needed for a run to pass.
+- iso 43516829550 and release 43516829798 were still running, rust
+  43516830072 still queued, when the next commit was pushed.
+- NOT RUN: a workflow_dispatch run with `rebuild` (c7af116's run already
+  built with nothing cached and nothing pinned); the release job's use of
+  the registry image through the mirror, unless the release rehearsal of
+  the last commit reaches it (see the pull request).
 - Hardware tests: not applicable.
 
 DIAGNOSTICS
@@ -172,6 +212,9 @@ KNOWN LIMITATIONS
 - A pin added outside the scanned paths (a new place) is caught only if a
   digest appears in a scanned file; pins.py scans .github/, tests/,
   scripts/, lock files and Containerfiles.
+- The Actions cache is nearly full (9.2 GB of 10 GB on 14 November), so
+  entries are evicted within hours. The desktop workflow no longer depends
+  on it; other workflows' caches (cargo) only cost time when evicted.
 - base-mirror now runs on every change to a workflow, lock file or
   Containerfile (about two minutes when the image build is skipped); a
   ghcr.io or Docker Hub outage then fails it.
