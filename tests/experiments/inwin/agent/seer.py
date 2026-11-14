@@ -232,11 +232,21 @@ class Seer:
                 self.note(f"bridge windows: {error}")
             for tier in ("win32", "msaa", "uia"):
                 began = time.perf_counter()
+                if self.bridge is None:
+                    reads["bridge-" + tier] = {"elements": [], "error": "the bridge was stopped after two reads without an answer"}
+                    continue
                 try:
-                    read = self.bridge.ask("read", 90, window=identifier, tier=None if tier == "win32" else tier, max_nodes=4000)
+                    read = self.bridge.ask("read", 45, window=identifier, tier=None if tier == "win32" else tier, max_nodes=4000)
                     read.setdefault("milliseconds", round((time.perf_counter() - began) * 1000, 1))
+                    self.silent = 0
                 except Exception as error:
                     read = {"elements": [], "error": f"{type(error).__name__}: {str(error)[:200]}"}
+                    if isinstance(error, queue.Empty):
+                        self.silent = getattr(self, "silent", 0) + 1
+                        if self.silent >= 2:
+                            self.note("the bridge gave no answer to two reads in a row: stopped; its tiers are NOT RUN from here on")
+                            self.bridge.process.kill()
+                            self.bridge = None
                 reads["bridge-" + tier] = read
         return reads
 
@@ -744,9 +754,10 @@ class Seer:
             except Exception:
                 self.note(f"{name}: the scenario stopped: {traceback.format_exc()[-900:]}")
             print(f"== {name}: {time.monotonic() - began:.0f} s", flush=True)
+            self.write(quiet=True)  # what there is so far, in case a later scenario never returns
         self.write()
 
-    def write(self):
+    def write(self, quiet=False):
         result = {"captures": self.captures, "checks": self.checks, "notes": self.notes}
         (self.out / "see.json").write_text(json.dumps(result, indent=1), encoding="utf-8")
         tiers = ["uia", "bridge-win32", "bridge-msaa", "bridge-uia", "uia or win32"]
@@ -769,7 +780,8 @@ class Seer:
             lines.append(f"| {check['app']} | {check['what']} | {'yes' if check['ok'] else '**no**'} | {check['detail'].replace('|', '/')} |")
         lines += ["", f"{sum(1 for c in self.checks if c['ok'])} of {len(self.checks)} actions arrived.", "", "### Notes", ""] + [f"- {note.replace(chr(10), ' ')[:500]}" for note in self.notes]
         (self.out / "see.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
-        print("\n".join(lines))
+        if not quiet:
+            print("\n".join(lines))
 
 
 def main():

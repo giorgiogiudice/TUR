@@ -75,17 +75,19 @@ jobs:
         shell: bash
         run: |
           gcc --version | head -n 1
-          mkdir -p "$RUNNER_TEMP/shim"
+          # RUNNER_TEMP is a Windows path; this shell's PATH wants the other kind.
+          tmp="$(cygpath -u "$RUNNER_TEMP")"
+          mkdir -p "$tmp/shim"
           for tool in gcc objdump; do
             if ! command -v "x86_64-w64-mingw32-$tool" >/dev/null 2>&1; then
-              printf '#!/bin/sh\nexec %s "$@"\n' "$tool" > "$RUNNER_TEMP/shim/x86_64-w64-mingw32-$tool"
-              chmod +x "$RUNNER_TEMP/shim/x86_64-w64-mingw32-$tool"
+              printf '#!/bin/sh\nexec %s "$@"\n' "$tool" > "$tmp/shim/x86_64-w64-mingw32-$tool"
+              chmod +x "$tmp/shim/x86_64-w64-mingw32-$tool"
             fi
           done
-          export PATH="$RUNNER_TEMP/shim:$PATH"
-          bash tests/experiments/winsee/bridge/build.sh "$RUNNER_TEMP/bridge" || echo "::warning::the bridge's build reported a failure; see build.json"
-          rm -rf "$RUNNER_TEMP/bridge/obj"
-          ls -l "$RUNNER_TEMP/bridge"
+          export PATH="$tmp/shim:$PATH"
+          bash tests/experiments/winsee/bridge/build.sh "$tmp/bridge" || echo "::warning::the bridge's build reported a failure; see build.json"
+          rm -rf "$tmp/bridge/obj"
+          ls -l "$tmp/bridge"
 
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
@@ -133,6 +135,7 @@ jobs:
         run: python tests/experiments/inwin/agent/fetch.py --dir "$env:RUNNER_TEMP\dl"
 
       - name: Read and operate real applications
+        timeout-minutes: 25
         shell: pwsh
         run: |
           python tests/experiments/inwin/agent/seer.py --out "$env:RUNNER_TEMP\see\out" --raw "$env:RUNNER_TEMP\see\raw" --bridge "$env:RUNNER_TEMP\bridge" --downloads "$env:RUNNER_TEMP\dl"
@@ -140,6 +143,7 @@ jobs:
           exit 0
 
       - name: The window list and how fast it can be kept current
+        timeout-minutes: 10
         if: ${{ !cancelled() }}
         shell: pwsh
         run: |
@@ -195,6 +199,7 @@ jobs:
           python -m pip install --disable-pip-version-check --no-deps --require-hashes -r tests/experiments/inwin/requirements.txt
 
       - name: The checker, with three sets of rights
+        timeout-minutes: 12
         shell: pwsh
         run: |
           python tests/experiments/inwin/rights.py --script checker/check.py --name checker --out "$env:RUNNER_TEMP\wayin"
@@ -202,6 +207,7 @@ jobs:
           exit 0
 
       - name: A test wallpaper and test shortcuts of TUR's own on this desktop
+        timeout-minutes: 6
         if: ${{ !cancelled() }}
         shell: pwsh
         run: |
@@ -209,6 +215,7 @@ jobs:
           exit 0
 
       - name: The carry-over reader, with three sets of rights
+        timeout-minutes: 15
         if: ${{ !cancelled() }}
         shell: pwsh
         run: |

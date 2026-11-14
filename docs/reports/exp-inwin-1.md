@@ -1,10 +1,78 @@
 <!-- SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0 -->
 # exp-inwin-1 — TUR as the solid floor under the person's own Windows, seen from the Windows side (experiment)
 
-> **Status: hypotheses registered; nothing measured yet.** This first
-> commit holds the hypotheses, the kill criteria and the experiment's code.
-> Every result section below says NOT RUN until a run of the workflow
-> `exp-inwin` fills it.
+> **Status: hypotheses registered; nothing measured yet.** The first
+> commit holds the hypotheses, the kill criteria and the experiment's
+> code; later commits, all made before any run produced a number, add
+> code and the design sections (5, 6.2, 8, 9, 11), which rest on documents
+> and judgement, not on measurement. Every result section says NOT RUN
+> until a run of the workflow `exp-inwin` fills it. The first run was
+> still waiting for a runner when this was written.
+
+Two things were added to the experiment after the first commit and before
+any run, and are registered here for that reason:
+
+- **For `dualrun`'s H5(b)** (each Windows application in its own window
+  without Remote Desktop): whether the content of a window that another
+  window covers can be had from inside Windows by asking the window itself
+  (`PrintWindow`), for a classic window, Explorer, a XAML application and
+  a Chromium browser. The kill criterion is `dualrun`'s own: the content
+  of a covered window cannot be obtained.
+- **For H5**: the registry file is also read by a reader of the file
+  format that asks Windows nothing (`carry/regf.py`), and compared value
+  by value with the running Windows. Kill: any of the listed values
+  differs or cannot be read.
+
+```text
+TUR DEVELOPMENT REPORT
+
+Task ID:          exp-inwin-1 (time-boxed research spike `inwin`)
+Subsystem:        P@x (AI control layer: acting through what an application
+                  exposes, here inside a Windows guest); installation (the
+                  way in from Windows); desktop (what is carried over)
+Build ID:         not applicable: this task builds no image
+Source revision:  exp/inwin (pull request 132); the run a number comes
+                  from is named next to it
+
+SUMMARY
+- What changed: an experiment, not a feature. Scripts that run on
+  GitHub's Windows runners: a guest agent's view of real applications
+  (UI Automation natively, and the winsee bridge built unmodified for
+  real Windows), with actions verified; the window list and its events;
+  a "get TUR" checker that only reads; a reader of what TUR can carry
+  over from a Windows desktop, with readers of shortcut files and
+  registry files written from their published formats.
+- Why: the owner's decision of 14 November 2026 that TUR is the floor
+  under the person's own Windows. Everything that decision needs from
+  inside Windows can be measured only on real Windows.
+
+FILES
+- Added: tests/experiments/inwin/** (agent/, checker/, carry/, probe.py,
+  rights.py, requirements.txt), .github/workflows/exp-inwin.yml,
+  docs/reports/exp-inwin-1.md
+- Modified: docs/frontier.md (one row, F8)
+- Removed: none
+
+BUILD
+- Command: the winsee experiment's bridge/build.sh, at commit 622bfa6 of
+  pull request 126, with the Windows runner's mingw-w64 gcc; in CI only.
+  Nothing was built or run on a development machine.
+- Result: NOT RUN yet
+
+TESTS
+- Integration: workflow exp-inwin (jobs bridge, see, way-in on
+  windows-2025, windows-2022 and windows-11-arm): NOT RUN yet (waiting
+  for runners when this was written)
+- Boot tests: NOT RUN (nothing here can affect boot)
+- Hardware tests: NOT RUN (hosted runners; no PC)
+
+KNOWN LIMITATIONS
+- See section 10.
+
+NEXT SAFE ACTION
+- Read the first run's tables. Nothing here is wired into tur-pax,
+  the installer, the image or any service.
+```
 
 ## 0. Scope, and how it changed before anything ran
 
@@ -67,7 +135,8 @@ nearest available stand-in, named as such wherever it appears.
   request 126 at commit `622bfa6`), `form.html` (TUR's own page).
 - `tests/experiments/inwin/checker/check.py`: the read-only checker.
 - `tests/experiments/inwin/carry/`: `carry.py` (the reader), `lnk.py` (a
-  reader of shortcut files from the published format [MS-SHLLINK]).
+  reader of shortcut files from the published format [MS-SHLLINK]),
+  `regf.py` (a reader of registry files).
 - `tests/experiments/inwin/rights.py`: runs a reader with three sets of
   rights and tabulates what each could read.
 - `.github/workflows/exp-inwin.yml`: three jobs, all on Windows runners.
