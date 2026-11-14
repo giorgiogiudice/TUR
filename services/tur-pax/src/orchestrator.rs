@@ -49,6 +49,9 @@
 //! for the person in settings. An [`Observer`] is told what happens and
 //! decides nothing.
 
+use std::io::{Read, Write};
+use std::net::Shutdown;
+use std::os::unix::net::UnixStream;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -61,7 +64,7 @@ use tur_pax_providers::{
 };
 
 use crate::action::{Action, AgentOperation};
-use crate::adapter::FEED_OUTPUT_BYTES;
+use crate::adapter::{Adapter, AdapterKind, FEED_OUTPUT_BYTES};
 use crate::audit::{ActionOutcome, ActionResult, AuditMeta, OutputWithheld, decide_and_record};
 use crate::class::ActionClass;
 use crate::codes::Code;
@@ -1776,6 +1779,9 @@ impl Orchestrator<'_> {
                 return Performed::not_started("an interface call is carried out by the bridge");
             }
             Performer::Command { argv } => (argv.clone(), Limits::default(), vec![0], false, None),
+            Performer::Adapter { adapter, arguments } if adapter.kind() == AdapterKind::Request => {
+                return perform_request(adapter, arguments);
+            }
             Performer::Adapter { adapter, arguments } => {
                 let argv = match adapter.argv(arguments) {
                     Ok(argv) => argv,
@@ -1893,6 +1899,95 @@ impl Orchestrator<'_> {
             withheld,
             code: None,
         }
+    }
+}
+
+/// Performs a tool of a `request` adapter: one line of JSON to the
+/// service's socket, one answer back. The service decides what it does with
+/// the request; the answer is bounded, filtered and framed like a program's
+/// output. It succeeded when the answer says `"ok": true`.
+fn perform_request(adapter: &Adapter, arguments: &Map<String, Value>) -> Performed {
+    let Some(socket) = adapter.socket() else {
+        return Performed::not_started("the adapter names no socket");
+    };
+    let mut stream = match UnixStream::connect(socket) {
+        Ok(stream) => stream,
+        Err(error) => {
+            return Performed::not_started(format!(
+                "the service at {socket} did not answer: {error}"
+            ));
+        }
+    };
+    let timeout = Some(Duration::from_secs(adapter.timeout_seconds()));
+    if stream
+        .set_read_timeout(timeout)
+        .and_then(|()| stream.set_write_timeout(timeout))
+        .is_err()
+    {
+        return Performed::not_started("the connection to the service could not be set up");
+    }
+    let line = adapter.request_line(arguments);
+    if stream
+        .write_all(line.as_bytes())
+        .and_then(|()| stream.shutdown(Shutdown::Write))
+        .is_err()
+    {
+        return Performed::not_started("the request could not be sent to the service");
+    }
+    let limit = adapter.max_output_bytes();
+    let mut answer = Vec::new();
+    let read = (&stream)
+        .take(u64::try_from(limit).unwrap_or(u64::MAX).saturating_add(1))
+        .read_to_end(&mut answer);
+    let truncated = answer.len() > limit;
+    answer.truncate(limit);
+    if let Err(error) = read {
+        let mut performed =
+            Performed::not_started(format!("the service's answer was cut short: {error}"));
+        performed.state = if matches!(
+            error.kind(),
+            std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock
+        ) {
+            "timed_out"
+        } else {
+            "failed"
+        };
+        return performed;
+    }
+    let mut withheld = Vec::new();
+    let parsed = if truncated {
+        None
+    } else {
+        serde_json::from_slice::<Value>(&answer).ok()
+    };
+    let ok = parsed
+        .as_ref()
+        .and_then(|value| value.get("ok"))
+        .and_then(Value::as_bool)
+        == Some(true);
+    let output = match parsed {
+        Some(value) => {
+            let filtered = filter_json(&value);
+            withheld.extend(filtered.withheld);
+            filtered.value
+        }
+        None => {
+            let filtered = filter_text(&String::from_utf8_lossy(&answer));
+            withheld.extend(filtered.withheld);
+            Value::String(filtered.text)
+        }
+    };
+    Performed {
+        state: if ok { "ok" } else { "failed" },
+        ok,
+        exit: None,
+        output,
+        stderr: String::new(),
+        detail: None,
+        bytes: answer.len(),
+        truncated,
+        withheld,
+        code: None,
     }
 }
 

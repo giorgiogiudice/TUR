@@ -284,6 +284,10 @@ event.
 | `runtime_inspect_file` | 0 | `tur-runtime inspect --json -- <path>` | `services/tur-runtime` |
 | `diag_report_prepare` | 0 | `tur-diag report prepare --preview --json --prepared-by=pax [--title=…] [--description=…] [--component=…] [--error-code=…] [--from-boot-health]` (a preview: nothing is saved or sent) | `services/tur-diagnostics` |
 | `diag_report_list` | 0 | `tur-diag report list --json` | the same |
+| `heal_list_faults` | 0 | `tur-diag heal status --json` (reads `/var/log/tur/heal/state.json`) | the same |
+| `heal_explain` | 0 | `tur-diag heal explain --json -- <code>` | the same |
+| `heal_apply_remedy` | 1 | a `request` adapter: `{"tool", "arguments": {code, remedy}}` to `/run/tur/heal.socket`; TUR's healing service decides and performs ([self-healing.md](self-healing.md), section 5) | the same |
+| `heal_undo_remedy` | 1 | the same, to undo | the same |
 | `apps_list_installed` | 0 | `tur-apps list --json` | `services/tur-apps` |
 | `apps_plan` | 0 | `tur-apps --catalogue /usr/share/tur/catalogue plan --offline --json -- <id>` | the same |
 | `ai_local_status` | 0 | `tur-ai-local status --json` | `services/tur-ai-local` |
@@ -755,7 +759,11 @@ The injection scenarios, as the task names them:
     decision stricter.
 15. **The adapter schema is not checked against the loader** beyond the shipped
     files using only fields the schema declares.
-16. **No undo.** Class 1 tools would need it; none ships.
+16. **Undo exists for one service's tools only.** The first class 1 tools,
+    `heal_apply_remedy` and `heal_undo_remedy` (ADR-0027,
+    [self-healing.md](self-healing.md)), are performed by a `request` adapter:
+    the healing service applies and undoes, and keeps what undoing needs. The
+    loop itself has no undo of its own.
 
 ## 10. Not built
 

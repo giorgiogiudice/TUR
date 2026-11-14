@@ -6,23 +6,55 @@
       "tool": "diag_get_status",
       "kind": "command",
       "program": "/usr/bin/tur-diag",
-      "arguments": [{ "literal": "status" }, { "literal": "--json" }]
+      "arguments": [
+        {
+          "literal": "status"
+        },
+        {
+          "literal": "--json"
+        }
+      ]
     },
     {
       "tool": "diag_report_prepare",
       "kind": "command",
       "program": "/usr/bin/tur-diag",
       "arguments": [
-        { "literal": "report" },
-        { "literal": "prepare" },
-        { "literal": "--preview" },
-        { "literal": "--json" },
-        { "literal": "--prepared-by=pax" },
-        { "option": "--title", "input": "title" },
-        { "option": "--description", "input": "description" },
-        { "option": "--component", "input": "component" },
-        { "option": "--error-code", "input": "error_code" },
-        { "flag": "--from-boot-health", "when": "from_boot_health" }
+        {
+          "literal": "report"
+        },
+        {
+          "literal": "prepare"
+        },
+        {
+          "literal": "--preview"
+        },
+        {
+          "literal": "--json"
+        },
+        {
+          "literal": "--prepared-by=pax"
+        },
+        {
+          "option": "--title",
+          "input": "title"
+        },
+        {
+          "option": "--description",
+          "input": "description"
+        },
+        {
+          "option": "--component",
+          "input": "component"
+        },
+        {
+          "option": "--error-code",
+          "input": "error_code"
+        },
+        {
+          "flag": "--from-boot-health",
+          "when": "from_boot_health"
+        }
       ],
       "timeout_seconds": 120,
       "max_output_bytes": 262144
@@ -31,7 +63,68 @@
       "tool": "diag_report_list",
       "kind": "command",
       "program": "/usr/bin/tur-diag",
-      "arguments": [{ "literal": "report" }, { "literal": "list" }, { "literal": "--json" }]
+      "arguments": [
+        {
+          "literal": "report"
+        },
+        {
+          "literal": "list"
+        },
+        {
+          "literal": "--json"
+        }
+      ]
+    },
+    {
+      "tool": "heal_list_faults",
+      "kind": "command",
+      "program": "/usr/bin/tur-diag",
+      "arguments": [
+        {
+          "literal": "heal"
+        },
+        {
+          "literal": "status"
+        },
+        {
+          "literal": "--json"
+        }
+      ],
+      "max_output_bytes": 262144
+    },
+    {
+      "tool": "heal_explain",
+      "kind": "command",
+      "program": "/usr/bin/tur-diag",
+      "arguments": [
+        {
+          "literal": "heal"
+        },
+        {
+          "literal": "explain"
+        },
+        {
+          "literal": "--json"
+        },
+        {
+          "literal": "--"
+        },
+        {
+          "input": "code"
+        }
+      ]
+    },
+    {
+      "tool": "heal_apply_remedy",
+      "kind": "request",
+      "socket": "/run/tur/heal.socket",
+      "timeout_seconds": 120
+    },
+    {
+      "tool": "heal_undo_remedy",
+      "kind": "request",
+      "socket": "/run/tur/heal.socket",
+      "timeout_seconds": 120
     }
   ]
 }

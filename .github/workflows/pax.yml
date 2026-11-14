@@ -139,6 +139,10 @@ jobs:
           for adapters in sorted(pathlib.Path("services").glob("*/agent-tools.adapter.json")):
               component = adapters.parent.name
               for adapter in json.loads(adapters.read_text())["adapters"]:
+                  # A request adapter names a service's socket, not a
+                  # program (ADR-0027).
+                  if adapter.get("kind") == "request":
+                      continue
                   program = adapter["program"]
                   if not program.startswith("/usr/bin/"):
                       sys.exit(f"{component}: {program} is not a program in /usr/bin")
@@ -194,13 +198,26 @@ jobs:
           sudo chmod 0700 "/run/user/$uid"
           ls -l /usr/bin/tur-* /usr/share/tur /usr/share/tur-pax-e2e
 
+      - name: Places of the healing service's stand-in
+        # The self-healing scenario (tests/pax/scenarios/20-heal-request.json)
+        # serves the healing service's socket with the built tur-diag, as
+        # systemd's tur-heal-request.socket does on TUR, and keeps its state
+        # where the shipped tools read it. Here they belong to the runner's
+        # account; on TUR they are root's.
+        run: |
+          sudo mkdir -p /run/tur /var/log/tur/heal /var/lib/tur/heal
+          sudo chown "$(id -u):$(id -g)" /run/tur /var/log/tur/heal /var/lib/tur/heal
+          systemctl is-active systemd-resolved.service || echo "systemd-resolved is not running here"
+          ls -ld /run/tur /var/log/tur/heal /var/lib/tur/heal
+
       - name: End-to-end test
         run: |
           python3 tests/pax/e2e.py \
             --tur-pax services/tur-pax/target/debug/tur-pax \
             --tur-pax-memory services/tur-pax-memory/target/debug/tur-pax-memory \
             --work-dir "$WORK/work" \
-            --evidence "$WORK/evidence"
+            --evidence "$WORK/evidence" \
+            --heal-standin
 
       - name: A user service manager, for the wake timer
         # Optional. With it, the session service sets its own transient
