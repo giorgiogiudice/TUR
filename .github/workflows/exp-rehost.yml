@@ -67,13 +67,15 @@ jobs:
       fail-fast: false
       matrix:
         shard: ${{ fromJSON(github.event.inputs.shards || '["e1","e2","e3","e4","n1","g1"]') }}
-    env:
-      WORK: ${{ runner.temp }}/rehost
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Work directory
-        run: mkdir -p "$WORK/cache" "$WORK/out"
+        # The runner context is not available in a job's env; set it here,
+        # as .github/workflows/windows-drivers.yml does.
+        run: |
+          echo "WORK=$RUNNER_TEMP/rehost" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/rehost/cache" "$RUNNER_TEMP/rehost/out"
 
       - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
