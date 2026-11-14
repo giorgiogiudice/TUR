@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
 """F-Droid's index as data for the Android experiment (docs/reports/exp-android-1.md).
 
-    fdroid_index.py fetch DIR                      download entry.json and index-v2.json, verify the hash
+    fdroid_index.py fetch DIR [REPO_URL]           download entry.json and index-v2.json, verify the hash
+                                                   (REPO_URL: another repository in F-Droid's format)
     fdroid_index.py stats INDEX OUT_DIR            native-ABI shares by category and recency (hypothesis B)
     fdroid_index.py resolve INDEX SAMPLE OUT.tsv [--prefer-abi ABI]
                                                    pin a list of packages to version, file and SHA-256
@@ -71,21 +72,22 @@ def sha256_file(path: pathlib.Path) -> str:
 
 # ---------------------------------------------------------------- fetch
 
-def cmd_fetch(dest_dir: str) -> int:
+def cmd_fetch(dest_dir: str, repo: str = REPO) -> int:
     d = pathlib.Path(dest_dir)
     d.mkdir(parents=True, exist_ok=True)
-    entry = json.loads(http_get(f"{REPO}/entry.json"))
+    repo = repo.rstrip("/")
+    entry = json.loads(http_get(f"{repo}/entry.json"))
     want = entry["index"]["sha256"]
     index = d / "index-v2.json"
     if not (index.exists() and sha256_file(index) == want):
-        http_get(f"{REPO}{entry['index']['name']}", index)
+        http_get(f"{repo}{entry['index']['name']}", index)
     got = sha256_file(index)
     if got != want:
         # The index is replaced a few times a week; a download that straddles
         # a replacement is retried once.
-        entry = json.loads(http_get(f"{REPO}/entry.json"))
+        entry = json.loads(http_get(f"{repo}/entry.json"))
         want = entry["index"]["sha256"]
-        http_get(f"{REPO}{entry['index']['name']}", index)
+        http_get(f"{repo}{entry['index']['name']}", index)
         got = sha256_file(index)
     if got != want:
         print(f"index-v2.json: sha256 {got}, entry.json says {want}", file=sys.stderr)
@@ -93,7 +95,7 @@ def cmd_fetch(dest_dir: str) -> int:
     meta = {"index_sha256": got, "index_size": index.stat().st_size,
             "index_timestamp_ms": entry["timestamp"],
             "index_date": datetime.datetime.fromtimestamp(entry["timestamp"] / 1000, datetime.timezone.utc).isoformat(),
-            "packages_in_entry": entry["index"].get("numPackages"), "source": f"{REPO}/index-v2.json"}
+            "packages_in_entry": entry["index"].get("numPackages"), "source": f"{repo}/index-v2.json"}
     (d / "index-meta.json").write_text(json.dumps(meta, indent=2) + "\n")
     print(json.dumps(meta))
     return 0
@@ -221,15 +223,18 @@ def cmd_stats(index_path: str, out_dir: str) -> int:
 
     header = ["", "Apps", "No native code", "x86-64 native code", "**Runs without translation**",
               "x86 32-bit only", "ARM only", "Of apps with native code: has x86-64"]
-    md = ["## Native ABIs of F-Droid applications\n"]
     meta_path = pathlib.Path(index_path).with_name("index-meta.json")
     meta = json.loads(meta_path.read_text()) if meta_path.exists() else {}
+    md = [f"## Native ABIs of the applications in {meta.get('source', index_path).split('/')[2] if '//' in meta.get('source', '') else 'the index'}\n"]
     md.append(f"Index: `{meta.get('source', index_path)}`, sha256 `{meta.get('index_sha256', '?')}`, "
               f"dated {meta.get('index_date', '?')}; {total} applications with at least one APK. "
               "The newest non-beta release of each application is counted, taking the union of the "
               "ABIs of every APK of that release (F-Droid publishes one APK per ABI for many "
               "applications).\n")
     md.append(table(header, [row("**All**", apps)]))
+    recent = [a for a in apps if a["last_updated"] >= (meta.get("index_timestamp_ms") or 0) - 730 * 86400 * 1000]
+    md.append("Applications updated in the two years before the index's date:\n")
+    md.append(table(header, [row("Updated in the last two years", recent)]))
 
     c_all = counts(apps)
     arm = [a for a in apps if a["class"] == "ARM only"]

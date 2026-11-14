@@ -28,6 +28,14 @@ sleep 1
 swaymsg -t get_outputs > "$EV/sway-outputs.json" 2>&1
 swaymsg -t get_version >> "$EV/setup.txt" 2>&1
 
+# A headless compositor has no input devices, so its seat offers neither
+# keyboard nor pointer and applications never listen for either. Hold one
+# virtual keyboard (wtype, asleep) and one virtual pointer for the session.
+command -v wtype >/dev/null && (wtype -s 100000000 -k F24 > /dev/null 2>&1 &)
+python3 "$EXP/atl/vpointer.py" "$XDG_RUNTIME_DIR/vpointer.cmd" 1280 1100 > "$EV/vpointer.log" 2>&1 &
+sleep 1.5
+swaymsg -t get_seats > "$EV/sway-seats.json" 2>&1
+
 command -v mako >/dev/null && (mako > "$EV/mako.log" 2>&1 &)
 # So that D-Bus-activated services (the portal, its GTK backend, the
 # accessibility bus) find the compositor.

@@ -374,6 +374,14 @@ def run_sample_app(row: dict, apks: pathlib.Path, out: pathlib.Path, scale: floa
 
 
 def click(x: int, y: int) -> None:
+    # The session's virtual pointer (vpointer.py) if it is there; sway's own
+    # cursor commands otherwise.
+    cmd_file = pathlib.Path(os.environ.get("XDG_RUNTIME_DIR", "/nonexistent")) / "vpointer.cmd"
+    if cmd_file.exists():
+        with open(cmd_file, "a") as f:
+            f.write(f"click {x} {y}\n")
+        time.sleep(0.5)
+        return
     run(["swaymsg", "seat", "seat0", "cursor", "set", str(x), str(y)])
     run(["swaymsg", "seat", "seat0", "cursor", "press", "button1"])
     time.sleep(0.08)

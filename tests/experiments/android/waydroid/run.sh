@@ -132,6 +132,12 @@ if [ -z "$WL" ]; then
 	exit 0
 fi
 fact compositor "sway headless on $WL"
+# A headless compositor has no input devices; hold a virtual keyboard and a
+# virtual pointer for the session so that applications listen for input.
+asuser wtype -s 100000000 -k F24 > /dev/null 2>&1 &
+asuser python3 "$HERE/../atl/vpointer.py" "$RUNDIR/vpointer.cmd" 1280 800 > "$OUT/logs/vpointer.log" 2>&1 &
+sleep 1.5
+asuser swaymsg -t get_seats > "$OUT/sway-seats.json" 2>&1
 
 start_session() {
 	log "waydroid session start"
@@ -282,10 +288,8 @@ if [ -f "$PROBE" ]; then
 		sleep 12
 		# Input from the host: the pointer, a key, the Escape key.
 		for y in 90 150 210 270 400 600; do
-			asuser swaymsg seat seat0 cursor set 640 "$y" >/dev/null 2>&1
-			asuser swaymsg seat seat0 cursor press button1 >/dev/null 2>&1
-			asuser swaymsg seat seat0 cursor release button1 >/dev/null 2>&1
-			sleep 0.5
+			echo "click 640 $y" >> "$RUNDIR/vpointer.cmd"
+			sleep 1
 			asuser timeout 5 wtype q 2>> "$OUT/logs/grim.log"
 			sleep 0.5
 		done

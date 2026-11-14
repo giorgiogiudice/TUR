@@ -98,6 +98,17 @@ jobs:
           python3 "$EXP/fdroid/fdroid_index.py" stats "$W/index/index-v2.json" "$W/evidence" > /dev/null
           cat "$W/evidence/abi.md" >> "$GITHUB_STEP_SUMMARY"
 
+      # IzzyOnDroid is a repository in F-Droid's format that carries the APKs
+      # their developers built and signed, not rebuilds: closer to what a
+      # developer ships elsewhere.
+      - name: The same count for IzzyOnDroid (APKs as their developers built them)
+        run: |
+          mkdir -p "$W/izzy" "$W/evidence/izzyondroid"
+          python3 "$EXP/fdroid/fdroid_index.py" fetch "$W/izzy" https://apt.izzysoft.de/fdroid/repo
+          cp "$W/izzy/index-meta.json" "$W/evidence/izzyondroid/"
+          python3 "$EXP/fdroid/fdroid_index.py" stats "$W/izzy/index-v2.json" "$W/evidence/izzyondroid" > /dev/null
+          cat "$W/evidence/izzyondroid/abi.md" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Lock files for the samples
         run: |
           mkdir -p "$W/evidence/locks"
@@ -132,9 +143,9 @@ jobs:
             timeout 90 "$chrome" --headless=new --no-sandbox --disable-gpu --hide-scrollbars \
               --user-data-dir="$W/rehost/profile-$pkg-$kind" --window-size=412,915 --virtual-time-budget=12000 \
               --screenshot="$W/evidence/rehost/$pkg-$kind.png" "http://127.0.0.1:$port/index.html" \
-              > "$W/evidence/rehost/$pkg-$kind.browser.log" 2>&1 || echo "$pkg $kind: browser status $?"
+              > "$W/evidence/rehost/$pkg-$kind.browser.log" 2>&1 < /dev/null || echo "$pkg $kind: browser status $?"
             timeout 60 "$chrome" --headless=new --no-sandbox --disable-gpu --user-data-dir="$W/rehost/profile-$pkg-$kind-dom" \
-              --virtual-time-budget=12000 --dump-dom "http://127.0.0.1:$port/index.html" 2>/dev/null \
+              --virtual-time-budget=12000 --dump-dom "http://127.0.0.1:$port/index.html" 2>/dev/null < /dev/null \
               | python3 -c 'import re,sys,html; t=sys.stdin.read(); t=re.sub(r"(?s)<(script|style)[^>]*>.*?</\1>","",t); t=html.unescape(re.sub(r"<[^>]+>"," ",t)); print(re.sub(r"\s+"," ",t)[:1500])' \
               > "$W/evidence/rehost/$pkg-$kind.text.txt" || true
           done < "$W/rehost/targets.txt"
@@ -310,7 +321,7 @@ jobs:
           } | tee "$W/evidence/runner-kernel.txt"
           if ! modinfo binder_linux >/dev/null 2>&1; then
             sudo apt-get update -q
-            sudo apt-get install -y "linux-modules-extra-$(uname -r)" 2>&1 | tail -n 3 | tee -a "$W/evidence/runner-kernel.txt"
+            sudo apt-get install -y "linux-modules-extra-$(uname -r)" 2>&1 | tail -n 3 | tee -a "$W/evidence/runner-kernel.txt" || true
           fi
           {
             echo "module after linux-modules-extra: $(modinfo -n binder_linux 2>&1)"
@@ -371,7 +382,7 @@ jobs:
     name: "Waydroid in a KVM guest on Fedora 45's kernel (Rust binder, SELinux enforcing)"
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.jobs == '' || contains(inputs.jobs, 'waydroid-f45') }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
@@ -379,6 +390,12 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/w/evidence" "$RUNNER_TEMP/w/apks/probe" "$RUNNER_TEMP/w/image-zips" "$RUNNER_TEMP/w/fedora"
           echo "W=$RUNNER_TEMP/w" >> "$GITHUB_ENV"
+          # The guest's disk, the images and the applications need about
+          # 12 GB. The Android SDK stays: the probe is built with it.
+          free=$(df --output=avail -B1G "$RUNNER_TEMP" | tail -1 | tr -d ' G')
+          if [ "$free" -lt 22 ]; then
+            sudo rm -rf /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL
+          fi
           df -h "$RUNNER_TEMP"
 
       # Hosted runners expose /dev/kvm but not to the runner user; the udev
@@ -425,7 +442,9 @@ jobs:
 
       - name: Waydroid in the Fedora 45 guest
         env:
-          MAX_APPS: "30"
+          # The first ten of the sample: the job on the runner's kernel runs
+          # all thirty, this one shows whether Fedora's kernel differs.
+          MAX_APPS: "10"
         run: bash "$EXP/waydroid/kvm-guest.sh" "$W" "$MAX_APPS" "$W/locks/sample.lock.tsv"
 
       - name: Results
