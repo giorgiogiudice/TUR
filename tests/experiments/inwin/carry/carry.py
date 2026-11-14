@@ -486,10 +486,11 @@ def offline_copy(out_dir):
                 result["different"].append(f"{path}\\{name}")
     finally:
         run_tool(["reg.exe", "unload", r"HKU\inwin_offline"])
-        try:
-            hive.unlink()
-        except OSError:
-            pass
+        for leftover in hive.parent.glob(hive.name + "*"):  # the copy and the log files loading it made
+            try:
+                leftover.unlink()
+            except OSError:
+                pass
     return result
 
 
@@ -622,7 +623,8 @@ def read_all(out):
     began = time.perf_counter()
     menu = run("start-menu-shortcuts", lambda: shortcuts_in([os.path.expandvars(r"%ProgramData%\Microsoft\Windows\Start Menu\Programs"), appdata + r"\Microsoft\Windows\Start Menu\Programs"], recurse=True),
                r"%ProgramData%\Microsoft\Windows\Start Menu\Programs and %AppData%\...\Start Menu\Programs")
-    run("start-menu-shortcuts-as-windows-reads-them", lambda: {**compare_with_windows(menu or []), "reader_ms": round((time.perf_counter() - began) * 1000)}, "WScript.Shell on the same files")
+    reader_ms = round((time.perf_counter() - began) * 1000)
+    run("start-menu-shortcuts-as-windows-reads-them", lambda: {**compare_with_windows(menu or []), "reader_ms": reader_ms}, "WScript.Shell on the same files")
     run("start-apps", lambda: (lambda rows: {"entries": len(rows), "packaged": sum(1 for row in rows if "!" in (row.get("AppID") or "")), "sample_ids": [row.get("AppID") for row in rows[:8]]})(powershell("@(Get-StartApps)" + JSON) or []),
         "Get-StartApps (shell:AppsFolder)")
     run("packaged-applications", lambda: powershell("@(Get-AppxPackage).Count" + JSON), "Get-AppxPackage; on disk: Program Files\\WindowsApps\\*\\AppxManifest.xml")

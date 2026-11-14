@@ -124,12 +124,7 @@ def pid_of(hwnd):
     return pid.value
 
 
-_exe_cache = {}
-
-
 def exe_of(pid):
-    if pid in _exe_cache:
-        return _exe_cache[pid]
     name = ""
     handle = OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
     if handle:
@@ -138,7 +133,6 @@ def exe_of(pid):
         if QueryFullProcessImageNameW(handle, 0, buffer, ctypes.byref(size)):
             name = buffer.value
         CloseHandle(handle)
-    _exe_cache[pid] = name
     return name
 
 

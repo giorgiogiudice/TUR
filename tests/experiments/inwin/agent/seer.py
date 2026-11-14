@@ -254,7 +254,8 @@ class Seer:
         """Read a window every way, draw what each found, count and score."""
         directory = self.raw / ("microsoft" if microsoft else "open") / app
         directory.mkdir(parents=True, exist_ok=True)
-        win.SetForegroundWindow(hwnd)
+        if win.class_of(hwnd) != "#32768":  # bringing a menu to the front would close it
+            win.SetForegroundWindow(hwnd)
         time.sleep(0.7)
         box = win.frame_of(hwnd) or win.rect_of(hwnd)
         plain = win.grab(box)
@@ -417,6 +418,7 @@ class Seer:
             self.check(app, "UI Automation: answer the save prompt with Don't Save", False, "no prompt with that button was found")
         if process.poll() is None:
             process.kill()
+        subprocess.run(["taskkill.exe", "/f", "/im", "notepad.exe"], capture_output=True)  # the process started may be only a launcher
 
     def scenario_explorer(self):
         app = "explorer"
@@ -427,9 +429,21 @@ class Seer:
             return
         hwnd = window["hwnd"]
         time.sleep(2)
-        reads = self.capture(app, "explorer", hwnd, FILES_TRUTH, microsoft=True)
+        # Explorer hides known extensions unless told otherwise: the names to look for follow its setting.
+        suffix = ".txt"
+        try:
+            import winreg
+
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced") as key:
+                if winreg.QueryValueEx(key, "HideFileExt")[0] != 0:
+                    suffix = ""
+        except OSError:
+            suffix = ""
+        self.note(f"explorer: file name extensions are {'shown' if suffix else 'hidden'}")
+        truth = {"named": [[name.replace(".txt", suffix), kind] for name, kind in FILES_TRUTH["named"]]}
+        reads = self.capture(app, "explorer", hwnd, truth, microsoft=True)
         read = reads["uia"]
-        item = find(read, "item", "beta.txt")
+        item = find(read, "item", "beta" + suffix)
         if item is not None:
             self.act(app, "UI Automation: select beta.txt", lambda: self.auto.select(item["id"]), lambda: (self.auto.selected(item["id"]), "the item reports itself selected (same tier: weak)"))
         folder = find(read, "item", "inner")
@@ -716,9 +730,12 @@ class Seer:
             if level == "medium-integrity":
                 problem = start_at_medium_integrity(command)
             else:
-                done = subprocess.run(["runas.exe", "/trustlevel:0x20000", command], capture_output=True, text=True, timeout=60)
+                done = subprocess.run(["runas.exe", "/trustlevel:0x20000", command], capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=60)
+                if done.returncode != 0:
+                    machine = {"AMD64": "amd64", "ARM64": "arm64"}.get(os.environ.get("PROCESSOR_ARCHITECTURE", ""), "amd64")
+                    done = subprocess.run(["runas.exe", "/trustlevel:0x20000", f"/machine:{machine}", command], capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=60)
                 problem = None if done.returncode == 0 else f"runas exit {done.returncode}"
-            deadline = time.monotonic() + 90
+            deadline = time.monotonic() + (15 if problem else 90)
             while time.monotonic() < deadline and not target.exists():
                 time.sleep(2)
             if target.exists():

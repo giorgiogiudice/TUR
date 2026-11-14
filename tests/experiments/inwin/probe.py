@@ -49,12 +49,13 @@ class Probes:
 
 def powershell(script, timeout=90):
     """Run a read-only PowerShell expression and return what it wrote as JSON."""
-    command = "$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'; " + script
+    command = ("$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'; "
+               "try { [Console]::OutputEncoding = New-Object Text.UTF8Encoding $false } catch {}; " + script)
     done = subprocess.run(
         ["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", command],
         capture_output=True, text=True, timeout=timeout, encoding="utf-8", errors="replace",
     )
-    out = done.stdout.strip()
+    out = done.stdout.strip().lstrip("\ufeff")
     if done.returncode != 0 or (not out and done.stderr.strip()):
         problem = " ".join(done.stderr.split())[:200] or f"exit {done.returncode}"
         raise RuntimeError(problem)

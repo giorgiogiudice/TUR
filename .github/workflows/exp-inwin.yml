@@ -66,6 +66,7 @@ jobs:
           git init -q .
           git remote add origin "https://github.com/${GITHUB_REPOSITORY}"
           git config core.protectNTFS false
+          git config core.autocrlf false
           git sparse-checkout set tests/experiments/winsee
           git fetch -q --depth=1 --filter=blob:none origin "${WINSEE_COMMIT}"
           git checkout -q FETCH_HEAD
@@ -99,6 +100,9 @@ jobs:
   see:
     name: Guest agent on ${{ matrix.os }}
     needs: bridge
+    # Also when the bridge could not be built (its tiers then say NOT RUN),
+    # but not when the run was superseded.
+    if: ${{ !cancelled() }}
     strategy:
       fail-fast: false
       matrix:
@@ -112,12 +116,14 @@ jobs:
           git init -q .
           git remote add origin "https://github.com/${GITHUB_REPOSITORY}"
           git config core.protectNTFS false
+          git config core.autocrlf false
           git sparse-checkout set tests/experiments/inwin
           git fetch -q --depth=1 --filter=blob:none origin "${GITHUB_REF}"
           git checkout -q FETCH_HEAD
           git log -1 --format='%H %s'
 
       - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        continue-on-error: true
         with:
           name: inwin-bridge
           path: ${{ runner.temp }}/bridge
@@ -131,6 +137,7 @@ jobs:
           python -m pip install --disable-pip-version-check --no-deps --require-hashes -r tests/experiments/inwin/requirements.txt
 
       - name: Applications, from their publishers, by hash
+        continue-on-error: true
         shell: pwsh
         run: python tests/experiments/inwin/agent/fetch.py --dir "$env:RUNNER_TEMP\dl"
 
@@ -185,6 +192,7 @@ jobs:
           git init -q .
           git remote add origin "https://github.com/${GITHUB_REPOSITORY}"
           git config core.protectNTFS false
+          git config core.autocrlf false
           git sparse-checkout set tests/experiments/inwin
           git fetch -q --depth=1 --filter=blob:none origin "${GITHUB_REF}"
           git checkout -q FETCH_HEAD

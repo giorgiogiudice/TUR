@@ -118,7 +118,8 @@ class Listener(threading.Thread):
 
         self.callback = WINEVENTPROC(on_event)
         self.thread_id = win.kernel32.GetCurrentThreadId()
-        hooks = [user32.SetWinEventHook(low, high, None, self.callback, 0, 0, 0x0002) for low, high in ((0x0003, 0x0017), (0x8000, 0x8018))]
+        # Flag 0: out of context, and not skipping this process, whose own calls make the changes that are timed.
+        hooks = [user32.SetWinEventHook(low, high, None, self.callback, 0, 0, 0) for low, high in ((0x0003, 0x0017), (0x8000, 0x8018))]
         self.hooked = all(hooks)
         self.ready.set()
         message = wt.MSG()
@@ -238,6 +239,11 @@ def main():
     subprocess.Popen(["explorer.exe", str(pathlib.Path.home())])
     name = pathlib.Path(target_program).name.lower()
     target = win.wait_window(lambda w: w["exe"] == name and w["title"], 40)
+    if target is None and name != "notepad.exe":
+        processes.append(subprocess.Popen(["notepad.exe"]))
+        name = "notepad.exe"
+        target = win.wait_window(lambda w: w["exe"] == name and w["title"], 40)
+    result["target"] = name if target is not None else None
     time.sleep(4)
 
     rows = listing()
@@ -318,6 +324,7 @@ def main():
             process.kill()
     for other in [w for w in win.top_windows() if w["class"] == "CabinetWClass"]:
         win.PostMessageW(other["hwnd"], win.WM_CLOSE, 0, 0)
+    subprocess.run(["taskkill.exe", "/f", "/im", "notepad.exe"], capture_output=True)
 
     (out / "desk.json").write_text(json.dumps(result, indent=1), encoding="utf-8")
     lines = ["### The window list a seamless desktop needs", "", f"Screen: {result['screen']}; shell windows present: {result['shell']}", "",

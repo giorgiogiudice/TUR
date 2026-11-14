@@ -9,6 +9,7 @@ its scenario says NOT RUN.
 
 import argparse
 import hashlib
+import http.client
 import json
 import pathlib
 import urllib.request
@@ -27,7 +28,7 @@ def main():
             request = urllib.request.Request(app["url"], headers={"User-Agent": "tur-experiment"})
             with urllib.request.urlopen(request, timeout=120) as response:
                 data = response.read()
-        except OSError as error:
+        except (OSError, http.client.HTTPException) as error:
             print(f"::warning::{app['id']}: not fetched ({error}); its scenario will say NOT RUN")
             continue
         if len(data) != app["size"] or hashlib.sha256(data).hexdigest() != app["sha256"]:

@@ -19,6 +19,7 @@ import argparse
 import ctypes
 import ctypes.wintypes as wt
 import json
+import os
 import pathlib
 import secrets
 import shutil
@@ -67,9 +68,10 @@ def run_standard(command_line, work):
     class ProcessInformation(ctypes.Structure):
         _fields_ = [("process", wt.HANDLE), ("thread", wt.HANDLE), ("pid", wt.DWORD), ("tid", wt.DWORD)]
 
-    password = "Tq7!" + secrets.token_urlsafe(18)
-    subprocess.run(["net.exe", "user", ACCOUNT, "/delete"], capture_output=True)
-    made = subprocess.run(["net.exe", "user", ACCOUNT, password, "/add"], capture_output=True, text=True)
+    # Fourteen characters: net.exe asks a question about anything longer.
+    password = "Tq7!" + secrets.token_urlsafe(7)[:10]
+    subprocess.run(["net.exe", "user", ACCOUNT, "/delete"], capture_output=True, stdin=subprocess.DEVNULL, timeout=60)
+    made = subprocess.run(["net.exe", "user", ACCOUNT, password, "/add", "/y"], capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=60)
     if made.returncode != 0:
         return f"the account could not be made: exit {made.returncode}"
     startup = StartupInfo()
@@ -113,7 +115,11 @@ def main():
 
     target = PUBLIC / "out" / f"{arguments.name}-restricted.json"
     command = f'"{sys.executable}" "{script}" --out "{target}"'
-    done = subprocess.run(["runas.exe", "/trustlevel:0x20000", command], capture_output=True, text=True, timeout=120)
+    done = subprocess.run(["runas.exe", "/trustlevel:0x20000", command], capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=120)
+    if done.returncode != 0:
+        # Newer Windows wants the machine type named.
+        machine = {"AMD64": "amd64", "ARM64": "arm64"}.get(os.environ.get("PROCESSOR_ARCHITECTURE", ""), "amd64")
+        done = subprocess.run(["runas.exe", "/trustlevel:0x20000", f"/machine:{machine}", command], capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=120)
     notes["restricted_start"] = f"runas exit {done.returncode}"
     results["restricted"] = wait_for(target, 240 if done.returncode == 0 else 10)
 
@@ -122,7 +128,7 @@ def main():
     if problem:
         notes["standard_start"] = problem
     results["standard"] = wait_for(target, 10 if problem else 60)
-    subprocess.run(["net.exe", "user", ACCOUNT, "/delete"], capture_output=True)
+    subprocess.run(["net.exe", "user", ACCOUNT, "/delete"], capture_output=True, stdin=subprocess.DEVNULL, timeout=60)
 
     for level, result in results.items():
         if result is not None:
