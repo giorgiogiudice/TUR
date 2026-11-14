@@ -71,8 +71,15 @@ As far as we know, KMDF drivers had not run in Wine before.
 - Not in the TUR image yet. Drivers for graphics, storage, networking and
   anything with kernel-level anti-cheat are out of scope: those stay with
   Linux's own drivers or a Windows virtual machine.
-- The Wine changes should go to the Wine project itself; the draft proposal is
-  in the [second report](reports/windows-drivers-2.md), section 10.
+- **These changes cannot go into Wine as they are.** The Wine project does
+  not accept code written by an AI model, because the copyright status of
+  such code is unsettled (its maintainer's statement on the developers' list,
+  9 April 2026). TUR's changes were written that way. So TUR carries them as
+  its own small patch queue, and what it can offer Wine is the findings: what
+  is missing, how real Windows behaves, and the proof that the approach
+  works. The draft proposal in the [second report](reports/windows-drivers-2.md),
+  section 10, was written before this was known and will be rewritten as a
+  report of findings.
 
 ## 2. A compatibility autopilot
 
