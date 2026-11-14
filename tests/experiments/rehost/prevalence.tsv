@@ -1,0 +1,88 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Which runtime widely used Windows and macOS applications are built on, from
+# public information only, read on 2026-11-14 (docs/reports/exp-rehost-1.md,
+# section 8). NOTHING in this file was downloaded, opened or run: every row is
+# NOT RUN. A row is a statement about what the publisher ships, with the page
+# it was read from; it is not a statement that re-hosting works for it.
+#
+# linux_edition: "no" = no official Linux desktop edition found; "yes" = one
+# exists now (the row is kept so nobody re-adds it; it does not count);
+# "nv" = the publisher's page could not be read, no Linux edition seen.
+# confidence: high = the publisher says so; medium = a reputable secondary
+# source (mostly Desktop Insights, "DI", a site that scans shipped binaries:
+# desktopinsights.com); low = inference, see notes.
+# SteamAPI:<id> = store.steampowered.com/api/appdetails?appids=<id>, platform
+# flags, queried 2026-11-14. SteamDB and PCGamingWiki refused automated
+# requests; nothing here rests on a page that was not opened, except where
+# the notes say "search snippet".
+name	publisher	platforms	linux_edition	runtime_windows	runtime_macos	confidence	evidence	notes
+Notion	Notion Labs	Windows, macOS	no	electron	electron 45.3.1	medium	https://desktopinsights.com/apps/notion?platform=macos https://www.notion.com/desktop	Download page lists macOS and Windows only
+Notion Calendar	Notion Labs	Windows, macOS	nv	electron (not scanned separately)	electron 44.10.2	medium	https://desktopinsights.com/apps/notion-calendar?platform=macos
+Figma desktop	Figma	Windows, macOS	no	electron 44.11.2	electron	medium	https://desktopinsights.com/apps/figma?platform=windows https://www.figma.com/downloads/	Figma support said in 2025 there will be no official Linux app; local fonts and the MCP server imply native helpers
+Linear	Linear	Windows, macOS	no	electron (not scanned)	electron 41.3.0	medium	https://desktopinsights.com/apps/linear?platform=macos https://linear.app/download
+Loom	Atlassian	Windows, macOS	nv	electron (not scanned)	electron 43.8.3	medium	https://desktopinsights.com/apps/loom?platform=macos	Screen and camera capture imply OS-specific native modules (inference)
+Miro	Miro	Windows, macOS	no	electron (not scanned)	electron 38.5.0	medium	https://desktopinsights.com/apps/miro?platform=macos https://miro.com/apps/
+Canva desktop	Canva	Windows, macOS	no	electron (not scanned)	electron 45.1.0	medium	https://desktopinsights.com/apps/canva?platform=macos https://www.canva.com/download/
+Asana desktop	Asana	Windows, macOS	no	electron (not scanned)	electron 43.8.4	medium	https://desktopinsights.com/apps/asana?platform=macos https://asana.com/download
+Superhuman	Superhuman	Windows, macOS	nv	electron (not scanned)	electron 45.2.3	medium	https://desktopinsights.com/apps/superhuman?platform=macos
+Spark Desktop	Readdle	Windows, macOS	nv	electron UI over a Swift mail core compiled for Windows	electron	high (Windows), medium (macOS)	https://sparkmailapp.com/blog/swift-windows https://mjtsai.com/blog/2022/10/04/spark-switches-to-electron-and-subscriptions	Heavy native component: the shared Swift core under the Electron front end
+Evernote	Evernote (Bending Spoons)	Windows, macOS	no	electron (not scanned)	electron 37.6.0	medium	https://desktopinsights.com/apps/evernote?platform=macos https://evernote.com/download	A 2021 Linux beta was discontinued
+GitHub Desktop	GitHub (Microsoft)	Windows, macOS	no	electron	electron 44.9.1	high	https://github.com/desktop/desktop	Open source (MIT); README: Linux is not officially supported, a community fork builds it. The one row that WAS run: see the report, section 6
+Tidal desktop	TIDAL	Windows, macOS	nv	electron (not scanned)	electron 43.8.3	medium	https://desktopinsights.com/apps/tidal?platform=macos	Native audio and DRM modules not checked
+Streamlabs Desktop	Streamlabs (Logitech)	Windows, macOS	no	electron 29.3.1	electron (not scanned)	medium	https://desktopinsights.com/apps/streamlabs-desktop?platform=windows https://streamlabs.com/streamlabs-live-streaming-software	Bundles a native OBS capture and encode engine beside the web UI (from memory, not verified)
+Trello desktop	Atlassian	Windows, macOS	no	electron (not scanned)	electron 43.8.1	medium	https://desktopinsights.com/apps/trello?platform=macos https://trello.com/platforms	Distributed through the Mac App Store and the Microsoft Store
+monday.com desktop	monday.com	Windows, macOS	nv	electron 39.8.10	not scanned	medium	https://desktopinsights.com/apps/monday?platform=macos
+Splice desktop	Splice	Windows, macOS	nv	not scanned	electron 38.4.0	medium	https://desktopinsights.com/apps/splice?platform=macos
+Framer desktop	Framer	Windows, macOS	nv	not scanned	electron 42.11.17	medium	https://desktopinsights.com/apps/framer?platform=macos
+Zeplin	Zeplin	Windows, macOS	nv	not scanned	electron 43.4.1	medium	https://desktopinsights.com/apps/zeplin?platform=macos
+Cookie Clicker (Steam)	Orteil, DashNet / Playsaurus	Windows, macOS	no	electron with the Greenworks Steam add-on	electron	high	https://www.pcgamesn.com/cookie-clicker/steam SteamAPI:1454400	Developer: "The Steam version is an electron wrapper around the HTML game"
+ChatGPT desktop	OpenAI	Windows, macOS, Linux (preview)	yes	electron 39.2.7	electron since July 2026	medium	https://desktopinsights.com/apps/chatgpt?platform=windows https://www.neowin.net/news/chatgpt-desktop-app-now-finally-available-on-linux/	EXCLUDED: Linux preview since 2026-08-11 (press only)
+Claude desktop	Anthropic	Windows, macOS, Linux (beta)	yes	electron (not scanned)	electron 45.2.1	medium	https://desktopinsights.com/apps/claude?platform=macos https://code.claude.com/docs/en/desktop-linux	EXCLUDED: Linux beta since 2026-06-30
+WhatsApp Desktop	Meta	Windows, macOS	nv	webview2 (.NET 8 and Windows App SDK host)	native Swift (Catalyst/AppKit)	medium	https://www.neowin.net/news/whatsapp-for-windows-is-ditching-uwp-for-a-web-app/ https://desktopinsights.com/apps/whatsapp?platform=windows	History on Windows: Electron, native UWP (2022), WebView2 wrapper of the web client (2025)
+Microsoft Teams (new)	Microsoft	Windows, macOS (Linux: web app only)	no	webview2 and React	nv	high (Windows)	https://techcommunity.microsoft.com/t5/microsoft-teams-blog/microsoft-teams-advantages-of-the-new-architecture/ba-p/3775704	Microsoft states the move from Electron to WebView2. The Linux client was retired in December 2022 for a web app
+New Outlook for Windows	Microsoft	Windows	no	webview2 with a native Windows integration component	not applicable	high	https://learn.microsoft.com/en-us/microsoft-365-apps/outlook/overview-new-outlook-windows	The experience is Outlook on the web in a thin shell
+Grammarly desktop	Grammarly	Windows, macOS	nv	dotnet (.NET 10) and webview2	native Swift	low	https://desktopinsights.com/apps/grammarly?platform=windows	Hooks other programs' text fields through OS accessibility interfaces: bound to the OS whatever the UI runtime (inference)
+Raycast 2.0	Raycast	macOS, Windows	no	.NET 8 and WPF shell, UI in WebView2, Node back end, Rust	Swift/AppKit shell, UI in WKWebView, Node back end, Rust	high	https://www.raycast.com/blog/a-technical-deep-dive-into-the-new-raycast	Publisher: explicitly not Electron; "the system's own WebView for UI"
+Power BI Desktop	Microsoft	Windows	nv	.NET Framework and webview2	not applicable	medium	https://desktopinsights.com/apps/power-bi-desktop?platform=windows
+Paint.NET	dotPDN LLC	Windows	no	dotnet with C++/CLI (Windows-only)	not applicable	medium	https://en.wikipedia.org/wiki/Paint.NET	C++/CLI binds it to Windows
+ShareX	ShareX Team	Windows	no	dotnet (Windows UI; an Avalonia port is in the repository)	not applicable	medium	https://github.com/ShareX/ShareX
+Adobe Creative Cloud desktop (launcher)	Adobe	Windows, macOS	nv	cef UI and native services	cef UI and native services	medium	https://helpx.adobe.com/x-productkb/global/adobe-background-processes.html	Many native background services (licensing, sync, updater)
+Affinity	Canva (Serif)	Windows, macOS	no	nv	native Cocoa	low	https://desktopinsights.com/apps/affinity?platform=windows https://omgubuntu.co.uk/2026/11/affinity-linux-release-confirmed	A Linux version was confirmed in development in November 2026, no date
+Amazon Music desktop	Amazon	Windows, macOS	nv	qt (one scan, 70/100)	not scanned	low	https://desktopinsights.com/apps/amazon-music?platform=windows	Tentative
+Balsamiq Wireframes desktop	Balsamiq	Windows, macOS	no	nv	native Swift	medium	https://balsamiq.com/learn/wireframes-for-desktop-launch/ https://docs.balsamiq.com/desktop/intro/	Publisher: "fully native", no longer Adobe AIR
+Sketch	Sketch B.V.	macOS	no	not applicable	native Swift/AppKit	medium	https://desktopinsights.com/apps/sketch?platform=macos
+Bear	Shiny Frog	macOS	no	not applicable	native Swift	medium	https://desktopinsights.com/apps/bear?platform=macos
+Alfred	Running with Crayons	macOS	no	not applicable	native Cocoa	medium	https://desktopinsights.com/apps/alfred?platform=macos
+Scrivener	Literature & Latte	Windows, macOS	no	qt	native Swift/Cocoa	medium	https://blinkio.literatureandlatte.com/scrivener/release-notes?os=Windows https://en.wikipedia.org/wiki/Scrivener_(software)	A Linux beta was abandoned in 2015
+Tableau Desktop	Salesforce (Tableau)	Windows, macOS	nv	qt (Qt shell and shared web UI)	qt	high	https://www.qt.io/development/tableau-built-with-qt
+Autodesk Fusion	Autodesk	Windows, macOS	nv	qt	qt	high	https://forums.autodesk.com/t5/fusion-360-api-and-scripts/what-ui-framework-is-the-fusion-360-user-interface-built-on/td-p/7409179	Large native CAD kernel
+SketchUp desktop	Trimble	Windows, macOS	nv	not scanned	native with embedded cef	low	https://desktopinsights.com/apps/sketchup?platform=macos	The core is a native 3D modeller
+EA app	Electronic Arts	Windows, macOS	nv	nv (a forum post says cef)	cef and qt	medium (macOS), low (Windows)	https://desktopinsights.com/apps/ea-app
+Epic Games Launcher	Epic Games	Windows, macOS, Linux (preview)	yes	Unreal Engine application with cef web UI (legacy launcher)	same	medium	https://www.gamingonlinux.com/2026/10/epic-games-launcher-preview-arrives-native-linux-support-fortnite-for-linux-is-coming-and-upgraded-easy-anti-cheat/	EXCLUDED: the rebuilt launcher has a Linux preview since 2026-10-14
+Battle.net	Blizzard	Windows, macOS	nv	cef (second-hand)	nv	low	https://www.guildwars2.com/en/news/inside-arenanet-chromium-embedded-framework-in-guild-wars-2/	No primary source found
+Ubisoft Connect	Ubisoft	Windows	nv	cef	not applicable	medium	https://vulners.com/packetstorm/PACKETSTORM:149425
+Riot Client / League client	Riot Games	Windows, macOS	nv	cef front end over a C++ foundation	same	medium	https://technology.riotgames.com/node/40	Kernel anti-cheat accompanies the games
+Overwolf	Overwolf	Windows	no	cef	not applicable	high	https://overwolf.github.io/tools/frameworks	Publisher: "only supports the Windows OS"
+Xbox app (PC)	Microsoft	Windows	no	React Native for Windows (UWP)	not applicable	medium	https://microsoft.github.io/react-native-windows/resources-showcase	Sources from 2019 and 2020
+Rockstar Games Launcher	Rockstar Games	Windows	nv	native with a cef helper	not applicable	low	https://list.winehq.org/pipermail/wine-bugs/2020-August/540305.html	Inferred from Wine bug reports
+Balatro	LocalThunk / Playstack	Windows, macOS	no	love	love	high	https://love2d.org/ https://en.wikipedia.org/wiki/Balatro SteamAPI:2379780	Listed on LÖVE's own site
+Moonring	Fluttermind	Windows, macOS	no	love	love	high	https://love2d.org/ SteamAPI:2373630
+Arco	Franek, Max Cahill, Bibiki, Fáyer / Panic	Windows, macOS	no	love	love	high	https://love2d.org/ SteamAPI:2366970
+SNKRX	a327ex	Windows	no	love	not applicable	medium	https://github.com/a327ex/SNKRX SteamAPI:915310	Source is open (MIT)
+Intravenous 2	Explosive Squat Games	Windows	no	love	not applicable	low	https://www.mobygames.com/group/10312/middleware-love/ SteamAPI:2608270
+Cruelty Squad	Consumer Softproducts	Windows	no	godot	not applicable	high	https://godotengine.org/showcase/ SteamAPI:1388770
+Webfishing	lamedeveloper	Windows	no	godot	not applicable	medium	https://en.wikipedia.org/wiki/Webfishing SteamAPI:3146520
+KinitoPET	troy_en	Windows	no	godot	not applicable	high	https://godotengine.org/showcase/ SteamAPI:2075070
+Road to Vostok	Road to Vostok	Windows	no	godot	not applicable	medium	https://en.wikipedia.org/wiki/Road_to_Vostok SteamAPI:1963610
+Buckshot Roulette	Mike Klubnika / Critical Reflex	Windows, Linux	yes	godot	not applicable	high	https://godotengine.org/showcase/ SteamAPI:2835570	EXCLUDED: Steam lists Linux
+Doki Doki Literature Club!	Team Salvato	Windows, macOS (Steam); Linux on itch.io	yes	renpy	renpy	medium	https://en.wikipedia.org/wiki/Doki_Doki_Literature_Club! SteamAPI:698780	EXCLUDED: a Linux build exists on itch.io only
+Doki Doki Literature Club Plus!	Team Salvato / Serenity Forge	Windows, macOS	no	unity	unity	medium	https://en.wikipedia.org/wiki/Doki_Doki_Literature_Club! SteamAPI:1388880	Ported from Ren'Py to Unity: not a portable runtime any more
+OMORI	OMOCAT	Windows, macOS	no	nwjs (RPG Maker MV)	nwjs (RPG Maker MV)	medium	https://en.wikipedia.org/wiki/Omori_(video_game) SteamAPI:1150690	NW.js follows from RPG Maker MV's desktop export; not checked per title
+Fear & Hunger	Miro Haverinen / Happy Paintings	Windows, macOS	no (Steam)	nwjs (RPG Maker MV)	nwjs (RPG Maker MV)	medium	https://en.wikipedia.org/wiki/Fear_%26_Hunger SteamAPI:1002300
+Fear & Hunger 2: Termina	Miro Haverinen / Happy Paintings	Windows	no (Steam)	nwjs (RPG Maker MV)	not applicable	medium	https://en.wikipedia.org/wiki/Fear_%26_Hunger SteamAPI:2171440
+The Coffin of Andy and Leyley	Nemlei / Kit9 Studio	Windows	no	nwjs (RPG Maker MV)	not applicable	medium	https://en.wikipedia.org/wiki/The_Coffin_of_Andy_and_Leyley SteamAPI:2378900
+Ib (2022 remake)	kouri / PLAYISM	Windows	no	nwjs (RPG Maker MV)	not applicable	medium	https://en.wikipedia.org/wiki/Ib_(video_game) SteamAPI:1901370
+The Witch's House MV	Fummy / DANGEN	Windows, macOS	no	nwjs (RPG Maker MV, from the title)	nwjs	low	SteamAPI:885810
+Look Outside	Francis Coulombe / Devolver Digital	Windows	no	RPG Maker, version not stated	not applicable	low	https://en.wikipedia.org/wiki/Look_Outside SteamAPI:3373660	NW.js only if MV or MZ
+Vampire Survivors	poncle	Windows, macOS	no	unity (since 1.6, August 2023; before that Phaser in Electron)	unity	medium	https://en.wikipedia.org/wiki/Vampire_Survivors SteamAPI:1794680	Left the web runtime: a re-hostable title that stopped being one
