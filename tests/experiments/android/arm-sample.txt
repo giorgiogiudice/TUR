@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Applications run from their 64-bit ARM build under user-mode emulation
+# (QEMU) on an x86-64 runner: two without native code (the Java side alone
+# under emulation) and two with native ARM libraries. All four are also in
+# sample.txt, where their x86-64 or ABI-neutral build runs natively.
+#
+# package                                  kind
+org.billthefarmer.editor                   notes
+org.moire.opensudoku                       game
+com.artifex.mupdf.viewer.app               tools
+com.shatteredpixel.shatteredpixeldungeon   game

@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# 30 packages drawn with random.Random('tur-android-1').shuffle over the sorted package names of F-Droid index sha256 a504cce496d4b288a1f18a39a376014ae1e9cd539309457189712b9aeaac0b72 dated 2026-11-11T13:48:33.394000+00:00.
+package	group	version_name	version_code	sha256	size	file	nativecode	abi_class	min_sdk	target_sdk	name
+io.github.dorumrr.de1984	random	2.8.4	54	36baf5da4a843ac54647b37828656c18efd088878b17b8f3a488a13b9f423b68	6673275	io.github.dorumrr.de1984_54.apk	-	no native code	26	34	De1984
+com.rascarlo.adaptive.brightness.tile	random	0.2	2	b446621ce9bfaff14ab90d04ef5415d1de7823c0497c8301ae6b39822e4773bd	942769	com.rascarlo.adaptive.brightness.tile_2.apk	-	no native code	24	28	Adaptive Brightness Tile
+com.quaap.launchtime	random	0.8.6	860	256dfa7d4041daa552dc104d61144e6ea44945f7400d94b076f8555c34f553b2	3899339	com.quaap.launchtime_860.apk	-	no native code	28	35	LaunchTime Homescreen
+de.bixilon.unithen	random	1.3.2	8	50c5ed9b2de7b19323ceec94a9125cc74c3c16eef1a0aa33e235e5ef8f9c5b1d	3867995	de.bixilon.unithen_8.apk	arm64-v8a,armeabi-v7a,x86,x86_64	x86-64 native code	26	37	UniThen
+com.werismoln.multibooter	random	v0.1.4	1004	2cf1dd26d06e4e258df1e486c360c6c0321679a5f675f3a2caba9656f5625e5f	16993176	com.werismoln.multibooter_1004.apk	arm64-v8a,armeabi-v7a,x86,x86_64	x86-64 native code	26	36	MultiBooter
+br.com.gualandi.dailypill	random	1.3.3	14	a9332ae02a8d70c60a767807fb69a089b92aa803e95e33069a902f4f97508465	2219424	br.com.gualandi.dailypill_14.apk	-	no native code	16	30	Daily Pill — Medication Reminder
+com.darkrockstudios.apps.fasttrack	random	5.1.1	42	829f857d37928a6af9535d40f2aab2ef0d1ec9b719b3acc12435ae0713d54153	4574292	com.darkrockstudios.apps.fasttrack_42.apk	arm64-v8a,armeabi-v7a,x86,x86_64	x86-64 native code	26	37	FastTrack
+com.yahyaoui.prayermode	random	1.8.5	11	187772b1ea806417bd2775ca9680c757b2eb682f20f23c9fb61a0adba86bb268	15963936	com.yahyaoui.prayermode_11.apk	-	no native code	24	36	Prayer mode
+com.bookorbit	random	0.7.1	701	d12cb9a8fa6b025b1362cc0e2ce4e39dcd33b09506b14fcdac7f698995a19cfd	4594576	com.bookorbit_701.apk	arm64-v8a,armeabi-v7a,x86,x86_64	x86-64 native code	26	36	BookOrbit
+app.auriel.nocean	random	0.2.0	2	1dceeb26d408ed06b9f047e6c11553b9f1e28d90415976a5d4ebea644bae1694	3797189	app.auriel.nocean_2.apk	arm64-v8a,armeabi-v7a,x86,x86_64	x86-64 native code	29	36	Nocean
+net.toload.main.hd	random	7.6.0	760	770cb76a817959286e495947794e9cfc75b49487756708723832b0ad5dc6a823	4217469	net.toload.main.hd_760.apk	-	no native code	21	33	萊姆輸入法
+ro.radioromaniaactualitati.podcasts	random	2.5.7	65	c1a6c7ffea2a4c2e8f6114ec603e9bb0faa8c1468164bea1e05e509f152d39b4	22643143	ro.radioromaniaactualitati.podcasts_65.apk	arm64-v8a,armeabi-v7a,x86_64	x86-64 native code	21	34	Radio Romania
+io.github.sykoram.sis	random	1.9.0	10900	3c00ac18ba5c71b4fd6a55765cdb63a345c10a520164ed74712aa4c00263c8c1	3733524	io.github.sykoram.sis_10900.apk	-	no native code	21	34	SIS
+com.serwylo.lexica	random	3.13.1	30018	255d26352ab1247c42736402af15e3ad4ec33951ac385817666a67dcc5c0f858	14282556	com.serwylo.lexica_30018.apk	-	no native code	18	34	Lexica
+org.astonbitecode.rustkeylock	random	0.18.3	1803	7e944b0a10d745b7f75f6cb5b4bdec3c7129066e0503820c53b316d4c1a28265	55551459	org.astonbitecode.rustkeylock_1803.apk	arm64-v8a,armeabi-v7a	ARM only	30	34	rust-keylock-android
+com.jellodog.chat	random	1.2.5	16	6c738434cf70b922fb5d22890de57fd547c067913e57d7e18cae0c719143dea9	3625604	com.jellodog.chat_16.apk	-	no native code	23	35	JelloDog Chat
+com.mouzinho.pokebase	random	1.0.2	3	ccc703405a71162b51bff321be4bc9d0d114dc12a9698c5b45168dd19f572ac5	104255367	com.mouzinho.pokebase_3.apk	arm64-v8a,armeabi-v7a,x86,x86_64	x86-64 native code	24	36	Pokébase
+com.listen1.app	random	0.8.1	1	f8f2ce22d3dbdc6da66ddd73a571825b3f5b893834c3f36a1d19a6d4ba200820	24716773	com.listen1.app_1.apk	arm64-v8a,armeabi-v7a,x86,x86_64	x86-64 native code	16	28	Listen1
+com.github.shadowsocks.plugin.ck_client	random	2.12.0	23	968c3c0b9d07795e22ac5dbc0b24da88dfdd1de0fc3fec643f30173098c1e696	14793849	com.github.shadowsocks.plugin.ck_client_23.apk	arm64-v8a,armeabi-v7a,x86,x86_64	x86-64 native code	21	34	Cloak
+com.bmco.cratesiounofficial	random	1.5.3	12	88c53a5dc1aa442c348ff025eb04939f3178bd11d561f0211b937be4ff30bb30	1985254	com.bmco.cratesiounofficial_12.apk	-	no native code	21	29	Crates.io unofficial
+de.jepfa.bdt	random	1.6.1	10601	6361781fdf477712b4dae88e536b2c82210cba6d6b4a7a143cf03fcafce94f9a	63526655	de.jepfa.bdt_10601.apk	arm64-v8a,armeabi-v7a,x86_64	x86-64 native code	24	37	Break.Down.Timer
+com.eneko.hexcolortimewallpaper	random	1.1	2	22edf720655c011be57c376336ab8eda4981f4acdccc6681256213e983f431a4	1380050	com.eneko.hexcolortimewallpaper_2.apk	-	no native code	15	25	HexColorTime Wallpaper
+org.ligi.gobandroid_hd	random	2.5.9	259	aca80064dc5cbda349c32b137e521c3ed85ba67c579a2fba2eb2f7d9ce891c71	2434458	org.ligi.gobandroid_hd_259.apk	-	no native code	9	25	Gobandroid
+com.bosun.app	random	0.8.6	47	3cdc26a71cfdff60175cd74b126e48fdcc067cc16640c74d75ac6b48c8816687	19072776	com.bosun.app_47.apk	arm64-v8a,armeabi-v7a,x86,x86_64	x86-64 native code	29	36	Bosun
+tribixbite.cleverkeys	random	1.5.0	105003	5cfff11dae63cf58abaed25525956a543da9c5dafa21896ace6faf3a9a312c33	62206581	tribixbite.cleverkeys_105003.apk	x86_64	x86-64 native code	21	34	CleverKeys
+com.agateau.catgenerator	random	0.2.1	3	d2f2c5ac99108d1c5a30f52e4d2d89000ab4de7c17e72ee9e277f2a024f398be	8739564	com.agateau.catgenerator_3.apk	-	no native code	17	33	Cat Avatar Generator
+com.wagebit.app	random	0.1.0	1	cbe56f2fa7f6d472b559f3d25c74d9bb67f39fcd67d9a1e3ee529e78b347f0dc	2502690	com.wagebit.app_1.apk	-	no native code	23	34	WageBit
+io.gitlab.cryptographic_id	random	0.5.7	23	90b2d626c66f3aef179437105513f6354cb335f66e06bd8c2345492f4daafc76	54715566	io.gitlab.cryptographic_id_23.apk	arm64-v8a,armeabi-v7a,x86_64	x86-64 native code	24	36	Cryptographic ID
+fr.odrevet.kingdomino_score_count	random	5.0.2	32	dce6e84400db77c37f58de112a5ecf0b3cdb29891a35d7c96fe3e7bccfb671f8	50488135	fr.odrevet.kingdomino_score_count_32.apk	arm64-v8a,armeabi-v7a,x86_64	x86-64 native code	24	36	Kingdomino Score
+com.wangjinli.carvita	random	1.2.3	12	4ab639801b18bccf3e8efb1888f5cd7d9a368f4d906b75fdec0e34f42ed1d40f	61762878	com.wangjinli.carvita_12.apk	arm64-v8a,armeabi-v7a,x86_64	x86-64 native code	24	36	CarVita
