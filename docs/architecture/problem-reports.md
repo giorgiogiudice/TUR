@@ -127,15 +127,10 @@ saved, nothing is sent) and `diag_report_list` runs `tur-diag report list
 P@x performs nothing above class 1 until the approval sheet exists (§23,
 item 1); the person sends with the command line, later in Settings.
 
-They are in `services/tur-diagnostics/agent-tools.next.json` and
-`agent-tools.next.adapter.json`, which are the shipped
-`agent-tools.json`/`agent-tools.adapter.json` with the two tools added, and
-are tested against the built program like the shipped files. They are not yet
-the shipped files because `services/tur-pax/tests/tools.rs` lists every
-offered tool of every component by name and is owned by another work item;
-promoting them is: rename the two files over the shipped ones, and add
-`diag_report_prepare` and `diag_report_list` after `diag_get_status` in that
-test's list (and cases for them). Inside P@x's read-only sandbox the home
+They are in the shipped `services/tur-diagnostics/agent-tools.json` and
+`agent-tools.adapter.json` (they were first in `agent-tools.next*.json`,
+promoted in pax-5 when P@x's tests stopped listing every tool by name), and
+are installed in the image with the rest of tur-diagnostics' tools. Inside P@x's read-only sandbox the home
 directory is hidden, so `diag_report_list` there reports
 `directory_found: false` until a D-Bus service (`org.tur.Diagnostics1`)
 performs it.

@@ -10,6 +10,8 @@ The TUR operating system is one bootc container image, defined by
 | `Containerfile.containerignore` | What is sent to the build: this directory, TUR's artwork (`branding/`), and the sources of the programs compiled into the image |
 | `programs.tsv` | The TUR programs compiled into the image: component, program, where it is installed |
 | `programs.sh` | What the build stage runs: fetch the crates, compile the programs, gather what goes with them |
+| `files.tsv` | Data and units of the components that go with the programs: P@x's model list and units, the local AI model catalogue |
+| `engine/` | The local AI engine, llama.cpp, built from its source in a stage of its own: the pinned version (`llama-cpp.lock`) and the build script (section "The local AI engine") |
 | `base.lock` | The pinned base image: repository, tag, digest, version |
 | `branding/` | What replaces Fedora's marks: the script the build runs, the pinned replacement packages, Firefox's policy (section "Fedora's marks") |
 | `signing/` | The script that adds TUR's rule to the container policy at build time (section "Signed updates") |
@@ -47,17 +49,23 @@ TUR's own programs are compiled inside the image build, in a build stage of the
 | `tur-storage` | `services/tur-storage` | `/usr/bin/` | `tur-storage` |
 | `tur-catalogue` | `services/tur-catalogue` | `/usr/bin/` | `tur-catalogue` |
 | `tur-runtime` | `services/tur-runtime` | `/usr/bin/` | `tur-runtime` |
-| `tur-update` | `services/tur-update` | `/usr/bin/` | not installed: see below |
+| `tur-update` | `services/tur-update` | `/usr/bin/` | `tur-update` |
 | `tur-pax` | `services/tur-pax` | `/usr/bin/` | – |
 | `tur-pax-memory` | `services/tur-pax-memory` | `/usr/bin/` | – |
 | `tur-pax-providers` | `services/tur-pax-providers` | `/usr/libexec/tur/` | – |
 | `tur-installer` | `installer/tur-installer-core` | `/usr/libexec/tur/` | – |
+| `tur-apps` | `services/tur-apps` | `/usr/bin/` | `tur-apps` |
+| `tur-ai-local` | `services/tur-ai-local` | `/usr/bin/` | `tur-ai-local` |
 
 `/usr/bin` holds what a person types and what an assistant tool adapter
 starts by path; `/usr/libexec/tur` holds what units and other programs start.
-No unit starts any of the ten new programs: nothing runs that did not run
-before. The desktop program `tur-centre` is not in the image
-([TUR-006](../docs/reports/TUR-006.md) says what stands in the way).
+One unit starts a TUR program on its own: P@x's catch-up timer, enabled for
+every user, runs `tur-pax schedule wake` after sign-in, which ends at once
+while P@x is switched off ([pax-service.md](../docs/architecture/pax-service.md),
+section 6). P@x's session service is started by the session bus only when a
+program calls `org.tur.Agent1`. The desktop programs (`tur-centre`,
+`tur-settings`, P@x's window) are not in the image yet (issue #59;
+[TUR-006](../docs/reports/TUR-006.md) says what stood in the way).
 
 What goes with the programs:
 
@@ -66,12 +74,17 @@ What goes with the programs:
 | `/usr/lib/tur/programs.tsv` | written by the build | What was installed: program, path, component, tools directory. The smoke test, the build manifest and the boot test read it |
 | `/usr/share/tur/pax/tools/<component>/agent-tools.json`, `agent-tools.adapter.json` | each component that has the two files at its top level | The tools P@x may offer a model, and how each is performed ([pax-orchestrator.md](../docs/architecture/pax-orchestrator.md)). `tur-pax` reads this directory when it is not told another |
 | `/usr/share/tur/catalogue/*.toml` | `catalogue/` | The application catalogue. `tur-catalogue` reads it when it is not told another, and its assistant tools name it |
+| `/usr/share/tur/pax/models.json` | `services/tur-pax/data/`, by [`files.tsv`](files.tsv) | P@x's model list, with the preset `local` for TUR's local AI. `tur-pax` reads it when it is not told another |
+| `/usr/share/dbus-1/services/org.tur.Agent1.service`; `/usr/lib/systemd/user/tur-pax.service`, `tur-pax-catchup.service`, `tur-pax-catchup.timer`; `/usr/share/dbus-1/interfaces/org.tur.Agent1.xml` | `services/tur-pax/units/`, `interfaces/`, by `files.tsv` | P@x's session service, started by the session bus through its user unit when a program calls it, and the catch-up timer, enabled for every user by a link in `/usr/lib/systemd/user/timers.target.wants/` ([pax-service.md](../docs/architecture/pax-service.md), section 6) |
+| `/usr/share/tur/ai-local/models/*.toml` | `services/tur-ai-local/catalogue/`, by `files.tsv` | The local AI model catalogue. `tur-ai-local` reads it when it is not told another. No model is in the image: models are downloaded at the person's request |
 | `/usr/share/licenses/tur/LICENSE.md`, `NOTICE` | the repository root | The licence of TUR's own programs and its required notice |
 | `/usr/share/licenses/tur-third-party/` | the crates, as fetched | `crates.tsv`: which program holds which crate, with version, declared licence and checksum; `<crate>-<version>/`: the licence files that crate ships; `rust-std-<version>/`: those of the Rust standard library |
 
-`tur-update` keeps its assistant tools in `services/tur-update/pax/`, not at
-the component's top level, so they are not installed; moving them is a change
-in `services/tur-pax`'s tests and is left to that work.
+Every component of the list that has `agent-tools.json` at its top level has
+its tools installed: eight today (`tur-ai-local`, `tur-apps`,
+`tur-catalogue`, `tur-device-manager`, `tur-diagnostics`, `tur-runtime`,
+`tur-storage`, `tur-update`). The smoke test and the boot test derive that
+list, and the number of programs, from `programs.tsv`.
 
 How the stage works, and why:
 
@@ -129,12 +142,73 @@ To add a program: a line in `programs.tsv`, the component's directory in
 `Containerfile.containerignore`, a `COPY` of it in the `Containerfile`, and
 its paths in the triggers of the `image` and `boot` workflows. If it ships
 `agent-tools.json` and `agent-tools.adapter.json`, they are installed without
-further ado. The smoke test then expects one program more.
+further ado; other files it needs go in `files.tsv`. The smoke test and the
+boot test read `programs.tsv` and expect what it lists.
 
 What the programs start is in the base image already: `bwrap` (bubblewrap)
 and `prlimit` (util-linux) for P@x's sandbox, `lsblk`, `udevadm`,
 `journalctl`, `fwupdmgr`, `bootc`, and the commands `tur-diag` collects with.
 No package is added. The smoke test checks each.
+
+## The local AI engine
+
+`tur-ai-local` runs models with llama.cpp's `llama-server`
+([local-ai.md](../docs/architecture/local-ai.md), section 6;
+[ADR-0021](../docs/adr/0021-local-ai.md)). The image build compiles it from
+llama.cpp's source in a stage of its own (`FROM … AS engine`), as decided in
+issue #74: Fedora 45's `llama-cpp` package has no AVX2/FMA kernels, no Vulkan
+and requires ROCm (5.3 GB), and was measured 5.5 to 7.7 times slower in
+generation than llama.cpp's own build of the same version.
+
+| In the image | What |
+|---|---|
+| `/usr/libexec/tur/llama.cpp/llama-server` | The engine, with its libraries beside it (`libllama`, `libggml`, `libggml-base`, `libmtmd`, …; each finds the others through `$ORIGIN`) |
+| `/usr/libexec/tur/llama.cpp/libggml-cpu-*.so` | One processor backend per x86-64 level (`x64`, `sse42`, `sandybridge`, `ivybridge`, `piledriver`, `haswell`, `skylakex`, `cannonlake`, `cascadelake`, `icelake`, `cooperlake`, `zen4`, `alderlake`, `sapphirerapids`); the engine loads the best one the processor supports when it starts |
+| `/usr/libexec/tur/llama.cpp/libggml-vulkan.so` | The Vulkan backend, for graphics processors with an open Vulkan driver. No HIP/ROCm and no CUDA backend is built |
+| `/usr/bin/llama-server` | A link to the engine: the program `tur-ai-local` starts. `tur-ai-local hardware` follows it to find the backends |
+| `/usr/share/licenses/llama.cpp/` | llama.cpp's licence (MIT) and the notices of what it bundles: nlohmann/json (MIT, with lines of Abseil under Apache-2.0, whose text comes from [`third-party-licensed/llama.cpp/`](third-party-licensed/llama.cpp/)), cpp-httplib (MIT), stb_image (MIT or public domain), miniaudio (public domain or MIT-0), subprocess.h (Unlicense), llamafile's sgemm (MIT) |
+| `/usr/lib/tur/built-from-source.tsv` | What the build compiled from third-party source: name, version, licence, source archive and its SHA-256. The SBOM adds it as a package |
+
+How the stage works:
+
+- **The version is pinned** in [`engine/llama-cpp.lock`](engine/llama-cpp.lock):
+  the release tag (`b9840`, the version Fedora 45 packages and the local-ai
+  workflow measured), its commit, and the SHA-256 of the source archive. The
+  build number and commit are passed to the build, so `llama-server
+  --version` names them.
+- **It is built on the base image** (`FROM` the pinned base), so that it is
+  linked against the C and C++ libraries, OpenMP and the Vulkan loader the
+  image has. The compilers, CMake, Ninja, `glslc` and the Vulkan and SPIR-V
+  headers are installed in that stage from the base's own package
+  repositories, with the versions they hold on the day of the build, and stay
+  there: only `/out` is copied into the image. The build log lists their
+  versions.
+- **One step has network access** (`llama-cpp.sh fetch`): the build tools and
+  the source archive, checked against its SHA-256. **The compile step has no
+  network** (`RUN --network=none`).
+- **What is built:** the `llama-server` target only (and what it needs), in
+  the Release configuration, `GGML_NATIVE=OFF`, `GGML_BACKEND_DL=ON`,
+  `GGML_CPU_ALL_VARIANTS=ON`, `GGML_VULKAN=ON`, OpenMP on; no web interface,
+  no OpenSSL (the engine downloads nothing: `tur-ai-local` downloads models
+  and starts the engine with `--offline`), no tests, no examples. Build paths
+  are mapped out of the files (`-ffile-prefix-map`) and the files are
+  stripped.
+- **Checks:** the stage fails if a library is not found or a processor
+  variant or the Vulkan backend is missing; the final stage runs
+  `llama-server --version` and `--list-devices`; the smoke test checks the
+  link, the backends, the libraries and the licences, and that
+  `tur-ai-local hardware` sees them; the boot test serves a model with it.
+- **Reproducibility:** the two builds of the `image` workflow must give the
+  same bytes, as for everything else. They do if the base's repositories
+  give the same compiler both times; a rebuild on another day may use a newer
+  compiler from Fedora's updates and give other bytes.
+
+To move to another llama.cpp version: change the lock file (tag, commit,
+SHA-256 of the archive) in a pull request of its own, and check that the
+licence notices the script copies out of the source are still where it looks
+(the stage fails when one is empty). Once Fedora builds `llama-cpp` with the
+processor variants and Vulkan and without a hard ROCm dependency, the stage
+can give way to the package.
 
 ## Boot health and rollback
 
@@ -176,7 +250,7 @@ the design as built, and how publishing is switched on, is
 | `/usr/share/containers/policy.json` | the base's vendor policy, plus one rule added by [`signing/policy.py`](signing/policy.py) in a `RUN` of the `Containerfile` | An image named `ghcr.io/giorgiogiudice/tur` is accepted only with a sigstore signature by TUR's release key that is entered in Sigstore's public Rekor log. Every other source, the `oci:` and `containers-storage:` transports and the default keep the base's policy |
 | `/usr/share/containers/registries.d/tur.yaml` | `rootfs/` | Signatures of that repository are sigstore attachments beside the image |
 | `/usr/share/tur/signing/rekor.pub`, `fulcio.crt` | `rootfs/`, from Sigstore's trust root (`scripts/release/trust-roots.py`) | The Rekor log's key; Fulcio's chain for the keyless signature |
-| `/usr/share/tur/signing/release.pub` | `rootfs/`, made by the owner (publishing.md, section 8) | TUR's release key, the public half (ECDSA P-256; SHA-256 of its DER form `3fa3992800078a370b1f15055434c90edefd648e0a39b3a2fe6a973fe2303430`). Images built before it was added refuse every image of the repository |
+| `/usr/share/tur/signing/release.pub` | `rootfs/`, made by the owner (publishing.md, section 8) | TUR's release key, the public half (ECDSA P-256; SHA-256 of its DER form `28f36c958b17261d629634e0d221adad9f04a86f4ea05a19299c539f6bf10fbd`). Images built before it was added refuse every image of the repository |
 
 Nothing is written under `/etc`: the base ships its policy as a vendor file
 in `/usr/share/containers` and no `/etc/containers/policy.json`, which an

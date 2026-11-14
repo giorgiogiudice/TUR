@@ -390,6 +390,11 @@ fn build(args: &TaskArgs, err: &mut dyn Write) -> io::Result<Result<Setup, Vec<F
         || config.provider.as_str().to_owned(),
         |entry| entry.id.clone(),
     );
+    // The context the model's entry declares: a tool's result is cut to fit
+    // it (TaskLimits::with_context). A configuration file declares none.
+    let context_tokens = entry
+        .as_ref()
+        .and_then(|entry| entry.declared(&config.model).context_tokens);
     // The key: none when none is to be sent; the file a model server on
     // this computer wrote, for an entry that names one; otherwise the
     // environment variable.
@@ -522,7 +527,8 @@ fn build(args: &TaskArgs, err: &mut dyn Write) -> io::Result<Result<Setup, Vec<F
             max_steps: args.max_steps,
             max_seconds: args.max_seconds,
             ..TaskLimits::default()
-        },
+        }
+        .with_context(context_tokens),
         memory_store: args.memory_store.clone(),
         interface,
     }))

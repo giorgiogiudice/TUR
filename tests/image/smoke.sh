@@ -14,11 +14,25 @@ read -r -a podman <<<"${PODMAN:-podman}"
 
 # shellcheck source=image/base.lock
 . image/base.lock
+# shellcheck source=image/engine/llama-cpp.lock
+. image/engine/llama-cpp.lock
+
+# What the image must hold of TUR's programs, from the list the build reads
+# (image/programs.tsv): how many, and which components ship assistant tools
+# (agent-tools.json at the component's top level).
+expect_programs="$(grep -v '^#' image/programs.tsv | grep -c .)"
+expect_tool_sets="$(grep -v '^#' image/programs.tsv | cut -f1 | while read -r component; do
+    if [ -f "${component}/agent-tools.json" ]; then basename "${component}"; fi
+done | LC_ALL=C sort | tr '\n' ' ')"
+echo "expected: ${expect_programs} programs; tool sets: ${expect_tool_sets}"
 
 "${podman[@]}" run --rm -i --network none \
     -e "EXPECT_BUILD_ID=${expected_build_id}" \
     -e "EXPECT_BASE_DIGEST=${BASE_DIGEST}" \
     -e "EXPECT_FEDORA=${BASE_TAG}" \
+    -e "EXPECT_PROGRAMS=${expect_programs}" \
+    -e "EXPECT_TOOL_SETS=${expect_tool_sets}" \
+    -e "EXPECT_LLAMA_CPP_BUILD=${LLAMA_CPP_BUILD_NUMBER}" \
     "${image}" /bin/bash -s <<'INNER'
 set -u
 fail=0
@@ -159,7 +173,8 @@ check "no TUR file under /etc"                bash -c '! ls -d /etc/tur* /usr/et
 # into the image"). The list the build wrote is in the image.
 programs=/usr/lib/tur/programs.tsv
 check "the list of TUR programs is in the image" test -s "${programs}"
-check "eleven programs are listed"            bash -c '[ "$(grep -c -v "^#" "$1")" = 11 ]' _ "${programs}"
+check "the programs of image/programs.tsv are listed (${EXPECT_PROGRAMS})" \
+    bash -c '[ "$(grep -c -v "^#" "$1")" = "$2" ]' _ "${programs}" "${EXPECT_PROGRAMS}"
 echo "--- TUR programs"
 while IFS=$'\t' read -r program path component tools; do
     case "${program}" in "#"* | "") continue ;; esac
@@ -184,11 +199,15 @@ manifest = json.load(open(sys.argv[1] + "/agent-tools.json"))
 adapters = json.load(open(sys.argv[1] + "/agent-tools.adapter.json"))
 assert manifest["service"] == adapters["service"], "the two files name different services"
 declared = {tool["name"] for tool in manifest["tools"]}
-performed = {adapter["tool"]: adapter["program"] for adapter in adapters["adapters"]}
+# A request adapter names a service socket under /run/tur/, not a program
+# (ADR-0027); its tool is still declared.
+performed = {adapter["tool"]: adapter.get("program") for adapter in adapters["adapters"]}
+assert all(adapter.get("program") or adapter.get("socket", "").startswith("/run/tur/")
+           for adapter in adapters["adapters"]), "an adapter names neither a program nor a TUR socket"
 assert performed, "no adapter at all"
 unknown = sorted(set(performed) - declared)
 assert not unknown, f"adapters for tools the manifest does not declare: {unknown}"
-missing = sorted({name for name in performed.values() if not os.access(name, os.X_OK)})
+missing = sorted({name for name in performed.values() if name and not os.access(name, os.X_OK)})
 assert not missing, f"not in the image: {missing}"
 ' "${tools}"
         echo "      offered: $(jq -r '[.adapters[].tool] | join(" ")' "${tools}/agent-tools.adapter.json")"
@@ -197,10 +216,13 @@ assert not missing, f"not in the image: {missing}"
     fi
 done < "${programs}"
 check "programs a person or an adapter starts are in /usr/bin" bash -c \
-    'for p in tur-diag tur-device tur-storage tur-catalogue tur-runtime tur-update tur-pax tur-pax-memory tur-boot-health; do
-         [ -x "/usr/bin/$p" ] || exit 1; done'
-check "five components have their assistant tools installed" bash -c \
-    '[ "$(ls -1 /usr/share/tur/pax/tools | tr "\n" " ")" = "tur-catalogue tur-device-manager tur-diagnostics tur-runtime tur-storage " ]'
+    'for p in tur-diag tur-device tur-storage tur-catalogue tur-runtime tur-update tur-pax tur-pax-memory tur-boot-health \
+              tur-apps tur-ai-local llama-server; do
+         [ -x "/usr/bin/$p" ] || { echo "$p"; exit 1; }; done'
+check "every component of the list that ships assistant tools has them installed, and no other" bash -c \
+    '[ "$(ls -1 /usr/share/tur/pax/tools | LC_ALL=C sort | tr "\n" " ")" = "$1" ] || { ls -1 /usr/share/tur/pax/tools; exit 1; }' \
+    _ "${EXPECT_TOOL_SETS}"
+echo "      tool sets: ${EXPECT_TOOL_SETS}"
 
 # The application catalogue, where tur-catalogue reads it when it is not told
 # otherwise, and where its assistant tools name it.
@@ -211,6 +233,46 @@ check "tur-catalogue finds an application in it" bash -c \
     'cd / && tur-catalogue search discord --json | jq -e ".hits[] | select(.id == \"com.discord.discord\")"'
 check "the catalogue its assistant tools name is that directory" \
     grep -q "\"${catalogue}\"" /usr/share/tur/pax/tools/tur-catalogue/agent-tools.adapter.json
+
+# What goes with the programs (image/files.tsv): P@x's model list with the
+# preset for local AI, P@x's units, and the local AI model catalogue, each
+# where its program looks for it.
+check "P@x's model list is installed, with the local preset" bash -c \
+    'jq -e "[.providers[] | select(.id == \"local\" and .adapter == \"openai-chat\")] | length == 1" /usr/share/tur/pax/models.json'
+check "P@x's session service is activatable on the session bus, by its user unit" bash -c \
+    'grep -qx "SystemdService=tur-pax.service" /usr/share/dbus-1/services/org.tur.Agent1.service &&
+     grep -qx "BusName=org.tur.Agent1" /usr/lib/systemd/user/tur-pax.service &&
+     test -s /usr/share/dbus-1/interfaces/org.tur.Agent1.xml'
+check "P@x's catch-up timer is installed and enabled for every user, and nothing else of P@x is" bash -c \
+    '[ "$(readlink /usr/lib/systemd/user/timers.target.wants/tur-pax-catchup.timer)" = ../tur-pax-catchup.timer ] &&
+     test -s /usr/lib/systemd/user/tur-pax-catchup.service &&
+     ! ls /usr/lib/systemd/user/*.wants/tur-pax.service /etc/systemd/user/*.wants/tur-pax* 2>/dev/null | grep -q .'
+check "the local AI model catalogue is installed, and tur-ai-local finds it by itself" bash -c \
+    'n=$(ls -1 /usr/share/tur/ai-local/models/*.toml | wc -l); [ "$n" -ge 5 ] &&
+     cd / && tur-ai-local models --catalogue-only --json | jq -e --argjson n "$n" "(.models | length) == \$n"'
+
+# The local AI engine (image/engine/; image/README.md, "The local AI engine"):
+# llama.cpp's llama-server, built in the image build, with a processor
+# backend per x86-64 level and Vulkan, and nothing for HIP, CUDA or ROCm.
+engine=/usr/libexec/tur/llama.cpp
+check "llama-server is the engine TUR built, linked from /usr/bin" bash -c \
+    '[ "$(readlink -f /usr/bin/llama-server)" = "$1/llama-server" ] &&
+     llama-server --version 2>&1 | grep -q "version: $2 "' _ "${engine}" "${EXPECT_LLAMA_CPP_BUILD}"
+echo "      $(llama-server --version 2>&1 | grep -E "^(version|built with)" | tr '\n' ' ')"
+check "the engine has a processor backend per x86-64 level and Vulkan, and no HIP, CUDA or ROCm" bash -c \
+    '[ "$(ls -1 "$1"/libggml-cpu-*.so | wc -l)" -ge 10 ] && test -s "$1/libggml-vulkan.so" &&
+     ! ls "$1" | grep -i -E "hip|cuda|rocm|rocblas"' _ "${engine}"
+echo "      backends: $(cd "${engine}" && ls -1 libggml-*.so | tr '\n' ' ')"
+echo "      $(du -sh "${engine}" | cut -f1) in ${engine}"
+check "every library the engine needs is beside it or in the image" bash -c \
+    '! find "$1" -type f -exec ldd {} \; 2>&1 | grep "not found"' _ "${engine}"
+check "tur-ai-local sees the engine and its backends through the link" bash -c \
+    'tur-ai-local hardware --json | jq -e ".engine.present and .engine.vulkan_backend and
+        ([.engine.backends[] | select(startswith(\"cpu-\"))] | length) >= 10"'
+check "the engine's licences are in the image, and the build says what it was built from" bash -c \
+    'for f in LICENSE LICENSE-nlohmann-json Apache-2.0.txt LICENSE-cpp-httplib LICENSE-stb_image LICENSE-miniaudio \
+              LICENSE-subprocess.h LICENSE-llamafile-sgemm README; do test -s "/usr/share/licenses/llama.cpp/$f" || exit 1; done &&
+     grep -q "^llama.cpp	b$1	" /usr/lib/tur/built-from-source.tsv' _ "${EXPECT_LLAMA_CPP_BUILD}"
 
 # What the programs start (specification section 12; pax-orchestrator.md).
 # Nothing is added to the image for them: every one comes with the base.
@@ -275,7 +337,7 @@ find "${third}" -type f -printf '%s %P\n' | sort -rn | head -n 12 | sed 's/^/   
 # Everything TUR adds must be readable by an ordinary user: the checks above
 # run as root, which would not notice.
 check "what TUR adds is readable by every user" bash -c \
-    '[ -z "$(find /usr/share/tur /usr/share/licenses/tur /usr/share/licenses/tur-third-party /usr/share/licenses/tur-grub-boot-count /usr/lib/tur /usr/libexec/tur \( -type d ! -perm -0555 \) -o \( -type f ! -perm -0444 \) | head -n 5)" ]'
+    '[ -z "$(find /usr/share/tur /usr/share/licenses/tur /usr/share/licenses/tur-third-party /usr/share/licenses/tur-grub-boot-count /usr/share/licenses/llama.cpp /usr/lib/tur /usr/libexec/tur /usr/share/dbus-1/services/org.tur.Agent1.service /usr/lib/systemd/user/tur-pax* \( -type d ! -perm -0555 \) -o \( -type f ! -perm -0444 \) | head -n 5)" ]'
 
 # Signed updates (ADR-0023; docs/architecture/publishing.md). The rule for
 # TUR's registry path is in the vendor policy, nothing in /etc hides it, and

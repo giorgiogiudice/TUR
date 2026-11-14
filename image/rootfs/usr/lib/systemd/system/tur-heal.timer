@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# When TUR's healing service looks for problems: five minutes after the start,
+# when the boot has been judged (boot health) and the session has settled,
+# then every thirty minutes.
+
+[Unit]
+Description=TUR self-healing: look for known problems regularly
+Documentation=https://github.com/giorgiogiudice/TUR/blob/main/docs/architecture/self-healing.md
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=30min
+RandomizedDelaySec=30
+
+[Install]
+WantedBy=timers.target

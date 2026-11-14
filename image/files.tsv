@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Files of TUR's components that go into the image beside the programs of
+# image/programs.tsv (image/README.md, "Programs built into the image"): data
+# the programs read where they look for it by default, and the units that
+# start them. One line each, two fields separated by a tab:
+#
+#   a file of the repository, or a shell pattern for several
+#   the directory it is installed in, under the same name
+#
+# image/programs.sh reads this file in the build stage; a line that matches
+# no file stops the build. The component's directory must be in
+# Containerfile.containerignore and copied into the stage.
+services/tur-pax/data/models.json	/usr/share/tur/pax
+services/tur-pax/units/org.tur.Agent1.service	/usr/share/dbus-1/services
+services/tur-pax/units/tur-pax.service	/usr/lib/systemd/user
+services/tur-pax/units/tur-pax-catchup.service	/usr/lib/systemd/user
+services/tur-pax/units/tur-pax-catchup.timer	/usr/lib/systemd/user
+services/tur-pax/interfaces/org.tur.Agent1.xml	/usr/share/dbus-1/interfaces
+services/tur-ai-local/catalogue/*.toml	/usr/share/tur/ai-local/models

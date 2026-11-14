@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# The engine of TUR's local AI: llama.cpp, built from its source in the image
+# build (image/engine/llama-cpp.sh; image/README.md, "The local AI engine";
+# decision of 12 November 2026 in issue #74; docs/architecture/local-ai.md,
+# section 6.2). Read by the build stage "engine" of image/Containerfile.
+#
+# The version is the one Fedora 45 packages (llama-cpp-b9840-2.fc45) and the
+# one the local-ai workflow measured, so that TUR can go back to Fedora's
+# package once Fedora builds it with the processor variants and Vulkan.
+# The tag's commit is from GitHub's API (refs/tags/b9840), the archive's
+# SHA-256 from the archive GitHub served on 13 November 2026.
+LLAMA_CPP_VERSION=b9840
+LLAMA_CPP_BUILD_NUMBER=9840
+LLAMA_CPP_COMMIT=8c146a8366304c871efc26057cc90370ccf58dad
+LLAMA_CPP_URL=https://github.com/ggml-org/llama.cpp/archive/refs/tags/b9840.tar.gz
+LLAMA_CPP_SHA256=6a786175a32873ec25ef66be623fca5d74636cf5128574e1caf6f1e13f43780d
+# What is compiled into llama-server and its libraries: llama.cpp and ggml
+# (MIT), cpp-httplib and nlohmann/json (MIT), lines of Google's Abseil inside
+# nlohmann/json (Apache-2.0), stb_image (MIT or public domain), miniaudio
+# (public domain or MIT-0) and sheredom's subprocess.h (Unlicense). Fedora
+# tags its package "MIT AND Apache-2.0 AND LicenseRef-Fedora-Public-Domain".
+LLAMA_CPP_LICENCE="MIT AND Apache-2.0 AND (MIT OR Unlicense) AND (MIT-0 OR Unlicense) AND Unlicense"

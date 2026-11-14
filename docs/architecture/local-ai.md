@@ -4,7 +4,7 @@
 `ensure`, 13 November 2026 (issue #84). Decision: [ADR-0021](../adr/0021-local-ai.md).
 Sections 1 to 5 are the design. Section 6 records the engine decision and its
 evidence, section 7 what is built (`services/tur-ai-local`), section 8 what
-deviates from the design and what is open, section 9 what the image needs,
+deviates from the design and what is open, section 9 what the image holds,
 section 10 the second list of models and the tiers, section 11 `ensure`.
 Measurements: [report local-ai-1](../reports/local-ai-1.md),
 [report pax-6](../reports/pax-6.md).
@@ -242,28 +242,39 @@ models that call tools, data terms "runs on this computer".
    Ministral 3 3B is run by the local-ai workflow, and Gemma 4 E2B measured
    in its comparison job.
 
-## 9. What the image needs
+## 9. What the image holds
 
-Nothing of this change is in the image (`image/` was not touched). To ship it:
+Since report [TUR-010](../reports/TUR-010.md) (issue #85) the image carries
+local AI, as the engine decision of issue #74 asked
+([image/README.md](../../image/README.md), "The local AI engine"):
 
-- `/usr/bin/tur-ai-local` (a line in `image/programs.tsv`) and the model
-  catalogue at `/usr/share/tur/ai-local/models/*.toml`;
-- the P@x tool set at `/usr/share/tur/pax/tools/tur-ai-local/`, which
-  `image/programs.sh` installs by itself once `tur-ai-local` has its line in
-  `image/programs.tsv` (the files are at the component's root);
-- the engine, pinned: Fedora's `llama-cpp-b9840-2.fc45` as it is (slow on the
-  processor, no Vulkan, and ROCm's hipBLAS and rocBLAS with it; installed
-  size in the report), or the same llama.cpp version built with
-  `GGML_BACKEND_DL=ON`, `GGML_CPU_ALL_VARIANTS=ON`, `GGML_VULKAN=ON` and
-  without HIP, preferably as a change to Fedora's spec;
-- nothing more for `setpriv` and `vulkaninfo`: the image already has
-  `util-linux` 2.42.4 and `vulkan-tools` 1.4.350.0
-  ([image-licences.csv](../dependencies/image-licences.csv));
-- a systemd user unit, started on request and not at login, once the D-Bus
-  interface exists;
+- `/usr/bin/tur-ai-local` (a line in `image/programs.tsv`), the model
+  catalogue at `/usr/share/tur/ai-local/models/*.toml` (`image/files.tsv`),
+  and the P@x tool set at `/usr/share/tur/pax/tools/tur-ai-local/`;
+- **the engine, built by TUR**: llama.cpp b9840, the version Fedora 45
+  packages, compiled from its source in a build stage of the image with
+  `GGML_BACKEND_DL=ON`, `GGML_CPU_ALL_VARIANTS=ON` (fourteen x86-64
+  variants, the best loaded at start) and `GGML_VULKAN=ON`, without HIP/ROCm
+  or CUDA, in `/usr/libexec/tur/llama.cpp/` with `/usr/bin/llama-server` a
+  link to it. `tur-ai-local` follows the link to read the backends, so its
+  recommendations count the processor variants and Vulkan. The proposal to
+  Fedora (processor variants, Vulkan on, ROCm in a subpackage) is work for a
+  person; when Fedora ships it, the stage can give way to the package;
+- P@x's model list at `/usr/share/tur/pax/models.json`, so the `local`
+  preset exists on the installed system;
+- nothing more for `setpriv`, `vulkaninfo` and `df`: the image already has
+  `util-linux`, `vulkan-tools` and `coreutils`;
 - no model: models are downloaded at the person's request.
-- `df` (coreutils, already in the image) for the free-space check of
-  `ensure`.
+
+Not yet: a systemd user unit and `org.tur.AiLocal1`, so that `status` works
+from P@x's sandbox (section 8, item 4).
+
+The boot test asks `tur-ai-local check` about Qwen3 0.6B and Qwen3 4B on
+the installed system and holds each to the verdict: a model that fits is
+downloaded from its publisher, served on the image's engine and asked by
+P@x through the `local` preset; one that does not is refused with
+`TUR-AI-LOCAL-006` (by `serve`) or `-005` (by `pull`). The results are in
+TUR-010.
 
 ## 10. The second list, and the tiers
 

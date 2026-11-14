@@ -77,6 +77,28 @@ pub enum ErrorKind {
     ReportUnknown,
     /// The prepared report is larger than a receiver accepts.
     ReportTooLarge,
+    /// No such fault or remedy in the self-healing catalogue.
+    HealUnknown,
+    /// The fault a remedy was asked for is not present.
+    HealNotPresent,
+    /// A class 2 remedy was asked for without administrator rights.
+    HealNeedsApproval,
+    /// A class 2 remedy was not confirmed.
+    HealNotConfirmed,
+    /// A remedy was asked for too often in one boot.
+    HealTooOften,
+    /// A detection check could not be made.
+    HealCheckUnavailable,
+    /// There is no applied remedy to undo, or it cannot be undone.
+    HealNothingToUndo,
+    /// No problem report is offered for this fault now.
+    HealNoReport,
+    /// The self-healing state or data directory cannot be used.
+    HealStateUnavailable,
+    /// A request to the healing service was not understood.
+    HealRequestInvalid,
+    /// The healing service's socket could not be reached.
+    HealServiceUnreachable,
 }
 
 /// A registry entry for one error code (specification §29.3).
@@ -102,7 +124,7 @@ pub struct RegistryEntry {
 
 impl ErrorKind {
     /// Every kind, in registry order.
-    pub const ALL: [ErrorKind; 24] = [
+    pub const ALL: [ErrorKind; 35] = [
         ErrorKind::OutputWrite,
         ErrorKind::OutputExists,
         ErrorKind::BundleRead,
@@ -127,6 +149,17 @@ impl ErrorKind {
         ErrorKind::ReportRecordsUnavailable,
         ErrorKind::ReportUnknown,
         ErrorKind::ReportTooLarge,
+        ErrorKind::HealUnknown,
+        ErrorKind::HealNotPresent,
+        ErrorKind::HealNeedsApproval,
+        ErrorKind::HealNotConfirmed,
+        ErrorKind::HealTooOften,
+        ErrorKind::HealCheckUnavailable,
+        ErrorKind::HealNothingToUndo,
+        ErrorKind::HealNoReport,
+        ErrorKind::HealStateUnavailable,
+        ErrorKind::HealRequestInvalid,
+        ErrorKind::HealServiceUnreachable,
     ];
 
     /// The registry entry for this kind.
@@ -422,6 +455,116 @@ impl ErrorKind {
                 recovery: "Prepare the report again with --since-boot, or share a bundle made \
                            with 'tur-diag collect' yourself.",
             },
+            ErrorKind::HealUnknown => RegistryEntry {
+                kind: self,
+                code: "TUR-DIAG-HEAL-001",
+                title: "Unknown fault or remedy",
+                severity: Severity::Error,
+                detection: "The code or the remedy's name is not in the catalogue compiled into tur-diag.",
+                user_message: "TUR does not know that problem or that repair.",
+                explanation: "The catalogue is compiled into tur-diag; names are case-sensitive.",
+                recovery: "Run 'tur-diag heal catalogue' to see every fault and its remedies.",
+            },
+            ErrorKind::HealNotPresent => RegistryEntry {
+                kind: self,
+                code: "TUR-DIAG-HEAL-002",
+                title: "Problem not present",
+                severity: Severity::Error,
+                detection: "The fault's detection check passed when the remedy was asked for.",
+                user_message: "That problem is not present now. Nothing was changed.",
+                explanation: "A remedy is applied only while its fault's check finds the fault, so that a request cannot change a working system.",
+                recovery: "Run 'tur-diag heal status' to see the problems TUR has found.",
+            },
+            ErrorKind::HealNeedsApproval => RegistryEntry {
+                kind: self,
+                code: "TUR-DIAG-HEAL-003",
+                title: "Needs your approval as administrator",
+                severity: Severity::Error,
+                detection: "The remedy is class 2 (it cannot be undone) and the request came through the healing service's socket or from an account without administrator rights.",
+                user_message: "This repair cannot be undone, so only you can apply it, with administrator rights. P@x cannot.",
+                explanation: "Class 2 remedies are refused on the socket that P@x and ordinary accounts use (ADR-0027).",
+                recovery: "Read what the repair changes with 'tur-diag heal explain CODE', then run 'sudo tur-diag heal apply CODE REMEDY' and confirm.",
+            },
+            ErrorKind::HealNotConfirmed => RegistryEntry {
+                kind: self,
+                code: "TUR-DIAG-HEAL-004",
+                title: "Repair not confirmed",
+                severity: Severity::Error,
+                detection: "Neither --yes was given nor 'yes' typed at the question.",
+                user_message: "The repair was not confirmed. Nothing was changed.",
+                explanation: "A remedy that cannot be undone is applied only after the person confirms it.",
+                recovery: "Run the command again and confirm, or give --yes after reading what it changes.",
+            },
+            ErrorKind::HealTooOften => RegistryEntry {
+                kind: self,
+                code: "TUR-DIAG-HEAL-005",
+                title: "Tried too often",
+                severity: Severity::Error,
+                detection: "The remedy was applied as often in this boot as the catalogue or the request limit allows.",
+                user_message: "This repair has already been tried several times since the computer started.",
+                explanation: "Repeating a repair that does not hold does not help; the limit also stops a loop.",
+                recovery: "Restart the computer, or send a report with 'tur-diag heal report CODE' if TUR offers one.",
+            },
+            ErrorKind::HealCheckUnavailable => RegistryEntry {
+                kind: self,
+                code: "TUR-DIAG-HEAL-006",
+                title: "Check could not be made",
+                severity: Severity::Error,
+                detection: "The program a check runs is missing, failed, or printed something unexpected.",
+                user_message: "TUR could not check for this problem, so it changed nothing.",
+                explanation: "Checks run systemctl, timedatectl, df and coredumpctl; the detail names the one that failed.",
+                recovery: "Run the command again as root; if it still fails, send a report with 'tur-diag report prepare'.",
+            },
+            ErrorKind::HealNothingToUndo => RegistryEntry {
+                kind: self,
+                code: "TUR-DIAG-HEAL-007",
+                title: "Nothing to undo",
+                severity: Severity::Error,
+                detection: "No application of that remedy to that fault is recorded that has not been undone, the remedy changed nothing lasting, or it is irreversible, or putting back the kept copy failed.",
+                user_message: "There is nothing to undo for that repair.",
+                explanation: "The state file records each application and its undo.",
+                recovery: "Run 'tur-diag heal status' to see what was applied.",
+            },
+            ErrorKind::HealNoReport => RegistryEntry {
+                kind: self,
+                code: "TUR-DIAG-HEAL-008",
+                title: "No report offered",
+                severity: Severity::Error,
+                detection: "The fault is not in a state in which TUR offers a report (its cause is not in TUR, or it was repaired).",
+                user_message: "TUR offers no report for this problem now.",
+                explanation: "Reports are offered when a fault's cause is in TUR and nothing safe repairs it.",
+                recovery: "You can still describe any problem yourself with 'tur-diag report prepare --title ... --component ...'.",
+            },
+            ErrorKind::HealStateUnavailable => RegistryEntry {
+                kind: self,
+                code: "TUR-DIAG-HEAL-009",
+                title: "Self-healing state unavailable",
+                severity: Severity::Error,
+                detection: "The state file could not be read, parsed or written, or the data directory or its lock could not be used.",
+                user_message: "TUR cannot keep its record of problems and repairs.",
+                explanation: "The state is /var/log/tur/heal/state.json; copies and the lock are in /var/lib/tur/heal.",
+                recovery: "Check the free space and that the directories exist; they are created by systemd-tmpfiles.",
+            },
+            ErrorKind::HealRequestInvalid => RegistryEntry {
+                kind: self,
+                code: "TUR-DIAG-HEAL-010",
+                title: "Request not understood",
+                severity: Severity::Error,
+                detection: "The request was not one JSON object of the request format, or named a tool the service does not answer.",
+                user_message: "The healing service did not understand the request. Nothing was changed.",
+                explanation: "Requests are one line of JSON: schema_version, tool (heal_apply_remedy or heal_undo_remedy) and arguments (code, remedy).",
+                recovery: "Use 'tur-diag heal apply' or 'tur-diag heal undo'.",
+            },
+            ErrorKind::HealServiceUnreachable => RegistryEntry {
+                kind: self,
+                code: "TUR-DIAG-HEAL-011",
+                title: "Healing service not reachable",
+                severity: Severity::Error,
+                detection: "Connecting to /run/tur/heal.socket failed, or no answer came back.",
+                user_message: "TUR's healing service did not answer. Nothing was changed.",
+                explanation: "tur-heal.socket starts a service for each request.",
+                recovery: "Check 'systemctl status tur-heal.socket', or run the command with administrator rights.",
+            },
         }
     }
 
@@ -587,6 +730,17 @@ mod tests {
             (ErrorKind::ReportRecordsUnavailable, "TUR-DIAG-REPORT-010"),
             (ErrorKind::ReportUnknown, "TUR-DIAG-REPORT-011"),
             (ErrorKind::ReportTooLarge, "TUR-DIAG-REPORT-012"),
+            (ErrorKind::HealUnknown, "TUR-DIAG-HEAL-001"),
+            (ErrorKind::HealNotPresent, "TUR-DIAG-HEAL-002"),
+            (ErrorKind::HealNeedsApproval, "TUR-DIAG-HEAL-003"),
+            (ErrorKind::HealNotConfirmed, "TUR-DIAG-HEAL-004"),
+            (ErrorKind::HealTooOften, "TUR-DIAG-HEAL-005"),
+            (ErrorKind::HealCheckUnavailable, "TUR-DIAG-HEAL-006"),
+            (ErrorKind::HealNothingToUndo, "TUR-DIAG-HEAL-007"),
+            (ErrorKind::HealNoReport, "TUR-DIAG-HEAL-008"),
+            (ErrorKind::HealStateUnavailable, "TUR-DIAG-HEAL-009"),
+            (ErrorKind::HealRequestInvalid, "TUR-DIAG-HEAL-010"),
+            (ErrorKind::HealServiceUnreachable, "TUR-DIAG-HEAL-011"),
         ];
         assert_eq!(pinned.len(), ErrorKind::ALL.len());
         for (kind, code) in pinned {

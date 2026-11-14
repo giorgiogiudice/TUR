@@ -187,8 +187,25 @@ it:
 A refusal has `"status": "refused"`, a machine-readable `reason`, the `TUR-AI-*`
 code and the sentence the user is shown.
 
+**A result cut to fit the model's context.** A tool may print up to 256 KiB
+(an adapter's `max_output_bytes`), which a local model's 8 192 tokens could
+not hold at all. When the model's context is known (`context_tokens`, as the
+person chose it for a model on this computer or as the model list declares
+it), one tool's result is cut to a quarter of the context, counted at four
+bytes a token, never below 2 048 bytes (`orchestrator::tool_result_budget`:
+8 192 bytes for 8 192 tokens, 200 000 for 200 000; P@x's own request with
+every tool set is about 3 300 tokens). The frame stays; the
+program's output and its error output become the beginning of their text,
+cut at a character, with `"truncated": true` and a `cut` sentence that says
+why, and the task's report marks the call as truncated. A model with no
+declared context, or a provider given by a configuration file, gets the
+result as the tool's own limit let it through. The budget is per result,
+not for the whole conversation: a long task can still outgrow a small
+context, which the provider then reports as an error (TUR-010).
+
 **Limits.** Steps (responses asked for; default 12), wall-clock seconds (default
-300), tool calls looked at per response (default 8), and the spend limit of the
+300), tool calls looked at per response (default 8), the size of one tool's
+result for a model with a known context (above), and the spend limit of the
 provider configuration. The spend limit acts between responses, as addendum A
 section 10 says: the meter cuts a response as soon as the provider's reported
 usage passes the limit, and that response is then discarded whole.
@@ -267,6 +284,10 @@ event.
 | `runtime_inspect_file` | 0 | `tur-runtime inspect --json -- <path>` | `services/tur-runtime` |
 | `diag_report_prepare` | 0 | `tur-diag report prepare --preview --json --prepared-by=pax [--title=…] [--description=…] [--component=…] [--error-code=…] [--from-boot-health]` (a preview: nothing is saved or sent) | `services/tur-diagnostics` |
 | `diag_report_list` | 0 | `tur-diag report list --json` | the same |
+| `heal_list_faults` | 0 | `tur-diag heal status --json` (reads `/var/log/tur/heal/state.json`) | the same |
+| `heal_explain` | 0 | `tur-diag heal explain --json -- <code>` | the same |
+| `heal_apply_remedy` | 1 | a `request` adapter: `{"tool", "arguments": {code, remedy}}` to `/run/tur/heal.socket`; TUR's healing service decides and performs ([self-healing.md](self-healing.md), section 5) | the same |
+| `heal_undo_remedy` | 1 | the same, to undo | the same |
 | `apps_list_installed` | 0 | `tur-apps list --json` | `services/tur-apps` |
 | `apps_plan` | 0 | `tur-apps --catalogue /usr/share/tur/catalogue plan --offline --json -- <id>` | the same |
 | `ai_local_status` | 0 | `tur-ai-local status --json` | `services/tur-ai-local` |
@@ -738,7 +759,11 @@ The injection scenarios, as the task names them:
     decision stricter.
 15. **The adapter schema is not checked against the loader** beyond the shipped
     files using only fields the schema declares.
-16. **No undo.** Class 1 tools would need it; none ships.
+16. **Undo exists for one service's tools only.** The first class 1 tools,
+    `heal_apply_remedy` and `heal_undo_remedy` (ADR-0027,
+    [self-healing.md](self-healing.md)), are performed by a `request` adapter:
+    the healing service applies and undoes, and keeps what undoing needs. The
+    loop itself has no undo of its own.
 
 ## 10. Not built
 

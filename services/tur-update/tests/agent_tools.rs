@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
 
-//! The assistant tools this component ships: `pax/agent-tools.json`, and
+//! The assistant tools this component ships: `agent-tools.json`, and
 //! beside it the adapters that perform them with this component's own
-//! program, `pax/agent-tools.adapter.json`.
+//! program, `agent-tools.adapter.json`.
 //!
 //! The files are loaded with P@x's own loader (`tur-pax`, a development
 //! dependency of this test only), and every command line an adapter builds
@@ -11,9 +11,10 @@
 //! one its help describes. The tools are also run for real, against recorded
 //! machines.
 //!
-//! No tool is run by P@x here and no model is involved. That the installed
-//! program runs in P@x's sandbox is not checked anywhere yet; see
-//! `where_the_tool_set_is_and_is_not` for why.
+//! No tool is run by P@x here and no model is involved. The files sit at the
+//! component's root, where P@x finds every component's tools; the image
+//! installs them in `/usr/share/tur/pax/tools/tur-update/`
+//! (`where_the_tool_set_is`).
 //!
 //! Both tools read and nothing else. Staging, going back and keeping a
 //! version are class 3 (the AI design, section 5: OS update and rollback):
@@ -28,8 +29,8 @@ use tur_pax::adapter::AdapterFile;
 use tur_pax::registry::{ADAPTER_FILE, MANIFEST_FILE, ToolRegistry, read_tool_sets};
 use tur_pax::{Action, ActionClass};
 
-const MANIFEST: &str = include_str!("../pax/agent-tools.json");
-const ADAPTERS: &str = include_str!("../pax/agent-tools.adapter.json");
+const MANIFEST: &str = include_str!("../agent-tools.json");
+const ADAPTERS: &str = include_str!("../agent-tools.adapter.json");
 
 /// The program this component built.
 const PROGRAM: &str = env!("CARGO_BIN_EXE_tur-update");
@@ -305,27 +306,26 @@ fn the_tools_run_against_recorded_machines() {
 }
 
 #[test]
-fn where_the_tool_set_is_and_is_not() {
-    // The two files have the names tur-pax looks for, and the directory that
-    // holds them is a tool set as tur-pax reads one.
+fn where_the_tool_set_is() {
+    // The two files have the names tur-pax looks for, at the component's
+    // root: `services/` read as a directory of tool sets, as tur-pax's own
+    // tests and the `pax` workflow read it, holds this component's set.
     let component = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let files = read_tool_sets(component).expect("the component directory can be read");
-    assert_eq!(files.components, ["pax"]);
-    assert_eq!(files.manifests, [MANIFEST]);
-    assert_eq!(files.adapters, [ADAPTERS]);
     assert_eq!(
         (MANIFEST_FILE, ADAPTER_FILE),
         ("agent-tools.json", "agent-tools.adapter.json")
     );
-    // They are one directory below where the other components keep theirs,
-    // on purpose. `services/` is itself read as a directory of tool sets, by
-    // tur-pax's own tests (`services/tur-pax/tests/tools.rs`) and by the
-    // `pax` workflow (`tests/pax/e2e.py`), and both list the components that
-    // ship tools. Putting the files in this component's directory adds a
-    // sixth to those lists and needs `/usr/bin/tur-update` built and
-    // installed in that workflow: a change to the assistant's own tests,
-    // made together with the move (docs/architecture/update-manager.md,
-    // section 9). Until then P@x does not load these tools.
-    assert!(!component.join(MANIFEST_FILE).exists());
-    assert!(!component.join(ADAPTER_FILE).exists());
+    assert!(component.join(MANIFEST_FILE).is_file());
+    assert!(component.join(ADAPTER_FILE).is_file());
+    let services = component.parent().expect("the services directory");
+    let files = read_tool_sets(services).expect("the services directory can be read");
+    let at = files
+        .components
+        .iter()
+        .position(|name| name == "tur-update")
+        .expect("tur-update is read as a tool set");
+    assert_eq!(files.manifests[at], MANIFEST);
+    // Nothing is left where the files were before (`pax/`, one level down,
+    // where P@x did not look).
+    assert!(!component.join("pax").exists());
 }

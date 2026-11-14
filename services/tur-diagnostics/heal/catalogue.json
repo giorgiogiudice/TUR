@@ -1,0 +1,192 @@
+{
+  "schema_version": 1,
+  "about": "The fault catalogue of TUR's self-healing (docs/architecture/self-healing.md, ADR-0027). Each entry is data: a detection check of a fixed kind, a stable error code, a plain explanation, the remedies of a fixed kind with their risk class and undo, the notices a person is shown, and when a problem report is offered. The repair is verified by running the detection check again. Compiled into tur-diag; schemas/heal-catalogue.schema.json describes it.",
+  "faults": [
+    {
+      "code": "TUR-DESKTOP-SERVICE-001",
+      "title": "A system service stopped working",
+      "component": "desktop",
+      "explanation": "One of the background services the desktop relies on (time, networking, name lookup, printing, Bluetooth, power or disks) ended with an error and was not started again. Whatever depends on it stops working until it runs again.",
+      "check": {
+        "kind": "unit-failed",
+        "units": [
+          "chronyd.service",
+          "NetworkManager.service",
+          "systemd-resolved.service",
+          "bluetooth.service",
+          "cups.service",
+          "avahi-daemon.service",
+          "upower.service",
+          "power-profiles-daemon.service",
+          "udisks2.service",
+          "ModemManager.service"
+        ]
+      },
+      "remedies": [
+        {
+          "id": "start-failed-service",
+          "kind": "restart-units",
+          "class": 1,
+          "automatic": true,
+          "max_per_boot": 1,
+          "changes": "Clears the failed state of the stopped service and starts it once. No setting is changed.",
+          "reversible": true,
+          "undo": "Nothing to undo: no setting or file is changed. If the service fails again it is not started a second time in the same boot."
+        }
+      ],
+      "verify_seconds": 20,
+      "report": "when-unrepaired",
+      "report_kind": "repair-failed",
+      "notice": {
+        "found": "{subjects} stopped working.",
+        "repaired": "{subjects} had stopped working. TUR started it again and checked that it is running.",
+        "unrepaired": "{subjects} stopped working and could not be started again. You can send a report to TUR's developers.",
+        "report": "{subjects} stopped working and could not be started again. You can send a report to TUR's developers."
+      },
+      "sources": [
+        { "what": "systemctl is-failed (exit status 0 if one has failed) and reset-failed (clears the failed state and the start rate limit)", "where": "https://www.freedesktop.org/software/systemd/man/latest/systemctl.html", "read": "2026-11-13" }
+      ]
+    },
+    {
+      "code": "TUR-NETWORK-TIME-001",
+      "title": "The clock is not kept right",
+      "component": "network",
+      "explanation": "Setting the clock from the network is switched off. The clock drifts, and when it is wrong, secure websites, updates and sign-ins can fail.",
+      "check": { "kind": "network-time-off" },
+      "remedies": [
+        {
+          "id": "enable-network-time",
+          "kind": "set-network-time",
+          "class": 1,
+          "automatic": false,
+          "changes": "Switches on setting the clock from the network (timedatectl set-ntp true), which enables and starts the time service.",
+          "reversible": true,
+          "undo": "Switches it off again (timedatectl set-ntp false)."
+        }
+      ],
+      "verify_seconds": 10,
+      "report": "never",
+      "notice": {
+        "found": "Setting the clock from the network is switched off. If you did not mean this, TUR can switch it back on.",
+        "repaired": "Setting the clock from the network is switched on again.",
+        "unrepaired": "Setting the clock from the network could not be switched on."
+      },
+      "sources": [
+        { "what": "timedatectl set-ntp enables and starts the first network time service; NTP and CanNTP are properties of systemd-timedated", "where": "https://www.freedesktop.org/software/systemd/man/latest/timedatectl.html", "read": "2026-11-13" },
+        { "what": "the property names NTP, CanNTP, NTPSynchronized", "where": "https://github.com/systemd/systemd/blob/main/src/timedate/timedatectl.c", "read": "2026-11-13" }
+      ]
+    },
+    {
+      "code": "TUR-NETWORK-RESOLVER-001",
+      "title": "Name lookups bypass the system resolver",
+      "component": "network",
+      "explanation": "The file that tells programs where to look up names (/etc/resolv.conf) was replaced, often by a VPN or a setup script, so programs no longer ask the system's resolver. Web addresses can stop resolving, or resolve through a server you did not choose.",
+      "check": {
+        "kind": "resolver-not-managed",
+        "service": "systemd-resolved.service",
+        "path": "/etc/resolv.conf",
+        "managed_targets": [
+          "../run/systemd/resolve/stub-resolv.conf",
+          "/run/systemd/resolve/stub-resolv.conf",
+          "../run/systemd/resolve/resolv.conf",
+          "/run/systemd/resolve/resolv.conf",
+          "../usr/lib/systemd/resolv.conf",
+          "/usr/lib/systemd/resolv.conf"
+        ],
+        "stub_address": "127.0.0.53",
+        "restore_target": "../run/systemd/resolve/stub-resolv.conf"
+      },
+      "remedies": [
+        {
+          "id": "restore-resolver-link",
+          "kind": "restore-resolver-link",
+          "class": 1,
+          "automatic": false,
+          "changes": "Keeps a copy of the current /etc/resolv.conf, then points /etc/resolv.conf at the system resolver again (the mode systemd-resolved recommends).",
+          "reversible": true,
+          "undo": "Puts the kept copy back exactly as it was."
+        }
+      ],
+      "verify_seconds": 5,
+      "report": "never",
+      "notice": {
+        "found": "Name lookups bypass the system resolver: /etc/resolv.conf was replaced. If you did not mean this, TUR can restore it, and undo that later.",
+        "repaired": "Name lookups go through the system resolver again. The previous /etc/resolv.conf is kept and can be put back.",
+        "unrepaired": "/etc/resolv.conf could not be restored."
+      },
+      "sources": [
+        { "what": "the four ways /etc/resolv.conf can be handled; the link to /run/systemd/resolve/stub-resolv.conf is the recommended mode", "where": "https://www.freedesktop.org/software/systemd/man/latest/systemd-resolved.service.html", "read": "2026-11-13" }
+      ]
+    },
+    {
+      "code": "TUR-STORAGE-SPACE-001",
+      "title": "The system disk is almost full",
+      "component": "storage",
+      "explanation": "There is very little free space where the system keeps its data (/var). Updates, applications and logging start to fail when it runs out.",
+      "check": {
+        "kind": "free-space-low",
+        "path": "/var",
+        "min_free_bytes": 1073741824,
+        "min_free_percent": 2
+      },
+      "remedies": [
+        {
+          "id": "vacuum-journal",
+          "kind": "vacuum-journal",
+          "class": 2,
+          "automatic": false,
+          "keep_bytes": 268435456,
+          "changes": "Deletes the oldest system logs until they take at most 256 MiB.",
+          "reversible": false,
+          "undo": "None: deleted logs cannot be brought back. This needs your approval with administrator rights; P@x cannot do it."
+        }
+      ],
+      "verify_seconds": 0,
+      "report": "never",
+      "notice": {
+        "found": "The system disk is almost full. Free space by removing files or applications you no longer need. TUR can also delete old system logs, with your approval.",
+        "repaired": "There is enough free space on the system disk again.",
+        "unrepaired": "The system disk is still almost full. Old logs were not enough: remove files or applications you no longer need."
+      },
+      "sources": [
+        { "what": "--vacuum-size removes archived journal files only; combined with --rotate the active files are archived first", "where": "https://www.freedesktop.org/software/systemd/man/latest/journalctl.html", "read": "2026-11-13" }
+      ]
+    },
+    {
+      "code": "TUR-DIAG-CRASH-001",
+      "title": "A TUR program crashed",
+      "component": "diag",
+      "explanation": "One of TUR's own programs stopped unexpectedly. That is a defect in TUR. There is no repair that is safe to try on this computer; a report lets TUR's developers fix it in an update.",
+      "check": {
+        "kind": "tur-program-crashed",
+        "prefixes": ["/usr/bin/tur-", "/usr/libexec/tur/"],
+        "components": {
+          "tur-apps": "apps",
+          "tur-boot-health": "boot",
+          "tur-catalogue": "catalogue",
+          "tur-device": "device",
+          "tur-diag": "diag",
+          "tur-installer": "install",
+          "tur-pax": "pax",
+          "tur-pax-memory": "pax",
+          "tur-pax-providers": "pax",
+          "tur-runtime": "runtime",
+          "tur-storage": "storage",
+          "tur-update": "update"
+        }
+      },
+      "remedies": [],
+      "verify_seconds": 0,
+      "report": "always",
+      "report_kind": "crash",
+      "notice": {
+        "found": "{subjects} crashed. This is a problem in TUR itself.",
+        "report": "{subjects} crashed. This is a problem in TUR itself. You can send a report to TUR's developers; you see everything in it first, and nothing is sent unless you choose to."
+      },
+      "sources": [
+        { "what": "coredumpctl list with --json and --since; no match is a non-zero exit", "where": "https://www.freedesktop.org/software/systemd/man/latest/coredumpctl.html", "read": "2026-11-13" },
+        { "what": "the list's columns: time, pid, uid, gid, sig, corefile, exe, size", "where": "https://github.com/systemd/systemd/blob/main/src/coredump/coredumpctl-list.c", "read": "2026-11-13" }
+      ]
+    }
+  ]
+}

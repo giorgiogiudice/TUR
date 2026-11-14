@@ -4,9 +4,12 @@
 //! it the adapters that perform them with this component's own program,
 //! `agent-tools.adapter.json`.
 //!
-//! Three tools: `diag_get_status`, and the two read-only problem report
-//! tools, `diag_report_prepare` (a preview only) and `diag_report_list`.
-//! Sending a report is not a tool (ADR-0024).
+//! Seven tools: `diag_get_status`; the two read-only problem report tools,
+//! `diag_report_prepare` (a preview only) and `diag_report_list`; and the
+//! four of self-healing (ADR-0027): `heal_list_faults` and `heal_explain`,
+//! which read, and `heal_apply_remedy` and `heal_undo_remedy`, class 1,
+//! which are requests to TUR's healing service over its socket: the service
+//! decides and performs. Sending a report is not a tool (ADR-0024).
 //!
 //! The files are loaded with P@x's own loader (`tur-pax`, a development
 //! dependency of this test only), and every command line an adapter builds
@@ -17,10 +20,11 @@
 //! No tool is run by P@x here and no model is involved. That the installed
 //! program runs in P@x's sandbox is checked by the `pax` workflow.
 
-use std::process::Command;
+use std::io::Write;
+use std::process::{Command, Stdio};
 
 use serde_json::{Value, json};
-use tur_pax::adapter::AdapterFile;
+use tur_pax::adapter::{AdapterFile, AdapterKind};
 use tur_pax::registry::ToolRegistry;
 use tur_pax::{Action, ActionClass};
 
@@ -118,7 +122,21 @@ fn check_against_the_program(tool: &str, line: &[String], subcommands: &[&str]) 
 }
 
 /// The tools P@x is offered, in the order of the manifest.
-const OFFERED: [&str; 3] = ["diag_get_status", "diag_report_prepare", "diag_report_list"];
+const OFFERED: [&str; 7] = [
+    "diag_get_status",
+    "diag_report_prepare",
+    "diag_report_list",
+    "heal_list_faults",
+    "heal_explain",
+    "heal_apply_remedy",
+    "heal_undo_remedy",
+];
+
+/// The tools performed by a request to the healing service, not a program.
+const REQUESTS: [&str; 2] = ["heal_apply_remedy", "heal_undo_remedy"];
+
+/// The healing service's socket.
+const SOCKET: &str = "/run/tur/heal.socket";
 
 /// The tools the manifest declares that no program performs yet.
 const NOT_OFFERED: [&str; 0] = [];
@@ -126,10 +144,14 @@ const NOT_OFFERED: [&str; 0] = [];
 /// Every tool with the class the manifest declares. Preparing a report is a
 /// preview and listing reports reads a local list: both observe. Sending is
 /// class 2 (ADR-0024) and is not a tool at all.
-const CLASSES: [(&str, u64); 3] = [
+const CLASSES: [(&str, u64); 7] = [
     ("diag_get_status", 0),
     ("diag_report_prepare", 0),
     ("diag_report_list", 0),
+    ("heal_list_faults", 0),
+    ("heal_explain", 0),
+    ("heal_apply_remedy", 1),
+    ("heal_undo_remedy", 1),
 ];
 
 /// A call of a tool: its arguments, the subcommands that perform it, and
@@ -187,6 +209,25 @@ fn cases() -> Vec<Case> {
             vec!["report", "list"],
             vec!["/usr/bin/tur-diag", "report", "list", "--json"],
         ),
+        (
+            "heal_list_faults",
+            json!({}),
+            vec!["heal", "status"],
+            vec!["/usr/bin/tur-diag", "heal", "status", "--json"],
+        ),
+        (
+            "heal_explain",
+            json!({ "code": "TUR-NETWORK-TIME-001" }),
+            vec!["heal", "explain"],
+            vec![
+                "/usr/bin/tur-diag",
+                "heal",
+                "explain",
+                "--json",
+                "--",
+                "TUR-NETWORK-TIME-001",
+            ],
+        ),
     ]
 }
 
@@ -222,7 +263,13 @@ fn the_manifest_and_the_adapters_load() {
     let file = AdapterFile::from_json(ADAPTERS).expect("a valid adapter file");
     assert_eq!(file.service(), SERVICE);
     for adapter in file.adapters() {
-        assert_eq!(adapter.program(), INSTALLED);
+        if REQUESTS.contains(&adapter.tool()) {
+            assert_eq!(adapter.kind(), AdapterKind::Request, "{}", adapter.tool());
+            assert_eq!(adapter.socket(), Some(SOCKET));
+        } else {
+            assert_eq!(adapter.kind(), AdapterKind::Command, "{}", adapter.tool());
+            assert_eq!(adapter.program(), INSTALLED);
+        }
     }
 }
 
@@ -236,9 +283,14 @@ fn every_tool_has_the_class_the_design_gives_it() {
         .map(|(name, class)| ((*name).to_owned(), *class))
         .collect();
     assert_eq!(declared_classes(), expected);
-    // Whatever is offered only observes.
+    // Whatever is offered observes, except the two requests to the healing
+    // service, which are class 1 and never more.
     for tool in &registry().offered() {
-        assert_eq!(tool.class, ActionClass::Observe, "{}", tool.name);
+        if REQUESTS.contains(&tool.name.as_str()) {
+            assert_eq!(tool.class, ActionClass::Reversible, "{}", tool.name);
+        } else {
+            assert_eq!(tool.class, ActionClass::Observe, "{}", tool.name);
+        }
     }
 }
 
@@ -284,11 +336,69 @@ fn every_command_line_is_one_the_program_really_has() {
     // Every offered tool is covered.
     let covered: Vec<&str> = cases.iter().map(|case| case.0).collect();
     for tool in OFFERED {
-        assert!(covered.contains(&tool), "{tool} has no case");
+        assert!(
+            covered.contains(&tool) || REQUESTS.contains(&tool),
+            "{tool} has no case"
+        );
     }
     for (tool, arguments, subcommands, expected) in cases {
         let line = command_line(&registry, tool, arguments);
         assert_eq!(line, expected, "{tool}");
         check_against_the_program(tool, &line, &subcommands);
     }
+}
+
+#[test]
+fn a_request_of_the_adapters_is_one_the_built_program_reads() {
+    // What P@x sends for heal_apply_remedy, given to the program this
+    // component built, as tur-heal.socket gives it a connection. The repair
+    // asked for cannot be undone, so the answer is a refusal, and no check
+    // or command of this machine is run to give it.
+    let registry = registry();
+    let proposal = registry
+        .propose(
+            "heal_apply_remedy",
+            json!({ "code": "TUR-STORAGE-SPACE-001", "remedy": "vacuum-journal" })
+                .as_object()
+                .cloned()
+                .expect("an object"),
+        )
+        .expect("the arguments fit the schema");
+    let tur_pax::registry::Performer::Adapter { adapter, arguments } = proposal.performer else {
+        panic!("not an adapter");
+    };
+    let line = adapter.request_line(&arguments);
+    let scratch =
+        std::env::temp_dir().join(format!("tur-diag-heal-request-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&scratch);
+    std::fs::create_dir_all(&scratch).expect("a scratch directory");
+    let mut child = Command::new(PROGRAM)
+        .args(["heal", "handle", "--connection", "1-2-3-1000"])
+        .arg(format!(
+            "--heal-state={}",
+            scratch.join("state.json").display()
+        ))
+        .arg(format!("--heal-data={}", scratch.join("data").display()))
+        .arg(format!("--root={}", scratch.display()))
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("the built program runs");
+    child
+        .stdin
+        .take()
+        .expect("stdin")
+        .write_all(line.as_bytes())
+        .expect("the request is written");
+    let output = child.wait_with_output().expect("an answer");
+    let _ = std::fs::remove_dir_all(&scratch);
+    assert!(output.status.success());
+    let answer: Value = serde_json::from_slice(&output.stdout).expect("the answer is JSON");
+    assert_eq!(answer["ok"], json!(false), "{answer}");
+    assert_eq!(
+        answer["error"]["code"],
+        json!("TUR-DIAG-HEAL-003"),
+        "{answer}"
+    );
 }

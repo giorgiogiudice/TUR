@@ -304,19 +304,17 @@ and `--events`, as it runs `tur-catalogue` today.
 
 ## The assistant
 
-`pax/agent-tools.json` and `pax/agent-tools.adapter.json`:
+`agent-tools.json` and `agent-tools.adapter.json`, at the component's top level:
 `apps_list_installed` (`list --json`) and `apps_plan` (`plan --offline
 --json`), both class 0. Installing, updating, removing and switching sources
 are class 2 (ai-control-layer.md) and are **not** tools in this slice.
 `tests/agent_tools.rs` loads both files with P@x's loader, holds each command
 line against the built program and runs the tools.
 
-The files are under `pax/`, as `tur-update` keeps its own, and not at the
-top of the component: the `pax` workflow's end-to-end test
-(`tests/pax/e2e.py`) expects exactly five components to ship tools at the top
-level and installs those into `/usr/share/tur/pax/tools/`. Adding `tur-apps`
-(and `tur-update`) to that list, and to the image, belongs to whoever owns
-`tests/pax/` and `image/`.
+They were first under `pax/`, while P@x's end-to-end test listed the
+components that ship tools; since pax-5 the tests discover tool sets and the
+files are at the top of the component. The image installs `/usr/bin/tur-apps`
+and the tools in `/usr/share/tur/pax/tools/tur-apps/` (report TUR-010).
 
 ## Command line
 
