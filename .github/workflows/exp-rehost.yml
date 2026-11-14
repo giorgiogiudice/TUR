@@ -1,0 +1,125 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Experiment `rehost` (docs/reports/exp-rehost-1.md): many Windows and macOS
+# applications are a portable payload (JavaScript in an Electron or NW.js
+# archive, .NET assemblies, JVM bytecode, a Godot pack, Ren'Py or LÖVE
+# scripts, frozen Python) in a thin platform shell. Can TUR detect the
+# runtime in the person's own package without running it, take the payload
+# out, and run it on the Linux build of the same runtime: no Wine, no VM?
+#
+# Each shard, in a Fedora 45 container: for open-source applications whose
+# projects publish Windows, macOS and Linux builds, the Windows and macOS
+# packages are opened (never executed), the runtime detected, the payload
+# laid under that runtime's own Linux build (fetched from its project's
+# release location) and started in a headless Wayland session; the
+# project's official Linux build is started the same way as the ground
+# truth. tests/experiments/rehost/harness/run.py says what is measured.
+#
+# Green when the harness ran: an application that does not come up is a
+# finding in the results, not a failed job. No proprietary application is
+# downloaded or run; nothing downloaded is committed or published, only
+# screenshots, logs and tables are kept as artifacts.
+#
+# Runners are scarce: six light jobs, cancelled when superseded. Downloads
+# from third-party hosts (npm, NuGet, Maven Central, nwjs.io, renpy.org) are
+# cached; GitHub release assets are fetched from GitHub each time (same
+# network, and they would fill the repository's cache).
+name: exp-rehost
+
+on:
+  pull_request:
+    paths:
+      - "tests/experiments/rehost/**"
+      - ".github/workflows/exp-rehost.yml"
+  workflow_dispatch:
+    inputs:
+      only:
+        description: "Comma-separated application ids (empty: every application of each shard)"
+        required: false
+        default: ""
+      shards:
+        description: "JSON list of shards"
+        required: false
+        default: '["e1","e2","e3","e4","n1","g1"]'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: exp-rehost-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  # Fedora 45's container image, by digest (tag 45 on 13 November 2026), the
+  # one .github/workflows/windows-drivers.yml uses.
+  FEDORA_IMAGE: registry.fedoraproject.org/fedora:45@sha256:fa773d10382c082ff2cccaf7982a5c162f11f296f91274b994357f2d3d473770
+
+jobs:
+  corpus:
+    name: Re-host and measure (${{ matrix.shard }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 80
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(github.event.inputs.shards || '["e1","e2","e3","e4","n1","g1"]') }}
+    env:
+      WORK: ${{ runner.temp }}/rehost
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Work directory
+        run: mkdir -p "$WORK/cache" "$WORK/out"
+
+      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: |
+            ${{ runner.temp }}/rehost/cache/meta
+            ${{ runner.temp }}/rehost/cache/npm
+            ${{ runner.temp }}/rehost/cache/npm-meta
+            ${{ runner.temp }}/rehost/cache/nuget
+            ${{ runner.temp }}/rehost/cache/maven
+            ${{ runner.temp }}/rehost/cache/runtimes
+          key: exp-rehost-${{ matrix.shard }}-${{ hashFiles('tests/experiments/rehost/corpus.json') }}
+          restore-keys: exp-rehost-${{ matrix.shard }}-
+
+      - name: Let an unprivileged user in the container make user namespaces
+        # Ubuntu 24.04 denies them to unconfined programs; Chromium's own
+        # sandbox needs them (as tests/windows-runtime/sandbox-preflight.sh
+        # explains for bubblewrap). A throw-away runner.
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+
+      - name: Experiment in Fedora 45
+        env:
+          REHOST_ONLY: ${{ github.event.inputs.only }}
+          SHARD: ${{ matrix.shard }}
+        run: |
+          df -h / | tail -n 1
+          docker run --rm --privileged --network host --shm-size=2g \
+            -e REHOST_ONLY \
+            -v "$GITHUB_WORKSPACE:/src:ro" -v "$WORK:/work" \
+            "$FEDORA_IMAGE" bash /src/tests/experiments/rehost/ci-run.sh "$SHARD"
+
+      - name: Results
+        if: always()
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: |
+          sudo chown -R "$(id -u):$(id -g)" "$WORK" || true
+          rm -rf "$WORK/cache/runtimes"/*-sdk "$WORK/cache/runtimes"/*.tmp || true
+          if [ -f "$WORK/out/results-$SHARD.md" ]; then
+            head -c 60000 "$WORK/out/results-$SHARD.md" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No results were written for shard $SHARD." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: exp-rehost-${{ matrix.shard }}
+          path: ${{ runner.temp }}/rehost/out/
+          if-no-files-found: warn

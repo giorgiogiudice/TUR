@@ -1,0 +1,1490 @@
+{
+ "$comment": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0. The corpus of the re-hosting experiment (docs/reports/exp-rehost-1.md). Every application is open-source software whose project publishes its own builds on GitHub; the licence is the repository's, as GitHub reports it or as the repository states. For each one the project's Windows and macOS packages are re-hosted and its official Linux build is the ground truth. Nothing listed here is committed: the workflow downloads each file from the project's release, and refuses it unless its SHA-256 is the one pinned here (the digest GitHub's release API publishes for the asset, read on 2026-11-14; releases older than that API field carry no pin and the digest of what was downloaded is recorded instead). No proprietary application is in this file. 'local' packages are built in the job from the Ren'Py SDK's own example games (MIT).",
+ "checked": "2026-11-14",
+ "applications": [
+  {
+   "id": "vscodium",
+   "name": "VSCodium",
+   "family": "electron",
+   "shard": "e1",
+   "licence": "MIT",
+   "repo": "VSCodium/vscodium",
+   "tag": "1.143.17232",
+   "released": "2026-10-28",
+   "packages": {
+    "windows": {
+     "asset": "VSCodium-win32-x64-1.143.17232.zip",
+     "size": 231406156,
+     "sha256": "a1090868af8ac0ac04c22d79fdd02246fa115a78daf38a741d8db06df1753c1d"
+    },
+    "macos": {
+     "asset": "VSCodium-darwin-x64-1.143.17232.zip",
+     "size": 215768189,
+     "sha256": "6f11e188a16decf417623a94593370ee87fc40445d09c0ff49e30af57a5087f5"
+    },
+    "linux": {
+     "asset": "VSCodium-linux-x64-1.143.17232.tar.gz",
+     "size": 214776735,
+     "sha256": "ca1895aa040bd91a09c709d79eac7862d8c1aa0237fdc25b503deeb8bcd87efd"
+    }
+   }
+  },
+  {
+   "id": "joplin",
+   "name": "Joplin",
+   "family": "electron",
+   "shard": "e1",
+   "licence": "AGPL-3.0-or-later",
+   "repo": "laurent22/joplin",
+   "tag": "v3.7.22",
+   "released": "2026-10-28",
+   "packages": {
+    "windows": {
+     "asset": "Joplin-Setup-3.7.22.exe",
+     "size": 368820432,
+     "sha256": "ee11551239e7d680f76c6a4ddbc2362dda850981904fdb365298e4d43bf1df4d"
+    },
+    "macos": {
+     "asset": "Joplin-3.7.22-mac.zip",
+     "size": 200754957,
+     "sha256": "00b1c5beeb47283935f742f907714e16d9b93e31271c50182f846742c2b6fe9f"
+    },
+    "linux": {
+     "asset": "Joplin-3.7.22.AppImage",
+     "size": 207329204,
+     "sha256": "2b0b1ee82999f00883d21d950c2fb5dff28ccc3d2f570248b3abd40e5100dfdc"
+    }
+   }
+  },
+  {
+   "id": "logseq",
+   "name": "Logseq",
+   "family": "electron",
+   "shard": "e1",
+   "licence": "AGPL-3.0",
+   "repo": "logseq/logseq",
+   "tag": "2.0.2",
+   "released": "2026-10-07",
+   "packages": {
+    "windows": {
+     "asset": "Logseq-win-x64-2.0.2.zip",
+     "size": 195883130,
+     "sha256": "3332383c730bf8c0bd6bda9d5c60b669399f3ce9a1bee688dda12bfaaa5457db"
+    },
+    "macos": {
+     "asset": "Logseq-darwin-x64-2.0.2.zip",
+     "size": 164988361,
+     "sha256": "5bb0e643ac81dd0bfb458f4fc70b5ad9b12e5d5b44f426679f56cf25cb66dc99"
+    },
+    "linux": {
+     "asset": "Logseq-linux-x86_64-2.0.2.zip",
+     "size": 179015389,
+     "sha256": "289eadd4dfcbdd2ab71aeb6cf02a53d0b5d7340865c528b1434bef8001900a9a"
+    }
+   }
+  },
+  {
+   "id": "zettlr",
+   "name": "Zettlr",
+   "family": "electron",
+   "shard": "e1",
+   "licence": "GPL-3.0",
+   "repo": "Zettlr/Zettlr",
+   "tag": "v4.10.0",
+   "released": "2026-11-13",
+   "packages": {
+    "windows": {
+     "asset": "Zettlr-4.10.0-x64.exe",
+     "size": 166182008,
+     "sha256": "80fe5a7ce88ce6b47bd71a669ac7a3cb63b2c0a868daddcfcd29e052056eb423"
+    },
+    "macos": {
+     "asset": "Zettlr-4.10.0-x64.dmg",
+     "size": 193585859,
+     "sha256": "df84b4ed3a732c94759be83f0b19fbd757584d753503512d06dd8503ef64b165"
+    },
+    "linux": {
+     "asset": "Zettlr-4.10.0-amd64.deb",
+     "size": 128461708,
+     "sha256": "6466d2f718dfdbed18d382a0ebf8b00173ad6eb62e83a21dd4fdbf4a11cc6650"
+    }
+   }
+  },
+  {
+   "id": "rocketchat",
+   "name": "Rocket.Chat",
+   "family": "electron",
+   "shard": "e1",
+   "licence": "MIT",
+   "repo": "RocketChat/Rocket.Chat.Electron",
+   "tag": "4.19.3",
+   "released": "2026-11-12",
+   "packages": {
+    "windows": {
+     "asset": "rocketchat-4.19.3-win-x64.exe",
+     "size": 119101904,
+     "sha256": "3e0a321dc4cd04504d867e900d01ed3c7dc5637aac9c6ae63f6230aa1eb788d3"
+    },
+    "macos": {
+     "asset": "rocketchat-4.19.3-mac.zip",
+     "size": 234009376,
+     "sha256": "f88f60b0a06d0476d5595d94e763902194f498e1c32e2e432cd1235e6a416fa8"
+    },
+    "linux": {
+     "asset": "rocketchat-4.19.3-linux-x64.tar.gz",
+     "size": 140875621,
+     "sha256": "2c43329da9d9ec1dfc05790dec60c40df89cac089e894785a787dba865600e05"
+    }
+   }
+  },
+  {
+   "id": "bitwarden",
+   "name": "Bitwarden",
+   "family": "electron",
+   "shard": "e1",
+   "licence": "GPL-3.0",
+   "repo": "bitwarden/clients",
+   "tag": "desktop-v2026.10.4",
+   "released": "2026-11-05",
+   "packages": {
+    "windows": {
+     "asset": "bitwarden-2026.10.4-x64.nsis.7z",
+     "size": 172198109,
+     "sha256": "f32f5864be463cbb1e838172beae45256c09b1599a5efa35b2900a695190e13c"
+    },
+    "macos": {
+     "asset": "Bitwarden-2026.10.4-universal-mac.zip",
+     "size": 336898248,
+     "sha256": "61ebef7a7cb75ed4e8facbe185ea23f94cc17f8d850177099a693b1578112d0a"
+    },
+    "linux": {
+     "asset": "bitwarden_2026.10.4_x64.tar.gz",
+     "size": 212571192,
+     "sha256": "0de53003bef44c68e573820874af38f8acb855c729e3bdf441037e61fe6088a9"
+    }
+   }
+  },
+  {
+   "id": "etcher",
+   "name": "balenaEtcher",
+   "family": "electron",
+   "shard": "e2",
+   "licence": "Apache-2.0",
+   "repo": "balena-io/etcher",
+   "tag": "v2.1.9",
+   "released": "2026-10-22",
+   "packages": {
+    "windows": {
+     "asset": "balenaEtcher-2.1.9.Setup.exe",
+     "size": 274253464,
+     "sha256": "3fa63ea453e75c0338f8f1444b511f38decdd002e17922a910aec5e29b85b751"
+    },
+    "macos": {
+     "asset": "balenaEtcher-darwin-x64-2.1.9.zip",
+     "size": 210949669,
+     "sha256": "0298a1a450d9ce81b0eed41b18d9a4bd6ca5111a1283c2143871bc8b5ae04510"
+    },
+    "linux": {
+     "asset": "balenaEtcher-linux-x64-2.1.9.zip",
+     "size": 202150269,
+     "sha256": "21ac9eb72a3f4d737623f85fc5ddd4073febb08b40e601b8051e99634da4fb09"
+    }
+   }
+  },
+  {
+   "id": "drawio",
+   "name": "draw.io",
+   "family": "electron",
+   "shard": "e2",
+   "licence": "Apache-2.0",
+   "repo": "jgraph/drawio-desktop",
+   "tag": "v32.6.10",
+   "released": "2026-11-04",
+   "packages": {
+    "windows": {
+     "asset": "draw.io-32.6.10.msi",
+     "size": 149065728,
+     "sha256": "d6781bce32c199b51f246deb2a816d6c5f07319b9c868ecd357b8c6c5e771ed0"
+    },
+    "macos": {
+     "asset": "draw.io-x64-32.6.10.zip",
+     "size": 158950581,
+     "sha256": "8994cd728b5fd6eac5da62fa622e68882eeb51ed5d0bec019de4d4a8672b73d0"
+    },
+    "linux": {
+     "asset": "drawio-amd64-32.6.10.deb",
+     "size": 122104752,
+     "sha256": "fc96faafe68cb4e06c0b7116779891592b20fce2cde7907adec504f23c5af83c"
+    }
+   }
+  },
+  {
+   "id": "marktext",
+   "name": "MarkText",
+   "family": "electron",
+   "shard": "e2",
+   "licence": "MIT",
+   "repo": "marktext/marktext",
+   "tag": "v0.23.0",
+   "released": "2026-10-21",
+   "packages": {
+    "windows": {
+     "asset": "marktext-win-x64-0.23.0-setup.exe",
+     "size": 132435617,
+     "sha256": "49bf66035f92072ce7dd8fa2f88b91f7036d674c05f872355a2d6e366fc53964"
+    },
+    "macos": {
+     "asset": "marktext-mac-x64-0.23.0.zip",
+     "size": 164694542,
+     "sha256": "2ad2fb2f335e4452dd9c4af1d101e3bd7a8411b0a8857c92f5ccebf686c11de5"
+    },
+    "linux": {
+     "asset": "marktext-linux-0.23.0.tar.gz",
+     "size": 156197559,
+     "sha256": "ed377fe3a2c255212667a083a3e5e645633a5fd760ad7554c3f56785541b9214"
+    }
+   }
+  },
+  {
+   "id": "jitsi-meet",
+   "name": "Jitsi Meet",
+   "family": "electron",
+   "shard": "e2",
+   "licence": "Apache-2.0",
+   "repo": "jitsi/jitsi-meet-electron",
+   "tag": "v2026.10.0",
+   "released": "2026-10-21",
+   "packages": {
+    "windows": {
+     "asset": "jitsi-meet.exe",
+     "size": 323096616,
+     "sha256": "30e56ea530efd1eeee44ef9ef9f8db9e3d2890f1543024574de5d56bffe5d9dc"
+    },
+    "macos": {
+     "asset": "jitsi-meet.zip",
+     "size": 219431099,
+     "sha256": "d028522c8a8ed5a86d9fc9e209c1a1320e47f6381ddf2fe4c87c10b0f67ef2b9"
+    },
+    "linux": {
+     "asset": "jitsi-meet-amd64.deb",
+     "size": 102222608,
+     "sha256": "6af39ff99d83cd6d9832283133d77197a14c4df528ab3b33561350725c536357"
+    }
+   }
+  },
+  {
+   "id": "freelens",
+   "name": "Freelens",
+   "family": "electron",
+   "shard": "e2",
+   "licence": "MIT",
+   "repo": "freelensapp/freelens",
+   "tag": "v2.0.0",
+   "released": "2026-10-28",
+   "packages": {
+    "windows": {
+     "asset": "Freelens-2.0.0-windows-amd64.exe",
+     "size": 178243904,
+     "sha256": "b777e99397aeec525f7d8a8e0f29b9550266a385c283338fd18c1003928d95b6"
+    },
+    "macos": {
+     "asset": "Freelens-2.0.0-macos-amd64.pkg",
+     "size": 221814951,
+     "sha256": "235e48507f7c29d6f687907d33cbe3185a54cdb001bba6947c2f59c2f8c25e37"
+    },
+    "linux": {
+     "asset": "Freelens-2.0.0-linux-amd64.deb",
+     "size": 157433516,
+     "sha256": "fb8353131b2d6f0717fe4c397254993a2b8a980ffec2d41628e29240acf97fd5"
+    }
+   }
+  },
+  {
+   "id": "podman-desktop",
+   "name": "Podman Desktop",
+   "family": "electron",
+   "shard": "e2",
+   "licence": "Apache-2.0",
+   "repo": "podman-desktop/podman-desktop",
+   "tag": "v1.30.5",
+   "released": "2026-10-13",
+   "packages": {
+    "windows": {
+     "asset": "podman-desktop-1.30.5-x64.exe",
+     "size": 162555496,
+     "sha256": "d1e877d5e004bda0c0a7a2f18ea5f7fed7a536efe34a998c4cccb345330f7e2e"
+    },
+    "macos": {
+     "asset": "podman-desktop-1.30.5-x64.zip",
+     "size": 248445352,
+     "sha256": "cf9f3de044ce6384de9b13a7da1b1589821415694a70803b8af8ace8297d9118"
+    },
+    "linux": {
+     "asset": "podman-desktop-1.30.5-x64.tar.gz",
+     "size": 159249818,
+     "sha256": "aa616a948a8b254132e903b751a95765eeae3454cbd5b7049146b5bdeb842d3d"
+    }
+   }
+  },
+  {
+   "id": "affine",
+   "name": "AFFiNE",
+   "family": "electron",
+   "shard": "e3",
+   "licence": "MIT and others (see repository)",
+   "repo": "toeverything/AFFiNE",
+   "tag": "v0.27.4",
+   "released": "2026-08-18",
+   "packages": {
+    "windows": {
+     "asset": "affine-0.27.4-stable-windows-x64.nsis.exe",
+     "size": 170626392,
+     "sha256": "80b6168bcdd3776b00b311386f60525e0d9ee90aef0e212b779087f3c8299f3c"
+    },
+    "macos": {
+     "asset": "affine-0.27.4-stable-macos-x64.zip",
+     "size": 206202603,
+     "sha256": "0db7851f16082a35db4b990fa6fff04717d745b81c2a202eb1d30d596099c63b"
+    },
+    "linux": {
+     "asset": "affine-0.27.4-stable-linux-x64.zip",
+     "size": 202703607,
+     "sha256": "d8460d678d31e3b47d52aaa0a5bc3266e31f616d778e43b1f62a45a1a1c5fb73"
+    }
+   }
+  },
+  {
+   "id": "heroic",
+   "name": "Heroic Games Launcher",
+   "family": "electron",
+   "shard": "e3",
+   "licence": "GPL-3.0",
+   "repo": "Heroic-Games-Launcher/HeroicGamesLauncher",
+   "tag": "v2.22.4",
+   "released": "2026-10-15",
+   "packages": {
+    "windows": {
+     "asset": "Heroic-2.22.4-Portable-x64.exe",
+     "size": 154612736,
+     "sha256": "8ee32f595545bd12b02aa1f84da75c0cc87208d93a47a0887a7eeb1165076bca"
+    },
+    "macos": {
+     "asset": "Heroic-2.22.4-macOS-x64.zip",
+     "size": 170969504,
+     "sha256": "0419253a48901ea858cb1b85c1f83653eefba4255bd5d31537d8952740b23d0e"
+    },
+    "linux": {
+     "asset": "Heroic-2.22.4-linux-x64.tar.xz",
+     "size": 113294664,
+     "sha256": "81497c4e67d42905da5839a32be053c011eae35fb1fd5ec9441249b238d8f99b"
+    }
+   }
+  },
+  {
+   "id": "min",
+   "name": "Min",
+   "family": "electron",
+   "shard": "e3",
+   "licence": "Apache-2.0",
+   "repo": "minbrowser/min",
+   "tag": "v1.35.7",
+   "released": "2026-08-23",
+   "packages": {
+    "windows": {
+     "asset": "Min-v1.35.7-windows.zip",
+     "size": 162454550,
+     "sha256": "6659766134e4d45bd75ac385390b02cea8284a58b37a9f60af2e193a9e04b3d5"
+    },
+    "macos": {
+     "asset": "min-v1.35.7-mac-x86.zip",
+     "size": 133305152,
+     "sha256": "0e13a1335a251949bc99482a435d715522a7653c0df472c40e971c1aeaed721c"
+    },
+    "linux": {
+     "asset": "min-1.35.7-amd64.deb",
+     "size": 93095934,
+     "sha256": "11741cb9606b68dc5f8371c335571e72726acefd5e8c327638e80e9f14ab737f"
+    }
+   }
+  },
+  {
+   "id": "lossless-cut",
+   "name": "LosslessCut",
+   "family": "electron",
+   "shard": "e3",
+   "licence": "GPL-2.0",
+   "repo": "mifi/lossless-cut",
+   "tag": "v3.70.2",
+   "released": "2026-10-28",
+   "packages": {
+    "windows": {
+     "asset": "LosslessCut-win-x64.7z",
+     "size": 151717535,
+     "sha256": "1740c5f17b952c04cf1b1612cf32f56c68a88105c045199526c7ea9678d309b0"
+    },
+    "macos": {
+     "asset": "LosslessCut-mac-x64.dmg",
+     "size": 177945549,
+     "sha256": "5504f5b1ed485d694929f64db9c41516cfe866f5dc5f8bb2afaad7d9a99d975c"
+    },
+    "linux": {
+     "asset": "LosslessCut-linux-x64.tar.bz2",
+     "size": 209203853,
+     "sha256": "6a5d36f92197a9c2af5cb9ff02d6bb5256ebec935950733f31a8ad02b47a2286"
+    }
+   }
+  },
+  {
+   "id": "hyper",
+   "name": "Hyper",
+   "family": "electron",
+   "shard": "e3",
+   "licence": "MIT",
+   "repo": "vercel/hyper",
+   "tag": "v3.4.1",
+   "released": "2023-01-08",
+   "note": "archived project, last release January 2023: an old Electron",
+   "packages": {
+    "windows": {
+     "asset": "Hyper-Setup-3.4.1.exe",
+     "size": 73828760
+    },
+    "macos": {
+     "asset": "Hyper-3.4.1-mac-x64.zip",
+     "size": 92284587
+    },
+    "linux": {
+     "asset": "Hyper-3.4.1.AppImage",
+     "size": 97878022
+    }
+   }
+  },
+  {
+   "id": "tabby",
+   "name": "Tabby",
+   "family": "electron",
+   "shard": "e3",
+   "licence": "MIT",
+   "repo": "Eugeny/tabby",
+   "tag": "v1.0.238",
+   "released": "2026-10-07",
+   "packages": {
+    "windows": {
+     "asset": "tabby-1.0.238-portable-x64.zip",
+     "size": 185884613,
+     "sha256": "56de045fbb5a74d586903367d3f7227276d538281b0068d8132de3318cdd5019"
+    },
+    "macos": {
+     "asset": "tabby-1.0.238-macos-x86_64.zip",
+     "size": 163103385,
+     "sha256": "93935cc99fed5ff76a4cceaef15fdd15802aa7f49e9227f9c883df6eeebee9b4"
+    },
+    "linux": {
+     "asset": "tabby-1.0.238-linux-x64.tar.gz",
+     "size": 159098403,
+     "sha256": "36436de2c2f8651ebed4a222e759583d6fedf3f62904b13d7c9599a084859309"
+    }
+   }
+  },
+  {
+   "id": "bruno",
+   "name": "Bruno",
+   "family": "electron",
+   "shard": "e4",
+   "licence": "MIT",
+   "repo": "usebruno/bruno",
+   "tag": "v4.3.0",
+   "released": "2026-10-22",
+   "packages": {
+    "windows": {
+     "asset": "bruno_4.3.0_x64_win.zip",
+     "size": 185171111,
+     "sha256": "d00a649e0120168f26b630aa3253c36f2fdc9a84b1a13ff6fd96abc48f7be3f0"
+    },
+    "macos": {
+     "asset": "bruno_4.3.0_x64_mac.zip",
+     "size": 166584685,
+     "sha256": "d3c1f4a7ad358a7b7256a5bb59982a9596fda1c3517961ca74609aed7b29409d"
+    },
+    "linux": {
+     "asset": "bruno_4.3.0_amd64_linux.deb",
+     "size": 105317598,
+     "sha256": "45117e3cc3c221801d10c8984c8e796f11bdf16d28e3a51b35e976603d3c3a02"
+    }
+   }
+  },
+  {
+   "id": "mqttx",
+   "name": "MQTTX",
+   "family": "electron",
+   "shard": "e4",
+   "licence": "Apache-2.0",
+   "repo": "emqx/MQTTX",
+   "tag": "v1.13.3",
+   "released": "2026-11-04",
+   "packages": {
+    "windows": {
+     "asset": "MQTTX-1.13.3-x64-win.zip",
+     "size": 149545001,
+     "sha256": "f242df2240b933cf1eb1542343c2547f459f5714f7040be47744d8a403814c56"
+    },
+    "macos": {
+     "asset": "MQTTX-1.13.3-mac.zip",
+     "size": 137789185,
+     "sha256": "41e8a6d7652bb6a34e962aa4daa701c811579a802df7c5d94a353f7a380e02e2"
+    },
+    "linux": {
+     "asset": "MQTTX_1.13.3_amd64.deb",
+     "size": 90758926,
+     "sha256": "8ae30177345219b5c661defc1f4e2f225453e554d2f89e7c03de47cd40c495f0"
+    }
+   }
+  },
+  {
+   "id": "zulip",
+   "name": "Zulip",
+   "family": "electron",
+   "shard": "e4",
+   "licence": "Apache-2.0",
+   "repo": "zulip/zulip-desktop",
+   "tag": "v5.14.2",
+   "released": "2026-10-31",
+   "packages": {
+    "windows": {
+     "asset": "zulip-5.14.2-x64.nsis.7z",
+     "size": 122985858,
+     "sha256": "dac946cc395a171e3ef76485c986feac0e1c7dcfa715422ff4139c8586db83d3"
+    },
+    "macos": {
+     "asset": "Zulip-5.14.2-x64.zip",
+     "size": 125838128,
+     "sha256": "486cadfd38a5c94dafc1d3bf97a416b697bb427a58605d9bf5615e210196a513"
+    },
+    "linux": {
+     "asset": "Zulip-5.14.2-x64.tar.xz",
+     "size": 90769244,
+     "sha256": "0dfb27132b37c98601b8fe995968502f1d39d4a005d7bf5ad0d84dfd73aa313a"
+    }
+   }
+  },
+  {
+   "id": "trilium",
+   "name": "Trilium Notes",
+   "family": "electron",
+   "shard": "e4",
+   "licence": "AGPL-3.0",
+   "repo": "TriliumNext/Trilium",
+   "tag": "v0.107.0",
+   "released": "2026-11-08",
+   "packages": {
+    "windows": {
+     "asset": "TriliumNotes-v0.107.0-windows-x64.zip",
+     "size": 225672170,
+     "sha256": "f79d9e063a68c783206132e7845d9b2801c9e1da7c9fba78ea9cdcf57477613c"
+    },
+    "macos": {
+     "asset": "TriliumNotes-v0.107.0-macos-x64.zip",
+     "size": 203401307,
+     "sha256": "2fd712c935c94962d20c2d36519114440badcfbd64491e8d9ed9af66ce842c90"
+    },
+    "linux": {
+     "asset": "TriliumNotes-v0.107.0-linux-x64.zip",
+     "size": 199889973,
+     "sha256": "a6fe96aae44e032f182452c2ef39a6fd56462153bf151bd0bba7b3be069379ba"
+    }
+   }
+  },
+  {
+   "id": "mattermost",
+   "name": "Mattermost",
+   "family": "electron",
+   "shard": "e4",
+   "licence": "Apache-2.0",
+   "repo": "mattermost/desktop",
+   "tag": "v6.3.2",
+   "released": "2026-11-02",
+   "packages": {
+    "windows": {
+     "asset": "mattermost-desktop-6.3.2-win-x64.zip",
+     "size": 152618348,
+     "sha256": "71742332c490901b772f67be16ce9dfc713d9ee3dde697aaa4fc9dc774080673"
+    },
+    "macos": {
+     "asset": "mattermost-desktop-6.3.2-mac-x64.zip",
+     "size": 129934708,
+     "sha256": "c256f69c8d57c1e527bee27205015f0fcc22da2590d11e55afd8d73bce55c5e6"
+    },
+    "linux": {
+     "asset": "mattermost-desktop-6.3.2-linux-x64.tar.gz",
+     "size": 129185261,
+     "sha256": "058daf5abbceb4f92d30ca2bab91f19c6340681603c794f2b3fef96792482c0d"
+    }
+   }
+  },
+  {
+   "id": "standardnotes",
+   "name": "Standard Notes",
+   "family": "electron",
+   "shard": "e4",
+   "licence": "AGPL-3.0",
+   "repo": "standardnotes/app",
+   "tag": "@standardnotes/desktop@3.202.11",
+   "released": "2026-10-23",
+   "packages": {
+    "windows": {
+     "asset": "standard-notes-3.202.11-win-x64.exe",
+     "size": 123772360,
+     "sha256": "63167dadf3f370a1b2055303e8f7754eefac6a10a07c9896ad7b8f5c36d6af6d"
+    },
+    "macos": {
+     "asset": "standard-notes-3.202.11-mac-x64.zip",
+     "size": 166374733,
+     "sha256": "6eadbf68056ceed370ddac11c68a6ef18ca46721f02813a36209c1292d9958bd"
+    },
+    "linux": {
+     "asset": "standard-notes-3.202.11-linux-amd64.deb",
+     "size": 106681190,
+     "sha256": "816ac267ebbd421ed6c012ed51669f4c1ea5c3b46535f93ec816b8f8630fd46f"
+    }
+   }
+  },
+  {
+   "id": "github-desktop",
+   "name": "GitHub Desktop",
+   "family": "electron-no-linux",
+   "shard": "e4",
+   "licence": "MIT",
+   "repo": "desktop/desktop",
+   "tag": "release-3.6.10",
+   "released": "2026-10-30",
+   "note": "no official Linux build: the publisher ships Windows and macOS only. No ground truth; a community fork exists but is another version",
+   "packages": {
+    "windows": {
+     "asset": "GitHubDesktopSetup-x64.exe",
+     "size": 269355808,
+     "sha256": "36cae76228a32cfabcf2bf3e17e6bb3f4e294b70692ca88a163595e6603dd835"
+    }
+   }
+  },
+  {
+   "id": "betaflight",
+   "name": "Betaflight Configurator 10.10",
+   "family": "nwjs",
+   "shard": "n1",
+   "licence": "GPL-3.0",
+   "repo": "betaflight/betaflight-configurator",
+   "tag": "10.10.0",
+   "released": "2024-04-28",
+   "packages": {
+    "windows": {
+     "asset": "betaflight-configurator_10.10.0_win64-portable.zip",
+     "size": 139532745
+    },
+    "macos": {
+     "asset": "betaflight-configurator_10.10.0_macOS.dmg",
+     "size": 137783954
+    },
+    "linux": {
+     "asset": "betaflight-configurator_10.10.0_linux64-portable.zip",
+     "size": 157013665
+    }
+   }
+  },
+  {
+   "id": "inav",
+   "name": "INAV Configurator 7.1",
+   "family": "nwjs",
+   "shard": "n1",
+   "licence": "GPL-3.0",
+   "repo": "iNavFlight/inav-configurator",
+   "tag": "7.1.2",
+   "released": "2024-09-19",
+   "packages": {
+    "windows": {
+     "asset": "INAV-Configurator_win64_7.1.2.zip",
+     "size": 141636876
+    },
+    "macos": {
+     "asset": "INAV-Configurator_macOS_7.1.2.zip",
+     "size": 143220000
+    },
+    "linux": {
+     "asset": "INAV-Configurator_linux64_7.1.2.tar.gz",
+     "size": 156395077
+    }
+   }
+  },
+  {
+   "id": "emuflight",
+   "name": "EmuConfigurator",
+   "family": "nwjs",
+   "shard": "n1",
+   "licence": "GPL-3.0",
+   "repo": "emuflight/EmuConfigurator",
+   "tag": "0.4.3",
+   "released": "2024-07-12",
+   "packages": {
+    "windows": {
+     "asset": "emuflight-configurator_0.4.3_win64.zip",
+     "size": 100885360
+    },
+    "macos": {
+     "asset": "emuflight-configurator_0.4.3_macOS.dmg",
+     "size": 144648114
+    },
+    "linux": {
+     "asset": "emuflight-configurator_0.4.3_linux64.zip",
+     "size": 124066892
+    }
+   }
+  },
+  {
+   "id": "asf",
+   "name": "ArchiSteamFarm",
+   "family": "dotnet",
+   "shard": "n1",
+   "licence": "Apache-2.0",
+   "repo": "JustArchiNET/ArchiSteamFarm",
+   "tag": "6.3.11.7",
+   "released": "2026-10-25",
+   "kind": "cli",
+   "function": {
+    "stdout": "ArchiSteamFarm|ASF V"
+   },
+   "packages": {
+    "windows": {
+     "asset": "ASF-win-x64.zip",
+     "size": 20510469,
+     "sha256": "f90a63359f9c2d3984828a22bb5fc0b9ba14776c4a16a2601513ba18c5369e7c"
+    },
+    "macos": {
+     "asset": "ASF-osx-x64.zip",
+     "size": 21638804,
+     "sha256": "d59655b6c7801316e7fe95641344f5a91d54b2c7a25c2dcddcf9e6f4070122ab"
+    },
+    "linux": {
+     "asset": "ASF-linux-x64.zip",
+     "size": 20461839,
+     "sha256": "9f1b3a50a1dc836ee9e7979c058fa33f10f3243b57f0a9236751de549a89f3a4"
+    }
+   }
+  },
+  {
+   "id": "sonarr",
+   "name": "Sonarr",
+   "family": "dotnet",
+   "shard": "n1",
+   "licence": "GPL-3.0",
+   "repo": "Sonarr/Sonarr",
+   "tag": "v4.0.20.3014",
+   "released": "2026-09-16",
+   "kind": "cli",
+   "function": {
+    "http": "http://127.0.0.1:8989/"
+   },
+   "packages": {
+    "windows": {
+     "asset": "Sonarr.main.4.0.20.3014.win-x64.zip",
+     "size": 137125149,
+     "sha256": "40ffa15710d791e71ab787e152610602e4e0d9ce4c2316e3b618c3c3d265d2af"
+    },
+    "macos": {
+     "asset": "Sonarr.main.4.0.20.3014.osx-x64.tar.gz",
+     "size": 101623111,
+     "sha256": "4587d134684d1ea58503a9158ed0c8731c7778075d3600c75a90064b43e37327"
+    },
+    "linux": {
+     "asset": "Sonarr.main.4.0.20.3014.linux-x64.tar.gz",
+     "size": 102149705,
+     "sha256": "1fc48544b5a3401b2fc3df8d0642c1e6a73a28e41a351169edd9cd8f54770db5"
+    }
+   }
+  },
+  {
+   "id": "wasabi",
+   "name": "Wasabi Wallet",
+   "family": "dotnet",
+   "shard": "n1",
+   "licence": "MIT",
+   "repo": "WalletWasabi/WalletWasabi",
+   "tag": "v2.8.5",
+   "released": "2026-10-27",
+   "packages": {
+    "windows": {
+     "asset": "Wasabi-2.8.5-win-x64.zip",
+     "size": 96204632,
+     "sha256": "6bfd0aa3990392e76dbfaf934a6dd5924ebadba960c4c68cb1a017031571d5cb"
+    },
+    "macos": {
+     "asset": "Wasabi-2.8.5-macOS-x64.zip",
+     "size": 82267613,
+     "sha256": "1aef909f3378c81c2b1786bf44246bace7eecbfbc2dffb5173b6597026e6fdec"
+    },
+    "linux": {
+     "asset": "Wasabi-2.8.5-linux-x64.tar.gz",
+     "size": 97736904,
+     "sha256": "4bf814f0a8dcffdd346fa2820644cb871454b948287c57534605b420e55217db"
+    }
+   }
+  },
+  {
+   "id": "sourcegit",
+   "name": "SourceGit",
+   "family": "dotnet",
+   "shard": "n1",
+   "licence": "MIT",
+   "repo": "sourcegit-scm/sourcegit",
+   "tag": "v2026.24",
+   "released": "2026-11-09",
+   "packages": {
+    "windows": {
+     "asset": "sourcegit_2026.24.win-x64.zip",
+     "size": 27811461,
+     "sha256": "c18e890fb6b946db991bf6b583d3b65416f40dd14890f6f0228acebf6ff4a40b"
+    },
+    "macos": {
+     "asset": "sourcegit_2026.24.osx-x64.zip",
+     "size": 29422652,
+     "sha256": "0711bd3dc55ca04aedbfb789d44321af9ffb56e90d034c891280b40a05617f14"
+    },
+    "linux": {
+     "asset": "sourcegit_2026.24-1_amd64.deb",
+     "size": 26212088,
+     "sha256": "9b4025a09872b5778e3056c8d6855154642871fd6873e90efc81a41069357b66"
+    }
+   }
+  },
+  {
+   "id": "ss14-launcher",
+   "name": "Space Station 14 Launcher",
+   "family": "dotnet",
+   "shard": "n1",
+   "licence": "MIT",
+   "repo": "space-wizards/SS14.Launcher",
+   "tag": "v0.40.4",
+   "released": "2026-10-28",
+   "packages": {
+    "windows": {
+     "asset": "SS14.Launcher_Windows.zip",
+     "size": 57733923,
+     "sha256": "b446393d24c25a421bac1d2a4e56c2d6a5ade9d4a3bec1571e0b6077bf727fdf"
+    },
+    "macos": {
+     "asset": "SS14.Launcher_macOS.zip",
+     "size": 106288004,
+     "sha256": "137796d8e3dd4be0f500f486e27b3e7a6ec7ea2d37f558551ef0af8a63657db8"
+    },
+    "linux": {
+     "asset": "SS14.Launcher_Linux.zip",
+     "size": 99294836,
+     "sha256": "59374138ded79f9ca57e2ec7d6d7b099ff52108c2f3f98eb1d786015e7e5a603"
+    }
+   }
+  },
+  {
+   "id": "knossos",
+   "name": "Knossos.NET",
+   "family": "dotnet",
+   "shard": "n1",
+   "licence": "GPL-3.0",
+   "repo": "KnossosNET/Knossos.NET",
+   "tag": "v1.3.14",
+   "released": "2026-11-08",
+   "packages": {
+    "windows": {
+     "asset": "Windows_x64.zip",
+     "size": 46018135,
+     "sha256": "ba1605eca9e232b49b03feedcd9acf5c095fbbe5874d70c79e56a7b4a8114270"
+    },
+    "macos": {
+     "asset": "MacOS_x64.tar.gz",
+     "size": 50232592,
+     "sha256": "3921d1624eddeafcc02b5f8969cf841d5a0a7b92e95ed4b13188f4bb61d59f95"
+    },
+    "linux": {
+     "asset": "Linux_x64.tar.gz",
+     "size": 45380711,
+     "sha256": "d631e033d2eec6f1e60673893508c5f3e7c293528addee4b660e505d10211bd2"
+    }
+   }
+  },
+  {
+   "id": "ilspy",
+   "name": "ILSpy",
+   "family": "dotnet",
+   "shard": "n1",
+   "licence": "MIT",
+   "repo": "icsharpcode/ILSpy",
+   "tag": "v11.2",
+   "released": "2026-10-27",
+   "detect_only": true,
+   "note": "negative control: a WPF program must be sent to Wine, not re-hosted",
+   "packages": {
+    "windows": {
+     "asset": "ILSpy_windows_11.2.0.10050-x64.zip",
+     "size": 20261396,
+     "sha256": "828cf2796e35ffb2f3b56e9736a4c8a711520dde3f781a7bf47cb460c17db980"
+    }
+   }
+  },
+  {
+   "id": "atlauncher",
+   "name": "ATLauncher",
+   "family": "jvm",
+   "shard": "g1",
+   "licence": "GPL-3.0",
+   "repo": "ATLauncher/ATLauncher",
+   "tag": "v3.4.41.3",
+   "released": "2026-09-19",
+   "packages": {
+    "windows": {
+     "asset": "ATLauncher-3.4.41.3.exe",
+     "size": 28843867,
+     "sha256": "9e38e3d1a863e36bdbf0fc3a2617b9f35cba72221ad1757e34efc1ba4a3b0d7b"
+    },
+    "linux": {
+     "asset": "ATLauncher-3.4.41.3.jar",
+     "size": 28406619,
+     "sha256": "ee10e457e04c2dff95e78a3445de31b623259c24a277f50acfbf7ca0636ebaec"
+    }
+   }
+  },
+  {
+   "id": "unciv",
+   "name": "Unciv",
+   "family": "jvm",
+   "shard": "g1",
+   "licence": "MPL-2.0",
+   "repo": "yairm210/Unciv",
+   "tag": "5.0.0",
+   "released": "2026-11-12",
+   "packages": {
+    "windows": {
+     "asset": "Unciv-Windows64.zip",
+     "size": 105075856,
+     "sha256": "9f6219991ac3b3e7d0f383bc6dc043a1f934c582760913ff7b260a684286402e"
+    },
+    "linux": {
+     "asset": "Unciv-Linux64.zip",
+     "size": 108959265,
+     "sha256": "b7cfd1ce372395bcc450a0c0067ede1e795b052a9bb86e79e3d9ffb36b4dc9ef"
+    }
+   }
+  },
+  {
+   "id": "ipscan",
+   "name": "Angry IP Scanner",
+   "family": "jvm",
+   "shard": "g1",
+   "licence": "GPL-2.0",
+   "repo": "angryip/ipscan",
+   "tag": "3.12.1",
+   "released": "2026-11-02",
+   "packages": {
+    "windows": {
+     "asset": "ipscan-3.12.1-win.exe",
+     "size": 3103003,
+     "sha256": "fa5c9d4a92a332c79abcd87c6d371bad0f1bbab457b552600d1ab2613cbd4f90"
+    },
+    "macos": {
+     "asset": "ipscan-3.12.1-macX86.zip",
+     "size": 29972149,
+     "sha256": "e5d70bbf6fe935cacf99e1c2693363de65cece491852cd393714fa6b89daf282"
+    },
+    "linux": {
+     "asset": "ipscan-3.12.1-linux64.jar",
+     "size": 2235269,
+     "sha256": "471aea3144f2c025fde34fb062f8766a0309f0c2f2c1e5610d26f634664d9253"
+    }
+   }
+  },
+  {
+   "id": "logisim",
+   "name": "Logisim-evolution",
+   "family": "jvm",
+   "shard": "g1",
+   "licence": "GPL-3.0",
+   "repo": "logisim-evolution/logisim-evolution",
+   "tag": "v5.0.0",
+   "released": "2026-09-12",
+   "packages": {
+    "windows": {
+     "asset": "logisim-evolution-5.0.0-windows-amd64.zip",
+     "size": 77440974,
+     "sha256": "59f11c42d4ae45c8656ab280403cf215a4a8d391f22468dc9a57deccb7e83427"
+    },
+    "macos": {
+     "asset": "logisim-evolution-5.0.0-x86_64.dmg",
+     "size": 84170401,
+     "sha256": "135fb814636850c1230b35603f703c031e140adfd47962c7e79a7dd2999876d3"
+    },
+    "linux": {
+     "asset": "logisim-evolution-5.0.0-all.jar",
+     "size": 54448596,
+     "sha256": "6b368e894742c04cc83aa9830f869bcab0190ede4df43ad6fecdb89b3a23a41c"
+    }
+   }
+  },
+  {
+   "id": "pdfsam",
+   "name": "PDFsam Basic",
+   "family": "jvm",
+   "shard": "g1",
+   "licence": "AGPL-3.0",
+   "repo": "torakiki/pdfsam",
+   "tag": "v6.0.10",
+   "released": "2026-11-04",
+   "packages": {
+    "windows": {
+     "asset": "pdfsam-basic-6.0.10-windows-x64.zip",
+     "size": 95207986,
+     "sha256": "2dc9410edf53fa1109c244c03a8533dcc2fc527a434240c017451722a4bbc148"
+    },
+    "macos": {
+     "asset": "pdfsam-basic-6.0.10-macos-x64.zip",
+     "size": 95972537,
+     "sha256": "80a52a352b69ef99cce6079f694b191cd0eaa82b73f71d23a211eee04d07cc8f"
+    },
+    "linux": {
+     "asset": "pdfsam-basic-6.0.10-linux-x64.tar.gz",
+     "size": 99523476,
+     "sha256": "49b0b6460503a2c4d4f42fe20f15ee25e0a80e1782bd8184b4d5394472160240"
+    }
+   }
+  },
+  {
+   "id": "shatteredpd",
+   "name": "Shattered Pixel Dungeon",
+   "family": "jvm",
+   "shard": "g1",
+   "licence": "GPL-3.0",
+   "repo": "00-Evan/shattered-pixel-dungeon",
+   "tag": "v4.0.2",
+   "released": "2026-10-07",
+   "packages": {
+    "windows": {
+     "asset": "ShatteredPD-v4.0.2-Windows.zip",
+     "size": 108216769,
+     "sha256": "c2bff844ae2dc1e470985cd453555e7d4be9b05b67d4013c075a55923d75f3c3"
+    },
+    "macos": {
+     "asset": "ShatteredPD-v4.0.2-macOS.zip",
+     "size": 109323622,
+     "sha256": "c9da5cc10aa192eb08e60dde722a9b00adccdf31a43f34c2f83d10748224e4b9"
+    },
+    "linux": {
+     "asset": "ShatteredPD-v4.0.2-Linux.zip",
+     "size": 111990393,
+     "sha256": "09d68d09fa0447c45202b0ed296ceacb30e2115959aad087a2d18cc7ae46273a"
+    }
+   }
+  },
+  {
+   "id": "freeplane",
+   "name": "Freeplane",
+   "family": "jvm",
+   "shard": "g1",
+   "licence": "GPL-2.0",
+   "repo": "freeplane/freeplane",
+   "tag": "release-1.13.5",
+   "released": "2026-11-11",
+   "detect_only": true,
+   "note": "detector only: an Inno Setup installer around a Java program",
+   "packages": {
+    "windows": {
+     "asset": "Freeplane-Setup-1.13.5.exe",
+     "size": 110590336,
+     "sha256": "4261a47714ae3fcff1cf6ce33f4b186a10bc66baed605b60d167c598a0290816"
+    }
+   }
+  },
+  {
+   "id": "pixelorama",
+   "name": "Pixelorama",
+   "family": "godot",
+   "shard": "g1",
+   "licence": "MIT",
+   "repo": "Orama-Interactive/Pixelorama",
+   "tag": "v1.2.4",
+   "released": "2026-11-03",
+   "packages": {
+    "windows": {
+     "asset": "Pixelorama-Windows-64bit.zip",
+     "size": 41983957,
+     "sha256": "8ce63c264338b88fd36527f8edb3b7f6bba614d92451efc406ef7ce45b41da85"
+    },
+    "macos": {
+     "asset": "Pixelorama-Mac.dmg",
+     "size": 72186942,
+     "sha256": "aef909572cb008174e758fbc36998823363e44d9eaffa974b156d4284c549ce7"
+    },
+    "linux": {
+     "asset": "Pixelorama-Linux-64bit.tar.gz",
+     "size": 32360991,
+     "sha256": "692473e44fe90ea02de49048343d6b3cb86749b7beb166286dbc3a308c568e0b"
+    }
+   }
+  },
+  {
+   "id": "material-maker",
+   "name": "Material Maker",
+   "family": "godot",
+   "shard": "g1",
+   "licence": "MIT",
+   "repo": "RodZill4/material-maker",
+   "tag": "1.8",
+   "released": "2026-10-25",
+   "packages": {
+    "windows": {
+     "asset": "material_maker_1_8_windows.zip",
+     "size": 109622143,
+     "sha256": "4dc604a09b8f2143f429aaba42e0829a83137c4e8b0d91b79d610c542c5ee9ff"
+    },
+    "macos": {
+     "asset": "material_maker_1_8.dmg",
+     "size": 137711855,
+     "sha256": "2549aa9c18b71550355b752e03a1afd5a199dc7f56eafb371c06b721182ef3d8"
+    },
+    "linux": {
+     "asset": "material_maker_1_8_linux.tar.gz",
+     "size": 98932563,
+     "sha256": "8e8eb7050e75086cfafeb4ddc0b09c4fe117f529693e611d6fccca1651e913b3"
+    }
+   }
+  },
+  {
+   "id": "lorien",
+   "name": "Lorien",
+   "family": "godot",
+   "shard": "g1",
+   "licence": "MIT",
+   "repo": "mbrlabs/Lorien",
+   "tag": "v0.6.0",
+   "released": "2023-11-06",
+   "packages": {
+    "windows": {
+     "asset": "Lorien_v0.6.0_Windows.zip",
+     "size": 38554411
+    },
+    "macos": {
+     "asset": "Lorien_v0.6.0_Mac.dmg",
+     "size": 56410643
+    },
+    "linux": {
+     "asset": "Lorien_v0.6.0_Linux.tar.xz",
+     "size": 30753392
+    }
+   }
+  },
+  {
+   "id": "rota",
+   "name": "ROTA",
+   "family": "godot",
+   "shard": "g1",
+   "licence": "MIT",
+   "repo": "HarmonyHoney/ROTA",
+   "tag": "2026.03.12",
+   "released": "2026-03-12",
+   "packages": {
+    "windows": {
+     "asset": "ROTA.exe",
+     "size": 33936384,
+     "sha256": "f787ee9522997960597b5c3f29459adf46f046e417e2ef2836802a1403ddb9f5",
+     "with": [
+      {
+       "asset": "ROTA.pck",
+       "size": 49941136,
+       "sha256": "0b70f687fcf0f762a1fdba97fdbd73b67d2999b69f47bff53ac77bf34740d20b"
+      }
+     ]
+    },
+    "macos": {
+     "asset": "ROTA-Mac.zip",
+     "size": 66275708,
+     "sha256": "f34d11a31777ed57c377d1c4ed21ed2cd2368d12b6ba82f740c79090a719e10d"
+    },
+    "linux": {
+     "asset": "ROTA.x86_64",
+     "size": 34476552,
+     "sha256": "178d0c020b6e0daf7cdc7512d3ae8917b85ebce9312415bdc58e6ab794dca901",
+     "with": [
+      {
+       "asset": "ROTA.pck",
+       "size": 49941136,
+       "sha256": "0b70f687fcf0f762a1fdba97fdbd73b67d2999b69f47bff53ac77bf34740d20b"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "boscaceoil",
+   "name": "Bosca Ceoil Blue",
+   "family": "godot",
+   "shard": "g1",
+   "licence": "MIT",
+   "repo": "YuriSizov/boscaceoil-blue",
+   "tag": "3.1.2-stable",
+   "released": "2025-03-12",
+   "packages": {
+    "windows": {
+     "asset": "boscaceoil-blue-windows-x86_64.zip",
+     "size": 31414399
+    },
+    "macos": {
+     "asset": "boscaceoil-blue-macos-universal.zip",
+     "size": 52967218
+    },
+    "linux": {
+     "asset": "boscaceoil-blue-linux-x86_64.zip",
+     "size": 25579418
+    }
+   }
+  },
+  {
+   "id": "hawkthorne",
+   "name": "Journey to the Center of Hawkthorne",
+   "family": "love",
+   "shard": "g1",
+   "licence": "MIT code; see repository for assets",
+   "repo": "hawkthorne/hawkthorne-journey",
+   "tag": "v1.1.0",
+   "released": "2024-11-22",
+   "packages": {
+    "windows": {
+     "asset": "hawkthorne-win64.zip",
+     "size": 73357646
+    },
+    "macos": {
+     "asset": "hawkthorne-macos.zip",
+     "size": 79263673
+    },
+    "linux": {
+     "asset": "hawkthorne-linux.AppImage",
+     "size": 74032320
+    }
+   }
+  },
+  {
+   "id": "liko12",
+   "name": "LIKO-12",
+   "family": "love",
+   "shard": "g1",
+   "licence": "MIT",
+   "repo": "LIKO-12/LIKO-12",
+   "tag": "1.1.0",
+   "released": "2019-11-13",
+   "packages": {
+    "windows": {
+     "asset": "LIKO-12_V1.1.0_Windows_x86_64.zip",
+     "size": 7114922
+    },
+    "macos": {
+     "asset": "LIKO-12_V1.1.0_macOS.zip",
+     "size": 6913200
+    },
+    "linux": {
+     "asset": "LIKO-12_V1.1.0_Linux_x86_64.AppImage",
+     "size": 5459944
+    }
+   }
+  },
+  {
+   "id": "ytdlp",
+   "name": "yt-dlp",
+   "family": "pyinstaller",
+   "shard": "g1",
+   "licence": "Unlicense",
+   "repo": "yt-dlp/yt-dlp",
+   "tag": "2026.10.26",
+   "released": "2026-10-26",
+   "kind": "cli",
+   "function": {
+    "args": [
+     "--version"
+    ],
+    "stdout": "^20\\d\\d\\.\\d\\d\\.\\d\\d"
+   },
+   "packages": {
+    "windows": {
+     "asset": "yt-dlp.exe",
+     "size": 23575744,
+     "sha256": "f5389d3698ecde4ef06f4e6b1ce0294fe9ac1396228c8990b8d3416d6d177a7d"
+    },
+    "macos": {
+     "asset": "yt-dlp_macos",
+     "size": 37466304,
+     "sha256": "0f922c15ccc0b83eefa1c8bc9104e434318c4bf16e408e1ee93b7745a6efe0aa"
+    },
+    "linux": {
+     "asset": "yt-dlp_linux",
+     "size": 41166968,
+     "sha256": "767ba9dce7052aa196f8b12652f433d76de128ba168966fa84b6394d5e6c6795"
+    }
+   }
+  },
+  {
+   "id": "black",
+   "name": "Black",
+   "family": "pyinstaller",
+   "shard": "g1",
+   "licence": "MIT",
+   "repo": "psf/black",
+   "tag": "26.10.1",
+   "released": "2026-10-10",
+   "kind": "cli",
+   "function": {
+    "args": [
+     "--version"
+    ],
+    "stdout": "black.*26\\.10"
+   },
+   "packages": {
+    "windows": {
+     "asset": "black_windows.exe",
+     "size": 14008196,
+     "sha256": "9901f869bcfe0df3304ee7a42913dc3a8f6d85ad4feff6f6c30c26bfd7063dd4"
+    },
+    "macos": {
+     "asset": "black_macos",
+     "size": 13410176,
+     "sha256": "1336c90c027f854e9806ca8476c4f4ce84d3a3eb4bc5495797f0446ee253d2c2"
+    },
+    "linux": {
+     "asset": "black_linux",
+     "size": 12514464,
+     "sha256": "94324773c2d112e7a4d62052ac9d7ed811ff1c826599f6d394e7b65d16ab1278"
+    }
+   }
+  },
+  {
+   "id": "spotdl",
+   "name": "spotDL",
+   "family": "pyinstaller",
+   "shard": "g1",
+   "licence": "MIT",
+   "repo": "spotDL/spotify-downloader",
+   "tag": "v4.6.0",
+   "released": "2026-10-26",
+   "kind": "cli",
+   "function": {
+    "args": [
+     "--version"
+    ],
+    "stdout": "4\\.6\\.0"
+   },
+   "packages": {
+    "windows": {
+     "asset": "spotdl-4.6.0-win32.exe",
+     "size": 46939120,
+     "sha256": "e674030c3337cd74120a3a086887ce1a5195765cfc17e1971a2807e0a398b505"
+    },
+    "macos": {
+     "asset": "spotdl-4.6.0-darwin",
+     "size": 44141136,
+     "sha256": "957bb335e773ab67fc7a65574b0465ad828849944025a84cdfc9466a4336e3bb"
+    },
+    "linux": {
+     "asset": "spotdl-4.6.0-linux",
+     "size": 80516912,
+     "sha256": "99eb14032e252af30f1c6bdc7461057c324754978afe30c6583ed6b3ec3257bf"
+    }
+   }
+  },
+  {
+   "id": "localsend",
+   "name": "LocalSend",
+   "family": "native",
+   "shard": "g1",
+   "licence": "Apache-2.0",
+   "repo": "localsend/localsend",
+   "tag": "v1.18.2",
+   "released": "2026-08-21",
+   "detect_only": true,
+   "note": "negative control: Flutter",
+   "packages": {
+    "windows": {
+     "asset": "LocalSend-1.18.2-windows-x86-64.zip",
+     "size": 26113764,
+     "sha256": "737aab1829d901e1d798cddd1e5fdc06ba9dfcc9ea50cfe3805e047005d5e71a"
+    }
+   }
+  },
+  {
+   "id": "keepassxc",
+   "name": "KeePassXC",
+   "family": "native",
+   "shard": "g1",
+   "licence": "GPL-3.0",
+   "repo": "keepassxreboot/keepassxc",
+   "tag": "2.8.0",
+   "released": "2026-10-21",
+   "detect_only": true,
+   "note": "negative control: Qt",
+   "packages": {
+    "windows": {
+     "asset": "KeePassXC-2.8.0-x64.zip",
+     "size": 70348471,
+     "sha256": "48ff4f088e9ce70e241da1270e5081528dba77c38b17dae4aa6690ffc50fc828"
+    }
+   }
+  },
+  {
+   "id": "yaak",
+   "name": "Yaak",
+   "family": "native",
+   "shard": "g1",
+   "licence": "MIT",
+   "repo": "mountain-loop/yaak",
+   "tag": "v2026.9.1",
+   "released": "2026-11-01",
+   "detect_only": true,
+   "note": "negative control: Tauri",
+   "packages": {
+    "windows": {
+     "asset": "Yaak_2026.9.1_x64-setup.exe",
+     "size": 46732096,
+     "sha256": "823084c8833add90c5ffd35bf38f49d2b9867f054920b2f22e00662b88a05750"
+    }
+   }
+  },
+  {
+   "id": "renpy-question",
+   "name": "The Question (Ren'Py's example game)",
+   "family": "renpy",
+   "shard": "g1",
+   "licence": "MIT",
+   "note": "packaged in the job by the Ren'Py 8.5.3 SDK's own distribute command; the Linux package is the ground truth",
+   "packages": {
+    "windows": {
+     "local": "renpy-dist/the_question-*-win.zip"
+    },
+    "macos": {
+     "local": "renpy-dist/the_question-*-mac.zip"
+    },
+    "linux": {
+     "local": "renpy-dist/the_question-*-linux.tar.bz2"
+    }
+   }
+  },
+  {
+   "id": "renpy-tutorial",
+   "name": "Ren'Py Tutorial",
+   "family": "renpy",
+   "shard": "g1",
+   "licence": "MIT",
+   "note": "packaged in the job by the Ren'Py 8.5.3 SDK's own distribute command; the Linux package is the ground truth",
+   "packages": {
+    "windows": {
+     "local": "renpy-dist/tutorial-*-win.zip"
+    },
+    "macos": {
+     "local": "renpy-dist/tutorial-*-mac.zip"
+    },
+    "linux": {
+     "local": "renpy-dist/tutorial-*-linux.tar.bz2"
+    }
+   }
+  }
+ ]
+}
