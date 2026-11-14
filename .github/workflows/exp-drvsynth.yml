@@ -1,0 +1,258 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Experiment drvsynth, stage A: the test bench for "driver synthesis"
+# (tests/experiments/drvsynth/README.md). Can an AI that sees only the USB
+# traffic between a device and its Windows driver write a working native
+# Linux driver for it?
+#
+# capture  builds the invented device's Windows KMDF driver and program
+#          (on the KMDF runtime and Wine patch set of the windows-drivers
+#          experiment, cached), plugs the emulated device into the runner's
+#          USB/IP virtual host controller, runs the Windows program's
+#          scripted sessions in Wine's user-space driver host and records
+#          every USB transfer with usbmon. Artifact drvsynth-handoff holds
+#          the captures, timelines and descriptors for the hand-off bundle.
+#          Skipped when a pull request changes only candidate/.
+# score    runs the hidden scoring suite against a freshly started device:
+#          the reference driver (must pass everything), two deliberately
+#          wrong drivers (must fail what they get wrong), and the blind
+#          engineer's driver in tests/experiments/drvsynth/candidate/ when
+#          there is one (a finding, never a failed job).
+#
+# Nothing is loaded into a kernel except the stock vhci-hcd and usbmon
+# modules. No Microsoft binary is downloaded or used.
+name: exp-drvsynth
+
+on:
+  pull_request:
+    paths:
+      - "tests/experiments/drvsynth/**"
+      - ".github/workflows/exp-drvsynth.yml"
+  workflow_dispatch:
+    inputs:
+      capture:
+        description: "Also build the Windows side and record new captures (false: score only)"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: exp-drvsynth-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  # Fedora 45's container image, by digest (the windows-drivers workflow's).
+  FEDORA_IMAGE: registry.fedoraproject.org/fedora:45@sha256:fa773d10382c082ff2cccaf7982a5c162f11f296f91274b994357f2d3d473770
+  BENCH: tests/experiments/drvsynth
+
+jobs:
+  capture:
+    name: Windows driver in Wine, scripted sessions, usbmon captures
+    if: github.event_name != 'workflow_dispatch' || inputs.capture
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Is there anything to capture?
+        id: changes
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          heavy=true
+          if [ -n "${BASE}" ] && git fetch -q --depth 1 origin "${BASE}"; then
+            git diff --name-only FETCH_HEAD HEAD | tee changed.txt
+            if ! grep -qvE '^tests/experiments/drvsynth/candidate/' changed.txt; then
+              heavy=false
+              echo "Only candidate/ changed: no new captures needed." >> "$GITHUB_STEP_SUMMARY"
+            fi
+          fi
+          echo "heavy=${heavy}" >> "$GITHUB_OUTPUT"
+          mkdir -p "$RUNNER_TEMP/drvsynth"/{build,work/handoff,run} "$RUNNER_TEMP/drvsynth-cache"
+          echo "D=$RUNNER_TEMP/drvsynth" >> "$GITHUB_ENV"
+
+      # The KMDF runtime and Wine overlay take about 25 minutes to build and
+      # change only with their inputs; saved as soon as they are built, so a
+      # later failure in this job does not lose them.
+      - uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
+        id: runtime
+        if: steps.changes.outputs.heavy == 'true'
+        with:
+          path: ${{ runner.temp }}/drvsynth-cache
+          key: drvsynth-kmdf-runtime-v1-${{ hashFiles('third-party/wdf/**', 'third-party/wine-patches/**', 'tests/windows-drivers/kmdf/build-wine.sh', 'tests/windows-drivers/kmdf/build-wdf.sh', 'tests/windows-drivers/kmdf/link-wdf.sh', 'tests/windows-drivers/kmdf/implibs.sh', 'tests/windows-drivers/kmdf/incmap.py', 'tests/windows-drivers/kmdf/salgen.py') }}
+
+      - name: Build (Fedora 45; KMDF runtime from the cache or built)
+        if: steps.changes.outputs.heavy == 'true'
+        run: |
+          rc=0
+          docker run --rm -e GITHUB_RUN_ID -v "$GITHUB_WORKSPACE:/src:ro" -v "$D/build:/work" \
+            -v "$RUNNER_TEMP/drvsynth-cache:/cache" "$FEDORA_IMAGE" bash "/src/$BENCH/bench/ci-build.sh" || rc=$?
+          sudo chown -R "$(id -u):$(id -g)" "$D/build" "$RUNNER_TEMP/drvsynth-cache"
+          cat "$D/build/build-evidence/summary.md" >> "$GITHUB_STEP_SUMMARY" || true
+          [ -f "$RUNNER_TEMP/drvsynth-cache/runtime/Wdf01000.sys" ] && echo "runtime=yes" >> "$GITHUB_OUTPUT"
+          echo "rc=${rc}" >> "$GITHUB_OUTPUT"
+        id: build
+
+      - uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5
+        if: steps.changes.outputs.heavy == 'true' && steps.runtime.outputs.cache-hit != 'true' && steps.build.outputs.runtime == 'yes'
+        with:
+          path: ${{ runner.temp }}/drvsynth-cache
+          key: ${{ steps.runtime.outputs.cache-primary-key }}
+
+      - name: Did the build succeed?
+        if: steps.changes.outputs.heavy == 'true'
+        run: '[ "${{ steps.build.outputs.rc }}" = 0 ]'
+
+      - name: Plug in the emulated device; load usbmon
+        if: steps.changes.outputs.heavy == 'true'
+        run: |
+          sudo modprobe usbmon
+          sudo chmod 700 "$D/run"
+          sudo chown root:root "$D/run"
+          sudo nohup python3 -I "$BENCH/sealed/emulator.py" run --log-dir "$D/run" --control "$D/run/world.sock" \
+            --firmware 3.1.4 --serial QF2-0A17C3 --uptime-offset 4242 > "$D/emulator.out" 2>&1 &
+          for _ in $(seq 1 60); do sudo test -f "$D/run/ready" && break; sleep 1; done
+          cat "$D/emulator.out"
+          sudo cat "$D/run/ready"
+          ls -l /dev/usbmon* | head
+          command -v lsusb >/dev/null || sudo apt-get install -y --no-install-recommends usbutils
+          {
+            echo "# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0"
+            echo "# lsusb -v -d 1209:000c (usbutils $(lsusb --version 2>&1 | awk '{print $NF}')), as root, on a Linux computer"
+            echo
+            sudo lsusb -v -d 1209:000c 2>&1
+          } > "$D/work/handoff/descriptors.txt"
+          cat "$D/work/handoff/descriptors.txt"
+
+      - name: Scripted sessions under Wine, captured
+        if: steps.changes.outputs.heavy == 'true'
+        run: |
+          sudo dmesg --clear || true
+          docker run --rm --privileged --network host \
+            -v /dev:/dev -v /sys:/sys -v /run/udev:/run/udev:ro \
+            -v "$GITHUB_WORKSPACE:/src:ro" -v "$D/build/artifact:/build:ro" -v "$D/run:/run/drvsynth" \
+            -v "$D/work:/work" "$FEDORA_IMAGE" bash "/src/$BENCH/bench/ci-capture.sh"
+
+      - name: Results
+        if: always() && steps.changes.outputs.heavy == 'true'
+        run: |
+          sudo pkill -f sealed/emulator.py || true
+          sleep 2
+          sudo dmesg | grep -iE 'usb|vhci' | tail -n 200 > "$D/work/evidence-dmesg.txt" || true
+          sudo mkdir -p "$D/sealed-evidence"
+          sudo cp -r "$D/run/." "$D/sealed-evidence/" || true
+          sudo rm -f "$D/sealed-evidence/world.sock"
+          sudo chown -R "$(id -u):$(id -g)" "$D/work" "$D/sealed-evidence" || true
+          cat "$D/work/handoff/captures/index.md" >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+          du -b "$D"/work/handoff/captures/* 2>/dev/null | sort -k2 >> "$GITHUB_STEP_SUMMARY" || true
+          if [ -f "$D/work/evidence/results.md" ]; then
+            cat "$D/work/evidence/results.md" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No capture results were written." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # Only what the blind engineer may see.
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always() && steps.changes.outputs.heavy == 'true'
+        with:
+          name: drvsynth-handoff
+          path: ${{ runner.temp }}/drvsynth/work/handoff/
+          if-no-files-found: warn
+
+      # Logs that reveal the protocol (driver traces, the device's own log).
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always() && steps.changes.outputs.heavy == 'true'
+        with:
+          name: drvsynth-sealed-capture-evidence
+          path: |
+            ${{ runner.temp }}/drvsynth/work/evidence/
+            ${{ runner.temp }}/drvsynth/work/evidence-dmesg.txt
+            ${{ runner.temp }}/drvsynth/sealed-evidence/
+            ${{ runner.temp }}/drvsynth/build/build-evidence/
+            ${{ runner.temp }}/drvsynth/build/windows/summary.txt
+          if-no-files-found: warn
+
+  score:
+    name: Hidden scoring suite (reference, wrong drivers, candidate)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Tools and an unprivileged user for the drivers under test
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends python3-usb acl usbutils
+          python3 -c 'import usb, sys; print("pyusb", usb.__version__, "python", sys.version.split()[0])'
+          sudo useradd -m -s /bin/bash drvsynth
+          # The drivers under test must not read the checkout (the sealed files).
+          sudo chmod o-rwx "$HOME"
+          echo "D=$RUNNER_TEMP/drvsynth" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/drvsynth/run" "$RUNNER_TEMP/drvsynth/score"
+
+      - name: Plug in a fresh device (firmware, serial and nonces in no capture)
+        run: |
+          sudo chmod 700 "$D/run"; sudo chown root:root "$D/run"
+          fw="$((RANDOM % 6 + 4)).$((RANDOM % 10)).$((RANDOM % 30))"
+          serial="QF2-$(openssl rand -hex 3 | tr a-f A-F)"
+          echo "firmware ${fw}, serial ${serial}"
+          sudo nohup python3 -I "$BENCH/sealed/emulator.py" run --log-dir "$D/run" --control "$D/run/world.sock" \
+            --firmware "${fw}" --serial "${serial}" --uptime-offset "$((RANDOM * 7))" > "$D/emulator.out" 2>&1 &
+          for _ in $(seq 1 60); do sudo test -f "$D/run/ready" && break; sleep 1; done
+          cat "$D/emulator.out"
+          node="$(sudo python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["node"])' "$D/run/ready")"
+          sudo setfacl -m u:drvsynth:rw "${node}"
+          getfacl -p "${node}"
+          lsusb -d 1209:000c
+
+      - name: Drivers under test, copied where the unprivileged user can read them
+        run: |
+          sudo mkdir -p /opt/drvsynth/drivers
+          sudo cp -r "$BENCH/sealed/reference" "$BENCH/sealed/wrong" /opt/drvsynth/drivers/
+          if [ -f "$BENCH/candidate/gadget.py" ]; then
+            sudo cp -r "$BENCH/candidate" /opt/drvsynth/drivers/
+            echo "CANDIDATE=1" >> "$GITHUB_ENV"
+          fi
+          sudo chown -R drvsynth:drvsynth /opt/drvsynth
+          find /opt/drvsynth -type f | sort
+
+      - name: Score the reference and the two wrong drivers
+        run: |
+          for d in reference:reference wrong-replay:wrong/replay wrong-quirks:wrong/quirks; do
+            sudo python3 -I "$BENCH/sealed/score.py" run --name "${d%%:*}" --program "/opt/drvsynth/drivers/${d#*:}/gadget.py" \
+              --run-dir "$D/run" --handoff "$BENCH/handoff" --out "$D/score" --user drvsynth
+          done
+
+      - name: Score the candidate
+        if: env.CANDIDATE == '1'
+        run: |
+          sudo python3 -I "$BENCH/sealed/score.py" run --name candidate --program /opt/drvsynth/drivers/candidate/gadget.py \
+            --run-dir "$D/run" --handoff "$BENCH/handoff" --out "$D/score" --user drvsynth
+
+      - name: Results; the suite must tell the drivers apart
+        if: always()
+        run: |
+          sudo chown -R "$(id -u):$(id -g)" "$D/score" || true
+          for f in "$D"/score/score-*.md; do cat "$f" >> "$GITHUB_STEP_SUMMARY"; echo >> "$GITHUB_STEP_SUMMARY"; done
+          python3 -I "$BENCH/sealed/score.py" validate --out "$D/score" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Unplug
+        if: always()
+        run: |
+          sudo pkill -f sealed/emulator.py || true
+          sleep 1
+          sudo cp "$D/run/emulator.log" "$D/run/commands.log" "$D/score/" 2>/dev/null || true
+          sudo chown -R "$(id -u):$(id -g)" "$D/score" || true
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: drvsynth-sealed-score
+          path: ${{ runner.temp }}/drvsynth/score/
+          if-no-files-found: warn
