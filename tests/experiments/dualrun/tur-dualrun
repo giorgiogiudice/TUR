@@ -1,0 +1,276 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+"""tur-dualrun: prototype launcher of the dualrun experiment.
+
+Starts the Windows that is installed on this computer's disk as a virtual
+machine, from its real partitions. A prototype for measuring, not a product:
+it drives QEMU directly so that every device and every byte of state is in
+view. The report says what TUR should use instead (libvirt's session
+instance, as ADR-0015 decides, behind a small root helper for the view).
+
+Read-only, any user who can read the disk:
+  inspect DISK                       everything the check-list reads, as JSON
+  check DISK [options]               the check-list: exit 0 = may start, 3 = refused
+
+Root (the view and the layers):
+  attach DISK --state DIR [--mode direct|protected] [--overlay FILE] [--owner UID]
+  detach DISK --state DIR [--force]
+  discard DISK --state DIR           throw a protected session's layer away
+  commit DISK --state DIR            keep it: undo record, then copy into the partitions
+  undo DISK --state DIR              put back what the last commit overwrote
+  esp-backup DISK --dest DIR         copy of the person's own boot files, with checksums
+  recover --run DIR DISK --state DIR close a session whose launcher died
+
+The person's own user:
+  vars --session FILE --out FILE     guest firmware variables with a Windows boot entry
+  identity                           this computer's SMBIOS strings (root for serials)
+  run --config FILE --run DIR        start QEMU from a JSON description and wait
+
+There is no option that turns a refusal into a start.
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import pathlib
+import subprocess
+import sys
+import time
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+sys.dont_write_bytecode = True
+
+from dualrunlib import checklist, fat, gpt, ovmfvars, qemu, session  # noqa: E402
+from dualrunlib.blockio import Dev  # noqa: E402
+from dualrunlib.qmp import Qmp, QmpError  # noqa: E402
+
+
+def options_of(args) -> dict:
+    return {"guest_mb": args.guest_mb, "reserve_mb": args.reserve_mb,
+            "bitlocker_key_available": args.have_bitlocker_key, "need_kvm": not args.no_kvm,
+            "experiment_allow_hibernated": args.experiment_allow_hibernated}
+
+
+def print_refusals(refusals: list[dict]) -> None:
+    for item in refusals:
+        print(checklist.render(item), file=sys.stderr)
+
+
+def cmd_inspect(args) -> int:
+    print(json.dumps(checklist.survey(args.disk), indent=2))
+    return 0
+
+
+def cmd_check(args) -> int:
+    facts = checklist.survey(args.disk)
+    decision = checklist.decide(facts, mode=args.mode, **options_of(args))
+    print(json.dumps({"decision": decision, "base_token": facts.get("base_token")}, indent=2))
+    print_refusals(decision["refusals"])
+    return 0 if decision["ok"] else 3
+
+
+def fail(error: session.SessionError) -> int:
+    print(json.dumps({"error": str(error), "refusals": error.refusals}, indent=2))
+    print_refusals(error.refusals)
+    print(f"tur-dualrun: {error}", file=sys.stderr)
+    return 3 if error.refusals else 1
+
+
+def cmd_attach(args) -> int:
+    try:
+        record = session.attach(args.disk, args.state, mode=args.mode, hidden=args.hidden, owner=args.owner,
+                                options=options_of(args))
+        if args.mode == "protected":
+            if not args.overlay:
+                raise session.SessionError("a protected session needs --overlay FILE")
+            try:
+                record["layer"] = session.open_layer(record, args.state, args.overlay, args.owner)
+            except session.SessionError:
+                session.detach(args.disk, args.state, record["name"], force=True)
+                raise
+    except session.SessionError as error:
+        return fail(error)
+    print(json.dumps(record, indent=2))
+    return 0
+
+
+def cmd_layer(args) -> int:
+    with Dev(args.disk) as dev:
+        name = session.view_name(gpt.read_gpt(dev).disk_guid)
+    try:
+        if args.command == "detach":
+            result = session.detach(args.disk, args.state, name, force=args.force)
+        elif args.command == "discard":
+            result = session.discard(args.disk, args.state, name)
+        elif args.command == "commit":
+            kill = os.environ.get("TUR_DUALRUN_TEST_KILL_COMMIT_AFTER")
+            result = session.commit(args.disk, args.state, name, rate=args.rate,
+                                    test_kill_after=float(kill) if kill else None)
+        else:
+            result = session.undo(args.disk, args.state, name)
+    except session.SessionError as error:
+        return fail(error)
+    print(json.dumps(result, indent=2))
+    return 0
+
+
+def cmd_esp_backup(args) -> int:
+    """Copy the person's own boot files out of the EFI system partition, with a manifest."""
+    facts = checklist.survey(args.disk)
+    esp = next((p for p in facts.get("partitions", []) if p["role"] == "esp"), None)
+    if esp is None:
+        print("no EFI system partition", file=sys.stderr)
+        return 1
+    dest = pathlib.Path(args.dest)
+    dest.mkdir(parents=True, exist_ok=True)
+    os.chmod(dest, 0o700)
+    manifest = {}
+    with Dev(args.disk) as disk:
+        volume = fat.Fat(disk.sub(esp["first_lba"] * facts["disk"]["sector"], esp["sectors"] * facts["disk"]["sector"]))
+        for path, size in volume.walk("EFI"):
+            data = volume.read(path)
+            manifest[path] = {"bytes": size, "sha256": hashlib.sha256(data).hexdigest()}
+            if not args.manifest_only:
+                target = dest / "files" / path
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(data)
+    session.write_json(dest / "manifest.json", {"partition": esp["index"], "part_guid": esp["part_guid"],
+                                                "taken": time.time(), "files": manifest})
+    print(json.dumps({"files": len(manifest), "dest": str(dest)}, indent=2))
+    return 0
+
+
+def cmd_vars(args) -> int:
+    record = json.loads(pathlib.Path(args.session).read_text())
+    esp = record.get("esp")
+    if not esp:
+        print("the session has no EFI system partition", file=sys.stderr)
+        return 1
+    template = args.template or qemu.firmware()["vars_blank"]
+    data = bytearray(pathlib.Path(template).read_bytes())
+    number = ovmfvars.add_windows_entry(data, esp["index"], esp["part_guid"], esp["first_lba"], esp["sectors"])
+    pathlib.Path(args.out).write_bytes(data)
+    print(json.dumps({"entry": number, "template": template, **ovmfvars.boot_entries(bytes(data))}, indent=2))
+    return 0
+
+
+def cmd_identity(args) -> int:
+    print(json.dumps(qemu.host_identity(), indent=2))
+    return 0
+
+
+def cmd_run(args) -> int:
+    """Start QEMU from a description and wait for it. QEMU keeps running if this process dies."""
+    cfg = json.loads(pathlib.Path(args.config).read_text())
+    rundir = pathlib.Path(args.run)
+    rundir.mkdir(parents=True, exist_ok=True)
+    with open(rundir / "qemu.log", "ab") as log:
+        process = subprocess.Popen(qemu.build(cfg), stdout=log, stderr=log, start_new_session=True)
+    session.write_json(rundir / "run.json", {"pid": process.pid, "qmp": cfg.get("qmp"), "started": time.time(),
+                                             "launcher_pid": os.getpid()})
+    code = process.wait()
+    (rundir / "run.json").unlink(missing_ok=True)
+    print(json.dumps({"qemu_exit": code}))
+    return 0 if code == 0 else 1
+
+
+def cmd_recover(args) -> int:
+    """After the launcher died: shut the guest down properly if it still runs, then remove the view."""
+    rundir = pathlib.Path(args.run)
+    record = session.read_json(rundir / "run.json")
+    result: dict = {"found_run_record": record is not None}
+    if record:
+        pid = record["pid"]
+        alive = pathlib.Path(f"/proc/{pid}").exists()
+        result["guest_was_running"] = alive
+        if alive:
+            try:
+                control = Qmp(record["qmp"], timeout=10)
+                control.command("system_powerdown")
+                control.close()
+                result["asked_to_shut_down"] = True
+            except QmpError as error:
+                result["asked_to_shut_down"] = False
+                result["control_error"] = str(error)
+            deadline = time.time() + args.wait
+            while time.time() < deadline and pathlib.Path(f"/proc/{pid}").exists():
+                time.sleep(1)
+            result["seconds_to_stop"] = round(args.wait - max(0.0, deadline - time.time()), 1)
+            if pathlib.Path(f"/proc/{pid}").exists():
+                result["stopped_by_itself"] = False
+                if not args.kill:
+                    print(json.dumps(result, indent=2))
+                    print("the guest is still running; not touching the view", file=sys.stderr)
+                    return 4
+                os.kill(pid, 9)
+                time.sleep(2)
+            else:
+                result["stopped_by_itself"] = True
+        (rundir / "run.json").unlink(missing_ok=True)
+    try:
+        closed = session.detach(args.disk, args.state, force=True)
+        result["view_removed"] = True
+        result["partition_table"] = closed.get("partition_table")
+    except session.SessionError as error:
+        result["view_removed"] = False
+        result["error"] = str(error)
+    print(json.dumps(result, indent=2))
+    return 0 if result.get("view_removed") else 1
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(prog="tur-dualrun", description=__doc__,
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    def common(p, state: bool = False) -> None:
+        p.add_argument("disk")
+        if state:
+            p.add_argument("--state", required=True)
+
+    def checks(p) -> None:
+        p.add_argument("--mode", choices=["direct", "protected"], default="direct")
+        p.add_argument("--guest-mb", type=int, default=4096)
+        p.add_argument("--reserve-mb", type=int, default=2048)
+        p.add_argument("--have-bitlocker-key", action="store_true",
+                       help="the person says they hold the BitLocker recovery key")
+        p.add_argument("--no-kvm", action="store_true", help="do not require /dev/kvm (tests without a guest)")
+        p.add_argument("--experiment-allow-hibernated", action="store_true",
+                       help="protected mode only, for the experiment that measures what Windows then does")
+
+    p = sub.add_parser("inspect"); common(p); p.set_defaults(func=cmd_inspect)
+    p = sub.add_parser("check"); common(p); checks(p); p.set_defaults(func=cmd_check)
+    p = sub.add_parser("attach"); common(p, True); checks(p)
+    p.add_argument("--hidden", choices=["auto", "flakey", "zero", "error"], default="auto")
+    p.add_argument("--owner", type=int)
+    p.add_argument("--overlay")
+    p.set_defaults(func=cmd_attach)
+    for name in ("detach", "discard", "commit", "undo"):
+        p = sub.add_parser(name); common(p, True)
+        p.add_argument("--force", action="store_true")
+        p.add_argument("--rate", type=int)
+        p.set_defaults(func=cmd_layer)
+    p = sub.add_parser("esp-backup"); common(p)
+    p.add_argument("--dest", required=True); p.add_argument("--manifest-only", action="store_true")
+    p.set_defaults(func=cmd_esp_backup)
+    p = sub.add_parser("vars")
+    p.add_argument("--session", required=True); p.add_argument("--out", required=True); p.add_argument("--template")
+    p.set_defaults(func=cmd_vars)
+    p = sub.add_parser("identity"); p.set_defaults(func=cmd_identity)
+    p = sub.add_parser("run")
+    p.add_argument("--config", required=True); p.add_argument("--run", required=True)
+    p.set_defaults(func=cmd_run)
+    p = sub.add_parser("recover"); common(p, True)
+    p.add_argument("--run", required=True); p.add_argument("--wait", type=float, default=240)
+    p.add_argument("--kill", action="store_true", help="end the guest if it does not shut down in time")
+    p.set_defaults(func=cmd_recover)
+
+    args = parser.parse_args()
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

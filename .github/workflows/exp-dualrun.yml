@@ -1,0 +1,205 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Experiment `dualrun` (docs/reports/exp-dualrun-1.md): on a computer that
+# already has Windows, can TUR start that same installation as a virtual
+# machine from its real partitions, safely, and let it start by itself
+# again? Hypotheses and kill criteria: tests/experiments/dualrun/README.md,
+# committed before anything was measured.
+#
+# Runners are scarce, so:
+#
+#   lint        on a pull request that touches these paths: syntax, SPDX
+#               lines and the synthetic tests (volumes made by mkfs.ntfs and
+#               mkfs.vfat, device-mapper views on loop devices). A few
+#               minutes, no KVM, no Microsoft software.
+#   terms       by hand only (stage=terms): downloads Microsoft's evaluation
+#               medium from Microsoft's server and prints the licence
+#               paragraphs that govern its use. Installs nothing.
+#   experiment  by hand only (stage=experiment, terms_read=yes): installs
+#               that evaluation unattended in a virtual machine that stands
+#               in for a PC, then starts the same disk as TUR's guest and
+#               back, with fault injection. One runner, several hours.
+#
+# The medium and the installed disk stay on the runner's temporary disk and
+# die with it: never committed, never cached, never an artifact. Artifacts
+# hold what TUR's own scripts wrote (ci/artifact-guard.py removes anything
+# else). The jobs are green when the harness ran: a refusal, a failed start
+# or a negative result is a finding in the results, not a failed job.
+name: exp-dualrun
+
+on:
+  pull_request:
+    paths:
+      - "tests/experiments/dualrun/**"
+      - ".github/workflows/exp-dualrun.yml"
+  workflow_dispatch:
+    inputs:
+      stage:
+        description: "terms (read the licence in the medium), experiment, or lint"
+        type: choice
+        options: [terms, experiment, lint]
+        default: terms
+      terms_read:
+        description: "experiment only: 'yes' = the terms printed by stage terms were read and allow this use"
+        required: false
+        default: "no"
+      media_url:
+        description: "Microsoft's link to the evaluation ISO (Windows 11 Enterprise, x64, en-US)"
+        required: false
+        default: "https://go.microsoft.com/fwlink/?LinkId=2382600&clcid=0x409&culture=en-us&country=us"
+      scenarios:
+        description: "experiment only: comma-separated scenarios (empty: all)"
+        required: false
+        default: ""
+      round_trips:
+        description: "experiment only: native/guest round trips"
+        required: false
+        default: "5"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: exp-dualrun-${{ github.ref }}-${{ github.event_name }}-${{ github.event.inputs.stage || 'pr' }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  lint:
+    name: Syntax and synthetic tests (no Microsoft software)
+    if: github.event_name == 'pull_request' || github.event.inputs.stage == 'lint'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Packages
+        run: tests/experiments/dualrun/ci/host-setup.sh light
+
+      - name: Syntax, SPDX lines, synthetic tests
+        run: tests/experiments/dualrun/ci/lint.sh "$WORK/out"
+
+      - name: Results
+        if: always()
+        run: |
+          if [ -f "$WORK/out/synthetic.md" ]; then
+            head -c 60000 "$WORK/out/synthetic.md" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No synthetic results were written." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          python3 tests/experiments/dualrun/ci/artifact-guard.py "$WORK/out" || true
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: exp-dualrun-synthetic
+          path: ${{ env.WORK }}/out/
+          if-no-files-found: warn
+
+  terms:
+    name: Read the licence terms inside Microsoft's evaluation medium
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.stage == 'terms'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Packages
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends wimtools p7zip-full
+          work=/mnt/dualrun; sudo mkdir -p "$work"; sudo chown "$(id -u):$(id -g)" "$work"
+          mkdir -p "$work/out"; echo "WORK=$work" >> "$GITHUB_ENV"; df -h "$work" | tail -n 1
+
+      - name: Download from Microsoft (kept on the runner only)
+        env:
+          MEDIA_URL: ${{ github.event.inputs.media_url }}
+        run: tests/experiments/dualrun/ci/fetch-windows.sh "$MEDIA_URL" "$WORK/media/windows.iso" "$WORK/out/media.json"
+
+      - name: The terms that govern use
+        run: |
+          python3 tests/experiments/dualrun/ci/terms.py "$WORK/media/windows.iso" "$WORK/out"
+          {
+            echo '## The medium'; echo; echo '```json'; cat "$WORK/out/media.json"; echo '```'; echo
+            cat "$WORK/out/terms-excerpt.md"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove the medium
+        if: always()
+        run: |
+          rm -rf "$WORK/media"
+          python3 tests/experiments/dualrun/ci/artifact-guard.py "$WORK/out" || true
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: exp-dualrun-terms
+          path: ${{ env.WORK }}/out/
+          if-no-files-found: warn
+
+  experiment:
+    name: Windows installed "natively", started as TUR's guest and back
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.stage == 'experiment'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: The terms were read first
+        env:
+          TERMS_READ: ${{ github.event.inputs.terms_read }}
+        run: |
+          if [ "$TERMS_READ" != "yes" ]; then
+            echo "Not started: run stage 'terms' first, read what it prints, record it in the report," \
+                 "then dispatch with terms_read=yes." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+      - name: Packages, KVM, work directory
+        run: tests/experiments/dualrun/ci/host-setup.sh heavy
+
+      - name: Download from Microsoft (kept on the runner only)
+        env:
+          MEDIA_URL: ${{ github.event.inputs.media_url }}
+        run: tests/experiments/dualrun/ci/fetch-windows.sh "$MEDIA_URL" "$WORK/media/windows.iso" "$WORK/out/media.json"
+
+      - name: The terms inside this medium
+        run: python3 tests/experiments/dualrun/ci/terms.py "$WORK/media/windows.iso" "$WORK/out" > /dev/null
+
+      - name: Experiment
+        env:
+          SCENARIOS: ${{ github.event.inputs.scenarios }}
+          ROUND_TRIPS: ${{ github.event.inputs.round_trips }}
+          DISPATCHED_BY: ${{ github.actor }}
+        run: |
+          python3 -u tests/experiments/dualrun/ci/experiment.py \
+            --work "$WORK" --iso "$WORK/media/windows.iso" --out "$WORK/out" \
+            --scenarios "$SCENARIOS" --round-trips "${ROUND_TRIPS:-5}" --budget-minutes 315
+
+      - name: Results
+        if: always()
+        run: |
+          if [ -f "$WORK/out/results.md" ]; then
+            head -c 900000 "$WORK/out/results.md" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No results were written." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Remove the medium and the disks; keep only TUR's own output
+        if: always()
+        run: |
+          sudo dmsetup remove_all --force 2>/dev/null || true
+          sudo losetup -D 2>/dev/null || true
+          sudo rm -rf "$WORK/media" "$WORK/vm" "$WORK/store" || true
+          sudo chown -R "$(id -u):$(id -g)" "$WORK/out" || true
+          python3 tests/experiments/dualrun/ci/artifact-guard.py "$WORK/out" || true
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: exp-dualrun-experiment
+          path: ${{ env.WORK }}/out/
+          if-no-files-found: warn
