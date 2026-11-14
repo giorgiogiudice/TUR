@@ -160,9 +160,44 @@ jobs:
           name: windiff-wine-fedora
           path: ${{ runner.temp }}/wf/evidence/
 
+  # The first build of the pinned Wine takes most of an hour. It needs
+  # nothing from the other jobs, so it starts with them and leaves the tree
+  # in the cache for wine-master; when the tree is already there it does
+  # nothing.
+  wine-tree:
+    name: Wine master's build tree (cached)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        id: tree
+        with:
+          path: ${{ runner.temp }}/wm/winebuild
+          key: windiff-wine-${{ hashFiles('tests/experiments/windiff/ci/wine-pin.sh', 'tests/experiments/windiff/ci/wine-build.sh') }}
+          restore-keys: windiff-wine-
+
+      - name: Build Wine master, unpatched
+        if: steps.tree.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p "$RUNNER_TEMP/wm"
+          docker run --rm -v "$GITHUB_WORKSPACE:/src:ro" -v "$RUNNER_TEMP/wm:/work" \
+            "$FEDORA_IMAGE" bash /src/tests/experiments/windiff/ci/wine-build.sh; status=$?
+          sudo chown -R "$(id -u):$(id -g)" "$RUNNER_TEMP/wm" || true
+          { echo '### Wine build tree'; echo '```'; cat "$RUNNER_TEMP/wm/evidence/toolchain-wine.txt" "$RUNNER_TEMP/wm/evidence/winebuild-size.txt" "$RUNNER_TEMP/wm/evidence/wine-version-build.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY" || true
+          exit $status
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: failure()
+        with:
+          name: windiff-wine-tree-logs
+          path: ${{ runner.temp }}/wm/evidence/
+          if-no-files-found: ignore
+
   wine-master:
     name: Wine master, before and after the fix queue
-    needs: build
+    needs: [build, wine-tree]
     runs-on: ubuntu-24.04
     timeout-minutes: 150
     steps:

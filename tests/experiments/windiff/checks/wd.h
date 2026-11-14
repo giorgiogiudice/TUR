@@ -238,10 +238,18 @@ static void wd_rmtree_full(WCHAR *path, int len)
     FindClose(h);
 }
 
-/* Empties the scratch directory, whatever the names in it. */
+/* Empties the scratch directory, whatever the names in it. Only ever a
+ * directory below one named "wd": the runner makes C:\wd\<prog>-<group>,
+ * and a program started anywhere else must not delete what it finds. */
+static BOOL wd_scratch_ok(void)
+{
+    return wcsstr(wd_cwd, L"\\wd\\") != NULL && lstrlenW(wd_cwd) > 6;
+}
+
 static void wd_clean(void)
 {
     static WCHAR path[2100];
+    if (!wd_scratch_ok()) return;
     SetCurrentDirectoryW(wd_cwd);
     lstrcpyW(path, L"\\\\?\\");
     lstrcatW(path, wd_cwd);
@@ -313,6 +321,11 @@ static int wd_main(const char *exe, const struct wd_group_def *groups, int argc,
     }
     if (argc >= 3 && !wcscmp(argv[1], L"--run"))
     {
+        if (!wd_scratch_ok())
+        {
+            wd_write("refusing to run outside a scratch directory below \\wd\\\n", 55);
+            return 3;
+        }
         WideCharToMultiByte(CP_UTF8, 0, argv[2], -1, wd_group, sizeof(wd_group) - 1, NULL, NULL);
         for (i = 0; groups[i].name; i++)
         {

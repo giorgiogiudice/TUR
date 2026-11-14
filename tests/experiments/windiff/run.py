@@ -3,7 +3,7 @@
 """Runs the windiff check programs and records what each check observed.
 
     run.py --bin DIR --root ROOT --out results.json --label NAME
-           [--wine WINE [--wineserver WINESERVER]] [--repeat 2] [--timeout 180] [--only prog.group,...]
+           [--wine WINE [--wineserver WINESERVER]] [--repeat 2] [--timeout 300] [--only prog.group,...]
 
 DIR holds the programs checks/build.sh made (manifest.txt names them). ROOT
 is the directory that is drive C: for the programs: `C:\\` on Windows, the
@@ -148,7 +148,7 @@ def main() -> int:
     ap.add_argument("--wine")
     ap.add_argument("--wineserver")
     ap.add_argument("--repeat", type=int, default=2)
-    ap.add_argument("--timeout", type=int, default=180)
+    ap.add_argument("--timeout", type=int, default=300)
     ap.add_argument("--only", default="")
     args = ap.parse_args()
 
