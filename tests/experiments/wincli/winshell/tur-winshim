@@ -1,0 +1,10 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+"""The Linux side of win32/turshim.c: NAME ARGS. See turwinshell.shim_main."""
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+import turwinshell  # noqa: E402
+
+sys.exit(turwinshell.shim_main(sys.argv[1:]))

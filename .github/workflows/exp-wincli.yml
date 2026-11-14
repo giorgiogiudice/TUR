@@ -1,0 +1,231 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Experiment wincli (docs/reports/exp-wincli-1.md): how close can TUR's
+# terminal get to a Windows PC's, with real Windows as the judge?
+#
+# truth        The corpus (tests/experiments/wincli/corpus.py) on GitHub's
+#              Windows runners, which are real Windows (ADR-0015, amendment
+#              of 12 November 2026). What leaves the runner is the shape of
+#              each result (exit code, field names, columns, which patterns
+#              matched, the state of a throwaway folder), not Microsoft's
+#              text: help output is never kept. Two Windows versions, so
+#              that the distance between Windows and Windows is known.
+# candidates   The same corpus on Linux, in a Fedora 45 container with
+#              Fedora's Wine: Wine's cmd.exe and tools; PowerShell 7 for
+#              Windows under Wine; PowerShell 7 for Linux, alone and with
+#              the TurWinCompat module; tur-winshell, the router with
+#              TUR-aware commands; and the lines pasted into bash. Then the
+#              integration pieces and the safety rules (integration.py).
+# score        Every candidate against the judge: scorecard and gap list.
+#
+# PowerShell 7 (MIT, published by Microsoft) is downloaded from its GitHub
+# release, checked against the pinned hash, used and thrown away. Nothing
+# is committed or redistributed. Green means the measurement ran; the
+# numbers are the finding.
+name: exp-wincli
+
+on:
+  pull_request:
+    paths:
+      - "tests/experiments/wincli/**"
+      - ".github/workflows/exp-wincli.yml"
+  workflow_dispatch:
+    inputs:
+      only:
+        description: "Regular expression of corpus identifiers to run (empty: all)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: exp-wincli-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  # Fedora 45's container image, by digest (tag 45 on 13 November 2026).
+  FEDORA_IMAGE: registry.fedoraproject.org/fedora:45@sha256:fa773d10382c082ff2cccaf7982a5c162f11f296f91274b994357f2d3d473770
+  # PowerShell 7.6 is the current long-term-support line; 7.6.10 was
+  # published on 10 November 2026 and is what the Windows runners carry.
+  PWSH_VERSION: "7.6.10"
+  PWSH_LINUX_SHA256: e261cabc91c78a9afe8d1e5f24731ab0d38204735ab2ec94b0af55102652e10d
+  PWSH_WIN_SHA256: 7d871531806eb1646264e4bbabd9f0c30c23355591bc756bb9909448c29ae166
+  WINCLI_ONLY: ${{ github.event.inputs.only }}
+  # "1" adds the held-out commands of corpus.py. Set only for the last run
+  # of the experiment, after which nothing is tuned.
+  WINCLI_FRESH: "0"
+  # PowerShell reports usage to Microsoft and looks for updates unless told
+  # not to. Off on the judge and on the candidates alike.
+  POWERSHELL_TELEMETRY_OPTOUT: "1"
+  POWERSHELL_UPDATECHECK: "Off"
+
+jobs:
+  truth:
+    name: Ground truth on ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2025, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 75
+    steps:
+      # Only this experiment's directory, and by hand: the repository holds
+      # a file name Windows cannot create (a device-manager fixture with ':'
+      # in it, issue 130), and git on Windows refuses the whole checkout
+      # over it, sparse or not, unless core.protectNTFS is off. The file is
+      # never written: it is outside the sparse set.
+      - name: Check out this experiment's directory only
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git init -q .
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}"
+          git config core.protectNTFS false
+          git config core.autocrlf false
+          git sparse-checkout set tests/experiments/wincli
+          auth="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          git -c "http.https://github.com/.extraheader=${auth}" fetch -q --depth=1 --filter=blob:none origin "${GITHUB_REF}"
+          git -c "http.https://github.com/.extraheader=${auth}" checkout -q FETCH_HEAD
+          git log -1 --format='%H %s'
+          ls tests/experiments/wincli
+
+      - name: Versions
+        shell: pwsh
+        run: |
+          cmd /c ver
+          "pwsh: $($PSVersionTable.PSVersion)"
+          "powershell: $(powershell -NoProfile -Command '$PSVersionTable.PSVersion.ToString()')"
+          python --version
+
+      - name: Run the corpus (cmd.exe and PowerShell 7)
+        shell: pwsh
+        run: |
+          $extra = @()
+          if ($env:WINCLI_ONLY) { $extra = @('--only', $env:WINCLI_ONLY) }
+          python tests/experiments/wincli/run.py --candidate truth --out "$env:RUNNER_TEMP\wincli" @extra
+          exit 0
+
+      - name: Run the PowerShell group in Windows PowerShell 5.1
+        if: matrix.os == 'windows-2025'
+        shell: pwsh
+        run: |
+          $extra = @()
+          if ($env:WINCLI_ONLY) { $extra = @('--only', $env:WINCLI_ONLY) }
+          python tests/experiments/wincli/run.py --candidate ps51 --out "$env:RUNNER_TEMP\wincli" @extra
+          exit 0
+
+      - name: Shapes
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: wincli-truth-${{ matrix.os }}
+          path: |
+            ${{ runner.temp }}/wincli/*/shapes*.json
+            ${{ runner.temp }}/wincli/*/meta.json
+          if-no-files-found: warn
+
+      - name: Raw output, for debugging the checks (one day; no help text)
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: wincli-truth-raw-${{ matrix.os }}
+          path: ${{ runner.temp }}/wincli/*/raw*.json
+          retention-days: 1
+          if-no-files-found: warn
+
+  candidates:
+    name: Candidates on Linux (Fedora 45, Fedora's Wine)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Scratch directory
+        run: |
+          mkdir -p "$RUNNER_TEMP/wincli/evidence" "$RUNNER_TEMP/wincli/dl"
+          echo "WORK=$RUNNER_TEMP/wincli" >> "$GITHUB_ENV"
+
+      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: ${{ runner.temp }}/wincli/dl
+          key: wincli-pwsh-${{ env.PWSH_VERSION }}
+
+      - name: PowerShell 7 for Linux and for Windows, from the project's release, by hash
+        run: |
+          cd "$WORK/dl"
+          base="https://github.com/PowerShell/PowerShell/releases/download/v${PWSH_VERSION}"
+          [ -f "powershell-${PWSH_VERSION}-linux-x64.tar.gz" ] || curl -fsSL -O "$base/powershell-${PWSH_VERSION}-linux-x64.tar.gz"
+          [ -f "PowerShell-${PWSH_VERSION}-win-x64.zip" ] || curl -fsSL -O "$base/PowerShell-${PWSH_VERSION}-win-x64.zip"
+          echo "${PWSH_LINUX_SHA256}  powershell-${PWSH_VERSION}-linux-x64.tar.gz" | sha256sum -c -
+          echo "${PWSH_WIN_SHA256}  PowerShell-${PWSH_VERSION}-win-x64.zip" | sha256sum -c -
+          ls -l
+
+      - name: Let the container ping
+        run: sudo sysctl -w net.ipv4.ping_group_range="0 2147483647" || true
+
+      - name: Candidates in Fedora 45 with Fedora's Wine
+        run: |
+          docker run --rm --privileged --network host --pid host \
+            -e WINCLI_ONLY -e WINCLI_FRESH \
+            -v /run/systemd:/run/systemd -v /run/dbus:/run/dbus \
+            -v "$GITHUB_WORKSPACE:/src:ro" -v "$WORK:/work" \
+            "$FEDORA_IMAGE" bash /src/tests/experiments/wincli/fedora-run.sh
+
+      - name: Hand the files back to the runner's user
+        if: always()
+        run: |
+          sudo chown -R "$(id -u):$(id -g)" "$WORK" || true
+          ls -la "$WORK/evidence" || true
+          for f in "$WORK"/evidence/*/meta.json; do echo "== $f"; head -c 1500 "$f"; echo; done || true
+
+      - name: Integration and safety
+        if: always()
+        run: |
+          if [ -f "$WORK/evidence/integration.md" ]; then
+            cat "$WORK/evidence/integration.md" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: wincli-candidates
+          path: ${{ runner.temp }}/wincli/evidence/
+          if-no-files-found: warn
+
+  score:
+    name: Scorecard
+    needs: [truth, candidates]
+    # Also when a job above failed, but not when the run was superseded: a
+    # job that always runs would hold the concurrency group for the queue.
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          path: ${{ runner.temp }}/a
+
+      - name: Score every candidate against the judge
+        run: |
+          ls -R "$RUNNER_TEMP/a" | head -n 80
+          python3 -I tests/experiments/wincli/score.py \
+            --truth "$RUNNER_TEMP/a/wincli-truth-windows-2025" \
+            --truth-other "$RUNNER_TEMP/a/wincli-truth-windows-2022" \
+            --candidates "$RUNNER_TEMP/a/wincli-candidates" \
+            --out "$RUNNER_TEMP/score" > /dev/null
+          cat "$RUNNER_TEMP/score/summary.md" >> "$GITHUB_STEP_SUMMARY"
+          cat "$RUNNER_TEMP/score/summary.md"
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: wincli-score
+          path: ${{ runner.temp }}/score/
+          if-no-files-found: warn
