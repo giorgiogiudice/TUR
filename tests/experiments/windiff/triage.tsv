@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# What each difference windiff finds is. Tab-separated:
+#   id pattern (shell style; first match wins)	cause	status	note
+# status: known (Wine's own tests or bug tracker record it), new, irrelevant
+# (real, but nothing an application depends on), artifact (made by the test
+# set-up, not by Wine). See diff.py.

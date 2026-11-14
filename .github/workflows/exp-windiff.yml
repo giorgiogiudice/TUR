@@ -1,0 +1,358 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Research spike `windiff` (docs/reports/exp-windiff-1.md): can a machine
+# find and close the differences between Wine and Windows by itself?
+#
+# Small test programs (tests/experiments/windiff/checks, C, built once with
+# mingw-w64) print what the public Windows API did, one JSON line per
+# check. The same binaries run
+#   - on GitHub's hosted Windows machine (real Windows, the oracle; allowed
+#     for testing by the ADR-0015 amendment of 12 November 2026),
+#   - under Fedora 45's Wine in a Fedora 45 container (the Wine TUR ships),
+#   - under Wine's master branch built here, before and after the fix queue
+#     in tests/experiments/windiff/wine-patches.
+# diff.py then classes every check per Wine: same, different, crash,
+# missing export, timeout; the triage file says which differences are
+# already recorded upstream.
+#
+# Windows is observed only as a black box through its documented API. No
+# Microsoft binary is downloaded, copied or kept: the Windows job runs
+# programs built here and uploads only the text they print.
+#
+# Every job is green when it produced its evidence; a difference from
+# Windows is a finding in the report, not a failed job.
+name: exp-windiff
+
+on:
+  pull_request:
+    paths:
+      - "tests/experiments/windiff/**"
+      - ".github/workflows/exp-windiff.yml"
+  workflow_dispatch:
+    inputs:
+      only:
+        description: "Comma-separated programs or program.group names (empty: all)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: exp-windiff-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  # Fedora 45's container image, by digest (tag 45 on 13 November 2026); the
+  # same pin as windows-drivers.yml.
+  FEDORA_IMAGE: registry.fedoraproject.org/fedora:45@sha256:fa773d10382c082ff2cccaf7982a5c162f11f296f91274b994357f2d3d473770
+  WINDIFF_ONLY: ${{ github.event.inputs.only }}
+
+jobs:
+  build:
+    name: Check programs (mingw-w64)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Build in Fedora 45
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          docker run --rm -v "$GITHUB_WORKSPACE:/src:ro" -v "$RUNNER_TEMP/bin:/out" "$FEDORA_IMAGE" bash -c '
+            dnf -y --setopt=install_weak_deps=False install mingw64-gcc mingw64-binutils mingw64-headers mingw64-crt >/out/dnf.log 2>&1 ||
+              { tail -n 40 /out/dnf.log; exit 1; }
+            bash /src/tests/experiments/windiff/checks/build.sh /out; status=$?
+            chmod -R a+rwX /out; exit $status'
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: windiff-bin
+          path: ${{ runner.temp }}/bin/
+          retention-days: 7
+
+  windows:
+    name: Windows (the oracle)
+    needs: build
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: windiff-bin
+          path: ${{ runner.temp }}/bin
+
+      - name: Which Windows this is
+        shell: pwsh
+        run: |
+          $ev = "$env:RUNNER_TEMP\evidence"
+          New-Item -ItemType Directory -Force $ev | Out-Null
+          $cv = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion'
+          $fs = Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem'
+          $lines = @(
+            "runner image: $env:ImageOS $env:ImageVersion",
+            "product: $($cv.ProductName)",
+            "display version: $($cv.DisplayVersion)",
+            "build: $($cv.CurrentBuildNumber).$($cv.UBR)",
+            "edition: $($cv.EditionID) ($($cv.InstallationType))",
+            "ver: $((cmd /c ver | Out-String).Trim())",
+            "file system of C: $((Get-Volume -DriveLetter C).FileSystem)",
+            "8.3 names: $((fsutil 8dot3name query C: | Out-String).Trim() -replace '\s+', ' ')",
+            "LongPathsEnabled: $($fs.LongPathsEnabled)",
+            "NtfsDisable8dot3NameCreation: $($fs.NtfsDisable8dot3NameCreation)",
+            "code pages: ACP $([System.Text.Encoding]::Default.CodePage), OEM $((Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Nls\CodePage').OEMCP)",
+            "python: $((python --version | Out-String).Trim())"
+          )
+          $lines | Tee-Object "$ev\windows-version.txt"
+          # Keep the antivirus out of the scratch directories: it opens new
+          # files and would change sharing results.
+          try { Add-MpPreference -ExclusionPath 'C:\wd','C:\wdbin' -ErrorAction Stop; "defender exclusion: set" } catch { "defender exclusion: not set ($($_.Exception.Message))" }
+          '### Windows' >> $env:GITHUB_STEP_SUMMARY
+          '```' >> $env:GITHUB_STEP_SUMMARY
+          $lines >> $env:GITHUB_STEP_SUMMARY
+          '```' >> $env:GITHUB_STEP_SUMMARY
+
+      - name: Run the checks on Windows
+        shell: pwsh
+        run: |
+          $only = @()
+          if ($env:WINDIFF_ONLY) { $only = @('--only', $env:WINDIFF_ONLY) }
+          python -I tests/experiments/windiff/run.py --bin "$env:RUNNER_TEMP\bin" --root 'C:\' `
+            --out "$env:RUNNER_TEMP\evidence\results-windows.json" --label windows @only
+          Compress-Archive -Path "$env:RUNNER_TEMP\evidence\results-windows.json.logs" -DestinationPath "$env:RUNNER_TEMP\evidence\logs-windows.zip"
+          Remove-Item -Recurse -Force "$env:RUNNER_TEMP\evidence\results-windows.json.logs"
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: windiff-windows
+          path: ${{ runner.temp }}/evidence/
+
+  wine-fedora:
+    name: Fedora 45's Wine
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: windiff-bin
+          path: ${{ runner.temp }}/wf/bin
+
+      - name: Run the checks under Fedora 45's Wine
+        run: |
+          docker run --rm -e WINDIFF_ONLY -v "$GITHUB_WORKSPACE:/src:ro" -v "$RUNNER_TEMP/wf:/work" \
+            "$FEDORA_IMAGE" bash /src/tests/experiments/windiff/ci/wine-fedora.sh
+          { echo '### Fedora 45 Wine'; echo '```'; cat "$RUNNER_TEMP/wf/evidence/versions-fedora.txt"; tail -n 1 "$RUNNER_TEMP/wf/evidence/run-fedora.log"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: windiff-wine-fedora
+          path: ${{ runner.temp }}/wf/evidence/
+
+  # The first build of the pinned Wine takes most of an hour. It needs
+  # nothing from the other jobs, so it starts with them and leaves the tree
+  # in the cache for wine-master; when the tree is already there it does
+  # nothing.
+  wine-tree:
+    name: Wine master's build tree (cached)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        id: tree
+        with:
+          path: ${{ runner.temp }}/wm/winebuild
+          key: windiff-wine-${{ hashFiles('tests/experiments/windiff/ci/wine-pin.sh', 'tests/experiments/windiff/ci/wine-build.sh') }}
+          restore-keys: windiff-wine-
+
+      - name: Build Wine master, unpatched
+        if: steps.tree.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p "$RUNNER_TEMP/wm"
+          docker run --rm -v "$GITHUB_WORKSPACE:/src:ro" -v "$RUNNER_TEMP/wm:/work" \
+            "$FEDORA_IMAGE" bash /src/tests/experiments/windiff/ci/wine-build.sh; status=$?
+          sudo chown -R "$(id -u):$(id -g)" "$RUNNER_TEMP/wm" || true
+          { echo '### Wine build tree'; echo '```'; cat "$RUNNER_TEMP/wm/evidence/toolchain-wine.txt" "$RUNNER_TEMP/wm/evidence/winebuild-size.txt" "$RUNNER_TEMP/wm/evidence/wine-version-build.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY" || true
+          exit $status
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: failure()
+        with:
+          name: windiff-wine-tree-logs
+          path: ${{ runner.temp }}/wm/evidence/
+          if-no-files-found: ignore
+
+  wine-master:
+    name: Wine master, before and after the fix queue
+    needs: [build, wine-tree]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: windiff-bin
+          path: ${{ runner.temp }}/wm/bin
+
+      # The unpatched build tree of the pinned Wine, and a compiler cache
+      # for the day the pin moves.
+      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: ${{ runner.temp }}/wm/winebuild
+          key: windiff-wine-${{ hashFiles('tests/experiments/windiff/ci/wine-pin.sh', 'tests/experiments/windiff/ci/wine-build.sh') }}
+          restore-keys: windiff-wine-
+
+      - name: Build Wine master, run the checks, apply the fix queue, run them again
+        run: |
+          docker run --rm -e WINDIFF_ONLY -v "$GITHUB_WORKSPACE:/src:ro" -v "$RUNNER_TEMP/wm:/work" \
+            "$FEDORA_IMAGE" bash /src/tests/experiments/windiff/ci/wine-master.sh; status=$?
+          sudo chown -R "$(id -u):$(id -g)" "$RUNNER_TEMP/wm" || true
+          cat "$RUNNER_TEMP/wm/evidence/wine-master.md" >> "$GITHUB_STEP_SUMMARY" || true
+          exit $status
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: windiff-wine-master
+          path: |
+            ${{ runner.temp }}/wm/evidence/
+            !${{ runner.temp }}/wm/evidence/winetests/*.exe
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: windiff-winetests
+          path: ${{ runner.temp }}/wm/evidence/winetests/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  winetests-windows:
+    name: The queue's conformance tests on Windows
+    needs: wine-master
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        continue-on-error: true
+        with:
+          name: windiff-winetests
+          path: ${{ runner.temp }}/winetests
+
+      - name: Run Wine's test programs (built from the patched tree) on Windows
+        run: |
+          dir="$(cygpath -u "$RUNNER_TEMP")/winetests"
+          if [ ! -s "$dir/tests.txt" ]; then
+            echo "No conformance tests in the queue: nothing to run." | tee -a "$GITHUB_STEP_SUMMARY"
+            mkdir -p "$dir"; echo "no tests" > "$dir/none.txt"
+            exit 0
+          fi
+          mkdir -p "$dir/cwd"
+          while read -r exe name file; do
+            [ -n "$exe" ] || continue
+            (cd "$dir/cwd" && timeout 900 "../$exe" "$name" > "../$exe.$name.windows.txt" 2>&1; echo "exit status $?" >> "../$exe.$name.windows.txt")
+            tail -n 3 "$dir/$exe.$name.windows.txt"
+          done < "$dir/tests.txt"
+          python -I tests/experiments/windiff/winetest_report.py "$(cygpath -w "$dir")" windows | tee -a "$GITHUB_STEP_SUMMARY"
+          rm -f "$dir"/*.exe
+          rm -rf "$dir/cwd"
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: windiff-winetests-windows
+          path: ${{ runner.temp }}/winetests/
+          if-no-files-found: ignore
+
+  # What TUR's real applications hit in Wine. The result depends only on the
+  # harvest scripts, the Wine pin and the application list, so it is kept
+  # and re-published until one of them changes.
+  harvest:
+    name: What real applications hit in Wine
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        id: kept
+        with:
+          path: ${{ runner.temp }}/hv/evidence/harvest
+          key: windiff-harvest-${{ hashFiles('tests/experiments/windiff/ci/harvest.sh', 'tests/experiments/windiff/harvest.py', 'tests/experiments/windiff/ci/wine-pin.sh', 'tests/experiments/windiff/ci/wine-common.sh', 'tests/windows-runtime/apps.json') }}
+
+      - name: Install, use and inspect the applications
+        if: steps.kept.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p "$RUNNER_TEMP/hv"
+          docker run --rm -v "$GITHUB_WORKSPACE:/src:ro" -v "$RUNNER_TEMP/hv:/work" \
+            "$FEDORA_IMAGE" bash /src/tests/experiments/windiff/ci/harvest.sh; status=$?
+          sudo chown -R "$(id -u):$(id -g)" "$RUNNER_TEMP/hv" || true
+          exit $status
+
+      - name: Summary
+        if: always()
+        run: head -c 60000 "$RUNNER_TEMP/hv/evidence/harvest/summary.md" >> "$GITHUB_STEP_SUMMARY" || true
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: windiff-harvest
+          path: ${{ runner.temp }}/hv/evidence/harvest/
+          if-no-files-found: warn
+
+  report:
+    name: Differences from Windows
+    needs: [windows, wine-fedora, wine-master, winetests-windows]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        continue-on-error: true
+        with:
+          pattern: windiff-*
+          path: ${{ runner.temp }}/art
+
+      - name: Compare
+        run: |
+          art="$RUNNER_TEMP/art"; out="$RUNNER_TEMP/report"; mkdir -p "$out"
+          ref="$art/windiff-windows/results-windows.json"
+          [ -s "$ref" ] || { echo "No Windows results: nothing to compare." | tee -a "$GITHUB_STEP_SUMMARY"; exit 1; }
+          args=(--ref "windows=$ref")
+          [ -s "$art/windiff-wine-fedora/results-fedora.json" ] && args+=(--target "fedora-11.20=$art/windiff-wine-fedora/results-fedora.json")
+          [ -s "$art/windiff-wine-master/results-master.json" ] && args+=(--target "master=$art/windiff-wine-master/results-master.json")
+          [ -s "$art/windiff-wine-master/results-patched.json" ] &&
+            args+=(--target "master+queue=$art/windiff-wine-master/results-patched.json" --base master --fixed "master+queue")
+          python3 -I tests/experiments/windiff/diff.py "${args[@]}" --triage tests/experiments/windiff/triage.tsv --out "$out" > /dev/null
+          {
+            cat "$out/summary.md"
+            echo '### Machines'; echo '```'
+            cat "$art/windiff-windows/windows-version.txt" "$art/windiff-wine-fedora/versions-fedora.txt" 2>/dev/null
+            cat "$art/windiff-wine-master/wine-version-build.txt" 2>/dev/null
+            echo '```'
+            cat "$art/windiff-wine-master/wine-master.md" 2>/dev/null
+          } | tee "$out/report.md" >> "$GITHUB_STEP_SUMMARY"
+          head -c 400000 "$out/differences.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: windiff-report
+          path: ${{ runner.temp }}/report/
