@@ -270,6 +270,80 @@ check "the engine's licences are in the image, and the build says what it was bu
               LICENSE-subprocess.h LICENSE-llamafile-sgemm README; do test -s "/usr/share/licenses/llama.cpp/$f" || exit 1; done &&
      grep -q "^llama.cpp	b$1	" /usr/lib/tur/built-from-source.tsv' _ "${EXPECT_LLAMA_CPP_BUILD}"
 
+# The desktop programs (image/desktop/; image/README.md, "The desktop
+# programs"): built in the image build against the image's own Qt, with
+# their launcher entries, bus activation files and P@x's icon.
+desktop=/usr/lib/tur/desktop-programs.tsv
+check "the list of TUR's desktop programs is in the image" test -s "${desktop}"
+check "the four desktop programs are listed" bash -c \
+    '[ "$(grep -v "^#" "$1" | cut -f1 | LC_ALL=C sort | tr "\n" " ")" = "tur-centre tur-pax-overlay tur-pax-ui tur-settings " ]' _ "${desktop}"
+while IFS=$'\t' read -r program path version; do
+    case "${program}" in "#"* | "") continue ;; esac
+    check "${program} is installed at ${path} and says its version without a display" bash -c \
+        '[ "$(QT_QPA_PLATFORM=offscreen XDG_RUNTIME_DIR=/tmp "$1" --version 2>/dev/null | tail -n1)" = "$2 $3" ]' \
+        _ "${path}" "${program}" "${version}"
+done < "${desktop}"
+# "The same Qt as the image": the package build of every library the programs
+# were linked against, as the build stage wrote it down, is the build this
+# image has. Qt and KDE's libraries must agree exactly; a difference in
+# another library (the compiler's, the C library) is printed.
+check "the image's Qt and KDE libraries are the builds the desktop programs were built against" bash -c \
+    'grep -v "^#" "$1" | while IFS=$'"'"'\t'"'"' read -r package build; do
+         case "${package}" in qt6-*|kf6-*|layer-shell-qt|kwayland) ;; *) continue ;; esac
+         have="$(rpm -q --qf "%{VERSION}-%{RELEASE}" "${package}")"
+         [ "${have}" = "${build}" ] || { echo "${package}: built against ${build}, the image has ${have}"; exit 1; }
+     done' _ /usr/lib/tur/desktop-built-against.tsv
+check "the desktop programs were built against Qt Base, Qt Declarative, LayerShellQt and KWayland" bash -c \
+    'for package in qt6-qtbase qt6-qtdeclarative layer-shell-qt kwayland; do
+         grep -q "^${package}	" "$1" || { echo "${package}"; exit 1; }; done' _ /usr/lib/tur/desktop-built-against.tsv
+echo "      built against: $(grep -v '^#' /usr/lib/tur/desktop-built-against.tsv | grep -E '^(qt6-|kf6-|layer-shell-qt|kwayland)' | tr '\t' ' ' | tr '\n' ';')"
+grep -v '^#' /usr/lib/tur/desktop-built-against.tsv | while IFS=$'\t' read -r package build; do
+    have="$(rpm -q --qf '%{VERSION}-%{RELEASE}' "${package}" 2>&1)"
+    if [ "${have}" != "${build}" ]; then echo "NOTE  ${package}: built against ${build}, the image has ${have}"; fi
+done
+check "every library the desktop programs need is in the image" bash -c \
+    '! find /usr/bin/tur-centre /usr/bin/tur-settings /usr/bin/tur-pax-ui /usr/bin/tur-pax-overlay /usr/lib64/tur -type f -exec ldd {} \; 2>&1 | grep "not found"'
+check "the desktop programs link no widget library and none of Qt's GPL-only modules" bash -c \
+    '! find /usr/bin/tur-centre /usr/bin/tur-settings /usr/bin/tur-pax-ui /usr/bin/tur-pax-overlay /usr/lib64/tur -type f -exec ldd {} \; 2>&1 |
+       grep -E "libQt6(Widgets|VirtualKeyboard|WaylandCompositor|Quick3D|QuickTimeline|Graphs|Charts|DataVisualization|Lottie|HttpServer|Grpc|Mqtt|Coap|NetworkAuth)"'
+# Each program loads its window from its installed libraries, with no import
+# path set, on what the image holds (no fixture): the catalogue through
+# tur-catalogue, this system's own facts, no session bus.
+offscreen() { env -i PATH=/usr/bin HOME=/tmp/tur-desktop-smoke XDG_RUNTIME_DIR=/tmp/tur-desktop-smoke LC_ALL=C.UTF-8 \
+    QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software "$@"; }
+mkdir -p /tmp/tur-desktop-smoke && chmod 0700 /tmp/tur-desktop-smoke
+check "tur-centre loads its window with no QML warning, on the installed catalogue" offscreen tur-centre --check
+check "tur-centre opens an application's page from the installed catalogue" \
+    offscreen tur-centre --check tur-centre:app/org.libreoffice.libreoffice
+check "tur-settings loads its window with no QML warning, on this system" offscreen tur-settings --check --no-dbus
+check "tur-pax-ui loads the ask bar with no QML warning" offscreen tur-pax-ui --check --no-dbus --mode ask
+check "tur-pax-ui loads the setup flow with no QML warning" offscreen tur-pax-ui --check --no-dbus --mode setup
+check "tur-pax-overlay loads its surfaces with no QML warning" offscreen tur-pax-overlay --check --no-dbus
+for entry in org.tur.Centre org.tur.Settings org.tur.PaxUi; do
+    check "the launcher entry ${entry}.desktop is valid, and its program is in the image" bash -c \
+        'desktop-file-validate "/usr/share/applications/$1.desktop" &&
+         command -v "$(sed -n "s/^Exec=\([^ ]*\).*/\1/p" "/usr/share/applications/$1.desktop" | head -n1)"' _ "${entry}"
+done
+for name in org.tur.Settings1 org.tur.PaxUi1 org.tur.PaxOverlay1; do
+    check "the session bus can start ${name}: its activation file names a program in the image" bash -c \
+        'f="/usr/share/dbus-1/services/$1.service"; grep -qx "Name=$1" "$f" &&
+         test -x "$(sed -n "s/^Exec=\([^ ]*\).*/\1/p" "$f")"' _ "${name}"
+done
+check "TUR's entry in KDE System Settings is installed" \
+    grep -qx 'Exec=tur-settings' /usr/share/plasma/systemsettings/externalmodules/org.tur.Settings.desktop
+check "P@x's icon is in the icon theme, where its launcher entry names it" bash -c \
+    'grep -qx "Icon=org.tur.Pax" /usr/share/applications/org.tur.PaxUi.desktop &&
+     grep -q "<svg" /usr/share/icons/hicolor/scalable/apps/org.tur.Pax.svg'
+check "the icons the other launcher entries name are in the icon theme" bash -c \
+    'for icon in system-software-install preferences-system; do
+         find /usr/share/icons/breeze /usr/share/icons/hicolor -name "${icon}.*" | grep -q . || { echo "${icon}"; exit 1; }; done'
+# The typefaces (image/desktop/fonts.lock).
+check "Inter and JetBrains Mono are installed, as Fedora's packages" rpm -q rsms-inter-fonts jetbrains-mono-fonts
+check "fontconfig finds the family Inter" bash -c \
+    '[ "$(HOME=/tmp/tur-desktop-smoke fc-match -f "%{family[0]}" "Inter")" = Inter ]'
+check "fontconfig finds the family JetBrains Mono" bash -c \
+    '[ "$(HOME=/tmp/tur-desktop-smoke fc-match -f "%{family[0]}" "JetBrains Mono")" = "JetBrains Mono" ]'
+
 # What the programs start (specification section 12; pax-orchestrator.md).
 # Nothing is added to the image for them: every one comes with the base.
 for tool in /usr/bin/bwrap /usr/bin/prlimit /usr/bin/lsblk /usr/bin/udevadm /usr/bin/journalctl \
@@ -333,7 +407,7 @@ find "${third}" -type f -printf '%s %P\n' | sort -rn | head -n 12 | sed 's/^/   
 # Everything TUR adds must be readable by an ordinary user: the checks above
 # run as root, which would not notice.
 check "what TUR adds is readable by every user" bash -c \
-    '[ -z "$(find /usr/share/tur /usr/share/licenses/tur /usr/share/licenses/tur-third-party /usr/share/licenses/tur-grub-boot-count /usr/share/licenses/llama.cpp /usr/lib/tur /usr/libexec/tur /usr/share/dbus-1/services/org.tur.Agent1.service /usr/lib/systemd/user/tur-pax* \( -type d ! -perm -0555 \) -o \( -type f ! -perm -0444 \) | head -n 5)" ]'
+    '[ -z "$(find /usr/share/tur /usr/share/licenses/tur /usr/share/licenses/tur-third-party /usr/share/licenses/tur-grub-boot-count /usr/share/licenses/llama.cpp /usr/lib/tur /usr/libexec/tur /usr/share/dbus-1/services/org.tur.Agent1.service /usr/lib/systemd/user/tur-pax* /usr/lib64/tur /usr/share/applications/org.tur.* /usr/share/dbus-1/services/org.tur.* /usr/share/icons/hicolor/scalable/apps/org.tur.Pax.svg \( -type d ! -perm -0555 \) -o \( -type f ! -perm -0444 \) | head -n 5)" ]'
 
 # Signed updates (ADR-0023; docs/architecture/publishing.md). The rule for
 # TUR's registry path is in the vendor policy, nothing in /etc hides it, and

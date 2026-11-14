@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# The launcher entry of tur-centre, the application centre, and its link
+# scheme: a link of the form tur-centre:app/ID or tur-centre:search?q=WORDS
+# is handed to the program as its argument (docs/architecture/tur-centre.md).
+# The icon is the icon theme's general one for installing software, until
+# the centre has an icon of its own. Installed as
+# /usr/share/applications/org.tur.Centre.desktop.
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=Application centre
+GenericName=Find and install applications
+Comment=Find an application, see how it will run on this computer, and install it
+Exec=tur-centre %u
+Icon=system-software-install
+Terminal=false
+Categories=System;
+Keywords=applications;apps;programs;software;install;remove;update;store;TUR;
+MimeType=x-scheme-handler/tur-centre;
+StartupNotify=true
+SingleMainWindow=true

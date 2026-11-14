@@ -15,6 +15,11 @@ image"). This adds to the SPDX document, from what the built image holds:
   declares and the SHA-256 of the crate file, as Cargo.lock pins it, and one
   for the Rust standard library;
 - a STATIC_LINK relationship from each program to each crate in it;
+- one package for each of TUR's desktop programs in
+  /usr/lib/tur/desktop-programs.tsv (C++ and QML on the image's own Qt,
+  linked dynamically: image/desktop/), with its version and the SHA-256 of
+  the installed file, and one for each library of their QML modules in
+  /usr/lib64/tur;
 - one package for each piece of third-party software the image build compiles
   from source, from /usr/lib/tur/built-from-source.tsv: today llama.cpp, the
   engine of local AI (image/engine/), with its version, licence, source
@@ -47,6 +52,7 @@ TUR_LICENCE = "LicenseRef-TUR-Noncommercial-1.0.0"
 PROGRAMS = "/usr/lib/tur/programs.tsv"
 CRATES = "/usr/share/licenses/tur-third-party/crates.tsv"
 BUILT = "/usr/lib/tur/built-from-source.tsv"
+DESKTOP = "/usr/lib/tur/desktop-programs.tsv"
 
 # Licences a crate may have when it is linked statically into a program under
 # the TUR licence: permissive ones, whose conditions are met by shipping the
@@ -74,6 +80,20 @@ PROBE = r"""
 grep -v '^#' /usr/lib/tur/programs.tsv | while IFS=$'\t' read -r program path component tools; do
     said=$("$path" --version 2>/dev/null </dev/null | head -n1)
     printf '%s\t%s\t%s\t%s\t%s\n' "$program" "$path" "$component" "${said##* }" "$(sha256sum "$path" | cut -d' ' -f1)"
+done
+"""
+
+
+# TUR's desktop programs and the libraries of their QML modules: name, path,
+# version ("-" for a library), SHA-256.
+DESKTOP_PROBE = r"""
+[ -e /usr/lib/tur/desktop-programs.tsv ] || exit 0
+grep -v '^#' /usr/lib/tur/desktop-programs.tsv | while IFS=$'\t' read -r program path version; do
+    printf '%s\t%s\t%s\t%s\n' "$program" "$path" "$version" "$(sha256sum "$path" | cut -d' ' -f1)"
+done
+for library in /usr/lib64/tur/*.so; do
+    [ -e "$library" ] || continue
+    printf '%s\t%s\t-\t%s\n' "$(basename "$library")" "$library" "$(sha256sum "$library" | cut -d' ' -f1)"
 done
 """
 
@@ -157,6 +177,7 @@ def main() -> int:
     programs = rows(in_image(args.image, "/bin/bash", "-c", PROBE))
     crates = rows(in_image(args.image, "cat", CRATES))
     built = rows(in_image(args.image, "/bin/bash", "-c", f"cat {BUILT} 2>/dev/null || true"))
+    desktop = rows(in_image(args.image, "/bin/bash", "-c", DESKTOP_PROBE))
     if not programs or not crates:
         print(f"the image has no {PROGRAMS} or no {CRATES}", file=sys.stderr)
         return 1
@@ -254,6 +275,29 @@ def main() -> int:
                 }
             )
 
+    # TUR's desktop programs and the libraries of their QML modules. They
+    # link Qt and KDE's libraries dynamically, which are packages of the
+    # image; nothing third-party is compiled into them.
+    for name, where, version, sha256 in desktop:
+        ident = spdx_id("tur-desktop", name)
+        package = {
+            "SPDXID": ident,
+            "name": name,
+            "supplier": "Organization: TUR project",
+            "downloadLocation": "NOASSERTION",
+            "filesAnalyzed": False,
+            "checksums": [{"algorithm": "SHA256", "checksumValue": sha256}],
+            "licenseConcluded": TUR_LICENCE,
+            "licenseDeclared": TUR_LICENCE,
+            "copyrightText": "Copyright (c) 2026 TUR project authors (https://github.com/giorgiogiudice/TUR)",
+            "sourceInfo": f"compiled in the image build from desktop/ against the image's own Qt; installed at "
+            f"{where}; the checksum is that of the installed file",
+        }
+        if version != "-":
+            package["versionInfo"] = version
+        packages.append(package)
+        relationships.append({"spdxElementId": root, "relatedSpdxElementId": ident, "relationshipType": "CONTAINS"})
+
     # Third-party software compiled from source in the image build. It is
     # not linked into TUR's programs: it is a program of its own, under its
     # own licence, with its licence files where the table says.
@@ -290,6 +334,7 @@ def main() -> int:
     without = sorted(f"{crate} {version}" for (crate, version), entry in linked.items() if entry["files"] == 0)
     print(f"TUR programs added to the SBOM: {len(programs)}")
     print(f"crates added to the SBOM: {len(linked)} (the Rust standard library included)")
+    print(f"TUR desktop programs and libraries added to the SBOM: {len(desktop)}")
     print(f"built from source in the image: {', '.join(f'{row[0]} {row[1]} ({row[2]})' for row in built) or 'nothing'}")
     print(f"crates that ship no licence file of their own: {', '.join(without) or 'none'}")
     if refused:

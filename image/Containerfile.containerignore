@@ -18,6 +18,13 @@ branding/render.py
 # TUR's desktop theme and defaults (task D-04): the tree image/Containerfile
 # copies, and nothing else of desktop/.
 !desktop/data/rootfs/
+# The desktop programs, built in the stage "desktop" (image/desktop/build.sh):
+# all of desktop/ but the reference pictures of its tests and any build
+# directory, and the notices tur-settings shows word for word.
+!desktop/
+desktop/tests/screenshots/
+desktop/build/
+!THIRD_PARTY_NOTICES.md
 !rust-toolchain.toml
 !LICENSE.md
 !NOTICE
