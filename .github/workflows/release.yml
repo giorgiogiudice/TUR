@@ -30,6 +30,11 @@
 #     nothing here decides by github.ref alone. A workflow that runs on main
 #     and is missing from the list below is still counted, but when it is
 #     the last to finish nothing starts the release: start it by hand.
+#     A commit is released once: when one of its workflows is run again and
+#     finishes a second time, the evaluation finds the commit's release in
+#     progress or done (by the run's name, which carries the commit) and
+#     stops. A release that failed does not count; one started by hand does
+#     not ask.
 #   - pull_request, only when the pull request changes the release itself:
 #     a rehearsal, decided at once. It takes this commit's image if all its
 #     workflows have already passed, else the latest image of the branch that
@@ -47,6 +52,14 @@
 # requests and with `image_run`, the release job runs in full against its own
 # registry and its own throwaway keys, and nothing leaves the job.
 name: release
+# The commit in the run's name is how a later evaluation finds the release
+# runs of that commit (a workflow_run run's own head commit is main's tip).
+run-name: >-
+  ${{ github.event_name == 'workflow_run' && format('release {0}', github.event.workflow_run.head_sha)
+      || github.event.pull_request.title
+      || (inputs.promote && format('promote {0} to stable', inputs.promote))
+      || (inputs.image_run && format('rehearsal with image run {0}', inputs.image_run))
+      || format('release by hand on {0}', github.ref_name) }}
 
 on:
   workflow_run:
@@ -75,14 +88,20 @@ on:
 
 permissions: {}
 
-# One run per commit (workflow_run) or per ref. For a commit of main, a newer
-# evaluation replaces an older one; it reads every run again, so nothing is
-# lost. A person's promotion is never cancelled. The release job has a group
-# of its own (below), so that an evaluation of another commit cannot cancel
-# a release in progress.
+# Pull requests and runs by hand: one run per ref; a newer push to a pull
+# request replaces the run of the older one; a person's run or promotion is
+# never cancelled.
+#
+# workflow_run: no group for the run as a whole (the run's own ID makes the
+# group unique). A group is taken when a run is created, before any job's
+# `if`: with one group per commit, the end of ANY run on main for that
+# commit (a scheduled one, one started by hand, a workflow run again) would
+# cancel a release in progress, even though its own evaluation is then
+# skipped. Instead, the evaluation (job await) and the release (job release)
+# each have a group of their own: evaluations only ever cancel evaluations.
 concurrency:
-  group: release-${{ github.event_name }}-${{ github.event.workflow_run.head_sha || github.ref }}-${{ inputs.promote || 'testing' }}
-  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
+  group: release-${{ github.event_name }}-${{ github.event_name == 'workflow_run' && github.run_id || github.ref }}-${{ inputs.promote || 'testing' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   PUBLISHED_REPOSITORY: ghcr.io/giorgiogiudice/tur
@@ -105,6 +124,17 @@ jobs:
           (github.event.workflow_run.event == 'push' &&
            github.event.workflow_run.head_branch == 'main' &&
            github.event.workflow_run.head_repository.full_name == github.repository)) }}
+    # The newest evaluation of a commit wins: it reads every run again, so
+    # the one it replaces loses nothing. Only evaluations are in this group,
+    # and only those that the `if` above lets through (any other gets a
+    # group of its own, whether or not a skipped job takes one).
+    concurrency:
+      group: >-
+        release-await-${{ (github.event_name == 'workflow_run' &&
+            github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' &&
+            github.event.workflow_run.head_repository.full_name == github.repository)
+          && github.event.workflow_run.head_sha || github.run_id }}
+      cancel-in-progress: true
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -137,6 +167,8 @@ jobs:
           TRIGGER_ID: ${{ github.event.workflow_run.id }}
           TRIGGER_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
           TRIGGER_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          RELEASE_JOB: Re-chunk, sign, prove on a booted guest, publish
+          LINT_JOB: Lint the release scripts
         run: |
           python3 - <<'PY'
           import importlib.util, os, sys, time
@@ -170,8 +202,8 @@ jobs:
           def unfinished(chosen):
               return sorted(n for n, r in chosen.items() if r["status"] != "completed")
 
-          def no(reason, code=0):
-              rules.output(release="false", reason=reason)
+          def no(reason, code=0, **more):
+              rules.output(release="false", reason=reason, **more)
               rules.summary("Not released: " + reason)
               sys.exit(code)
 
@@ -225,6 +257,44 @@ jobs:
                            reason="this commit's image was not both built (image) and booted (boot) by CI", **ids)
               rules.summary("Nothing to release: the image of this commit was not both built and booted by CI.")
               sys.exit(0)
+          if event == "workflow_run":
+              # A workflow of this commit that is run again finishes a second
+              # time, and everything has passed a second time. The commit is
+              # released once: not again while a release of it is on its way
+              # or has succeeded. (A release that failed does not count, and a
+              # run started by hand does not ask.) The other runs of this
+              # workflow for the commit are found by their name.
+              mine = os.environ["GITHUB_RUN_ID"]
+
+              def release_state(run_id):
+                  jobs = {j["name"]: j for j in rules.api(repo, f"/actions/runs/{run_id}/jobs?per_page=30")["jobs"]}
+                  job, lint = jobs.get(os.environ["RELEASE_JOB"]), jobs.get(os.environ["LINT_JOB"])
+                  if job and job["conclusion"] == "success":
+                      return "released"
+                  if job and job["status"] != "completed":
+                      return "in progress"
+                  if job or rules.api(repo, f"/actions/runs/{run_id}")["status"] == "completed":
+                      return "no"  # it failed, was cancelled, or decided "not yet"
+                  # Still going, and no release job yet. Lint runs only for
+                  # a run that decided to release; the release follows it.
+                  if lint and lint["conclusion"] in ("skipped", "failure", "cancelled"):
+                      return "no"
+                  return "in progress" if lint else "unclear"
+
+              others = rules.api(repo, "/actions/workflows/release.yml/runs?event=workflow_run&per_page=100")["workflow_runs"]
+              for run in others:
+                  if str(run["id"]) == mine or run.get("display_title") != f"release {sha}":
+                      continue
+                  state = release_state(run["id"])
+                  for _ in range(3):
+                      if state != "unclear":
+                          break
+                      time.sleep(10)  # between its decision and its next job
+                      state = release_state(run["id"])
+                  if state == "released":
+                      no(f"already released by run {run['id']}", **ids)
+                  if state == "in progress":
+                      no(f"a release of this commit is in progress (run {run['id']})", **ids)
           rules.output(release="true", rehearsal="false", reason="every workflow on this commit passed", **ids)
           PY
 

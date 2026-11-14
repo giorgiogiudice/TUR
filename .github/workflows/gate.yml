@@ -44,20 +44,6 @@ permissions:
   statuses: write
   pull-requests: read
 
-# One evaluation per commit waits for a runner; a newer one cancels it (issue
-# #114: workflow_run evaluations run in main's context, and with several pull
-# requests open they were most of the queue, so the final evaluation of a
-# commit waited hours and the status stayed a stale "pending"). Every
-# evaluation reads the whole run list, so a cancelled one loses nothing, and
-# the newest, created after the latest workflow finished, is the one that
-# survives and records the status. The pull_request evaluation is a check of
-# the pull request, where a cancelled check would look like a failure: it has
-# a group of its own, is never cancelled by a workflow_run one, and corrects
-# itself as described above if it finishes after one.
-concurrency:
-  group: gate-${{ github.event_name }}-${{ github.event.workflow_run.head_sha || github.event.pull_request.head.sha }}
-  cancel-in-progress: ${{ github.event_name == 'workflow_run' }}
-
 jobs:
   evaluate:
     name: record the gate status (not the verdict)
@@ -68,6 +54,31 @@ jobs:
     if: >-
       ${{ github.event_name != 'workflow_run' ||
           github.event.workflow_run.event == 'pull_request' || github.event.workflow_run.event == 'push' }}
+    # One evaluation per commit waits for a runner; a newer one cancels it
+    # (issue #114: workflow_run evaluations run in main's context, and with
+    # several pull requests open they were most of the queue, so the final
+    # evaluation of a commit waited hours and the status stayed a stale
+    # "pending"). Every evaluation reads the whole run list, so a cancelled
+    # one loses nothing, and the newest, created after the latest workflow
+    # finished, is the one that survives and records the status.
+    #
+    # The group is the job's, not the workflow's, and only an evaluation
+    # that the `if` above lets through is in a commit's group (any other
+    # gets a group of its own): a workflow's group is taken when the run is
+    # created, before the `if`, so the end of a run that is not counted
+    # would cancel the commit's last evaluation and then do nothing, and the
+    # status would stay "pending".
+    #
+    # The pull_request evaluation is a check of the pull request, where a
+    # cancelled check would look like a failure: it has a group of its own,
+    # is never cancelled by a workflow_run one, and corrects itself as
+    # described at the top if it finishes after one.
+    concurrency:
+      group: >-
+        gate-${{ github.event_name }}-${{ (github.event_name != 'workflow_run' ||
+            github.event.workflow_run.event == 'pull_request' || github.event.workflow_run.event == 'push')
+          && (github.event.workflow_run.head_sha || github.event.pull_request.head.sha) || github.run_id }}
+      cancel-in-progress: ${{ github.event_name == 'workflow_run' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -156,11 +167,20 @@ jobs:
           H = {"Authorization": f"Bearer {os.environ['GH_TOKEN']}",
                "Accept": "application/vnd.github+json"}
           def call(method, path, body=None):
+              # The last evaluation of a commit has no successor: one failed
+              # request must not leave an old status standing.
               data = json.dumps(body).encode() if body is not None else None
-              req = urllib.request.Request(f"https://api.github.com/repos/{repo}{path}",
-                                           data=data, headers=H, method=method)
-              with urllib.request.urlopen(req, timeout=30) as r:
-                  return json.load(r)
+              for attempt in range(4):
+                  req = urllib.request.Request(f"https://api.github.com/repos/{repo}{path}",
+                                               data=data, headers=H, method=method)
+                  try:
+                      with urllib.request.urlopen(req, timeout=30) as r:
+                          return json.load(r)
+                  except OSError as err:  # URLError and HTTPError are OSErrors
+                      if attempt == 3 or getattr(err, "code", 500) in (401, 403, 404, 422):
+                          raise
+                      print(f"{method} {path}: {err}; again in {5 * (attempt + 1)} s", flush=True)
+                      time.sleep(5 * (attempt + 1))
           def read():
               return call("GET", f"/actions/runs?head_sha={sha}&per_page=100")["workflow_runs"]
           def record(state, text):
