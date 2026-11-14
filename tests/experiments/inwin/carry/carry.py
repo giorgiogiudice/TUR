@@ -230,7 +230,8 @@ def start_layout():
             target.unlink()
         try:
             powershell(f"Export-StartLayout -Path '{target}'; 'done'" + JSON)
-            text = target.read_text(encoding="utf-8-sig", errors="replace")
+            raw = target.read_bytes()
+            text = raw.decode("utf-16", "replace") if raw[:2] in (b"\xff\xfe", b"\xfe\xff") else raw.decode("utf-8-sig", "replace")
             break
         except (RuntimeError, OSError) as error:
             problems.append(f"{extension}: {str(error)[:120]}")
