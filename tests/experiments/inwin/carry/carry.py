@@ -405,7 +405,8 @@ def offline_copy(out_dir):
     """Save this user's registry to a file, load the file as a stranger's
     registry would be loaded, and compare: is what the running Windows
     says what the file on the disk holds?"""
-    hive = pathlib.Path(out_dir) / "inwin-ntuser-copy.dat"
+    # Never in a directory that becomes an artifact: the copy is deleted before this returns.
+    hive = pathlib.Path(os.environ.get("TEMP", out_dir)) / "inwin-ntuser-copy.dat"
     if hive.exists():
         hive.unlink()
     code, text = run_tool(["reg.exe", "save", "HKCU", str(hive), "/y"])
@@ -462,7 +463,12 @@ def offline_copy(out_dir):
         result["own_reader"] = {"error": f"{type(error).__name__}: {str(error)[:200]}"}
     code, text = run_tool(["reg.exe", "load", r"HKU\inwin_offline", str(hive)])
     if code != 0:
-        raise PermissionError(f"reg load: exit {code}")
+        result["reg_load"] = f"exit {code}"
+        try:
+            hive.unlink()
+        except OSError:
+            pass
+        return result
     try:
         for path, name in OFFLINE:
             try:
