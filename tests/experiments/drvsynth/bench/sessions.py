@@ -380,9 +380,9 @@ class Bench:
               "Entries with a single time are things that happened while the program was running.", ""]
         for e in timeline:
             if "at" in e:
-                md.append(f"- **{e['at']:.2f} s**: {e['did']}")
+                md.append(f"- **{e['at']:.3f} s**: {e['did']}")
                 continue
-            md.append(f"- **{e['from']:.2f} - {e['to']:.2f} s**: did: {e['did']}")
+            md.append(f"- **{e['from']:.3f} - {e['to']:.3f} s**: did: {e['did']}")
             if e.get("picture"):
                 md.append("  - the picture (16 x 8 pixels; `.` is off, `1`-`f` are brightness levels, `f` brightest):")
                 md.append("")
