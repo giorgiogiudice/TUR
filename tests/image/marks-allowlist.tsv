@@ -18,6 +18,7 @@ text	/usr/lib/systemd/system/fedora-third-party-refresh.service	Fedora's third-p
 text	/usr/share/polkit-1/actions/org.fedoraproject.thirdparty.policy	Fedora's third-party repository tool (C6)
 text	/usr/lib/python3*/site-packages/fedora_third_party*	Fedora's third-party repository tool (C6)
 text	/usr/share/tur/catalogue/*.toml	TUR's catalogue links an application's page on Fedora's package site and names that site truthfully
+text	/usr/share/tur/ai-local/models/*.toml	TUR's local AI model catalogue records measurements made with Fedora's llama-cpp package and names that build truthfully
 #
 # --- TUR's own text about its origin, and Fedora's defaults that TUR's override
 text	/usr/share/tur/statement-of-origin.txt	TUR's statement of origin (desktop-experience.md, 17.1, answer 3)

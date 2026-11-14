@@ -187,8 +187,25 @@ it:
 A refusal has `"status": "refused"`, a machine-readable `reason`, the `TUR-AI-*`
 code and the sentence the user is shown.
 
+**A result cut to fit the model's context.** A tool may print up to 256 KiB
+(an adapter's `max_output_bytes`), which a local model's 8 192 tokens could
+not hold at all. When the model's context is known (`context_tokens`, as the
+person chose it for a model on this computer or as the model list declares
+it), one tool's result is cut to a quarter of the context, counted at four
+bytes a token, never below 2 048 bytes (`orchestrator::tool_result_budget`:
+8 192 bytes for 8 192 tokens, 200 000 for 200 000; P@x's own request with
+every tool set is about 3 300 tokens). The frame stays; the
+program's output and its error output become the beginning of their text,
+cut at a character, with `"truncated": true` and a `cut` sentence that says
+why, and the task's report marks the call as truncated. A model with no
+declared context, or a provider given by a configuration file, gets the
+result as the tool's own limit let it through. The budget is per result,
+not for the whole conversation: a long task can still outgrow a small
+context, which the provider then reports as an error (TUR-010).
+
 **Limits.** Steps (responses asked for; default 12), wall-clock seconds (default
-300), tool calls looked at per response (default 8), and the spend limit of the
+300), tool calls looked at per response (default 8), the size of one tool's
+result for a model with a known context (above), and the spend limit of the
 provider configuration. The spend limit acts between responses, as addendum A
 section 10 says: the meter cuts a response as soon as the provider's reported
 usage passes the limit, and that response is then discarded whole.

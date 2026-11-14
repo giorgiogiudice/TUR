@@ -103,6 +103,8 @@ NEXT SAFE ACTION
   command tool's schema (section 6).
 ```
 
+> **Later (TUR-010):** the tool files this report puts under `pax/` were moved to the component's top level (pax-5 for tur-apps and tur-ai-local, TUR-010 for tur-update), where P@x discovers every component's tools, and the image installs them.
+
 ## 1. Runs
 
 | Commit | Workflow | Run | Result | What it showed |

@@ -10,6 +10,8 @@ on:
       - "branding/**"
       # Programs compiled into the image (image/programs.tsv), what they are
       # compiled with, and what is installed beside them.
+      - "services/tur-ai-local/**"
+      - "services/tur-apps/**"
       - "services/tur-boot-health/**"
       - "services/tur-catalogue/**"
       - "services/tur-device-manager/**"
@@ -40,6 +42,8 @@ on:
       - "branding/**"
       # Programs compiled into the image (image/programs.tsv), what they are
       # compiled with, and what is installed beside them.
+      - "services/tur-ai-local/**"
+      - "services/tur-apps/**"
       - "services/tur-boot-health/**"
       - "services/tur-catalogue/**"
       - "services/tur-device-manager/**"
@@ -80,7 +84,7 @@ jobs:
   build:
     name: Build, test and describe the image
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 120
     permissions:
       contents: read
       packages: read
@@ -91,7 +95,7 @@ jobs:
 
       - name: Lint scripts
         run: |
-          shellcheck -x scripts/*.sh tests/image/*.sh image/*.sh image/branding/*.sh
+          shellcheck -x scripts/*.sh tests/image/*.sh image/*.sh image/branding/*.sh image/engine/*.sh
           python3 -m py_compile scripts/*.py tests/image/*.py
 
       - name: Runner environment

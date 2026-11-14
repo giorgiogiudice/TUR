@@ -502,8 +502,8 @@ operation states to those of section 2.2: `checking`, `downloading`,
 
 ### 9.1 Tools
 
-`services/tur-update/pax/agent-tools.json` declares two tools, both class 0,
-and `pax/agent-tools.adapter.json` performs them with this component's
+`services/tur-update/agent-tools.json` declares two tools, both class 0,
+and `agent-tools.adapter.json` beside it performs them with this component's
 program:
 
 | Tool | Class | Method | Performed by |
@@ -520,23 +520,18 @@ yet, would be a name without a meaning.
 classes, holds each command line against the built program, and runs the
 tools on recorded machines.
 
-**Two things stand between these tools and P@x.**
+**Where the files are.** At the component's top level, where P@x finds every
+component's tools; the image installs them in
+`/usr/share/tur/pax/tools/tur-update/` (report TUR-010). Until then they sat
+one directory down, in `pax/`, because P@x's tests listed the components that
+ship tools; since pax-5 those tests discover the tool sets instead.
 
-1. **Where the files are.** Other components keep the two files in their own
-   directory, `services/<component>/`. `services/` is read as a directory of
-   tool sets by `services/tur-pax/tests/tools.rs` and by the `pax` workflow
-   (`tests/pax/e2e.py`), and both list the components that ship tools: five.
-   A sixth breaks both until they are changed, and the `pax` workflow has to
-   build and install `/usr/bin/tur-update`. That is a change to the
-   assistant's own tests, outside what this slice may touch. So the files are
-   one directory down, in `pax/`, where `tur-pax` does not look, and a test
-   says so. Moving them up is one `git mv` and the three edits of section 14.
-2. **What the tools can see.** P@x runs tool programs in its read-only
-   sandbox, as the user. There `bootc status` fails (section 3), and the tool
-   returns `TUR-UPDATE-STATE-004`: reading the versions needs administrator
-   rights. Until `org.tur.Update1` exists the tools can therefore say only
-   that. They are complete as an interface and useful once the service
-   publishes the state.
+**What stands between these tools and P@x: what they can see.** P@x runs
+tool programs in its read-only sandbox, as the user. There `bootc status`
+fails (section 3), and the tool returns `TUR-UPDATE-STATE-004`: reading the
+versions needs administrator rights. Until `org.tur.Update1` exists the tools
+can therefore say only that. They are complete as an interface and useful
+once the service publishes the state.
 
 ### 9.2 Command line
 
@@ -726,7 +721,7 @@ Not applied by this change: each file belongs to someone else.
 | `desktop-experience.md` §11.1 | "Not applied … signature, checksum, space or network": add the reasons that exist before any download: boot health unknown, attempts cannot be counted. Add the states `held` and `not-checked`. Add "Versions on this computer" marks: kept, failed to start here |
 | `desktop-experience.md` §11.1 | "Try the update again" on the fallback notice is the person's request of 4.3 rule 7 and gives `TUR-UPDATE-HEALTH-002`, a warning to show before it starts |
 | `ai-control-layer.md` §11 | The update tools: `update_status` and `update_preview_check`, class 0. No class 3 update tool is declared until the trusted path exists |
-| `services/tur-pax/tests/tools.rs`, `tests/pax/e2e.py`, `.github/workflows/pax.yml` | When the tool set moves to `services/tur-update/`: add `tur-update` to the three lists of components (six, not five), and build and install `/usr/bin/tur-update` in the `pax` workflow. A scenario for the tools is only useful once the service exists |
+| `services/tur-pax/tests/tools.rs`, `tests/pax/e2e.py`, `.github/workflows/pax.yml` | Done (pax-5, TUR-010): the tests discover tool sets, and the tool set is at `services/tur-update/`. A scenario for the tools is only useful once the service exists |
 | `THIRD_PARTY_NOTICES.md` | The sentence "No such code exists yet" about upstream-licensed files: `services/tur-update/tests/fixtures/bootc-upstream/` holds fourteen test samples converted from bootc's source tree, under bootc's licence (MIT OR Apache-2.0), with `LICENSE-MIT` beside them. They are test data and are not in the image |
 
 ## 15. Sources

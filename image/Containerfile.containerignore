@@ -24,6 +24,8 @@ branding/render.py
 !catalogue/
 !crates/
 !installer/tur-installer-core/
+!services/tur-ai-local/
+!services/tur-apps/
 !services/tur-boot-health/
 !services/tur-catalogue/
 !services/tur-device-manager/
