@@ -14,6 +14,12 @@
 #   proof     a medium built the same way that carries the boot-test image, so
 #             that the boot test's checks and boot-health scenarios can run on
 #             a disk installed from a medium.
+#   beside    the product medium, installing beside Windows on the same disk
+#             (ADR-0029): refusals, an installation, TUR's first start and
+#             "Windows" in TUR's boot menu, the disk compared with what it
+#             held before after each.
+#   beside-faults
+#             the same installation with the power cut at each step.
 #
 # THE MEDIUM IS NOT UPLOADED BY DEFAULT. Every run uploads the manifest,
 # checksums, logs and screenshots. The medium itself is uploaded only when the
@@ -103,7 +109,8 @@ jobs:
             installer/iso/rootfs/usr/libexec/tur-installer/tur-install-engine \
             installer/iso/rootfs/usr/libexec/tur-installer/tur-live-transcript \
             installer/iso/rootfs/usr/libexec/tur-installer/tur-installer-wizard \
-            installer/iso/rootfs/usr/lib/tur-installer/engine.sh
+            installer/iso/rootfs/usr/lib/tur-installer/engine.sh \
+            image/rootfs/usr/bin/tur-dualboot image/rootfs/usr/libexec/tur/tur-restart-windows
           python3 -m py_compile installer/iso/*.py tests/iso/*.py
 
   product:
@@ -656,4 +663,348 @@ jobs:
         with:
           name: tur-installer-medium-proof
           path: out/iso-proof/
+          if-no-files-found: warn
+
+  # TUR beside Windows on the same disk (ADR-0029, issue 64 step 1). The disk
+  # is laid out as Windows leaves it after its own "Shrink Volume"
+  # (tests/iso/make-windows-shared-disk.sh: no Microsoft file; its
+  # bootmgfw.efi is TUR's stand-in program, tests/iso/standin). It is
+  # recorded before, and compared after the installation, after TUR's first
+  # start and after "Windows" was chosen in TUR's boot menu.
+  beside:
+    name: Beside Windows on the same disk - install, first start, Windows entry
+    needs: lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    permissions:
+      contents: read
+      packages: read
+    env:
+      OUT: out/iso-beside
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - uses: ./.github/actions/use-base-mirror
+
+      - name: Enable KVM for the runner user
+        run: |
+          mkdir -p "$OUT/host"
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          sudo udevadm settle
+          ls -la /dev/kvm
+
+      - name: Verify KVM
+        run: python3 tests/boot/check-kvm.py "$OUT/host/kvm.json"
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache/CodeQL
+          df -h / /mnt 2>/dev/null || df -h /
+
+      - name: Choose a work directory
+        run: |
+          work="$RUNNER_TEMP/tur-iso"
+          here=$(df --output=avail -B1G "$RUNNER_TEMP" | tail -1 | tr -d ' G')
+          if [ -d /mnt ]; then
+            there=$(df --output=avail -B1G /mnt | tail -1 | tr -d ' G')
+            if [ "$there" -gt "$here" ]; then
+              sudo mkdir -p /mnt/tur-iso
+              sudo chown "$(id -u):$(id -g)" /mnt/tur-iso
+              work=/mnt/tur-iso
+            fi
+          fi
+          mkdir -p "$work"
+          echo "WORK=$work" >> "$GITHUB_ENV"
+
+      # ntfs-3g makes the NTFS volumes of the test disk, gnu-efi the stand-in
+      # program, mtools reads the EFI system partition from the host.
+      - name: Install QEMU, UEFI firmware and the tools
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils ovmf \
+            xorriso squashfs-tools mtools dosfstools ntfs-3g attr e2fsprogs gnu-efi binutils gcc
+          dpkg-query -W -f='${Package} ${Version}\n' qemu-system-x86 ovmf mtools dosfstools ntfs-3g gnu-efi \
+            | tee "$OUT/host/tool-packages.txt"
+
+      - name: Build the stand-in for Windows Boot Manager (TUR's test program)
+        run: tests/iso/build-standin.sh "$WORK/standin.efi" | tee "$OUT/host/standin.txt"
+
+      - name: Build image
+        run: |
+          TUR_BUILD_ID_FILE="$RUNNER_TEMP/build-id" scripts/build-image.sh "$IMAGE" \
+            --ignorefile image/Containerfile.containerignore
+          echo "BUILD_ID=$(cat "$RUNNER_TEMP/build-id")" >> "$GITHUB_ENV"
+
+      - name: Build the installer medium
+        run: |
+          installer/iso/build-medium.sh "$IMAGE" "$WORK" "$OUT/medium"
+          echo "MEDIUM=$WORK/medium/tur-installer.iso" >> "$GITHUB_ENV"
+          df -h / "$WORK"
+
+      - name: "Refusals: no free space beside Windows; an EFI system partition too full"
+        if: ${{ !cancelled() && env.MEDIUM != '' }}
+        run: |
+          mkdir -p "$OUT/refused"
+          tests/iso/make-windows-shared-disk.sh "$WORK/nofree.raw" "$WORK/standin.efi" --free-gib 0 \
+            > "$OUT/refused/nofree-disk.txt"
+          tests/iso/make-windows-shared-disk.sh "$WORK/espfull.raw" "$WORK/standin.efi" --esp-fill-mib 94 \
+            > "$OUT/refused/espfull-disk.txt"
+          status=0
+          python3 tests/iso/install.py beside-refused --medium "$MEDIUM" --medium-as usb \
+            --disk "$WORK/nofree.raw" --extra-disk "$WORK/espfull.raw=windows-disk-a" \
+            --work "$WORK/vm" --out "$OUT/refused" || status=$?
+          rm -f "$WORK/nofree.raw" "$WORK/espfull.raw"
+          exit "$status"
+
+      # The firmware first gets a "Windows Boot Manager" entry for the disk's
+      # EFI system partition, as Windows setup would have made it; every
+      # later start runs without a boot order from QEMU (tests/iso/isovm.py).
+      # After the installation, from the medium's command line: tur-dualboot
+      # default windows / tur, then restart-windows (BootNext): the stand-in
+      # must start once, and the first start after it must be TUR again.
+      - name: "Beside Windows, text installer: install, compare, first start, compare, Windows entry, compare"
+        if: ${{ !cancelled() && env.MEDIUM != '' }}
+        run: |
+          d="$OUT/shared"
+          mkdir -p "$d"
+          tests/iso/make-windows-shared-disk.sh "$WORK/shared.raw" "$WORK/standin.efi" | tee "$d/windows-disk.txt"
+          python3 tests/iso/windows-disk.py record "$WORK/shared.raw" "$d/before.json"
+          status=0
+          python3 tests/iso/install.py windows-setup --medium "$MEDIUM" --medium-as usb \
+            --windows-serial tur-boot-test --windows-partition 1 --windows-last \
+            --disk "$WORK/shared.raw" --work "$WORK/vm" --out "$d/windows-setup" || status=$?
+          if [ "$status" -eq 0 ]; then
+            python3 tests/iso/install.py same-disk --dualboot-after --medium "$MEDIUM" --medium-as usb --no-bootindex \
+              --variables-from "$d/windows-setup/host/OVMF_VARS.after.fd" \
+              --disk "$WORK/shared.raw" --work "$WORK/vm" --out "$d/install" || status=$?
+          fi
+          python3 tests/iso/windows-disk.py compare "$d/before.json" "$WORK/shared.raw" "$d/compare-install.json" || status=$?
+          if [ "$status" -eq 0 ]; then
+            sudo python3 tests/boot/inspect-disk.py installed "$WORK/shared.raw" "$d/install" || status=$?
+            sudo python3 tests/iso/installed-root.py inspect "$WORK/shared.raw" "$d/install/installed-root" || true
+            python3 tests/iso/boot-installed.py --no-bootindex \
+              --variables-from "$d/install/host/OVMF_VARS.after.fd" \
+              --disk "$WORK/shared.raw" --work "$WORK/vm" --out "$d/first-start" || status=$?
+            sudo python3 tests/boot/inspect-disk.py postmortem "$WORK/shared.raw" "$d/first-start"
+            python3 tests/iso/windows-disk.py compare "$d/before.json" "$WORK/shared.raw" "$d/compare-first-start.json" || status=$?
+            mkdir -p "$d/windows-entry"
+            python3 tests/iso/boot-installed.py --no-bootindex --windows-entry --timeout 180 \
+              --variables-from "$d/install/host/OVMF_VARS.after.fd" \
+              --disk "$WORK/shared.raw" --work "$WORK/vm" --out "$d/windows-entry" || status=$?
+            python3 tests/iso/windows-disk.py compare "$d/before.json" "$WORK/shared.raw" "$d/compare-windows-entry.json" || status=$?
+          fi
+          rm -f "$WORK/shared.raw"
+          exit "$status"
+
+      # The graphical installer in the live session, driven with the keyboard.
+      # This disk's Windows partition carries BitLocker's signature, as an
+      # encrypted C: shows, so the confirmation shows the BitLocker note.
+      # Windows is chosen to start by default: the first start must be the
+      # stand-in for Windows Boot Manager, started by the firmware.
+      - name: "Beside Windows, graphical installer: install, compare, first start, compare"
+        if: ${{ !cancelled() && env.MEDIUM != '' }}
+        run: |
+          d="$OUT/live"
+          mkdir -p "$d"
+          tests/iso/make-windows-shared-disk.sh "$WORK/live-shared.raw" "$WORK/standin.efi" --bitlocker-c \
+            > "$d/windows-disk.txt"
+          python3 tests/iso/windows-disk.py record "$WORK/live-shared.raw" "$d/before.json"
+          status=0
+          python3 tests/iso/install.py windows-setup --medium "$MEDIUM" --medium-as usb \
+            --windows-serial tur-boot-test --windows-partition 1 --windows-last \
+            --disk "$WORK/live-shared.raw" --work "$WORK/vm" --out "$d/windows-setup" || status=$?
+          python3 tests/iso/live.py beside --default-system windows --medium "$MEDIUM" --medium-as usb \
+            --no-bootindex --variables-from "$d/windows-setup/host/OVMF_VARS.after.fd" \
+            --disk "$WORK/live-shared.raw" --work "$WORK/vm" --out "$d" || status=$?
+          python3 tests/iso/windows-disk.py compare "$d/before.json" "$WORK/live-shared.raw" "$d/compare-install.json" || status=$?
+          if [ "$status" -eq 0 ]; then
+            # Windows was chosen as the default: the firmware starts the
+            # stand-in for Windows Boot Manager by itself (w is pressed too,
+            # in case TUR's menu came instead; the report tells which).
+            python3 tests/iso/boot-installed.py --no-bootindex --windows-entry --timeout 180 \
+              --variables-from "$d/host/OVMF_VARS.after.fd" \
+              --disk "$WORK/live-shared.raw" --work "$WORK/vm" --out "$d/first-start" || status=$?
+            sudo python3 tests/boot/inspect-disk.py postmortem "$WORK/live-shared.raw" "$d/first-start"
+            python3 tests/iso/windows-disk.py compare "$d/before.json" "$WORK/live-shared.raw" "$d/compare-first-start.json" || status=$?
+          fi
+          rm -f "$WORK/live-shared.raw"
+          exit "$status"
+
+      - name: Report
+        if: always()
+        run: python3 tests/iso/beside-report.py --job beside --out "$OUT"
+
+      - name: Summary
+        if: always()
+        run: |
+          if [ -f "$OUT/summary.md" ]; then cat "$OUT/summary.md" >> "$GITHUB_STEP_SUMMARY"; fi
+
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          show() { echo "::group::$1"; if [ -f "$1" ]; then tail -n "${2:-200}" "$1"; else echo "(absent)"; fi; echo "::endgroup::"; }
+          for run in refused shared/windows-setup shared/install live; do
+            show "$OUT/$run/result.json" 150
+            show "$OUT/$run/installer-screens.txt" 150
+            if [ -f "$OUT/$run/serial.log" ]; then
+              echo "::group::$run: serial console, last 150 lines"
+              sed 's/\x1b\[[0-9;?]*[A-Za-z]//g; s/\r//g' "$OUT/$run/serial.log" | tail -n 150
+              echo "::endgroup::"
+            fi
+          done
+          for f in compare-install compare-first-start compare-windows-entry; do show "$OUT/shared/$f.json" 80; done
+          show "$OUT/shared/first-start/first-start.json" 80
+          show "$OUT/shared/windows-entry/first-start.json" 80
+          if [ -f "$OUT/shared/windows-entry/serial.log" ]; then
+            sed 's/\x1b\[[0-9;?]*[A-Za-z]//g; s/\r//g' "$OUT/shared/windows-entry/serial.log" | tail -n 80
+          fi
+          df -h / "${WORK:-/}"
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: tur-installer-beside-windows
+          path: out/iso-beside/
+          if-no-files-found: warn
+
+  # Power cuts while installing beside Windows (ADR-0029): QEMU is stopped
+  # at once at each step. After every cut, Windows' partitions, its files on
+  # the EFI system partition and its firmware entry must be as they were.
+  beside-faults:
+    name: Beside Windows on the same disk - a power cut at each step
+    needs: lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 200
+    permissions:
+      contents: read
+      packages: read
+    env:
+      OUT: out/iso-beside-faults
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - uses: ./.github/actions/use-base-mirror
+
+      - name: Enable KVM for the runner user
+        run: |
+          mkdir -p "$OUT/host"
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          sudo udevadm settle
+          ls -la /dev/kvm
+
+      - name: Verify KVM
+        run: python3 tests/boot/check-kvm.py "$OUT/host/kvm.json"
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache/CodeQL
+          df -h / /mnt 2>/dev/null || df -h /
+
+      - name: Choose a work directory
+        run: |
+          work="$RUNNER_TEMP/tur-iso"
+          here=$(df --output=avail -B1G "$RUNNER_TEMP" | tail -1 | tr -d ' G')
+          if [ -d /mnt ]; then
+            there=$(df --output=avail -B1G /mnt | tail -1 | tr -d ' G')
+            if [ "$there" -gt "$here" ]; then
+              sudo mkdir -p /mnt/tur-iso
+              sudo chown "$(id -u):$(id -g)" /mnt/tur-iso
+              work=/mnt/tur-iso
+            fi
+          fi
+          mkdir -p "$work"
+          echo "WORK=$work" >> "$GITHUB_ENV"
+
+      - name: Install QEMU, UEFI firmware and the tools
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils ovmf \
+            xorriso squashfs-tools mtools dosfstools ntfs-3g attr e2fsprogs gnu-efi binutils gcc
+
+      - name: Build the stand-in for Windows Boot Manager (TUR's test program)
+        run: tests/iso/build-standin.sh "$WORK/standin.efi"
+
+      - name: Build image
+        run: |
+          TUR_BUILD_ID_FILE="$RUNNER_TEMP/build-id" scripts/build-image.sh "$IMAGE" \
+            --ignorefile image/Containerfile.containerignore
+
+      - name: Build the installer medium
+        run: |
+          installer/iso/build-medium.sh "$IMAGE" "$WORK" "$OUT/medium"
+          echo "MEDIUM=$WORK/medium/tur-installer.iso" >> "$GITHUB_ENV"
+
+      - name: The disk and its firmware entry
+        run: |
+          tests/iso/make-windows-shared-disk.sh "$WORK/pristine.raw" "$WORK/standin.efi" > "$OUT/windows-disk.txt"
+          python3 tests/iso/windows-disk.py record "$WORK/pristine.raw" "$OUT/before.json"
+          cp --sparse=always "$WORK/pristine.raw" "$WORK/setup.raw"
+          python3 tests/iso/install.py windows-setup --medium "$MEDIUM" --medium-as usb \
+            --windows-serial tur-boot-test --windows-partition 1 --windows-last \
+            --disk "$WORK/setup.raw" --work "$WORK/vm" --out "$OUT/setup"
+          rm -f "$WORK/setup.raw"
+
+      # Each cut: a fresh copy of the disk, an installation beside Windows
+      # cut at a step, the comparison, then a start of the disk with "w"
+      # pressed (what starts is recorded, not judged).
+      - name: "Power cuts at each step"
+        if: ${{ !cancelled() && env.MEDIUM != '' }}
+        run: |
+          status=0
+          for cut in partition:0 partitioned:0 filesystem:0 deploy:30 bootloader:0 bootloader:2 deployed:0 boot-menu:0 check:0; do
+            at="${cut%%:*}" delay="${cut#*:}"
+            d="$OUT/cut-$at-$delay"
+            mkdir -p "$d"
+            echo "::group::power cut at $at +$delay s"
+            cp --sparse=always "$WORK/pristine.raw" "$WORK/cut.raw"
+            python3 tests/iso/install.py same-disk-cut --cut-at "$at" --cut-delay "$delay" \
+              --medium "$MEDIUM" --medium-as usb --no-bootindex \
+              --variables-from "$OUT/setup/host/OVMF_VARS.after.fd" \
+              --disk "$WORK/cut.raw" --work "$WORK/vm" --out "$d" || status=$?
+            python3 tests/iso/windows-disk.py compare "$OUT/before.json" "$WORK/cut.raw" "$d/compare.json" || status=$?
+            if [ -f "$WORK/vm/tur-iso-same-disk-cut-OVMF_VARS.fd" ]; then
+              cp "$WORK/vm/tur-iso-same-disk-cut-OVMF_VARS.fd" "$d/host/OVMF_VARS.after.fd"
+            fi
+            mkdir -p "$d/start"
+            python3 tests/iso/boot-installed.py --no-bootindex --windows-entry --timeout 150 \
+              --variables-from "$d/host/OVMF_VARS.after.fd" \
+              --disk "$WORK/cut.raw" --work "$WORK/vm" --out "$d/start" || true
+            rm -f "$WORK/cut.raw" "$WORK/vm/tur-iso-same-disk-cut-OVMF_VARS.fd" "$WORK/vm/tur-iso-first-start-OVMF_VARS.fd"
+            echo "::endgroup::"
+          done
+          exit "$status"
+
+      - name: Report
+        if: always()
+        run: python3 tests/iso/beside-report.py --job faults --out "$OUT"
+
+      - name: Summary
+        if: always()
+        run: |
+          if [ -f "$OUT/summary.md" ]; then cat "$OUT/summary.md" >> "$GITHUB_STEP_SUMMARY"; fi
+
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          for d in "$OUT"/cut-*; do
+            echo "::group::$d"
+            tail -n 60 "$d/compare.json" 2>/dev/null || true
+            python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); print(r.get("outcome"), r.get("stopped_because")); print(json.dumps(r["facts"].get("cut"), indent=1))' "$d/result.json" 2>/dev/null || true
+            echo "::endgroup::"
+          done
+          show() { echo "::group::$1"; if [ -f "$1" ]; then tail -n 120 "$1"; else echo "(absent)"; fi; echo "::endgroup::"; }
+          show "$OUT/setup/result.json"
+          df -h / "${WORK:-/}"
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: tur-installer-beside-windows-power-cuts
+          path: out/iso-beside-faults/
           if-no-files-found: warn

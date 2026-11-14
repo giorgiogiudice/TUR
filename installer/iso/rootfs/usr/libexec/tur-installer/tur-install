@@ -8,15 +8,24 @@
 # graphical installer; both use the same engine,
 # /usr/lib/tur-installer/engine.sh, for everything that touches a disk.
 #
-# It does one thing: erase one whole disk and install the TUR image that is
-# on the medium onto it, with the installer the image carries:
+# It does one of two things with the TUR image that is on the medium, with
+# the installer the image carries:
+#
+#   - erase one whole disk and install TUR onto it:
 #
 #     bootc install to-disk --source-imgref oci:<medium>/payload:payload \
 #         --target-imgref <name> --generic-image --wipe [--filesystem ext4] <disk>
 #
-# What it deliberately does not do, and says so on its first screen: keep
-# another operating system (no dual boot), encrypt, partition by hand, keep
-# any data on the chosen disk, use a network.
+#   - on a disk that holds Windows, install TUR into free space the person
+#     made with Windows' own Shrink Volume, sharing Windows' EFI system
+#     partition and adding Windows to TUR's boot menu (ADR-0029; engine.sh,
+#     run_beside): one new partition, then
+#
+#     bootc install to-filesystem --source-imgref ... --target-imgref <name> <mounted partition>
+#
+# What it deliberately does not do, and says so on its first screen: shrink
+# or move a Windows partition, encrypt, partition by hand, keep any data on a
+# disk it erases, use a network.
 #
 # Safety rules it follows (AGENTS.md; specification 5.2 and 28.5):
 #   - a disk is chosen by its stable identity (a /dev/disk/by-id link that
@@ -38,9 +47,11 @@
 #     read-only in a private mount namespace only to look for that directory.
 #     A disk that holds Windows or BitLocker gets an explicit warning on the
 #     confirmation screen;
-#   - nothing is written to any disk but the chosen one, and no firmware boot
-#     variable is written: `--generic-image` makes bootc skip bootupd's
-#     firmware update (ADR-0018).
+#   - nothing is written to any disk but the chosen one. Erasing a disk writes
+#     no firmware boot variable: `--generic-image` makes bootc skip bootupd's
+#     firmware update (ADR-0018). Installing beside Windows adds a "TUR"
+#     entry at the front of the boot order and leaves Windows' entry
+#     (ADR-0029); its confirmation phrase starts with "BESIDE".
 #
 # Everything shown on the screen is also written, line by line, to the first
 # serial port when the machine has one, with state lines that start with
@@ -164,12 +175,14 @@ common() {
 screen_welcome() {
     local item
     screen welcome "install TUR on this computer"
-    say "This installs TUR on ONE WHOLE DISK of this computer and ERASES that disk."
+    say "This installs TUR on ONE WHOLE DISK of this computer and ERASES that disk,"
+    say "or, on a disk that holds Windows, into free space beside Windows that you"
+    say "made in Windows (Disk Management, Shrink Volume). Windows is then kept."
     say ""
     say "What this installer does not do:"
-    say "  - keep another operating system on the same disk (no dual boot)"
+    say "  - shrink or move Windows, or any other partition"
     say "  - encrypt the disk"
-    say "  - let you choose partitions, or keep any data that is on the chosen disk"
+    say "  - let you choose partitions, or keep any data on a disk it erases"
     say "It needs no network and uses none. The keyboard layout here is US English."
     say ""
     if [ "${payload_state}" = unknown ]; then
@@ -219,6 +232,13 @@ screen_disks() {
             say "  [-]  ${d_model[i]:-unnamed disk}, $(human "${d_size[i]}"), ${d_tran[i]:-unknown connection}, serial $(serial_end "${i}")"
         fi
         say "       holds: ${d_holds[i]}"
+        if [ "${d_status[i]}" = ok ] && [ "${d_windows[i]}" = yes ]; then
+            if [ "${d_beside[i]}" = yes ]; then
+                say "       beside Windows: possible, $(human "${d_bsize[i]}") of free space"
+            else
+                say "       beside Windows: not possible: ${d_bwhy[i]} (${d_bcode[i]})"
+            fi
+        fi
         if [ "${d_status[i]}" != ok ]; then
             say "       cannot be chosen: ${d_why[i]} (${d_code[i]})"
         fi
@@ -244,14 +264,15 @@ screen_disks() {
         fi
         return 0
     fi
-    ask "Type the number of the disk to erase, then Enter. (Enter alone: look again; \"off\": power off) "
+    ask "Type the number of a disk, then Enter. (Enter alone: look again; \"off\": power off) "
     if common "${answer}"; then return 0; fi
     if [ -z "${answer}" ]; then return 0; fi
     for i in "${!d_name[@]}"; do
         if [ "${d_index[i]}" = "${answer}" ]; then
             chosen="${i}"
+            mode=erase
             mark "choice result=ok index=${answer} name=${d_name[i]}"
-            state=confirm
+            if [ "${d_beside[i]}" = yes ]; then state=mode; else state=confirm; fi
             return 0
         fi
     done
@@ -260,10 +281,141 @@ screen_disks() {
     sleep 3
 }
 
+# How to install on a disk that holds Windows and has room beside it.
+mode=erase
+screen_mode() {
+    local i="${chosen}"
+    screen mode "keep Windows, or erase the disk"
+    say "  Disk: ${d_model[i]:-unnamed disk}, $(human "${d_size[i]}"), serial $(serial_end "${i}")"
+    say "  This disk holds Windows and has $(human "${d_bsize[i]}") of free space."
+    say ""
+    say "  [1]  Use the free space beside Windows. Windows and its files are kept."
+    say "       TUR goes into the free space; TUR's start menu offers Windows too."
+    say "  [2]  Erase the whole disk. Windows and everything on the disk is lost."
+    say ""
+    ask "Type 1 or 2, then Enter. (Enter alone goes back) "
+    case "${answer}" in
+        1)
+            mode=beside
+            mark "mode chosen=beside name=${d_name[i]}"
+            state=default
+            ;;
+        2)
+            mode=erase
+            mark "mode chosen=erase name=${d_name[i]}"
+            state=confirm
+            ;;
+        "")
+            mark "mode chosen=back"
+            state=disks
+            ;;
+        *)
+            if common "${answer}"; then return 0; fi
+            mark "mode chosen=invalid"
+            say "\"${answer}\" is not 1 or 2."
+            sleep 3
+            ;;
+    esac
+}
+
+# Which system starts when the computer is switched on (beside Windows).
+default_system=tur
+screen_default() {
+    screen default "which system starts by default"
+    say "  When you switch the computer on, which system should start?"
+    say ""
+    say "  [1]  TUR. TUR's start menu also offers Windows."
+    say "  [2]  Windows. TUR is then started from the computer's boot menu."
+    say ""
+    say "  You can change this later in TUR: tur-dualboot default tur|windows."
+    say ""
+    ask "Type 1 or 2, then Enter. (Enter alone goes back) "
+    case "${answer}" in
+        1 | 2)
+            if [ "${answer}" = 1 ]; then default_system=tur; else default_system=windows; fi
+            mark "default chosen=${default_system}"
+            state=confirm
+            ;;
+        "")
+            mark "default chosen=back"
+            state=mode
+            ;;
+        *)
+            if common "${answer}"; then return 0; fi
+            mark "default chosen=invalid"
+            say "\"${answer}\" is not 1 or 2."
+            sleep 3
+            ;;
+    esac
+}
+
+# The confirmation of an installation beside Windows (ADR-0029).
+screen_confirm_beside() {
+    local i="${chosen}" phrase line
+    screen confirm "confirm installing beside Windows"
+    phrase="$(beside_phrase_for "${i}")"
+    confirmed_fingerprint="$(fingerprint "${d_name[i]}")"
+    say "  Disk:       ${d_model[i]:-unnamed disk}"
+    say "  Capacity:   $(human "${d_size[i]}") (${d_size[i]} bytes)"
+    say "  Connection: ${d_tran[i]:-unknown}"
+    say "  Serial:     ${d_serial[i]:-none reported}${d_wwn[i]:+   WWN: ${d_wwn[i]}}"
+    say "  Path:       ${d_byid[i]}"
+    say "  (A serial number identifies your hardware. Mind it if you share a photo.)"
+    say ""
+    say "  On this disk now, ALL OF WHICH IS KEPT:"
+    while IFS= read -r line; do
+        say "     ${line}"
+    done < <(contents "${d_name[i]}")
+    say ""
+    say "  What will be written:"
+    say "   - a new partition for TUR in the free space: $(human "${d_bsize[i]}"),"
+    say "     from byte ${d_bstart[i]}${d_bbefore[i]:+, after ${d_bbefore[i]}}${d_bafter[i]:+, before ${d_bafter[i]}}"
+    say "   - TUR's start-up files added to the EFI system partition ${d_besp[i]##*/}"
+    say "     ($(human "${d_bneed[i]}") of its $(human "${d_bespfree[i]}") free); Windows' files there are kept"
+    if [ "${default_system}" = tur ]; then
+        say "   - the computer starts TUR by default (its boot order); Windows' entry stays"
+    else
+        say "   - the computer starts Windows by default; a \"TUR\" entry follows it"
+    fi
+    say "   - \"Windows\" in TUR's start menu"
+    say "  No Windows partition is changed, moved or shrunk. Not encrypted."
+    say ""
+    say "  Back up what matters to you before you go on."
+    if [ "${d_bitlocker[i]}" = yes ]; then
+        say "  This disk holds data encrypted with BitLocker. Starting Windows from TUR's"
+        say "  menu may make Windows ask for its BitLocker recovery key: have it ready."
+        mark "confirm-warning kind=bitlocker-beside"
+    fi
+    say ""
+    mark "confirm name=${d_name[i]} by_id=${d_byid[i]} phrase=\"${phrase}\" mode=beside free_start=${d_bstart[i]} free_size=${d_bsize[i]} default=${default_system}"
+    say "To install TUR beside Windows on this disk, type exactly:  ${phrase}"
+    ask "(Enter alone goes back and changes nothing) > "
+    if [ -z "${answer}" ]; then
+        mark "confirm result=back"
+        state=disks
+        return 0
+    fi
+    if [ "${answer}" != "${phrase}" ]; then
+        mark "confirm result=mismatch code=TUR-INSTALL-CONFIRM-001"
+        say ""
+        say "TUR-INSTALL-CONFIRM-001"
+        say "That is not the phrase. Nothing was changed. The phrase has capital"
+        say "letters and one space, exactly as shown."
+        sleep 4
+        return 0
+    fi
+    mark "confirm result=accepted mode=beside"
+    state=install
+}
+
 chosen=""
 confirmed_fingerprint=""
 screen_confirm() {
     local i="${chosen}" phrase line
+    if [ "${mode}" = beside ]; then
+        screen_confirm_beside
+        return
+    fi
     screen confirm "confirm erasing this disk"
     phrase="$(phrase_for "${i}")"
     confirmed_fingerprint="$(fingerprint "${d_name[i]}")"
@@ -377,8 +529,49 @@ show_new_lines() {
     fi
 }
 
+screen_install_beside() {
+    local i="${chosen}"
+    revalidate_chosen
+    if ! beside_revalidate "${d_bstart[i]}" "${d_bsize[i]}"; then
+        fail "${engine_code}" "${engine_message}" "Nothing was changed."
+    fi
+    screen installing "installing TUR beside Windows"
+    say "  Disk: ${d_model[i]:-unnamed disk}, $(human "${d_size[i]}")"
+    say "        ${d_byid[i]}"
+    say "  Into: $(human "${d_bsize[i]}") of free space; Windows is kept."
+    say ""
+    say "Do not power off and do not remove the medium. This takes several minutes."
+    say ""
+    shown=0
+    last_mark=0
+    install_started="${SECONDS}"
+    if ! run_beside "${target_device}" "${d_bstart[i]}" "${d_bsize[i]}" show_new_lines "${default_system}"; then
+        case "${beside_disk_state}" in
+            untouched) fail "${beside_code}" "${beside_message}" "Nothing was changed." ;;
+            *)
+                fail "${beside_code}" "${beside_message}" \
+                    "Windows' partitions were not written. The free space now holds an" \
+                    "unfinished TUR partition (${beside_partition:-see the log}). Windows still starts" \
+                    "from the computer's boot menu."
+                ;;
+        esac
+    fi
+    if ! check_installed "${target_device}"; then
+        fail TUR-INSTALL-MEDIUM-002 \
+            "The installer reported success, but the disk does not have the partitions" \
+            "an installed TUR has. Do not rely on TUR on this disk; Windows was kept."
+    fi
+    record_root_features "${target_device}"
+    keep_log "${target_device}" "$(session_id)"
+    state=finished
+}
+
 screen_install() {
     local i="${chosen}"
+    if [ "${mode}" = beside ]; then
+        screen_install_beside
+        return
+    fi
     revalidate_chosen
     screen installing "installing TUR"
     say "  Disk: ${d_model[i]:-unnamed disk}, $(human "${d_size[i]}")"
@@ -410,7 +603,11 @@ install_seconds=0
 screen_finished() {
     local i="${chosen}" line
     screen finished "TUR is installed"
-    say "TUR ${tur_version:-?} (build ${tur_build_id:-?}) was installed in ${install_seconds} s on:"
+    if [ "${mode}" = beside ]; then
+        say "TUR ${tur_version:-?} (build ${tur_build_id:-?}) was installed beside Windows in ${install_seconds} s on:"
+    else
+        say "TUR ${tur_version:-?} (build ${tur_build_id:-?}) was installed in ${install_seconds} s on:"
+    fi
     say "  ${d_model[i]:-unnamed disk}, $(human "${d_size[i]}")"
     say "  ${d_byid[i]}"
     say ""
@@ -427,8 +624,13 @@ screen_finished() {
     say "  2. Remove the installer medium."
     say "  3. Switch the computer on. The first start shows a setup screen that"
     say "     creates your user account."
+    if [ "${mode}" = beside ]; then
+        say "  To start Windows from TUR: \"tur-dualboot restart-windows\""
+        say "  (no BitLocker prompt), or \"Windows\" in TUR's start menu (key w)."
+        say "  Change which system starts by default: \"pkexec tur-dualboot default\"."
+    fi
     say ""
-    mark "result=success seconds=${install_seconds} device=${target_device}"
+    mark "result=success seconds=${install_seconds} device=${target_device} mode=${mode}"
     while :; do
         ask 'Press Enter to power off. ("shell": a command line) '
         if [ "${answer}" = shell ]; then
@@ -459,6 +661,8 @@ while :; do
     case "${state}" in
         welcome) screen_welcome ;;
         disks) screen_disks ;;
+        mode) screen_mode ;;
+        default) screen_default ;;
         confirm) screen_confirm ;;
         install) screen_install ;;
         finished) screen_finished ;;

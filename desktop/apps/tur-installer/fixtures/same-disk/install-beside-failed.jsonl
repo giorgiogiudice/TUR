@@ -1,0 +1,12 @@
+{"licence":"SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0","what":"tur-install-engine install --mode beside that fails while copying (induced by hand: the disk is not written by a replay); written by hand in the engine's format; bootc's lines are assumed to be those of install to-disk (iso run 43291029560) and are to be compared with the ENGINE> lines of the iso workflow's beside job"}
+{"event":"stage","stage":"revalidate"}
+{"event":"stage","stage":"prepare"}
+{"event":"written","bytes":1048576}
+{"event":"stage","stage":"copy"}
+{"event":"line","text":"Installing image: docker://localhost/tur:20261113.g3223774"}
+{"event":"line","text":"Initializing ostree layout"}
+{"event":"copy-total","text":"70 (3.2 GB)"}
+{"event":"line","text":"layers already present: 0; layers needed: 70 (3.2 GB)"}
+{"event":"written","bytes":2254857830}
+{"event":"line","text":"error: Installing to filesystem: Creating ostree deployment: writing object: No space left on device"}
+{"event":"result","outcome":"failed","code":"TUR-INSTALL-MEDIUM-002","message":"bootc stopped with an error (status 1) after 48 s.","disk_state":"partial","mode":"beside","status":1,"seconds":48,"partition":"/dev/vda5"}

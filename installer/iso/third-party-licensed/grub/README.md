@@ -1,4 +1,4 @@
-# Boot menu of the installer medium (BSD-3-Clause, not the TUR licence)
+# GRUB files of the installer medium (BSD-3-Clause, not the TUR licence)
 
 Everything in this directory is under the BSD 3-Clause licence in
 [`LICENSE`](LICENSE), **not** under the TUR licence.
@@ -23,3 +23,13 @@ On the medium:
 `EFI/BOOT` is where the binary is. GRUB reads whichever it looks for first.
 Started from a USB stick, GRUB looks on the EFI system partition; started from
 an optical drive, it looks in the disc's ISO 9660 filesystem.
+
+`windows-entry.cfg.in` is the "Windows" entry of TUR's own boot menu on a
+computer where TUR was installed beside Windows on the same disk
+([ADR-0029](../../../../docs/adr/0029-install-beside-windows.md)). It too is
+GRUB script, written for TUR and not derived from another project's file.
+
+| Source | Installed as |
+|---|---|
+| `windows-entry.cfg.in` | `/usr/lib/tur-installer/grub/windows-entry.cfg.in` in the installer environment; the installer writes it, with `@ESP_UUID@` replaced by the UUID of the shared EFI system partition, to `/boot/grub2/custom.cfg` on TUR's partition |
+| `LICENSE` | `/usr/lib/tur-installer/grub/LICENSE` in the installer environment |

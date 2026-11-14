@@ -4,7 +4,10 @@
 - **Date:** 2026-11-12
 - **Specification sections:** §4.1, §4.3, §5.1, §5.2, §6.1 to §6.3, §14, §19.5,
   §28; tasks TUR-006 and D-23
-- **Amended:** 2026-11-13 by [ADR-0025](0025-live-session-and-graphical-installer.md)
+- **Amended:** 2026-11-13 by [ADR-0025](0025-live-session-and-graphical-installer.md);
+  2026-11-13 by [ADR-0029](0029-install-beside-windows.md) (installing beside
+  Windows on the same disk, into free space Windows made; erasing a whole disk
+  is unchanged)
 
 > **Amendment, 13 November 2026.** The medium described here now starts, by
 > default, a live TUR desktop that opens a graphical installer;

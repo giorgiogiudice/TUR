@@ -104,7 +104,7 @@ class Engine : public QObject
     // "idle", "running", "success", "failed", "refused" or "cancelled".
     Q_PROPERTY(QString installState READ installState NOTIFY installChanged FINAL)
     // The engine's current stage: revalidate, prepare, copy, bootloader,
-    // finish, check, record.
+    // finish, boot-menu (beside Windows only), check, record.
     Q_PROPERTY(QString stage READ stage NOTIFY installChanged FINAL)
     Q_PROPERTY(QStringList stagesSeen READ stagesSeen NOTIFY installChanged FINAL)
     Q_PROPERTY(double bytesWritten READ bytesWritten NOTIFY installChanged FINAL)
@@ -180,9 +180,16 @@ public:
     Q_INVOKABLE void runCheck();
     // Lists the disks.
     Q_INVOKABLE void runDisks();
-    // Erases `disk` (one of `disks`) and installs TUR on it. `phrase` is what
-    // the person typed; the engine compares it with the phrase it derives.
-    Q_INVOKABLE void install(const QVariantMap &disk, const QString &phrase);
+    // Installs TUR on `disk` (one of `disks`): with `mode` "erase", erases the
+    // whole disk; with "beside", into the free space beside Windows that the
+    // engine listed in the disk's "beside" (ADR-0029). `phrase` is what the
+    // person typed; the engine compares it with the phrase it derives. In a
+    // replay, "beside" plays the fixture file "install-beside" unless
+    // `installFixture` names another.
+    // `defaultSystem` ("tur" or "windows", beside Windows only) is the system
+    // the computer then starts by default.
+    Q_INVOKABLE void install(const QVariantMap &disk, const QString &phrase, const QString &mode = QStringLiteral("erase"),
+                             const QString &defaultSystem = QStringLiteral("tur"));
     // Asks the engine to stop, which it does only before it writes.
     Q_INVOKABLE void cancel();
     // Forgets the last installation's outcome, to choose a disk again.

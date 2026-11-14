@@ -4,6 +4,8 @@
 - **Date:** 2026-11-13
 - **Specification sections:** §4.3, §5.2, §6.1 to §6.3, §14.4, §28.3 to §28.5;
   tasks D-23 and TUR-009; amends [ADR-0018](0018-first-installer-medium.md)
+- **Amended:** 2026-11-13 by [ADR-0029](0029-install-beside-windows.md): "Use
+  the free space beside Windows" is available, on a disk where it is possible
 
 ## Context
 

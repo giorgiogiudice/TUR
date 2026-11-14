@@ -14,6 +14,9 @@ WizardScreen {
 
     required property Engine engine
     required property var disk
+    // "erase" or "beside" (Windows; ADR-0029).
+    property string mode: "erase"
+    property string defaultSystem: "tur"
 
     readonly property string outcome: screen.engine.installState
     readonly property bool success: screen.outcome === "success"
@@ -31,6 +34,8 @@ WizardScreen {
             return qsTr("Nothing was changed on any disk. Go back and look at the disks again.")
         case "erased":
             return qsTr("The disk has been partly written. It will not start this computer. Your other disks were not touched. Save the log to a USB stick and report the problem, then start the installation again.")
+        case "partial":
+            return qsTr("Windows' partitions were not written to. The free space now holds an unfinished TUR partition, which you can delete in Windows' Disk Management. Windows can still be started from the computer's boot menu. Save the log to a USB stick and report the problem.")
         default:
             return qsTr("The disk may have been partly written; do not rely on it. Your other disks were not touched. Save the log to a USB stick and report the problem.")
         }
@@ -81,7 +86,8 @@ WizardScreen {
     Kit.Label {
         Layout.fillWidth: true
         visible: screen.success
-        text: qsTr("TUR was installed on %1. Writing it took %2 seconds.")
+        text: (screen.mode === "beside" ? qsTr("TUR was installed beside Windows on %1. Writing it took %2 seconds.")
+                                        : qsTr("TUR was installed on %1. Writing it took %2 seconds."))
               .arg(Words.diskLine(screen.disk)).arg(Number(screen.engine.result.seconds || 0))
         paragraph: true
         wrapMode: Text.Wrap
@@ -91,6 +97,17 @@ WizardScreen {
         Layout.fillWidth: true
         visible: screen.success
         text: qsTr("When it starts for the first time, TUR asks for your language and keyboard and creates your account.")
+        paragraph: true
+        wrapMode: Text.Wrap
+    }
+
+    Kit.Label {
+        objectName: "windowsAfterInstall"
+        Layout.fillWidth: true
+        visible: screen.success && screen.mode === "beside"
+        text: screen.defaultSystem === "windows"
+              ? qsTr("The computer now starts Windows by default. Start TUR from the computer's boot menu (“TUR”). In TUR, you can change which system starts by default.")
+              : qsTr("The computer now starts TUR by default. To start Windows, use “Restart into Windows” in TUR, or choose “Windows” in TUR's start menu (press W while it shows). Windows is also still in the computer's own boot menu.")
         paragraph: true
         wrapMode: Text.Wrap
     }
