@@ -17,7 +17,8 @@
  * not, so their items are read through memory allocated in the
  * application's process (64-bit applications only here). A window's menu
  * cannot be read from another process under Wine, so it is read inside the
- * application by tur-winhook.dll (tw_hook.c).
+ * application by tur-winhook.dll (../hook-mit/tw_hook.c, MIT), unless the
+ * bridge was started with TUR_WINBRIDGE_NO_HOOK=1, as it is for games.
  *
  * Requests: {"id":N,"op":"...", ...flat members...}
  * Answers:  {"id":N,"ok":true,"result":{...}}
@@ -1369,6 +1370,9 @@ static void walk_window(tw_walk *w, HWND hwnd, const tw_node *parent, int depth)
 /* ------------------------------------------- the menu, read in-process */
 
 static WCHAR hook_path[MAX_PATH];
+/* Cleared by TUR_WINBRIDGE_NO_HOOK=1: nothing is loaded into the
+ * application, and its menu is not read. For games. */
+static int hook_allowed = 1;
 
 static void menu_file(WCHAR *path, DWORD token)
 {
@@ -1412,6 +1416,10 @@ static void read_menu(tw_walk *w, const tw_node *top_node, tw_buf *diag)
 
     if (w->wow64 || (walk_remote(w, top), w->wow64)) {
         tw_puts(diag, ",\"menu_hook\":\"not tried: a 32-bit application needs a 32-bit hook library\"");
+        return;
+    }
+    if (!hook_allowed) {
+        tw_puts(diag, ",\"menu_hook\":\"off: nothing is loaded into this application\"");
         return;
     }
     module = LoadLibraryW(hook_path);
@@ -2066,8 +2074,8 @@ static void op_hello(tw_buf *out)
     tw_printf(out, "\"bridge\":\"tur-winbridge\",\"protocol\":1,\"pid\":%lu,\"bits\":%d",
               (unsigned long)GetCurrentProcessId(), (int)(8 * sizeof(void *)));
     tw_printf(out, ",\"wine\":\"%s\"", version ? version() : "");
-    hook = LoadLibraryW(hook_path);
-    tw_printf(out, ",\"hook_library\":%s", hook ? "true" : "false");
+    hook = hook_allowed ? LoadLibraryW(hook_path) : NULL;
+    tw_printf(out, ",\"hook_library\":%s,\"hook_allowed\":%s", hook ? "true" : "false", hook_allowed ? "true" : "false");
 }
 
 int main(void)
@@ -2087,6 +2095,13 @@ int main(void)
     else
         hook_path[0] = 0;
     tw_cat(hook_path, MAX_PATH, L"tur-winhook.dll");
+    {
+        WCHAR value[8];
+        DWORD length = GetEnvironmentVariableW(L"TUR_WINBRIDGE_NO_HOOK", value, 8);
+
+        if (length > 0 && length < 8 && value[0] == L'1')
+            hook_allowed = 0;
+    }
 
     while (fgets(line, sizeof line, stdin)) {
         tw_field fields[TW_FIELDS];

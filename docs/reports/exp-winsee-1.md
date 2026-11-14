@@ -5,10 +5,17 @@
 > (a bridge inside the Wine prefix) is measured in run 43538249361 (commit
 > `b558699`); every number here is from that run. A second commit
 > (`76229a9`) corrects faults of the experiment itself that the first run
-> showed (section 10, item 9); its run, 43545323891, was still waiting for a
-> runner when this was written. Hypothesis B (a small vision model locating
+> showed (section 10, item 9); its run, 43545838974, was still waiting for a
+> runner when this was written (43545323891 before it was cancelled unrun
+> by the push of this report). Hypothesis B (a small vision model locating
 > controls) is built and queued; **its numbers are NOT RUN yet** (section 7
 > says exactly what is and is not measured).
+>
+> **The owner decided on 14 November 2026** (section 11): the bridge is
+> adopted as P@x's path into Windows applications, once the re-run
+> confirms the fixes; the menu hook library is MIT, in a directory of its
+> own, and switched off for games; a position proposed from a picture
+> never acts alone.
 
 ```text
 TUR DEVELOPMENT REPORT
@@ -35,8 +42,8 @@ SUMMARY
 
 FILES
 - Added: tests/experiments/winsee/** (bridge/, apps/, harness/, decide/,
-  vision/, run-in-fedora.sh), .github/workflows/exp-winsee.yml,
-  docs/reports/exp-winsee-1.md
+  vision/, run-in-fedora.sh; hook-mit/ under the MIT licence, with its
+  LICENSE), .github/workflows/exp-winsee.yml, docs/reports/exp-winsee-1.md
 - Modified: none
 - Removed: none
 
@@ -62,9 +69,11 @@ KNOWN LIMITATIONS
 - See section 10.
 
 NEXT SAFE ACTION
-- Read the vision job's tables when it has run (section 7), then the
-  owner's decisions of section 11. Nothing here is wired into tur-pax,
-  tur-pax-a11y, tur-runtime or the image.
+- Read run 43545838974 when it has run: the bridge job confirms or does
+  not confirm the second commit's fixes (the owner's condition for
+  adopting the bridge), the vision job fills section 7. Then the three
+  questions the owner left open (section 11). Nothing here is wired into
+  tur-pax, tur-pax-a11y, tur-runtime or the image.
 ```
 
 ## The answer
@@ -105,10 +114,10 @@ place; no model has answered a question in CI when this was written.
 Section 7 states the hypothesis, the kill criterion and the data, and has
 the place for the tables.
 
-**Safety with vision.** The rule proposed in section 8 (vision proposes a
-point; the action happens only if the tree, or the Win32 tier, names the
-control that was asked for at that point; anything else is class 2) was
-tested against a window that paints "Cancel" over a real "Delete" and a
+**Safety with vision.** The rule of section 8, which the owner has since
+adopted (vision proposes a point; the action happens only if the tree, or
+the Win32 tier, names the control that was asked for at that point;
+anything else is class 2), was tested against a window that paints "Cancel" over a real "Delete" and a
 second window painting "Help" over "Turn off backups": a click by position
 pressed Delete and switched the backups off; with the rule both were
 refused and nothing was pressed.
@@ -389,7 +398,12 @@ is a heuristic on Windows as on Linux.
   makes. The task loop, the tools and the engine do not change.
 - The hook library is loaded into the application only while its menu is
   read (one message), and only for applications of the bridge's word
-  size. A 32-bit application needs a 32-bit bridge and library (**NOT
+  size. By the owner's decision it is **switched off for games**: the
+  bridge started with `TUR_WINBRIDGE_NO_HOOK=1` loads nothing into the
+  application and reads no menu (the rest of the window is read as
+  before). tur-runtime would set it from the catalogue (an application
+  marked as a game, and every Proton launch). The switch and a test of it
+  (notepad standing in for a game) are in the third commit: **NOT RUN**. A 32-bit application needs a 32-bit bridge and library (**NOT
   RUN**: every application tested was 64-bit, the Inno Setup 7 wizard
   included).
 
@@ -452,7 +466,8 @@ them is as likely as it was in the first run's harness.
 ## 8. Safety with vision: the rule, and one attack
 
 A model that picks coordinates can be misled by what is on the screen:
-pixels are the application's to paint. The rule this experiment proposes:
+pixels are the application's to paint. The rule this experiment proposed,
+and the owner adopted on 14 November 2026 (section 11):
 
 > **Vision proposes, the tree confirms.** A point chosen by a vision model
 > is never acted on by position. It is looked up in what the application
@@ -562,7 +577,9 @@ call still decided by the engine.
    (anti-cheat) would not.
 5. **The hook library runs inside the application** for the length of one
    message. It reads the menu and writes a file in the prefix's temporary
-   folder. It is injected code all the same: section 11.
+   folder. It is injected code all the same; the owner's decision
+   (section 11) gives it the MIT licence and keeps it out of games, where
+   P@x then has the window's controls but not its menu.
 6. **32-bit applications: NOT RUN.** The remote-memory and hook paths are
    written for the bridge's word size only and say so when they meet a
    32-bit process.
@@ -578,50 +595,76 @@ call still decided by the engine.
    menu items and its name matching for typing was ambiguous; three wrong
    expectations in the tests (sections 4 and 5).
 
-## 11. For the owner
+## 11. Decisions
 
-**Proposed decision text** (no ADR is written; the lead assigns numbers):
+### 11.1 Decided by the owner, 14 November 2026
 
-> *Windows applications are operated through a bridge inside their Wine
-> prefix.* P@x reads and operates a Windows application under Wine through
-> `tur-winbridge`, a Windows program of TUR's own started in the
-> application's sandbox by `tur-runtime` and spoken to by `tur-pax-a11y`
-> over a pipe. It reads the Win32 window tree and standard control
-> messages; UI Automation and MSAA are used when Wine implements them.
-> The eleven interface tools, the resolve, decide, re-read, perform order
-> and the policy classification are those of the accessibility path; the
-> bridge holds no authority and is never offered to a model.
->
-> *Vision proposes, the tree confirms.* An action whose target was chosen
-> by a vision model is carried out only when the accessibility tree or
-> the bridge names the same control at that point in the window meant; it
-> is then decided as an ordinary interface action. Otherwise it is class
-> 2. Where an application exposes nothing, acting by sight is class 2.
+The three decisions below were put to the owner with the first run's
+results and answered "yes to all". They are recorded here as decided; no
+ADR is written in this spike (the lead assigns numbers), and the text is
+what an ADR would say.
 
-**Licence and legal questions.**
+1. **The in-prefix bridge is P@x's path into Windows applications**, once
+   the re-run confirms the fixes of the second commit (run 43545838974;
+   not yet run when this was written, so the condition is open).
 
-1. **The hook library is loaded into other publishers' programs**
-   (Notepad++ is GPL-3.0, 7-Zip LGPL-2.1). AGENTS.md says code that runs
-   inside a GPL program cannot carry the project licence. The library is
-   90 lines; it could carry a permissive licence (MIT) of its own, or the
-   menu could be left unread. The owner's call. The bridge itself is a
-   separate program and is not affected.
-2. **Injecting into applications** can trip anti-cheat and
-   anti-tampering in games and some commercial software. Proposed: the
-   hook is used only for applications whose catalogue entry allows it,
-   never for games.
-3. **Holo2's GGUF comes from a third party** (the publisher ships
+   > *Windows applications are operated through a bridge inside their
+   > Wine prefix.* P@x reads and operates a Windows application under
+   > Wine through `tur-winbridge`, a Windows program of TUR's own started
+   > in the application's sandbox by `tur-runtime` and spoken to by
+   > `tur-pax-a11y` over a pipe. It reads the Win32 window tree and
+   > standard control messages; UI Automation and MSAA are used when Wine
+   > implements them. The eleven interface tools, the resolve, decide,
+   > re-read, perform order and the policy classification are those of
+   > the accessibility path; the bridge holds no authority and is never
+   > offered to a model.
+
+2. **The menu hook library is MIT, apart, and off for games.** The code
+   that runs inside other publishers' programs (Notepad++ is GPL-3.0,
+   7-Zip LGPL-2.1; AGENTS.md: code that runs inside a GPL program cannot
+   carry the project licence) gets a permissive licence, MIT, in a
+   clearly marked directory with its own LICENSE file and SPDX lines, and
+   is switched off for games, whose anti-cheat software treats a loaded
+   library as tampering. Everything else keeps TUR's licence.
+
+   Applied in the third commit of this branch:
+   `tests/experiments/winsee/hook-mit/` holds `tw_hook.c`
+   (`SPDX-License-Identifier: MIT`, the copyright line of NOTICE) and
+   `LICENSE` (the MIT text). The file includes only the Windows headers
+   and shares no code with the bridge. `TUR_WINBRIDGE_NO_HOOK=1` switches
+   it off (section 6). The bridge (`bridge/`), the test windows, the
+   harnesses and the filter keep `LicenseRef-TUR-Noncommercial-1.0.0`.
+
+3. **A position proposed from a picture never acts alone.**
+
+   > *Vision proposes, the application confirms.* An action whose target
+   > was chosen from a picture is carried out only when the application's
+   > real structure (the accessibility tree, or the bridge) names the
+   > same control at that point in the window meant; it is then decided
+   > as an ordinary interface action. Otherwise it is class 2, which is
+   > refused today. Where an application exposes nothing, acting by sight
+   > is class 2.
+
+### 11.2 Still open
+
+4. **Holo2's GGUF comes from a third party** (the publisher ships
    safetensors only). Its licence is Apache-2.0; if it is the model to
    ship, TUR converts it itself or asks H Company for a GGUF, as the
    catalogue's rule ("from the publisher's official source") requires.
-4. **Wine's missing accessibility is an upstream gap**, and TUR's rule is
+   Nothing to decide before section 7 has numbers.
+5. **Wine's missing accessibility is an upstream gap**, and TUR's rule is
    to integrate upstream. Children of a window in the UI Automation
    client and accessible objects for the standard controls in `oleacc`
    are well-defined pieces of work; the Win32 tier of this bridge shows
-   what they would return. Whether TUR contributes them is a question of
-   effort, not of licence (LGPL-2.1-or-later, as the KMDF patch set).
+   what they would return. The lead's note of 14 November 2026: Wine does
+   not accept AI-written code (wine-devel, April 2026; not checked again
+   in this spike), so what TUR can offer is the findings, as bug reports:
+   section 2's table and the measurements of sections 3 and 4 are written
+   to be quoted. No patch is proposed.
+6. **The sensitive list has no Windows terminal or shell** (`cmd.exe`,
+   `powershell.exe`, `wineconsole`; PuTTY's terminal window): section 5.
 
-**What productising would take.**
+### 11.3 What productising would take
 
 1. `tur-runtime`: start the bridge in the application's sandbox and offer
    its pipe (section 6); the interface is small and should be frozen
@@ -635,10 +678,14 @@ call still decided by the engine.
 4. Policy: Windows terminals and shells on the sensitive list; the
    application's identity from tur-runtime's record (the catalogue
    identifier) rather than the executable's name.
-5. Vision, if section 7's numbers allow: the confirmation rule in
-   `tur-pax-a11y`, and a tool that returns a proposal, never an action.
+5. Vision: the confirmation rule (decided, 11.1) in `tur-pax-a11y`, and,
+   if section 7's numbers allow, a tool that returns a proposal, never an
+   action.
+6. The hook library (decided, 11.1): its MIT directory moves with it into
+   the image's licence records (`docs/dependencies`), and tur-runtime
+   sets `TUR_WINBRIDGE_NO_HOOK=1` for games.
 
-**Follow-ups.**
+### 11.4 Follow-ups
 
 - Run B (it is queued) and fill section 7.
 - An application with its own-drawn interface under Wine (Qt, Electron):

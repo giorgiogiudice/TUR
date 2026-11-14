@@ -705,6 +705,40 @@ class Harness:
         if process.poll() is None:
             process.kill()
 
+    def scenario_hook_off(self):
+        """The owner's decision for games: with TUR_WINBRIDGE_NO_HOOK=1 the
+        bridge loads nothing into the application. Notepad stands in for a
+        game: its window is still read, its menu is not."""
+        app = "hook-off"
+        process = self.launch(app, ["notepad"])
+        window = self.wait_window(lambda w: (w.get("exe") or "").lower() == "notepad.exe")
+        if window is None:
+            self.note("Wine's notepad showed no window for the hook-off test")
+            return
+        with_hook = self.read(window)
+        quiet = Bridge(self.build / "tur-winbridge.exe", dict(self.env, TUR_WINBRIDGE_NO_HOOK="1"), self.evidence / "logs" / "bridge-hook-off.log")
+        try:
+            hello = quiet.start()
+            without = quiet.ask("read", window=window["window"], tier="win32", timeout=60)
+        except BridgeError as error:
+            hello, without = {}, {"error": str(error)[:300], "elements": []}
+        finally:
+            quiet.stop()
+        (self.evidence / "notepad").mkdir(parents=True, exist_ok=True)
+        (self.evidence / "notepad" / "notepad-hook-off-win32.json").write_text(json.dumps(without, indent=1))
+        menus = [e for e in without.get("elements", []) if "menu" in (e.get("role") or "")]
+        self.results["steps"].append({
+            "app": app, "what": "with the hook switched off nothing is loaded into the application: no menu is read, the rest is", "tier": "win32", "action": "read",
+            "done": hello.get("hook_allowed") is False,
+            "verified": hello.get("hook_allowed") is False and str(without.get("menu_hook", "")).startswith("off") and not menus
+            and find(without, "text") is not None and find(with_hook, ["menu", "menu item"]) is not None,
+            "detail": f"hello {hello}; menu_hook {without.get('menu_hook')!r}; {len(menus)} menu elements without the hook, "
+                      f"{sum(1 for e in with_hook.get('elements', []) if 'menu' in (e.get('role') or ''))} with it",
+        })
+        print(f"  hook off: {self.results['steps'][-1]['detail']}", flush=True)
+        if process.poll() is None:
+            process.kill()
+
     def scenario_putty(self):
         app = "putty"
         source = self.downloads / "putty.exe"
@@ -906,6 +940,7 @@ class Harness:
             ("com-clean", lambda: self.scenario_com("clean")),
             ("cost", self.scenario_cost),
             ("notepad", self.scenario_notepad),
+            ("hook-off", self.scenario_hook_off),
             ("putty", self.scenario_putty),
             ("notepadpp", self.scenario_notepadpp),
             ("sevenzip", self.scenario_sevenzip),

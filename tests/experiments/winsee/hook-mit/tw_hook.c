@@ -1,4 +1,5 @@
-/* SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0 */
+/* SPDX-License-Identifier: MIT */
+/* Copyright (c) 2026 TUR project authors (https://github.com/giorgiogiudice/TUR) */
 /*
  * tur-winhook.dll: reads a window's menu from inside the application.
  *
@@ -18,9 +19,19 @@
  * The rectangle is in screen coordinates and given for the menu bar's own
  * items only.
  *
- * Experiment code (docs/reports/exp-winsee-1.md). Whether a library of
- * TUR's may be loaded into other publishers' programs is a licence
- * question the report puts to the owner.
+ * Licence: MIT (the LICENSE file beside this one), not TUR's project
+ * licence. This is the one part of the bridge that runs inside other
+ * publishers' programs, some of them under the GPL, and code that runs
+ * inside a GPL program cannot carry the project licence (AGENTS.md); the
+ * owner decided on 14 November 2026 that it is MIT, in this directory of
+ * its own. It includes nothing but the Windows headers and shares no code
+ * with the rest of the bridge, which keeps TUR's licence.
+ *
+ * It is not used for games: the bridge does not load it when it is
+ * started with TUR_WINBRIDGE_NO_HOOK=1 (anti-cheat software treats a
+ * library loaded into a game as tampering).
+ *
+ * Experiment code (docs/reports/exp-winsee-1.md).
  */
 #ifndef UNICODE
 #define UNICODE

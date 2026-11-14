@@ -7,7 +7,9 @@
 #   tests/experiments/winsee/bridge/build.sh OUTPUT_DIR
 #
 #   tur-winbridge.exe   the bridge (tw_core.c, tw_msaa.c, tw_uia.c, tw_com.c)
-#   tur-winhook.dll     reads a window's menu inside the application (tw_hook.c)
+#   tur-winhook.dll     reads a window's menu inside the application
+#                       (../hook-mit/tw_hook.c: MIT, not TUR's licence, because it
+#                       runs inside other publishers' programs)
 #   tw-controls.exe     a window with one of each standard control (../apps)
 #   tw-attack.exe       a window that paints one label over another control
 #
@@ -83,7 +85,7 @@ program() { # output source flags...
     return 0
 }
 
-program tur-winhook.dll "${here}/tw_hook.c" -shared -luser32 -lkernel32
+program tur-winhook.dll "${here}/../hook-mit/tw_hook.c" -shared -luser32 -lkernel32
 program tw-controls.exe "${here}/../apps/tw-controls.c" -mwindows -lcomctl32 -lgdi32 -lshell32 -luser32
 program tw-attack.exe "${here}/../apps/tw-attack.c" -mwindows -lgdi32 -lshell32 -luser32
 

@@ -9,7 +9,12 @@
  *   tw_msaa.c   the MSAA tier (oleacc, IAccessible)
  *   tw_uia.c    the UI Automation tier (uiautomationcore's COM client)
  *   tw_com.c    COM automation: registered objects, type libraries, calls
- *   tw_hook.c   tur-winhook.dll: reads a window's menu inside its process
+ *
+ * and, apart from these and under the MIT licence because it runs inside
+ * other publishers' programs:
+ *
+ *   ../hook-mit/tw_hook.c   tur-winhook.dll: reads a window's menu inside
+ *                           the application
  *
  * Experiment code: built and run only by .github/workflows/exp-winsee.yml.
  */
