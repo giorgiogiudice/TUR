@@ -1454,7 +1454,7 @@
    "family": "renpy",
    "shard": "g1",
    "licence": "MIT",
-   "note": "packaged in the job by the Ren'Py 8.5.3 SDK's own distribute command; the Linux package is the ground truth",
+   "note": "packaged in the job by the Ren'Py 8.5.3 SDK's own distribute command; the Linux package is the ground truth. (The SDK refuses to package its Tutorial game, so this is the only one.)",
    "packages": {
     "windows": {
      "local": "renpy-dist/the_question-*-win.zip"
@@ -1464,25 +1464,6 @@
     },
     "linux": {
      "local": "renpy-dist/the_question-*-linux.tar.bz2"
-    }
-   }
-  },
-  {
-   "id": "renpy-tutorial",
-   "name": "Ren'Py Tutorial",
-   "family": "renpy",
-   "shard": "g1",
-   "licence": "MIT",
-   "note": "packaged in the job by the Ren'Py 8.5.3 SDK's own distribute command; the Linux package is the ground truth",
-   "packages": {
-    "windows": {
-     "local": "renpy-dist/tutorial-*-win.zip"
-    },
-    "macos": {
-     "local": "renpy-dist/tutorial-*-mac.zip"
-    },
-    "linux": {
-     "local": "renpy-dist/tutorial-*-linux.tar.bz2"
     }
    }
   }

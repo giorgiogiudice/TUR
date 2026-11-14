@@ -49,6 +49,7 @@ class Session:
             "XDG_SESSION_TYPE": "wayland",
             "XDG_CURRENT_DESKTOP": "sway",
             "LIBGL_ALWAYS_SOFTWARE": "1",
+            "SDL_AUDIODRIVER": "dummy",  # the runner has no sound card
             "HOME": os.path.join(work, "session-home"),
         }
         os.makedirs(self.base["HOME"], exist_ok=True)

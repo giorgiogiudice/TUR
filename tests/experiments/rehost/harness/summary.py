@@ -28,11 +28,22 @@ def cell(value):
     return str(value if value not in (None, "") else "-").replace("|", "/").replace("\n", " ")
 
 
-def verdict(entry, key="run"):
+def nodes(entry, key="run"):
+    pages = ((entry or {}).get(key) or {}).get("pages") or []
+    return pages[0].get("nodes") if pages else None
+
+
+def verdict(entry, key="run", truth=None):
     if entry is None:
         return "no package"
     if key in entry:
-        return entry[key].get("verdict", "?")
+        word = entry[key].get("verdict", "?")
+        mine, theirs = nodes(entry, key), nodes(truth) if truth else None
+        if word == "window" and mine is not None and theirs and mine < 0.5 * theirs:
+            return f"window, page incomplete ({mine} of {theirs} elements)"
+        if word == "no-window" and mine and mine >= 15:
+            return f"no-window (page loaded: {mine} elements)"
+        return word
     if key == "pretend":
         return "-"
     if entry.get("error"):
@@ -75,8 +86,8 @@ def main():
                         family,
                         record["name"],
                         verdict(variants.get("linux")),
-                        verdict(variants.get("windows")),
-                        verdict(variants.get("macos")),
+                        verdict(variants.get("windows"), truth=variants.get("linux")),
+                        verdict(variants.get("macos"), truth=variants.get("linux")),
                         verdict(variants.get("windows"), "pretend") if variants.get("windows") else "-",
                         verdict(variants.get("macos"), "pretend") if variants.get("macos") else "-",
                     )
@@ -142,16 +153,25 @@ def main():
                 )
 
     out.append("\n## Native modules of the Electron payloads\n")
-    out.append("| Application | From | Module | Version | Outcome | Detail |")
-    out.append("|---|---|---|---|---|---|")
+    out.append("| Application | From | Module | Version | In the official Linux build | Outcome | Detail |")
+    out.append("|---|---|---|---|---|---|---|")
     totals = {}
+    needed = {}
     for record in records:
+        linux = (record.get("variants", {}).get("linux") or {}).get("finding") or {}
+        linux_modules = {item.get("package") for item in linux.get("natives") or [] if item.get("package")} if linux.get("runtime") == "electron" else None
         for variant in ("windows", "macos"):
             plan = ((record.get("variants", {}).get(variant) or {}).get("plan")) or {}
             for item in plan.get("natives", []):
                 totals.setdefault(variant, {}).setdefault(item["status"], 0)
                 totals[variant][item["status"]] += 1
-                out.append(f"| {cell(record['name'])} | {variant} | {cell(item['package'])} | {cell(item['version'])} | {item['status']} | {cell(item['detail'][:110])} |")
+                used = "unknown" if linux_modules is None or not item["package"] else ("yes" if item["package"] in linux_modules else "no")
+                needed.setdefault(variant, {}).setdefault(used, {}).setdefault(item["status"], 0)
+                needed[variant][used][item["status"]] += 1
+                out.append(f"| {cell(record['name'])} | {variant} | {cell(item['package'])} | {cell(item['version'])} | {used} | {item['status']} | {cell(item['detail'][:110])} |")
+    for variant, groups in needed.items():
+        for used, counts in sorted(groups.items()):
+            out.append(f"\n**{variant} packages, module in the official Linux build: {used}**: " + ", ".join(f"{count} {status}" for status, count in sorted(counts.items())) + ".")
     for variant, counts in totals.items():
         total = sum(counts.values())
         out.append(f"\n**{variant} packages**: {total} native modules: " + ", ".join(f"{count} {status} ({100 * count // total}%)" for status, count in sorted(counts.items())) + ".")

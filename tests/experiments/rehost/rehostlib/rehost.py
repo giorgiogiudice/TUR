@@ -154,6 +154,24 @@ def rehost_electron(finding, out, cache, log, spoof=None, resolve_natives=True):
     foreign_helpers = [item["path"] for item in finding.get("sidecars", []) if item["format"] != "elf"]
     if foreign_helpers:
         plan["foreign_helpers"] = foreign_helpers[:40]
+        # A helper program the system itself provides is linked in place of
+        # the package's Windows or macOS build (so far: ffmpeg, ffprobe).
+        linked = []
+        for helper in foreign_helpers:
+            stem = os.path.splitext(os.path.basename(helper))[0].lower()
+            system = shutil.which(stem) if stem in ("ffmpeg", "ffprobe") else None
+            if not system:
+                continue
+            base = os.path.join(out, "resources", os.path.dirname(helper))
+            for name in (stem, os.path.basename(helper)):
+                target = os.path.join(base, name)
+                if os.path.lexists(target):
+                    os.unlink(target)
+                os.symlink(system, target)
+            linked.append(f"{helper} -> {system}")
+        if linked:
+            plan["helpers_linked"] = linked
+            plan["steps"].append("helper programs replaced by the system's: " + ", ".join(linked[:6]))
 
     env = {}
     if spoof:
@@ -351,7 +369,10 @@ def nuget_linux_assets(deps, app, cache, log, plan):
                 swapped.append(f"{candidate} {version}: {taken} Linux file(s)")
                 break
         else:
-            plan["blockers"].append(f"NuGet package {key} has Windows-specific files and no Linux assets were found")
+            if re.match(r"(?i)^(runtimepack\.|runtime\.|System\.|Microsoft\.Win32\.|Microsoft\.Extensions\.|Microsoft\.NETCore\.|Microsoft\.AspNetCore\.)", key):
+                plan.setdefault("framework_packages", []).append(key)  # part of, or served by, the installed framework
+            else:
+                plan["blockers"].append(f"NuGet package {key} has Windows-specific files and no Linux assets were found")
     if swapped:
         plan["steps"].append("Linux assets from NuGet: " + "; ".join(swapped[:12]))
     plan["nuget"] = {"windows_specific_packages": sorted(libraries), "swapped": swapped}
@@ -397,6 +418,7 @@ def rehost_dotnet(finding, out, cache, log):
     plan["runtime"] = {"name": ".NET (Fedora's packages)", "wanted": frameworks, "installed": {name: {major: value[0] for major, value in majors.items()} for name, majors in installed.items()}}
     removed = 0
     roll_forward = False
+    rewrite = bool(included)
     for item in frameworks:
         majors = installed.get(item["name"], {})
         major = str(item.get("version", "0")).split(".")[0]
@@ -406,6 +428,13 @@ def rehost_dotnet(finding, out, cache, log):
         if major not in majors:
             roll_forward = True
         chosen = majors.get(major) or majors[sorted(majors, key=int)[-1]]
+        if major in majors and item.get("version") != chosen[0]:
+            # Same major, another patch level: the host refuses an older
+            # installed patch, so the configuration is written for the
+            # installed one (and the report says which).
+            plan.setdefault("patch_level", []).append(f"{item['name']}: package {item.get('version')}, installed {chosen[0]}")
+            item["version"] = chosen[0]
+            rewrite = True
         if included:
             # The package carries the Windows build of the framework: use the
             # installed Linux one, and drop the carried files of the same name.
@@ -425,11 +454,13 @@ def rehost_dotnet(finding, out, cache, log):
             if re.match(r"(?i)^(mscordaccore_|api-ms-win-|ucrtbase|vcruntime|msvcp)", name):
                 os.unlink(os.path.join(app, name))
                 removed += 1
+        plan["steps"].append(f"self-contained package made framework-dependent: {removed} carried framework files removed")
+    if rewrite:
         options["frameworks"] = frameworks
         options.pop("framework", None)
         with open(os.path.join(app, payload["runtimeconfig"]), "w", encoding="utf-8") as handle:
             json.dump(config, handle, indent=2)
-        plan["steps"].append(f"self-contained package made framework-dependent: {removed} carried Windows framework files removed, runtimeconfig.json rewritten")
+        plan["steps"].append("runtimeconfig.json rewritten for the installed framework" + (": " + "; ".join(plan["patch_level"]) if plan.get("patch_level") else ""))
     deps_path = os.path.join(app, payload.get("deps") or "")
     if payload.get("deps") and os.path.isfile(deps_path):
         try:
@@ -475,7 +506,7 @@ def swt_linux(swt, cache, log):
     versions = fetch.maven_versions("org.eclipse.platform", "org.eclipse.swt.gtk.linux.x86_64")
     tried = 0
     for version in versions[::-1]:
-        if tried >= 30:
+        if tried >= 90:
             break
         jar = fetch.maven_artifact("org.eclipse.platform", "org.eclipse.swt.gtk.linux.x86_64", version, cache)
         tried += 1

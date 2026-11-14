@@ -24,7 +24,8 @@ work=/work
 out=${work}/out
 mkdir -p "${out}" "${work}/cache"
 
-base="python3 python3-gobject python3-pillow at-spi2-core at-spi2-atk dbus-daemon dbus-tools glib2
+base="python3 python3-gobject python3-pillow gobject-introspection at-spi2-core at-spi2-atk dbus-daemon dbus-tools glib2
+  libICE libSM libXext libXrender ffmpeg-free
   sway grim xorg-x11-server-Xwayland mesa-dri-drivers mesa-vulkan-drivers mesa-libgbm mesa-libGL mesa-libEGL
   bsdtar 7zip p7zip p7zip-plugins innoextract msitools squashfs-tools util-linux procps-ng findutils which file
   nss atk cups-libs gtk3 libdrm alsa-lib libXcomposite libXdamage libXrandr libXScrnSaver libxkbcommon pango
@@ -44,6 +45,11 @@ if ! dnf -y --setopt=install_weak_deps=False install --skip-unavailable ${base} 
     echo "::error::dnf could not install the packages"
     exit 1
 fi
+# The privileged container shows the runner's /dev/dri, which the test user
+# may not open: Mesa then refuses to fall back to software rendering, and in
+# run 43544136201 neither LÖVE nor Ren'Py (official Linux build included)
+# showed a window. Without the nodes Mesa renders in software.
+rm -rf /dev/dri
 command -v 7z > /dev/null || { command -v 7zz > /dev/null && ln -s "$(command -v 7zz)" /usr/local/bin/7z; }
 {
     . /etc/os-release
@@ -86,7 +92,7 @@ if not os.path.isdir(sdk):
 print(record)
 env = dict(os.environ, SDL_VIDEODRIVER="dummy", SDL_AUDIODRIVER="dummy")
 status = 0
-for game in ("the_question", "tutorial"):
+for game in ("the_question",):
     done = subprocess.run([os.path.join(sdk, "renpy.sh"), os.path.join(sdk, "launcher"), "distribute", os.path.join(sdk, game), "--destination", os.path.join(work, "w", "renpy-dist"), "--package", "win", "--package", "mac", "--package", "linux", "--no-update"], env=env, capture_output=True, text=True, timeout=900)
     print(game, "exit", done.returncode, done.stdout[-1500:], done.stderr[-1500:])
     status = status or done.returncode

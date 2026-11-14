@@ -129,7 +129,12 @@ class Bench:
         if chromium:
             self.port += 1
             devtools = DevTools(self.port)
-            argv += [f"--remote-debugging-port={self.port}", "--ozone-platform-hint=auto"]
+            # --disable-gpu: the runner has no GPU, and in run 43544136201
+            # Chromium's GPU process died in this container ("GPU process
+            # isn't usable"), which kept several official Linux builds from
+            # ever showing their window. Given to official and re-hosted
+            # builds alike.
+            argv += [f"--remote-debugging-port={self.port}", "--ozone-platform-hint=auto", "--disable-gpu"]
             env["ELECTRON_OZONE_PLATFORM_HINT"] = "auto"
             if not self.userns:
                 argv.append("--no-sandbox")
@@ -174,7 +179,8 @@ class Bench:
                         http = {"status": status, "seconds": round(time.time() - started, 1)}
             exited = process.poll() is not None
             if kind == "gui":
-                if first_window is not None and now - first_window >= 8 and (not devtools or page_ready is not None or now - first_window >= 22):
+                settle = 8 if devtools else 14  # Java and game engines paint later than they map
+                if first_window is not None and now - first_window >= settle and (not devtools or page_ready is not None or now - first_window >= 22):
                     if not function or not function.get("http") or http is not None or now > wait - 2:
                         break
                 if exited and first_window is None and now > 4 and not (pids() - before):
@@ -329,8 +335,17 @@ class Bench:
             scripts = [name for name in os.listdir(directory) if name.endswith(".sh")]
             if scripts:
                 return {"argv": ["bash", os.path.join(directory, scripts[0])], "cwd": directory}
+        if runtime == "dotnet" and payload.get("single_file"):
+            return {"argv": [os.path.join(directory, payload["single_file"])], "cwd": directory, "kind": "gui" if payload.get("avalonia") else "cli"}
         if runtime == "dotnet" and payload.get("assembly"):
             program = os.path.join(directory, payload["assembly"][:-4])
+            if not os.path.isfile(program):
+                # The launcher may have another name; it names its assembly.
+                for name in sorted(os.listdir(directory)):
+                    path = os.path.join(directory, name)
+                    if os.path.isfile(path) and os.path.getsize(path) < (8 << 20) and "." not in name and detect.binfmt.binary_kind(path) and detect.binfmt.contains(path, payload["assembly"].encode()):
+                        program = path
+                        break
             if os.path.isfile(program):
                 return {"argv": [program], "cwd": directory, "kind": "gui" if payload.get("avalonia") else "cli"}
         if runtime == "jvm":

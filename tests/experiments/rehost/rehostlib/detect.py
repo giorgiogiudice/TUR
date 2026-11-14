@@ -74,6 +74,7 @@ class Payload:
         self.asar = binfmt.Asar(asar_path) if asar_path else None
         self.directory = directory
         self.kind = "asar" if asar_path else "directory"
+        self.inner = {}
 
     def read(self, rel, limit=8 << 20):
         if self.asar:
@@ -82,7 +83,22 @@ class Payload:
             with open(os.path.join(self.directory, rel), "rb") as handle:
                 return handle.read(limit)
         except OSError:
-            return None
+            pass
+        # A directory payload may keep its modules in an archive of their
+        # own (VS Code: node_modules.asar beside node_modules.asar.unpacked).
+        marker = ".asar.unpacked/"
+        if marker in rel:
+            head, tail = rel.split(marker, 1)
+            inner = os.path.join(self.directory, head + ".asar")
+            if os.path.isfile(inner):
+                if inner not in self.inner:
+                    try:
+                        self.inner[inner] = binfmt.Asar(inner)
+                    except (ValueError, OSError):
+                        self.inner[inner] = None
+                if self.inner[inner] is not None:
+                    return self.inner[inner].read(tail, limit)
+        return None
 
     def read_json(self, rel):
         raw = self.read(rel, 4 << 20)
@@ -499,7 +515,22 @@ def detect_dotnet_dir(directory, names):
         return None
     lower = {name.lower() for name in names}
     # The application's own configuration, not a tool's that travels with it.
-    configs.sort(key=lambda name: (0 if (name[: -len(".runtimeconfig.json")] + ".exe").lower() in lower else 1, len(name)))
+    def rank(name):
+        stem = name[: -len(".runtimeconfig.json")]
+        graphical = 1
+        deps = os.path.join(directory, stem + ".deps.json")
+        try:
+            if os.path.isfile(deps) and b"Avalonia" in binfmt.read_at(deps, 0, 4 << 20):
+                graphical = 0  # the program with the user interface
+        except OSError:
+            pass
+        program = os.path.join(directory, stem + ".exe")
+        info = binfmt.pe_info(program) if os.path.isfile(program) else None
+        if info and info["subsystem"] == 2 and graphical:
+            graphical = 0.5  # a Windows GUI program
+        return (0 if (stem + ".exe").lower() in lower or stem in names else 1, graphical, len(name))
+
+    configs.sort(key=rank)
     parsed = [(name, _dotnet_config(directory, name)) for name in configs[:8]]
     parsed = [(name, value) for name, value in parsed if value]
     if not parsed:
@@ -509,7 +540,9 @@ def detect_dotnet_dir(directory, names):
     if any(framework in WINDOWS_ONLY_FRAMEWORKS for framework in parsed[0][1][1]):
         # A Windows-only front end (a tray program) beside a portable
         # program of the same application: the portable one is the payload.
-        for name, (other, frameworks) in parsed[1:]:
+        main_stem = config_name[: -len(".runtimeconfig.json")]
+        others = sorted(parsed[1:], key=lambda item: (0 if item[0].startswith(main_stem + ".") else 1, 0 if "Microsoft.AspNetCore.App" in item[1][1] else 1, len(item[0])))
+        for name, (other, frameworks) in others:
             if not any(framework in WINDOWS_ONLY_FRAMEWORKS for framework in frameworks) and (name[: -len(".runtimeconfig.json")] + ".exe").lower() in lower:
                 skipped = config_name
                 config_name, options = name, other
@@ -571,6 +604,24 @@ def detect_dotnet_bundle(path):
     names = [entry["path"] for entry in bundle["files"]]
     configs = [name for name in names if name.endswith(".runtimeconfig.json")]
     finding["payload"] = {"single_file": os.path.basename(path), "bundle_version": bundle["version"], "files": len(names), "runtimeconfig": configs[0] if configs else None}
+    if configs:
+        entry = next(item for item in bundle["files"] if item["path"] == configs[0])
+        try:
+            import zlib
+
+            raw = binfmt.read_at(path, entry["offset"], entry["compressed"] or entry["size"])
+            if entry["compressed"]:
+                raw = zlib.decompress(raw, -15)
+            options = json.loads(raw.decode("utf-8-sig")).get("runtimeOptions", {})
+            listed = list(options.get("includedFrameworks") or []) + list(options.get("frameworks") or []) + ([options["framework"]] if options.get("framework") else [])
+            core = next((item for item in listed if item.get("name") == "Microsoft.NETCore.App"), None)
+            if core:
+                finding["version"] = core.get("version")
+                finding["version_evidence"].append({"from": f"{configs[0]} inside the bundle", "value": finding["version"]})
+            finding["payload"]["frameworks"] = [item.get("name") for item in listed]
+            finding["payload"]["tfm"] = options.get("tfm")
+        except (ValueError, OSError, zlib.error):
+            pass
     lower = {name.lower() for name in names}
     finding["payload"]["avalonia"] = "avalonia.dll" in lower or "avalonia.base.dll" in lower
     finding["payload"]["self_contained"] = "system.private.corelib.dll" in lower
@@ -638,7 +689,7 @@ def jar_facts(path, limit=20000):
                         facts["natives"]["linux"] += 1
                     else:
                         facts["natives"]["macos"] += 1
-                    if "swt-" in lower and facts["swt"] is None:
+                    if "swt-" in lower and (facts["swt"] is None or not facts["swt"].get("library")):
                         facts["swt"] = {"library": name}
                 if name.startswith("org/eclipse/swt/") and facts["swt"] is None:
                     facts["swt"] = {"library": None}

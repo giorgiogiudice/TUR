@@ -11,6 +11,12 @@
 // application's real entry point. It tests one question: does a payload that
 // has no Linux code path still come up?
 //
+// Only the application's own code is told so. Electron's and Node's own
+// JavaScript also read process.platform, and call native methods that exist
+// on that platform only (run 43544136201: every payload told "darwin" died
+// in Electron's Menu.setApplicationMenu). The property is therefore a getter
+// that looks at its caller: code inside node: or electron/js2c sees Linux.
+//
 // Renderer processes and preload scripts are not touched: they see Linux.
 'use strict';
 
@@ -54,7 +60,19 @@ function stubAll(object, label, names, value) {
 const nothing = () => undefined;
 
 if (want && want !== real) {
-  Object.defineProperty(process, 'platform', { value: want, configurable: true });
+  const platformGetter = function platformGetter() {
+    const limit = Error.stackTraceLimit;
+    const holder = {};
+    try {
+      Error.stackTraceLimit = 2;
+      Error.captureStackTrace(holder, platformGetter);
+    } finally {
+      Error.stackTraceLimit = limit;
+    }
+    const caller = String(holder.stack || '').split('\n')[1] || '';
+    return /\(node:|at node:|electron\/js2c/.test(caller) ? real : want;
+  };
+  Object.defineProperty(process, 'platform', { get: platformGetter, configurable: true, enumerable: true });
   os.platform = () => want;
   os.type = () => (want === 'darwin' ? 'Darwin' : 'Windows_NT');
   note('platform ' + real + ' -> ' + want);

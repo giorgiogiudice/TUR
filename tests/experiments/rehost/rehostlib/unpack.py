@@ -77,6 +77,20 @@ class Unpacker:
             self.log("      exit " + str(done.returncode) + ": " + output[-600:].replace("\n", " | "))
         return done.returncode, output
 
+    @staticmethod
+    def is_jar(path):
+        import zipfile
+
+        try:
+            with zipfile.ZipFile(path) as archive:
+                names = archive.namelist()
+                if "META-INF/MANIFEST.MF" not in names:
+                    return False
+                manifest = archive.read("META-INF/MANIFEST.MF").decode("utf-8", "replace")
+                return "Main-Class" in manifest and any(name.endswith(".class") for name in names[:5000])
+        except (zipfile.BadZipFile, OSError, KeyError):
+            return False
+
     # ---- individual containers
 
     def bsdtar(self, path, dest):
@@ -100,6 +114,7 @@ class Unpacker:
         shoff = struct.unpack_from("<Q", head, 0x28)[0]
         shentsize, shnum = struct.unpack_from("<HH", head, 0x3A)
         offset = shoff + shentsize * shnum
+        os.makedirs(os.path.dirname(os.path.abspath(dest)), exist_ok=True)
         code, _ = self.run(["unsquashfs", "-q", "-n", "-f", "-o", str(offset), "-d", dest, path])
         return code == 0 or (os.path.isdir(dest) and bool(os.listdir(dest)))
 
@@ -194,19 +209,27 @@ class Unpacker:
             # Squirrel.Windows' Setup.exe ends in a zip that holds the
             # application as a NuGet package; anything else that ends in a
             # zip (launch4j, LÖVE, a self-extracting zip) is read in place.
-            try:
-                import zipfile
+            import zipfile
 
-                with zipfile.ZipFile(path) as archive:
+            holder = dest + ".zip"
+            os.makedirs(os.path.dirname(os.path.abspath(holder)), exist_ok=True)
+            with open(path, "rb") as source, open(holder, "wb") as out:
+                source.seek(tail["start"])
+                remaining = tail["end"] - tail["start"]
+                while remaining > 0:
+                    chunk = source.read(min(remaining, 4 << 20))
+                    if not chunk:
+                        break
+                    out.write(chunk)
+                    remaining -= len(chunk)
+            try:
+                with zipfile.ZipFile(holder) as archive:
                     packages = [name for name in archive.namelist() if name.endswith(".nupkg")]
             except (zipfile.BadZipFile, OSError):
                 packages = []
             if not packages:
+                os.unlink(holder)
                 return None
-            holder = dest + ".zip"
-            with open(path, "rb") as source, open(holder, "wb") as out:
-                source.seek(tail["start"])
-                shutil.copyfileobj(source, out)
             ok = self.bsdtar(holder, dest)
             os.unlink(holder)
             if not ok:
@@ -268,6 +291,8 @@ class Unpacker:
         kind = sniff(path)
         self.log(f"  unpack: {os.path.basename(path)} is {kind}")
         ok = False
+        if kind == "zip" and self.is_jar(path):
+            kind = "jar"
         if kind in ("zip", "tar", "tar-compressed"):
             ok = self.bsdtar(path, dest)
             if ok:
@@ -306,7 +331,7 @@ class Unpacker:
         if not ok:
             os.makedirs(dest, exist_ok=True)
             shutil.copy2(path, os.path.join(dest, os.path.basename(path)))
-            if kind not in ("pe", "elf", "macho", "pck", "other"):
+            if kind not in ("pe", "elf", "macho", "pck", "other", "jar"):
                 self.problems.append(f"the {kind} container could not be opened")
             self.layers.append(f"file ({kind})")
         # A lone archive inside an archive (a .dmg in a zip, a tar in a gz).

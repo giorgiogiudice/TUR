@@ -192,11 +192,26 @@ class Resolver:
 
         found = self.release_prebuild(name, version, package or (meta or {}))
         if found:
-            url, files = found
+            url, files, values = found
+            binary = package.get("binary") if isinstance(package.get("binary"), dict) else {}
             for rel, data in files.items():
-                target = next((item["path"] for item in foreign if os.path.basename(item["path"]) == os.path.basename(rel)), f"{directory}/{rel}")
-                self.put(target, data)
-                result["applied"].append(target)
+                targets = []
+                # node-pre-gyp says where its loader looks on each platform
+                # (run 43544136201: sqlite3's Linux build was written over
+                # the Windows path, and the loader never looked there).
+                text = binary.get("module_path") or ""
+                for key, value in values.items():
+                    text = text.replace("{" + key + "}", value)
+                if text and "{" not in text:
+                    targets.append(os.path.normpath(f"{directory}/{text}/{os.path.basename(rel)}"))
+                for item in foreign:
+                    if os.path.basename(item["path"]) == os.path.basename(rel) and "/build/" in "/" + item["path"]:
+                        targets.append(item["path"])
+                if not targets:
+                    targets.append(f"{directory}/{rel}")
+                for target in dict.fromkeys(targets):
+                    self.put(target, data)
+                    result["applied"].append(target)
             result["status"] = "release-prebuild"
             result["detail"] = url
             return
@@ -214,6 +229,7 @@ class Resolver:
     def release_prebuild(self, name, version, package):
         """prebuild-install's and node-pre-gyp's naming of release assets."""
         urls = []
+        values_of = {}
         short = name.split("/")[-1]
         repository = package.get("repository")
         repository = repository.get("url") if isinstance(repository, dict) else repository
@@ -243,10 +259,13 @@ class Resolver:
                     text = text.replace("{" + key + "}", value)
                 if "{" not in text:
                     urls.append(text)
+                    values_of[text] = values
         if match and ("prebuild-install" in str(package.get("dependencies", {})) or "prebuild-install" in str(package.get("scripts", {})) or not urls):
             for tag in (f"v{version}", version):
                 for runtime in runtimes:
-                    urls.append(f"https://github.com/{match.group(1)}/releases/download/{tag}/{short}-v{version}-{runtime}-linux-x64.tar.gz")
+                    url = f"https://github.com/{match.group(1)}/releases/download/{tag}/{short}-v{version}-{runtime}-linux-x64.tar.gz"
+                    urls.append(url)
+                    values_of[url] = {"platform": "linux", "arch": "x64", "libc": "glibc", "napi_build_version": runtime.split("-v")[-1], "node_abi": runtime if runtime.startswith("electron") else "napi", "configuration": "Release", "module_name": binary.get("module_name", short)}
         seen = set()
         for url in urls[:14]:
             if url in seen:
@@ -268,7 +287,7 @@ class Resolver:
             except (tarfile.TarError, OSError):
                 continue
             if files:
-                return url, files
+                return url, files, values_of.get(url, {})
         return None
 
 

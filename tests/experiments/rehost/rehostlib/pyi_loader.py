@@ -35,11 +35,26 @@ def main():
     raw = marshal.loads(blob[toc_offset:])
     toc = dict(raw) if not isinstance(raw, dict) else raw
 
+    standard = set(getattr(sys, "stdlib_module_names", ()))
+    site_dirs = [entry for entry in sys.path if entry.endswith("site-packages")]
+    known = {}
+
+    def installed(top):
+        if top not in known:
+            import importlib.machinery
+
+            spec = importlib.machinery.PathFinder.find_spec(top, site_dirs)
+            known[top] = spec is not None and spec.loader is not None
+        return known[top]
+
     class Finder(importlib.abc.MetaPathFinder, importlib.abc.Loader):
         def find_spec(self, fullname, path=None, target=None):
             entry = toc.get(fullname)
             if entry is None:
                 return None
+            top = fullname.split(".")[0]
+            if top in standard or installed(top):
+                return None  # this interpreter's own, or a Linux build installed for it
             is_package = entry[0] in (1, 3)
             spec = importlib.util.spec_from_loader(fullname, self, is_package=is_package)
             if is_package:
@@ -62,8 +77,11 @@ def main():
             with open(path, "rb") as handle:
                 return handle.read()
 
-    sys.meta_path.append(Finder())
-    sys.path.insert(0, data_dir)
+    # Before the path finder: a directory of data files named like a package
+    # would otherwise be taken for an (empty) namespace package.
+    position = next((index for index, finder in enumerate(sys.meta_path) if getattr(finder, "__name__", "") == "PathFinder"), len(sys.meta_path))
+    sys.meta_path.insert(position, Finder())
+    sys.path.append(data_dir)
     sys.frozen = True
     sys._MEIPASS = data_dir
     with open(os.path.join(out, script), "rb") as handle:
