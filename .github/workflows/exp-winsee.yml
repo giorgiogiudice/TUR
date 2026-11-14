@@ -1,0 +1,254 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Experiment `winsee` (docs/reports/exp-winsee-1.md): can P@x see and
+# operate Windows applications under Wine, which show nothing on the
+# accessibility bus?
+#
+# bridge   Hypothesis A. In a Fedora 45 container with Fedora 45's Wine: a
+#          small Windows program of TUR's own (tests/experiments/winsee/
+#          bridge, built with mingw-w64) is started inside the Wine prefix
+#          and reads each application's window through three tiers (UI
+#          Automation, MSAA, plain Win32), then presses, types, selects and
+#          uses menus, each verified by reading the application back and by
+#          screenshot. Applications: TUR's own test window, Wine's notepad,
+#          PuTTY, Notepad++, 7-Zip and an Inno Setup wizard (the files of
+#          tests/windows-runtime/apps.json, fetched from their publishers,
+#          checked, not committed). Also: COM automation objects and type
+#          libraries, the cost of the bridge, the first half of the vision
+#          safety test, the same bridge under the real tur-pax task loop
+#          and policy engine (a scripted provider; no model is called), and
+#          labelled screenshots of Linux windows read from the
+#          accessibility tree.
+# vision   Hypothesis B. Each model of tests/experiments/winsee/vision/
+#          models.json, on llama.cpp's llama-server on the runner's
+#          processor, is shown each labelled window and asked where a named
+#          control is; a hit is an answer inside the control's rectangle.
+#          The window that paints one label over another control is scored
+#          against the confirmation rule.
+#
+# Both jobs are green when their harness ran; what was found, a negative
+# result included, is in the job summary and the artifacts. No Microsoft
+# binary is downloaded or used. No model weight is committed, and none is
+# kept in the Actions cache: the repository's cache is full (9.2 of 10 GB on
+# 14 November 2026) and 12 GB of weights would evict every other
+# workflow's entries, so each run fetches them from the publisher and
+# checks the digest.
+name: exp-winsee
+
+on:
+  pull_request:
+    paths:
+      - "tests/experiments/winsee/**"
+      - ".github/workflows/exp-winsee.yml"
+  workflow_dispatch:
+    inputs:
+      only:
+        description: "Comma-separated scenarios of harness/winsee.py (empty: all)"
+        required: false
+        default: ""
+      scales:
+        description: "Image scales for the vision test"
+        required: false
+        default: "1.0,0.5,1.5"
+      most:
+        description: "The most controls asked about in one window"
+        required: false
+        default: "8"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: exp-winsee-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    # -o pipefail: a step that pipes into tee fails when the command does.
+    shell: bash
+
+env:
+  # Fedora 45's container image, by digest (tag 45 on 13 November 2026), as
+  # the windows-drivers workflow uses it.
+  FEDORA_IMAGE: registry.fedoraproject.org/fedora:45@sha256:fa773d10382c082ff2cccaf7982a5c162f11f296f91274b994357f2d3d473770
+  # llama.cpp's own release of the version TUR pins (docs/architecture/
+  # local-ai.md, section 6), CPU build for x86-64, and its SHA-256 as the
+  # local-ai workflow has it.
+  LLAMA_URL: https://github.com/ggml-org/llama.cpp/releases/download/b9840/llama-b9840-bin-ubuntu-x64.tar.gz
+  LLAMA_SHA256: 7a8a02089076eb6bd86e6a5d23ea99b91ce0d13f8d43b01fa3ad5aa4e02e7e92
+  CARGO_TERM_COLOR: never
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  bridge:
+    name: A bridge inside the Wine prefix, on real applications (Fedora 45 Wine)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Scratch directory
+        run: |
+          mkdir -p "$RUNNER_TEMP/winsee/evidence" "$RUNNER_TEMP/winsee/downloads" "$RUNNER_TEMP/winsee/hostbin"
+          echo "WORK=$RUNNER_TEMP/winsee" >> "$GITHUB_ENV"
+
+      - name: The applications, from the cache when they are there
+        # 26 MB in all: small enough for the cache.
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: ${{ runner.temp }}/winsee/downloads
+          key: winsee-apps-${{ hashFiles('tests/windows-runtime/apps.json') }}
+
+      - name: The applications, from their publishers, checked
+        run: |
+          python3 tests/experiments/winsee/harness/fetch_apps.py --apps tests/windows-runtime/apps.json \
+            --dir "$WORK/downloads" 7zip-exe notepadpp-zip putty-exe innosetup
+          ls -l "$WORK/downloads"
+
+      - name: Toolchain
+        working-directory: services/tur-pax
+        run: |
+          rustup show active-toolchain || rustup toolchain install
+          rustc --version; cargo --version
+
+      - name: The rust workflow's cache for tur-pax, read only
+        # The same key and paths as the `rust` workflow's, so that its entry
+        # on main is found. Nothing is saved: the repository's cache is full.
+        uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            services/tur-pax/target
+          key: rust-services/tur-pax-${{ hashFiles('rust-toolchain.toml', 'services/tur-pax/Cargo.toml', 'services/tur-pax/Cargo.lock') }}
+          restore-keys: rust-services/tur-pax-
+
+      - name: Build tur-pax and the bridge's second decision
+        # On the runner; the programs run in the container (Fedora 45's C
+        # library is newer than the runner's). winsee-decide takes
+        # tur-pax-a11y's lockfile, so that it is built from the versions
+        # that component pins, into tur-pax's target directory. If this
+        # fails, the policy test says NOT RUN and the rest is still measured.
+        continue-on-error: true
+        run: |
+          (cd services/tur-pax && cargo build --locked --bin tur-pax)
+          cp services/tur-pax-a11y/Cargo.lock tests/experiments/winsee/decide/Cargo.lock
+          (cd tests/experiments/winsee/decide && CARGO_TARGET_DIR="$GITHUB_WORKSPACE/services/tur-pax/target" cargo build)
+          cp services/tur-pax/target/debug/tur-pax services/tur-pax/target/debug/winsee-decide "$WORK/hostbin/"
+          ls -l "$WORK/hostbin"
+
+      - name: The experiment, in Fedora 45 with Fedora's Wine
+        env:
+          WINSEE_ONLY: ${{ github.event.inputs.only }}
+        run: |
+          docker run --rm --shm-size=1g -e WINSEE_ONLY \
+            -v "$GITHUB_WORKSPACE:/src:ro" -v "$WORK:/work" \
+            "$FEDORA_IMAGE" bash /src/tests/experiments/winsee/run-in-fedora.sh
+
+      - name: Results
+        if: always()
+        run: |
+          sudo chown -R "$(id -u):$(id -g)" "$WORK" || true
+          for file in "$WORK/evidence/results.md" "$WORK/evidence/policy/policy.md" "$WORK/evidence/linux-labels.md"; do
+            if [ -f "$file" ]; then cat "$file" >> "$GITHUB_STEP_SUMMARY"; echo >> "$GITHUB_STEP_SUMMARY"; fi
+          done
+          { echo '### Versions'; echo '```'; cat "$WORK/evidence/versions.txt" 2>/dev/null; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          ls -la "$WORK/evidence" "$WORK/evidence/dataset" 2>/dev/null | head -n 150 || true
+          test -f "$WORK/evidence/results.json"
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: winsee-evidence
+          path: ${{ runner.temp }}/winsee/evidence/
+          if-no-files-found: warn
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: winsee-dataset
+          path: ${{ runner.temp }}/winsee/evidence/dataset/
+          if-no-files-found: warn
+          retention-days: 14
+
+  vision:
+    name: Where is the control? ${{ matrix.model }} on the processor
+    needs: bridge
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        model: [qwen3-vl-2b-instruct, gemma-4-e2b, qwen3-vl-4b-instruct, holo2-4b]
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Scratch directory
+        run: |
+          mkdir -p "$RUNNER_TEMP/vision/evidence" "$RUNNER_TEMP/vision/models" "$RUNNER_TEMP/vision/dataset"
+          echo "WORK=$RUNNER_TEMP/vision" >> "$GITHUB_ENV"
+
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: winsee-dataset
+          path: ${{ runner.temp }}/vision/dataset
+
+      - name: The labelled windows
+        run: |
+          ls -l "$WORK/dataset" | head -n 80
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq python3-pil
+          python3 - <<'PY'
+          import json, os, pathlib
+          dataset = pathlib.Path(os.environ["WORK"]) / "dataset"
+          total = 0
+          for path in sorted(dataset.glob("*.json")):
+              capture = json.loads(path.read_text())
+              total += len(capture["targets"])
+              print(f"{capture['label']}: {capture['width']}x{capture['height']}, {len(capture['targets'])} controls asked about of {capture['named_controls_in_window']} named; {capture['labelled_by']}")
+          print("controls asked about:", total)
+          PY
+
+      - name: llama.cpp's own release build, checked
+        run: |
+          curl -fsSL -o "$WORK/llama.tar.gz" "$LLAMA_URL"
+          echo "$LLAMA_SHA256  $WORK/llama.tar.gz" | sha256sum -c -
+          mkdir -p "$WORK/llama" && tar -xzf "$WORK/llama.tar.gz" -C "$WORK/llama"
+          server="$(find "$WORK/llama" -name llama-server -type f | head -n 1)"
+          echo "LLAMA_SERVER=$server" >> "$GITHUB_ENV"
+          "$server" --version 2>&1 | tail -n 3
+
+      - name: The model, from its publisher, checked
+        run: |
+          python3 tests/experiments/winsee/vision/evaluate.py fetch --models tests/experiments/winsee/vision/models.json \
+            --model "${{ matrix.model }}" --dir "$WORK/models"
+          ls -l "$WORK/models"; df -h "$WORK" | tail -n 1; free -g | head -n 2
+
+      - name: Ask the model where each control is
+        env:
+          SCALES: ${{ github.event.inputs.scales || '1.0,0.5,1.5' }}
+          MOST: ${{ github.event.inputs.most || '8' }}
+        run: |
+          python3 tests/experiments/winsee/vision/evaluate.py run --models tests/experiments/winsee/vision/models.json \
+            --model "${{ matrix.model }}" --dir "$WORK/models" --server "$LLAMA_SERVER" --dataset "$WORK/dataset" \
+            --evidence "$WORK/evidence" --scales "$SCALES" --most "$MOST" --threads "$(nproc)"
+
+      - name: Results
+        if: always()
+        run: |
+          if [ -f "$WORK/evidence/results-${{ matrix.model }}.md" ]; then
+            cat "$WORK/evidence/results-${{ matrix.model }}.md" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### ${{ matrix.model }}: nothing was measured" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          tail -n 40 "$WORK/evidence/llama-server-${{ matrix.model }}.log" || true
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: winsee-vision-${{ matrix.model }}
+          path: ${{ runner.temp }}/vision/evidence/
+          if-no-files-found: warn
