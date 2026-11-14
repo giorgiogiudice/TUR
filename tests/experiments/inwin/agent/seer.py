@@ -681,30 +681,46 @@ class Seer:
         subprocess.run(["taskkill.exe", "/f", "/im", installer.stem + ".tmp"], capture_output=True)
 
     def scenario_rights(self):
-        """Can an agent without administrator rights read and operate a window of a program that has them?"""
-        process = self.launch(["notepad.exe"])
-        window = win.wait_window(lambda w: w["exe"] == "notepad.exe" and w["title"], 40)
-        if window is None:
-            self.note("rights: Notepad showed no window: NOT RUN")
-            return
-        target = pathlib.Path(r"C:\Users\Public\inwin\out\lower.json")
-        target.parent.mkdir(parents=True, exist_ok=True)
-        if target.exists():
-            target.unlink()
+        """Can an agent below a program's rights read and operate its window?
+        Notepad is started with this job's administrator rights; the agent
+        is started twice below them: at medium integrity (an ordinary
+        program on a person's desktop), and with runas /trustlevel."""
         import sys
-        command = f'"{sys.executable}" "{HERE / "lower.py"}" {window["hwnd"]} "{target}"'
-        done = subprocess.run(["runas.exe", "/trustlevel:0x20000", command], capture_output=True, text=True, timeout=60)
-        deadline = time.monotonic() + 90
-        while time.monotonic() < deadline and not target.exists():
-            time.sleep(2)
-        if target.exists():
+
+        sys.path.insert(0, str(HERE.parent))
+        from probe import start_at_medium_integrity
+
+        directory = pathlib.Path(r"C:\Users\Public\inwin\out")
+        directory.mkdir(parents=True, exist_ok=True)
+        results = {}
+        for level in ("medium-integrity", "runas-trustlevel"):
+            process = self.launch(["notepad.exe"])
+            window = win.wait_window(lambda w: w["exe"] == "notepad.exe" and w["title"], 40)
+            if window is None:
+                self.note(f"rights ({level}): Notepad showed no window: NOT RUN")
+                continue
+            target = directory / f"lower-{level}.json"
+            if target.exists():
+                target.unlink()
+            command = f'"{sys.executable}" "{HERE / "lower.py"}" {window["hwnd"]} "{target}"'
+            if level == "medium-integrity":
+                problem = start_at_medium_integrity(command)
+            else:
+                done = subprocess.run(["runas.exe", "/trustlevel:0x20000", command], capture_output=True, text=True, timeout=60)
+                problem = None if done.returncode == 0 else f"runas exit {done.returncode}"
+            deadline = time.monotonic() + 90
+            while time.monotonic() < deadline and not target.exists():
+                time.sleep(2)
+            if target.exists():
+                time.sleep(1)
+                results[level] = json.loads(target.read_text(encoding="utf-8"))
+                self.note(f"rights ({level}): an agent with {results[level].get('rights')} against an elevated Notepad: {json.dumps(results[level].get('findings'))[:700]}")
+            else:
+                self.note(f"rights ({level}): the lower agent wrote no result ({problem}): NOT RUN")
+            subprocess.run(["taskkill.exe", "/f", "/t", "/pid", str(process.pid)], capture_output=True)
+            subprocess.run(["taskkill.exe", "/f", "/im", "notepad.exe"], capture_output=True)
             time.sleep(1)
-            result = json.loads(target.read_text(encoding="utf-8"))
-            (self.out / "lower-rights.json").write_text(json.dumps(result, indent=1), encoding="utf-8")
-            self.note(f"rights: an agent with {result.get('rights')} against an elevated Notepad: {json.dumps(result.get('findings'))[:600]}")
-        else:
-            self.note(f"rights: the restricted agent wrote no result (runas exit {done.returncode}): NOT RUN")
-        process.kill()
+        (self.out / "lower-rights.json").write_text(json.dumps(results, indent=1), encoding="utf-8")
 
     def run(self, only):
         scenarios = [

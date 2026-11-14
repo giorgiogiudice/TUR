@@ -389,6 +389,54 @@ def offline_copy(out_dir):
     if code != 0:
         raise PermissionError(f"reg save: exit {code}")
     result = {"file_bytes": hive.stat().st_size, "starts_with": hive.read_bytes()[:4].decode("ascii", "replace"), "compared": 0, "same": 0, "different": []}
+    # First with a reader of the file format that asks Windows nothing (regf.py).
+    try:
+        from regf import Hive
+
+        parsed = Hive(hive.read_bytes())
+        own = {"compared": 0, "same": 0, "different": [], "keys_walked": 0, "values_walked": 0}
+        for path, name in OFFLINE:
+            try:
+                with winreg.OpenKey(HKCU, path) as key:
+                    live = winreg.QueryValueEx(key, name)[0]
+            except OSError:
+                continue
+            own["compared"] += 1
+            try:
+                saved = parsed.value(path, name)
+            except (KeyError, ValueError, struct.error) as error:
+                saved = f"{type(error).__name__}"
+            if saved == (bytes(live) if isinstance(live, bytes) else live):
+                own["same"] += 1
+            else:
+                own["different"].append(f"{path}\\{name}")
+        # And every value of whole keys, to exercise the reader on more than fourteen values.
+        for path in (r"Control Panel\Desktop", r"Control Panel\International", CV + r"\Explorer\User Shell Folders", CV + r"\Explorer\Advanced", r"Environment", r"Control Panel\Colors"):
+            try:
+                with winreg.OpenKey(HKCU, path) as key:
+                    index = 0
+                    live_values = {}
+                    while True:
+                        try:
+                            value_name, value, _ = winreg.EnumValue(key, index)
+                        except OSError:
+                            break
+                        live_values[value_name] = bytes(value) if isinstance(value, bytes) else value
+                        index += 1
+                saved_values = {value_name: value for value_name, (_, value) in parsed.values(path).items()}
+            except (OSError, KeyError, ValueError, struct.error) as error:
+                own["different"].append(f"{path}: {type(error).__name__}")
+                continue
+            own["keys_walked"] += 1
+            for value_name, value in live_values.items():
+                own["values_walked"] += 1
+                if saved_values.get(value_name) == value or (value is None and not saved_values.get(value_name)):
+                    own["values_same"] = own.get("values_same", 0) + 1
+                elif len(own["different"]) < 12:
+                    own["different"].append(f"{path}\\{value_name}")
+        result["own_reader"] = own
+    except Exception as error:
+        result["own_reader"] = {"error": f"{type(error).__name__}: {str(error)[:200]}"}
     code, text = run_tool(["reg.exe", "load", r"HKU\inwin_offline", str(hive)])
     if code != 0:
         raise PermissionError(f"reg load: exit {code}")

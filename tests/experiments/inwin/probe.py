@@ -147,3 +147,53 @@ def token_facts():
         "integrity": levels.get(rid, hex(rid)),
         "member_of_administrators": bool(ctypes.windll.shell32.IsUserAnAdmin()),
     }
+
+
+class StartupInfo(ctypes.Structure):
+    _fields_ = [("cb", wt.DWORD), ("reserved", wt.LPWSTR), ("desktop", wt.LPWSTR), ("title", wt.LPWSTR)] + \
+               [(name, wt.DWORD) for name in ("x", "y", "xs", "ys", "xc", "yc", "fill", "flags")] + \
+               [("show", wt.WORD), ("reserved2", wt.WORD), ("reserved3", ctypes.c_void_p)] + \
+               [(name, wt.HANDLE) for name in ("stdin", "stdout", "stderr")]
+
+
+class ProcessInformation(ctypes.Structure):
+    _fields_ = [("process", wt.HANDLE), ("thread", wt.HANDLE), ("pid", wt.DWORD), ("tid", wt.DWORD)]
+
+
+class SidAndAttributes(ctypes.Structure):
+    _fields_ = [("sid", ctypes.c_void_p), ("attributes", wt.DWORD)]
+
+
+def start_at_medium_integrity(command_line, wait_ms=120000):
+    """Start a command as this account but at medium integrity: the level
+    of an ordinary program on a person's desktop, below a program that
+    was given administrator rights. Returns None, or what went wrong."""
+    advapi32.OpenProcessToken.argtypes = [wt.HANDLE, wt.DWORD, ctypes.POINTER(wt.HANDLE)]
+    advapi32.DuplicateTokenEx.argtypes = [wt.HANDLE, wt.DWORD, ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.POINTER(wt.HANDLE)]
+    advapi32.ConvertStringSidToSidW.argtypes = [wt.LPCWSTR, ctypes.POINTER(ctypes.c_void_p)]
+    advapi32.GetLengthSid.argtypes = [ctypes.c_void_p]
+    advapi32.GetLengthSid.restype = wt.DWORD
+    advapi32.SetTokenInformation.argtypes = [wt.HANDLE, ctypes.c_int, ctypes.c_void_p, wt.DWORD]
+    advapi32.CreateProcessAsUserW.argtypes = [wt.HANDLE, wt.LPCWSTR, wt.LPWSTR, ctypes.c_void_p, ctypes.c_void_p, wt.BOOL, wt.DWORD,
+                                              ctypes.c_void_p, wt.LPCWSTR, ctypes.c_void_p, ctypes.c_void_p]
+    kernel32.GetCurrentProcess.restype = wt.HANDLE
+    kernel32.WaitForSingleObject.argtypes = [wt.HANDLE, wt.DWORD]
+    token, lowered = wt.HANDLE(), wt.HANDLE()
+    if not advapi32.OpenProcessToken(kernel32.GetCurrentProcess(), 0x0001 | 0x0002 | 0x0008 | 0x0080 | 0x0100, ctypes.byref(token)):
+        return f"OpenProcessToken: error {ctypes.get_last_error()}"
+    if not advapi32.DuplicateTokenEx(token, 0x02000000, None, 2, 1, ctypes.byref(lowered)):
+        return f"DuplicateTokenEx: error {ctypes.get_last_error()}"
+    sid = ctypes.c_void_p()
+    if not advapi32.ConvertStringSidToSidW("S-1-16-8192", ctypes.byref(sid)):
+        return f"ConvertStringSidToSid: error {ctypes.get_last_error()}"
+    label = SidAndAttributes(sid, 0x20)
+    if not advapi32.SetTokenInformation(lowered, 25, ctypes.byref(label), ctypes.sizeof(label) + advapi32.GetLengthSid(sid)):
+        return f"SetTokenInformation: error {ctypes.get_last_error()}"
+    startup = StartupInfo()
+    startup.cb = ctypes.sizeof(StartupInfo)
+    information = ProcessInformation()
+    buffer = ctypes.create_unicode_buffer(command_line)
+    if not advapi32.CreateProcessAsUserW(lowered, None, buffer, None, None, False, 0x08000000, None, None, ctypes.byref(startup), ctypes.byref(information)):
+        return f"CreateProcessAsUser: error {ctypes.get_last_error()}"
+    kernel32.WaitForSingleObject(information.process, wait_ms)
+    return None

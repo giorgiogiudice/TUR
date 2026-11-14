@@ -231,6 +231,36 @@ set-up. None of that changes its safety rules.
 
 ## 7. What TUR can carry over from a Windows desktop
 
+### 7.1 What was read on the runners, and with which rights
+
+NOT RUN.
+
+### 7.2 Where each thing lives on the disk (for `dualrun` and the installer)
+
+TUR's installer sees the disk before Windows ever runs under TUR. Nearly
+everything is in three registry files and a few folders:
+
+- `Users\<name>\NTUSER.DAT`: the person's own settings (what a running
+  Windows shows as HKCU);
+- `Windows\System32\config\SOFTWARE` and `...\SYSTEM`: the machine's
+  (HKLM\SOFTWARE and HKLM\SYSTEM). On the disk there is no
+  `CurrentControlSet`: `SYSTEM\Select\Current` names the `ControlSet00N`
+  to read;
+- `Windows\System32\config\SAM`: the accounts. A running Windows shows it
+  to nobody; on the disk it is an ordinary registry file.
+
+All four are in the registry's file format ("regf"), which the `hivex`
+library reads on Linux. **Reading them with hivex is NOT RUN here**; what
+section 7.1 shows is that a saved copy of the file, loaded as a
+stranger's, holds the same values the running Windows reports.
+
+The column "Seen" says whether the value was present and read on a
+runner (section 7.1), or is described from documentation only.
+
+NOT WRITTEN YET: the table is filled from the first run.
+
+### 7.3 Shortcuts, icon positions, pins: what the measurement found
+
 NOT RUN.
 
 ## 8. Product judgement
