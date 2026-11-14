@@ -147,12 +147,14 @@ relaxations) is now out of the session service's reach. The service settings
 
 ## Owner decisions
 
-1. **The polkit prompt as the interim path for loosening.** Accept an
-   administrator's password through polkit as the way to change the store
-   until the trusted screen exists (ADR-0028, status Proposed)?
-2. **Service settings that loosen P@x** (issue 66): move switching on, the
+1. **The polkit prompt as the interim path for loosening.** **Decided by the
+   owner on 14 November 2026: yes**, until the trusted screen (D-16) exists.
+   Recorded in ADR-0028.
+2. **Service settings that loosen P@x** (issue 66; the default stands for
+   now): move switching on, the
    provider, the key and raising the day's limit into the store now (each then
    asks for a password, and the P@x window D-17 changes), or leave them until
    the trusted screen?
 3. **Observe-only versus ask-every-action** when the store and the own file
-   disagree: observe-only is taken as stricter (interpretation 68).
+   disagree: observe-only is taken as stricter (interpretation 68; the
+   default stands).

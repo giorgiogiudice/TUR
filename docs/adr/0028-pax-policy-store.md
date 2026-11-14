@@ -54,6 +54,19 @@ loop**: the engine refuses every unattended class 2 action until a proven
 trusted session exists, so reading them would change nothing, and wiring them
 in is the reviewed step that comes with the trusted screen.
 
+## The owner's decision (14 November 2026)
+
+The owner accepted the polkit administrator prompt on the desktop as the
+interim way to change P@x's policy store, until the trusted screen (desktop
+task D-16) exists and takes its place. The other choices of this change stand
+as recorded in [pax-policy-store.md](../architecture/pax-policy-store.md):
+the settings that are not policy (switching P@x on, the provider, the key,
+the day's limit) stay in the session service for now; observe-only counts as
+stricter than ask-every-action when the store and the person's own file
+disagree; removable media (`/media`) are not among the links a grant may be
+named through. The status stays Proposed until this ADR is merged, as for
+every ADR ([README](README.md)).
+
 ## Consequences
 
 - No file that P@x's process can write can make P@x less strict than the
