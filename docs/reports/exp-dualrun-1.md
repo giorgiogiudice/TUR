@@ -455,11 +455,12 @@ file with the signature or extension of an executable, hive, event log,
 image, archive or RTF document, and anything over 8 MiB, and lists what it
 removed). The run is dispatched by hand with `terms_read=yes`; the answer
 file's `AcceptEula` accepts the evaluation's terms on behalf of whoever
-dispatches. **That is a decision for the owner** (section 14, decision 1):
-the terms could not be read in advance, and the judgement that "evaluation"
-covers an automated compatibility experiment is not the engineer's to make
-alone. If the answer is no, H1 to H10's Windows parts stay NOT RUN in CI and
-the owner's PC procedure (section 10) is the experiment.
+dispatches. The task allowed this use in CI; what it could not settle is
+what the terms themselves say, because they could not be read in advance.
+If stage `terms` shows terms that do not plainly allow evaluation and
+testing, or that are unclear about an automated run, the judgement is the
+owner's (section 14, decision 1), H1 to H10's Windows parts stay NOT RUN in
+CI, and the owner's PC procedure (section 10) is the experiment.
 
 No product key is entered, no activation or evaluation timer is reset or
 extended, Setup's hardware checks are met (a software TPM 2.0, firmware with
@@ -1079,10 +1080,13 @@ part and the summary (about 2,400), the workflow and CI helpers (about
 
 ## 14. Decisions for the owner
 
-1. **May CI install Microsoft's evaluation of Windows 11 Enterprise** for
-   this experiment, accepting its licence terms by the answer file, once
-   stage `terms` has printed them and they read as allowing evaluation and
-   testing? Until yes, H1 to H10 stay NOT RUN in CI.
+1. **Microsoft's evaluation of Windows 11 Enterprise in CI.** The task
+   allowed downloading it in CI and using it there; its licence terms could
+   not be read in advance (they are inside the medium). Stage `terms` prints
+   them. If they plainly allow installing the software for evaluation and
+   testing, the experiment is dispatched and the terms are quoted here. If
+   they do not, or are unclear about an automated run, **the owner
+   decides**, and until then H1 to H10 stay NOT RUN in CI.
 2. **Is the default session protected or direct?** Proposal: protected for
    the first sessions and for anything P@x drives; direct once the person
    has seen it work; always the person's choice.
@@ -1118,4 +1122,6 @@ Read on 14 November 2026 unless noted.
 | S7 | QEMU, Hyper-V Dynamic Memory Protocol driver (`hv-balloon`), cover letter and source: https://patchwork.kernel.org/project/qemu-devel/cover/cover.1672878904.git.maciej.szmigiero@oracle.com |
 | S8 | virt-firmware (`virt-fw-vars`), considered for the firmware entry and not used (the launcher writes edk2's variable format itself, as `tests/iso/efivars.py` reads it): https://gitlab.com/kraxel/virt-firmware |
 | S9 | In this repository: ADR-0015 and `docs/architecture/windows-guest.md`; ADR-0007; `docs/architecture/storage.md` section 8 (what `ntfs3` does and does not check; ntfs-3g's hibernation and journal rules); pull request 112 (ADR-0029 as proposed there, `engine.sh`: TUR's partition is type `4f68bce3-…`, name "TUR"); `tests/iso/isovm.py` (OVMF and boot order) |
-| S10 | Microsoft, BCD WMI provider, `BcdBootMgrElementTypes` (`AttemptResume` = 0x26000005, `ResumeObject` = 0x23000006): from the engineer's knowledge of the documentation, **not re-read today**; the experiment measures the element on a real store |
+| S11 | Linux kernel, dm-flakey: `error_writes`: "All write I/O is failed with an error signalled. Read I/O is handled correctly." (used for the ranges the guest must not have): https://docs.kernel.org/admin-guide/device-mapper/dm-flakey.html |
+| S12 | Microsoft, `shutdown`: `/hybrid` "Shuts down the device and prepares it for fast startup. This option must be used with the /s option"; `/h` hibernation (how the experiment produces each state): https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/shutdown |
+| S10 | Microsoft, BCD WMI provider, `BcdBootMgrElementTypes`: `BcdBootMgrBoolean_AttemptResume` = 0x26000005, "Indicates that a resume operation should be attempted during a system restart"; `BcdBootMgrObject_ResumeObject` = 0x23000006: https://learn.microsoft.com/en-us/previous-versions/windows/desktop/bcd/bcdbootmgrelementtypes . That Windows sets the element when it hibernates or uses Fast Startup is the expectation the experiment measures on a real store |
