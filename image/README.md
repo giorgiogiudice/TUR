@@ -250,7 +250,7 @@ the design as built, and how publishing is switched on, is
 | `/usr/share/containers/policy.json` | the base's vendor policy, plus one rule added by [`signing/policy.py`](signing/policy.py) in a `RUN` of the `Containerfile` | An image named `ghcr.io/giorgiogiudice/tur` is accepted only with a sigstore signature by TUR's release key that is entered in Sigstore's public Rekor log. Every other source, the `oci:` and `containers-storage:` transports and the default keep the base's policy |
 | `/usr/share/containers/registries.d/tur.yaml` | `rootfs/` | Signatures of that repository are sigstore attachments beside the image |
 | `/usr/share/tur/signing/rekor.pub`, `fulcio.crt` | `rootfs/`, from Sigstore's trust root (`scripts/release/trust-roots.py`) | The Rekor log's key; Fulcio's chain for the keyless signature |
-| `/usr/share/tur/signing/release.pub` | `rootfs/`, made by the owner (publishing.md, section 8) | TUR's release key, the public half (ECDSA P-256; SHA-256 of its DER form `3fa3992800078a370b1f15055434c90edefd648e0a39b3a2fe6a973fe2303430`). Images built before it was added refuse every image of the repository |
+| `/usr/share/tur/signing/release.pub` | `rootfs/`, made by the owner (publishing.md, section 8) | TUR's release key, the public half (ECDSA P-256; SHA-256 of its DER form `28f36c958b17261d629634e0d221adad9f04a86f4ea05a19299c539f6bf10fbd`). Images built before it was added refuse every image of the repository |
 
 Nothing is written under `/etc`: the base ships its policy as a vendor file
 in `/usr/share/containers` and no `/etc/containers/policy.json`, which an
