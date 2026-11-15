@@ -103,13 +103,9 @@ jobs:
 
       - name: Lint scripts
         run: |
-<<<<<<< HEAD
-          shellcheck -x scripts/*.sh tests/image/*.sh image/*.sh image/branding/*.sh image/engine/*.sh image/wine/*.sh
+          shellcheck -x scripts/*.sh tests/image/*.sh image/*.sh image/branding/*.sh image/engine/*.sh image/wine/*.sh \
+            image/desktop/*.sh image/winbridge/*.sh services/tur-winbridge/*.sh
           python3 -m py_compile scripts/*.py tests/image/*.py image/wine/*.py
-=======
-          shellcheck -x scripts/*.sh tests/image/*.sh image/*.sh image/branding/*.sh image/engine/*.sh image/desktop/*.sh
-          python3 -m py_compile scripts/*.py tests/image/*.py
->>>>>>> origin/feat/desktop-in-image
 
       - name: Runner environment
         run: |
