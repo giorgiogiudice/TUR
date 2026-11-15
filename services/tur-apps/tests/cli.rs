@@ -614,6 +614,13 @@ fn a_windows_application_is_downloaded_checked_installed_and_removed_keeping_doc
             .join("tur/runtime/launchers/org.example.tool")
             .exists()
     );
+    // The launcher entry tur-runtime installed is gone with it.
+    assert!(
+        !world
+            .data()
+            .join("applications/tur-wine-org.example.tool.desktop")
+            .exists()
+    );
     assert!(
         !world
             .data()

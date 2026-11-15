@@ -10,7 +10,8 @@
 set -eu
 state="${FAKE_STATE:?}"
 echo "$*" >> "$state/runtime.log"
-root="${XDG_DATA_HOME:-$HOME/.local/share}/tur/runtime"
+data="${XDG_DATA_HOME:-$HOME/.local/share}"
+root="$data/tur/runtime"
 [ "$1" = app ] || exit 2
 command="$2"
 shift 2
@@ -44,12 +45,14 @@ install)
     cp "$file" "$state/installed-file"
     mkdir -p "$root/prefixes/$id/home" "$root/prefixes/$id/prefix/drive_c/users/user/AppData" "$root/launchers/$id"
     echo "settings" > "$root/prefixes/$id/prefix/drive_c/users/user/AppData/settings.ini"
+    mkdir -p "$data/applications"
+    printf "[Desktop Entry]\nName=%s\n" "$name" > "$data/applications/tur-wine-$id.desktop"
     printf '{"app_id":"%s","name":"%s","version":"1.0"}\n' "$id" "$name" > "$root/prefixes/$id/application.json"
     printf '{"dry_run":false,"record":{"app_id":"%s","name":"%s","version":"1.0","main_executable_windows":"C:\\\\Program Files\\\\x.exe"}}\n' "$id" "$name"
     ;;
 uninstall)
     id="$1"
-    rm -rf "${root:?}/prefixes/$id" "${root:?}/launchers/$id"
+    rm -rf "${root:?}/prefixes/$id" "${root:?}/launchers/$id" "${data:?}/applications/tur-wine-$id.desktop"
     printf '{"dry_run":false,"app_id":"%s","removed":["%s"],"kept":[],"left_behind":[]}\n' "$id" "$root/prefixes/$id"
     ;;
 list)
