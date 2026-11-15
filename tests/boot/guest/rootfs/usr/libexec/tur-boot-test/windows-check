@@ -111,14 +111,22 @@ sleep 30
 say "WINDOWS-CHECK session ready uptime=$(uptime_s)"
 
 # as_session NAME SECONDS COMMAND...: run as the user, in the user's own
-# service manager, with the session's display; keep what it prints.
+# service manager, with the session's display; keep what it prints and its
+# exit status (written by the user's own shell, in files made for it here).
 as_session() {
     local name="$1" seconds="$2" rc
     shift 2
-    timeout "${seconds}" systemd-run --machine="${user}@.host" --user --wait --collect --quiet --pipe \
-        --unit="tur-windows-${name}" "${session_env[@]}" -- "$@" \
-        > "${out}/${name}.out" 2> "${out}/${name}.err" < /dev/null
-    rc=$?
+    for suffix in out err rc; do
+        : > "${out}/${name}.${suffix}"
+        chown "${user}" "${out}/${name}.${suffix}"
+    done
+    # shellcheck disable=SC2016  # expanded by the user's shell
+    timeout "$((seconds + 60))" systemd-run --machine="${user}@.host" --user --wait --collect --quiet \
+        --unit="tur-windows-${name}" -p RuntimeMaxSec="${seconds}" "${session_env[@]}" -- \
+        /usr/bin/bash -c '"$@" > "$0.out" 2> "$0.err" < /dev/null; echo "$?" > "$0.rc"' "${out}/${name}" "$@" \
+        > "${out}/${name}.systemd-run.txt" 2>&1 < /dev/null
+    rc="$(tr -dc '0-9' < "${out}/${name}.rc")"
+    if [ -z "${rc}" ]; then rc=255; fi
     printf '%s\t%s\n' "${name}" "${rc}" >> "${out}/exit-status.tsv"
     return "${rc}"
 }
@@ -142,11 +150,11 @@ installer="$(find "${work}/downloads/7zip-exe" -name '*.exe' 2> /dev/null | head
 put tur_apps_installer "${installer}"
 if [ -n "${installer}" ]; then
     as_session tur-apps-plan 300 /usr/bin/tur-apps plan org.7-zip.7zip --route wine --file "${installer}" --json
-    as_session tur-apps-install 1200 /usr/bin/tur-apps install org.7-zip.7zip --route wine --file "${installer}" --yes --json
+    as_session tur-apps-install 1200 /usr/bin/tur-apps install org.7-zip.7zip --route wine --file "${installer}" --yes --events
     as_session tur-apps-list 120 /usr/bin/tur-apps list --json
     # shellcheck disable=SC2016  # expanded by the shell that runs the snippet
     as_session tur-apps-entries 60 /usr/bin/bash -c 'ls -la "$HOME/.local/share/applications"; for f in "$HOME"/.local/share/applications/tur-wine-*.desktop; do echo "== $f"; cat "$f"; done'
-    as_session tur-apps-remove 900 /usr/bin/tur-apps remove org.7-zip.7zip --delete-data --json
+    as_session tur-apps-remove 900 /usr/bin/tur-apps remove org.7-zip.7zip --delete-data --events
     # shellcheck disable=SC2016  # expanded by the shell that runs the snippet
     as_session tur-apps-after 60 /usr/bin/bash -c 'ls -la "$HOME/.local/share/applications"; ls -la "$HOME/.local/share/tur/runtime/prefixes" "$HOME/.local/share/tur/runtime/launchers" 2>&1; tur-apps list --json'
 fi
