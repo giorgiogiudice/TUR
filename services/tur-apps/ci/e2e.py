@@ -478,6 +478,9 @@ def run_windows(world: World, checks: Checks) -> None:
                  and result.get("source", {}).get("sha256", "").startswith("ce3267f5"))
     checks.check("tur-runtime holds it under the catalogue's identifier", WINDOWS_ID in runtime_apps(world),
                  runtime_apps(world))
+    entry = world.home / ".local/share/applications" / f"tur-wine-{WINDOWS_ID}.desktop"
+    checks.check("its launcher entry is installed where the desktop's launcher looks",
+                 entry.is_file() and "Exec=" in entry.read_text(), str(entry))
     checks.check("the downloaded installer was deleted", downloads_left() == [])
 
     code, out, _ = world.apps(["list", "--json", "--check-updates"], "list")
@@ -508,10 +511,14 @@ def run_windows(world: World, checks: Checks) -> None:
     checks.check("its Windows settings were kept", len(profiles) == 1, [str(p) for p in profiles])
     checks.check("tur-runtime holds nothing", runtime_apps(world) == [])
     for path in (runtime / "prefixes" / WINDOWS_ID, runtime / "launchers" / WINDOWS_ID,
+                 world.home / ".local/share/applications" / f"tur-wine-{WINDOWS_ID}.desktop",
                  world.data / "tur/apps/installed" / f"{WINDOWS_ID}.json"):
         checks.check(f"gone: {path.relative_to(world.home)}", not path.exists())
-    traces = [str(p) for p in (world.home / ".wine", world.home / ".local/share/applications",
-                               world.home / "Desktop") if p.exists()]
+    # tur-runtime installs the launcher entry in the applications directory
+    # and deletes it with the application; the directory itself may stay.
+    applications = world.home / ".local/share/applications"
+    traces = [str(p) for p in (world.home / ".wine", world.home / "Desktop") if p.exists()]
+    traces += [str(p) for p in applications.iterdir()] if applications.is_dir() else []
     checks.check("nothing outside the sandbox in the scratch home", traces == [], traces)
 
     wrong = world.work / "npp.8.9.9.1.Installer.x64.exe"
