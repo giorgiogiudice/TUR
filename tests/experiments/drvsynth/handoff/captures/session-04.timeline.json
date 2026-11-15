@@ -1,0 +1,99 @@
+{
+  "session": 4,
+  "title": "Sensors through the day",
+  "capture": "session-04.pcapng",
+  "text": "session-04.txt",
+  "clock": "seconds since the capture started",
+  "entries": [
+    {
+      "from": 0.501,
+      "did": "read all sensors (early morning, lights off)",
+      "to": 0.513,
+      "shown": [
+        "temperature 18.05",
+        "humidity 38.1",
+        "light 0"
+      ]
+    },
+    {
+      "from": 1.214,
+      "did": "read the temperature (office, afternoon)",
+      "to": 1.232,
+      "shown": [
+        "23.90"
+      ]
+    },
+    {
+      "from": 1.933,
+      "did": "read the humidity",
+      "to": 1.949,
+      "shown": [
+        "52.7"
+      ]
+    },
+    {
+      "from": 2.65,
+      "did": "read the light level",
+      "to": 2.668,
+      "shown": [
+        "815"
+      ]
+    },
+    {
+      "from": 3.37,
+      "did": "read all sensors (gadget out on the balcony in winter)",
+      "to": 3.387,
+      "shown": [
+        "temperature -1.25",
+        "humidity 81.0",
+        "light 15"
+      ]
+    },
+    {
+      "from": 4.088,
+      "did": "read all sensors (gadget in direct sunlight)",
+      "to": 4.101,
+      "shown": [
+        "temperature 30.42",
+        "humidity 29.9",
+        "light 70210"
+      ]
+    },
+    {
+      "from": 4.802,
+      "did": "read all sensors (by the window, cloudy)",
+      "to": 4.815,
+      "shown": [
+        "temperature 12.00",
+        "humidity 60.0",
+        "light 65535"
+      ]
+    },
+    {
+      "from": 5.516,
+      "did": "read all sensors (bathroom after a shower, under a lamp)",
+      "to": 5.53,
+      "shown": [
+        "temperature 0.07",
+        "humidity 99.9",
+        "light 131072"
+      ]
+    },
+    {
+      "from": 6.231,
+      "did": "read the temperature (gadget in the freezer)",
+      "to": 6.246,
+      "shown": [
+        "-12.34"
+      ]
+    },
+    {
+      "from": 6.946,
+      "did": "read the light level",
+      "to": 6.962,
+      "shown": [
+        "1"
+      ]
+    }
+  ]
+}
