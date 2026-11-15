@@ -287,8 +287,9 @@ ordinary application, the password manager is observed, the unit is restarted.
 The lists were first written from memory. On 2026-11-12 every entry was checked
 against a published source: the application's own repository (the name of its
 desktop file, a `StartupWMClass` line, an identifier set in its code), the file
-list of a Fedora 44 or Debian package, or its Flathub identifier. Nothing was
-checked on the TUR image, which is still the place that decides.
+list of a Fedora 44 or Debian package, or its Flathub identifier. On
+2026-11-13 the lists were held against the TUR image, which is the place that
+decides; what that changed is at the end of this section.
 
 **Applications.** The source of each entry is in the code, beside the entry:
 `SENSITIVE_APPLICATION_SOURCES` and `EXCLUDED_APPLICATION_SOURCES` in
@@ -357,6 +358,31 @@ checked in this pass; the units `fapolicyd`, `systemd-repart`, `systemd-growfs`,
 `systemd-makefs`, `systemd-mkswap`, `systemd-fsck`, `lvm2`, `mdadm`, `mdmon`,
 `multipathd`, `udisks`, `bootupd`, `bootloader-update`, `grub` and `ostree`
 were not looked up either.
+
+**On the TUR image (2026-11-13, issue 58).** `tests/image/identifiers.py` holds
+the three lists against the image the image workflow builds (run 43479278136:
+214 desktop files, 2 897 programs, 727 unit files). Every judgement:
+
+| Found | Judgement |
+|---|---|
+| `org.kde.secretprompter`, `ksecretprompter` (KWallet's prompt for a secret) | **Excluded** |
+| `kdesu` (asks for the administrator's password to run a program) | **Excluded**. `kdesud` and `kdesu_stub` have no window and are not listed |
+| `org.kde.plasma-interactiveconsole`, `plasma-interactiveconsole` (runs JavaScript in the desktop shell) | **Sensitive**: it executes what is typed |
+| `kcm_plasmalogin` (the login screen's settings) | **Sensitive**. It applies only when the compositor reports that identifier; inside System Settings the window is System Settings' |
+| `pam_kwallet_init`, `kwallet-query` | Not listed: no window to act in. The read-only sandbox has no session bus, so a command cannot reach the wallet either |
+| `kcm_krunnersettings` | Not listed: KRunner's settings run nothing |
+| 16 unit prefixes that match nothing in the image (`iptables`, `ip6tables`, `ebtables`, `arptables`, `apparmor`, `fapolicyd`, `usbguard`, `sddm`, `greetd`, `tpm2-abrmd`, `systemd-cryptsetup`, `clevis`, `multipathd`, `systemd-makefs`, `systemd-mkswap`, `bootupd`) | **Kept.** Each names a unit that a package in Fedora's repositories installs (so a person can layer it, and a typed operation could then reach it), a unit systemd generates at boot with no unit file (`systemd-cryptsetup@`, `systemd-makefs@`, `systemd-mkswap@`), or the name on another distribution (`apparmor`). An entry that matches nothing costs nothing |
+| Security-relevant units no prefix covered | **Added** for every one a typed operation can name (`.service`, `.socket`, `.timer`, `.path`): `plasma-login`, `display-manager`, `fedora-kinoite-plasmalogin`, `accounts-daemon`, `plasma-polkit-agent`, `plasma-kwallet-pam`, `pam_namespace`, `systemd-userdb-`, `gpg-agent`, `ssh-`, `pcscd`, `fips-crypto-policy`, `netavark-firewalld`, `netavark-nftables` (security policy); `systemd-cryptenroll`, `systemd-tpm2`, `systemd-report-sign-tpm2`, `systemd-veritysetup`, `systemd-integritysetup` (encryption); `lvm-` (partitioning); `systemd-sysupdate` (OS update). Targets and slices (`cryptsetup.target`, `tpm2.target`, `plasma-login-wayland.target`, …) are not listed: no typed operation accepts them as a target |
+| Units judged not security-relevant | `at-spi-dbus-bus.service` (the accessibility bus), `plasma-gmenudbusmenuproxy.service` |
+| `/etc/systemd/logind.conf`, `/etc/systemd/journald.conf` do not exist on Fedora 45 | **Kept.** An entry covers every name that begins with it, so the two already cover `logind.conf.d/` and `journald.conf.d/`, where a change would go, and the file if it were created. A test names the drop-in paths |
+| The login screen's configuration | **Added** `/etc/plasmalogin` (file) and the packages `plasma-login`, `sddm` |
+| Duplicates left by the rename: unit `tur-`, file `/etc/tur`, package `tur-` | **Removed**; a test refuses a duplicate |
+
+The fourteen `Unverified` applications are not installed in the image, so the
+image cannot confirm them either; they stay as they were. The test
+`what_the_image_showed_is_covered` (`src/policy.rs`) and the additions to
+`the_real_names_of_the_protected_units_are_covered` (`src/action.rs`) hold the
+judgements.
 
 ## 3. Decisions
 
@@ -940,7 +966,9 @@ What this engine cannot guarantee by itself.
    exist yet. Until it does, "a repair session never covers system-critical
    operations" is true of the engine's decisions and unproven for the system.
    The unit, file and package names in the deny list were written for the Fedora
-   base and have not been checked against the image.
+   base and were held against the image on 2026-11-13 (section 2.5); a unit or
+   file a package layered later brings is covered only if its name begins with
+   an entry.
 
 5. **The same holds for the other sandboxes.** A command in the read-only sandbox
    is class 0 because the sandbox is supposed to make it harmless. The engine
@@ -971,7 +999,9 @@ What this engine cannot guarantee by itself.
    the pattern tables catch the usual names of such panels in a window title or a
    control name, and nothing else does. The application identifiers were written
    from the upstream desktop-file names as known to the author of the list and
-   have not been checked against the packages the image ships. Private browser
+   were held against the image on 2026-11-13 (section 2.5); an application
+   installed later, as a Flatpak or a layered package, is covered only if it is
+   on the list already. Private browser
    windows cannot be told from ordinary ones by an identifier and are the
    compositor's to exclude.
 
@@ -1034,8 +1064,10 @@ What this engine cannot guarantee by itself.
     ([pax-service.md](pax-service.md), section 4). No caller records an
     observed, stated or procedure entry; (c) the other kinds of the memory
     layer (`tur-pax-memory`: stated, observed, procedure) are mapped onto the
-    engine's operations in this document only, not in code; (d) the built-in names were checked against upstream sources
-    and distribution packages, not against the image (section 2.5).
+    engine's operations in this document only, not in code. (d) The built-in
+    names, checked against upstream sources and distribution packages, were
+    held against the image on 2026-11-13 (section 2.5); the fourteen
+    unverified applications are not installed there and remain unverified.
 
 17. **The accessibility bridge's facts are the bus's.** The role, the
     states, the description and the identifiers of an element come from
