@@ -210,6 +210,30 @@ licence notices the script copies out of the source are still where it looks
 processor variants and Vulkan and without a hard ROCm dependency, the stage
 can give way to the package.
 
+## The Android runtime
+
+ADR-0006 and [android-runtime.md](../docs/architecture/android-runtime.md),
+section 8.3: Waydroid is in the image and Android is off.
+
+- `image/android/waydroid.sh` installs the packages `image/android/packages.lock`
+  pins (`waydroid` and `waydroid-selinux` 1.6.3-2.fc45) from the Fedora 45
+  release tree, without weak dependencies, and writes what came with them, with
+  sizes and licences, to `/usr/share/tur/android/added-packages.tsv`. It hides
+  Waydroid's three launcher entries and removes their claim on APK files and
+  `market:` links: they start Waydroid directly, which cannot work while
+  Android is off, and would install an APK without TUR's inspection.
+- `image/rootfs/usr/lib/systemd/system/waydroid-container.service.d/50-tur-android.conf`
+  keeps Waydroid's root service from starting, by hand or through D-Bus, until
+  `tur-android enable` has created `/var/lib/tur/android/enabled`.
+- No Android image is in TUR's image. `/usr/share/tur/android/images.json`
+  (from `services/tur-android/data/`) pins the VANILLA system and vendor
+  images by SHA-256; the person's computer fetches them when the person
+  switches Android on.
+
+To move to another Waydroid or another image, change the lock or the pins in
+a pull request of its own and let the `android` workflow show that Android
+still starts, runs an application and switches off cleanly.
+
 ## Boot health and rollback
 
 What the image carries for [ADR-0014](../docs/adr/0014-boot-health-and-rollback.md);

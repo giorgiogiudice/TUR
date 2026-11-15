@@ -104,11 +104,11 @@ where it differs from what the project assumed when this work was requested.
 | Question | Finding | Source |
 |---|---|---|
 | Packaged in Fedora 45? | Yes: `waydroid-1.6.3-2.fc45`, with a `waydroid-selinux` subpackage. | [S13] [S14] |
-| What the Fedora package adds | An SELinux policy module (`waydroid_t` for the daemon); a `dev-binderfs.mount` unit of type `binder`; firewalld zone assignment for the container interface; D-Bus activation; removal of the AppArmor setting. It has no dependency on any kernel-module package. | [S14] |
+| What the Fedora package adds | An SELinux policy module (`waydroid_t` for the daemon); a `dev-binderfs.mount` unit of type `binder`; firewalld zone assignment for the container interface; D-Bus activation; removal of the AppArmor setting. It has no dependency on any kernel-module package. **Corrected 15 November 2026 (android-1):** the firewalld zone it assigns is `trusted` (`setup-firewalld.patch`: `firewall-cmd --zone=trusted --add-interface=waydroid0`), the opposite of the restrictive zone of section 10.2. Its D-Bus policy lets every local user call `id.waydro.Container`, and D-Bus activation starts the root service on such a call. It requires `lxc`, `dnsmasq`, `nftables`, `iproute`, `gtk3`, `python3-gobject`, `dbus-python` and `gbinder-python` >= 1.3, recommends nothing, and no longer pulls in `pyclip`, without which Waydroid shares no clipboard. | [S14] |
 | Image download | The Fedora package **blanks the default image URLs**. The user must enter the system and vendor channel URLs at first start. | [S4] [S14] |
 | SELinux domain of the Android processes | The policy lets the container's entry point enter `container_runtime_t`, the domain of the container runtime itself; a denial report of October 2026 also shows `spc_t`, the privileged-container domain. Both are domains that SELinux confines little (**assumption**, to be measured). Android's own SELinux policy is not enforced inside the container; a request to add it has been open since 2023. | [S12] [S14] |
 | How it is installed on Fedora Atomic desktops | Upstream documents `rpm-ostree install waydroid` (package layering) on Silverblue, Kinoite and other variants. Bazzite, a bootc image derived from Fedora Atomic, ships Waydroid inside the image and configures it with a helper command; it uses its own kernel build. | [S4] [S23] |
-| Does it run on the stock Fedora kernel? | A bug report from October 2026 shows Waydroid 1.6.3 running on Fedora 44 with stock kernel `7.2.9-200.fc44`. See section 3.3. | [S12] |
+| Does it run on the stock Fedora kernel? | A bug report from October 2026 shows Waydroid 1.6.3 running on Fedora 44 with stock kernel `7.2.9-200.fc44`. See section 3.3. **Corrected 15 November 2026:** that kernel has the C binder driver, so the report says nothing about the Rust driver (section 3.3). Measured since: Android 13 boots on `7.3.3-300.fc45` with the Rust driver, SELinux enforcing, no denial (exp-android-1, run 43553105465, a Fedora 45 guest), and on TUR's own image (android-1). | [S12] |
 | What this means for TUR | TUR is a bootc image, so the package is added in the `Containerfile` at build time, as Bazzite does, not layered on the installed system. | — |
 
 ### 3.3 Binder in the kernel
@@ -133,6 +133,26 @@ options `CONFIG_ANDROID_BINDER_IPC` and `CONFIG_ANDROID_BINDERFS`. Those name
 the C driver, which Fedora does not build and which mainline has removed: at
 7.4-rc2 only `ANDROID_BINDER_IPC_RUST` and `ANDROID_BINDER_DEVICES` remain.
 [S16] [S17] Fedora 43 and 44 carry the same configuration as Fedora 45. [S15]
+
+**Correction (15 November 2026, docs/reports/android-1.md).** The sentence
+above is wrong as a statement about Fedora releases. Fedora 45's kernel *as
+released*, `7.2.11-300.fc45`, has the **C** driver built in
+(`CONFIG_ANDROID_BINDER_IPC=y`, `CONFIG_ANDROID_BINDERFS=y`) and no Rust
+binder option (measured, exp-android-1, run 43537684872). The change to the
+Rust driver comes with Fedora's 7.3 kernels, not with a Fedora release. The
+measurement in the table holds for TUR: the pinned base (`image/base.lock`,
+45.20261113.0) carries `7.3.3-300.fc45.x86_64` with
+`CONFIG_ANDROID_BINDER_IPC=n`, `CONFIG_ANDROID_BINDER_IPC_RUST=y` and
+`CONFIG_ANDROID_BINDER_DEVICES="binder,hwbinder,vndbinder"` (build manifest of
+image run 43545811883, build `20261114.gd424be79919d`). Consequences: the
+Waydroid report on `7.2.9` cited below is evidence for the C driver only; a
+test of "Fedora 45's kernel" tests the Rust driver only on a 7.3 kernel; and
+TUR's image test must keep checking the option it ships, because a base
+update can move it. Questions 1 and 2 below are now measured on the Rust
+driver: binder is listed in `/proc/filesystems`, Fedora's mount unit gives
+`binder`, `hwbinder` and `vndbinder` in `/dev/binderfs`, and Android 13 boots
+with SELinux enforcing and no denial (exp-android-1, run 43553105465, Fedora
+45 with `7.3.3-300.fc45`; android-1 on TUR's image).
 Any check in TUR must key on the Rust option, not on the old names.
 
 Three questions follow from "the driver is there". Each answer below is from
@@ -580,6 +600,19 @@ named application, after redaction, and is shown in the bundle preview (§6.5).
 
 ### 8.2 Error codes
 
+**Correction (15 November 2026, android-1).** `TUR-ANDROID-RUNTIME-002` and
+`-003` cannot have the meanings proposed below: the runtime manager released
+them first (`services/tur-runtime/src/codes.rs`: ARM translation is not
+installed; an Android package no runtime handles), and a released code never
+changes its meaning. `tur-android` reports the container's failures as
+`TUR-ANDROID-CONTAINER-001` (did not start), `-002` (did not finish starting
+in time) and `-003` (the session has no sound server socket, which the
+container needs), and adds `RUNTIME-004` (Waydroid not in the image),
+`RUNTIME-005` (a step of switching on or off failed), `IMAGE-003` to `-005`,
+`PKG-007` (split sets, not installable yet), `CONSENT-001`/`-002`,
+`SESSION-001`, `APP-001` to `-004` and `DISABLE-001`; `tur-android codes`
+lists them.
+
 The `TUR-ANDROID-*` family is already registered in `crates/tur-core`. Proposed
 first entries, each to receive a full registry entry (§29.3) when implemented:
 
@@ -755,7 +788,7 @@ shorter path to the host than from a Wine prefix running as the user.
 
 | Measure | Effect |
 |---|---|
-| Off by default; service masked until opt-in | Users who never use Android carry no root daemon and no exposure |
+| Off by default; service masked until opt-in | Users who never use Android carry no root daemon and no exposure. Implemented (android-1) as a drop-in in the image, `ConditionPathExists=/var/lib/tur/android/enabled`, rather than a mask: a mask lives in `/etc` and would stay in the person's `/etc` across images. The condition also refuses D-Bus activation, which any local user can ask for |
 | Opt-in dialog states the trust model | The user decides knowing that Android applications are less contained than on a phone |
 | Device-node allowlist | Only the render node and the nodes Android cannot start without. No video devices, no kernel debug filesystem, no TUN device unless granted |
 | Audio capture withheld until granted | No silent microphone access |
