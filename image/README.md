@@ -210,6 +210,33 @@ licence notices the script copies out of the source are still where it looks
 processor variants and Vulkan and without a hard ROCm dependency, the stage
 can give way to the package.
 
+## P@x's bridge into Windows applications
+
+`tur-winbridge.exe` is a small Windows program of TUR's own
+([`services/tur-winbridge`](../services/tur-winbridge/)) that reads and
+operates a Windows application's windows from inside its Wine prefix, for
+P@x ([pax-accessibility.md](../docs/architecture/pax-accessibility.md),
+section 11). The stage `winbridge` of the [Containerfile](Containerfile)
+compiles it, and its menu hook `tur-winhook.dll`, from their source with
+mingw-w64 (`mingw64-gcc`, `mingw64-crt`, `mingw64-headers`,
+`mingw64-binutils`) from the base's own repositories
+([`winbridge/winbridge.sh`](winbridge/winbridge.sh)); the compiler stays in
+that stage. One step has network (the compiler), the compile step has none.
+
+| In the image | What |
+|---|---|
+| `/usr/lib/tur/winbridge/tur-winbridge.exe` | The bridge, under TUR's licence. It imports only `kernel32`, `user32` and the C runtime, which Wine ships; the build fails if it names any other DLL |
+| `/usr/lib/tur/winbridge/tur-winhook.dll` | The menu hook, the one part that runs inside other publishers' programs: under the **MIT** licence, from its own directory (`services/tur-winbridge/hook-mit/`) |
+| `/usr/lib/tur/winbridge/build.tsv` | Each file's SHA-256, size, licence, compiler and mingw-w64 runtime |
+| `/usr/share/licenses/tur-winhook/LICENSE` | The hook's MIT licence |
+| `/usr/share/licenses/tur-winbridge/` | The licence files of the mingw-w64 runtime linked into both files, and a README that says which is which |
+
+Nothing here is a Microsoft binary, and nothing is copied into a prefix:
+`tur-runtime` starts the bridge from this directory, read-only, inside the
+application's sandbox. The PE headers carry no time stamp and build paths
+are mapped out, so two builds with the same compiler give the same bytes;
+as for the engine, a newer compiler from Fedora's updates gives other bytes.
+
 ## Boot health and rollback
 
 What the image carries for [ADR-0014](../docs/adr/0014-boot-health-and-rollback.md);

@@ -9,7 +9,10 @@
 //!
 //! [`supervise`] is the small job this program does inside the sandbox: start
 //! Wine, wait for it, then wait for the Wine server to write the registry and
-//! exit, so that the sandbox is not torn down under it.
+//! exit, so that the sandbox is not torn down under it. With
+//! [`supervise_with_bridge`] it also starts P@x's bridge into the
+//! application when one is asked for ([`crate::winbridge`]).
+
 
 use std::fs::{self, DirBuilder, File, OpenOptions};
 use std::io::{self, Read, Write};
@@ -29,6 +32,7 @@ use crate::limits::{
 use crate::paths::{RuntimeDirs, plain_text};
 use crate::plan::{Check, CommandSpec, Executor, Step, StepError, StepOutcome};
 use crate::timefmt::Timestamp;
+use crate::winbridge::{self, BridgeCommand, Serving};
 
 /// Where a launched application's output goes besides its log file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -258,7 +262,12 @@ impl SystemExecutor {
         })
     }
 
-    fn launch(&mut self, spec: &CommandSpec, log: &Path) -> Result<StepOutcome, StepError> {
+    fn launch(
+        &mut self,
+        spec: &CommandSpec,
+        log: &Path,
+        bridge: Option<&Path>,
+    ) -> Result<StepOutcome, StepError> {
         let failed =
             |what: &str, error: io::Error| StepError::new(format!("cannot {what}: {error}"));
         let mut file = OpenOptions::new()
@@ -279,9 +288,34 @@ impl SystemExecutor {
 
         let mut command = Self::command(spec);
         command.stdout(Stdio::piped()).stderr(Stdio::piped());
-        let mut child = command
-            .spawn()
-            .map_err(|error| failed("start the sandbox", error))?;
+        // P@x's bridge: the listening socket is the sandbox's standard
+        // input, where the supervisor inside takes it. The application
+        // starts whether or not the socket can be made.
+        let mut offered = None;
+        if let Some(socket) = bridge {
+            match winbridge::listen(socket) {
+                Ok(listener) => {
+                    command.stdin(Stdio::from(std::os::fd::OwnedFd::from(listener)));
+                    offered = Some(socket);
+                    let _ = writeln!(file, "# P@x's bridge is offered on {}", socket.display());
+                }
+                Err(error) => {
+                    let _ = writeln!(file, "# P@x's bridge is not offered: {error}");
+                }
+            }
+        }
+        let spawned = command.spawn();
+        // The sandbox holds the listening socket now; this process does not.
+        drop(command);
+        let mut child = match spawned {
+            Ok(child) => child,
+            Err(error) => {
+                if let Some(socket) = offered {
+                    winbridge::remove_socket(socket);
+                }
+                return Err(failed("start the sandbox", error));
+            }
+        };
 
         let sink = Arc::new(Mutex::new(LogSink {
             file,
@@ -300,7 +334,11 @@ impl SystemExecutor {
         ];
         let status = child
             .wait()
-            .map_err(|error| failed("wait for the application", error))?;
+            .map_err(|error| failed("wait for the application", error));
+        if let Some(socket) = offered {
+            winbridge::remove_socket(socket);
+        }
+        let status = status?;
         for copier in copiers.into_iter().flatten() {
             let _ = copier.join();
         }
@@ -545,7 +583,11 @@ impl Executor for SystemExecutor {
                 command,
                 limit_seconds,
             } => self.run_bounded(label, command, *limit_seconds),
-            Step::Launch { command, log } => self.launch(command, log),
+            Step::Launch {
+                command,
+                log,
+                bridge,
+            } => self.launch(command, log, bridge.as_deref()),
             Step::Check { check: wanted } | Step::Require { check: wanted } => Ok(check(wanted)),
         }
     }
@@ -566,10 +608,44 @@ pub fn supervise(
     program: &str,
     arguments: &[String],
 ) -> Result<i32, StepError> {
-    let status = Command::new(program)
-        .args(arguments)
-        .status()
-        .map_err(|error| StepError::new(format!("cannot start {program}: {error}")))?;
+    supervise_with_bridge(settle, program, arguments, None)
+}
+
+/// [`supervise`], and P@x's bridge into the application: when `bridge` is
+/// given and this process's standard input is the listening socket the
+/// launcher made, each connection to it gets the bridge, started with
+/// `program` (the application's Wine) and the connection as its standard
+/// input and output. The application then gets an empty standard input.
+/// A bridge still running when the application ends is stopped before the
+/// Wine server is waited for.
+///
+/// # Errors
+///
+/// A [`StepError`] when `program` cannot be started.
+pub fn supervise_with_bridge(
+    settle: Option<&Path>,
+    program: &str,
+    arguments: &[String],
+    bridge: Option<(&str, bool)>,
+) -> Result<i32, StepError> {
+    let serving = bridge.and_then(|(bridge, no_hook)| {
+        Serving::from_stdin(BridgeCommand {
+            wine: program.to_owned(),
+            program: bridge.to_owned(),
+            no_hook,
+        })
+    });
+    let mut application = Command::new(program);
+    application.args(arguments);
+    if serving.is_some() {
+        application.stdin(Stdio::null());
+    }
+    let status = application.status();
+    if let Some(serving) = &serving {
+        serving.close();
+    }
+    let status =
+        status.map_err(|error| StepError::new(format!("cannot start {program}: {error}")))?;
     if let Some(settle) = settle {
         // Whether the server was still there or not does not change the
         // application's result.
@@ -1002,6 +1078,7 @@ mod tests {
         plan.steps.push(Step::Launch {
             command: shell("echo to-stdout; echo to-stderr >&2; echo \"[$TUR_TEST]\"; exit 42"),
             log: log.clone(),
+            bridge: None,
         });
         let report = run_plan(&plan, &mut executor);
         assert_eq!(report.failure, None);
@@ -1024,9 +1101,57 @@ mod tests {
             .execute(&Step::Launch {
                 command: shell("kill -TERM $$"),
                 log: log.clone(),
+                bridge: None,
             })
             .unwrap();
         assert_eq!(outcome, StepOutcome::Exited { status: 143 });
+    }
+
+    #[test]
+    fn a_launch_offers_the_bridge_while_the_application_runs() {
+        let scratch = scratch("exec-bridge");
+        let logs = scratch.dirs.state_root().join("logs/com.example.app");
+        fs::create_dir_all(&logs).unwrap();
+        let log = logs.join("launch.log");
+        let socket = scratch
+            .dirs
+            .state_root()
+            .join("run/tur/winbridge/com.example.app.sock");
+        let mut executor = SystemExecutor::new(&scratch.dirs);
+        // The sandbox's standard input is the listening socket, and the
+        // socket is there while it runs.
+        let script = format!(
+            "if [ -S '{}' ] && [ -S /dev/stdin ]; then exit 3; fi; exit 4",
+            socket.display()
+        );
+        let outcome = executor
+            .execute(&Step::Launch {
+                command: shell(&script),
+                log: log.clone(),
+                bridge: Some(socket.clone()),
+            })
+            .unwrap();
+        assert_eq!(outcome, StepOutcome::Exited { status: 3 });
+        // It is gone when the application has ended.
+        assert!(fs::symlink_metadata(&socket).is_err());
+        let logged = fs::read_to_string(&log).unwrap();
+        assert!(logged.contains("# P@x's bridge is offered on "), "{logged}");
+
+        // When the socket cannot be made, the application starts all the
+        // same, with an empty standard input.
+        fs::remove_dir_all(socket.parent().unwrap()).unwrap();
+        fs::create_dir_all(socket.parent().unwrap().parent().unwrap()).unwrap();
+        fs::write(socket.parent().unwrap(), b"not a directory").unwrap();
+        let outcome = executor
+            .execute(&Step::Launch {
+                command: shell("if [ -S /dev/stdin ]; then exit 3; fi; exit 4"),
+                log: log.clone(),
+                bridge: Some(socket.clone()),
+            })
+            .unwrap();
+        assert_eq!(outcome, StepOutcome::Exited { status: 4 });
+        let logged = fs::read_to_string(&log).unwrap();
+        assert!(logged.contains("# P@x's bridge is not offered: "), "{logged}");
     }
 
     #[test]

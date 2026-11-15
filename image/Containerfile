@@ -52,6 +52,7 @@ COPY services/tur-catalogue/ /src/services/tur-catalogue/
 COPY services/tur-device-manager/ /src/services/tur-device-manager/
 COPY services/tur-diagnostics/ /src/services/tur-diagnostics/
 COPY services/tur-pax/ /src/services/tur-pax/
+COPY services/tur-pax-a11y/ /src/services/tur-pax-a11y/
 COPY services/tur-pax-memory/ /src/services/tur-pax-memory/
 COPY services/tur-pax-providers/ /src/services/tur-pax-providers/
 COPY services/tur-runtime/ /src/services/tur-runtime/
@@ -89,6 +90,23 @@ RUN /bin/sh /src/image/engine/llama-cpp.sh fetch
 # No network: compiled from the checked source with the tools above.
 RUN --network=none /bin/sh /src/image/engine/llama-cpp.sh build
 
+# ---- build stage: P@x's bridge into Windows applications ------------------------
+# tur-winbridge.exe and its menu hook tur-winhook.dll (services/tur-winbridge;
+# docs/architecture/pax-accessibility.md, section 11), Windows programs of
+# TUR's own, compiled from their source with mingw-w64 from the base's own
+# repositories. The compiler stays in this stage. See image/README.md, "P@x's
+# bridge into Windows applications".
+FROM ${BASE_IMAGE}@${BASE_DIGEST} AS winbridge
+
+COPY image/winbridge/ /src/image/winbridge/
+COPY services/tur-winbridge/ /src/services/tur-winbridge/
+
+# With network: the cross compiler. Nothing is compiled here.
+RUN /bin/sh /src/image/winbridge/winbridge.sh fetch
+
+# No network: compiled from the source above with the compiler above.
+RUN --network=none /bin/sh /src/image/winbridge/winbridge.sh build
+
 # ---- the image ------------------------------------------------------------------
 FROM ${BASE_IMAGE}@${BASE_DIGEST}
 
@@ -114,6 +132,12 @@ COPY --from=programs /out/ /
 # its libraries and backends in /usr/libexec/tur/llama.cpp, the link
 # /usr/bin/llama-server, its licences, and /usr/lib/tur/built-from-source.tsv.
 COPY --from=engine /out/ /
+
+# What the bridge stage made (image/winbridge/winbridge.sh): the bridge and
+# its menu hook in /usr/lib/tur/winbridge, with what they were built from, and
+# their licences. tur-runtime starts the bridge inside a Windows
+# application's sandbox when P@x's accessibility bridge asks for it.
+COPY --from=winbridge /out/ /
 
 # Boot-attempt counting (ADR-0014). bootupd concatenates every *.cfg in
 # configs.d, sorted by name, into /boot/grub2/grub.cfg at installation. The

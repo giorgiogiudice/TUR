@@ -218,7 +218,9 @@ impl Overlay {
 
     /// Highlight a rectangle in a window, relative to the window's content,
     /// and send P@x's pointer to it. A window not found by its title is
-    /// looked for by its process alone.
+    /// looked for by its process alone, when a process is given (`pid` 0
+    /// means any process: a Windows application's window under Wine, whose
+    /// process the bridge does not know as the compositor does).
     ///
     /// # Errors
     ///
@@ -258,7 +260,11 @@ impl Overlay {
         };
         let reply = match place(title) {
             Ok(reply) => reply,
-            Err(_) if !title.is_empty() => place("").map_err(|error| error.to_string())?,
+            // A window found by its title alone (process 0) is not looked
+            // for any other way: any window at all would match.
+            Err(_) if !title.is_empty() && pid != 0 => {
+                place("").map_err(|error| error.to_string())?
+            }
             Err(error) => return Err(error.to_string()),
         };
         Ok(reply.body.first().and_then(Value::as_u32).unwrap_or(0))

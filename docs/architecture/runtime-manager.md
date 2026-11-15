@@ -635,6 +635,27 @@ requests are also written straight into metadata, bypassing admission. The
 `windows-runtime` workflow then runs a real Windows program inside the real
 sandbox and checks what it could and could not read.
 
+### P@x's bridge
+
+A Wine launch offers P@x's bridge into the application
+([pax-accessibility.md](pax-accessibility.md), section 11): when
+`/usr/lib/tur/winbridge/tur-winbridge.exe` is installed and the session has
+a runtime directory, the plan carries `winbridge` (the socket
+`$XDG_RUNTIME_DIR/tur/winbridge/<app-id>.sock`, and whether the menu hook is
+allowed and why) and the supervisor's command line gains `--bridge PATH`,
+with `--bridge-no-hook` when the catalogue's entry for the application says
+`category = "game"`. The launcher binds the socket (directory 0700, socket
+0600; a stale socket is replaced, anything else at the path is left alone)
+and gives the listening socket to bubblewrap as its standard input; the
+supervisor inside gives the application an empty standard input and, for
+each connection, starts `wine tur-winbridge.exe` with the connection as its
+standard input and output. The sandbox gains no mount: `/usr` is already
+there, read-only. When the application ends the supervisor stops the bridge
+before it waits for the Wine server, and the launcher removes the socket.
+If the socket cannot be made, the application starts all the same and the
+log says why. Proton launches offer no bridge yet; for them the hook would
+be off.
+
 ### Logs
 
 One file per launch, `logs/<app-id>/<UTC time>-<pid>.log`, mode 0600: a header

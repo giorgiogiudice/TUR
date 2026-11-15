@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/giorgiogiudice/TUR/schemas/local-model.schema.json",
   "title": "TUR local model catalogue entry",
-  "description": "One AI model TUR offers to run on the person's own computer (ADR-0021). Written in TOML, one file per model, in services/tur-ai-local/catalogue/<id>.toml; this schema describes the document the TOML parses to. The loader in services/tur-ai-local (src/catalogue.rs) is authoritative and also enforces rules this schema cannot express: the file is named <id>.toml; every file URL names the pinned revision and ends with the file's name; a projector is given exactly for models with the vision capability; pooling is given exactly for embeddings models, which have no other capability and do not think; tools and vision need chat; memory_bytes is at least the files plus kv_bytes_per_token times memory_context; memory_context is at most context_length; a licence with restrictions states them in sentences; ids and file names are unique across the catalogue.",
+  "description": "One AI model TUR offers to run on the person's own computer (ADR-0021). Written in TOML, one file per model, in services/tur-ai-local/catalogue/<id>.toml; this schema describes the document the TOML parses to. The loader in services/tur-ai-local (src/catalogue.rs) is authoritative and also enforces rules this schema cannot express: the file is named <id>.toml; every file URL names the pinned revision and ends with the file's name; a projector is given exactly for models with the vision capability; pooling is given exactly for embeddings models, which have no other capability and do not think; tools and vision need chat; locate needs vision, locate_scale is given exactly for models with the locate capability, and such a model has a tested entry with locate = yes; memory_bytes is at least the files plus kv_bytes_per_token times memory_context; memory_context is at most context_length; a licence with restrictions states them in sentences; ids and file names are unique across the catalogue.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -35,10 +35,16 @@
     "kv_bytes_per_token": { "description": "The size of the 16-bit context cache per token: layers x KV heads x head size x 2 (keys and values) x 2 bytes.", "type": "integer", "minimum": 1 },
     "active_weight_bytes": { "description": "The bytes of weights read for each generated token, where it is not the whole model file: a mixture-of-experts model reads only its active experts, and Gemma 4's per-layer embeddings are looked up, not multiplied. Without it, the model file's size. tur-ai-local estimates the speed of a model from it. At most the model file's size (the loader checks).", "type": "integer", "minimum": 1 },
     "capabilities": {
-      "description": "chat: conversation. tools: OpenAI-style tool calling. vision: image input (needs the projector). embeddings: text embeddings only.",
+      "description": "chat: conversation. tools: OpenAI-style tool calling. vision: image input (needs the projector). embeddings: text embeddings only. locate: locates a named control in a picture of a window, answering with a point inside it, as measured (needs vision; image input alone does not mean it). A point a model proposes is never acted on by itself.",
       "type": "array",
       "minItems": 1,
-      "items": { "enum": ["chat", "tools", "vision", "embeddings"] }
+      "items": { "enum": ["chat", "tools", "vision", "embeddings", "locate"] }
+    },
+    "locate_scale": {
+      "description": "For a model with the locate capability: how much a window's picture is enlarged before the model is asked, as measured (docs/reports/exp-winsee-1.md, section 7.1).",
+      "type": "number",
+      "exclusiveMinimum": 0.25,
+      "maximum": 4
     },
     "thinking": {
       "description": "none: answers directly. hybrid: can think first or answer directly; tur-ai-local decides (--reasoning). always: thinks first.",
@@ -122,6 +128,7 @@
         "tool_call": { "$ref": "#/$defs/outcome" },
         "image_input": { "$ref": "#/$defs/outcome" },
         "embeddings": { "$ref": "#/$defs/outcome" },
+        "locate": { "description": "Whether named controls were located in pictures of windows well enough to propose them. Left out when not tested.", "$ref": "#/$defs/outcome" },
         "notes": { "type": "string" }
       }
     }

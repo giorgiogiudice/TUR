@@ -1,9 +1,9 @@
 # P@x through the accessibility tree
 
 **Part of the [AI control layer](ai-control-layer.md)**, sections 4 (tier 2), 5.1, 7, 8, 16.6, 17, 19 and 21 to 23
-**Components:** `services/tur-pax-a11y` (the bridge, a program of its own); `services/tur-pax` (modules `interface`, `orchestrator`, `registry`; the policy engine's `action`, `engine`, `audit`)
-**Builds on:** [agent-policy.md](agent-policy.md), [pax-orchestrator.md](pax-orchestrator.md), [tur-pax-overlay.md](tur-pax-overlay.md)
-**Report:** [pax-7](../reports/pax-7.md)
+**Components:** `services/tur-pax-a11y` (the bridge, a program of its own); `services/tur-pax` (modules `interface`, `orchestrator`, `registry`; the policy engine's `action`, `engine`, `audit`); for Windows applications `services/tur-winbridge` (a Windows program inside each prefix) and `services/tur-runtime` (module `winbridge`), section 11
+**Builds on:** [agent-policy.md](agent-policy.md), [pax-orchestrator.md](pax-orchestrator.md), [tur-pax-overlay.md](tur-pax-overlay.md), [runtime-manager.md](runtime-manager.md)
+**Reports:** [pax-7](../reports/pax-7.md); Windows: [exp-winsee-1](../reports/exp-winsee-1.md) (the experiment), [pax-winbridge-1](../reports/pax-winbridge-1.md)
 
 This document describes, as built, how P@x sees and operates other
 applications' windows through the accessibility tree (AT-SPI): the bridge
@@ -313,7 +313,8 @@ could not be resolved is a `proposal_rejected` event and never a decision.
    (Firefox through at-spi2-atk: `;;`); the bridge then asks `GetName`.
 4b. **Wine exposes nothing** (Wine 11.20 as Fedora 45 ships it, its own
    notepad on Wine's Wayland driver, measured): no application appears on
-   the accessibility bus. Windows programs stay on the third way of acting.
+   the accessibility bus. Windows programs are read and operated through a
+   bridge inside their prefix instead (section 11).
 4c. **P@x's own indicator is on the accessibility bus** (tur-pax-overlay, a
    Qt Quick program, with one window). Listing the windows shows it; it has
    nothing to press.
@@ -348,9 +349,130 @@ could not be resolved is a `proposal_rejected` event and never a decision.
 ## 10. Licences
 
 No AT-SPI client library is linked: the bridge speaks the bus interfaces
-through `tur_pax::bus` (standard library only). libatspi (LGPL-2.1-or-later)
+through `tur_pax::bus` (standard library only). The Windows bridge is TUR's
+own Windows program; its menu hook is MIT, in its own directory, because it
+runs inside other publishers' programs (section 11). libatspi (LGPL-2.1-or-later)
 and pyatspi are not used. The CI test image adds Fedora's at-spi2-core,
 at-spi2-atk (LGPL-2.1-or-later), GTK 3 and 4, gnome-text-editor (GPL-3.0),
 Firefox (MPL-2.0) and Wine (LGPL-2.1-or-later) as programs to operate; none
 is linked into TUR code, and Wine's notepad is Wine's own program, not a
 Microsoft binary.
+
+## 11. Windows applications: the bridge inside the prefix
+
+Decided by the owner on 14 November 2026 ([exp-winsee-1](../reports/exp-winsee-1.md),
+section 11.1); built as described here.
+
+```text
+ tur-pax ─ pipe ─▶ tur-pax-a11y ─ $XDG_RUNTIME_DIR/tur/winbridge/<app-id>.sock (0600) ─┐
+                    │  (a second source of windows)                                      │ the listening socket is
+                    └─▶ overlay (indicator, pointer)                                       │ the sandbox's stdin
+ tur-runtime (launcher) ──▶ bwrap ──▶ tur-runtime supervise ──▶ wine <application>         │
+                                       │  on each connection ◀─────────────────────────────┘
+                                       └─▶ wine /usr/lib/tur/winbridge/tur-winbridge.exe
+                                            (stdin and stdout: the connection)
+```
+
+| Part | Where | What it does |
+|---|---|---|
+| The bridge | `services/tur-winbridge` (C, mingw-w64), built in the image build (`image/winbridge/`) into `/usr/lib/tur/winbridge/` | Runs inside the application's prefix and sandbox, under the application's own Wine. Reads windows through the **Win32 tier** (the window tree, classes, styles, text, rectangles, the standard and common controls' own messages) and acts with the controls' own messages; no key or pointer event is emulated. Speaks one JSON object a line on its standard input and output: `hello`, `windows`, `read`, `act`, `at_point`, `quit`. Nothing else: no click at a position, no closing of windows, no COM (left in the experiment). Imports only `kernel32`, `user32` and the C runtime |
+| The menu hook | `services/tur-winbridge/hook-mit/` (`tur-winhook.dll`, **MIT**) | Under Wine a menu cannot be read from another process; the bridge loads this library into the application's thread for one message and it writes the menu to a file. The only code that runs inside other publishers' programs. **Off for games**: the bridge started with `TUR_WINBRIDGE_NO_HOOK=1` loads nothing into the application and reads no menu |
+| The offer | `tur-runtime`, module `winbridge`; the launcher (`exec.rs`) and the supervisor (`supervise --bridge`) | For a Wine launch, when the bridge is installed and the session has a runtime directory, the launcher binds the application's socket (directory 0700, socket 0600) and makes the listening socket the sandbox's standard input; the plan says so. Inside the sandbox the supervisor gives the application an empty standard input, and for each connection starts the bridge with the application's Wine, the connection as its standard input and output, `WINEDEBUG=-all`, and `TUR_WINBRIDGE_NO_HOOK=1` when the catalogue calls the application a game (`category = "game"`). One connection at a time. When the application ends the supervisor stops a bridge still running, then waits for the Wine server; the launcher removes the socket. The application starts whether or not the socket can be made |
+| The second source | `tur-pax-a11y`, module `wine` | Lists the sockets of the user's own in `$XDG_RUNTIME_DIR/tur/winbridge` (a directory of the user's, mode 0700, or none is used), asks each bridge for its windows, reads and acts through it. Its windows and elements have identifiers of their own (`ww3`, `we12`) |
+| The rule for vision | `tur-pax-a11y`, module `vision`; `tur-pax-a11y confirm-point` | Section 11.3 |
+
+**Why the bridge starts on demand, inside the supervisor.** It must run in
+the application's sandbox: the Wine server's socket is in the sandbox's
+private `/tmp`, and a bridge anywhere else would start a second Wine server
+that sees no window. The experiment proposed starting it with every
+application (0.06 s and 6 MB each) or joining the sandbox's namespaces when
+needed. Neither is needed: the supervisor is already inside, waiting on the
+listening socket costs nothing, and the bridge's pipe is simply the
+accepted connection. No namespace is joined, no file descriptor is passed
+after the start, and nothing in the sandbox sees the socket's path.
+
+**Under Proton** the bridge is not started yet: Proton runs inside the
+Steam Linux Runtime's own container, which the supervisor is not in. Every
+Proton launch counts as a game for the hook (`menu_hook_allowed`), so when
+it is started there, the hook is off.
+
+### 11.1 The same tools, the same order, the same classes
+
+- **Windows are listed and chosen with the others.** `ui_list_windows`
+  gives the Windows windows beside the accessibility bus's, with toolkit
+  `win32 (Wine)`, screened by the same built-in lists. A window argument is
+  matched against all of them by the rules of section 3 (identifier, exact
+  title, part of a title, application identifier); two matches anywhere are
+  ambiguous.
+- **Who the application is.** The main identifier is the one `tur-runtime`
+  named the socket after: the application's identifier, the catalogue's
+  when it was installed from the catalogue (exp-winsee-1, section 11.3,
+  item 4). The program's file name (`7zfm.exe`) and that name without
+  `.exe` are its other identifiers; one match on a list is enough, so
+  Wine's consoles (`cmd.exe`, `conhost.exe`, `wineconsole`) are sensitive
+  and their windows are left out of the list.
+- **Whose window it is.** `user`: only the user's own `tur-runtime` can make
+  a socket in the user's runtime directory, and it refuses to run as root.
+  A socket that is not the user's, or a directory others can enter, is not
+  used at all.
+- **The node model.** Each element has the bridge's AT-SPI role number, so
+  `UiRole::from_atspi` judges a Windows button as it judges a GTK one; its
+  name (a label taken from the static text before it when it has none), its
+  states (`focused`, `checked`, `selected`, `expanded`, `editable`,
+  `is default`, `read only`, `disabled`, …), its bounds in the coordinates of
+  the window's content, its actions, and its text, never a password
+  field's. Containers without a name and nothing to do give way to their
+  children; what is not shown is left out, except the items of the
+  window's menus, which the bridge reads through the hook and can send
+  without opening the menu. The same budgets apply.
+- **Resolve, decide, re-read, perform.** `resolve` reads the window from its
+  bridge and chooses the element by the rules of section 3. The task loop
+  decides and records. `perform` lists the window again, reads it again,
+  finds the element by the bridge's own identifier, compares the target
+  field for field (`changed` otherwise), takes the bridge's own decision
+  (`serve::second_decision`, unchanged), holds the overlay's lease, points,
+  rests, and only then asks the bridge to act; it reports what the
+  application did (`text_now_contains_typed_text` from the field).
+- **The indicator** finds a Windows window by its title alone (process 0):
+  the bridge knows Windows process numbers, not the compositor's. A
+  rectangle is placed from where the window's content begins: the window
+  less the caption and frame the window manager draws instead of Windows,
+  as Wine's X11 driver computes it.
+
+### 11.2 Limits
+
+1. **Classic Win32 controls only.** An application that draws its own
+   controls (Qt, Electron, Java, a game) gives one window and nothing in
+   it; UI Automation and MSAA, which such toolkits would use, are stubs in
+   Wine 11.20 and are not built into the bridge (exp-winsee-1, section 3).
+2. **64-bit applications only**: reading list rows, tabs and toolbar
+   buttons and the menu hook need a bridge of the application's word size;
+   a 32-bit application gets its windows and plain controls without them
+   (the bridge says so in the read).
+3. **Names are a heuristic** where a control has none (the label before
+   it); toolbar icons without text have no name.
+4. **Anyone who is the user** can connect to the socket while the
+   application runs, as they can reach the application's files. P@x's
+   command sandbox cannot (it has no `/run/user`).
+5. **Positions under Wine's Wayland driver** are not computed for it: the
+   content origin follows Wine's X11 driver, which the TUR session uses
+   (Plasma with XWayland).
+
+### 11.3 Vision proposes, the application confirms
+
+The owner's decision 3. A point chosen from a picture is never acted on by
+position. `vision::confirm` looks it up in what the application exposes
+(the bridge's `at_point`) and confirms it only when an element is there, no
+other window covers the point (a source that cannot tell counts as
+covered), and the element's name and kind, read from the application, are
+the ones asked for. The action then goes on as an ordinary action on that
+element (resolved, decided, re-read, performed). Anything else is class 2,
+refused today; where nothing is exposed, every action by sight is class 2.
+No vision model is wired into P@x yet; the check, its unit tests (the
+experiment's attack: Cancel painted over Delete, Help over Turn off
+backups) and `tur-pax-a11y confirm-point WINDOW X Y NAME [ROLE]` (which
+acts on nothing) are what any wiring must go through. The accessibility
+tree's side is not built: it cannot say whether a window covers a point
+(KWin knows; the overlay would have to answer), so it would refuse every
+point today. The model that locates is in the local AI catalogue with the
+capability `locate` ([local-ai.md](local-ai.md), section 12).

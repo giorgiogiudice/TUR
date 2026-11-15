@@ -244,6 +244,11 @@ pub enum Step {
         command: CommandSpec,
         /// The log file its output is captured to.
         log: PathBuf,
+        /// The socket on which P@x's bridge into the application is offered
+        /// ([`crate::winbridge`]); the listening socket is the sandbox's
+        /// standard input.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        bridge: Option<PathBuf>,
     },
     /// Test something without changing it. A failed check is recorded as a
     /// finding and does not stop the plan.
@@ -300,9 +305,17 @@ impl Step {
                 "{label}, within {limit_seconds} seconds: {}",
                 command.display_line()
             ),
-            Step::Launch { command, log } => format!(
-                "launch, logging to {}: {}",
+            Step::Launch {
+                command,
+                log,
+                bridge,
+            } => format!(
+                "launch, logging to {}{}: {}",
                 log.display(),
+                bridge.as_ref().map_or_else(String::new, |socket| format!(
+                    ", offering P@x's bridge on {}",
+                    socket.display()
+                )),
                 command.display_line()
             ),
             Step::Check { check } => format!("check that {}", check.describe()),
@@ -649,6 +662,7 @@ mod tests {
             Step::Launch {
                 command: command("/usr/bin/bwrap", &["--", "wine", "app.exe"]),
                 log: PathBuf::from("/s/log"),
+                bridge: None,
             },
         ];
         plan.notes.push("a note".to_owned());

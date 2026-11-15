@@ -13,7 +13,10 @@ Run by tests/pax/a11y/run.sh inside the image of tests/pax/a11y/Containerfile
   - tur-pax-overlay, P@x's indicator and pointer;
   - the applications, one group at a time: tur-settings (Qt Quick), a GTK 3
     test window (mail_app.py), gnome-text-editor (GTK 4), Firefox with a
-    test page, Wine's own notepad.
+    test page, Wine's own notepad;
+  - a Windows program of TUR's own (winwindow.c) under Wine, with
+    tur-runtime's supervisor offering tur-winbridge.exe beside it: P@x's
+    Windows path (windows_phase.py).
 
 For each application it measures what the accessibility tree exposes
 (`tur-pax-a11y survey`), then runs P@x on it: `tur-pax run --interface`,
@@ -28,6 +31,7 @@ process's log. It exits 1 if a hard check failed. Firefox and Wine are
 measured and reported; what they do not expose does not fail the run.
 
     harness.py --out DIR --build DIR --kwin PATH --tur-pax PATH --bridge PATH
+               [--winbuild DIR --tur-runtime PATH]
 """
 
 import argparse
@@ -45,6 +49,7 @@ HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 
 from fake_provider import ScriptedProvider  # noqa: E402
+from windows_phase import WindowsPhase  # noqa: E402
 
 KEY = "sk-test-not-a-real-key-a11y"
 GOLD = (0xE8, 0xB4, 0x4C)
@@ -874,6 +879,9 @@ class Harness:
         if wineserver:
             subprocess.run([wineserver, "-k"], env=self.session.environment(**environment), capture_output=True, timeout=60)
 
+    def phase_windows(self):
+        WindowsPhase(self).run()
+
     def phase_stop(self):
         log = self.out / "mail-stop.log"
         log.write_text("")
@@ -959,7 +967,16 @@ class Harness:
             self.session.up()
             self.results["accessibility_bus"] = self.session.a11y
             self.overlay_up()
-            for phase in (self.phase_settings, self.phase_mail, self.phase_editor, self.phase_firefox, self.phase_wine, self.phase_stop):
+            phases = (
+                self.phase_settings,
+                self.phase_mail,
+                self.phase_editor,
+                self.phase_firefox,
+                self.phase_wine,
+                self.phase_windows,
+                self.phase_stop,
+            )
+            for phase in phases:
                 try:
                     phase()
                 except Exception as error:  # noqa: BLE001 - one phase does not stop the others
@@ -1062,6 +1079,8 @@ def main():
     parser.add_argument("--kwin", required=True)
     parser.add_argument("--tur-pax", required=True)
     parser.add_argument("--bridge", required=True)
+    parser.add_argument("--winbuild", help="tur-winbridge.exe and winwindow.exe, built with mingw-w64")
+    parser.add_argument("--tur-runtime", help="the tur-runtime program, whose supervisor offers the bridge")
     arguments = parser.parse_args()
     return Harness(arguments).run()
 

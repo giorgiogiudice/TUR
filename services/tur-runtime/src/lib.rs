@@ -31,6 +31,8 @@
 //!   file system can (ext4 with the `casefold` feature).
 //! * [`plan`] is what all of these produce, and [`exec`] carries a plan out.
 //! * [`desktop`] writes the text of a desktop entry.
+//! * [`winbridge`] offers P@x's bridge into the application's windows: a
+//!   socket outside the sandbox, the bridge started inside it on demand.
 //!
 //! Installing a Windows application:
 //!
@@ -111,6 +113,7 @@ pub mod script;
 pub mod sha256;
 pub mod shortcut;
 pub mod timefmt;
+pub mod winbridge;
 pub mod winreg;
 
 mod plist;

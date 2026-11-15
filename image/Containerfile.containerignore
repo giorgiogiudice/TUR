@@ -31,6 +31,8 @@ branding/render.py
 !services/tur-device-manager/
 !services/tur-diagnostics/
 !services/tur-pax/
+!services/tur-pax-a11y/
+!services/tur-winbridge/
 !services/tur-pax-memory/
 !services/tur-pax-providers/
 !services/tur-runtime/

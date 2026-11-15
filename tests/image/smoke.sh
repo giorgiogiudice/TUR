@@ -274,6 +274,23 @@ check "the engine's licences are in the image, and the build says what it was bu
               LICENSE-subprocess.h LICENSE-llamafile-sgemm README; do test -s "/usr/share/licenses/llama.cpp/$f" || exit 1; done &&
      grep -q "^llama.cpp	b$1	" /usr/lib/tur/built-from-source.tsv' _ "${EXPECT_LLAMA_CPP_BUILD}"
 
+# P@x's bridge into Windows applications (services/tur-winbridge, built in the
+# image build by image/winbridge/winbridge.sh): two Windows programs of TUR's
+# own, the record of their build, and the licences that go with them.
+winbridge=/usr/lib/tur/winbridge
+check "the bridge and its menu hook are Windows programs (PE files)" bash -c \
+    'for f in tur-winbridge.exe tur-winhook.dll; do [ "$(head -c 2 "$1/$f")" = MZ ] || exit 1; done' _ "${winbridge}"
+check "the build record names both files with the SHA-256 they have" bash -c \
+    'cd "$1" && for f in tur-winbridge.exe tur-winhook.dll; do
+         grep -q "^${f}	$(sha256sum "${f}" | cut -d" " -f1)	" build.tsv || exit 1
+     done' _ "${winbridge}"
+echo "      $(grep -v '^#' "${winbridge}/build.tsv" 2>/dev/null | cut -f1,3,5,6 | tr '\t\n' ' ;')"
+check "the menu hook's MIT licence and the mingw-w64 runtime's licences are in the image" bash -c \
+    'grep -q "^MIT License" /usr/share/licenses/tur-winhook/LICENSE &&
+     test -s /usr/share/licenses/tur-winbridge/README &&
+     ls /usr/share/licenses/tur-winbridge/mingw64-crt-* > /dev/null'
+check "tur-pax-a11y, which speaks to the bridge, is where tur-pax starts it" test -x /usr/bin/tur-pax-a11y
+
 # What the programs start (specification section 12; pax-orchestrator.md).
 # Nothing is added to the image for them: every one comes with the base.
 for tool in /usr/bin/bwrap /usr/bin/prlimit /usr/bin/lsblk /usr/bin/udevadm /usr/bin/journalctl \

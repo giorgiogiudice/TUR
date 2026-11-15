@@ -821,6 +821,22 @@
           }
         },
         {
+          "model": "qwen3-vl-4b-instruct",
+          "label": "Qwen3-VL 4B Instruct",
+          "capabilities": {
+            "image_input": true
+          },
+          "max_output_tokens": 1024,
+          "tested_with_tur": false,
+          "settings": {
+            "context_tokens": {
+              "min": 2048,
+              "max": 131072,
+              "default": 8192
+            }
+          }
+        },
+        {
           "model": "granite-4.0-1b",
           "label": "Granite 4.0 1B",
           "max_output_tokens": 1024,
