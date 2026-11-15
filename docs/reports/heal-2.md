@@ -153,6 +153,21 @@ clippy and rustfmt are still NOT RUN:
    whole pipeline, whose `sleep 600` was stopped only afterwards. The order
    is swapped (test only).
 
+## P@x's companion first (added after the merge with main)
+
+`tur-diag heal notify` now offers each notice to P@x's companion first
+(`org.tur.PaxCompanion1.Announce("heal", id)`, only if the name has an
+owner, 5 s limit) and shows the desktop notification only when the
+companion did not take it; it alone marks notices seen
+([self-healing.md](../architecture/self-healing.md), section 4;
+tur-pax-companion.md, section 7, on the companion's branch). Proven by unit
+tests with a stand-in session (taken, refused, error, no answer: one
+announcement each; a notice nobody could show waits; the summing-up
+notice). In the guest no companion runs, so every notice takes the
+notification path, which the heal run proves; the call against the real
+companion is NOT RUN until the companion (pull request 139) is in the
+image.
+
 ## Not proven
 
 - **Unit tests, clippy and rustfmt** for this change: the rust workflow had

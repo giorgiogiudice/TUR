@@ -183,6 +183,21 @@ accepted call marks one notice seen. The unit runs only when the session has
 a display (`WAYLAND_DISPLAY` or `DISPLAY`), and is never refused for starting
 often. `tur-diag heal notices [--json] [--mark-shown]` lists what waits.
 
+**P@x's companion first** (the handshake of
+[tur-pax-companion.md](tur-pax-companion.md), section 7, adopted by the
+owner on 15 November 2026). Before the notification of a notice, `notify`
+asks whether `org.tur.PaxCompanion1` has an owner on the session bus (it
+never starts the companion) and, if so, calls `Announce("heal", id)` with a
+5 s limit. Only a plain `true`, which the companion gives once the notice's
+bubble is on the screen, counts: the notice is marked seen and no
+notification is sent. Anything else (no companion, `false`, an error, no
+answer) and the notification shows it, as before. One announcement either
+way, one notice at a time, in order; only `tur-diag heal notify` writes the
+seen list, and the companion reads the words from `tur-diag heal notices
+--json` by the notice's `id`. Those fields (`id`, `at_utc`, `code`, `kind`,
+`title`, `body`, `actions`) and the history's (`at_utc`, `code`, `kind`,
+`who`, `text`) are kept stable: fields are added, never renamed.
+
 **The history.** `tur-diag heal history [--json] [--limit N]`, in plain
 words, newest first, merges the service's events (what it found, repaired by
 itself and whether that held, what was applied or undone and by whom: "TUR",
