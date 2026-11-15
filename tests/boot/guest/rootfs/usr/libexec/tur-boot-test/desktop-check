@@ -78,6 +78,43 @@ if [ -n "${pid}" ]; then
 fi
 as_user() { timeout 60 runuser -u "${user}" -- env -i "${envs[@]}" "$@"; }
 
+# Plasma locks the screen and switches the display off after five minutes
+# without input, and nobody types in this boot: in the first run of the
+# pictures of TUR's programs (issue #59) every picture after the fifth
+# minute showed the lock screen or "Display output is not active". As a
+# person's video player does, the check holds an inhibition of the screen
+# saver and of power management (org.freedesktop.ScreenSaver and
+# org.freedesktop.PowerManagement.Inhibit on the session bus) for as long
+# as it runs; it ends with the check. Nothing is written to the account's
+# configuration.
+inhibitor=""
+if [ -n "${pid}" ]; then
+    runuser -u "${user}" -- env -i "${envs[@]}" python3 -I -c '
+import sys, time
+import dbus
+bus = dbus.SessionBus()
+why = ["tur-boot-test", "pictures of the desktop for the boot test"]
+for service, path, interface in (
+        ("org.freedesktop.ScreenSaver", "/ScreenSaver", "org.freedesktop.ScreenSaver"),
+        ("org.freedesktop.PowerManagement.Inhibit", "/org/freedesktop/PowerManagement/Inhibit",
+         "org.freedesktop.PowerManagement.Inhibit")):
+    try:
+        cookie = bus.call_blocking(service, path, interface, "Inhibit", "ss", why)
+        print(f"{interface}.Inhibit: cookie {int(cookie)}", flush=True)
+    except dbus.exceptions.DBusException as error:
+        print(f"{interface}.Inhibit: {error.get_dbus_name()}: {error}", flush=True)
+time.sleep(1800)
+' > "${out}/inhibit.txt" 2>&1 &
+    inhibitor=$!
+    sleep 2
+fi
+put inhibitor_pid "${inhibitor}"
+# screen_state: whether the screen is locked, as KDE's screen locker says.
+screen_state() {
+    as_user busctl --user call org.freedesktop.ScreenSaver /ScreenSaver org.freedesktop.ScreenSaver GetActive 2>&1 \
+        | tr -d '\n'
+}
+
 # Plasma's layout as plasmashell itself describes it (org.kde.PlasmaShell,
 # dumpCurrentLayoutJS: panels with their applets in order and their settings,
 # and the desktops of the current activity).
@@ -201,6 +238,7 @@ show() {
         tr '\0' ' ' < "/proc/${pid}/cmdline" > "${programs}/${name}.cmdline" 2> /dev/null
     fi
     ps -U "${uid}" -o pid,etimes,rss,comm,args > "${programs}/${name}.processes.txt" 2>&1
+    put "program_${name}_screen_locked" "$(screen_state)"
     say "DESKTOP-PROGRAM-SHOWN ${name} pid=${pid:-none} uptime=$(uptime_s)"
     sleep 9
 }
@@ -219,12 +257,14 @@ close tur-centre
 show centre-app tur-centre 16 tur-centre tur-centre:app/com.discord.discord
 close tur-centre
 # P@x's window: the ask bar from the launcher entry; then the setup flow,
-# asked of the running window as the entry's action does; then P@x's keys,
-# which the window asks the overlay to show: the session bus starts
-# tur-pax-overlay from its activation file.
+# asked of the running window as the entry's action does. Then P@x's
+# indicator: the session bus starts tur-pax-overlay from its activation file
+# when it is first called (here a Ping), and P@x's keys key (`tur-pax-ui
+# --show-keys`, which only toggles an indicator that runs) shows the list.
 show pax-ask tur-pax-ui 14 gio launch /usr/share/applications/org.tur.PaxUi.desktop
 show pax-setup tur-pax-ui 12 tur-pax-ui --mode setup
-show pax-keys tur-pax-overlay 12 tur-pax-ui --show-keys
+show pax-keys tur-pax-overlay 12 sh -c 'busctl --user call org.tur.PaxOverlay1 /org/tur/PaxOverlay1 \
+    org.freedesktop.DBus.Peer Ping && sleep 3 && tur-pax-ui --show-keys'
 as_user busctl --user list --no-legend 2> /dev/null | grep -E 'org\.tur\.' > "${programs}/bus-names.txt"
 as_user systemctl --user show tur-pax.service -p ActiveState -p SubState -p Result > "${programs}/tur-pax-unit.txt" 2>&1
 close tur-pax-ui tur-pax-overlay
@@ -238,6 +278,9 @@ journalctl -b --no-pager -o short-monotonic "_UID=${uid}" -g 'tur-(centre|settin
     > "${programs}/journal.txt" 2>&1
 put programs_done_uptime "$(uptime_s)"
 say "DESKTOP-PROGRAMS-DONE uptime=$(uptime_s)"
+
+put screen_locked_at_end "$(screen_state)"
+if [ -n "${inhibitor}" ]; then kill "${inhibitor}" 2> /dev/null; fi
 
 # --- send ------------------------------------------------------------------------
 sleep 5

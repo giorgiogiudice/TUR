@@ -376,15 +376,25 @@ def judge_programs(out: pathlib.Path, facts: pathlib.Path, status: dict[str, str
         record = pictures.get(name) or {}
         changed = record.get("changed_from_light_desktop")
         least = CHANGED_SURFACE if surface else CHANGED_WINDOW
-        check(f"{what}: the picture of the screen shows something the desktop did not", True,
-              None if record.get("file") is None or changed is None else changed >= least,
+        # A locked screen, or a display that is off, also differs from the
+        # desktop (the first run's pictures did): the screen must be unlocked
+        # and the picture lit, with more than a few colours.
+        locked = status.get(f"program_{name}_screen_locked", "")
+        check(f"{what}: the picture of the screen shows the session, unlocked, with something the desktop "
+              "did not show", True,
+              None if record.get("file") is None or changed is None
+              else changed >= least and record.get("looks_rendered") is True
+              and (record.get("distinct_colours") or 0) >= 50 and locked == "b false",
               f"{record.get('file') or 'no picture'}; {changed} of the screen differs from the light desktop "
-              f"(at least {least}); at {record.get('at_seconds')} s")
+              f"(at least {least}); lit {record.get('lit_fraction')}, {record.get('distinct_colours')} colours; "
+              f"screen locked: {locked or 'no data'}; at {record.get('at_seconds')} s")
         warnings = [line for line in said.split(" / ") if "QML warning" in line or "qml:" in line.lower()]
         check(f"{what}: no QML warning in the session", False, bool(pid) and not warnings,
               f"{len(warnings)} line(s): {' / '.join(warnings)[:400] or 'none'}")
     names = (directory / "bus-names.txt").read_text(errors="replace") if (directory / "bus-names.txt").exists() else ""
-    owned = sorted(set(re.findall(r"org\.tur\.[A-Za-z0-9.]+", names)))
+    # busctl lists activatable names too, marked "(activatable)": they are not owned.
+    owned = sorted({found for line in names.splitlines() if "(activatable)" not in line
+                    for found in re.findall(r"^org\.tur\.[A-Za-z0-9.]+", line)})
     check("P@x's window and its overlay are on the session bus while the window is open", True,
           all(name in owned for name in ("org.tur.PaxUi1", "org.tur.PaxOverlay1")),
           f"names owned: {', '.join(owned) or 'none'}")
@@ -393,6 +403,11 @@ def judge_programs(out: pathlib.Path, facts: pathlib.Path, status: dict[str, str
     check("P@x's window started P@x's session service through the session bus", False,
           "org.tur.Agent1" in owned and "ActiveState=active" in unit,
           f"org.tur.Agent1 owned: {'org.tur.Agent1' in owned}; tur-pax.service: {' '.join(unit.split()) or 'no data'}")
+    inhibit = (facts / "inhibit.txt").read_text(errors="replace") if (facts / "inhibit.txt").exists() else ""
+    check("the check held the screen saver off while it took pictures (no lock screen, display on)", True,
+          "ScreenSaver.Inhibit: cookie" in inhibit and status.get("screen_locked_at_end") == "b false",
+          f"{' / '.join(inhibit.split(chr(10)))[:300] or 'no data'}; locked at the end: "
+          f"{status.get('screen_locked_at_end') or 'no data'}")
     icon = (directory / "icon-org.tur.Pax.path").read_text(errors="replace").strip() \
         if (directory / "icon-org.tur.Pax.path").exists() else ""
     check("the icon theme finds P@x's icon, org.tur.Pax", True, icon.endswith("org.tur.Pax.svg"),
