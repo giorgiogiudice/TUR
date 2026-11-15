@@ -200,7 +200,9 @@ pub(crate) fn explain(pins: &Pins) -> Explanation {
         format!(
             "Android {} no longer receives security fixes from Google. Android applications run \
              in a container managed by a service with administrator rights; they are less \
-             contained than on a phone. Install only applications you trust.",
+             contained than on a phone. They can reach the internet, but not this computer's \
+             own services or the devices of your local network. Install only applications you \
+             trust.",
             pins.android_version
         ),
         format!("Licences: {}", pins.licence),

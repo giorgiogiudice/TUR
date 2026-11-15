@@ -570,6 +570,20 @@ on the host. No audio hardware is passed in.
   expected to fail.
 - The bridge is placed in a restrictive firewall zone. Android cannot reach
   services bound to the host's loopback interface.
+- **As built (android-1; the owner's decision of 15 November 2026).** The
+  rule, in plain words: *Android may ask the host for an address and resolve
+  names through it, and may reach the internet; it may not reach any other
+  service of the host, nor any device of the local network.* In the image:
+  the firewalld zone `tur-android` (`/usr/lib/firewalld/zones/`) binds
+  `waydroid0` before Fedora's patch can put it in `trusted`, and allows only
+  the `dhcp` and `dns` services towards the host (everything else to the host
+  is rejected, the zone's default); the policy `tur-android-out`
+  (`/usr/lib/firewalld/policies/`) accepts traffic from that zone to every
+  other zone except to the private, link-local and shared ranges
+  (10/8, 172.16/12, 192.168/16, 169.254/16, 100.64/10, fc00::/7, fe80::/10),
+  which it rejects. Measured from inside Android on the booted image in
+  android-1. Reaching a device of the local network, for casting or
+  printing, would be a per-person grant: not built.
 
 ## 8. Diagnostics and updates
 

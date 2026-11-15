@@ -277,6 +277,17 @@ def judge(result: dict, out: pathlib.Path) -> list[dict]:
     check("the picture changed after the application was started (a person must still look)",
           "mean_level" in app and "mean_level" in before and app.get("mean_level") != before.get("mean_level"),
           f"mean level {before.get('mean_level')} -> {app.get('mean_level')}", required=False)
+    check("the Android bridge is in TUR's zone tur-android, not trusted", facts.get("bridge_zone") == "tur-android",
+          facts.get("bridge_zone", "?"))
+    net = {key: facts.get(f"net_{key}", "?") for key in
+           ("internet_ip", "internet_name", "host_service_bridge", "host_service_lan", "local_network")}
+    check("Android reaches the internet", net["internet_ip"] == "REACHED",
+          f"1.1.1.1:443 {net['internet_ip']}; f-droid.org:443 {net['internet_name']}")
+    check("Android cannot reach the host's own services",
+          net["host_service_bridge"].startswith("BLOCKED") and net["host_service_lan"].startswith("BLOCKED"),
+          f"bridge address {net['host_service_bridge']}; LAN address {net['host_service_lan']}")
+    check("Android cannot reach the local network", net["local_network"].startswith("BLOCKED"),
+          f"10.0.2.2:8765 {net['local_network']}")
     remove = docs.get("remove") or {}
     check("the application was removed", remove.get("ok") is True, code_of("remove"), required=False)
     disable = docs.get("disable") or {}
@@ -315,6 +326,8 @@ def summarise(result: dict, checks: list[dict], out: pathlib.Path) -> None:
         "memory_used_after_disable_mib": facts.get("memory_used_after_disable_mib"),
         "container_memory_bytes": running.get("container_memory_bytes"),
         "disable_seconds": facts.get("disable_wall_seconds"),
+        "notification_server_on_bus": facts.get("notification_server"),
+        "binder_buffer_failures": facts.get("binder_buffer_failures"),
     }
     result.update({"checks": checks, "measured": measured, "facts": facts})
     (out / "android.json").write_text(json.dumps(result, indent=2) + "\n")

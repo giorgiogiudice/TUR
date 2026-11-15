@@ -309,6 +309,13 @@ check "Waydroid's launcher entries are hidden and claim no APK file" bash -c \
          grep -qx "NoDisplay=true" "/usr/share/applications/$f.desktop" || exit 1
      done
      ! grep -rqs vnd.android.package-archive /usr/share/applications/*.desktop'
+check "the Android bridge is in TUR's zone, not trusted: DHCP and DNS to the host, the internet but not the local network" bash -c \
+    'firewall-offline-cmd --info-zone=tur-android | grep -q "interfaces: waydroid0" &&
+     firewall-offline-cmd --info-zone=tur-android | grep -q "services: dhcp dns" &&
+     ! firewall-offline-cmd --info-zone=trusted | grep -q waydroid0 &&
+     firewall-offline-cmd --info-policy=tur-android-out | grep -q "192.168.0.0/16"'
+check "Waydroid can share the clipboard (pyclip and wl-clipboard)" bash -c \
+    'rpm -q python3-pyclip wl-clipboard && python3 -I -c "import pyclip"'
 check "tur-android's image pins name the VANILLA image by SHA-256" bash -c \
     'jq -e ".images | length == 2 and all(.[]; (.sha256 | length) == 64) and (.[0].file | test(\"VANILLA\"))" \
          /usr/share/tur/android/images.json'

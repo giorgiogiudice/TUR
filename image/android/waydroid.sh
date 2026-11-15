@@ -70,6 +70,15 @@ grep -qx 'ConditionPathExists=/var/lib/tur/android/enabled' \
     || die "TUR's drop-in for the container service is missing"
 test -s /usr/lib/systemd/system/dev-binderfs.mount || die "dev-binderfs.mount is missing"
 
+# The Android bridge's firewall (image/rootfs/usr/lib/firewalld): the zone
+# tur-android, which binds waydroid0 before Waydroid's patch can put it in
+# "trusted", and the policy tur-android-out. Both must be valid for firewalld.
+firewall-offline-cmd --check-config || die "firewalld's configuration is not valid"
+firewall-offline-cmd --info-zone=tur-android
+firewall-offline-cmd --info-policy=tur-android-out
+firewall-offline-cmd --info-zone=tur-android | grep -q 'interfaces: waydroid0' \
+    || die "waydroid0 is not bound to the zone tur-android"
+
 # Waydroid's launcher entries: hidden, and no claim on files or links.
 for entry in Waydroid.desktop waydroid.market.desktop waydroid.app.install.desktop; do
     file="/usr/share/applications/${entry}"
