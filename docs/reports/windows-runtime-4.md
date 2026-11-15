@@ -11,7 +11,7 @@ Source revision:  @REVISION@ (windows-on-image, pull request 136)
 
 SUMMARY
 - What changed: the TUR image carries Wine. Fedora 45's own packages,
-  Wine 11.20 for x86-64 in Fedora's "new WoW64" build, pinned by SHA-256
+  Wine 11.21 for x86-64 in Fedora's "new WoW64" build, pinned by SHA-256
   (image/wine/wine.lock, written by image/wine/lock.py from Fedora's
   repository metadata), downloaded in a build stage and installed with rpm,
   without network, first in the final stage. tur-runtime installs an
@@ -32,7 +32,7 @@ Fedora's `wine.spec` on the f45 branch:
 
 | | |
 |---|---|
-| Wine in Fedora 45 | 11.0-3.fc44 in the release tree; **11.20-1.fc45 in updates** (what a Fedora 45 system installs today); 11.21 in updates-testing. Fedora follows Wine's development releases |
+| Wine in Fedora 45 | 11.0-3.fc44 in the release tree; 11.20-1.fc45 in updates on 14 November, **11.21-1.fc45 in updates on 15 November** (what a Fedora 45 system installs). Fedora follows Wine's development releases |
 | How it is built | `%bcond new_wow64 1` for Fedora ≥ 43: x86-64 Wine is configured with `--enable-archs=i386,x86_64` and installs into `/usr/lib64/wine-wow64/wine/{x86_64-windows,i386-windows,x86_64-unix}`. 32-bit Windows programs run inside the 64-bit Wine through WoW64; no 32-bit Linux library is needed. The i686 `wine-core` (726 MB) still exists, for the old mode, and is not needed |
 | What new WoW64 cannot do, upstream | 16-bit Windows programs (Win16, DOS) are not supported in WoW64 mode; 32-bit OpenGL is slower (buffers mapped through 64-bit memory). Neither was measured here |
 | `wine-core` x86-64 | 260 MB to download, **1 538 MB installed** (both architectures' DLLs, 836 i386 and 758 x86-64 files) |
@@ -64,7 +64,7 @@ section 3: @SIZE_DELTA@.
   whatever the mirrors hold that hour. The lock is the same mechanism the
   branding and font packages use, plus a second source (Koji) because the
   updates repository drops old builds within days.
-- *11.20 from updates, not 11.0 from the release tree.* It is what a
+- *11.21 from updates, not 11.0 from the release tree.* It is what a
   Fedora 45 system has, and the base image takes Fedora's updates at every
   re-pin; 11.0 is ten months older. When the base is re-pinned, rerun
   `image/wine/lock.py` in the same pull request: rpm refuses a lock that no
@@ -86,7 +86,7 @@ section 3: @SIZE_DELTA@.
 | Where | What |
 |---|---|
 | `image/wine/lock.py` | Reads Fedora 45's repository metadata (release + updates, never updates-testing), resolves the dependencies of the ten packages TUR wants against the base's package list (from the image's SBOM), writes `wine.lock`: file, SHA-256, size, licence, Fedora path, Koji path, why |
-| `image/wine/wine.lock` | 82 packages, 298 449 246 bytes to download |
+| `image/wine/wine.lock` | @LOCK_COUNT@ |
 | `image/wine/wine.sh` | `fetch` (stage `wine`, the only step with network; Fedora's repository, its mirror redirector, then Koji; each checked) and `install` (final stage, no network: checksum and licence again, one `rpm -i --nosignature --notriggers` transaction at the build ID's date, then `wine --version`, the alternatives links, both DLL directories, and that nothing registered Wine for `.exe` files) |
 | `image/Containerfile` | Stage `wine`; the install first in the final stage |
 | `tests/image/smoke.sh` | Every package of the lock at its version; `wine --version` is 11.x; the links; both architectures' DLLs and WoW64's; the Direct3D DLLs `alternatives` manages; no i686 Wine, Mono, Gecko; no `wine`/`wine-desktop`/`wine-systemd`, binfmt entry or desktop entry for Wine; ntsync; xwininfo |
@@ -125,7 +125,7 @@ section 3: @SIZE_DELTA@.
    to download them from WineHQ (follow-up below). Recommended: ship Mono
    (it is what makes the commonest class of small Windows tools run), not
    Gecko; measure a .NET application first.
-2. **Updating Wine.** The lock pins 11.20. Fedora moves Wine every two
+2. **Updating Wine.** The lock pins 11.21. Fedora moves Wine every two
    weeks. Recommended: refresh the lock with every base re-pin (one command;
    rpm refuses a lock that does not fit), so Wine follows Fedora's updates
    like the rest of the image.

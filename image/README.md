@@ -223,7 +223,7 @@ decision and the measurements are in
 
 | In the image | What |
 |---|---|
-| `wine-core` (Wine 11.20) and `wine-filesystem` | The loader, the Wine server, and the Windows DLLs of both architectures in `/usr/lib64/wine-wow64/wine/{x86_64,i386}-windows`. Fedora builds x86-64 Wine in "new WoW64" mode: a 32-bit Windows program runs in the 64-bit Wine, without any 32-bit Linux library. No i686 package is installed |
+| `wine-core` (Wine 11.21) and `wine-filesystem` | The loader, the Wine server, and the Windows DLLs of both architectures in `/usr/lib64/wine-wow64/wine/{x86_64,i386}-windows`. Fedora builds x86-64 Wine in "new WoW64" mode: a 32-bit Windows program runs in the 64-bit Wine, without any 32-bit Linux library. No i686 package is installed |
 | `/usr/bin/wine`, `/usr/bin/wineserver` | Links that `alternatives` manages (to `wine64`, `wineserver64`), made by `wine-core`'s own scriptlet at build time; so are the links of Wine's Direct3D DLLs |
 | `wine-pulseaudio`, `wine-alsa`, `wine-cms`, `wine-ldap`, `wine-smartcard`, `wine-twain`, `wine-opencl` | The parts of Fedora's `wine` package that are drivers for sound, colour management, directory, smart-card, scanner and OpenCL |
 | `wine-winefonts` and the fonts it names | Wine's own fonts (Tahoma, Marlett, …) and the Liberation fonts it substitutes for Arial, Times New Roman and Courier New |

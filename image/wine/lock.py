@@ -174,24 +174,50 @@ def main() -> int:
         for root in ROOTS:
             name, _, arch = root.rpartition(".")
             queue.append((package(name, arch), "wanted"))
-        while queue:
-            row, reason = queue.pop(0)
-            if row["name"] in chosen or row["name"] in installed:
-                continue
-            chosen[row["name"]], why[row["name"]] = row, reason
-            for (capability,) in db.execute("select distinct name from req where pid=?", (row["id"],)):
-                if capability.startswith(("rpmlib(", "(")):
-                    continue  # rpm's own features; rich dependencies (all conditional here)
-                names = {r["name"] for r in db.execute(
-                    "select pkg.name from prov join pkg on pkg.id=prov.pid where prov.name=?", (capability,))}
-                if not names:
-                    raise SystemExit(f"{row['name']} needs {capability}, which no package provides")
-                if names & installed or names & set(chosen):
+        def providers(capability: str) -> set[str]:
+            return {r["name"] for r in db.execute(
+                "select pkg.name from prov join pkg on pkg.id=prov.pid where prov.name=?", (capability,))}
+
+        def present(capability: str) -> bool:
+            return bool(providers(capability) & (installed | set(chosen)))
+
+        # Conditional dependencies, "(A if B)": A is needed once B is there,
+        # whether B is the base's or the lock's. They are looked at again
+        # whenever the lock grows, until nothing changes.
+        conditional: list[tuple[str, str, str]] = []
+
+        def need(capability: str, wanted_by: str) -> None:
+            if capability.startswith("rpmlib("):
+                return  # rpm's own features
+            if capability.startswith("("):
+                match = re.fullmatch(r"\((\S+)(?: [<>=]+ \S+)? if (\S+)(?: [<>=]+ \S+)?\)", capability)
+                if not match:
+                    raise SystemExit(f"{wanted_by} needs {capability}, which this tool cannot read")
+                conditional.append((match.group(1), match.group(2), wanted_by))
+                return
+            names = providers(capability)
+            if not names:
+                raise SystemExit(f"{wanted_by} needs {capability}, which no package provides")
+            if names & installed or names & set(chosen):
+                return
+            if len(names) > 1:
+                print(f"note: {capability} ({wanted_by}) is provided by {sorted(names)}; "
+                      f"taking {sorted(names)[0]}", file=sys.stderr)
+            queue.append((package(sorted(names)[0]), f"{wanted_by} needs {capability}"))
+
+        while True:
+            while queue:
+                row, reason = queue.pop(0)
+                if row["name"] in chosen or row["name"] in installed:
                     continue
-                if len(names) > 1:
-                    print(f"note: {capability} ({row['name']}) is provided by {sorted(names)}; "
-                          f"taking {sorted(names)[0]}", file=sys.stderr)
-                queue.append((package(sorted(names)[0]), f"{row['name']} needs {capability}"))
+                chosen[row["name"]], why[row["name"]] = row, reason
+                for (capability,) in db.execute("select distinct name from req where pid=?", (row["id"],)):
+                    need(capability, row["name"])
+            for wanted, condition, wanted_by in list(conditional):
+                if present(condition) and not present(wanted):
+                    need(wanted, f"{wanted_by} (as {condition} is installed)")
+            if not queue:
+                break
 
         today = datetime.date.today().isoformat()
         wine = chosen["wine-core"]
