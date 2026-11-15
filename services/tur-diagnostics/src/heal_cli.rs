@@ -400,9 +400,7 @@ pub(crate) fn run(command: HealCommand) -> Result<ExitCode, DiagError> {
             let found = notices(&catalogue()?, &state, &shown, &reported_codes());
             let (delivered, waiting) = notify(&found, &mut shown);
             write_shown(&shown)?;
-            eprintln!(
-                "tur-heal: {delivered} notice(s) shown; {waiting} wait for the next session"
-            );
+            eprintln!("tur-heal: {delivered} notice(s) shown; {waiting} wait for the next session");
             Ok(ExitCode::SUCCESS)
         }
         HealCommand::History { json, limit, heal } => {
@@ -428,9 +426,9 @@ pub(crate) fn run(command: HealCommand) -> Result<ExitCode, DiagError> {
         }
         HealCommand::Decline { code, heal } => {
             let catalogue = catalogue()?;
-            let fault = catalogue
-                .fault(&code)
-                .ok_or_else(|| DiagError::new(ErrorKind::HealUnknown, format!("no fault {code}")))?;
+            let fault = catalogue.fault(&code).ok_or_else(|| {
+                DiagError::new(ErrorKind::HealUnknown, format!("no fault {code}"))
+            })?;
             record_declined("report-declined", Some(&code), &fault.title)?;
             // The offer is answered: its notices are not shown again.
             let state = HealState::load(&heal.paths().state)?;
@@ -441,7 +439,10 @@ pub(crate) fn run(command: HealCommand) -> Result<ExitCode, DiagError> {
                 }
             }
             write_shown(&shown)?;
-            println!("Recorded: you do not want to send a report about \"{}\".", fault.title);
+            println!(
+                "Recorded: you do not want to send a report about \"{}\".",
+                fault.title
+            );
             Ok(ExitCode::SUCCESS)
         }
         HealCommand::Report {
@@ -518,7 +519,10 @@ fn notify(found: &[Notice], shown: &mut BTreeSet<u64>) -> (usize, usize) {
         if show_on_desktop("TUR: earlier messages", &body) {
             shown.extend(summed.iter().map(|notice| notice.id));
             delivered += summed.len();
-            eprintln!("tur-heal: {} earlier notice(s) summed up in one", summed.len());
+            eprintln!(
+                "tur-heal: {} earlier notice(s) summed up in one",
+                summed.len()
+            );
         } else {
             // Not shown: the newest are not shown either, so that order is kept.
             return (0, found.len());
@@ -533,9 +537,15 @@ fn notify(found: &[Notice], shown: &mut BTreeSet<u64>) -> (usize, usize) {
         if show_on_desktop(&format!("TUR: {}", notice.title), &body) {
             shown.insert(notice.id);
             delivered += 1;
-            eprintln!("tur-heal: notice {} shown ({}, {:?})", notice.id, notice.code, notice.kind);
+            eprintln!(
+                "tur-heal: notice {} shown ({}, {:?})",
+                notice.id, notice.code, notice.kind
+            );
         } else {
-            eprintln!("tur-heal: notice {} could not be shown; it waits", notice.id);
+            eprintln!(
+                "tur-heal: notice {} could not be shown; it waits",
+                notice.id
+            );
             break;
         }
     }
@@ -574,9 +584,8 @@ pub(crate) fn record_declined(
         title: title.to_owned(),
         report_id: None,
     };
-    let line = serde_json::to_string(&entry).map_err(|error| {
-        DiagError::new(ErrorKind::Internal, error.to_string())
-    })?;
+    let line = serde_json::to_string(&entry)
+        .map_err(|error| DiagError::new(ErrorKind::Internal, error.to_string()))?;
     let mut file = fs::OpenOptions::new()
         .create(true)
         .append(true)

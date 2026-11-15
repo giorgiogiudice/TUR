@@ -222,7 +222,13 @@ fn cases() -> Vec<Case> {
             "heal_history",
             json!({}),
             vec!["heal", "history"],
-            vec!["/usr/bin/tur-diag", "heal", "history", "--json", "--limit=50"],
+            vec![
+                "/usr/bin/tur-diag",
+                "heal",
+                "history",
+                "--json",
+                "--limit=50",
+            ],
         ),
         (
             "heal_explain",

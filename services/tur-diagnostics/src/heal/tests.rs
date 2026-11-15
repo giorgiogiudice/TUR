@@ -984,24 +984,57 @@ fn an_automatic_repair_is_told_and_so_is_whether_it_held() {
     let catalogue = catalogue();
     let mut state = empty_state();
     for _ in 0..2 {
-        scan(&machine, &catalogue, &paths, &mut state, &running("b1"), &Fixes::default(), true);
+        scan(
+            &machine,
+            &catalogue,
+            &paths,
+            &mut state,
+            &running("b1"),
+            &Fixes::default(),
+            true,
+        );
     }
     let shown = notices(&catalogue, &state, &BTreeSet::new(), &BTreeSet::new());
     let kinds: Vec<EventKind> = shown.iter().map(|notice| notice.kind).collect();
     assert_eq!(kinds, [EventKind::Repaired, EventKind::Held]);
-    assert!(shown[0].body.contains("TUR did this by itself"), "{}", shown[0].body);
-    assert!(shown[1].body.starts_with("The repair TUR made by itself held"), "{}", shown[1].body);
+    assert!(
+        shown[0].body.contains("TUR did this by itself"),
+        "{}",
+        shown[0].body
+    );
+    assert!(
+        shown[1]
+            .body
+            .starts_with("The repair TUR made by itself held"),
+        "{}",
+        shown[1].body
+    );
     // Every notice says where to see more.
     for notice in &shown {
-        assert_eq!(notice.actions.last().map(String::as_str), Some(HISTORY_COMMAND));
+        assert_eq!(
+            notice.actions.last().map(String::as_str),
+            Some(HISTORY_COMMAND)
+        );
     }
     // A repair a person made is not followed by a "held" notice: they saw it.
     let time = base()
         .with_command(TIME_LINE, printed("NTP=no\nCanNTP=yes\n"))
         .with_command("timedatectl set-ntp true", printed(""))
-        .with_effect("timedatectl set-ntp true", TIME_LINE, printed("NTP=yes\nCanNTP=yes\n"));
+        .with_effect(
+            "timedatectl set-ntp true",
+            TIME_LINE,
+            printed("NTP=yes\nCanNTP=yes\n"),
+        );
     let mut state = empty_state();
-    scan(&time, &catalogue, &paths, &mut state, &running("b1"), &Fixes::default(), true);
+    scan(
+        &time,
+        &catalogue,
+        &paths,
+        &mut state,
+        &running("b1"),
+        &Fixes::default(),
+        true,
+    );
     apply(
         &time,
         &catalogue,
@@ -1011,7 +1044,15 @@ fn an_automatic_repair_is_told_and_so_is_whether_it_held() {
         &request(TIME, "enable-network-time", Actor::Person, false),
     )
     .expect("applied");
-    scan(&time, &catalogue, &paths, &mut state, &running("b1"), &Fixes::default(), true);
+    scan(
+        &time,
+        &catalogue,
+        &paths,
+        &mut state,
+        &running("b1"),
+        &Fixes::default(),
+        true,
+    );
     let kinds: Vec<EventKind> = notices(&catalogue, &state, &BTreeSet::new(), &BTreeSet::new())
         .iter()
         .map(|notice| notice.kind)
@@ -1027,11 +1068,27 @@ fn the_history_names_who_acted_newest_first_with_the_persons_own_decisions() {
     let time = base()
         .with_command(TIME_LINE, printed("NTP=no\nCanNTP=yes\n"))
         .with_command("timedatectl set-ntp true", printed(""))
-        .with_effect("timedatectl set-ntp true", TIME_LINE, printed("NTP=yes\nCanNTP=yes\n"))
+        .with_effect(
+            "timedatectl set-ntp true",
+            TIME_LINE,
+            printed("NTP=yes\nCanNTP=yes\n"),
+        )
         .with_command("timedatectl set-ntp false", printed(""))
-        .with_effect("timedatectl set-ntp false", TIME_LINE, printed("NTP=no\nCanNTP=yes\n"));
+        .with_effect(
+            "timedatectl set-ntp false",
+            TIME_LINE,
+            printed("NTP=no\nCanNTP=yes\n"),
+        );
     let mut state = empty_state();
-    scan(&time, &catalogue, &paths, &mut state, &running("b1"), &Fixes::default(), true);
+    scan(
+        &time,
+        &catalogue,
+        &paths,
+        &mut state,
+        &running("b1"),
+        &Fixes::default(),
+        true,
+    );
     time.advance(60);
     let mut pax = request(TIME, "enable-network-time", Actor::Request, false);
     pax.uid = Some(1000);
@@ -1072,8 +1129,18 @@ fn the_history_names_who_acted_newest_first_with_the_persons_own_decisions() {
             ("report-declined".to_owned(), Some("you".to_owned())),
         ]
     );
-    assert!(entries[1].text.starts_with("Repaired: The clock is not kept right"), "{}", entries[1].text);
-    assert!(entries[3].text.starts_with("You chose not to send a report"));
+    assert!(
+        entries[1]
+            .text
+            .starts_with("Repaired: The clock is not kept right"),
+        "{}",
+        entries[1].text
+    );
+    assert!(
+        entries[3]
+            .text
+            .starts_with("You chose not to send a report")
+    );
 }
 
 #[test]
@@ -1084,12 +1151,22 @@ fn the_persons_own_request_says_so_and_nothing_else_may_be_claimed() {
     let machine = base()
         .with_command(TIME_LINE, printed("NTP=no\nCanNTP=yes\n"))
         .with_command("timedatectl set-ntp true", printed(""))
-        .with_effect("timedatectl set-ntp true", TIME_LINE, printed("NTP=yes\nCanNTP=yes\n"));
+        .with_effect(
+            "timedatectl set-ntp true",
+            TIME_LINE,
+            printed("NTP=yes\nCanNTP=yes\n"),
+        );
     let ask = |by: &str| {
         let text = format!(
             r#"{{"schema_version":1,"tool":"heal_apply_remedy","arguments":{{"code":"{TIME}","remedy":"enable-network-time"}}{by}}}"#
         );
-        handle_request(&machine, &catalogue, &paths, text.as_bytes(), Some("1-2-3-1000"))
+        handle_request(
+            &machine,
+            &catalogue,
+            &paths,
+            text.as_bytes(),
+            Some("1-2-3-1000"),
+        )
     };
     let refused = ask(r#","by":"service""#);
     assert_eq!(refused["error"]["code"], json!("TUR-DIAG-HEAL-010"));

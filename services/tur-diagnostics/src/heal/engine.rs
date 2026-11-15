@@ -1151,7 +1151,11 @@ fn who(actor: Option<Actor>, uid: Option<u32>) -> Option<String> {
 /// service's events (what it found, repaired by itself, verified, offered;
 /// what P@x and the person applied or undid) and the person's own report
 /// decisions.
-pub fn history(catalogue: &Catalogue, state: &HealState, person: &[PersonEntry]) -> Vec<HistoryEntry> {
+pub fn history(
+    catalogue: &Catalogue,
+    state: &HealState,
+    person: &[PersonEntry],
+) -> Vec<HistoryEntry> {
     let mut entries: Vec<HistoryEntry> = Vec::new();
     for event in &state.events {
         let title = catalogue
@@ -1170,20 +1174,20 @@ pub fn history(catalogue: &Catalogue, state: &HealState, person: &[PersonEntry])
         let version = event.version.as_deref().unwrap_or("the running version");
         let text = match event.kind {
             EventKind::Detected => format!("Found: {title}{subjects}. It waits for you."),
-            EventKind::Repaired => format!(
-                "Repaired: {title}{subjects}.{changes} Checked afterwards: it works."
-            ),
-            EventKind::NotRepaired => format!(
-                "Not repaired: {title}{subjects}. The check still finds the problem."
-            ),
+            EventKind::Repaired => {
+                format!("Repaired: {title}{subjects}.{changes} Checked afterwards: it works.")
+            }
+            EventKind::NotRepaired => {
+                format!("Not repaired: {title}{subjects}. The check still finds the problem.")
+            }
             EventKind::Held => format!("Checked again later: the repair of {title} held."),
             EventKind::ReportOffered => {
                 format!("A report to TUR's developers is offered for: {title}{subjects}.")
             }
             EventKind::Cleared => format!("Gone: {title}."),
-            EventKind::FixedByUpdate => format!(
-                "Fixed by the update to {version}: {title} has not happened again."
-            ),
+            EventKind::FixedByUpdate => {
+                format!("Fixed by the update to {version}: {title} has not happened again.")
+            }
             EventKind::RecurredAfterUpdate => format!(
                 "Happened again after the update to {version}, which was meant to fix it: {title}."
             ),
