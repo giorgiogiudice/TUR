@@ -43,6 +43,7 @@ echo "revision:  ${revision}"
     --build-arg "TUR_VERSION=${tur_version}" \
     --build-arg "TUR_BUILD_ID=${build_id}" \
     --build-arg "TUR_SOURCE_REVISION=${revision}" \
+    --build-arg "TUR_SOURCE_DATE_EPOCH=${epoch}" \
     "$@" \
     .
 

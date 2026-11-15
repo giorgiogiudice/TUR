@@ -305,8 +305,10 @@ Task D-01 was to settle the assumptions of the design's sections 5.7, 15.4 and
   container**, only text that is elided or cut.
 - **No formatting patch and no translation extraction** in `build-test`.
   `qmlformat` and `lupdate` are in the builder; `clang-format` is not.
-- **No install rules.** Nothing is installed into the image; that is the
-  build stage of the design's 15.2, wanted by D-04 or the first program.
+- **Install rules** exist since TUR-011: the kit's two libraries (`libturkit`,
+  `libturkitpax`) go into the image with the programs that use them
+  (`tur_install_modules`; image/README.md, "The desktop programs"). The
+  gallery and the test harness are not installed.
 - **`Message` takes its words as properties.** The registry loader that turns
   a code into them (specification 29.3) does not exist yet.
 - **Fixed-width text looks heavier on the dark variant** than on the light in

@@ -18,8 +18,8 @@ authority of its own: everything it does is a call on `org.tur.Agent1` that
 any program of the person could make (pax-service.md, section 3), and the
 service decides. It keeps no key and no conversation on disk.
 
-**Not on the image yet.** The image installs no desktop program (issue #59);
-section 9 lists what it will need.
+**On the image** since TUR-011 (issue #59, #106 item 1): section 9 says
+where.
 
 ---
 
@@ -253,17 +253,19 @@ The `boundary` job and `boundary.py --linked` check sources and binaries.
 
 ## 9. Installation
 
-Files, all under `desktop/apps/tur-pax-ui/data/`; nothing is installed into
-the image yet (issue #59). What the image will need:
+The install rules are in `desktop/apps/tur-pax-ui/CMakeLists.txt`; the image
+build runs them (image/README.md, "The desktop programs"; report TUR-011).
 
 | From | To |
 |---|---|
-| the built `tur-pax-ui` and `libturpaxui.so`, with `libturkit.so` and `libturkitpax.so` | `/usr/bin/tur-pax-ui`, `/usr/lib64/` (or the QML module directory the image chooses for TUR's modules) |
+| the built `tur-pax-ui` | `/usr/bin/tur-pax-ui` |
+| `libturpaxui.so`, with `libturkit.so` and `libturkitpax.so` | `/usr/lib64/tur/`, the programs' run path. The QML is inside the libraries; no QML import path is needed |
 | `data/org.tur.PaxUi.desktop` | `/usr/share/applications/org.tur.PaxUi.desktop` (launcher entry and P@x's three keys) |
 | `data/org.tur.PaxUi1.service` | `/usr/share/dbus-1/services/org.tur.PaxUi1.service` |
-| an icon `org.tur.Pax` (P@x's flame, design 5.2; the desktop file names it) | the icon theme; it does not exist yet |
-| runtime: LayerShellQt (`layer-shell-qt`), Qt 6 D-Bus, Quick, Quick Controls 2, Svg; the Inter and JetBrains Mono fonts (D-04 does not install them yet) | packages |
-| `tur-pax` and its units (pax-service.md, section 6), which the image does not install either | |
+| `dbus/org.tur.PaxUi1.xml` | `/usr/share/dbus-1/interfaces/` |
+| `data/icons/org.tur.Pax.svg`: the kit's flame (`PaxFlame.qml`'s paths) in gold on the dark tile of TUR's icon. A first draft for the owner | `/usr/share/icons/hicolor/scalable/apps/org.tur.Pax.svg`, the icon the desktop file names |
+| runtime | LayerShellQt, Qt 6 D-Bus, Quick and Quick Controls 2 are in the base image; Inter and JetBrains Mono are added by the image (`image/desktop/fonts.lock`) |
+| `tur-pax` and its units (pax-service.md, section 6) | in the image since TUR-010 |
 
 ## 10. What the service lacks
 

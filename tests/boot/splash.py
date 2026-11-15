@@ -33,6 +33,11 @@ desktop, `boot` waits for the guest to switch the account to TUR Light and
 takes OUT_DIR/screenshot-desktop-light.png; then it reads the guest's facts
 into OUT_DIR/desktop/ and judges them (tests/boot/desktop_checks.py). A
 required desktop check that fails fails this step.
+
+In the same session the guest then starts each of TUR's desktop programs
+(issue #59), and `boot` takes a picture of the screen for each when the
+guest says it is shown: OUT_DIR/desktop-programs/<name>.png. They are judged
+with the rest; a person looks at them.
 Run in CI only (ADR-0002).
 """
 
@@ -159,6 +164,10 @@ class DirectMachine(vm.Machine):
 # TUR Light (it counts from its own start, which is a moment after QEMU's).
 LIGHT_AFTER = 30
 
+# The pictures of TUR's desktop programs, in the order the guest's desktop
+# check shows them (tests/boot/guest/.../desktop-check, "show").
+PROGRAMS = ["settings", "centre", "centre-app", "pax-ask", "pax-setup", "pax-keys"]
+
 
 def wait_for_marker(machine: vm.Machine, log: pathlib.Path, marker: str, timeout: float) -> bool:
     """Wait until the guest prints TUR-BOOT-TEST: <marker> on the serial console."""
@@ -243,14 +252,39 @@ def boot(work: pathlib.Path, out: pathlib.Path, seconds: int) -> int:
             shot = vm.screenshot(qmp, work, out / "screenshot-desktop-light.png")
             shot["at_seconds"] = round(time.monotonic() - started, 1)
             result["desktop_light"] = shot
-            (out / "screenshot-desktop-light.ppm.tmp").unlink(missing_ok=True)
-        result["desktop_check_sent"] = machine.alive() and wait_for_marker(machine, log, "DESKTOP-CHECK-DONE sent", 150)
+            shutil.move(out / "screenshot-desktop-light.ppm.tmp", work / "splash-light.ppm")
+        # Issue #59: the guest starts each desktop program and says when it
+        # is shown; a picture of each, and how much of the screen differs
+        # from the light desktop.
+        pictures = out / "desktop-programs"
+        pictures.mkdir(parents=True, exist_ok=True)
+        result["programs"] = []
+        for name in PROGRAMS:
+            record: dict = {"name": name, "file": None}
+            result["programs"].append(record)
+            if not machine.alive() or not wait_for_marker(machine, log, f"DESKTOP-PROGRAM-SHOWN {name} ", 150):
+                break
+            time.sleep(2)
+            target = pictures / f"{name}.png"
+            try:
+                shot = vm.screenshot(qmp, work, target)
+            except Exception as error:  # noqa: BLE001 - recorded, judged later
+                record["error"] = str(error)
+                continue
+            raw = target.with_suffix(".ppm.tmp")
+            record.update(file=str(target.relative_to(out)), at_seconds=round(time.monotonic() - started, 1),
+                          changed_from_light_desktop=vm.changed_fraction(work / "splash-light.ppm", raw), **shot)
+            raw.unlink(missing_ok=True)
+        result["desktop_check_sent"] = machine.alive() and wait_for_marker(machine, log, "DESKTOP-CHECK-DONE sent", 240)
     finally:
         machine.quit()
         machine.variables.unlink(missing_ok=True)
     (shots / "splash.json").write_text(json.dumps(result, indent=2) + "\n")
     print(f"{len(result['frames'])} frames in {shots}; desktop: {result['desktop']}")
     print(f"light desktop: {result.get('desktop_light')}; facts sent: {result.get('desktop_check_sent')}")
+    for record in result.get("programs", []):
+        print(f"program {record['name']}: {record.get('file')}, changed from the light desktop: "
+              f"{record.get('changed_from_light_desktop')}")
     unpack_desktop_facts(machine.report_tar, out / "desktop")
     return desktop_checks.write(out, desktop_checks.judge(out))
 

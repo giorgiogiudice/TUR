@@ -96,6 +96,17 @@ target_compile_definitions(tur-settings PRIVATE TUR_VERSION="${PROJECT_VERSION}"
 target_link_libraries(tur-settings PRIVATE Qt6::Core Qt6::Gui Qt6::Qml Qt6::DBus)
 tur_link_qml_modules(tur-settings turkit turkitpax tursettings)
 
+# Into the image: the program, its module's library, its launcher entry, its
+# bus activation file, its entry in KDE System Settings' side list
+# (configuration, not a module: desktop-experience.md, 10.1) and its
+# interface descriptions.
+tur_install_program(tur-settings)
+tur_install_modules(tursettings)
+tur_install_data(applications data/org.tur.Settings.desktop)
+tur_install_data(dbus-1/services data/org.tur.Settings1.service)
+tur_install_data(plasma/systemsettings/externalmodules data/systemsettings/org.tur.Settings.desktop)
+tur_install_data(dbus-1/interfaces dbus/org.tur.Settings1.xml dbus/org.tur.Addressable1.xml)
+
 # The program starts on each page, on a row and on a link, and reports no QML
 # warning. An address it cannot open is refused, and it says so.
 set(settings_fixtures ${CMAKE_CURRENT_SOURCE_DIR}/fixtures)

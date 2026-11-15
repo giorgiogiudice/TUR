@@ -91,6 +91,32 @@ Inside the builder the steps are `ci/build.sh ci`, `ci/test.sh ci`,
 `ci/lint.sh ci`, `ci/screenshots.sh ci`, each a few lines around `cmake
 --preset`, `ctest --preset` and the `all_qmllint` target.
 
+## Into the image
+
+`tur-centre`, `tur-settings`, `tur-pax-ui` and `tur-pax-overlay` are in the
+TUR image (issue #59). The image build compiles them itself, in a stage that
+starts from the image's base and uses its own Qt
+([image/README.md](../image/README.md), "The desktop programs"); it does not
+take them from this workflow's builder.
+
+What is installed is the CMake component `image`:
+
+```cmake
+tur_install_program(tur-centre)                              # /usr/bin
+tur_install_modules(turcentre)                               # /usr/lib64/tur
+tur_install_data(applications data/org.tur.Centre.desktop)   # /usr/share/...
+```
+
+The libraries of the QML modules carry their QML as resources, and a program
+links the libraries of the modules it uses (`tur_link_qml_modules`), so an
+installed program needs no QML import path: its run path names
+`/usr/lib64/tur`. Tests, the gallery, the probe and the installer's wizard
+have no install rule and are not built for the image.
+
+The same rules that hold in this workflow hold there: the image stage runs
+`ci/boundary.py --linked` on what it installed, starts every program
+offscreen and requires that no QML warning is reported.
+
 ## Reference images
 
 A reference image says "this picture is what the design intends". The
