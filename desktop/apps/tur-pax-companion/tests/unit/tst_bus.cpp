@@ -385,8 +385,13 @@ private Q_SLOTS:
         QVERIFY2(!m_bus->agentOwned(), "stopping started P@x's service");
         QVERIFY(!who->source.problem().isEmpty());
 
-        // When P@x is started by someone else, the character wakes.
+        // When P@x is started by someone else, the character wakes. The
+        // stand-in takes its name before it is told its scenario and does
+        // not signal the change, where the service signals StateChanged
+        // when it is switched on; the client asks again, as it does on
+        // that signal.
         QVERIFY(scenario(QStringLiteral("ready")));
+        who->source.client()->refresh();
         QTRY_VERIFY_WITH_TIMEOUT(who->companion.paxOn(), 15000);
         QCOMPARE(who->companion.state(), QStringLiteral("idle"));
         // And sleeps again when it goes.

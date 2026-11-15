@@ -8,6 +8,7 @@
 #include <QObject>
 #include <QPointer>
 #include <QString>
+#include <QStringList>
 #include <QVariant>
 #include <QVariantMap>
 #include <QtQml/qqmlregistration.h>
@@ -101,7 +102,10 @@ private:
     struct Running {
         double startedAt = 0;
         bool attended = true;
-        int refused = 0;
+        // The steps refused, by their audit identifier: the service reports
+        // a refused step twice, when it is proposed and when it is
+        // completed (fixtures/agent1/tasks/refused.json).
+        QStringList refused;
         QString lastRefusal;
     };
 

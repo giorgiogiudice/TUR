@@ -163,7 +163,11 @@ void AgentSource::onStep(const QString &task, const QVariant &step)
     const QString state = said.value(QStringLiteral("state")).toString();
     if (state == QLatin1String("refused")) {
         Running &running = m_tasks[task];
-        ++running.refused;
+        QString which = said.value(QStringLiteral("audit_id")).toString();
+        if (which.isEmpty())
+            which = QStringLiteral("index:") + said.value(QStringLiteral("index")).toString();
+        if (!running.refused.contains(which))
+            running.refused.append(which);
         running.lastRefusal = said.value(QStringLiteral("message")).toString();
     }
     if (!m_companion)
@@ -203,11 +207,12 @@ void AgentSource::onTaskFinished(const QString &task, const QVariant &result)
         return;
     }
     if (outcome == QLatin1String("completed")) {
-        if (running.refused > 0) {
+        if (!running.refused.isEmpty()) {
+            const int refused = int(running.refused.size());
             m_companion->flag(QStringLiteral("refused"));
             notice.insert(QStringLiteral("sentence"),
-                          running.refused == 1 ? tr("P@x finished, but one step was refused.")
-                                               : tr("P@x finished, but %1 steps were refused.").arg(running.refused));
+                          refused == 1 ? tr("P@x finished, but one step was refused.")
+                                       : tr("P@x finished, but %1 steps were refused.").arg(refused));
             notice.insert(QStringLiteral("detail"), running.lastRefusal);
         } else {
             const double took = running.startedAt > 0 ? (m_companion->now() - running.startedAt) / 1000.0 : 0;

@@ -290,11 +290,14 @@ Item {
             id: leafHover
         }
 
+        // Only its width is set: its height is the page's own, so that a
+        // page that wraps to more lines makes the leaf taller (setting the
+        // height from the implicit height was a binding loop, run
+        // 43766852343).
         Loader {
             id: holder
 
             width: leaf.width
-            height: holder.item !== null ? Math.ceil(holder.implicitHeight) : 0
             sourceComponent: {
                 switch (stage.page) {
                 case "bubble":
