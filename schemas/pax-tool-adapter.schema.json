@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/giorgiogiudice/TUR/schemas/pax-tool-adapter.schema.json",
   "title": "P@x tool adapters",
-  "description": "How P@x performs the tools of one service. A tool manifest (agent-tool-manifest.schema.json) says what a tool is: its name, its class and the shape of its input. An adapter says how the tool is performed today, while the D-Bus services the manifests name do not exist: by running a TUR command-line program in the read-only sandbox and returning what it prints. An adapter never adds a tool and never states a class. The loader in services/tur-pax (src/adapter.rs, src/registry.rs) is authoritative. It also enforces rules this schema cannot express: the service and every tool must be declared by a loaded manifest; a tool has at most one adapter; every input an argument refers to must be declared by the tool's input schema, with type string or integer for 'input', boolean for 'when' and array of string or integer for 'each'; and a path may have no empty, '.' or '..' component and no control character.",
+  "description": "How P@x performs the tools of one service. A tool manifest (agent-tool-manifest.schema.json) says what a tool is: its name, its class and the shape of its input. An adapter says how the tool is performed today, while the D-Bus services the manifests name do not exist: by running a TUR command-line program in the read-only sandbox and returning what it prints, or by sending a request to a TUR service over its socket under /run/tur/. An adapter never adds a tool and never states a class. The loader in services/tur-pax (src/adapter.rs, src/registry.rs) is authoritative. It also enforces rules this schema cannot express: the service and every tool must be declared by a loaded manifest; a tool has at most one adapter; every input an argument refers to must be declared by the tool's input schema, with type string or integer for 'input', boolean for 'when' and array of string or integer for 'each'; and a path may have no empty, '.' or '..' component and no control character.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "service", "adapters"],
@@ -69,7 +69,27 @@
       "description": "How one tool is performed.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["tool", "kind", "program"],
+      "required": ["tool", "kind"],
+      "oneOf": [
+        {
+          "properties": { "kind": { "const": "command" } },
+          "required": ["program"],
+          "not": { "required": ["socket"] }
+        },
+        {
+          "properties": { "kind": { "const": "request" } },
+          "required": ["socket"],
+          "not": {
+            "anyOf": [
+              { "required": ["program"] },
+              { "required": ["arguments"] },
+              { "required": ["reads"] },
+              { "required": ["feed"] },
+              { "required": ["success_exit_codes"] }
+            ]
+          }
+        }
+      ],
       "properties": {
         "tool": {
           "description": "The name of a tool the service's manifest declares.",
@@ -77,10 +97,16 @@
           "pattern": "^[a-z][a-z0-9_]{0,63}$"
         },
         "kind": {
-          "description": "How the tool is performed. command: run a program in the read-only sandbox. This is the only kind.",
-          "const": "command"
+          "description": "How the tool is performed. command: run a program in the read-only sandbox. request: send the tool's name and its validated input, as one line of JSON ({\"schema_version\": 1, \"tool\": ..., \"arguments\": ...}), to a TUR service over its Unix socket, and return the service's answer; the call succeeded when the answer has \"ok\": true. The service decides and performs, under its own rules (ADR-0027).",
+          "enum": ["command", "request"]
         },
         "program": { "$ref": "#/$defs/path" },
+        "socket": {
+          "description": "For a request adapter: the service's Unix socket, under /run/tur/.",
+          "type": "string",
+          "pattern": "^/run/tur/[^/]",
+          "maxLength": 4096
+        },
         "arguments": {
           "description": "The arguments of the program, in order.",
           "type": "array",

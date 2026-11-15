@@ -1,0 +1,193 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Self-healing (ADR-0027, docs/architecture/self-healing.md): build the image,
+# install it to a disk, prepare the disk with the boot test's first two boots,
+# then boot it once more with faults injected (tests/boot/heal.py and the
+# guest's heal-agent): a failed service, network time off, a replaced
+# resolver file, a full /var and a crash of a TUR program. TUR's healing
+# service finds, repairs and verifies them; P@x (scripted provider) and the
+# person act through its socket; a report goes to a stand-in receiver only
+# when the person confirms; one restart proves the link from a fix in an
+# update back to the fault.
+name: heal
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "image/**"
+      - "services/tur-diagnostics/**"
+      - "services/tur-pax/**"
+      - "services/tur-pax-providers/**"
+      - "services/tur-pax-memory/**"
+      - "crates/**"
+      - "rust-toolchain.toml"
+      - "tests/boot/**"
+      - "tests/pax/fake_provider.py"
+      - "schemas/heal-*.json"
+      - "scripts/build-image.sh"
+      - "VERSION"
+      - ".github/workflows/heal.yml"
+  pull_request:
+    paths:
+      - "image/**"
+      - "services/tur-diagnostics/**"
+      - "services/tur-pax/**"
+      - "services/tur-pax-providers/**"
+      - "services/tur-pax-memory/**"
+      - "crates/**"
+      - "rust-toolchain.toml"
+      - "tests/boot/**"
+      - "tests/pax/fake_provider.py"
+      - "schemas/heal-*.json"
+      - "scripts/build-image.sh"
+      - "VERSION"
+      - ".github/workflows/heal.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: heal-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PODMAN: sudo podman
+  IMAGE: localhost/tur:ci
+  OUT: out/heal
+  PREPARE: out/heal/prepare
+
+jobs:
+  lint:
+    name: Lint the self-healing test scripts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Lint
+        run: |
+          shellcheck --version | sed -n 2p
+          shellcheck -x tests/boot/guest/rootfs/usr/libexec/tur-boot-test/heal-agent
+          python3 -m py_compile tests/boot/heal.py
+          for script in heal-pax heal-receiver; do
+            python3 -c 'import ast, sys; ast.parse(open(sys.argv[1]).read(), sys.argv[1])' \
+              "tests/boot/guest/rootfs/usr/libexec/tur-boot-test/${script}"
+          done
+          python3 - <<'EOF'
+          import json
+          for path in ("services/tur-diagnostics/heal/catalogue.json", "image/rootfs/usr/share/tur/heal/fixes.json",
+                       "schemas/heal-catalogue.schema.json", "schemas/heal-fixes.schema.json"):
+              json.load(open(path))
+          print("JSON files parse")
+          EOF
+
+  heal:
+    name: Inject faults into a booted TUR and let it heal
+    runs-on: ubuntu-24.04
+    timeout-minutes: 110
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - uses: ./.github/actions/use-base-mirror
+
+      - name: Runner environment
+        run: |
+          echo "podman: $(podman --version)"
+          echo "kernel: $(uname -r)"
+          echo "cpus:   $(nproc) ($(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2 | xargs))"
+          free -g | sed -n 2p
+          df -h / /mnt 2>/dev/null || df -h /
+          mkdir -p "$PREPARE/host"
+
+      # Hosted runners expose /dev/kvm but not to the runner user. The udev rule
+      # is the method GitHub documents (see .github/workflows/boot.yml).
+      - name: Enable KVM for the runner user
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          sudo udevadm settle
+          ls -la /dev/kvm
+
+      # No software-emulation fallback (ADR-0002): without KVM the job stops here.
+      - name: Verify KVM
+        run: python3 tests/boot/check-kvm.py "$PREPARE/host/kvm.json"
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache/CodeQL
+          df -h / /mnt 2>/dev/null || df -h /
+
+      - name: Choose a work directory
+        run: |
+          work="$RUNNER_TEMP/tur-boot"
+          here=$(df --output=avail -B1G "$RUNNER_TEMP" | tail -1 | tr -d ' G')
+          if [ -d /mnt ]; then
+            there=$(df --output=avail -B1G /mnt | tail -1 | tr -d ' G')
+            if [ "$there" -gt "$here" ]; then
+              sudo mkdir -p /mnt/tur-boot
+              sudo chown "$(id -u):$(id -g)" /mnt/tur-boot
+              work=/mnt/tur-boot
+            fi
+          fi
+          mkdir -p "$work"
+          echo "work directory: $work ($(df --output=avail -h "$work" | tail -1 | xargs) free)"
+          echo "WORK=$work" >> "$GITHUB_ENV"
+
+      - name: Install QEMU, UEFI firmware and zstd
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils ovmf zstd
+          qemu-system-x86_64 --version | head -1
+          qemu-img --version | head -1
+
+      - name: Build image
+        run: |
+          start=$(date +%s)
+          scripts/build-image.sh "$IMAGE" --ignorefile image/Containerfile.containerignore
+          echo "image build: $(( $(date +%s) - start )) s"
+
+      - name: Build the boot-test image and install it to a disk
+        run: tests/boot/build-disk.sh "$IMAGE" "$WORK" "$PREPARE"
+
+      # The boot test's first two boots: as installed, then with a user and
+      # first-run setup done.
+      - name: Prepare the disk (two boots)
+        run: python3 tests/boot/run-vm.py --disk "$WORK/disk.raw" --work "$WORK" --out "$PREPARE" --timeout 900 --prepare-only
+
+      - name: Inject faults and let TUR heal
+        run: python3 tests/boot/heal.py --disk "$WORK/disk.raw" --work "$WORK" --out "$OUT" --timeout 2400
+
+      - name: Summary
+        if: always()
+        run: |
+          if [ -f "$OUT/summary.md" ]; then cat "$OUT/summary.md" >> "$GITHUB_STEP_SUMMARY"; fi
+
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          show() { echo "::group::$1"; if [ -f "$1" ]; then tail -n "${2:-200}" "$1"; else echo "(absent)"; fi; echo "::endgroup::"; }
+          show "$PREPARE/host/vm-result.json"
+          for phase in phase-a phase-b; do
+            show "$OUT/guest/$phase/status"
+            show "$OUT/guest/$phase/exit-status.tsv"
+          done
+          show "$OUT/guest/phase-a/pax/stderr.txt" 60
+          show "$OUT/guest/phase-a/pax/transcript.json" 80
+          show "$OUT/host/qemu.log" 40
+          echo "::group::self-healing lines of the guest's journal"
+          grep -h -E "tur-heal|tur-diag|heal-test" "$OUT"/guest/*/journal.txt 2>/dev/null | tail -n 150 || true
+          echo "::endgroup::"
+          ls -laR "$OUT" | head -150
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: tur-heal
+          path: out/heal/
+          if-no-files-found: warn

@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Shows TUR's healing notices this person has not seen as desktop
+# notifications. Only in a graphical session.
+
+[Unit]
+Description=TUR self-healing: show notices
+ConditionEnvironment=|WAYLAND_DISPLAY
+ConditionEnvironment=|DISPLAY
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/tur-diag heal notify

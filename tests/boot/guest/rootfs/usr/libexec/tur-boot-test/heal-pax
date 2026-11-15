@@ -1,0 +1,100 @@
+#!/usr/bin/python3
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+"""P@x repairs a fault through TUR's healing service, on the booted system.
+
+    heal-pax OUT_DIR
+
+Run by heal-agent as the test user, with network time switched off and
+the healing service's scan having found it. The installed `tur-pax run`
+talks to a scripted provider (tests/pax/fake_provider.py, copied into the
+test image) with the tool sets installed in the image: P@x lists the faults,
+explains the one found, asks the service to repair it (class 1, through
+/run/tur/heal.socket), and asks for a repair that cannot be undone, which
+the service refuses. No model is called and no key exists. Everything is
+kept in OUT_DIR for the host's checks; this decides nothing.
+"""
+
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+sys.path.insert(0, "/usr/share/tur-pax-e2e/repo/tests/pax")
+from fake_provider import ScriptedProvider  # noqa: E402
+
+OUT = Path(sys.argv[1])
+OUT.mkdir(parents=True, exist_ok=True)
+TIME = "TUR-NETWORK-TIME-001"
+TURNS = [
+    {
+        "text": "I will look at what TUR has found.",
+        "calls": [
+            {"id": "toolu_list", "name": "heal_list_faults", "arguments": {}},
+            {"id": "toolu_explain", "name": "heal_explain", "arguments": {"code": TIME}},
+        ],
+    },
+    {
+        "text": "Setting the clock from the network is off. I will switch it back on.",
+        "calls": [
+            {
+                "id": "toolu_apply",
+                "name": "heal_apply_remedy",
+                "arguments": {"code": TIME, "remedy": "enable-network-time"},
+            },
+            {
+                "id": "toolu_vacuum",
+                "name": "heal_apply_remedy",
+                "arguments": {"code": "TUR-STORAGE-SPACE-001", "remedy": "vacuum-journal"},
+            },
+        ],
+    },
+    {"text": "The clock is set from the network again."},
+]
+
+provider = ScriptedProvider(TURNS, False, wire="anthropic").start()
+config = {
+    "schema_version": 1,
+    "provider": "anthropic",
+    "base_url": provider.base_url,
+    "model": "scripted-model",
+    "max_output_tokens": 1024,
+    "timeouts": {"connect_ms": 5000, "response_ms": 30000, "idle_ms": 30000},
+    "retry": {"max_attempts": 1, "initial_delay_ms": 10, "max_delay_ms": 100},
+}
+(OUT / "provider.json").write_text(json.dumps(config, indent=2))
+environment = {
+    "PATH": "/usr/bin:/bin",
+    "HOME": os.environ.get("HOME", "/tmp"),
+    "XDG_RUNTIME_DIR": os.environ.get("XDG_RUNTIME_DIR", ""),
+    # Not a real key: the provider is a script on this machine.
+    "TUR_PAX_API_KEY": "sk-test-KEY-heal-0123456789abcdef",
+}
+try:
+    process = subprocess.run(
+        [
+            "/usr/bin/tur-pax",
+            "run",
+            "Setting the clock looks wrong. Can you fix it?",
+            "--json",
+            "--provider-config",
+            str(OUT / "provider.json"),
+            "--audit-log",
+            str(OUT / "audit.jsonl"),
+            "--task",
+            "heal-pax",
+        ],
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=600,
+    )
+    status, stdout, stderr = process.returncode, process.stdout, process.stderr
+except subprocess.TimeoutExpired as error:
+    status, stdout, stderr = -1, str(error.stdout or ""), f"timed out: {error}"
+(OUT / "transcript.json").write_text(stdout)
+(OUT / "stderr.txt").write_text(stderr)
+(OUT / "requests.json").write_text(json.dumps(provider.bodies(), indent=2))
+(OUT / "exit-status").write_text(f"{status}\n")
+provider.stop()
+sys.exit(0 if status == 0 else 1)

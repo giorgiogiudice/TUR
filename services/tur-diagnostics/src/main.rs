@@ -12,6 +12,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
+mod heal_cli;
+
 use tur_diag::manifest::format_utc;
 use tur_diag::report::{
     self, InspectedReport, ListedReport, PREPARED_DIR, PreparedBy, REPORT_SCHEMA_VERSION,
@@ -68,6 +70,13 @@ enum Command {
     Report {
         #[command(subcommand)]
         command: ReportCommand,
+    },
+    /// Find problems on this computer, repair what is safe to repair, check
+    /// that the repair held, and offer a report when the cause is in TUR.
+    /// Nothing is sent from here.
+    Heal {
+        #[command(subcommand)]
+        command: heal_cli::HealCommand,
     },
 }
 
@@ -235,8 +244,12 @@ impl From<PreparedByArg> for PreparedBy {
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
-    match run(cli.command) {
-        Ok(()) => ExitCode::SUCCESS,
+    let result = match cli.command {
+        Command::Heal { command } => heal_cli::run(command),
+        command => run(command).map(|()| ExitCode::SUCCESS),
+    };
+    match result {
+        Ok(code) => code,
         Err(error) => {
             eprintln!("{error}");
             ExitCode::FAILURE
@@ -296,6 +309,7 @@ fn run(command: Command) -> Result<(), DiagError> {
             Ok(())
         }
         Command::Report { command } => run_report(&host, command),
+        Command::Heal { command } => heal_cli::run(command).map(|_| ()),
     }
 }
 
@@ -436,34 +450,7 @@ fn run_report(host: &SystemHost, command: ReportCommand) -> Result<(), DiagError
             if let Some(kind) = kind {
                 request.kind = kind.into();
             }
-            // A configuration that cannot be read does not stop a report from
-            // being prepared; it is reported when sending.
-            let receiver = report::load_config(places.config.as_deref())
-                .ok()
-                .and_then(|config| config.receiver_url);
-            let known = gather_known_identifiers(host, &session_users());
-            let prepared = report::prepare(host, &request, since_boot, now(), known)?;
-            let saved = if preview {
-                None
-            } else {
-                let path = match output {
-                    Some(path) => path,
-                    None => {
-                        let directory = state_dir(&places)?.join(PREPARED_DIR);
-                        report::ensure_private_dir(&directory)?;
-                        directory.join(report::prepared_file_name(&prepared))
-                    }
-                };
-                write_bundle(&path, &prepared.archive)?;
-                Some(path)
-            };
-            let shown = report::preview(&prepared, receiver.as_deref(), saved.as_deref());
-            if json {
-                print_json(&shown)
-            } else {
-                print!("{}", report::render_preview(&shown));
-                Ok(())
-            }
+            prepare_and_show(host, &request, since_boot, preview, output, json, &places)
         }
         ReportCommand::Send {
             to,
@@ -487,6 +474,47 @@ fn run_report(host: &SystemHost, command: ReportCommand) -> Result<(), DiagError
             json,
             places,
         } => status(host, &report_id, json, &places),
+    }
+}
+
+/// Prepares a report, saves it unless `preview`, and shows what would be
+/// sent. Nothing is sent.
+fn prepare_and_show(
+    host: &SystemHost,
+    request: &ReportRequest,
+    since_boot: bool,
+    preview: bool,
+    output: Option<PathBuf>,
+    json: bool,
+    places: &Places,
+) -> Result<(), DiagError> {
+    // A configuration that cannot be read does not stop a report from
+    // being prepared; it is reported when sending.
+    let receiver = report::load_config(places.config.as_deref())
+        .ok()
+        .and_then(|config| config.receiver_url);
+    let known = gather_known_identifiers(host, &session_users());
+    let prepared = report::prepare(host, request, since_boot, now(), known)?;
+    let saved = if preview {
+        None
+    } else {
+        let path = match output {
+            Some(path) => path,
+            None => {
+                let directory = state_dir(places)?.join(PREPARED_DIR);
+                report::ensure_private_dir(&directory)?;
+                directory.join(report::prepared_file_name(&prepared))
+            }
+        };
+        write_bundle(&path, &prepared.archive)?;
+        Some(path)
+    };
+    let shown = report::preview(&prepared, receiver.as_deref(), saved.as_deref());
+    if json {
+        print_json(&shown)
+    } else {
+        print!("{}", report::render_preview(&shown));
+        Ok(())
     }
 }
 

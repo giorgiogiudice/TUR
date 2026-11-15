@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# One request to TUR's healing service, on the connection tur-heal-request.socket
+# accepted. The instance name ends with the UID of the account that connected,
+# which is recorded with what was done.
+
+[Unit]
+Description=TUR self-healing: one request
+Documentation=https://github.com/giorgiogiudice/TUR/blob/main/docs/architecture/self-healing.md
+CollectMode=inactive-or-failed
+
+[Service]
+ExecStart=/usr/bin/tur-diag heal handle --connection %i
+StandardInput=socket
+StandardOutput=socket
+StandardError=journal
+ProtectHome=yes
+PrivateTmp=yes
+TimeoutStartSec=180

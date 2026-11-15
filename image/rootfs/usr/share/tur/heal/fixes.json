@@ -1,0 +1,5 @@
+{
+  "schema_version": 1,
+  "about": "The fault codes of TUR's self-healing catalogue that a change in this image addresses (schemas/heal-fixes.schema.json; docs/architecture/self-healing.md, section 7). A pull request that fixes a fault the healing service finds adds its code here. After an update, the service checks each such fault again: gone, the person is told it is fixed; back, a report is offered again.",
+  "fixes": []
+}

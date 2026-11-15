@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# TUR's healing service (docs/architecture/self-healing.md, ADR-0027): run
+# every check of the fault catalogue, apply the repairs TUR makes by itself
+# (reversible, class 0 or 1, at most as often per boot as the catalogue
+# allows), check that earlier repairs held, and offer a report where the
+# cause is in TUR. Nothing is sent from here, and P@x is not involved.
+#
+# Started by tur-heal.timer, after the boot has settled. Not part of the boot:
+# nothing waits for it, and boot health does not count it.
+
+[Unit]
+Description=TUR self-healing: look for known problems and repair what is safe
+Documentation=https://github.com/giorgiogiudice/TUR/blob/main/docs/architecture/self-healing.md
+After=tur-boot-health.service time-set.target network.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/tur-diag heal scan --repair
+ProtectHome=yes
+PrivateTmp=yes
+TimeoutStartSec=600
+Nice=10
+IOSchedulingClass=idle

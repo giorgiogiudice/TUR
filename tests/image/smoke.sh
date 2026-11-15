@@ -199,11 +199,15 @@ manifest = json.load(open(sys.argv[1] + "/agent-tools.json"))
 adapters = json.load(open(sys.argv[1] + "/agent-tools.adapter.json"))
 assert manifest["service"] == adapters["service"], "the two files name different services"
 declared = {tool["name"] for tool in manifest["tools"]}
-performed = {adapter["tool"]: adapter["program"] for adapter in adapters["adapters"]}
+# A request adapter names a service socket under /run/tur/, not a program
+# (ADR-0027); its tool is still declared.
+performed = {adapter["tool"]: adapter.get("program") for adapter in adapters["adapters"]}
+assert all(adapter.get("program") or adapter.get("socket", "").startswith("/run/tur/")
+           for adapter in adapters["adapters"]), "an adapter names neither a program nor a TUR socket"
 assert performed, "no adapter at all"
 unknown = sorted(set(performed) - declared)
 assert not unknown, f"adapters for tools the manifest does not declare: {unknown}"
-missing = sorted({name for name in performed.values() if not os.access(name, os.X_OK)})
+missing = sorted({name for name in performed.values() if name and not os.access(name, os.X_OK)})
 assert not missing, f"not in the image: {missing}"
 ' "${tools}"
         echo "      offered: $(jq -r '[.adapters[].tool] | join(" ")' "${tools}/agent-tools.adapter.json")"

@@ -1,0 +1,29 @@
+{
+  "name": "heal-request",
+  "what": "Self-healing through P@x (ADR-0027): the shipped heal tools list the problems TUR's healing service found and explain one (class 0, programs in the sandbox), then ask the service, over its socket, to repair it and to undo the repair (class 1, request adapters), and ask for a repair that cannot be undone, which the service refuses. The service is tur-diag heal handle, run for each connection as systemd would, on a resolver file in a scratch root.",
+  "needs": "heal-service",
+  "request": "Web addresses stopped working after I used a VPN. Can you fix it?",
+  "turns": [
+    {
+      "text": "I will look at what TUR has found.",
+      "calls": [
+        { "id": "toolu_heal_list", "name": "heal_list_faults", "arguments": {} },
+        { "id": "toolu_heal_explain", "name": "heal_explain", "arguments": { "code": "TUR-NETWORK-RESOLVER-001" } }
+      ]
+    },
+    {
+      "text": "The resolver file was replaced. I will restore it; TUR keeps a copy.",
+      "calls": [
+        { "id": "toolu_heal_apply", "name": "heal_apply_remedy", "arguments": { "code": "TUR-NETWORK-RESOLVER-001", "remedy": "restore-resolver-link" } },
+        { "id": "toolu_heal_vacuum", "name": "heal_apply_remedy", "arguments": { "code": "TUR-STORAGE-SPACE-001", "remedy": "vacuum-journal" } }
+      ]
+    },
+    {
+      "text": "You asked me to put it back as it was.",
+      "calls": [
+        { "id": "toolu_heal_undo", "name": "heal_undo_remedy", "arguments": { "code": "TUR-NETWORK-RESOLVER-001", "remedy": "restore-resolver-link" } }
+      ]
+    },
+    { "text": "The resolver was restored, checked, and put back as you asked. Deleting old logs is yours to decide." }
+  ]
+}

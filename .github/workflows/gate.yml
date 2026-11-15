@@ -5,11 +5,30 @@
 # workflows run only when their paths change, so none of them can be a required
 # check on its own; this status can.
 #
+# The verdict is the commit STATUS named "gate" (success, failure or pending,
+# with the workflows it waits for or that failed). This workflow's own run,
+# and its check "record the gate status", only say that an evaluation ran:
+# they are green when the status they recorded is "pending" or "failure" too.
+# Do not read them as the verdict (issue #114: on pull request 112 the check
+# was green while the status was a stale "pending" and three workflows had
+# failed). `scripts/dev/ci.py pr-status N` prints the status.
+#
 # The gate does not wait on a runner. It is evaluated briefly when the pull
 # request changes and again each time one of the workflows below finishes. A
 # workflow missing from the list below is still counted, but its completion
 # does not trigger a re-evaluation; the gate then stays "pending", never a
 # false "success". Add new workflows to the list.
+#
+# What an evaluation guarantees:
+#   - "pending" while any counted workflow of the commit is queued or running;
+#   - the result of the run that triggered it is taken from the event only
+#     for the attempt the event is about, so an evaluation that waited in the
+#     queue while its run was started again does not report the old result;
+#   - right after a push, when no other run is listed yet, it looks again for
+#     a minute before it says that there is no other workflow;
+#   - after recording the status it reads the runs again and corrects the
+#     status if they say something else, so an evaluation that finishes after
+#     a newer one cannot leave an older state behind.
 #
 # It never checks out or runs code from the pull request.
 name: gate
@@ -17,7 +36,7 @@ name: gate
 on:
   pull_request:
   workflow_run:
-    workflows: [rust, image, boot, rollback, pax, desktop, windows-runtime, update, apps, iso, local-ai, reports, release-installer, windows-drivers, base-mirror, release]
+    workflows: [rust, image, boot, rollback, pax, desktop, windows-runtime, update, apps, iso, local-ai, reports, release-installer, windows-drivers, base-mirror, release, heal]
     types: [completed]
 
 permissions:
@@ -27,6 +46,39 @@ permissions:
 
 jobs:
   evaluate:
+    name: record the gate status (not the verdict)
+    # Only runs that a pull request or a push started are counted, so the end
+    # of any other run (a scheduled one, one started by hand, release's
+    # evaluations, which workflow_run starts) changes nothing: no evaluation,
+    # and no runner.
+    if: >-
+      ${{ github.event_name != 'workflow_run' ||
+          github.event.workflow_run.event == 'pull_request' || github.event.workflow_run.event == 'push' }}
+    # One evaluation per commit waits for a runner; a newer one cancels it
+    # (issue #114: workflow_run evaluations run in main's context, and with
+    # several pull requests open they were most of the queue, so the final
+    # evaluation of a commit waited hours and the status stayed a stale
+    # "pending"). Every evaluation reads the whole run list, so a cancelled
+    # one loses nothing, and the newest, created after the latest workflow
+    # finished, is the one that survives and records the status.
+    #
+    # The group is the job's, not the workflow's, and only an evaluation
+    # that the `if` above lets through is in a commit's group (any other
+    # gets a group of its own): a workflow's group is taken when the run is
+    # created, before the `if`, so the end of a run that is not counted
+    # would cancel the commit's last evaluation and then do nothing, and the
+    # status would stay "pending".
+    #
+    # The pull_request evaluation is a check of the pull request, where a
+    # cancelled check would look like a failure: it has a group of its own,
+    # is never cancelled by a workflow_run one, and corrects itself as
+    # described at the top if it finishes after one.
+    concurrency:
+      group: >-
+        gate-${{ github.event_name }}-${{ (github.event_name != 'workflow_run' ||
+            github.event.workflow_run.event == 'pull_request' || github.event.workflow_run.event == 'push')
+          && (github.event.workflow_run.head_sha || github.event.pull_request.head.sha) || github.run_id }}
+      cancel-in-progress: ${{ github.event_name == 'workflow_run' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -38,47 +90,133 @@ jobs:
           EVENT: ${{ github.event_name }}
           SELF: ${{ github.workflow }}
           TRIGGER_ID: ${{ github.event.workflow_run.id }}
+          TRIGGER_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
           TRIGGER_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
         run: |
           python3 - <<'PY'
           import json, os, time, urllib.request
-          repo, sha = os.environ["REPO"], os.environ["SHA"]
+
+          def counted(runs, self_name):
+              """The newest run of each workflow that the gate counts."""
+              latest = {}
+              for r in runs:
+                  if r["name"] in (self_name, "pax-live"):
+                      continue
+                  if r["event"] not in ("pull_request", "push"):
+                      continue
+                  if r["name"] not in latest or r["id"] > latest[r["name"]]["id"]:
+                      latest[r["name"]] = r
+              return latest
+
+          def verdict(runs, self_name, trigger=None):
+              """(state, text) for the commit's runs. trigger is (run id,
+              attempt, conclusion) of the run whose completion started this
+              evaluation: it has finished, but the list may not say so yet."""
+              latest = counted(runs, self_name)
+              pending, failed = [], []
+              for name, r in latest.items():
+                  status, conclusion = r["status"], r.get("conclusion")
+                  if (trigger and status != "completed" and str(r["id"]) == str(trigger[0])
+                          and str(r.get("run_attempt", 1)) == str(trigger[1])):
+                      status, conclusion = "completed", trigger[2]
+                  if status != "completed":
+                      pending.append(name)
+                  elif conclusion not in ("success", "skipped", "neutral"):
+                      failed.append(f"{name} ({conclusion})")
+              if failed:
+                  return "failure", "Not passed: " + ", ".join(sorted(failed))
+              if pending:
+                  return "pending", "Waiting for: " + ", ".join(sorted(pending))
+              return "success", "All passed: " + (", ".join(sorted(latest)) or "no other workflow")
+
+          def self_test():
+              def run(i, name, status, conclusion=None, event="pull_request", attempt=1):
+                  return {"id": i, "name": name, "status": status, "conclusion": conclusion,
+                          "event": event, "run_attempt": attempt}
+              ok = run(1, "rust", "completed", "success")
+              cases = [
+                  ([ok, run(2, "iso", "queued")], None, "pending"),
+                  ([ok, run(2, "iso", "in_progress")], None, "pending"),
+                  ([ok, run(2, "iso", "completed", "skipped")], None, "success"),
+                  ([ok, run(2, "iso", "completed", "failure"), run(3, "boot", "queued")], None, "failure"),
+                  ([ok, run(2, "iso", "completed", "cancelled")], None, "failure"),
+                  # the newest run of a workflow counts, not an older one
+                  ([run(2, "iso", "completed", "failure"), run(5, "iso", "completed", "success")], None, "success"),
+                  ([run(2, "iso", "completed", "success"), run(5, "iso", "queued")], None, "pending"),
+                  # the gate itself, pax-live and runs by hand are not counted
+                  ([ok, run(2, "gate", "queued"), run(3, "pax-live", "completed", "failure"),
+                    run(4, "iso", "completed", "failure", event="workflow_dispatch")], None, "success"),
+                  ([], None, "success"),
+                  # the trigger's result comes from the event while the list lags
+                  ([ok, run(2, "iso", "in_progress")], (2, 1, "failure"), "failure"),
+                  ([ok, run(2, "iso", "in_progress")], (2, 1, "success"), "success"),
+                  # ... but not for an attempt the event is not about
+                  ([ok, run(2, "iso", "in_progress", attempt=2)], (2, 1, "success"), "pending"),
+                  # ... and never against what the list already knows
+                  ([ok, run(2, "iso", "completed", "failure", attempt=2)], (2, 1, "success"), "failure"),
+                  ([ok, run(2, "iso", "completed", "failure")], (2, 1, "success"), "failure"),
+              ]
+              for runs, trigger, want in cases:
+                  got = verdict(runs, "gate", trigger)
+                  assert got[0] == want, (runs, trigger, got, want)
+              print(f"self-test: {len(cases)} cases judged as expected")
+
+          self_test()
+
+          repo, sha, event, self_name = (os.environ[k] for k in ("REPO", "SHA", "EVENT", "SELF"))
           H = {"Authorization": f"Bearer {os.environ['GH_TOKEN']}",
                "Accept": "application/vnd.github+json"}
           def call(method, path, body=None):
+              # The last evaluation of a commit has no successor: one failed
+              # request must not leave an old status standing.
               data = json.dumps(body).encode() if body is not None else None
-              req = urllib.request.Request(f"https://api.github.com/repos/{repo}{path}",
-                                           data=data, headers=H, method=method)
-              with urllib.request.urlopen(req, timeout=30) as r:
-                  return json.load(r)
-          if os.environ["EVENT"] == "pull_request":
+              for attempt in range(4):
+                  req = urllib.request.Request(f"https://api.github.com/repos/{repo}{path}",
+                                               data=data, headers=H, method=method)
+                  try:
+                      with urllib.request.urlopen(req, timeout=30) as r:
+                          return json.load(r)
+                  except OSError as err:  # URLError and HTTPError are OSErrors
+                      if attempt == 3 or getattr(err, "code", 500) in (401, 403, 404, 422):
+                          raise
+                      print(f"{method} {path}: {err}; again in {5 * (attempt + 1)} s", flush=True)
+                      time.sleep(5 * (attempt + 1))
+          def read():
+              return call("GET", f"/actions/runs?head_sha={sha}&per_page=100")["workflow_runs"]
+          def record(state, text):
+              print(state, "-", text, flush=True)
+              if os.environ.get("GATE_DRY_RUN"):  # for reading a commit's verdict by hand
+                  return
+              call("POST", f"/statuses/{sha}", {"state": state, "context": "gate",
+                                                 "description": text[:140]})
+
+          trigger = None
+          if os.environ.get("TRIGGER_ID"):
+              trigger = (os.environ["TRIGGER_ID"], os.environ.get("TRIGGER_ATTEMPT") or "1",
+                         os.environ["TRIGGER_CONCLUSION"])
+          if event == "pull_request":
               time.sleep(20)  # let the other workflows be created
-          runs = call("GET", f"/actions/runs?head_sha={sha}&per_page=100")["workflow_runs"]
-          # The run that triggered this evaluation has finished, but the list
-          # may not say so yet: take its result from the event itself.
-          trig = os.environ.get("TRIGGER_ID")
-          for r in runs:
-              if trig and str(r["id"]) == trig:
-                  r["status"], r["conclusion"] = "completed", os.environ["TRIGGER_CONCLUSION"]
-          latest = {}
-          for r in runs:
-              if r["name"] in (os.environ["SELF"], "pax-live"):
-                  continue
-              if r["event"] not in ("pull_request", "push"):
-                  continue
-              if r["name"] not in latest or r["id"] > latest[r["name"]]["id"]:
-                  latest[r["name"]] = r
-          pending = sorted(n for n, r in latest.items() if r["status"] != "completed")
-          failed = sorted(f"{n} ({r['conclusion']})" for n, r in latest.items()
-                          if r["status"] == "completed"
-                          and r["conclusion"] not in ("success", "skipped", "neutral"))
-          if failed:
-              state, text = "failure", "Not passed: " + ", ".join(failed)
-          elif pending:
-              state, text = "pending", "Waiting for: " + ", ".join(pending)
-          else:
-              state, text = "success", "All passed: " + (", ".join(sorted(latest)) or "no other workflow")
-          print(state, "-", text)
-          call("POST", f"/statuses/{sha}", {"state": state, "context": "gate",
-                                             "description": text[:140]})
+          runs = read()
+          if event == "pull_request":
+              # Nothing else listed: either no workflow's paths match this
+              # change, or the runs do not exist yet. Look again for a minute
+              # before saying that there is no other workflow.
+              for _ in range(6):
+                  if counted(runs, self_name):
+                      break
+                  time.sleep(10)
+                  runs = read()
+          state, text = verdict(runs, self_name, trigger)
+          record(state, text)
+          # Read again and correct. This covers a run that finished a moment
+          # ago and is still listed as running (its own evaluation may be the
+          # one this one cancelled), and an evaluation that records its status
+          # after a newer one did: whoever writes last has checked afterwards.
+          for _ in range(2):
+              time.sleep(10)
+              again = verdict(read(), self_name, trigger)
+              if again == (state, text):
+                  break
+              state, text = again
+              record(state, text)
           PY

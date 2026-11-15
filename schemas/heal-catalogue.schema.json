@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/giorgiogiudice/TUR/schemas/heal-catalogue.schema.json",
+  "$comment": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+  "title": "TUR self-healing fault catalogue",
+  "description": "The faults TUR's healing service looks for and what it may do about each (docs/architecture/self-healing.md, ADR-0027). A check and a remedy are each one of a fixed set of kinds that tur-diag implements; an entry only gives parameters. Rules the schema cannot express (unique codes and remedy names, a remedy answering its check's kind, the class and reversibility rules, a fault without a remedy offering a report) are checked by tur-diag's validator (services/tur-diagnostics/src/heal/catalogue.rs).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "about", "faults"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "about": { "type": "string" },
+    "faults": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/fault" } }
+  },
+  "$defs": {
+    "text": { "type": "string", "minLength": 1, "maxLength": 2000 },
+    "fault": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "title", "component", "explanation", "check", "remedies", "verify_seconds", "report", "notice", "sources"],
+      "properties": {
+        "code": { "type": "string", "pattern": "^TUR-[A-Z]+(-[A-Z0-9]+)*-[0-9]{3}$" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "component": {
+          "enum": ["android", "apps", "audio", "boot", "catalogue", "desktop", "device", "diag", "display",
+                   "install", "network", "other", "pax", "runtime", "settings", "storage", "update", "windows"]
+        },
+        "explanation": { "$ref": "#/$defs/text" },
+        "check": { "$ref": "#/$defs/check" },
+        "remedies": { "type": "array", "items": { "$ref": "#/$defs/remedy" } },
+        "verify_seconds": { "type": "integer", "minimum": 0, "maximum": 120 },
+        "report": { "enum": ["never", "when-unrepaired", "always"] },
+        "report_kind": { "enum": ["failed-update", "boot-problem", "crash", "repair-failed", "request"] },
+        "notice": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["found"],
+          "properties": {
+            "found": { "$ref": "#/$defs/text" },
+            "repaired": { "$ref": "#/$defs/text" },
+            "unrepaired": { "$ref": "#/$defs/text" },
+            "report": { "$ref": "#/$defs/text" }
+          }
+        },
+        "sources": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["what", "where", "read"],
+            "properties": {
+              "what": { "$ref": "#/$defs/text" },
+              "where": { "type": "string", "pattern": "^https://" },
+              "read": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" }
+            }
+          }
+        }
+      }
+    },
+    "check": {
+      "oneOf": [
+        {
+          "type": "object", "additionalProperties": false, "required": ["kind", "units"],
+          "properties": {
+            "kind": { "const": "unit-failed" },
+            "units": { "type": "array", "minItems": 1, "items": { "type": "string", "pattern": "^[A-Za-z0-9_.@:-]+\\.service$" } }
+          }
+        },
+        {
+          "type": "object", "additionalProperties": false, "required": ["kind"],
+          "properties": { "kind": { "const": "network-time-off" } }
+        },
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["kind", "service", "path", "managed_targets", "stub_address", "restore_target"],
+          "properties": {
+            "kind": { "const": "resolver-not-managed" },
+            "service": { "type": "string" },
+            "path": { "type": "string", "pattern": "^/" },
+            "managed_targets": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+            "stub_address": { "type": "string" },
+            "restore_target": { "type": "string" }
+          }
+        },
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["kind", "path", "min_free_bytes", "min_free_percent"],
+          "properties": {
+            "kind": { "const": "free-space-low" },
+            "path": { "type": "string", "pattern": "^/" },
+            "min_free_bytes": { "type": "integer", "minimum": 0 },
+            "min_free_percent": { "type": "integer", "minimum": 0, "maximum": 50 }
+          }
+        },
+        {
+          "type": "object", "additionalProperties": false, "required": ["kind", "prefixes", "components"],
+          "properties": {
+            "kind": { "const": "tur-program-crashed" },
+            "prefixes": { "type": "array", "minItems": 1, "items": { "type": "string", "pattern": "^/" } },
+            "components": { "type": "object", "additionalProperties": { "type": "string" } }
+          }
+        }
+      ]
+    },
+    "remedy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "class", "automatic", "changes", "reversible", "undo"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$", "maxLength": 64 },
+        "kind": { "enum": ["restart-units", "set-network-time", "restore-resolver-link", "vacuum-journal"] },
+        "class": { "type": "integer", "minimum": 0, "maximum": 2 },
+        "automatic": { "type": "boolean" },
+        "max_per_boot": { "type": "integer", "minimum": 1 },
+        "keep_bytes": { "type": "integer", "minimum": 0 },
+        "changes": { "$ref": "#/$defs/text" },
+        "reversible": { "type": "boolean" },
+        "undo": { "$ref": "#/$defs/text" }
+      }
+    }
+  }
+}

@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# In a person's session: when TUR's healing service records something, show
+# what this person has not seen yet (docs/architecture/self-healing.md,
+# section 4).
+
+[Unit]
+Description=TUR self-healing: watch for news
+
+[Path]
+PathChanged=/var/log/tur/heal/state.json
+Unit=tur-heal-notify.service
+
+[Install]
+WantedBy=default.target

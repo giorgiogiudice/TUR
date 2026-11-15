@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Requests to TUR's healing service (docs/architecture/self-healing.md,
+# section 5; ADR-0027): P@x's tools heal_apply_remedy and heal_undo_remedy,
+# and a person's own 'tur-diag heal apply' without administrator rights. Each
+# connection starts one tur-heal-request@.service, which answers one request.
+#
+# Anyone on the computer may connect. The service grants a request only what
+# it would do by itself: a reversible (class 0 or 1) repair of the catalogue,
+# for a problem its check finds at that moment, at most three times a boot.
+
+[Unit]
+Description=TUR self-healing: requests for a repair
+Documentation=https://github.com/giorgiogiudice/TUR/blob/main/docs/architecture/self-healing.md
+
+[Socket]
+ListenStream=/run/tur/heal.socket
+SocketMode=0666
+DirectoryMode=0755
+Accept=yes
+MaxConnections=4
+
+[Install]
+WantedBy=sockets.target
