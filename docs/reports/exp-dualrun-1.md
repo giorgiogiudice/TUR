@@ -1,18 +1,21 @@
 <!-- SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0 -->
 # exp-dualrun-1 — the person's own Windows, started inside TUR from its real partitions (experiment)
 
-> **Status: registered and built; no measurement has finished.** Pull request
-> 131. The hypotheses were committed first (`01d0df6`), before any run. At
-> hand-back (14 November 2026, 03:55 UTC) the runners had about 120 runs
-> queued and none of this branch's had started in 50 minutes: the synthetic
-> job (workflow `exp-dualrun`, job `lint`, on the pull request's head) and
-> the licence-terms stage (run 43549695840, dispatched at 03:04 UTC) were
-> queued, and the experiment stage had not been dispatched, because its
-> precondition (reading the evaluation's licence terms) had not been met. **Every number in this report
-> that would come from CI is marked NOT RUN.** What is in this report today is
-> the design, the prototype, the experiment as written, and what was
-> established from sources. Section 5 says exactly which run fills which
-> table.
+> **Status (16 November 2026, second engineer): the synthetic tests pass,
+> 30 of 30 (runs 43757600470 and 43764669843); the licence terms were read
+> and do not plainly permit the experiment on a hosted runner, so the
+> experiment stage was NOT dispatched.** Pull request 131. The hypotheses
+> were committed first (`01d0df6`), before any run. The first synthetic run
+> (43554037179, on `65a6280`) passed 9 of 30: a harness bug (ntfs-3g mounts
+> a volume that looks hibernated read-only, without failing) left a
+> stand-in `hiberfil.sys` stuck for every later case; fixed in `9a29ba2`.
+> The second (43753949520) found a real launcher bug: the view failed every
+> cache flush (section 3.2); fixed in `4aea64d`. The terms (runs
+> 43549695840 and 43753952778) are quoted and judged in section 2.1;
+> whether to run the evaluation on a hosted runner is the owner's decision
+> 1 (section 14). **Every number about a real Windows in this report is NOT
+> RUN.** What is measured is the launcher on synthetic volumes (section
+> 5.0).
 
 ```text
 TUR DEVELOPMENT REPORT
@@ -51,10 +54,12 @@ BUILD
 - Warnings: none
 
 TESTS
-- Unit tests: NOT RUN (the synthetic job, 30 cases, was queued: workflow
-  exp-dualrun, job lint, on the pull request's head commit)
-- Integration tests: NOT RUN (stage `experiment` not dispatched: see the
-  status above and section 2)
+- Unit tests: the synthetic job, 30 cases, no Microsoft software:
+  **30 of 30 pass** (run 43764669843 on `81fea51`; also 43757600470 on
+  `4aea64d`); section 5.0
+- Integration tests: NOT RUN (stage `experiment` not dispatched: the
+  evaluation's terms do not plainly permit it on a hosted runner, section
+  2.1; owner's decision 1)
 - Boot tests: NOT RUN (nothing here changes TUR's boot)
 - Hardware tests: NOT RUN (no hardware runner; the owner's PC procedure is
   section 10)
@@ -76,21 +81,28 @@ KNOWN LIMITATIONS
 - Section 13.
 
 NEXT SAFE ACTION
-- Let the queued synthetic job and the `terms` stage (run 43549695840)
-  finish; fix what the synthetic job finds; read the terms the other
-  prints (its job summary and artifact exp-dualrun-terms); if they plainly
-  allow evaluation and testing use, dispatch workflow exp-dualrun on
-  exp/dualrun with stage=experiment and terms_read=yes; then fill
-  section 5. Nothing on the owner's PC before that, and then only steps 1
-  to 3 of section 10, which cannot write to his disk.
+- The owner takes decision 1 (section 14). If (b), he dispatches workflow
+  exp-dualrun on exp/dualrun with stage=experiment and terms_read=yes; the
+  next engineer fixes what the first run of the harness finds (about 6,000
+  lines that have never run against Windows) and fills section 5, H1 and
+  H2 first. If (a), a self-hosted runner on his PC or section 10's steps 1
+  to 3, which cannot write to his disk.
 ```
 
 ## The answer
 
 Not known yet. The experiment that would answer H1 (round trips without
-damage) and H2 (reliable refusals), which everything else stands on, is
-written and waiting for a runner. What can be said today, from sources and
-from the design work:
+damage) and H2 (reliable refusals) on a real Windows, which everything else
+stands on, is written and **was not dispatched**: the evaluation's licence
+terms allow evaluation and testing in a virtual machine but not plainly on
+a hosted CI server that nobody uses (section 2.1). The launcher's own
+mechanics were measured on synthetic volumes (no Microsoft software):
+**30 of 30 cases pass** (section 5.0): every refusal fires, the view never
+exposes TUR's bytes, and layers are thrown away, kept through an interrupted
+commit, and undone byte for byte. Getting there found one launcher bug that
+would have sunk H1 for a harness reason: the first design of the view failed
+every cache flush. What can be said otherwise, from sources and from the design
+work:
 
 - **The idea is buildable from parts Fedora ships**, with no kernel patch and
   no change to Windows: QEMU/KVM with an emulated NVMe or AHCI disk, an Intel
@@ -429,11 +441,11 @@ during the first hours; nothing had run.
 | | Hypothesis | Kill criterion | Result |
 |---|---|---|---|
 | H1 | A natively installed Windows starts unmodified as a guest from the same disk and natively again, repeatedly | Repair needed in either direction | **NOT RUN** |
-| H2 | Reliable refusals; the guest gets only Windows' partitions; a kill leaves Windows no worse than a power cut | A state that must be refused is accepted; a byte outside the given partitions changes; damage Windows cannot repair itself | Synthetic part **NOT RUN (queued)**; real-Windows part **NOT RUN** |
+| H2 | Reliable refusals; the guest gets only Windows' partitions; a kill leaves Windows no worse than a power cut | A state that must be refused is accepted; a byte outside the given partitions changes; damage Windows cannot repair itself | Synthetic part **passed** (run 43757600470, 30 of 30: every refusal, the view, TUR's partition untouched; section 5.0); real-Windows part and kills **NOT RUN** |
 | H3 | Identity can be carried; with it Windows reports fewer changes | none (decides only the explanation) | **NOT RUN** |
 | H4 | Memory return, USB hand-over and clean shutdown with built-in drivers | None of them possible without added drivers | **NOT RUN** |
 | H5 | Each Windows application as its own host window: (a) RemoteApp, (b) TUR's own helper | (a) no separate windows; (b) hidden content cannot be obtained without Remote Desktop | **NOT RUN** |
-| H6 | Protected sessions: discard leaves every byte; commit is seen natively; interrupted commit completes; undo; repair from outside | A discarded session changes a byte, or a kept one needs repair | Synthetic part **NOT RUN (queued)**; real-Windows part **NOT RUN** |
+| H6 | Protected sessions: discard leaves every byte; commit is seen natively; interrupted commit completes; undo; repair from outside | A discarded session changes a byte, or a kept one needs repair | Synthetic part **passed** (run 43757600470: discard byte-identical; interrupted commit completed; undo byte-identical; undo refused after a change); real-Windows part **NOT RUN** |
 | H7 | The guest's start fits a budget; a saved guest can be resumed | No controller Windows starts from can be saved | **NOT RUN** |
 | H8 | Letters and labels unchanged in the guest; TUR's partition has no letter | Any differs | **NOT RUN** |
 | H9 | The same files both ways, the volume clean both times | A write missing, or the volume dirty or damaged | **NOT RUN** |
@@ -449,7 +461,7 @@ on 14 November 2026.
 | Does Microsoft publish an evaluation of Windows 11? | Yes: Windows 11 Enterprise, version 26H2, 90 days; also Enterprise LTSC 2024. "Register, then download and install the full-featured software for a 90-day evaluation." No product key. "Designed for IT professionals" | [S1], [S2] |
 | Can CI fetch it from Microsoft's own server by a stable link? | Yes. The download page lists `go.microsoft.com/fwlink` links per language; the English x64 one redirects (302) to `software-static.download.prss.microsoft.com/dbazure/26300.9457.260913-1737.26h2_ge_release_svc_refresh_CLIENTENTERPRISEEVAL_OEMRET_x64FRE_en-us.iso`. The registration form is on another page and is not enforced by the link | [S1]; a HEAD request, 14 November |
 | Size | 8,225,329,152 bytes (7.66 GiB), range requests accepted, last modified 17 September 2026 | the same request |
-| Its terms for automated testing | **Not established.** The page does not publish the evaluation's licence terms; they are inside the medium and shown by Setup. Microsoft's use-terms site lists retail and OEM terms; no evaluation entry was found in the part read. Stage `terms` extracts the text from the medium and prints the paragraphs that govern use, installing nothing. **It had not run at hand-back.** | [S1], [S3] |
+| Its terms for automated testing | **Read (section 2.1); not plainly permitted, so the experiment was not dispatched.** The page does not publish the evaluation's licence terms; they are inside the medium. Stage `terms` (run 43549695840) took them out of it | [S1], [S3], run 43549695840 |
 | Windows 10 | **No evaluation is offered any more.** The Windows 10 Enterprise evaluation page answers 301 to a 2024 blog post about the end of Windows 10 support. No other lawful automated source was found; old direct links, if any still answer, would be media Microsoft has withdrawn from evaluation and were not tried | [S4] |
 | GitHub's Windows runners | Allowed by ADR-0015's amendment for the guest-side helper. They cannot stand in here: the experiment needs one installed disk started under two machine configurations | ADR-0015 |
 
@@ -470,6 +482,74 @@ No product key is entered, no activation or evaluation timer is reset or
 extended, Setup's hardware checks are met (a software TPM 2.0, firmware with
 Secure Boot support) and not bypassed, and the guest has no route to the
 Internet.
+
+### 2.1 What the terms say, and why the experiment was not dispatched
+
+Stage `terms`, run **43549695840** (14 November 2026, workflow_dispatch on
+`exp/dualrun`), downloaded
+`26300.9457.260913-1737.26h2_ge_release_svc_refresh_CLIENTENTERPRISEEVAL_OEMRET_x64FRE_en-us.iso`
+(8,225,329,152 bytes, SHA-256 `bc3f2408…c10e38`) from Microsoft's link. Its
+install archive holds one image, "Windows 11 Enterprise Evaluation"
+(edition `EnterpriseEval`, build 26300). The licence text is
+`Windows/System32/en-US/Licenses/Eval/EnterpriseEval/license.rtf` (SHA-256
+`6b5d4b32…ede21c8e`, 39,406 characters; the three other copies are
+identical): **Microsoft's general Windows licence terms, "Last updated
+April 2024"**, whose section 14.d(ii) covers evaluation software. There are
+no separate evaluation terms. Section numbers below follow the text's own
+cross-references ("Section 2(d)(iii)", "Section 14.d(ii)").
+
+The rule set before reading (task and section 14, decision 1): dispatch only
+if the terms **plainly** permit evaluation and testing, in a non-production
+environment, in a virtual machine, by the account holder, and nothing in
+them forbids automated testing or publishing measurements of TUR's own
+software. Against that rule:
+
+| Needed | What the terms say | Plain? |
+|---|---|---|
+| Evaluation and testing, not production | 14.d(ii): "For evaluation (or test or demonstration) use, you may not sell the software, use it in a live operating environment, or use it after the evaluation period." | **Yes**: a CI runner that dies after the job is not a live operating environment, and the job is inside 90 days |
+| The grant itself | 2(a): "we grant you the right to install and run one instance of the software on your device (the licensed device), for use by one person at a time, so long as you comply with the terms and restrictions contained in this agreement." | **Not plainly for CI**: a GitHub-hosted runner is not the account holder's device, and no person uses it |
+| In a virtual machine | 2(b): "“device” means a local hardware system (whether physical or virtual) with an internal storage device capable of running the software." 2(d)(iv): "This license allows you to install only one instance of the software for use on one device, whether that device is physical or virtual." | **Yes**, for one instance on one virtual device |
+| …on a hosted CI server that no person uses | 2(b): "“device” does not include any hardware system (whether physical or virtual) on which the software is installed or accessed solely for remote use over a network." 2(c)(v), among the things the licence gives no right to: "install the software on a server for remote access or use over a network; or install the software on a device for use only by remote users" | **No.** The guest would run on a GitHub-hosted runner (a server in Microsoft's cloud) that no one ever sits at; the harness reaches it over QEMU's private network (agent, Windows' file sharing for H9, Remote Desktop for H5(a)). Whether that is "use over a network" / "only by remote users" is a reading, not a plain permission |
+| Remote Desktop into it (H5(a), scenario `remoteapp`) | 2(d)(v): "No more than once every 90 days, you may designate a single user who physically uses the licensed device as the licensed user. The licensed user may access the licensed device from another device using remote access technologies…" | **No**: there is no user who physically uses the runner |
+| Running without activation | 5: "You are authorized to use this software only if you are properly licensed and the software has been properly activated with a genuine product key or by other authorized method." … "You may not bypass or circumvent activation." | **Unclear.** The registered design keeps the guest off the Internet, so the evaluation never activates; whether use in its initial unactivated period counts as "properly activated … by other authorized method" is not said. H3 (carrying the PC's identity and comparing licence status) circumvents nothing, but sits next to this sentence |
+| One installation started under two machine configurations | 2(d)(iv) above; 4(b), stand-alone software: "you may transfer the software to another device that belongs to you. … Every time you transfer the software to a new device, you must remove the software from the prior device. You may not transfer the software to share licenses between devices." | **Unclear**: H1's "pc" and "guest" profiles are two virtual machines; whether they are one device is the owner's lawyer's question 1 (section 11) in miniature |
+| By the account holder | The evaluation page says "Register, then download"; the link CI used does not enforce registration, and none was made | **Unclear**: no one has registered for this evaluation |
+| Nothing against automated testing or publishing measurements | No paragraph of the 39,406 characters mentions benchmarks; "automat…" occurs only for automatic updates and automatic activation (both excerpts cover the whole text: neither reached its length limit). The restrictions in full, 2(c): "(i) use or virtualize features of the software separately; (ii) publish, copy (other than the permitted backup copy), rent, lease, or lend the software; (iii) transfer the software (except as permitted by this agreement); (iv) work around any technical restrictions or limitations in the software; (v) [above]; (vi) reverse engineer, decompile, or disassemble the software … (vii) [Internet-based features]" | **Yes**: publishing *the software* is restricted, publishing measurements of TUR's own software is not mentioned. TUR's readers of NTFS and of the boot configuration read on-disk data and decompile nothing (2(c)(vi)); Setup's checks are met, not worked around (2(c)(iv)) |
+
+2(c) opens: "this license does not give you any right to, and you may not
+(and you may not permit any other person or entity to):". Of its items,
+2(c)(i) "use or virtualize features of the software separately" (the
+seamless desktop shows whole application windows of a whole running
+Windows, which is not obviously this, but it is not plainly something else
+either).
+
+**Judgement: the terms plainly allow evaluation and testing of Windows in a
+virtual machine, and they do not plainly allow it on a hosted CI server
+that nobody uses, reached only over a network, unactivated. The experiment
+stage was therefore not dispatched** (decision 1, section 14). Nothing was
+installed. A second `terms` run with a fuller excerpt (sections 2, 4 and 5
+whole, `ci/terms.py` at `af43322`), run **43753952778** (15 November 2026,
+the same medium: SHA-256 `bc3f2408…c10e38`, the same licence text
+`6b5d4b32…ede21c8e`), gave the grant (2(a)), every restriction (2(c)) and
+the transfer clause (4) quoted above from the medium itself; it changed no
+answer in the table. Its artifact `exp-dualrun-terms` holds the excerpt
+for the owner's lawyer.
+
+What would make it plain, in the order this report would choose:
+
+1. **The owner's own PC as a self-hosted runner** (or his trial of section
+   10): a device he physically uses, his own licence, his own Windows 10.
+   This removes every "No" above and is the experiment that matters anyway.
+2. **The owner, as licensee, decides** that the hosted-runner reading is
+   acceptable (or his lawyer says so), and dispatches `stage=experiment,
+   terms_read=yes` himself; the report then names him as the one who
+   accepted the terms. The harness is ready; this report does not take that
+   decision for him.
+3. Microsoft's own route for Windows in hosted CI: GitHub's Windows runners
+   (Windows Server, licensed by GitHub). They cannot start one installed
+   disk under two machine configurations (H1), but they can measure H5(b)'s
+   kill criterion: `inwin` measures it there (section 7.2; its first pass
+   was void).
 
 ## 3. The safety design
 
@@ -520,7 +600,7 @@ partition table:
 |---|---|---|
 | First sectors up to the first partition (protective MBR, partition table) and the backup table at the end | A private copy in a file ("the shadow"), byte-identical at the start | Windows sees the same disk GUID, partition GUIDs and offsets as natively. Nothing the guest writes to the table reaches the real one; a change is detected at the end and reported |
 | The EFI system partition, the Microsoft reserved partition, every Windows data partition whose content is NTFS, BitLocker, FAT, exFAT or ReFS, Windows recovery partitions | `linear` onto the real partition | These are Windows' |
-| Every other partition (TUR's root, other systems) and every unallocated range | Reads as zeros, writes fail (`flakey … error_writes` over a `zero` device); `zero` or `error` where the target is missing | **No mapping to those blocks exists.** A fault in Windows, or an escape from QEMU as the user, cannot reach them. Zeros, not errors, on read, so that a probing read does not fill Windows' event log with disk errors |
+| Every other partition (TUR's root, other systems) and every unallocated range | A `zero` target: reads give zeros, writes are dropped; `error` where `zero` is missing | **No mapping to those blocks exists.** A fault in Windows, or an escape from QEMU as the user, cannot reach them. Zeros, not errors, on read, so that a probing read does not fill Windows' event log with disk errors. **Changed after the first synthetic run:** the design had `flakey … error_writes` (writes fail rather than vanish), but dm-flakey also receives the view's cache flushes and fails them, so every flush of the whole view failed (run 43753949520: `qemu-img commit` ended in EIO; run 43764669843: a flush of a view-shaped device with a flakey part fails, EIO). A guest flushes its disk constantly; with that table every Windows flush would have failed. `flakey` stays an option, not the default |
 
 The partition table is shown unchanged, TUR's entries included, so that the
 guest's view of the disk is the native one. If Windows changes the table
@@ -715,9 +795,77 @@ too little memory, the refusal texts; the view (size, table, mapping, zeros
 for TUR's partition, a refused write, the kernel's lock, the shadow); a
 protected session thrown away with the whole disk hashed; a commit killed
 and run again, undo, and undo refused after the disk changed; the firmware
-entry; the copy of the boot files. NOT RUN (queued). A volume made by
-`mkfs.ntfs` is not one left by Windows: the same reader is run against real
-Windows in 5.2 and 5.3.
+entry; the copy of the boot files. A volume made by `mkfs.ntfs` is not one
+left by Windows: the same reader is run against real Windows in 5.2 and 5.3
+(NOT RUN).
+
+### 5.0 Synthetic results (measured)
+
+GitHub-hosted Ubuntu 24.04 runner, job `lint` of workflow `exp-dualrun`,
+device-mapper targets `error, flakey, linear, multipath, striped, zero`,
+test volumes built with ntfs-3g.
+
+| Run | Commit | Cases passed | What it found |
+|---|---|---|---|
+| 43554037179 | `65a6280` | 9 of 30 | A harness bug: ntfs-3g mounts a volume whose `hiberfil.sys` begins `hibr` **read-only and exits 0**, so the test could not remove its stand-in file and the 21 later cases ran on a "hibernated" volume. (The check-list refused all of them with 010, correctly.) Fixed in `9a29ba2`: mount with `remove_hiberfile`, verify read-write |
+| 43753949520 | `af43322` | 29 of 30 | A launcher bug: with the hidden ranges as `flakey … error_writes`, the kept session's `qemu-img commit` into the view ended in `Block job failed: Input/output error`. Changed in `4aea64d`: hidden ranges are a `zero` target; the test now flushes the whole view |
+| 43757600470 | `4aea64d` | **30 of 30** | Hidden ranges as `zero`. Its probe of flakey's flush was not shaped like the view (see below) |
+| **43764669843** | `81fea51` | **30 of 30** | The flush probe, shaped like the view (a linear part on a loop device, write cache `write back`, and a `flakey … error_writes` part): **a flush fails, EIO**. With `zero`, a flush of the whole view succeeds |
+
+Run 43757600470, case by case (seconds are the case's own):
+
+| Case | Result |
+|---|---|
+| Clean volume | may start; partitions 1, 2, 3, 5 given, TUR's 4 hidden; label `Windows`; the EFI system partition's other system `fedora` seen |
+| `hiberfil.sys` `hibr` + data; `HIBR` + data; `hibr`, 4 bytes, resident | hibernated: **refused, 010** (each) |
+| `wake`; all zeros; length 0 | used / empty: may start |
+| Unknown content | unknown: **refused, 013** |
+| Protected session of a hibernated volume | refused in both modes; the experiment switch works in protected mode only |
+| Volume marked dirty | may start, with a note (Windows runs its own check) |
+| Journal: unclean, clean, torn restart page | read correctly each way; unclean is a note, not a refusal |
+| Root directory unreadable | **refused, 013** |
+| BitLocker signature | **refused, 030 and 013**; with the key, 013 (no readable boot configuration on the synthetic disk) |
+| Windows partition mounted by TUR | **refused, 020**, naming the mount point; no view created |
+| No Windows boot manager | **refused, 002** |
+| Linux filesystem in a partition typed as Windows data | not given to the guest, with a note |
+| Not enough free memory | **refused, 040** |
+| Refusal texts | 13 texts, each with a reason and an action, none suggesting to force |
+| Attach (direct) | one 2 GiB device; GPT identical; Windows' partitions identical through the view; **TUR's partition reads as zeros** |
+| Write into TUR's partition through the view | accepted and **dropped**; TUR's partition byte-identical (300 MiB hashed) |
+| The kernel's lock | mounting the EFI system partition refused while the view holds it (holder `dm-0`); a second attach refused |
+| Writes land where they should | a marker written through the view is on the real partition; **a flush of the whole view succeeds** |
+| The partition table is a private copy | a write to it did not reach the disk; reported at detach (sectors 40–47) |
+| After detach | token unchanged over an idle session; the volume mounts and reads |
+| Protected session, thrown away | the read-only view refuses writes (EPERM); the layer held 96 MiB; **the whole 2 GiB disk byte-identical after discard** (3.6 s) |
+| Protected session, kept; commit killed and run again | killed after 1.02 s with 32 of 96 MiB on the disk; a new protected session refused while the commit is unfinished; the second run completed; **undo restored the whole disk byte-identically**; a second kept session, then a change to the disk: **undo refused, 072**; after the change was reverted, undo restored the disk (12.5 s) |
+| Guest firmware variables | `Boot00D0: HD(1,GPT,…)/\EFI\Microsoft\Boot\bootmgfw.efi`, first in `BootOrder` |
+| Copy of the person's boot files | every file under `EFI` with its checksum |
+| This machine's identity strings | 16 SMBIOS fields readable (values not recorded) |
+| Everything left as found | TUR's partition unchanged; no view left |
+
+What this proves, and what it does not: the launcher's refusals fire on every
+synthetic state the check-list knows; the view gives exactly the given
+partitions and never TUR's bytes; layers can be thrown away, kept through an
+interrupted commit, and undone, byte for byte, on a 2 GiB disk. It says
+nothing yet about volumes left by a real Windows (Fast Startup, real
+hibernation, real journals) or about a Windows guest using the view: those
+are H1, H2's real part and H6's real part, NOT RUN.
+
+**The flush finding, stated exactly.** With `flakey … error_writes` in the
+hidden ranges a complete `qemu-img commit` into the view failed with EIO
+(one run); with `zero` the same case passes and a flush of the whole view
+succeeds. The explanation (dm-flakey is sent the view's cache flushes and,
+being "down" with `error_writes`, fails them as writes) is the likely one
+but not yet confirmed: run 43757600470's probe was a device made only of
+`zero` and `flakey`, which has no write cache, so the kernel sent it no
+flush and it "succeeded" without meaning anything. **Run 43764669843
+confirmed it** with a probe shaped like the view (a linear part on a loop
+device, which has a write cache, plus a flakey part): `fsync` on it fails
+with EIO. A Windows guest flushes its disk all the time (every journal
+commit); with the first design every one of those flushes would have
+failed. `zero` receives no flushes and drops writes: the guarantee that TUR's
+blocks have no mapping is unchanged, only the guest's error on a stray write
+is lost.
 
 ## 6. Protected, layered, controlled by P@x
 
@@ -902,6 +1050,18 @@ What is already clear without the run, to be confirmed or corrected by it:
 | Input | Pointer and keys must arrive at the right window | Absolute pointer through the virtual tablet after bringing the target to the front; the cost is a round trip before each first click |
 | Secure desktop (UAC prompts, sign-in) | No capture API sees it | Shown from the guest's whole screen in a host window of its own, and said to be Windows' own prompt |
 
+**What the sibling spike measured on real Windows** (`inwin`, pull request
+132, GitHub's Windows runners; its report sections 5, 7.2 and 7.4; not
+dualrun measurements, and not inside a guest):
+
+| Question for this route | `inwin`'s answer | Consequence here |
+|---|---|---|
+| Does the agent see real applications' controls? | 151 of 151 listed controls, by UI Automation or the window tree (Edge 7/7, Chrome 7/7 page controls; Settings only through UI Automation); actions arrived in every kind of application (21/23, 23/25, 18/22 by runner), checked by an independent route | P@x's route into the person's Windows (the in-guest bridge) holds on real Windows, not only under Wine |
+| What does the top-level window list cost? | 0.6–0.9 ms (2–3 ms with icons); window changes arrive as WinEvents in 0.3–9 ms; 100 of 100 changes brought an event | The seamless desktop can be **event-driven**, not polled |
+| The channel | Messages on the 16550 serial port, pixels on the private link; a window read is 2–15 KB, an event about 60 bytes, a drag about 80 events/s (coalesce); Firefox and Chromium build their page tree on first request (read again after about 2 s) | Matches section 4.2's devices (serial port, e1000e link); no added driver |
+| Carrying the desktop over | Everything about the person's desktop is readable from the disk except Start pins (the agent reads those with `Export-StartLayout`); icon positions decode to grid cells; a manifest is proposed (a drive letter only if its volume exists; default apps shown, never written back) | "The desktop looks like theirs" can be built from the disk while Windows is down |
+| **The content of a covered window** (H5(b)'s kill criterion) | **Void in its first run** (run 43552339780: the cover did not reach the screen for four of five windows, and the lead's reading is that the fifth is not to be relied on either); fixed there, not yet measured | **H5(b) stays open.** Nothing here relies on it until `inwin`'s next run or scenario `seamless` in the guest |
+
 ### 7.3 Around both routes
 
 Windows applications in TUR's launcher (the Start menu's entries and icons,
@@ -1040,7 +1200,7 @@ Nothing was built whose purpose is to defeat licensing. The questions:
 
 ## 12. Effort
 
-One session of design and writing; no CI iteration finished. About 6,100
+One session of design and writing; a second session read the licence terms (two `terms` runs) and took the synthetic job from 9 to 30 of 30 in three iterations (two fixes, one probe). About 6,100
 lines: the launcher and its library (about 2,400), the synthetic tests
 (about 640), the experiment with its guest scripts, the seamless-desktop
 part and the summary (about 2,400), the workflow and CI helpers (about
@@ -1048,10 +1208,13 @@ part and the summary (about 2,400), the workflow and CI helpers (about
 
 ## 13. Limits, and what was not run
 
-- **Nothing has run.** Every claim about Windows' behaviour in this report
-  is either from a source or a design expectation, and is marked. The code
-  was syntax-checked only; a first CI run of code this size will find
-  errors in the harness before it finds anything about Windows.
+- **Nothing has run against Windows.** Every claim about Windows'
+  behaviour in this report is either from a source or a design
+  expectation, and is marked. The launcher and its library ran in the
+  synthetic job (30 of 30); the experiment harness (`ci/experiment.py`,
+  `winvm.py`, `seamless.py`, `guestscripts.py`, the guest agent, about
+  3,000 lines) has never run, and its first run will find errors in the
+  harness before it finds anything about Windows.
 - **Not real hardware.** Real firmware, a real TPM, real BitLocker sealing,
   OEM activation, a real graphics card, real USB devices: NOT RUN until the
   owner's PC.
@@ -1084,13 +1247,21 @@ part and the summary (about 2,400), the workflow and CI helpers (about
 
 ## 14. Decisions for the owner
 
-1. **Microsoft's evaluation of Windows 11 Enterprise in CI.** The task
-   allowed downloading it in CI and using it there; its licence terms could
-   not be read in advance (they are inside the medium). Stage `terms` prints
-   them. If they plainly allow installing the software for evaluation and
-   testing, the experiment is dispatched and the terms are quoted here. If
-   they do not, or are unclear about an automated run, **the owner
-   decides**, and until then H1 to H10 stay NOT RUN in CI.
+1. **Microsoft's evaluation of Windows 11 Enterprise in CI: the owner's
+   decision now.** The terms were read (section 2.1). They plainly allow
+   evaluation and test use in a virtual machine, outside a live operating
+   environment, for 90 days, and say nothing against benchmarks or
+   automation. They do not plainly allow installing it on a hosted CI
+   server that no person uses and that is reached only over a network
+   (2(b), 2(c)(v)), Remote Desktop without a licensed user who physically
+   uses the device (2(d)(v)), or running it unactivated (5). So the
+   experiment was **not** dispatched. Choose one: (a) a self-hosted runner
+   on the owner's own PC, or the section 10 trial (recommended: it is also
+   the real test); (b) the owner, as licensee and after his lawyer if he
+   wishes, accepts the hosted-runner reading and dispatches `exp-dualrun`
+   with `stage=experiment, terms_read=yes` himself, optionally without the
+   `remoteapp` scenario (`scenarios=` all but `remoteapp`) to stay clear of
+   2(d)(v); (c) keep H1 to H10's Windows parts NOT RUN.
 2. **Is the default session protected or direct?** Proposal: protected for
    the first sessions and for anything P@x drives; direct once the person
    has seen it work; always the person's choice.
@@ -1126,6 +1297,6 @@ Read on 14 November 2026 unless noted.
 | S7 | QEMU, Hyper-V Dynamic Memory Protocol driver (`hv-balloon`), cover letter and source: https://patchwork.kernel.org/project/qemu-devel/cover/cover.1672878904.git.maciej.szmigiero@oracle.com |
 | S8 | virt-firmware (`virt-fw-vars`), considered for the firmware entry and not used (the launcher writes edk2's variable format itself, as `tests/iso/efivars.py` reads it): https://gitlab.com/kraxel/virt-firmware |
 | S9 | In this repository: ADR-0015 and `docs/architecture/windows-guest.md`; ADR-0007; `docs/architecture/storage.md` section 8 (what `ntfs3` does and does not check; ntfs-3g's hibernation and journal rules); pull request 112 (ADR-0029 as proposed there, `engine.sh`: TUR's partition is type `4f68bce3-…`, name "TUR"); `tests/iso/isovm.py` (OVMF and boot order) |
-| S11 | Linux kernel, dm-flakey: `error_writes`: "All write I/O is failed with an error signalled. Read I/O is handled correctly." (used for the ranges the guest must not have): https://docs.kernel.org/admin-guide/device-mapper/dm-flakey.html |
+| S11 | Linux kernel, dm-flakey: `error_writes`: "All write I/O is failed with an error signalled. Read I/O is handled correctly." (designed for the ranges the guest must not have; replaced by `zero` because it fails cache flushes too, section 3.2): https://docs.kernel.org/admin-guide/device-mapper/dm-flakey.html |
 | S12 | Microsoft, `shutdown`: `/hybrid` "Shuts down the device and prepares it for fast startup. This option must be used with the /s option"; `/h` hibernation (how the experiment produces each state): https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/shutdown |
 | S10 | Microsoft, BCD WMI provider, `BcdBootMgrElementTypes`: `BcdBootMgrBoolean_AttemptResume` = 0x26000005, "Indicates that a resume operation should be attempted during a system restart"; `BcdBootMgrObject_ResumeObject` = 0x23000006: https://learn.microsoft.com/en-us/previous-versions/windows/desktop/bcd/bcdbootmgrelementtypes . That Windows sets the element when it hibernates or uses Fast Startup is the expectation the experiment measures on a real store |
