@@ -124,6 +124,8 @@ class World:
         self.install_options = install_options or []
         self.expect_casefold = expect_casefold
         self.title = title or "Real applications through tur-runtime"
+        # The time an installer may take, in seconds (tur-runtime --timeout).
+        self.step_timeout = 900
         self.data = work / "xdg-data"
         self.state = work / "xdg-state"
         if SESSION is not None:
@@ -967,7 +969,8 @@ def test_application(world: World, app: dict) -> dict:
     # Install.
     started = time.monotonic()
     status, installed, stderr = world.tur_json(
-        ["app", "install", str(installer), "--app-id", app_id, "--launcher", world.tur, "--timeout", "900",
+        ["app", "install", str(installer), "--app-id", app_id, "--launcher", world.tur,
+         "--timeout", str(world.step_timeout),
          "--json", *app.get("install_options", []), *world.install_options], timeout=1500)
     seconds = round(time.monotonic() - started, 1)
     (evidence / "install.json").write_text(json.dumps(installed, indent=2))
@@ -1114,7 +1117,8 @@ def test_application(world: World, app: dict) -> dict:
     # Remove it, and look for anything left.
     copy_evidence(world.state / "tur/runtime/logs" / app_id, evidence / "logs")
     started = time.monotonic()
-    status, removed, stderr = world.tur_json(["app", "uninstall", app_id, "--timeout", "600", "--json"],
+    status, removed, stderr = world.tur_json(["app", "uninstall", app_id, "--timeout",
+                                              str(min(world.step_timeout, 600)), "--json"],
                                              timeout=900)
     seconds = round(time.monotonic() - started, 1)
     (evidence / "uninstall.json").write_text(json.dumps(removed, indent=2))
@@ -1359,6 +1363,8 @@ def main() -> int:
     parser.add_argument("--session", action="store_true",
                         help="run in the signed-in desktop session (the installed TUR system)")
     parser.add_argument("--shot-fifo", help="with --session: where to ask the host for screenshots and keys")
+    parser.add_argument("--step-timeout", type=int, default=900,
+                        help="seconds an installer or uninstaller may take (tur-runtime --timeout)")
     parser.add_argument("--launcher-check", default="",
                         help="with --session: comma-separated ids to find and start from the desktop's launcher")
     arguments = parser.parse_args()
@@ -1371,6 +1377,7 @@ def main() -> int:
                   downloads=arguments.downloads.resolve() if arguments.downloads else None,
                   install_options=arguments.install_option, expect_casefold=arguments.expect_casefold,
                   title=arguments.title)
+    world.step_timeout = arguments.step_timeout
     environment = describe_session() if SESSION is not None else describe_environment()
     traces_before = host_traces()
     log(json.dumps(environment, indent=2))

@@ -274,6 +274,10 @@ def boot(work: pathlib.Path, out_root: pathlib.Path, seconds: int, only: str | N
     seen = 0
     done = False
     names: set[str] = set()
+    # A picture every two minutes, whatever the guest asks for, so that a
+    # dialog nobody expected is seen.
+    next_periodic = started + 120
+    periodic = 0
     try:
         while time.monotonic() - started < seconds and machine.alive() and not done:
             time.sleep(0.5)
@@ -313,6 +317,15 @@ def boot(work: pathlib.Path, out_root: pathlib.Path, seconds: int, only: str | N
                         (shots / "000-session.ppm.tmp").unlink(missing_ok=True)
                     if said.startswith("WINDOWS-CHECK-DONE"):
                         done = True
+            if time.monotonic() >= next_periodic and periodic < 60:
+                next_periodic += 120
+                periodic += 1
+                try:
+                    name = f"periodic-{periodic:02d}-{round(time.monotonic() - started)}s"
+                    vm.screenshot(qmp, work, shots / f"{name}.png")
+                    (shots / f"{name}.ppm.tmp").unlink(missing_ok=True)
+                except Exception:  # noqa: BLE001 - a missed picture is not a failure
+                    pass
             qmp.drain()
         if not done:
             timeline.append({"at": round(time.monotonic() - started, 1),
@@ -342,7 +355,7 @@ def main() -> int:
     b = sub.add_parser("boot")
     b.add_argument("work")
     b.add_argument("out")
-    b.add_argument("--seconds", type=int, default=4200)
+    b.add_argument("--seconds", type=int, default=5400)
     b.add_argument("--only", help="comma-separated ids of tests/windows-runtime/apps.json")
     j = sub.add_parser("judge", help="judge what an earlier boot brought back")
     j.add_argument("out")

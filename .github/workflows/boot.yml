@@ -103,7 +103,8 @@ jobs:
           shellcheck -x tests/boot/*.sh tests/boot/guest/rootfs/usr/libexec/tur-boot-test/guest-agent \
             tests/boot/guest/rootfs/usr/libexec/tur-boot-test/scenario-agent \
             tests/boot/guest/rootfs/usr/libexec/tur-boot-test/component-checks \
-            tests/boot/guest/rootfs/usr/libexec/tur-boot-test/windows-check
+            tests/boot/guest/rootfs/usr/libexec/tur-boot-test/windows-check \
+            tests/boot/guest/rootfs/usr/libexec/tur-boot-test/windows-preflight
           python3 -m py_compile tests/boot/*.py
           python3 - <<'EOF'
           import ast
@@ -257,7 +258,7 @@ jobs:
         if: ${{ !cancelled() && steps.boot.outcome == 'success' }}
         run: |
           sudo python3 tests/boot/windows.py prepare "$WORK/disk.raw" "$WORK"
-          python3 tests/boot/windows.py boot "$WORK" "$OUT" --seconds 4500
+          python3 tests/boot/windows.py boot "$WORK" "$OUT" --seconds 5400
 
       - name: Windows applications, summary
         if: ${{ !cancelled() && steps.boot.outcome == 'success' }}
@@ -309,6 +310,7 @@ jobs:
           show "$OUT/guest/second-boot/components/pax-e2e.err" 40
           show "$OUT/guest/second-boot/components-avc.txt" 60
           show "$OUT/windows/guest/tur-windows-check/status" 60
+          show "$OUT/windows/guest/tur-windows-check/preflight.out" 120
           show "$OUT/windows/guest/tur-windows-check/apps.out" 200
           show "$OUT/windows/guest/tur-windows-check/apps.err" 60
           show "$OUT/windows/guest/tur-windows-check/autopilot.out" 80

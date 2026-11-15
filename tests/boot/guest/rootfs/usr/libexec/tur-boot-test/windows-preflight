@@ -1,0 +1,53 @@
+#!/usr/bin/bash
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Part of the Windows boot of tests/boot/windows.py (boot-test image only).
+# windows-check runs this as the test user, in the session, before the real
+# applications: Wine itself, outside any sandbox, then tur-runtime's prefix
+# creation, each with a time limit; if either is still running half-way, the
+# processes are listed, so that a hang says where it is.
+#
+#   windows-preflight WORK_DIR
+set -u
+work="${1:?work directory required}"
+mkdir -p "${work}"
+
+snapshot() { # snapshot LABEL: the Wine and sandbox processes, as a tree
+    echo "== processes ($1, $(date -u +%T))"
+    ps -o pid,ppid,etimes,stat,wchan:20,args -u "$(id -u)" --forest | grep -v -E ' (ps|grep) ' | grep -i -E 'wine|bwrap|tur-runtime|\.exe|PID' | cut -c1-220
+}
+
+watch() { # watch SECONDS LABEL COMMAND...: run, list the processes half-way
+    local seconds="$1" label="$2" pid rc
+    shift 2
+    echo "== ${label}: $*"
+    local started="${SECONDS}"
+    timeout "${seconds}" "$@" &
+    pid=$!
+    (sleep "$((seconds / 2))"; if kill -0 "${pid}" 2> /dev/null; then snapshot "${label}, still running after $((seconds / 2)) s"; fi) &
+    wait "${pid}"
+    rc=$?
+    echo "== ${label}: exit status ${rc} after $((SECONDS - started)) s"
+    return "${rc}"
+}
+
+echo "== id: $(id); $(id -Z)"
+echo "== DISPLAY=${DISPLAY:-} WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-} XAUTHORITY=${XAUTHORITY:-} XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-}"
+echo "== wine --version: $(wine --version 2>&1)"
+ls -lZ /dev/ntsync 2>&1
+
+# Wine alone, as a person would start it from a terminal: no sandbox.
+export WINEPREFIX="${work}/plain-prefix" WINEDLLOVERRIDES="mscoree,mshtml=" WINEDEBUG="err+all"
+watch 240 "wine wineboot --init, no sandbox" wine wineboot --init
+watch 60 "wineserver --wait, no sandbox" wineserver --wait
+watch 30 "wine cmd /c ver, no sandbox" wine cmd /c ver
+wineserver -k 2> /dev/null
+du -sh "${WINEPREFIX}" 2>&1
+unset WINEPREFIX WINEDLLOVERRIDES WINEDEBUG
+
+# The same through tur-runtime, in its sandbox.
+watch 300 "tur-runtime prefix create" tur-runtime prefix create tur.test.preflight --json
+ls -la "${HOME}/.local/state/tur/runtime/logs/tur.test.preflight/" 2>&1
+tail -n 60 "${HOME}"/.local/state/tur/runtime/logs/tur.test.preflight/operations.log 2>&1
+watch 120 "tur-runtime prefix remove" tur-runtime prefix remove tur.test.preflight --json
+snapshot "at the end"

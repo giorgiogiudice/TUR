@@ -98,7 +98,7 @@ RUN set -eu; \
     ln -s ../tur-desktop-check.service \
         /usr/lib/systemd/system/multi-user.target.wants/tur-desktop-check.service; \
     # The Windows boot (tests/boot/windows.py).
-    chmod 0755 /usr/libexec/tur-boot-test/windows-check; \
+    chmod 0755 /usr/libexec/tur-boot-test/windows-check /usr/libexec/tur-boot-test/windows-preflight; \
     chmod -R a+rX /usr/share/tur-windows-e2e; \
     ln -s ../tur-windows-autologin.service \
         /usr/lib/systemd/system/multi-user.target.wants/tur-windows-autologin.service; \

@@ -131,14 +131,37 @@ as_session() {
     return "${rc}"
 }
 
+# follow FILE: copy a driver's output to the serial console as it is
+# written, so that the host's log shows progress even if the guest never
+# finishes. The host ignores these lines.
+follow() {
+    tail -n +1 -F "$1" 2> /dev/null | sed -u "s/^/TUR-BOOT-TEST: WINDOWS-LOG $2: /" > /dev/ttyS0 &
+}
+
+# The session must stay visible and unlocked for an hour: no screen locking,
+# no display power saving (kde-inhibit holds Plasma's inhibition while it
+# runs), as a person working at it would have.
+as_session kscreenlocker 30 /usr/bin/kwriteconfig6 --file kscreenlockerrc --group Daemon --key Autolock false
+timeout 30 systemd-run --machine="${user}@.host" --user --quiet --unit=tur-windows-inhibit "${session_env[@]}" -- \
+    /usr/bin/kde-inhibit --power --screenSaver /usr/bin/sleep 10800 > "${out}/inhibit.txt" 2>&1 < /dev/null
+
 work="${home}/tur-windows"
 # shellcheck disable=SC2016  # expanded by the shell that runs the snippet
 as_session context 60 /usr/bin/bash -c 'id; id -Z; echo "DISPLAY=${DISPLAY:-} WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-}"; mkdir -p "$1"' _ "${work}"
 
+# ---- 0. Wine alone, then tur-runtime's prefix creation, with time limits --------
+say "WINDOWS-CHECK preflight start uptime=$(uptime_s)"
+: > "${out}/preflight.out"
+follow "${out}/preflight.out" preflight
+as_session preflight 900 /usr/libexec/tur-boot-test/windows-preflight "${work}/preflight"
+say "WINDOWS-CHECK preflight done uptime=$(uptime_s)"
+
 # ---- 1. real applications, through tur-runtime ----------------------------------
 say "WINDOWS-CHECK apps start uptime=$(uptime_s)"
-as_session apps 5400 /usr/bin/python3 "${share}/apps.py" --session --shot-fifo "${fifo}" \
-    --launcher-check 7zip-exe --only "${only}" \
+: > "${out}/apps.out"
+follow "${out}/apps.out" apps
+as_session apps 2400 /usr/bin/python3 "${share}/apps.py" --session --shot-fifo "${fifo}" \
+    --launcher-check 7zip-exe --only "${only}" --step-timeout 420 \
     --tur-runtime /usr/bin/tur-runtime --apps "${share}/apps.json" \
     --work-dir "${work}/apps" --downloads "${work}/downloads" --evidence "${work}/evidence/apps" \
     --title "Real applications on the installed TUR system"
@@ -149,19 +172,21 @@ say "WINDOWS-CHECK apps done uptime=$(uptime_s)"
 installer="$(find "${work}/downloads/7zip-exe" -name '*.exe' 2> /dev/null | head -n1)"
 put tur_apps_installer "${installer}"
 if [ -n "${installer}" ]; then
-    as_session tur-apps-plan 300 /usr/bin/tur-apps plan org.7-zip.7zip --route wine --file "${installer}" --json
-    as_session tur-apps-install 1200 /usr/bin/tur-apps install org.7-zip.7zip --route wine --file "${installer}" --yes --events
-    as_session tur-apps-list 120 /usr/bin/tur-apps list --json
+    as_session tur-apps-plan 120 /usr/bin/tur-apps plan org.7-zip.7zip --route wine --file "${installer}" --json
+    as_session tur-apps-install 600 /usr/bin/tur-apps install org.7-zip.7zip --route wine --file "${installer}" --yes --events
+    as_session tur-apps-list 60 /usr/bin/tur-apps list --json
     # shellcheck disable=SC2016  # expanded by the shell that runs the snippet
-    as_session tur-apps-entries 60 /usr/bin/bash -c 'ls -la "$HOME/.local/share/applications"; for f in "$HOME"/.local/share/applications/tur-wine-*.desktop; do echo "== $f"; cat "$f"; done'
-    as_session tur-apps-remove 900 /usr/bin/tur-apps remove org.7-zip.7zip --delete-data --events
+    as_session tur-apps-entries 30 /usr/bin/bash -c 'ls -la "$HOME/.local/share/applications"; for f in "$HOME"/.local/share/applications/tur-wine-*.desktop; do echo "== $f"; cat "$f"; done'
+    as_session tur-apps-remove 300 /usr/bin/tur-apps remove org.7-zip.7zip --delete-data --events
     # shellcheck disable=SC2016  # expanded by the shell that runs the snippet
-    as_session tur-apps-after 60 /usr/bin/bash -c 'ls -la "$HOME/.local/share/applications"; ls -la "$HOME/.local/share/tur/runtime/prefixes" "$HOME/.local/share/tur/runtime/launchers" 2>&1; tur-apps list --json'
+    as_session tur-apps-after 30 /usr/bin/bash -c 'ls -la "$HOME/.local/share/applications"; ls -la "$HOME/.local/share/tur/runtime/prefixes" "$HOME/.local/share/tur/runtime/launchers" 2>&1; tur-apps list --json'
 fi
 say "WINDOWS-CHECK tur-apps done uptime=$(uptime_s)"
 
 # ---- 3. the compatibility autopilot, on a real application with a fault ---------
-as_session autopilot 2400 /usr/bin/python3 "${share}/autopilot.py" --session --real-only \
+: > "${out}/autopilot.out"
+follow "${out}/autopilot.out" autopilot
+as_session autopilot 900 /usr/bin/python3 "${share}/autopilot.py" --session --real-only \
     --shot-fifo "${fifo}" --real putty-exe \
     --tur-runtime /usr/bin/tur-runtime --tur-catalogue /usr/bin/tur-catalogue \
     --build-dir "${work}/no-build" --work-dir "${work}/autopilot" --apps "${share}/apps.json" \
@@ -185,6 +210,7 @@ put finished_uptime "$(uptime_s)"
 
 # ---- send -----------------------------------------------------------------------
 kill "${relay}" 2> /dev/null
+pkill -f "tail -n \+1 -F ${out}/" 2> /dev/null
 exec 3>&-
 rm -f "${fifo}"
 chmod -R a+rX "${out}"
