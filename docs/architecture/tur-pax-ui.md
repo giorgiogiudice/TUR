@@ -68,6 +68,20 @@ starts the program with nothing shown (`--background`) when they call and it
 is not running. The interface carries no words to P@x: a program that wants
 P@x to do something calls `org.tur.Agent1`, under its rules.
 
+**Beside P@x's character** (added on 15 November 2026;
+[tur-pax-companion.md](tur-pax-companion.md), sections 4 and 6). The
+interface gained a read-only property, `Mode`: what the window shows now
+(empty, `ask`, `panel`, `activity` or `setup`), with `PropertiesChanged`,
+so that P@x's character on the bar listens, and says nothing, while the ask
+bar is open. And `Show("ask")`, from whoever calls it and from P@x's key,
+opens the bar beside the character when the character is on the bar: the
+program reads `org.tur.PaxCompanion1.Anchor` (waiting 0.4 s at most, never
+starting the character) and anchors the bar to the bottom and left edges of
+the character's screen, centred on the character as far as the screen
+allows, 8 px above the bar's top edge, which is where the character's
+bubble is. With no character it opens where it always did. Run under KWin
+by the character's compositor test. An addition: the version stays 1.
+
 **Command line.** `tur-pax-ui [--mode ask|panel|activity|setup]
 [--background] [--variant dark|light] [--standalone] [--no-dbus] [--check]
 [--bus ADDRESS]`, and the keys' commands, which need no display: `--stop`,

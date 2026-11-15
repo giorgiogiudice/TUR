@@ -93,7 +93,7 @@ Methods   Acquire(s purpose) -> s lease
           ShowCommands(b shown)                                             the list of P@x's keys
 Signals   PointerArrived(s lease)  HighlightLost(u id, s reason)  LeaseEnded(s lease, s reason)
           StopRequested()  PauseRequested()  ResumeRequested()  GuideControl(u id, s control)
-Property  Shown (b)  Screens (as)  CommandsShown (b)
+Property  Shown (b)  Screens (as)  CommandsShown (b)  Activity (s)
 ```
 
 **Coordinates.** Logical pixels, as KWin and Qt count them. A `screen` is an
@@ -120,6 +120,13 @@ matches, with the reason the locator gives), `UnknownHighlight` (004),
 lease, so that a lease's token is not told to anyone else on the bus. The
 other four are declared for the design's buttons and are never sent (section
 7).
+
+**Activity** (added on 15 November 2026) is what the pill says P@x is
+doing: the loudest of what the leases set (`idle`, `listening`, `working`,
+`observing`, `acting`, `waiting`, `paused`), or empty while P@x is not on.
+It sends `PropertiesChanged`. P@x's character on the bar follows it, so that
+the two never disagree ([tur-pax-companion.md](tur-pax-companion.md), rule
+R12).
 
 **Shown** is true while P@x is on (some lease is held, whatever the state)
 and a frame of the overlay's surface has reached the compositor on every

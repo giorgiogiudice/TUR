@@ -99,9 +99,11 @@ Item {
         const notice = stage.companion.bubble
         if (action === "show") {
             if (notice.opens === "notice") {
+                // The whole notice takes the bubble's place before the
+                // bubble goes, so that whoever has the keyboard keeps it.
                 stage.opened = notice
-                stage.companion.dismiss()
                 stage.page = "notice"
+                stage.companion.dismiss()
             } else {
                 stage.companion.dismiss()
                 stage.windowRequested(notice.opens !== undefined ? String(notice.opens) : "panel")

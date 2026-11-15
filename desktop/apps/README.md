@@ -15,6 +15,7 @@ sections 14.1 and 15.1). Each arrives with the task that builds it. So far:
 | `diagnostics/` | `tur-diagnostics` | D-08 |
 | `pax-ui/` | `tur-pax-ui` | D-17 |
 | `pax-overlay/` | `tur-pax-overlay` | D-15 |
+| `tur-pax-companion/` | `tur-pax-companion`, P@x's character on the bar ([tur-pax-companion.md](../../docs/architecture/tur-pax-companion.md)) | the owner's wish of 14 November 2026 |
 | `pax-approve/` | `tur-pax-approve` | D-18 |
 | `confirm/` | `tur-confirm`, the trusted screen | D-16 |
 
