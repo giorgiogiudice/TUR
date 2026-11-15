@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Present only in the boot-test image (tests/boot/guest). Never part of TUR.
+
+[Unit]
+Description=TUR boot test: Windows applications on the installed system (test image only)
+Documentation=https://github.com/giorgiogiudice/TUR/tree/main/tests/boot
+# Inert unless the Windows boot of tests/boot/windows.py asked for it, and
+# never on hardware.
+ConditionKernelCommandLine=tur.windows_check
+ConditionVirtualization=vm
+After=basic.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+ExecStart=/usr/libexec/tur-boot-test/windows-check
+StandardOutput=journal
+StandardError=journal
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target

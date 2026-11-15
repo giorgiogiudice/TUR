@@ -184,6 +184,37 @@
       }
     },
     {
+      "id": "putty-exe-32",
+      "app_id": "tur.test.putty-exe-32",
+      "name": "PuTTY (single program, 32-bit)",
+      "version": "0.85",
+      "publisher": "Simon Tatham",
+      "toolkit": "Win32 dialogs and a terminal window drawn by the application; an i386 program, which Fedora's 64-bit Wine runs in its new WoW64 mode",
+      "licence": "MIT",
+      "licence_source": "https://www.chiark.greenend.org.uk/~sgtatham/putty/licence.html",
+      "download_page": "https://www.chiark.greenend.org.uk/~sgtatham/putty/latest.html",
+      "url": "https://the.earth.li/~sgtatham/putty/0.85/w32/putty.exe",
+      "size": 1513624,
+      "sha256": "4c70267ca03a00ea761ec358498b990a7221decb36eace9b7dbe6a751be0fb3b",
+      "hash_source": "https://the.earth.li/~sgtatham/putty/0.85/sha256sums",
+      "expected_kind": "plain-exe",
+      "install_options": [
+        "--portable"
+      ],
+      "main_executable": "putty.exe",
+      "window_title": "^PuTTY Configuration$",
+      "check": {
+        "kind": "putty-raw",
+        "title": "127\\.0\\.0\\.1 - PuTTY"
+      },
+      "expected": {
+        "install": "pass",
+        "launch": "pass",
+        "check": "pass",
+        "uninstall": "pass"
+      }
+    },
+    {
       "id": "innosetup",
       "app_id": "tur.test.innosetup",
       "name": "Inno Setup",

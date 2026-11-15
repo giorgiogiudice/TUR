@@ -858,20 +858,31 @@ launch refuses another one until the prefix is migrated.
 
 ### The launcher entry
 
-Staged in this slice, not installed:
+Installed where the desktop's launcher looks, with the icon kept in the
+runtime manager's own directory:
 
 ```
-$XDG_DATA_HOME/tur/runtime/launchers/<app-id>/tur-wine-<app-id>.desktop
+$XDG_DATA_HOME/applications/tur-wine-<app-id>.desktop
 $XDG_DATA_HOME/tur/runtime/launchers/<app-id>/tur-wine-<app-id>.png
 ```
 
-On a system whose desktop this is integrated with, the entry would be
-`$XDG_DATA_HOME/applications/tur-wine-<app-id>.desktop` and the icon
-`$XDG_DATA_HOME/icons/hicolor/<size>x<size>/apps/tur-wine-<app-id>.png`, named
-in the entry as `Icon=tur-wine-<app-id>`. That step is not taken here because
-it belongs to the desktop bridge (§9.3), which also has to refresh the
-desktop's own caches and to remove the entry reliably; `app install` prints
-both destinations and the record says `installed: false`.
+The entry names the icon by its absolute path (`Icon=/…/tur-wine-<app-id>.png`),
+so nothing is written into an icon theme and no icon cache needs refreshing.
+Plasma's launcher (Kickoff, KRunner) reads the user's applications directory
+again when it changes; nothing is run to tell it. The record says
+`installed: true` and names the entry. `app uninstall` and `prefix remove`
+delete the entry with everything else and check that it is gone; a failed
+installation is rolled back with it. In the applications directory the runtime
+manager writes and deletes nothing but files named
+`tur-wine-<valid app-id>.desktop` (the executor refuses any other path there).
+Measured on the installed TUR system: [windows-runtime-4](../reports/windows-runtime-4.md).
+
+A record written before this (`installed: false`) names the staged entry in
+`launchers/<app-id>/`; it is removed with that directory.
+
+What the desktop bridge (§9.3) would still add: an icon in the user's icon
+theme at its size, categories, the "About this application" action, `%F`
+and file types.
 
 The icon is taken from the main program: the first icon group of its
 resources, and of that the largest image and, among equals, the deepest. An
@@ -1377,10 +1388,12 @@ the Windows-guest route. Everything else is in
   verify` cannot check it and a prefix made with `prefix create` keeps it
   only in its directory's attribute. Nothing asks for it per application
   yet: a catalogue entry or the application centre would pass `--casefold`.
-- **Running on the TUR image.** Everything that has run, ran on a hosted Ubuntu
-  runner with Ubuntu's Wine (reports [1](../reports/windows-runtime-1.md) and
-  [2](../reports/windows-runtime-2.md)). Wine is not in the image yet, and
-  nothing here has run on Fedora, under SELinux, on Plasma or with a GPU.
+- **Beyond the virtual machine.** The image carries Fedora's Wine
+  ([image/README.md](../../image/README.md), "Wine"), and the boot test
+  installs, starts and removes real applications on the installed system,
+  under SELinux, in a Plasma session ([windows-runtime-4](../reports/windows-runtime-4.md)).
+  Not tried: a GPU, sound heard, real hardware, games, Proton. The jobs of
+  the `windows-runtime` workflow still run on Ubuntu's Wine.
 - **Real applications beyond a first few.** Eight installers of five free
   applications have been installed, started, used once and removed in CI; the
   measured results are in the [second report](../reports/windows-runtime-2.md).
@@ -1397,8 +1410,9 @@ the Windows-guest route. Everything else is in
 - **Dependencies.** Nothing is installed for an application: no Microsoft
   component, no redistributable runtime, no Mono, no Gecko, no winetricks
   recipe. An application that needs one fails, and that is the result.
-- **Installing the launcher entry.** The entry and its icon are staged under
-  the runtime manager's own directory. Putting them where the desktop looks,
+- **More of the launcher entry.** The entry is installed among the user's
+  applications (see [The launcher entry](#the-launcher-entry)); its icon is
+  named by path, not put into the icon theme. Putting them where the desktop looks,
   refreshing the desktop's caches, categories, file associations and "open
   with" are the desktop bridge's work (§9.3) and are not built.
 - **Updating an installed application.** There is install and uninstall. A
