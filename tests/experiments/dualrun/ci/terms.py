@@ -9,8 +9,10 @@ page; they are inside the medium. This mounts the medium read-only on the
 runner, lists the images in its install archive, takes the licence text of
 the evaluation edition out of it into a temporary directory, and writes
 `terms-excerpt.md`: where the text was found, its SHA-256 and length, its
-opening paragraphs and every paragraph about evaluation, testing, virtual
-machines, time limits and remote use. The licence file itself is deleted
+opening paragraphs, every section heading, sections 2 (use rights and
+restrictions), 4 (transfer) and 5 (activation) whole, and every other
+paragraph about evaluation, testing, virtual machines, time limits, remote
+use, benchmarks, publishing or automation. The licence file itself is deleted
 again and is never an artifact; the excerpt is a quotation for review.
 
 Nothing is installed or started.
@@ -29,9 +31,14 @@ import tempfile
 
 KEY = re.compile(
     r"evaluat|demonstrat|live operating|\btest|virtual|time-sensitive|expire|benchmark|automat|"
-    r"remote|install and use|not for resale|activation|number of|internal",
+    r"remote|install and use|not for resale|activation|number of|internal|"
+    r"install and run|licensed device|one instance|reverse engineer|work around|publish|transfer",
     re.I,
 )
+# Sections given whole: 2 (installation and use rights, restrictions), 4
+# (transfer), 5 (activation). Every top-level heading is kept for orientation.
+WHOLE_SECTIONS = {2, 4, 5}
+HEADING = re.compile(r"^(\d{1,2})\.\s+[A-Z]")
 DESTINATIONS = frozenset("""
 aftncn aftnsep aftnsepc annotation atnauthor atndate atnicn atnid atnparent atnref atntime atrfend
 atrfstart author background bkmkend bkmkstart blipuid buptim category colorschememapping colortbl
@@ -130,13 +137,17 @@ def run(*argv: str, check: bool = True) -> str:
     return done.stdout
 
 
-def excerpt(text: str, limit: int = 14000) -> list[str]:
+def excerpt(text: str, limit: int = 32000) -> list[str]:
     paragraphs = [re.sub(r"[ \t]+", " ", p).strip() for p in text.split("\n")]
     paragraphs = [p for p in paragraphs if p]
     chosen: list[str] = []
     used = 0
+    section = 0
     for index, paragraph in enumerate(paragraphs):
-        if index < 12 or KEY.search(paragraph):
+        heading = HEADING.match(paragraph)
+        if heading:
+            section = int(heading.group(1))
+        if index < 12 or heading or section in WHOLE_SECTIONS or KEY.search(paragraph):
             piece = paragraph if len(paragraph) <= 1500 else paragraph[:1500] + " […]"
             if used + len(piece) > limit:
                 chosen.append("[… the excerpt stops here: length limit …]")
@@ -210,8 +221,9 @@ def main() -> int:
             record["characters"] = len(text)
             lines += [f"## `{path}`", "",
                       f"SHA-256 `{digest}`, {len(data)} bytes, {len(text)} characters of text. "
-                      "Opening paragraphs, then every paragraph that mentions evaluation, testing, "
-                      "virtual machines, time limits, remote use or activation.", ""]
+                      "Opening paragraphs, every section heading, sections 2, 4 and 5 whole, then "
+                      "every paragraph that mentions evaluation, testing, virtual machines, time limits, "
+                      "remote use, activation, benchmarks, publishing or automation.", ""]
             lines += [f"> {p}\n>" for p in excerpt(text)]
             lines.append("")
         if not facts["licences"]:
