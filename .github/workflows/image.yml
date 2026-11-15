@@ -99,8 +99,8 @@ jobs:
 
       - name: Lint scripts
         run: |
-          shellcheck -x scripts/*.sh tests/image/*.sh image/*.sh image/branding/*.sh image/engine/*.sh
-          python3 -m py_compile scripts/*.py tests/image/*.py
+          shellcheck -x scripts/*.sh tests/image/*.sh image/*.sh image/branding/*.sh image/engine/*.sh image/wine/*.sh
+          python3 -m py_compile scripts/*.py tests/image/*.py image/wine/*.py
 
       - name: Runner environment
         run: |

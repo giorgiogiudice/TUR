@@ -46,6 +46,7 @@ pub enum Forward {
 /// The executor that carries plans out on the running system.
 pub struct SystemExecutor {
     roots: Vec<PathBuf>,
+    applications: PathBuf,
     command_log: Option<PathBuf>,
     forward: Forward,
     last_output: String,
@@ -59,6 +60,7 @@ impl SystemExecutor {
                 dirs.data_root().to_path_buf(),
                 dirs.state_root().to_path_buf(),
             ],
+            applications: dirs.applications().to_path_buf(),
             command_log: None,
             forward: Forward::LogOnly,
             last_output: String::new(),
@@ -85,13 +87,15 @@ impl SystemExecutor {
     }
 
     /// Refuses a path that is not strictly inside one of the roots, at least
-    /// two levels down: an application's directory, or something inside one.
+    /// two levels down: an application's directory, or something inside one;
+    /// or an application's launcher entry in the user's applications
+    /// directory, `tur-wine-<app-id>.desktop`.
     fn guard(&self, path: &Path) -> Result<(), StepError> {
         let inside = plain_text(path).is_some()
-            && self.roots.iter().any(|root| {
+            && (self.roots.iter().any(|root| {
                 path.strip_prefix(root)
                     .is_ok_and(|rest| rest.components().count() >= 2)
-            });
+            }) || crate::paths::is_application_entry(&self.applications, path));
         if inside {
             Ok(())
         } else {
@@ -773,6 +777,10 @@ mod tests {
             scratch.dirs.state_root().to_path_buf(),
             scratch.app.join("../../../victim"),
             PathBuf::from("relative/path"),
+            // The user's applications directory, and entries not TUR's.
+            scratch.dirs.applications().to_path_buf(),
+            scratch.dirs.applications().join("firefox.desktop"),
+            scratch.dirs.applications().join("tur-wine-.desktop"),
         ] {
             let error = executor
                 .execute(&Step::RemoveTree {
@@ -822,6 +830,16 @@ mod tests {
         );
         assert!(fs::symlink_metadata(&prefix).is_err());
         assert!(outside.join("precious").exists());
+
+        // An application's own launcher entry is deleted; its neighbours stay.
+        let applications = scratch.dirs.applications().to_path_buf();
+        fs::create_dir_all(&applications).unwrap();
+        let entry = applications.join("tur-wine-com.example.app.desktop");
+        fs::write(&entry, b"[Desktop Entry]\n").unwrap();
+        fs::write(applications.join("firefox.desktop"), b"[Desktop Entry]\n").unwrap();
+        done(&mut executor, Step::RemoveTree { path: entry.clone() });
+        assert!(!entry.exists());
+        assert!(applications.join("firefox.desktop").exists());
 
         let moved = scratch.app.join("moved");
         fs::create_dir_all(&prefix).unwrap();

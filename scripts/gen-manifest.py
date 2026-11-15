@@ -36,6 +36,8 @@ PACKAGES = [
     "bubblewrap",
     # what TUR's own programs start
     "util-linux", "pciutils", "usbutils", "vulkan-tools", "python3", "sudo",
+    # Windows applications (image/wine/wine.lock)
+    "wine-core", "wine-mono", "ntsync-autoload",
 ]
 
 PROBE = r"""
@@ -211,7 +213,7 @@ def main() -> int:
             "rust": values.get("rust"),
         },
         "runtime_versions": {
-            "wine": None,
+            "wine": pkg("wine-core"),
             "proton": None,
             "darling": None,
             "dxvk": None,

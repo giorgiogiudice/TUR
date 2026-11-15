@@ -3,6 +3,9 @@
 *
 !tests/boot/guest/
 !tests/pax/
+!tests/windows-runtime/apps.py
+!tests/windows-runtime/apps.json
+!tests/windows-runtime/autopilot.py
 !services/tur-pax/tests/data/
 !services/tur-pax/data/
 !services/tur-pax/interfaces/

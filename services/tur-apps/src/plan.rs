@@ -929,7 +929,7 @@ fn windows_plan(
         ));
     }
     notes.push(
-        "The launcher entry is staged by tur-runtime and not yet added to the launcher (docs/architecture/runtime-manager.md, \"The launcher entry\").".to_owned(),
+        "tur-runtime adds its launcher entry, with the icon of its main program, to the launcher; removing it takes the entry away (docs/architecture/runtime-manager.md, \"The launcher entry\").".to_owned(),
     );
 
     let home = dirs.runtime_home(&app_id);
@@ -951,7 +951,12 @@ fn windows_plan(
                 dirs,
             ),
             place(
-                "its launcher entry and icon (staged)",
+                "its launcher entry",
+                &dirs.runtime_desktop_entry(&app_id),
+                dirs,
+            ),
+            place(
+                "its launcher entry's icon",
                 &dirs.runtime_launcher(&app_id),
                 dirs,
             ),

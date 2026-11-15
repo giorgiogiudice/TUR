@@ -38,6 +38,10 @@ again. The time of every step is recorded.
 One case runs a second time with the data directory on btrfs, to measure
 copy-on-write copies (--reflink-work-dir).
 
+On the installed TUR system (tests/boot/windows.py) it runs with --session
+and --real-only: in the signed-in session, as apps.py --session does, on the
+real applications only (no compiler is there to build the broken programs).
+
 The exit status is 1 when anything differs from what is expected. The table
 is written either way.
 """
@@ -108,6 +112,8 @@ INJECTABLE = ["comctl32.dll", "comdlg32.dll", "shlwapi.dll", "uxtheme.dll", "ole
               "ole32.dll", "shell32.dll", "version.dll", "winmm.dll", "imm32.dll", "ws2_32.dll"]
 
 WINE_DLL_DIRECTORIES = [
+    # Fedora's x86-64 Wine, built in its new WoW64 mode (the TUR image).
+    "/usr/lib64/wine-wow64/wine/x86_64-windows", "/usr/lib64/wine-wow64/wine/i386-windows",
     "/usr/lib64/wine/x86_64-windows", "/usr/lib64/wine/i386-windows", "/usr/lib/wine/x86_64-windows",
     "/usr/lib/wine/i386-windows", "/usr/lib/x86_64-linux-gnu/wine/x86_64-windows",
     "/usr/lib/i386-linux-gnu/wine/i386-windows",
@@ -516,15 +522,22 @@ def main() -> int:
     parser.add_argument("--real", default="", help="comma-separated ids of apps.json")
     parser.add_argument("--downloads", type=pathlib.Path)
     parser.add_argument("--only", default="", help="comma-separated case names")
+    parser.add_argument("--real-only", action="store_true",
+                        help="only the real applications: no broken program, no assistant tools")
+    parser.add_argument("--session", action="store_true",
+                        help="run in the signed-in desktop session (the installed TUR system)")
+    parser.add_argument("--shot-fifo", help="with --session: where to ask the host for screenshots")
     arguments = parser.parse_args()
+    arguments.launcher_check = ""
+    apps.configure_session(arguments)
     arguments.evidence = arguments.evidence.resolve()
     arguments.build_dir = arguments.build_dir.resolve()
     arguments.evidence.mkdir(parents=True, exist_ok=True)
 
     checks = Checks()
-    environment = apps.describe_environment()
+    environment = apps.describe_session() if arguments.session else apps.describe_environment()
     (arguments.evidence / "environment.json").write_text(json.dumps(environment, indent=2) + "\n")
-    processes = apps.start_display(arguments.evidence)
+    processes = [] if arguments.session else apps.start_display(arguments.evidence)
     rows: list[dict] = []
     reflink_rows: list[dict] = []
     real_rows: list[dict] = []
@@ -534,6 +547,8 @@ def main() -> int:
                            downloads=arguments.downloads.resolve() if arguments.downloads else None)
         driver = Driver(arguments, checks, work, world)
         cases = [case for case in CASES if not arguments.only or case["name"] in arguments.only.split(",")]
+        if arguments.real_only:
+            cases = []
         for case in cases:
             try:
                 rows.append(driver.case(case))
@@ -542,7 +557,7 @@ def main() -> int:
                 checks.check(case["name"], "the harness ran the case", False, str(error))
 
         # The assistant's two tools, as P@x would call them.
-        for label, command in [
+        for label, command in [] if arguments.real_only else [
             ("pax-plan", ["app", "autopilot", "--plan", "--json", "--failure=dll-init-failed", "--",
                           "tur.test.autopilot-dllover"]),
             ("pax-results", ["app", "autopilot", "--results", "--json", "--", "tur.test.autopilot-dllover"]),
@@ -578,9 +593,12 @@ def main() -> int:
         for process in processes:
             process.terminate()
 
+    where = (f"Fedora's Wine in the TUR image ({environment.get('wine', '?')}), on the installed system in the "
+             f"signed-in Plasma session; SELinux {environment.get('selinux', '?')}; a virtual machine, no GPU."
+             if arguments.session else
+             f"Ubuntu's Wine on a hosted runner ({environment.get('wine', '?')}); Xvfb 1280x800, no GPU.")
     lines = ["## Compatibility autopilot", "",
-             f"Ubuntu's Wine on a hosted runner ({environment.get('wine', '?')}); Xvfb 1280x800, no GPU. "
-             "Every attempt ran in a throwaway copy of the prefix, in the sandbox, without network.", ""]
+             where + " Every attempt ran in a throwaway copy of the prefix, in the sandbox, without network.", ""]
     lines += table(rows, "Deliberately broken programs (ext4 with the casefold feature)")
     if reflink_rows:
         lines += [""] + table(reflink_rows, "The same programs with the data directory on btrfs (copy-on-write)")

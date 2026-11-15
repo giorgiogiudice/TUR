@@ -25,6 +25,9 @@ expect_tool_sets="$(grep -v '^#' image/programs.tsv | cut -f1 | while read -r co
     if [ -f "${component}/agent-tools.json" ]; then basename "${component}"; fi
 done | LC_ALL=C sort | tr '\n' ' ')"
 echo "expected: ${expect_programs} programs; tool sets: ${expect_tool_sets}"
+# The packages of the Wine lock, as name-version-release.arch.
+expect_wine_packages="$(grep -v '^#' image/wine/wine.lock | cut -f1 | sed 's/\.rpm$//' | tr '\n' ' ')"
+echo "expected: $(echo "${expect_wine_packages}" | wc -w) Wine packages"
 
 "${podman[@]}" run --rm -i --network none \
     -e "EXPECT_BUILD_ID=${expected_build_id}" \
@@ -33,6 +36,7 @@ echo "expected: ${expect_programs} programs; tool sets: ${expect_tool_sets}"
     -e "EXPECT_PROGRAMS=${expect_programs}" \
     -e "EXPECT_TOOL_SETS=${expect_tool_sets}" \
     -e "EXPECT_LLAMA_CPP_BUILD=${LLAMA_CPP_BUILD_NUMBER}" \
+    -e "EXPECT_WINE_PACKAGES=${expect_wine_packages}" \
     "${image}" /bin/bash -s <<'INNER'
 set -u
 fail=0
@@ -302,11 +306,35 @@ for tool in uname systemd-analyze dmesg lspci lsusb vulkaninfo wpctl nmcli bluet
 done
 check "bubblewrap and util-linux are packages of the base" rpm -q bubblewrap util-linux
 check "bubblewrap is not set-user-ID"         bash -c '[ ! -u /usr/bin/bwrap ]'
-check "no Windows, Android or macOS runtime is in the image" bash -c \
-    'for name in wine wine64 wineserver umu-run waydroid darling; do
+# Wine (image/README.md, "Wine"): Fedora's x86-64 build of image/wine/wine.lock,
+# which runs 64-bit and 32-bit Windows programs, and nothing that would start
+# a Windows program outside tur-runtime's sandbox.
+check "Wine is installed, every package of image/wine/wine.lock at its pinned version" bash -c \
+    'for nevra in ${EXPECT_WINE_PACKAGES}; do rpm -q "${nevra}" > /dev/null || { echo "${nevra} is not installed"; exit 1; }; done
+     [ "$(echo ${EXPECT_WINE_PACKAGES} | wc -w)" -ge 60 ]'
+check "wine --version names Wine 11" bash -c '[[ "$(wine --version)" == wine-11.* ]]'
+check "wine and wineserver are the 64-bit programs, through alternatives" bash -c \
+    '[ "$(readlink -f /usr/bin/wine)" = /usr/bin/wine64 ] && [ "$(readlink -f /usr/bin/wineserver)" = /usr/bin/wineserver64 ]'
+check "Wine has the DLLs of both architectures (new WoW64)" bash -c \
+    'd=/usr/lib64/wine-wow64/wine; for f in i386-windows/kernel32.dll x86_64-windows/kernel32.dll x86_64-unix/ntdll.so \
+         x86_64-windows/wow64.dll x86_64-windows/wow64cpu.dll; do test -f "$d/$f" || { echo "no $f"; exit 1; }; done'
+check "the Direct3D DLLs that alternatives manages resolve" bash -c \
+    'for f in x86_64-windows/dxgi.dll x86_64-windows/d3d11.dll i386-windows/d3d9.dll; do
+         test -f "$(readlink -f "/usr/lib64/wine-wow64/wine/$f")" || { echo "$f does not resolve"; exit 1; }; done'
+check "no 32-bit (i686) Wine, no Mono, no Gecko" bash -c \
+    '! rpm -qa --qf "%{NAME}.%{ARCH}\n" | grep -E "^(wine[^.]*\.i686|wine-mono\.|mingw(32|64)-wine-gecko\.)"'
+check "nothing starts a Windows program outside tur-runtime" bash -c \
+    'for p in wine wine-desktop wine-systemd; do if rpm -q "$p"; then exit 1; fi; done
+     if ls /usr/lib/binfmt.d/*wine* /usr/share/applications/*wine* 2>/dev/null; then exit 1; fi
+     ! grep -rlE "^Exec=(.*/)?wine(64)?( |$)" /usr/share/applications/'
+check "ntsync is loaded at boot, and the kernel has the module" bash -c \
+    'grep -qx ntsync /usr/lib/modules-load.d/ntsync.conf && find /usr/lib/modules -name "ntsync.ko*" | grep -q .'
+check "xwininfo, which tur-runtime's autopilot uses, is in the image" test -x /usr/bin/xwininfo
+check "no Proton launcher, Android or macOS runtime is in the image" bash -c \
+    'for name in umu-run waydroid darling; do
          if command -v "${name}"; then exit 1; fi
      done
-     if rpm -qa | grep -i -E "^(wine|waydroid|darling|umu-launcher)"; then exit 1; fi'
+     if rpm -qa | grep -i -E "^(waydroid|darling|umu-launcher)"; then exit 1; fi'
 
 # A program runs, not only prints its version.
 check "tur-diag status works without a running system" bash -c \

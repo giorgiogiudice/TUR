@@ -1772,9 +1772,10 @@ fn run_app_install(arguments: &InstallArguments<'_>) -> u8 {
             "record": record,
             "discovery": discovery,
             "launcher": {
-                "staged_in": session.app.launchers,
-                "would_install_entry_to": entry_destination,
-                "would_install_icon_to": icon_destination,
+                "entry": record.launcher.desktop_entry,
+                "installed_entry_to": entry_destination,
+                "icon_kept_in": session.app.launchers,
+                "icon_theme_place": icon_destination,
                 "icon": icon,
             },
             "seconds": {
@@ -1803,7 +1804,7 @@ fn run_app_install(arguments: &InstallArguments<'_>) -> u8 {
         print_line(&format!("  drive C: {}", case_folding.summary()));
         print_line(&format!("  record: {}", session.app.record.display()));
         print_line(&format!(
-            "  launcher entry: {} (staged; installed it would be {entry_destination})",
+            "  launcher entry: {} (installed as {entry_destination})",
             record.launcher.desktop_entry
         ));
         print_line(&format!(
