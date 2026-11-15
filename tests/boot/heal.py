@@ -229,13 +229,14 @@ def main() -> int:
     decisions = [(entry.get("TUR_AI_ACTION"), entry.get("TUR_AI_CLASS"), entry.get("TUR_AI_DECISION"))
                  for entry in audit if entry.get("TUR_AI_EVENT") == "decision"]
     executed = [entry.get("TUR_AI_RESULT") for entry in audit if entry.get("TUR_AI_EVENT") == "executed"]
-    expected = [("org.tur.Diagnostics1:heal_list_faults", "0", "allowed"),
+    expected = [("org.tur.Diagnostics1:heal_history", "0", "allowed"),
+                ("org.tur.Diagnostics1:heal_list_faults", "0", "allowed"),
                 ("org.tur.Diagnostics1:heal_explain", "0", "allowed"),
                 ("org.tur.Diagnostics1:heal_apply_remedy", "1", "allowed"),
                 ("org.tur.Diagnostics1:heal_apply_remedy", "1", "allowed")]
     check("T2", "P@x (installed tur-pax, scripted provider, the image's tools): reads at class 0, asks for the "
           "repair at class 1, allowed by the policy engine; the service refused the class 2 one",
-          sa.get("heal_pax_rc") == "0" and decisions == expected and executed == ["ok", "ok", "ok", "failed"],
+          sa.get("heal_pax_rc") == "0" and decisions == expected and executed == ["ok", "ok", "ok", "ok", "failed"],
           f"exit {sa.get('heal_pax_rc')}; decisions {decisions}; results {executed}; "
           f"stderr {text(a / 'pax/stderr.txt')[-300:]}")
     requests = document(a / "pax/requests.json") or []
@@ -361,18 +362,79 @@ def main() -> int:
           bool(fixed_notice) and fixed_notice[0].get("body", "").startswith("The problem you reported is fixed"),
           json.dumps(fixed_notice)[:400])
 
-    # ---- notices ---------------------------------------------------------------------------------
-    notices_a = document(a / "notices-a.json") or []
-    kinds = {(notice.get("code"), notice.get("kind")) for notice in notices_a}
-    wanted = {(SERVICE, "repaired"), (TIME, "detected"), (TIME, "repaired"), (RESOLVER, "detected"),
-              (RESOLVER, "repaired"), (SPACE, "detected"), (SPACE, "not-repaired"), (CRASH, "report-offered"),
-              (CRASH, "recurred-after-update")}
-    report_action = any(f"tur-diag heal report {CRASH}" in notice.get("actions", []) for notice in notices_a)
-    check("N1", "the person's notices say what was found, what was repaired and what is offered",
-          wanted <= kinds and report_action,
-          f"missing {sorted(wanted - kinds)}; {len(notices_a)} notices")
-    check("N2", "desktop delivery of notices (gdbus to the notification service)", False,
-          "NOT RUN: no graphical session in this test", required=False)
+    # ---- awareness: every notice shown, none dropped, none twice; the history --------------------
+    titles = {SERVICE: "A system service stopped working", TIME: "The clock is not kept right",
+              RESOLVER: "Name lookups bypass the system resolver", SPACE: "The system disk is almost full",
+              CRASH: "A TUR program crashed"}
+    noticed = {"detected", "repaired", "not-repaired", "report-offered", "fixed-by-update",
+               "recurred-after-update", "undone"}
+
+    def expected_notices(state):
+        """The (code, kind) of every event the person must be told about."""
+        return [(event.get("code"), event.get("kind")) for event in (state or {}).get("events", [])
+                if event.get("kind") in noticed or (event.get("kind") == "held" and event.get("by") == "service")]
+
+    def recorded(path):
+        return [json.loads(line) for line in text(path).splitlines() if line.strip()]
+
+    waiting = document(a / "pending-no-session.json") or []
+    still = document(a / "pending-still.json") or []
+    waiting_kinds = [(notice.get("code"), notice.get("kind")) for notice in waiting]
+    check("A1", "no graphical session: the automatic repair and its check are not shown, and wait; the "
+          "notice program with no session bus shows nothing and marks nothing seen",
+          waiting_kinds == [(SERVICE, "repaired"), (SERVICE, "held")]
+          and [n.get("id") for n in still] == [n.get("id") for n in waiting]
+          and "0 notice(s) shown; 2 wait" in text(a / "notify-no-session.txt.err"),
+          f"waiting {waiting_kinds}; still {len(still)}; {text(a / 'notify-no-session.txt.err').strip()[-120:]}")
+    shown_a = recorded(a / "notify/recorded.jsonl")
+    after_sign_in = document(a / "pending-after-sign-in.json")
+    first_two = [notice.get("summary") for notice in shown_a[:2]]
+    check("A2", "at sign-in (tur-heal-notify.service, a notification service on the session bus) both "
+          "waiting notices were shown, the automatic repair first, saying TUR did it by itself; none waits",
+          sa.get("notification_server_a") == "ready" and sa.get("notify_unit_a") == "success"
+          and first_two == [f"TUR: {titles[SERVICE]}"] * 2
+          and "TUR did this by itself" in (shown_a[0].get("body", "") if shown_a else "")
+          and "held" in (shown_a[1].get("body", "") if len(shown_a) > 1 else "")
+          and after_sign_in == [],
+          f"server {sa.get('notification_server_a')}, unit {sa.get('notify_unit_a')}; first two {first_two}; "
+          f"waiting after {after_sign_in}")
+    state_end_a = document(a / "state-recurred.json")
+    expected = expected_notices(state_end_a)
+    want_titles, got_titles = {}, {}
+    for code, _kind in expected:
+        want_titles[f"TUR: {titles.get(code, code)}"] = want_titles.get(f"TUR: {titles.get(code, code)}", 0) + 1
+    for notice in shown_a:
+        got_titles[notice.get("summary")] = got_titles.get(notice.get("summary"), 0) + 1
+    check("A3", "from then on every event the person must know of was shown, once each: "
+          "automatic repairs and whether they held, faults waiting for the person, repairs by P@x and by "
+          "the person, undo, reports offered, 'happened again'",
+          len(shown_a) == len(expected) and want_titles == got_titles
+          and document(a / "pending-end-a.json") == [] and sa.get("notify_unit_end_a") == "success",
+          f"{len(expected)} expected {expected}; {len(shown_a)} shown, by title {got_titles}; "
+          f"still waiting {document(a / 'pending-end-a.json')}")
+    check("A4", "every notice says where to see more (tur-diag heal history)",
+          bool(shown_a) and all("tur-diag heal history" in notice.get("body", "") for notice in shown_a),
+          f"{sum('tur-diag heal history' in notice.get('body', '') for notice in shown_a)} of {len(shown_a)}")
+    shown_b = recorded(b / "notify/recorded.jsonl")
+    check("A5", "after the restart, with no session yet, 'the problem you reported is fixed' waited, and was "
+          "shown at the next sign-in, once",
+          sb.get("recorded_before_sign_in_b") in ("0", "") and len(shown_b) == 1
+          and shown_b[0].get("body", "").startswith("The problem you reported is fixed")
+          and document(b / "pending-b.json") == [],
+          f"before sign-in {sb.get('recorded_before_sign_in_b')}; shown {[n.get('body', '')[:80] for n in shown_b]}")
+    history_a = document(a / "history-a.json") or []
+    whos = {entry.get("who") for entry in history_a}
+    kinds_h = {entry.get("kind") for entry in history_a}
+    ordered = [entry.get("at_utc") for entry in history_a]
+    check("A6", "the history lists, newest first, what TUR did by itself, what P@x, the person and the "
+          "person as administrator did, and the reports offered, sent and not sent",
+          {"TUR", "you", "you, as administrator"} <= whos
+          and any((who or "").startswith("P@x") for who in whos)
+          and {"repaired", "held", "undone", "report-offered", "report-sent", "report-not-sent"} <= kinds_h
+          and ordered == sorted(ordered, reverse=True),
+          f"{len(history_a)} entries; who {sorted(w or '-' for w in whos)}; kinds {sorted(kinds_h)}")
+    check("A7", "P@x read the history and found what TUR repaired by itself",
+          f"Repaired: {titles[SERVICE]}" in sent, sent[:0] + "searched the tool results sent to the provider")
     check("Z1", "the timer was put back", sb.get("timer_restored") == "active", sb.get("timer_restored"),
           required=False)
 

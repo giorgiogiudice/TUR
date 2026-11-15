@@ -101,9 +101,38 @@ those faults again and tells the person.
   applying it again until the fault is resolved.
 - Restarting a failed service is automatic; switching network time back on
   and restoring the resolver file are not, because the person may have
-  chosen them. That line is the owner's to move.
+  chosen them. The owner confirmed that line (below).
 - The state file (`/var/log/tur/heal/state.json`) is readable by everyone and
   must stay free of personal data; copies of replaced files are root's only.
+
+## The owner's decision (14 November 2026)
+
+The line is confirmed: only restarting a failed system service is
+automatic, and everything else waits for the person. The owner added: *make
+sure the user is always kept aware of this stuff.* That is a rule of this
+design:
+
+1. Everything TUR does by itself is shown to the person as a desktop notice:
+   what failed, what TUR did, that it checked the repair, and, at the next
+   scan, whether the repair held or the fault came back.
+2. Every fault that waits for the person is shown, with the safe next step.
+3. Every "the problem you reported is fixed" and "it happened again" is
+   shown.
+4. Nothing is dropped silently: a notice is marked seen only once the
+   desktop's notification service has accepted it; without a graphical
+   session it waits for the next sign-in; when many wait, the rest are summed
+   up in one notice that points to the history.
+5. Everything is in a history the person can read (`tur-diag heal history`):
+   automatic actions, what P@x and the person applied or undid, and reports
+   offered, sent, declined and not confirmed.
+
+The notices are shown by TUR's own program, `tur-diag heal notify`, in the
+person's session (a user unit started at every graphical sign-in and when
+the state changes), through the freedesktop notification service, with
+`gdbus` as a separate program (no linking). P@x gets the history as a class
+0 tool and is asked to tell the person what is new; that is not a guarantee,
+the notice is. Design: [self-healing.md](../architecture/self-healing.md),
+section 4; proof: [heal-2](../reports/heal-2.md).
 
 ## Verification
 
@@ -117,3 +146,7 @@ those faults again and tells the person.
   values, and the fix link across a restart. The `pax` workflow proves the
   P@x path end to end with a scripted provider. Report:
   [heal-1](../reports/heal-1.md).
+- Awareness: the same guest test shows that, without a graphical session,
+  notices wait; that at sign-in each is shown once through a notification
+  service on the person's session bus; that a notice survives a restart; and
+  that the history lists everything. Report: [heal-2](../reports/heal-2.md).

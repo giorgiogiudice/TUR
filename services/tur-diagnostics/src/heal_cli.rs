@@ -19,9 +19,11 @@ use tur_diag::heal::engine::{
     DEFAULT_SOCKET, MAX_REQUEST_BYTES, REQUEST_SCHEMA_VERSION, uid_of_connection,
 };
 use tur_diag::heal::{
-    Actor, ApplyRequest, Catalogue, Check, FaultState, Fixes, HealState, Lock, Machine, Outcome,
-    Paths, RealMachine, Running, apply, handle_request, notices, scan, status_view, undo,
+    Actor, ApplyRequest, Catalogue, Check, FaultState, Fixes, HISTORY_COMMAND, HealState, Lock,
+    Machine, Notice, Outcome, Paths, PersonEntry, RealMachine, Running, apply, handle_request,
+    history, notices, scan, status_view, undo,
 };
+use tur_diag::manifest::format_utc;
 use tur_diag::report::{self, REPORT_SCHEMA_VERSION, ReportKind, ReportRequest};
 use tur_diag::{DiagError, ErrorKind, SystemHost};
 
@@ -176,6 +178,30 @@ pub(crate) enum HealCommand {
     /// Show what you have not seen yet as desktop notifications. Started by
     /// tur-heal-notify.service in your session.
     Notify {
+        #[command(flatten)]
+        heal: HealPlaces,
+    },
+    /// Show everything TUR's self-healing did on this computer and what you
+    /// decided, newest first, in plain words: what it found, what it
+    /// repaired by itself and whether that held, what you and P@x applied
+    /// or undid, and the reports offered, sent and not sent.
+    History {
+        /// Print JSON instead of text.
+        #[arg(long)]
+        json: bool,
+        /// Show at most this many lines.
+        #[arg(long, value_name = "N")]
+        limit: Option<usize>,
+        #[command(flatten)]
+        heal: HealPlaces,
+    },
+    /// Say that you do not want to send the report TUR offers for a
+    /// problem. It is recorded in your history and not offered again in a
+    /// notice.
+    Decline {
+        /// The problem's code.
+        #[arg(value_name = "CODE")]
+        code: String,
         #[command(flatten)]
         heal: HealPlaces,
     },
@@ -372,43 +398,51 @@ pub(crate) fn run(command: HealCommand) -> Result<ExitCode, DiagError> {
             let state = HealState::load(&paths.state)?;
             let mut shown = read_shown();
             let found = notices(&catalogue()?, &state, &shown, &reported_codes());
-            let machine = RealMachine::new();
-            for notice in &found {
-                let mut body = notice.body.clone();
-                for action in &notice.actions {
-                    body.push('\n');
-                    body.push_str(action);
+            let (delivered, waiting) = notify(&found, &mut shown, &mut Session);
+            write_shown(&shown)?;
+            eprintln!("tur-heal: {delivered} notice(s) shown; {waiting} wait for the next session");
+            Ok(ExitCode::SUCCESS)
+        }
+        HealCommand::History { json, limit, heal } => {
+            let state = HealState::load(&heal.paths().state)?;
+            let mut entries = history(&catalogue()?, &state, &person_entries());
+            if let Some(limit) = limit {
+                entries.truncate(limit);
+            }
+            if json {
+                print_json(&entries)?;
+            } else if entries.is_empty() {
+                println!("TUR's self-healing has nothing to tell yet.");
+            } else {
+                for entry in &entries {
+                    let who = entry
+                        .who
+                        .as_deref()
+                        .map_or_else(String::new, |who| format!(" [{who}]"));
+                    println!("{}{who}  {}", entry.at_utc, entry.text);
                 }
-                let title = format!("TUR: {}", notice.title);
-                let delivered = machine.run(
-                    "gdbus",
-                    &[
-                        "call",
-                        "--session",
-                        "--dest",
-                        "org.freedesktop.Notifications",
-                        "--object-path",
-                        "/org/freedesktop/Notifications",
-                        "--method",
-                        "org.freedesktop.Notifications.Notify",
-                        &gvariant_string("TUR"),
-                        "0",
-                        &gvariant_string("dialog-information"),
-                        &gvariant_string(&title),
-                        &gvariant_string(&body),
-                        "[]",
-                        "{}",
-                        "15000",
-                    ],
-                );
-                match delivered {
-                    Ok(output) if output.success() => {
-                        shown.insert(notice.id);
-                    }
-                    _ => eprintln!("tur-heal: notice {} could not be shown", notice.id),
+            }
+            Ok(ExitCode::SUCCESS)
+        }
+        HealCommand::Decline { code, heal } => {
+            let catalogue = catalogue()?;
+            let fault = catalogue.fault(&code).ok_or_else(|| {
+                DiagError::new(ErrorKind::HealUnknown, format!("no fault {code}"))
+            })?;
+            record_declined("report-declined", Some(&code), &fault.title)?;
+            // The offer is answered: its notices are not shown again.
+            let state = HealState::load(&heal.paths().state)?;
+            let mut shown = read_shown();
+            for event in &state.events {
+                if event.code == code {
+                    shown.insert(event.seq);
                 }
             }
             write_shown(&shown)?;
+            println!(
+                "Recorded: you do not want to send a report about \"{}\".",
+                fault.title
+            );
             Ok(ExitCode::SUCCESS)
         }
         HealCommand::Report {
@@ -432,6 +466,240 @@ pub(crate) fn run(command: HealCommand) -> Result<ExitCode, DiagError> {
             Ok(ExitCode::SUCCESS)
         }
     }
+}
+
+/// How many notices are shown one by one in one run; more are summed up
+/// in one notice that points to the history, so that nothing is dropped
+/// unannounced and a first sign-in is not a flood.
+const NOTICES_AT_ONCE: usize = 10;
+
+/// Where a notice can be shown. [`Session`] is the person's session;
+/// the tests give a stand-in.
+trait Announcer {
+    /// Offers notice `id` to P@x's companion (`org.tur.PaxCompanion1`,
+    /// tur-pax-companion.md, section 7). True only when it answered that the
+    /// notice is on the screen. Never starts the companion.
+    fn companion(&mut self, id: u64) -> bool;
+
+    /// Shows a desktop notification. True when the notification service
+    /// accepted it.
+    fn desktop(&mut self, title: &str, body: &str) -> bool;
+}
+
+/// The person's session bus, through `gdbus` (glib's command-line D-Bus
+/// client, a separate program: nothing is linked).
+struct Session;
+
+/// The companion's name, object and interface on the session bus.
+const COMPANION: &str = "org.tur.PaxCompanion1";
+const COMPANION_PATH: &str = "/org/tur/PaxCompanion1";
+
+/// What `gdbus call` printed, when it succeeded.
+fn gdbus(args: &[&str]) -> Option<String> {
+    match RealMachine::new().run("gdbus", args) {
+        Ok(output) if output.success() => {
+            Some(String::from_utf8_lossy(&output.stdout).trim().to_owned())
+        }
+        _ => None,
+    }
+}
+
+impl Announcer for Session {
+    fn companion(&mut self, id: u64) -> bool {
+        // Only a companion that runs: a notice is not a reason to start it.
+        let owned = gdbus(&[
+            "call",
+            "--session",
+            "--dest",
+            "org.freedesktop.DBus",
+            "--object-path",
+            "/org/freedesktop/DBus",
+            "--method",
+            "org.freedesktop.DBus.NameHasOwner",
+            &gvariant_string(COMPANION),
+        ]);
+        if owned.as_deref() != Some("(true,)") {
+            return false;
+        }
+        let id = format!("uint64 {id}");
+        let method = format!("{COMPANION}.Announce");
+        // Anything but a plain true (false, an error, no answer within 5 s)
+        // leaves the notice to the desktop notification.
+        let answer = gdbus(&[
+            "call",
+            "--session",
+            "--timeout",
+            "5",
+            "--dest",
+            COMPANION,
+            "--object-path",
+            COMPANION_PATH,
+            "--method",
+            &method,
+            &gvariant_string("heal"),
+            &id,
+        ]);
+        answer.as_deref() == Some("(true,)")
+    }
+
+    /// Through the freedesktop notification service. Every argument is
+    /// typed, so that the call does not depend on the service's
+    /// introspection.
+    fn desktop(&mut self, title: &str, body: &str) -> bool {
+        gdbus(&[
+            "call",
+            "--session",
+            "--dest",
+            "org.freedesktop.Notifications",
+            "--object-path",
+            "/org/freedesktop/Notifications",
+            "--method",
+            "org.freedesktop.Notifications.Notify",
+            &gvariant_string("TUR"),
+            "uint32 0",
+            &gvariant_string("dialog-information"),
+            &gvariant_string(title),
+            &gvariant_string(body),
+            "@as []",
+            "@a{sv} {}",
+            "int32 15000",
+        ])
+        .is_some()
+    }
+}
+
+/// Shows the notices, oldest first, and remembers each one shown. Each is
+/// offered first to P@x's companion, which says it in its bubble when it
+/// can; when it does not take it (not running, quiet, busy, an error), the
+/// desktop notification shows it. Either way it is announced once, and only
+/// this program marks it seen (tur-pax-companion.md, section 7). A notice
+/// that neither could show stays waiting for the next run:
+/// tur-heal-notify.service runs at every graphical sign-in and whenever the
+/// state changes. Returns how many were shown and how many wait.
+fn notify(
+    found: &[Notice],
+    shown: &mut BTreeSet<u64>,
+    announcer: &mut dyn Announcer,
+) -> (usize, usize) {
+    let (summed, one_by_one) = found.split_at(found.len().saturating_sub(NOTICES_AT_ONCE));
+    let mut delivered = 0;
+    if !summed.is_empty() {
+        let body = format!(
+            "{} earlier messages from TUR's self-healing are in your history: {HISTORY_COMMAND}",
+            summed.len()
+        );
+        if announcer.desktop("TUR: earlier messages", &body) {
+            shown.extend(summed.iter().map(|notice| notice.id));
+            delivered += summed.len();
+            eprintln!(
+                "tur-heal: {} earlier notice(s) summed up in one",
+                summed.len()
+            );
+        } else {
+            // Not shown: the newest are not shown either, so that order is kept.
+            return (0, found.len());
+        }
+    }
+    for notice in one_by_one {
+        if announcer.companion(notice.id) {
+            shown.insert(notice.id);
+            delivered += 1;
+            eprintln!(
+                "tur-heal: notice {} said by P@x's companion ({}, {:?})",
+                notice.id, notice.code, notice.kind
+            );
+            continue;
+        }
+        let mut body = notice.body.clone();
+        for action in &notice.actions {
+            body.push('\n');
+            body.push_str(action);
+        }
+        if announcer.desktop(&format!("TUR: {}", notice.title), &body) {
+            shown.insert(notice.id);
+            delivered += 1;
+            eprintln!(
+                "tur-heal: notice {} shown ({}, {:?})",
+                notice.id, notice.code, notice.kind
+            );
+        } else {
+            eprintln!(
+                "tur-heal: notice {} could not be shown; it waits",
+                notice.id
+            );
+            break;
+        }
+    }
+    (delivered, found.len() - delivered)
+}
+
+/// The file of this person's report decisions that are not in the report
+/// records: reports they chose not to send.
+fn declined_file() -> Option<PathBuf> {
+    shown_file().map(|shown| shown.with_file_name("declined.jsonl"))
+}
+
+/// Records a report the person did not send: `report-declined` from
+/// `tur-diag heal decline`, `report-not-sent` when `tur-diag report send`
+/// was not confirmed.
+pub(crate) fn record_declined(
+    kind: &str,
+    code: Option<&str>,
+    title: &str,
+) -> Result<(), DiagError> {
+    let Some(path) = declined_file() else {
+        return Ok(());
+    };
+    let unusable =
+        |error: io::Error| DiagError::new(ErrorKind::HealStateUnavailable, error.to_string());
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(unusable)?;
+    }
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.as_secs());
+    let entry = PersonEntry {
+        at_utc: format_utc(now),
+        kind: kind.to_owned(),
+        code: code.map(str::to_owned),
+        title: title.to_owned(),
+        report_id: None,
+    };
+    let line = serde_json::to_string(&entry)
+        .map_err(|error| DiagError::new(ErrorKind::Internal, error.to_string()))?;
+    let mut file = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        .map_err(unusable)?;
+    writeln!(file, "{line}").map_err(unusable)
+}
+
+/// What this person's own account did: reports sent (the report records)
+/// and reports not sent (declined.jsonl).
+fn person_entries() -> Vec<PersonEntry> {
+    let mut entries: Vec<PersonEntry> = report::default_state_dir()
+        .and_then(|directory| report::read_records(&directory).ok())
+        .map(|(records, _)| {
+            records
+                .into_iter()
+                .map(|record| PersonEntry {
+                    at_utc: record.sent_utc,
+                    kind: "report-sent".to_owned(),
+                    code: record.error_code,
+                    title: record.title,
+                    report_id: Some(record.report_id),
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    if let Some(text) = declined_file().and_then(|path| fs::read_to_string(path).ok()) {
+        entries.extend(
+            text.lines()
+                .filter_map(|line| serde_json::from_str::<PersonEntry>(line).ok()),
+        );
+    }
+    entries
 }
 
 /// A text as a GVariant string literal, for `gdbus call`.
@@ -708,6 +976,7 @@ fn request(
         "schema_version": REQUEST_SCHEMA_VERSION,
         "tool": tool,
         "arguments": { "code": code, "remedy": remedy },
+        "by": "person",
     });
     stream
         .write_all(format!("{line}\n").as_bytes())
@@ -806,4 +1075,97 @@ fn report_request(code: &str, heal: &HealPlaces) -> Result<ReportRequest, DiagEr
         prepared_by: report::PreparedBy::Person,
         boot_health: None,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tur_diag::heal::EventKind;
+
+    /// A stand-in for the session: the companion's answer to each offer in
+    /// turn (`None`: no answer, an error or no companion, which all read as
+    /// "not taken"), and whether the desktop accepts notifications.
+    struct Script {
+        companion: Vec<Option<bool>>,
+        desktop: bool,
+        offered: Vec<u64>,
+        notified: Vec<String>,
+    }
+
+    impl Announcer for Script {
+        fn companion(&mut self, id: u64) -> bool {
+            self.offered.push(id);
+            let answer = if self.companion.is_empty() {
+                None
+            } else {
+                self.companion.remove(0)
+            };
+            answer == Some(true)
+        }
+
+        fn desktop(&mut self, title: &str, _body: &str) -> bool {
+            if self.desktop {
+                self.notified.push(title.to_owned());
+            }
+            self.desktop
+        }
+    }
+
+    fn notice(id: u64) -> Notice {
+        Notice {
+            id,
+            at_utc: "2026-11-16T00:00:00Z".to_owned(),
+            code: "TUR-DESKTOP-SERVICE-001".to_owned(),
+            kind: EventKind::Repaired,
+            title: format!("notice {id}"),
+            body: "body".to_owned(),
+            actions: vec![HISTORY_COMMAND.to_owned()],
+        }
+    }
+
+    fn script(companion: Vec<Option<bool>>, desktop: bool) -> Script {
+        Script {
+            companion,
+            desktop,
+            offered: Vec::new(),
+            notified: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn each_notice_is_announced_once_by_the_companion_or_the_desktop() {
+        // True, false, an error, no answer: one announcement each.
+        let found: Vec<Notice> = (1..=4).map(notice).collect();
+        let mut session = script(vec![Some(true), Some(false), None, None], true);
+        let mut shown = BTreeSet::new();
+        assert_eq!(notify(&found, &mut shown, &mut session), (4, 0));
+        assert_eq!(session.offered, [1, 2, 3, 4], "one offer per notice, in order");
+        assert_eq!(
+            session.notified,
+            ["TUR: notice 2", "TUR: notice 3", "TUR: notice 4"],
+            "the companion's notice is not also a notification"
+        );
+        assert_eq!(shown, BTreeSet::from([1, 2, 3, 4]));
+    }
+
+    #[test]
+    fn a_notice_nobody_could_show_waits_and_so_do_the_ones_after_it() {
+        let found: Vec<Notice> = (1..=3).map(notice).collect();
+        let mut session = script(vec![Some(true), Some(false)], false);
+        let mut shown = BTreeSet::new();
+        assert_eq!(notify(&found, &mut shown, &mut session), (1, 2));
+        assert_eq!(shown, BTreeSet::from([1]));
+        assert_eq!(session.offered, [1, 2], "nothing after the one that waits");
+    }
+
+    #[test]
+    fn many_waiting_are_summed_up_on_the_desktop_and_the_newest_offered_one_by_one() {
+        let found: Vec<Notice> = (1..=12).map(notice).collect();
+        let mut session = script(Vec::new(), true);
+        let mut shown = BTreeSet::new();
+        assert_eq!(notify(&found, &mut shown, &mut session), (12, 0));
+        assert_eq!(session.notified[0], "TUR: earlier messages");
+        assert_eq!(session.offered, (3..=12).collect::<Vec<u64>>());
+        assert_eq!(shown.len(), 12);
+    }
 }

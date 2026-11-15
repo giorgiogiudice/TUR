@@ -1,0 +1,298 @@
+#!/usr/bin/python3
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+"""A stand-in for the desktop's notification service, for the self-healing
+test only. Present only in the boot-test image.
+
+    heal-notifications RECORD_FILE READY_FILE
+
+Connects to the session bus named by DBUS_SESSION_BUS_ADDRESS, takes the
+name org.freedesktop.Notifications, and answers the calls of the
+freedesktop notification specification as a desktop's server would:
+Notify (recorded as one JSON line in RECORD_FILE, answered with an id),
+GetCapabilities, GetServerInformation, and Introspect. READY_FILE is
+written once the name is held. It decides nothing: tests/boot/heal.py
+reads what was recorded.
+
+Written with the standard library only, from the D-Bus specification
+(https://dbus.freedesktop.org/doc/dbus-specification.html): the guest has no
+D-Bus binding for Python. Little-endian, EXTERNAL authentication, no file
+descriptors.
+"""
+
+import json
+import os
+import socket
+import struct
+import sys
+import time
+
+RECORD, READY = sys.argv[1], sys.argv[2]
+NAME = "org.freedesktop.Notifications"
+PATH = "/org/freedesktop/Notifications"
+INTROSPECTION = """<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+ "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+  <interface name="org.freedesktop.Notifications">
+    <method name="Notify">
+      <arg type="s" direction="in"/><arg type="u" direction="in"/><arg type="s" direction="in"/>
+      <arg type="s" direction="in"/><arg type="s" direction="in"/><arg type="as" direction="in"/>
+      <arg type="a{sv}" direction="in"/><arg type="i" direction="in"/><arg type="u" direction="out"/>
+    </method>
+    <method name="GetCapabilities"><arg type="as" direction="out"/></method>
+    <method name="GetServerInformation">
+      <arg type="s" direction="out"/><arg type="s" direction="out"/>
+      <arg type="s" direction="out"/><arg type="s" direction="out"/>
+    </method>
+    <method name="CloseNotification"><arg type="u" direction="in"/></method>
+  </interface>
+  <interface name="org.freedesktop.DBus.Introspectable">
+    <method name="Introspect"><arg type="s" direction="out"/></method>
+  </interface>
+</node>
+"""
+
+
+class Writer:
+    def __init__(self):
+        self.data = bytearray()
+
+    def pad(self, n):
+        self.data += b"\0" * ((-len(self.data)) % n)
+
+    def byte(self, value):
+        self.data.append(value)
+
+    def uint32(self, value):
+        self.pad(4)
+        self.data += struct.pack("<I", value)
+
+    def string(self, value):
+        encoded = value.encode()
+        self.uint32(len(encoded))
+        self.data += encoded + b"\0"
+
+    def signature(self, value):
+        encoded = value.encode()
+        self.byte(len(encoded))
+        self.data += encoded + b"\0"
+
+    def string_array(self, values):
+        self.uint32(0)
+        at = len(self.data) - 4
+        start = len(self.data)
+        for value in values:
+            self.string(value)
+        struct.pack_into("<I", self.data, at, len(self.data) - start)
+
+
+def message(kind, serial, fields, signature="", body=b"", flags=0):
+    """fields: [(code, type character, value)]."""
+    if signature:
+        fields = fields + [(8, "g", signature)]
+    w = Writer()
+    w.data += bytes([ord("l"), kind, flags, 1])
+    w.uint32(len(body))
+    w.uint32(serial)
+    w.uint32(0)
+    at = len(w.data) - 4
+    start = len(w.data)
+    for code, kind_char, value in fields:
+        w.pad(8)
+        w.byte(code)
+        w.signature(kind_char)
+        if kind_char in "so":
+            w.string(value)
+        elif kind_char == "g":
+            w.signature(value)
+        else:
+            w.uint32(value)
+    struct.pack_into("<I", w.data, at, len(w.data) - start)
+    w.pad(8)
+    return bytes(w.data) + body
+
+
+class Reader:
+    def __init__(self, data, position=0):
+        self.data, self.pos = data, position
+
+    def align(self, n, base=0):
+        self.pos += (-(self.pos - base)) % n
+
+    def byte(self):
+        value = self.data[self.pos]
+        self.pos += 1
+        return value
+
+    def uint32(self, base=0):
+        self.align(4, base)
+        (value,) = struct.unpack_from("<I", self.data, self.pos)
+        self.pos += 4
+        return value
+
+    def string(self, base=0):
+        length = self.uint32(base)
+        value = self.data[self.pos:self.pos + length].decode("utf-8", "replace")
+        self.pos += length + 1
+        return value
+
+    def signature(self):
+        length = self.byte()
+        value = self.data[self.pos:self.pos + length].decode()
+        self.pos += length + 1
+        return value
+
+
+class Bus:
+    def __init__(self, address):
+        target = None
+        for part in address.split(";"):
+            if not part.startswith("unix:"):
+                continue
+            keys = dict(item.split("=", 1) for item in part[5:].split(",") if "=" in item)
+            if "path" in keys:
+                target = keys["path"]
+            elif "abstract" in keys:
+                target = "\0" + keys["abstract"]
+            if target:
+                break
+        if not target:
+            raise SystemExit(f"no unix address in {address!r}")
+        self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.sock.connect(target)
+        self.sock.sendall(b"\0AUTH EXTERNAL " + str(os.getuid()).encode().hex().encode() + b"\r\n")
+        line = self._line()
+        if not line.startswith(b"OK"):
+            raise SystemExit(f"authentication refused: {line!r}")
+        self.sock.sendall(b"BEGIN\r\n")
+        self.buffer = b""
+        self.serial = 0
+
+    def _line(self):
+        data = b""
+        while not data.endswith(b"\r\n"):
+            chunk = self.sock.recv(1)
+            if not chunk:
+                raise SystemExit("the bus closed the connection")
+            data += chunk
+        return data
+
+    def send(self, data):
+        self.sock.sendall(data)
+
+    def next_serial(self):
+        self.serial += 1
+        return self.serial
+
+    def call(self, member, signature="", body=b""):
+        serial = self.next_serial()
+        self.send(message(1, serial, [(1, "o", "/org/freedesktop/DBus"), (2, "s", "org.freedesktop.DBus"),
+                                      (3, "s", member), (6, "s", "org.freedesktop.DBus")], signature, body))
+        while True:
+            incoming = self.receive()
+            if incoming["fields"].get(5) == serial:
+                return incoming
+
+    def receive(self):
+        while True:
+            if len(self.buffer) >= 16:
+                body_length, = struct.unpack_from("<I", self.buffer, 4)
+                fields_length, = struct.unpack_from("<I", self.buffer, 12)
+                header_end = 16 + fields_length
+                body_start = header_end + (-header_end) % 8
+                total = body_start + body_length
+                if len(self.buffer) >= total:
+                    raw, self.buffer = self.buffer[:total], self.buffer[total:]
+                    return parse(raw, header_end, body_start)
+            chunk = self.sock.recv(65536)
+            if not chunk:
+                raise SystemExit("the bus closed the connection")
+            self.buffer += chunk
+
+
+def parse(raw, header_end, body_start):
+    reader = Reader(raw, 16)
+    fields = {}
+    while reader.pos < header_end:
+        reader.align(8)
+        code = reader.byte()
+        kind = reader.signature()
+        if kind in "so":
+            fields[code] = reader.string()
+        elif kind == "g":
+            fields[code] = reader.signature()
+        else:
+            fields[code] = reader.uint32()
+    return {"type": raw[1], "flags": raw[2], "serial": struct.unpack_from("<I", raw, 8)[0],
+            "fields": fields, "body": raw[body_start:]}
+
+
+def reply(bus, incoming, signature="", body=b""):
+    if incoming["flags"] & 0x1:
+        return
+    fields = [(5, "u", incoming["serial"])]
+    if 7 in incoming["fields"]:
+        fields.append((6, "s", incoming["fields"][7]))
+    bus.send(message(2, bus.next_serial(), fields, signature, body))
+
+
+def error(bus, incoming, name, text):
+    if incoming["flags"] & 0x1:
+        return
+    fields = [(4, "s", name), (5, "u", incoming["serial"])]
+    if 7 in incoming["fields"]:
+        fields.append((6, "s", incoming["fields"][7]))
+    w = Writer()
+    w.string(text)
+    bus.send(message(3, bus.next_serial(), fields, "s", bytes(w.data)))
+
+
+def main():
+    bus = Bus(os.environ["DBUS_SESSION_BUS_ADDRESS"])
+    bus.call("Hello")
+    w = Writer()
+    w.string(NAME)
+    w.uint32(0x2 | 0x4)  # replace an existing owner; do not queue
+    answer = bus.call("RequestName", "su", bytes(w.data))
+    result = Reader(answer["body"]).uint32() if answer["type"] == 2 else None
+    if result != 1:
+        raise SystemExit(f"could not take {NAME}: {answer['fields'].get(4)} {result}")
+    with open(READY, "w") as ready:
+        ready.write(f"{time.time()}\n")
+    next_id = 0
+    while True:
+        incoming = bus.receive()
+        if incoming["type"] != 1:
+            continue
+        member = incoming["fields"].get(3)
+        interface = incoming["fields"].get(2)
+        if member == "Introspect":
+            w = Writer()
+            w.string(INTROSPECTION)
+            reply(bus, incoming, "s", bytes(w.data))
+        elif member == "Notify" and incoming["fields"].get(8, "").startswith("susss"):
+            body = Reader(incoming["body"])
+            app, replaces, icon, summary, text = (body.string(), body.uint32(), body.string(),
+                                                  body.string(), body.string())
+            next_id += 1
+            with open(RECORD, "a") as record:
+                record.write(json.dumps({"id": next_id, "app": app, "replaces": replaces, "icon": icon,
+                                         "summary": summary, "body": text, "at": time.time()}) + "\n")
+            w = Writer()
+            w.uint32(next_id)
+            reply(bus, incoming, "u", bytes(w.data))
+        elif member == "GetCapabilities":
+            w = Writer()
+            w.string_array(["body"])
+            reply(bus, incoming, "as", bytes(w.data))
+        elif member == "GetServerInformation":
+            w = Writer()
+            for value in ("tur-heal-test", "TUR", "1", "1.2"):
+                w.string(value)
+            reply(bus, incoming, "ssss", bytes(w.data))
+        elif member == "CloseNotification" or interface == "org.freedesktop.DBus.Peer":
+            reply(bus, incoming)
+        else:
+            error(bus, incoming, "org.freedesktop.DBus.Error.UnknownMethod", f"no method {member}")
+
+
+main()

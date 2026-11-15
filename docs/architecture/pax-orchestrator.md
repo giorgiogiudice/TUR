@@ -286,6 +286,7 @@ event.
 | `diag_report_list` | 0 | `tur-diag report list --json` | the same |
 | `heal_list_faults` | 0 | `tur-diag heal status --json` (reads `/var/log/tur/heal/state.json`) | the same |
 | `heal_explain` | 0 | `tur-diag heal explain --json -- <code>` | the same |
+| `heal_history` | 0 | `tur-diag heal history --json --limit=50` | the same |
 | `heal_apply_remedy` | 1 | a `request` adapter: `{"tool", "arguments": {code, remedy}}` to `/run/tur/heal.socket`; TUR's healing service decides and performs ([self-healing.md](self-healing.md), section 5) | the same |
 | `heal_undo_remedy` | 1 | the same, to undo | the same |
 | `apps_list_installed` | 0 | `tur-apps list --json` | `services/tur-apps` |

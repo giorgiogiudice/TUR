@@ -7,7 +7,8 @@
 Run by heal-agent as the test user, with network time switched off and
 the healing service's scan having found it. The installed `tur-pax run`
 talks to a scripted provider (tests/pax/fake_provider.py, copied into the
-test image) with the tool sets installed in the image: P@x lists the faults,
+test image) with the tool sets installed in the image: P@x reads the
+history (what TUR did by itself is there), lists the faults,
 explains the one found, asks the service to repair it (class 1, through
 /run/tur/heal.socket), and asks for a repair that cannot be undone, which
 the service refuses. No model is called and no key exists. Everything is
@@ -30,6 +31,7 @@ TURNS = [
     {
         "text": "I will look at what TUR has found.",
         "calls": [
+            {"id": "toolu_history", "name": "heal_history", "arguments": {}},
             {"id": "toolu_list", "name": "heal_list_faults", "arguments": {}},
             {"id": "toolu_explain", "name": "heal_explain", "arguments": {"code": TIME}},
         ],

@@ -1,13 +1,25 @@
 # SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
 #
-# Shows TUR's healing notices this person has not seen as desktop
-# notifications. Only in a graphical session.
+# Shows TUR's self-healing notices this person has not seen as desktop
+# notifications (docs/architecture/self-healing.md, section 4; ADR-0027,
+# "the person is always kept aware"). Started at every graphical sign-in,
+# and by tur-heal-notify.path whenever the healing service records
+# something. A notice that cannot be shown (no graphical session, no
+# notification service) is not marked seen: it waits for the next run, the
+# next sign-in at the latest.
 
 [Unit]
 Description=TUR self-healing: show notices
+After=graphical-session.target
+# Started whenever the state changes: never refuse a start for coming too
+# often, or a notice would wait for the next sign-in.
+StartLimitIntervalSec=0
 ConditionEnvironment=|WAYLAND_DISPLAY
 ConditionEnvironment=|DISPLAY
 
 [Service]
 Type=oneshot
 ExecStart=/usr/bin/tur-diag heal notify
+
+[Install]
+WantedBy=graphical-session.target

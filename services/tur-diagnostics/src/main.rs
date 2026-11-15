@@ -617,7 +617,16 @@ fn send(
     } else {
         print!("{}", describe(&inspected, &receiver));
     }
-    confirm(yes, &receiver)?;
+    if let Err(refused) = confirm(yes, &receiver) {
+        // Not sending is something the person's history shows. A record
+        // that cannot be written does not change the answer.
+        let _ = heal_cli::record_declined(
+            "report-not-sent",
+            inspected.report.error_code.as_deref(),
+            &inspected.report.title,
+        );
+        return Err(refused);
+    }
 
     let receipt = report::send_prepared(host, &receiver, file)?;
     let record = SentRecord {
