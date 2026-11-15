@@ -95,15 +95,62 @@ class Resolver:
         self.abi = fetch.electron_abi(electron_version, cache) if runtime == "electron" and electron_version else ""
         self.changed = False
 
-    def put(self, rel, data):
+    def put(self, rel, data, executable=None):
+        if executable is None:
+            executable = rel.endswith(".node")
         if self.payload.asar:
-            self.payload.asar.put_unpacked(rel, data, executable=rel.endswith(".node"))
+            self.payload.asar.put_unpacked(rel, data, executable=executable)
         else:
             target = os.path.join(self.payload.directory, rel)
             os.makedirs(os.path.dirname(target), exist_ok=True)
             with open(target, "wb") as handle:
                 handle.write(data)
+            if executable:
+                os.chmod(target, 0o755)
         self.changed = True
+
+    def helper_packages(self, sidecars):
+        """Per-platform npm packages that carry a program rather than a Node
+        module (@vscode/ripgrep-win32-x64 holds rg.exe): the linux-x64
+        package of the same version is fetched from npm and laid beside it.
+        (Run 43754196480: MarkText died with "Could not find
+        @vscode/ripgrep-linux-x64".) sidecars: paths of foreign programs
+        relative to the payload."""
+        results = []
+        seen = set()
+        for path in sidecars:
+            match = re.search(r"(?:^|/)node_modules/((?:@[^/]+/)?[^/]+)/", path)
+            if not match:
+                continue
+            name = match.group(1)
+            directory = path[: match.end() - 1]
+            token = next((token for token in PLATFORM_TOKENS if token in name), None)
+            if not token or directory in seen:
+                continue
+            seen.add(directory)
+            version = (self.payload.read_json(directory + "/package.json") or {}).get("version")
+            result = {"package": name, "version": version, "status": "dead-end", "detail": "", "applied": []}
+            for linux in LINUX_TOKENS:
+                sibling = name.replace(token, linux)
+                tarball, _ = fetch.npm_tarball(sibling, version, self.cache) if version else (None, None)
+                if not tarball:
+                    continue
+                archive, members = tar_members(tarball)
+                if not members:
+                    continue
+                base = directory[: -len(name)] + sibling
+                for rel, member in members.items():
+                    data = archive.extractfile(member).read()
+                    self.put(f"{base}/{rel}", data, executable=data[:4] == b"\x7fELF")
+                result.update(status="platform-package", detail=f"{sibling}@{version} from npm ({len(members)} files) at {base}", applied=[base])
+                break
+            else:
+                result["detail"] = f"no Linux sibling of {name}@{version} on npm"
+            self.log(f"    helper package {name}@{version}: {result['status']} {result['detail']}")
+            results.append(result)
+        if self.changed and self.payload.asar:
+            self.payload.asar.save()
+        return results
 
     def over(self, foreign, data, applied):
         """Replace foreign builds that sit where a build-from-source would
@@ -161,6 +208,7 @@ class Resolver:
                 if not members:
                     continue
                 base = directory[: -len(name)] + sibling if directory.endswith(name) else os.path.dirname(directory) + "/" + sibling.split("/")[-1]
+                base = base.lstrip("/")  # never outside the payload (run 43754196480)
                 count = 0
                 for rel, member in members.items():
                     self.put(f"{base}/{rel}", archive.extractfile(member).read())

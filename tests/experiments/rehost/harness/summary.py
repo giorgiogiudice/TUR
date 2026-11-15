@@ -169,7 +169,8 @@ def main():
                 used = "unknown" if linux_modules is None or not item["package"] else ("yes" if item["package"] in linux_modules else "no")
                 needed.setdefault(variant, {}).setdefault(used, {}).setdefault(item["status"], 0)
                 needed[variant][used][item["status"]] += 1
-                out.append(f"| {cell(record['name'])} | {variant} | {cell(item['package'])} | {cell(item['version'])} | {used} | {item['status']} | {cell(item['detail'][:110])} |")
+                detail = item["detail"] if item["status"] != "needs-build" or not item.get("build") else "build: " + item["build"]
+                out.append(f"| {cell(record['name'])} | {variant} | {cell(item['package'])} | {cell(item['version'])} | {used} | {item['status']} | {cell(detail[:160])} |")
     for variant, groups in needed.items():
         for used, counts in sorted(groups.items()):
             out.append(f"\n**{variant} packages, module in the official Linux build: {used}**: " + ", ".join(f"{count} {status}" for status, count in sorted(counts.items())) + ".")

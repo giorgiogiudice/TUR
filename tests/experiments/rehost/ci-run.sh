@@ -37,7 +37,11 @@ case "${shard}" in
     # Electron shards: a compiler, Node.js and npm, to build from their npm
     # source the native modules that publish no Linux build
     # (rehostlib/build.py; run 43557782687 counted half of them).
-    e*) extra="nodejs nodejs-npm gcc-c++ make" ;;
+    # The X11, xkbfile, libsecret and fontconfig headers: native-keymap,
+    # keytar and fontmanager-redux build against them (run 43754196480:
+    # native-keymap's gyp step failed, fontmanager-redux lacked
+    # fontconfig.h).
+    e*) extra="nodejs nodejs-npm gcc-c++ make pkgconf-pkg-config libX11-devel libxkbfile-devel libsecret-devel fontconfig-devel freetype-devel" ;;
     *) extra="" ;;
 esac
 case "${shard}" in

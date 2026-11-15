@@ -817,8 +817,37 @@ def detect_jvm_dir(directory, names, depth):
                         finding["payload"]["options"] = list(packr.get("vmArgs") or [])
                 except ValueError:
                     pass
+        if finding["payload"]["wrapper"] != "packr":
+            launcher = launcher_script(directory, jars)
+            if launcher:
+                # A start script names the main class and puts every jar on
+                # the class path (PDFsam: run 43754196480 took icu4j's own
+                # Main-Class for the application's).
+                finding["payload"].update(launcher)
     describe_jars(finding)
     return finding
+
+
+def launcher_script(directory, jars):
+    """The main class a shell start script beside the jars (bin/ here or one
+    level up) runs, with every jar of the directory on the class path."""
+    for bindir in (os.path.join(directory, "bin"), os.path.join(os.path.dirname(directory), "bin")):
+        if not os.path.isdir(bindir):
+            continue
+        for name in sorted(os.listdir(bindir)):
+            path = os.path.join(bindir, name)
+            if not os.path.isfile(path) or os.path.getsize(path) > (64 << 10):
+                continue
+            text = binfmt.read_at(path, 0, 64 << 10)
+            if b"\0" in text or b"java" not in text:
+                continue
+            for line in text.decode("utf-8", "replace").splitlines():
+                if line.lstrip().startswith("#") or "java" not in line.lower() and "exec" not in line:
+                    continue
+                match = re.search(r"(?:^|[\s\"'/=])((?:[a-z_][a-z0-9_]*\.)+[A-Z][A-Za-z0-9_$]*)(?=[\s\"']|$)", line)
+                if match:
+                    return {"wrapper": "start-script", "launcher": os.path.relpath(path, os.path.dirname(directory)), "mainclass": match.group(1), "classpath": ["$APPDIR/" + jar for jar in sorted(jars)]}
+    return None
 
 
 def describe_jars(finding):
@@ -1285,7 +1314,10 @@ def detect(root, max_depth=9):
             if finding["runtime"] != "dotnet-framework":
                 claimed.append(directory)
                 dirs[:] = []
-    findings.sort(key=lambda f: (ORDER.get(f["runtime"], 5), f["depth"]))
+    # Among equals, a build for ARM comes after the x86-64 one (run
+    # 43754196480: SS14's Linux and macOS packages each carry both, and the
+    # arm64 directory was taken first).
+    findings.sort(key=lambda f: (ORDER.get(f["runtime"], 5), bool(re.search(r"(?i)(^|[^a-z])(arm64|aarch64)([^a-z]|$)", os.path.relpath(f.get("app_dir") or root, root))), f["depth"]))
     portable = [f for f in findings if f["runtime"] != "dotnet-framework"]
     native = None
     if not portable:

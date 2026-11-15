@@ -44,8 +44,17 @@ def tools():
     return [tool for tool in ("node", "npm", "npx", "make", "g++", "python3") if not shutil.which(tool)]
 
 
+def _recipe():
+    """A digest of this file: a cached result is reused only by the recipe
+    that produced it (the CI cache is restored across changes)."""
+    import hashlib
+
+    with open(os.path.abspath(__file__), "rb") as handle:
+        return hashlib.sha256(handle.read()).hexdigest()[:10]
+
+
 def build(name, version, electron_version, tarball, cache, log=print, timeout=420):
-    key = os.path.join(cache, "builds", _safe(f"{name}-{version}-electron-{electron_version}"))
+    key = os.path.join(cache, "builds", "r-" + _recipe(), _safe(f"{name}-{version}-electron-{electron_version}"))
     marker = os.path.join(key, "result.json")
     if os.path.isfile(marker):
         with open(marker, encoding="utf-8") as handle:
@@ -93,7 +102,10 @@ def build(name, version, electron_version, tarball, cache, log=print, timeout=42
     except (OSError, ValueError):
         pass
     systems = package.get("os") if isinstance(package.get("os"), list) else []
-    if systems and ("linux" not in systems or "!linux" in systems):
+    # npm's "os": a list of systems, or of exclusions ("!win32"); run
+    # 43754196480 read ["!win32"] (fs-xattr) as "not for Linux".
+    allowed = [item for item in systems if not str(item).startswith("!")]
+    if "!linux" in systems or (allowed and "linux" not in allowed):
         shutil.rmtree(work, ignore_errors=True)
         return finish({}, f"the package says it is not for Linux (os: {', '.join(systems)})")
     if not os.path.isfile(os.path.join(work, "binding.gyp")):
@@ -104,14 +116,22 @@ def build(name, version, electron_version, tarball, cache, log=print, timeout=42
     os.makedirs(home, exist_ok=True)
     env = dict(os.environ, HOME=home, npm_config_cache=os.path.join(cache, "builds", "npm-cache"), npm_config_update_notifier="false", npm_config_fund="false", npm_config_audit="false")
     started = time.time()
+    with open(os.path.join(work, "binding.gyp"), encoding="utf-8", errors="replace") as handle:
+        gyp = handle.read()
+    declared = set(package.get("dependencies") or {})
+    # Header packages the build description uses but the package lists only
+    # as a development dependency (run 43754196480: native-reg, "Cannot find
+    # module 'node-addon-api'"); fetched at their newest version.
+    headers = [name for name in ("node-addon-api", "nan") if name in gyp and name not in declared]
     steps = [
         # The package's dependencies (header packages such as nan or
         # node-addon-api), without running anyone's install scripts.
-        ["npm", "install", "--ignore-scripts", "--omit=dev", "--no-package-lock", "--no-save"],
+        ["npm", "install", "--ignore-scripts", "--omit=dev", "--no-package-lock", "--no-save"] if declared else None,
+        ["npm", "install", "--ignore-scripts", "--no-package-lock", "--no-save", *headers] if headers else None,
         ["npx", "--yes", NODE_GYP, "rebuild", f"--target={electron_version}", "--arch=x64", "--dist-url=https://electronjs.org/headers", f"--devdir={os.path.join(cache, 'builds', 'node-gyp')}", "--jobs=max"],
     ]
     for command in steps:
-        if not package.get("dependencies") and command[0] == "npm":
+        if command is None:
             continue
         try:
             done = subprocess.run(command, cwd=work, env=env, capture_output=True, text=True, errors="replace", timeout=timeout)
@@ -119,9 +139,10 @@ def build(name, version, electron_version, tarball, cache, log=print, timeout=42
             shutil.rmtree(work, ignore_errors=True)
             return finish({}, f"{command[0] if command[0] == 'npm' else 'node-gyp'} took longer than {timeout} s")
         if done.returncode != 0:
-            text = (done.stderr or done.stdout).strip().splitlines()
-            error = next((line for line in text if re.search(r"error:|Error:|fatal", line)), text[-1] if text else "failed")
-            log(f"      build of {name}@{version} failed: {' / '.join(text[-6:])[:600]}")
+            text = (done.stderr + "\n" + done.stdout).strip().splitlines()
+            causes = [line.strip() for line in text if re.search(r"(?i)error|not found|no such|cannot find|fatal", line) and not line.startswith("gyp ERR!")]
+            error = causes[0] if causes else next((line for line in text if re.search(r"error:|Error:|fatal", line)), text[-1] if text else "failed")
+            log(f"      build of {name}@{version} failed: {' / '.join(causes[:5])[:800]}")
             shutil.rmtree(work, ignore_errors=True)
             return finish({}, f"{'npm install' if command[0] == 'npm' else 'node-gyp'} failed: {error.strip()[:160]}")
     files = {}

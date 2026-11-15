@@ -50,6 +50,11 @@ class Session:
             "XDG_CURRENT_DESKTOP": "sway",
             "LIBGL_ALWAYS_SOFTWARE": "1",
             "SDL_AUDIODRIVER": "dummy",  # the runner has no sound card
+            # sway does not reparent windows; Java's AWT then maps blank
+            # windows (run 43754196480: Logisim-evolution and ATLauncher's
+            # dialog, official builds included). Plasma's KWin reparents,
+            # so this is the test session's need, not a re-hosting one.
+            "_JAVA_AWT_WM_NONREPARENTING": "1",
             "HOME": os.path.join(work, "session-home"),
         }
         os.makedirs(self.base["HOME"], exist_ok=True)

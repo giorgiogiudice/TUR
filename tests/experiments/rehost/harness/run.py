@@ -352,6 +352,8 @@ class Bench:
             return "blank-window"
         if result.get("chromium") and result.get("devtools"):
             pages = result.get("pages") or []
+            if pages and all(str(page.get("url", "")).startswith("chrome-error:") for page in pages):
+                return "error-page"
             if not pages or max(page.get("nodes", 0) for page in pages) < 15:
                 return "empty-page"
         if function and function.get("http") and (result.get("http") or {}).get("status") not in (200, 301, 302, 307, 401):
@@ -395,6 +397,10 @@ class Bench:
             if os.path.isfile(program):
                 return {"argv": [program], "cwd": directory, "kind": "gui" if payload.get("avalonia") else "cli"}
         if runtime == "jvm":
+            if payload.get("launcher"):
+                # The project's own start script (PDFsam's Linux build).
+                script = os.path.join(os.path.dirname(directory), payload["launcher"])
+                return {"argv": ["bash", script], "cwd": os.path.dirname(script)}
             binaries = os.path.join(directory, "bin")
             if os.path.isdir(binaries):
                 for name in sorted(os.listdir(binaries)):
@@ -539,7 +545,7 @@ class Bench:
     def python_packages(self, plan, finding, out, entry):
         """A virtual environment of the matching Python with the Linux
         builds of the extension packages the frozen program carries."""
-        names = {"Cryptodome": "pycryptodomex", "Crypto": "pycryptodome", "yaml": "PyYAML", "PIL": "pillow", "nacl": "pynacl", "curl_cffi": "curl_cffi", "brotli": "brotli", "websockets": "websockets", "charset_normalizer": "charset-normalizer", "markupsafe": "markupsafe", "yt_dlp_ejs": "yt-dlp-ejs"}
+        names = {"Cryptodome": "pycryptodomex", "Crypto": "pycryptodome", "yaml": "PyYAML", "PIL": "pillow", "nacl": "pynacl", "curl_cffi": "curl_cffi", "brotli": "brotli", "websockets": "websockets", "charset_normalizer": "charset-normalizer", "markupsafe": "markupsafe", "yt_dlp_ejs": "yt-dlp-ejs", "bson": "pymongo", "gridfs": "pymongo"}
         metadata = {}
         for name in finding["payload"].get("metadata", []):
             match = re.match(r"(.+)-([0-9][^-]*)\.dist-info$", name)
@@ -559,6 +565,19 @@ class Bench:
         code, _, err = run([plan["python"], "-m", "venv", venv], timeout=120)
         report = {"venv": code == 0, "installed": [], "failed": []}
         if code == 0:
+            # First one resolver run with the distributions the program
+            # carries metadata for, at their versions: their own pins then
+            # choose the extension packages' versions (run 43754196480:
+            # spotDL froze pydantic 2.14.1; pydantic-core installed alone
+            # came at a newer version, which pydantic refuses).
+            together = sorted(set(wanted) | {f"{key}=={version}" for key, version in metadata.items()})
+            code, _, err = run([os.path.join(venv, "bin", "python"), "-m", "pip", "install", "--quiet", "--disable-pip-version-check", "--only-binary", ":all:", *together], timeout=480)
+            if code == 0:
+                report["installed"] = together
+                report["resolved_together"] = True
+                wanted = []
+            else:
+                report["together_failed"] = err.strip().splitlines()[-1][:200] if err.strip() else "failed"
             for spec in sorted(set(wanted)):
                 code, _, err = run([os.path.join(venv, "bin", "python"), "-m", "pip", "install", "--quiet", "--disable-pip-version-check", "--only-binary", ":all:", spec], timeout=240)
                 (report["installed"] if code == 0 else report["failed"]).append(spec if code == 0 else f"{spec}: {err.strip().splitlines()[-1][:160] if err.strip() else 'failed'}")

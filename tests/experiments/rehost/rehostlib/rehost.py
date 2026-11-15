@@ -153,6 +153,22 @@ def rehost_electron(finding, out, cache, log, spoof=None, resolve_natives=True):
         for result in plan["natives"]:
             if result["status"] in ("needs-build", "dead-end"):
                 plan["blockers"].append(f"native module {result['package']}@{result['version']}: {result['status']}")
+        # Programs in per-platform npm packages (ripgrep, esbuild, ...).
+        programs = []
+        for item in finding.get("sidecars", []):
+            if item["format"] == "elf":
+                continue
+            if holder.asar:
+                prefix = os.path.basename(holder.asar.path) + ".unpacked/"
+                if item["path"].startswith(prefix):
+                    programs.append(item["path"][len(prefix):])
+            else:
+                rel = os.path.relpath(os.path.join(out, "resources", item["path"]), holder.directory)
+                if not rel.startswith(".."):
+                    programs.append(rel.replace(os.sep, "/"))
+        plan["helper_packages"] = resolver.helper_packages(programs)
+        if plan["helper_packages"]:
+            plan["steps"].append("per-platform npm packages of helper programs: " + "; ".join(f"{item['package']}: {item['status']}" for item in plan["helper_packages"]))
     foreign_helpers = [item["path"] for item in finding.get("sidecars", []) if item["format"] != "elf"]
     if foreign_helpers:
         plan["foreign_helpers"] = foreign_helpers[:40]
@@ -213,7 +229,12 @@ def rehost_nwjs(finding, out, cache, log):
         os.makedirs(target, exist_ok=True)
         for name in sorted(os.listdir(where)):
             source = os.path.join(where, name)
-            if name in ELECTRON_RUNTIME_DIRS or name.lower() in ("pnacl", "lib") or (os.path.isfile(source) and ELECTRON_RUNTIME_FILES.search(name) and name != "package.json"):
+            # The application's own pages sit here too: only the runtime's
+            # HTML files are left out (run 43754196480: the three NW.js
+            # programs re-hosted from Windows lost main.html and showed
+            # "ERR_FILE_NOT_FOUND").
+            page = name.lower().endswith(".html") and name.lower() not in ("credits.html", "licenses.chromium.html")
+            if name in ELECTRON_RUNTIME_DIRS or name.lower() in ("pnacl", "lib") or (os.path.isfile(source) and ELECTRON_RUNTIME_FILES.search(name) and name != "package.json" and not page):
                 continue
             copy_tree(source, os.path.join(target, name))
     plan["steps"].append(f"NW.js {version} for Linux unpacked; payload ({layout}) placed in package.nw/")
@@ -506,7 +527,10 @@ def swt_linux(swt, cache, log):
     Central (EPL-2.0)."""
     wanted = (swt.get("version_txt") or "").replace("version", "").strip()
     library = swt.get("library") or ""
-    match = re.search(r"swt-[a-z0-9]+-(\d{4,5})", library)
+    # swt-win32-4974r10.dll, libswt-cocoa-4974r10.jnilib, and also
+    # swt-gdip-win32-4974r10.dll (Angry IP Scanner's Windows build, run
+    # 43754196480: two words before the number).
+    match = re.search(r"swt-(?:[a-z0-9]+-)+(\d{4,5})", library)
     number = match.group(1) if match else None
     versions = fetch.maven_versions("org.eclipse.platform", "org.eclipse.swt.gtk.linux.x86_64")
     tried = 0
