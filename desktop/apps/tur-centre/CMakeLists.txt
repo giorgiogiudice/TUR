@@ -83,6 +83,11 @@ target_compile_definitions(tur-centre PRIVATE TUR_VERSION="${PROJECT_VERSION}")
 target_link_libraries(tur-centre PRIVATE Qt6::Core Qt6::Gui Qt6::Qml)
 tur_link_qml_modules(tur-centre turkit turcentre)
 
+# Into the image: the program, its module's library and its launcher entry.
+tur_install_program(tur-centre)
+tur_install_modules(turcentre)
+tur_install_data(applications data/org.tur.Centre.desktop)
+
 # The program starts on recorded answers, shows a search and an application's
 # page, and reports no QML warning.
 set(centre_fixtures ${CMAKE_CURRENT_SOURCE_DIR}/fixtures)
@@ -124,5 +129,10 @@ set_tests_properties(
     centre-starts-on-no-route
     centre-starts-without-the-catalogue
     PROPERTIES ENVIRONMENT "${TUR_TEST_ENVIRONMENT}" TIMEOUT 120)
+
+# The launcher entry is valid.
+add_test(NAME centre-desktop-file
+    COMMAND desktop-file-validate ${CMAKE_CURRENT_SOURCE_DIR}/data/org.tur.Centre.desktop)
+set_tests_properties(centre-desktop-file PROPERTIES TIMEOUT 60)
 
 add_subdirectory(tests)

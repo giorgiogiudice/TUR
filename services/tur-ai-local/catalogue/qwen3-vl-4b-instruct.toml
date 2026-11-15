@@ -1,0 +1,85 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR local model catalogue entry. Format: schemas/local-model.schema.json.
+# How entries are written and sourced: services/tur-ai-local/catalogue/README.md.
+#
+# Sources read on 2026-11-15: the Hugging Face API for
+# Qwen/Qwen3-VL-4B-Instruct-GGUF (revision, file list, sizes and LFS SHA-256
+# digests: the same as the winsee experiment pinned on 2026-11-14), its
+# README.md at the pinned revision, and the base model
+# Qwen/Qwen3-VL-4B-Instruct's card and config.json (36 layers, 8 KV heads,
+# head size 128, 262,144-token context).
+#
+# The model P@x uses to locate controls in a picture when it needs vision
+# (the lead's recommendation, which the owner accepted on 2026-11-15;
+# docs/reports/pax-winbridge-1.md): 97 % of named controls of plain dialogs
+# located with the window enlarged 1.5 times, from the publisher's own GGUF.
+# Holo2 4B located as well (96 %) but has no GGUF from its publisher, so it
+# is not in this catalogue.
+
+schema_version = 1
+id = "qwen3-vl-4b-instruct"
+name = "Qwen3-VL 4B Instruct"
+publisher = "Qwen (Alibaba Cloud)"
+repository = "https://huggingface.co/Qwen/Qwen3-VL-4B-Instruct-GGUF"
+revision = "1cd86afb9a95c410a6038ab3b40d8b578c892266"
+format = "gguf"
+quantisation = "Q4_K_M"
+parameters = "4B"
+# The model card: "Native 256K context, expandable to 1M".
+context_length = 262144
+# Measured: llama.cpp's own build b9840 peaked at 6.60 GB (6,763,012,096
+# bytes) at 8192 tokens of context while it located controls in pictures of
+# windows enlarged 1.5 times (CI run 43545838974, winsee experiment). 10 %
+# above the peak. The files and the 16-bit context cache alone
+# (36 layers x 8 KV heads x 128 x 2 x 2 bytes = 147,456 bytes per token)
+# are 4.16 GB.
+memory_bytes = 7440000000
+memory_context = 8192
+kv_bytes_per_token = 147456
+capabilities = ["chat", "tools", "vision", "locate"]
+# Plain Win32 dialogs draw 8-point text: at their own size the model located
+# 54 % of their controls, enlarged 1.5 times 97 %.
+locate_scale = 1.5
+thinking = "none"
+languages = ["mul"]
+languages_note = "The publisher states text recognition (OCR) in 32 languages; the languages of conversation are not listed."
+good_for = [
+  "Locating a named control in a picture of a window, to propose it to the application for confirmation.",
+  "Questions about images and screenshots.",
+  "Reading text in images.",
+]
+checked = "2026-11-15"
+
+[file]
+name = "Qwen3VL-4B-Instruct-Q4_K_M.gguf"
+url = "https://huggingface.co/Qwen/Qwen3-VL-4B-Instruct-GGUF/resolve/1cd86afb9a95c410a6038ab3b40d8b578c892266/Qwen3VL-4B-Instruct-Q4_K_M.gguf"
+size_bytes = 2497281664
+sha256 = "66358cb18bb6b3b1b6675aa412c7a88ef01d228f481184d13668e5201c730a0a"
+
+[projector]
+name = "mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf"
+url = "https://huggingface.co/Qwen/Qwen3-VL-4B-Instruct-GGUF/resolve/1cd86afb9a95c410a6038ab3b40d8b578c892266/mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf"
+size_bytes = 453974304
+sha256 = "30ba2c7dd3127a4561b6cba9d13d0f711c91bdb38742e2f56d73c8cb596bd06d"
+
+[licence]
+id = "Apache-2.0"
+url = "https://huggingface.co/Qwen/Qwen3-VL-4B-Instruct-GGUF"
+summary = "Apache License 2.0. You may use, copy, change and share the model for any purpose, commercial use included. If you pass it on, include the licence and keep its notices."
+restrictions = "none"
+evidence = "The GGUF repository's card header at the pinned revision declares apache-2.0 (and the API's tag license:apache-2.0), as does the base model Qwen/Qwen3-VL-4B-Instruct (revision ebb281ec70b05090aa6165b016eac8ec08e71b17). Neither repository holds a licence file. The publisher's GitHub repository QwenLM/Qwen3-VL is declared Apache-2.0."
+checked = "2026-11-15"
+
+[[tested]]
+date = "2026-11-14"
+report = "docs/reports/exp-winsee-1.md"
+run = "https://github.com/giorgiogiudice/TUR/actions/runs/43545838974"
+engine = "llama-server b9840 (8c146a836) from llama.cpp's own release llama-b9840-bin-ubuntu-x64, with --mmproj, 4 threads"
+hardware = "GitHub-hosted ubuntu-24.04 runner: AMD EPYC 9V74, 4 logical processors, no graphics processor"
+context = 8192
+peak_memory_bytes = 6763012096
+tool_call = "not-tested"
+image_input = "yes"
+embeddings = "not-tested"
+locate = "yes"
+notes = "The winsee experiment's question (a window's picture, 'output a click position' for a named control, a point normalised to 0-1000): on 70 controls of nine plain dialogs, 68 inside the control's rectangle with the window enlarged 1.5 times (97 %), 38 at its own size (54 %), 12 at half size (17 %); on all windows 96 of 102, 75 of 118, 18 of 118. The first question about a picture took 11.1, 27.0 and 50.1 s (medians at half, own and 1.5 times the size), later ones 2.0 to 2.5 s. Asked for a label a window painted over another control, it pointed at the control under it every time: a point is never acted on by itself."

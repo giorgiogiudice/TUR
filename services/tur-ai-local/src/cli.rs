@@ -761,6 +761,7 @@ fn capability_words(capabilities: &[Capability]) -> String {
             Capability::Tools => "tool calling",
             Capability::Vision => "image input",
             Capability::Embeddings => "embeddings",
+            Capability::Locate => "locating controls in a picture",
         })
         .collect::<Vec<_>>()
         .join(", ")

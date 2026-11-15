@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Starts tur-pax-overlay, with nothing drawn, when something calls
+# org.tur.PaxOverlay1 on the session bus and the overlay is not running:
+# P@x's window showing P@x's keys, a program that takes a lease to show
+# P@x's indicator, pointer or a highlight (docs/architecture/
+# tur-pax-overlay.md, section 3). Installed as
+# /usr/share/dbus-1/services/org.tur.PaxOverlay1.service.
+[D-BUS Service]
+Name=org.tur.PaxOverlay1
+Exec=/usr/bin/tur-pax-overlay

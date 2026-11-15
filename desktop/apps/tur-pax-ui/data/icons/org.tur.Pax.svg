@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0 -->
+<!-- P@x's icon, FIRST DRAFT for the owner's review: the flame of desktop/kit/pax/PaxFlame.qml (the same three paths, on its 32 grid) in P@x's gold (desktop-experience.md, 5.2), on the round dark tile of branding/tur-icon.svg. Installed as the icon "org.tur.Pax" of the hicolor theme, which the launcher entry org.tur.PaxUi.desktop names. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
+<title>P@x (first draft)</title>
+<circle cx="24" cy="24" r="24" fill="#0B0F17"/>
+<g transform="translate(8 7)">
+<path d="M 16 0 C 19 7 27 13 27 21 A 11 11 0 0 1 5 21 C 5 13 13 7 16 0 Z" fill="#E8B44C"/>
+<path d="M 16 14 C 17.5 16.5 20 19 20 22.5 A 4 4 0 0 1 12 22.5 C 12 19 14.5 16.5 16 14 Z" fill="#F8BF3D"/>
+<path d="M 16 20.5 A 2.5 2.5 0 1 1 15.99 20.5 Z" fill="#FDF682"/>
+</g>
+</svg>

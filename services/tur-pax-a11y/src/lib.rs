@@ -22,6 +22,8 @@
 //! | [`act`] | Carrying out one operation on one element |
 //! | [`serve`] | The protocol with the task loop |
 //! | [`survey`] | What each application exposes, for the coverage table |
+//! | [`wine`] | Windows applications under Wine, through the bridge inside each prefix |
+//! | [`vision`] | The rule a position proposed from a picture is held to |
 
 #![forbid(unsafe_code)]
 
@@ -32,3 +34,5 @@ pub mod overlay;
 pub mod serve;
 pub mod survey;
 pub mod tree;
+pub mod vision;
+pub mod wine;

@@ -865,3 +865,89 @@ fn the_supervisor_passes_the_exit_status_on() {
     );
     assert_eq!(home.run(&["supervise"]).status, 2);
 }
+
+/// The supervisor, given a listening socket as its standard input (as the
+/// launcher gives the sandbox), starts the bridge for a connection with the
+/// connection as the bridge's standard input and output, gives the
+/// application an empty standard input, and stops the bridge when the
+/// application ends. Wine is stood in for by the shell.
+#[test]
+fn the_supervisor_starts_the_bridge_for_a_connection() {
+    use std::io::{BufRead, BufReader, Write};
+    use std::os::fd::OwnedFd;
+    use std::os::unix::net::{UnixListener, UnixStream};
+    use std::process::Stdio;
+    use std::time::{Duration, Instant};
+
+    let home = Home::new("supervise-bridge");
+    let socket = home.root.join("bridge.sock");
+    let listener = UnixListener::bind(&socket).unwrap();
+    // The stand-in bridge answers one line with the hook switch it got.
+    let bridge = home.root.join("bridge.sh");
+    fs::write(
+        &bridge,
+        "read -r line; printf '%s hook-off=%s\\n' \"$line\" \"${TUR_WINBRIDGE_NO_HOOK:-}\"\n",
+    )
+    .unwrap();
+    // The stand-in application waits for a file the test writes, and says
+    // whether its standard input is a socket.
+    let release = home.root.join("release");
+    let application = format!(
+        "if [ -S /dev/stdin ]; then echo stdin-is-the-socket; else echo stdin-is-empty; fi; \
+         while [ ! -e '{}' ]; do sleep 0.1; done",
+        release.display()
+    );
+    let mut supervisor = Command::new(env!("CARGO_BIN_EXE_tur-runtime"))
+        .args([
+            "supervise",
+            "--bridge",
+            bridge.to_str().unwrap(),
+            "--bridge-no-hook",
+            "--",
+            "/bin/sh",
+            "-c",
+            &application,
+        ])
+        .env_clear()
+        .env("PATH", "/usr/bin:/bin")
+        .stdin(Stdio::from(OwnedFd::from(listener)))
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+
+    let mut stream = UnixStream::connect(&socket).unwrap();
+    stream
+        .set_read_timeout(Some(Duration::from_secs(30)))
+        .unwrap();
+    writeln!(stream, "hello").unwrap();
+    let mut answer = String::new();
+    BufReader::new(stream.try_clone().unwrap())
+        .read_line(&mut answer)
+        .unwrap();
+    assert_eq!(answer, "hello hook-off=1\n");
+
+    fs::write(&release, b"").unwrap();
+    let started = Instant::now();
+    let output = supervisor.wait_with_output().unwrap();
+    assert!(started.elapsed() < Duration::from_secs(20));
+    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "stdin-is-empty\n");
+
+    // Without a listening socket, --bridge changes nothing.
+    let outcome = home.run(&[
+        "supervise",
+        "--bridge",
+        bridge.to_str().unwrap(),
+        "--",
+        "/bin/sh",
+        "-c",
+        "exit 4",
+    ]);
+    assert_eq!(outcome.status, 4);
+    // The hook switch needs a bridge.
+    assert_eq!(
+        home.run(&["supervise", "--bridge-no-hook", "--", "/bin/true"])
+            .status,
+        2
+    );
+}

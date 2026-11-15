@@ -122,7 +122,7 @@
           "$ref": "#/$defs/path"
         },
         "installed": {
-          "description": "Whether the entry is installed where the desktop looks for entries. false: it is staged in the runtime manager's own directory.",
+          "description": "Whether the entry is installed where the desktop looks for entries ($XDG_DATA_HOME/applications/tur-wine-<app-id>.desktop). true for every application installed since the entry is installed; false in an older record, whose entry was staged in the runtime manager's own directory.",
           "type": "boolean"
         }
       }

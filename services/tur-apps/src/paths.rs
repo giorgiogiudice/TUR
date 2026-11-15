@@ -139,9 +139,18 @@ impl Dirs {
         self.runtime_app(app_id).join("prefix/drive_c/users")
     }
 
-    /// The staged launcher entry of a Windows application.
+    /// Where `tur-runtime` keeps the icon of a Windows application's
+    /// launcher entry.
     pub fn runtime_launcher(&self, app_id: &str) -> PathBuf {
         self.runtime_root().join("launchers").join(app_id)
+    }
+
+    /// The launcher entry `tur-runtime` installs for a Windows application,
+    /// among the user's applications, where the desktop's launcher finds it.
+    pub fn runtime_desktop_entry(&self, app_id: &str) -> PathBuf {
+        self.data_home
+            .join("applications")
+            .join(format!("tur-wine-{app_id}.desktop"))
     }
 }
 

@@ -25,6 +25,9 @@ expect_tool_sets="$(grep -v '^#' image/programs.tsv | cut -f1 | while read -r co
     if [ -f "${component}/agent-tools.json" ]; then basename "${component}"; fi
 done | LC_ALL=C sort | tr '\n' ' ')"
 echo "expected: ${expect_programs} programs; tool sets: ${expect_tool_sets}"
+# The packages of the Wine lock, as name-version-release.arch.
+expect_wine_packages="$(grep -v '^#' image/wine/wine.lock | cut -f1 | sed 's/\.rpm$//' | tr '\n' ' ')"
+echo "expected: $(echo "${expect_wine_packages}" | wc -w) Wine packages"
 
 "${podman[@]}" run --rm -i --network none \
     -e "EXPECT_BUILD_ID=${expected_build_id}" \
@@ -33,6 +36,7 @@ echo "expected: ${expect_programs} programs; tool sets: ${expect_tool_sets}"
     -e "EXPECT_PROGRAMS=${expect_programs}" \
     -e "EXPECT_TOOL_SETS=${expect_tool_sets}" \
     -e "EXPECT_LLAMA_CPP_BUILD=${LLAMA_CPP_BUILD_NUMBER}" \
+    -e "EXPECT_WINE_PACKAGES=${expect_wine_packages}" \
     "${image}" /bin/bash -s <<'INNER'
 set -u
 fail=0
@@ -274,6 +278,97 @@ check "the engine's licences are in the image, and the build says what it was bu
               LICENSE-subprocess.h LICENSE-llamafile-sgemm README; do test -s "/usr/share/licenses/llama.cpp/$f" || exit 1; done &&
      grep -q "^llama.cpp	b$1	" /usr/lib/tur/built-from-source.tsv' _ "${EXPECT_LLAMA_CPP_BUILD}"
 
+# P@x's bridge into Windows applications (services/tur-winbridge, built in the
+# image build by image/winbridge/winbridge.sh): two Windows programs of TUR's
+# own, the record of their build, and the licences that go with them.
+winbridge=/usr/lib/tur/winbridge
+check "the bridge and its menu hook are Windows programs (PE files)" bash -c \
+    'for f in tur-winbridge.exe tur-winhook.dll; do [ "$(head -c 2 "$1/$f")" = MZ ] || exit 1; done' _ "${winbridge}"
+check "the build record names both files with the SHA-256 they have" bash -c \
+    'cd "$1" && for f in tur-winbridge.exe tur-winhook.dll; do
+         grep -q "^${f}	$(sha256sum "${f}" | cut -d" " -f1)	" build.tsv || exit 1
+     done' _ "${winbridge}"
+echo "      $(grep -v '^#' "${winbridge}/build.tsv" 2>/dev/null | cut -f1,3,5,6 | tr '\t\n' ' ;')"
+check "the menu hook's MIT licence and the mingw-w64 runtime's licences are in the image" bash -c \
+    'grep -q "^MIT License" /usr/share/licenses/tur-winhook/LICENSE &&
+     test -s /usr/share/licenses/tur-winbridge/README &&
+     ls /usr/share/licenses/tur-winbridge/mingw64-crt-* > /dev/null'
+check "tur-pax-a11y, which speaks to the bridge, is where tur-pax starts it" test -x /usr/bin/tur-pax-a11y
+
+# The desktop programs (image/desktop/; image/README.md, "The desktop
+# programs"): built in the image build against the image's own Qt, with
+# their launcher entries, bus activation files and P@x's icon.
+desktop=/usr/lib/tur/desktop-programs.tsv
+check "the list of TUR's desktop programs is in the image" test -s "${desktop}"
+check "the four desktop programs are listed" bash -c \
+    '[ "$(grep -v "^#" "$1" | cut -f1 | LC_ALL=C sort | tr "\n" " ")" = "tur-centre tur-pax-overlay tur-pax-ui tur-settings " ]' _ "${desktop}"
+while IFS=$'\t' read -r program path version; do
+    case "${program}" in "#"* | "") continue ;; esac
+    check "${program} is installed at ${path} and says its version without a display" bash -c \
+        '[ "$(QT_QPA_PLATFORM=offscreen XDG_RUNTIME_DIR=/tmp "$1" --version 2>/dev/null | tail -n1)" = "$2 $3" ]' \
+        _ "${path}" "${program}" "${version}"
+done < "${desktop}"
+# "The same Qt as the image": the package build of every library the programs
+# were linked against, as the build stage wrote it down, is the build this
+# image has. Qt and KDE's libraries must agree exactly; a difference in
+# another library (the compiler's, the C library) is printed.
+check "the image's Qt and KDE libraries are the builds the desktop programs were built against" bash -c \
+    'grep -v "^#" "$1" | while IFS=$'"'"'\t'"'"' read -r package build; do
+         case "${package}" in qt6-*|kf6-*|layer-shell-qt|kwayland) ;; *) continue ;; esac
+         have="$(rpm -q --qf "%{VERSION}-%{RELEASE}" "${package}")"
+         [ "${have}" = "${build}" ] || { echo "${package}: built against ${build}, the image has ${have}"; exit 1; }
+     done' _ /usr/lib/tur/desktop-built-against.tsv
+check "the desktop programs were built against Qt Base, Qt Declarative, LayerShellQt and KWayland" bash -c \
+    'for package in qt6-qtbase qt6-qtdeclarative layer-shell-qt kwayland; do
+         grep -q "^${package}	" "$1" || { echo "${package}"; exit 1; }; done' _ /usr/lib/tur/desktop-built-against.tsv
+echo "      built against: $(grep -v '^#' /usr/lib/tur/desktop-built-against.tsv | grep -E '^(qt6-|kf6-|layer-shell-qt|kwayland)' | tr '\t' ' ' | tr '\n' ';')"
+grep -v '^#' /usr/lib/tur/desktop-built-against.tsv | while IFS=$'\t' read -r package build; do
+    have="$(rpm -q --qf '%{VERSION}-%{RELEASE}' "${package}" 2>&1)"
+    if [ "${have}" != "${build}" ]; then echo "NOTE  ${package}: built against ${build}, the image has ${have}"; fi
+done
+check "every library the desktop programs need is in the image" bash -c \
+    '! find /usr/bin/tur-centre /usr/bin/tur-settings /usr/bin/tur-pax-ui /usr/bin/tur-pax-overlay /usr/lib64/tur -type f -exec ldd {} \; 2>&1 | grep "not found"'
+check "the desktop programs link no widget library and none of Qt's GPL-only modules" bash -c \
+    '! find /usr/bin/tur-centre /usr/bin/tur-settings /usr/bin/tur-pax-ui /usr/bin/tur-pax-overlay /usr/lib64/tur -type f -exec ldd {} \; 2>&1 |
+       grep -E "libQt6(Widgets|VirtualKeyboard|WaylandCompositor|Quick3D|QuickTimeline|Graphs|Charts|DataVisualization|Lottie|HttpServer|Grpc|Mqtt|Coap|NetworkAuth)"'
+# Each program loads its window from its installed libraries, with no import
+# path set, on what the image holds (no fixture): the catalogue through
+# tur-catalogue, this system's own facts, no session bus.
+offscreen() { env -i PATH=/usr/bin HOME=/tmp/tur-desktop-smoke XDG_RUNTIME_DIR=/tmp/tur-desktop-smoke LC_ALL=C.UTF-8 \
+    QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software "$@"; }
+mkdir -p /tmp/tur-desktop-smoke && chmod 0700 /tmp/tur-desktop-smoke
+check "tur-centre loads its window with no QML warning, on the installed catalogue" offscreen tur-centre --check
+check "tur-centre opens an application's page from the installed catalogue" \
+    offscreen tur-centre --check tur-centre:app/org.libreoffice.libreoffice
+check "tur-settings loads its window with no QML warning, on this system" offscreen tur-settings --check --no-dbus
+check "tur-pax-ui loads the ask bar with no QML warning" offscreen tur-pax-ui --check --no-dbus --mode ask
+check "tur-pax-ui loads the setup flow with no QML warning" offscreen tur-pax-ui --check --no-dbus --mode setup
+check "tur-pax-overlay loads its surfaces with no QML warning" offscreen tur-pax-overlay --check --no-dbus
+for entry in org.tur.Centre org.tur.Settings org.tur.PaxUi; do
+    check "the launcher entry ${entry}.desktop is valid, and its program is in the image" bash -c \
+        'desktop-file-validate "/usr/share/applications/$1.desktop" &&
+         command -v "$(sed -n "s/^Exec=\([^ ]*\).*/\1/p" "/usr/share/applications/$1.desktop" | head -n1)"' _ "${entry}"
+done
+for name in org.tur.Settings1 org.tur.PaxUi1 org.tur.PaxOverlay1; do
+    check "the session bus can start ${name}: its activation file names a program in the image" bash -c \
+        'f="/usr/share/dbus-1/services/$1.service"; grep -qx "Name=$1" "$f" &&
+         test -x "$(sed -n "s/^Exec=\([^ ]*\).*/\1/p" "$f")"' _ "${name}"
+done
+check "TUR's entry in KDE System Settings is installed" \
+    grep -qx 'Exec=tur-settings' /usr/share/plasma/systemsettings/externalmodules/org.tur.Settings.desktop
+check "P@x's icon is in the icon theme, where its launcher entry names it" bash -c \
+    'grep -qx "Icon=org.tur.Pax" /usr/share/applications/org.tur.PaxUi.desktop &&
+     grep -q "<svg" /usr/share/icons/hicolor/scalable/apps/org.tur.Pax.svg'
+check "the icons the other launcher entries name are in the icon theme" bash -c \
+    'for icon in system-software-install preferences-system; do
+         find /usr/share/icons/breeze /usr/share/icons/hicolor -name "${icon}.*" | grep -q . || { echo "${icon}"; exit 1; }; done'
+# The typefaces (image/desktop/fonts.lock).
+check "Inter and JetBrains Mono are installed, as Fedora's packages" rpm -q rsms-inter-fonts jetbrains-mono-fonts
+check "fontconfig finds the family Inter" bash -c \
+    '[ "$(HOME=/tmp/tur-desktop-smoke fc-match -f "%{family[0]}" "Inter")" = Inter ]'
+check "fontconfig finds the family JetBrains Mono" bash -c \
+    '[ "$(HOME=/tmp/tur-desktop-smoke fc-match -f "%{family[0]}" "JetBrains Mono")" = "JetBrains Mono" ]'
+
 # What the programs start (specification section 12; pax-orchestrator.md).
 # Nothing is added to the image for them: every one comes with the base.
 for tool in /usr/bin/bwrap /usr/bin/prlimit /usr/bin/lsblk /usr/bin/udevadm /usr/bin/journalctl \
@@ -285,11 +380,35 @@ for tool in uname systemd-analyze dmesg lspci lsusb vulkaninfo wpctl nmcli bluet
 done
 check "bubblewrap and util-linux are packages of the base" rpm -q bubblewrap util-linux
 check "bubblewrap is not set-user-ID"         bash -c '[ ! -u /usr/bin/bwrap ]'
-check "no Windows, Android or macOS runtime is in the image" bash -c \
-    'for name in wine wine64 wineserver umu-run waydroid darling; do
+# Wine (image/README.md, "Wine"): Fedora's x86-64 build of image/wine/wine.lock,
+# which runs 64-bit and 32-bit Windows programs, and nothing that would start
+# a Windows program outside tur-runtime's sandbox.
+check "Wine is installed, every package of image/wine/wine.lock at its pinned version" bash -c \
+    'for nevra in ${EXPECT_WINE_PACKAGES}; do rpm -q "${nevra}" > /dev/null || { echo "${nevra} is not installed"; exit 1; }; done
+     [ "$(echo ${EXPECT_WINE_PACKAGES} | wc -w)" -ge 60 ]'
+check "wine --version names Wine 11" bash -c '[[ "$(wine --version)" == wine-11.* ]]'
+check "wine and wineserver are the 64-bit programs, through alternatives" bash -c \
+    '[ "$(readlink -f /usr/bin/wine)" = /usr/bin/wine64 ] && [ "$(readlink -f /usr/bin/wineserver)" = /usr/bin/wineserver64 ]'
+check "Wine has the DLLs of both architectures (new WoW64)" bash -c \
+    'd=/usr/lib64/wine-wow64/wine; for f in i386-windows/kernel32.dll x86_64-windows/kernel32.dll x86_64-unix/ntdll.so \
+         x86_64-windows/wow64.dll x86_64-windows/wow64cpu.dll; do test -f "$d/$f" || { echo "no $f"; exit 1; }; done'
+check "the Direct3D DLLs that alternatives manages resolve" bash -c \
+    'for f in x86_64-windows/dxgi.dll x86_64-windows/d3d11.dll i386-windows/d3d9.dll; do
+         test -f "$(readlink -f "/usr/lib64/wine-wow64/wine/$f")" || { echo "$f does not resolve"; exit 1; }; done'
+check "no 32-bit (i686) Wine, no Mono, no Gecko" bash -c \
+    '! rpm -qa --qf "%{NAME}.%{ARCH}\n" | grep -E "^(wine[^.]*\.i686|wine-mono\.|mingw(32|64)-wine-gecko\.)"'
+check "nothing starts a Windows program outside tur-runtime" bash -c \
+    'for p in wine wine-desktop wine-systemd; do if rpm -q "$p"; then exit 1; fi; done
+     if ls /usr/lib/binfmt.d/*wine* /usr/share/applications/*wine* 2>/dev/null; then exit 1; fi
+     ! grep -rlE "^Exec=(.*/)?wine(64)?( |$)" /usr/share/applications/'
+check "ntsync is loaded at boot, and the kernel has the module" bash -c \
+    'grep -qx ntsync /usr/lib/modules-load.d/ntsync.conf && find /usr/lib/modules -name "ntsync.ko*" | grep -q .'
+check "xwininfo, which tur-runtime's autopilot uses, is in the image" test -x /usr/bin/xwininfo
+check "no Proton launcher, Android or macOS runtime is in the image" bash -c \
+    'for name in umu-run waydroid darling; do
          if command -v "${name}"; then exit 1; fi
      done
-     if rpm -qa | grep -i -E "^(wine|waydroid|darling|umu-launcher)"; then exit 1; fi'
+     if rpm -qa | grep -i -E "^(waydroid|darling|umu-launcher)"; then exit 1; fi'
 
 # A program runs, not only prints its version.
 check "tur-diag status works without a running system" bash -c \
@@ -337,7 +456,7 @@ find "${third}" -type f -printf '%s %P\n' | sort -rn | head -n 12 | sed 's/^/   
 # Everything TUR adds must be readable by an ordinary user: the checks above
 # run as root, which would not notice.
 check "what TUR adds is readable by every user" bash -c \
-    '[ -z "$(find /usr/share/tur /usr/share/licenses/tur /usr/share/licenses/tur-third-party /usr/share/licenses/tur-grub-boot-count /usr/share/licenses/llama.cpp /usr/lib/tur /usr/libexec/tur /usr/share/dbus-1/services/org.tur.Agent1.service /usr/lib/systemd/user/tur-pax* \( -type d ! -perm -0555 \) -o \( -type f ! -perm -0444 \) | head -n 5)" ]'
+    '[ -z "$(find /usr/share/tur /usr/share/licenses/tur /usr/share/licenses/tur-third-party /usr/share/licenses/tur-grub-boot-count /usr/share/licenses/llama.cpp /usr/lib/tur /usr/libexec/tur /usr/share/dbus-1/services/org.tur.Agent1.service /usr/lib/systemd/user/tur-pax* /usr/lib64/tur /usr/share/applications/org.tur.* /usr/share/dbus-1/services/org.tur.* /usr/share/icons/hicolor/scalable/apps/org.tur.Pax.svg \( -type d ! -perm -0555 \) -o \( -type f ! -perm -0444 \) | head -n 5)" ]'
 
 # Signed updates (ADR-0023; docs/architecture/publishing.md). The rule for
 # TUR's registry path is in the vendor policy, nothing in /etc hides it, and

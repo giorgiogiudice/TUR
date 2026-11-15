@@ -344,7 +344,8 @@ jobs:
             ~/.cargo/git/db
             services/tur-pax/target
             services/tur-pax-a11y/target
-          key: pax-a11y-${{ hashFiles('rust-toolchain.toml', 'services/tur-pax/Cargo.lock', 'services/tur-pax-a11y/Cargo.lock') }}
+            services/tur-runtime/target
+          key: pax-a11y-${{ hashFiles('rust-toolchain.toml', 'services/tur-pax/Cargo.lock', 'services/tur-pax-a11y/Cargo.lock', 'services/tur-runtime/Cargo.lock') }}
           restore-keys: pax-a11y-
 
       - name: Build tur-pax and the accessibility bridge
@@ -353,7 +354,11 @@ jobs:
         run: |
           (cd services/tur-pax && cargo build --locked --bin tur-pax)
           (cd services/tur-pax-a11y && cargo build --locked)
-          ls -l services/tur-pax/target/debug/tur-pax services/tur-pax-a11y/target/debug/tur-pax-a11y
+          # tur-runtime's supervisor offers P@x's bridge beside a Windows
+          # program (the harness's Windows phase).
+          (cd services/tur-runtime && cargo build --locked --bin tur-runtime)
+          ls -l services/tur-pax/target/debug/tur-pax services/tur-pax-a11y/target/debug/tur-pax-a11y \
+            services/tur-runtime/target/debug/tur-runtime
 
       - name: P@x through the accessibility tree
         run: |

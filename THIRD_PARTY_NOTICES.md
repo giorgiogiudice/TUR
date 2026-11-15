@@ -17,6 +17,12 @@ file, and is identified by the SPDX header of each file
   counts boot attempts (BSD-3-Clause). It is in the image.
 - `image/third-party-licensed/llama.cpp/`: the text of the Apache License 2.0,
   which goes with the local AI engine below. It is in the image.
+- `services/tur-winbridge/hook-mit/`: `tur-winhook.dll`, the part of P@x's
+  bridge into Windows applications that runs inside other publishers'
+  programs, some of them under the GPL (MIT; the owner's decision of 14
+  November 2026, docs/reports/exp-winsee-1.md, section 11.1). It is in the
+  image, with its licence in `/usr/share/licenses/tur-winhook/`. The same
+  file is in `tests/experiments/winsee/hook-mit/`, where it was measured.
 - `services/tur-update/tests/fixtures/bootc-upstream/`: fourteen test samples
   converted from bootc's source tree (MIT OR Apache-2.0). Test data only; not
   in the image.
@@ -56,6 +62,15 @@ local AI engine"). It is under llama.cpp's licence (MIT) and contains code
 under MIT, Apache-2.0, MIT-0 or public domain, and the Unlicense; the texts and
 notices are in `/usr/share/licenses/llama.cpp/` in the image, and the SBOM
 lists it with its source archive and that archive's SHA-256.
+
+Two Windows programs of TUR's own are compiled in the image build with
+Fedora's mingw-w64 cross compiler: `tur-winbridge.exe` (TUR's licence) and
+`tur-winhook.dll` (MIT), P@x's bridge into Windows applications
+(`image/winbridge/`; image/README.md, "P@x's bridge into Windows
+applications"). They link parts of the mingw-w64 runtime (`mingw64-crt`,
+whose licence files are in `/usr/share/licenses/tur-winbridge/`) and may
+link parts of libgcc under the GCC Runtime Library Exception. No Microsoft
+binary is built, fetched or shipped.
 
 ### Fedora's marks
 

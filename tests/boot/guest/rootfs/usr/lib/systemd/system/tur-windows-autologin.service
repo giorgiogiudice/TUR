@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Present only in the boot-test image (tests/boot/guest). Never part of TUR.
+
+[Unit]
+Description=TUR boot test: sign the test user in, for the Windows applications check (test image only)
+Documentation=https://github.com/giorgiogiudice/TUR/tree/main/tests/boot
+# Only in the Windows boot of tests/boot/windows.py, and never on hardware.
+# The file is written here, in the guest, so that SELinux labels it as it
+# labels any file in /etc and the boot can stay enforcing.
+ConditionKernelCommandLine=tur.windows_check
+ConditionVirtualization=vm
+DefaultDependencies=no
+After=local-fs.target
+Before=display-manager.service plasmalogin.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/mkdir -p /etc/plasmalogin.conf.d
+ExecStart=/usr/bin/cp /usr/share/tur-windows-e2e/zz-tur-windows-test.conf /etc/plasmalogin.conf.d/
+ExecStart=/usr/sbin/restorecon -v /etc/plasmalogin.conf.d /etc/plasmalogin.conf.d/zz-tur-windows-test.conf
+
+[Install]
+WantedBy=multi-user.target

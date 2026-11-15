@@ -73,6 +73,14 @@ target_link_libraries(tur-pax-overlay PRIVATE
     LayerShellQt::Interface Plasma::KWaylandClient)
 tur_link_qml_modules(tur-pax-overlay turkit turkitpax turpaxoverlay)
 
+# Into the image: the program, its module's library, its bus activation file
+# (the overlay has no launcher entry: it is started when something calls
+# org.tur.PaxOverlay1) and its interface description.
+tur_install_program(tur-pax-overlay)
+tur_install_modules(turpaxoverlay)
+tur_install_data(dbus-1/services data/org.tur.PaxOverlay1.service)
+tur_install_data(dbus-1/interfaces dbus/org.tur.PaxOverlay1.xml)
+
 # The program loads its surfaces and reports no QML warning, under the
 # offscreen platform (where it has plain windows and no window locator).
 add_test(NAME pax-overlay-starts COMMAND tur-pax-overlay --check)

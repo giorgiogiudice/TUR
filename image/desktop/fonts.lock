@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# The two typefaces of TUR's desktop that the base image does not carry
+# (docs/architecture/desktop-experience.md, 5.3): Inter, the interface face
+# of TUR's programs outside the session's theme (P@x's overlay; later setup
+# and the installer), and JetBrains Mono, for commands, codes and technical
+# detail in every TUR program. Fedora's packages, pinned by the SHA-256 of
+# the signed package as published in the Fedora 45 release tree, which does
+# not change after the release; the same versions the desktop builder has
+# (desktop/ci/builder.packages), so that the programs look as their
+# reference images. image/desktop/build.sh downloads each from the first
+# address that answers and refuses one whose checksum differs; the final
+# stage of image/Containerfile installs them with rpm.
+#
+# file	sha256	licence	path under the Fedora 45 release tree
+rsms-inter-fonts-4.1-4.fc45.noarch.rpm	84ae6445c75936a5302062f437160dd20151f02d32911064be06138b7ec925d0	OFL-1.1	Everything/x86_64/os/Packages/r/rsms-inter-fonts-4.1-4.fc45.noarch.rpm
+jetbrains-mono-fonts-2.304-11.fc45.noarch.rpm	2f61a5fe795aa0759242cd2dc6eb9e09431f7c26d412122f7c3be3d2de9570ae	OFL-1.1	Everything/x86_64/os/Packages/j/jetbrains-mono-fonts-2.304-11.fc45.noarch.rpm

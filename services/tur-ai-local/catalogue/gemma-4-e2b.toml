@@ -84,3 +84,17 @@ tool_call = "yes"
 image_input = "yes"
 embeddings = "not-tested"
 notes = "The local-ai workflow's table (local_ai_ci.py): downloaded and checked in 54.1 s, loaded in 2.5 s; 128 tokens generated in 6.28 s wall time from a 159-token prompt; a well-formed tool call, streamed too, and an answer that used the tool's result; the colour of a red image named."
+
+[[tested]]
+date = "2026-11-14"
+report = "docs/reports/exp-winsee-1.md"
+run = "https://github.com/giorgiogiudice/TUR/actions/runs/43545838974"
+engine = "llama-server b9840 (8c146a836) from llama.cpp's own release llama-b9840-bin-ubuntu-x64, with --mmproj, 4 threads"
+hardware = "GitHub-hosted ubuntu-24.04 runner: AMD EPYC 7763, 4 logical processors, no graphics processor"
+context = 8192
+peak_memory_bytes = 5963128832
+tool_call = "not-tested"
+image_input = "not-tested"
+embeddings = "not-tested"
+locate = "no"
+notes = "The winsee experiment's question (a window's picture, 'output a click position' for a named control): on 70 controls of nine plain dialogs, 4 inside the control's rectangle with the window enlarged 1.5 times (6 %), 5 at its own size (7 %), 8 at half size (11 %); no reading of its answers (y before x, pixels) gives more than 16 hits in 118. It describes pictures (pax-6) and does not locate controls: it has no locate capability."

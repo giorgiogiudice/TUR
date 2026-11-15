@@ -27,7 +27,12 @@ context_length = 262144
 memory_bytes = 3650000000
 memory_context = 8192
 kv_bytes_per_token = 114688
-capabilities = ["chat", "tools", "vision"]
+capabilities = ["chat", "tools", "vision", "locate"]
+# Located 64 % of the controls of plain dialogs at their own size and 74 %
+# enlarged 1.5 times (CI run 43545838974). Its peak memory while locating at
+# that size was 4.42 GB, above memory_bytes: the larger pictures cost more
+# to encode. Qwen3-VL 4B Instruct is the model P@x locates with.
+locate_scale = 1.5
 thinking = "none"
 languages = ["mul"]
 languages_note = "The publisher states text recognition (OCR) in 32 languages; the languages of conversation are not listed."
@@ -84,3 +89,17 @@ tool_call = "yes"
 image_input = "yes"
 embeddings = "not-tested"
 notes = "128 tokens generated in 3.93 s wall time; prompt speed not recorded: this run reused the prompt cache between the two measuring requests; answer after the tool result used it: yes; streamed tool call: yes."
+
+[[tested]]
+date = "2026-11-14"
+report = "docs/reports/exp-winsee-1.md"
+run = "https://github.com/giorgiogiudice/TUR/actions/runs/43545838974"
+engine = "llama-server b9840 (8c146a836) from llama.cpp's own release llama-b9840-bin-ubuntu-x64, with --mmproj, 4 threads"
+hardware = "GitHub-hosted ubuntu-24.04 runner: Intel Xeon 6975P-C, 4 logical processors, no graphics processor"
+context = 8192
+peak_memory_bytes = 4417634304
+tool_call = "not-tested"
+image_input = "yes"
+embeddings = "not-tested"
+locate = "yes"
+notes = "The winsee experiment's question (a window's picture, 'output a click position' for a named control): on 70 controls of nine plain dialogs, 52 inside the control's rectangle with the window enlarged 1.5 times (74 %), 45 at its own size (64 %), 15 at half size (21 %). The first question about a picture took 3.3, 8.4 and 17.0 s (medians), later ones 1.6 to 2.0 s. Asked for a label a window painted over another control, it pointed at the control under it every time."

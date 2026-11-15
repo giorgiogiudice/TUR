@@ -73,7 +73,7 @@ use tur_runtime::launch_host::{PROGRAM_DIRECTORIES, find_program};
 
 use tur_runtime::desktop::desktop_entry;
 use tur_runtime::discover::{discover, snapshot};
-use tur_runtime::exec::{Forward, SystemExecutor, supervise};
+use tur_runtime::exec::{Forward, SystemExecutor, supervise_with_bridge};
 use tur_runtime::grant::GrantContext;
 use tur_runtime::install::{
     InstallRequest, RecordOptions, application_paths, describe_installation,
@@ -204,6 +204,13 @@ enum Command {
         /// The wineserver program to wait for afterwards.
         #[arg(long, value_name = "PATH")]
         settle: Option<PathBuf>,
+        /// P@x's bridge, started with the program (Wine) for each connection
+        /// to the listening socket that is this process's standard input.
+        #[arg(long, value_name = "PATH")]
+        bridge: Option<String>,
+        /// Start the bridge with its menu hook switched off.
+        #[arg(long, requires = "bridge")]
+        bridge_no_hook: bool,
         /// The program and its arguments.
         #[arg(last = true, required = true)]
         command: Vec<String>,
@@ -590,7 +597,16 @@ fn main() -> ExitCode {
             command: InstallerCommand::Identify { file, json },
         } => run_installer_identify(&file, json),
         Command::App { command } => run_app(command),
-        Command::Supervise { settle, command } => run_supervise(settle.as_deref(), &command),
+        Command::Supervise {
+            settle,
+            bridge,
+            bridge_no_hook,
+            command,
+        } => run_supervise(
+            settle.as_deref(),
+            bridge.as_deref().map(|bridge| (bridge, bridge_no_hook)),
+            &command,
+        ),
     };
     ExitCode::from(status)
 }
@@ -1304,6 +1320,16 @@ fn render_launch(profile: &AppProfile, launch: &LaunchPlan) -> String {
     );
     line("prefix", &launch.prefix.display().to_string());
     line("log", &launch.log.display().to_string());
+    if let Some(offer) = &launch.winbridge {
+        line(
+            "P@x's bridge",
+            &format!(
+                "offered on {} (menu hook {})",
+                offer.socket.display(),
+                if offer.menu_hook { "on" } else { "off" }
+            ),
+        );
+    }
     if let Some(overrides) = &launch.dll_overrides {
         line("DLL overrides", overrides);
     }
@@ -1746,9 +1772,10 @@ fn run_app_install(arguments: &InstallArguments<'_>) -> u8 {
             "record": record,
             "discovery": discovery,
             "launcher": {
-                "staged_in": session.app.launchers,
-                "would_install_entry_to": entry_destination,
-                "would_install_icon_to": icon_destination,
+                "entry": record.launcher.desktop_entry,
+                "installed_entry_to": entry_destination,
+                "icon_kept_in": session.app.launchers,
+                "icon_theme_place": icon_destination,
                 "icon": icon,
             },
             "seconds": {
@@ -1777,7 +1804,7 @@ fn run_app_install(arguments: &InstallArguments<'_>) -> u8 {
         print_line(&format!("  drive C: {}", case_folding.summary()));
         print_line(&format!("  record: {}", session.app.record.display()));
         print_line(&format!(
-            "  launcher entry: {} (staged; installed it would be {entry_destination})",
+            "  launcher entry: {} (installed as {entry_destination})",
             record.launcher.desktop_entry
         ));
         print_line(&format!(
@@ -1989,11 +2016,11 @@ fn run_app_uninstall(
     EXIT_OK
 }
 
-fn run_supervise(settle: Option<&Path>, command: &[String]) -> u8 {
+fn run_supervise(settle: Option<&Path>, bridge: Option<(&str, bool)>, command: &[String]) -> u8 {
     let Some((program, arguments)) = command.split_first() else {
         return EXIT_USAGE;
     };
-    match supervise(settle, program, arguments) {
+    match supervise_with_bridge(settle, program, arguments, bridge) {
         Ok(status) => u8::try_from(status).unwrap_or(EXIT_INPUT),
         Err(error) => {
             print_error_line(&format!(

@@ -20,6 +20,7 @@ services/tur-catalogue	tur-catalogue	/usr/bin/tur-catalogue
 services/tur-runtime	tur-runtime	/usr/bin/tur-runtime
 services/tur-update	tur-update	/usr/bin/tur-update
 services/tur-pax	tur-pax	/usr/bin/tur-pax
+services/tur-pax-a11y	tur-pax-a11y	/usr/bin/tur-pax-a11y
 services/tur-pax-memory	tur-pax-memory	/usr/bin/tur-pax-memory
 services/tur-pax-providers	tur-pax-providers	/usr/libexec/tur/tur-pax-providers
 services/tur-apps	tur-apps	/usr/bin/tur-apps

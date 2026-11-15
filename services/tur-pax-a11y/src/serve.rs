@@ -19,6 +19,11 @@
 //! When the stop control is used (the lease ends, the overlay leaves or
 //! asks to stop), the request under way ends at its next step and every
 //! later one is answered `stopped`.
+//!
+//! Windows applications under Wine are a second source of windows
+//! ([`crate::wine`]): their windows are listed and chosen with the others,
+//! and a call on one of them goes through the same steps, with the
+//! application's bridge where the bus would be.
 
 use std::io::{self, BufRead, Write};
 use std::sync::Arc;
@@ -37,7 +42,10 @@ use tur_pax::{Action, ActionClass, Context, Timestamp, UiOperation, UserPolicy, 
 use crate::act;
 use crate::atspi::{Client, Node, role_name, state};
 use crate::overlay::{ARRIVAL_TIMEOUT, DWELL, Overlay};
-use crate::tree::{Budget, DEFAULT_NODES, Desktop, Facts, Miss, Window};
+use crate::tree::{
+    Budget, Candidate, DEFAULT_NODES, Desktop, Facts, Miss, Window, choose_window,
+};
+use crate::wine::{TOOLKIT, Wine, WineElement, WineWindow};
 
 /// An answer that is not a result.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -67,8 +75,17 @@ impl From<Miss> for Refusal {
 #[derive(Debug)]
 pub struct Bridge {
     desktop: Desktop,
+    wine: Wine,
     overlay: Overlay,
     stopped: Arc<AtomicBool>,
+}
+
+/// A window a call names: on the accessibility bus, or of a Windows
+/// application under Wine.
+#[derive(Debug)]
+enum Place {
+    Bus(Window),
+    Wine(WineWindow),
 }
 
 fn argument<'a>(arguments: &'a Map<String, Value>, name: &str) -> Option<&'a str> {
@@ -108,6 +125,43 @@ fn target_of(window: &Window, element: Option<(&str, &Facts)>) -> Target {
         },
         default_control: facts.states.has(state::IS_DEFAULT),
         editable: facts.states.has(state::EDITABLE),
+    }
+}
+
+/// The facts the engine decides on, for a window of a Windows application:
+/// the application is the one `tur-runtime` named its socket after, with
+/// the program's file name as another identifier; the owner is the user
+/// (only the user's own `tur-runtime` can offer a bridge in the user's
+/// runtime directory, and it refuses to run as root).
+pub fn wine_target(window: &WineWindow, element: Option<(&str, &WineElement)>) -> Target {
+    let (id, name, description, role, default_control, editable) = match element {
+        Some((id, element)) => (
+            id.to_owned(),
+            element.name.clone(),
+            element.description.clone(),
+            element.role,
+            element.has("is default"),
+            element.editable(),
+        ),
+        None => (String::new(), String::new(), String::new(), 0, false, false),
+    };
+    Target {
+        window: window.id.clone(),
+        element: id,
+        application: window.application.clone(),
+        also_known_as: window.also_known_as(),
+        window_title: window.title.clone(),
+        owner: "user".to_owned(),
+        name,
+        description,
+        role,
+        role_name: if element.is_some() {
+            role_name(role).to_owned()
+        } else {
+            String::new()
+        },
+        default_control,
+        editable,
     }
 }
 
@@ -162,6 +216,7 @@ impl Bridge {
         let overlay = Overlay::new(session, incoming, Arc::clone(&stopped));
         Ok(Bridge {
             desktop: Desktop::new(client, Arc::clone(&stopped)),
+            wine: Wine::from_environment(),
             overlay,
             stopped,
         })
@@ -204,10 +259,46 @@ impl Bridge {
         }
     }
 
-    fn window(&mut self, call: &InterfaceCall) -> Result<Window, Refusal> {
+    /// The window a call names, among the windows on the bus and those of
+    /// Windows applications, by the same rules for both.
+    fn place(&mut self, call: &InterfaceCall) -> Result<Place, Refusal> {
         let query = argument(&call.arguments, "window")
             .ok_or_else(|| Refusal::new("not_found", "the call names no window"))?;
-        Ok(self.desktop.find_window(query)?)
+        let on_bus = self.desktop.windows();
+        let wine = self.wine.windows();
+        let bus_windows = match on_bus {
+            Ok(windows) => windows,
+            Err(error) if wine.is_empty() => {
+                return Err(Refusal::new(
+                    "not_found",
+                    format!("the windows could not be listed: {error}"),
+                ));
+            }
+            Err(_) => Vec::new(),
+        };
+        let mut candidates: Vec<Candidate> = bus_windows
+            .iter()
+            .map(|window| {
+                let mut names = vec![
+                    window.application.application.clone(),
+                    window.application.name.clone(),
+                ];
+                names.extend(window.application.also_known_as.iter().cloned());
+                (window.id.clone(), window.title.clone(), names)
+            })
+            .collect();
+        candidates.extend(wine.iter().map(|window| {
+            let mut names = vec![window.application.clone()];
+            names.extend(window.also_known_as());
+            (window.id.clone(), window.title.clone(), names)
+        }));
+        let index = choose_window(query, &candidates)?;
+        let count = bus_windows.len();
+        Ok(if index < count {
+            Place::Bus(bus_windows[index].clone())
+        } else {
+            Place::Wine(wine[index - count].clone())
+        })
     }
 
     fn desktop_target(&self) -> Target {
@@ -226,14 +317,21 @@ impl Bridge {
     pub fn resolve(&mut self, call: &InterfaceCall) -> Result<Target, Refusal> {
         match call.tool {
             InterfaceTool::ListWindows => Ok(self.desktop_target()),
-            InterfaceTool::ReadWindow | InterfaceTool::Find => {
-                let window = self.window(call)?;
-                Ok(target_of(&window, None))
-            }
+            InterfaceTool::ReadWindow | InterfaceTool::Find => match self.place(call)? {
+                Place::Bus(window) => Ok(target_of(&window, None)),
+                Place::Wine(window) => Ok(wine_target(&window, None)),
+            },
             InterfaceTool::ReadFocused => {
-                let (window, node, facts) = self
-                    .desktop
-                    .focused()
+                // The bus's element, when its window is the active one;
+                // otherwise a Windows application's, then the bus's.
+                let on_bus = self.desktop.focused();
+                let active = on_bus
+                    .as_ref()
+                    .is_some_and(|(window, _, _)| window.states.has(state::ACTIVE));
+                if !active && let Some(target) = self.wine_focused() {
+                    return Ok(target);
+                }
+                let (window, node, facts) = on_bus
                     .ok_or_else(|| Refusal::new("not_found", "no element has the keyboard"))?;
                 let id = self.desktop.element_id(&node, &window.id);
                 let mut target = target_of(&window, Some((&id, &facts)));
@@ -243,7 +341,10 @@ impl Bridge {
                 Ok(target)
             }
             _ => {
-                let window = self.window(call)?;
+                let window = match self.place(call)? {
+                    Place::Bus(window) => window,
+                    Place::Wine(window) => return self.wine_resolve(call, &window),
+                };
                 let (node, facts) = self.desktop.resolve_element(
                     &window,
                     argument(&call.arguments, "element"),
@@ -255,6 +356,48 @@ impl Bridge {
                 Ok(target_of(&window, Some((&id, &facts))))
             }
         }
+    }
+
+    /// What a call would act on in a window of a Windows application,
+    /// read from its bridge.
+    fn wine_resolve(
+        &mut self,
+        call: &InterfaceCall,
+        window: &WineWindow,
+    ) -> Result<Target, Refusal> {
+        let (elements, _) = self.wine.read(window)?;
+        let element = self.wine.choose(
+            window,
+            &elements,
+            argument(&call.arguments, "element"),
+            argument(&call.arguments, "name"),
+            argument(&call.arguments, "role"),
+            call.tool == InterfaceTool::Type,
+        )?;
+        let id = self.wine.element_id(&window.id, &element.handle);
+        Ok(wine_target(window, Some((&id, element))))
+    }
+
+    /// The element that has the keyboard in a Windows application, its
+    /// foreground window first.
+    fn wine_focused(&mut self) -> Option<Target> {
+        let mut windows = self.wine.windows();
+        windows.sort_by_key(|window| !window.active);
+        for window in windows {
+            let Ok((elements, _)) = self.wine.read(&window) else {
+                continue;
+            };
+            if let Some(element) = elements
+                .iter()
+                .find(|element| element.has("focused") && element.shows())
+            {
+                let id = self.wine.element_id(&window.id, &element.handle);
+                let mut target = wine_target(&window, Some((&id, element)));
+                target.role_name = String::new();
+                return Some(target);
+            }
+        }
+        None
     }
 
     /// The window and the element a target names, read again now.
@@ -295,8 +438,21 @@ impl Bridge {
             ));
             return;
         };
+        self.point_at(pid, &window.title, &window.id, rect, caption, dwell);
+    }
+
+    /// The same, for a window found by its process (0: any) and title.
+    fn point_at(
+        &self,
+        pid: u32,
+        title: &str,
+        window: &str,
+        rect: [i32; 4],
+        caption: &str,
+        dwell: bool,
+    ) {
         let before = self.overlay.arrivals();
-        let (arrived, placed) = match self.overlay.highlight(pid, &window.title, rect, caption) {
+        let (arrived, placed) = match self.overlay.highlight(pid, title, rect, caption) {
             Ok(_) => (
                 self.overlay.wait_for_arrival(before, ARRIVAL_TIMEOUT),
                 "ok".to_owned(),
@@ -308,8 +464,8 @@ impl Bridge {
             ),
         };
         log(&format!(
-            "arrived={arrived} highlight={placed} window={} rect={},{},{},{} pid={pid}",
-            window.id, rect[0], rect[1], rect[2], rect[3]
+            "arrived={arrived} highlight={placed} window={window} rect={},{},{},{} pid={pid}",
+            rect[0], rect[1], rect[2], rect[3]
         ));
         if dwell {
             thread::sleep(DWELL);
@@ -358,6 +514,9 @@ impl Bridge {
             }
             self.overlay.activity("observing", None);
             return self.list();
+        }
+        if Wine::is_window_id(&decided.window) {
+            return self.carry_out_wine(call, decided);
         }
         // 1. The same target, now.
         let (window, element) = self.reread(decided)?;
@@ -496,6 +655,170 @@ impl Bridge {
         }
     }
 
+    /// Carry out a call on a window of a Windows application: the same
+    /// steps as on the bus, with the application's bridge where the bus is.
+    fn carry_out_wine(
+        &mut self,
+        call: &InterfaceCall,
+        decided: &Target,
+    ) -> Result<Value, Refusal> {
+        // 1. The same target, now.
+        let window = self
+            .wine
+            .window(&decided.window)
+            .ok_or_else(|| Refusal::new("changed", "the window is not there any more"))?;
+        let (elements, truncated) = self.wine.read(&window).map_err(|miss| {
+            Refusal::new(
+                "changed",
+                format!("the window cannot be read: {}", miss.message),
+            )
+        })?;
+        let element = if decided.element.is_empty() {
+            None
+        } else {
+            let (in_window, handle) = self
+                .wine
+                .element(&decided.element)
+                .ok_or_else(|| Refusal::new("changed", "the element is not known any more"))?;
+            if in_window != window.id {
+                return Err(Refusal::new("changed", "the element is in another window"));
+            }
+            let found = elements
+                .iter()
+                .find(|element| element.handle == handle && element.shows())
+                .cloned()
+                .ok_or_else(|| Refusal::new("changed", "the element is not there any more"))?;
+            Some(found)
+        };
+        let mut now = wine_target(
+            &window,
+            element
+                .as_ref()
+                .map(|element| (decided.element.as_str(), element)),
+        );
+        if call.tool == InterfaceTool::ReadFocused {
+            now.role_name = String::new();
+        }
+        if !same_target(decided, &now) {
+            return Err(Refusal::new(
+                "changed",
+                "the window or the element changed since the decision",
+            ));
+        }
+        second_decision(call, &now)?;
+        let title = window.title.clone();
+        match call.tool {
+            InterfaceTool::ReadWindow | InterfaceTool::Find => {
+                self.overlay.activity("observing", Some((0, &title)));
+                self.point_at(
+                    0,
+                    &title,
+                    &window.id,
+                    window.frame(),
+                    "P@x is reading this window",
+                    true,
+                );
+                self.check_stopped()?;
+                if call.tool == InterfaceTool::Find {
+                    return Ok(self.wine.find_answer(
+                        &window,
+                        &elements,
+                        argument(&call.arguments, "name"),
+                        argument(&call.arguments, "role"),
+                    ));
+                }
+                let nodes = call
+                    .arguments
+                    .get("max_nodes")
+                    .and_then(Value::as_u64)
+                    .and_then(|n| usize::try_from(n).ok())
+                    .unwrap_or(DEFAULT_NODES);
+                Ok(self.wine.read_answer(&window, &elements, truncated, nodes))
+            }
+            InterfaceTool::ReadFocused => {
+                let element = element
+                    .ok_or_else(|| Refusal::new("not_found", "no element has the keyboard"))?;
+                self.overlay.activity("observing", Some((0, &title)));
+                if let Some(rect) = element.bounds(&window) {
+                    self.point_at(0, &title, &window.id, rect, "P@x is reading this", true);
+                }
+                let described = self.wine.describe(&window, &element);
+                Ok(json!({
+                    "note": crate::tree::CONTENT_NOTE,
+                    "window": window.id,
+                    "title": crate::tree::cut(&window.title, crate::tree::MAX_LABEL),
+                    "application": window.application,
+                    "focused": described,
+                }))
+            }
+            _ => {
+                let element = element
+                    .ok_or_else(|| Refusal::new("changed", "the element is not known any more"))?;
+                let operation = call.tool.operation();
+                self.overlay.activity("acting", Some((0, &title)));
+                let rect = element.bounds(&window).unwrap_or([0, 0, 1, 1]);
+                // 4. The pointer travels to the element and rests there.
+                self.point_at(
+                    0,
+                    &title,
+                    &window.id,
+                    rect,
+                    &format!("P@x: {}", operation.as_str()),
+                    true,
+                );
+                self.check_stopped()?;
+                log(&format!(
+                    "act op={} element={} window={}",
+                    operation.as_str(),
+                    decided.element,
+                    window.id
+                ));
+                let done = self
+                    .wine
+                    .act(&window, &element.handle, operation.as_str(), call.text())
+                    .map_err(|(code, message)| Refusal::new(code, message))?;
+                self.overlay.pulse();
+                let after = self.wine.read(&window).ok().and_then(|(now, _)| {
+                    now.into_iter()
+                        .find(|candidate| candidate.handle == element.handle)
+                });
+                let mut answer = Map::new();
+                answer.insert("done".to_owned(), json!(true));
+                answer.insert("operation".to_owned(), json!(operation.as_str()));
+                answer.insert("element".to_owned(), json!(decided.element));
+                answer.insert(
+                    "what".to_owned(),
+                    json!(done.get("how").and_then(Value::as_str).unwrap_or_default()),
+                );
+                answer.insert(
+                    "states_after".to_owned(),
+                    json!(after.as_ref().unwrap_or(&element).reported()),
+                );
+                if operation == UiOperation::Type {
+                    // Whether the text arrived, read back from the field.
+                    let arrived = done
+                        .get("text_now_contains_typed_text")
+                        .and_then(Value::as_bool)
+                        .or_else(|| {
+                            after
+                                .as_ref()
+                                .and_then(|after| after.text.as_ref())
+                                .map(|text| text.contains(call.text()))
+                        })
+                        .unwrap_or(false);
+                    answer.insert("text_now_contains_typed_text".to_owned(), json!(arrived));
+                }
+                log(&format!(
+                    "done op={} element={} window={}",
+                    operation.as_str(),
+                    decided.element,
+                    window.id
+                ));
+                Ok(Value::Object(answer))
+            }
+        }
+    }
+
     fn list(&mut self) -> Result<Value, Refusal> {
         let windows = self.desktop.windows().map_err(|error| {
             Refusal::new(
@@ -528,6 +851,26 @@ impl Bridge {
                 "toolkit": application.toolkit,
                 "owner": application.owner,
                 "active": window.states.has(state::ACTIVE),
+            }));
+        }
+        // Windows applications under Wine, screened by the same lists.
+        for window in self.wine.windows() {
+            let also_known_as = window.also_known_as();
+            if std::iter::once(&window.application)
+                .chain(also_known_as.iter())
+                .any(|identity| policy.is_excluded(identity))
+            {
+                left_out += 1;
+                continue;
+            }
+            listed.push(json!({
+                "window": window.id,
+                "title": crate::tree::cut(&window.title, crate::tree::MAX_LABEL),
+                "application": window.application,
+                "also_known_as": also_known_as,
+                "toolkit": TOOLKIT,
+                "owner": "user",
+                "active": window.active,
             }));
         }
         Ok(json!({ "windows": listed, "windows_left_out": left_out }))

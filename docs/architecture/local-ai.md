@@ -413,3 +413,26 @@ large are refused before any download, with a `failed` event; `cancel`
 leaves its request; every event follows the schema. The local-ai workflow's
 `pax` job runs one real `ensure` of Ministral 3 3B from Mistral's
 repository, then a P@x task through it.
+
+## 12. Locating controls in a picture
+
+Added on 15 November 2026 ([pax-winbridge-1](../reports/pax-winbridge-1.md)).
+"Image input" does not mean a model can say where a named control is in a
+picture of a window: the winsee experiment
+([exp-winsee-1](../reports/exp-winsee-1.md), section 7) measured Gemma 4 E2B
+at 6 to 11 %. The catalogue therefore has a capability of its own,
+`locate`, set only from a measurement (the loader refuses it without a
+`[[tested]]` entry with `locate = "yes"`), with `locate_scale`, how much a
+window's picture is enlarged before the model is asked (plain Win32 dialogs
+draw 8-point text):
+
+| Model | In the catalogue | Located, plain dialogs: half size / own size / 1.5 times | `locate` |
+|---|---|---|---|
+| Qwen3-VL 4B Instruct (`qwen3-vl-4b-instruct`, added) | yes, the publisher's GGUF | 17 % / 54 % / **97 %** | yes, 1.5: **the model P@x locates with** |
+| Qwen3-VL 2B Instruct | yes | 21 % / 64 % / 74 % | yes, 1.5 |
+| Holo2 4B | no: its publisher offers no GGUF (a third party's conversion was measured) | 11 % / 76 % / 96 % | – |
+| Gemma 4 E2B | yes | 11 % / 7 % / 6 % | no (`locate = "no"` recorded) |
+
+A point a model proposes is never acted on by itself
+([pax-accessibility.md](pax-accessibility.md), section 11.3). Nothing in P@x
+asks a model for a point yet.

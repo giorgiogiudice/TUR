@@ -18,6 +18,9 @@
 //! * a model with image input has a projector file, and only such a model;
 //! * an embeddings model does nothing else and names its pooling;
 //! * tool calling and image input go with conversation;
+//! * a model that locates controls in a picture takes images, says how much
+//!   a window's picture is enlarged for it (`locate_scale`), and was
+//!   measured locating them (a `[[tested]]` entry with `locate = "yes"`);
 //! * the memory stated is at least the files plus the context cache at the
 //!   stated context;
 //! * a licence with use restrictions says them in words; "none" means none.
@@ -52,6 +55,13 @@ pub enum Capability {
     Vision,
     /// Text embeddings.
     Embeddings,
+    /// Locating a named control in a picture of a window: answering with a
+    /// point inside it, well enough to propose it (docs/reports/
+    /// exp-winsee-1.md, section 7). Needs image input. "Image input" alone
+    /// does not mean it: Gemma 4 E2B describes pictures and does not locate
+    /// controls. A point a model proposes is never acted on by itself
+    /// (tur-pax-a11y, `vision`).
+    Locate,
 }
 
 /// How a model thinks before it answers.
@@ -171,8 +181,16 @@ pub struct Tested {
     pub image_input: Outcome,
     /// Whether embeddings came back.
     pub embeddings: Outcome,
+    /// Whether named controls were located in pictures of windows, well
+    /// enough to propose them.
+    #[serde(default = "not_tested")]
+    pub locate: Outcome,
     /// Anything else worth knowing.
     pub notes: String,
+}
+
+fn not_tested() -> Outcome {
+    Outcome::NotTested
 }
 
 /// A catalogue entry.
@@ -214,6 +232,11 @@ pub struct Model {
     pub active_weight_bytes: Option<u64>,
     /// What the model can do.
     pub capabilities: Vec<Capability>,
+    /// For a model that locates controls: how much a window's picture is
+    /// enlarged before it is asked, as measured (1.5 for the Qwen3-VL
+    /// models: plain Win32 dialogs draw 8-point text).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub locate_scale: Option<f64>,
     /// How it thinks before it answers.
     pub thinking: Thinking,
     /// The pooling of an embeddings model.
@@ -561,6 +584,31 @@ pub fn check(file_name: &str, model: &Model) -> Vec<String> {
     {
         problems.push(format!("{id}: tools and vision need chat"));
     }
+    let locates = capabilities.contains(&Capability::Locate);
+    if locates && !capabilities.contains(&Capability::Vision) {
+        problems.push(format!("{id}: locating controls needs vision"));
+    }
+    if locates != model.locate_scale.is_some() {
+        problems.push(format!(
+            "{id}: locate_scale is given for models that locate controls and only for them"
+        ));
+    }
+    if model
+        .locate_scale
+        .is_some_and(|scale| !scale.is_finite() || scale <= 0.25 || scale > 4.0)
+    {
+        problems.push(format!("{id}: locate_scale must be above 0.25 and at most 4"));
+    }
+    if locates
+        && !model
+            .tested
+            .iter()
+            .any(|tested| tested.locate == Outcome::Yes)
+    {
+        problems.push(format!(
+            "{id}: a model is said to locate controls only when it was measured doing it"
+        ));
+    }
     if capabilities.contains(&Capability::Vision) != model.projector.is_some() {
         problems.push(format!(
             "{id}: a projector is given for vision models and only for them"
@@ -636,6 +684,11 @@ pub fn check(file_name: &str, model: &Model) -> Vec<String> {
         if !model.can(Capability::Vision) && tested.image_input != Outcome::NotTested {
             problems.push(format!(
                 "{id}: image input was tested on a model without vision"
+            ));
+        }
+        if !model.can(Capability::Vision) && tested.locate != Outcome::NotTested {
+            problems.push(format!(
+                "{id}: locating controls was tested on a model without vision"
             ));
         }
     }
@@ -722,6 +775,74 @@ checked = "2026-11-12"
         ] {
             assert!(text.contains(expected), "{expected} missing from:\n{text}");
         }
+    }
+
+    #[test]
+    fn a_model_locates_controls_only_with_vision_a_scale_and_a_measurement() {
+        let projector = r#"
+[projector]
+name = "mmproj-Example-1B.gguf"
+url = "https://huggingface.co/example/Example-1B-GGUF/resolve/0123456789abcdef0123456789abcdef01234567/mmproj-Example-1B.gguf"
+size_bytes = 1000
+sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
+"#;
+        let measured = r#"
+[[tested]]
+date = "2026-11-14"
+report = "docs/reports/exp-winsee-1.md"
+run = "https://github.com/giorgiogiudice/TUR/actions/runs/43545838974"
+engine = "llama-server b9840"
+hardware = "a runner"
+context = 8192
+tool_call = "not-tested"
+image_input = "yes"
+embeddings = "not-tested"
+locate = "yes"
+notes = ""
+"#;
+        let locating = ENTRY
+            .replace(
+                "capabilities = [\"chat\", \"tools\"]",
+                "capabilities = [\"chat\", \"vision\", \"locate\"]\nlocate_scale = 1.5",
+            )
+            + projector
+            + measured;
+        let model = parse_entry("example-1b.toml", &locating).expect("valid");
+        assert!(model.can(Capability::Locate));
+        assert_eq!(model.locate_scale, Some(1.5));
+
+        // Without vision, without a scale, or without a measurement: refused.
+        let blind = ENTRY.replace(
+            "capabilities = [\"chat\", \"tools\"]",
+            "capabilities = [\"chat\", \"locate\"]\nlocate_scale = 1.5",
+        ) + measured;
+        let text = parse_entry("example-1b.toml", &blind)
+            .expect_err("no vision")
+            .join("\n");
+        assert!(text.contains("locating controls needs vision"), "{text}");
+        assert!(text.contains("tested on a model without vision"), "{text}");
+        let unscaled = locating.replace("locate_scale = 1.5\n", "");
+        let text = parse_entry("example-1b.toml", &unscaled)
+            .expect_err("no scale")
+            .join("\n");
+        assert!(text.contains("locate_scale is given"), "{text}");
+        let unmeasured = locating.replace("locate = \"yes\"", "locate = \"no\"");
+        let text = parse_entry("example-1b.toml", &unmeasured)
+            .expect_err("not measured")
+            .join("\n");
+        assert!(text.contains("only when it was measured"), "{text}");
+        let silly = locating.replace("locate_scale = 1.5", "locate_scale = 9.0");
+        assert!(parse_entry("example-1b.toml", &silly).is_err());
+        // A model that takes images and does not locate says so with a
+        // measurement and no capability.
+        let describes = ENTRY.replace(
+            "capabilities = [\"chat\", \"tools\"]",
+            "capabilities = [\"chat\", \"vision\"]",
+        ) + projector
+            + &measured.replace("locate = \"yes\"", "locate = \"no\"");
+        let model = parse_entry("example-1b.toml", &describes).expect("valid");
+        assert!(!model.can(Capability::Locate));
+        assert_eq!(model.tested[0].locate, Outcome::No);
     }
 
     #[test]

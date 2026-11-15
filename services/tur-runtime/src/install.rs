@@ -702,10 +702,20 @@ pub fn describe_installation(
             window_class: window_class.as_deref(),
         },
     )?;
-    let entry_path = text(
-        &app.launchers.join(&desktop_entry.file_name),
-        "the application's launcher entry",
-    )?;
+    // Installed where the desktop looks: the user's applications directory.
+    // The entry's own name and the path's are the same by construction.
+    let entry_path = text(&app.desktop_entry, "the application's launcher entry")?;
+    if app.desktop_entry.file_name().and_then(|name| name.to_str())
+        != Some(desktop_entry.file_name.as_str())
+    {
+        return Err(PlanError::InstallRequest {
+            problem: format!(
+                "the launcher entry is named {}, and an installed application's must be {}",
+                desktop_entry.file_name,
+                app.desktop_entry.display()
+            ),
+        });
+    }
 
     let record = AppRecord {
         schema_version: APP_RECORD_SCHEMA_VERSION,
@@ -732,7 +742,7 @@ pub fn describe_installation(
         launcher: LauncherRecord {
             desktop_entry: entry_path,
             icon: icon_path,
-            installed: false,
+            installed: true,
         },
         profile: profile_path,
         executables: discovery
@@ -769,10 +779,10 @@ pub fn describe_installation(
     })
 }
 
-/// Where a launcher entry and its icon would be installed on a system
-/// whose desktop this build integrates with, relative to the user's data
-/// directory (`$XDG_DATA_HOME`): the entry among the user's applications,
-/// the icon in the user's icon theme.
+/// Where the launcher entry is installed and where its icon would go in the
+/// user's icon theme, relative to the user's data directory
+/// (`$XDG_DATA_HOME`). The entry is installed there; the icon is kept in the
+/// runtime manager's own directory and named by its absolute path.
 pub fn launcher_destinations(installed: &Installed) -> (String, Option<String>) {
     let entry = format!("applications/{}", installed.entry.file_name);
     let icon = installed.icon.as_ref().map(|icon| {
@@ -810,6 +820,11 @@ pub fn plan_record(planner: &Planner<'_>, installed: &Installed) -> Plan {
             bytes: icon.png.clone(),
         });
     }
+    if let Some(applications) = app.desktop_entry.parent() {
+        plan.steps.push(Step::CreateDir {
+            path: applications.to_path_buf(),
+        });
+    }
     plan.steps.push(Step::WriteFile {
         path: PathBuf::from(&installed.record.launcher.desktop_entry),
         contents: installed.entry.contents.clone(),
@@ -818,14 +833,16 @@ pub fn plan_record(planner: &Planner<'_>, installed: &Installed) -> Plan {
         path: app.record.clone(),
         contents: installed.record.to_json(),
     });
-    let (entry, icon) = launcher_destinations(installed);
     plan.notes.push(format!(
-        "The launcher entry is staged in {} and is not shown by the desktop. Installed, it \
-         would be $XDG_DATA_HOME/{entry}{}.",
-        app.launchers.display(),
-        icon.map_or(String::new(), |icon| format!(
-            ", with its icon at $XDG_DATA_HOME/{icon}"
-        ))
+        "The launcher entry is installed as {}, where the desktop's launcher finds it{}. \
+         Removing the application deletes it.",
+        app.desktop_entry.display(),
+        installed
+            .record
+            .launcher
+            .icon
+            .as_ref()
+            .map_or(String::new(), |icon| format!(", with its icon {icon}"))
     ));
     plan
 }
@@ -835,7 +852,7 @@ pub fn plan_record(planner: &Planner<'_>, installed: &Installed) -> Plan {
 pub fn plan_rollback(planner: &Planner<'_>) -> Plan {
     let app = planner.app;
     let mut plan = Plan::new(Operation::Remove, &app.app_id);
-    for path in [&app.app_dir, &app.staging, &app.launchers] {
+    for path in [&app.app_dir, &app.staging, &app.launchers, &app.desktop_entry] {
         plan.steps.push(Step::RemoveTree { path: path.clone() });
     }
     plan.notes
@@ -945,14 +962,16 @@ pub fn survey_leftovers(app: &AppPaths, record: &AppRecord) -> UninstallerLeftov
 }
 
 /// Everything kept for one application: its directory (prefix, private
-/// home, metadata, record, profile), the staging area, the logs and the
-/// launcher entry; and its backups when `with_backups` is set.
+/// home, metadata, record, profile), the staging area, the logs, the
+/// launcher entry's icon and the installed launcher entry; and its backups
+/// when `with_backups` is set.
 pub fn application_paths(app: &AppPaths, with_backups: bool) -> Vec<PathBuf> {
     let mut paths = vec![
         app.app_dir.clone(),
         app.staging.clone(),
         app.logs.clone(),
         app.launchers.clone(),
+        app.desktop_entry.clone(),
     ];
     if with_backups {
         paths.push(app.backups.clone());
@@ -1476,16 +1495,23 @@ mod tests {
         assert!(profile.known_requirements.is_empty());
         assert!(installed.notes.is_empty());
 
-        // The launcher entry and the icon, both staged under the runtime
+        // The launcher entry, installed among the user's applications, and
+        // the icon, kept under the runtime
         // manager's own directory.
         let launchers = setup.app.launchers.to_str().unwrap();
         assert_eq!(
             record.launcher.desktop_entry,
-            format!("{launchers}/tur-wine-com.example.app.desktop")
+            setup.app.desktop_entry.to_str().unwrap()
+        );
+        assert!(
+            record
+                .launcher
+                .desktop_entry
+                .ends_with("/applications/tur-wine-com.example.app.desktop")
         );
         let icon_path = format!("{launchers}/tur-wine-com.example.app.png");
         assert_eq!(record.launcher.icon.as_deref(), Some(icon_path.as_str()));
-        assert!(!record.launcher.installed);
+        assert!(record.launcher.installed);
         assert_eq!(record.profile, setup.app.profile.to_str().unwrap());
         let contents = &installed.entry.contents;
         assert!(contents.contains("Name=7-Zip 26.06 (x64)\n"));
@@ -1504,8 +1530,9 @@ mod tests {
             )
         );
 
-        // The plan writes the profile, the icon, the entry and, last, the
-        // record; nothing else.
+        // The plan writes the profile, the icon, the entry (making the
+        // applications directory when there is none) and, last, the record;
+        // nothing else.
         let plan = plan_record(&planner(&setup), &installed);
         let written: Vec<&Path> = plan
             .steps
@@ -1537,10 +1564,11 @@ mod tests {
             panic!();
         };
         assert_eq!(crate::app_record::parse_record(contents).unwrap(), *record);
-        assert!(
-            plan.notes[0].contains("$XDG_DATA_HOME/applications/tur-wine-com.example.app.desktop")
-        );
-        assert!(plan.notes[0].contains("icons/hicolor/2x2/apps/"));
+        assert!(plan.steps.contains(&Step::CreateDir {
+            path: setup.app.desktop_entry.parent().unwrap().to_path_buf()
+        }));
+        assert!(plan.notes[0].contains("/applications/tur-wine-com.example.app.desktop"));
+        assert!(plan.notes[0].contains(&icon_path));
         let report = run_plan(&plan, &mut FakeExecutor::default());
         assert!(report.succeeded());
     }
@@ -1945,7 +1973,8 @@ mod tests {
                 app.app_dir.clone(),
                 app.staging.clone(),
                 app.logs.clone(),
-                app.launchers.clone()
+                app.launchers.clone(),
+                app.desktop_entry.clone()
             ]
         );
         assert!(plan.notes[0].contains("are kept"));
@@ -1956,7 +1985,7 @@ mod tests {
                 path: app.backups.clone()
             })
         );
-        assert_eq!(with_backups.steps.len(), 5);
+        assert_eq!(with_backups.steps.len(), 6);
 
         // The check names every deleted path, and only those.
         for remove_backups in [false, true] {
@@ -1995,6 +2024,9 @@ mod tests {
                 },
                 Step::RemoveTree {
                     path: app.launchers.clone()
+                },
+                Step::RemoveTree {
+                    path: app.desktop_entry.clone()
                 },
             ]
         );

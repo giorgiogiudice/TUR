@@ -52,6 +52,7 @@ COPY services/tur-catalogue/ /src/services/tur-catalogue/
 COPY services/tur-device-manager/ /src/services/tur-device-manager/
 COPY services/tur-diagnostics/ /src/services/tur-diagnostics/
 COPY services/tur-pax/ /src/services/tur-pax/
+COPY services/tur-pax-a11y/ /src/services/tur-pax-a11y/
 COPY services/tur-pax-memory/ /src/services/tur-pax-memory/
 COPY services/tur-pax-providers/ /src/services/tur-pax-providers/
 COPY services/tur-runtime/ /src/services/tur-runtime/
@@ -89,6 +90,59 @@ RUN /bin/sh /src/image/engine/llama-cpp.sh fetch
 # No network: compiled from the checked source with the tools above.
 RUN --network=none /bin/sh /src/image/engine/llama-cpp.sh build
 
+# ---- build stage: P@x's bridge into Windows applications ------------------------
+# tur-winbridge.exe and its menu hook tur-winhook.dll (services/tur-winbridge;
+# docs/architecture/pax-accessibility.md, section 11), Windows programs of
+# TUR's own, compiled from their source with mingw-w64 from the base's own
+# repositories. The compiler stays in this stage. See image/README.md, "P@x's
+# bridge into Windows applications".
+FROM ${BASE_IMAGE}@${BASE_DIGEST} AS winbridge
+
+COPY image/winbridge/ /src/image/winbridge/
+COPY services/tur-winbridge/ /src/services/tur-winbridge/
+
+# With network: the cross compiler. Nothing is compiled here.
+RUN /bin/sh /src/image/winbridge/winbridge.sh fetch
+
+# No network: compiled from the source above with the compiler above.
+RUN --network=none /bin/sh /src/image/winbridge/winbridge.sh build
+
+# ---- download stage: Wine -------------------------------------------------------
+# Fedora's Wine packages, and what they need that the base lacks, pinned by
+# SHA-256 in image/wine/wine.lock (written by image/wine/lock.py). This stage
+# only downloads and checks them; the final stage installs them without
+# network. See image/README.md, "Wine".
+FROM ${BASE_IMAGE}@${BASE_DIGEST} AS wine
+
+COPY image/wine/ /src/image/wine/
+RUN /bin/sh /src/image/wine/wine.sh fetch /rpms
+
+# ---- build stage: the desktop programs -------------------------------------------
+# tur-centre, tur-settings, tur-pax-ui and tur-pax-overlay (desktop/), built
+# on the base image itself against its own Qt and KDE libraries: the -devel
+# packages are asked for in exactly the builds the base has, and the stage
+# stops if Fedora's repositories no longer hold them (issue #59). The
+# compiler and the -devel packages stay in this stage. The stage also
+# downloads the two font packages of image/desktop/fonts.lock, which the
+# image installs below. See image/README.md, "The desktop programs".
+FROM ${BASE_IMAGE}@${BASE_DIGEST} AS desktop
+
+COPY image/desktop/ /src/image/desktop/
+
+# With network: the build tools and the -devel packages, and the fonts,
+# checked against their SHA-256. Nothing is compiled here.
+RUN /bin/sh /src/image/desktop/build.sh fetch
+
+COPY LICENSE.md NOTICE THIRD_PARTY_NOTICES.md /src/
+COPY desktop/ /src/desktop/
+
+# The commit's time, for the QML packed into the programs (build.sh).
+ARG TUR_SOURCE_DATE_EPOCH=0
+
+# No network: compiled from this repository with the tools above, installed
+# under /out, and checked: every program starts and loads its QML.
+RUN --network=none TUR_SOURCE_DATE_EPOCH="${TUR_SOURCE_DATE_EPOCH}" /bin/sh /src/image/desktop/build.sh build
+
 # ---- the image ------------------------------------------------------------------
 FROM ${BASE_IMAGE}@${BASE_DIGEST}
 
@@ -98,6 +152,16 @@ ARG BASE_VERSION
 ARG TUR_VERSION
 ARG TUR_BUILD_ID
 ARG TUR_SOURCE_REVISION
+
+# Wine (image/README.md, "Wine"; ADR-0007): Fedora's x86-64 build, which runs
+# 64-bit and 32-bit Windows programs ("new WoW64"), installed with rpm from
+# the packages the stage "wine" downloaded. First in this stage, so that its
+# layer does not change when TUR's own files do. tur-runtime starts it, always
+# inside its sandbox; nothing registers it to open .exe files by itself.
+RUN --network=none \
+    --mount=type=bind,from=wine,source=/rpms,target=/run/tur-wine-rpms \
+    --mount=type=bind,source=image/wine,target=/run/tur-wine \
+    /bin/sh /run/tur-wine/wine.sh install /run/tur-wine-rpms "${TUR_BUILD_ID}"
 
 # Files owned by TUR. Everything here lives under /usr: the image is immutable
 # and /etc and /var belong to the installed system.
@@ -114,6 +178,26 @@ COPY --from=programs /out/ /
 # its libraries and backends in /usr/libexec/tur/llama.cpp, the link
 # /usr/bin/llama-server, its licences, and /usr/lib/tur/built-from-source.tsv.
 COPY --from=engine /out/ /
+
+# What the bridge stage made (image/winbridge/winbridge.sh): the bridge and
+# its menu hook in /usr/lib/tur/winbridge, with what they were built from, and
+# their licences. tur-runtime starts the bridge inside a Windows
+# application's sandbox when P@x's accessibility bridge asks for it.
+COPY --from=winbridge /out/ /
+
+# What the desktop stage made (image/desktop/build.sh): the four desktop
+# programs in /usr/bin, the libraries of their QML modules in /usr/lib64/tur,
+# their launcher entries, bus activation files and P@x's icon, and the two
+# lists /usr/lib/tur/desktop-programs.tsv and desktop-built-against.tsv.
+COPY --from=desktop /out/ /
+
+# The typefaces the programs name that the base does not carry: Inter and
+# JetBrains Mono, Fedora's packages, pinned in image/desktop/fonts.lock and
+# downloaded by the desktop stage.
+RUN --network=none \
+    --mount=type=bind,from=desktop,source=/rpms,target=/run/tur-fonts \
+    --mount=type=bind,source=image/desktop,target=/run/tur-desktop \
+    /bin/sh /run/tur-desktop/fonts.sh /run/tur-fonts "${TUR_BUILD_ID}"
 
 # Boot-attempt counting (ADR-0014). bootupd concatenates every *.cfg in
 # configs.d, sorted by name, into /boot/grub2/grub.cfg at installation. The
@@ -157,6 +241,12 @@ RUN set -eu; \
     # build).
     /usr/bin/llama-server --version || { echo "llama-server does not run in this image" >&2; exit 1; }; \
     /usr/bin/llama-server --list-devices; \
+    # The desktop programs were built against the base's Qt: each must
+    # start here, without a display.
+    for path in $(grep -v '^#' /usr/lib/tur/desktop-programs.tsv | cut -f2); do \
+        QT_QPA_PLATFORM=offscreen XDG_RUNTIME_DIR=/tmp "${path}" --version \
+            || { echo "${path} does not run in this image" >&2; exit 1; }; \
+    done; \
     # P@x's catch-up timer is enabled for every user (pax-service.md,
     # section 6): after sign-in it runs `tur-pax schedule wake`, which ends at
     # once while P@x is switched off. The link is what `systemctl --global

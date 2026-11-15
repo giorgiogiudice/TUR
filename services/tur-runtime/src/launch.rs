@@ -27,6 +27,7 @@ use crate::prefix::{Planner, PrefixSettings};
 use crate::profile::{AppProfile, GraphicsBackend, ProfileFormat, ProfileRuntime, SyncBackend};
 use crate::runtime_cmd::{Invocation, PlanError, Task, assemble, decide_sync, dll_overrides};
 use crate::sandbox::Mount;
+use crate::winbridge::{self, BridgeOffer};
 
 /// What the caller asks of one launch.
 #[derive(Debug, Clone, Copy)]
@@ -77,6 +78,10 @@ pub struct LaunchPlan {
     pub creates_prefix: bool,
     /// Whether the prefix is migrated by this launch.
     pub migrates_prefix: bool,
+    /// How P@x's bridge into the application is offered, when it is
+    /// ([`crate::winbridge`]).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub winbridge: Option<BridgeOffer>,
     /// The steps to carry out. The last one starts the application.
     pub plan: Plan,
 }
@@ -263,7 +268,7 @@ pub fn plan_launch(
     };
     record.validate()?;
 
-    let assembled = assemble(
+    let mut assembled = assemble(
         &Invocation {
             host,
             app,
@@ -285,6 +290,31 @@ pub fn plan_launch(
         },
     )?;
 
+    // P@x's bridge: offered under Wine when it is installed and the session
+    // has a runtime directory; started inside the sandbox only when
+    // tur-pax-a11y connects.
+    let offered = winbridge::offer(
+        runtime,
+        host.winbridge.as_deref(),
+        host.runtime_dir.as_deref(),
+        &host.catalogue,
+        &app.app_id,
+    )
+    .filter(|offer| winbridge::add_to_supervisor(&mut assembled.sandboxed.arguments, offer));
+    match (&offered, runtime) {
+        (Some(offer), _) => notes.push(format!(
+            "P@x's bridge into the application is offered on {}; it starts inside the \
+             sandbox only when P@x looks ({}).",
+            offer.socket.display(),
+            offer.menu_hook_reason
+        )),
+        (None, RuntimeKind::Proton) => notes.push(
+            "P@x's bridge is not started under Proton yet; when it is, the menu hook is off."
+                .to_owned(),
+        ),
+        (None, RuntimeKind::Wine) => {}
+    }
+
     let log = app.logs.join(format!(
         "{}-{}.log",
         planner.now.compact(),
@@ -302,6 +332,7 @@ pub fn plan_launch(
     steps.push(Step::Launch {
         command: assembled.sandboxed,
         log: log.clone(),
+        bridge: offered.as_ref().map(|offer| offer.socket.clone()),
     });
 
     notes.push(format!("Synchronisation: {}", sync.reason));
@@ -336,6 +367,7 @@ pub fn plan_launch(
         sandbox: assembled.mounts,
         creates_prefix,
         migrates_prefix,
+        winbridge: offered,
         plan: Plan {
             operation: Operation::Launch,
             app_id: app.app_id.clone(),
@@ -347,6 +379,8 @@ pub fn plan_launch(
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use super::*;
     use crate::codes::Code;
     use crate::grant::GrantRefusal;
@@ -401,7 +435,7 @@ mod tests {
 
     fn launch_step(plan: &LaunchPlan) -> (&CommandSpec, &PathBuf) {
         match plan.plan.steps.last() {
-            Some(Step::Launch { command, log }) => (command, log),
+            Some(Step::Launch { command, log, .. }) => (command, log),
             other => panic!("the last step is {other:?}"),
         }
     }
@@ -829,6 +863,88 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(error.code(), Code::GrantChanged);
+    }
+
+    #[test]
+    fn a_wine_launch_offers_p_x_s_bridge_inside_the_sandbox() {
+        let mut setup = Setup::new("launch-bridge");
+        let profile = profile(&setup);
+        let installed = wine_9();
+        let existing = recorded();
+        let plan = plan_launch(
+            &planner(&setup),
+            &request(&profile, &installed, Some(&existing)),
+        )
+        .unwrap();
+        let offer = plan.winbridge.clone().expect("the bridge is offered");
+        let socket = setup
+            .machine
+            .runtime_dir
+            .join("tur/winbridge/com.example.app.sock");
+        assert_eq!(offer.socket, socket);
+        assert!(offer.menu_hook);
+        let Some(Step::Launch { command, bridge, .. }) = plan.plan.steps.last() else {
+            panic!("{:?}", plan.plan.steps.last());
+        };
+        assert_eq!(bridge.as_ref(), Some(&socket));
+        // The supervisor is told where the bridge is; the hook is allowed.
+        let split = command
+            .arguments
+            .iter()
+            .position(|argument| argument == "--")
+            .unwrap();
+        let inside = &command.arguments[split + 1..];
+        assert_eq!(
+            inside[..4],
+            [
+                crate::sandbox::SUPERVISOR_PATH.to_owned(),
+                "supervise".to_owned(),
+                "--bridge".to_owned(),
+                winbridge::BRIDGE_PROGRAM.to_owned(),
+            ]
+        );
+        assert!(!inside.iter().any(|argument| argument == "--bridge-no-hook"));
+        // The sandbox's own options are those of every launch: the bridge
+        // adds no mount; /usr, where it lies, is already there read-only.
+        assert_boundary(&setup.machine, &setup.app, &command.arguments[..=split]);
+        assert!(
+            plan.plan
+                .notes
+                .iter()
+                .any(|note| note.contains("P@x's bridge"))
+        );
+
+        // A game of the catalogue: the menu hook is off.
+        fs::create_dir_all(&setup.host.catalogue).unwrap();
+        fs::write(
+            setup.host.catalogue.join("com.example.app.toml"),
+            "id = \"com.example.app\"\ncategory = \"game\"\n",
+        )
+        .unwrap();
+        let game = plan_launch(
+            &planner(&setup),
+            &request(&profile, &installed, Some(&existing)),
+        )
+        .unwrap();
+        assert!(!game.winbridge.as_ref().unwrap().menu_hook);
+        let (command, _) = launch_step(&game);
+        assert!(command.arguments.iter().any(|argument| argument == "--bridge-no-hook"));
+
+        // Without the bridge installed, or without a runtime directory,
+        // nothing is offered and the command is the one it always was.
+        setup.host.winbridge = None;
+        let without = plan_launch(
+            &planner(&setup),
+            &request(&profile, &installed, Some(&existing)),
+        )
+        .unwrap();
+        assert_eq!(without.winbridge, None);
+        let (command, _) = launch_step(&without);
+        assert!(!command.arguments.iter().any(|argument| argument == "--bridge"));
+        let Some(Step::Launch { bridge, .. }) = without.plan.steps.last() else {
+            panic!();
+        };
+        assert_eq!(*bridge, None);
     }
 
     #[test]

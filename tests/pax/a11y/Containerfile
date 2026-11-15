@@ -12,6 +12,9 @@
 #   firefox                     Firefox
 #   wine                        Windows programs: Wine's own notepad is used,
 #                               not a Microsoft binary
+#   mingw64-gcc and its runtime P@x's bridge into Windows applications
+#                               (services/tur-winbridge) and a Windows test
+#                               window of TUR's own, built in the job
 #
 # Fedora keeps only the newest update of a package, so versions are not
 # pinned here; what was installed is written to
@@ -27,6 +30,7 @@ RUN dnf -y --setopt=install_weak_deps=False --setopt=tsflags=nodocs install \
         python3-gobject gtk3 gtk4 libadwaita gnome-text-editor \
         firefox \
         wine \
+        mingw64-gcc mingw64-binutils mingw64-headers mingw64-crt \
     && dnf clean all \
     && rm -rf /var/cache/dnf /var/cache/libdnf5 /var/log/dnf* \
     && fc-cache -f \

@@ -163,6 +163,11 @@ pub struct LaunchHost {
     pub sockets: Sockets,
     /// This program's own file, which supervises Wine inside the sandbox.
     pub supervisor: PathBuf,
+    /// P@x's bridge into Windows applications, when it is installed
+    /// ([`crate::winbridge`]).
+    pub winbridge: Option<PathBuf>,
+    /// The application catalogue, which says which applications are games.
+    pub catalogue: PathBuf,
 }
 
 /// The effective user ID from the text of `/proc/self/status`.
@@ -409,6 +414,9 @@ impl LaunchHost {
             system: system_entries(),
             sockets,
             supervisor: std::env::current_exe().ok()?,
+            winbridge: Some(PathBuf::from(crate::winbridge::BRIDGE_PROGRAM))
+                .filter(|program| program.is_file()),
+            catalogue: PathBuf::from(crate::winbridge::CATALOGUE_DIRECTORY),
         })
     }
 }
@@ -468,6 +476,8 @@ pub(crate) mod tests {
                 pulse: Some(runtime_dir.join("pulse/native")),
             },
             supervisor: PathBuf::from("/usr/bin/tur-runtime"),
+            winbridge: Some(PathBuf::from(crate::winbridge::BRIDGE_PROGRAM)),
+            catalogue: home.join("catalogue"),
         }
     }
 

@@ -30,6 +30,14 @@ the table as it happened; it is not retried and not hidden.
 The exit status is 1 when a result differs from the one apps.json expects,
 so that a regression, or an improvement nobody wrote down, is noticed.
 
+On the installed TUR system (tests/boot/windows.py, the boot test's guest)
+it runs with --session: in the signed-in Plasma session, as the person,
+with the session's own display (Xwayland), data directories and launcher.
+No X server is started; screenshots are taken by the host, which the
+driver asks for through --shot-fifo; and with --launcher-check the
+application is also found in Plasma's launcher (KRunner), shown, and
+started from there.
+
 For the comparison of case-insensitive prefixes (issue #81) the same
 applications are installed again with options added to every `app install`
 (--install-option --casefold, or --no-casefold), and --expect-casefold says
@@ -63,6 +71,9 @@ import zipfile
 import zlib
 
 DISPLAY = ":99"
+# Set by --session: the signed-in desktop's own display and directories, and
+# the FIFO through which the host is asked for a screenshot or a key press.
+SESSION: dict | None = None
 STAGES = ("install", "launch", "check", "uninstall")
 PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 
@@ -115,6 +126,12 @@ class World:
         self.title = title or "Real applications through tur-runtime"
         self.data = work / "xdg-data"
         self.state = work / "xdg-state"
+        if SESSION is not None:
+            # The person's own directories: the launcher entry lands where
+            # the desktop's launcher looks, and is checked to be gone after.
+            home = pathlib.Path(os.environ["HOME"])
+            self.data = pathlib.Path(os.environ.get("XDG_DATA_HOME") or home / ".local/share")
+            self.state = pathlib.Path(os.environ.get("XDG_STATE_HOME") or home / ".local/state")
         self.shared = work / "shared"
         self.downloads = downloads or work / "downloads"
         self.profiles = work / "profiles"
@@ -123,6 +140,12 @@ class World:
 
     def env(self, display: bool = True) -> dict[str, str]:
         env = dict(os.environ)
+        if SESSION is not None:
+            # As the session has it: DISPLAY, WAYLAND_DISPLAY, XAUTHORITY.
+            if not display:
+                env.pop("DISPLAY", None)
+                env.pop("WAYLAND_DISPLAY", None)
+            return env
         env.pop("WAYLAND_DISPLAY", None)
         env.pop("DISPLAY", None)
         if display:
@@ -210,7 +233,24 @@ def start_display(evidence: pathlib.Path) -> list[subprocess.Popen]:
     return [manager, server]
 
 
+def ask_host(request: str, wait: float) -> None:
+    """Asks the host for something through the FIFO (tests/boot/windows.py
+    reads it from the serial console) and gives it time to act."""
+    with open(SESSION["fifo"], "w") as fifo:
+        fifo.write(request + "\n")
+    time.sleep(wait)
+
+
 def screenshot(path: pathlib.Path) -> bool:
+    if SESSION is not None:
+        # The host takes the picture of the whole screen; the name says
+        # whose and which. Rootless Xwayland has no root window to read.
+        name = re.sub(r"[^A-Za-z0-9._-]", "-", f"{path.parent.name}-{path.stem}")
+        if SESSION.get("fifo"):
+            ask_host(f"SHOT {name}", 5)
+            path.with_suffix(".host-screenshot.txt").write_text(f"taken by the host as {name}.png\n")
+            return True
+        return False
     done = run(["import", "-display", DISPLAY, "-window", "root", str(path)], timeout=60)
     if done.returncode != 0 or not path.is_file():
         log("  screenshot failed: " + tail(done.stderr, 3))
@@ -223,6 +263,65 @@ def screenshot(path: pathlib.Path) -> bool:
 
 def close_window(window: Window) -> None:
     run(["wmctrl", "-i", "-c", window.id], env=dict(os.environ, DISPLAY=DISPLAY), timeout=20)
+
+
+def launcher_check(world: World, app: dict, record: dict, entry: dict, klass: str,
+                   evidence: pathlib.Path) -> dict:
+    """In the signed-in session: the installed launcher entry is found by
+    Plasma's launcher (KRunner, asked over the session bus for the entry's
+    name), shown with its icon, and started from there with the Return key
+    (pressed by the host); a window of the application must appear."""
+    found: dict = {"entry": record["launcher"]["desktop_entry"], "name": entry.get("Name")}
+    before = {window.id for window in list_windows()}
+    asked = run(["busctl", "--user", "call", "org.kde.krunner", "/App", "org.kde.krunner.App", "query", "s",
+                 entry.get("Name", "")], timeout=60)
+    found["krunner_query"] = {"status": asked.returncode, "error": tail(asked.stderr, 3)}
+    time.sleep(6)
+    screenshot(evidence / "launcher-krunner.png")
+    ask_host("KEY ret", 2)
+    deadline = time.monotonic() + 120
+    started = time.monotonic()
+    window = None
+    while time.monotonic() < deadline and window is None:
+        for candidate in list_windows():
+            if candidate.id in before:
+                continue
+            if klass.lower() in (candidate.instance.lower(), candidate.klass.lower()) \
+                    and candidate.width >= 120 and candidate.height >= 60 and is_viewable(candidate):
+                window = candidate
+                break
+        time.sleep(0.5)
+    found["seconds_to_window"] = round(time.monotonic() - started, 1)
+    if window is None:
+        found["status"] = "fail"
+        found["detail"] = (f"no window of class {klass!r} within 120 s of Return in KRunner; "
+                           f"new windows: {[w.describe() for w in list_windows() if w.id not in before]}")
+        screenshot(evidence / "launcher-no-window.png")
+        ask_host("KEY esc", 1)
+        return found
+    time.sleep(3)
+    found["window"] = window.describe()
+    screenshot(evidence / "launcher-started.png")
+    # Closed the way a person would; the launch through the desktop then ends.
+    for _ in range(3):
+        for candidate in list_windows():
+            if candidate.id not in before and klass.lower() in (candidate.instance.lower(),
+                                                                candidate.klass.lower()):
+                close_window(candidate)
+        time.sleep(5)
+        if not [c for c in list_windows() if c.id not in before
+                and klass.lower() in (c.instance.lower(), c.klass.lower())]:
+            break
+    for _ in range(60):
+        running = run(["pgrep", "-u", str(os.getuid()), "-f", "tur-runtime launch " + record["profile"]],
+                      timeout=10).stdout.strip()
+        if not running:
+            break
+        time.sleep(1)
+    else:
+        found["still_running"] = running
+    found["status"] = "pass"
+    return found
 
 
 # -------------------------------------------------------------- launcher entries
@@ -916,6 +1015,11 @@ def test_application(world: World, app: dict) -> dict:
                         icon_key=entry.get("Icon"), would_install=installed.get("launcher", {}))
         if command[:2] != [world.tur, "launch"] or command[2] != record["profile"]:
             problems.append(f"the launcher entry starts {command}")
+        # Installed where the desktop's launcher looks, under its own name.
+        wanted_entry = world.data / "applications" / f"tur-wine-{app_id}.desktop"
+        if record["launcher"].get("installed") is not True or \
+                pathlib.Path(record["launcher"]["desktop_entry"]) != wanted_entry:
+            problems.append(f"the launcher entry is not installed as {wanted_entry}: {record['launcher']}")
         copy_evidence(pathlib.Path(record["launcher"]["desktop_entry"]), evidence / "launcher.desktop")
         if record["launcher"].get("icon"):
             icon = pathlib.Path(record["launcher"]["icon"])
@@ -942,6 +1046,15 @@ def test_application(world: World, app: dict) -> dict:
           breakdown=installed.get("seconds"), detail="; ".join(problems) or None)
     copy_evidence(world.data / "tur/runtime/prefixes" / app_id / "application.json", evidence / "application.json")
     copy_evidence(world.data / "tur/runtime/prefixes" / app_id / "profile.json", evidence / "profile.json")
+
+    if command is not None and SESSION is not None and app["id"] in SESSION.get("launcher_check", ()):
+        try:
+            result["launcher_start"] = launcher_check(world, app, record, entry, klass, evidence)
+        except Exception as error:  # noqa: BLE001 - a harness error is a result
+            result["launcher_start"] = {"status": "fail", "detail": f"harness error: {error}"}
+            traceback.print_exc()
+        log(f"{result['launcher_start']['status'].upper():8} {result['id']}: started from the launcher"
+            + (f"\n         {result['launcher_start'].get('detail')}" if result["launcher_start"].get("detail") else ""))
 
     if command is not None:
         # Start it from its launcher entry and wait for a window of its own.
@@ -1073,11 +1186,19 @@ def notes_for(result: dict, app: dict) -> str:
 
 
 def write_report(world: World, apps: list[dict], results: list[dict], environment: dict) -> list[str]:
-    lines = [f"### {world.title}", "",
-             f"Wine: `{environment['wine']}` from Ubuntu's archive, on a GitHub-hosted runner "
-             f"({environment['os']}, kernel {environment['kernel']}). **This is not the TUR image**, which ships "
-             "no Wine yet. No GPU: an X server without a screen (Xvfb), everything drawn in software. "
-             "No Microsoft component, redistributable runtime or winetricks verb was installed.", "",
+    if environment.get("tur_image"):
+        where = (f"Wine: `{environment['wine']}`, Fedora's package in the TUR image, on the installed and booted "
+                 f"system ({environment['os']}, kernel {environment['kernel']}, SELinux "
+                 f"{environment.get('selinux', '?')}), in the signed-in Plasma session through Xwayland. A virtual "
+                 "machine without a GPU: everything drawn in software. No Microsoft component, redistributable "
+                 "runtime or winetricks verb was installed.")
+    else:
+        where = (f"Wine: `{environment['wine']}` from Ubuntu's archive, on a GitHub-hosted runner "
+                 f"({environment['os']}, kernel {environment['kernel']}). **This is not the TUR image**; the "
+                 "boot test runs these applications on it (tests/boot/windows.py). No GPU: an X server without a "
+                 "screen (Xvfb), everything drawn in software. No Microsoft component, redistributable runtime "
+                 "or winetricks verb was installed.")
+    lines = [f"### {world.title}", "", where, "",
              "| Application | Version | Installer kind | Install | Launch | Check | Uninstall | Notes |",
              "|---|---|---|---|---|---|---|---|"]
     differences = []
@@ -1092,6 +1213,14 @@ def write_report(world: World, apps: list[dict], results: list[dict], environmen
             wanted = app.get("expected", {}).get(name)
             if wanted and result[name]["status"] != wanted:
                 differences.append(f"{result['id']}: {name} is {result[name]['status']!r}, expected {wanted!r}")
+        started = result.get("launcher_start")
+        if started is not None:
+            lines.append(f"| ↳ {result['name']}, from the desktop's launcher | | | | "
+                         f"{started['status']}"
+                         + (f" (window after {started['seconds_to_window']} s)" if started.get("window") else "")
+                         + f" | | | {str(started.get('detail') or 'found by its name in KRunner, started with Return').replace('|', '/')} |")
+            if started["status"] != "pass":
+                differences.append(f"{result['id']}: starting it from the desktop's launcher failed")
     escaped = environment.get("outside_the_sandbox", [])
     if escaped:
         differences.append(f"files appeared in the home directory, outside every sandbox: {escaped[:20]}")
@@ -1180,6 +1309,40 @@ def describe_environment() -> dict:
             "tur_image": False}
 
 
+def describe_session() -> dict:
+    """The installed TUR system, as the person's session sees it."""
+    def first_line(command: list[str]) -> str:
+        return (run(command, timeout=60).stdout.strip().splitlines() or ["not available"])[0]
+
+    release = {}
+    for line in pathlib.Path("/usr/lib/os-release").read_text().splitlines():
+        key, _, value = line.partition("=")
+        release[key] = value.strip('"')
+    packages = run(["rpm", "-q", "wine-core", "wine-filesystem", "wine-pulseaudio", "ntsync-autoload",
+                    "bubblewrap", "xwininfo", "wmctrl", "unzip", "selinux-policy-targeted", "kwin",
+                    "xorg-x11-server-Xwayland"], timeout=60).stdout
+    return {"wine": first_line(["wine", "--version"]), "os": release.get("PRETTY_NAME", "unknown"),
+            "build_id": release.get("BUILD_ID"), "kernel": first_line(["uname", "-r"]),
+            "bubblewrap": first_line(["bwrap", "--version"]), "selinux": first_line(["getenforce"]),
+            "context": first_line(["id", "-Z"]), "ntsync": first_line(["ls", "-l", "/dev/ntsync"]),
+            "packages": sorted(set(packages.split("\n")) - {""}),
+            "display": (f"the Plasma session's Xwayland, DISPLAY={os.environ.get('DISPLAY')}, "
+                        f"WAYLAND_DISPLAY={os.environ.get('WAYLAND_DISPLAY')}; virtio-vga, no GPU"),
+            "tur_image": True}
+
+
+def configure_session(arguments: argparse.Namespace) -> None:
+    """--session: the display and directories are the session's own."""
+    global SESSION, DISPLAY
+    if not arguments.session:
+        return
+    if not os.environ.get("DISPLAY"):
+        raise SystemExit("--session needs the session's DISPLAY")
+    DISPLAY = os.environ["DISPLAY"]
+    SESSION = {"fifo": arguments.shot_fifo,
+               "launcher_check": [item for item in arguments.launcher_check.split(",") if item]}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--tur-runtime", required=True)
@@ -1193,7 +1356,13 @@ def main() -> int:
                         help="whether every prefix's drive_c must be case-insensitive")
     parser.add_argument("--downloads", type=pathlib.Path, help="a directory of downloads shared between passes")
     parser.add_argument("--title", help="the heading of the table")
+    parser.add_argument("--session", action="store_true",
+                        help="run in the signed-in desktop session (the installed TUR system)")
+    parser.add_argument("--shot-fifo", help="with --session: where to ask the host for screenshots and keys")
+    parser.add_argument("--launcher-check", default="",
+                        help="with --session: comma-separated ids to find and start from the desktop's launcher")
     arguments = parser.parse_args()
+    configure_session(arguments)
 
     apps = json.loads(arguments.apps.read_text())["applications"]
     if arguments.only:
@@ -1202,10 +1371,10 @@ def main() -> int:
                   downloads=arguments.downloads.resolve() if arguments.downloads else None,
                   install_options=arguments.install_option, expect_casefold=arguments.expect_casefold,
                   title=arguments.title)
-    environment = describe_environment()
+    environment = describe_session() if SESSION is not None else describe_environment()
     traces_before = host_traces()
     log(json.dumps(environment, indent=2))
-    processes = start_display(world.evidence)
+    processes = [] if SESSION is not None else start_display(world.evidence)
     results = []
     try:
         for app in apps:
