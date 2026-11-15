@@ -13,7 +13,7 @@ hardware unless it says so.
 
 | Bet | The goal | Where it stands |
 |---|---|---|
-| [1. Windows drivers without a Windows kernel](#1-windows-drivers-without-a-windows-kernel) | A device that only has a Windows driver works on TUR, safely | **Breakthrough in the lab**: real Windows USB drivers, including Microsoft's own KMDF sample, run as ordinary sandboxed programs |
+| [1. Windows drivers without a Windows kernel](#1-windows-drivers-without-a-windows-kernel) | A device that only has a Windows driver works on TUR, safely | **Breakthrough in the lab**: real Windows USB drivers, including Microsoft's own KMDF sample, run as ordinary sandboxed programs; and **a native Linux driver written blind from recordings alone passed 18 of 18** |
 | [2. A compatibility autopilot](#2-a-compatibility-autopilot) | A Windows application that fails gets fixed by the computer, not by a forum search | **Working**: the right fix found in 12 of 12 fixable test cases, never touching the real copy |
 | [3. An assistant that can operate any application](#3-an-assistant-that-can-operate-any-application) | Say what you want; P@x does it in the applications you already use, within limits you can trust | **Working for Qt, GTK and Firefox**; **Windows applications measured in an experiment**: 95% of controls found, every action tried arrived |
 | [4. Private AI on your own computer](#4-private-ai-on-your-own-computer) | A capable assistant with no account, no bill and nothing leaving the machine | **Working**: models chosen to fit the hardware, downloaded on first use, P@x runs on them |
@@ -80,6 +80,40 @@ As far as we know, KMDF drivers had not run in Wine before.
   works. The draft proposal in the [second report](reports/windows-drivers-2.md),
   section 10, was written before this was known and will be rewritten as a
   report of findings.
+
+### A driver learned from a recording (15 November 2026)
+
+Running a Windows driver in a sandbox still needs the Windows driver. The next
+question was bolder: can TUR learn a device from its Windows driver once, and
+give it a native Linux driver?
+
+The test ([report](reports/exp-drvsynth-1.md)): an invented USB desk gadget,
+with a protocol that exists nowhere else, was driven by its own Windows driver
+while every USB transfer was recorded, together with a plain list of what the
+owner did ("set brightness to 40", "read the temperature"). A fresh AI agent
+was then given **only those recordings and the list** of features a driver must
+provide: no documentation, no source, no device to try things on, no network.
+Its actions were audited afterwards; none left its folder.
+
+In about 18 minutes it worked out the start-up handshake (an answer computed
+from a random challenge), the framing and a non-standard checksum, every
+command, the modes, the note store, the button and alert events, and two
+quirks (a command that must be sent twice, a pause the device needs after a
+mode change), and wrote the driver. A hidden test suite then scored it once,
+on a unit with a different serial number and firmware, with values that
+appear in no recording: **18 of 18 features passed.** The same suite failed a
+driver that only replays the recordings (0 of 18) and one with subtle mistakes
+(10 of 18).
+
+**Limits, plainly.** One device, one trial, emulated rather than real
+hardware. The protocol was invented by one AI model and solved by another,
+which may share habits; its handshake used a well-known constant. A device
+whose secrets are per-unit keys could not be learned from recordings alone.
+The report proposes a harder, fairer round (protocols designed by others,
+several devices, with and without the driver binary, several blind attempts,
+then a real device), the pipeline that would make it a feature (record with
+consent, P@x guiding the person, test, sandbox, review), and the legal
+questions about reverse engineering for interoperability.
 
 ## 2. A compatibility autopilot
 
