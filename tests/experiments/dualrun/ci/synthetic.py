@@ -131,12 +131,20 @@ def mounted(node: str, work: pathlib.Path):
     point = work / "mnt"
     point.mkdir(exist_ok=True)
     driver = None
-    for candidate, options in (("ntfs-3g", "rw"), ("ntfs3", "rw")):
-        if sh("mount", "-t", candidate, "-o", options, node, str(point), check=False).returncode == 0:
-            driver = candidate
+    # ntfs-3g falls back to a read-only mount (exit 0) when the volume looks
+    # hibernated; `remove_hiberfile` deletes the synthetic hiberfil.sys
+    # instead, which is what the cases want when they replace it. A mount
+    # that still came up read-only is undone and the next driver tried.
+    for candidate, options in (("ntfs-3g", "rw,remove_hiberfile"), ("ntfs-3g", "rw"), ("ntfs3", "rw")):
+        if sh("mount", "-t", candidate, "-o", options, node, str(point), check=False).returncode != 0:
+            continue
+        flags = sh("findmnt", "-n", "-o", "OPTIONS", "--mountpoint", str(point), check=False).stdout
+        if "rw" in flags.strip().split(",")[:1]:
+            driver = f"{candidate} ({options})"
             break
+        sh("umount", str(point), check=False)
     if driver is None:
-        raise RuntimeError("no NTFS driver could mount the synthetic volume")
+        raise RuntimeError("no NTFS driver could mount the synthetic volume read-write")
     FACTS["ntfs_driver_used_to_build"] = driver
     try:
         yield point
