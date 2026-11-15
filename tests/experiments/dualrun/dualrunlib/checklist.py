@@ -89,6 +89,16 @@ REFUSALS = {
         "Windows was started by itself (or its disk was changed) after this session or restore point was made. "
         "Applying it now would mix two different states and damage Windows.",
         "The saved session or restore point can only be thrown away."),
+    # Not a refusal: the notice shown after a session (section 3.2 of the report).
+    "TUR-DUALRUN-090": (
+        "Windows tried to write outside its own partitions.",
+        "While it ran inside TUR, Windows tried to write to parts of the disk that are not its own: "
+        "TUR's own partition, another system's, or space outside every partition. TUR did not let those "
+        "writes through. Nothing outside Windows' partitions was changed, and Windows' own files are as "
+        "it left them.",
+        "Nothing needs to be done now. If this keeps happening, a program in Windows that works with "
+        "disks directly (a partition tool, a backup or encryption program) is the likely cause: tell TUR "
+        "with the details below, and do not use that program while Windows runs inside TUR."),
 }
 
 

@@ -114,6 +114,9 @@ def cmd_layer(args) -> int:
     except session.SessionError as error:
         return fail(error)
     print(json.dumps(result, indent=2))
+    if result.get("notice"):
+        # Shown to the person after the session; also recorded in <state>/history.jsonl.
+        print(checklist.render(result["notice"]), file=sys.stderr)
     return 0
 
 
@@ -214,6 +217,10 @@ def cmd_recover(args) -> int:
         closed = session.detach(args.disk, args.state, force=True)
         result["view_removed"] = True
         result["partition_table"] = closed.get("partition_table")
+        result["dropped_writes"] = closed.get("dropped_writes")
+        if closed.get("notice"):
+            result["notice"] = closed["notice"]
+            print(checklist.render(closed["notice"]), file=sys.stderr)
     except session.SessionError as error:
         result["view_removed"] = False
         result["error"] = str(error)

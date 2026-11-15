@@ -521,9 +521,56 @@ def main() -> int:
             code, result, err = launcher("detach", loop, "--state", str(state))
             assert code == 0 and result["base_token_before"] == result["base_token_after"] == first, result
             assert result["partition_table"]["guest_changed_its_copy"] is False
+            assert result["dropped_writes"]["writes"] == 0 and "notice" not in result, result["dropped_writes"]
             with mounted(part[3], work) as point:
                 assert (point / "Windows" / "System32" / "notes.txt").read_text() == "synthetic\n"
-            return "token unchanged over an idle session; volume mounts and reads"
+            return "token unchanged over an idle session; no write outside Windows' partitions; volume mounts and reads"
+
+        @case("writes outside Windows' partitions are counted and reported",
+              "each one counted (where, how many, how much), recorded in TUR's history, a notice shown; "
+              "TUR's partition unchanged; the same for a protected session's layer")
+        def _():
+            history = state / "history.jsonl"
+            lines_before = len(history.read_text().splitlines()) if history.exists() else 0
+            last_end = max(p.first_lba + p.sectors for p in table.partitions) * 512
+            gap = last_end + (-last_end % (1 * MIB)) + MIB
+            code, record, err = launcher("attach", loop, "--state", str(state), "--no-kvm",
+                                         "--guest-mb", "256", "--reserve-mb", "64")
+            assert code == 0, (record, err[-300:])
+            assert len(record["stats_regions"]) >= 2, record["stats_regions"]
+            for where in (offsets[4] + MIB, offsets[4] + 2 * MIB, offsets[4] + 3 * MIB, gap):
+                direct_write(view, where, b"\x66" * 4096)
+            code, result, err = launcher("detach", loop, "--state", str(state))
+            assert code == 0, (result, err[-300:])
+            dropped = result["dropped_writes"]
+            assert dropped["writes"] == 4 and dropped["sectors"] == 32, dropped
+            partitions = sorted({str(a["partition"]) for a in dropped["areas"]})
+            assert partitions == ["4", "None"], dropped["areas"]
+            assert result.get("notice", {}).get("code") == "TUR-DUALRUN-090", result.get("notice")
+            assert "TUR-DUALRUN-090" in err and "sectors" in err, err[-400:]
+            assert sha_range(part[4], 0, 300 * MIB) == tur_sha, "TUR's partition changed"
+            recorded = [json.loads(line) for line in history.read_text().splitlines()][lines_before:]
+            assert len(recorded) == 1 and recorded[0]["code"] == "TUR-DUALRUN-090" \
+                and recorded[0]["sectors"] == 32 and recorded[0]["kind"] == "detected", recorded
+            # A protected session: the guest's writes land in the layer, never on the view.
+            overlay_outside = str(work / "layer-outside.qcow2")
+            code, record, err = launcher("attach", loop, "--state", str(state), "--mode", "protected",
+                                         "--overlay", overlay_outside, "--no-kvm", "--guest-mb", "256",
+                                         "--reserve-mb", "64")
+            assert code == 0, (record, err[-300:])
+            sh("qemu-io", "-f", "qcow2", "-c", f"write -P 0xcd {offsets[4] + MIB} 65536", overlay_outside)
+            code, result, err = launcher("discard", loop, "--state", str(state))
+            assert code == 0, (result, err[-300:])
+            outside = result["layer_outside_windows"]
+            assert outside["sectors"] >= 128 and all(a["partition"] == 4 for a in outside["areas"]), outside
+            assert result.get("notice", {}).get("code") == "TUR-DUALRUN-090", result.get("notice")
+            recorded = [json.loads(line) for line in history.read_text().splitlines()][lines_before:]
+            assert len(recorded) == 2 and recorded[1]["when"] == "discard", recorded
+            assert sha_range(part[4], 0, 300 * MIB) == tur_sha, "TUR's partition changed"
+            FACTS["dropped_write_record"] = recorded[0]
+            return (f"direct: {dropped['writes']} writes, {dropped['sectors']} sectors in "
+                    f"{len(dropped['areas'])} area(s) ({'; '.join(recorded[0]['evidence'])}); "
+                    f"protected: {outside['sectors']} sectors in the layer; 2 history records; notices shown")
 
         # ---- layers --------------------------------------------------------
 

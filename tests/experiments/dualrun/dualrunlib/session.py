@@ -15,6 +15,17 @@ device with the disk's size and layout, in which
   fail writes instead, but it also fails the device's cache flushes, which
   makes every flush of the view fail; it is kept only as an option.)
 
+**Dropped writes are never silent.** Every hidden range gets a device-mapper
+statistics region (`@stats_create`, 64 areas at most) before anyone can
+open the view. At detach the regions are read: every write (and discard)
+the guest sent outside its own partitions is reported with its area's
+sector range, the number of writes and the sectors written, recorded in
+TUR's history (`history.jsonl`, the self-healing record format of the
+report) and turned into a plain notice for the person (TUR-DUALRUN-090).
+If the regions cannot be created, the view is not handed out. In a
+protected session the guest's writes land in the layer, so the layer's own
+map is checked against the same ranges at discard and at commit.
+
 **The lock.** Device-mapper opens each mapped partition exclusively. While
 the view exists the kernel refuses to mount those partitions, and creating
 the view fails if one is mounted. The view's name is derived from the
@@ -159,6 +170,102 @@ def _shadow_bytes(disk_path: str, facts: dict) -> tuple[bytes, bytes]:
     return head, tail
 
 
+STATS_PROGRAM = "tur-dualrun"
+STATS_AREAS = 64
+
+
+def _stats_create(name: str, segments: list[dict]) -> list[dict]:
+    """A statistics region over each hidden range of the view. Raises when that is impossible."""
+    regions = []
+    for s in segments:
+        if s["kind"] not in ("hidden", "gap"):
+            continue
+        areas = max(1, min(STATS_AREAS, s["sectors"] // 8))
+        out = run("dmsetup", "message", name, "0", "@stats_create", f"{s['start']}+{s['sectors']}",
+                  f"/{areas}", STATS_PROGRAM).stdout.strip()
+        try:
+            region = int(out.split()[-1])
+        except (ValueError, IndexError):
+            raise SessionError(f"device-mapper statistics did not answer with a region: {out!r}")
+        regions.append({"region": region, "start": s["start"], "sectors": s["sectors"], "kind": s["kind"],
+                        "partition": s.get("partition")})
+    return regions
+
+
+def _stats_read(name: str, regions: list[dict]) -> dict:
+    """Writes the guest sent into the hidden ranges, per area that saw any."""
+    out: dict = {"counted_by": "device-mapper statistics", "writes": 0, "sectors": 0, "areas": [], "errors": []}
+    for r in regions:
+        done = run("dmsetup", "message", name, "0", "@stats_print", str(r["region"]), check=False)
+        if done.returncode != 0:
+            out["errors"].append(f"region {r['region']}: {done.stderr.strip()[:200]}")
+            continue
+        for line in done.stdout.splitlines():
+            fields = line.split()
+            if len(fields) < 8 or "+" not in fields[0]:
+                continue
+            start, length = (int(x) for x in fields[0].split("+"))
+            writes, sectors = int(fields[5]), int(fields[7])
+            if writes or sectors:
+                out["areas"].append({"start_sector": start, "area_sectors": length, "writes": writes,
+                                     "sectors_written": sectors, "partition": r["partition"], "range": r["kind"]})
+                out["writes"] += writes
+                out["sectors"] += sectors
+    return out
+
+
+def _layer_outside(overlay: str, segments: list[dict]) -> dict:
+    """What a protected session's layer holds outside Windows' partitions (exact byte ranges)."""
+    out: dict = {"counted_by": "the layer's own map", "writes": None, "sectors": 0, "areas": [], "errors": []}
+    try:
+        ranges = _extents(overlay)
+    except (SessionError, ValueError) as error:
+        out["errors"].append(str(error)[:200])
+        return out
+    for s in segments:
+        if s["kind"] not in ("hidden", "gap"):
+            continue
+        low, high = s["start"] * 512, (s["start"] + s["sectors"]) * 512
+        for offset, length in ranges:
+            a, b = max(low, offset), min(high, offset + length)
+            if a < b:
+                out["areas"].append({"start_sector": a // 512, "area_sectors": (b - a) // 512,
+                                     "sectors_written": (b - a) // 512, "partition": s.get("partition"),
+                                     "range": s["kind"]})
+                out["sectors"] += (b - a) // 512
+    return out
+
+
+def _describe(area: dict) -> str:
+    where = (f"partition {area['partition']} (not Windows')" if area.get("partition")
+             else "space outside every partition")
+    end = area["start_sector"] + area["area_sectors"] - 1
+    writes = f"{area['writes']} write(s), " if area.get("writes") is not None else ""
+    return (f"{where}, sectors {area['start_sector']}-{end}: {writes}"
+            f"{area['sectors_written']} sectors ({area['sectors_written'] * 512} bytes)")
+
+
+def report_dropped(state_root: str, name: str, dropped: dict | None, when: str) -> dict | None:
+    """Record writes outside Windows' partitions in TUR's history and make the person's notice."""
+    if not dropped or not (dropped.get("sectors") or dropped.get("writes") or dropped.get("errors")):
+        return None
+    evidence = [_describe(a) for a in dropped["areas"]] + [f"not counted: {e}" for e in dropped["errors"]]
+    notice = checklist.refusal("TUR-DUALRUN-090", "\n".join(evidence) or "the count could not be read")
+    record = {
+        "code": "TUR-DUALRUN-090", "kind": "detected",
+        "at_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "subjects": [f"windows-guest:{name}"], "when": when,
+        "evidence": evidence, "counted_by": dropped.get("counted_by"),
+        "writes": dropped.get("writes"), "sectors": dropped.get("sectors"),
+    }
+    history = pathlib.Path(state_root) / "history.jsonl"
+    with open(history, "a") as handle:
+        handle.write(json.dumps(record) + "\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+    return notice
+
+
 def attach(disk_path: str, state_root: str, *, mode: str = "direct", hidden: str = "auto",
            owner: int | None = None, options: dict | None = None, skip_checks: bool = False) -> dict:
     """Check, then create the view. Returns the session record. Raises SessionError with the refusals."""
@@ -211,6 +318,12 @@ def attach(disk_path: str, state_root: str, *, mode: str = "direct", hidden: str
             void = True
         arguments = ["dmsetup", "create", name] + (["--readonly"] if mode == "protected" else [])
         run(*arguments, stdin=table(segments, name, loop))
+        try:
+            regions = _stats_create(name, segments)
+        except SessionError as error:
+            run("dmsetup", "remove", name, check=False)
+            raise SessionError(f"writes outside Windows' partitions could not be counted, so the view is not "
+                               f"handed out: {error}")
     except SessionError:
         if void:
             run("dmsetup", "remove", f"{name}-void", check=False)
@@ -232,7 +345,7 @@ def attach(disk_path: str, state_root: str, *, mode: str = "direct", hidden: str
         "disk_guid": facts["disk"]["guid"], "bytes": facts["disk"]["bytes"],
         "give": decision["give"], "hide": decision["hide"], "notes": decision["notes"],
         "refusals_overridden_for_experiment": [r["code"] for r in decision["refusals"]],
-        "segments": segments,
+        "segments": segments, "stats_regions": regions,
         "esp": None if esp is None else {"index": esp["index"], "part_guid": esp["part_guid"],
                                          "first_lba": esp["first_lba"], "sectors": esp["sectors"]},
     }
@@ -281,6 +394,12 @@ def detach(disk_path: str, state_root: str, name: str | None = None, *, force: b
             raise SessionError(f"{name} is still open by {users} program(s)")
         run("blockdev", "--flushbufs", f"/dev/mapper/{name}", check=False)
         result["partition_table"] = _table_changes(disk_path, record) if record.get("shadow_sha256") else {}
+        if "stats_regions" in record:
+            result["dropped_writes"] = _stats_read(name, record["stats_regions"])
+        else:
+            result["dropped_writes"] = {"counted_by": None, "writes": None, "sectors": 0, "areas": [],
+                                        "errors": ["the session record was missing: writes outside Windows' "
+                                                   "partitions could not be counted"]}
         for attempt in range(20):
             done = run("dmsetup", "remove", name, check=False)
             if done.returncode == 0:
@@ -295,6 +414,9 @@ def detach(disk_path: str, state_root: str, name: str | None = None, *, force: b
     run("udevadm", "settle", check=False)
     (state / "session.json").unlink(missing_ok=True)
     (state / "shadow.img").unlink(missing_ok=True)
+    notice = report_dropped(state_root, name, result.get("dropped_writes"), "detach")
+    if notice:
+        result["notice"] = notice
     after = checklist.survey(disk_path)
     result["base_token_before"] = record.get("base_token")
     result["base_token_after"] = after.get("base_token")
@@ -334,7 +456,14 @@ def discard(disk_path: str, state_root: str, name: str) -> dict:
         raise SessionError("there is no layer to throw away")
     if layer["status"] != "open":
         raise SessionError(f"the layer is in state '{layer['status']}': a commit has begun and must be finished")
+    record = read_json(pathlib.Path(state_root) / name / "session.json") or {}
+    outside = _layer_outside(layer["overlay"], record["segments"]) if record.get("segments") else None
     result = detach(disk_path, state_root, name) if view_exists(name) else {"name": name}
+    if outside is not None:
+        result["layer_outside_windows"] = outside
+        notice = report_dropped(state_root, name, outside, "discard")
+        if notice:
+            result["notice"] = notice
     pathlib.Path(layer["overlay"]).unlink(missing_ok=True)
     path.unlink(missing_ok=True)
     result["discarded"] = True
@@ -368,6 +497,12 @@ def commit(disk_path: str, state_root: str, name: str, *, rate: int | None = Non
         raise SessionError("there is no layer to keep")
     state = path.parent
     result: dict = {"name": name, "resumed": layer["status"] == "committing"}
+    session_record = read_json(state / "session.json") or {}
+    if session_record.get("segments") and layer["status"] == "open":
+        layer["outside_windows"] = _layer_outside(layer["overlay"], session_record["segments"])
+        write_json(path, layer)
+    if layer.get("outside_windows"):
+        result["layer_outside_windows"] = layer["outside_windows"]
     if view_exists(name):
         result["closed_view"] = {k: v for k, v in detach(disk_path, state_root, name).items() if k != "after"}
     if layer["status"] == "open":
@@ -426,6 +561,9 @@ def commit(disk_path: str, state_root: str, name: str, *, rate: int | None = Non
     path.unlink(missing_ok=True)
     result["committed"] = True
     result["undo_valid_for_token"] = closed["base_token_after"]
+    notice = report_dropped(state_root, name, layer.get("outside_windows"), "commit")
+    if notice:
+        result["notice"] = notice
     return result
 
 

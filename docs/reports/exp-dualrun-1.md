@@ -54,9 +54,10 @@ BUILD
 - Warnings: none
 
 TESTS
-- Unit tests: the synthetic job, 30 cases, no Microsoft software:
-  **30 of 30 pass** (run 43764669843 on `81fea51`; also 43757600470 on
-  `4aea64d`); section 5.0
+- Unit tests: the synthetic job, no Microsoft software: **30 of 30 pass**
+  (run 43764669843 on `81fea51`; also 43757600470 on `4aea64d`); a 31st
+  case (dropped writes counted and reported, section 3.2.1) was added
+  after them: its result is in the hand-back and section 5.0
 - Integration tests: NOT RUN (stage `experiment` not dispatched: the
   evaluation's terms do not plainly permit it on a hosted runner, section
   2.1; owner's decision 1)
@@ -600,7 +601,7 @@ partition table:
 |---|---|---|
 | First sectors up to the first partition (protective MBR, partition table) and the backup table at the end | A private copy in a file ("the shadow"), byte-identical at the start | Windows sees the same disk GUID, partition GUIDs and offsets as natively. Nothing the guest writes to the table reaches the real one; a change is detected at the end and reported |
 | The EFI system partition, the Microsoft reserved partition, every Windows data partition whose content is NTFS, BitLocker, FAT, exFAT or ReFS, Windows recovery partitions | `linear` onto the real partition | These are Windows' |
-| Every other partition (TUR's root, other systems) and every unallocated range | A `zero` target: reads give zeros, writes are dropped; `error` where `zero` is missing | **No mapping to those blocks exists.** A fault in Windows, or an escape from QEMU as the user, cannot reach them. Zeros, not errors, on read, so that a probing read does not fill Windows' event log with disk errors. **Changed after the first synthetic run:** the design had `flakey … error_writes` (writes fail rather than vanish), but dm-flakey also receives the view's cache flushes and fails them, so every flush of the whole view failed (run 43753949520: `qemu-img commit` ended in EIO; run 43764669843: a flush of a view-shaped device with a flakey part fails, EIO). A guest flushes its disk constantly; with that table every Windows flush would have failed. `flakey` stays an option, not the default |
+| Every other partition (TUR's root, other systems) and every unallocated range | A `zero` target: reads give zeros, writes are dropped **and counted, reported, recorded and shown to the person (3.2.1)**; `error` where `zero` is missing | **No mapping to those blocks exists.** A fault in Windows, or an escape from QEMU as the user, cannot reach them. Zeros, not errors, on read, so that a probing read does not fill Windows' event log with disk errors. **Changed after the first synthetic run:** the design had `flakey … error_writes` (writes fail rather than vanish), but dm-flakey also receives the view's cache flushes and fails them, so every flush of the whole view failed (run 43753949520: `qemu-img commit` ended in EIO; run 43764669843: a flush of a view-shaped device with a flakey part fails, EIO). A guest flushes its disk constantly; with that table every Windows flush would have failed. `flakey` stays an option, not the default |
 
 The partition table is shown unchanged, TUR's entries included, so that the
 guest's view of the disk is the native one. If Windows changes the table
@@ -608,6 +609,71 @@ inside a session (its updates sometimes resize the recovery partition), the
 change lands in the shadow, is reported at the end, and is **not** applied
 by this prototype. Whether to apply a change that touches only Windows'
 entries and ranges, with the person's confirmation, is decision 6.
+
+### 3.2.1 Writes outside Windows' partitions: dropped, never silent
+
+The lead accepted dropping such writes (decision 2 of the first hand-back)
+on one condition, which is now the design: **a dropped write is never
+silent.**
+
+- **Counted.** When the view is made, before its device node is handed to
+  the person's account, every hidden range gets a device-mapper statistics
+  region (`dmsetup message VIEW 0 @stats_create START+LENGTH /AREAS
+  tur-dualrun`, at most 64 areas per range, so a 300 GiB partition is
+  watched in areas of about 4.7 GiB). Device-mapper counts every write and
+  discard that reaches the view, by sector, whatever the target does with
+  it. If the regions cannot be made, **the view is not handed out**: the
+  session is refused rather than run uncounted.
+- **Reported at detach.** Before the view is removed its regions are read
+  (`@stats_print`): for each area that saw a write, its sector range, the
+  number of writes and the sectors written, and which range it is (TUR's
+  partition, another system's, or space outside every partition). The
+  detach result carries them as `dropped_writes`; `tur-dualrun recover`
+  (after a killed launcher) does the same.
+- **Protected sessions.** There the guest's writes land in the layer, never
+  on the (read-only) view, so the layer's own map (`qemu-img map`) is
+  compared with the same ranges at *discard* and before *commit*; this gives
+  exact byte ranges. A commit copies such data into the view, where it is
+  dropped and counted again.
+- **In TUR's history.** Every session with a dropped write (or a count that
+  could not be read) appends one record to the history (below), and
+- **a plain notice** after the session, `TUR-DUALRUN-090` in section 3.4:
+  what happened, that nothing was changed, and what Windows tried.
+
+**The record for the self-healing history.** The self-healing service
+(ADR-0027, `docs/architecture/self-healing.md` section 6) keeps faults and
+events in `/var/log/tur/heal/state.json` and lists them through `tur-diag
+heal`. This experiment may not edit `services/`, and the service has no
+entry point for another program's findings yet, so the prototype appends
+the same fields to `STATE_DIR/history.jsonl` and the format is given here
+for that component to adopt:
+
+```text
+One JSON object per line, appended and fsync'd, never rewritten:
+
+  code         "TUR-DUALRUN-090" (product: TUR-GUEST-WINDOWS-…, assigned by
+               the self-healing catalogue)
+  kind         "detected"           an event kind the service already has,
+                                    and one that is a notice (is_notice)
+  at_utc       "2026-11-16T09:12:44Z"
+  subjects     ["windows-guest:tur-dualrun-0123456789ab"]   the view's name
+  when         "detach" | "discard" | "commit"
+  evidence     ["partition 4 (not Windows'), sectors 2049000-2058559:
+                 3 write(s), 24 sectors (12288 bytes)", …]   one line per area;
+               or "not counted: …" when a count could not be read
+  counted_by   "device-mapper statistics" | "the layer's own map"
+  writes       total writes (null for a layer: it records data, not writes)
+  sectors      total 512-byte sectors
+
+Mapping to the service: one FaultRecord per session (code, state "seen",
+first_seen_utc = last_seen_utc = at_utc, subjects, evidence; no remedy:
+nothing needs repairing, the writes never landed) and one Event of kind
+"detected", which becomes the person's notice through tur-diag heal
+notices and tur-heal-notify. A report is offered only if it recurs
+(the likely cause is a disk tool inside Windows, which TUR's developers
+want to know about). No file content and no file names are recorded:
+sector ranges and counts only.
+```
 
 ### 3.3 Locking
 
@@ -666,6 +732,31 @@ Action:
 Find the recovery key first (for a Microsoft account:
 account.microsoft.com/devices/recoverykey), then start again and say that
 you have it. Or use Restart into Windows.
+```
+
+The notice after a session in which Windows wrote outside its partitions
+(section 3.2.1; not a refusal, nothing stops the next session):
+
+```text
+TUR-DUALRUN-090
+Windows tried to write outside its own partitions.
+
+Reason:
+While it ran inside TUR, Windows tried to write to parts of the disk that
+are not its own: TUR's own partition, another system's, or space outside
+every partition. TUR did not let those writes through. Nothing outside
+Windows' partitions was changed, and Windows' own files are as it left
+them.
+
+Action:
+Nothing needs to be done now. If this keeps happening, a program in
+Windows that works with disks directly (a partition tool, a backup or
+encryption program) is the likely cause: tell TUR with the details below,
+and do not use that program while Windows runs inside TUR.
+
+Technical detail:
+partition 4 (not Windows'), sectors 2049000-2058559: 3 write(s), 24
+sectors (12288 bytes)
 ```
 
 The others: 001 no Windows found; 002 Windows' start-up files not found;
@@ -811,6 +902,7 @@ test volumes built with ntfs-3g.
 | 43753949520 | `af43322` | 29 of 30 | A launcher bug: with the hidden ranges as `flakey … error_writes`, the kept session's `qemu-img commit` into the view ended in `Block job failed: Input/output error`. Changed in `4aea64d`: hidden ranges are a `zero` target; the test now flushes the whole view |
 | 43757600470 | `4aea64d` | **30 of 30** | Hidden ranges as `zero`. Its probe of flakey's flush was not shaped like the view (see below) |
 | **43764669843** | `81fea51` | **30 of 30** | The flush probe, shaped like the view (a linear part on a loop device, write cache `write back`, and a `flakey … error_writes` part): **a flush fails, EIO**. With `zero`, a flush of the whole view succeeds |
+| (next run) | the dropped-write commit | 31 cases | Added: **writes outside Windows' partitions are counted and reported**: four 4 KiB writes through a direct view (three into TUR's partition, one into unallocated space) must come back as 4 writes and 32 sectors in the right areas, with the notice, one history record and TUR's partition unchanged; a protected session's 64 KiB written into TUR's partition in the layer must be reported at discard. An idle session must report none |
 
 Run 43757600470, case by case (seconds are the case's own):
 
@@ -831,7 +923,7 @@ Run 43757600470, case by case (seconds are the case's own):
 | Not enough free memory | **refused, 040** |
 | Refusal texts | 13 texts, each with a reason and an action, none suggesting to force |
 | Attach (direct) | one 2 GiB device; GPT identical; Windows' partitions identical through the view; **TUR's partition reads as zeros** |
-| Write into TUR's partition through the view | accepted and **dropped**; TUR's partition byte-identical (300 MiB hashed) |
+| Write into TUR's partition through the view | accepted and **dropped**; TUR's partition byte-identical (300 MiB hashed). Since then also counted and reported (next row of the run table) |
 | The kernel's lock | mounting the EFI system partition refused while the view holds it (holder `dm-0`); a second attach refused |
 | Writes land where they should | a marker written through the view is on the real partition; **a flush of the whole view succeeds** |
 | The partition table is a private copy | a write to it did not reach the disk; reported at detach (sectors 40–47) |
@@ -1262,6 +1354,12 @@ part and the summary (about 2,400), the workflow and CI helpers (about
    with `stage=experiment, terms_read=yes` himself, optionally without the
    `remoteapp` scenario (`scenarios=` all but `remoteapp`) to stay clear of
    2(d)(v); (c) keep H1 to H10's Windows parts NOT RUN.
+1a. **Writes outside Windows' partitions** are dropped (the `zero` target)
+   instead of failed: **accepted by the lead** on the condition that they
+   are never silent, now the design of section 3.2.1 (counted, reported at
+   detach, recorded in TUR's history, a notice to the person). The
+   self-healing service needs an entry point for another program's
+   findings to take the record of 3.2.1 (its format is given there).
 2. **Is the default session protected or direct?** Proposal: protected for
    the first sessions and for anything P@x drives; direct once the person
    has seen it work; always the person's choice.
