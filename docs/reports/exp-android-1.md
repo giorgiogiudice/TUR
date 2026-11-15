@@ -1,18 +1,14 @@
 <!-- SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0 -->
 # exp-android-1 — Android applications on TUR: translation first, how much needs no ARM translation, and whether the container can be tested in CI (experiment)
 
-> **Status: first results; three of the five questions are still open.**
-> One CI run has finished (43537684872, commit `4ccc96d`, 14 November
-> 2026). It settles **B1** (92.8% of F-Droid's 4,987 applications need no
-> ARM translation) and **D** (four of four web bundles tried show their
-> first screen in a browser with no Android; such applications are about
-> 2 to 3% of F-Droid). It did **not** produce a single ATL or Waydroid
-> first screen: the ATL jobs and both Waydroid jobs stopped at defects of
-> the test bed, each found and fixed in the commit that carries this
-> version of the report (sections 3, 5, 6). **Hypotheses A, B2 and C are
-> NOT RUN**; nothing in this report says ATL or Waydroid works or does not
-> work on the sample. The hypotheses and kill criteria were committed
-> before the first measurement (commit `2bfb491`).
+> **Status: second run read; a third is running.** Run 43553105465
+> (commit `0f56629`) started ATL and Waydroid for the first time. This
+> version of the report was committed first for the Waydroid findings
+> (section 6.1): Android 13 boots on TUR's kernel with the Rust binder
+> driver under SELinux enforcing, from Fedora's own package, and what it
+> needed is listed there. Sections 3, 4 and 5 still describe the first
+> run and are rewritten in the next commit; B1 and D (sections 2 and 7)
+> are settled.
 
 ```text
 TUR DEVELOPMENT REPORT
@@ -355,46 +351,72 @@ is, is what the job measures.
 
 ## 6. Hypothesis C: Waydroid in GitHub Actions
 
-**NOT RUN to its end; not killed.** Run 43537684872 got as far as the
-container's start in both places and stopped there for one and the same
-reason, which belongs to the test bed. Measured:
+**Android boots in CI in both places, applications install and start, and
+nothing yet reaches the desktop.** Run 43553105465 (commit `0f56629`): on
+the runner's kernel and in a KVM guest on TUR's own kernel
+(`7.3.3-300.fc45`, Rust binder driver, SELinux enforcing), Android 13
+finished booting in 45 and 27 seconds, and every application of the sample
+that has x86 code installed, started and stayed in front. But every
+screenshot of the host compositor is empty: I looked at all of them. The
+hypothesis asks for a first screen *in a screenshot*, so it is **not yet
+met**; section 6.2 says why and what the next run does about it.
 
-| Step | Runner's own kernel (job `waydroid`) | KVM guest, Fedora 45 (job `waydroid-f45`) |
-|---|---|---|
-| Kernel | `7.0.0-1017-azure` (Ubuntu 24.04.5) | `7.2.11-300.fc45` (Cloud Base 45-1.4 as released) |
-| Binder | `CONFIG_ANDROID_BINDER_IPC=m`, `CONFIG_ANDROID_BINDERFS=m`: the C driver as a module, **already in the runner's image** (`binder_linux.ko.zst`; no extra package). `modprobe` succeeds | **`CONFIG_ANDROID_BINDER_IPC=y`, `CONFIG_ANDROID_BINDERFS=y`: the C driver, built in.** No `CONFIG_ANDROID_BINDER_IPC_RUST` line. See the note below |
-| Binder devices | Waydroid makes `anbox-binder`, `anbox-hwbinder`, `anbox-vndbinder` in binderfs through `binder-control` | Fedora's mount unit provides `binder`, `hwbinder`, `vndbinder` in `/dev/binderfs` |
-| KVM guest | — | `/dev/kvm` usable on the runner; the guest (4 CPUs, 10.5 GB) answers on SSH **20 seconds** after QEMU starts |
-| Waydroid | 1.6.3 from upstream's `noble` repository, LXC 5.0.3 | `waydroid-1.6.3-2.fc45` with `waydroid-selinux`, LXC 7.0.0; installed with sway and its dependencies in 30 seconds |
-| `waydroid init` with the pinned VANILLA images (no network) | Status 0, 1 second | Status 0, 1 second |
-| Container service | Active | Active |
-| SELinux | not present (AppArmor on) | **Enforcing; 0 denials** up to this point |
-| Headless compositor and input devices | sway 1.9, `wayland-1`, seat with pointer and keyboard | sway 1.12, the same |
-| `waydroid session start` | **Fails: "container failed to start"** | **Fails: the same** |
-| Cause | `lxc-start`: `Failed to mount "/run/user/1001/pulse/native"` | `Failed to mount "/run/user/1000/pulse/native"` |
-| Job duration | 2.5 minutes | 8.8 minutes (6 of them downloading the Fedora image, the Android images and the applications; cached afterwards) |
+### 6.1 What Waydroid needed to start (for the runtime work under ADR-0006)
 
-Waydroid binds the session's PulseAudio socket into the container and the
-mount is not optional: with no sound server in the session the container
-does not start. A desktop session always has one; a CI session started by
-hand has not. Fixed in the commit that carries this report (a sound server
-with no sound card: PulseAudio on the runner, PipeWire in the guest, and
-an empty file as the last resort); not yet run. So far nothing has been
-found that prevents Waydroid from being tested in CI: binder is there in
-both places, KVM works, the downloads cache, and the jobs are short.
+Measured in run 43553105465 unless a line says otherwise. The script is
+`tests/experiments/android/waydroid/run.sh`; it runs unchanged on Ubuntu
+and on Fedora 45.
 
-**A correction to android-runtime.md, section 3.3.** That section measures
-TUR's image (kernel `7.3.3-300.fc45`): C driver off, Rust driver built in;
-and says that Fedora 43, 44 and 45 carry the same configuration, citing a
-Fedora 44 kernel `7.2.9`. Measured here: Fedora 45's kernel **as released**
-(`7.2.11-300.fc45`, `/lib/modules/…/config`) has the **C** driver built in
-and no Rust binder option. The switch is between 7.2 and 7.3, not between
-Fedora releases. Two consequences: the report cited there of Waydroid
-working on `7.2.9` is evidence for the C driver, not the Rust one; and a
-test of "Fedora 45's kernel" tests the Rust driver only if the guest is
-updated first. The guest job now updates the kernel and restarts before
-the test and records both configurations (`kernel-as-released.txt`,
-`kernel-updated.txt`); not yet run.
+| Need | What was measured |
+|---|---|
+| **Binder, on TUR's kernel** | Fedora 45 updated to `7.3.3-300.fc45` (the kernel of TUR's image): `# CONFIG_ANDROID_BINDER_IPC is not set`, `CONFIG_ANDROID_BINDER_IPC_RUST=y`, `CONFIG_ANDROID_BINDER_DEVICES="binder,hwbinder,vndbinder"`. Fedora's mount unit puts `binder`, `hwbinder`, `vndbinder` and `binder-control` in `/dev/binderfs`; Waydroid's configuration then reads `binder = binder`, `vndbinder = vndbinder`, `hwbinder = hwbinder`. **Nothing to load, build or configure.** Android booted on the Rust driver |
+| Binder, kernel messages | On the Rust driver: `rust_binder: Failed to allocate buffer. len:96, is_oneway:true` four times in a six-minute session, with no visible effect; and the usual "undelivered transaction … process died" when applications were stopped |
+| **Packages** | `waydroid-1.6.3-2.fc45` and `waydroid-selinux` (which it pulls in), LXC 7.0.0, `python3-gbinder` 1.3.0. Nothing from outside Fedora |
+| **SELinux** | **Enforcing throughout; 0 denials** over the whole run (boot, 10 applications, a second boot), in the audit log and the journal |
+| **Images without the network** | `system.img` (1,827,717,120 bytes) and `vendor.img` (562,388,992 bytes) placed in `/usr/share/waydroid-extra/images` (label `usr_t` after `restorecon`). `waydroid init -f` then takes one to two seconds, asks no server, and records `system_ota = None`. This is the path for an image TUR pins and fetches itself. Archives: 847 MB and 190 MB |
+| **Container service** | `systemctl restart waydroid-container` after `init`; active |
+| **A sound server in the session** | **Required.** Waydroid binds `$XDG_RUNTIME_DIR/pulse/native` into the container and LXC refuses to start without it (`Failed to mount "/run/user/1000/pulse/native"`, run 43537684872). PipeWire's `pipewire-pulse` satisfies it. On a Plasma session it is there; a service that starts Android outside a full session must check for it first, or the error is "container failed to start" with no hint |
+| **A notification server in the session** | Without one on the bus at session start Waydroid says `Skipping notification manager service because we could not connect to the notifications server` and Android notifications go nowhere (measured: the probe's notification never reached the bus). Plasma has one; the order matters: it must be there *before* `waydroid session start` |
+| **No GPU** (CI only) | `ro.hardware.gralloc=default` and `ro.hardware.egl=swiftshader` under `[properties]` in `/var/lib/waydroid/waydroid.cfg`, then `waydroid upgrade --offline`. On a computer with a Mesa driver these lines are absent |
+| **Boot** | `waydroid session start` as the user, with `WAYLAND_DISPLAY`, the session bus and `XDG_RUNTIME_DIR`. `sys.boot_completed=1` after **27 s** in the guest (first boot, empty data) and 24 s on the second boot; 45 s and 20 s on the runner. Software rendering, 4 CPUs |
+| **A window on the desktop** | **Not by itself.** `waydroid session start` maps no window, and an activity started with Android's own `am start` runs invisibly: 29 applications were "resumed" and the desktop stayed empty. Waydroid shows its display only when asked through its own interface (`waydroid show-full-ui`, `waydroid app launch`), which sets the property `waydroid.active_apps` (from Waydroid's source). TUR's runtime must launch through that interface. Whether it then produces windows here is measured in the next run |
+| **Installing** | `pm install -r -g` through `waydroid shell` (which reads commands on standard input). An ARM-only APK is refused with `INSTALL_FAILED_NO_MATCHING_ABIS` (OpenSudoku 4.11.3 and the probe's ARM64 variant). The image's ABI list is `x86_64,x86`: an application with only 32-bit x86 code installed and started (MuPDF viewer). `ro.dalvik.vm.native.bridge=0` |
+| **Applications** | Runner: 29 of 30 installed, started (`am start -W` status ok, 167 to 1,349 ms) and were alive with their own activity in front ten seconds later; the thirtieth is the ARM-only one; no crash logged. Guest, first ten: 10 of 10 |
+| **Memory** | Host memory in use rose by **956 MiB** (runner) and **936 MiB** (guest) from before the session to a booted, idle Android with 95 processes. Per application (Android's own PSS figure): 37 to 325 MB, median about 104 MB; the probe 72 to 74 MB |
+| **Clipboard** | Android to host works as packaged, on both (text set by the probe was read with `wl-paste`), **without** `python3-pyclip`: the claim of section 1.2 that the module is needed does not hold for this direction. Host to Android was not seen, but no Waydroid window had the focus (see above); measured again in the next run |
+| **One window per application** | With `persist.waydroid.multi_windows=true` the probe was laid out at 364 × 591 instead of the full display: Android is in free-form mode. Windows on the desktop: none yet, for the reason above |
+| **microG** | Installs (`Success`). **The image does not define `android.permission.FAKE_PACKAGE_SIGNATURE`** (`pm list permissions`: 0 matches; microG's package lists it as requested, not granted), so in this image microG cannot present Google's signature. android-runtime.md section 12.2 marks this as an assumption to verify: it is now measured, and the answer is no for the image of 27 September 2026 |
+| **Cost in CI** | Guest job 11.9 minutes in all: kernel update and restart 52 s, packages 42 s, images and applications copied in 31 s, the test itself 5.8 minutes |
+
+### 6.2 Why the screenshots are empty, and what the next run does
+
+The harness started applications with `am start`, which is how Android's
+own tools do it and which bypasses Waydroid's switch for showing its
+display. Everything measured from inside Android is real (activities
+resumed, processes alive, memory, the benchmark); nothing was drawn on the
+host, so pointer and keyboard input from the host, the clipboard towards
+Android, notifications and resizing could not be judged. The commit that
+carries this version of the report calls `waydroid show-full-ui` after the
+boot, launches through `waydroid app launch` in multi-window mode, starts
+a notification server before the session, and takes Android's own
+screenshot beside the desktop's for every application. Not yet run.
+
+### 6.3 The earlier run, and a correction to android-runtime.md
+
+Run 43537684872 stopped at the container's start in both places for want
+of the sound-server socket (6.1). It also measured the kernel of Fedora
+45's Cloud image **as released**, `7.2.11-300.fc45`:
+`CONFIG_ANDROID_BINDER_IPC=y`, `CONFIG_ANDROID_BINDERFS=y`, no Rust binder
+option: the **C** driver, built in. android-runtime.md section 3.3 says
+Fedora 43, 44 and 45 carry the same configuration as TUR's `7.3.3` kernel
+and cites Waydroid working on a Fedora 44 kernel `7.2.9`. The switch is
+between 7.2 and 7.3, not between Fedora releases; that citation is
+evidence for the C driver. The evidence for the Rust driver is this
+experiment's run 43553105465.
+
+The runner's own kernel (`7.0.0-1017-azure`) has the C driver as a module
+in its stock image; Waydroid there creates `anbox-binder`,
+`anbox-hwbinder` and `anbox-vndbinder` through `binder-control`.
 
 ## 7. Hypothesis D: what applications are made of, and re-hosting a web bundle
 

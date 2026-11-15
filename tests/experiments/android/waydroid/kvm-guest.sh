@@ -104,7 +104,7 @@ gssh 'uname -r; grep -E "CONFIG_ANDROID|CONFIG_RUST=" /lib/modules/$(uname -r)/c
 cat "$OUT/kernel-updated.txt"
 
 log "installing Waydroid and a compositor from Fedora's repositories"
-gssh 'sudo dnf install -y waydroid sway grim wtype wl-clipboard unzip pipewire pipewire-pulseaudio wireplumber' > "$OUT/dnf.log" 2>&1
+gssh 'sudo dnf install -y waydroid sway grim wtype wl-clipboard unzip pipewire pipewire-pulseaudio wireplumber mako' > "$OUT/dnf.log" 2>&1
 log "dnf status $?"
 gssh 'rpm -q kernel-core waydroid waydroid-selinux lxc sway wlroots python3-gbinder libgbinder selinux-policy-targeted 2>&1; uname -r; getenforce' | tee "$OUT/guest-packages.txt"
 

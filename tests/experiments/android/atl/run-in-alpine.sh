@@ -29,7 +29,7 @@ apk add -q android-translation-layer sway swaybg grim python3 py3-gobject3 dbus 
 	adwaita-icon-theme gsettings-desktop-schemas 2>&1 | tail -n 30
 rc=$?
 # Wanted, not essential: a failure of one must not stop the run.
-for p in wtype wl-clipboard mako xdg-desktop-portal xdg-desktop-portal-gtk libatspi font-noto font-noto-emoji mesa-vulkan-swrast; do
+for p in wtype wl-clipboard mako xdg-desktop-portal xdg-desktop-portal-gtk font-noto font-noto-emoji font-noto-cjk mesa-vulkan-swrast; do
 	apk add -q "$p" >/dev/null 2>&1 || echo "optional package not installed: $p" | tee -a "$EV/setup.txt"
 done
 apk info -v 2>/dev/null | sort > "$EV/alpine-packages.txt"
@@ -53,7 +53,7 @@ su tur -c "
 	export HOME=/home/tur XDG_RUNTIME_DIR=/tmp/xdg-tur
 	export WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1 WLR_RENDERER=pixman
 	export SWAYSOCK=/tmp/xdg-tur/sway.sock XDG_CURRENT_DESKTOP=sway XDG_SESSION_TYPE=wayland
-	export ATL_TITLE='${ATL_TITLE:-run}' ATL_SCALE='${ATL_SCALE:-1}' ATL_LIMIT='${ATL_LIMIT:-0}' ATL_PROBE='${ATL_PROBE:-}' ATL_PROBE_PHASES='${ATL_PROBE_PHASES:-}'
+	export ATL_TITLE='${ATL_TITLE:-run}' ATL_SCALE='${ATL_SCALE:-1}' ATL_LIMIT='${ATL_LIMIT:-0}' ATL_PROBE='${ATL_PROBE:-}' ATL_PROBE_PHASES='${ATL_PROBE_PHASES:-}' ATL_EXTRA_ARGS='${ATL_EXTRA_ARGS:-}'
 	exec dbus-run-session -- sh $EXP/atl/session.sh
 "
 echo "session exit status: $?" | tee -a "$EV/setup.txt"

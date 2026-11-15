@@ -43,7 +43,36 @@ asuser() {
 	sudo -u "$USR" env XDG_RUNTIME_DIR="$RUNDIR" WAYLAND_DISPLAY="${WL:-wayland-1}" SWAYSOCK="$RUNDIR/sway.sock" \
 		DBUS_SESSION_BUS_ADDRESS="unix:path=$RUNDIR/bus" HOME="$UHOME" XDG_SESSION_TYPE=wayland "$@"
 }
-shot() { asuser timeout 30 grim "$OUT/shots/$1.png" 2>> "$OUT/logs/grim.log" && chmod a+r "$OUT/shots/$1.png"; }
+shot() {
+	# The host compositor's picture: what a person at the desktop would see.
+	asuser timeout 30 grim "$OUT/shots/$1.png" 2>> "$OUT/logs/grim.log" && chmod a+r "$OUT/shots/$1.png"
+	# Android's own picture of its display, for comparison: an application
+	# can be drawn inside Android and still not reach the desktop.
+	mkdir -p "$OUT/android-shots"
+	ASH_TIMEOUT=30 ash 'screencap -p /data/local/tmp/tur-shot.png' >/dev/null 2>&1
+	if [ -n "${DATA:-}" ] && [ -f "$DATA/local/tmp/tur-shot.png" ]; then
+		cp "$DATA/local/tmp/tur-shot.png" "$OUT/android-shots/$1.png"
+		chmod a+r "$OUT/android-shots/$1.png"
+		rm -f "$DATA/local/tmp/tur-shot.png"
+	fi
+}
+# The windows the host compositor has, one per line: application id, title, size.
+host_windows() {
+	asuser swaymsg -t get_tree 2>/dev/null | python3 -c '
+import json, sys
+def walk(n):
+    if n.get("pid") and n.get("type") in ("con", "floating_con") and not n.get("nodes"):
+        r = n.get("rect", {})
+        print("%s | %s | %sx%s" % (n.get("app_id"), n.get("name"), r.get("width"), r.get("height")))
+    for k in ("nodes", "floating_nodes"):
+        for c in n.get(k, []):
+            walk(c)
+try:
+    walk(json.load(sys.stdin))
+except Exception as e:
+    print("error: %s" % e)
+'
+}
 
 # ---------------------------------------------------------------- kernel
 {
@@ -135,6 +164,15 @@ fact compositor "sway headless on $WL"
 # A headless compositor has no input devices; hold a virtual keyboard and a
 # virtual pointer for the session so that applications listen for input.
 asuser wtype -s 100000000 -k F24 > /dev/null 2>&1 &
+# Waydroid forwards Android notifications only if a notification server is
+# on the session bus when the session starts ("Skipping notification
+# manager service", run 43553105465). A desktop has one; here it is mako.
+if command -v mako >/dev/null; then
+	asuser mako > "$OUT/logs/mako.log" 2>&1 &
+	fact notification_server "mako"
+else
+	fact notification_server "none"
+fi
 asuser python3 "$HERE/../atl/vpointer.py" "$RUNDIR/vpointer.cmd" 1280 800 > "$OUT/logs/vpointer.log" 2>&1 &
 sleep 1.5
 asuser swaymsg -t get_seats > "$OUT/sway-seats.json" 2>&1
@@ -235,7 +273,20 @@ if ! grep -q '^android_booted=yes' "$OUT/facts.txt"; then
 	exit 0
 fi
 
+DATA="$UHOME/.local/share/waydroid/data"
 sleep 5
+# "waydroid session start" boots Android but puts no window on the desktop,
+# and an activity started with Android's own "am start" stays invisible
+# (run 43553105465: thirty applications resumed, every screenshot of the
+# desktop empty). The display is shown only on Waydroid's own request:
+# "waydroid show-full-ui" here, "waydroid app launch" in multi-window mode.
+fact host_windows_before_show "$(host_windows | wc -l)"
+asuser timeout 60 waydroid show-full-ui >> "$OUT/logs/session.log" 2>&1
+sleep 8
+host_windows > "$OUT/host-windows-full-ui.txt"
+fact host_windows_after_show "$(wc -l < "$OUT/host-windows-full-ui.txt")"
+fact host_window_full_ui "$(head -n 1 "$OUT/host-windows-full-ui.txt")"
+fact active_apps_property "$(ash 'getprop waydroid.active_apps' | tr -d '\r' | tail -n 1)"
 shot home
 fact android_release "$(ash 'getprop ro.build.version.release' | tr -d '\r' | tail -n 1)"
 fact android_sdk "$(ash 'getprop ro.build.version.sdk' | tr -d '\r' | tail -n 1)"
@@ -253,7 +304,6 @@ done
 fact android_processes "$(ash 'ps -A' | wc -l)"
 
 # ---------------------------------------------------------------- applications
-DATA="$UHOME/.local/share/waydroid/data"
 install_apk() { # FILE -> prints pm's answer
 	mkdir -p "$DATA/local/tmp"
 	cp "$1" "$DATA/local/tmp/tur-install.apk"
@@ -292,7 +342,7 @@ run_app() { # PACKAGE GROUP VERSION NATIVECODE APKFILE
 	crash=$(ash 'logcat -d -b crash' | grep -c "Process: $pkg")
 	echo -e "$pkg\t$group\t$ver\t$nat\tSuccess\t${status:--}\t${total:--}\t${wait:--}\t${resumed:--}\t${alive:+yes}\t${pss:--}\t$crash" >> "$OUT/apps.tsv"
 	ash "logcat -d -t 400" > "$OUT/logs/logcat-$pkg.txt" 2>&1
-	ash "am force-stop $pkg; input keyevent KEYCODE_HOME" >/dev/null
+	ash "am force-stop $pkg; am force-stop com.android.documentsui; input keyevent KEYCODE_HOME" >/dev/null
 	# Removed again: the image's data partition stays small and the next
 	# application starts from the same state.
 	ash "pm uninstall $pkg" >/dev/null
@@ -335,6 +385,8 @@ if [ -f "$PROBE" ]; then
 		fact probe_clipboard_host_to_android "$(grep '^clipboard_get=' "$OUT/probe-basic.txt" | tr '\n' ' ')"
 		fact probe_notification_on_host_bus "$(grep -c 'tur-probe-notification' "$OUT/logs/probe-dbus-monitor.log")"
 		fact probe_touch_from_host "$(grep -cE '^(touch|tap)=' "$OUT/probe-basic.txt")"
+		fact probe_clipboard_host_to_android_at_click "$(grep '^clipboard_at_tap=' "$OUT/probe-basic.txt" | tr '\n' ' ')"
+		fact probe_clipboard_android_to_host_after_click "$(asuser timeout 5 wl-paste -n 2>&1 | head -c 100)"
 		fact probe_key_from_host "$(grep -E '^(key_down|text)=' "$OUT/probe-basic.txt" | tr '\n' ' ')"
 		fact probe_back_from_escape "$(grep -c '^back_pressed=' "$OUT/probe-basic.txt")"
 		fact probe_pss_kb "$(ash 'dumpsys meminfo org.tur.probe' | tr -d '\r' | awk '/TOTAL PSS:/ {print $3; exit}')"
@@ -347,13 +399,13 @@ if [ -f "$PROBE" ]; then
 		ash 'logcat -d -s TURPROBE' | tr -d '\r' | sed -E 's/.*TURPROBE: //' > "$OUT/probe-bench.txt"
 		shot probe-bench
 		ash 'am force-stop org.tur.probe; logcat -c' >/dev/null
-		for phase in open view webview; do
+		for phase in view webview open; do
 			ash "am start -W -n org.tur.probe/.ProbeActivity --es phase $phase" > "$OUT/logs/start-probe-$phase.txt" 2>&1
 			sleep 8
 			shot "probe-$phase"
 			ash 'logcat -d -s TURPROBE' | tr -d '\r' | sed -E 's/.*TURPROBE: //' > "$OUT/probe-$phase.txt"
 			fact "probe_${phase}_resumed" "$(ash 'dumpsys activity activities' | tr -d '\r' | grep -E 'ResumedActivity' | head -n 1 | sed -E 's/.* u0 ([^ ]+).*/\1/')"
-			ash 'am force-stop org.tur.probe; input keyevent KEYCODE_HOME; logcat -c' >/dev/null
+			ash 'am force-stop org.tur.probe; am force-stop com.android.documentsui; input keyevent KEYCODE_HOME; logcat -c' >/dev/null
 		done
 	fi
 fi
@@ -389,7 +441,7 @@ if [ -f "$MICROG" ] && [ -f "$PROBE" ]; then
 	fact microg_install "$(install_apk "$MICROG")"
 	install_apk "$PROBE" >/dev/null
 	ash 'logcat -c' >/dev/null
-	ash 'am start -W -n org.tur.probe/.ProbeActivity --es phase none' > "$OUT/logs/start-probe-microg.txt" 2>&1
+	ash 'am force-stop com.android.documentsui; am start -S -W -n org.tur.probe/.ProbeActivity --es phase none' > "$OUT/logs/start-probe-microg.txt" 2>&1
 	sleep 5
 	ash 'logcat -d -s TURPROBE' | tr -d '\r' | sed -E 's/.*TURPROBE: //' > "$OUT/probe-microg.txt"
 	fact microg_seen_by_application "$(grep -E '^google_play_services' "$OUT/probe-microg.txt" | tr '\n' ' ')"
@@ -422,7 +474,9 @@ if [ "${MULTI_WINDOW:-1}" = "1" ] && [ -f "$PROBE" ]; then
 		sleep 5
 		install_apk "$PROBE" >/dev/null
 		ash 'logcat -c' >/dev/null
-		ash 'am start -W -n org.tur.probe/.ProbeActivity --es phase basic' > "$OUT/logs/start-probe-multiwindow.txt" 2>&1
+		# Through Waydroid's own launcher, which is what puts a window on
+		# the desktop; the probe's default phase is "basic".
+		asuser timeout 60 waydroid app launch org.tur.probe > "$OUT/logs/start-probe-multiwindow.txt" 2>&1
 		sleep 4
 		fact pyclip_clipboard_android_to_host "$(asuser timeout 5 wl-paste -n 2>&1 | head -c 100)"
 		asuser wl-copy tur-host-clip-456 2>> "$OUT/logs/grim.log" &
@@ -430,11 +484,18 @@ if [ "${MULTI_WINDOW:-1}" = "1" ] && [ -f "$PROBE" ]; then
 		ash 'logcat -d -s TURPROBE' | tr -d '\r' | sed -E 's/.*TURPROBE: //' > "$OUT/probe-multiwindow.txt"
 		fact pyclip_clipboard_host_to_android "$(grep '^clipboard_get=' "$OUT/probe-multiwindow.txt" | tr '\n' ' ')"
 		fact multi_window_probe_layout "$(grep '^layout=' "$OUT/probe-multiwindow.txt" | tr '\n' ' ')"
-		ash 'am start -W -n com.android.settings/.Settings' >> "$OUT/logs/start-probe-multiwindow.txt" 2>&1
+		asuser timeout 60 waydroid app launch com.android.settings >> "$OUT/logs/start-probe-multiwindow.txt" 2>&1
 		sleep 8
 		asuser swaymsg -t get_tree > "$OUT/multi-window-tree.json" 2>&1
-		fact multi_window_host_windows "$(grep -c '"app_id"' "$OUT/multi-window-tree.json")"
-		fact multi_window_app_ids "$(grep -oE '"app_id": *"[^"]*"' "$OUT/multi-window-tree.json" | sort -u | tr '\n' ' ')"
+		host_windows > "$OUT/host-windows-multi-window.txt"
+		fact multi_window_host_windows "$(wc -l < "$OUT/host-windows-multi-window.txt")"
+		fact multi_window_windows "$(tr '\n' ';' < "$OUT/host-windows-multi-window.txt")"
+		# Does a desktop resize reach the application? The first window is
+		# made floating and resized; the probe logs its new layout.
+		asuser swaymsg '[app_id=".*probe.*"] floating enable, resize set width 700 px height 500 px' >> "$OUT/logs/session.log" 2>&1
+		sleep 4
+		ash 'logcat -d -s TURPROBE' | tr -d '\r' | sed -E 's/.*TURPROBE: //' | grep '^layout=' | tr '\n' ' ' > "$OUT/multi-window-layouts.txt"
+		fact multi_window_layouts_after_host_resize "$(cat "$OUT/multi-window-layouts.txt")"
 		shot multi-window
 	else
 		fact multi_window_boot "failed"

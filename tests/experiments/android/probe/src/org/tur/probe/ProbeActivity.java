@@ -147,6 +147,22 @@ public class ProbeActivity extends Activity {
                 public void onClick(View v) {
                     taps++;
                     say("tap", taps);
+                    // The clipboard again, this time in answer to a click: a
+                    // Wayland compositor accepts a clipboard only from a
+                    // program that can name the input event behind it.
+                    try {
+                        ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                        ClipData cd = cm.getPrimaryClip();
+                        String s = "(empty)";
+                        if (cd != null && cd.getItemCount() > 0) {
+                            s = String.valueOf(cd.getItemAt(0).coerceToText(ProbeActivity.this));
+                        }
+                        say("clipboard_at_tap", s);
+                        cm.setPrimaryClip(ClipData.newPlainText("tur", "tur-probe-clip-from-tap-" + taps));
+                        say("clipboard_set_at_tap", "tur-probe-clip-from-tap-" + taps);
+                    } catch (Throwable t) {
+                        say("clipboard_at_tap_error", t);
+                    }
                 }
             });
             root.addView(tap);

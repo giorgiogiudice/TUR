@@ -205,7 +205,9 @@ class App:
             "WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS": "1",
             "WEBKIT_DISABLE_COMPOSITING_MODE": "1",
         })
-        cmd = [ATL, str(apk), "--window-width=540", "--window-height=960"] + (extras or [])
+        # ATL_EXTRA_ARGS: options for every launch, e.g. "-X -Xusejit:false".
+        cmd = [ATL, str(apk), "--window-width=540", "--window-height=960"] + (extras or []) \
+            + os.environ.get("ATL_EXTRA_ARGS", "").split()
         self.cmd = cmd
         self.logf = open(self.log, "w")
         self.t0 = time.monotonic()
@@ -442,6 +444,14 @@ def run_probe(probe: pathlib.Path, out: pathlib.Path, scale: float, phases: set[
                 lines = app.probe_lines()
                 basic["pointer"] = {"taps": [x for x in lines if x.startswith("tap=")][-1:],
                                     "touches": len([x for x in lines if x.startswith("touch=")])}
+                # The clipboard in answer to a click: the probe reads it
+                # (the host's text was put there before the clicks) and
+                # then sets its own, which the host should now see.
+                r = run(["wl-paste", "-n"], timeout=5)
+                at_tap = [x for x in lines if x.startswith("clipboard_at_tap=")]
+                basic["clipboard_after_a_click"] = {
+                    "host_to_android_seen_by_app": at_tap, "host_to_android_ok": any("tur-host-clip-123" in x for x in at_tap),
+                    "android_to_host_clipboard": r.stdout[:100], "android_to_host_ok": "tur-probe-clip-from-tap" in r.stdout}
                 basic["keyboard"] = {"text": [x for x in lines if x.startswith("text=")][-1:],
                                      "key_down": [x for x in lines if x.startswith("key_down=")][:5]}
                 # Back: the Escape key, then the button ATL puts in the title bar.

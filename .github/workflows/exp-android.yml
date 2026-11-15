@@ -288,9 +288,16 @@ jobs:
           ATL_PROBE: tur-probe-arm64.apk
           ATL_SCALE: "5"
           ATL_PROBE_PHASES: bench
+          # In run 43553105465 the first launch drew its window and every
+          # later one died inside the emulator (SIGSEGV). ART's just-in-time
+          # compiler writes code through one mapping and runs it through
+          # another, which a user-mode emulator cannot follow; ATL's README
+          # names this switch for hosts where compiled code misbehaves.
+          # Ahead-of-time compiled code (dex2oat) is still used.
+          ATL_EXTRA_ARGS: "-X -Xusejit:false"
         run: |
           docker run --rm --platform linux/arm64 --security-opt seccomp=unconfined --cap-add SYS_NICE --shm-size=2g \
-            -e ATL_TITLE -e ATL_PROBE -e ATL_SCALE -e ATL_PROBE_PHASES \
+            -e ATL_TITLE -e ATL_PROBE -e ATL_SCALE -e ATL_PROBE_PHASES -e ATL_EXTRA_ARGS \
             -v "$GITHUB_WORKSPACE:/src:ro" -v "$W:/work" \
             "$ALPINE_ARM64" sh /src/tests/experiments/android/atl/run-in-alpine.sh
 
@@ -350,7 +357,7 @@ jobs:
         run: |
           curl -fsS https://repo.waydro.id | sudo bash > "$W/evidence/waydroid-repo.txt" 2>&1 || true
           sudo apt-get update -q
-          sudo apt-get install -y waydroid sway grim wtype wl-clipboard imagemagick pulseaudio 2>&1 | tail -n 5
+          sudo apt-get install -y waydroid sway grim wtype wl-clipboard imagemagick pulseaudio mako-notifier 2>&1 | tail -n 5
           dpkg-query -W -f='${Package} ${Version}\n' waydroid lxc-utils python3-gbinder libgbinder sway grim 2>&1 | tee "$W/evidence/host-packages.txt"
 
       - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
@@ -386,6 +393,8 @@ jobs:
           # Contact sheets, so that a person can look at every first screen.
           montage -label '%t' "$W"/evidence/shots/*.png -tile 4x2 -geometry 440x275+6+6 -background '#202020' -fill white \
             "$W/evidence/sheet-%02d.png" || true
+          montage -label '%t' "$W"/evidence/android-shots/*.png -tile 4x2 -geometry 440x275+6+6 -background '#202020' -fill white \
+            "$W/evidence/android-sheet-%02d.png" || true
 
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         if: always()
@@ -470,6 +479,8 @@ jobs:
           python3 "$EXP/waydroid/summary.py" "$W/evidence" "Waydroid in a KVM guest on Fedora 45's kernel" >> "$GITHUB_STEP_SUMMARY" || true
           montage -label '%t' "$W"/evidence/shots/*.png -tile 4x2 -geometry 440x275+6+6 -background '#202020' -fill white \
             "$W/evidence/sheet-%02d.png" || true
+          montage -label '%t' "$W"/evidence/android-shots/*.png -tile 4x2 -geometry 440x275+6+6 -background '#202020' -fill white \
+            "$W/evidence/android-sheet-%02d.png" || true
 
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         if: always()
