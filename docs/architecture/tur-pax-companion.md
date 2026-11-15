@@ -23,6 +23,13 @@ that holds it.
 
 **Not on the image.** Nothing installs or starts the program yet (section 8).
 
+**Status, 15 November 2026: written, not yet proven.** The code and its
+tests are in pull request 139; when this was written CI had not reached
+them, so nothing here has been compiled or run, the reference pictures this
+document shows do not exist yet, and every "held by" in section 3 names a
+test that has still to pass. [desktop-8](../reports/desktop-8.md) says what
+ran; this paragraph goes when the runs are green.
+
 ---
 
 ## 1. The character
@@ -175,7 +182,7 @@ layer is above it. The person chooses (section 5):
   moments the person must be able to see P@x and stop it, and P@x's
   indicator is on screen then too.
 
-Both were run under KWin (section 10). Two costs of *stay* are stated in
+Both are tested under KWin (section 10). Two costs of *stay* are stated in
 section 9: a flame over a film is something on what the person is looking
 at, and a surface over a full-screen window keeps the compositor from
 handing that window straight to the display.
