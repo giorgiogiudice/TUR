@@ -3,6 +3,10 @@
 
 #include <QDBusError>
 #include <QDBusMessage>
+#include <QQuickWindow>
+#include <QTimer>
+
+#include <memory>
 
 QString CompanionService::serviceName()
 {
@@ -78,6 +82,93 @@ void CompanionService::announce(const QString &property, const QVariant &value)
                                                       QStringLiteral("PropertiesChanged"));
     changed << interfaceName() << QVariantMap { { property, value } } << QStringList();
     m_bus.send(changed);
+}
+
+void CompanionService::setHeal(HealSource *heal)
+{
+    if (heal == m_heal)
+        return;
+    if (m_heal)
+        m_heal->disconnect(this);
+    m_heal = heal;
+    if (m_heal)
+        connect(m_heal, &HealSource::announced, this, &CompanionService::announced);
+}
+
+void CompanionService::setWindow(QQuickWindow *window)
+{
+    m_window = window;
+}
+
+bool CompanionService::Announce(const QString &source, qulonglong id)
+{
+    if (source != QLatin1String("heal")) {
+        if (calledFromDBus())
+            sendErrorReply(QDBusError::InvalidArgs, QStringLiteral("Announce knows one source: heal"));
+        return false;
+    }
+    // What can be known without reading anything is answered at once: not
+    // on the bar, asleep, quiet, already speaking, or the person is busy
+    // with the ask bar or the character's menu.
+    if (!calledFromDBus() || !m_companion || !m_heal || !m_companion->shown() || !m_companion->paxOn()
+        || m_companion->quiet() || m_companion->speaking() || m_companion->askOpen() || m_companion->attending())
+        return false;
+    setDelayedReply(true);
+    m_pending.append({ qint64(id), message() });
+    m_heal->announce(qint64(id));
+    return false;
+}
+
+void CompanionService::announced(qint64 id, const QString &result)
+{
+    for (qsizetype i = 0; i < m_pending.size();) {
+        if (m_pending.at(i).first != id) {
+            ++i;
+            continue;
+        }
+        const QDBusMessage call = m_pending.takeAt(i).second;
+        if (result == QLatin1String("shown"))
+            whenOnScreen(call, id);
+        else
+            reply(call, false);
+    }
+}
+
+void CompanionService::whenOnScreen(const QDBusMessage &call, qint64 id)
+{
+    const QString notice = QStringLiteral("heal:%1").arg(id);
+    QQuickWindow *window = m_window;
+    if (!window || !window->isVisible()) {
+        if (m_companion)
+            m_companion->withdraw(notice);
+        reply(call, false);
+        return;
+    }
+    // The first frame the window shows after the bubble was set may have
+    // been prepared before it; the second one has it. One more frame is
+    // asked for, so that a still scene does not wait for ever.
+    auto frames = std::make_shared<int>(0);
+    auto *guard = new QObject(this);
+    connect(window, &QQuickWindow::frameSwapped, guard, [this, call, frames, guard, window] {
+        if (++*frames < 2) {
+            QMetaObject::invokeMethod(window, &QQuickWindow::update, Qt::QueuedConnection);
+            return;
+        }
+        reply(call, true);
+        guard->deleteLater();
+    }, Qt::QueuedConnection);
+    QTimer::singleShot(m_frameTimeout, guard, [this, call, notice, guard] {
+        if (m_companion)
+            m_companion->withdraw(notice);
+        reply(call, false);
+        guard->deleteLater();
+    });
+    window->update();
+}
+
+void CompanionService::reply(const QDBusMessage &call, bool taken)
+{
+    m_bus.send(call.createReply(QVariant(taken)));
 }
 
 bool CompanionService::registerOn(const QDBusConnection &bus, QString *problem)

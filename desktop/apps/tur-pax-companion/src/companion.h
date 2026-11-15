@@ -156,6 +156,19 @@ public:
     // "shown", or why not: "off", "quiet", "busy", "limited", "hidden",
     // "told", "invalid". A suggestion is never held.
     Q_INVOKABLE QString suggest(const QVariantMap &notice);
+    // The healing service asks the character to say one of its notices now
+    // (org.tur.PaxCompanion1.Announce; design, section 7). Unlike offer,
+    // nothing is kept: it is said now, or refused at once so that the
+    // healing service shows the desktop's notification instead. Returns
+    // "shown", or why not: "invalid", "hidden" (not on the bar, or asleep),
+    // "told" (said before), "off" (the person switched that kind off),
+    // "quiet", "busy" (already speaking; the ask bar or the menu is open)
+    // or "limited" (it has spoken its number for the hour).
+    Q_INVOKABLE QString announce(const QVariantMap &notice);
+    // Takes back the bubble of the notice `id`, if it is the one being said,
+    // without keeping it as a mark: an announcement that did not reach the
+    // screen in time is the desktop notification's to make.
+    Q_INVOKABLE void withdraw(const QString &id);
 
     // The person answered the bubble ("Not now", or one of its actions): it
     // is gone.

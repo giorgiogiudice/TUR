@@ -346,9 +346,10 @@ Item {
             // What they are made from is said beside the switch.
             verify(find(stage.leafItem, "suggestionsNote").text.indexOf("2") >= 0)
             const stay = find(stage.leafItem, "staySwitch")
-            verify(stay.checked)
+            // Stepping aside is the default; staying is one switch.
+            verify(!stay.checked)
             mouseClick(stay)
-            verify(!host.settings.overFullScreen)
+            verify(host.settings.overFullScreen)
             press(stage, "backButton")
             compare(stage.page, "menu")
         }

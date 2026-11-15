@@ -10,7 +10,8 @@
   /org/tur/PaxCompanion1. Interface version 1.
 
   It brings the character back, hides it, gives it the keyboard and makes it
-  quiet, and says where it is. It carries no words: nothing can make the
+  quiet, says where it is, and lets the healing service ask it to say one
+  of that service's notices. It carries no words: nothing can make the
   character say anything through it. What the character says it has read
   itself, from org.tur.Agent1 and from the healing service's own notices.
 -->
@@ -28,6 +29,23 @@
          with InvalidArgs. -->
     <method name="SetQuiet">
       <arg name="mode" type="s" direction="in"/>
+    </method>
+    <!-- The healing service's `tur-diag heal notify` asks the character to
+         say the notice `id` (design, section 7; the owner's decision of 15
+         November 2026). "heal" is the only source; anything else is
+         refused with InvalidArgs. The character reads the notice itself
+         from the healing service's own program (tur-diag heal notices, as
+         JSON); no words travel in the call.
+         `taken` is true only once the bubble is on the screen; false, at
+         once, when the character is hidden, asleep, quiet, already
+         speaking, busy with the person, has spoken its number for the
+         hour, the person switched that kind off, or no such notice waits.
+         On false, no answer or an error the caller shows the desktop's
+         notification. The character never marks a notice seen. -->
+    <method name="Announce">
+      <arg name="source" type="s" direction="in"/>
+      <arg name="id" type="t" direction="in"/>
+      <arg name="taken" type="b" direction="out"/>
     </method>
     <property name="InterfaceVersion" type="u" access="read"/>
     <!-- asleep, idle, noticing, listening, thinking, observing, acting,

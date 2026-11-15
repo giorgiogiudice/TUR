@@ -165,8 +165,9 @@ by P@x's window and indicator:
 clock is. So that the character covers nothing, TUR's panel for new
 accounts should end with a fixed spacer 48 px wide: Plasma's own spacer
 applet, configured in `desktop/data`'s applets file, which is data (side B)
-and not code. That change is not in this slice, so as not to cross pull
-request #128; it is proposed in section 9. On a panel a person arranged
+and not code. The owner decided it (section 9, decision 5); it follows
+pull request #128 (the desktop programs in the image), so as not to cross
+it. On a panel a person arranged
 themselves the character may sit over one of their items until they drag it
 to a free place.
 
@@ -174,17 +175,18 @@ to a free place.
 layer, which KWin puts under an active full-screen window. The overlay
 layer is above it. The person chooses (section 5):
 
-- *Stay* (the default, the owner's "omnipresent"): the strip is on the
-  overlay layer, always.
-- *Step aside*: the strip is on the top layer, so it leaves with the bar,
-  and moves to the overlay layer only while P@x's indicator says P@x is
-  controlling, can see the screen, or waits for the person. Those are the
-  moments the person must be able to see P@x and stop it, and P@x's
-  indicator is on screen then too.
+- *Step aside* (the default, the owner's decision of 15 November 2026):
+  the strip is on the top layer, so it leaves with the bar, and moves to
+  the overlay layer only while P@x's indicator says P@x is controlling, can
+  see the screen, or waits for the person's answer. Those are the moments
+  the person must be able to see P@x and stop it, and P@x's indicator is
+  on screen then too.
+- *Stay* (one switch, "Stay over full-screen windows"): the strip is on
+  the overlay layer, always.
 
-Both are tested under KWin (section 10). Two costs of *stay* are stated in
-section 9: a flame over a film is something on what the person is looking
-at, and a surface over a full-screen window keeps the compositor from
+Both are tested under KWin (section 10). *Step aside* is the default
+because a film, a game or a presentation is what the person is working on
+(R2), and a surface over a full-screen window keeps the compositor from
 handing that window straight to the display.
 
 **Licence.** `Tur.PaxCompanion` and `libturpaxcompanion` are the project's.
@@ -209,7 +211,7 @@ Each rule is a sentence a test can fail. "Unit" is
 | R1 | **It never takes the keyboard by itself.** The surface asks for no keyboard. Keys typed while it is there, while it speaks and while P@x controls reach the window that had them, which never loses focus | KWin: `it_never_takes_the_keyboard_and_never_blocks_a_click`, `over_a_full_screen_window…`; stage: `test_it_never_takes_the_keyboard_by_itself` |
 | R2 | **It never covers what the person works on and never blocks a click.** The character is inside the bar; what opens is above the bar, beside the character, and only while open; every other pixel of the strip passes a click to what is under it | KWin: a click on the bar in the character's row reaches the bar, a click beside the bubble reaches the window; `it_sits_in_the_bar`. Stage: `test_only_the_character_and_what_is_open_take_a_click`, `test_the_character_sits_inside_the_bar`. Unit: `the_character_sits_in_the_bar` |
 | R3 | **It never makes a sound.** The program has no code that plays one and links no library that could | `boundary.py --linked`: no audio library is on the allowed list |
-| R4 | **It speaks first only for things that matter and are true**: a repair TUR made, a problem waiting for the person, P@x waiting for an answer, a task that ended in a way the person should hear of, an update that undid itself. Each kind has its own switch. Each notice is said once. Its words are the words of the service it came from, which the character read itself; no program can hand it words to say | Unit: `it_speaks_once_about_what_is_switched_on`, `a_kind_switched_off_is_never_said`, `the_healing_services_notices_are_said_in_its_words`, `what_the_person_chose_is_kept`. Bus: the refusal's and the limit's sentences are the recorded service's. Stage: `test_each_kind_of_notice_has_its_switch`. The interface has no method that carries words (section 6) |
+| R4 | **It speaks first only for things that matter and are true**: a repair TUR made, a problem waiting for the person, P@x waiting for an answer, a task that ended in a way the person should hear of, an update that undid itself. Each kind has its own switch. Each notice is said once. Its words are the words of the service it came from, which the character read itself; no program can hand it words to say | Unit: `it_speaks_once_about_what_is_switched_on`, `a_kind_switched_off_is_never_said`, `the_healing_services_notices_are_said_in_its_words`, `the_healing_service_asks_and_the_character_says_it_or_says_no`, `what_the_person_chose_is_kept`. Bus: the refusal's and the limit's sentences are the recorded service's; `Announce` is refused for a notice said before. Stage: `test_each_kind_of_notice_has_its_switch`. The interface has no method that carries words (section 6) |
 | R5 | **Quiet is one press away, and it is quiet**: for an hour, until tomorrow, or until the person says. While quiet nothing is said; what would have been said waits as a mark. When quiet ends nothing pops up: the person asks. It never speaks over itself, over the ask bar or over its own menu, never more than a set number of times an hour (6), and answering one bubble never brings the next | Unit: `quiet_is_quiet_and_nothing_pops_up_afterwards`, `going_quiet_takes_back_what_was_being_said`, `quiet_for_an_hour_until_tomorrow_and_until_i_say`, `it_does_not_speak_over_itself_the_ask_bar_or_its_menu`, `it_speaks_only_so_often_in_an_hour`. Stage: `test_quiet_is_one_press_away`, `test_quiet_until_tomorrow` |
 | R6 | **One press, or P@x's key, opens the ask bar beside the character.** If something waits, the first press says it | Stage: `test_one_press_opens_the_ask_bar`, `test_what_waits_is_said_before_the_ask_bar`. KWin: `one_press_opens_the_ask_bar_beside_it` |
 | R7 | **A long press, a right click or the menu key gives quiet, "What is P@x watching?", what it may tell, hide, and stop** while P@x works | Stage: `test_a_right_click_or_a_long_press_opens_the_menu`, `test_stop_is_there_while_pax_works_and_only_then`, `test_what_is_pax_watching_says_what_is_read`. Bus: `a_task_the_person_stopped_is_not_announced` (Stop cancels the task) |
@@ -260,10 +262,10 @@ The two programs stay two programs: the character shows and hands over,
 
 | From | How | Becomes |
 |---|---|---|
-| The healing service | The program `tur-diag heal notices --json` is run (a separate program: the command-line side of the boundary) when the character starts and when `/var/log/tur/heal/state.json` changes. Fields `id`, `at_utc`, `code`, `kind`, `title`, `body`, `actions`, declared stable by that component | `repaired`, `held`, `fixed-by-update`, `undone`: kind *repair*. `detected`, `not-repaired`, `report-offered`, `recurred-after-update`: kind *fault*. Its `actions` are the commands shown as text |
+| The healing service | When the healing service's own program asks (`org.tur.PaxCompanion1.Announce`, section 7), the program `tur-diag heal notices --json` is run (a separate program: the command-line side of the boundary) and the notice asked for is said, or refused at once. Fields `id`, `at_utc`, `code`, `kind`, `title`, `body`, `actions`, declared stable by that component | `repaired`, `held`, `fixed-by-update`, `undone`: kind *repair*. `detected`, `not-repaired`, `report-offered`, `recurred-after-update`: kind *fault*. Its `actions` are the commands shown as text |
 | `org.tur.Agent1` | `TaskFinished`, with the steps seen before it | Kind *task*: refused steps ("P@x finished, but one step was refused", with the service's reason); a limit or a failure (the service's own sentence and code); a task that ran 20 s or more, or with nobody there. A task the person stopped is not announced; a short task that ended well is not either |
 | `org.tur.Agent1` | `ScheduleProposed`; `proposals` in the status | Kind *approval*, and the state *waiting* for as long as a proposal waits |
-| The update manager | Not built: nothing in the session says "the system went back to the previous version" yet | Kind *update* exists, with its switch; its source is proposed in section 9 |
+| The update manager | Not built: nothing in the session says "the system went back to the previous version" yet | Kind *update* exists, with its switch; its source is proposed in section 6 |
 
 ## 5. What the person can do
 
@@ -273,7 +275,7 @@ The two programs stay two programs: the character shows and hands over,
 | P@x's key (Meta+Space) | The ask bar opens beside the character |
 | A right click, a long press (0.7 s), or the menu key | The menu |
 | A drag | The character moves along the bar and stays where it is left; within 24 px of an end it goes to the end |
-| `tur-pax-companion --attend`, the launcher's "Go to P@x on the bar", `org.tur.PaxCompanion1.Attend` | The character has the keyboard: Tab goes from it through what is open, Esc gives the keyboard back. If nothing is open, the menu opens |
+| **Meta+Alt+Space** (P@x's fifth key, `attend` in `desktop/kit/pax/commands.json`, bound by the action `attend` of the character's desktop file), `tur-pax-companion --attend`, the launcher's "Go to P@x on the bar", `org.tur.PaxCompanion1.Attend` | The character has the keyboard: Tab goes from it through what is open, Esc gives the keyboard back. If nothing is open, the menu opens |
 | `tur-pax-companion --hide`, "Hide P@x from the bar" | It is gone until brought back |
 | `tur-pax-companion`, the launcher's "P@x on the bar", `org.tur.PaxCompanion1.Show` | It is back |
 
@@ -290,8 +292,9 @@ The two programs stay two programs: the character shows and hands over,
   what is left of today's limit; exactly what the character reads; what it
   never reads; and "See everything P@x did", which opens P@x's record.
 - **What it may tell me** (`qml/SettingsCard.qml`): a switch for each kind
-  of notice; suggestions, with what they are made from; "Stay over
-  full-screen windows"; "Stay on the bar while P@x is off".
+  of notice (all five on for a new person); suggestions, with what they are
+  made from (off); "Stay over full-screen windows" (off: it steps aside);
+  "Stay on the bar while P@x is off" (off: it is absent).
 - **Hide P@x from the bar**, with how to bring it back.
 
 **What is kept**: `$XDG_CONFIG_HOME/tur/pax-companion.json`, a file of the
@@ -303,9 +306,10 @@ notices said, so that none is said twice. No words of a notice are kept.
 state in words and whose description says what pressing it does. The bubble
 is an alert whose name is who speaks and whose description is the sentence.
 Every control is the kit's, with its name and role. The walks hold this for
-every scene in both directions (R9). Two things are not built: an
-announcement to a screen reader when a bubble opens (the kit has none yet),
-and a key of P@x's own for "Go to P@x on the bar" (section 9).
+every scene in both directions (R9). One thing is not built: an
+announcement to a screen reader when a bubble opens (the kit has none
+yet). "Go to P@x on the bar" has P@x's fifth key, Meta+Alt+Space, which
+P@x's indicator and window list with the other four.
 
 ## 6. What it reads, and its interfaces
 
@@ -314,7 +318,7 @@ and a key of P@x's own for "Go to P@x on the bar" (section 9).
 | What | How | Why |
 |---|---|---|
 | P@x's own state | `org.tur.Agent1`: `GetStatus`, `StateChanged`, `TaskStarted`, `ActionProposed`, `ActionCompleted`, `TaskFinished`, `ScheduleProposed`. Listening only; never starting the service | On or off, working, paused, why it cannot work, today's spending against the limit, the step it is on, how a task ended |
-| TUR's record of repairs and problems | `tur-diag heal notices --json` | Notices |
+| TUR's record of repairs and problems | `tur-diag heal notices --json`, run only when the healing service asks the character to say one of its notices | Notices |
 | What P@x's indicator shows | `org.tur.PaxOverlay1.Activity` | So that the two agree (R12) |
 | Whether the computer is on battery | `org.freedesktop.UPower.OnBattery`, system bus | To keep still and dim |
 
@@ -345,12 +349,16 @@ test):
 
 ```text
 Methods     Show()   Hide()   Attend()   SetQuiet(s mode)      mode: hour | tomorrow | always | off
+            Announce(s source, t id) -> b taken             source: heal (section 7)
 Properties  State (s)   Shown (b)   Quiet (b)   Anchor (a{sv})   InterfaceVersion (u) = 1
             Anchor: screen (s), x (d: the character's middle from the screen's left edge),
                     lift (d: how far above the bar's top edge what opens beside it starts), shown (b)
 ```
 
-It carries no words. Nothing can make the character say anything through it.
+It carries no words. Nothing can make the character say anything through
+it: `Announce` carries an identifier of the healing service's, and the
+character reads that notice's words from the healing service's own
+program.
 
 **Additions to two interfaces of the desktop's own programs**, both built
 here and both additions (nothing that used them changes):
@@ -378,22 +386,17 @@ changed:**
 
 ## 7. The healing service's notices: who marks one seen
 
-Today `tur-heal-notify.service` runs `tur-diag heal notify` in the session,
-which shows each notice this person has not seen through the desktop's
-notification service and marks it seen once the service accepted it. The
-character reads the same list. Uncoordinated, a repair would be announced
-twice, once by each; and if the character marked notices seen, one could be
-lost when the character could not speak.
+`tur-heal-notify.service` runs `tur-diag heal notify` in the session, which
+shows each notice this person has not seen through the desktop's
+notification service and marks it seen once the service accepted it. If
+the character read the same list by itself, a repair would be announced
+twice, once by each; and if the character marked notices seen, one could
+be lost when the character could not speak.
 
-**In this slice** the character reads and says, and marks nothing: it runs
-`tur-diag heal notices --json`, never with `--mark-shown`. A notice is said
-once by the character (its own list) and shown once as a notification. That
-is two announcements of one event, known, and the reason for what follows.
-
-**Proposed** (for `services/tur-diagnostics`, and one method on the
-character): one announcement, by whoever can make it at that moment, with
-the healing service's own program still the only one that marks a notice
-seen.
+**The handshake** (proposed in the first draft of this design, adopted by
+the owner on 15 November 2026, and built on the character's side): one
+announcement, by whoever can make it at that moment, with the healing
+service's own program the only one that marks a notice seen.
 
 ```text
 tur-diag heal notify, for each notice N that this person has not seen:
@@ -405,8 +408,10 @@ tur-diag heal notify, for each notice N that this person has not seen:
      with a 5 s limit.
        The character runs `tur-diag heal notices --json` itself, finds N by its
        id, and answers true only once N's bubble is on the screen. It answers
-       false, at once, if it is hidden, asleep, quiet, already speaking, has
-       spoken its number for the hour, or the person switched that kind off.
+       false, at once, if it is hidden, asleep, quiet, already speaking, busy
+       with the person (the ask bar or its menu is open), has spoken its
+       number for the hour, the person switched that kind off, or N is not
+       among the notices waiting.
        taken ─▶ mark N seen. No notification is sent.
        not taken, no answer, an error ─▶ 3
   3. Show N through org.freedesktop.Notifications, as today, and mark it seen
@@ -418,12 +423,14 @@ What this keeps:
 - **One announcement.** Either the character says it or the desktop's
   notification shows it, never both.
 - **Nothing is lost.** The character takes a notice only when it is saying
-  it. Quiet, hidden, asleep, P@x off, the character not running or not
-  installed: `notify` does what it does today. The owner's rule for the
-  healing service ("the person is always kept aware") never depends on the
-  character.
+  it, and keeps nothing it refused: a refused notice does not wait as a
+  mark on the character, it is the notification's. Quiet, hidden, asleep,
+  busy, P@x off, the character not running or not installed: `notify` does
+  what it does today. The owner's rule for the healing service ("the
+  person is always kept aware") never depends on the character.
 - **One writer.** Only `tur-diag heal notify` writes the list of notices
-  seen. The character never does.
+  seen. The character never does; it keeps only its own list of what it
+  said, so that it never says a notice twice.
 - **No words through the bus.** `Announce` carries an identifier. The words
   are the ones the character reads from the healing service's own program,
   so `Announce` cannot make it say anything that is not a notice of TUR's.
@@ -431,17 +438,55 @@ What this keeps:
   character quiet still gets TUR's notifications, under the desktop's own
   Do Not Disturb; the menu says so.
 
-With it, the character no longer watches the state file: `Announce` is what
-tells it. "Show me" on such a notice should then open the healing history
-(`tur-diag heal history --json`: `at_utc`, `code`, `kind`, `who`, `text`,
-from pull request #117), in the page P@x's window or Settings gets for it.
+**"On the screen".** The character answers true after the strip has drawn
+two frames since the bubble was set (the first may have been prepared
+before it), asking for the second itself so that a still scene does not
+wait. If no frame comes within 3 s (the strip is not mapped, the
+compositor is stuck) it takes the bubble back without keeping it and
+answers false. Under KWin the test measures the time from the call to the
+answer (`desktop-8`).
+
+**What the character no longer does.** It does not watch the healing
+service's state file and does not read its notices on its own: `Announce`
+is what tells it. Until `tur-diag heal notify` makes the call (below), the
+character says nothing of the healing service's and the notification shows
+every notice, exactly as before the character existed: no announcement is
+doubled, none is lost.
+
+**For `services/tur-diagnostics`** (pull request #117's component; nothing
+under `services/` was changed here). The change to `tur-diag heal notify`,
+as text for that component's engineer:
+
+1. Before the notification of a notice N, look up whether
+   `org.tur.PaxCompanion1` has an owner on the session bus
+   (`org.freedesktop.DBus.NameHasOwner`; never start it).
+2. If it has, call `Announce("heal", N.id)` on `/org/tur/PaxCompanion1`,
+   interface `org.tur.PaxCompanion1`, with the auto-start flag off and a
+   5 s limit. The reply is one boolean.
+3. True: mark N seen exactly as after an accepted notification, and send no
+   notification. Anything else (false, an error, no owner, the limit):
+   today's path, unchanged.
+4. One call per notice, in order, waiting for each answer: the character
+   says one thing at a time and answers false to the second while the first
+   is on the screen, which is right, since the notification then shows it.
+5. `tur-diag heal notices --json` stays as it is (`id`, `at_utc`, `code`,
+   `kind`, `title`, `body`, `actions`); the character depends on those
+   fields and on `id` being the number `Announce` is given.
+6. A test in that component's suite with a stand-in that owns the name and
+   answers true, false, an error, or nothing: one announcement each time,
+   and the seen list written by `notify` only.
+
+"Show me" on such a notice opens the whole notice in place today; it
+should later open the healing history (`tur-diag heal history --json`:
+`at_utc`, `code`, `kind`, `who`, `text`, from pull request #117), in the
+page P@x's window or Settings gets for it.
 
 ## 8. Starting, stopping, installing
 
 ```text
 tur-pax-companion [--show] [--attend] [--background] [--hide] [--quiet MODE]
                   [--variant dark|light] [--standalone] [--settings FILE]
-                  [--bus ADDRESS] [--heal-command COMMAND] [--heal-state FILE]
+                  [--bus ADDRESS] [--heal-command COMMAND]
                   [--bar-inset PIXELS] [--no-dbus] [--check]
 ```
 
@@ -469,56 +514,58 @@ need:
 | `data/org.tur.PaxCompanion.desktop` | `/usr/share/applications/` (the launcher's "P@x on the bar", "Go to P@x on the bar", "Hide P@x from the bar") |
 | `data/org.tur.PaxCompanion1.service` | `/usr/share/dbus-1/services/` |
 | runtime: LayerShellQt, Qt 6 D-Bus, Quick, Shapes | packages already needed by P@x's window |
-| the seat: a fixed spacer at the end of the panel of new accounts | `desktop/data`'s applets file (section 9, decision 4) |
+| the seat: a fixed spacer at the end of the panel of new accounts | `desktop/data`'s applets file (section 9, decision 5) |
 
-## 9. For the owner
+## 9. The owner's decisions
 
-Decisions taken here that the owner may want to reverse, and questions only
-the owner can answer.
+The first draft of this design asked the owner eight questions. The owner
+answered on 15 November 2026 ("I trust your choices"); what was decided,
+and what it changed:
 
-1. **The character has no name of its own.** It is P@x; the flame is P@x's
-   face. A second name would make two things of one, and "an assistant with
-   a pet name" is the manner this design stays away from. If a name is
-   wanted, it is a string in `qml/Words.qml`.
-2. **Which notices are on by default: all five** (a repair TUR made, a
+1. **No name of its own.** It is P@x; the flame is P@x's face. A second
+   name would make two things of one. (A string in `qml/Words.qml` if that
+   ever changes.)
+2. **All five kinds of notice are on by default**: a repair TUR made, a
    problem waiting, P@x waiting for an answer, a task that ended or was
-   refused, an update that undid itself). Each is rare, true and about this
-   computer. The alternative worth weighing is *a repair TUR made* off by
-   default once the handshake of section 7 exists, since the notification
-   says it anyway.
-3. **Suggestions: never on by default.** Recommended as a standing rule, not
-   only for this version. The character is liked for as long as it speaks
-   only when something is true and matters; a guess, however good, spends
-   that.
-4. **The seat.** Add a fixed 48 px spacer at the end of TUR's default panel
-   (data, in `desktop/data`), so that the character covers nothing on a new
-   account. Until then it sits over the end of the bar.
-5. **Over a full-screen window: stay** is the default, because the owner
-   asked for "omnipresent" and the brief asks that the character work over a
-   full-screen window. The designer's recommendation is the other choice,
-   *step aside*, as the default: a film, a game or a presentation is what
-   the person is working on (R2), and a surface over a full-screen window
-   costs that window its direct path to the display. It is one switch
-   either way.
-6. **With P@x off: absent** by default (design principle 8 and 9.1: TUR
-   never reminds the person that P@x is off). "Stay on the bar while P@x is
-   off" shows it asleep.
-7. **A key for "Go to P@x on the bar".** Everything is reachable with the
-   keyboard through the launcher today. A key of its own would be a fifth
-   command in `desktop/kit/pax/commands.json` (the proposal: `Meta+Alt+Space`,
-   not verified to be free), bound by the action `attend` of the character's
-   desktop file; it changes the list of keys P@x's indicator and window
-   show, and their pictures.
-8. **Two interfaces gained a property** (`org.tur.PaxOverlay1.Activity`,
-   `org.tur.PaxUi1.Mode`), and the ask bar opens beside the character.
+   refused, an update that undid itself. Each is rare, true and about this
+   computer, and each has its own switch.
+3. **Suggestions are never on by default**, as a standing rule and not only
+   for this version. The one rule built (most of the day's spending limit
+   used) stays off until the person switches suggestions on.
+4. **Over a full-screen window it steps aside** by default: it leaves with
+   the bar and comes back only while P@x controls, sees the screen or waits
+   for an answer. One switch, "Stay over full-screen windows", keeps it.
+   Built: `CompanionSettings.overFullScreen` is false for a new person;
+   the KWin test runs the default and the switch.
+5. **The seat**, a fixed 48 px spacer at the end of TUR's default panel (data
+   in `desktop/data`), is a follow-up after pull request #128 (the desktop
+   programs in the image) merges. Until then the character sits over the
+   end of the bar.
+6. **With P@x off it is absent** by default (design principle 8, and 9.1:
+   TUR never reminds the person that P@x is off). "Asleep on the bar" is
+   the person's choice ("Stay on the bar while P@x is off").
+7. **Meta+Alt+Space is P@x's fifth key**, "Go to P@x on the bar": the
+   command `attend` in `desktop/kit/pax/commands.json`, bound by the action
+   `attend` of `data/org.tur.PaxCompanion.desktop`, so that
+   `gen_commands.py --check` holds the two together. P@x's indicator
+   (its list of keys) and P@x's window (its line of keys) show it with the
+   other four; their reference pictures were taken again. Whether the
+   combination is free in Plasma 6.8's defaults is not verified (`verified:
+   false`, like the other four).
+8. **The interface additions stand**: `org.tur.PaxOverlay1.Activity`,
+   `org.tur.PaxUi1.Mode`, and the ask bar opening beside the character.
    `org.tur.PaxUi1` was frozen as version 1; the addition leaves every
    existing caller as it was, and the version stays 1.
-9. **It speaks at most 6 times an hour**, and a bubble stays 12 seconds.
-   Both are numbers in one place (`CompanionSettings`, `Companion`).
-10. **The character uses P@x's window's client of the service**
-    (`libturpaxui`'s `AgentClient`) rather than a second one, so that the
-    two cannot understand `org.tur.Agent1` differently. If more programs
-    need it, it should move to a library of its own.
+
+And, with them, **the healing service's handshake** (section 7) was
+adopted; the character's side is built and `tur-diag`'s side is text for
+pull request #117's component.
+
+Two numbers stay the designer's: it speaks at most **6 times an hour**, and
+a bubble stays **12 seconds**; both are in one place (`CompanionSettings`,
+`Companion`). The character uses P@x's window's client of the service
+(`libturpaxui`'s `AgentClient`) rather than a second one, so that the two
+cannot understand `org.tur.Agent1` differently.
 
 **A decision record is needed** for two things: a new program of P@x's on
 the desktop with an interface of its own, and the standing rule about
@@ -530,8 +577,8 @@ All in CI, in the desktop workflow.
 
 | Test | Where | What it proves |
 |---|---|---|
-| `pax-companion-unit-logic` | ctest | The rules, with the clock in the test's hands: section 3's unit column; the person's choices kept across a restart; the healing service's notices mapped and said in its words, its program run and its file watched; where the character and what opens above it go |
-| `pax-companion-bus` | ctest, private bus | Against the stand-in for `org.tur.Agent1` that answers as the real service did (`desktop/apps/tur-pax-ui/fixtures/agent1`, recorded in CI): off is asleep, on is idle, on and not ready is an error; a task is *thinking* with its step, then idle; a refused step, the day's limit, a long task are told, in the service's words; a stopped task is not; the character never starts the service. `org.tur.PaxUi1.Show` asked of a stand-in. A property of another program followed and dropped. The running program's `org.tur.PaxCompanion1` against the XML; Show, Hide, SetQuiet, Attend, Anchor; a second start |
+| `pax-companion-unit-logic` | ctest | The rules, with the clock in the test's hands: section 3's unit column; the person's choices kept across a restart; the healing service's notices mapped and said in its words; the handshake: said only when asked, and then said or refused at once, nothing kept; where the character and what opens above it go |
+| `pax-companion-bus` | ctest, private bus | Against the stand-in for `org.tur.Agent1` that answers as the real service did (`desktop/apps/tur-pax-ui/fixtures/agent1`, recorded in CI): off is asleep, on is idle, on and not ready is an error; a task is *thinking* with its step, then idle; a refused step, the day's limit, a long task are told, in the service's words; a stopped task is not; the character never starts the service. `org.tur.PaxUi1.Show` asked of a stand-in. A property of another program followed and dropped. The running program's `org.tur.PaxCompanion1` against the XML; Show, Hide, SetQuiet, Attend, Anchor; `Announce`: taken once drawn, refused while it speaks, quiet, hidden, for a notice said before, not waiting or not a notice, and for a source it does not know; a second start |
 | `pax-companion-qml` | ctest, offscreen | `tst_character`: every state its own words and shape; contrast of every state over every background, dimmed too; nothing loops unless P@x works or controls, and never with reduced motion, frozen, or on battery. `tst_stage`: section 3's stage column. `tst_walks`: for each of 27 scenes, contrast in both variants, gold only in the character and P@x's name, keyboard and accessible names in both directions, no text cut at 200 %, right-to-left long, and both |
 | `pax-companion-starts-*`, `-hide-without-a-bus`, `-desktop-file` | ctest | The program loads with no QML warning, dark and light; `--hide` needs no bus and no display; the desktop file is valid |
 | Pictures | `screenshots` job | `tests/shots/render_companion.qml`: 27 scenes and the sheet of states, dark and light, compared with `desktop/tests/screenshots/companion-*` |
@@ -551,9 +598,10 @@ maximised window of the test's that writes down every key and click.
    in the middle of its thickness; `Anchor` says where; KWin lists no window
    of the program's.
 2. Keys typed while it is there and while it speaks reach the window, which
-   never loses focus. A click on the bar in the character's row reaches the
-   bar; a click beside the bubble reaches the window. The bubble is above
-   the bar, beside the character.
+   never loses focus. The healing service's `Announce` is answered "taken"
+   (and how long that took is reported). A click on the bar in the
+   character's row reaches the bar; a click beside the bubble reaches the
+   window. The bubble is above the bar, beside the character.
 3. `Attend`: a key no longer reaches the window; Esc: the bubble waits as a
    mark and the window types again.
 4. A press says what waits; the next opens `tur-pax-ui`'s ask bar, 640 wide,
@@ -561,11 +609,12 @@ maximised window of the test's that writes down every key and click.
    character listens.
 5. Dragged 240 px, it is 240 px along and stays; `Anchor` follows.
 6. Hidden: no gold on the bar. Shown: back.
-7. Over a full-screen window (which covers the stand-in bar): the character
-   is visible and the window keeps the keyboard. Started again with "step
-   aside": no gold. The indicator's stand-in says *acting*: the character is
-   acting and visible over the full-screen window. The stand-in goes: gone
-   again.
+7. Over a full-screen window (which covers the stand-in bar), with "Stay
+   over full-screen windows" switched on: the character is visible and the
+   window keeps the keyboard. Started again with the default, stepping
+   aside: no gold. The indicator's stand-in says *acting*: the character is
+   acting and visible over the full-screen window, which keeps the
+   keyboard. The stand-in goes: gone again.
 
 What the job measured is in the report.
 
@@ -594,9 +643,12 @@ What the job measured is in the report.
 
 **Known gaps:**
 
-- **Two announcements of one repair** until section 7's handshake exists.
+- **The healing service's side of the handshake** (section 7) is not
+  built: until `tur-diag heal notify` calls `Announce`, the character says
+  nothing of the healing service's, and the desktop's notification shows
+  every notice, as before.
 - **The program stays in memory while P@x is off** (section 8).
-- **The seat** is not in the default panel (section 9, decision 4).
+- **The seat** is not in the default panel (section 9, decision 5).
 - **The healing fixture is written by hand** from the service's struct and
   catalogue, not recorded from a run, unlike `tur-pax-ui`'s. Recording it in
   the `heal` workflow is a follow-up.
@@ -671,14 +723,23 @@ For `docs/adr/` (number to be given; not added to the index here).
 > 6. Desktop design principle 8 is amended: while P@x is on, P@x's
 >    character may run in an idle session beside the notifier. While P@x is
 >    off it does not, once `tur-pax` starts and ends it.
+> 7. The owner's decisions of 15 November 2026: no name but P@x's; all
+>    five kinds of notice on by default; over a full-screen window it steps
+>    aside by default (one switch keeps it); with P@x off it is absent by
+>    default; Meta+Alt+Space is P@x's fifth key, "Go to P@x on the bar";
+>    the healing service's notices are announced once, through
+>    `org.tur.PaxCompanion1.Announce`, with `tur-diag heal notify` the only
+>    writer of what was seen and the desktop's notification whenever the
+>    character cannot say it.
 >
 > **Consequences.** P@x is visible at all times while it is on, in one
 > place, in the same words and signs as its indicator. A person can make it
 > quiet, move it, hide it, and ask what it reads. The character can sit
 > over an item of a panel the person arranged themselves, until they move
-> it; TUR's own panel reserves it a seat. It does not follow a panel at
-> another edge until that is built. The healing service's notices need the
-> handshake of section 7 to be announced once.
+> it; TUR's own panel will reserve it a seat. It does not follow a panel at
+> another edge until that is built. The healing service's notices are said
+> by the character only once `tur-diag heal notify` asks it to (section 7);
+> until then the notification says them, as before.
 >
 > **Verification.** The tests of tur-pax-companion.md, section 10; KWin
 > 6.8.2's treatment of exclusive zone 0 and -1 and of the top and overlay

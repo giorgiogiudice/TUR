@@ -556,8 +556,11 @@ private Q_SLOTS:
     void over_a_full_screen_window_only_when_it_matters_unless_asked_to_stay()
     {
         Bench b;
-        // The person's choice to stay is the default.
-        QVERIFY(b.settings.overFullScreen());
+        // Stepping aside is the default (the owner's decision); staying is
+        // the person's choice.
+        QVERIFY(!b.settings.overFullScreen());
+        QVERIFY(!b.companion.raised());
+        b.settings.setOverFullScreen(true);
         QVERIFY(b.companion.raised());
         b.settings.setOverFullScreen(false);
         QVERIFY(!b.companion.raised());
@@ -589,7 +592,7 @@ private Q_SLOTS:
             QVERIFY(!first.hidden());
             QCOMPARE(first.presence(), QStringLiteral("with-pax"));
             QCOMPARE(first.along(), 1.0);
-            QVERIFY(first.overFullScreen());
+            QVERIFY(!first.overFullScreen());
             QCOMPARE(first.quietUntil(), 0.0);
 
             first.setKind(QStringLiteral("task"), false);
@@ -598,7 +601,7 @@ private Q_SLOTS:
             first.setHidden(true);
             first.setPresence(QStringLiteral("always"));
             first.setAlong(0.25);
-            first.setOverFullScreen(false);
+            first.setOverFullScreen(true);
             first.markTold(QStringLiteral("heal:3"));
         }
         CompanionSettings second;
@@ -610,7 +613,7 @@ private Q_SLOTS:
         QVERIFY(second.hidden());
         QCOMPARE(second.presence(), QStringLiteral("always"));
         QCOMPARE(second.along(), 0.25);
-        QVERIFY(!second.overFullScreen());
+        QVERIFY(second.overFullScreen());
         QVERIFY(second.told(QStringLiteral("heal:3")));
         QVERIFY(!second.told(QStringLiteral("heal:4")));
 
@@ -670,48 +673,91 @@ private Q_SLOTS:
         }
     }
 
-    void the_healing_services_program_is_run_and_its_file_watched()
+    void the_healing_service_asks_and_the_character_says_it_or_says_no()
     {
         Bench b;
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
         const QString printedFile = dir.path() + QStringLiteral("/printed.json");
-        const QString stateFile = dir.path() + QStringLiteral("/state.json");
-        const auto write = [](const QString &path, const QByteArray &content) {
-            QFile file(path);
+        {
+            QFile file(printedFile);
             QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
-            file.write(content);
-        };
-        const QJsonArray printed = printedNotices();
-        write(printedFile, QJsonDocument(QJsonArray { printed.at(0) }).toJson());
-        write(stateFile, "{}");
+            file.write(QJsonDocument(printedNotices()).toJson());
+        }
 
         HealSource heal;
         heal.setCompanion(&b.companion);
         // A stand-in for `tur-diag heal notices --json`: it prints the file.
         heal.setCommand({ QStringLiteral("cat"), printedFile });
-        heal.setStateFile(stateFile);
-        heal.start();
-        QTRY_COMPARE_WITH_TIMEOUT(heal.count(), 1, 10000);
+        QSignalSpy answers(&heal, &HealSource::announced);
+        const auto ask = [&](qint64 id) {
+            const int before = int(answers.count());
+            heal.announce(id);
+            if (!QTest::qWaitFor([&] { return answers.count() > before; }, 10000))
+                return QStringLiteral("no answer");
+            const QList<QVariant> answer = answers.constLast();
+            return answer.value(0).toLongLong() == id ? answer.value(1).toString() : QStringLiteral("another id");
+        };
+
+        // Nothing is read, and nothing said, until the healing service asks.
+        QTest::qWait(200);
+        QVERIFY(!b.companion.speaking());
+        QCOMPARE(heal.count(), 0);
+
+        // Asked, it reads the notices and says the one asked for.
+        QCOMPARE(ask(3), QStringLiteral("shown"));
         QVERIFY(heal.problem().isEmpty());
+        QCOMPARE(heal.count(), 4);
         QCOMPARE(b.companion.bubble().value(QStringLiteral("id")).toString(), QStringLiteral("heal:3"));
+        // Already speaking: no, at once, and nothing is kept for later.
+        QCOMPARE(ask(4), QStringLiteral("busy"));
+        QCOMPARE(b.companion.heldCount(), 0);
+        b.companion.dismiss();
+        // Said before; not waiting; not a notice the person is told of.
+        QCOMPARE(ask(3), QStringLiteral("told"));
+        QCOMPARE(ask(99), QStringLiteral("unknown"));
+        QCOMPARE(ask(7), QStringLiteral("unknown"));
+        // Quiet; that kind switched off; hidden; asleep.
+        b.companion.setQuiet(QStringLiteral("hour"));
+        QCOMPARE(ask(4), QStringLiteral("quiet"));
+        b.companion.setQuiet(QStringLiteral("off"));
+        b.settings.setKind(QStringLiteral("fault"), false);
+        QCOMPARE(ask(4), QStringLiteral("off"));
+        // Switched off is not "said": switched on again, it can be.
+        QVERIFY(!b.settings.told(QStringLiteral("heal:4")));
+        b.settings.setKind(QStringLiteral("fault"), true);
+        b.settings.setHidden(true);
+        QCOMPARE(ask(4), QStringLiteral("hidden"));
+        b.settings.setHidden(false);
+        b.companion.setPaxOn(false);
+        QCOMPARE(ask(4), QStringLiteral("hidden"));
+        b.companion.setPaxOn(true);
+        QVERIFY(!b.companion.speaking());
+        QCOMPARE(b.companion.heldCount(), 0);
+        // Two asks at once are both answered, in turn.
+        heal.announce(4);
+        heal.announce(5);
+        QTRY_COMPARE_WITH_TIMEOUT(answers.count(), 11, 10000);
+        QCOMPARE(answers.at(9).value(1).toString(), QStringLiteral("shown"));
+        QCOMPARE(answers.at(10).value(1).toString(), QStringLiteral("busy"));
 
-        // The healing service wrote its state: the notices are read again,
-        // the one already said is not said again, the new one waits.
-        write(printedFile, QJsonDocument(QJsonArray { printed.at(0), printed.at(1) }).toJson());
-        write(stateFile, "{\"changed\": true}");
-        QTRY_COMPARE_WITH_TIMEOUT(heal.count(), 2, 10000);
-        QCOMPARE(b.companion.bubble().value(QStringLiteral("id")).toString(), QStringLiteral("heal:3"));
-        QCOMPARE(b.companion.heldCount(), 1);
+        // An announcement that did not reach the screen is taken back, and
+        // not kept as a mark: the desktop's notification says it.
+        b.companion.withdraw(QStringLiteral("heal:4"));
+        QVERIFY(!b.companion.speaking());
+        QCOMPARE(b.companion.heldCount(), 0);
 
-        // A program that is not there, or prints something else, is a
+        // A program that is not there, or prints something else: no, and a
         // problem that is said nowhere on the bar.
         HealSource missing;
         missing.setCompanion(&b.companion);
         missing.setCommand({ QStringLiteral("tur-no-such-program-anywhere") });
-        missing.setStateFile(QString());
-        missing.refresh();
-        QTRY_VERIFY_WITH_TIMEOUT(!missing.problem().isEmpty(), 10000);
+        QSignalSpy unread(&missing, &HealSource::announced);
+        missing.announce(5);
+        QTRY_COMPARE_WITH_TIMEOUT(unread.count(), 1, 10000);
+        QCOMPARE(unread.constFirst().value(1).toString(), QStringLiteral("unread"));
+        QVERIFY(!missing.problem().isEmpty());
+        QVERIFY(!b.companion.speaking());
         QCOMPARE(missing.ingest(QStringLiteral("{\"not\": \"an array\"}")), -1);
         QCOMPARE(HealSource::defaultCommand(),
                  (QStringList { QStringLiteral("tur-diag"), QStringLiteral("heal"), QStringLiteral("notices"),

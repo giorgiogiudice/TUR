@@ -12,7 +12,8 @@
 //  - a property of another program followed (P@x's indicator's Activity,
 //    from a stand-in);
 //  - org.tur.PaxCompanion1 as the running program offers it, against the
-//    committed XML.
+//    committed XML, with the healing service's Announce: taken only when
+//    the bubble is said, refused at once when it cannot be.
 
 #include "agentsource.h"
 #include "busproperty.h"
@@ -27,6 +28,9 @@
 #include <QDBusMessage>
 #include <QDBusVariant>
 #include <QFile>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QMap>
 #include <QProcess>
 #include <QProcessEnvironment>
@@ -462,8 +466,19 @@ private Q_SLOTS:
     void the_program_offers_what_the_xml_states()
     {
         QVERIFY(scenario(QStringLiteral("ready")));
+        // What the healing service's program prints: the fixture's notices.
+        const QString printed = m_dir.path() + QStringLiteral("/printed.json");
+        {
+            QFile fixture(QStringLiteral(TUR_COMPANION_FIXTURES "/heal/notices.json"));
+            QVERIFY(fixture.open(QIODevice::ReadOnly));
+            QFile out(printed);
+            QVERIFY(out.open(QIODevice::WriteOnly));
+            out.write(QJsonDocument(QJsonDocument::fromJson(fixture.readAll()).object().value(QLatin1String("printed"))
+                                        .toArray())
+                          .toJson());
+        }
         QProcess program;
-        startProgram(program, {});
+        startProgram(program, { QStringLiteral("--heal-command"), QStringLiteral("cat ") + printed });
         QVERIFY(program.waitForStarted(15000));
         QVERIFY2(QTest::qWaitFor([&] { return owned(companionName); }, 30000),
                  "tur-pax-companion took org.tur.PaxCompanion1");
@@ -477,7 +492,7 @@ private Q_SLOTS:
         QFile file(QStringLiteral(TUR_COMPANION_XML));
         QVERIFY(file.open(QIODevice::ReadOnly));
         const QStringList stated = shapeOf(QString::fromUtf8(file.readAll())).value(companionName);
-        QCOMPARE(stated.size(), 9);
+        QCOMPARE(stated.size(), 10);
         QCOMPARE(offered, stated);
         QCOMPARE(property(QStringLiteral("InterfaceVersion")).toUInt(), 1u);
 
@@ -505,6 +520,39 @@ private Q_SLOTS:
         QCOMPARE(call(QStringLiteral("SetQuiet"), { QStringLiteral("off") }).type(), QDBusMessage::ReplyMessage);
         QTRY_COMPARE_WITH_TIMEOUT(property(QStringLiteral("Quiet")).toBool(), false, 10000);
         QCOMPARE(call(QStringLiteral("SetQuiet"), { QStringLiteral("for ever") }).type(), QDBusMessage::ErrorMessage);
+
+        // The healing service asks the character to say its notice 3 (the
+        // handshake, design section 7): taken, once the bubble is drawn.
+        const auto announce = [&](const QString &source, qulonglong id) {
+            return call(QStringLiteral("Announce"), { source, QVariant::fromValue(id) });
+        };
+        const auto taken = [&](qulonglong id) {
+            const QDBusMessage reply = announce(QStringLiteral("heal"), id);
+            return reply.type() == QDBusMessage::ReplyMessage && reply.arguments().value(0).toBool();
+        };
+        QVERIFY2(taken(3), "the notice was not taken");
+        QCOMPARE(property(QStringLiteral("State")).toString(), QStringLiteral("telling"));
+        // While it speaks, the next one is the desktop notification's.
+        QVERIFY(!taken(4));
+        // Quiet: not taken; what was being said waits as a mark.
+        QCOMPARE(call(QStringLiteral("SetQuiet"), { QStringLiteral("always") }).type(), QDBusMessage::ReplyMessage);
+        QTRY_COMPARE_WITH_TIMEOUT(property(QStringLiteral("State")).toString(), QStringLiteral("noticing"), 10000);
+        QVERIFY(!taken(4));
+        QCOMPARE(call(QStringLiteral("SetQuiet"), { QStringLiteral("off") }).type(), QDBusMessage::ReplyMessage);
+        QTRY_COMPARE_WITH_TIMEOUT(property(QStringLiteral("Quiet")).toBool(), false, 10000);
+        // Said before, or not waiting at all: not taken.
+        QVERIFY(!taken(3));
+        QVERIFY(!taken(99));
+        // An event the person is not told of is not a notice.
+        QVERIFY(!taken(7));
+        // One source only.
+        QCOMPARE(announce(QStringLiteral("tur-pax"), 1).type(), QDBusMessage::ErrorMessage);
+        // Hidden: not taken.
+        QCOMPARE(call(QStringLiteral("Hide")).type(), QDBusMessage::ReplyMessage);
+        QTRY_COMPARE_WITH_TIMEOUT(property(QStringLiteral("Shown")).toBool(), false, 10000);
+        QVERIFY(!taken(4));
+        QCOMPARE(call(QStringLiteral("Show")).type(), QDBusMessage::ReplyMessage);
+        QTRY_COMPARE_WITH_TIMEOUT(property(QStringLiteral("Shown")).toBool(), true, 10000);
         // Asking for the keyboard is answered.
         QCOMPARE(call(QStringLiteral("Attend")).type(), QDBusMessage::ReplyMessage);
 

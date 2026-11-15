@@ -207,7 +207,7 @@ void CompanionSettings::load()
     const QString presence = stored.value(QLatin1String("presence")).toString();
     m_presence = presence == QLatin1String("always") ? presence : QStringLiteral("with-pax");
     m_along = std::clamp(stored.value(QLatin1String("along")).toDouble(1.0), 0.0, 1.0);
-    m_overFullScreen = stored.value(QLatin1String("over_full_screen")).toBool(true);
+    m_overFullScreen = stored.value(QLatin1String("over_full_screen")).toBool(false);
     m_told.clear();
     const QJsonArray told = stored.value(QLatin1String("told")).toArray();
     for (const QJsonValue &id : told)

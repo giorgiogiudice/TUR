@@ -3,12 +3,11 @@
 # The launcher entry of P@x's character on the bar (docs/architecture/
 # tur-pax-companion.md, section 5): how a person brings the character back
 # after hiding it, and how they reach it with the keyboard alone. Opening
-# the entry puts the character back on the bar; its action gives it the
-# keyboard (what it is saying, or its menu; Esc gives the keyboard back).
-#
-# No key is bound here. A key for "Go to P@x on the bar" would be a fifth
-# command in desktop/kit/pax/commands.json, which is the owner's to choose
-# (tur-pax-companion.md, section 9).
+# the entry puts the character back on the bar; its action "attend" gives it
+# the keyboard (what it is saying, or its menu; Esc gives the keyboard back)
+# and is bound to P@x's fifth key, the command "attend" of
+# desktop/kit/pax/commands.json (the owner's decision of 15 November 2026);
+# desktop/kit/pax/gen_commands.py --check fails if the two disagree.
 # Installed as /usr/share/applications/org.tur.PaxCompanion.desktop.
 [Desktop Entry]
 Type=Application
@@ -28,6 +27,8 @@ Actions=attend;hide;
 [Desktop Action attend]
 Name=Go to P@x on the bar
 Exec=tur-pax-companion --attend
+X-KDE-Shortcuts=Meta+Alt+Space
+X-TUR-Pax-Command=attend
 
 [Desktop Action hide]
 Name=Hide P@x from the bar

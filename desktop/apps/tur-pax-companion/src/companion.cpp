@@ -357,6 +357,45 @@ QString Companion::offer(const QVariantMap &notice)
     return QStringLiteral("shown");
 }
 
+QString Companion::announce(const QVariantMap &notice)
+{
+    const QString kind = notice.value(QStringLiteral("kind")).toString();
+    if (!CompanionSettings::kindNames().contains(kind))
+        return QStringLiteral("invalid");
+    const QVariantMap ready = checked(notice, kind);
+    if (ready.isEmpty())
+        return QStringLiteral("invalid");
+    const QString id = ready.value(QStringLiteral("id")).toString();
+    if (!m_shown || !m_paxOn)
+        return QStringLiteral("hidden");
+    if (waitingInQueue(id) || (m_settings && m_settings->told(id)))
+        return QStringLiteral("told");
+    if (m_settings && !m_settings->kindOn(kind))
+        return QStringLiteral("off");
+    if (m_quiet)
+        return QStringLiteral("quiet");
+    if (speaking() || m_askOpen || m_attending)
+        return QStringLiteral("busy");
+    const int limit = m_settings ? m_settings->speakPerHour() : 6;
+    if (spokenLastHour(m_spoken) >= limit)
+        return QStringLiteral("limited");
+    m_spoken.append(qint64(now()));
+    while (m_spoken.size() > 120)
+        m_spoken.removeFirst();
+    show(ready);
+    return QStringLiteral("shown");
+}
+
+void Companion::withdraw(const QString &id)
+{
+    if (!speaking() || m_bubble.value(QStringLiteral("id")).toString() != id)
+        return;
+    m_bubbleTimer.stop();
+    m_bubble.clear();
+    Q_EMIT bubbleChanged();
+    update();
+}
+
 QString Companion::suggest(const QVariantMap &notice)
 {
     const QVariantMap ready = checked(notice, QStringLiteral("suggestion"));

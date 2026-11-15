@@ -110,6 +110,7 @@ private:
     bool m_hidden = false;
     QString m_presence = QStringLiteral("with-pax");
     double m_along = 1.0;
-    bool m_overFullScreen = true;
+    // Step aside by default: the owner's decision of 15 November 2026.
+    bool m_overFullScreen = false;
     QStringList m_told;
 };

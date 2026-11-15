@@ -29,9 +29,9 @@ QtObject {
     // Where the person's choices are kept; empty to keep nothing.
     property string settingsPath
     // The healing service's program and arguments; empty for tur-diag's.
+    // It is run only when the healing service asks the character to say
+    // one of its notices (org.tur.PaxCompanion1.Announce).
     property list<string> healCommand
-    // The healing service's state file; empty for the system's.
-    property string healStateFile
     // The bar's thickness where the compositor cannot be asked (no layer
     // shell): for trying the program on another platform.
     property real standInInset: 0
@@ -165,10 +165,7 @@ QtObject {
             Kit.Theme.light = true
         else if (main.variant === "dark")
             Kit.Theme.light = false
-        if (main.healStateFile.length > 0)
-            main.heal.stateFile = main.healStateFile
         main.agent.start()
-        main.heal.start()
         main.indicator.start()
         main.paxWindow.start()
         main.battery.start()

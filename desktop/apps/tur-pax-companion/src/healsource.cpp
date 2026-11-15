@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
 #include "healsource.h"
 
-#include <QFileInfo>
-#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonValue>
 
@@ -17,11 +15,6 @@ constexpr int bodyLimit = 180;
 QStringList HealSource::defaultCommand()
 {
     return { QStringLiteral("tur-diag"), QStringLiteral("heal"), QStringLiteral("notices"), QStringLiteral("--json") };
-}
-
-QString HealSource::defaultStateFile()
-{
-    return QStringLiteral("/var/log/tur/heal/state.json");
 }
 
 QString HealSource::kindOf(const QString &event)
@@ -69,24 +62,18 @@ QVariantMap HealSource::noticeFrom(const QJsonObject &heal)
 
 HealSource::HealSource(QObject *parent)
     : QObject(parent)
-    , m_stateFile(defaultStateFile())
 {
-    // The healing service writes its state in more than one step.
-    m_settle.setSingleShot(true);
-    m_settle.setInterval(700);
-    connect(&m_settle, &QTimer::timeout, this, &HealSource::refresh);
-    connect(&m_watcher, &QFileSystemWatcher::fileChanged, this, [this] {
-        watch();
-        m_settle.start();
-    });
-    connect(&m_watcher, &QFileSystemWatcher::directoryChanged, this, [this] {
-        watch();
-        m_settle.start();
-    });
     connect(&m_process, &QProcess::finished, this, &HealSource::finished);
     connect(&m_process, &QProcess::errorOccurred, this, [this](QProcess::ProcessError error) {
-        if (error == QProcess::FailedToStart)
-            setProblem(tr("The healing service's program could not be started."));
+        if (error != QProcess::FailedToStart)
+            return;
+        setProblem(tr("The healing service's program could not be started."));
+        // `finished` does not follow a program that never started.
+        const QList<qint64> ids = m_reading;
+        m_reading.clear();
+        answer(ids, nullptr);
+        if (!m_asked.isEmpty())
+            run();
     });
 }
 
@@ -106,16 +93,6 @@ void HealSource::setCommand(const QStringList &command)
     Q_EMIT commandChanged();
 }
 
-void HealSource::setStateFile(const QString &file)
-{
-    if (file == m_stateFile)
-        return;
-    m_stateFile = file;
-    Q_EMIT stateFileChanged();
-    if (m_started)
-        watch();
-}
-
 void HealSource::setProblem(const QString &problem)
 {
     if (problem == m_problem)
@@ -124,33 +101,17 @@ void HealSource::setProblem(const QString &problem)
     Q_EMIT problemChanged();
 }
 
-void HealSource::watch()
+void HealSource::announce(qint64 id)
 {
-    if (m_stateFile.isEmpty())
-        return;
-    // The file is replaced, not rewritten, so its directory is watched too;
-    // a watch on a file that was replaced has to be set again.
-    const QFileInfo info(m_stateFile);
-    if (info.exists() && !m_watcher.files().contains(m_stateFile))
-        m_watcher.addPath(m_stateFile);
-    const QString directory = info.absolutePath();
-    if (QFileInfo::exists(directory) && !m_watcher.directories().contains(directory))
-        m_watcher.addPath(directory);
+    m_asked.append(id);
+    if (m_process.state() == QProcess::NotRunning && m_reading.isEmpty())
+        run();
 }
 
-void HealSource::start()
+void HealSource::run()
 {
-    m_started = true;
-    watch();
-    refresh();
-}
-
-void HealSource::refresh()
-{
-    if (m_process.state() != QProcess::NotRunning) {
-        m_again = true;
-        return;
-    }
+    m_reading = m_asked;
+    m_asked.clear();
     const QStringList command = m_command.isEmpty() ? defaultCommand() : m_command;
     m_process.start(command.constFirst(), command.mid(1), QIODevice::ReadOnly);
 }
@@ -158,16 +119,53 @@ void HealSource::refresh()
 void HealSource::finished(int exitCode, QProcess::ExitStatus status)
 {
     const QByteArray printed = m_process.readAllStandardOutput();
+    const QList<qint64> ids = m_reading;
+    m_reading.clear();
+    const QJsonDocument document = QJsonDocument::fromJson(printed);
     if (status != QProcess::NormalExit || exitCode != 0) {
         setProblem(tr("The healing service's notices could not be read (exit status %1).").arg(exitCode));
-    } else if (ingest(QString::fromUtf8(printed)) < 0) {
+        answer(ids, nullptr);
+    } else if (!document.isArray()) {
         setProblem(tr("The healing service's notices were not in the form expected."));
+        answer(ids, nullptr);
     } else {
         setProblem(QString());
+        const QJsonArray notices = document.array();
+        answer(ids, &notices);
     }
-    if (m_again) {
-        m_again = false;
-        m_settle.start();
+    if (!m_asked.isEmpty())
+        run();
+}
+
+void HealSource::answer(const QList<qint64> &ids, const QJsonArray *notices)
+{
+    if (notices) {
+        int count = 0;
+        for (const QJsonValue &entry : *notices) {
+            if (!noticeFrom(entry.toObject()).isEmpty())
+                ++count;
+        }
+        if (count != m_count) {
+            m_count = count;
+            Q_EMIT countChanged();
+        }
+    }
+    for (const qint64 id : ids) {
+        QString result = QStringLiteral("unread");
+        if (notices) {
+            result = QStringLiteral("unknown");
+            for (const QJsonValue &entry : *notices) {
+                const QJsonObject heal = entry.toObject();
+                if (!heal.value(QLatin1String("id")).isDouble() || qint64(heal.value(QLatin1String("id")).toDouble()) != id)
+                    continue;
+                const QVariantMap notice = noticeFrom(heal);
+                if (notice.isEmpty())
+                    break;
+                result = m_companion ? m_companion->announce(notice) : QStringLiteral("hidden");
+                break;
+            }
+        }
+        Q_EMIT announced(id, result);
     }
 }
 

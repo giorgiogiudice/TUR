@@ -108,36 +108,62 @@ In short:
 | Sources | `org.tur.Agent1` through the recorded stand-in; the healing service's notices through a stand-in for `tur-diag heal notices --json`; P@x's indicator and window; the battery |
 | Suggestions | Off by default; the rules for them; one plain rule (most of today's limit used) |
 
-## For the owner
+## The owner's decisions (15 November 2026)
 
-From [tur-pax-companion.md](../architecture/tur-pax-companion.md), section 9:
+The owner answered the first draft's eight questions ("I trust your
+choices"); [tur-pax-companion.md](../architecture/tur-pax-companion.md),
+section 9, records them and what each changed:
 
-1. **The character's name**: none of its own; it is P@x.
-2. **Notices on by default**: all five kinds (a repair TUR made, a problem
+1. **No name of its own**: it is P@x.
+2. **All five kinds of notice on by default** (a repair TUR made, a problem
    waiting, P@x waiting for an answer, a task that ended or was refused, an
-   update that undid itself).
-3. **Suggestions on by default, ever**: no, recommended as a standing rule.
-4. **A seat for it** at the end of TUR's default panel (a 48 px spacer, as
-   data).
-5. **Over a full-screen window**: it stays (built as the default, as
-   asked); the recommendation is "steps aside" as the default.
-6. **With P@x off**: absent by default.
-7. **A key for "Go to P@x on the bar"** (`Meta+Alt+Space` proposed).
-8. Whether the two added properties, and the ask bar opening beside the
-   character, stand.
+   update that undid itself). As built.
+3. **Suggestions never on by default**, as a standing rule; the one rule
+   built (most of the day's spending limit used) stays off by default. As
+   built.
+4. **Over a full-screen window it steps aside** by default (it leaves with
+   the bar and comes back only while P@x controls, sees the screen or waits
+   for an answer); one switch keeps it. **Changed**: the default was "stay";
+   `CompanionSettings.overFullScreen` is now false for a new person, and the
+   unit, stage and KWin tests hold the new default.
+5. **The 48 px seat** at the end of TUR's default panel: a follow-up after
+   pull request #128 (the desktop programs in the image) merges.
+6. **With P@x off it is absent** by default; "asleep on the bar" is the
+   person's choice. As built.
+7. **Meta+Alt+Space is P@x's fifth key**, "Go to P@x on the bar".
+   **Changed**: the command `attend` in `desktop/kit/pax/commands.json`
+   (bound: true, verified: false like the other four), bound by the action
+   `attend` of the character's desktop file; `PaxCommands.qml` regenerated;
+   `gen_commands.py --check` passes with five commands and four files that
+   bind them. P@x's indicator's list of keys and P@x's window's line of keys
+   show it, so their reference pictures were taken again.
+8. **The interface additions stand** (`org.tur.PaxOverlay1.Activity`,
+   `org.tur.PaxUi1.Mode`, the ask bar beside the character).
 
 A decision record is needed (a new program of P@x's with its own interface;
 the standing rule on suggestions). Its text is section 12 of the design.
 
-## The healing service's notices
+## The healing service's notices: the handshake
 
-The character reads `tur-diag heal notices --json` and never marks a notice
-seen. Today that means two announcements of one event (the desktop's
-notification and the bubble). The handshake that makes it one, with
-`tur-diag heal notify` still the only writer of what was seen and the
-notification as the fallback whenever the character cannot speak, is
-proposed as text in section 7 of the design; nothing under
-`services/tur-diagnostics` was changed.
+Adopted by the owner with the decisions above, and built on the
+character's side (design, section 7):
+
+- `org.tur.PaxCompanion1.Announce(s source, t id) -> b taken`. "heal" is the
+  one source. The character runs `tur-diag heal notices --json` itself,
+  finds the notice by its id and answers true only once the bubble is on
+  the screen (two frames drawn since it was set, at most 3 s, else it takes
+  the bubble back and answers false). It answers false at once when it is
+  hidden, asleep, quiet, already speaking, busy with the person, has spoken
+  its number for the hour, the kind is switched off, or the notice is not
+  waiting; it keeps nothing it refused.
+- The character no longer watches the healing service's state file and no
+  longer reads its notices by itself (`--heal-state` is gone). Until
+  `tur-diag heal notify` calls `Announce`, the character says nothing of the
+  healing service's and the notification shows every notice: one
+  announcement, nothing lost.
+- `tur-diag heal notify` stays the only writer of the seen list. Its side
+  of the handshake is written as text for pull request #117's component in
+  the design, section 7; nothing under `services/` was changed.
 
 ## Licence placement
 

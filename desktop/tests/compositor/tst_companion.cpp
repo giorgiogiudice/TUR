@@ -429,9 +429,10 @@ private:
             file.write(content);
     }
 
-    // The healing service has something new: its state file changes, and
+    // The healing service repaired something and asks the character to say
+    // it (org.tur.PaxCompanion1.Announce, as `tur-diag heal notify` will):
     // the stand-in for its program prints one notice, the first of the
-    // fixture's.
+    // fixture's, and the character must answer that it took it.
     void healingServiceRepairsSomething()
     {
         QFile fixture(QStringLiteral(TUR_COMPANION_FIXTURES "/heal/notices.json"));
@@ -440,15 +441,20 @@ private:
             QJsonDocument::fromJson(fixture.readAll()).object().value(QLatin1String("printed")).toArray();
         QVERIFY(!printed.isEmpty());
         writeFile(m_work + QStringLiteral("/printed.json"), QJsonDocument(QJsonArray { printed.at(0) }).toJson());
-        writeFile(m_work + QStringLiteral("/state.json"), QByteArray("{\"changed\": ") + QByteArray::number(m_shots)
-                                                              + QByteArray("}\n"));
+        const qulonglong id = qulonglong(printed.at(0).toObject().value(QLatin1String("id")).toInteger());
+        QElapsedTimer clock;
+        clock.start();
+        const QDBusMessage reply = companion(QStringLiteral("Announce"), { QStringLiteral("heal"), QVariant::fromValue(id) });
+        QCOMPARE(reply.type(), QDBusMessage::ReplyMessage);
+        QVERIFY2(reply.arguments().value(0).toBool(), "the character took the healing service's notice");
+        report(QStringLiteral("Announce(heal, %1) was answered \"taken\" after %2 ms").arg(id).arg(clock.elapsed()));
     }
 
     QString startCompanion(bool stayOverFullScreen)
     {
         writeFile(m_work + QStringLiteral("/pax-companion.json"),
-                  stayOverFullScreen ? QByteArray("{\"version\": 1}\n")
-                                     : QByteArray("{\"version\": 1, \"over_full_screen\": false}\n"));
+                  stayOverFullScreen ? QByteArray("{\"version\": 1, \"over_full_screen\": true}\n")
+                                     : QByteArray("{\"version\": 1}\n"));
         QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
         environment.insert(QStringLiteral("QT_QPA_PLATFORM"), QStringLiteral("wayland"));
         m_companion.setProcessEnvironment(environment);
@@ -457,8 +463,7 @@ private:
                           { QStringLiteral("--standalone"), QStringLiteral("--variant"), m_variant,
                             QStringLiteral("--settings"), m_work + QStringLiteral("/pax-companion.json"),
                             QStringLiteral("--heal-command"),
-                            QStringLiteral("cat ") + m_work + QStringLiteral("/printed.json"),
-                            QStringLiteral("--heal-state"), m_work + QStringLiteral("/state.json") });
+                            QStringLiteral("cat ") + m_work + QStringLiteral("/printed.json") });
         if (!m_companion.waitForStarted(15000))
             return QStringLiteral("tur-pax-companion did not start");
         if (!QTest::qWaitFor([] { return owned(companionService); }, 30000))
@@ -490,7 +495,6 @@ private Q_SLOTS:
         QDir(m_work).removeRecursively();
         QVERIFY(QDir().mkpath(m_work));
         writeFile(m_work + QStringLiteral("/printed.json"), "[]\n");
-        writeFile(m_work + QStringLiteral("/state.json"), "{}\n");
 
         QCOMPARE(QGuiApplication::platformName(), QStringLiteral("wayland"));
         if (QGuiApplication::screens().size() != 1)
@@ -799,8 +803,9 @@ private Q_SLOTS:
 
     void over_a_full_screen_window_it_stays_or_steps_aside_as_the_person_chose()
     {
-        // The person's choice to stay (the default): visible over a
-        // full-screen window, where the bar itself is not.
+        // The person's choice to stay (the switch "Stay over full-screen
+        // windows", on for the tests above): visible over a full-screen
+        // window, where the bar itself is not.
         m_probe->showFullScreen();
         const QPointF onTheBar(100, height() - barThickness / 2.0);
         const QImage full = captureUntil([&](const QImage &image) {
@@ -817,7 +822,9 @@ private Q_SLOTS:
         QCOMPARE(m_probe->typed, QStringLiteral("f"));
         QCOMPARE(m_probe->deactivations, 0);
 
-        // Told to step aside: it leaves with the bar.
+        // The default, stepping aside (the owner's decision of 15 November
+        // 2026; the settings file says nothing about it): it leaves with the
+        // bar.
         writeFile(m_work + QStringLiteral("/printed.json"), "[]\n");
         stopCompanion();
         const QString problem = startCompanion(false);

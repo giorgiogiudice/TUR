@@ -15,6 +15,7 @@
 #include "companion.h"
 #include "companionservice.h"
 #include "companionsettings.h"
+#include "healsource.h"
 #include "surfaces.h"
 #include "turkit.h"
 
@@ -30,6 +31,7 @@
 #include <QProcess>
 #include <QQmlApplicationEngine>
 #include <QQmlError>
+#include <QQuickWindow>
 #include <QString>
 #include <QStringList>
 #include <QTextStream>
@@ -151,9 +153,6 @@ int main(int argc, char *argv[])
                                          QStringLiteral("The program that prints the healing service's notices, "
                                                         "instead of \"tur-diag heal notices --json\" (tests)."),
                                          QStringLiteral("COMMAND"));
-    const QCommandLineOption healState(QStringLiteral("heal-state"),
-                                       QStringLiteral("The healing service's state file to watch (tests)."),
-                                       QStringLiteral("FILE"));
     const QCommandLineOption barInset(QStringLiteral("bar-inset"),
                                       QStringLiteral("The bar's thickness, where the compositor cannot be asked."),
                                       QStringLiteral("PIXELS"));
@@ -163,7 +162,7 @@ int main(int argc, char *argv[])
     const QCommandLineOption check(QStringLiteral("check"),
                                    QStringLiteral("Load the character, report any QML warning, and exit. For tests."));
     parser.addOptions({ show, hide, attend, quiet, background, bus, variant, standalone, settings, healCommand,
-                        healState, barInset, noDBus, check });
+                        barInset, noDBus, check });
     parser.process(app);
 
     QTextStream err(stderr);
@@ -202,7 +201,6 @@ int main(int argc, char *argv[])
         { QStringLiteral("busAddress"), parser.value(bus) },
         { QStringLiteral("variant"), parser.value(variant) },
         { QStringLiteral("settingsPath"), settingsPath },
-        { QStringLiteral("healStateFile"), parser.value(healState) },
         { QStringLiteral("standInInset"), parser.value(barInset).toDouble() },
     };
     if (parser.isSet(healCommand))
@@ -216,6 +214,8 @@ int main(int argc, char *argv[])
     QObject *root = engine.rootObjects().constFirst();
     auto *companion = root->property("companion").value<Companion *>();
     service.setCompanion(companion);
+    service.setHeal(root->property("heal").value<HealSource *>());
+    service.setWindow(qobject_cast<QQuickWindow *>(root->property("strip").value<QObject *>()));
 
     // Started by the person, not with the session: they want it on the bar.
     if (!parser.isSet(background) && !parser.isSet(check) && companion && companion->settings())
