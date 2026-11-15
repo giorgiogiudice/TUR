@@ -438,7 +438,24 @@ def main() -> int:
             flush(view)
             assert sha_range(part[4], 0, 300 * MIB) == tur_sha, "TUR's partition changed"
             FACTS["write_to_hidden"] = outcome
-            return outcome
+            # Why the hidden ranges are not `flakey ... error_writes`: does a cache flush survive it?
+            probe = "tur-dualrun-flushprobe"
+            sh("dmsetup", "create", f"{probe}-void", "--table", "0 2048 zero")
+            try:
+                sh("dmsetup", "create", probe, "--table",
+                   f"0 2048 flakey /dev/mapper/{probe}-void 0 0 1 1 error_writes")
+                fd = os.open(f"/dev/mapper/{probe}", os.O_WRONLY)
+                try:
+                    os.fsync(fd)
+                    FACTS["flakey_error_writes_flush"] = "a flush succeeds"
+                except OSError as error:
+                    FACTS["flakey_error_writes_flush"] = f"a flush fails ({error.strerror})"
+                finally:
+                    os.close(fd)
+            finally:
+                sh("dmsetup", "remove", probe, check=False)
+                sh("dmsetup", "remove", f"{probe}-void", check=False)
+            return f"{outcome}; flakey/error_writes: {FACTS['flakey_error_writes_flush']}"
 
         @case("the kernel's lock", "a mapped partition cannot be mounted while the view exists; no second view")
         def _():
@@ -460,7 +477,13 @@ def main() -> int:
             marker = (b"TUR-DUALRUN-MARKER" + bytes(4096))[:4096]
             direct_write(view, offsets[2] + 64 * MIB, marker)
             assert read(part[2], 64 * MIB, 4096) == marker
-            return "marker written at +64 MiB of the reserved partition and read back from the real partition"
+            fd = os.open(view, os.O_WRONLY)
+            try:
+                os.fsync(fd)       # a guest flushes its disk constantly: the whole view must take a flush
+            finally:
+                os.close(fd)
+            return ("marker written at +64 MiB of the reserved partition and read back from the real partition; "
+                    "a flush of the whole view succeeds")
 
         @case("the partition table is a private copy", "a write to it does not reach the disk and is reported at detach")
         def _():

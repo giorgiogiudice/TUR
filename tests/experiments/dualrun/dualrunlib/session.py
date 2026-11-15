@@ -9,10 +9,11 @@ device with the disk's size and layout, in which
   table) are a private copy in a file ("the shadow"), so nothing the guest
   writes there reaches the real table, and a change is seen afterwards;
 - every other range (TUR's own partitions, other systems, unallocated
-  space) reads as zeros and refuses writes (`flakey ... error_writes` over
-  a `zero` device), or `zero` or `error` where that target is missing. No
-  mapping to those ranges exists, so no fault in the guest or in QEMU can
-  reach them.
+  space) is a `zero` target: reads give zeros, writes are dropped (`error`
+  where `zero` is missing). No mapping to those ranges exists, so no fault
+  in the guest or in QEMU can reach them. (`flakey ... error_writes` would
+  fail writes instead, but it also fails the device's cache flushes, which
+  makes every flush of the view fail; it is kept only as an option.)
 
 **The lock.** Device-mapper opens each mapped partition exclusively. While
 the view exists the kernel refuses to mount those partitions, and creating
@@ -186,8 +187,12 @@ def attach(disk_path: str, state_root: str, *, mode: str = "direct", hidden: str
     state.mkdir(parents=True, exist_ok=True)
     os.chmod(state, 0o711)
     if hidden == "auto":
+        # Not `flakey`: dm-flakey receives the device's cache flushes (an empty write) and,
+        # with error_writes, fails them, so every flush of the whole view fails (synthetic
+        # run 43753949520: qemu-img commit's final flush, EIO). A guest flushes constantly.
+        # `zero` gets no flushes, reads zeros and drops writes: still no mapping to the blocks.
         available = targets()
-        hidden = "flakey" if {"flakey", "zero"} <= available else ("zero" if "zero" in available else "error")
+        hidden = "zero" if "zero" in available else "error"
     segments = plan(facts, decision, hidden)
     head, tail = _shadow_bytes(disk_path, facts)
     shadow = state / "shadow.img"
