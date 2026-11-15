@@ -83,8 +83,14 @@ class Session:
         if not self.wait(lambda: os.path.exists(bus), 10):
             raise RuntimeError("the session bus did not start")
         config = os.path.join(self.runtime, "sway.conf")
+        # Xwayland is started with the compositor ("force"), not on first use:
+        # started lazily, it was a child of sway that appeared while an
+        # application was being measured, was taken for one of the
+        # application's processes and killed with it. In run 43557782687
+        # every program of shard g1 after the second Java application then
+        # found neither an X display nor a Wayland one.
         with open(config, "w", encoding="utf-8") as handle:
-            handle.write("xwayland enable\noutput HEADLESS-1 resolution 1280x800 position 0 0 bg #20303c solid_color\ndefault_border none\nfocus_follows_mouse no\n")
+            handle.write("xwayland force\noutput HEADLESS-1 resolution 1280x800 position 0 0 bg #20303c solid_color\ndefault_border none\nfocus_follows_mouse no\n")
         sway_env = dict(self.base, WLR_BACKENDS="headless", WLR_LIBINPUT_NO_DEVICES="1", WLR_RENDERER="pixman")
         self.start("sway", ["sway", "-c", config], sway_env)
         if not self.wait(lambda: glob.glob(os.path.join(self.runtime, "sway-ipc.*.sock")) and glob.glob(os.path.join(self.runtime, "wayland-*")), 30):
@@ -118,7 +124,58 @@ class Session:
             time.sleep(2)
         for name in ("IsEnabled", "ScreenReaderEnabled"):
             code, out, err = run(["gdbus", "call", "--session", "--dest", "org.a11y.Bus", "--object-path", "/org/a11y/bus", "--method", "org.freedesktop.DBus.Properties.Set", "org.a11y.Status", name, "<true>"], env=self.env())
-            self.a11y[name] = code == 0
+            self.a11y[name] = code == 0 or (err or out).strip()[:200]
+
+    def alive(self):
+        """Whether the compositor and Xwayland still answer."""
+        code, _, _ = run(["swaymsg", "-t", "get_version"], env=self.base, timeout=8)
+        if code != 0:
+            return False
+        number = (self.display or ":0").lstrip(":").split(".")[0]
+        return os.path.exists(f"/tmp/.X11-unix/X{number}")
+
+    def protected(self):
+        """The session's own processes and every process below them (Xwayland,
+        services the bus started): never counted as, or stopped with, an
+        application."""
+        roots = {process.pid for process in self.processes if process.poll() is None}
+        parents = {}
+        names = {}
+        for entry in os.listdir("/proc"):
+            if not entry.isdigit():
+                continue
+            try:
+                with open(f"/proc/{entry}/stat", encoding="ascii", errors="replace") as handle:
+                    stat = handle.read()
+                names[int(entry)] = stat[stat.index("(") + 1 : stat.rindex(")")]
+                parents[int(entry)] = int(stat[stat.rindex(")") + 2 :].split()[1])
+            except (OSError, ValueError, IndexError):
+                continue
+        keep = set()
+        for pid in parents:
+            chain, current = 0, pid
+            while current in parents and chain < 64:
+                if current in roots or names.get(current) in ("Xwayland", "dbus-daemon", "at-spi-bus-laun", "at-spi2-registr", "sway", "swaybg"):
+                    keep.add(pid)
+                    break
+                current = parents[current]
+                chain += 1
+        return keep
+
+    def restart(self):
+        self.down()
+        self.processes = []
+        self.display = None
+        for key in ("SWAYSOCK", "WAYLAND_DISPLAY"):
+            self.base.pop(key, None)
+        for path in glob.glob(os.path.join(self.runtime, "*")):
+            if os.path.isdir(path):
+                continue
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
+        self.up()
 
     def windows(self):
         """Every window sway knows: title, size, and whether it is a

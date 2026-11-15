@@ -62,7 +62,9 @@ jobs:
   corpus:
     name: Re-host and measure (${{ matrix.shard }})
     runs-on: ubuntu-24.04
-    timeout-minutes: 80
+    # The harness stops starting applications after REHOST_BUDGET_SECONDS
+    # (60 minutes, ci-run.sh); the rest is packages, builds and the upload.
+    timeout-minutes: 95
     strategy:
       fail-fast: false
       matrix:
@@ -86,7 +88,8 @@ jobs:
             ${{ runner.temp }}/rehost/cache/nuget
             ${{ runner.temp }}/rehost/cache/maven
             ${{ runner.temp }}/rehost/cache/runtimes
-          key: exp-rehost-${{ matrix.shard }}-${{ hashFiles('tests/experiments/rehost/corpus.json') }}
+            ${{ runner.temp }}/rehost/cache/builds
+          key: exp-rehost-${{ matrix.shard }}-${{ hashFiles('tests/experiments/rehost/corpus.json', 'tests/experiments/rehost/rehostlib/build.py') }}
           restore-keys: exp-rehost-${{ matrix.shard }}-
 
       - name: Let an unprivileged user in the container make user namespaces
@@ -112,7 +115,7 @@ jobs:
           SHARD: ${{ matrix.shard }}
         run: |
           sudo chown -R "$(id -u):$(id -g)" "$WORK" || true
-          rm -rf "$WORK/cache/runtimes"/*-sdk "$WORK/cache/runtimes"/*.tmp || true
+          rm -rf "$WORK/cache/runtimes"/*-sdk "$WORK/cache/runtimes"/*.tmp "$WORK/cache/builds/work" "$WORK/cache/builds/npm-cache" || true
           if [ -f "$WORK/out/results-$SHARD.md" ]; then
             head -c 60000 "$WORK/out/results-$SHARD.md" >> "$GITHUB_STEP_SUMMARY"
           else

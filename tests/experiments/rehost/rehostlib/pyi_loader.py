@@ -18,6 +18,7 @@ import importlib.abc
 import importlib.util
 import marshal
 import os
+import pathlib
 import struct
 import sys
 import types
@@ -77,6 +78,19 @@ def main():
             with open(path, "rb") as handle:
                 return handle.read()
 
+        def get_resource_reader(self, fullname):
+            # importlib.resources.files(package): the package's data files
+            # are in data/ under its own path, as PyInstaller lays them out
+            # (run 43557782687: spotDL died in pykakasi with "expected str,
+            # not OrphanPath" without a reader).
+            location = os.path.join(data_dir, *fullname.split("."))
+
+            class Reader:
+                def files(self):
+                    return pathlib.Path(location)
+
+            return Reader()
+
     # Before the path finder: a directory of data files named like a package
     # would otherwise be taken for an (empty) namespace package.
     position = next((index for index, finder in enumerate(sys.meta_path) if getattr(finder, "__name__", "") == "PathFinder"), len(sys.meta_path))
@@ -95,7 +109,10 @@ def main():
     module = types.ModuleType("__main__")
     module.__file__ = os.path.join(data_dir, script)
     sys.modules["__main__"] = module
-    sys.argv = [os.path.join(out, script)] + sys.argv[3:]
+    # The program's own name, as the frozen program would see it (Black
+    # prints it in --version; run 43557782687 showed "__main__.code").
+    program = os.environ.get("TUR_PYI_PROGRAM") or script
+    sys.argv = [os.path.join(out, program)] + sys.argv[3:]
     exec(code, module.__dict__)
 
 

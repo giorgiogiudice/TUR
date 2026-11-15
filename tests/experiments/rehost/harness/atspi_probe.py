@@ -17,8 +17,11 @@ import gi
 gi.require_version("Atspi", "2.0")
 from gi.repository import Atspi  # noqa: E402
 
-LIMIT = 6000
-BUDGET = 25.0
+# Enough to tell an exposed page from a bare frame, breadth first; with the
+# page itself on the bus (--force-renderer-accessibility) a whole tree took
+# too long for 150 measurements a run.
+LIMIT = 2500
+BUDGET = 12.0
 ACTIONABLE = {"push button", "menu item", "link", "entry", "check box", "radio button", "combo box", "page tab", "toggle button", "text", "menu", "list item", "tree item"}
 
 

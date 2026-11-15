@@ -142,7 +142,9 @@ def rehost_electron(finding, out, cache, log, spoof=None, resolve_natives=True):
 
         holder = native_payload(payload, os.path.join(out, "resources"))
         found = holder.natives()
-        resolver = natives.Resolver(holder, version, cache, log)
+        # REHOST_BUILD_NATIVES=1 (CI only): modules without a published
+        # Linux build are compiled from their npm source (rehostlib/build.py).
+        resolver = natives.Resolver(holder, version, cache, log, build=os.environ.get("REHOST_BUILD_NATIVES") == "1")
         plan["electron_abi"] = resolver.abi
         plan["natives"] = resolver.resolve_all(found)
         counts = natives.summarise(plan["natives"])
@@ -322,21 +324,24 @@ def dotnet_shared(root="/usr/lib64/dotnet"):
 
 
 def nuget_linux_assets(deps, app, cache, log, plan):
-    """Windows-specific files a win-x64 publish copied from NuGet packages:
-    fetch the same package version and take its Linux assets instead."""
+    """Platform-specific files a win-x64 or osx-x64 publish copied from NuGet
+    packages: fetch the same package version and take its Linux assets
+    instead. (macOS packages were not examined before run 43557782687; there
+    Knossos.NET, Wasabi Wallet and Sonarr from macOS died for want of the
+    Linux builds of SkiaSharp, e_sqlite3 and MonoPosixHelper.)"""
     libraries = {}
     for target in (deps.get("targets") or {}).values():
         for key, body in target.items():
             if not isinstance(body, dict) or "/" not in key:
                 continue
             assets = list((body.get("runtime") or {})) + list((body.get("native") or {})) + list((body.get("runtimeTargets") or {}))
-            if any("runtimes/win" in asset for asset in assets) or re.search(r"(?i)win32|win-x64|windows", key.split("/")[0]):
+            if any(re.search(r"runtimes/(win|osx|maccatalyst)", asset) or asset.endswith(".dylib") for asset in assets) or re.search(r"(?i)win32|win-x64|windows|macos|osx|darwin", key.split("/")[0]):
                 libraries[key] = assets
     swapped = []
     for key in sorted(libraries):
         package, version = key.split("/", 1)
         tried = [package]
-        for old, new in (("Win32", "Linux"), ("win-x64", "linux-x64"), ("Windows", "Linux")):
+        for old, new in (("Win32", "Linux"), ("win-x64", "linux-x64"), ("Windows", "Linux"), ("macOS", "Linux"), ("MacOS", "Linux"), ("OSX", "Linux"), ("osx-x64", "linux-x64"), ("osx-arm64", "linux-x64")):
             if old in package:
                 tried.append(package.replace(old, new))
         for candidate in tried[::-1]:
@@ -372,7 +377,7 @@ def nuget_linux_assets(deps, app, cache, log, plan):
             if re.match(r"(?i)^(runtimepack\.|runtime\.|System\.|Microsoft\.Win32\.|Microsoft\.Extensions\.|Microsoft\.NETCore\.|Microsoft\.AspNetCore\.)", key):
                 plan.setdefault("framework_packages", []).append(key)  # part of, or served by, the installed framework
             else:
-                plan["blockers"].append(f"NuGet package {key} has Windows-specific files and no Linux assets were found")
+                plan["blockers"].append(f"NuGet package {key} has Windows- or macOS-specific files and no Linux assets were found")
     if swapped:
         plan["steps"].append("Linux assets from NuGet: " + "; ".join(swapped[:12]))
     plan["nuget"] = {"windows_specific_packages": sorted(libraries), "swapped": swapped}
@@ -664,7 +669,8 @@ def rehost_pyinstaller(finding, out, cache, log):
     plan["extension_packages"] = sorted(wanted)
     here = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pyi_loader.py")
     plan["steps"].append(f"PYZ archive and entry script {scripts[-1]} taken out of the program; started under {python} with the experiment's loader")
-    plan.update({"ok": True, "argv": [python, "-I", here, out, scripts[-1]], "cwd": out, "kind": "cli", "pip": sorted(wanted), "python": python})
+    program = os.path.basename(finding["payload"]["carrier"])
+    plan.update({"ok": True, "argv": [python, "-I", here, out, scripts[-1]], "cwd": out, "env": {"TUR_PYI_PROGRAM": program}, "kind": "cli", "pip": sorted(wanted), "python": python})
     return plan
 
 

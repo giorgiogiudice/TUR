@@ -417,7 +417,10 @@ def detect_nwjs_dir(directory, names):
     finding = finding_base("nwjs", "windows" if windows else "linux", directory)
     kind, where = nw_payload(directory, names)
     exes = _exes(directory, names, kinds=("pe", "elf"))
-    program = next((name for _, name, _ in exes if name.lower() not in ("notification_helper.exe", "nwjc.exe", "chromedriver.exe", "payload.exe", "nwjc", "chromedriver", "chrome_crashpad_handler")), None)
+    # Helpers that sit beside the program (run 43557782687: EmuConfigurator's
+    # Linux build was started as its crash reporter, crashpad_handler).
+    helpers = ("notification_helper.exe", "nwjc.exe", "chromedriver.exe", "payload.exe", "nwjc", "chromedriver", "chrome_crashpad_handler", "crashpad_handler", "chrome-sandbox", "minidump_stackwalk", "nacl_helper", "nacl_helper_bootstrap")
+    program = next((name for _, name, _ in exes if name.lower() not in helpers), None)
     finding["payload"] = {"layout": kind, "where": where, "program": program}
     binaries = [os.path.join(directory, lower["nw.dll"])] if windows else [os.path.join(directory, "lib", "libnw.so")]
     if program:

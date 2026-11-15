@@ -38,12 +38,13 @@ def verdict(entry, key="run", truth=None):
         return "no package"
     if key in entry:
         word = entry[key].get("verdict", "?")
+        x11 = " [X11 retry]" if str(entry[key].get("display_server", "")).startswith("x11") else ""
         mine, theirs = nodes(entry, key), nodes(truth) if truth else None
         if word == "window" and mine is not None and theirs and mine < 0.5 * theirs:
-            return f"window, page incomplete ({mine} of {theirs} elements)"
+            return f"window, page incomplete ({mine} of {theirs} elements){x11}"
         if word == "no-window" and mine and mine >= 15:
-            return f"no-window (page loaded: {mine} elements)"
-        return word
+            return f"no-window (page loaded: {mine} elements){x11}"
+        return word + x11
     if key == "pretend":
         return "-"
     if entry.get("error"):

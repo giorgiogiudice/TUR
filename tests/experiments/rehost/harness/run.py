@@ -115,6 +115,27 @@ class Bench:
     # ---------------------------------------------------------------- start
 
     def measure(self, label, argv, cwd, env_extra, shots, chromium=False, kind="gui", function=None, wait=40):
+        """measure_once(), and for a Chromium application that stayed alive
+        without showing a window, once more as an X11 client of Xwayland.
+
+        In run 43557782687 seven official Linux builds (Logseq, Rocket.Chat,
+        Zettlr, balenaEtcher, Jitsi Meet, Bruno, Standard Notes) loaded their
+        page, had a frame on the accessibility bus, and never mapped a window
+        in the headless compositor: they create the window hidden and show it
+        on 'ready-to-show', which did not come there. The second attempt is
+        made for official and re-hosted builds alike, and the report says
+        which display each verdict comes from."""
+        first = self.measure_once(label, argv, cwd, env_extra, shots, chromium, kind, function, wait)
+        if not (chromium and kind == "gui" and first.get("verdict") == "no-window" and first.get("alive") and first.get("seconds_to_first_window") is None):
+            first["display_server"] = "wayland" if chromium else ("wayland or x11" if kind == "gui" else None)
+            return first
+        log(f"    {label}: no window on Wayland while alive; again as an X11 client")
+        second = self.measure_once(label + "-x11", list(argv) + ["--ozone-platform=x11"], cwd, env_extra, shots, chromium, kind, function, wait)
+        second["display_server"] = "x11 (retry: no window on Wayland)"
+        second["wayland_attempt"] = {key: first.get(key) for key in ("verdict", "pss_mb", "atspi", "pages", "error_lines", "screenshot", "devtools")}
+        return second
+
+    def measure_once(self, label, argv, cwd, env_extra, shots, chromium=False, kind="gui", function=None, wait=40):
         """Start a program in the session and record what it does."""
         home = os.path.join(self.work, "home", label)
         shutil.rmtree(home, ignore_errors=True)
@@ -133,9 +154,18 @@ class Bench:
             # Chromium's GPU process died in this container ("GPU process
             # isn't usable"), which kept several official Linux builds from
             # ever showing their window. Given to official and re-hosted
-            # builds alike.
-            argv += [f"--remote-debugging-port={self.port}", "--ozone-platform-hint=auto", "--disable-gpu"]
-            env["ELECTRON_OZONE_PLATFORM_HINT"] = "auto"
+            # builds alike. --force-renderer-accessibility: the page itself
+            # on the accessibility bus (in run 43557782687 every Chromium
+            # application showed AT-SPI its frame and nothing in it); TUR
+            # would start applications so while P@x is on. No
+            # --ozone-platform-hint: Electron 38 and later choose Wayland
+            # themselves, and Joplin refuses flags it does not know (run
+            # 43557782687: "Unknown flag: --ozone-platform-hint=auto" from
+            # the official build as from the re-hosted ones). Every flag here
+            # is on Joplin's list of accepted ones.
+            argv += [f"--remote-debugging-port={self.port}", "--disable-gpu", "--force-renderer-accessibility"]
+            env["ELECTRON_OZONE_PLATFORM_HINT"] = "auto"  # Electron 28 to 37
+            env["ACCESSIBILITY_ENABLED"] = "1"
             if not self.userns:
                 argv.append("--no-sandbox")
             result["sandbox"] = "chromium's own (user namespaces)" if self.userns else "off (--no-sandbox): no user namespaces in this container"
@@ -147,13 +177,14 @@ class Bench:
             with open(shot_log, "wb") as output:
                 process = subprocess.Popen(argv, cwd=cwd, env=env, stdout=output, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, start_new_session=True)
         except OSError as problem:
-            result.update({"started": False, "error": f"could not start: {problem}"})
+            result.update({"started": False, "error": f"could not start: {problem}", "verdict": "did-not-start"})
             return result
         result["started"] = True
         first_window = None
         page_ready = None
         windows = []
         http = None
+        last_look = 0
         while time.time() - started < wait:
             now = time.time() - started
             if kind == "gui":
@@ -178,12 +209,22 @@ class Bench:
                     if status:
                         http = {"status": status, "seconds": round(time.time() - started, 1)}
             exited = process.poll() is not None
+            if devtools and kind == "gui" and first_window is None and not exited and now >= 15 and now - last_look >= 2:
+                # A page complete and no window after 15 s: the hidden-window
+                # case measure() retries under X11; no need to wait longer.
+                last_look = now
+                for target in devtools.targets() or []:
+                    if target.get("type") == "page" and target.get("webSocketDebuggerUrl") and devtools.evaluate(target["webSocketDebuggerUrl"], "document.readyState", timeout=4) == "complete":
+                        result["page_without_window_after"] = round(now, 1)
+                        break
+                if "page_without_window_after" in result:
+                    break
             if kind == "gui":
                 settle = 8 if devtools else 14  # Java and game engines paint later than they map
                 if first_window is not None and now - first_window >= settle and (not devtools or page_ready is not None or now - first_window >= 22):
                     if not function or not function.get("http") or http is not None or now > wait - 2:
                         break
-                if exited and first_window is None and now > 4 and not (pids() - before):
+                if exited and first_window is None and now > 4 and not (pids() - before - self.session.protected()):
                     break
             else:
                 if exited or (function and function.get("http") and http is not None):
@@ -192,7 +233,10 @@ class Bench:
         result["seconds_to_first_window"] = round(first_window, 1) if first_window is not None else None
         result["seconds_to_page_ready"] = round(page_ready, 1) if page_ready is not None else None
         result["exit_code"] = process.poll()
-        mine = sorted(pids() - before)
+        # The session's own processes (Xwayland, services the bus started)
+        # are never the application's (run 43557782687).
+        protected = self.session.protected()
+        mine = sorted(pids() - before - protected)
         result["processes"] = len(mine)
         result["alive"] = bool(mine) and (process.poll() is None or len(mine) > 0)
         result["pss_mb"] = round(sum(pss_kb(pid) for pid in mine) / 1024, 1)
@@ -259,13 +303,14 @@ class Bench:
         result["profile_files"] = profile_files(home)
         # stop everything it started
         for sig in (signal.SIGTERM, signal.SIGKILL):
-            for pid in sorted(pids() - before):
+            protected = self.session.protected()
+            for pid in sorted(pids() - before - protected):
                 try:
                     os.kill(pid, sig)
                 except OSError:
                     pass
             deadline = time.time() + (6 if sig == signal.SIGTERM else 2)
-            while time.time() < deadline and (pids() - before):
+            while time.time() < deadline and (pids() - before - protected):
                 time.sleep(0.3)
         try:
             process.wait(timeout=5)
@@ -297,7 +342,8 @@ class Bench:
             return "ran" if result.get("exit_code") == 0 else "failed"
         windows = [window for window in result.get("windows") or [] if window["width"] * window["height"] > 20000]
         if not windows:
-            return "no-window"
+            # A window that came and went: the program died or closed it.
+            return "window-then-gone" if result.get("seconds_to_first_window") is not None else "no-window"
         titles = " ".join(window["title"] for window in windows) + " ".join((result.get("atspi") or {}).get("windows", []))
         if re.search(r"(?i)\berror\b|exception|crash", titles) and len(windows) == 1:
             return "error-dialog"
@@ -359,6 +405,14 @@ class Bench:
                 return {"argv": plan["argv"], "cwd": plan["cwd"]}
         if runtime == "pyinstaller":
             return {"argv": [os.path.join(directory, payload["carrier"])], "cwd": directory, "kind": "cli"}
+        if runtime.startswith("native:") and payload.get("program"):
+            # Not re-hostable from the other platforms (SourceGit is compiled
+            # ahead of time on each one), but its Linux build is started all
+            # the same, so that the table says whether it works here at all.
+            program = os.path.join(directory, payload["program"])
+            if os.path.isfile(program):
+                os.chmod(program, 0o755)
+                return {"argv": [program], "cwd": os.path.dirname(program)}
         if runtime == "love":
             plan = rehost.rehost_love(finding, os.path.join(self.work, "r", app["id"] + "-linux-official"), self.cache, log)
             if plan["ok"]:
@@ -519,6 +573,12 @@ class Bench:
         for variant in ("linux", "windows", "macos"):
             if variant not in app["packages"]:
                 continue
+            if not self.session.alive():
+                # In a dead session every later program is a false
+                # "no-window" (run 43557782687, shard g1).
+                log(f"  session lost before {app['id']}-{variant}: restarted")
+                self.environment.setdefault("session_restarts", []).append(f"{app['id']}-{variant}")
+                self.session.restart()
             started = time.time()
             try:
                 self.package(app, variant, record, shots)
@@ -550,7 +610,8 @@ class Bench:
                             cells.append((f"{variant}: " + (entry.get("error") or "; ".join((entry.get("plan") or {}).get("blockers", [])) or "not started")[:70], None))
                         continue
                     name = "official Linux build" if variant == "linux" else f"re-hosted from {variant}" + (" (pretend)" if suffix else "")
-                    cells.append((f"{name}: {data.get('verdict')}", os.path.join(shots, data["screenshot"]) if data.get("screenshot") else None))
+                    x11 = " [X11 retry]" if str(data.get("display_server", "")).startswith("x11") else ""
+                    cells.append((f"{name}: {data.get('verdict')}{x11}", os.path.join(shots, data["screenshot"]) if data.get("screenshot") else None))
             if not cells:
                 return
             width, height = 512, 320
@@ -604,7 +665,7 @@ def main():
 
 
 def options_budget():
-    return int(os.environ.get("REHOST_BUDGET_SECONDS", "2700"))
+    return int(os.environ.get("REHOST_BUDGET_SECONDS", "3600"))
 
 
 if __name__ == "__main__":

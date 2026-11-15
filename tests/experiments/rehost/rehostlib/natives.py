@@ -14,12 +14,15 @@ For every package that owns a foreign .node file, in this order:
   release-prebuild   the package publishes prebuilds as release assets
                      (prebuild-install, node-pre-gyp): the Linux asset for
                      N-API or for this Electron's ABI is fetched
-  needs-build        none of those, but the source is in the npm tarball:
-                     it would have to be compiled for this Electron
+  source-build       none of those, but the source in the npm tarball was
+                     compiled for this Electron (rehostlib/build.py; only
+                     when the resolver is asked to build, in CI)
+  needs-build        none of those, and the source in the npm tarball was
+                     not built, or did not build
   dead-end           the package cannot be identified, or is not on npm
 
-Everything fetched is the module's own published build, at the version the
-payload names. Nothing is compiled here.
+Everything fetched is the module's own published build or source, at the
+version the payload names.
 """
 
 import io
@@ -82,12 +85,13 @@ def rank(path, abi):
 
 
 class Resolver:
-    def __init__(self, payload, electron_version, cache, log=print, runtime="electron"):
+    def __init__(self, payload, electron_version, cache, log=print, runtime="electron", build=False):
         self.payload = payload
         self.version = electron_version
         self.cache = cache
         self.log = log
         self.runtime = runtime
+        self.build = build
         self.abi = fetch.electron_abi(electron_version, cache) if runtime == "electron" and electron_version else ""
         self.changed = False
 
@@ -222,6 +226,29 @@ class Resolver:
         elif any(rel in members for rel in ("binding.gyp", "Cargo.toml", "CMakeLists.txt")) or (meta or {}).get("gypfile"):
             result["status"] = "needs-build"
             result["detail"] += "no Linux prebuild published; the source is in the npm tarball" + (" (N-API)" if "napi" in str(package.get("dependencies", {})) or "node-addon-api" in str(package.get("dependencies", {})) else "")
+            if self.build and self.runtime == "electron" and self.version:
+                from . import build
+
+                files, detail = build.build(name, version, self.version, tarball, self.cache, self.log)
+                result["build"] = detail
+                if files:
+                    binary = package.get("binary") if isinstance(package.get("binary"), dict) else {}
+                    for base, data in files.items():
+                        # Where a build from source puts it (bindings,
+                        # node-gyp-build and most hand-written loaders look
+                        # there first), and over any foreign file of the same
+                        # name the payload carries.
+                        targets = [f"{directory}/build/Release/{base}"]
+                        if binary.get("module_path") and "{" not in binary["module_path"]:
+                            targets.append(os.path.normpath(f"{directory}/{binary['module_path']}/{base}"))
+                        targets += [item["path"] for item in foreign if os.path.basename(item["path"]) == base]
+                        if len(files) == 1:
+                            targets += [item["path"] for item in foreign if "/build/" in "/" + item["path"]]
+                        for target in dict.fromkeys(targets):
+                            self.put(target, data)
+                            result["applied"].append(target)
+                    result["status"] = "source-build"
+                    result["detail"] = detail
         else:
             result["status"] = "dead-end"
             result["detail"] += "no Linux prebuild and no source in the npm tarball"

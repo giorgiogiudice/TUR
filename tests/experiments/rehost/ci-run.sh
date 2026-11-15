@@ -25,7 +25,7 @@ out=${work}/out
 mkdir -p "${out}" "${work}/cache"
 
 base="python3 python3-gobject python3-pillow gobject-introspection at-spi2-core at-spi2-atk dbus-daemon dbus-tools glib2
-  libICE libSM libXext libXrender ffmpeg-free
+  libICE libSM libXext libXrender ffmpeg-free libatomic
   sway grim xorg-x11-server-Xwayland mesa-dri-drivers mesa-vulkan-drivers mesa-libgbm mesa-libGL mesa-libEGL
   bsdtar 7zip p7zip p7zip-plugins innoextract msitools squashfs-tools util-linux procps-ng findutils which file
   nss atk cups-libs gtk3 libdrm alsa-lib libXcomposite libXdamage libXrandr libXScrnSaver libxkbcommon pango
@@ -34,7 +34,15 @@ base="python3 python3-gobject python3-pillow gobject-introspection at-spi2-core 
 case "${shard}" in
     n1) extra="dotnet-runtime-8.0 aspnetcore-runtime-8.0 dotnet-runtime-9.0 aspnetcore-runtime-9.0 dotnet-runtime-10.0 aspnetcore-runtime-10.0 libicu sqlite-libs git-core" ;;
     g1) extra="java-21-openjdk java-25-openjdk java-latest-openjdk java-atk-wrapper python3.9 python3.10 python3.11 python3.12 python3.13 python3.14 python3-pip openal-soft SDL2 libglvnd-glx libglvnd-opengl" ;;
+    # Electron shards: a compiler, Node.js and npm, to build from their npm
+    # source the native modules that publish no Linux build
+    # (rehostlib/build.py; run 43557782687 counted half of them).
+    e*) extra="nodejs nodejs-npm gcc-c++ make" ;;
     *) extra="" ;;
+esac
+case "${shard}" in
+    e*) build_natives=1 ;;
+    *) build_natives=0 ;;
 esac
 echo "== packages"
 # --skip-unavailable: a package Fedora 45 does not have is a finding (it is
@@ -59,6 +67,7 @@ command -v 7z > /dev/null || { command -v 7zz > /dev/null && ln -s "$(command -v
     done
     7z i 2> /dev/null | head -n 3
     dotnet --list-runtimes 2> /dev/null
+    node --version 2> /dev/null && npm --version 2> /dev/null && g++ --version 2> /dev/null | head -n 1
     ls /usr/lib/jvm 2> /dev/null
 } > "${out}/versions-${shard}.txt" 2>&1
 grep -c "NOT INSTALLED" "${out}/versions-${shard}.txt" | sed 's/^/packages not installed: /'
@@ -104,7 +113,7 @@ fi
 
 echo "== corpus, shard ${shard}"
 status=0
-as_tur env REHOST_BUDGET_SECONDS="${REHOST_BUDGET_SECONDS:-2700}" python3 -I "${src}/harness/run.py" \
+as_tur env REHOST_BUDGET_SECONDS="${REHOST_BUDGET_SECONDS:-3600}" REHOST_BUILD_NATIVES="${build_natives}" python3 -I "${src}/harness/run.py" \
     --corpus "${src}/corpus.json" --shard "${shard}" --only "${REHOST_ONLY:-}" \
     --work "${work}/w" --cache "${work}/cache" --out "${out}" ${REHOST_NO_PRETEND:+--no-pretend} \
     2>&1 | tee "${out}/harness-${shard}.log" | grep -E '^(== |  (linux|windows|macos): |    [a-z0-9-]+: |session|Traceback|[A-Za-z]+Error)' || status=$?
