@@ -44,7 +44,7 @@ Fedora's `wine.spec` on the f45 branch:
 | Updates repository | Keeps only the newest build: 18 of the 82 pinned files were already gone from it a day later (HTTP 404), and were fetched from Koji's signed copy, which matched the pinned SHA-256 |
 
 **Decision: in the image, as Fedora's packages, pinned.** Measured in
-section 3: @SIZE_DELTA@.
+section 3: +1.92 GB uncompressed (+24 %), about 0.3 GB more to download.
 
 - *In the image, not a system extension or an on-demand install.* Running
   Windows applications is one of the three things TUR is for, and "it just
@@ -86,7 +86,7 @@ section 3: @SIZE_DELTA@.
 | Where | What |
 |---|---|
 | `image/wine/lock.py` | Reads Fedora 45's repository metadata (release + updates, never updates-testing), resolves the dependencies of the ten packages TUR wants against the base's package list (from the image's SBOM), writes `wine.lock`: file, SHA-256, size, licence, Fedora path, Koji path, why |
-| `image/wine/wine.lock` | @LOCK_COUNT@ |
+| `image/wine/wine.lock` | 83 packages, 298 881 745 bytes to download (Wine 11.21-1.fc45) |
 | `image/wine/wine.sh` | `fetch` (stage `wine`, the only step with network; Fedora's repository, its mirror redirector, then Koji; each checked) and `install` (final stage, no network: checksum and licence again, one `rpm -i --nosignature --notriggers` transaction at the build ID's date, then `wine --version`, the alternatives links, both DLL directories, and that nothing registered Wine for `.exe` files) |
 | `image/Containerfile` | Stage `wine`; the install first in the final stage |
 | `tests/image/smoke.sh` | Every package of the lock at its version; `wine --version` is 11.x; the links; both architectures' DLLs and WoW64's; the Direct3D DLLs `alternatives` manages; no i686 Wine, Mono, Gecko; no `wine`/`wine-desktop`/`wine-systemd`, binfmt entry or desktop entry for Wine; ntsync; xwininfo |
@@ -99,7 +99,28 @@ section 3: @SIZE_DELTA@.
 
 ## 3. Image size and build time
 
-@SIZE_TABLE@
+Measured by the `image` workflow (run 43755443830, commit 479ed7b, build
+20261115.g479ed7b2c141) against main's last measured image (run 43545811883,
+commit d424be7; main has changed only in TUR's own programs since):
+
+| | main (d424be7) | with Wine (479ed7b) | Change |
+|---|---|---|---|
+| Image size (podman, uncompressed) | 7 902 362 717 B | 9 824 861 744 B | **+1 922 499 027 B (+24.3 %)** |
+| What the Wine step added to the file system (`df` before and after, in the build) | | 1 929 723 904 B | |
+| of which `/usr/lib64/wine-wow64` (Wine's DLLs and libraries) | | 1 553 443 042 B | |
+| of which `/usr/share/wine` (fonts, NLS, winmd) | | 47 211 321 B | |
+| RPM packages in the image | 1 743 | 1 826 | +83 |
+| Packages to download for Wine (compressed RPMs; the image layer is of the same order) | | 298 881 745 B | |
+| Image build, first build (`Build image` step) | 532 s and 1 402 s (two main runs; the runners vary) | 1 489 s | about +1 to +15 min |
+| Image build, second build without cache (reproducibility) | 432 s and 1 296 s | 1 411 s | |
+| Reproducible (two builds, same image ID) | yes | **yes** (`2eb3a887…`) | |
+
+The 1.5 GB of Wine's DLLs is Fedora's build: its PE DLLs keep their
+debugging information (`wine-core` x86-64 is 260 MB compressed and 1 538 MB
+installed; the i686 build of the same version, one architecture, is 726 MB).
+Stripping them in TUR's image would change files rpm owns; asking Fedora is a
+follow-up. `wine --version` on the image says `wine-11.21 (Staging)`: Fedora
+builds Wine with the Wine Staging patch set.
 
 ## 4. Measured on the installed, booted system
 
