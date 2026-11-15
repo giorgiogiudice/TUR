@@ -160,6 +160,7 @@ impl Situation {
             presence: self.presence,
             session_locked: self.session_locked,
             trusted_session_proven: false,
+            approval_sheet_proven: false,
             repair_session: None,
             standing_approvals: HeldApprovals::none(),
             model_flags_consequential: false,
@@ -2013,6 +2014,7 @@ mod tests {
                 assert_eq!(context.presence, presence);
                 assert_eq!(context.session_locked, session_locked);
                 assert!(!context.trusted_session_proven);
+                assert!(!context.approval_sheet_proven);
                 assert!(context.repair_session.is_none());
                 assert!(context.standing_approvals.is_empty());
                 assert!(!context.model_flags_consequential);

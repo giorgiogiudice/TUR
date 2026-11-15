@@ -16,6 +16,9 @@
 //! the file format takes an entry away.
 
 use std::collections::BTreeSet;
+use std::fs;
+use std::os::unix::fs::MetadataExt;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -422,6 +425,75 @@ struct RawRelaxation {
     class: i64,
 }
 
+/// The directory of the system's policy store (`services/tur-pax-policy`):
+/// one directory per person, written only by root, through polkit.
+pub const POLICY_STORE_ROOT: &str = "/var/lib/tur-pax-policy";
+
+/// The person's policy in the system's policy store.
+pub fn policy_store_file(uid: u32) -> PathBuf {
+    Path::new(POLICY_STORE_ROOT)
+        .join(uid.to_string())
+        .join("policy.json")
+}
+
+/// The user this process runs as, from the owner of `/proc/self`.
+pub fn process_uid() -> Option<u32> {
+    fs::metadata("/proc/self")
+        .ok()
+        .map(|metadata| metadata.uid())
+}
+
+/// What reading a policy file found.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PolicySource {
+    /// There is no such file.
+    Absent,
+    /// The file's text.
+    Text(String),
+    /// The file is there and cannot be read.
+    Unreadable,
+}
+
+impl PolicySource {
+    /// Read a policy file.
+    pub fn read(path: &Path) -> Self {
+        match fs::read_to_string(path) {
+            Ok(text) => PolicySource::Text(text),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => PolicySource::Absent,
+            Err(_) => PolicySource::Unreadable,
+        }
+    }
+
+    fn policy(&self) -> Option<UserPolicy> {
+        match self {
+            PolicySource::Absent => None,
+            PolicySource::Text(text) => {
+                Some(UserPolicy::from_json(text).unwrap_or_else(|_| UserPolicy::fail_closed()))
+            }
+            PolicySource::Unreadable => Some(UserPolicy::fail_closed()),
+        }
+    }
+}
+
+impl Mode {
+    /// How strict the mode is, for [`UserPolicy::tightened_by`]: observe
+    /// only, then ask every action, then normal.
+    ///
+    /// Observe-only and ask-every-action are not stricter than each other
+    /// in every respect: the first refuses what changes anything, the second
+    /// asks before observing too. Observe-only is taken as the stricter: it
+    /// performs nothing that changes anything, while asking before an
+    /// observation adds a question, not a guarantee (agent-policy.md, known
+    /// limit 3).
+    const fn strictness(self) -> u8 {
+        match self {
+            Mode::Normal => 0,
+            Mode::AskEveryAction => 1,
+            Mode::ObserveOnly => 2,
+        }
+    }
+}
+
 impl UserPolicy {
     /// The policy to use when the policy file cannot be read or is invalid:
     /// observe-only.
@@ -429,6 +501,54 @@ impl UserPolicy {
         UserPolicy {
             mode: Mode::ObserveOnly,
             ..UserPolicy::default()
+        }
+    }
+
+    /// The policy in force for a person: the one in the system's policy
+    /// store (`store`), made stricter by the person's own policy file
+    /// (`own`), and never less strict.
+    ///
+    /// The store is written only by root, through polkit; the person's own
+    /// file can be written by every program of the person, P@x's process
+    /// included. So the own file can only tighten: it can choose a stricter
+    /// mode and add exclusions and sensitive applications, and its
+    /// relaxations are ignored. A file that is there and cannot be used
+    /// counts as observe-only, in either place.
+    pub fn in_force(store: &PolicySource, own: &PolicySource) -> Self {
+        let base = store.policy().unwrap_or_default();
+        match own.policy() {
+            Some(own) => base.tightened_by(&own),
+            None => base,
+        }
+    }
+
+    /// This policy, made stricter by `other` and never less strict: the
+    /// stricter mode, both lists of exclusions and of sensitive
+    /// applications, and only this policy's relaxations.
+    #[must_use]
+    pub fn tightened_by(&self, other: &UserPolicy) -> Self {
+        let mode = if other.mode.strictness() > self.mode.strictness() {
+            other.mode
+        } else {
+            self.mode
+        };
+        let union = |mine: &[String], theirs: &[String]| {
+            let mut all = mine.to_vec();
+            for entry in theirs {
+                if !all.contains(entry) {
+                    all.push(entry.clone());
+                }
+            }
+            all
+        };
+        UserPolicy {
+            mode,
+            excluded_applications: union(&self.excluded_applications, &other.excluded_applications),
+            sensitive_applications: union(
+                &self.sensitive_applications,
+                &other.sensitive_applications,
+            ),
+            relaxations: self.relaxations.clone(),
         }
     }
 
@@ -1091,6 +1211,71 @@ mod tests {
         ] {
             assert!(policy.is_excluded(application), "{application}");
         }
+    }
+
+    #[test]
+    fn the_person_s_own_file_can_only_make_the_store_s_policy_stricter() {
+        let text = |mode: &str, extra: &str| {
+            PolicySource::Text(format!(
+                r#"{{"schema_version": 1, "mode": "{mode}"{extra}}}"#
+            ))
+        };
+        let relaxed = r#", "relaxations": [{"application": "org.mozilla.firefox", "class": 2}]"#;
+        let excluded = r#", "excluded_applications": ["org.example.Bank"]"#;
+
+        // Nothing anywhere: the default.
+        assert_eq!(
+            UserPolicy::in_force(&PolicySource::Absent, &PolicySource::Absent),
+            UserPolicy::default()
+        );
+        // The own file alone: its mode and lists apply, its relaxations do not.
+        let own_only = UserPolicy::in_force(
+            &PolicySource::Absent,
+            &text("ask_every_action", &format!("{excluded}{relaxed}")),
+        );
+        assert_eq!(own_only.mode, Mode::AskEveryAction);
+        assert_eq!(own_only.excluded_applications, ["org.example.Bank"]);
+        assert!(own_only.relaxations.is_empty());
+        // The store's relaxations apply; the own file cannot loosen the mode.
+        let both = UserPolicy::in_force(
+            &text("ask_every_action", relaxed),
+            &text("normal", excluded),
+        );
+        assert_eq!(both.mode, Mode::AskEveryAction);
+        assert_eq!(both.relaxations.len(), 1);
+        assert_eq!(both.excluded_applications, ["org.example.Bank"]);
+        // Every pair of modes gives the stricter one.
+        for store in Mode::ALL {
+            for own in Mode::ALL {
+                let name = |mode: Mode| match mode {
+                    Mode::Normal => "normal",
+                    Mode::AskEveryAction => "ask_every_action",
+                    Mode::ObserveOnly => "observe_only",
+                };
+                let combined =
+                    UserPolicy::in_force(&text(name(store), ""), &text(name(own), "")).mode;
+                assert_eq!(
+                    combined.strictness(),
+                    store.strictness().max(own.strictness()),
+                    "{store:?} {own:?}"
+                );
+            }
+        }
+        // A file that cannot be used, in either place, leaves observation only.
+        for broken in [PolicySource::Unreadable, PolicySource::Text("{".to_owned())] {
+            assert_eq!(
+                UserPolicy::in_force(&broken, &PolicySource::Absent).mode,
+                Mode::ObserveOnly
+            );
+            assert_eq!(
+                UserPolicy::in_force(&text("normal", relaxed), &broken).mode,
+                Mode::ObserveOnly
+            );
+        }
+        assert_eq!(
+            policy_store_file(1000),
+            Path::new("/var/lib/tur-pax-policy/1000/policy.json")
+        );
     }
 
     #[test]

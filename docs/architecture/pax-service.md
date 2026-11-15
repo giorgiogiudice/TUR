@@ -668,7 +668,12 @@ Decisions taken where the designs were silent (the owner may reverse any):
    raising a limit and setting the key are methods any program of the person
    can call. The design's trusted-screen confirmation for loosening does not
    exist. The alternative, refusing them until it does, would leave P@x
-   unusable.
+   unusable. Since the policy store exists ([pax-policy-store.md](pax-policy-store.md)),
+   they could move there, behind an administrator's password; they grant
+   nothing above class 1, and moving them changes the P@x window (D-17), so
+   they stay here until the owner decides (issue 66). **The person's policy no
+   longer comes from this service's files alone**: it is the store's, made
+   stricter by the own file.
 2. **No standing approval through the interface**, ever, until the policy
    owner exists: an approval given over the session bus would be one any
    program in the session can give.
@@ -701,7 +706,9 @@ Decisions taken where the designs were silent (the owner may reverse any):
 7. Two sessions of one person would each set and stop the same transient
    timers.
 8. The trail and the settings file are files of the person's, not
-   append-only and not owned by another component.
+   append-only and not owned by another component. The policy is the policy
+   store's, which only root writes; the person's own policy file can only
+   tighten it.
 9. A proposal lives in the service's memory: a restart loses proposals the
    person has not confirmed.
 10. The service keeps the last 20 tasks in memory only; the trail is the

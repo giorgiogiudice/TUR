@@ -1467,8 +1467,13 @@ impl ModelList {
 pub struct Paths {
     /// The settings file.
     pub settings: PathBuf,
-    /// The user policy file. It is read if it exists.
+    /// The person's own policy file. It is read if it exists, and can only
+    /// make the policy of the store stricter.
     pub policy: PathBuf,
+    /// The person's policy in the system's policy store, which only root
+    /// writes ([`crate::policy::policy_store_file`]). `None` where the user
+    /// this process runs as cannot be read: then only the own file applies.
+    pub policy_store: Option<PathBuf>,
     /// The spending record.
     pub spending: PathBuf,
     /// The audit trail.
@@ -1525,6 +1530,7 @@ impl Paths {
         Some(Paths {
             settings: config.join("settings.json"),
             policy: config.join("policy.json"),
+            policy_store: crate::policy::process_uid().map(crate::policy::policy_store_file),
             spending: state.join("spending.json"),
             audit: state.join("audit.jsonl"),
             store,

@@ -74,7 +74,7 @@ use crate::orchestrator::{
     Assistant, AssistantOutcome, HeldAction, MEMORY_RECALL, Observer, Orchestrator, ProposalReport,
     ReportItem, SharedControl, Situation, SystemTaskClock, TaskLimits, TaskOutcome, TaskRequest,
 };
-use crate::policy::UserPolicy;
+use crate::policy::{PolicySource, UserPolicy};
 use crate::registry::{ASSISTANT_TOOLS, AssistantCall, AssistantTools, COMMAND_TOOL, ToolRegistry};
 use crate::sandbox::{Grant, GrantRules};
 use crate::scheduler::{Runner, TaskRun, TickReport, outcome_name, run_due};
@@ -1632,14 +1632,18 @@ impl Core {
         }))
     }
 
-    /// The person's policy. A file that is there and cannot be used leaves
-    /// P@x able to observe only.
+    /// The person's policy: the one in the system's policy store, made
+    /// stricter by the person's own file and never less strict
+    /// ([`UserPolicy::in_force`]). A file that is there and cannot be used
+    /// leaves P@x able to observe only.
     fn policy(&self) -> UserPolicy {
-        match fs::read_to_string(&self.parts.paths.policy) {
-            Ok(text) => UserPolicy::from_json(&text).unwrap_or_else(|_| UserPolicy::fail_closed()),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => UserPolicy::default(),
-            Err(_) => UserPolicy::fail_closed(),
-        }
+        let store = self
+            .parts
+            .paths
+            .policy_store
+            .as_deref()
+            .map_or(PolicySource::Absent, PolicySource::read);
+        UserPolicy::in_force(&store, &PolicySource::read(&self.parts.paths.policy))
     }
 
     /// Run one job to its end. This is the only place a task loop is built.

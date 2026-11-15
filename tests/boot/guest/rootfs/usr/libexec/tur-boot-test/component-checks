@@ -349,5 +349,22 @@ local_model qwen3-0.6b local-ai,two-tools 480
 local_model qwen3-4b local-ai 900
 put local_finished_uptime "$(cut -d' ' -f1 /proc/uptime)"
 
+# ---- tur-pax-policy: P@x's policy store, which only root writes (ADR-0028) ----------------
+# After every run of P@x above, so that what is written here cannot change
+# any of them, and taken away again at the end. pkexec's path is simulated
+# with sudo and PKEXEC_UID: polkit's prompt needs a person at the keyboard.
+uid="$(id -u)"
+printf '%s\n' '{"schema_version": 1, "mode": "normal", "excluded_applications": ["org.example.BootTest"]}' \
+    > "${out}/policy-store-input.json"
+run policy-store-root stat -c '%U:%G %a %n' /var/lib/tur-pax-policy
+run policy-store-person-write /bin/bash -c \
+    "/usr/bin/tur-pax-policy set-policy --root /var/lib/tur-pax-policy < '${out}/policy-store-input.json'"
+run policy-store-root-write /bin/bash -c \
+    "sudo -n env PKEXEC_UID='${uid}' /usr/bin/tur-pax-policy set-policy < '${out}/policy-store-input.json'"
+run policy-store-modes stat -c '%U:%G %a %n' "/var/lib/tur-pax-policy/${uid}" "/var/lib/tur-pax-policy/${uid}/policy.json"
+run policy-store-show /usr/bin/tur-pax-policy show --json
+run policy-store-person-touch /bin/bash -c "echo x >> '/var/lib/tur-pax-policy/${uid}/policy.json'"
+run policy-store-cleanup sudo -n rm -rf "/var/lib/tur-pax-policy/${uid}"
+
 put finished_utc "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 touch "${out}/finished"

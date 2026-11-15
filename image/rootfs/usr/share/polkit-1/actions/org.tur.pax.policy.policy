@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0 -->
+<!DOCTYPE policyconfig PUBLIC
+ "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<!--
+  The policy store of P@x (services/tur-pax-policy). tur-pax-policy starts
+  itself through pkexec to write it as root. A change that could loosen P@x
+  asks for an administrator's password every time; taking standing approvals
+  away only makes P@x stricter and asks for nothing. Neither is possible
+  from P@x's commands: their sandbox has no bus and sets no_new_privs.
+-->
+<policyconfig>
+  <vendor>TUR</vendor>
+
+  <action id="org.tur.pax.policy.change">
+    <description>Change what P@x may do</description>
+    <message>Authentication is required to change what P@x may do: its policy or the actions it may take without asking.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/tur-pax-policy</annotate>
+  </action>
+
+  <action id="org.tur.pax.policy.tighten">
+    <description>Take away actions P@x may take without asking</description>
+    <message>Take away standing approvals of P@x.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/tur-pax-policy</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">clear-approvals</annotate>
+  </action>
+</policyconfig>

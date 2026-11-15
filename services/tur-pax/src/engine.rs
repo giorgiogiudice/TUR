@@ -63,10 +63,23 @@ pub fn decide(action: &Action, context: &Context, policy: &UserPolicy, now: Time
         return Decision::refuse(class, Refusal::ObserveOnly);
     }
 
-    // 5. Without the trusted path, nothing above class 1, and no request to
-    //    authenticate, because it could not be answered safely.
-    if !context.trusted_session_proven && class >= ActionClass::Consequential {
-        return Decision::refuse(class, Refusal::TrustedPathUnavailable);
+    // 5. The two levels of confirmation (addendum section 23, item 1).
+    //    Class 3, a privileged request (it needs a repair session, opened on
+    //    the trusted screen) and an unattended class 2 action (only a
+    //    standing approval, granted on the trusted screen, could allow it)
+    //    need the proven trusted session. An attended class 2 action needs
+    //    the proven approval sheet or the trusted session. Without them,
+    //    nothing above class 1, and no request that could not be answered
+    //    safely.
+    if class >= ActionClass::Consequential {
+        let needs_the_trusted_session = class >= ActionClass::SystemCritical
+            || action.privileged_request().is_some()
+            || context.presence == Presence::Unattended;
+        let can_be_confirmed = context.trusted_session_proven
+            || (!needs_the_trusted_session && context.approval_sheet_proven);
+        if !can_be_confirmed {
+            return Decision::refuse(class, Refusal::TrustedPathUnavailable);
+        }
     }
 
     // A locked session has nobody at the screen, whatever the task says.
@@ -177,7 +190,10 @@ pub fn decide(action: &Action, context: &Context, policy: &UserPolicy, now: Time
     }
     // A relaxation covers an application the engine can identify, in a window
     // known to be the user's, and never an action the model itself flagged.
+    // It is a loosening made on the trusted screen, so the approval sheet
+    // alone does not bring it into force.
     if let Some(ui) = ui
+        && context.trusted_session_proven
         && !context.model_flags_consequential
         && context.target_window_owner == WindowOwner::User
         && !is_sensitive_target(ui, policy)
@@ -800,6 +816,7 @@ mod tests {
                                         presence,
                                         session_locked,
                                         trusted_session_proven,
+                                        approval_sheet_proven: true,
                                         repair_session: open_session(),
                                         standing_approvals: HeldApprovals::read(
                                             &TestStore(vec![StandingApproval {

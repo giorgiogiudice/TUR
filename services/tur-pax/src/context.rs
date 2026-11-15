@@ -212,6 +212,24 @@ pub struct Context {
     /// check --trusted-session-proven` sets it to answer a what-if question
     /// and performs nothing.
     pub trusted_session_proven: bool,
+    /// Whether the class 2 approval sheet exists **and has been proven**
+    /// (addendum section 23, item 1: a class 2 action is approved on the
+    /// desktop, in a sheet protected by TUR's own code; desktop task D-18).
+    ///
+    /// It is the lower of the two levels of confirmation. It lets an
+    /// attended class 2 action be asked, and nothing else: class 3, a
+    /// privileged request (which needs a repair session), an unattended
+    /// class 2 action (which only a standing approval could allow) and a
+    /// relaxation of the user policy all still need
+    /// [`Context::trusted_session_proven`], because each is a loosening that
+    /// belongs on the trusted screen.
+    ///
+    /// It is true only when the sheet exists, the window rules that keep it
+    /// out of capture and above other windows are in place, and it has
+    /// passed its tests on the image the assistant runs on. No shipped code
+    /// sets it; `tur-pax policy check --approval-sheet-proven` sets it to
+    /// answer a what-if question and performs nothing.
+    pub approval_sheet_proven: bool,
     /// The repair session, if the user opened one.
     pub repair_session: Option<RepairSession>,
     /// The standing approvals of the schedule that started the task, as the
@@ -235,6 +253,7 @@ impl Context {
             presence: Presence::Attended,
             session_locked: false,
             trusted_session_proven: false,
+            approval_sheet_proven: false,
             repair_session: None,
             standing_approvals: HeldApprovals::none(),
             model_flags_consequential: false,

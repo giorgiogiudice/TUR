@@ -32,6 +32,7 @@ branding/render.py
 !services/tur-diagnostics/
 !services/tur-pax/
 !services/tur-pax-memory/
+!services/tur-pax-policy/
 !services/tur-pax-providers/
 !services/tur-runtime/
 !services/tur-storage/

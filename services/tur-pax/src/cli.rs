@@ -165,6 +165,12 @@ pub struct CheckArgs {
     /// former name of the flag.
     #[arg(long = "trusted-session-proven", alias = "trusted-path")]
     pub trusted_session_proven: bool,
+    /// Suppose the class 2 approval sheet existed and had been proven
+    /// (addendum A section 23, item 1; desktop task D-18). It does not
+    /// exist; this asks what the engine would decide if it did, and performs
+    /// nothing. It lets an attended class 2 action be asked, nothing more.
+    #[arg(long = "approval-sheet-proven")]
+    pub approval_sheet_proven: bool,
     /// A repair session expires at this time, in seconds since the Unix epoch.
     #[arg(long, requires = "repair_session_purpose")]
     pub repair_session_until: Option<u64>,
@@ -344,6 +350,7 @@ fn evaluate(args: &CheckArgs) -> Result<(Decision, AuditRecord), Vec<Problem>> {
         },
         session_locked: args.locked,
         trusted_session_proven: args.trusted_session_proven,
+        approval_sheet_proven: args.approval_sheet_proven,
         repair_session,
         standing_approvals: HeldApprovals::none(),
         model_flags_consequential: args.model_flags_consequential,
@@ -426,6 +433,7 @@ mod tests {
             panic!("expected policy check");
         };
         assert!(!args.trusted_session_proven);
+        assert!(!args.approval_sheet_proven);
         assert!(!args.unattended);
         assert!(!args.locked);
         assert!(!args.model_flags_consequential);

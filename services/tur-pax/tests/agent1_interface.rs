@@ -230,6 +230,7 @@ fn every_way_into_the_service_ends_in_one_task_loop_that_grants_nothing() {
         // approval, and nothing reads approvals from a policy store.
         for forbidden in [
             "trusted_session_proven",
+            "approval_sheet_proven",
             "RepairSession",
             // A standing approval built or granted; the reason
             // `NoStandingApproval` of a deferred action is no such thing.
