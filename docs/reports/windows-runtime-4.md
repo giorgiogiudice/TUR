@@ -1,308 +1,151 @@
-# windows-runtime-4 — WinSCP on TUR's Windows runtime, measured
+# windows-runtime-4 — Windows applications on the installed TUR system
 
 ```text
 TUR DEVELOPMENT REPORT
 
-Task ID:          windows-runtime-4
-Subsystem:        Universal Runtime Manager (services/tur-runtime), tested
-                  through tests/windows-runtime
-Build ID:         not applicable: this task builds no image
-Source revision:  f37001f (feat/windows-runtime-winscp, pull request 121),
-                  the commit the measurements below come from. The commit
-                  that adds this report changes only the window-title
-                  pattern (see "Runs") and adds this file.
+Task ID:          windows-runtime-4 (issues #32, #98, #134: "Run on the TUR image")
+Subsystem:        OS image (image/wine), Universal Runtime Manager
+                  (services/tur-runtime), tur-apps, boot test (tests/boot)
+Build ID:         @BUILD_ID@
+Source revision:  @REVISION@ (windows-on-image, pull request 136)
 
 SUMMARY
-- What changed: WinSCP 6.7.1 is a sixth real application of the
-  windows-runtime workflow, as two packages: its Inno Setup installer and
-  its portable zip. Each is installed with `tur-runtime app install`,
-  started from its generated launcher entry, used for a real SFTP file
-  transfer through WinSCP's console program, and removed.
-- Why it changed: the owner asked whether WinSCP can be installed on TUR.
-
-FILES
-- Added: docs/reports/windows-runtime-4.md
-- Modified: tests/windows-runtime/apps.json (two entries),
-  tests/windows-runtime/apps.py (the check "winscp-sftp"),
-  .github/workflows/windows-runtime.yml (openssh-server, openssh-client and
-  putty-tools in the two jobs that run apps.json)
-- Removed: none
-
-BUILD
-- Command: cargo build --locked (workflow "windows-runtime"); no Rust
-  source changed
-- Result: pass
-- Warnings: none
-
-TESTS
-- Unit tests: none changed.
-- Integration tests: job "Install and run real applications under Wine",
-  ten installations, all four stages of each passed; job "Real
-  applications with and without case-insensitive prefixes", the same ten
-  four times each, all passed. Run 43535838684.
-- Compatibility autopilot: NOT RUN on WinSCP. Nothing failed, and the
-  autopilot is for failures.
-- Boot tests: NOT RUN. Nothing here can affect boot.
-- Hardware tests: NOT RUN. No graphics card, no real display.
-- Performance tests: NOT RUN. Times are wall-clock on a shared runner.
-- On the TUR image: NOT RUN. Wine is not in the image.
-- Real remote servers: NOT RUN. The SFTP server was OpenSSH on the
-  runner's loopback interface.
-- WinSCP's graphical file transfer, including drag and drop: NOT RUN. The
-  window was opened and closed; the transfer used the console program.
-
-DIAGNOSTICS
-- Log paths: artifact "windows-runtime-applications" of run 43535838684,
-  apps/winscp-inno/ and apps/winscp-zip/: identify.json, install.json,
-  application.json, profile.json, launcher.desktop, launch.png, launch.txt,
-  winscp-output.txt (the console program's output), winscp.log (WinSCP's
-  session log), sshd.log, uninstall.json, logs/. Artifact
-  "windows-runtime-casefold" for the four further passes.
-- Diagnostic bundle path: none
-- Relevant error IDs: none produced
-
-RECOVERY
-- Rollback procedure: revert the merge. Only the test, its data and the
-  workflow change.
-- Recovery tested: removal checked to leave nothing, for both packages, in
-  five runs each.
-
-KNOWN LIMITATIONS
-- See "What was not tested".
-
-NEXT SAFE ACTION
-- Run the same two packages on the TUR image once it carries Wine.
+- What changed: the TUR image carries Wine. Fedora 45's own packages,
+  Wine 11.20 for x86-64 in Fedora's "new WoW64" build, pinned by SHA-256
+  (image/wine/wine.lock, written by image/wine/lock.py from Fedora's
+  repository metadata), downloaded in a build stage and installed with rpm,
+  without network, first in the final stage. tur-runtime installs an
+  application's launcher entry where Plasma's launcher finds it and removes
+  it with the application. The boot test gains a boot of the installed
+  disk in which real Windows applications are installed, started, used
+  and removed in a signed-in Plasma session with SELinux enforcing.
+- Why: tur-runtime was in the image and Wine was not, so on an installed
+  TUR no Windows program ran (issue #134, the owner's definition of done).
 ```
 
-## Answer
+## 1. How Wine gets into the system, and why
 
-**Yes, on Ubuntu's Wine 9.0 inside tur-runtime's sandbox, both WinSCP
-packages install unattended, open their window, transfer files over SFTP
-and uninstall without leaving anything.** That was measured five times for
-each package, on one runner. It is not a measurement on the TUR image,
-which has no Wine yet.
-
-## Runs
-
-| Commit | Workflow | Run | Result |
-|---|---|---|---|
-| `f37001f` | windows-runtime | 43535838684 | Passed, all four jobs. Applications job (job 132264499101): ten installations, 40 of 40 stages. Case-folding job (job 132264498891): the same ten in four passes, all passed. Autopilot job: passed (it does not include WinSCP). **This report is written from this run** |
-| `f37001f` | gate | 43535838655 | Passed |
-
-The window-title pattern in `apps.json` was `Login|WinSCP` for that run,
-because the title was not known beforehand. The window it matched was
-titled exactly `Login`, so the commit that adds this report tightens it to
-`^Login$`. That commit's runs are named in the pull request.
-
-## Where this ran
-
-```text
-runner image: ubuntu24 20261111.370.1
-os: Ubuntu 24.04.5 LTS
-kernel: 7.0.0-1017-azure
-wine: wine-9.0 (Ubuntu 9.0~repack-4build3)
-bubblewrap: bubblewrap 0.9.0
-openssh: OpenSSH_9.6p1 Ubuntu-3ubuntu13.20, OpenSSL 3.0.13 30 Jan 2024
-puttygen: Release 0.81 (putty-tools 0.81-1)
-```
-
-**This is Ubuntu's Wine on a GitHub-hosted runner, not the TUR image.** No
-graphics card: an X server without a screen (Xvfb, 1280 by 800) with
-Openbox, drawn in software. No Microsoft component, redistributable
-runtime or winetricks verb was installed.
-
-## The application, its licence and where it came from
-
-Read on 14 November 2026 on WinSCP's own site.
+Facts read on 14 and 15 November 2026 from Fedora 45's x86-64 repository
+metadata (release tree, revision 1793218669; updates, revision
+1794615633), the package files themselves (all 82 downloaded and read) and
+Fedora's `wine.spec` on the f45 branch:
 
 | | |
 |---|---|
-| Version | 6.7.1, published 2026-11-11 (`https://winscp.net/eng/downloads.php`) |
-| Licence | GPL-3.0-or-later (`https://winscp.net/eng/docs/license`, and `license.txt` in the zip). The icon set is not under the GPL: it may not be reused or redistributed apart from WinSCP |
-| Installer | `WinSCP-6.7.1-Setup.exe`, 13,176,776 bytes, SHA-256 `95ea85587c30ac6dd0c4b8148e16971f7854a6eee9e68298bf007566ebbe7603` |
-| Portable | `WinSCP-6.7.1-Portable.zip`, 8,833,106 bytes, SHA-256 `e6d2f8e1249e41f3bf8638319bb9bd15a541a64720df0805cb0bebdedb5eda83`; holds `WinSCP.exe`, `WinSCP.com`, `license.txt`, `readme.txt` |
-| Hashes from | The publisher's release notes, `https://winscp.net/download/WinSCP-6.7.1-ReadMe.txt` |
-| Downloaded from | `https://downloads.sourceforge.net/project/winscp/WinSCP/6.7.1/<file>`, the project's SourceForge files |
+| Wine in Fedora 45 | 11.0-3.fc44 in the release tree; **11.20-1.fc45 in updates** (what a Fedora 45 system installs today); 11.21 in updates-testing. Fedora follows Wine's development releases |
+| How it is built | `%bcond new_wow64 1` for Fedora ≥ 43: x86-64 Wine is configured with `--enable-archs=i386,x86_64` and installs into `/usr/lib64/wine-wow64/wine/{x86_64-windows,i386-windows,x86_64-unix}`. 32-bit Windows programs run inside the 64-bit Wine through WoW64; no 32-bit Linux library is needed. The i686 `wine-core` (726 MB) still exists, for the old mode, and is not needed |
+| What new WoW64 cannot do, upstream | 16-bit Windows programs (Win16, DOS) are not supported in WoW64 mode; 32-bit OpenGL is slower (buffers mapped through 64-bit memory). Neither was measured here |
+| `wine-core` x86-64 | 260 MB to download, **1 538 MB installed** (both architectures' DLLs, 836 i386 and 758 x86-64 files) |
+| Fedora's `wine` package | A meta package. It also brings `wine-desktop` (makes Wine the program that opens `.exe`/`.msi` files), `wine-systemd` (registers Wine with binfmt_misc, so a Windows program marked executable runs when started), `samba-winbind-clients` (`ntlm_auth`), `wine-mono` and both `wine-gecko`s |
+| Wine Mono 11.3.0 | 82 MB / **326 MB installed**. GPL-2.0-or-later AND LGPL-2.1-only AND MIT AND BSD-4-Clause-UC AND MS-PL AND MPL-1.1, built by Fedora from source (no Microsoft binary) |
+| Wine Gecko 2.47.4 | 52 MB (x86-64) + 56 MB (i386) installed; MPL-1.1 OR GPL-2.0-or-later OR LGPL-2.1-or-later. Both require `wine-common`, which requires Perl (60 packages) |
+| What Wine's MinGW libraries pull in | `mingw64-*` libraries require `mingw64-filesystem`, which requires `mingw-filesystem-base`, `redhat-rpm-config`, 28 `*-srpm-macros`, `cmake-rpm-macros`, `ninja-build`, `mingw-binutils-generic` and `mingw64-crt` (143 MB of static libraries). Fedora's packaging; not avoidable without breaking the package database |
+| ntsync | Fedora's kernel builds `ntsync` as a module (`CONFIG_NTSYNC=m`); `ntsync-autoload` (7 bytes) loads it at boot. Wine 11 uses `/dev/ntsync` when it can open it |
+| Updates repository | Keeps only the newest build: 18 of the 82 pinned files were already gone from it a day later (HTTP 404), and were fetched from Koji's signed copy, which matched the pinned SHA-256 |
 
-The publisher's download page links to its own CDN with a token that
-expires, so that link cannot be pinned. The same page offers the
-project's SourceForge files as the alternative, and the test uses those.
-The workflow refuses a file whose size or SHA-256 is not the pinned one.
-Nothing is committed or redistributed.
+**Decision: in the image, as Fedora's packages, pinned.** Measured in
+section 3: @SIZE_DELTA@.
 
-## The measurements
+- *In the image, not a system extension or an on-demand install.* Running
+  Windows applications is one of the three things TUR is for, and "it just
+  works after install" includes offline. An on-demand `rpm-ostree install`
+  layers packages on the deployment (slower updates, a reboot, network at
+  first use, and bootc's model does not support it). A system extension
+  (sysext) must match the exact image version, so TUR would build and
+  publish one per release next to the image, with its own SELinux labelling
+  and signing: more machinery for the same bytes, and Windows would still
+  need a download after installation. The cost of the image route is size
+  (section 3), paid once per installation; an update that does not change
+  the lock does not change Wine's files, and the layer is first in the final
+  stage so that TUR's own changes do not rebuild it.
+- *Pinned, with `rpm`, not `dnf install` in the build.* The image build must
+  give the same bytes twice (the image workflow compares image IDs); `dnf`
+  writes its history and caches with the time in them, and would take
+  whatever the mirrors hold that hour. The lock is the same mechanism the
+  branding and font packages use, plus a second source (Koji) because the
+  updates repository drops old builds within days.
+- *11.20 from updates, not 11.0 from the release tree.* It is what a
+  Fedora 45 system has, and the base image takes Fedora's updates at every
+  re-pin; 11.0 is ten months older. When the base is re-pinned, rerun
+  `image/wine/lock.py` in the same pull request: rpm refuses a lock that no
+  longer fits the base, so a stale one stops the build rather than the boot.
+- *No `wine` meta package, no `wine-desktop`, no `wine-systemd`.* Either of
+  the last two would start a Windows program outside tur-runtime's sandbox
+  (double-click on an `.exe`, or `./setup.exe`). The smoke test checks they
+  are absent.
+- *No Mono, no Gecko* — for the owner to decide (section 7). The runtime
+  design installs no dependency for an application, Mono and Gecko named
+  (runtime-manager.md); every application measured so far runs without them.
+- *No i686 Wine.* New WoW64 runs 32-bit programs; measured below with the
+  32-bit PuTTY and with the 32-bit NSIS installers of Notepad++ and VLC.
+- *`xwininfo` added* (56 kB): tur-runtime's autopilot finds windows with it,
+  and the image did not have it.
 
-From run 43535838684, job "Install and run real applications under Wine":
+## 2. What was built
 
-| Package | Installer kind | Install | Launch | Check | Uninstall |
-|---|---|---|---|---|---|
-| WinSCP 6.7.1 | inno-setup (a 32-bit program) | pass (17.4 s, 9.4 of it creating the prefix) | pass (window after 5.1 s) | pass (2.8 s) | pass (5.8 s): its own uninstaller ran and succeeded |
-| WinSCP 6.7.1, portable | portable-zip | pass (10.2 s) | pass (window after 5.1 s) | pass (2.6 s) | pass (0.1 s): no uninstaller, the prefix was deleted |
-
-The same two packages in the case-folding job, four passes (case-folded,
-not, not, case-folded), all stages passed:
-
-| Package | Mode | Install (s) | First window (s) | Check | Uninstall (s) | Left behind |
-|---|---|---|---|---|---|---|
-| Installer | case-folded | 20.7 / 20.2 | 3.8 / 3.8 | pass / pass | 4.9 / 5.5 | 0 / 0 |
-| Installer | not case-folded | 18.2 / 17.6 | 4.1 / 3.8 | pass / pass | 5.4 / 4.9 | 0 / 0 |
-| Portable | case-folded | 10.7 / 14.6 | 3.8 / 4.1 | pass / pass | 0.1 / 0.1 | 0 / 0 |
-| Portable | not case-folded | 13.7 / 11.4 | 4.4 / 3.8 | pass / pass | 0.1 / 0.1 | 0 / 0 |
-
-What each stage required is in windows-runtime-2, "The compatibility
-table". In short:
-
-- **Install**: `tur-runtime app install <file>` alone, unattended (for
-  Inno Setup: `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-`), in the
-  sandbox. The main program had to be `WinSCP.exe`, and it was, by rule:
-  "the only program a shortcut points to ("WinSCP")" for the installer,
-  "the only program that was installed" for the zip. The installer put it
-  in `C:\Program Files (x86)\WinSCP\`.
-- **Launch**: the generated launcher entry's command, until a window of
-  class `winscp.exe` with the expected title is viewable.
-- **Check**: below.
-- **Uninstall**: `tur-runtime app uninstall`. For the installer, WinSCP's
-  own `unins000.exe` ran with exit status 0 and left no program and no
-  uninstall entry in the prefix. Then nothing of either package was left
-  under the runtime's data or state, no Wine server ran and no window
-  stayed open. Nothing appeared in the runner's home directory in the
-  places Wine or an installer would write without a sandbox.
-
-### The check: a real SFTP transfer
-
-1. **The server.** Outside the sandbox, the test started OpenSSH's `sshd`
-   as the runner's own user on 127.0.0.1, on a free port, with a throwaway
-   Ed25519 host key and a throwaway client key. It accepted public-key
-   login only and served a temporary directory. PuTTY's `puttygen`
-   converted the client key to the `.ppk` format WinSCP reads. The key was
-   in the granted directory so that the sandboxed program could read it,
-   and it was deleted afterwards. It is not in the artifact.
-2. **A control.** OpenSSH's own `sftp` client listed the directory first,
-   so that a failure afterwards would be WinSCP's.
-3. **WinSCP.** `WinSCP.com /ini=nul /nointeractiveinput /log=… /script=…`
-   ran in the sandbox through `tur-runtime launch`. The script opened
-   `sftp://runner@127.0.0.1:<port>/`, pinned the host key by its SHA-256
-   fingerprint and used the key file. It uploaded a 1,035,000-byte file
-   from the granted directory, downloaded it back under another name, and
-   downloaded a 300,000-byte file the test had made on the server.
-4. **Verified outside WinSCP.** The test computed SHA-256 on the runner.
-   The uploaded copy on the server, the copy downloaded back and the
-   server file downloaded all matched their originals. `sshd` had to log
-   two public-key logins (the control and WinSCP). It logged exactly two,
-   each followed by `Starting session: subsystem 'sftp'`.
-
-WinSCP's own output, from `apps/winscp-inno/winscp-output.txt`:
-
-```text
-Authenticating with public key "tur-test-client".
-Authenticated.
-Starting the session...
-Session started.
-Active session: [1] runner@127.0.0.1
-Z:\home\runner\work\_temp\tur-apps\run\shared\winscp-inno\upload.bin |        1010 KB | 51514.4 KB/s | binary | 100%
-uploaded.bin              |        1010 KB | 40781.6 KB/s | binary | 100%
-from-server.bin           |         292 KB | 43497.4 KB/s | binary | 100%
--rw-r--r--   1 runner   runner     1035000 Nov 14  1:54:10 2026 uploaded.bin
--rw-r--r--   1 runner   runner      300000 Nov 14  1:54:10 2026 from-server.bin
-```
-
-The portable package's output is the same, apart from the port and the
-times.
-
-**The network.** Nothing was granted for this test. tur-runtime shares the
-host's network with a prefix by default
-([runtime-manager.md](../architecture/runtime-manager.md), "The network";
-`--no-network` removes it). The check read each prefix's `metadata.json`,
-and it recorded `"network": true` for both packages. Only the loopback
-interface was used on purpose.
-
-## The screenshot
-
-`apps/winscp-inno/launch.png` and `apps/winscp-zip/launch.png` in the
-artifact "windows-runtime-applications" of run 43535838684. Both were
-looked at, and they show the same thing:
-
-- WinSCP's main window, titled "runner – WinSCP", in its Commander layout:
-  menus, toolbars, a local tab "runner – runner", a "New Tab" tab and two
-  file panels.
-- In front of it, the "Login" dialog: "New Site", the file protocol set to
-  SFTP, empty host name, user name and password fields, port 22, and the
-  Save, Advanced, Tools, Manage, Login, Close and Help buttons. Everything
-  is drawn whole and is readable.
-- The local panel shows `Z:\home\runner\` with one folder, `work`, which is
-  how the sandbox shows the home directory. What else the sandbox shows of
-  it was not examined here.
-
-Both windows have class `winscp.exe`: the dialog is 652 by 396 pixels, the
-main window 1082 by 666. Both closed when asked.
-
-**The screenshots are not committed.** WinSCP's licence page says the
-images distributed with WinSCP are not under the GPL, and may not be
-reused or redistributed apart from WinSCP. A screenshot of its window
-contains them. They stay in the run's artifact, which GitHub keeps for the
-repository's retention period.
-
-## What the runs showed
-
-1. **Both packages worked at every stage, in all five runs.** Results did
-   not change between runs, and case folding made no difference.
-2. **WinSCP opens two windows on start**: its main window and the Login
-   dialog over it. The test measured the dialog, and the window class
-   matched the generated launcher entry.
-3. **The installer is a 32-bit program, and it installs the 32-bit
-   WinSCP.** Wine's 32-bit half (`wine32:i386`) was installed in the job,
-   as it is for the other 32-bit installers. The portable zip holds the
-   same 32-bit program.
-4. **The installer made two shortcuts and installed four programs.** The
-   main program was chosen by rule, without a hint. The names in the
-   records came from the files: "WinSCP 6.7.1" from the installer,
-   "WinSCP" (version 6.7.1.0) from the zip. Both icons are the same
-   256-pixel PNG; the test kept only its digest.
-5. **`tur-runtime installer identify` counts only `.exe` members in a
-   portable zip.** It reported "1 member named like a Windows program" and
-   did not count `WinSCP.com`. The console program was still unpacked
-   beside `WinSCP.exe`, and the check used it.
-6. **Wine printed errors that did not matter here**: that it could not run
-   its menu builder (TUR switches it off on purpose, as windows-runtime-2
-   notes), and that `ntlm_auth` is missing (NTLM authentication, which
-   SFTP with keys does not use).
-
-## The compatibility autopilot
-
-NOT RUN on WinSCP. No stage failed, and the autopilot exists to find fixes
-for failures. The autopilot job in the same run passed, but WinSCP is not
-in its list of real applications.
-
-## What was not tested
-
-| Not tested | Why |
+| Where | What |
 |---|---|
-| The TUR image | Wine is not in the image. Ubuntu 24.04 with Ubuntu's Wine 9.0 |
-| A graphics card | The runner has none; everything was drawn in software |
-| Real remote servers | Only OpenSSH on the runner's own loopback interface. Not tested: other servers, the internet, SCP, FTP, FTPS, WebDAV, S3, host-key prompts, password and keyboard-interactive login, Pageant, proxies |
-| The graphical interface: drag and drop, the panels, the Login dialog used to connect | The window was opened and closed. All transfers used the console program `WinSCP.com` |
-| Drag and drop out of WinSCP into a desktop, and its shell extension | Not tried. The installer installs the extension, and nothing exercised it |
-| WinSCP's settings kept between runs | The check ran with `/ini=nul`, so no configuration was read or written |
-| Paths outside ASCII, large files, many files, resuming, synchronisation | One file of about 1 MB each way, and one of 300 kB |
-| The 64-bit "Experimental" portable package, and the MSI | Not chosen. The task's two packages were the installer and the portable zip |
+| `image/wine/lock.py` | Reads Fedora 45's repository metadata (release + updates, never updates-testing), resolves the dependencies of the ten packages TUR wants against the base's package list (from the image's SBOM), writes `wine.lock`: file, SHA-256, size, licence, Fedora path, Koji path, why |
+| `image/wine/wine.lock` | 82 packages, 298 449 246 bytes to download |
+| `image/wine/wine.sh` | `fetch` (stage `wine`, the only step with network; Fedora's repository, its mirror redirector, then Koji; each checked) and `install` (final stage, no network: checksum and licence again, one `rpm -i --nosignature --notriggers` transaction at the build ID's date, then `wine --version`, the alternatives links, both DLL directories, and that nothing registered Wine for `.exe` files) |
+| `image/Containerfile` | Stage `wine`; the install first in the final stage |
+| `tests/image/smoke.sh` | Every package of the lock at its version; `wine --version` is 11.x; the links; both architectures' DLLs and WoW64's; the Direct3D DLLs `alternatives` manages; no i686 Wine, Mono, Gecko; no `wine`/`wine-desktop`/`wine-systemd`, binfmt entry or desktop entry for Wine; ntsync; xwininfo |
+| `scripts/gen-manifest.py` | `runtime_versions.wine` from `wine-core` |
+| `tests/image/marks-allowlist.tsv` | Comments naming Fedora in the RPM macros and MinGW files Wine's dependencies bring (found by reading all 82 packages before the first build) |
+| `services/tur-runtime` | `app install` writes the launcher entry as `$XDG_DATA_HOME/applications/tur-wine-<app-id>.desktop` (record: `installed: true`); `app uninstall`, `prefix remove` and a rollback delete it and check it is gone. The executor's guard accepts in the applications directory only `tur-wine-<valid id>.desktop` |
+| `services/tur-apps` | The plan names the entry; removal checks it is gone; the test's stand-in tur-runtime installs and removes one |
+| `tests/boot/windows.py`, guest `windows-check`, two units | The Windows boot (section 4) |
+| `tests/windows-runtime/apps.py`, `autopilot.py` | `--session` (the signed-in desktop's display and directories, host screenshots, KRunner), `--real-only`; Fedora's DLL directory; 32-bit PuTTY in `apps.json` |
 
-## Catalogue
+## 3. Image size and build time
 
-No catalogue entry was added. Of the five applications already measured,
-four have one and Inno Setup does not, so the condition for adding one
-("only if the existing five have one") is not met. An entry would also
-change the application centre's recorded fixtures
-(`desktop/apps/tur-centre/fixtures/*/validate.json`). If the owner wants
-one, it would take the form of PuTTY's entry: rating `unknown`,
-`reported_by = "tur-test"`, `test_report` this file, because
-`catalogue/README.md` still says TUR has rated nothing.
+@SIZE_TABLE@
 
-## Decisions the owner may want to reverse
+## 4. Measured on the installed, booted system
 
-- **The download comes from SourceForge**, not from winscp.net's own CDN,
-  because the CDN's links expire. The digest still comes from winscp.net.
-- **The screenshots are not committed**, because of the icon-set terms. A
-  reader of this report has to open the artifact to see them.
-- **The check pins a host key and uses a key file**, as a script would.
-  The interactive path (the Login dialog, accepting a new host key) was
-  not driven.
+@BOOT_RESULTS@
+
+## 5. Application centre and launcher
+
+@CENTRE_RESULTS@
+
+## 6. Runs
+
+@RUNS@
+
+## 7. Decisions for the owner
+
+1. **Wine Mono and Gecko in the image?** +326 MB (Mono) and +108 MB plus
+   Perl (Gecko) installed; +82 MB and +108 MB to download. With them, .NET
+   Framework applications and those that embed Internet Explorer's engine
+   can start; without them they fail, and the failure is classified
+   (`dotnet-runtime-missing`). It also matters at the first launch after an
+   update that moves Wine: Wine updates the prefix then, and with Mono and
+   Gecko absent and `mscoree`/`mshtml` not disabled at launch, Wine offers
+   to download them from WineHQ (follow-up below). Recommended: ship Mono
+   (it is what makes the commonest class of small Windows tools run), not
+   Gecko; measure a .NET application first.
+2. **Updating Wine.** The lock pins 11.20. Fedora moves Wine every two
+   weeks. Recommended: refresh the lock with every base re-pin (one command;
+   rpm refuses a lock that does not fit), so Wine follows Fedora's updates
+   like the rest of the image.
+3. **ntsync is loaded at boot for everyone** (`ntsync-autoload`). Wine 11
+   uses it when it can open `/dev/ntsync`. What it did on the image is in
+   section 4.
+
+## 8. Not run
+
+- A graphics card: the guest has virtio-vga, everything drawn in software.
+- Sound heard: VLC's check writes a file; nothing was played.
+- Games, DXVK/VKD3D-Proton, Proton through `umu-run`: not run.
+- 16-bit programs (not supported by new WoW64 upstream): not tried.
+- A .NET application (no Mono in the image).
+- Real hardware, a real disk.
+- The application centre's "I have the installer file" path in the
+  graphical centre: PR #128 (the desktop programs in the image) is not
+  merged; the same route was measured through `tur-apps` on the command line.
+- WinSCP (needs an SSH server on the machine; on Ubuntu it is measured).
+
+## 9. Follow-ups
+
+@FOLLOWUPS@
