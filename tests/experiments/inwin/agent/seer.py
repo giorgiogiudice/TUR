@@ -59,6 +59,14 @@ FORM_TRUTH = {"named": [["Name", "text"], ["Subscribe", "check"], ["Small", "rad
 FILES_TRUTH = {"named": [["alpha.txt", "item"], ["beta.txt", "item"], ["gamma.txt", "item"], ["inner", "item"]]}
 
 
+def powershell_json(script, timeout=60):
+    """A read-only PowerShell expression's answer, as JSON."""
+    done = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script + " | ConvertTo-Json -Compress"],
+                          capture_output=True, text=True, timeout=timeout, errors="replace")
+    out = done.stdout.strip()
+    return json.loads(out) if out else None
+
+
 def norm(name):
     text = (name or "").replace("&", "").replace("\u2026", "...")
     text = re.sub(r"\s+", " ", text).strip().lower()
@@ -133,6 +141,8 @@ def summary(read, box):
         "kinds": dict(collections.Counter(group(e.get("role")) for e in controls)),
         "frameworks": dict(collections.Counter(e.get("framework", "") for e in shown if e.get("framework"))),
         "milliseconds": read.get("milliseconds"), "error": read.get("error"),
+        # The read as the agent would send it to TUR: one JSON line, compact.
+        "json_bytes": len(json.dumps(read.get("elements", []), separators=(",", ":")).encode("utf-8")),
     }
 
 
@@ -252,23 +262,29 @@ class Seer:
 
     def capture(self, app, label, hwnd, truth=None, microsoft=False):
         """Read a window every way, draw what each found, count and score."""
-        directory = self.raw / ("microsoft" if microsoft else "open") / app
-        directory.mkdir(parents=True, exist_ok=True)
         if win.class_of(hwnd) != "#32768":  # bringing a menu to the front would close it
-            win.SetForegroundWindow(hwnd)
+            win.bring_to_top(hwnd)
         time.sleep(0.7)
         box = win.frame_of(hwnd) or win.rect_of(hwnd)
+        shown = win.on_top(hwnd, box) or win.class_of(hwnd) == "#32768"
+        # A picture of an open-source application is kept only when the
+        # window itself is what the screen shows: on the ARM runner of run
+        # 43552339780 Windows' first-sign-in window lay over every one.
+        directory = self.raw / ("microsoft" if microsoft or not shown else "open") / app
+        directory.mkdir(parents=True, exist_ok=True)
         plain = win.grab(box)
         win.save_png(directory / f"{label}.png", plain)
         reads = self.read_all(hwnd)
-        row = {"app": app, "label": label, "microsoft": microsoft, "box": box, "title_length": len(win.text_of(hwnd)), "tiers": {}}
+        row = {"app": app, "label": label, "microsoft": microsoft, "box": box, "on_top": shown, "title_length": len(win.text_of(hwnd)), "tiers": {}}
         for tier, read in reads.items():
             picture = (plain[0], plain[1], plain[2], plain[3], bytearray(plain[4]))
             for element in visible(read, box):
                 if group(element.get("role")) in INTERACTIVE:
                     win.outline(picture, element["screen"], COLOURS[tier])
             win.save_png(directory / f"{label}-{tier}.png", picture)
-            (directory / f"{label}-{tier}.json").write_text(json.dumps(read, indent=1), encoding="utf-8")
+            reads_directory = self.raw / ("microsoft" if microsoft else "open") / app
+            reads_directory.mkdir(parents=True, exist_ok=True)
+            (reads_directory / f"{label}-{tier}.json").write_text(json.dumps(read, indent=1), encoding="utf-8")
             row["tiers"][tier] = summary(read, box)
             if truth is not None:
                 row["tiers"][tier]["score"] = score(truth, read, box)
@@ -292,6 +308,36 @@ class Seer:
                 process.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 process.kill()
+
+    @staticmethod
+    def own_picture(hwnd):
+        """The window's own picture (PrintWindow), whatever lies over it."""
+        return win.print_window(hwnd)[1]
+
+    def pictures(self, hwnd):
+        """The screen's picture of the window's box and the window's own."""
+        return win.grab(win.frame_of(hwnd) or win.rect_of(hwnd)), self.own_picture(hwnd)
+
+    def picture_changed(self, hwnd, before, share):
+        """Whether the screen or the window's own picture changed by more than `share`."""
+        screen, own = self.pictures(hwnd)
+        a, b = win.differing(before[0], screen), win.differing(before[1], own)
+        return (a > share or b > share), f"{a:.1%} of the screen's picture and {b:.1%} of the window's own picture changed"
+
+    def expand_or_open(self, identifier):
+        """Open a menu: ExpandCollapse, and when the provider refuses it
+        (COMError 0x80131509 on the ARM runner in run 43552339780) the
+        element's default action."""
+        try:
+            return self.auto.expand(identifier)
+        except Exception as error:
+            return f"expand refused ({type(error).__name__}); " + self.auto.press(identifier)
+
+    def list_item_selected(self, list_hwnd, index):
+        """A list view row's selection, asked of the control (LVM_GETITEMSTATE)."""
+        result = ctypes.c_size_t(0)
+        win.SendMessageTimeoutW(list_hwnd, 0x102C, index, ctypes.c_void_p(2), win.SMTO_ABORTIFHUNG, 2000, ctypes.byref(result))
+        return bool(result.value & 2)
 
     def checked(self, hwnd):
         """A button's check state, asked of the control itself (BM_GETCHECK)."""
@@ -387,13 +433,13 @@ class Seer:
         if menu is None:
             self.check(app, "UI Automation: open the File menu", False, "no File menu")
         else:
-            before = win.grab(win.frame_of(hwnd) or win.rect_of(hwnd))
+            before = self.pictures(hwnd)
 
             def opened():
                 popups = [w for w in win.top_windows() if w["class"] == "#32768"]
-                after = win.grab(win.frame_of(hwnd) or win.rect_of(hwnd))
-                return (bool(popups) or win.differing(before, after) > 0.01, f"{len(popups)} menu window(s); {win.differing(before, after):.1%} of the picture changed")
-            if self.act(app, "UI Automation: open the File menu", lambda: self.auto.expand(menu["id"]), opened):
+                changed, detail = self.picture_changed(hwnd, before, 0.01)
+                return (bool(popups) or changed, f"{len(popups)} menu window(s); {detail}")
+            if self.act(app, "UI Automation: open the File menu", lambda: self.expand_or_open(menu["id"]), opened):
                 popup = next((w for w in win.top_windows() if w["class"] == "#32768"), None)
                 self.capture(app, "notepad-file-menu", popup["hwnd"] if popup else hwnd, microsoft=True)
             try:
@@ -445,7 +491,13 @@ class Seer:
         read = reads["uia"]
         item = find(read, "item", "beta" + suffix)
         if item is not None:
-            self.act(app, "UI Automation: select beta.txt", lambda: self.auto.select(item["id"]), lambda: (self.auto.selected(item["id"]), "the item reports itself selected (same tier: weak)"))
+            def shell_says():
+                # Shell.Application: the folder window's own automation
+                # model, which does not go through UI Automation.
+                names = powershell_json("@((New-Object -ComObject Shell.Application).Windows() | Where-Object { $_.HWND -eq %d } | ForEach-Object { $_.Document.SelectedItems() } | ForEach-Object { $_.Name })" % hwnd)
+                names = names if isinstance(names, list) else [names] if names else []
+                return (any(str(n).lower().startswith("beta") for n in names) and len(names) == 1, f"the shell's folder window reports {len(names)} selected: {[str(n)[:20] for n in names][:3]}")
+            self.act(app, "UI Automation: select beta.txt", lambda: self.auto.select(item["id"]), shell_says)
         folder = find(read, "item", "inner")
         if folder is not None:
             self.act(app, "UI Automation: open the folder 'inner'", lambda: self.auto.press(folder["id"]),
@@ -472,14 +524,14 @@ class Seer:
         if target is None:
             self.check(app, "UI Automation: open another page", False, "no navigation item found")
         else:
-            before = win.grab(win.frame_of(hwnd) or win.rect_of(hwnd))
+            before = self.pictures(hwnd)
             names_before = {e["name"] for e in visible(read) if e.get("name")}
 
             def changed():
-                after = win.grab(win.frame_of(hwnd) or win.rect_of(hwnd))
+                ok, detail = self.picture_changed(hwnd, before, 0.03)
                 again = self.auto.read(hwnd)
                 new = {e["name"] for e in visible(again) if e.get("name")} - names_before
-                return (win.differing(before, after) > 0.03, f"{win.differing(before, after):.1%} of the picture changed; {len(new)} new names on the page")
+                return (ok, f"{detail}; {len(new)} new names on the page (same tier)")
 
             def go():
                 return self.auto.select(target["id"]) if "select" in target["actions"] else self.auto.press(target["id"])
@@ -501,6 +553,15 @@ class Seer:
             try:
                 profile = profiles / app
                 profile.mkdir(parents=True, exist_ok=True)
+                if app == "firefox":
+                    # Firefox's welcome and terms window is modal: while it
+                    # shows, the page is hidden from accessibility. These
+                    # preferences are the ones a managed installation sets.
+                    (profile / "user.js").write_text("\n".join(f'user_pref("{key}", {value});' for key, value in (
+                        ("browser.aboutwelcome.enabled", "false"), ("browser.preonboarding.enabled", "false"), ("termsofuse.bypassNotification", "true"),
+                        ("datareporting.policy.dataSubmissionPolicyBypassNotification", "true"), ("browser.startup.homepage_override.mstone", '"ignore"'),
+                        ("trailhead.firstrun.didSeeAboutWelcome", "true"), ("browser.shell.checkDefaultBrowser", "false"),
+                        ("datareporting.policy.firstRunURL", '""'))) + "\n", encoding="ascii")
                 process = self.launch([program] + [a.replace("{p}", str(profile)) for a in arguments])
                 window = win.wait_window(lambda w: "tur inwin form" in w["title"].lower(), 60)
                 if window is None:
@@ -509,7 +570,13 @@ class Seer:
                     continue
                 hwnd = window["hwnd"]
                 time.sleep(3)
-                first = score(FORM_TRUTH, self.auto.read(hwnd))
+                first_read = self.auto.read(hwnd)
+                first = score(FORM_TRUTH, first_read)
+                welcome = find(first_read, "button", "Continue")
+                if app == "firefox" and welcome is not None and first["found_with_kind"] == 0:
+                    # The welcome window came anyway: P@x would answer it as a person does.
+                    self.act(app, "UI Automation: answer Firefox's welcome window", lambda: self.auto.press(welcome["id"]),
+                             lambda: (find(self.auto.read(hwnd), "button", "Continue") is None, "the button is gone from the window"), wait=2)
                 time.sleep(2)
                 reads = self.capture(app, f"{app}-form", hwnd, FORM_TRUTH, microsoft=microsoft)
                 read = reads["uia"]
@@ -548,11 +615,10 @@ class Seer:
         if tab is None:
             self.check(app, "UI Automation: switch the ribbon to View", False, "no View tab")
         else:
-            before = win.grab(win.frame_of(hwnd) or win.rect_of(hwnd))
+            before = self.pictures(hwnd)
 
             def switched():
-                after = win.grab(win.frame_of(hwnd) or win.rect_of(hwnd))
-                return (win.differing(before, after) > 0.01, f"{win.differing(before, after):.1%} of the picture changed")
+                return self.picture_changed(hwnd, before, 0.01)
             self.act(app, "UI Automation: switch the ribbon to View", lambda: self.auto.select(tab["id"]), switched, wait=1.5)
             self.capture(app, "wordpad-view", hwnd, microsoft=True)
         document = find(read, "text")
@@ -616,7 +682,7 @@ class Seer:
         menu = find(reads["uia"], "menu", "Settings")
         if menu is not None:
             try:
-                self.auto.expand(menu["id"])
+                self.expand_or_open(menu["id"])
                 time.sleep(1)
                 popup = next((w for w in win.top_windows() if w["class"] == "#32768"), None)
                 entry = find(self.auto.read(popup["hwnd"]), "menu", None, "Preferences") if popup else None
@@ -660,9 +726,18 @@ class Seer:
         time.sleep(1.5)
         reads = self.capture(app, "sevenzip", hwnd, self.truth["sevenzip"])
         item = find(reads["uia"], "item", "beta.txt")
-        if item is not None:
+        listing = next((e for e in reads["uia"]["elements"] if e.get("class") == "SysListView32" and e.get("hwnd")), None)
+        if item is not None and listing is not None:
+            # Run 43552339780 looked for the count in the status bar's name,
+            # which UI Automation does not give; LVM_GETITEMSTATE asks the
+            # list view itself. Row 1 is beta.txt (alpha, beta, gamma).
+            rows = [e for e in reads["uia"]["elements"] if e.get("parent") == listing["id"] and e["role"] == "list item"]
+            index = next((i for i, e in enumerate(rows) if e["id"] == item["id"]), 1)
             self.act(app, "UI Automation: select beta.txt", lambda: self.auto.select(item["id"]),
-                     lambda: (find(self.auto.read(hwnd), None, None, "1 / 3") is not None or find(self.auto.read(hwnd), None, None, "1 object") is not None, "the status bar counts one selected object"))
+                     lambda: (self.list_item_selected(listing["hwnd"], index) and not self.list_item_selected(listing["hwnd"], 0 if index else 1),
+                              f"LVM_GETITEMSTATE: row {index} selected, the others not"))
+        elif item is not None:
+            self.check(app, "UI Automation: select beta.txt", False, "the list view's window handle was not found")
         self.close(hwnd, process)
         if process.poll() is None:
             process.kill()
@@ -696,9 +771,9 @@ class Seer:
             forward = find(read, "button", "OK") or find(read, "button", None, "all users") or find(read, "button", None, "Next")
             if forward is None:
                 break
-            before = win.grab(win.frame_of(hwnd) or win.rect_of(hwnd))
+            before = self.pictures(hwnd)
             self.act(app, f"UI Automation: press '{forward['name']}' in the installer", lambda f=forward: self.auto.press(f["id"]),
-                     lambda h=hwnd, b=before: ((not win.IsWindow(h)) or win.differing(b, win.grab(win.frame_of(h) or win.rect_of(h))) > 0.02, "the window closed or its page changed"), wait=2.5)
+                     lambda h=hwnd, b=before: (True, "the window closed") if not win.IsWindow(h) else self.picture_changed(h, b, 0.02), wait=2.5)
         if not scored:
             self.note("innosetup: the licence page was not reached")
         subprocess.run(["taskkill.exe", "/f", "/t", "/pid", str(process.pid)], capture_output=True)
@@ -756,6 +831,10 @@ class Seer:
             ("putty", self.scenario_putty), ("notepadpp", self.scenario_notepadpp), ("sevenzip", self.scenario_sevenzip),
             ("installer", self.scenario_installer), ("rights", self.scenario_rights),
         ]
+        try:
+            self.note(f"cleared before the run: {win.clear_desktop()}")
+        except Exception as error:
+            self.note(f"the desktop could not be cleared: {error}")
         try:
             win.save_png(self.raw / "microsoft" / "desktop-at-start.png", win.grab())
             self.note(f"screen {win.screen_box()}; top-level windows at the start: {[(w['class'], w['exe']) for w in win.top_windows()][:14]}")

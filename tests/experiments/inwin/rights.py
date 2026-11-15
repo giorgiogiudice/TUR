@@ -31,8 +31,26 @@ PUBLIC = pathlib.Path(r"C:\Users\Public\inwin")
 ACCOUNT = "inwinstd"
 
 
-def classify(row):
+# Facts that change from one moment or one account to the next: their
+# values are not compared with what the elevated run read.
+VOLATILE = {"memory", "system-drive-space", "volumes", "shrink-room (NTFS volume data)", "desktop-icons-live", "displays (live)"}
+
+
+def empty(value):
+    """An answer that says nothing: a route that answered without refusing
+    but withheld the fact (run 43552339780: Get-Partition and Get-Tpm)."""
+    if value in (None, "", [], {}):
+        return True
+    return isinstance(value, dict) and all(item is None for item in value.values())
+
+
+def classify(row, reference=None):
+    """read, read but different from the elevated run, empty, refused, absent, failed."""
     if row.get("ok"):
+        if empty(row.get("value")):
+            return "empty"
+        if reference is not None and reference.get("ok") and row["name"] not in VOLATILE and row.get("value") != reference.get("value"):
+            return "read (differs)"
         return "read"
     error = row.get("error", "")
     low = error.lower()
@@ -143,16 +161,19 @@ def main():
     for level, result in results.items():
         rights = next((row.get("value") for row in (result or {}).get("probes", []) if row["name"] == "rights"), None)
         lines.append(f"- **{level}**: {'NOT RUN (' + notes.get(level + '_start', 'no result') + ')' if result is None else json.dumps(rights)}")
-    lines += ["", "| Fact | Elevated | Restricted | Standard account | Where it lives |", "|---|---|---|---|---|"]
+    lines += ["", "*read (differs)*: answered, but not what the elevated run read (per-user facts of the standard account describe its own empty profile); "
+              "*empty*: answered without refusing, but with nothing in the answer.",
+              "", "| Fact | Elevated | Restricted | Standard account | Where it lives |", "|---|---|---|---|---|"]
     matrix = []
     for name in names:
         if name == "rights":
             continue
         cells = []
         where = ""
+        reference = next((row for row in (results["elevated"] or {}).get("probes", []) if row["name"] == name), None)
         for level in ("elevated", "restricted", "standard"):
             row = next((row for row in (results[level] or {}).get("probes", []) if row["name"] == name), None)
-            cells.append("NOT RUN" if row is None else classify(row))
+            cells.append("NOT RUN" if row is None else classify(row, None if level == "elevated" else reference))
             where = where or (row or {}).get("where", "")
         matrix.append({"fact": name, "elevated": cells[0], "restricted": cells[1], "standard": cells[2], "where": where})
         lines.append(f"| {name} | {cells[0]} | {cells[1]} | {cells[2]} | `{where}` |")

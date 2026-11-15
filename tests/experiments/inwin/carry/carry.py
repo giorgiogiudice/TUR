@@ -53,7 +53,20 @@ OFFLINE = [
     (CV + r"\Explorer\User Shell Folders", "Desktop"), (CV + r"\Explorer\User Shell Folders", "Personal"),
     (CV + r"\Explorer\Taskband", "Favorites"), (r"Keyboard Layout\Preload", "1"), (r"Control Panel\International", "LocaleName"),
     (DESKTOP_BAG, "IconLayouts"), (DESKTOP_BAG, "FFlags"),
+    (CV + r"\Explorer\FileExts\.txt\UserChoice", "ProgId"), (CV + r"\Explorer\FileExts\.html\UserChoice", "ProgId"),
+    (CV + r"\Explorer\FileExts\.pdf\UserChoice", "ProgId"), (r"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\http\UserChoice", "ProgId"),
+    (r"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https\UserChoice", "ProgId"),
+    (CV + r"\Explorer\Advanced", "HideFileExt"), (r"Control Panel\International", "sShortDate"),
+    (CV + r"\Explorer\User Shell Folders", "{374DE290-123F-4565-9164-39C4925E467B}"), (CV + r"\Explorer\User Shell Folders", "My Pictures"),
+    (CV + r"\Explorer\Wallpapers", "BackgroundHistoryPath0"), (r"Software\Microsoft\Windows\DWM", "ColorizationColor"),
 ]
+# The machine's values, compared between the running registry and a saved copy of SYSTEM and SOFTWARE.
+MACHINE = {
+    "SYSTEM": [(r"Select", "Current"), (r"{set}\Control\TimeZoneInformation", "TimeZoneKeyName"), (r"{set}\Control\TimeZoneInformation", "RealTimeIsUniversal"),
+               (r"{set}\Control\Session Manager\Power", "HiberbootEnabled"), (r"{set}\Control\ComputerName\ComputerName", "ComputerName")],
+    "SOFTWARE": [(r"Microsoft\Windows NT\CurrentVersion", "CurrentBuild"), (r"Microsoft\Windows NT\CurrentVersion", "EditionID"),
+                 (r"Microsoft\Windows NT\CurrentVersion", "DisplayVersion"), (r"Microsoft\Windows\CurrentVersion", "ProgramFilesDir")],
+}
 
 
 def sha256(path):
@@ -113,18 +126,21 @@ def shortcuts_in(directories, recurse=False):
 
 
 def windows_reads_shortcuts(files):
-    """What Windows itself says about the same .lnk files (WScript.Shell)."""
+    """What Windows itself says about the same .lnk files (WScript.Shell).
+    The list is read with ReadAllLines, not Get-Content, whose strings
+    carry extra properties that ConvertTo-Json turned into objects (run
+    43552339780)."""
     if not files:
         return {}
     listing = pathlib.Path(os.environ.get("TEMP", ".")) / "inwin-lnk-list.txt"
     listing.write_text("\n".join(files), encoding="utf-8")
     rows = powershell(
-        f"$sh = New-Object -ComObject WScript.Shell; @(Get-Content -LiteralPath '{listing}' -Encoding UTF8 | ForEach-Object "
+        f"$sh = New-Object -ComObject WScript.Shell; @([IO.File]::ReadAllLines('{listing}', [Text.Encoding]::UTF8) | ForEach-Object "
         "{ $s = $sh.CreateShortcut($_); [pscustomobject]@{ file = $_; target = $s.TargetPath; arguments = $s.Arguments; "
         "icon = $s.IconLocation; dir = $s.WorkingDirectory } })" + JSON, timeout=180)
     if isinstance(rows, dict):
         rows = [rows]
-    return {row["file"]: row for row in rows or []}
+    return {(row["file"].get("value") if isinstance(row["file"], dict) else row["file"]): row for row in rows or []}
 
 
 def same_path(a, b):
@@ -137,8 +153,8 @@ def compare_with_windows(rows):
     """How many shortcuts the offline reader reads as Windows does."""
     links = [row for row in rows if row["kind"] == "lnk" and "error" not in row]
     truth = windows_reads_shortcuts([row["file"] for row in links])
-    result = {"shortcuts": len(links), "windows_answered": len(truth), "target_same": 0, "arguments_same": 0, "working_dir_same": 0,
-              "windows_has_no_target": 0, "reader_has_no_target": 0, "different": []}
+    result = {"shortcuts": len(links), "windows_answered": len(truth), "target_same": 0, "both_without_target": 0, "arguments_same": 0, "working_dir_same": 0,
+              "icon_same": 0, "windows_has_no_target": 0, "reader_has_no_target": 0, "different": []}
     for row in links:
         theirs = truth.get(row["file"])
         if theirs is None:
@@ -147,7 +163,9 @@ def compare_with_windows(rows):
             result["windows_has_no_target"] += 1
         if "target" not in row:
             result["reader_has_no_target"] += 1
-        if same_path(row.get("target"), theirs.get("target")):
+        if not theirs.get("target") and not row.get("target"):
+            result["both_without_target"] += 1  # a shell item only, or an installer's advertised shortcut: agreement, but no path
+        elif same_path(row.get("target"), theirs.get("target")):
             result["target_same"] += 1
         elif len(result["different"]) < 12:
             result["different"].append({"file": os.path.basename(row["file"]), "reader": row.get("target", row.get("target_kind")), "windows": theirs.get("target")})
@@ -155,10 +173,44 @@ def compare_with_windows(rows):
             result["arguments_same"] += 1
         if same_path(row.get("working_dir"), theirs.get("dir")):
             result["working_dir_same"] += 1
+        # Windows says "path,index"; the reader keeps the index apart.
+        mine = os.path.expandvars(row.get("icon_location") or "") + f",{row.get('icon_index', 0)}"
+        if (theirs.get("icon") or "").lower() == mine.lower() or (not row.get("icon_location") and (theirs.get("icon") or "").startswith(",")):
+            result["icon_same"] += 1
     return result
 
 
 # ---------------------------------------------------------------- the desktop's icons
+
+
+def win_module():
+    sys.path.insert(0, str(HERE.parent / "agent"))
+    import win
+
+    return win
+
+
+def item_spacing(view):
+    """The desktop grid's cell in pixels (LVM_GETITEMSPACING, large icons)."""
+    value = user32.SendMessageW(wt.HWND(view), 0x1033, 0, 0) & 0xFFFFFFFF
+    return [value & 0xFFFF, value >> 16] if value else None
+
+
+def icon_layout_decoded():
+    """The icon layout read from its registry value alone (layout.py), set
+    beside what the desktop shows, cell by cell."""
+    from layout import compare, decode
+
+    decoded = decode(reg_bytes(HKCU, DESKTOP_BAG, "IconLayouts"))
+    result = {"items": decoded["items"], "format_version": decoded["version"], "table_at": decoded["table_at"]}
+    view = desktop_list_view()
+    if view is not None:
+        spacing = item_spacing(view)
+        live = desktop_icons_live()
+        origin = win_module().rect_of(view)
+        result["spacing"] = spacing
+        result["compared_with_the_desktop"] = compare(decoded, live["icons"], spacing, origin[:2]) if spacing else None
+    return result
 
 
 def desktop_list_view():
@@ -208,16 +260,27 @@ def layout_fingerprint():
     return found
 
 
-def taskband_order(blob):
-    """The shortcut names inside Taskband\\Favorites, in the order stored."""
+def taskband_order(blob, pinned_files):
+    """The order of the taskbar's pins as Taskband\\Favorites stores it.
+
+    The value is a list of shell item lists that nobody outside Microsoft
+    documents. Run 43552339780 read names out of it with a pattern and got
+    a stray character in front of each; here each shortcut file of the
+    pinned folder is looked for by its name (UTF-16) and the pins are
+    ordered by where their names lie in the value. Packaged applications
+    are pinned by their application identifiers."""
+    found = []
+    for name in pinned_files:
+        for needle in (name, name.rsplit(".", 1)[0]):
+            at = blob.find(needle.encode("utf-16-le"))
+            if at >= 0:
+                found.append((at, name))
+                break
     text = blob.decode("utf-16-le", "ignore")
-    names = re.findall(r"[^\x00-\x1f\\/:*?\"<>|]{1,80}\.lnk", text)
-    ordered = []
-    for name in names:
-        if name not in ordered:
-            ordered.append(name)
     packaged = sorted(set(re.findall(r"[A-Za-z0-9.]{3,60}_[a-z0-9]{13}![A-Za-z0-9.]{1,40}", text)))
-    return {"bytes": len(blob), "shortcut_names_in_order": ordered, "packaged_application_ids": packaged}
+    return {"bytes": len(blob), "pinned_files": len(pinned_files), "order": [name for _, name in sorted(found)],
+            "files_not_named_in_the_value": sorted(set(pinned_files) - {name for _, name in found}),
+            "packaged_application_ids": packaged, "first_byte": blob[:1].hex()}
 
 
 def start_layout():
@@ -494,6 +557,115 @@ def offline_copy(out_dir):
     return result
 
 
+def accounts_with_profiles():
+    """The accounts that have used this PC: the profile list (in the file
+    SOFTWARE), without the account database (SAM), which holds secrets."""
+    base = r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList"
+    rows = []
+    for sid in reg_subkeys(HKLM, base):
+        try:
+            path = reg_value(HKLM, base + "\\" + sid, "ProfileImagePath")
+        except OSError:
+            path = None
+        kind = "person" if sid.startswith("S-1-5-21-") else "service"
+        rows.append({"kind": kind, "profile": os.path.basename(path or ""), "hive_on_disk": bool(path) and os.path.exists(os.path.expandvars(path) + "\\NTUSER.DAT")})
+    return {"people": sum(1 for row in rows if row["kind"] == "person"), "services": sum(1 for row in rows if row["kind"] == "service"),
+            "people_with_a_hive_on_disk": sum(1 for row in rows if row["kind"] == "person" and row["hive_on_disk"])}
+
+
+def letters_against_volumes(letters, labels, partitions):
+    """Does each letter Windows records name a volume that is there? A
+    letter left behind by a disk that is gone must not be carried over."""
+    present = {row["letter"] for row in labels}
+    guids = {(row.get("Guid") or "").strip("{}").lower() for row in (partitions if isinstance(partitions, list) else [partitions] if partitions else [])}
+    rows = []
+    for row in letters:
+        rows.append({"letter": row["letter"], "kind": row["kind"], "volume_present": row["letter"] in present,
+                     "partition_guid_found": (row.get("partition_guid") in guids) if row["kind"] == "gpt" else None})
+    return rows
+
+
+def machine_hives():
+    """Save SYSTEM and SOFTWARE (administrators only, as Windows locks the
+    files while it runs), read each with regf.py and compare value by value
+    with the running registry. Deleted before returning."""
+    from regf import Hive
+
+    result = {}
+    temp = pathlib.Path(os.environ.get("TEMP", "."))
+    for name, rows in MACHINE.items():
+        hive_file = temp / f"inwin-{name.lower()}-copy.dat"
+        if hive_file.exists():
+            hive_file.unlink()
+        began = time.perf_counter()
+        code, _ = run_tool(["reg.exe", "save", rf"HKLM\{name}", str(hive_file), "/y"], timeout=300)
+        if code != 0:
+            result[name] = {"saved": False, "error": f"reg save exit {code}"}
+            continue
+        try:
+            row = {"saved": True, "file_mib": round(hive_file.stat().st_size / 2**20, 1), "save_ms": round((time.perf_counter() - began) * 1000)}
+            began = time.perf_counter()
+            parsed = Hive(hive_file.read_bytes())
+            current = None
+            row.update({"compared": 0, "same": 0, "different": []})
+            for path, value_name in rows:
+                if "{set}" in path:
+                    if current is None:
+                        current = parsed.value("Select", "Current")
+                    disk_path = path.replace("{set}", f"ControlSet{current:03d}")
+                    live_path = path.replace("{set}", "CurrentControlSet")
+                else:
+                    disk_path = live_path = path
+                try:
+                    live = reg_value(HKLM, rf"{name}\{live_path}", value_name)
+                except OSError:
+                    continue
+                row["compared"] += 1
+                try:
+                    saved = parsed.value(disk_path, value_name)
+                except (KeyError, ValueError, struct.error) as error:
+                    saved = type(error).__name__
+                if saved == live:
+                    row["same"] += 1
+                else:
+                    row["different"].append(f"{disk_path}\\{value_name}")
+            if name == "SYSTEM":
+                with winreg.OpenKey(HKLM, r"SYSTEM\MountedDevices") as key:
+                    live_letters = {}
+                    index = 0
+                    while True:
+                        try:
+                            value_name, value, _ = winreg.EnumValue(key, index)
+                        except OSError:
+                            break
+                        index += 1
+                        if value_name.startswith("\\DosDevices\\"):
+                            live_letters[value_name] = bytes(value)
+                saved_letters = {key: value for key, (_, value) in parsed.values("MountedDevices").items() if key.startswith("\\DosDevices\\")}
+                row["drive_letters"] = {"live": len(live_letters), "in_the_file": len(saved_letters),
+                                        "same_bytes": sum(1 for key, value in live_letters.items() if saved_letters.get(key) == value)}
+            if name == "SOFTWARE":
+                base = r"Microsoft\Windows NT\CurrentVersion\ProfileList"
+                live_profiles = set(reg_subkeys(HKLM, "SOFTWARE\\" + base))
+                saved_profiles = set(parsed.subkeys(base))
+                uninstall = r"Microsoft\Windows\CurrentVersion\Uninstall"
+                row["profiles"] = {"live": len(live_profiles), "in_the_file": len(saved_profiles), "same": len(live_profiles & saved_profiles)}
+                row["uninstall_entries"] = {"live": len(reg_subkeys(HKLM, "SOFTWARE\\" + uninstall)), "in_the_file": len(parsed.subkeys(uninstall))}
+            row["read_ms"] = round((time.perf_counter() - began) * 1000)
+            result[name] = row
+        except Exception as error:
+            result[name] = {"saved": True, "error": f"{type(error).__name__}: {str(error)[:200]}"}
+        finally:
+            for leftover in temp.glob(hive_file.name + "*"):
+                try:
+                    leftover.unlink()
+                except OSError:
+                    pass
+    if not any(row.get("saved") for row in result.values()):
+        raise PermissionError("reg save of a machine hive needs administrator rights (the backup privilege): " + json.dumps(result)[:160])
+    return result
+
+
 # ---------------------------------------------------------------- the fixture
 
 
@@ -521,6 +693,14 @@ def fixture(directory):
         winreg.SetValueEx(key, "TileWallpaper", 0, winreg.REG_SZ, "0")
     notes["wallpaper_set"] = bool(user32.SystemParametersInfoW(20, 0, ctypes.c_wchar_p(str(wallpaper)), 3))
     notes["wallpaper"] = file_facts(wallpaper)
+    # Run 43552339780 read style 10 on Windows 11 after 6 was written: does setting the wallpaper rewrite it?
+    notes["style_after_setting"] = reg_value(HKCU, r"Control Panel\Desktop", "WallpaperStyle")
+    notes["cleared"] = win_module().clear_desktop()
+    tray = next((w for w in win_module().top_windows() if w["class"] == "Shell_TrayWnd"), None)
+    if tray:
+        win_module().SendMessageTimeoutW(tray["hwnd"], 0x0111, 419, None, 2, 5000, None)  # the taskbar's "minimise all"
+        notes["cleared"].append("minimised every window (the taskbar's own command)")
+        time.sleep(1.5)
     desktop = pathlib.Path(desktop_dirs()[0])
     desktop.mkdir(parents=True, exist_ok=True)
     windir = os.environ.get("SystemRoot", r"C:\Windows")
@@ -567,6 +747,27 @@ def fixture(directory):
             refresh()  # does Explorer write the layout down when the desktop is refreshed?
             notes["icons_after_refresh"] = desktop_icons_live()
             notes["layout_after_refresh"] = layout_fingerprint()
+            # Run 43552339780: positions set by LVM_SETITEMPOSITION did not
+            # survive a refresh; Explorer keeps its own record. So the icon
+            # is now dragged with the real pointer, as a person moves it.
+            spacing = item_spacing(view)
+            notes["spacing"] = spacing
+            icon = next((i for i in notes["icons_after_refresh"]["icons"] if i["name"].startswith("TUR Test Notepad")), None)
+            if icon and icon.get("screen") and spacing:
+                x, y, w, h = icon["screen"]
+                start = (x + w // 2, y + min(h // 3, 24))
+                end = (start[0] + 5 * spacing[0], start[1] + 3 * spacing[1])
+                found = win_module().WindowFromPoint(wt.POINT(*start))
+                notes["drag"] = {"from": list(start), "to": list(end), "desktop_under_the_pointer": bool(found) and int(found) == int(view)}
+                win_module().drag(start, end)
+                time.sleep(1)
+                notes["icons_after_drag"] = desktop_icons_live()
+                notes["layout_after_drag"] = layout_fingerprint()
+                refresh()
+                notes["icons_after_drag_and_refresh"] = desktop_icons_live()
+                notes["layout_after_drag_and_refresh"] = layout_fingerprint()
+                moved = next((i for i in notes["icons_after_drag_and_refresh"]["icons"] if i["name"].startswith("TUR Test Notepad")), None)
+                notes["drag"]["kept_after_refresh"] = bool(moved and moved.get("screen") and moved["screen"][:2] != icon["screen"][:2])
     except Exception as error:  # the fixture's limits are a finding
         notes["desktop_icons_error"] = f"{type(error).__name__}: {str(error)[:300]}"
     (directory / "fixture.json").write_text(json.dumps(notes, indent=1), encoding="utf-8")
@@ -613,11 +814,13 @@ def read_all(out):
     run("desktop-shortcuts-as-windows-reads-them", lambda: compare_with_windows(desktop or []), "WScript.Shell on the same files")
     run("desktop-icons-live", desktop_icons_live, "the desktop's list view, through UI Automation")
     run("desktop-icon-layout", lambda: reg_values(HKCU, DESKTOP_BAG), rf"HKCU\{DESKTOP_BAG}: IconLayouts, ItemPos<width>x<height>x<dpi>(<n>), FFlags, IconSize")
+    run("desktop-icon-layout (decoded)", icon_layout_decoded, rf"HKCU\{DESKTOP_BAG}: IconLayouts, decoded by layout.py and set beside the desktop's own positions")
     run("desktop-system-icons", lambda: reg_values(HKCU, CV + r"\Explorer\HideDesktopIcons\NewStartPanel"), rf"HKCU\{CV}\Explorer\HideDesktopIcons\NewStartPanel")
     # Taskbar and Start.
     pinned = appdata + r"\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar"
     run("taskbar-pinned-shortcuts", lambda: shortcuts_in([pinned]), r"%AppData%\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar\*.lnk")
-    run("taskbar-order", lambda: taskband_order(reg_bytes(HKCU, CV + r"\Explorer\Taskband", "Favorites")), rf"HKCU\{CV}\Explorer\Taskband: Favorites")
+    run("taskbar-order", lambda: taskband_order(reg_bytes(HKCU, CV + r"\Explorer\Taskband", "Favorites"), sorted(path.name for path in pathlib.Path(pinned).glob("*.lnk"))),
+        rf"HKCU\{CV}\Explorer\Taskband: Favorites (order), the pinned folder (the shortcuts)")
     run("start-pins (Windows' export)", start_layout, "Export-StartLayout")
     run("start-pins (files)", start_files, r"%LocalAppData%\Packages\Microsoft.Windows.StartMenuExperienceHost_cw5n1h2txyewy\LocalState\start*.bin; HKCU\...\CloudStore")
     began = time.perf_counter()
@@ -633,6 +836,7 @@ def read_all(out):
     run("volume-labels", volume_labels, "the label is in the file system itself; GetVolumeInformationW")
     run("partitions", lambda: powershell("Get-Partition | Select-Object DiskNumber,PartitionNumber,DriveLetter,Guid,GptType,Type,Size,IsHidden,NoDefaultDriveLetter" + JSON), "Get-Partition")
     run("drive-label-overrides", lambda: reg_subkeys(HKLM, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\DriveIcons"), r"HKLM\SOFTWARE\...\Explorer\DriveIcons\<letter>\DefaultLabel")
+    run("letters-against-volumes", lambda: letters_against_volumes(p.value("drive-letters") or [], p.value("volume-labels") or [], p.value("partitions")), "MountedDevices set beside the volumes and partitions present")
     run("hidden-drives-policy", lambda: reg_value(HKCU, CV + r"\Policies\Explorer", "NoDrives"), rf"HKCU\{CV}\Policies\Explorer: NoDrives")
     # Folders, associations, applications.
     run("known-folders (registry)", lambda: reg_values(HKCU, CV + r"\Explorer\User Shell Folders"), rf"HKCU\{CV}\Explorer\User Shell Folders")
@@ -643,6 +847,7 @@ def read_all(out):
     run("installed-applications", installed_applications, r"HKLM and HKCU ...\CurrentVersion\Uninstall\*; HKLM\...\App Paths")
     # The account.
     logon = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Authentication\LogonUI"
+    run("accounts-with-profiles", accounts_with_profiles, r"HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList (the file SOFTWARE); Users\<name>\NTUSER.DAT")
     run("account-name", lambda: {"user": os.environ.get("USERNAME"), "sid_known": bool(sid), **{name: reg_value(HKLM, logon, name) for name in ("LastLoggedOnUser", "LastLoggedOnDisplayName")}}, rf"HKLM\{logon}: LastLoggedOnDisplayName")
     run("account-kind", lambda: powershell("Get-LocalUser -Name $env:USERNAME | Select-Object @{n='source';e={\"$($_.PrincipalSource)\"}},Enabled,@{n='has_full_name';e={[bool]$_.FullName}}" + JSON), "Get-LocalUser: PrincipalSource")
     run("account-microsoft-identity", lambda: len(reg_subkeys(HKCU, r"Software\Microsoft\IdentityCRL\UserExtendedProperties")), r"HKCU\Software\Microsoft\IdentityCRL\UserExtendedProperties")
@@ -663,6 +868,7 @@ def read_all(out):
     run("display-layout (registry)", display_registry, r"HKLM\SYSTEM\CurrentControlSet\Control\GraphicsDrivers\Configuration")
     # The same facts from the file.
     run("registry-file-holds-the-same", lambda: offline_copy(pathlib.Path(out).parent), "reg save HKCU, reg load, compare")
+    run("machine-registry-files-hold-the-same", machine_hives, "reg save HKLM\\SYSTEM and HKLM\\SOFTWARE, read by regf.py, compare")
 
     # The layout values in full, for working out their format (names of icons only).
     layout = {}
@@ -677,6 +883,10 @@ def read_all(out):
                 index += 1
                 if isinstance(value, bytes) and (name == "IconLayouts" or name.startswith("ItemPos")):
                     layout[name] = bytes(value)[:16384].hex()
+    except OSError:
+        pass
+    try:
+        layout["Taskband.Favorites"] = reg_bytes(HKCU, CV + r"\Explorer\Taskband", "Favorites")[:16384].hex()
     except OSError:
         pass
     pathlib.Path(out).write_text(json.dumps({"probes": p.rows, "layout_values_hex": layout}, indent=1), encoding="utf-8")

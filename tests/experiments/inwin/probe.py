@@ -128,16 +128,18 @@ def token_facts():
     if not advapi32.OpenProcessToken(kernel32.GetCurrentProcess(), 0x8, ctypes.byref(token)):
         raise OSError(ctypes.get_last_error(), "OpenProcessToken")
 
-    def information(kind):
-        buffer = ctypes.create_string_buffer(256)
+    def information(kind, size):
+        # TokenElevation and TokenElevationType want exactly their own size:
+        # a larger buffer is refused with ERROR_BAD_LENGTH (run 43552339780).
+        buffer = ctypes.create_string_buffer(size)
         got = wt.DWORD(0)
-        if not advapi32.GetTokenInformation(token, kind, buffer, 256, ctypes.byref(got)):
+        if not advapi32.GetTokenInformation(token, kind, buffer, size, ctypes.byref(got)):
             raise OSError(ctypes.get_last_error(), f"GetTokenInformation {kind}")
         return buffer
 
-    elevated = struct.unpack("I", information(20).raw[:4])[0]
-    kind = struct.unpack("I", information(18).raw[:4])[0]
-    label = information(25)
+    elevated = struct.unpack("I", information(20, 4).raw[:4])[0]
+    kind = struct.unpack("I", information(18, 4).raw[:4])[0]
+    label = information(25, 256)
     sid = ctypes.cast(label, ctypes.POINTER(ctypes.c_void_p))[0]
     count = advapi32.GetSidSubAuthorityCount(sid)[0]
     rid = advapi32.GetSidSubAuthority(sid, count - 1)[0]
@@ -148,6 +150,35 @@ def token_facts():
         "integrity": levels.get(rid, hex(rid)),
         "member_of_administrators": bool(ctypes.windll.shell32.IsUserAnAdmin()),
     }
+
+
+def _windows_error(what):
+    number = ctypes.get_last_error()
+    return OSError(f"winerror {number}{' (access denied)' if number == 5 else ''}: {what}")
+
+
+def device_control(path, code, out_size=65536, in_bytes=b""):
+    """A read-only device question (DeviceIoControl) asked of a device
+    opened with no access rights at all: the route a program without
+    administrator rights has to a disk's or a volume's layout. Returns the
+    answer's bytes, or raises OSError with Windows' error number."""
+    kernel32.CreateFileW.restype = wt.HANDLE
+    kernel32.CreateFileW.argtypes = [wt.LPCWSTR, wt.DWORD, wt.DWORD, ctypes.c_void_p, wt.DWORD, wt.DWORD, wt.HANDLE]
+    kernel32.DeviceIoControl.argtypes = [wt.HANDLE, wt.DWORD, ctypes.c_void_p, wt.DWORD, ctypes.c_void_p, wt.DWORD, ctypes.POINTER(wt.DWORD), ctypes.c_void_p]
+    kernel32.CloseHandle.argtypes = [wt.HANDLE]
+    # Desired access 0: neither read nor write; shared for both; open existing.
+    handle = kernel32.CreateFileW(path, 0, 0x1 | 0x2, None, 3, 0, None)
+    if handle in (None, wt.HANDLE(-1).value, -1, 0xFFFFFFFFFFFFFFFF):
+        raise _windows_error("CreateFile " + path)
+    try:
+        out = ctypes.create_string_buffer(out_size)
+        source = ctypes.create_string_buffer(in_bytes, len(in_bytes)) if in_bytes else None
+        got = wt.DWORD(0)
+        if not kernel32.DeviceIoControl(handle, code, source, len(in_bytes), out, out_size, ctypes.byref(got), None):
+            raise _windows_error(f"DeviceIoControl {code:#x}")
+        return out.raw[:got.value]
+    finally:
+        kernel32.CloseHandle(handle)
 
 
 class StartupInfo(ctypes.Structure):

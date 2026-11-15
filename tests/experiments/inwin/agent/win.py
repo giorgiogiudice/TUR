@@ -68,6 +68,7 @@ QueryFullProcessImageNameW = _fn(kernel32, "QueryFullProcessImageNameW", wt.BOOL
 
 GWL_STYLE, GWL_EXSTYLE, GW_OWNER = -16, -20, 4
 WS_EX_TOOLWINDOW, WS_EX_APPWINDOW, WS_EX_NOACTIVATE, WS_EX_TOPMOST = 0x80, 0x40000, 0x08000000, 0x8
+GA_ROOT = 2
 WM_CLOSE, WM_GETTEXT, WM_GETTEXTLENGTH, WM_GETICON = 0x10, 0x0D, 0x0E, 0x7F
 SMTO_ABORTIFHUNG = 0x2
 
@@ -275,6 +276,78 @@ def save_png(path, picture):
         out.write(chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)))
         out.write(chunk(b"IDAT", zlib.compress(bytes(rows), 6)))
         out.write(chunk(b"IEND", b""))
+
+
+WindowFromPoint = _fn(user32, "WindowFromPoint", P, wt.POINT)
+GetAncestor = _fn(user32, "GetAncestor", P, P, wt.UINT)
+SetCursorPos = _fn(user32, "SetCursorPos", wt.BOOL, ctypes.c_int, ctypes.c_int)
+mouse_event = _fn(user32, "mouse_event", None, wt.DWORD, wt.DWORD, wt.DWORD, wt.DWORD, ctypes.c_size_t)
+HWND_TOPMOST, HWND_NOTOPMOST = P(-1 & 0xFFFFFFFFFFFFFFFF), P(-2 & 0xFFFFFFFFFFFFFFFF)
+SWP_NOSIZE, SWP_NOMOVE, SWP_SHOWWINDOW = 0x1, 0x2, 0x40
+
+
+def bring_to_top(hwnd, box=None):
+    """Put a window at the top of the ordinary windows, with or without
+    the right to take the foreground: made topmost and at once ordinary
+    again, which leaves it above every ordinary window. Run 43552339780
+    moved windows with SWP_NOZORDER and relied on SetForegroundWindow, and
+    its pictures were of whatever lay on top."""
+    ShowWindow(hwnd, 9)
+    flags = SWP_SHOWWINDOW | (0 if box else SWP_NOMOVE | SWP_NOSIZE)
+    x, y, w, h = box or (0, 0, 0, 0)
+    SetWindowPos(hwnd, HWND_TOPMOST, x, y, w, h, flags)
+    SetWindowPos(hwnd, HWND_NOTOPMOST, x, y, w, h, flags)
+    SetForegroundWindow(hwnd)
+
+
+def on_top(hwnd, box=None, points=5):
+    """Whether the window itself is what the screen shows at a few points
+    of its box (GetAncestor of WindowFromPoint), so that a picture of the
+    box is a picture of the window."""
+    box = box or frame_of(hwnd) or rect_of(hwnd)
+    if not box or box[2] < 4 or box[3] < 4:
+        return False
+    for fx, fy in ((0.5, 0.5), (0.2, 0.2), (0.8, 0.2), (0.2, 0.8), (0.8, 0.8))[:points]:
+        point = wt.POINT(int(box[0] + box[2] * fx), int(box[1] + box[3] * fy))
+        found = WindowFromPoint(point)
+        if not found or GetAncestor(found, 2) != hwnd:  # GA_ROOT
+            return False
+    return True
+
+
+def clear_desktop():
+    """Take out of the way what a runner's image leaves on its screen and
+    a person's desktop would not have: Windows 11's first-sign-in privacy
+    window (it covered every picture on the ARM runner in run 43552339780)
+    and a leftover Performance Options dialog. Returns what was done."""
+    done = []
+    for window in top_windows(visible_only=True):
+        if window["class"] == "Shell_OOBEProxy":
+            ShowWindow(window["hwnd"], 0)  # SW_HIDE
+            PostMessageW(window["hwnd"], WM_CLOSE, 0, 0)
+            done.append("hid the first-sign-in window (Shell_OOBEProxy)")
+        elif window["exe"] == "systempropertiesperformance.exe":
+            PostMessageW(window["hwnd"], WM_CLOSE, 0, 0)
+            done.append("closed a leftover Performance Options dialog")
+        elif window["class"] in ("ConsoleWindowClass", "CASCADIA_HOSTING_WINDOW_CLASS", "PseudoConsoleWindow") and window["screen"][2] > 0:
+            ShowWindow(window["hwnd"], 6)  # the runner's own console: minimised, not closed
+            done.append(f"minimised a console window ({window['exe']})")
+    time.sleep(1)
+    return done
+
+
+def drag(start, end, steps=24):
+    """A left-button drag with the real pointer, as a person makes it."""
+    SetCursorPos(*start)
+    time.sleep(0.2)
+    mouse_event(0x0002, 0, 0, 0, 0)  # left down
+    time.sleep(0.2)
+    for step in range(1, steps + 1):
+        SetCursorPos(start[0] + (end[0] - start[0]) * step // steps, start[1] + (end[1] - start[1]) * step // steps)
+        time.sleep(0.02)
+    time.sleep(0.2)
+    mouse_event(0x0004, 0, 0, 0, 0)  # left up
+    time.sleep(0.5)
 
 
 PrintWindow = _fn(user32, "PrintWindow", wt.BOOL, P, P, wt.UINT)

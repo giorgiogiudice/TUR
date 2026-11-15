@@ -26,6 +26,9 @@ def main():
         from probe import token_facts
 
         result["rights"] = token_facts()
+    except Exception as error:  # run 43552339780 lost every finding to this one probe
+        result["rights"] = f"{type(error).__name__}: {str(error)[:200]}"
+    try:
         import win
 
         findings["title_read"] = bool(win.text_of(hwnd))
@@ -62,6 +65,18 @@ def main():
             findings["wm_settext_sent"] = bool(sent)
             findings["wm_settext_error"] = ctypes.get_last_error()
             findings["wm_gettext_after"] = win.remote_text(editor)[:40]
+            # Keys as a person types them (keybd_event, the route under SendInput).
+            import time
+
+            before = win.remote_text(editor)
+            findings["foreground_taken"] = bool(win.SetForegroundWindow(hwnd))
+            time.sleep(0.5)
+            for key in (0x51, 0x51):  # Q twice
+                ctypes.windll.user32.keybd_event(key, 0, 0, 0)
+                ctypes.windll.user32.keybd_event(key, 0, 2, 0)
+                time.sleep(0.05)
+            time.sleep(0.5)
+            findings["keys_arrived"] = len(win.remote_text(editor)) > len(before)
         findings["post_close"] = bool(win.PostMessageW(hwnd, 0x10, 0, 0))
     except Exception as error:
         result["error"] = f"{type(error).__name__}: {str(error)[:300]}"
