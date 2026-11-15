@@ -67,13 +67,16 @@ RUN set -eu; \
 FROM ${PAYLOAD_IMAGE}
 
 # Packages come from Fedora's own repositories, named explicitly. Their exact
-# versions are recorded in the medium's manifest.
+# versions are recorded in the medium's manifest. ntfsprogs (ntfsresize,
+# ntfscat; GPL-2.0-or-later, from ntfs-3g) is for shrinking Windows to make
+# room for TUR (issue 64, step 2; ADR-0029); only the medium has it.
 RUN set -eu; \
     dnf --version | head -n 2; \
-    dnf -y --repo=fedora --repo=updates --setopt=install_weak_deps=False install dracut-live; \
+    dnf -y --repo=fedora --repo=updates --setopt=install_weak_deps=False install dracut-live ntfsprogs; \
     dnf clean all; \
     rm -rf /var/cache/dnf /var/cache/libdnf5 /var/lib/dnf /var/log/dnf*.log; \
-    rpm -q dracut dracut-live
+    rpm -q dracut dracut-live ntfsprogs; \
+    command -v ntfsresize ntfscat
 
 # The initramfs of the medium. The image's own initramfs is left untouched:
 # it is what the installed system boots with. dmsquash-live finds the medium

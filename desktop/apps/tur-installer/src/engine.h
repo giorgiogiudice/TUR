@@ -188,8 +188,11 @@ public:
     // `installFixture` names another.
     // `defaultSystem` ("tur" or "windows", beside Windows only) is the system
     // the computer then starts by default.
+    // With `mode` "shrink", Windows' partition is shrunk first so that
+    // `turBytes` are free for TUR (issue 64, step 2); the fixture file is
+    // "install-shrink" unless `installFixture` names another.
     Q_INVOKABLE void install(const QVariantMap &disk, const QString &phrase, const QString &mode = QStringLiteral("erase"),
-                             const QString &defaultSystem = QStringLiteral("tur"));
+                             const QString &defaultSystem = QStringLiteral("tur"), double turBytes = 0);
     // Asks the engine to stop, which it does only before it writes.
     Q_INVOKABLE void cancel();
     // Forgets the last installation's outcome, to choose a disk again.

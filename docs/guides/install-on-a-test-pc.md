@@ -506,6 +506,20 @@ that file as Windows had it when TUR was installed); then
 Please report: whether Windows started from TUR's menu, whether BitLocker
 asked for its key, and the firmware's boot order afterwards.
 
+**Letting the installer shrink Windows instead** (option **Make room by
+shrinking Windows**; in the text installer, 3). If the disk has too little
+free space, the installer can shrink Windows' partition itself with
+ntfsresize. **Back up first: a backup is strongly recommended.** If the
+power fails while Windows' data is moved, Windows' partition can be damaged.
+It was tested only on volumes made by Linux tools, never on a real Windows.
+It refuses, with what to do, when Windows is encrypted with BitLocker
+(shrink it from Windows instead), hibernated or shut down with Fast Startup
+(start Windows and shut it down with Shift held), marked for a check (let
+Windows check its disk), or too full. You choose the room for TUR (at least
+25 GiB; Windows keeps 16 GiB free). Windows checks its partition the first
+time it starts afterwards: let it. Shrinking from Windows (step 3 above)
+remains the safer way.
+
 
 ## 8. What this build cannot do
 

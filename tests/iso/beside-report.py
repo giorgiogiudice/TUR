@@ -182,6 +182,10 @@ def beside(out: pathlib.Path, checks: Checks, facts: dict) -> None:
                    len(listed) == 2 and all(item.get("possible") == "no" for item in listed.values())
                    and codes == ["TUR-INSTALL-BESIDE-003", "TUR-INSTALL-BESIDE-004"],
                    "; ".join(f"{name}: {item.get('code')} {item.get('why')}" for name, item in listed.items()))
+        shrinks = {item.get("name"): item for item in refused.get("facts", {}).get("shrink_as_listed", [])}
+        checks.add("refused", "shrinking Windows not offered either (BitLocker on C:; a full ESP)",
+                   bool(shrinks) and all(item.get("possible") == "no" for item in shrinks.values()),
+                   "; ".join(f"{name}: {item.get('code')} {item.get('why')}" for name, item in shrinks.items()))
         nexts = refused.get("facts", {}).get("next_screen", {})
         checks.add("refused", "choosing either goes to the erase confirmation, not to beside Windows",
                    bool(nexts) and all(value == "confirm" for value in nexts.values()), str(nexts))
@@ -262,6 +266,23 @@ def beside(out: pathlib.Path, checks: Checks, facts: dict) -> None:
     checks.add("shared", "after removing TUR the disk starts Windows' own start-up file by itself (the stand-in)",
                after.get("outcome") == "windows-started" and started.get("partition_uuid") == facts["esp_partuuid"],
                f"{after.get('outcome')}; {started.get('file')} {started.get('partition_uuid')}")
+
+    shrink = out / "shrink"
+    if (shrink / "install" / "result.json").exists():
+        result = load(shrink / "install" / "result.json") or {}
+        sf = result.get("facts", {})
+        checks.add("shrink", "offered for shrinking, within limits", (sf.get("target_shrink") or {}).get("possible") == "yes",
+                   str(sf.get("target_shrink")))
+        checks.add("shrink", "the erase and beside phrases are refused", all(
+            item.get("result") == "mismatch" for item in sf.get("wrong_phrases") or [{}]), str(sf.get("wrong_phrases")))
+        checks.add("shrink", "Windows shrunk, then TUR installed beside it",
+                   result.get("outcome") == "completed" and sf.get("result") == "success",
+                   f"{sf.get('shrink_line')}; {sf.get('result_line', result.get('stopped_because', ''))}")
+        judge_compare(checks, "shrink", load(shrink / "compare-install.json"), "after shrinking and installing")
+        start = load(shrink / "first-start" / "first-start.json")
+        checks.add("shrink", "TUR starts from the disk", (start or {}).get("outcome") == "rendered", str((start or {}).get("outcome")))
+    else:
+        checks.add("shrink", "the shrink run", False, "no result")
 
     live = out / "live"
     if (live / "result.json").exists():

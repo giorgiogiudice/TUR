@@ -34,6 +34,8 @@ WizardScreen {
             return qsTr("Nothing was changed on any disk. Go back and look at the disks again.")
         case "erased":
             return qsTr("The disk has been partly written. It will not start this computer. Your other disks were not touched. Save the log to a USB stick and report the problem, then start the installation again.")
+        case "windows-check":
+            return qsTr("Windows' partition was being shrunk when this happened. Start Windows and let it check its disk before anything else; then try again. Save the log to a USB stick and report the problem.")
         case "partial":
             return qsTr("Windows' partitions were not written to. The free space now holds an unfinished TUR partition, which you can delete in Windows' Disk Management. Windows can still be started from the computer's boot menu. Save the log to a USB stick and report the problem.")
         default:
@@ -86,7 +88,7 @@ WizardScreen {
     Kit.Label {
         Layout.fillWidth: true
         visible: screen.success
-        text: (screen.mode === "beside" ? qsTr("TUR was installed beside Windows on %1. Writing it took %2 seconds.")
+        text: (screen.mode === "beside" || screen.mode === "shrink" ? qsTr("TUR was installed beside Windows on %1. Writing it took %2 seconds.")
                                         : qsTr("TUR was installed on %1. Writing it took %2 seconds."))
               .arg(Words.diskLine(screen.disk)).arg(Number(screen.engine.result.seconds || 0))
         paragraph: true
@@ -104,7 +106,7 @@ WizardScreen {
     Kit.Label {
         objectName: "windowsAfterInstall"
         Layout.fillWidth: true
-        visible: screen.success && screen.mode === "beside"
+        visible: screen.success && (screen.mode === "beside" || screen.mode === "shrink")
         text: screen.defaultSystem === "windows"
               ? qsTr("The computer now starts Windows by default. Start TUR from the computer's boot menu (“TUR”). In TUR, you can change which system starts by default.")
               : qsTr("The computer now starts TUR by default. To start Windows, use “Restart into Windows” in TUR, or choose “Windows” in TUR's start menu (press W while it shows). Windows is also still in the computer's own boot menu.")
