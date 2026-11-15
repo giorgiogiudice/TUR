@@ -1,14 +1,18 @@
 <!-- SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0 -->
 # exp-android-1 — Android applications on TUR: translation first, how much needs no ARM translation, and whether the container can be tested in CI (experiment)
 
-> **Status: second run read; a third is running.** Run 43553105465
-> (commit `0f56629`) started ATL and Waydroid for the first time. This
-> version of the report was committed first for the Waydroid findings
-> (section 6.1): Android 13 boots on TUR's kernel with the Rust binder
-> driver under SELinux enforcing, from Fedora's own package, and what it
-> needed is listed there. Sections 3, 4 and 5 still describe the first
-> run and are rewritten in the next commit; B1 and D (sections 2 and 7)
-> are settled.
+> **Status: three of five questions settled; a third run is queued for the
+> rest.** Measured in runs 43537684872 and 43553105465 (14 November 2026):
+> **B1** holds (92.8% of F-Droid needs no ARM translation); **D**: web
+> bundles are 2 to 3% of F-Droid and 4 of 4 tried run with no Android;
+> **A survives**: 12 of 60 applications reach a usable first screen under
+> ATL (7 of the 30 hand-picked). **C is half met**: Android boots in CI on
+> TUR's kernel and applications start, but no window reached the desktop
+> yet. **B2 is killed as it stands** (one emulated launch in seven
+> worked). The commit that carries this version fixes what stopped C and
+> tries one switch for B2; that run had not finished when this was
+> written. The hypotheses and kill criteria were committed before the
+> first measurement (commit `2bfb491`).
 
 ```text
 TUR DEVELOPMENT REPORT
@@ -17,9 +21,8 @@ Task ID:          exp-android-1 (time-boxed research spike "android")
 Subsystem:        Android runtime (addendum B, ADR-0006); no TUR service
 Build ID:         not applicable: this task builds no image
 Source revision:  exp/android (pull request 120); measured results are from
-                  commit 4ccc96d (run 43537684872); the fixes named below
-                  are in the commit that carries this report and have not
-                  run
+                  commits 4ccc96d (run 43537684872) and 0f56629 (run
+                  43553105465)
 
 SUMMARY
 - What changed: an experiment, not a feature. A workflow (exp-android) and
@@ -50,14 +53,17 @@ BUILD
 
 TESTS
 - Unit tests: none (experiment)
-- Integration tests: workflow exp-android, run 43537684872: fdroid job
-  measured B1 and D; the two ATL jobs and the two Waydroid jobs were green
-  but stopped before any application started (test-bed defects, sections
-  3 and 6); the aarch64 job failed at "docker run" (section 5)
+- Integration tests: workflow exp-android. Run 43537684872: fdroid job
+  measured B1 and D; the other jobs stopped at test-bed defects. Run
+  43553105465: 60 applications under ATL (12 usable first screens), the
+  probe's integration checks, Waydroid booted on the runner's kernel and
+  on Fedora 45's 7.3.3 kernel (29 of 30 and 10 of 10 applications
+  started, none visible on the desktop), ATL as ARM64 under QEMU (1 of 7
+  launches)
 - Boot tests: NOT RUN (nothing here can affect boot)
 - Hardware tests: NOT RUN (no GPU, no touchscreen, software rendering only)
-- Performance tests: NOT RUN (start-up time, memory and the emulation
-  benchmark need the ATL and Waydroid jobs)
+- Performance tests: start-up time and memory of both routes and the
+  probe's benchmark (sections 3 and 4); under emulation NOT RUN
 
 DIAGNOSTICS
 - Log paths: artifacts exp-android-fdroid, exp-android-atl-sample,
@@ -75,19 +81,20 @@ KNOWN LIMITATIONS
 - See section 11.
 
 NEXT SAFE ACTION
-- Let the run on the commit that carries this report finish; look at every
-  contact sheet; settle A, B2 and C; then confirm or withdraw the
-  provisional route order of section 9 and the decision text of section 14.
+- Read the run on the commit that carries this report: Waydroid windows on
+  the desktop, clipboard after a click, the ARM route without the
+  just-in-time compiler. Then the owner's decisions of section 12 and the
+  decision text of section 14.
 ```
 
 ## Hypotheses and kill criteria (fixed before measuring)
 
 | | Hypothesis | Kill criterion | Result |
 |---|---|---|---|
-| A | Translation first, as for Windows: on a sample of thirty real open-source applications, a useful share reaches a working first screen under the Android Translation Layer (ATL), which runs an APK as an ordinary Linux process | Fewer than 3 of the 30 hand-picked applications (10%) reach a usable first screen | **NOT RUN.** No application was started: the compositor could not be executed in the container (section 3) |
+| A | Translation first, as for Windows: on a sample of thirty real open-source applications, a useful share reaches a working first screen under the Android Translation Layer (ATL), which runs an APK as an ordinary Linux process | Fewer than 3 of the 30 hand-picked applications (10%) reach a usable first screen | **Survives: 7 of 30** hand-picked applications (23%) reach a usable first screen under ATL, and 5 of 30 random ones (17%); 12 of 60 together. Run 43553105465 (section 3) |
 | B1 | Most open-source Android applications need no ARM translation on an x86-64 computer: at least 80% of F-Droid's applications carry x86-64 native code or no native code | Under 50%: the container route without translation would leave out most applications, and the design would have to say so | **Holds. 92.8%** (4,626 of 4,987): 42.1% no native code, 50.7% x86-64 code; 6.9% ARM only; 0.3% 32-bit x86 only. Run 43537684872 (section 2) |
-| B2 | An open-source ARM-on-x86 route exists that TUR could ship legally, and it runs an application with native ARM code at a usable speed | No such route starts an application at all; or native ARM code runs more than 20 times slower than x86-64 code on the same work; or a first screen takes more than 60 seconds | **NOT RUN.** The job failed before ATL was installed (section 5). The desk finding stands: no open ARM-to-x86 native bridge exists (section 1.3) |
-| C | Waydroid can be started in GitHub Actions, on the runner's kernel or in a KVM guest running Fedora 45's kernel, as far as one application's first screen in a screenshot | Android does not finish booting within ten minutes in either place; then the report says exactly what stops it | **NOT RUN to its end, not killed.** Binder, Waydroid's package, its initialisation and the container service all work in both places; the container did not start because the test session had no sound-server socket (section 6) |
+| B2 | An open-source ARM-on-x86 route exists that TUR could ship legally, and it runs an application with native ARM code at a usable speed | No such route starts an application at all; or native ARM code runs more than 20 times slower than x86-64 code on the same work; or a first screen takes more than 60 seconds | **Killed as it stands.** One launch of an ARM64 application under QEMU drew its window, after 98 seconds; the six launches after it died inside the emulator within seconds; no benchmark was obtained. The emulator itself is 6 to 16 times slower on plain work. A switch that may cure the crashes is in the next run (section 5) |
+| C | Waydroid can be started in GitHub Actions, on the runner's kernel or in a KVM guest running Fedora 45's kernel, as far as one application's first screen in a screenshot | Android does not finish booting within ten minutes in either place; then the report says exactly what stops it | **Half met.** Android 13 boots in CI in both places (45 s on the runner, 27 s on TUR's kernel with the Rust binder driver under SELinux enforcing) and 29 of 30 applications start; but no window reached the desktop, so there is no first screen in a screenshot yet. The cause is known and the fix is in the next run (section 6) |
 | D | Some Android applications are a web view around bundled web assets, and such an application can be run as a web application with no Android at all: at least 3% of F-Droid's applications are of this kind, and one of them shows its first screen in a plain browser | None of up to four web bundles tried shows its first screen without the native bridge | **The share is under the bar; the re-hosting works.** 10 of 600 are certainly web-view applications (1.7%), 16 of 600 on inspection (2.7%, interval 1.6 to 4.3): under 3%. **4 of 4** tried show their first screen in a plain browser, 2 of them with nothing added (section 7) |
 
 **"Usable first screen"**, decided before looking: the application's own
@@ -284,70 +291,225 @@ For applications outside F-Droid: section 9.3.
 
 ## 3. Hypothesis A: applications under ATL
 
-**NOT RUN.** In run 43537684872 both ATL jobs installed ATL from Alpine
+**Measured**, run 43553105465, jobs `atl (sample)` and `atl (random)`
+(artifacts `exp-android-atl-sample` and `-random`: `results.json`,
+`shots/`, `logs/`, contact sheets). ATL as Alpine edge packages it
 (`android-translation-layer-0_git20261019-r1`, `art_standalone-0_git20261018-r0`,
-`bionic_translation-0_git20260927-r0`, GTK 4.24.1, WebKitGTK 2.54.2,
-sway 1.12, Mesa 26.2.6; the full package list is in each artifact), then
-stopped: `sway: Operation not permitted`. Alpine gives `/usr/bin/sway` the
-file capability `cap_sys_nice`, and a container whose bounding set lacks
-that capability refuses to execute such a file. No application was
-started; the jobs were green because the harness exits cleanly, which is
-the convention of experiment jobs here and is exactly why a green job
-proves nothing.
+`bionic_translation-0_git20260927-r0`, GTK 4.24.1, WebKitGTK 2.54.2),
+x86-64, in a container on the runner, headless sway 1.12, software
+rendering with GTK's default renderer (the probe's window was drawn, so no
+fallback was needed). Every window's screenshot was looked at, the
+doubtful ones at full size; the verdicts are mine, by the definition fixed
+before measuring.
 
-Fixed in the commit that carries this report (a plain copy of the binary,
-which has no file capability, and `--cap-add SYS_NICE`); not yet run. The
-harness now also starts the probe application first and looks at whether
-its window has a picture at all; if it has none with GTK's default
-renderer it switches to GTK's software renderer and says so, so that a
-blank window caused by the GPU-less runner is not counted against ATL.
+| | Hand-picked 30 | Random 30 | Together |
+|---|---|---|---|
+| **Usable first screen** | **7 (23%)** | **5 (17%)** | **12 of 60 (20%)** |
+| Window drawn with visible defects (not counted) | 5 | 2 | 7 |
+| Window blank, or stuck on a splash screen | 1 | 3 | 4 |
+| No window | 17 | 20 | 37 |
 
-What is known about ATL without the measurement is in section 1.1: it is
-maintained, Alpine packages it, and one real application (NewPipe) is
-distributed with it on Flathub and has 76,528 installs.
+**The kill criterion (fewer than 3 of 30) is not met: hypothesis A
+survives.** A useful share, but one in five, not most: ATL is a route for
+applications known to work, not one to try on an unknown APK.
+
+Of the 23 windows, none crashed in the ten seconds or so it was watched,
+and all 23 survived a resize to 760 × 620.
+
+| Application | Version | Native code | ATL: first screen | What is seen, or the first blocker | Window (s) | Memory | Waydroid: started | Waydroid: memory |
+|---|---|---|---|---|---|---|---|---|
+| `org.billthefarmer.editor` | 1.98 | none | No window | missing method `setSubtitle` | – | – | yes, 456 ms | 76 MiB |
+| `net.gsantner.markor` | 2026.10.0 | none | No window | missing method `setExitTransition` | – | – | yes, 617 ms | 157 MiB |
+| `org.fossify.notes` | 1.7.0 | x86-64 | **Usable** | note editor with toolbar | 2.65 | 337 MiB | yes, 308 ms | 60 MiB |
+| `com.orgzlyrevived` | 1.23.0 | x86-64 | Partial | its What's New dialog legible with raw HTML tags; the view behind it broken | 5.5 | 423 MiB | yes, 1113 ms | 140 MiB |
+| `org.videolan.vlc` | 3.7.2 | x86-64 | No window | native library needs `__strlcpy_chk` | – | – | yes, 1025 ms | 113 MiB |
+| `org.schabi.newpipe` | 0.29.1 | x86-64 | **Usable** | live list fetched from the network | 4.89 | 401 MiB | yes, 977 ms | 199 MiB |
+| `org.fossify.gallery` | 1.14.2 | x86-64 | Partial | toolbar drawn, content area empty | 4.07 | 348 MiB | yes, 522 ms | 88 MiB |
+| `org.oxycblt.auxio` | 4.1.5 | x86-64 | No window | `NoSuchMethodException` | – | – | yes, 1349 ms | 106 MiB |
+| `de.danoeh.antennapod` | 3.12.3 | x86-64 | **Usable** | home view with bottom tabs | 4.3 | 400 MiB | yes, 1226 ms | 113 MiB |
+| `org.fossify.filemanager` | 1.6.4 | x86-64 | Partial | toolbar and tabs drawn, list area empty | 3.27 | 350 MiB | yes, 626 ms | 86 MiB |
+| `org.fossify.clock` | 1.6.0 | x86-64 | Partial | frame and tabs drawn, the clock itself missing | 2.86 | 344 MiB | yes, 601 ms | 67 MiB |
+| `com.termux` | 0.118.3 | x86-64 | No window | class not found `com.termux.filepicker.TermuxDocumentsProvider` | – | – | yes, 294 ms | 98 MiB |
+| `org.fdroid.fdroid` | 1.23.2 | x86-64 | No window | exits with nothing logged | – | – | yes, 540 ms | 101 MiB |
+| `com.beemdevelopment.aegis` | 3.4.3 | x86-64 | **Usable** | main view, empty list with its hint | 2.85 | 372 MiB | yes, 716 ms | 63 MiB |
+| `com.kunzisoft.keepass.libre` | 4.5.8 | x86-64 | Partial | drawn, but shapes overlap the buttons | 5.71 | 368 MiB | yes, 541 ms | 102 MiB |
+| `org.isoron.uhabits` | 2.3.2 | none | **Usable** | introduction | 3.06 | 362 MiB | yes, 731 ms | 79 MiB |
+| `com.artifex.mupdf.viewer.app` | 1.28.5a | 32-bit x86 | **Usable** | the system's file chooser, which is this application's first screen on Android too | 1.42 | 300 MiB | yes, 167 ms | 35 MiB |
+| `net.sourceforge.opencamera` | 1.56.2 | none | No window | class not found `net.sourceforge.opencamera.MainActivity` | – | – | yes, 491 ms | 77 MiB |
+| `org.wikipedia` | r/50616-r-2026 | x86-64 | No window | missing class `android.accounts.OnAccountsUpdateListener` | – | – | yes, 850 ms | 80 MiB |
+| `app.organicmaps` | 2026.09.29-32- | x86-64 | Splash only | splash screen only, still there after the resize | 3.06 | 361 MiB | yes, 345 ms | 113 MiB |
+| `com.shatteredpixel.shatteredpixeldungeon` | 4.0.2 | x86-64 | No window | no window within 60 s, still running | – | – | yes, 313 ms | 127 MiB |
+| `org.moire.opensudoku` | 4.11.3 | ARM only | No window | `SQLiteException` | – | – | not installable: ARM only | – |
+| `eu.siacs.conversations` | 2.21.0+free | x86-64 | No window | missing class `android.security.KeyChainAliasCallback` | – | – | yes, 470 ms | 93 MiB |
+| `im.vector.app` | 1.6.62 | x86-64 | No window | missing class `android.security.KeyPairGeneratorSpec$Builder` | – | – | yes, 994 ms | 173 MiB |
+| `com.fsck.k9` | 24.0 | x86-64 | **Usable** | welcome screen with Get started | 5.1 | 356 MiB | yes, 523 ms | 83 MiB |
+| `de.baumann.browser` | 24 | none | No window | missing method `getTextCursorDrawable` | – | – | yes, 1066 ms | 189 MiB |
+| `org.mozilla.fennec_fdroid` | 159.0.1 | x86-64 | No window | native library needs `__register_atfork` | – | – | yes, 365 ms | 236 MiB |
+| `org.localsend.localsend_app` | 1.18.2 | x86-64 | No window | `libflutter.so` does not link | – | – | yes, 739 ms | 250 MiB |
+| `org.jitsi.meet` | 26.0.0 | x86-64 | No window | missing method `getApplicationRestrictions` | – | – | yes, 482 ms | 317 MiB |
+| `de.tutao.tutanota` | 366.261105.0 | x86-64 | No window | missing method `setSafeBrowsingEnabled` | – | – | yes, 465 ms | 197 MiB |
+
+"Waydroid: started" is Android's own report in run 43553105465 (activity
+resumed, process alive ten seconds later); nothing of Waydroid was seen on
+the desktop in that run (section 6).
+
+| Application | Version | Native code | ATL: first screen | What is seen, or the first blocker | Window (s) | Memory |
+|---|---|---|---|---|---|---|
+| `io.github.dorumrr.de1984` | 2.8.4 | none | No window | missing method `getUserProfiles` | – | – |
+| `com.rascarlo.adaptive.brightness.tile` | 0.2 | none | No window | missing class `android.service.quicksettings.TileService` | – | – |
+| `com.quaap.launchtime` | 0.8.6 | none | No window | missing class `android.appwidget.AppWidgetHost` | – | – |
+| `de.bixilon.unithen` | 1.3.2 | x86-64 | No window | `BootstrapMethodError` | – | – |
+| `com.werismoln.multibooter` | v0.1.4 | x86-64 | **Usable** | introduction | 1.44 | 308 MiB |
+| `br.com.gualandi.dailypill` | 1.3.3 | none | **Usable** | main view | 2.88 | 328 MiB |
+| `com.darkrockstudios.apps.fasttrack` | 5.1.1 | x86-64 | No window | `NoSuchMethodException` | – | – |
+| `com.yahyaoui.prayermode` | 1.8.5 | none | **Usable** | settings view | 3.09 | 358 MiB |
+| `com.bookorbit` | 0.7.1 | x86-64 | No window | no window within 60 s, still running | – | – |
+| `app.auriel.nocean` | 0.2.0 | x86-64 | No window | missing method `setColor` | – | – |
+| `net.toload.main.hd` | 7.6.0 | none | Partial | drawn; its Chinese text shows as boxes (no CJK font in the test container) | 2.27 | 334 MiB |
+| `ro.radioromaniaactualitati.podcasts` | 2.5.7 | x86-64 | No window | missing class `android.media.session.MediaController$Callback` | – | – |
+| `io.github.sykoram.sis` | 1.9.0 | none | Partial | text legible, layout broken | 3.7 | 523 MiB |
+| `com.serwylo.lexica` | 3.13.1 | none | Blank | empty window | 3.93 | 340 MiB |
+| `org.astonbitecode.rustkeylock` | 0.18.3 | ARM only | No window | missing method `startForegroundService` | – | – |
+| `com.jellodog.chat` | 1.2.5 | none | Blank | empty window | 4.54 | 545 MiB |
+| `com.mouzinho.pokebase` | 1.0.2 | x86-64 | No window | native library needs `__register_atfork` | – | – |
+| `com.listen1.app` | 0.8.1 | x86-64 | No window | no window within 60 s, still running | – | – |
+| `com.github.shadowsocks.plugin.ck_client` | 2.12.0 | x86-64 | No window | exits with nothing logged | – | – |
+| `com.bmco.cratesiounofficial` | 1.5.3 | none | No window | `IllegalStateException` | – | – |
+| `de.jepfa.bdt` | 1.6.1 | x86-64 | No window | `libflutter.so` does not link | – | – |
+| `com.eneko.hexcolortimewallpaper` | 1.1 | none | No window | missing class `android.preference.PreferenceFragment` | – | – |
+| `org.ligi.gobandroid_hd` | 2.5.9 | none | No window | native crash | – | – |
+| `com.bosun.app` | 0.8.6 | x86-64 | No window | native library needs `__register_atfork` | – | – |
+| `tribixbite.cleverkeys` | 1.5.0 | x86-64 | **Usable** | set-up view | 10.33 | 834 MiB |
+| `com.agateau.catgenerator` | 0.2.1 | none | Blank | title bar only, content black | 3.09 | 355 MiB |
+| `com.wagebit.app` | 0.1.0 | none | **Usable** | dashboard | 2.06 | 302 MiB |
+| `io.gitlab.cryptographic_id` | 0.5.7 | x86-64 | No window | `libflutter.so` does not link | – | – |
+| `fr.odrevet.kingdomino_score_count` | 5.0.2 | x86-64 | No window | `libflutter.so` does not link | – | – |
+| `com.wangjinli.carvita` | 1.2.3 | x86-64 | No window | `libflutter.so` does not link | – | – |
+
+**Why applications fail** (the first error logged, 37 applications
+without a window):
+
+| First blocker | Hand-picked | Random | Notes |
+|---|---|---|---|
+| A method or class of the Android framework that ATL does not have | 12 | 9 | Twenty-one different ones: `ActionBar.setSubtitle`, `android.security.KeyChain…`, `android.accounts…`, `WebSettings.setSafeBrowsingEnabled`, `android.appwidget…`, `TileService`, `PreferenceFragment`, … Each is the kind of stub the ATL README asks contributors for; what lies behind the first one is unknown |
+| The application's native library does not load | 3 | 6 | **Three causes cover all nine**: `libflutter.so` does not link (all 5 Flutter applications in the two samples); `__register_atfork` is missing from the C-library shim (Firefox's `libmegazord.so`, React Native's `libreactnative.so`, one more); `__strlcpy_chk` is missing (VLC) |
+| No window within 60 seconds, process still running | 1 | 2 | Includes the one game (libGDX); with no GPU in CI this may be the test bed |
+| ARM-only APK | 1 | 1 | Expected on x86-64 |
+| Other crash | 0 | 2 | |
+
+By what the applications are built with: **Flutter 0 of 5, React Native
+0 of 2, Gecko 0 of 1.** Jetpack Compose is not a barrier in itself (K-9
+Mail's welcome screen, WageBit and CleverKeys are drawn). The usable ones
+are plain Android-toolkit applications.
+
+**Could TUR's contributing change the number?** For a specific
+application, yes, and cheaply: the blockers are shallow and named, and
+upstream takes such patches (293 merged merge requests). For the share as
+a whole, three fixes in `bionic_translation` (the Flutter link failure and
+two missing C-library symbols) would move the first blocker of 9 of the 60
+applications, among them every Flutter application, which are 12% of
+F-Droid; what those applications hit next is not known. The 21 framework
+gaps are 21 separate pieces of work.
+
+**Start-up and memory** (the 23 applications with a window):
+
+| | ATL (per application) | Waydroid (run 43553105465) |
+|---|---|---|
+| Before the first application | nothing | Android boots: 45 s on the runner, 27 s in the guest; then stays up |
+| Start of one application | Window after 1.4 to 5.7 s, median 3.3 s (hand-picked) and 3.1 s (random); picture still after a median of 4.1 s and 3.7 s. Each launch here is a first launch, bytecode compiled on the spot | `am start -W` total time 167 to 1,349 ms, median 541 ms (installed just before; software rendering) |
+| Memory before the first application | nothing | **+956 MiB** on the runner, +936 MiB in the guest (host memory in use, idle Android, 95 processes) |
+| Memory per application (PSS) | **300 to 423 MiB, median 361** (hand-picked); 302 to 834, median 347 (random). The probe, which does nothing, takes 294 MiB | 35 to 317 MiB, median 102 (Android's own figure); the probe 72 MiB |
+
+So **ATL is not the lighter route once several Android applications are
+open**: every ATL process carries its own runtime, toolkit and (as run
+here) web engine, about 300 MiB before the application does anything.
+One application costs about 0.35 GB under ATL and about 1.05 GB under
+Waydroid; at four the two are level (about 1.4 GB); beyond that Waydroid
+is cheaper. Caution: each ATL application was measured alone, and two
+running together would share part of their libraries; `ATL_UGLY_ENABLE_WEBVIEW`
+was set for all, which loads WebKitGTK.
 
 ## 4. Integration facts (probe application)
 
-**NOT RUN** for ATL and for Waydroid (no application started in either).
-Two things about the test bed are measured (run 43537684872, both Waydroid
-jobs, `sway-seats.json`, `logs/vpointer.log`):
+**Measured for ATL**, run 43553105465, job `atl (sample)` (`results.json`
+→ `probe`, `shots/probe-*.png`, `logs/probe-*`). The probe is
+`tests/experiments/android/probe`, built in CI. For Waydroid the same
+checks need a window on the desktop and are in the next run (section 6).
 
-- The probe application builds without Gradle from the runner's SDK and
-  NDK, in two variants (x86-64 with ARM64 native code, and ARM64 only).
-- The harness's own virtual pointer (`atl/vpointer.py`, the Wayland wire
-  protocol written out by hand) and a sleeping `wtype` give the headless
-  seat both capabilities: sway 1.9 (Ubuntu) and sway 1.12 (Fedora 45)
-  report `capabilities: 3` with a `wlr_virtual_pointer_v1` and a
-  `wlr_virtual_keyboard_v1` device.
+| Question | ATL (measured) | Waydroid (run 43553105465) |
+|---|---|---|
+| **Is the application on the accessibility bus**, so that P@x could operate it? | **Yes.** The probe is an AT-SPI application with 28 nodes (frame, panels, 3 buttons, 4 labels), 26 of them with actions; **its own texts and button label are there** (`TUR probe: basic`, `tur-probe-tap`, the log text). Of the 23 real applications with a window, 21 are on the bus (1 to 2,455 nodes) and 14 expose their own text beyond the window title (for example Aegis's "No entries found", Loop Habit Tracker's introduction, WageBit's figures); 2 expose nothing | NOT RUN (no window). By design Android's views are not on the host's bus; android-runtime.md section 9 plans a separate tier |
+| Pointer | **Yes**: a click on the probe's button counted (`tap=1`), 8 touches seen | Not received (no window) |
+| Keyboard | **Yes**: typed letters arrive in the text field (`text=qqqqqqq`) | Not received (no window) |
+| Back | The **button ATL puts in the title bar** calls `onBackPressed`; the **Escape key does not** | NOT RUN |
+| Resize | **Yes**: the window was resized to 760 × 620 and the application was laid out again at 760 × 573; all 23 real applications survived the same resize | In multi-window mode the probe is laid out at 364 × 591 inside Android; on the desktop NOT RUN |
+| Notification | **Yes**: ATL calls `org.freedesktop.Notifications.Notify` directly (not the portal); the notification daemon showed "tur-probe-notification" (visible in the screenshots) | Not forwarded: no notification server was on the bus when the session started (section 6.1) |
+| Open a file (`ACTION_OPEN_DOCUMENT`) | **The desktop portal**: `org.freedesktop.portal.FileChooser.OpenFile`; the portal's "Open File" window appeared | Android's own picker (`com.android.documentsui`) inside Android |
+| Save a file (`ACTION_CREATE_DOCUMENT`) | **The portal**: `FileChooser.SaveFile`, "Save File" window | NOT RUN |
+| Open a web address (`ACTION_VIEW`) | **The portal**: `OpenURI.OpenURI`; the portal's "Open With…" window appeared (the container has no browser) | NOT RUN |
+| Share text (`ACTION_SEND`) | ATL's own small "Share" dialog: Cancel, Copy, Email | NOT RUN |
+| WebView | **Renders** (WebKitGTK), when `ATL_UGLY_ENABLE_WEBVIEW` is set | NOT RUN |
+| Clipboard, set by the application with no input event | **Did not reach the host** and the application read nothing back. wlroots refuses a clipboard from a client that cannot name an input event, and the probe set it on a timer: this is the test, not ATL (ATL has a native clipboard implementation, `android_content_ClipboardManager.c`). Repeated in the next run in answer to a click | **Android to host: yes**, as packaged, on Ubuntu and on Fedora. Host to Android: not seen (no window had the focus) |
+| What the application is told about the device | Android 5.0 (API 21), "HTC / unknown", ABIs `x86_64, x86` | Android 13 (API 33), "Waydroid", ABIs `x86_64, x86` |
+| What the application is told about Google Play services | **Present**, version 25.09.32, with Google's own certificate fingerprint (`38918a45…5788`): ATL answers with a stub (`loadGStub`) | Absent (VANILLA image) |
+| Same work, same checksum? | Yes, in Java and in native code (`c38f0c76db79b09e`, `56867.75`), as on Waydroid | Yes |
 
-One desk fact bears on the design already: Waydroid shares the clipboard
-only when the Python module `pyclip` is importable, and Fedora 45's
-package neither requires nor recommends `python3-pyclip` (section 1.2).
-The harness measures the clipboard as packaged and again with the module.
+Benchmark of the probe (milliseconds; integer work, then floating point;
+second pass). The three jobs ran on different runners, so only the
+columns within a row compare:
+
+| Where | Java, integer | Java, floating point | Native, integer | Native, floating point |
+|---|---|---|---|---|
+| ATL, x86-64 | 118 | 68 | 116 | 46 |
+| Waydroid, runner's kernel | 269 | 363 | 168 | 108 |
+| Waydroid, Fedora guest under KVM | 327 | 407 | 177 | 114 |
+
+Under ATL the application's bytecode is compiled ahead of time on first
+launch and runs as fast as the native library; under Waydroid's Android 13
+the same Java code, in its first seconds, is 1.6 to 3.6 times slower than
+the native library.
+
+**What this means for the design.** An ATL application is an ordinary
+desktop citizen: accessibility bus, portals for files and links, the
+desktop's notifications, pointer, keyboard, resizing. P@x's existing tier
+for native applications applies to it without anything Android-specific.
+The gaps seen: Escape is not Back, and the application is told it runs on
+Android 5.0.
 
 ## 5. Hypothesis B2: ARM applications through QEMU user-mode emulation
 
-**NOT RUN.** Measured so far (run 43537684872, job `atl-arm64`):
+**Measured**, run 43553105465, job `atl-arm64`: Alpine edge for aarch64
+with the same ATL packages, in a container under `qemu-aarch64` 10.2.3
+(binfmt_misc) on the x86-64 runner. Everything in that container is
+emulated, the compositor included. **Killed as it stands.**
 
-- QEMU 10.2.3's `qemu-aarch64` registers with `binfmt_misc` on the runner
-  (flags `POCF`).
-- The reference point for the emulator's speed, native x86-64 on the
-  runner (`openssl speed`, Alpine edge): SHA-256 at 2,177 MB/s on 16 kB
-  blocks, RSA-2048 at 5,111 signatures per second.
+| Step | Result |
+|---|---|
+| The ARM64 userland under emulation (sway, GTK, Python, the harness) | Works |
+| **First launch of the ARM64-only probe application** | **A window, drawn (881 colours), process alive.** The application reports `os_arch=aarch64`, `supported_abis=[arm64-v8a]`. Window after **98 seconds**, of which 61 s is ART compiling its boot image once (160 s of CPU), 8 s compiling ATL's own framework, and under 1 s the application |
+| Six launches after it (the probe twice, four applications) | **All died within seconds**: `qemu-aarch64: QEMU internal SIGSEGV {code=ACCERR}` or a segmentation fault in the C library under GLib. No window was caught by the harness |
+| Benchmark, Java against native ARM code | **NOT RUN**: the process died before it |
+| The emulator on plain work, same machine (`openssl speed`) | SHA-256: 96 MB/s emulated against 1,541 MB/s native, **16 times slower** (the native side has the processor's SHA instructions); RSA-2048 signatures: 236 against 1,501 per second, **6.3 times slower** |
 
-The ARM half failed: `docker: cannot overwrite digest sha256:020dfcba…`.
-The job pinned Alpine by the digest of its multi-architecture index and
-then asked docker for two platforms of it; docker cannot hold one index
-digest for two platforms. The job failed at its next step for the same
-reason. Fixed in the commit that carries this report (each architecture is
-pinned by the digest of its own manifest); not yet run.
+Against the kill criteria: an application did start, once; its first
+screen took more than 60 seconds (98 s, a one-time cost on the first
+launch ever); and the speed of native ARM code in an application could
+not be measured. One success in seven launches is not a route.
 
-The idea, for the record, because nobody was found to have published it:
+**One more try, cheap, in the next run.** ART's just-in-time compiler
+writes machine code through one memory mapping and executes it through
+another; a user-mode emulator caches translations and cannot see such
+writes, which fits "works at first, then dies". ATL's README names the
+switch for hosts where compiled code misbehaves (`-Xusejit:false`);
+ahead-of-time compiled code is still used. The cause is a conjecture
+until that run.
+
+The idea stands on its design, and nobody was found to have published it:
 ATL turns an Android application into one ordinary Linux process, so the
-whole of ATL, as an ARM64 program, can run under user-mode emulation on an
-x86-64 kernel and still be a native window. No proprietary library, no
-native bridge, nothing in the kernel. Whether it starts, and how slow it
-is, is what the job measures.
+whole of ATL, as an ARM64 program, can run under user-mode emulation and
+still be a native window, with no proprietary library and nothing in the
+kernel. Section 3 limits what it could ever cover: an ARM-only application
+must first be one that ATL runs at all.
 
 ## 6. Hypothesis C: Waydroid in GitHub Actions
 
@@ -382,7 +544,7 @@ and on Fedora 45.
 | **A window on the desktop** | **Not by itself.** `waydroid session start` maps no window, and an activity started with Android's own `am start` runs invisibly: 29 applications were "resumed" and the desktop stayed empty. Waydroid shows its display only when asked through its own interface (`waydroid show-full-ui`, `waydroid app launch`), which sets the property `waydroid.active_apps` (from Waydroid's source). TUR's runtime must launch through that interface. Whether it then produces windows here is measured in the next run |
 | **Installing** | `pm install -r -g` through `waydroid shell` (which reads commands on standard input). An ARM-only APK is refused with `INSTALL_FAILED_NO_MATCHING_ABIS` (OpenSudoku 4.11.3 and the probe's ARM64 variant). The image's ABI list is `x86_64,x86`: an application with only 32-bit x86 code installed and started (MuPDF viewer). `ro.dalvik.vm.native.bridge=0` |
 | **Applications** | Runner: 29 of 30 installed, started (`am start -W` status ok, 167 to 1,349 ms) and were alive with their own activity in front ten seconds later; the thirtieth is the ARM-only one; no crash logged. Guest, first ten: 10 of 10 |
-| **Memory** | Host memory in use rose by **956 MiB** (runner) and **936 MiB** (guest) from before the session to a booted, idle Android with 95 processes. Per application (Android's own PSS figure): 37 to 325 MB, median about 104 MB; the probe 72 to 74 MB |
+| **Memory** | Host memory in use rose by **956 MiB** (runner) and **936 MiB** (guest) from before the session to a booted, idle Android with 95 processes. Per application (Android's own PSS figure): 35 to 317 MiB, median 102 MiB; the probe 70 to 72 MiB |
 | **Clipboard** | Android to host works as packaged, on both (text set by the probe was read with `wl-paste`), **without** `python3-pyclip`: the claim of section 1.2 that the module is needed does not hold for this direction. Host to Android was not seen, but no Waydroid window had the focus (see above); measured again in the next run |
 | **One window per application** | With `persist.waydroid.multi_windows=true` the probe was laid out at 364 × 591 instead of the full display: Android is in free-form mode. Windows on the desktop: none yet, for the reason above |
 | **microG** | Installs (`Success`). **The image does not define `android.permission.FAKE_PACKAGE_SIGNATURE`** (`pm list permissions`: 0 matches; microG's package lists it as requested, not granted), so in this image microG cannot present Google's signature. android-runtime.md section 12.2 marks this as an assumption to verify: it is now measured, and the answer is no for the image of 27 September 2026 |
@@ -512,17 +674,24 @@ page, and is sandboxed like one.
 
 ## 9. Recommended route order for TUR's router
 
-**Provisional.** Rungs 2 and 4 rest on hypotheses that are NOT RUN; they
-are written as conditions, not as findings. Rungs 1, 3 and 5 rest on
-measurements or on facts already in android-runtime.md.
+Rungs 1 to 3 rest on measurements; rung 3's last step (a window on the
+desktop) and rung 4 are in the next run.
 
-| Rung | Route | For which applications | Share of F-Droid (measured) | Rests on |
+| Rung | Route | For which applications | Measured | Rests on |
 |---|---|---|---|---|
-| 1 | **Re-host as a web application**, no Android | Catalogue entries marked as a web bundle and checked once (Cordova, Capacitor, plain web view) | 1.7% certain, 2.7% likely | Section 7: 4 of 4 first screens. Catalogue only: an unknown APK is never re-hosted by guesswork |
-| 2 | **ATL**, the application as an ordinary process with a native window | Catalogue entries that were measured to work under ATL, delivered as a Flatpak on ATL's base application; not arbitrary APKs | NOT RUN (hypothesis A decides whether this rung exists at all, and how wide it is) | Section 1.1: it ships NewPipe this way today |
-| 3 | **Waydroid container** (ADR-0006), one window per Android task | Every other APK with x86-64 code or no native code | Up to 92.8%; 0.7% need a newer Android than the image | Section 2; section 6 for whether TUR can test it continuously (NOT RUN to its end) |
-| 4 | **ATL as an ARM64 program under QEMU user-mode emulation** | ARM-only applications in the catalogue | 6.9% of F-Droid; at most 19% of developer-built open-source applications; more among games | NOT RUN (hypothesis B2). If it is killed, this rung is "not supported unless the person supplies a translation layer", as android-runtime.md says now |
-| 5 | **Not supported, with the reason** | Applications that need a certified device (banking, DRM video, anti-cheat), phone hardware, or Google's services where neither microG nor the person's opt-in answers | Not in F-Droid by its policy | android-runtime.md, section 11 |
+| 1 | **Re-host as a web application**, no Android | Catalogue entries marked as a web bundle and checked once (Cordova, Capacitor, plain web view) | 1.7% of F-Droid certain, 2.7% likely; 4 of 4 tried show a first screen | Section 7. Catalogue only |
+| 2 | **ATL**: the application as an ordinary process with a native window, as a Flatpak on ATL's base application | **Only catalogue entries measured to work under ATL.** Never an unknown APK | 12 of 60 reach a usable first screen (20%); none of the Flutter, React Native or Gecko applications | Section 3 |
+| 3 | **Waydroid container** (ADR-0006), **the general route** | Every other APK with x86-64, 32-bit x86 or no native code | 92.8% of F-Droid by ABI; 29 of 30 of the sample installed and started (the thirtieth is ARM only); a window on the desktop: next run | Sections 2 and 6 |
+| 4 | ARM-only applications | 6.9% of F-Droid; at most 19% of developer-built open-source applications | Waydroid refuses them (`INSTALL_FAILED_NO_MATCHING_ABIS`); ATL as ARM64 under QEMU: killed as it stands (section 5) | **Not supported unless the person supplies a translation layer**, as android-runtime.md says, until section 5's last try says otherwise |
+| 5 | **Not supported, with the reason** | Applications that need a certified device, phone hardware, or Google's services where neither microG nor the person's opt-in answers | Not in F-Droid by its policy | android-runtime.md, section 11 |
+
+**"Translation first", as for Windows?** Not as a default. Wine is tried
+first because it runs most of what is thrown at it; ATL runs one
+application in five, and a failed try costs seconds and leaves nothing on
+screen. The order holds per application: where the catalogue says an
+application works under ATL, ATL comes before the container, because it
+is the better desktop citizen (section 4) and needs no Android system.
+Everything else goes straight to Waydroid.
 
 **How the routes fit the direction the owner has set** (TUR beside the
 person's Windows, their Windows inside TUR, everything on one desktop):
@@ -532,50 +701,37 @@ person's Windows, their Windows inside TUR, everything on one desktop):
   announcement of 2024; not re-read for this report), so the person's
   Windows offers no Android route of its own. If Android applications are
   to be on the one desktop, TUR runs them.
-- **Rungs 1, 2 and 4 are native windows in the plain sense**: one process
-  per application, one Wayland window, its own identity in the task
-  switcher, its own sandbox, nothing running when the application is
+- **Rungs 1 and 2 are native windows in the plain sense**: one process
+  per application, one Wayland window with its own identity, on the
+  accessibility bus, using the desktop's file chooser and notifications
+  (measured for ATL, section 4), nothing running when the application is
   closed, no root daemon. That is the shape the owner asks for, and it is
-  the shape of TUR's Windows route too (Wine before the guest).
-- **Rung 3 is windows from one shared Android system.** Each Android task
-  is a window on the desktop (to be confirmed by the multi-window check of
-  section 6), but behind them one container boots, holds memory while any
-  Android application is open, and runs a root daemon (ADR-0006's
-  recorded deviation). It is the rung that runs the most applications and
-  the one that is furthest from "native".
-- **Memory is shared with the Windows guest.** ADR-0007 indicates 16 GB
-  with the guest, to be measured. A whole Android system beside a whole Windows is the
-  expensive combination; an ATL process or a web application beside
-  Windows is not. The numbers (memory of an ATL application, of Waydroid
-  idle and per application) are NOT RUN; they decide how hard the router
-  should prefer rungs 1 and 2 when the Windows guest is running.
+  the shape of TUR's Windows route (Wine before the guest). Today it
+  covers about a fifth of open-source applications.
+- **Rung 3 is windows from one shared Android system**: it runs nearly
+  everything that has x86 code, behind a container that boots in about
+  half a minute, holds about 0.95 GB while any Android application is
+  open, and runs a root daemon (ADR-0006's recorded deviation). Whether
+  each Android task becomes a desktop window here is the next run's
+  measurement; Android's side of it (free-form layout) works.
+- **Memory beside the Windows guest.** ADR-0007 indicates 16 GB with the
+  guest, to be measured. Measured here: Waydroid idle about 0.95 GB plus
+  about 0.1 GB per application; ATL about 0.35 GB per application and
+  nothing idle. With the Windows guest running and one or two Android
+  applications wanted, ATL is the cheaper company; with many, Waydroid.
 - **Nothing here needs a VM.** Every rung runs on the host kernel.
-
-### 9.3 Applications outside F-Droid: what can be known without downloading them
-
-- **Not knowable from Google Play.** The store's listing does not state
-  native ABIs, and Play delivers device-specific splits of an App Bundle:
-  what an x86-64 device would receive cannot be seen without asking as
-  that device.
-- **Knowable from a package in hand.** The ZIP directory of an APK lists
-  `lib/<abi>/`; TUR's inspector reads it before installing
-  (android-runtime.md, section 6.2). For a remote APK two HTTP range
-  requests are enough (section 7 did this for 600 packages, about
-  106 kB each on average).
-- **Knowable from other open indexes.** IzzyOnDroid publishes an index in
-  F-Droid's format for developer-built APKs (section 2): at least 80.8%
-  need no translation.
-- **Inferable from the framework.** Flutter and React Native build
-  x86-64 libraries by default; a Unity game is ARM-only unless its
-  developer ticks x86-64. For the Play Store this is an inference, not a
-  measurement, and the trend of section 2 (more ARM-only every year)
-  argues against optimism.
 
 ## 10. What productising would take
 
-The measured part is NOT RUN. From the upstream facts of section 1 alone,
-ATL could reach a TUR computer in three ways, and the choice does not
-depend on the measurements:
+**Waydroid** (the general route): section 6.1 is the list. Beyond
+ADR-0006's plan it adds four things: launch through Waydroid's own
+interface, never `am start`; a sound server and a notification server in
+the session before the session starts; the image is an Android 13 without
+signature spoofing (no microG unless the image changes); and a CI job
+that boots it on TUR's kernel in a KVM guest in twelve minutes
+(`waydroid/kvm-guest.sh`), which can become a permanent test.
+
+**ATL** (the catalogue route) could reach a TUR computer in three ways:
 
 | Way | What TUR builds | Sandbox | Cost |
 |---|---|---|---|
@@ -583,24 +739,44 @@ depend on the measurements:
 | ATL as packages in TUR's image | ATL, `art_standalone`, `bionic_translation`, wolfSSL with JNI: four packages Fedora does not have, tracked against an upstream without releases (snapshots only) | TUR's own (`tur-runtime`'s bubblewrap profiles, as for Wine) | A build and update pipeline for a second Android runtime; any APK can be tried |
 | ATL in a container image fetched on demand (Alpine, as this experiment runs it) | A pinned container image | The container's | Simple to pin; a second C library and GTK stack on disk; desktop integration (portals, accessibility, theme) crosses a container boundary |
 
+For a catalogue route the first way fits: the catalogue already names
+applications, a Flatpak gives each one a sandbox, and TUR builds nothing
+of ATL. Its cost is one measurement per catalogue entry and release
+(this experiment's harness does it in about twenty seconds an
+application), and patches upstream for the applications TUR wants.
+
+**Re-hosting** (rung 1): a sandboxed web view with a stand-in for
+`cordova.js` and Capacitor's bridge that answers the common plug-ins;
+`fdroid/payload.py` has the 15-line beginning.
+
 ## 11. Limits
 
-- **A, B2 and C are not measured.** No ATL window and no Android boot has
-  been seen in this experiment yet. The route order is provisional.
+- **No Waydroid window has been seen on a desktop yet** (section 6.2), and
+  the ARM route has one success in seven launches (section 5). Both are in
+  the next run.
 - No GPU and no touchscreen in CI: software rendering only. Games and
   anything that needs hardware acceleration are not judged fairly by this
-  test bed, in either route.
-- First screens only. An application that draws its first screen may fail
-  at the second; the re-hosted web bundles were not operated.
+  test bed, in either route; the one game in the sample opened no window
+  under ATL within a minute.
+- **First screens only**, watched for about ten seconds. An application
+  that draws its first screen may fail at the second; none of the
+  applications was operated. "Usable" is a person's reading of a
+  screenshot against a definition fixed beforehand; the seven "partial"
+  windows are listed so that a reader can count differently.
 - ATL is measured as Alpine packages it (musl C library, snapshot of
-  19 October 2026), not as a Fedora build, which does not exist.
+  19 October 2026) in a container, not as a Fedora build or as the
+  Flatpak base application from Flathub.
+- Sixty applications. With 12 successes the 95% interval for the share is
+  about 12% to 32%.
+- Memory is PSS of one application at a time; ATL applications running
+  together would share libraries. Waydroid's per-application figure is
+  Android's own.
 - F-Droid is not the Play Store. Everything here is about open-source
   applications; sections 2 and 9.3 say what follows for the rest.
 - IzzyOnDroid's index holds one APK per release, so its ARM-only share is
   an upper bound (section 2).
 - The web-view share rests on file names in the APK and a reading of
   twenty entries by hand, not on running the applications.
-- The fixes in the commit that carries this report have not run.
 
 ## 12. Licence and legal questions for the owner
 
@@ -627,55 +803,55 @@ depend on the measurements:
 
 ## 13. Follow-ups
 
-1. **Finish this experiment**: one more run settles A, B2 and C (the
-   fixes are in place). Then confirm or withdraw rungs 2 and 4.
-2. **Correct android-runtime.md, section 3.3** (binder on Fedora 45's
-   released kernel is the C driver; section 6 here).
-3. **`python3-pyclip` in TUR's image** if Waydroid is shipped: without it
-   there is no shared clipboard (to be confirmed by the measurement).
-4. **Catalogue fields**: `payload: web-bundle | flutter | …` and
-   `native_abis`, both readable from an APK's ZIP directory without
-   downloading it (`fdroid/payload.py` is the reference).
-5. **A re-hosting runner** for rung 1: a sandboxed web view with a
-   stand-in for `cordova.js` and Capacitor's bridge, answering the common
-   plug-ins (storage, files through the portal, notifications).
-6. **If A holds**: ATL in a Fedora 45 container or as TUR-built Flatpaks,
-   tested on the catalogue's Android entries at every base update, the way
-   Wine applications are.
-7. **If B2 holds**: the compositor native and only ATL emulated (this
-   experiment emulates the compositor too, which overstates the cost).
-8. **Waydroid in CI as a permanent job** once C holds: the guest job costs
-   about nine minutes with caches cold.
+1. **Read the next run** (commit `3fd3d68` and after): Waydroid windows on
+   the desktop, input, clipboard both ways, notifications, one window per
+   task; the ARM route with the just-in-time compiler off.
+2. **Correct android-runtime.md**: section 3.3 (binder on Fedora 45's
+   released kernel is the C driver; section 6.3 here); section 12.2
+   (signature spoofing: measured absent in the image, so microG is not an
+   option without another image).
+3. **For the Waydroid runtime work**: section 6.1.
+4. **Catalogue fields**: `payload: web-bundle | flutter | …`,
+   `native_abis`, and per route a measured verdict with the run it came
+   from. The first two are readable from an APK's ZIP directory without
+   downloading it (`fdroid/payload.py`).
+5. **Upstream, small and specific**: `__register_atfork` and
+   `__strlcpy_chk` in `bionic_translation`; why `libflutter.so` does not
+   link. Each is the first blocker of several applications (section 3).
+6. **ATL as shipped on Flathub**: the same sixty applications on the
+   Flatpak base application in a Fedora 45 guest, which is how TUR would
+   run it.
+7. **A re-hosting runner** for rung 1.
+8. **Waydroid on TUR's kernel as a permanent CI job** (twelve minutes).
+9. **The Rust binder driver's messages** (`Failed to allocate buffer`,
+   four in six minutes): harmless here; worth a look under load.
 
-## 14. Proposed decision text (provisional; the lead assigns the number)
+## 14. Proposed decision text (the lead assigns the number)
 
-To be adopted only as far as the open hypotheses allow: paragraph 2 only
-if hypothesis A survives, paragraph 4 only if B2 survives. As written it
-amends ADR-0006 and ADR-0007's routing table; it does not replace
+Amends ADR-0006 and ADR-0007's routing table; it does not replace
 Waydroid.
 
-> **Android applications: the lightest route that is known to work.**
+> **Android applications: the container by default, the lightest route
+> where it is known to work.**
 >
-> 1. The router treats "Android application" as a ladder, as it does
->    Windows applications. The first rung that the catalogue records as
->    working is used; the person can override it.
-> 2. **Translation before the container.** Where the catalogue records
->    that an application runs under the Android Translation Layer, TUR
->    runs it that way: an ordinary process with a native window and a
->    per-application sandbox, delivered as a Flatpak on ATL's base
->    application. ATL is GPL-3.0 and stays a separate program. An
->    application not recorded as working under ATL is never sent there by
->    guesswork.
-> 3. **The container is the general route.** Any other package with
->    x86-64 code or no native code goes to Waydroid (ADR-0006), unchanged.
-> 4. **ARM-only applications** recorded as working go to ATL built for
->    ARM64 under QEMU's user-mode emulation. TUR ships no proprietary
->    translation library; otherwise the verdict of android-runtime.md
->    section 6.2 stands.
-> 5. **An application that is a web view around its own bundled web
+> 1. **Waydroid is the general route** for Android applications
+>    (ADR-0006, unchanged). TUR launches applications through Waydroid's
+>    own interface, and starts Android only when a sound server and a
+>    notification server are present in the session.
+> 2. **Translation before the container, per application.** Where the
+>    catalogue records that an application and version was measured to
+>    reach a usable state under the Android Translation Layer, TUR runs it
+>    that way: an ordinary process with a native window, as a Flatpak on
+>    ATL's base application. ATL is GPL-3.0 and stays a separate program.
+>    An application not so recorded is never sent to ATL.
+> 3. **An application that is a web view around its own bundled web
 >    assets**, and is recorded as such, is run as a sandboxed web
 >    application with no Android runtime.
-> 6. The catalogue records, per Android application and version: native
->    ABIs, what it is built with, and the rungs measured to work. All
->    three are measured in CI, never claimed.
-> 7. TUR does not rely on the person's Windows for Android applications.
+> 4. **ARM-only applications are not supported** unless the person
+>    supplies a translation layer (android-runtime.md, section 6.2). TUR
+>    ships none.
+> 5. The catalogue records, per Android application and version: native
+>    ABIs, what it is built with, and for each route a verdict measured in
+>    CI, with the run it came from. Nothing is claimed that was not
+>    measured.
+> 6. TUR does not rely on the person's Windows for Android applications.
