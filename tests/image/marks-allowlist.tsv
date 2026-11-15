@@ -97,7 +97,7 @@ text	/usr/lib/python3*/site-packages/sos/*	The sos report tool's distribution po
 text	/usr/lib/rpm/macros.d/macros.*	Comments in Fedora's RPM build macros, pulled in by the MinGW libraries Wine requires
 text	/usr/lib/rpm/redhat/*	Comments in Fedora's RPM build configuration (redhat-rpm-config), pulled in by the MinGW libraries Wine requires
 text	/usr/libexec/mingw-scripts	A comment in Fedora's MinGW tools, pulled in by the MinGW libraries Wine requires
-text	/usr/x86_64-w64-mingw32/sys-root/mingw/include/SDL3/SDL_revision.h	SDL's build string names the package's builder (C4)
+text	/usr/bin/mingw64-*	Links to Fedora's MinGW tools (mingw-scripts), whose comment names Fedora; pulled in by the MinGW libraries Wine requires
 #
 # --- generic-logos: Fedora's mark-free artwork under the file names other packages look for (C5)
 name	/usr/share/icons/hicolor/scalable/apps/fedora-logo-icon.svg	generic-logos' neutral logo under Fedora's file name; not Fedora's artwork (checked by checksum)
