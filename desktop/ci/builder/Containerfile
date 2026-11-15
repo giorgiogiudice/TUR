@@ -25,6 +25,14 @@
 # (desktop/apps/tur-settings/tests/unit/tst_bus.cpp): Fedora's default bus,
 # dbus-broker, cannot be started without systemd. desktop-file-utils gives
 # desktop-file-validate, for the desktop files the programs ship.
+#
+# The built image is kept in TUR's registry (desktop/README.md, "The builder
+# image"), which makes it a distributed image derived from Fedora. Fedora's
+# terms do not allow its logos and release packages in one (AGENTS.md: no
+# image is published with them), so they are replaced by Fedora's own
+# mark-free packages, as in the OS image (image/branding/branding.sh):
+# fedora-logos by generic-logos, the fedora-release packages by
+# generic-release. Nothing the programs render comes from them.
 
 ARG BASE
 FROM ${BASE}
@@ -40,6 +48,12 @@ RUN dnf -y --setopt=install_weak_deps=False --setopt=tsflags=nodocs install \
         google-noto-sans-vf-fonts google-noto-sans-hebrew-vf-fonts \
         python3 python3-pillow \
         dbus-daemon desktop-file-utils \
+    && dnf -y download --destdir=/tmp/generic generic-release generic-release-common generic-logos \
+    && rpm -e --nodeps fedora-logos fedora-release-container fedora-release-identity-container fedora-release-common \
+    && rpm -i /tmp/generic/*.rpm \
+    && rm -rf /tmp/generic \
+    && test "$(rpm -q --whatprovides system-release --qf '%{NAME}')" = generic-release \
+    && test "$(rpm -q --whatprovides system-logos --qf '%{NAME}')" = generic-logos \
     && dnf clean all \
     && rm -rf /var/cache/dnf /var/cache/libdnf5 /var/log/dnf* \
     && fc-cache -f \

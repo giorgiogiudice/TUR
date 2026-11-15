@@ -43,6 +43,7 @@ on:
 
 permissions:
   contents: read
+  packages: read   # TUR's mirror of the Fedora container (ghcr.io)
 
 concurrency:
   group: windows-drivers-${{ github.ref }}
@@ -72,11 +73,18 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
+      # The Fedora container from TUR's mirror, as FEDORA_IMAGE_PULL (image/
+      # README.md, "The base image and its mirror").
+      - uses: ./.github/actions/use-base-mirror
+        with:
+          check: "false"
+          images: FEDORA_IMAGE
+
       - name: Build in Fedora 45
         run: |
           mkdir -p "$RUNNER_TEMP/kmdf"
           docker run --rm -v "$GITHUB_WORKSPACE:/src:ro" -v "$RUNNER_TEMP/kmdf:/work" \
-            "$FEDORA_IMAGE" bash /src/tests/windows-drivers/kmdf/ci-build.sh
+            "$FEDORA_IMAGE_PULL" bash /src/tests/windows-drivers/kmdf/ci-build.sh
           sudo chown -R "$(id -u):$(id -g)" "$RUNNER_TEMP/kmdf"
           cat "$RUNNER_TEMP/kmdf/kmdf-evidence/summary.md" >> "$GITHUB_STEP_SUMMARY" || true
 
@@ -107,6 +115,13 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
+      # The Fedora container from TUR's mirror, as FEDORA_IMAGE_PULL (image/
+      # README.md, "The base image and its mirror").
+      - uses: ./.github/actions/use-base-mirror
+        with:
+          check: "false"
+          images: FEDORA_IMAGE
+
       - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           name: kmdf-binaries
@@ -134,7 +149,7 @@ jobs:
           docker run --rm --privileged --network host -e KMDF_ONLY \
             -v /dev:/dev -v /sys:/sys -v /run/udev:/run/udev:ro \
             -v "$GITHUB_WORKSPACE:/src:ro" -v "$RUNNER_TEMP/kmdf-binaries:/kmdf:ro" -v "$RUNNER_TEMP/kmdf-run:/work" \
-            "$FEDORA_IMAGE" bash /src/tests/windows-drivers/kmdf/kmdf-run.sh
+            "$FEDORA_IMAGE_PULL" bash /src/tests/windows-drivers/kmdf/kmdf-run.sh
 
       - name: Results
         if: always()
@@ -162,6 +177,13 @@ jobs:
     timeout-minutes: 75
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      # The Fedora container from TUR's mirror, as FEDORA_IMAGE_PULL (image/
+      # README.md, "The base image and its mirror").
+      - uses: ./.github/actions/use-base-mirror
+        with:
+          check: "false"
+          images: FEDORA_IMAGE
 
       - name: Scratch directory
         run: |
@@ -205,7 +227,7 @@ jobs:
             -e TWD_ONLY \
             -v /dev:/dev -v /sys:/sys -v /run/udev:/run/udev:ro \
             -v "$GITHUB_WORKSPACE:/src:ro" -v "$WORK:/work" \
-            "$FEDORA_IMAGE" bash /src/tests/windows-drivers/fedora-run.sh
+            "$FEDORA_IMAGE_PULL" bash /src/tests/windows-drivers/fedora-run.sh
 
       - name: Kernel log and devices afterwards
         if: always()

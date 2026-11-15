@@ -1,0 +1,50 @@
+{
+  "session": 8,
+  "title": "Clearing the notes",
+  "capture": "session-08.pcapng",
+  "text": "session-08.txt",
+  "clock": "seconds since the capture started",
+  "entries": [
+    {
+      "from": 0.5,
+      "did": "stored the note 'temp' in slot 1",
+      "to": 0.514,
+      "shown": [
+        "note 1 stored"
+      ]
+    },
+    {
+      "from": 1.215,
+      "did": "stored the note 'call Ana at 5' in slot 2",
+      "to": 1.231,
+      "shown": [
+        "note 2 stored"
+      ]
+    },
+    {
+      "from": 1.932,
+      "did": "listed the stored notes",
+      "to": 1.946,
+      "shown": [
+        "0 5",
+        "1 4",
+        "2 13",
+        "7 96"
+      ]
+    },
+    {
+      "from": 2.647,
+      "did": "cleared all notes",
+      "to": 2.66,
+      "shown": [
+        "notes cleared"
+      ]
+    },
+    {
+      "from": 3.361,
+      "did": "listed the stored notes (none left)",
+      "to": 3.373,
+      "shown": []
+    }
+  ]
+}
