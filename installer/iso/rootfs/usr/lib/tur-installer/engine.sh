@@ -1507,15 +1507,19 @@ run_remove() {
     rm -rf "${state}"
     mkdir -p "${state}"
     if [ "${r_state}" = yes ]; then
-        esp_look "${esp}" cat "${STATE_DIR}/table-before.txt" > "${state}/table-before.txt" 2>> "${LOG}"
-        esp_look "${esp}" cat "${STATE_DIR}/esp-before.sha256" > "${state}/esp-before.sha256" 2>> "${LOG}"
-        esp_look "${esp}" cat "${STATE_DIR}/boot-order-before.txt" > "${state}/boot-order-before.txt" 2>> "${LOG}"
+        {
+            esp_look "${esp}" cat "${STATE_DIR}/table-before.txt" > "${state}/table-before.txt"
+            esp_look "${esp}" cat "${STATE_DIR}/esp-before.sha256" > "${state}/esp-before.sha256"
+            esp_look "${esp}" cat "${STATE_DIR}/boot-order-before.txt" > "${state}/boot-order-before.txt"
+        } 2>> "${LOG}"
     fi
-    : > "${names}"
-    for source in "${LOADER_FILES_USR}" "${LOADER_FILES}"; do
-        find "${source}" -type f -ipath '*/EFI/BOOT/*' -printf '%f\n' 2> /dev/null | tr '[:upper:]' '[:lower:]' >> "${names}"
-    done
-    printf '%s\n' fbx64.efi bootia32.efi fbia32.efi >> "${names}"
+    # The names bootupd gives the files it puts into EFI/BOOT.
+    {
+        for source in "${LOADER_FILES_USR}" "${LOADER_FILES}"; do
+            find "${source}" -type f -ipath '*/EFI/BOOT/*' -printf '%f\n' 2> /dev/null | tr '[:upper:]' '[:lower:]'
+        done
+        printf '%s\n' fbx64.efi bootia32.efi fbia32.efi
+    } > "${names}"
 
     # 1. The firmware: no "TUR" entry, the order as before TUR.
     mark "remove step=firmware"
