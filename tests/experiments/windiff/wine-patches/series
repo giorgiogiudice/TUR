@@ -1,0 +1,2 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# Order in which ci/wine-master.sh applies the fix queue to Wine master.
