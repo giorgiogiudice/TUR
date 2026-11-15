@@ -623,7 +623,13 @@ class Seer:
             self.capture(app, "wordpad-view", hwnd, microsoft=True)
         document = find(read, "text")
         if document is not None and "type" in document.get("actions", []):
-            self.act(app, "UI Automation: type into the document", lambda: self.auto.set_value(document["id"], "TUR ribbon"), lambda: (True, "not verified independently"))
+            def typed():
+                # Run 43552339780 counted this as arrived without a check: WM_GETTEXT of the document's own control.
+                for child in win.children(hwnd):
+                    if win.class_of(child).upper().startswith("RICHEDIT") and "TUR ribbon" in win.remote_text(child):
+                        return True, f"WM_GETTEXT of the {win.class_of(child)} control returns the text"
+                return False, "no rich-edit control returned the text"
+            self.act(app, "UI Automation: type into the document", lambda: self.auto.set_value(document["id"], "TUR ribbon"), typed)
         self.close(hwnd, process)
         if process.poll() is None:
             process.kill()
@@ -655,8 +661,11 @@ class Seer:
             self.act(app, "UI Automation: type into the first field", lambda: self.auto.set_value(field["id"], "COM7"), lambda: (win.remote_text(field["hwnd"]) == "COM7", "WM_GETTEXT returns the text"))
         item = find(again, "tree item", "Colours")
         if item is not None:
-            self.act(app, "UI Automation: select the tree row 'Colours'", lambda: self.auto.select(item["id"]),
-                     lambda: (find(self.auto.read(hwnd), None, None, "ANSI") is not None or find(self.auto.read(hwnd), None, None, "colour") is not None, "the panel now shows colour options"), wait=1.5)
+            def colours_shown():
+                # The window tree, not UI Automation: a visible child window of the panel whose own text names ANSI colours.
+                texts = [win.text_of(child) for child in win.children(hwnd) if win.IsWindowVisible(child)]
+                return any("ansi" in text.lower() for text in texts), f"{sum(1 for t in texts if 'colour' in t.lower())} visible child windows name colours (window tree)"
+            self.act(app, "UI Automation: select the tree row 'Colours'", lambda: self.auto.select(item["id"]), colours_shown, wait=1.5)
         self.close(hwnd, process)
         if process.poll() is None:
             process.kill()
