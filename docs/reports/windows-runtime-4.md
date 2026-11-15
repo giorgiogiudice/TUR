@@ -91,8 +91,8 @@ which has no Wine yet.
 
 The window-title pattern in `apps.json` was `Login|WinSCP` for that run,
 because the title was not known beforehand. The window it matched was
-titled exactly `Login`, so the commit that adds this report tightens it to
-`^Login$`. That commit's runs are named in the pull request.
+titled exactly `Login`, so the commit that added this report tightened it to
+`^Login$`. That pattern failed once on `main`; see "After the merge" below.
 
 ## Where this ran
 
@@ -246,9 +246,10 @@ repository's retention period.
 
 1. **Both packages worked at every stage, in all five runs.** Results did
    not change between runs, and case folding made no difference.
-2. **WinSCP opens two windows on start**: its main window and the Login
-   dialog over it. The test measured the dialog, and the window class
-   matched the generated launcher entry.
+2. **WinSCP opens two windows on start**: its main window and, normally,
+   the Login dialog over it. The test measured the dialog, and the window
+   class matched the generated launcher entry. The dialog is not always
+   there: see "After the merge".
 3. **The installer is a 32-bit program, and it installs the 32-bit
    WinSCP.** Wine's 32-bit half (`wine32:i386`) was installed in the job,
    as it is for the other 32-bit installers. The portable zip holds the
@@ -266,6 +267,45 @@ repository's retention period.
    its menu builder (TUR switches it off on purpose, as windows-runtime-2
    notes), and that `ntlm_auth` is missing (NTLM authentication, which
    SFTP with keys does not use).
+
+## After the merge: the Login dialog is not always shown
+
+On `main` after the merge (`8eca8e8`, run 43556947745), the applications
+job (job 132331862309) failed at **launch** for both packages: "a window of
+class 'winscp.exe' appeared, and none is titled like '^Login$': ['runner –
+WinSCP']". Install, the SFTP check and removal passed in the same job, and
+the case-folding job of the same run passed all eight WinSCP launches.
+
+The screenshot from that job (`apps/winscp-inno/launch.png` in its artifact
+"windows-runtime-applications", looked at) shows WinSCP's main window fully
+drawn, with both panels on `Z:\home\runner\` and the toolbars ready, and
+no Login dialog. The main window appeared after 5.9 s, slower than in the
+passing runs (3.8 to 5.1 s). The harness then waited a fixed 3 seconds and
+looked for the title. Across the three workflow runs with WinSCP so far,
+the dialog was open at that moment in 28 of 30 launches. The 2 where it was
+not open were both in this one job.
+
+Why the dialog was missing was not proved. WinSCP's source
+(`source/forms/CustomScpExplorer.cpp`, `SessionListChanged`) postpones the
+Login dialog when the main window is minimised at startup, until the window
+is restored. If Wine reported the window as minimised for a moment while
+the window manager mapped it, the dialog would wait for a restore that
+never comes. That fits the screenshot, but nothing measured it. It may
+also have come later than the harness looked.
+
+What changed in response:
+
+- **The harness waits for the expected title**, not for any window of the
+  application's class followed by 3 seconds. This applies to every
+  application in `apps.json`, and it fails only when no window with that
+  title appears within 120 seconds.
+- **WinSCP's pattern accepts either of its own windows**: the Login dialog
+  (`^Login$`) or the main window, titled after the folder its local panel
+  shows (`^.+ – WinSCP$`; it was "runner – WinSCP" in the applications job
+  and "Documents – WinSCP" in the case-folding job). Both are full-size
+  windows of class `winscp.exe`. The table still names the window that was
+  measured, and the other one under "It also opened", so whether the Login
+  dialog appeared stays recorded for each run.
 
 ## The compatibility autopilot
 

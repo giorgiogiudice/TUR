@@ -944,11 +944,25 @@ def test_application(world: World, app: dict) -> dict:
     copy_evidence(world.data / "tur/runtime/prefixes" / app_id / "profile.json", evidence / "profile.json")
 
     if command is not None:
-        # Start it from its launcher entry and wait for a window of its own.
+        # Start it from its launcher entry and wait for a window of its own,
+        # with the expected title when apps.json gives one: an application
+        # may open another window of its own first, and the one expected can
+        # follow seconds later on a busy runner.
         try:
             launch = Launch(world, command, app.get("launch_arguments", []), evidence / "launch.txt")
-            window, seconds = launch.wait_for_window(klass, None, 120)
-            if window is None:
+            wanted = app.get("window_title")
+            window, seconds = launch.wait_for_window(klass, wanted, 120)
+            own_seen = [found for found in launch.new_windows()
+                            if klass.lower() in (found.instance.lower(), found.klass.lower())]
+            if window is None and wanted and own_seen:
+                exited = launch.process.poll()
+                screenshot(evidence / "launch.png")
+                launch.kill()
+                stage(result, "launch", "fail", seconds=round(seconds, 1),
+                      other_windows=[found.describe() for found in own_seen],
+                      detail=f"windows of class {klass!r} appeared, and none titled like {wanted!r} within "
+                             f"120 s (exit status so far: {exited}): {[found.title for found in own_seen]}")
+            elif window is None:
                 seen = [found.describe() for found in launch.new_windows()]
                 exited = launch.process.poll()
                 launch.kill()
@@ -962,7 +976,6 @@ def test_application(world: World, app: dict) -> dict:
                 own = [found for found in launch.new_windows()
                        if klass.lower() in (found.instance.lower(), found.klass.lower())
                        and found.width >= 120 and found.height >= 60 and is_viewable(found)]
-                wanted = app.get("window_title")
                 titled = [found for found in own if wanted and re.search(wanted, found.title)]
                 largest = sorted(own, key=lambda found: found.width * found.height, reverse=True)
                 shown = (titled or largest or [window])[0]
