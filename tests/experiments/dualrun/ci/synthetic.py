@@ -439,23 +439,36 @@ def main() -> int:
             assert sha_range(part[4], 0, 300 * MIB) == tur_sha, "TUR's partition changed"
             FACTS["write_to_hidden"] = outcome
             # Why the hidden ranges are not `flakey ... error_writes`: does a cache flush survive it?
-            probe = "tur-dualrun-flushprobe"
-            sh("dmsetup", "create", f"{probe}-void", "--table", "0 2048 zero")
+            # The probe is shaped like the view: a linear part on a loop device (which has a
+            # write cache, so the kernel sends flushes at all) and a flakey part.
             try:
-                sh("dmsetup", "create", probe, "--table",
-                   f"0 2048 flakey /dev/mapper/{probe}-void 0 0 1 1 error_writes")
-                fd = os.open(f"/dev/mapper/{probe}", os.O_WRONLY)
+                probe = "tur-dualrun-flushprobe"
+                backing = work / "flushprobe.img"
+                sh("truncate", "-s", "1M", str(backing))
+                probe_loop = sh("losetup", "--find", "--show", str(backing)).stdout.strip()
+                sh("dmsetup", "create", f"{probe}-void", "--table", "0 2048 zero")
                 try:
-                    os.fsync(fd)
-                    FACTS["flakey_error_writes_flush"] = "a flush succeeds"
-                except OSError as error:
-                    FACTS["flakey_error_writes_flush"] = f"a flush fails ({error.strerror})"
+                    sh("dmsetup", "create", probe, stdin=f"0 2048 linear {probe_loop} 0\n"
+                       f"2048 2048 flakey /dev/mapper/{probe}-void 0 0 1 1 error_writes\n")
+                    FACTS["flushprobe_write_cache"] = pathlib.Path(
+                        f"/sys/block/{os.path.basename(os.path.realpath('/dev/mapper/' + probe))}/queue/write_cache"
+                    ).read_text().strip()
+                    fd = os.open(f"/dev/mapper/{probe}", os.O_WRONLY)
+                    try:
+                        os.fsync(fd)
+                        FACTS["flakey_error_writes_flush"] = "a flush succeeds"
+                    except OSError as error:
+                        FACTS["flakey_error_writes_flush"] = f"a flush fails ({error.strerror})"
+                    finally:
+                        os.close(fd)
                 finally:
-                    os.close(fd)
-            finally:
-                sh("dmsetup", "remove", probe, check=False)
-                sh("dmsetup", "remove", f"{probe}-void", check=False)
-            return f"{outcome}; flakey/error_writes: {FACTS['flakey_error_writes_flush']}"
+                    sh("dmsetup", "remove", probe, check=False)
+                    sh("dmsetup", "remove", f"{probe}-void", check=False)
+                    sh("losetup", "-d", probe_loop, check=False)
+            except Exception as error:  # noqa: BLE001  (an observation, not a case of its own)
+                FACTS["flakey_error_writes_flush"] = f"probe failed: {error}"[:300]
+            return (f"{outcome}; a view-shaped device with a flakey/error_writes part "
+                    f"(write cache: {FACTS.get('flushprobe_write_cache')}): {FACTS.get('flakey_error_writes_flush')}")
 
         @case("the kernel's lock", "a mapped partition cannot be mounted while the view exists; no second view")
         def _():
