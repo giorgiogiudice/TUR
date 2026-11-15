@@ -237,6 +237,15 @@ def cmd_pr_edit(args) -> int:
 def cmd_pr_status(args) -> int:
     pr = request("GET", f"/pulls/{args.number}")
     print(f"#{pr['number']} {pr['state']} merged={pr['merged']} mergeable={pr['mergeable']} head={pr['head']['sha'][:12]}")
+    # The verdict on the head commit is the commit status "gate", not the
+    # result of the gate workflow's own run, which is green whenever an
+    # evaluation ran (.github/workflows/gate.yml). The newest status counts.
+    statuses = [s for s in request("GET", f"/commits/{pr['head']['sha']}/statuses?per_page=100") if s["context"] == "gate"]
+    if statuses:
+        s = statuses[0]
+        print(f"gate: {s['state']} ({s['description']}; recorded {s['created_at']})")
+    else:
+        print("gate: no status recorded yet")
     return 0
 
 

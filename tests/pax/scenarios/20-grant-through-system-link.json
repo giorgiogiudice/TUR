@@ -1,0 +1,21 @@
+{
+  "name": "grant-through-system-link",
+  "what": "A folder granted as a person writes it, /home/<name>/..., where /home is the system's link to /var/home (Fedora Atomic; issue 56). The command names it the same way and reads it; the link shows nothing beside it. Where /home is not a link the two names are one.",
+  "request": "What does my report say?",
+  "options": ["--grant-read", "{{GRANTED_NAMED}}"],
+  "turns": [
+    {
+      "text": "I will read the report where you put it.",
+      "calls": [
+        { "id": "toolu_named", "name": "run_readonly_command", "arguments": { "argv": ["/usr/bin/cat", "{{GRANTED_NAMED}}/report.txt"] } }
+      ]
+    },
+    {
+      "text": "And the folder beside it.",
+      "calls": [
+        { "id": "toolu_beside", "name": "run_readonly_command", "arguments": { "argv": ["/usr/bin/cat", "{{GRANTED_NAMED}}/../.ssh/id_canary"] } }
+      ]
+    },
+    { "text": "Your report is in order." }
+  ]
+}
