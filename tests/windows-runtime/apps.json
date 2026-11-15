@@ -263,7 +263,8 @@
       "expected_kind": "inno-setup",
       "install_options": [],
       "main_executable": "WinSCP.exe",
-      "window_title": "^Login$",
+      "window_title": "^Login$|^.+ – WinSCP$",
+      "window_title_note": "WinSCP opens its main window, titled after the folder its local panel shows ('runner – WinSCP' or 'Documents – WinSCP' in CI, with an en dash), and normally its Login dialog over it; in 2 of 30 launches in CI the dialog had not appeared, so either window counts. See docs/reports/windows-runtime-4.md",
       "check": {
         "kind": "winscp-sftp",
         "tool": "WinSCP.com"
@@ -293,7 +294,8 @@
       "expected_kind": "portable-zip",
       "install_options": [],
       "main_executable": "WinSCP.exe",
-      "window_title": "^Login$",
+      "window_title": "^Login$|^.+ – WinSCP$",
+      "window_title_note": "WinSCP opens its main window, titled after the folder its local panel shows ('runner – WinSCP' or 'Documents – WinSCP' in CI, with an en dash), and normally its Login dialog over it; in 2 of 30 launches in CI the dialog had not appeared, so either window counts. See docs/reports/windows-runtime-4.md",
       "check": {
         "kind": "winscp-sftp",
         "tool": "WinSCP.com"
