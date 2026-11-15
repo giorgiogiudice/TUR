@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# The Android runtime's packages (ADR-0006; android-runtime.md, section 3.2),
+# pinned by exact version and installed from the Fedora 45 release tree,
+# which does not change after the release. image/android/waydroid.sh installs
+# them; their dependencies come from the same tree, and the list of what was
+# added, with versions, sizes and licences, is written to
+# /usr/share/tur/android/added-packages.tsv in the image. Checked on
+# 14 November 2026 against https://mdapi.fedoraproject.org/f45/pkg/waydroid
+# (release repository; no newer build in updates).
+#
+# package	licence
+waydroid-1.6.3-2.fc45	GPL-3.0-only
+waydroid-selinux-1.6.3-2.fc45	GPL-3.0-only

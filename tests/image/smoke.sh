@@ -285,11 +285,39 @@ for tool in uname systemd-analyze dmesg lspci lsusb vulkaninfo wpctl nmcli bluet
 done
 check "bubblewrap and util-linux are packages of the base" rpm -q bubblewrap util-linux
 check "bubblewrap is not set-user-ID"         bash -c '[ ! -u /usr/bin/bwrap ]'
-check "no Windows, Android or macOS runtime is in the image" bash -c \
-    'for name in wine wine64 wineserver umu-run waydroid darling; do
+check "no Windows or macOS runtime is in the image" bash -c \
+    'for name in wine wine64 wineserver umu-run darling; do
          if command -v "${name}"; then exit 1; fi
      done
-     if rpm -qa | grep -i -E "^(wine|waydroid|darling|umu-launcher)"; then exit 1; fi'
+     if rpm -qa | grep -i -E "^(wine|darling|umu-launcher)"; then exit 1; fi'
+
+# The Android runtime (ADR-0006; image/android/waydroid.sh): Waydroid is in
+# the image and off. No Android image, nothing from Google, no ARM
+# translation library.
+check "Waydroid and its SELinux module are the pinned versions" bash -c \
+    'rpm -q waydroid-1.6.3-2.fc45 waydroid-selinux-1.6.3-2.fc45 && semodule -l | grep -qx waydroid'
+check "the Android container service is not enabled and cannot start before Android is switched on" bash -c \
+    '! systemctl is-enabled -q waydroid-container.service &&
+     grep -qx "ConditionPathExists=/var/lib/tur/android/enabled" \
+         /usr/lib/systemd/system/waydroid-container.service.d/50-tur-android.conf'
+check "no Android image, Google software or ARM translation library is in the image" bash -c \
+    '! find /usr /etc -xdev \( -name "system.img" -o -name "vendor.img" -o -name "libhoudini*" \
+         -o -name "libndk_translation*" -o -iname "*gapps*" \) -print 2>/dev/null | grep -q . &&
+     ! test -e /etc/waydroid-extra && ! test -e /usr/share/waydroid-extra && ! test -e /var/lib/waydroid'
+check "Waydroid's launcher entries are hidden and claim no APK file" bash -c \
+    'for f in Waydroid waydroid.market waydroid.app.install; do
+         grep -qx "NoDisplay=true" "/usr/share/applications/$f.desktop" || exit 1
+     done
+     ! grep -rqs vnd.android.package-archive /usr/share/applications/*.desktop'
+check "tur-android's image pins name the VANILLA image by SHA-256" bash -c \
+    'jq -e ".images | length == 2 and all(.[]; (.sha256 | length) == 64) and (.[0].file | test(\"VANILLA\"))" \
+         /usr/share/tur/android/images.json'
+check "tur-android explains switching on, and status says Android is off" bash -c \
+    'tur-android explain --json | jq -e ".explanation.download_bytes == 1037268032" &&
+     tur-android status --json | jq -e ".enabled == false and (.processes | length) == 0"'
+check "what Waydroid added to the image is recorded with sizes and licences" bash -c \
+    'grep -q "^waydroid	" /usr/share/tur/android/added-packages.tsv'
+echo "      added for Android: $(grep -c -v "^#" /usr/share/tur/android/added-packages.tsv) packages, $(tail -n1 /usr/share/tur/android/added-packages.tsv | cut -f3) bytes"
 
 # A program runs, not only prints its version.
 check "tur-diag status works without a running system" bash -c \

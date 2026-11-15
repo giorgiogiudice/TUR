@@ -17,6 +17,7 @@ on:
       # compiled with, and what is installed beside them. Each is run on the
       # booted system, the P@x end-to-end test among them.
       - "services/tur-ai-local/**"
+      - "services/tur-android/**"
       - "services/tur-apps/**"
       - "services/tur-boot-health/**"
       - "services/tur-catalogue/**"
@@ -47,6 +48,7 @@ on:
       # compiled with, and what is installed beside them. Each is run on the
       # booted system, the P@x end-to-end test among them.
       - "services/tur-ai-local/**"
+      - "services/tur-android/**"
       - "services/tur-apps/**"
       - "services/tur-boot-health/**"
       - "services/tur-catalogue/**"

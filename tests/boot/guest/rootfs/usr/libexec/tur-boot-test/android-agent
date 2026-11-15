@@ -1,0 +1,261 @@
+#!/usr/bin/bash
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# TUR Android runtime test agent (ADR-0006; docs/architecture/android-runtime.md;
+# docs/reports/android-1.md). Present only in the boot-test image.
+#
+# tests/boot/android.py starts the prepared disk with opt/org.tur/android in
+# QEMU's fw_cfg, holding the address where the host serves the pinned Android
+# images and the test's APK (a mirror: tur-android checks every digest all
+# the same); guest-agent hands over to this script. On the booted product
+# image, with SELinux enforcing, it:
+#
+#   1. records that Android is off: no Waydroid process, the container
+#      service inactive, and D-Bus activation of it refused;
+#   2. signs the test user in to a real Plasma session (the automatic
+#      sign-in is written here, inside the guest, so it is labelled as any
+#      file an administrator writes), with the session's own PipeWire;
+#   3. asks to switch Android on without consent (refused), then switches it
+#      on as root with consent: tur-android enable --yes;
+#   4. as the user, in the session, installs an open-source APK pinned by
+#      SHA-256 (Android starts on the way), lists it, and starts it as a
+#      window; the host takes its screenshots then;
+#   5. removes it, switches Android off, and looks for any process, mount or
+#      network interface of Android left behind, independently of
+#      tur-android;
+#   6. measures memory before, while the application runs, and after.
+#
+# It decides nothing: tests/boot/android.py judges the facts and the
+# pictures. Markers (all start with "TUR-BOOT-TEST: "): ANDROID-START,
+# ANDROID-DESKTOP, ANDROID-APP-LAUNCHED, ANDROID-DISABLED, ANDROID-COMPLETE,
+# ANDROID-PROBLEM.
+set -u
+
+port=/dev/virtio-ports/org.tur.boottest
+fw=/sys/firmware/qemu_fw_cfg/by_name/opt/org.tur/android/raw
+user=turtest
+apk_name=org.billthefarmer.editor_198.apk
+apk_sha256=343d17e11d0914e1a7708df2781580a0413e52501c0a41d91f7ef725d9615fe9
+app_id=org.billthefarmer.editor
+base=/var/lib/tur-android-test
+out="${base}/android"
+rm -rf "${base}"
+mkdir -p "${out}"
+
+say() { printf 'TUR-BOOT-TEST: %s\n' "$*"; }
+uptime_s() { cut -d' ' -f1 /proc/uptime; }
+put() { printf '%s=%s\n' "$1" "$2" >> "${out}/facts.txt"; }
+# cap FILE COMMAND...: keep what a command prints; note its exit status.
+cap() {
+    local file="$1" rc
+    shift
+    timeout 1800 "$@" > "${out}/${file}" 2> "${out}/${file}.err" < /dev/null
+    rc=$?
+    printf '%s\t%s\n' "${file}" "${rc}" >> "${out}/exit-status.tsv"
+    return "${rc}"
+}
+# Memory in use, in MiB, with the page cache dropped first so that the
+# numbers compare: MemTotal - MemAvailable.
+# since START: seconds from START (date +%s.%N) to now, one decimal.
+since() { awk -v a="$1" -v b="$(date +%s.%N)" 'BEGIN { printf "%.1f", b - a }'; }
+mem_used() {
+    sync
+    echo 3 > /proc/sys/vm/drop_caches
+    sleep 2
+    awk '/^MemTotal:/ {t=$2} /^MemAvailable:/ {a=$2} END {printf "%d", (t-a)/1024}' /proc/meminfo
+}
+
+mirror="$(tr -d '\n' < "${fw}" 2> /dev/null)"
+say "ANDROID-START mirror=${mirror} uptime=$(uptime_s)"
+put mirror "${mirror}"
+
+# --- 1. Android is off ---------------------------------------------------------
+cap kernel.txt sh -c 'uname -r; grep -E "binder" /proc/filesystems; ls -l /dev/binder* 2>&1'
+put kernel "$(uname -r)"
+put binder_filesystem "$(grep -c -w binder /proc/filesystems)"
+put selinux_at_start "$(getenforce)"
+cap packages.txt rpm -q waydroid waydroid-selinux lxc python3-gbinder libgbinder dnsmasq pipewire kernel-core
+cap added-packages.tsv cat /usr/share/tur/android/added-packages.tsv
+cap semodule.txt sh -c 'semodule -l | grep -x waydroid'
+put waydroid_processes_before "$(pgrep -c -f 'waydroid|lxc-start' || true)"
+put service_before "$(systemctl is-active waydroid-container.service)"
+put service_enabled_before "$(systemctl is-enabled waydroid-container.service 2>&1)"
+cap status-before.json tur-android status --json
+# Anyone may ask D-Bus to start Waydroid's root service; before Android is
+# switched on, the drop-in's condition must keep it from starting.
+cap dbus-activation-before.txt busctl --system call id.waydro.Container /ContainerManager \
+    id.waydro.ContainerManager GetSession
+put dbus_activation_before_rc "$?"
+sleep 3
+put service_after_dbus_call "$(systemctl is-active waydroid-container.service)"
+cap service-before.txt systemctl status --no-pager waydroid-container.service
+
+# --- 2. a signed-in Plasma session ----------------------------------------------
+uid="$(id -u "${user}")"
+put uid "${uid}"
+mkdir -p /etc/plasmalogin.conf.d
+printf '# Written by the boot test (android-agent) for this throw-away boot.\n[Autologin]\nUser=%s\nSession=plasma.desktop\n' \
+    "${user}" > /etc/plasmalogin.conf.d/zz-tur-android-test.conf
+restorecon -R /etc/plasmalogin.conf.d 2> /dev/null
+systemctl restart plasmalogin.service
+pid=""
+for _ in $(seq 1 300); do
+    pid="$(pgrep -u "${uid}" -x plasmashell | head -n1)"
+    if [ -n "${pid}" ]; then break; fi
+    sleep 1
+done
+put plasmashell_pid "${pid}"
+if [ -z "${pid}" ]; then
+    say "ANDROID-PROBLEM plasmashell did not start"
+fi
+envs=()
+if [ -n "${pid}" ]; then
+    mapfile -d '' envs < "/proc/${pid}/environ"
+    tr '\0' '\n' < "/proc/${pid}/environ" | grep -E '^(XDG_RUNTIME_DIR|WAYLAND_DISPLAY|DBUS_SESSION|DISPLAY)=' \
+        > "${out}/session-environment.txt"
+fi
+runtime_dir="/run/user/${uid}"
+wayland="$(sed -n 's/^WAYLAND_DISPLAY=//p' "${out}/session-environment.txt" 2> /dev/null)"
+for _ in $(seq 1 90); do
+    if [ -S "${runtime_dir}/pulse/native" ]; then break; fi
+    sleep 1
+done
+put sound_server_socket "$(test -S "${runtime_dir}/pulse/native" && echo present || echo absent)"
+put wayland_display "${wayland}"
+sleep 20
+say "ANDROID-DESKTOP uptime=$(uptime_s)"
+sleep 8
+
+# as_user FILE COMMAND...: run a command as the user, through the user's own
+# service manager (so in the context of the signed-in session, as a program
+# started from the desktop would be), with the session's display.
+as_user() {
+    local file="$1" rc
+    shift
+    timeout 1800 runuser -u "${user}" -- env -i "${envs[@]}" HOME="/home/${user}" \
+        systemd-run --user --pipe --wait --quiet --collect \
+        "--setenv=WAYLAND_DISPLAY=${wayland}" "--setenv=XDG_RUNTIME_DIR=${runtime_dir}" \
+        -- "$@" > "${out}/${file}" 2> "${out}/${file}.err" < /dev/null
+    rc=$?
+    printf '%s\t%s\n' "${file}" "${rc}" >> "${out}/exit-status.tsv"
+    return "${rc}"
+}
+
+# --- 3. switching on ---------------------------------------------------------------
+apk=/var/tmp/tur-android-test.apk
+curl -fsS --retry 3 -o "${apk}" "${mirror}/${apk_name}" 2> "${out}/apk-download.err"
+put apk_sha256 "$(sha256sum "${apk}" | cut -d' ' -f1)"
+if [ "$(sha256sum "${apk}" | cut -d' ' -f1)" != "${apk_sha256}" ]; then
+    say "ANDROID-PROBLEM the test APK does not match its pin"
+fi
+chmod 0644 "${apk}"
+as_user explain.json tur-android explain --json
+as_user enable-no-consent.json tur-android enable --json
+put enable_without_consent_rc "$?"
+put memory_used_before_mib "$(mem_used)"
+put disk_free_before_bytes "$(df --output=avail -B1 /var | tail -n1 | tr -d ' ')"
+started="$(date +%s.%N)"
+cap enable.json tur-android enable --yes --json --graphics=software "--mirror=${mirror}"
+put enable_rc "$?"
+put enable_wall_seconds "$(since "${started}")"
+put disk_free_after_enable_bytes "$(df --output=avail -B1 /var | tail -n1 | tr -d ' ')"
+cap waydroid-var-du.txt du -sb /var/lib/waydroid
+cap waydroid.cfg cat /var/lib/waydroid/waydroid.cfg
+cap waydroid_base.prop cat /var/lib/waydroid/waydroid_base.prop
+cap status-enabled.json tur-android status --json
+
+# --- 4. an application, as the user ---------------------------------------------------
+started="$(date +%s.%N)"
+as_user install.json tur-android install --json "${apk}"
+put install_rc "$?"
+put install_wall_seconds "$(since "${started}")"
+as_user list.json tur-android list --json
+as_user list-all.json tur-android list --all --json
+cp "/home/${user}/.local/share/applications/waydroid.${app_id}.desktop" "${out}/launcher-entry.desktop" 2> /dev/null
+icon="$(sed -n 's/^Icon=//p' "${out}/launcher-entry.desktop" 2> /dev/null | head -n1)"
+put launcher_icon "${icon}"
+if [ -n "${icon}" ] && [ -f "${icon}" ]; then cp "${icon}" "${out}/launcher-icon.png"; fi
+put launcher_icon_readable_by_user "$(runuser -u "${user}" -- test -r "${icon:-/nonexistent}" && echo yes || echo no)"
+as_user launch.json tur-android launch --json "${app_id}"
+put launch_rc "$?"
+sleep 15
+say "ANDROID-APP-LAUNCHED uptime=$(uptime_s)"
+sleep 40
+put memory_used_app_running_mib "$(mem_used)"
+cap status-running.json tur-android status --json
+cap processes-running.txt sh -c 'ps -eo pid,user,rss,args --sort=-rss | head -n 60'
+cap links-running.txt ip -o link
+cap firewall-zone.txt firewall-cmd --get-zone-of-interface=waydroid0
+cap nft-tables-running.txt nft list tables
+cap android-mounts-running.txt sh -c 'grep -E "waydroid|binder" /proc/self/mountinfo'
+cap waydroid-status.txt runuser -u "${user}" -- env -i "${envs[@]}" waydroid status
+as_user session-journal.txt journalctl --user --no-pager -u tur-android-session.service
+cap lxc-config.txt sh -c 'cat /var/lib/waydroid/lxc/waydroid/config /var/lib/waydroid/lxc/waydroid/config_nodes 2> /dev/null'
+cap container-privileges.txt sh -c '
+    init=$(for p in $(ls /proc | grep -E "^[0-9]+$"); do
+        if grep -q "lxc.payload.waydroid" /proc/$p/cgroup 2> /dev/null; then echo $p; break; fi; done)
+    echo "first container process: ${init}"
+    if [ -n "${init}" ]; then
+        grep -E "^(Uid|Gid|CapEff|CapBnd|NoNewPrivs|Seccomp)" /proc/${init}/status
+        echo "uid_map:"; cat /proc/${init}/uid_map
+        echo "selinux context:"; cat /proc/${init}/attr/current; echo
+        echo "contexts of the container processes:"
+        for p in $(ls /proc | grep -E "^[0-9]+$"); do
+            grep -q "lxc.payload.waydroid" /proc/$p/cgroup 2> /dev/null && cat /proc/$p/attr/current 2> /dev/null && echo
+        done | sort | uniq -c
+    fi'
+
+as_user remove.json tur-android remove --json "${app_id}"
+put remove_rc "$?"
+as_user list-after-remove.json tur-android list --json
+
+# --- 5. switching off -------------------------------------------------------------------
+started="$(date +%s.%N)"
+cap disable.json tur-android disable --yes --json
+put disable_rc "$?"
+put disable_wall_seconds "$(since "${started}")"
+sleep 5
+# What is left, looked at without tur-android.
+pgrep -a -f 'waydroid|lxc-start|lxc-monitord' > "${out}/left-processes.txt" 2>&1
+in_container=0
+for p in $(ls /proc | grep -E '^[0-9]+$'); do
+    if grep -q 'lxc.payload.waydroid' "/proc/${p}/cgroup" 2> /dev/null; then in_container=$((in_container + 1)); fi
+done
+put left_container_processes "${in_container}"
+put left_processes "$(grep -c . "${out}/left-processes.txt")"
+grep -E 'waydroid|binder' /proc/self/mountinfo > "${out}/left-mounts.txt" 2>&1
+put left_mounts "$(grep -c . "${out}/left-mounts.txt")"
+ip -o link | grep -i waydroid > "${out}/left-interfaces.txt" 2>&1
+put left_interfaces "$(grep -c . "${out}/left-interfaces.txt")"
+put left_binder_links "$(find /dev -maxdepth 1 -type l -lname '/dev/binderfs/*' | wc -l)"
+put service_after_disable "$(systemctl is-active waydroid-container.service)"
+put binderfs_after_disable "$(systemctl is-active dev-binderfs.mount)"
+cap nft-tables-after.txt nft list tables
+cap status-after.json tur-android status --json
+put memory_used_after_disable_mib "$(mem_used)"
+busctl --system call id.waydro.Container /ContainerManager id.waydro.ContainerManager GetSession \
+    > "${out}/dbus-activation-after.txt" 2>&1
+put dbus_activation_after_rc "$?"
+sleep 3
+put service_after_dbus_call_after_disable "$(systemctl is-active waydroid-container.service)"
+say "ANDROID-DISABLED uptime=$(uptime_s)"
+sleep 10
+
+# --- 6. SELinux and logs -------------------------------------------------------------
+put selinux_at_end "$(getenforce)"
+journalctl -b --no-pager -o short-monotonic | grep -E 'avc: +denied' > "${out}/avc.txt"
+put avc_denials "$(grep -c . "${out}/avc.txt")"
+put avc_denials_waydroid "$(grep -c -E 'waydroid|container_runtime|binder' "${out}/avc.txt")"
+journalctl -b --no-pager -o short-monotonic -u waydroid-container.service -u dev-binderfs.mount \
+    > "${out}/journal-waydroid.txt" 2>&1
+journalctl -b --no-pager -o short-monotonic "_UID=${uid}" | tail -n 3000 > "${out}/journal-user.txt" 2>&1
+cp /var/lib/waydroid/waydroid.log "${out}/waydroid.log" 2> /dev/null
+journalctl -b --no-pager -o short-monotonic | tail -n 2000 > "${out}/journal-tail.txt"
+
+chmod -R a+rX "${base}"
+for _ in $(seq 1 20); do [ -e "${port}" ] && break; sleep 1; done
+if [ -e "${port}" ] && tar -C "${base}" -cf - android > "${port}"; then
+    for _ in 1 2 3; do say "ANDROID-COMPLETE sent uptime=$(uptime_s)"; sleep 1; done
+else
+    for _ in 1 2 3; do say "ANDROID-COMPLETE not-sent uptime=$(uptime_s)"; sleep 1; done
+fi

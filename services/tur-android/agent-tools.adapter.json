@@ -1,0 +1,100 @@
+{
+  "schema_version": 1,
+  "service": "org.tur.Android1",
+  "adapters": [
+    {
+      "tool": "android_status",
+      "kind": "command",
+      "program": "/usr/bin/tur-android",
+      "arguments": [
+        { "literal": "status" },
+        { "literal": "--json" }
+      ]
+    },
+    {
+      "tool": "android_explain",
+      "kind": "command",
+      "program": "/usr/bin/tur-android",
+      "arguments": [
+        { "literal": "explain" },
+        { "literal": "--json" }
+      ]
+    },
+    {
+      "tool": "android_list_apps",
+      "kind": "command",
+      "program": "/usr/bin/tur-android",
+      "arguments": [
+        { "literal": "list" },
+        { "literal": "--json" }
+      ]
+    },
+    {
+      "tool": "android_launch_app",
+      "kind": "command",
+      "program": "/usr/bin/tur-android",
+      "arguments": [
+        { "literal": "launch" },
+        { "literal": "--json" },
+        { "literal": "--wait=100" },
+        { "literal": "--" },
+        { "input": "id" }
+      ],
+      "success_exit_codes": [0, 3],
+      "timeout_seconds": 120
+    },
+    {
+      "tool": "android_install_app",
+      "kind": "command",
+      "program": "/usr/bin/tur-android",
+      "arguments": [
+        { "literal": "install" },
+        { "literal": "--json" },
+        { "literal": "--wait=60" },
+        { "literal": "--" },
+        { "input": "path" }
+      ],
+      "success_exit_codes": [0, 3],
+      "timeout_seconds": 120
+    },
+    {
+      "tool": "android_remove_app",
+      "kind": "command",
+      "program": "/usr/bin/tur-android",
+      "arguments": [
+        { "literal": "remove" },
+        { "literal": "--json" },
+        { "literal": "--wait=60" },
+        { "literal": "--" },
+        { "input": "id" }
+      ],
+      "success_exit_codes": [0, 3],
+      "timeout_seconds": 120
+    },
+    {
+      "tool": "android_switch_on",
+      "kind": "command",
+      "program": "/usr/bin/tur-android",
+      "arguments": [
+        { "literal": "enable" },
+        { "literal": "--yes" },
+        { "literal": "--detach" },
+        { "literal": "--json" }
+      ],
+      "success_exit_codes": [0, 3],
+      "timeout_seconds": 120
+    },
+    {
+      "tool": "android_switch_off",
+      "kind": "command",
+      "program": "/usr/bin/tur-android",
+      "arguments": [
+        { "literal": "disable" },
+        { "literal": "--yes" },
+        { "literal": "--json" }
+      ],
+      "success_exit_codes": [0, 3],
+      "timeout_seconds": 120
+    }
+  ]
+}

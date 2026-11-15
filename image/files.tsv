@@ -18,3 +18,4 @@ services/tur-pax/units/tur-pax-catchup.service	/usr/lib/systemd/user
 services/tur-pax/units/tur-pax-catchup.timer	/usr/lib/systemd/user
 services/tur-pax/interfaces/org.tur.Agent1.xml	/usr/share/dbus-1/interfaces
 services/tur-ai-local/catalogue/*.toml	/usr/share/tur/ai-local/models
+services/tur-android/data/images.json	/usr/share/tur/android
