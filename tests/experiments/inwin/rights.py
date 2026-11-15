@@ -44,12 +44,21 @@ def empty(value):
     return isinstance(value, dict) and all(item is None for item in value.values())
 
 
+def without_timings(value):
+    """A value without the milliseconds a probe records about itself."""
+    if isinstance(value, dict):
+        return {key: without_timings(item) for key, item in value.items() if not (key.endswith("_ms") or key == "milliseconds")}
+    if isinstance(value, list):
+        return [without_timings(item) for item in value]
+    return value
+
+
 def classify(row, reference=None):
     """read, read but different from the elevated run, empty, refused, absent, failed."""
     if row.get("ok"):
         if empty(row.get("value")):
             return "empty"
-        if reference is not None and reference.get("ok") and row["name"] not in VOLATILE and row.get("value") != reference.get("value"):
+        if reference is not None and reference.get("ok") and row["name"] not in VOLATILE and without_timings(row.get("value")) != without_timings(reference.get("value")):
             return "read (differs)"
         return "read"
     error = row.get("error", "")
