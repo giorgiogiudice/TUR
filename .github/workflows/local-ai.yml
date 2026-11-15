@@ -389,6 +389,10 @@ jobs:
           for adapters in sorted(pathlib.Path("services").glob("*/agent-tools.adapter.json")):
               component = adapters.parent.name
               for adapter in json.loads(adapters.read_text())["adapters"]:
+                  # A request adapter names a service's socket, not a
+                  # program (ADR-0027); pax.yml skips it the same way.
+                  if adapter.get("kind") == "request":
+                      continue
                   program = adapter["program"]
                   if not program.startswith("/usr/bin/"):
                       sys.exit(f"{component}: {program} is not a program in /usr/bin")

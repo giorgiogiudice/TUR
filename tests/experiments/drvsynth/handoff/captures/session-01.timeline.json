@@ -1,0 +1,72 @@
+{
+  "session": 1,
+  "title": "First use",
+  "capture": "session-01.pcapng",
+  "text": "session-01.txt",
+  "clock": "seconds since the capture started",
+  "entries": [
+    {
+      "from": 0.5,
+      "to": 14.773,
+      "did": "started the computer with the gadget plugged in (Windows loaded its driver)",
+      "shown": []
+    },
+    {
+      "from": 14.773,
+      "did": "asked for the device information",
+      "to": 15.015,
+      "shown": [
+        "firmware 3.1.4",
+        "uptime 4305"
+      ]
+    },
+    {
+      "from": 15.717,
+      "did": "read all sensors",
+      "to": 15.729,
+      "shown": [
+        "temperature 21.37",
+        "humidity 45.2",
+        "light 312"
+      ]
+    },
+    {
+      "from": 16.429,
+      "did": "asked which mode the gadget is in",
+      "to": 16.445,
+      "shown": [
+        "day"
+      ]
+    },
+    {
+      "from": 17.145,
+      "did": "asked for the display brightness",
+      "to": 17.158,
+      "shown": [
+        "60"
+      ]
+    },
+    {
+      "from": 17.859,
+      "did": "asked for the night-light level",
+      "to": 18.377,
+      "shown": [
+        "10"
+      ]
+    },
+    {
+      "from": 19.078,
+      "did": "asked for the temperature alert",
+      "to": 19.592,
+      "shown": [
+        "off"
+      ]
+    },
+    {
+      "from": 20.293,
+      "did": "listed the stored notes (there were none)",
+      "to": 20.305,
+      "shown": []
+    }
+  ]
+}

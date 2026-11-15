@@ -256,12 +256,13 @@ jobs:
 
           if "image" not in chosen:
               if pull_request:
-                  sys.exit(rules.fallback(repo, os.environ["HEAD_REF"], "the image workflow did not run on this commit"))
+                  sys.exit(rules.fallback(repo, os.environ["HEAD_REF"], "the image workflow did not run on this commit", head=sha))
               no("the image workflow did not run on this commit: no image to release")
           if pending:
               if pull_request:
                   sys.exit(rules.fallback(repo, os.environ["HEAD_REF"],
-                                          "this commit's workflows have not finished (" + ", ".join(pending) + ")"))
+                                          "this commit's workflows have not finished (" + ", ".join(pending) + ")",
+                                          head=sha))
               no(f"not yet: {sha[:12]}: still running: " + ", ".join(pending)
                  + (". The release starts when the last of them has finished" if event == "workflow_run"
                     else ". Start this again when they have finished"))
@@ -279,7 +280,7 @@ jobs:
               sys.exit(0 if event == "workflow_run" and not any(str(r["id"]) == trigger[0] for r in chosen.values()) else 1)
           if chosen["image"]["conclusion"] != "success" or chosen.get("boot", {}).get("conclusion") != "success":
               if pull_request:
-                  sys.exit(rules.fallback(repo, os.environ["HEAD_REF"], "the boot workflow did not run on this commit"))
+                  sys.exit(rules.fallback(repo, os.environ["HEAD_REF"], "the boot workflow did not run on this commit", head=sha))
               rules.output(release="false",
                            reason="this commit's image was not both built (image) and booted (boot) by CI", **ids)
               rules.summary("Nothing to release: the image of this commit was not both built and booted by CI.")
