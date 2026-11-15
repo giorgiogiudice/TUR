@@ -114,14 +114,73 @@ again (UEFI: `BootNext` is deleted when it is used). The "Windows" entry of
 TUR's menu stays, and on a disk that holds BitLocker its title says
 "Windows (may ask for the BitLocker recovery key)".
 
-**The order of writing, for a power cut at any moment.** Record (the GPT and
-the SHA-256 of every file on the ESP), then one GPT entry for the free space
-(`sfdisk --append`: GPT keeps two copies with checksums, so a cut leaves the
-old table or the new one), then ext4 inside it, then bootc (whose last step
-writes the ESP and the firmware entry), then Windows' fallback file back,
-then the "Windows" entry, then the check that every file and every partition
-entry Windows had is unchanged. Windows' partitions are never opened for
-writing; the ESP is writable only inside bootupd and for the one rename.
+**The order of writing, for a power cut at any moment.** First a record of
+the disk as it is, kept in a directory of TUR's own on the ESP (`EFI/tur`):
+the GPT, the SHA-256 of every file on the ESP, the firmware's boot order and
+a copy of Windows' fallback boot loader. Then one GPT entry for the free
+space (`sfdisk --append`: GPT keeps two copies with checksums, so a cut
+leaves the old table or the new one), then ext4 inside it, then bootc (whose
+last step writes the ESP and the firmware entry), then Windows' fallback
+file back, then the "Windows" entry, then the check that every file and
+every partition entry Windows had is unchanged, then the default system.
+Windows' partitions are never opened for writing; the ESP is writable only
+for the record, inside bootupd, and for the one rename.
+
+**Measured (iso run 43536196180): one window in which a file of Windows' is
+not Windows'.** Power cuts after bootupd had run and before the installer
+put Windows' `EFI/Boot/bootx64.efi` back left TUR's shim in that file, and
+"TUR" first in the boot order. Every Windows partition was byte-identical,
+everything under `EFI/Microsoft` was identical and the "Windows Boot
+Manager" entry unchanged: Windows itself still starts, from the firmware's
+boot menu. bootupd offers no way not to write that file. So: (a) the file is
+now put back as soon as bootc's output shows bootupd has finished (it was
+only after bootc's end, several seconds later), which shortens the window to
+about two seconds; (b) the record on the ESP, written before anything else,
+lets the installer **remove TUR again** after any interruption and leave the
+disk exactly as it was (below). The window cannot be closed while bootupd
+writes `EFI/BOOT`.
+
+**Removing TUR (the owner's requirement of 14 November: Windows must always
+start by itself, and TUR must be removable, the space given back and Windows
+left exactly as it was).** Options: documented steps from Windows only
+(Disk Management, `bcdedit`, `mountvol`): fragile, and nothing checks the
+result; or **the installer medium removes TUR** (chosen; the steps from
+Windows are documented too, for a computer without the stick). From the
+medium (text installer, "Remove TUR from this disk"; engine `remove`), after
+the typed phrase `REMOVE` and the end of the disk's serial number: the "TUR"
+firmware entries are deleted and the boot order of the record restored;
+Windows' fallback loader is put back if TUR's shim is in its place; TUR's
+files are deleted from the ESP (`EFI/fedora`, what bootupd added to
+`EFI/BOOT`, the record), never anything under `EFI/Microsoft`, nor a file
+that was there before TUR or that Windows added since; TUR's partition is
+wiped of its filesystem signature and its GPT entry deleted; the result is
+compared with the record. It works on a whole installation and on what a
+power cut left, and can be repeated. TUR itself cannot do it: it would be
+deleting the partition it runs from.
+
+**What Windows sees (the owner's requirement: inside Windows nothing may
+change).** TUR's partition has the GPT type "Linux root (x86-64)"
+(`4F68BCE3-E8CD-4DB1-96E7-FBCAF984B709`) and the GPT name "TUR"; its
+filesystem is ext4, labelled "TUR". Windows gives drive letters only to
+partitions of the type "basic data" (`EBD0A0A2-…`) [S12], so TUR's
+partition gets no letter, does not appear in Explorer, and Windows does not
+offer to format it; C: and every other letter and label stay as they are.
+Disk Management shows it as a partition without a letter, a label or a
+filesystem it can name, between C: and the recovery partition. No GPT
+attribute is set: bit 63 ("no drive letter") has that meaning only on basic
+data partitions (on a root partition systemd reads it as "do not mount
+automatically"), and bit 0 ("required by the platform") marks a partition
+the computer needs, which Disk Management then does not let a person delete
+(DiskPart still can), and a person removing TUR from Windows should be able
+to.
+The ESP keeps its label, its size and its Windows files; TUR's directories
+there (`EFI\fedora`, `EFI\tur`) are not visible in Windows unless the ESP
+is given a letter by hand. **Not verified on a real Windows.** One thing
+TUR does change that Windows shows: a Linux system keeps the computer's
+clock in universal time and Windows in local time, so after TUR has run,
+Windows' clock can be off by the time zone until it synchronises. Not
+solved here; recorded for the `dualrun` design (set TUR to keep the clock in
+local time when it is installed beside Windows).
 
 ## Decision
 
@@ -160,8 +219,11 @@ crate):
 | `TUR-INSTALL-BESIDE-002` | Not exactly one ESP, or no Windows Boot Manager on it |
 | `TUR-INSTALL-BESIDE-003` | The largest free stretch is smaller than 25 GiB; the message says how to shrink Windows |
 | `TUR-INSTALL-BESIDE-004` | The ESP has too little free space for TUR's boot loader |
-| `TUR-INSTALL-BESIDE-005` | The ESP already holds `EFI/fedora` |
+| `TUR-INSTALL-BESIDE-005` | TUR is already on the disk (or an installation of it was interrupted: remove it first), or the ESP holds another system's `EFI/fedora` |
 | `TUR-INSTALL-BESIDE-006` | After writing, an entry or a file Windows had is different (the installation stops and says so) |
+| `TUR-INSTALL-REMOVE-001` | Removing: TUR is not on this disk beside Windows (any more) |
+| `TUR-INSTALL-REMOVE-002` | Removing: TUR's files could not all be removed from the ESP |
+| `TUR-INSTALL-REMOVE-003` | Removing: TUR's partition could not be deleted |
 
 ## Consequences
 
@@ -193,10 +255,20 @@ crate):
   documented manual procedure (shrink C:, recreate the recovery partition
   right after it) still works; Windows' automatic resize may not. Not
   measured.
-- Leftovers of a power cut: an unfinished "TUR" partition in the free space,
-  which the installer then shows as a partition, not as free space. It is
-  removed in Windows' Disk Management. The installer does not yet offer to
-  reuse it.
+- Leftovers of a power cut (an unfinished "TUR" partition, TUR's files on
+  the ESP, possibly its shim in Windows' fallback loader's place and "TUR"
+  first in the boot order) are removed by the medium's "Remove TUR from this
+  disk", which leaves the disk as it was before; the installation can then
+  be started again. Until then the installer refuses to install beside
+  Windows on that disk and says so.
+- TUR keeps a small record on Windows' ESP, `EFI/tur` (a few kilobytes and
+  a copy of Windows' fallback loader, 1 to 3 MB on a real Windows): files of
+  TUR's own that Windows does not use. Removing TUR deletes it.
+- Labels are plain: the partition and its filesystem are "TUR", the
+  firmware entry is "TUR". `EFI/fedora` on the ESP is the one name TUR
+  cannot choose: Fedora's signed shim and GRUB have it built in (ADR-0013).
+  A whole-disk installation still gets bootc's own labels ("root",
+  "EFI-SYSTEM").
 - **Case-insensitive folders for Windows applications (issue 99, issue 81).**
   Installing into a partition TUR makes itself opens the way the whole-disk
   installation lacked: the installer chooses the filesystems. Proposed,
@@ -247,8 +319,19 @@ recovery partition at the end:
   stand-in, which reports the file it was started from and the partition's
   UUID, compared with the ESP's;
 - a power cut (QEMU stopped at once) at each step: after each, the same
-  comparison, the firmware's "Windows Boot Manager" entry, and what the disk
-  then starts.
+  comparison (in which only Windows' fallback loader may differ, as
+  described above), the firmware's "Windows Boot Manager" entry, and what
+  the disk then starts; then TUR is removed from the medium and the disk
+  must be exactly as before TUR: the partition table, every partition's
+  bytes, the ESP's files with none added, the free space, no "TUR" firmware
+  entry, the boot order of before;
+- TUR removed after a complete installation, the same comparison, and the
+  disk then starts Windows' start-up file (the stand-in) by itself.
+
+Run 43536196180 (commit 64427e0) showed the first eight points (job
+`beside`, every check passed) and, in job `beside-faults`, the window
+described under "Measured"; removal and the earlier put-back are new since
+and are shown by the runs of the pull request's head (TUR-011).
 
 **Not shown**, recorded as not run:
 
@@ -270,6 +353,9 @@ recovery partition at the end:
   remove.
 - Real firmware: whether it keeps the entry bootupd adds, and how it shows
   the boot order.
+- What Windows' Disk Management and Explorer show for TUR's partition, and
+  removing TUR by hand from Windows (the guide's steps): read in Microsoft's
+  documentation, not run.
 
 ## Owner's decisions, 14 November 2026
 
@@ -286,6 +372,11 @@ recovery partition at the end:
    the minimum, a typed confirmation, and a strong recommendation to back up
    first. Tested on volumes made by mkfs.ntfs, not on a real Windows volume.
 4. **Minimum free space for TUR: 25 GiB.**
+5. **Inside Windows nothing may change** (letters, labels, no new drive in
+   Explorer); **Windows must always start by itself, and TUR must be
+   removable**, the space given back and Windows left exactly as it was;
+   **labels TUR creates are plain ("TUR")**. See "What Windows sees" and
+   "Removing TUR" above.
 
 ## Step 2: shrinking Windows from the installer
 
@@ -313,3 +404,4 @@ safety cannot be claimed from CI without a real Windows image.
 | S9 | https://lists.snapcraft.io/archives/foundations-bugs/2026-March/546735.html (Launchpad bug 2144897) |
 | S10 | https://learn.microsoft.com/en-us/windows-hardware/manufacture/desktop/configure-uefigpt-based-hard-drive-partitions |
 | S11 | https://wiki.archlinux.org/title/Dual_boot_with_Windows |
+| S12 | https://learn.microsoft.com/en-us/windows/win32/api/winioctl/ns-winioctl-partition_information_gpt (drive letters and the attributes of basic data partitions) |

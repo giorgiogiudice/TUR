@@ -33,6 +33,11 @@
 #   {"event":"cancel","accepted":true|false}
 #   {"event":"result","outcome":"success|failed|refused|cancelled",...}
 #
+# `remove --by-id ... --phrase "REMOVE ..."` (the same disk arguments as
+# install) removes TUR from a disk it shares with Windows and leaves Windows
+# as it was before TUR (ADR-0029). The graphical installer does not offer it
+# yet; the text installer does.
+#
 # The installation can be cancelled by writing the line "cancel" to its
 # standard input, until the point at which the disk begins to be written.
 # After that a request is answered with {"event":"cancel","accepted":false}.
@@ -146,7 +151,7 @@ partition_kind() {
 }
 
 do_disks() {
-    local i part parts tree phrase print beside
+    local i part parts tree phrase print beside remove
     mark "engine disks"
     scan_disks
     dump_inventory
@@ -165,10 +170,14 @@ do_disks() {
         # Installing into the free space beside Windows (ADR-0029): offered
         # for a disk that holds Windows, with what was found, or why not.
         beside=null
+        remove=null
+        if [ "${d_remove[i]:-no}" = yes ]; then
+            remove="{\"possible\":true,\"partition\":$(js "${d_rpart[i]##*/}"),\"size\":$(number "${d_rsize[i]}"),\"phrase\":$(js "$(remove_phrase_for "${i}")")}"
+        fi
         if [ "${d_status[i]}" = ok ] && [ "${d_windows[i]}" = yes ]; then
             beside="{\"possible\":$([ "${d_beside[i]}" = yes ] && echo true || echo false),\"code\":$(js "${d_bcode[i]}"),\"why\":$(js "${d_bwhy[i]}"),\"free_start\":$(number "${d_bstart[i]}"),\"free_size\":$(number "${d_bsize[i]}"),\"before\":$(js "${d_bbefore[i]}"),\"after\":$(js "${d_bafter[i]}"),\"esp\":$(js "${d_besp[i]##*/}"),\"esp_size\":$(number "${d_bespsize[i]}"),\"esp_free\":$(number "${d_bespfree[i]}"),\"esp_needed\":$(number "${d_bneed[i]}"),\"min_bytes\":${BESIDE_MIN_BYTES},\"phrase\":$(js "$([ "${d_beside[i]}" = yes ] && beside_phrase_for "${i}")")}"
         fi
-        tree="{\"event\":\"disk\",\"name\":$(js "${d_name[i]}"),\"model\":$(js "${d_model[i]}"),\"serial\":$(js "${d_serial[i]}"),\"serial_end\":$(js "$(serial_end "${i}")"),\"wwn\":$(js "${d_wwn[i]}"),\"size\":${d_size[i]:-0},\"transport\":$(js "${d_tran[i]}"),\"by_id\":$(js "${d_byid[i]}"),\"status\":$(js "${d_status[i]}"),\"code\":$(js "${d_code[i]}"),\"why\":$(js "${d_why[i]}"),\"holds\":$(js "${d_holds[i]}"),\"words\":$(js "${d_words[i]}"),\"windows\":$([ "${d_windows[i]}" = yes ] && echo true || echo false),\"bitlocker\":$([ "${d_bitlocker[i]}" = yes ] && echo true || echo false),\"linux\":${d_linux[i]:-0},\"ntfs\":${d_ntfs[i]:-0},\"partition_count\":${d_parts[i]:-0},\"phrase\":$(js "${phrase}"),\"fingerprint\":$(js "${print}"),\"beside\":${beside},\"partitions\":[${parts}]}"
+        tree="{\"event\":\"disk\",\"name\":$(js "${d_name[i]}"),\"model\":$(js "${d_model[i]}"),\"serial\":$(js "${d_serial[i]}"),\"serial_end\":$(js "$(serial_end "${i}")"),\"wwn\":$(js "${d_wwn[i]}"),\"size\":${d_size[i]:-0},\"transport\":$(js "${d_tran[i]}"),\"by_id\":$(js "${d_byid[i]}"),\"status\":$(js "${d_status[i]}"),\"code\":$(js "${d_code[i]}"),\"why\":$(js "${d_why[i]}"),\"holds\":$(js "${d_holds[i]}"),\"words\":$(js "${d_words[i]}"),\"windows\":$([ "${d_windows[i]}" = yes ] && echo true || echo false),\"bitlocker\":$([ "${d_bitlocker[i]}" = yes ] && echo true || echo false),\"linux\":${d_linux[i]:-0},\"ntfs\":${d_ntfs[i]:-0},\"partition_count\":${d_parts[i]:-0},\"phrase\":$(js "${phrase}"),\"fingerprint\":$(js "${print}"),\"beside\":${beside},\"remove\":${remove},\"partitions\":[${parts}]}"
         emit "${tree}"
     done
     emit "{\"event\":\"disks\",\"total\":${#d_name[@]},\"selectable\":${selectable},\"minimum_bytes\":${min_target_bytes:-0}}"
@@ -361,6 +370,54 @@ do_install_beside() {
     result success "" "TUR is installed beside Windows." installed "\"mode\":\"beside\",\"default\":$(js "${default_system}"),\"status\":0,\"seconds\":${install_seconds},\"device\":$(js "${target_device}"),\"partition\":$(js "${beside_partition}"),\"log_on_disk\":$(js "${kept_log_path}")"
 }
 
+# ---- remove: TUR away from beside Windows (engine.sh, run_remove) ----------------
+
+do_remove() {
+    local by_id="" serial="" wwn="" size="" print="" phrase="" expected
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+            --by-id) by_id="$2"; shift 2 ;;
+            --serial) serial="$2"; shift 2 ;;
+            --wwn) wwn="$2"; shift 2 ;;
+            --size) size="$2"; shift 2 ;;
+            --fingerprint) print="$2"; shift 2 ;;
+            --phrase) phrase="$2"; shift 2 ;;
+            *)
+                result refused TUR-INSTALL-CONFIRM-001 "Unknown option $1; nothing was changed." untouched
+                exit 2
+                ;;
+        esac
+    done
+    case "${size}" in '' | *[!0-9]*) size=0 ;; esac
+    mark "engine remove by_id=${by_id}"
+    set_stage revalidate
+    if ! revalidate "${by_id}" "${serial}" "${wwn}" "${size}" "${print}"; then
+        mark "revalidate result=refused code=${engine_code}"
+        result refused "${engine_code}" "${engine_message} Nothing was changed." untouched
+        exit 3
+    fi
+    device_name="${target_device##*/}"
+    if ! remove_look "${device_name}"; then
+        result refused TUR-INSTALL-REMOVE-001 "TUR was not found beside Windows on this disk. Nothing was changed." untouched
+        exit 3
+    fi
+    expected="$(phrase_of "$(prop "${device_name}" SERIAL)" "$(prop "${device_name}" WWN)" "$(prop "${device_name}" SIZE)" REMOVE)"
+    if [ "${phrase}" != "${expected}" ]; then
+        mark "confirm result=mismatch code=TUR-INSTALL-CONFIRM-001 frontend=graphical mode=remove"
+        result refused TUR-INSTALL-CONFIRM-001 "The confirmation does not name this disk. Nothing was changed." untouched
+        exit 3
+    fi
+    mark "confirm result=accepted frontend=graphical mode=remove"
+    set_stage remove
+    if ! run_remove "${target_device}"; then
+        mark "result=failed code=${remove_code}"
+        result failed "${remove_code}" "${remove_message}" partial "\"mode\":\"remove\""
+        exit 5
+    fi
+    mark "result=removed table=${remove_table} esp=${remove_esp} device=${target_device}"
+    result success "" "TUR was removed. Windows was left as it was." removed "\"mode\":\"remove\",\"table\":$(js "${remove_table}"),\"esp\":$(js "${remove_esp}"),\"device\":$(js "${target_device}")"
+}
+
 # ---- the log, to a USB stick -----------------------------------------------------
 
 # A filesystem the log can be saved to: on a USB or removable disk that is not
@@ -457,6 +514,10 @@ case "${1:-}" in
     install)
         shift
         do_install "$@"
+        ;;
+    remove)
+        shift
+        do_remove "$@"
         ;;
     *)
         echo "usage: tur-install-engine check | disks | sticks | save-log --to PATH | install [--mode erase|beside --region-start BYTES --region-size BYTES --default tur|windows] --by-id PATH --serial S --wwn W --size BYTES --fingerprint F --phrase PHRASE" >&2

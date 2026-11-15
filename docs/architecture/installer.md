@@ -62,6 +62,20 @@ image's `tur-dualboot default` (which the person also uses later, with
 `restart-windows` for "Restart into Windows" through the firmware's
 BootNext). Its state lines start `TUR-INSTALLER: beside `. Never `--replace=alongside`: it deletes the ESP's `EFI` directory.
 
+**Removing TUR from beside Windows** (ADR-0029). Before it changes
+anything, `run_beside` keeps a record on the shared ESP, `EFI/tur`: the
+partition table, the SHA-256 of every file on the ESP, the firmware's boot
+order and a copy of Windows' fallback boot loader. `disks` lists
+`"remove": {possible, partition, size, phrase}` for a disk that holds
+Windows and TUR's partition (GPT name "TUR", type Linux root x86-64) or
+that record; `remove --by-id … --phrase "REMOVE ..."` (and the text
+installer's "Remove TUR from this disk") runs `run_remove`: the firmware's
+"TUR" entries deleted and the recorded boot order restored, Windows'
+fallback loader put back if TUR's shim is in its place, TUR's files deleted
+from the ESP, TUR's partition deleted, and the result compared with the
+record. It works after a complete installation and after an interrupted
+one. State lines start `TUR-INSTALLER: remove `.
+
 The installation log (the engine's log, bootc's output, the graphical
 installer's state lines) is copied to `/var/log/tur-installer/<session>/`
 on the installed disk (§28.3), with the SELinux label of `/var/log`. It is

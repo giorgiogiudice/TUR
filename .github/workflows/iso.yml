@@ -672,7 +672,7 @@ jobs:
   # recorded before, and compared after the installation, after TUR's first
   # start and after "Windows" was chosen in TUR's boot menu.
   beside:
-    name: Beside Windows on the same disk - install, first start, Windows entry
+    name: Beside Windows on the same disk - install, first start, Windows entry, removal
     needs: lint
     runs-on: ubuntu-24.04
     timeout-minutes: 180
@@ -795,8 +795,23 @@ jobs:
               --variables-from "$d/install/host/OVMF_VARS.after.fd" \
               --disk "$WORK/shared.raw" --work "$WORK/vm" --out "$d/windows-entry" || status=$?
             python3 tests/iso/windows-disk.py compare "$d/before.json" "$WORK/shared.raw" "$d/compare-windows-entry.json" || status=$?
+            # TUR removed again, from the medium (ADR-0029). TUR is first in
+            # the boot order, so the stick is put first as a person does with
+            # the firmware's boot menu (tests/iso/efivars.py first). Then the
+            # disk must be exactly as before TUR, and must start Windows'
+            # start-up file (the stand-in) by itself.
+            python3 tests/iso/efivars.py first "$d/install/host/OVMF_VARS.after.fd" "$WORK/remove-vars.fd" \
+              TURINSTALLERMEDIUM || status=$?
+            python3 tests/iso/install.py remove --medium "$MEDIUM" --medium-as usb --no-bootindex \
+              --variables-from "$WORK/remove-vars.fd" \
+              --disk "$WORK/shared.raw" --work "$WORK/vm" --out "$d/remove" || status=$?
+            python3 tests/iso/windows-disk.py compare "$d/before.json" "$WORK/shared.raw" "$d/compare-removed.json" \
+              --exact || status=$?
+            python3 tests/iso/boot-installed.py --no-bootindex --windows-entry --timeout 150 \
+              --variables-from "$d/remove/host/OVMF_VARS.after.fd" \
+              --disk "$WORK/shared.raw" --work "$WORK/vm" --out "$d/after-remove" || status=$?
           fi
-          rm -f "$WORK/shared.raw"
+          rm -f "$WORK/shared.raw" "$WORK/remove-vars.fd"
           exit "$status"
 
       # The graphical installer in the live session, driven with the keyboard.
@@ -846,7 +861,7 @@ jobs:
         if: failure()
         run: |
           show() { echo "::group::$1"; if [ -f "$1" ]; then tail -n "${2:-200}" "$1"; else echo "(absent)"; fi; echo "::endgroup::"; }
-          for run in refused shared/windows-setup shared/install live; do
+          for run in refused shared/windows-setup shared/install shared/remove live; do
             show "$OUT/$run/result.json" 150
             show "$OUT/$run/installer-screens.txt" 150
             if [ -f "$OUT/$run/serial.log" ]; then
@@ -855,7 +870,8 @@ jobs:
               echo "::endgroup::"
             fi
           done
-          for f in compare-install compare-first-start compare-windows-entry; do show "$OUT/shared/$f.json" 80; done
+          for f in compare-install compare-first-start compare-windows-entry compare-removed; do show "$OUT/shared/$f.json" 80; done
+          show "$OUT/shared/after-remove/first-start.json" 60
           show "$OUT/shared/first-start/first-start.json" 80
           show "$OUT/shared/windows-entry/first-start.json" 80
           if [ -f "$OUT/shared/windows-entry/serial.log" ]; then
@@ -874,7 +890,7 @@ jobs:
   # at once at each step. After every cut, Windows' partitions, its files on
   # the EFI system partition and its firmware entry must be as they were.
   beside-faults:
-    name: Beside Windows on the same disk - a power cut at each step
+    name: Beside Windows on the same disk - a power cut at each step, then TUR removed
     needs: lint
     runs-on: ubuntu-24.04
     timeout-minutes: 200
@@ -951,13 +967,18 @@ jobs:
           rm -f "$WORK/setup.raw"
 
       # Each cut: a fresh copy of the disk, an installation beside Windows
-      # cut at a step, the comparison, then a start of the disk with "w"
-      # pressed (what starts is recorded, not judged).
-      - name: "Power cuts at each step"
+      # cut at a step, and the comparison with the disk before (judged by the
+      # report: only Windows' fallback boot loader may differ, while TUR's
+      # shim is in its place). Unless the cut left nothing at all on the
+      # disk: a start of the disk with "w" pressed (what starts is recorded),
+      # then the recovery: the medium started again (the stick put first in
+      # the boot order, tests/iso/efivars.py first), "Remove TUR from this
+      # disk", and the disk compared again: it must be exactly as before TUR.
+      - name: "Power cuts at each step, then TUR removed again"
         if: ${{ !cancelled() && env.MEDIUM != '' }}
         run: |
           status=0
-          for cut in partition:0 partitioned:0 filesystem:0 deploy:30 bootloader:0 bootloader:2 deployed:0 boot-menu:0 check:0; do
+          for cut in state:0 partition:0 filesystem:0 deploy:30 bootloader:0 bootloader:1 deployed:0 boot-menu:0; do
             at="${cut%%:*}" delay="${cut#*:}"
             d="$OUT/cut-$at-$delay"
             mkdir -p "$d"
@@ -967,15 +988,24 @@ jobs:
               --medium "$MEDIUM" --medium-as usb --no-bootindex \
               --variables-from "$OUT/setup/host/OVMF_VARS.after.fd" \
               --disk "$WORK/cut.raw" --work "$WORK/vm" --out "$d" || status=$?
-            python3 tests/iso/windows-disk.py compare "$OUT/before.json" "$WORK/cut.raw" "$d/compare.json" || status=$?
-            if [ -f "$WORK/vm/tur-iso-same-disk-cut-OVMF_VARS.fd" ]; then
-              cp "$WORK/vm/tur-iso-same-disk-cut-OVMF_VARS.fd" "$d/host/OVMF_VARS.after.fd"
+            python3 tests/iso/windows-disk.py compare "$OUT/before.json" "$WORK/cut.raw" "$d/compare.json" > /dev/null || true
+            if python3 tests/iso/windows-disk.py compare "$OUT/before.json" "$WORK/cut.raw" \
+                 "$d/compare-exact-after-cut.json" --exact > /dev/null; then
+              echo "the cut left the disk exactly as before TUR: nothing to remove"
+            else
+              mkdir -p "$d/start"
+              python3 tests/iso/boot-installed.py --no-bootindex --windows-entry --timeout 150 \
+                --variables-from "$d/host/OVMF_VARS.after.fd" \
+                --disk "$WORK/cut.raw" --work "$WORK/vm" --out "$d/start" || true
+              python3 tests/iso/efivars.py first "$d/host/OVMF_VARS.after.fd" "$WORK/cut-vars.fd" \
+                TURINSTALLERMEDIUM || status=$?
+              python3 tests/iso/install.py remove --medium "$MEDIUM" --medium-as usb --no-bootindex \
+                --variables-from "$WORK/cut-vars.fd" \
+                --disk "$WORK/cut.raw" --work "$WORK/vm" --out "$d/remove" || status=$?
+              python3 tests/iso/windows-disk.py compare "$OUT/before.json" "$WORK/cut.raw" "$d/compare-removed.json" \
+                --exact > /dev/null || status=$?
             fi
-            mkdir -p "$d/start"
-            python3 tests/iso/boot-installed.py --no-bootindex --windows-entry --timeout 150 \
-              --variables-from "$d/host/OVMF_VARS.after.fd" \
-              --disk "$WORK/cut.raw" --work "$WORK/vm" --out "$d/start" || true
-            rm -f "$WORK/cut.raw" "$WORK/vm/tur-iso-same-disk-cut-OVMF_VARS.fd" "$WORK/vm/tur-iso-first-start-OVMF_VARS.fd"
+            rm -f "$WORK/cut.raw" "$WORK/cut-vars.fd"
             echo "::endgroup::"
           done
           exit "$status"
@@ -995,6 +1025,11 @@ jobs:
           for d in "$OUT"/cut-*; do
             echo "::group::$d"
             tail -n 60 "$d/compare.json" 2>/dev/null || true
+            tail -n 40 "$d/compare-removed.json" 2>/dev/null || true
+            tail -n 60 "$d/remove/installer-screens.txt" 2>/dev/null || true
+            if [ -f "$d/remove/serial.log" ]; then
+              sed 's/\x1b\[[0-9;?]*[A-Za-z]//g; s/\r//g' "$d/remove/serial.log" | tail -n 60
+            fi
             python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); print(r.get("outcome"), r.get("stopped_because")); print(json.dumps(r["facts"].get("cut"), indent=1))' "$d/result.json" 2>/dev/null || true
             echo "::endgroup::"
           done

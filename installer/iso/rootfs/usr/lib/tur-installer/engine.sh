@@ -268,6 +268,8 @@ d_holds=() d_words=() d_windows=() d_bitlocker=() d_linux=() d_ntfs=() d_parts=(
 # and the partitions just before and after the free stretch.
 d_beside=() d_bcode=() d_bwhy=() d_bstart=() d_bsize=() d_besp=() d_bespuuid=() d_bespfree=() d_bespsize=()
 d_bneed=() d_bafter=() d_bbefore=()
+# Removing TUR from beside Windows: whether, TUR's partition and its size.
+d_remove=() d_rpart=() d_rsize=()
 selectable=0
 
 prop() {
@@ -424,6 +426,7 @@ scan_disks() {
     d_holds=() d_words=() d_windows=() d_bitlocker=() d_linux=() d_ntfs=() d_parts=()
     d_beside=() d_bcode=() d_bwhy=() d_bstart=() d_bsize=() d_besp=() d_bespuuid=() d_bespfree=() d_bespsize=()
     d_bneed=() d_bafter=() d_bbefore=()
+    d_remove=() d_rpart=() d_rsize=()
     selectable=0
     live=" $(live_disks | sort -u | tr '\n' ' ')"
     while read -r name type; do
@@ -483,6 +486,14 @@ scan_disks() {
         mark "disk index=${d_index[i]} name=${name} size=${d_size[i]} serial=\"${serial}\" transport=${d_tran[i]:-unknown} status=${status} code=${code:-none} by_id=${link:-none} partitions=${d_parts[i]} holds=${words}"
         d_beside[i]=no d_bcode[i]="" d_bwhy[i]="" d_bstart[i]=0 d_bsize[i]=0 d_besp[i]="" d_bespuuid[i]=""
         d_bespfree[i]=0 d_bespsize[i]=0 d_bneed[i]=0 d_bafter[i]="" d_bbefore[i]=""
+        d_remove[i]=no d_rpart[i]="" d_rsize[i]=0
+        if [ "${status}" = ok ]; then
+            remove_look "${name}"
+            d_remove[i]="${r_possible}" d_rpart[i]="${r_part}" d_rsize[i]="${r_size}"
+            if [ "${r_possible}" = yes ]; then
+                mark "remove index=${d_index[i]} name=${name} possible=yes partition=${r_part:-none} size=${r_size} esp=${r_esp:-none} state=${r_state}"
+            fi
+        fi
         if [ "${status}" = ok ] && [ "${windows}" = yes ]; then
             beside_look "${name}"
             d_beside[i]="${b_possible}" d_bcode[i]="${b_code}" d_bwhy[i]="${b_why}"
@@ -533,6 +544,11 @@ phrase_for() {
     phrase_of "${d_serial[$1]}" "${d_wwn[$1]}" "${d_size[$1]}"
 }
 
+# remove_phrase_for I: the phrase that confirms removing TUR from disk I.
+remove_phrase_for() {
+    phrase_of "${d_serial[$1]}" "${d_wwn[$1]}" "${d_size[$1]}" REMOVE
+}
+
 # beside_phrase_for I: the phrase that confirms installing beside Windows on
 # disk I of the last scan.
 beside_phrase_for() {
@@ -560,6 +576,13 @@ readonly BESIDE_MIN_BYTES=$((25 * 1024 * 1024 * 1024))
 # The firmware's default and "Restart into Windows" (ADR-0029); in the image.
 readonly DUALBOOT=/usr/bin/tur-dualboot
 readonly TUR_PARTLABEL=TUR
+# What TUR found on the shared EFI system partition before it installed, kept
+# there in a directory of its own so that TUR can be removed again, also
+# after an interrupted installation, and Windows left exactly as it was:
+# the partition table, the SHA-256 of every file, the firmware's boot order
+# and a copy of Windows' fallback boot loader.
+readonly STATE_DIR=EFI/tur
+readonly STATE_FALLBACK=windows-bootx64.efi
 
 # esp_look PARTITION COMMAND...: run COMMAND inside an EFI system partition
 # mounted read-only, in a mount namespace of its own that ends with the
@@ -583,10 +606,55 @@ esp_look() {
 }
 
 # esp_manifest PARTITION: every file on an EFI system partition with its
-# SHA-256, sorted by path ("HASH  ./PATH").
+# SHA-256, sorted by path ("HASH  ./PATH"), without TUR's own record of what
+# was there before (STATE_DIR).
 esp_manifest() {
     # shellcheck disable=SC2016  # expanded by the inner shell
-    esp_look "$1" /bin/sh -c 'find . -type f -print0 | sort -z | xargs -0 -r sha256sum'
+    esp_look "$1" /bin/sh -c 'find . -type f -print0 | sort -z | xargs -0 -r sha256sum' \
+        | { grep -viE "^[0-9a-f]+  \./${STATE_DIR}(\.new)?/" || true; }
+}
+
+# tur_partitions NAME: the partitions of disk NAME that TUR's installer made
+# beside Windows: named TUR_PARTLABEL, of the type "Linux root (x86-64)".
+tur_partitions() {
+    local part
+    while read -r part; do
+        if [ "$(prop "${part}" PARTLABEL)" = "${TUR_PARTLABEL}" ] \
+            && [ "$(prop "${part}" PARTTYPE | tr '[:upper:]' '[:lower:]')" = "${ROOT_GUID}" ]; then
+            echo "${part}"
+        fi
+    done < <(lsblk -ln -o NAME,TYPE "/dev/$1" 2> /dev/null | awk '$2 == "part" { print $1 }')
+}
+
+# remove_look NAME: can TUR be removed from disk NAME, where it was installed
+# (or began to be installed) beside Windows? Sets r_possible (yes or no),
+# r_part and r_size (TUR's partition, when there is one), r_esp (the shared
+# EFI system partition) and r_state (yes when it holds TUR's record of what
+# was there before). Reads only.
+remove_look() {
+    local name="$1" part esps=() parts=() leftover=no
+    r_possible=no r_part="" r_size=0 r_esp="" r_state=no
+    [ "$(prop "${name}" PTTYPE)" = gpt ] || return 1
+    while read -r part; do
+        if [ "$(prop "${part}" PARTTYPE | tr '[:upper:]' '[:lower:]')" = "${ESP_GUID}" ]; then esps+=("${part}"); fi
+    done < <(lsblk -ln -o NAME,TYPE "/dev/${name}" 2> /dev/null | awk '$2 == "part" { print $1 }')
+    [ "${#esps[@]}" -eq 1 ] || return 1
+    r_esp="/dev/${esps[0]}"
+    # Only beside Windows: a disk TUR has to itself is erased, not "removed from".
+    esp_look "${r_esp}" test -f EFI/Microsoft/Boot/bootmgfw.efi || return 1
+    if esp_look "${r_esp}" test -f "${STATE_DIR}/table-before.txt"; then r_state=yes; fi
+    # An installation cut short while the record was being written leaves
+    # only an unfinished directory of TUR's.
+    if esp_look "${r_esp}" test -e "${STATE_DIR}" || esp_look "${r_esp}" test -e "${STATE_DIR}.new"; then leftover=yes; fi
+    mapfile -t parts < <(tur_partitions "${name}")
+    if [ "${#parts[@]}" -gt 1 ]; then return 1; fi
+    if [ "${#parts[@]}" -eq 1 ]; then
+        r_part="/dev/${parts[0]}"
+        r_size="$(prop "${parts[0]}" SIZE)"
+    fi
+    if [ -z "${r_part}" ] && [ "${r_state}" = no ] && [ "${leftover}" = no ]; then return 1; fi
+    r_possible=yes
+    return 0
 }
 
 # loader_bytes: what TUR's boot loader takes on an EFI system partition, as
@@ -665,9 +733,18 @@ beside_look() {
         b_why="the EFI system partition does not hold Windows Boot Manager (EFI/Microsoft/Boot/bootmgfw.efi)"
         return 1
     fi
+    if tur_partitions "${name}" | grep -q .; then
+        b_code=TUR-INSTALL-BESIDE-005
+        b_why="TUR is already on this disk, or an installation of it was interrupted. Remove TUR from this disk first, then install again"
+        return 1
+    fi
     if esp_look "${b_esp}" test -e EFI/fedora; then
         b_code=TUR-INSTALL-BESIDE-005
-        b_why="the EFI system partition already holds another Linux system's start-up files (EFI/fedora), which TUR's would replace"
+        if esp_look "${b_esp}" test -e "${STATE_DIR}"; then
+            b_why="TUR is already on this disk, or an installation of it was interrupted. Remove TUR from this disk first, then install again"
+        else
+            b_why="the EFI system partition already holds another Linux system's start-up files (EFI/fedora), which TUR's would replace"
+        fi
         return 1
     fi
     df_line="$(esp_look "${b_esp}" df -B1 --output=size,avail . 2> /dev/null | tail -n 1)"
@@ -987,8 +1064,12 @@ keep_log() {
 # The order, chosen so that a power cut at any moment leaves Windows as it
 # was (each step's effect on the disk, if it is cut short):
 #
-#   1. record     nothing is written: the partition table and the SHA-256 of
-#                 every file on the EFI system partition, kept in the session
+#   1. record     the partition table, the SHA-256 of every file on the EFI
+#                 system partition, the firmware's boot order and a copy of
+#                 Windows' fallback boot loader are written to a directory of
+#                 TUR's own on the EFI system partition (EFI/tur): from here
+#                 on TUR can be removed again and Windows left exactly as it
+#                 was (run_remove), whatever interrupts the installation
 #   2. partition  one GPT entry is added for the free stretch (sfdisk
 #                 --append); GPT keeps two copies with checksums, so a cut
 #                 leaves the old table or the new one. No existing entry, and
@@ -1002,7 +1083,12 @@ keep_log() {
 #                 the front of the boot order. Nothing under EFI/Microsoft is
 #                 written, and the "Windows Boot Manager" entry stays
 #   5. fallback   Windows' own EFI/BOOT/BOOTX64.EFI is put back, through a
-#                 copy and a rename
+#                 copy and a rename: as soon as bootc's output shows that
+#                 bootupd has finished, and again after bootc. A power cut
+#                 between bootupd and that moment (a few seconds) leaves
+#                 TUR's shim in its place and "TUR" first in the boot order;
+#                 Windows' own boot entry and boot manager are untouched,
+#                 and removing TUR puts the file and the order back
 #   6. boot-menu  a "Windows" entry in TUR's boot menu (/boot/grub2/custom.cfg
 #                 on TUR's partition)
 #   7. check      every file that was on the EFI system partition is
@@ -1064,6 +1150,57 @@ esp_put_back() {
         exit "$rc"' _ "$1" "${ESP_PROBE}" "$2" "$3"
 }
 
+# esp_save_state PARTITION DIRECTORY: copy the files of DIRECTORY into
+# STATE_DIR on an EFI system partition, as a whole: into a new directory,
+# which then takes the place of the old one.
+esp_save_state() {
+    mkdir -p "${ESP_PROBE}"
+    # shellcheck disable=SC2016  # expanded by the inner shell
+    unshare --mount --propagation private /bin/sh -c '
+        mount -t vfat -o rw,nodev,nosuid,noexec "$1" "$2" || exit 90
+        rm -rf "$2/$4.new"
+        mkdir -p "$2/$4.new" && cp "$3"/* "$2/$4.new/" && sync \
+            && rm -rf "$2/$4" && mv "$2/$4.new" "$2/$4" && sync
+        rc=$?
+        umount "$2" || rc=95
+        exit "$rc"' _ "$1" "${ESP_PROBE}" "$2" "${STATE_DIR}"
+}
+
+# beside_restore_fallback WHEN: put Windows' fallback boot loader back if
+# bootupd replaced it. Uses beside_fb_* set by run_beside. Returns 1 only if
+# it had to be put back and could not be.
+beside_fb_esp="" beside_fb_path="" beside_fb_sum="" beside_fb_file="" beside_fb_early=no beside_user_poll=""
+beside_restore_fallback() {
+    local now
+    [ -n "${beside_fb_path}" ] || return 0
+    now="$(esp_look "${beside_fb_esp}" sha256sum "${beside_fb_path}" 2> /dev/null | cut -c1-64)"
+    if [ "${now}" = "${beside_fb_sum}" ]; then
+        mark "beside step=fallback when=$1 state=unchanged path=${beside_fb_path}"
+        return 0
+    fi
+    mark "beside step=fallback when=$1 state=replaced-by-bootupd path=${beside_fb_path} now=${now:-none}"
+    if ! esp_put_back "${beside_fb_esp}" "${beside_fb_file}" "${beside_fb_path}" >> "${LOG}" 2>&1; then
+        mark "beside step=fallback-restored when=$1 same=no"
+        return 1
+    fi
+    now="$(esp_look "${beside_fb_esp}" sha256sum "${beside_fb_path}" 2> /dev/null | cut -c1-64)"
+    mark "beside step=fallback-restored when=$1 path=${beside_fb_path} sha256=${now:-none} same=$([ "${now}" = "${beside_fb_sum}" ] && echo yes || echo no)"
+    [ "${now}" = "${beside_fb_sum}" ]
+}
+
+# beside_poll PID: run_beside's poll function while bootc runs: the caller's
+# own, and, once bootc's output shows that bootupd has finished, Windows'
+# fallback boot loader put back at once, without waiting for bootc's end.
+beside_poll() {
+    if [ -n "${beside_user_poll}" ]; then "${beside_user_poll}" "$1"; fi
+    if [ "${beside_fb_early}" = no ] \
+        && grep -qE 'Trimming |Finalizing filesystem|Installation complete' "${INSTALL_LOG}" 2> /dev/null; then
+        beside_fb_early=yes
+        beside_restore_fallback early
+    fi
+    return 0
+}
+
 # run_beside DEVICE START SIZE [POLL_FUNCTION] [DEFAULT]: install TUR into the
 # free stretch START..START+SIZE (bytes) of DEVICE, which `revalidate` and
 # `beside_revalidate` returned, sharing the EFI system partition b_esp.
@@ -1077,8 +1214,8 @@ run_beside() {
     local title="Windows" one magic
     local before_table="${SESSION}/beside-table-before.txt" after_table="${SESSION}/beside-table-after.txt"
     local esp_before="${SESSION}/beside-esp-before.sha256" esp_after="${SESSION}/beside-esp-after.sha256"
-    local fallback="${SESSION}/beside-fallback.efi" fallback_path="" fallback_sum="" now root_mnt="${SESSION}/beside-root"
-    local grub_dir changed fs_uuid label entries order
+    local fallback="${SESSION}/beside-fallback.efi" fallback_path="" fallback_sum="" root_mnt="${SESSION}/beside-root"
+    local grub_dir changed fs_uuid label entries order state="${SESSION}/beside-state"
     local -a words=()
     beside_code="" beside_message="" beside_partition="" beside_disk_state=untouched install_status=1 install_seconds=0
     sector="$(blockdev --getss "${device}" 2> /dev/null)"
@@ -1105,11 +1242,36 @@ run_beside() {
         fi
     fi
     mark "beside recorded partitions=$(grep -c '^/dev/' "${before_table}") esp_files=$(wc -l < "${esp_before}") fallback=${fallback_path:-none} fallback_sha256=${fallback_sum:-none}"
+    # Kept on the EFI system partition, in TUR's own directory, before
+    # anything else is written: what removing TUR needs to leave Windows
+    # exactly as it was.
+    rm -rf "${state}"
+    mkdir -p "${state}"
+    cp "${before_table}" "${state}/table-before.txt"
+    cp "${esp_before}" "${state}/esp-before.sha256"
+    efibootmgr 2> /dev/null | sed -n 's/^BootOrder: //p' > "${state}/boot-order-before.txt"
+    if [ -n "${fallback_path}" ]; then
+        cp "${fallback}" "${state}/${STATE_FALLBACK}"
+        printf '%s\n' "${fallback_path}" > "${state}/fallback-path.txt"
+    fi
+    printf '%s\n' \
+        "TUR's record of this disk before TUR was installed beside Windows." \
+        "The TUR installer uses it to remove TUR again and leave Windows as it was:" \
+        "table-before.txt (the partition table), esp-before.sha256 (every file on" \
+        "this partition), boot-order-before.txt (the firmware's boot order) and" \
+        "${STATE_FALLBACK} (a copy of Windows' EFI\\Boot\\bootx64.efi)." \
+        "Nothing here is used to start Windows or TUR." > "${state}/README.txt"
+    mark "beside step=state directory=${STATE_DIR}"
+    beside_disk_state=partial
+    if ! esp_save_state "${esp}" "${state}" >> "${LOG}" 2>&1; then
+        beside_fail TUR-INSTALL-MEDIUM-002 "The record of what is on the disk now could not be kept on the EFI system partition. No partition was changed."
+        return 1
+    fi
+    mark "beside step=state-kept boot_order=$(tr -d '\n' < "${state}/boot-order-before.txt")"
 
     # 2. One new partition entry, for the free stretch.
     beside_stage_hook prepare
     mark "beside step=partition start=${start} size=${size} first_sector=$((start / sector)) sectors=$((size / sector)) sector_size=${sector}"
-    beside_disk_state=partial
     if ! printf 'start=%s, size=%s, type=%s, name="%s"\n' "$((start / sector))" "$((size / sector))" \
         "${ROOT_GUID^^}" "${TUR_PARTLABEL}" \
         | sfdisk --append --wipe never --wipe-partitions never "${device}" >> "${LOG}" 2>&1; then
@@ -1135,10 +1297,12 @@ run_beside() {
     beside_partition="${part}"
     mark "beside step=partitioned partition=${part} entries_unchanged=$(grep -c '^/dev/' "${before_table}")"
 
-    # 3. Its filesystem: ext4, made as bootc makes TUR's root (-O verity).
+    # 3. Its filesystem: ext4, made as bootc makes TUR's root (-O verity),
+    # labelled plainly "TUR" (nothing finds it by its label: the kernel is
+    # given its UUID).
     mark "beside step=filesystem partition=${part}"
     wipefs -a "${part}" >> "${LOG}" 2>&1
-    if ! mkfs.ext4 -F -q -L root -O verity "${part}" >> "${LOG}" 2>&1; then
+    if ! mkfs.ext4 -F -q -L "${TUR_PARTLABEL}" -O verity "${part}" >> "${LOG}" 2>&1; then
         beside_fail TUR-INSTALL-MEDIUM-002 "The filesystem could not be made on the new partition."
         return 1
     fi
@@ -1161,31 +1325,26 @@ run_beside() {
         --source-imgref "oci:${PAYLOAD_DIR}:${payload_ref}"
         --target-imgref "${payload_target}"
         "${root_mnt}")
-    run_words "${device}" "${poll}" "${words[@]}"
+    beside_fb_esp="${esp}" beside_fb_path="${fallback_path}" beside_fb_sum="${fallback_sum}" beside_fb_file="${fallback}"
+    beside_fb_early=no beside_user_poll="${poll}"
+    run_words "${device}" beside_poll "${words[@]}"
     if [ "${install_status}" -ne 0 ]; then
+        # bootupd may have run before bootc failed.
+        beside_restore_fallback after-failure
         umount "${root_mnt}" 2>> "${LOG}"
         beside_fail TUR-INSTALL-MEDIUM-002 "bootc stopped with an error (status ${install_status}) after ${install_seconds} s."
         return 1
     fi
     mark "beside step=deployed seconds=${install_seconds}"
 
-    # 5. Windows' fallback boot loader, as it was.
+    # 5. Windows' fallback boot loader, as it was (again: the first time was
+    # while bootc finished).
     beside_stage_hook boot-menu
-    if [ -n "${fallback_path}" ]; then
-        now="$(esp_look "${esp}" sha256sum "${fallback_path}" 2> /dev/null | cut -c1-64)"
-        if [ "${now}" = "${fallback_sum}" ]; then
-            mark "beside step=fallback state=unchanged path=${fallback_path}"
-        else
-            mark "beside step=fallback state=replaced-by-bootupd path=${fallback_path} now=${now:-none}"
-            if ! esp_put_back "${esp}" "${fallback}" "${fallback_path}" >> "${LOG}" 2>&1; then
-                install_status=1
-                beside_fail TUR-INSTALL-BESIDE-006 "Windows' fallback boot loader (${fallback_path}) could not be put back."
-                umount "${root_mnt}" 2>> "${LOG}"
-                return 1
-            fi
-            now="$(esp_look "${esp}" sha256sum "${fallback_path}" 2> /dev/null | cut -c1-64)"
-            mark "beside step=fallback-restored path=${fallback_path} sha256=${now:-none} same=$([ "${now}" = "${fallback_sum}" ] && echo yes || echo no)"
-        fi
+    if ! beside_restore_fallback after; then
+        install_status=1
+        beside_fail TUR-INSTALL-BESIDE-006 "Windows' fallback boot loader (${fallback_path}) could not be put back."
+        umount "${root_mnt}" 2>> "${LOG}"
+        return 1
     fi
 
     # 6. "Windows" in TUR's boot menu. bootupd's grub.cfg sources
@@ -1243,6 +1402,194 @@ run_beside() {
     mark "beside windows-files unchanged=yes files=$(wc -l < "${esp_before}") added=$(grep -cvxF -f "${esp_before}" "${esp_after}") entries=$(grep -c '^/dev/' "${before_table}")"
     beside_disk_state=installed
     install_status=0
+    return 0
+}
+
+# ---- beside Windows: removing TUR again (ADR-0029) ------------------------------------
+#
+# Removing TUR from a disk it shares with Windows gives the space back and
+# leaves Windows as it was before TUR: also after an installation that was
+# interrupted. The order, each step safe to repeat after a power cut:
+#
+#   1. firmware   the "TUR" boot entries are deleted and the boot order is the
+#                 one recorded before TUR, without entries that no longer exist
+#   2. ESP        Windows' fallback boot loader is put back if TUR's shim is
+#                 in its place; TUR's own files are deleted: EFI/fedora, what
+#                 bootupd added to EFI/BOOT, and last TUR's record (EFI/tur).
+#                 Nothing under EFI/Microsoft is touched, and no file that
+#                 was there before TUR or that Windows added since
+#   3. partition  TUR's partition is wiped of its filesystem signature and
+#                 its GPT entry deleted: the space is unallocated again
+#   4. check      the partition table and the files on the EFI system
+#                 partition are compared with the record
+#
+# It runs from the installer medium only: TUR cannot remove the partition it
+# is running from.
+
+remove_code=""
+remove_message=""
+remove_table=unknown
+remove_esp=unknown
+
+# esp_clean PARTITION NAMES_FILE: step 2, inside the EFI system partition
+# mounted writable in a mount namespace of its own. NAMES_FILE lists, in
+# lower case, the file names bootupd puts into EFI/BOOT.
+esp_clean() {
+    mkdir -p "${ESP_PROBE}"
+    # shellcheck disable=SC2016  # expanded by the inner shell
+    unshare --mount --propagation private /bin/sh -c '
+        mount -t vfat -o rw,nodev,nosuid,noexec "$1" "$2" || exit 90
+        cd "$2" || exit 91
+        state="$3" names="$4" saved="$5"
+        rc=0
+        same() { [ -f "$1" ] && [ -f "$2" ] && cmp -s "$1" "$2"; }
+        if [ -f "$state/esp-before.sha256" ]; then
+            # Windows fallback boot loader: back if TUR shim is in its place.
+            fallback="$(cat "$state/fallback-path.txt" 2> /dev/null)"
+            if [ -n "$fallback" ] && [ -f "$state/$saved" ]; then
+                if [ ! -f "$fallback" ] || same "$fallback" EFI/fedora/shimx64.efi; then
+                    mkdir -p "$(dirname "$fallback")"
+                    cp "$state/$saved" "$(dirname "$fallback")/TURCOPY.TMP" && sync \
+                        && mv -f "$(dirname "$fallback")/TURCOPY.TMP" "$fallback" || rc=1
+                    echo "fallback=restored"
+                elif same "$fallback" "$state/$saved"; then
+                    echo "fallback=as-before"
+                else
+                    echo "fallback=changed-since-by-another-system-kept"
+                fi
+            elif same EFI/BOOT/BOOTX64.EFI EFI/fedora/shimx64.efi; then
+                # There was none before TUR: the one there is TUR shim.
+                rm -f EFI/BOOT/BOOTX64.EFI || rc=1
+                echo "fallback=removed-there-was-none-before"
+            fi
+            # What bootupd added to EFI/BOOT: by name, and only files that
+            # were not there before TUR.
+            if [ -d EFI/BOOT ]; then
+                for file in EFI/BOOT/*; do
+                    [ -f "$file" ] || continue
+                    name="$(basename "$file" | tr "[:upper:]" "[:lower:]")"
+                    [ "$name" = bootx64.efi ] && continue
+                    grep -qx "$name" "$names" || continue
+                    if grep -qi "  \./efi/boot/$name\$" "$state/esp-before.sha256"; then continue; fi
+                    rm -f "$file" || rc=1
+                done
+                rmdir EFI/BOOT 2> /dev/null
+            fi
+            # EFI/fedora is TUR own: the installer refuses a disk that has one.
+            if ! grep -qi "  \./efi/fedora/" "$state/esp-before.sha256"; then
+                rm -rf EFI/fedora || rc=1
+            fi
+            sync
+            echo "tur-files=removed"
+        else
+            echo "tur-files=no-record-only-the-unfinished-record-removed"
+        fi
+        # Last: the record itself, and an unfinished one.
+        rm -rf "$state" "$state.new" || rc=1
+        sync
+        cd /
+        umount "$2" || rc=95
+        exit "$rc"' _ "$1" "${ESP_PROBE}" "${STATE_DIR}" "$2" "${STATE_FALLBACK}"
+}
+
+# run_remove DEVICE: remove TUR from DEVICE, which `revalidate` returned and
+# for which remove_look said yes (r_part, r_esp, r_state are its answers).
+# Sets remove_table and remove_esp (same, differs or unknown: the comparison
+# with the record) and, on failure, remove_code and remove_message.
+run_remove() {
+    local device="$1" part="${r_part}" esp="${r_esp}" state="${SESSION}/remove-state" names="${SESSION}/remove-names.txt"
+    local number entry order kept item wanted cleaned now_table="${SESSION}/remove-table-after.txt"
+    local now_esp="${SESSION}/remove-esp-after.sha256" source
+    remove_code="" remove_message="" remove_table=unknown remove_esp=unknown
+    mark "remove step=start device=${device} partition=${part:-none} esp=${esp} state=${r_state}"
+
+    # The record, read before anything is removed.
+    rm -rf "${state}"
+    mkdir -p "${state}"
+    if [ "${r_state}" = yes ]; then
+        esp_look "${esp}" cat "${STATE_DIR}/table-before.txt" > "${state}/table-before.txt" 2>> "${LOG}"
+        esp_look "${esp}" cat "${STATE_DIR}/esp-before.sha256" > "${state}/esp-before.sha256" 2>> "${LOG}"
+        esp_look "${esp}" cat "${STATE_DIR}/boot-order-before.txt" > "${state}/boot-order-before.txt" 2>> "${LOG}"
+    fi
+    : > "${names}"
+    for source in "${LOADER_FILES_USR}" "${LOADER_FILES}"; do
+        find "${source}" -type f -ipath '*/EFI/BOOT/*' -printf '%f\n' 2> /dev/null | tr '[:upper:]' '[:lower:]' >> "${names}"
+    done
+    printf '%s\n' fbx64.efi bootia32.efi fbia32.efi >> "${names}"
+
+    # 1. The firmware: no "TUR" entry, the order as before TUR.
+    mark "remove step=firmware"
+    while read -r entry; do
+        [ -n "${entry}" ] || continue
+        efibootmgr --bootnum "${entry}" --delete-bootnum >> "${LOG}" 2>&1
+        mark "remove firmware deleted=${entry}"
+    done < <(efibootmgr 2> /dev/null | awk '
+        /^Boot[0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][* ]/ {
+            rest = substr($0, 9); sub(/^\*?[ ]+/, "", rest); split(rest, parts, "\t"); sub(/[ ]+$/, "", parts[1])
+            if (parts[1] == "TUR") print toupper(substr($0, 5, 4))
+        }')
+    order="$(efibootmgr 2> /dev/null | sed -n 's/^BootOrder: //p' | tr -d ' ')"
+    wanted="$(tr -d ' \n' < "${state}/boot-order-before.txt" 2> /dev/null)"
+    if [ -n "${wanted}" ] && [ -n "${order}" ]; then
+        # The order as it was, without entries that no longer exist; then
+        # whatever exists now and was not there.
+        kept=""
+        for item in $(printf '%s' "${wanted}" | tr ',' ' '); do
+            case ",${order^^}," in *",${item^^},"*) kept+="${kept:+,}${item^^}" ;; esac
+        done
+        for item in $(printf '%s' "${order}" | tr ',' ' '); do
+            case ",${kept}," in *",${item^^},"*) ;; *) kept+="${kept:+,}${item^^}" ;; esac
+        done
+        if [ -n "${kept}" ] && [ "${kept}" != "${order^^}" ]; then efibootmgr --bootorder "${kept}" >> "${LOG}" 2>&1; fi
+    fi
+    mark "remove firmware boot_order=$(efibootmgr 2> /dev/null | sed -n 's/^BootOrder: //p') before_tur=${wanted:-not-recorded}"
+
+    # 2. The EFI system partition.
+    mark "remove step=esp"
+    if ! cleaned="$(esp_clean "${esp}" "${names}" 2>> "${LOG}")"; then
+        remove_code=TUR-INSTALL-REMOVE-002
+        remove_message="TUR's files could not all be removed from the EFI system partition. Windows' own files there were not touched."
+        mark "remove esp result=failed $(printf '%s' "${cleaned}" | tr '\n' ' ')"
+        return 1
+    fi
+    mark "remove esp $(printf '%s' "${cleaned}" | tr '\n' ' ')"
+
+    # 3. TUR's partition.
+    if [ -n "${part}" ]; then
+        number="$(prop "${part##*/}" PARTN)"
+        mark "remove step=partition partition=${part} number=${number}"
+        wipefs -a "${part}" >> "${LOG}" 2>&1
+        if [ -z "${number}" ] || ! sfdisk --delete "${device}" "${number}" >> "${LOG}" 2>&1; then
+            remove_code=TUR-INSTALL-REMOVE-003
+            remove_message="TUR's partition could not be deleted. Windows was not touched; delete the partition in Windows' Disk Management."
+            mark "remove partition result=failed"
+            return 1
+        fi
+        udevadm settle --timeout=30 > /dev/null 2>&1
+    fi
+
+    # 4. As before TUR?
+    mark "remove step=check"
+    sfdisk --dump "${device}" > "${now_table}" 2>> "${LOG}"
+    esp_manifest "${esp}" > "${now_esp}" 2>> "${LOG}"
+    if [ -s "${state}/table-before.txt" ]; then
+        # The partition lines, without the kernel's name for the disk.
+        if diff <(sed -n 's|^/dev/[^ ]*[^0-9]\([0-9]*\) : |\1 : |p' "${state}/table-before.txt") \
+            <(sed -n 's|^/dev/[^ ]*[^0-9]\([0-9]*\) : |\1 : |p' "${now_table}") > /dev/null; then
+            remove_table=same
+        else
+            remove_table=differs
+        fi
+        # Files Windows added or changed since are Windows' own business:
+        # what counts is that every file of before is there as it was, and
+        # that nothing of TUR's is left.
+        if grep -qvxF -f "${now_esp}" "${state}/esp-before.sha256"; then
+            remove_esp=differs
+        else
+            remove_esp=same
+        fi
+    fi
+    mark "remove result=done table=${remove_table} esp=${remove_esp} esp_files=$(wc -l < "${now_esp}") left_of_tur=$(grep -ciE '  \./efi/(fedora|tur)/' "${now_esp}")"
     return 0
 }
 

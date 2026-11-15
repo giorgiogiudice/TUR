@@ -456,15 +456,56 @@ not with Secure Boot on. You are the first to try it with Windows.
    - Windows and TUR are also in the computer's own boot menu (section 7,
      point 7), as "Windows Boot Manager" and "TUR".
 7. **If the installation stops** (a power cut, an error), Windows' partitions
-   were not written to and Windows still starts from the computer's boot
-   menu. The free space then holds an unfinished partition named "TUR":
-   delete it in Windows' Disk Management (right-click it, Delete Volume),
-   and try again.
+   were not written to, and Windows still starts: by itself, or, if the
+   computer now tries to start an unfinished TUR, from the computer's boot
+   menu ("Windows Boot Manager"). Start from the stick again and remove TUR
+   (below): that puts the disk back exactly as it was. Then install again.
+
+**What Windows shows.** Nothing changes inside Windows: C: stays C:, every
+letter and label stays, and no new drive appears in Explorer. TUR's
+partition is of a type Windows gives no letter to and does not offer to
+format. In Disk Management it appears as a partition without a letter or a
+name, between C: and the recovery partition, the size you gave TUR. (Read in
+Microsoft's documentation; not yet seen on a real Windows: please report
+what Disk Management shows.) One thing can differ: after TUR has run,
+Windows' clock may be off by your time zone until Windows sets it again.
+
+**Removing TUR.** TUR can be taken away again and the disk left as it was
+before TUR:
+
+1. Start from the installer stick, and at its boot menu press **t**
+   ("Install TUR (text mode)"). The graphical installer does not offer
+   removal yet.
+2. Press Enter, type the number of the Windows disk (it says "TUR is on this
+   disk beside Windows ... it can be removed"), then **4**, "Remove TUR from
+   this disk".
+3. The screen shows what is deleted (TUR's partition, with everything in
+   TUR) and what is kept (everything of Windows). Type the phrase it shows,
+   **REMOVE** and the end of the disk's serial number.
+4. It removes TUR's entry from the computer's boot order (the order is as it
+   was before TUR), TUR's start-up files from the EFI system partition, and
+   TUR's partition, and compares the disk with the record it made before
+   installing. The computer then starts Windows by itself.
+5. In Windows, to give the space back to C:: Disk Management, right-click
+   C:, **Extend Volume**.
+
+Tested in a virtual machine: after a whole installation and after a power
+cut at each step of one, the disk was afterwards identical to the disk
+before TUR (TUR-011). Not tested with a real Windows.
+
+Without the stick, from Windows (not tested; an administrator's Command
+Prompt): delete TUR's partition in Disk Management (right-click it, Delete
+Volume); `bcdedit /enum firmware` lists the firmware's entries, and
+`bcdedit /delete {identifier}` deletes the one described as "TUR";
+`mountvol S: /S` gives the EFI system partition the letter S:, then
+`rmdir /s S:\EFI\fedora`; if `S:\EFI\tur\windows-bootx64.efi` exists,
+`copy S:\EFI\tur\windows-bootx64.efi S:\EFI\Boot\bootx64.efi` (it is
+that file as Windows had it when TUR was installed); then
+`rmdir /s S:\EFI\tur` and `mountvol S: /D`.
 
 Please report: whether Windows started from TUR's menu, whether BitLocker
 asked for its key, and the firmware's boot order afterwards.
 
-**Removing TUR from beside Windows.** In Windows' Disk Management, delete the "TUR" partition; in the firmware setup, delete the "TUR" boot entry. TUR's start-up files stay in `EFI\fedora` on the EFI system partition, harmless; removing them needs a tool that writes the EFI system partition, and is not described here.
 
 ## 8. What this build cannot do
 

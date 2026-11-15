@@ -136,6 +136,8 @@ QtObject {
             return qsTr("Windows' EFI system partition is too full for TUR's start-up files: %1 free, %2 needed.")
                 .arg(words.size(room.esp_free || 0)).arg(words.size(room.esp_needed || 0))
         case "TUR-INSTALL-BESIDE-005":
+            if (disk.remove !== undefined && disk.remove !== null && disk.remove.possible === true)
+                return qsTr("TUR is already on this disk, or an installation of it was interrupted. To remove it and leave Windows as it was, start this medium again, press T at its first menu (“Install TUR (text mode)”), choose this disk, then “Remove TUR from this disk”. Then you can install again.")
             return qsTr("Windows' EFI system partition already holds another Linux system's start-up files, which TUR's would replace.")
         default:
             return String(room.why || "")

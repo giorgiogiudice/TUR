@@ -3,12 +3,20 @@
 """Read the boot entries from an OVMF firmware-variable file, on the host.
 
     tests/iso/efivars.py OVMF_VARS.fd [OUT.json]
+    tests/iso/efivars.py first IN.fd OUT.fd REGEX
 
 Prints, and writes as JSON, every `Boot####` variable (its description, its
 device path as text) and `BootOrder`, as the file holds them after the
-virtual machine stopped. It reads the file only. The test uses it to show
+virtual machine stopped. The test uses it to show
 what an installation and a first start did to the firmware's boot entries,
 without trusting anything inside the guest.
+
+`first` writes a copy of the file in which the boot entry whose description
+matches REGEX is first in `BootOrder`: what a person does who starts the
+computer from the installer stick when another system is first in the boot
+order (the firmware's boot menu does it for one start; this does it until
+something changes the order again). Only the bytes of `BootOrder`'s value
+change, in place: the same numbers in another order.
 
 The format is the one edk2 writes (MdeModulePkg/Include/Guid/VariableFormat.h):
 a firmware volume, a variable store header, then variables, each starting
@@ -63,7 +71,7 @@ def variables(data: bytes) -> list[dict]:
         value = data[name_at + name_size:name_at + name_size + data_size]
         valid = state == VAR_ADDED or state == (VAR_ADDED & VAR_IN_DELETED_TRANSITION)
         found.append({"name": name, "guid": str(guid), "state": state, "valid": valid,
-                      "attributes": attributes, "data": value})
+                      "attributes": attributes, "data": value, "data_at": name_at + name_size})
         offset = name_at + name_size + data_size
         offset = (offset + 3) & ~3
     return found
@@ -135,7 +143,43 @@ def boot_entries(path: pathlib.Path) -> dict:
     }
 
 
+def put_first(source: pathlib.Path, target: pathlib.Path, pattern: str) -> dict:
+    """Copy SOURCE to TARGET with the entry matching PATTERN first in BootOrder."""
+    import re
+
+    data = bytearray(source.read_bytes())
+    entries = boot_entries(source)
+    number = next((n for n, entry in entries["entries"].items() if re.search(pattern, entry["description"])), None)
+    if number is None:
+        raise ValueError(f"no boot entry matches {pattern!r}: {[e['description'] for e in entries['entries'].values()]}")
+    wanted = int(number, 16)
+    changed = 0
+    for var in variables(bytes(data)):
+        if not (var["valid"] and var["name"] == "BootOrder" and uuid.UUID(var["guid"]) == GLOBAL):
+            continue
+        order = list(struct.unpack(f"<{len(var['data']) // 2}H", var["data"]))
+        if wanted not in order:
+            continue
+        order.remove(wanted)
+        order.insert(0, wanted)
+        data[var["data_at"]:var["data_at"] + len(var["data"])] = struct.pack(f"<{len(order)}H", *order)
+        changed += 1
+    if not changed:
+        raise ValueError(f"Boot{number} is not in BootOrder")
+    target.write_bytes(bytes(data))
+    after = boot_entries(target)
+    return {"first": number, "description": entries["entries"][number]["description"],
+            "boot_order_before": entries["boot_order"], "boot_order_after": after["boot_order"]}
+
+
 def main() -> int:
+    if len(sys.argv) == 5 and sys.argv[1] == "first":
+        try:
+            print(json.dumps(put_first(pathlib.Path(sys.argv[2]), pathlib.Path(sys.argv[3]), sys.argv[4])))
+        except (OSError, ValueError) as error:
+            print(f"efivars first: {error}", file=sys.stderr)
+            return 1
+        return 0
     if len(sys.argv) not in (2, 3):
         print(__doc__, file=sys.stderr)
         return 2

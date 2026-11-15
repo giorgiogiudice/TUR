@@ -56,6 +56,12 @@ Scenarios:
               "restart-windows", which sets the firmware's BootNext and
               restarts; the run then waits for the stand-in for Windows Boot
               Manager to start, which powers the machine off.
+  remove      ADR-0029: TUR is (wholly, or after an interrupted installation,
+              partly) on the main disk beside Windows. The disk must be listed
+              as one TUR can be removed from; choosing it asks how; "4"
+              (remove) leads to the confirmation, where the erase phrase is
+              refused and the "REMOVE" phrase removes TUR. Powers off as the
+              last screen says.
   beside-refused
               Disks laid out as Windows on which installing beside Windows is
               not possible (no free space; a full EFI system partition). Each
@@ -204,7 +210,7 @@ class Session:
         self.result["facts"]["boot_menu"] = {"entry": "text mode", "hotkey": "t", "presses": presses}
         self.step(f"pressed the boot menu's text-mode key {presses} times")
 
-    def wait(self, pattern: str, timeout: float, what: str) -> "re.Match":
+    def wait(self, pattern: str, timeout: float, what: str, poll: float = 0.5) -> "re.Match":
         """Wait for text on the serial port after the cursor; move the cursor past it."""
         deadline = time.monotonic() + timeout
         while True:
@@ -217,7 +223,7 @@ class Session:
                 raise Stop(f"QEMU exited while waiting for {what}")
             if time.monotonic() > deadline:
                 raise Stop(f"timeout after {timeout:.0f} s waiting for {what}")
-            time.sleep(0.5)
+            time.sleep(poll)
             self.qmp.drain()
 
     def wait_prompt(self, screen: str, timeout: float = 120) -> None:
@@ -583,6 +589,7 @@ def beside_phrase(serial: str) -> str:
 # output on the installer's screen, mirrored to the serial port.
 CUTS = {
     "record": r"TUR-INSTALLER: beside step=record ",
+    "state": r"TUR-INSTALLER: beside step=state ",
     "partition": r"TUR-INSTALLER: beside step=partition ",
     "partitioned": r"TUR-INSTALLER: beside step=partitioned ",
     "filesystem": r"TUR-INSTALLER: beside step=filesystem ",
@@ -684,7 +691,8 @@ def scenario_same_disk_cut(s: Session) -> None:
     where = s.args.cut_at
     facts["cut"] = {"at": where, "pattern": CUTS[where], "delay_seconds": s.args.cut_delay}
     beside_to_install(s)
-    s.wait(CUTS[where], 2400, f"the installation to reach {where}")
+    # Looked for twenty times a second: the steps are short.
+    s.wait(CUTS[where], 2400, f"the installation to reach {where}", poll=0.05)
     reached = s.elapsed()
     if s.args.cut_delay:
         time.sleep(s.args.cut_delay)
@@ -729,6 +737,56 @@ def dualboot_after(s: Session) -> None:
                                                            "boot_next=", "tur-dualboot:"))]
 
 
+def scenario_remove(s: Session) -> None:
+    facts = s.result["facts"]
+    s.to_welcome()
+    target = s.to_disks()
+    s.shot("disks-tur-beside-windows")
+    listed = [isovm.fields(state) for state in s.transcript.states() if state.startswith("remove index=")]
+    facts["remove_as_listed"] = listed
+    facts["beside_as_listed"] = [isovm.fields(state) for state in s.transcript.states() if state.startswith("beside ")]
+    mine = next((item for item in reversed(listed) if target and item.get("name") == target.get("name")), None)
+    facts["target_remove"] = mine
+    if not target or target.get("status") != "ok" or not mine or mine.get("possible") != "yes":
+        raise Stop(f"the disk is not offered for removing TUR: {target} {mine}")
+    s.type_line(target["index"])
+    s.wait_prompt("mode")
+    s.shot("mode-remove")
+    s.type_line("4")
+    s.wait(r"TUR-INSTALLER: mode chosen=remove", 60, "the choice of removing TUR")
+    match = s.wait(r'TUR-INSTALLER: confirm name=\S+ by_id=(\S+) phrase="([^"]*)" mode=remove[^\n]*', 60,
+                   "the confirmation of removing TUR")
+    s.wait_prompt("confirm")
+    expected = "REMOVE " + isovm.confirmation_phrase(DISK_SERIAL).split(" ", 1)[1]
+    facts["confirmation"] = {"phrase_shown": match.group(2), "phrase_computed_by_the_test": expected,
+                             "phrase_matches": match.group(2) == expected, "line": match.group(0)}
+    s.shot("confirm-remove")
+    erase = isovm.confirmation_phrase(DISK_SERIAL)
+    s.type_line(erase)
+    match = s.wait(r"TUR-INSTALLER: confirm result=(\w+)", 60, "the answer to the erase phrase")
+    facts["erase_phrase_on_remove"] = {"typed": erase, "result": match.group(1)}
+    if match.group(1) != "mismatch":
+        raise Stop("the erase phrase was accepted for removing TUR")
+    time.sleep(1.5)
+    s.wait_prompt("confirm")
+    s.type_line(expected)
+    s.wait(r"TUR-INSTALLER: confirm result=accepted mode=remove", 60, "the confirmation to be accepted")
+    match = s.wait(r"TUR-INSTALLER: (remove result=done table=(\w+) esp=(\w+)[^\n]*|result=failed[^\n]*)", 600,
+                   "TUR to be removed")
+    facts["remove_line"] = match.group(1)
+    facts["remove_table"], facts["remove_esp"] = match.group(2), match.group(3)
+    facts["remove_states"] = [state for state in s.transcript.states() if state.startswith("remove ")]
+    if match.group(2) is None:
+        s.shot("remove-failed")
+        raise Stop("the installer could not remove TUR")
+    s.wait_prompt("removed", 120)
+    s.shot("removed")
+    s.type_line("", "nothing")
+    facts["powered_off_by_installer"] = s.wait_power_off()
+    if not facts["powered_off_by_installer"]:
+        s.machine.quit()
+
+
 def scenario_beside_refused(s: Session) -> None:
     facts = s.result["facts"]
     disks = [s.args.disk] + [item.split("=", 1)[0] for item in s.args.extra_disk]
@@ -764,6 +822,7 @@ SCENARIOS = {
     "same-disk": scenario_same_disk,
     "same-disk-cut": scenario_same_disk_cut,
     "beside-refused": scenario_beside_refused,
+    "remove": scenario_remove,
     "install": scenario_install,
     "refuse": scenario_refuse,
     "too-small": scenario_too_small,

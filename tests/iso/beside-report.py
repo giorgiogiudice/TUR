@@ -18,9 +18,15 @@
   live/             the same with the graphical installer, when present
 
 `faults`: the power is cut at each step of an installation beside Windows
-(cut-<step>/); after every cut Windows' partitions, its files on the EFI
-system partition and its firmware boot entry must be as they were. What the
-disk then starts is recorded, not judged.
+(cut-<step>/). After every cut Windows' partitions, its files under
+EFI/Microsoft and its firmware boot entry must be as they were; the one file
+that may differ is Windows' fallback boot loader, EFI/Boot/bootx64.efi, which
+holds TUR's shim from the moment bootupd wrote it until the installer puts
+Windows' back (recorded when a cut lands there). What the disk then starts
+is recorded. Then TUR is removed from the medium (the recovery), and the
+disk must be exactly as before TUR: the same partition table, every
+partition byte-identical, the EFI system partition's files as before and
+none added, no "TUR" firmware entry, the boot order of before.
 
 Writes OUT/summary.md and OUT/beside-report.json; exits 1 if a required check
 failed. Run in CI only (ADR-0002).
@@ -34,7 +40,8 @@ import pathlib
 import sys
 
 ESP = "C12A7328-F81F-11D2-BA4B-00A0C93EC93B"
-TUR_ESP_PREFIXES = ("EFI/fedora/", "EFI/BOOT/", "EFI/Boot/")
+TUR_ESP_PREFIXES = ("EFI/fedora/", "EFI/BOOT/", "EFI/Boot/", "EFI/tur/", "EFI/tur.new/")
+FALLBACK = "efi/boot/bootx64.efi"
 
 
 def load(path: pathlib.Path) -> dict | None:
@@ -76,13 +83,29 @@ def windows_entry(entries: dict | None) -> dict | None:
     return None
 
 
-def judge_compare(checks: Checks, group: str, compare: dict | None, when: str) -> None:
+def judge_compare(checks: Checks, group: str, compare: dict | None, when: str, fallback_may_differ: bool = False) -> None:
     if compare is None:
         checks.add(group, f"Windows as it was, {when}", False, "no comparison recorded")
         return
-    checks.add(group, f"Windows' partitions and files as they were, {when}", compare.get("windows_intact") is True,
-               "; ".join(compare.get("problems", [])) or "every Windows partition byte-identical, every file on "
-               "the EFI system partition identical")
+    problems = list(compare.get("problems", []))
+    intact = compare.get("windows_intact") is True
+    if fallback_may_differ and not intact:
+        # The one file that may differ after a power cut: Windows' fallback
+        # boot loader, replaced by bootupd and not yet put back.
+        changed = [path for part in compare.get("windows_partitions", [])
+                   for path in part.get("esp_files_changed_or_missing", [])]
+        others = [text for text in problems if not text.startswith("EFI system partition: files changed or missing")]
+        if changed and not others and all(path.lower() == FALLBACK for path in changed):
+            checks.add(group, f"Windows' partitions, its files under EFI/Microsoft and every other file as they were, {when}",
+                       True, "every Windows partition byte-identical; on the EFI system partition only "
+                       "EFI/Boot/bootx64.efi differs")
+            checks.add(group, f"Windows' fallback boot loader (EFI/Boot/bootx64.efi), {when}", None,
+                       "holds TUR's shim: the cut came after bootupd wrote it and before the installer put Windows' back")
+            intact = None
+    if intact is not None:
+        checks.add(group, f"Windows' partitions and files as they were, {when}", intact,
+                   "; ".join(problems) or "every Windows partition byte-identical, every file on "
+                   "the EFI system partition identical")
     for part in compare.get("windows_partitions", []):
         if "esp_files_before" in part:
             added = part.get("esp_files_added", [])
@@ -108,6 +131,42 @@ def judge_firmware(checks: Checks, group: str, result: dict | None, require_tur:
     order = (entries.get("after") or {}).get("boot_order_descriptions")
     tur_first = bool(order) and order[0] == "TUR"
     checks.add(group, "firmware boot order after", (tur_first if require_tur else None), str(order))
+
+
+def order_of(result: dict | None, which: str) -> list:
+    return (((result or {}).get("firmware_boot_entries") or {}).get(which) or {}).get("boot_order_descriptions") or []
+
+
+def judge_removed(checks: Checks, group: str, directory: pathlib.Path, setup: dict | None) -> None:
+    """TUR removed again by the installer medium: the disk and the firmware as before TUR."""
+    result = load(directory / "remove" / "result.json")
+    if result is None:
+        checks.add(group, "TUR removed again", False, "no result")
+        return
+    f = result.get("facts", {})
+    checks.add(group, "the medium offered to remove TUR, and the erase phrase did not confirm it",
+               (f.get("target_remove") or {}).get("possible") == "yes"
+               and (f.get("erase_phrase_on_remove") or {}).get("result") == "mismatch",
+               f"{f.get('target_remove')}; {f.get('erase_phrase_on_remove')}")
+    checks.add(group, "TUR removed; the installer's own comparison with its record: table and ESP files the same",
+               result.get("outcome") == "completed" and (f.get("remove_table"), f.get("remove_esp")) in (
+                   ("same", "same"), ("unknown", "unknown")),  # unknown: the cut came before the record was kept
+               f"{f.get('remove_line') or result.get('stopped_because', '')}")
+    checks.add(group, "the installer's lines while removing", None, " / ".join(f.get("remove_states") or [])[:900])
+    compare = load(directory / "compare-removed.json")
+    checks.add(group, "after removing TUR the disk is exactly as before TUR (table, every partition's bytes, "
+               "the EFI system partition's files, nothing added, the free space)",
+               (compare or {}).get("windows_intact") is True and (compare or {}).get("exact") is True,
+               "; ".join((compare or {}).get("problems", ["no comparison recorded"])) or "identical")
+    entries = (result.get("firmware_boot_entries") or {}).get("after") or {}
+    descriptions = [entry.get("description") for entry in (entries.get("entries") or {}).values()]
+    was, now = windows_entry(((setup or {}).get("firmware_boot_entries") or {}).get("after")), windows_entry(entries)
+    checks.add(group, "after removing TUR the firmware has no \"TUR\" entry and Windows' entry is as before TUR",
+               "TUR" not in descriptions and was is not None and now is not None
+               and was.get("device_path") == now.get("device_path"), f"entries {descriptions}")
+    checks.add(group, "after removing TUR the boot order is the one of before TUR",
+               bool(order_of(setup, "after")) and order_of(result, "after") == order_of(setup, "after"),
+               f"now {order_of(result, 'after')}; before TUR {order_of(setup, 'after')}")
 
 
 def beside(out: pathlib.Path, checks: Checks, facts: dict) -> None:
@@ -197,6 +256,12 @@ def beside(out: pathlib.Path, checks: Checks, facts: dict) -> None:
                bool(facts["esp_partuuid"]) and windows.get("partition_uuid") == facts["esp_partuuid"],
                f"stand-in reports {windows.get('device')}; ESP PARTUUID {facts['esp_partuuid']}")
     judge_compare(checks, "shared", load(shared / "compare-windows-entry.json"), "after Windows was started from TUR's menu")
+    judge_removed(checks, "shared", shared, load(shared / "windows-setup" / "result.json"))
+    after = load(shared / "after-remove" / "first-start.json") or {}
+    started = after.get("windows_entry") or {}
+    checks.add("shared", "after removing TUR the disk starts Windows' own start-up file by itself (the stand-in)",
+               after.get("outcome") == "windows-started" and started.get("partition_uuid") == facts["esp_partuuid"],
+               f"{after.get('outcome')}; {started.get('file')} {started.get('partition_uuid')}")
 
     live = out / "live"
     if (live / "result.json").exists():
@@ -243,13 +308,18 @@ def faults(out: pathlib.Path, checks: Checks, facts: dict) -> None:
         checks.add(name, "the power was cut where intended", bool(info.get("reached_at_seconds")),
                    f"at {info.get('at')} +{info.get('delay_seconds')} s; last state line before the cut: {landed[0]}; "
                    f"{result.get('stopped_because', '')}")
-        judge_compare(checks, name, load(cut / "compare.json"), "after the power cut")
+        judge_compare(checks, name, load(cut / "compare.json"), "after the power cut", fallback_may_differ=True)
         judge_firmware(checks, name, result, require_tur=False)
-        start = load(cut / "start" / "first-start.json") or {}
-        entry = start.get("windows_entry") or {}
-        checks.add(name, "what the disk starts afterwards (key w pressed)", None,
-                   f"{start.get('outcome')}; {entry.get('file') or ''} {entry.get('device') or ''}".strip())
-        facts["cuts"][name] = {"cut": info, "start": start.get("outcome")}
+        untouched = (load(cut / "compare-exact-after-cut.json") or {}).get("windows_intact") is True
+        if untouched:
+            checks.add(name, "the cut left the disk exactly as before TUR: nothing to remove", True, "")
+        else:
+            start = load(cut / "start" / "first-start.json") or {}
+            entry = start.get("windows_entry") or {}
+            checks.add(name, "what the disk starts after the cut (key w pressed)", None,
+                       f"{start.get('outcome')}; {entry.get('file') or ''} {entry.get('device') or ''}".strip())
+            judge_removed(checks, name, cut, load(out / "setup" / "result.json"))
+        facts["cuts"][name] = {"cut": info, "untouched": untouched}
 
 
 def main() -> int:

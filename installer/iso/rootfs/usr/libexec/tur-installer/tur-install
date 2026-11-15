@@ -16,6 +16,9 @@
 #     bootc install to-disk --source-imgref oci:<medium>/payload:payload \
 #         --target-imgref <name> --generic-image --wipe [--filesystem ext4] <disk>
 #
+#   - remove TUR again from a disk it shares with Windows, leaving Windows as
+#     it was before TUR (engine.sh, run_remove); its phrase starts "REMOVE";
+#
 #   - on a disk that holds Windows, install TUR into free space the person
 #     made with Windows' own Shrink Volume, sharing Windows' EFI system
 #     partition and adding Windows to TUR's boot menu (ADR-0029; engine.sh,
@@ -239,6 +242,10 @@ screen_disks() {
                 say "       beside Windows: not possible: ${d_bwhy[i]} (${d_bcode[i]})"
             fi
         fi
+        if [ "${d_remove[i]:-no}" = yes ]; then
+            say "       TUR is on this disk beside Windows (or its installation was"
+            say "       interrupted): it can be removed, and the space given back"
+        fi
         if [ "${d_status[i]}" != ok ]; then
             say "       cannot be chosen: ${d_why[i]} (${d_code[i]})"
         fi
@@ -272,7 +279,7 @@ screen_disks() {
             chosen="${i}"
             mode=erase
             mark "choice result=ok index=${answer} name=${d_name[i]}"
-            if [ "${d_beside[i]}" = yes ]; then state=mode; else state=confirm; fi
+            if [ "${d_beside[i]}" = yes ] || [ "${d_remove[i]:-no}" = yes ]; then state=mode; else state=confirm; fi
             return 0
         fi
     done
@@ -287,15 +294,36 @@ screen_mode() {
     local i="${chosen}"
     screen mode "keep Windows, or erase the disk"
     say "  Disk: ${d_model[i]:-unnamed disk}, $(human "${d_size[i]}"), serial $(serial_end "${i}")"
-    say "  This disk holds Windows and has $(human "${d_bsize[i]}") of free space."
+    say "  This disk holds Windows. Free space on it: $(human "${d_bsize[i]}")."
     say ""
-    say "  [1]  Use the free space beside Windows. Windows and its files are kept."
-    say "       TUR goes into the free space; TUR's start menu offers Windows too."
+    if [ "${d_beside[i]}" = yes ]; then
+        say "  [1]  Use the free space beside Windows. Windows and its files are kept."
+        say "       TUR goes into the free space; TUR's start menu offers Windows too."
+    fi
     say "  [2]  Erase the whole disk. Windows and everything on the disk is lost."
+    if [ "${d_remove[i]:-no}" = yes ]; then
+        say "  [4]  Remove TUR from this disk. Windows is kept and left as it was"
+        say "       before TUR; TUR and everything in it is deleted."
+    fi
     say ""
-    ask "Type 1 or 2, then Enter. (Enter alone goes back) "
+    ask "Type the number, then Enter. (Enter alone goes back) "
     case "${answer}" in
+        4)
+            if [ "${d_remove[i]:-no}" != yes ]; then
+                say "\"4\" is not offered for this disk."
+                sleep 3
+                return 0
+            fi
+            mode=remove
+            mark "mode chosen=remove name=${d_name[i]}"
+            state=confirm
+            ;;
         1)
+            if [ "${d_beside[i]}" != yes ]; then
+                say "\"1\" is not offered for this disk."
+                sleep 3
+                return 0
+            fi
             mode=beside
             mark "mode chosen=beside name=${d_name[i]}"
             state=default
@@ -312,10 +340,122 @@ screen_mode() {
         *)
             if common "${answer}"; then return 0; fi
             mark "mode chosen=invalid"
-            say "\"${answer}\" is not 1 or 2."
+            say "\"${answer}\" is not one of the numbers in brackets."
             sleep 3
             ;;
     esac
+}
+
+# The confirmation of removing TUR from beside Windows (ADR-0029).
+screen_confirm_remove() {
+    local i="${chosen}" phrase line
+    screen confirm "confirm removing TUR"
+    phrase="$(remove_phrase_for "${i}")"
+    confirmed_fingerprint="$(fingerprint "${d_name[i]}")"
+    say "  Disk:       ${d_model[i]:-unnamed disk}"
+    say "  Capacity:   $(human "${d_size[i]}") (${d_size[i]} bytes)"
+    say "  Serial:     ${d_serial[i]:-none reported}${d_wwn[i]:+   WWN: ${d_wwn[i]}}"
+    say "  Path:       ${d_byid[i]}"
+    say ""
+    say "  On this disk now:"
+    while IFS= read -r line; do
+        say "     ${line}"
+    done < <(contents "${d_name[i]}")
+    say ""
+    say "  What will be done:"
+    if [ -n "${d_rpart[i]}" ]; then
+        say "   - TUR's partition ${d_rpart[i]##*/} ($(human "${d_rsize[i]}")) is DELETED, with TUR and every"
+        say "     file in it. The space becomes free (unallocated) again."
+    else
+        say "   - there is no TUR partition on this disk (the installation stopped early)"
+    fi
+    say "   - TUR's start-up files are removed from the EFI system partition, and"
+    say "     Windows' fallback start-up file is put back if TUR's is in its place"
+    say "   - the \"TUR\" entry is removed from the computer's boot order"
+    say "  Windows' partitions and files are not written to. Afterwards the computer"
+    say "  starts Windows by itself, as before TUR."
+    say ""
+    mark "confirm name=${d_name[i]} by_id=${d_byid[i]} phrase=\"${phrase}\" mode=remove partition=${d_rpart[i]:-none}"
+    say "To remove TUR from this disk, type exactly:  ${phrase}"
+    ask "(Enter alone goes back and changes nothing) > "
+    if [ -z "${answer}" ]; then
+        mark "confirm result=back"
+        state=disks
+        return 0
+    fi
+    if [ "${answer}" != "${phrase}" ]; then
+        mark "confirm result=mismatch code=TUR-INSTALL-CONFIRM-001"
+        say ""
+        say "TUR-INSTALL-CONFIRM-001"
+        say "That is not the phrase. Nothing was changed."
+        sleep 4
+        return 0
+    fi
+    mark "confirm result=accepted mode=remove"
+    state=install
+}
+
+screen_remove() {
+    local i="${chosen}"
+    revalidate_chosen
+    if ! remove_look "${target_device##*/}"; then
+        fail TUR-INSTALL-REMOVE-001 "TUR was not found beside Windows on this disk any more." "Nothing was changed."
+    fi
+    screen removing "removing TUR"
+    say "  Disk: ${d_model[i]:-unnamed disk}, $(human "${d_size[i]}")"
+    say "        ${d_byid[i]}"
+    say ""
+    say "Do not power off. This takes a few seconds."
+    say ""
+    if ! run_remove "${target_device}"; then
+        fail "${remove_code}" "${remove_message}" \
+            "Start this medium again and choose \"Remove TUR from this disk\" once more:" \
+            "removing can be repeated."
+    fi
+    state=removed
+}
+
+screen_removed() {
+    local i="${chosen}" line
+    screen removed "TUR was removed"
+    say "TUR was removed from:"
+    say "  ${d_model[i]:-unnamed disk}, $(human "${d_size[i]}")"
+    say "  ${d_byid[i]}"
+    say ""
+    while IFS= read -r line; do
+        say "     ${line}"
+    done < <(contents "${target_device##*/}")
+    say ""
+    case "${remove_table}/${remove_esp}" in
+        same/same)
+            say "The partition table and every file on the EFI system partition are as"
+            say "they were before TUR was installed."
+            ;;
+        unknown/*)
+            say "TUR left no record of the disk before it was installed (the installation"
+            say "stopped very early), so nothing could be compared. Windows was not touched."
+            ;;
+        *)
+            say "Compared with TUR's record of the disk before it was installed:"
+            say "  partition table: ${remove_table}; files on the EFI system partition: ${remove_esp}."
+            say "A difference means something else changed them since (a Windows update,"
+            say "or Windows was shrunk by this installer: extend it again in Windows' Disk"
+            say "Management, Extend Volume)."
+            ;;
+    esac
+    say ""
+    say "The space TUR used is free (unallocated). To give it back to Windows: in"
+    say "Windows, Disk Management, right-click the Windows partition, Extend Volume."
+    say ""
+    mark "result=removed table=${remove_table} esp=${remove_esp} device=${target_device}"
+    while :; do
+        ask 'Press Enter to power off. ("shell": a command line) '
+        if [ "${answer}" = shell ]; then
+            command_line
+            continue
+        fi
+        power_off
+    done
 }
 
 # Which system starts when the computer is switched on (beside Windows).
@@ -412,6 +552,10 @@ chosen=""
 confirmed_fingerprint=""
 screen_confirm() {
     local i="${chosen}" phrase line
+    if [ "${mode}" = remove ]; then
+        screen_confirm_remove
+        return
+    fi
     if [ "${mode}" = beside ]; then
         screen_confirm_beside
         return
@@ -550,9 +694,9 @@ screen_install_beside() {
             untouched) fail "${beside_code}" "${beside_message}" "Nothing was changed." ;;
             *)
                 fail "${beside_code}" "${beside_message}" \
-                    "Windows' partitions were not written. The free space now holds an" \
-                    "unfinished TUR partition (${beside_partition:-see the log}). Windows still starts" \
-                    "from the computer's boot menu."
+                    "Windows' partitions were not written. To put the disk back as it was," \
+                    "start this medium again, choose this disk and \"Remove TUR from this" \
+                    "disk\". Windows still starts from the computer's boot menu."
                 ;;
         esac
     fi
@@ -568,6 +712,10 @@ screen_install_beside() {
 
 screen_install() {
     local i="${chosen}"
+    if [ "${mode}" = remove ]; then
+        screen_remove
+        return
+    fi
     if [ "${mode}" = beside ]; then
         screen_install_beside
         return
@@ -666,6 +814,7 @@ while :; do
         confirm) screen_confirm ;;
         install) screen_install ;;
         finished) screen_finished ;;
+        removed) screen_removed ;;
         *) state=welcome ;;
     esac
 done

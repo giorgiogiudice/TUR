@@ -3,7 +3,11 @@
 """What is on a disk image that holds Windows, and whether it is still there.
 
     tests/iso/windows-disk.py record DISK OUT.json
-    tests/iso/windows-disk.py compare BEFORE.json DISK OUT.json [--expect-added]
+    tests/iso/windows-disk.py compare BEFORE.json DISK OUT.json [--exact]
+
+With --exact (after TUR was removed again) the disk must also hold nothing
+more than before: no partition added, no file added to the EFI system
+partition, the same free space, the same disk identifier.
 
 The proof of "install TUR beside Windows on the same disk" (ADR-0029):
 everything Windows had must be byte-for-byte where it was.
@@ -140,8 +144,8 @@ def key(entry: dict) -> tuple:
     return tuple(entry[name] for name in ("number", "start", "size", "type", "uuid", "name", "attrs"))
 
 
-def compare(before: dict, after: dict) -> dict:
-    checks: dict = {"problems": []}
+def compare(before: dict, after: dict, exact: bool = False) -> dict:
+    checks: dict = {"problems": [], "exact": exact}
     now = {entry["number"]: entry for entry in after["partitions"]}
     kept = []
     for old in before["partitions"]:
@@ -164,6 +168,8 @@ def compare(before: dict, after: dict) -> dict:
             })
             if changed:
                 checks["problems"].append(f"EFI system partition: files changed or missing: {changed}")
+            if exact and added:
+                checks["problems"].append(f"EFI system partition: files left behind: {added}")
             if not files_before:
                 checks["problems"].append("EFI system partition: no file could be read before")
         else:
@@ -184,6 +190,13 @@ def compare(before: dict, after: dict) -> dict:
         if not inside:
             checks["problems"].append(f"partition {entry['number']} was added outside the free space")
     checks["added_partitions"] = placed
+    if exact:
+        if placed:
+            checks["problems"].append(f"partitions left behind: {[item['number'] for item in placed]}")
+        if before["free_regions"] != after["free_regions"]:
+            checks["problems"].append(f"the free space is not as before: {after['free_regions']}")
+        if before["label_id"] != after["label_id"]:
+            checks["problems"].append("the disk identifier of the partition table changed")
     # Reported, not judged: libfdisk writes the protective MBR again with
     # every GPT it writes. It holds no Windows data; on a disk Windows
     # partitioned its bytes may differ from what libfdisk writes.
@@ -205,7 +218,7 @@ def main() -> int:
     if len(sys.argv) >= 5 and sys.argv[1] == "compare":
         before = json.loads(pathlib.Path(sys.argv[2]).read_text())
         after = record(pathlib.Path(sys.argv[3]))
-        result = compare(before, after)
+        result = compare(before, after, exact="--exact" in sys.argv)
         result["after"] = {k: v for k, v in after.items() if k != "partitions"}
         result["after_partitions"] = [{k: v for k, v in p.items() if k != "esp"} for p in after["partitions"]]
         pathlib.Path(sys.argv[4]).write_text(json.dumps(result, indent=2) + "\n")
