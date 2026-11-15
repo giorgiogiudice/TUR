@@ -286,6 +286,9 @@ jobs:
     name: Operate applications through the accessibility tree, under KWin
     runs-on: ubuntu-24.04
     timeout-minutes: 75
+    permissions:
+      contents: read
+      packages: read   # the builder's base from TUR's mirror (ghcr.io)
     env:
       CARGO_TERM_COLOR: never
       CARGO_INCREMENTAL: "0"
@@ -312,11 +315,40 @@ jobs:
           path: ${{ env.BUILDER_DIR }}
           key: ${{ steps.key.outputs.key }}
 
-      - name: Build the builder image, if the cache has none
+      # Without the cache: from TUR's registry, the image builder.lock pins
+      # or the one a run pushed for these inputs; without either, built
+      # (desktop/README.md, "The builder image").
+      - name: The builder image from TUR's registry, if the cache has none
+        id: fetch
         if: steps.cache.outputs.cache-hit != 'true'
+        env:
+          TOKEN: ${{ github.token }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          printf '%s' "$TOKEN" | docker login ghcr.io --username "$ACTOR" --password-stdin
+          status=0
+          desktop/ci/fetch-builder.sh "$BUILDER_DIR" || status=$?
+          case "$status" in
+            0) echo "fetched=true" >> "$GITHUB_OUTPUT" ;;
+            3) echo "fetched=false" >> "$GITHUB_OUTPUT" ;;
+            *) exit "$status" ;;
+          esac
+
+      # The pinned Fedora base from TUR's mirror: TUR_BUILD_CONTEXTS.
+      - uses: ./.github/actions/use-base-mirror
+        if: steps.cache.outputs.cache-hit != 'true' && steps.fetch.outputs.fetched != 'true'
+        with:
+          check: "false"
+          images: desktop/ci/builder.lock
+
+      - name: Build the builder image, if neither the cache nor the pin has one
+        if: steps.cache.outputs.cache-hit != 'true' && steps.fetch.outputs.fetched != 'true'
         run: desktop/ci/build-builder.sh "$BUILDER_DIR"
 
       - name: Load the builder image
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+          GHCR_USER: ${{ github.actor }}
         run: desktop/ci/load-builder.sh "$BUILDER_DIR"
 
       - name: The test image (accessibility bus, GTK, Firefox, Wine)

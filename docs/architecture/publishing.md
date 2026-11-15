@@ -14,8 +14,8 @@
 ## 1. In one paragraph
 
 The `release` workflow publishes the image that the `image` workflow built and
-tested, without building it again. It waits until every workflow on the commit
-has passed, takes the tested image as that workflow exported it (checked by its
+tested, without building it again. Once every workflow on the commit has
+passed, it takes the tested image as that workflow exported it (checked by its
 image ID), re-chunks it so that no layer holds what a later layer removed,
 checks every layer for Fedora's marks, signs it, and proves on a booted TUR
 guest that the computer's own container libraries accept that signed image and
@@ -44,26 +44,57 @@ ADR-0017, in its executing slice.
 
 ## 3. When a build is released, and which image
 
-`.github/workflows/release.yml` runs on every push to `main`, on manual start,
-and on pull requests that change the release itself (then as a rehearsal,
-section 7).
+`.github/workflows/release.yml` runs each time a workflow that a push to
+`main` started has finished (`workflow_run`), on manual start, and on pull
+requests that change the release itself (then as a rehearsal, section 7).
 
-**Waiting** (job `await`, `scripts/release/await.py`). Workflows run only when
-their paths change, and `workflow_run` would fire once per finished workflow,
-so the job instead lists the commit's runs through the API every minute until
-none is running. For each workflow the latest run counts (push and manual runs
-on `main`; the pull request's runs on a pull request). `gate`, `pax-live` (a
-test against a live provider, excluded from the gate too) and the release
-workflow itself do not count. The image is released only if:
+**Deciding** (job `await`; the rules are those of
+`scripts/release/await.py`). The job never waits on a runner: until
+14 November 2026 it listed the commit's runs every minute until none was
+running, and held a runner for hours doing so (issue 114). It now decides
+once, in seconds, and the event of the last workflow to finish is the one
+that lets the release go ahead; every earlier one says "not yet".
+
+*Which commit.* Not the commit the event is about, but the newest commit of
+`main` that has a run of the `image` workflow, whatever that run's state.
+Commits above it that have none (documents, CI files) do not matter, so a
+docs-only commit on top does not hold back the release of the one below it.
+A commit above it that has an image run is the one to release, when its
+workflows have finished; if one of them fails, nothing older is released
+instead. The release job checks that commit out: the image, its build ID,
+the commit it names and the scripts that release it are that commit's. The
+run's summary says which commit was chosen.
+
+*When.* For each workflow the commit's latest run counts (push and manual
+runs on `main`; the pull request's runs on a pull request). `gate`,
+`pax-live` (a test against a live provider, excluded from the gate too) and
+the release workflow itself do not count. The image is released only if:
 
 - the `image` workflow ran and passed on the commit (it built and tested the
   image and exported it), and the `boot` workflow ran and passed on it;
 - every other workflow that ran on the commit passed, the rollback scenarios
-  among them when the commit changed what they test.
+  among them when the commit changed what they test;
+- the commit has not been released already.
+
+*Once.* The run that decides to release a commit records the commit status
+`release` on it (`pending`), and the release job records `success`
+("published as ..." or "rehearsed ...") or `failure` when it ends. An
+evaluation that finds an earlier run that released the commit, or is on its
+way to, stops: a workflow run again, a scheduled run or a later commit's
+workflow finishing does not release it twice, and cannot cancel a release in
+progress (evaluations share a concurrency group of their own). A release
+that failed does not count, and an image that was only rehearsed, because
+publishing was off, is released again once publishing is on.
 
 A failure stops the release with the failing workflows named. A commit on
-which `image` did not run has nothing to release. A newer push to `main`
-cancels the release of an older commit that is still waiting.
+which `image` did not run has nothing to release. The release of a newer
+commit replaces the release of an older one that is still in progress.
+
+A workflow that runs on `main` must be in the `workflow_run` list of
+`release.yml` (and of `gate.yml`). One that is missing is still counted, but
+if it is the last to finish, nothing starts the release until the next
+workflow on `main` finishes or a person starts the workflow by hand: a
+manual run on `main` without inputs makes the same decision.
 
 **The image** (`scripts/release/tested.py`). The `image` workflow, after all
 its checks pass (smoke tests, the reproducibility build, Fedora's marks, SBOM,
@@ -316,15 +347,18 @@ The fixtures are the image under release with one label added
 (`scripts/release/variant.py`): same layers, another digest each, because a
 signature belongs to a digest.
 
-**Rehearsing without waiting.** A full run waits for every workflow on the
-commit. Two shortcuts run only the release job, against an image CI already
+**Rehearsing.** Two ways run the release job against an image CI already
 built and tested, and never publish: a manual run of `release` with the
 input `image_run` (the ID of a successful run of the `image` workflow; the
-boot and rollback runs of the same commit are used alongside), and, on a
-pull request, a commit that changes only the release itself (the image
-workflow does not run on it, and the branch's latest successful image run
-is used). The workflow file must be on `main` for the manual run to be
-offered.
+boot and rollback runs of the same commit are used alongside), and a pull
+request that changes the release itself (`release.yml`, `scripts/release/`,
+`image/signing/`, the signing files and container policy in `image/rootfs`).
+On a pull request the decision is made at once: this commit's image if all
+its workflows have already passed, otherwise the latest image of the branch
+that was built and booted, otherwise nothing. The pull request's own copy
+of the workflow runs; a rehearsal is not started from `workflow_run`, which
+would run `main`'s copy. The workflow file must be on `main` for the manual
+run to be offered.
 
 **While publishing is off** the release key does not exist. The job makes a
 throwaway key pair, signs with it, and the guest gets its public half on a
@@ -425,8 +459,9 @@ it back. Nothing is rebuilt or re-signed: signatures belong to the digest.
 - The rollback scenarios and the boot test boot their own builds of the
   commit, not the exported image, and those builds have the same image ID
   only on some runners (section 3; release-1, finding 1).
-- A full run on `main` waits for the slowest workflow on the commit (the
-  `iso` workflow, 76 minutes in release-1) and then takes about 36 minutes:
-  about two hours from merge to publication with free runners.
+- On `main` the release starts when the slowest workflow on the commit has
+  finished (the `iso` workflow, 76 minutes in release-1) and then takes
+  about 36 minutes: about two hours from merge to publication with free
+  runners, and longer when jobs wait in the queue.
 - Release notes from the merged pull requests (ADR-0023, consequences) are
   not built yet.
