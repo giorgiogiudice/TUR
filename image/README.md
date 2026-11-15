@@ -10,6 +10,7 @@ The TUR operating system is one bootc container image, defined by
 | `Containerfile.containerignore` | What is sent to the build: this directory, TUR's artwork (`branding/`), and the sources of the programs compiled into the image |
 | `programs.tsv` | The TUR programs compiled into the image: component, program, where it is installed |
 | `programs.sh` | What the build stage runs: fetch the crates, compile the programs, gather what goes with them |
+| `wine/` | Wine: the pinned Fedora packages (`wine.lock`), the tool that writes the lock, and the script that fetches and installs them (section "Wine") |
 | `files.tsv` | Data and units of the components that go with the programs: P@x's model list and units, the local AI model catalogue |
 | `engine/` | The local AI engine, llama.cpp, built from its source in a stage of its own: the pinned version (`llama-cpp.lock`) and the build script (section "The local AI engine") |
 | `base.lock` | The pinned base image: repository, tag, digest, version |
@@ -148,7 +149,8 @@ boot test read `programs.tsv` and expect what it lists.
 What the programs start is in the base image already: `bwrap` (bubblewrap)
 and `prlimit` (util-linux) for P@x's sandbox, `lsblk`, `udevadm`,
 `journalctl`, `fwupdmgr`, `bootc`, and the commands `tur-diag` collects with.
-No package is added. The smoke test checks each.
+No package is added for them; Wine, which `tur-runtime` starts, is (section
+"Wine"). The smoke test checks each.
 
 ## The local AI engine
 
@@ -209,6 +211,73 @@ licence notices the script copies out of the source are still where it looks
 (the stage fails when one is empty). Once Fedora builds `llama-cpp` with the
 processor variants and Vulkan and without a hard ROCm dependency, the stage
 can give way to the package.
+
+## Wine
+
+Windows applications run under Wine through `tur-runtime`, always inside its
+sandbox ([runtime-manager.md](../docs/architecture/runtime-manager.md);
+[ADR-0007](../docs/adr/0007-app-centric-routing.md)). The image carries
+Fedora 45's own Wine packages; nothing comes from outside Fedora. The
+decision and the measurements are in
+[windows-runtime-4](../docs/reports/windows-runtime-4.md).
+
+| In the image | What |
+|---|---|
+| `wine-core` (Wine 11.20) and `wine-filesystem` | The loader, the Wine server, and the Windows DLLs of both architectures in `/usr/lib64/wine-wow64/wine/{x86_64,i386}-windows`. Fedora builds x86-64 Wine in "new WoW64" mode: a 32-bit Windows program runs in the 64-bit Wine, without any 32-bit Linux library. No i686 package is installed |
+| `/usr/bin/wine`, `/usr/bin/wineserver` | Links that `alternatives` manages (to `wine64`, `wineserver64`), made by `wine-core`'s own scriptlet at build time; so are the links of Wine's Direct3D DLLs |
+| `wine-pulseaudio`, `wine-alsa`, `wine-cms`, `wine-ldap`, `wine-smartcard`, `wine-twain`, `wine-opencl` | The parts of Fedora's `wine` package that are drivers for sound, colour management, directory, smart-card, scanner and OpenCL |
+| `wine-winefonts` and the fonts it names | Wine's own fonts (Tahoma, Marlett, …) and the Liberation fonts it substitutes for Arial, Times New Roman and Courier New |
+| `ntsync-autoload` | Loads the kernel's `ntsync` module at boot, so that Wine 11 can use `/dev/ntsync`; `tur-runtime` passes it into the sandbox when it opens |
+| `xwininfo` | What `tur-runtime app autopilot` finds an application's windows with |
+| What those need that the base lacks | Fedora's MinGW libraries Wine links its DLLs with (FAudio, lcms2, libpng, libtiff, libxml2, libxslt, vkd3d, zlib, …), and what Fedora makes those require: the MinGW file system packages, the MinGW C runtime (143 MB of it static libraries a compiler would use), and the RPM build macros (`redhat-rpm-config` and the `*-srpm-macros`); `unixODBC` |
+
+Not installed, on purpose:
+
+- **Fedora's `wine` package** itself. It would bring `wine-desktop`, which
+  makes Wine the program that opens `.exe` and `.msi` files, and
+  `wine-systemd`, which registers Wine with the kernel's `binfmt_misc` so
+  that a Windows program marked executable runs when started. Either would
+  run a Windows program outside `tur-runtime` and its sandbox. The smoke test
+  checks that neither is there.
+- **Wine Mono** (.NET Framework; 326 MB installed) and **Wine Gecko**
+  (Internet Explorer's engine; 108 MB for both architectures, and through
+  `wine-common` 60 Perl packages). The runtime design installs no
+  dependency for an application, Mono and Gecko named among them
+  (runtime-manager.md, "Installing a Windows application"); an application
+  that needs one fails and says so. Whether TUR should ship them is a
+  decision for the owner (windows-runtime-4, "Decisions").
+- **The 32-bit (i686) Wine.** New WoW64 needs it for nothing; it would bring
+  726 MB and the i686 libraries of everything Wine links.
+
+How it gets in:
+
+- **Pinned packages.** [`wine/wine.lock`](wine/wine.lock) lists every package
+  with the SHA-256 of the signed package, its licence, its path in Fedora's
+  repository and the path of the same signed file in Fedora's build system
+  (Koji). [`wine/lock.py`](wine/lock.py) writes it: it reads Fedora 45's
+  repository metadata (release tree and updates, never updates-testing) and
+  resolves the dependencies of what TUR wants against the base's packages, as
+  rpm will. Run it when the base pin moves or to take a newer Wine, and
+  commit the lock in a change of its own.
+- **The stage `wine`** (`FROM` the pinned base) downloads them with
+  [`wine/wine.sh`](wine/wine.sh) `fetch`, from Fedora's repository or, once
+  the updates repository has moved on (it keeps only the newest build), from
+  Koji, which keeps every build; each is checked against its SHA-256. It is
+  the only step with network.
+- **The final stage installs them first**, without network
+  (`wine.sh install`), in one `rpm -i` transaction: rpm checks every
+  dependency against the base, so a lock that no longer fits the base stops
+  the build. The time rpm records is the build ID's date; file triggers are
+  not run (fontconfig's would write a cache with the build's time in it), as
+  for the fonts of the desktop. Wine's own scriptlets run. Being first, the
+  layer does not change when TUR's own files do.
+- **Checks:** the build runs `wine --version` and checks the links and that
+  nothing registered Wine for `.exe` files; the smoke test checks every
+  package of the lock, both architectures' DLLs, the links, the absence of
+  `wine`, `wine-desktop`, `wine-systemd`, Mono, Gecko and i686 Wine, and
+  `ntsync`; the SBOM lists the packages from the package database; the boot
+  test installs, starts and removes real Windows applications on the
+  installed system ([`tests/boot/windows.py`](../tests/boot/windows.py)).
 
 ## Boot health and rollback
 

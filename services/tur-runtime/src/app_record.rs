@@ -136,9 +136,10 @@ pub struct LauncherRecord {
     /// The icon file, when the program had an icon that could be read.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub icon: Option<String>,
-    /// Whether the entry is installed where the desktop looks for entries.
-    /// `false` in this build: the entry is staged in the runtime manager's
-    /// own directory.
+    /// Whether the entry is installed where the desktop looks for entries
+    /// (`$XDG_DATA_HOME/applications`). `true` for an application installed
+    /// by this build; `false` in a record written before, when the entry
+    /// was only staged in the runtime manager's own directory.
     pub installed: bool,
 }
 

@@ -600,6 +600,7 @@ pub fn copy_paths(directory: &Path, app_id: &str) -> AppPaths {
         backups: directory.join("backups"),
         staging: directory.join("staging"),
         launchers: directory.join("launchers"),
+        desktop_entry: directory.join("launchers").join(crate::paths::desktop_entry_name(app_id)),
         logs: directory.join("logs"),
     }
 }

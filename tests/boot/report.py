@@ -793,21 +793,19 @@ def check_components(ev: Evidence, checks: Checks, args) -> dict:
     windows = document("runtime-inspect-windows.out") or {}
     recommendation = windows.get("recommendation") or {}
     native = (document("runtime-inspect-linux.out") or {}).get("recommendation") or {}
-    absent = [line for line in text("runtime-which.out").splitlines() if line.strip()]
+    found = dict(line.split(": ", 1) for line in text("runtime-which.out").splitlines() if ": " in line)
     add(
         "runtime_windows",
-        "tur-runtime recognises a Windows program and says honestly that no runtime for it is installed",
-        codes.get("runtime-inspect-windows") == 4
+        "tur-runtime recognises a Windows program and finds Wine, which the image carries, to run it",
+        codes.get("runtime-inspect-windows") == 0
         and recommendation.get("runtime") == "wine"
-        and "wine" in (recommendation.get("missing") or [])
-        and "runtime-not-installed" in (recommendation.get("reasons") or [])
-        and "is not installed on this system" in str(recommendation.get("explanation"))
-        and len(absent) == 4
-        and all(line.endswith(": absent") for line in absent),
-        f"exit status {codes.get('runtime-inspect-windows')} (4: something is missing); runtime "
+        and not recommendation.get("missing")
+        and all(found.get(name, "").startswith("/") for name in ("wine", "wine64", "wineserver"))
+        and found.get("umu-run") == "absent",
+        f"exit status {codes.get('runtime-inspect-windows')} (0: nothing is missing); runtime "
         f"{recommendation.get('runtime')}, missing {recommendation.get('missing')}, code "
-        f"{recommendation.get('code')}: {str(recommendation.get('explanation'))[:200]}; in the image: "
-        f"{', '.join(absent) or 'no data'}",
+        f"{recommendation.get('code')}: {str(recommendation.get('explanation'))[:200]}; on the system: "
+        f"{', '.join(f'{k}: {v}' for k, v in found.items()) or 'no data'}",
     )
     add(
         "runtime_linux",

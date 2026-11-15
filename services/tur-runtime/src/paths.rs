@@ -11,7 +11,9 @@
 //!     prefixes/<app-id>/profile.json      the profile it is launched from
 //!     backups/<app-id>/<time>-<reason>.tar.gz
 //!     staging/<app-id>/                   scratch space for restore
-//!     launchers/<app-id>/                 the staged launcher entry and its icon
+//!     launchers/<app-id>/                 the launcher entry's icon
+//! $XDG_DATA_HOME/applications/
+//!     tur-wine-<app-id>.desktop           an installed application's launcher entry
 //! $XDG_STATE_HOME/tur/runtime/
 //!     logs/<app-id>/<time>-<pid>.log      one file per launch
 //!     logs/<app-id>/operations.log        output of prefix operations
@@ -88,6 +90,7 @@ pub(crate) fn plain_text(path: &Path) -> Option<&str> {
 pub struct RuntimeDirs {
     data_root: PathBuf,
     state_root: PathBuf,
+    applications: PathBuf,
 }
 
 impl RuntimeDirs {
@@ -97,6 +100,7 @@ impl RuntimeDirs {
         RuntimeDirs {
             data_root: data_home.join(&own),
             state_root: state_home.join(&own),
+            applications: data_home.join("applications"),
         }
     }
 
@@ -137,6 +141,14 @@ impl RuntimeDirs {
         &self.state_root
     }
 
+    /// The user's applications directory (`$XDG_DATA_HOME/applications`),
+    /// where the desktop looks for launcher entries. The runtime manager
+    /// writes and deletes only its own entries there, one file per
+    /// installed application ([`AppPaths::desktop_entry`]).
+    pub fn applications(&self) -> &Path {
+        &self.applications
+    }
+
     /// The directory holding one directory per application.
     pub fn prefixes(&self) -> PathBuf {
         self.data_root.join("prefixes")
@@ -164,6 +176,7 @@ impl RuntimeDirs {
             backups: self.data_root.join("backups").join(app_id),
             staging: self.data_root.join("staging").join(app_id),
             launchers: self.data_root.join("launchers").join(app_id),
+            desktop_entry: self.applications.join(desktop_entry_name(app_id)),
             logs: self.state_root.join("logs").join(app_id),
         })
     }
@@ -193,10 +206,34 @@ pub struct AppPaths {
     pub backups: PathBuf,
     /// Scratch space used while restoring a backup.
     pub staging: PathBuf,
-    /// Where the application's launcher entry and icon are staged.
+    /// Where the icon of the application's launcher entry is kept.
     pub launchers: PathBuf,
+    /// The application's launcher entry where the desktop shows it:
+    /// `$XDG_DATA_HOME/applications/tur-wine-<app-id>.desktop`.
+    pub desktop_entry: PathBuf,
     /// The application's log directory.
     pub logs: PathBuf,
+}
+
+/// The file name of an installed application's launcher entry. Applications
+/// are installed with the wine runtime only, so it is the name
+/// [`crate::desktop`] gives a wine entry.
+pub fn desktop_entry_name(app_id: &str) -> String {
+    format!("tur-wine-{app_id}.desktop")
+}
+
+/// Whether `path` is an application's launcher entry in the applications
+/// directory `applications`: `tur-wine-<app-id>.desktop` directly inside it,
+/// with a valid identifier. Nothing else there is ever written or deleted.
+pub fn is_application_entry(applications: &Path, path: &Path) -> bool {
+    plain_text(path).is_some()
+        && path.parent() == Some(applications)
+        && path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .and_then(|name| name.strip_prefix("tur-wine-"))
+            .and_then(|name| name.strip_suffix(".desktop"))
+            .is_some_and(is_app_id)
 }
 
 impl AppPaths {
@@ -247,6 +284,29 @@ mod tests {
             dirs.state_root(),
             Path::new("/home/ada/.local/state/tur/runtime")
         );
+    }
+
+    #[test]
+    fn an_application_entry_is_its_own_file_in_the_applications_directory() {
+        let dirs = RuntimeDirs::new(Path::new("/data"), Path::new("/state"));
+        assert_eq!(dirs.applications(), Path::new("/data/applications"));
+        let app = dirs.app("com.example.app").unwrap();
+        assert_eq!(
+            app.desktop_entry,
+            Path::new("/data/applications/tur-wine-com.example.app.desktop")
+        );
+        assert!(is_application_entry(dirs.applications(), &app.desktop_entry));
+        for other in [
+            "/data/applications",
+            "/data/applications/firefox.desktop",
+            "/data/applications/tur-wine-Bad_Id.desktop",
+            "/data/applications/tur-wine-com.example.app.desktop/x",
+            "/data/applications/sub/tur-wine-com.example.app.desktop",
+            "/data/applications/../applications/tur-wine-com.example.app.desktop",
+            "/other/applications/tur-wine-com.example.app.desktop",
+        ] {
+            assert!(!is_application_entry(dirs.applications(), Path::new(other)), "{other}");
+        }
     }
 
     #[test]
