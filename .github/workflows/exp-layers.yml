@@ -1,0 +1,218 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Experiment "layers": Windows prefixes composed from a shared base layer and
+# thin application layers, instead of one whole Wine prefix per application.
+# A time-boxed research spike; nothing here builds or changes a TUR service.
+# Hypotheses and kill criteria: tests/experiments/layers/README.md. Report:
+# docs/reports/exp-layers-1.md.
+#
+# Two jobs, both on a hosted Ubuntu runner:
+#
+#   layers   Fedora 43's Wine (the older one) in one container, then Fedora
+#            45's Wine (the one TUR ships) in another, on the same scratch
+#            directory: layers made under the old Wine are rebased onto a
+#            base of the new one. The kernel is the runner's (Ubuntu's).
+#   kernel   Fedora 45's kernel, booted in a virtual machine whose root is a
+#            copy of the Fedora 45 container: what overlayfs does without
+#            privilege on the kernel TUR ships, with and without case
+#            folding, and Wine on layers there.
+#
+# A pull request's path filter looks at the whole pull request, so a later
+# push that only touches the report would run both jobs again. The first step
+# of each job looks for an earlier successful run on this branch that left
+# the job's evidence, and when nothing of the experiment's has changed since
+# the commit it measured, the job ends at once. A push that arrives while a
+# run is queued or running cancels it (the concurrency group) and is then
+# measured itself, because no finished measurement of that code exists.
+#
+# This is not the TUR image: no SELinux, no Plasma, no GPU.
+name: exp-layers
+
+on:
+  pull_request:
+    paths:
+      - "tests/experiments/layers/**"
+      - ".github/workflows/exp-layers.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: exp-layers-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DEBIAN_FRONTEND: noninteractive
+  # Fedora's container images, by digest (tags 43 and 45 on 14 November 2026).
+  FEDORA_OLD: registry.fedoraproject.org/fedora:43@sha256:a09ad4bedcd4f12658fb43b20a605ba36b831261dedd30d85b6e400dac601ddc
+  FEDORA_NEW: registry.fedoraproject.org/fedora:45@sha256:e15959f36d52307f176f8c068009f6f1451c3b238b37a1f03e56dbfa4526e8b1
+
+jobs:
+  layers:
+    name: Layers under two Wine versions (Fedora containers)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 130
+    steps:
+      - name: Is there a measurement of this code already?
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.head_ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          ARTIFACT: exp-layers-evidence
+        run: |
+          run=true
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            measured=""
+            for id in $(gh api "repos/$REPO/actions/workflows/exp-layers.yml/runs?branch=$BRANCH&event=pull_request&status=success&per_page=20" --jq '.workflow_runs[].id' || true); do
+              if gh api "repos/$REPO/actions/runs/$id/artifacts" --jq '.artifacts[].name' | grep -qx "$ARTIFACT"; then
+                measured="$(gh api "repos/$REPO/actions/runs/$id" --jq .head_sha)"
+                echo "run $id measured commit $measured"
+                break
+              fi
+            done
+            if [ -n "$measured" ] && files="$(gh api "repos/$REPO/compare/$measured...$HEAD_SHA" --jq '.files[].filename')"; then
+              echo "changed since then:"; echo "$files"
+              if ! echo "$files" | grep -Eq '^(tests/experiments/layers/|tests/windows-runtime/apps\.(py|json)$|\.github/workflows/exp-layers\.yml$)'; then
+                run=false
+              fi
+            fi
+          fi
+          echo "RUN=$run" >> "$GITHUB_ENV"
+          echo "run the experiment: $run" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        if: env.RUN == 'true'
+
+      - name: Scratch directory, on the disk with more room
+        if: env.RUN == 'true'
+        run: |
+          df -h / /mnt 2>/dev/null || true
+          root="$RUNNER_TEMP"
+          if [ -d /mnt ] && [ "$(df --output=avail -k /mnt | tail -n 1)" -gt "$(df --output=avail -k "$RUNNER_TEMP" | tail -n 1)" ]; then
+            sudo mkdir -p /mnt/tur-layers
+            sudo chown "$(id -u):$(id -g)" /mnt/tur-layers
+            root=/mnt/tur-layers
+          fi
+          mkdir -p "$root/work/evidence"
+          echo "WORK=$root/work" >> "$GITHUB_ENV"
+
+      - name: File systems, and user namespaces for the containers
+        # ext4 as bootc makes TUR's root, ext4 with the casefold feature and
+        # btrfs, each in an image file on a loop device. Ubuntu 24.04 denies
+        # unprivileged user namespaces to unconfined programs, which a
+        # privileged container's are; this throw-away runner lifts that
+        # (remedy 2 of tests/windows-runtime/sandbox-preflight.sh).
+        if: env.RUN == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y btrfs-progs e2fsprogs
+          sudo bash tests/experiments/layers/fs-setup.sh "$WORK/fs" "$(id -u):$(id -g)" | tee "$WORK/evidence/file-systems.txt"
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 | tee "$WORK/evidence/userns.txt" || true
+          { echo "runner image: ${ImageOS:-?} ${ImageVersion:-?}"; echo "kernel: $(uname -r)"; nproc; free -g | head -n 2; } | tee "$WORK/evidence/runner.txt"
+
+      - name: The older Wine (Fedora 43), a base and five applications on layers
+        if: env.RUN == 'true'
+        run: |
+          docker run --rm --privileged --network host -v /dev:/dev \
+            -v "$GITHUB_WORKSPACE:/src:ro" -v "$WORK:/work" \
+            "$FEDORA_OLD" bash /src/tests/experiments/layers/container.sh old
+
+      - name: The newer Wine (Fedora 45), rebase and everything else
+        if: env.RUN == 'true'
+        run: |
+          sudo dmesg --clear || true
+          docker run --rm --privileged --network host -v /dev:/dev \
+            -v "$GITHUB_WORKSPACE:/src:ro" -v "$WORK:/work" \
+            "$FEDORA_NEW" bash /src/tests/experiments/layers/container.sh new
+
+      - name: Results
+        if: always() && env.RUN == 'true'
+        run: |
+          sudo chown -R "$(id -u):$(id -g)" "$WORK/evidence" || true
+          python3 tests/experiments/layers/report.py "$WORK/evidence" > "$WORK/evidence/results.md" || true
+          head -c 900000 "$WORK/evidence/results.md" >> "$GITHUB_STEP_SUMMARY" || true
+          df -h "$WORK" "$WORK"/fs/* 2>/dev/null || true
+          du -sh "$WORK/evidence" || true
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always() && env.RUN == 'true'
+        with:
+          name: exp-layers-evidence
+          path: ${{ env.WORK }}/evidence/
+          if-no-files-found: warn
+
+  kernel:
+    name: Layers on Fedora 45's kernel (virtual machine)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 100
+    steps:
+      - name: Is there a measurement of this code already?
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.head_ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          ARTIFACT: exp-layers-kernel-evidence
+        run: |
+          run=true
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            measured=""
+            for id in $(gh api "repos/$REPO/actions/workflows/exp-layers.yml/runs?branch=$BRANCH&event=pull_request&status=success&per_page=20" --jq '.workflow_runs[].id' || true); do
+              if gh api "repos/$REPO/actions/runs/$id/artifacts" --jq '.artifacts[].name' | grep -qx "$ARTIFACT"; then
+                measured="$(gh api "repos/$REPO/actions/runs/$id" --jq .head_sha)"
+                echo "run $id measured commit $measured"
+                break
+              fi
+            done
+            if [ -n "$measured" ] && files="$(gh api "repos/$REPO/compare/$measured...$HEAD_SHA" --jq '.files[].filename')"; then
+              echo "changed since then:"; echo "$files"
+              if ! echo "$files" | grep -Eq '^(tests/experiments/layers/|tests/windows-runtime/apps\.(py|json)$|\.github/workflows/exp-layers\.yml$)'; then
+                run=false
+              fi
+            fi
+          fi
+          echo "RUN=$run" >> "$GITHUB_ENV"
+          echo "run the experiment: $run" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        if: env.RUN == 'true'
+
+      - name: Scratch directory, on the disk with more room
+        if: env.RUN == 'true'
+        run: |
+          df -h / /mnt 2>/dev/null || true
+          root="$RUNNER_TEMP"
+          if [ -d /mnt ] && [ "$(df --output=avail -k /mnt | tail -n 1)" -gt "$(df --output=avail -k "$RUNNER_TEMP" | tail -n 1)" ]; then
+            sudo mkdir -p /mnt/tur-layers
+            sudo chown "$(id -u):$(id -g)" /mnt/tur-layers
+            root=/mnt/tur-layers
+          fi
+          mkdir -p "$root/work/evidence"
+          echo "WORK=$root/work" >> "$GITHUB_ENV"
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          { echo "runner image: ${ImageOS:-?} ${ImageVersion:-?}"; echo "kernel: $(uname -r)"; nproc; free -g | head -n 2; ls -l /dev/kvm; } | tee "$root/work/evidence/runner.txt"
+
+      - name: Fedora 45's kernel in a virtual machine, Fedora 45's Wine in it
+        if: env.RUN == 'true'
+        run: |
+          docker run --rm --privileged --network host -v /dev:/dev \
+            -v "$GITHUB_WORKSPACE:/src:ro" -v "$WORK:/work" \
+            "$FEDORA_NEW" bash /src/tests/experiments/layers/container.sh vm
+
+      - name: Results
+        if: always() && env.RUN == 'true'
+        run: |
+          sudo chown -R "$(id -u):$(id -g)" "$WORK/evidence" || true
+          python3 tests/experiments/layers/report.py "$WORK/evidence" > "$WORK/evidence/results.md" || true
+          head -c 900000 "$WORK/evidence/results.md" >> "$GITHUB_STEP_SUMMARY" || true
+          du -sh "$WORK/evidence" || true
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always() && env.RUN == 'true'
+        with:
+          name: exp-layers-kernel-evidence
+          path: ${{ env.WORK }}/evidence/
+          if-no-files-found: warn
