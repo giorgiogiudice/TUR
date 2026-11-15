@@ -85,6 +85,8 @@ OverlayService::OverlayService(OverlayState *state, WindowLocator *locator, QObj
     connect(m_state, &OverlayState::activeChanged, this, &OverlayService::updateShown);
     connect(m_state, &OverlayState::activityChanged, this, &OverlayService::updateShown);
     connect(m_state, &OverlayState::onChanged, this, &OverlayService::updateShown);
+    connect(m_state, &OverlayState::activityChanged, this, &OverlayService::updateActivity);
+    connect(m_state, &OverlayState::onChanged, this, &OverlayService::updateActivity);
     connect(m_locator, &WindowLocator::changed, this, &OverlayService::windowChanged);
     connect(m_locator, &WindowLocator::removed, this, &OverlayService::windowRemoved);
 }
@@ -629,6 +631,29 @@ void OverlayService::setDrawnScreens(const QStringList &drawn)
         }
     }
     updateShown();
+}
+
+QString OverlayService::activity() const
+{
+    if (!m_state->on() && m_state->activity() == QLatin1String("idle"))
+        return QString();
+    return m_state->activity();
+}
+
+void OverlayService::updateActivity()
+{
+    const QString said = activity();
+    if (said == m_activitySaid)
+        return;
+    m_activitySaid = said;
+    if (m_bus.isConnected()) {
+        QDBusMessage changed = QDBusMessage::createSignal(PaxOverlay::Bus::path(),
+                                                          QStringLiteral("org.freedesktop.DBus.Properties"),
+                                                          QStringLiteral("PropertiesChanged"));
+        changed << PaxOverlay::Bus::interface() << QVariantMap { { QStringLiteral("Activity"), said } }
+                << QStringList();
+        m_bus.send(changed);
+    }
 }
 
 void OverlayService::updateShown()

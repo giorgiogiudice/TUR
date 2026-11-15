@@ -11,9 +11,11 @@
 # For each arrangement below it starts a private session bus and
 # kwin_wayland with its virtual backend (no display, no GPU: Mesa's software
 # renderer), then desktop/tests/compositor's tst_compositor, which starts
-# tur-settings and tur-pax-overlay as Wayland clients and tests them. The
-# KWin is the one the builder image has from Fedora 45, the same package the
-# TUR image ships.
+# tur-settings and tur-pax-overlay as Wayland clients and tests them, and
+# then, where there is one output, tst_compositor_companion, which draws a
+# stand-in for the bar and tests P@x's character on it (tur-pax-companion,
+# with tur-pax-ui for the ask bar). The KWin is the one the builder image has
+# from Fedora 45, the same package the TUR image ships.
 #
 # Everything goes to $OUT/compositor: each arrangement's KWin log, test log
 # (JUnit and text) and screenshots, and report.md.
@@ -23,6 +25,7 @@ preset=${1:?usage: compositor.sh PRESET}
 build=$PWD/desktop/build/$preset
 out=$PWD/${OUT:-out/desktop}/compositor
 program=$build/tests/compositor/tst_compositor
+companion=$build/tests/compositor/tst_compositor_companion
 rm -rf "$out"
 mkdir -p "$out"
 
@@ -136,6 +139,26 @@ PY
     grep -a -E '^(PASS|FAIL!|SKIP|XFAIL|XPASS|Totals)' "$out/$label-test.log" || true
     grep -a -E -A 6 '^FAIL!' "$out/$label-test.log" | head -n 80 || true
     grep -a 'TUR-KWIN' "$out/$label-test.log" | sed "s/^/$label: /" >> "$out/observations.txt" || true
+
+    # P@x's character on a stand-in bar, under the same KWin, after the
+    # overlay's tests have ended their programs. One output: the screen the
+    # bar is on.
+    if [ "$outputs" = 1 ]; then
+        echo "== $label: P@x's character on the bar"
+        if ! XDG_RUNTIME_DIR=$runtime XDG_CONFIG_HOME=$runtime/config DBUS_SESSION_BUS_ADDRESS=$bus \
+            WAYLAND_DISPLAY=wayland-tur QT_QPA_PLATFORM=wayland QT_QUICK_BACKEND=software \
+            XCURSOR_SIZE=24 LC_ALL=C.UTF-8 ASAN_OPTIONS=detect_leaks=0 \
+            TUR_COMPOSITOR_OUT=$out TUR_COMPOSITOR_LABEL=$label TUR_COMPOSITOR_VARIANT=$variant \
+            timeout 600 "$companion" -o "$out/$label-companion.xml,junitxml" -o "-,txt" \
+            > "$out/$label-companion-test.log" 2>&1; then
+            status=1
+            echo "::error::$label: the tests of P@x's character under KWin failed"
+        fi
+        grep -a -E '^(PASS|FAIL!|SKIP|XFAIL|XPASS|Totals)' "$out/$label-companion-test.log" || true
+        grep -a -E -A 6 '^FAIL!' "$out/$label-companion-test.log" | head -n 80 || true
+        grep -a 'TUR-KWIN' "$out/$label-companion-test.log" | sed "s/^/$label: /" >> "$out/observations.txt" || true
+        rm -rf "$out/$label-companion-work"
+    fi
 
     kill "$compositor" 2>/dev/null || true
     wait "$compositor" 2>/dev/null || true

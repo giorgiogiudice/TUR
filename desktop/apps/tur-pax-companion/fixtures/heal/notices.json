@@ -1,0 +1,55 @@
+{
+  "licence": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+  "about": "What `tur-diag heal notices --json` prints, under `printed`: an array of the notices this person has not seen, each with id, at_utc, code, kind, title, body and actions (services/tur-diagnostics/src/heal/engine.rs, struct Notice; the healing service's engineer declared these fields stable on 14 November 2026: fields may be added, never renamed). WRITTEN BY HAND from that struct and from the texts of services/tur-diagnostics/heal/catalogue.json with their subjects filled in; not recorded from a run of tur-diag. The fourth notice carries the longer text pull request #117 gives an automatic repair. Recording this file in the heal workflow, as tur-pax-ui's fixture is recorded from the real service, is a follow-up (docs/reports/desktop-8.md).",
+  "printed": [
+    {
+      "id": 3,
+      "at_utc": "2026-11-14T09:12:44Z",
+      "code": "TUR-DESKTOP-SERVICE-001",
+      "kind": "repaired",
+      "title": "A system service stopped working",
+      "body": "chronyd.service had stopped working. TUR started it again and checked that it is running.",
+      "actions": []
+    },
+    {
+      "id": 4,
+      "at_utc": "2026-11-14T09:42:51Z",
+      "code": "TUR-NETWORK-RESOLVER-001",
+      "kind": "detected",
+      "title": "Name lookups bypass the system resolver",
+      "body": "Name lookups bypass the system resolver: /etc/resolv.conf was replaced. If you did not mean this, TUR can restore it, and undo that later.",
+      "actions": [
+        "tur-diag heal apply TUR-NETWORK-RESOLVER-001 restore-resolver-link"
+      ]
+    },
+    {
+      "id": 5,
+      "at_utc": "2026-11-14T10:12:40Z",
+      "code": "TUR-DIAG-CRASH-001",
+      "kind": "report-offered",
+      "title": "A TUR program crashed",
+      "body": "tur-diag crashed. This is a problem in TUR itself. You can send a report to TUR's developers; you see everything in it first, and nothing is sent unless you choose to.",
+      "actions": [
+        "tur-diag heal report TUR-DIAG-CRASH-001"
+      ]
+    },
+    {
+      "id": 6,
+      "at_utc": "2026-11-14T10:42:38Z",
+      "code": "TUR-DESKTOP-SERVICE-001",
+      "kind": "repaired",
+      "title": "A system service stopped working",
+      "body": "cups.service had stopped working. TUR started it again and checked that it is running. TUR did this by itself; it checks again at its next look and tells you whether the repair held.",
+      "actions": []
+    },
+    {
+      "id": 7,
+      "at_utc": "2026-11-14T11:12:41Z",
+      "code": "TUR-DESKTOP-SERVICE-001",
+      "kind": "cleared",
+      "title": "A system service stopped working",
+      "body": "",
+      "actions": []
+    }
+  ]
+}

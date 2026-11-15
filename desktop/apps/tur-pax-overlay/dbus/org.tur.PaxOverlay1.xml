@@ -192,5 +192,10 @@
     <property name="Screens" type="as" access="read"/>
     <!-- Whether the list of P@x's keys is asked for. -->
     <property name="CommandsShown" type="b" access="read"/>
+    <!-- What the pill says P@x is doing: idle, listening, working, observing,
+         acting, waiting or paused (the loudest of what the leases set);
+         empty while P@x is not on. P@x's character on the bar
+         (tur-pax-companion) follows it, so that the two never disagree. -->
+    <property name="Activity" type="s" access="read"/>
   </interface>
 </node>

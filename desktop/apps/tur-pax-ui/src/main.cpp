@@ -18,6 +18,7 @@
 #include <QCommandLineParser>
 #include <QCoreApplication>
 #include <QDBusConnection>
+#include <QDBusArgument>
 #include <QDBusConnectionInterface>
 #include <QDBusMessage>
 #include <QDBusVariant>
@@ -126,6 +127,28 @@ int showKeys(const QString &address)
     return 0;
 }
 
+// Where P@x's character is, if it is on the bar (tur-pax-companion's
+// org.tur.PaxCompanion1.Anchor): the ask bar opens beside it. Empty when
+// the character is not running, which is never a reason to start it; the
+// character answers at once or is not waited for.
+QVariantMap characterAnchor(const QString &address)
+{
+    const QDBusConnection bus = busFor(address);
+    QDBusConnectionInterface *names = bus.isConnected() ? bus.interface() : nullptr;
+    const QString service = QStringLiteral("org.tur.PaxCompanion1");
+    if (!names || !names->isServiceRegistered(service).value())
+        return {};
+    QDBusMessage get = QDBusMessage::createMethodCall(service, QStringLiteral("/org/tur/PaxCompanion1"),
+                                                      QStringLiteral("org.freedesktop.DBus.Properties"),
+                                                      QStringLiteral("Get"));
+    get << service << QStringLiteral("Anchor");
+    get.setAutoStartService(false);
+    const QDBusMessage reply = bus.call(get, QDBus::Block, 400);
+    if (reply.type() != QDBusMessage::ReplyMessage)
+        return {};
+    return qdbus_cast<QVariantMap>(reply.arguments().value(0).value<QDBusVariant>().variant());
+}
+
 } // namespace
 
 int main(int argc, char *argv[])
@@ -231,12 +254,19 @@ int main(int argc, char *argv[])
         return 2;
     }
     QObject *root = engine.rootObjects().constFirst();
-    Surface surface(root);
+    const QString paxBus = parser.value(bus);
+    Surface surface(root, shown == QLatin1String("ask") ? characterAnchor(paxBus) : QVariantMap());
+    // What the window shows is said on the bus (org.tur.PaxUi1.Mode).
+    QObject::connect(&surface, &Surface::modeChanged, &service, &UiService::setMode);
+    service.setMode(root->property("mode").toString());
     err << "tur-pax-ui: platform " << QGuiApplication::platformName() << ", "
         << (surface.layerShell() ? "a layer-shell surface" : "an ordinary window") << '\n';
     err.flush();
 
-    const auto showMode = [root](const QString &asked) {
+    const auto showMode = [root, &surface, paxBus](const QString &asked) {
+        // The ask bar opens beside P@x's character, where it is now.
+        if (asked == QLatin1String("ask"))
+            surface.prepareBar(characterAnchor(paxBus));
         if (!QMetaObject::invokeMethod(root, "show", Q_ARG(QString, asked)))
             root->setProperty("mode", asked);
     };
