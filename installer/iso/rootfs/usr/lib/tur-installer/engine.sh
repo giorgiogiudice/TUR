@@ -1734,7 +1734,7 @@ run_shrink() {
     if ! ntfs_shrink "${device}" "${w_number}" "${w_part}" "${new}"; then
         case "${s_code}" in
             TUR-INSTALL-SHRINK-006) beside_disk_state=untouched ;;
-            *) beside_disk_state=windows-check ;;
+            *) beside_disk_state="windows-check" ;;
         esac
         beside_fail "${s_code}" "${s_why}"
         return 1
@@ -1745,7 +1745,7 @@ run_shrink() {
     read -r start size <<< "${region:-0 0}"
     mark "shrink step=done partition=${w_part} free_start=${start} free_size=${size}"
     if [ "${b_possible}" != yes ]; then
-        beside_disk_state=windows-check
+        beside_disk_state="windows-check"
         beside_fail "${b_code:-TUR-INSTALL-SHRINK-008}" "Windows was shrunk, but TUR cannot be installed into the space: ${b_why}. Windows checks its partition at its next start."
         return 1
     fi
