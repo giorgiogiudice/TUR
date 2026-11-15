@@ -482,7 +482,8 @@ private:
             m_companion.kill();
             m_companion.waitForFinished(5000);
         }
-        QTest::qWaitFor([] { return !owned(companionService); }, 10000);
+        if (!QTest::qWaitFor([] { return !owned(companionService); }, 10000))
+            report(QStringLiteral("the stopped character still owned org.tur.PaxCompanion1 after 10 s"));
     }
 
 private Q_SLOTS:
