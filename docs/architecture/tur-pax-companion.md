@@ -532,8 +532,8 @@ All in CI, in the desktop workflow.
 | `pax-overlay-bus` (extended) | ctest | The indicator's `Activity`: empty with P@x off, then what the pill says |
 
 **Under KWin** (`desktop/tests/compositor/tst_companion.cpp`, run by
-`desktop/ci/compositor.sh` after the overlay's tests, in three arrangements:
-dark and light at scale 1, dark at scale 1.5). The bar is a **stand-in**: a
+`desktop/ci/compositor.sh` after the overlay's tests, in four arrangements:
+dark and light, at scale 1 and 1.5). The bar is a **stand-in**: a
 layer-shell surface of the test's own on the top layer along the bottom
 edge, 64 px thick, reserving its thickness as Plasma's panel does. 64 and
 not 44, so that "in the middle of the bar" and "just above the screen's
