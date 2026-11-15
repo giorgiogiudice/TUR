@@ -1,0 +1,16 @@
+#!/usr/bin/bash
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# "Restart into Windows" (ADR-0029), as root: the program polkit's action
+# org.tur.dualboot.restart-windows names. It does only what
+# `tur-dualboot restart-windows` does: set the firmware's BootNext to
+# "Windows Boot Manager" and restart. It takes no other command, so the
+# action can be allowed to the person at the computer without a password,
+# as restarting is; changing the default system stays behind
+# org.tur.dualboot (an administrator's password).
+set -u
+if [ "$#" -ne 0 ] && [ "$*" != --no-reboot ]; then
+    echo "usage: tur-restart-windows [--no-reboot]" >&2
+    exit 2
+fi
+exec /usr/bin/tur-dualboot restart-windows "$@"

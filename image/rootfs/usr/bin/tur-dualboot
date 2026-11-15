@@ -1,0 +1,149 @@
+#!/usr/bin/bash
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# TUR and Windows on one computer (ADR-0029): which system the computer
+# starts by default, and "Restart into Windows".
+#
+#   tur-dualboot status                 the firmware's entries for TUR and
+#                                       Windows, the boot order, BootNext
+#   tur-dualboot default tur|windows    put that system first in the
+#                                       firmware's boot order, the other
+#                                       second; every other entry keeps its
+#                                       place after them
+#   tur-dualboot restart-windows [--no-reboot]
+#                                       set the firmware's BootNext to
+#                                       "Windows Boot Manager" and restart:
+#                                       the firmware starts Windows' own boot
+#                                       manager once, directly, and the boot
+#                                       after that follows the boot order
+#                                       again
+#
+# Why "Restart into Windows" and not only the "Windows" entry of TUR's boot
+# menu: Windows started by GRUB through shim is measured differently by the
+# TPM, so a BitLocker Windows asks for its recovery key (ADR-0029, sources
+# S8, S9). Started by the firmware, Windows is measured as usual.
+#
+# Writing firmware variables needs root. `restart-windows` run by the person
+# at the computer goes through pkexec and /usr/libexec/tur/tur-restart-windows
+# (polkit action org.tur.dualboot.restart-windows: no password, as for
+# restarting). `default` needs `pkexec tur-dualboot` (org.tur.dualboot, an
+# administrator's password). The installer medium runs
+# it as root when it installs TUR beside Windows. Nothing here touches a
+# disk. Exit status: 0 done, 1 refused (with the reason), 2 usage.
+set -u
+
+readonly TUR_LABEL="TUR"
+readonly WINDOWS_LABEL="Windows Boot Manager"
+
+say() { printf '%s\n' "$*"; }
+refuse() {
+    printf 'tur-dualboot: %s\n' "$*" >&2
+    exit 1
+}
+
+entries() { efibootmgr 2> /dev/null; }
+
+# entry_of LABEL: the number (XXXX) of the first boot entry with exactly
+# that label, nothing if there is none.
+entry_of() {
+    entries | awk -v want="$1" '
+        /^Boot[0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][* ]/ {
+            number = substr($0, 5, 4)
+            rest = substr($0, 9)
+            sub(/^\*?[ ]+/, "", rest)
+            split(rest, parts, "\t")
+            sub(/[ ]+$/, "", parts[1])
+            if (parts[1] == want) { print toupper(number); exit }
+        }'
+}
+
+order() { entries | sed -n 's/^BootOrder: //p' | tr -d ' '; }
+next_entry() { entries | sed -n 's/^BootNext: //p' | tr -d ' '; }
+
+need_uefi() {
+    [ -d /sys/firmware/efi/efivars ] || refuse "this computer was not started by UEFI firmware"
+    command -v efibootmgr > /dev/null || refuse "efibootmgr is missing"
+}
+
+need_root() {
+    [ "$(id -u)" -eq 0 ] || refuse "changing the firmware's boot settings needs an administrator: run it with pkexec"
+}
+
+cmd_status() {
+    local tur windows first default=other
+    need_uefi
+    tur="$(entry_of "${TUR_LABEL}")"
+    windows="$(entry_of "${WINDOWS_LABEL}")"
+    first="$(order | cut -d, -f1)"
+    if [ -n "${tur}" ] && [ "${first^^}" = "${tur}" ]; then default=tur; fi
+    if [ -n "${windows}" ] && [ "${first^^}" = "${windows}" ]; then default=windows; fi
+    say "default=${default}"
+    say "tur_entry=${tur:-none}"
+    say "windows_entry=${windows:-none}"
+    say "boot_order=$(order)"
+    say "boot_next=$(next_entry)"
+}
+
+cmd_default() {
+    local system="${1:-}" first second rest item
+    case "${system}" in
+        tur | windows) ;;
+        *)
+            say "usage: tur-dualboot default tur|windows" >&2
+            exit 2
+            ;;
+    esac
+    need_uefi
+    need_root
+    local tur windows
+    tur="$(entry_of "${TUR_LABEL}")"
+    windows="$(entry_of "${WINDOWS_LABEL}")"
+    [ -n "${tur}" ] || refuse "the firmware has no boot entry named \"${TUR_LABEL}\""
+    [ -n "${windows}" ] || refuse "the firmware has no boot entry named \"${WINDOWS_LABEL}\""
+    if [ "${system}" = tur ]; then first="${tur}" second="${windows}"; else first="${windows}" second="${tur}"; fi
+    rest=""
+    for item in $(order | tr ',' ' '); do
+        case "${item^^}" in
+            "${tur}" | "${windows}") ;;
+            *) rest+=",${item}" ;;
+        esac
+    done
+    efibootmgr --bootorder "${first},${second}${rest}" > /dev/null || refuse "efibootmgr could not set the boot order"
+    say "default=${system} boot_order=$(order)"
+}
+
+cmd_restart_windows() {
+    local windows reboot=yes
+    if [ "${1:-}" = --no-reboot ]; then reboot=no; fi
+    need_uefi
+    # Not root: through the helper polkit allows to the person at the
+    # computer without a password (org.tur.dualboot.restart-windows).
+    if [ "$(id -u)" -ne 0 ]; then
+        pkexec /usr/libexec/tur/tur-restart-windows "$@"
+        exit $?
+    fi
+    windows="$(entry_of "${WINDOWS_LABEL}")"
+    [ -n "${windows}" ] || refuse "the firmware has no boot entry named \"${WINDOWS_LABEL}\""
+    efibootmgr --bootnext "${windows}" > /dev/null || refuse "efibootmgr could not set BootNext"
+    say "boot_next=$(next_entry) windows_entry=${windows}"
+    if [ "${reboot}" = yes ]; then
+        say "Restarting into Windows."
+        systemctl reboot
+    fi
+}
+
+case "${1:-}" in
+    status) cmd_status ;;
+    default)
+        shift
+        cmd_default "$@"
+        ;;
+    restart-windows)
+        shift
+        cmd_restart_windows "$@"
+        ;;
+    *)
+        say "usage: tur-dualboot status | default tur|windows | restart-windows [--no-reboot]" >&2
+        exit 2
+        ;;
+esac

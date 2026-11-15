@@ -15,6 +15,8 @@ WizardScreen {
 
     required property Engine engine
     required property var disk
+    // "erase" or "beside" (Windows; ADR-0029).
+    property string mode: "erase"
 
     // When each stage was first seen, for the time it took.
     property var startedAt: ({})
@@ -27,7 +29,9 @@ WizardScreen {
         return found !== null ? found[1] : ""
     }
 
-    readonly property var stages: ["revalidate", "prepare", "copy", "bootloader", "finish", "check", "record"]
+    readonly property var stages: screen.mode === "beside"
+                                  ? ["revalidate", "prepare", "copy", "bootloader", "finish", "boot-menu", "check", "record"]
+                                  : ["revalidate", "prepare", "copy", "bootloader", "finish", "check", "record"]
 
     function stateOf(stage: string): string {
         if (screen.engine.stage === stage && screen.engine.installState === "running")
@@ -83,7 +87,9 @@ WizardScreen {
 
     Kit.Label {
         Layout.fillWidth: true
-        text: qsTr("On %1. This takes a few minutes. Keep the computer switched on and the installation medium in place.")
+        text: (screen.mode === "beside"
+               ? qsTr("Beside Windows, on %1. This takes a few minutes. Keep the computer switched on and the installation medium in place.")
+               : qsTr("On %1. This takes a few minutes. Keep the computer switched on and the installation medium in place."))
               .arg(Words.diskLine(screen.disk))
         paragraph: true
         wrapMode: Text.Wrap
@@ -212,7 +218,9 @@ WizardScreen {
             Kit.Label {
                 Layout.fillWidth: true
                 visible: why.expanded
-                text: qsTr("Stopping now would leave the disk erased and without a working system, and it would not start this computer. Your other disks are not touched. Let the installation finish; it takes a few minutes.")
+                text: screen.mode === "beside"
+                      ? qsTr("Stopping now would leave an unfinished TUR partition in the free space. Windows' partitions are not written to, and Windows can still be started from the computer's boot menu. Let the installation finish; it takes a few minutes.")
+                      : qsTr("Stopping now would leave the disk erased and without a working system, and it would not start this computer. Your other disks are not touched. Let the installation finish; it takes a few minutes.")
                 tone: Kit.Label.Secondary
                 paragraph: true
                 wrapMode: Text.Wrap

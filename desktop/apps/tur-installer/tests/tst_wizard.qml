@@ -17,7 +17,10 @@ import Tur.Kit as Kit
 //  - "Cancel" while the engine has written nothing, and the sentence instead
 //    once it writes;
 //  - a failure shows its code, what state the disk is in, and the way to save
-//    the log to a USB stick; a refusal before writing leads back to the disks.
+//    the log to a USB stick; a refusal before writing leads back to the disks;
+//  - beside Windows (ADR-0029): offered only on a disk that holds Windows and
+//    has room, with the reason when not; its own phrase, which the erase
+//    phrase does not match; a failure says Windows was not written to.
 Item {
     id: root
 
@@ -256,10 +259,81 @@ Item {
             verify(!control(wizard, "disk-vda").enabled, "the small disk cannot be chosen")
         }
 
-        function test_beside_windows_is_not_offered_yet() {
+        function test_beside_windows_only_on_a_disk_that_holds_windows() {
             const wizard = enter("disks-chosen")
             verify(control(wizard, "eraseOption").selected)
-            verify(!control(wizard, "besideWindowsOption").enabled, "using the free space beside Windows comes later")
+            verify(!control(wizard, "besideWindowsOption").enabled, "the blank disk holds no Windows")
+            verify(control(wizard, "besideExplanation").text.indexOf("Only on a disk that holds Windows") >= 0)
+        }
+
+        function test_beside_windows_chosen_with_the_keyboard() {
+            const wizard = enter("disks-windows-chosen")
+            const beside = control(wizard, "besideWindowsOption")
+            verify(beside.enabled, "the Windows disk with free space offers it")
+            verify(control(wizard, "eraseOption").selected, "erasing stays the default")
+            compare(wizard.mode, "erase")
+            press("besideWindowsOption")
+            compare(wizard.mode, "beside")
+            verify(beside.selected)
+            verify(!control(wizard, "eraseOption").selected)
+            verify(beside.subtitle.indexOf("30.0 GiB") >= 0, beside.subtitle)
+            // Which system starts by default: TUR unless the person chooses Windows.
+            verify(control(wizard, "defaultTurOption").selected)
+            compare(wizard.defaultSystem, "tur")
+            press("defaultWindowsOption")
+            compare(wizard.defaultSystem, "windows")
+            verify(control(wizard, "defaultWindowsOption").selected)
+            press("defaultTurOption")
+            compare(wizard.defaultSystem, "tur")
+            press("eraseOption")
+            compare(wizard.mode, "erase", "and back to erasing")
+        }
+
+        function test_beside_windows_not_possible_says_why() {
+            const wizard = enter("disks-beside-not-possible")
+            verify(!control(wizard, "besideWindowsOption").enabled, "no free space: not possible")
+            const why = control(wizard, "besideExplanation").text
+            verify(why.indexOf("Shrink Volume") >= 0, "says how to make room: " + why)
+            compare(wizard.mode, "erase")
+        }
+
+        function test_confirm_beside_windows() {
+            const wizard = enter("confirm-beside")
+            const field = control(wizard, "phraseField")
+            const install = control(wizard, "eraseButton")
+            compare(focusName(), "phraseField", "the field has the keyboard: there is no default button")
+            compare(findChild(wizard, "confirmPhrase").text, "BESIDE BOOTTEST")
+            compare(install.text, "Install beside Windows")
+            verify(control(wizard, "besideNothingDestroyed").visible, "it says nothing on the disk is destroyed")
+            verify(control(wizard, "besideNewPartition").text.indexOf("30.0 GiB") >= 0)
+            verify(control(wizard, "besideDefaultSystem").text.indexOf("starts TUR by default") >= 0)
+            verify(!control(wizard, "windowsWarning").visible, "no BitLocker on this disk")
+            field.text = "ERASE BOOTTEST"
+            verify(!install.enabled, "the erase phrase does not confirm installing beside Windows")
+            field.text = "beside boottest"
+            verify(!install.enabled, "nor the phrase in lower case")
+            field.text = ""
+            for (const key of "BESIDE BOOTTEST")
+                keyClick(key === " " ? Qt.Key_Space : key, key === " " ? Qt.NoModifier : Qt.ShiftModifier)
+            compare(field.text, "BESIDE BOOTTEST")
+            verify(install.enabled, "the exact phrase enables the button")
+            keyClick(Qt.Key_Return)
+            wait(50)
+            compare(wizard.step, "confirm", "Enter installs nothing")
+            press("eraseButton")
+            tryCompare(wizard, "step", "done", 10000)
+            compare(host.engine.installState, "success")
+            compare(host.engine.result.mode, "beside")
+            verify(host.engine.stagesSeen.indexOf("boot-menu") >= 0, "the boot-menu stage was seen")
+            verify(control(wizard, "windowsAfterInstall").visible, "the result says how to start Windows")
+        }
+
+        function test_beside_windows_failure_keeps_windows() {
+            const wizard = enter("done-beside-failed")
+            compare(host.engine.result.disk_state, "partial")
+            const message = control(wizard, "failureMessage")
+            verify(message.whatToDo.indexOf("Windows' partitions were not written to") >= 0, message.whatToDo)
+            verify(!control(wizard, "backToDisksButton").visible, "the disk was written: no going back")
         }
     }
 }

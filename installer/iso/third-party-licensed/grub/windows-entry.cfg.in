@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# The licence is in the LICENSE file beside the source of this fragment
+# (installer/iso/third-party-licensed/grub in the TUR tree).
+#
+# "Windows" in TUR's boot menu (ADR-0029). Written by TUR's installer to
+# /boot/grub2/custom.cfg when TUR is installed beside Windows on the same
+# disk; bootupd's grub.cfg reads that file after its own menu entries, so this
+# entry comes after TUR's and the entry numbers boot counting uses stay as
+# they are (ADR-0014). @ESP_UUID@ is the filesystem UUID of the EFI system
+# partition TUR shares with Windows; @WINDOWS_TITLE@ is "Windows", or, when
+# the disk holds BitLocker, "Windows (may ask for the BitLocker recovery
+# key)": started from here, Windows is measured differently by the TPM. TUR's
+# "Restart into Windows" (tur-dualboot) starts it from the firmware instead.
+#
+# It starts Windows' own boot manager from that partition. Under Secure Boot,
+# GRUB starts it through the firmware, which checks Microsoft's signature on
+# it. It changes nothing on the disk and nothing in the firmware.
+if [ "${grub_platform}" = "efi" ]; then
+  menuentry '@WINDOWS_TITLE@' --class windows --class os --hotkey=w --id 'tur-windows' {
+    insmod part_gpt
+    insmod fat
+    insmod chain
+    search --no-floppy --fs-uuid --set=root @ESP_UUID@
+    chainloader /EFI/Microsoft/Boot/bootmgfw.efi
+  }
+  # With two systems to choose from, the menu waits long enough to choose.
+  if [ "${timeout}" -lt 5 ]; then
+    set timeout=5
+  fi
+fi
