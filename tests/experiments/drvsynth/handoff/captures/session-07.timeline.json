@@ -1,0 +1,67 @@
+{
+  "session": 7,
+  "title": "Alert and buttons",
+  "capture": "session-07.pcapng",
+  "text": "session-07.txt",
+  "clock": "seconds since the capture started",
+  "entries": [
+    {
+      "from": 0.501,
+      "did": "set the temperature alert to 26.5 degrees",
+      "to": 1.018,
+      "shown": [
+        "alert 26.5"
+      ]
+    },
+    {
+      "from": 1.719,
+      "did": "asked for the temperature alert",
+      "to": 2.238,
+      "shown": [
+        "26.5"
+      ]
+    },
+    {
+      "from": 2.939,
+      "did": "watched the gadget for 10 seconds",
+      "to": 12.971,
+      "shown": [
+        "button 1 0.30",
+        "alert 27.12",
+        "button 2 1.62"
+      ]
+    },
+    {
+      "at": 4.49,
+      "did": "briefly pressed button 1 (about 0.3 s)"
+    },
+    {
+      "at": 5.99,
+      "did": "the room warmed up a little"
+    },
+    {
+      "at": 7.49,
+      "did": "the room warmed up past the alert temperature"
+    },
+    {
+      "at": 8.99,
+      "did": "held button 2 down (about 1.6 s)"
+    },
+    {
+      "from": 13.672,
+      "did": "switched the temperature alert off",
+      "to": 14.193,
+      "shown": [
+        "alert off"
+      ]
+    },
+    {
+      "from": 14.894,
+      "did": "asked for the temperature alert",
+      "to": 15.411,
+      "shown": [
+        "off"
+      ]
+    }
+  ]
+}

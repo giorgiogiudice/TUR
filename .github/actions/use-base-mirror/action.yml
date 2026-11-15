@@ -1,22 +1,38 @@
 # SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
 #
-# Serve the pinned base image from TUR's mirror when its upstream registry no
-# longer has it. See image/README.md, "The base image and its mirror".
+# Serve every image CI pins by digest from TUR's mirror when its upstream
+# registry no longer has it. See image/README.md, "The base image and its
+# mirror".
 #
-# quay.io keeps a digest of fedora-kinoite only about a day after Fedora moves
-# the :45 tag. .github/workflows/base-mirror.yml copies every pinned digest,
-# byte for byte, to ghcr.io/giorgiogiudice/tur-base. This action:
+# quay.io keeps a digest of a Fedora image only about a day after Fedora moves
+# the tag. .github/workflows/base-mirror.yml copies every pinned digest (found
+# by pins.py), byte for byte, to a package in ghcr.io: the one mirrors.tsv
+# names for its repository (ghcr.io/giorgiogiudice/tur-base for the OS base).
+# This action:
 #
 #   1. logs podman and skopeo in to ghcr.io with the job's token, as root
 #      (sudo podman, sudo skopeo) and as the runner user;
-#   2. writes a containers-registries.conf(5) drop-in that declares the mirror
-#      as a mirror-by-digest-only mirror of the base repository, for root and
-#      for the runner user;
-#   3. checks that the pinned digest can be fetched, and says from where.
+#   2. writes a containers-registries.conf(5) drop-in that declares each
+#      mirror as a mirror-by-digest-only mirror of its upstream repository,
+#      for root and for the runner user;
+#   3. checks that the base pinned in `lock` can be fetched, and says from
+#      where (`check`);
+#   4. for docker, which reads no registries.conf (`images`): logs docker in
+#      to ghcr.io and gives each pin the reference to pull it by, the
+#      mirror's when the mirror has the digest.
 #
-# The image reference the build uses does not change: scripts/build-image.sh
-# still builds FROM quay.io/fedora/fedora-kinoite@<digest>, and the labels and
-# the build manifest still name quay.io. Only where the bytes come from does.
+# For podman, buildah and skopeo the image reference does not change:
+# scripts/build-image.sh still builds FROM quay.io/fedora/fedora-kinoite@<digest>,
+# and the labels and the build manifest still name quay.io. Only where the
+# bytes come from does.
+#
+# `images` is a list of words, each either
+#   - the name of an environment variable holding a reference by digest
+#     (FEDORA_IMAGE): the action sets <NAME>_PULL to the reference to give
+#     `docker pull` or `docker run`; or
+#   - a file (a Containerfile, a lock file): every pin pins.py finds in it.
+# For all of them it sets TUR_BUILD_CONTEXTS to `--build-context` flags with
+# which `docker build` takes each pinned FROM image from where it was found.
 #
 # The calling job needs `packages: read` (and `contents: read` for checkout):
 #
@@ -26,42 +42,58 @@
 #   steps:
 #     - uses: actions/checkout@...
 #     - uses: ./.github/actions/use-base-mirror
-name: Use the base image mirror
+#       with:                        # only for docker, or for no base check
+#         check: "false"
+#         images: FEDORA_IMAGE
+name: Use the image mirrors
 description: >-
-  Log in to ghcr.io and declare TUR's mirror of the pinned base image as a
-  digest-only mirror of quay.io/fedora/fedora-kinoite, for root and rootless
-  podman and skopeo.
+  Log in to ghcr.io and declare TUR's mirror of every pinned image as a
+  digest-only mirror of its upstream repository, for root and rootless podman
+  and skopeo; give docker the mirror's reference for the images named.
 inputs:
   token:
-    description: Token with read access to the mirror package.
+    description: Token with read access to the mirror packages.
     default: ${{ github.token }}
-  mirror:
-    description: The mirror repository.
-    default: ghcr.io/giorgiogiudice/tur-base
   lock:
-    description: The base pin to read BASE_IMAGE and BASE_DIGEST from.
+    description: The base pin to check (BASE_IMAGE and BASE_DIGEST).
     default: image/base.lock
   check:
     description: >-
-      "true" to fail the step when the pinned digest is in neither the mirror
-      nor the upstream registry.
+      "true" to fail the step when the base pinned in `lock` is in neither
+      its mirror nor its upstream registry.
     default: "true"
+  images:
+    description: >-
+      Pins for docker: names of environment variables that hold a reference
+      by digest, or files whose pins are all wanted. See the top of action.yml.
+    default: ""
 runs:
   using: composite
   steps:
-    - name: Declare the base image mirror
+    - name: Declare the image mirrors
       shell: bash
       env:
         TOKEN: ${{ inputs.token }}
         ACTOR: ${{ github.actor }}
-        MIRROR: ${{ inputs.mirror }}
-        LOCK: ${{ inputs.lock }}
       run: '"$GITHUB_ACTION_PATH/setup.sh"'
 
     - name: Check that the pinned base can be fetched
       if: ${{ inputs.check == 'true' }}
       shell: bash
       env:
-        MIRROR: ${{ inputs.mirror }}
         LOCK: ${{ inputs.lock }}
       run: '"$GITHUB_ACTION_PATH/check.sh"'
+
+    - name: Give docker the mirror's reference of each image
+      if: ${{ inputs.images != '' }}
+      shell: bash
+      env:
+        TOKEN: ${{ inputs.token }}
+        ACTOR: ${{ github.actor }}
+        IMAGES: ${{ inputs.images }}
+      run: |
+        if ! printf '%s' "$TOKEN" | docker login ghcr.io --username "$ACTOR" --password-stdin; then
+          echo "::warning title=Image mirrors::docker could not log in to ghcr.io; it reads a mirror only if the package is public"
+        fi
+        # shellcheck disable=SC2086 # IMAGES is a list of words
+        python3 -I "$GITHUB_ACTION_PATH/pins.py" export $IMAGES

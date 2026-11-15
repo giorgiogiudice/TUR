@@ -111,12 +111,40 @@ def rehearse_with(repo: str, image_run: dict, why: str) -> int:
     return 0 if "boot" in others else 1
 
 
-def fallback(repo: str, branch: str, why: str) -> int:
-    """The branch's latest image run whose commit was also booted by CI."""
+# What may differ between the commit whose image a rehearsal borrows and the
+# commit under test: the release itself, CI files and documents. Anything
+# else may change what is in the image or what the tests expect of it (the
+# smoke test counts image/programs.tsv, say), and the rehearsal would test an
+# old image against new expectations.
+BORROWABLE = (".github/", "scripts/release/", "docs/")
+
+
+def differs(repo: str, image_sha: str, head: str) -> list[str]:
+    """Files outside BORROWABLE that differ between image_sha and head;
+    ["(not an ancestor)"] when head does not contain image_sha."""
+    diff = api(repo, f"/compare/{image_sha}...{head}")
+    if diff.get("status") not in ("ahead", "identical") or diff.get("behind_by"):
+        return ["(not an ancestor)"]
+    return [f["filename"] for f in diff.get("files", [])
+            if not f["filename"].startswith(BORROWABLE) and not f["filename"].endswith(".md")]
+
+
+def fallback(repo: str, branch: str, why: str, head: str | None = None) -> int:
+    """The branch's latest image run whose commit was also booted by CI, when
+    nothing but the release, CI files and documents changed since (head)."""
     found = api(repo, f"/actions/workflows/image.yml/runs?branch={branch}"
                       "&event=pull_request&status=success&per_page=15")["workflow_runs"]
     for run in found:
         if any(r["name"] == "boot" and r["conclusion"] == "success" for r in runs_for(repo, run["head_sha"])):
+            changed = differs(repo, run["head_sha"], head) if head else []
+            if changed:
+                shown = ", ".join(changed[:5]) + (f" and {len(changed) - 5} more" if len(changed) > 5 else "")
+                reason = (f"{why}; the branch's latest image (commit {run['head_sha'][:12]}, image run {run['id']}) "
+                          f"was built from other sources ({shown}), so no rehearsal: this needs a run of the "
+                          f"image workflow on this commit")
+                output(release="false", reason=reason)
+                summary("No rehearsal: " + reason + ".")
+                return 0
             return rehearse_with(repo, run, why)
     output(release="false", reason=f"{why}, and no earlier commit of {branch} was both built and booted")
     return 0

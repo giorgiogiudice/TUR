@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# winsee-decide: the bridge's second decision, for the winsee experiment
+# (docs/reports/exp-winsee-1.md). It gives the experiment's adapter
+# (../harness/adapter.py) the same decision tur-pax-a11y takes before it
+# acts: `tur_pax_a11y::serve::second_decision`, the policy engine with the
+# built-in lists and the strictest context. Nothing here decides anything
+# itself.
+#
+# Experiment code: built only by .github/workflows/exp-winsee.yml. It has no
+# [workspace] table on purpose, so that the `rust` workflow, which finds
+# components by that table, does not take it for one; its lockfile is made
+# by the build and not committed.
+[package]
+name = "winsee-decide"
+version = "0.0.0"
+edition = "2024"
+license = "LicenseRef-TUR-Noncommercial-1.0.0"
+description = "TUR experiment: the accessibility bridge's second decision as a filter, for a bridge that is not tur-pax-a11y."
+publish = false
+
+[dependencies]
+serde_json = "1.0"
+tur-pax = { path = "../../../../services/tur-pax" }
+tur-pax-a11y = { path = "../../../../services/tur-pax-a11y" }

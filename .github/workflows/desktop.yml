@@ -39,9 +39,18 @@ on:
     # were made with; this keeps it, and shows drift in Fedora's packages.
     - cron: "23 4 * * 1"
   workflow_dispatch:
+    inputs:
+      rebuild:
+        description: >-
+          Build the builder image anew from builder.lock and the day's
+          packages, ignoring the cache, and test with it (other runs keep the
+          image they had)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
+  packages: read   # the builder image, from TUR's registry when the cache lost it
 
 concurrency:
   group: desktop-${{ github.ref }}
@@ -49,6 +58,8 @@ concurrency:
 
 env:
   BUILDER: localhost/tur-desktop-builder:ci
+  # A rebuild by hand tests the image it built, which is in the cache only.
+  BUILDER_FROM_REGISTRY: ${{ inputs.rebuild && 'no' || 'yes' }}
   BUILDER_DIR: builder-image
   OUT: out/desktop
 
@@ -110,19 +121,35 @@ jobs:
           git fetch --no-tags --depth=1 origin main
           python3 desktop/ci/registry.py --against FETCH_HEAD
 
+  # The builder image (desktop/README.md, "The builder image"): from the
+  # Actions cache when it has it; else from TUR's registry, the image pinned
+  # in builder.lock or, without a usable pin, the one an earlier run pushed
+  # for the same inputs; else built from the Containerfile and the pinned base
+  # (from TUR's mirror), and pushed to TUR's registry for pinning. The cache
+  # only saves the other jobs a pull: when it has lost the image by the time
+  # they start, they take it from the registry (load-builder.sh). A rebuild
+  # by hand always builds, under a cache key of its own, and keeps nothing.
   builder:
     name: Builder image
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write  # the built image to TUR's registry; the base from its mirror
     outputs:
       key: ${{ steps.key.outputs.key }}
+      source: ${{ steps.source.outputs.source }}
+      pushed: ${{ steps.push.outputs.digest }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Cache key
         id: key
+        env:
+          REBUILD: ${{ inputs.rebuild && github.run_id || '' }}
         run: |
           key="desktop-builder-${{ hashFiles('desktop/ci/builder/Containerfile', 'desktop/ci/builder.lock') }}"
+          if [ -n "$REBUILD" ]; then key="$key-rebuild-$REBUILD"; fi
           echo "key=$key" >> "$GITHUB_OUTPUT"
           echo "$key"
 
@@ -134,8 +161,35 @@ jobs:
           key: ${{ steps.key.outputs.key }}
           lookup-only: true
 
-      - name: Build the image
+      - name: Log docker in to TUR's registry
         if: steps.cache.outputs.cache-hit != 'true'
+        env:
+          TOKEN: ${{ github.token }}
+          ACTOR: ${{ github.actor }}
+        run: printf '%s' "$TOKEN" | docker login ghcr.io --username "$ACTOR" --password-stdin
+
+      - name: The image from TUR's registry, pinned in builder.lock or pushed for these inputs
+        id: fetch
+        if: steps.cache.outputs.cache-hit != 'true' && !inputs.rebuild
+        run: |
+          status=0
+          desktop/ci/fetch-builder.sh "$BUILDER_DIR" || status=$?
+          case "$status" in
+            0) echo "fetched=true" >> "$GITHUB_OUTPUT" ;;
+            3) echo "fetched=false" >> "$GITHUB_OUTPUT" ;;
+            *) exit "$status" ;;
+          esac
+
+      # The pinned Fedora base from TUR's mirror: TUR_BUILD_CONTEXTS.
+      - uses: ./.github/actions/use-base-mirror
+        if: steps.cache.outputs.cache-hit != 'true' && steps.fetch.outputs.fetched != 'true'
+        with:
+          check: "false"
+          images: desktop/ci/builder.lock
+
+      - name: Build the image
+        id: build
+        if: steps.cache.outputs.cache-hit != 'true' && steps.fetch.outputs.fetched != 'true'
         run: |
           echo "docker: $(docker --version)"
           df -h / | tail -1
@@ -146,6 +200,34 @@ jobs:
             echo "Cache key \`${{ steps.key.outputs.key }}\`. $(wc -l < "$BUILDER_DIR/packages.tsv") packages,"
             echo "$(du -h "$BUILDER_DIR/image.tar.zst" | cut -f1) compressed."
           } >> "$GITHUB_STEP_SUMMARY"
+
+      # Kept in TUR's registry, so that builder.lock can pin it: not for a
+      # rebuild by hand, nor from a fork, whose token cannot write.
+      - name: Keep the built image in TUR's registry
+        id: push
+        if: >-
+          steps.build.outcome == 'success' && !inputs.rebuild &&
+          (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        run: |
+          desktop/ci/push-builder.sh | tee "$RUNNER_TEMP/push.log"
+          {
+            echo
+            echo "Pushed to TUR's registry. To use it in every run, pin it in \`desktop/ci/builder.lock\`:"
+            echo
+            grep '^  BUILDER_DIGEST=' "$RUNNER_TEMP/push.log" | sed 's/^  /    /'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Where the image came from
+        id: source
+        env:
+          HIT: ${{ steps.cache.outputs.cache-hit }}
+          FETCHED: ${{ steps.fetch.outputs.fetched }}
+        run: |
+          if [ "$HIT" = true ]; then source=cache
+          elif [ "$FETCHED" = true ]; then source=registry
+          else source=built; fi
+          echo "source=$source" >> "$GITHUB_OUTPUT"
+          echo "builder image: $source"
 
       - name: Put the image in the cache
         if: steps.cache.outputs.cache-hit != 'true'
@@ -161,6 +243,43 @@ jobs:
           path: ${{ env.BUILDER_DIR }}/packages.tsv
           if-no-files-found: warn
 
+  # builder.lock pins an image made from this Containerfile and this base.
+  # When it does not (they changed, or nothing is pinned yet), the other jobs
+  # still run, with the image the builder job built, and this check fails
+  # with the line to put in builder.lock. Not for a rebuild by hand.
+  builder-pin:
+    name: The builder image is pinned
+    needs: builder
+    if: ${{ !inputs.rebuild }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: builder.lock pins an image of these inputs
+        env:
+          TOKEN: ${{ github.token }}
+          ACTOR: ${{ github.actor }}
+          PUSHED: ${{ needs.builder.outputs.pushed }}
+          SOURCE: ${{ needs.builder.outputs.source }}
+        run: |
+          printf '%s' "$TOKEN" | docker login ghcr.io --username "$ACTOR" --password-stdin >/dev/null
+          echo "this run's builder image: ${SOURCE}"
+          if desktop/ci/fetch-builder.sh --check; then
+            exit 0
+          fi
+          if [ -n "$PUSHED" ]; then
+            echo "::error title=Builder image not pinned::put BUILDER_DIGEST=${PUSHED} in desktop/ci/builder.lock (the image this run built and pushed)"
+          elif ref="$(desktop/ci/fetch-builder.sh --ref)"; then
+            echo "::error title=Builder image not pinned::put BUILDER_DIGEST=${ref#*@} in desktop/ci/builder.lock (the image an earlier run built from these inputs and pushed)"
+          else
+            echo "::error title=Builder image not pinned::builder.lock pins no image of these inputs, and this run pushed none (a fork cannot): a maintainer's run must build and push it"
+          fi
+          exit 1
+
   build-test:
     name: Build, lint and test
     needs: builder
@@ -174,9 +293,11 @@ jobs:
         with:
           path: ${{ env.BUILDER_DIR }}
           key: ${{ needs.builder.outputs.key }}
-          fail-on-cache-miss: true
 
       - name: Load the builder image
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+          GHCR_USER: ${{ github.actor }}
         run: desktop/ci/load-builder.sh "$BUILDER_DIR"
 
       - name: Versions
@@ -234,9 +355,11 @@ jobs:
         with:
           path: ${{ env.BUILDER_DIR }}
           key: ${{ needs.builder.outputs.key }}
-          fail-on-cache-miss: true
 
       - name: Load the builder image
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+          GHCR_USER: ${{ github.actor }}
         run: desktop/ci/load-builder.sh "$BUILDER_DIR"
 
       - name: Configure and build
@@ -279,9 +402,11 @@ jobs:
         with:
           path: ${{ env.BUILDER_DIR }}
           key: ${{ needs.builder.outputs.key }}
-          fail-on-cache-miss: true
 
       - name: Load the builder image
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+          GHCR_USER: ${{ github.actor }}
         run: desktop/ci/load-builder.sh "$BUILDER_DIR"
 
       # KWin 6.8 renders without a GPU through a "software device": Mesa's
@@ -347,9 +472,11 @@ jobs:
         with:
           path: ${{ env.BUILDER_DIR }}
           key: ${{ needs.builder.outputs.key }}
-          fail-on-cache-miss: true
 
       - name: Load the builder image
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+          GHCR_USER: ${{ github.actor }}
         run: desktop/ci/load-builder.sh "$BUILDER_DIR"
 
       - name: Toolchain
@@ -476,10 +603,12 @@ jobs:
         with:
           path: ${{ env.BUILDER_DIR }}
           key: ${{ needs.builder.outputs.key }}
-          fail-on-cache-miss: true
 
       - name: Load the builder image
         if: ${{ !cancelled() }}
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+          GHCR_USER: ${{ github.actor }}
         run: desktop/ci/load-builder.sh "$BUILDER_DIR"
 
       - name: Configure and build
