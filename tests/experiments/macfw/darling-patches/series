@@ -1,0 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Order in which ci/darling-get.sh applies TUR's queue to the pinned Darling.
+# <submodule path, or . for the main repository> <patch file in this directory>
+# Empty until the first cycle: cycle c00 measures upstream Darling alone.

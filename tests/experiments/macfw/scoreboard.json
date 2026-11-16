@@ -1,0 +1,5 @@
+{
+  "$comment": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0. One row per fix cycle, added by harness/scoreboard.py from the macfw-report artifact and committed by the person running the loop. 'looked' is filled in by hand: for each rung that scored 4, who looked at its contact sheet and whether it is a usable window.",
+  "registered": "2026-11-16",
+  "cycles": []
+}

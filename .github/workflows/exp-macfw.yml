@@ -1,0 +1,215 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Experiment `macfw` (docs/reports/exp-macfw-0.md): can an AI-driven
+# differential loop, with real Macs as the oracle, extend Darling's AppKit
+# far enough that a ladder of open-source Mac-only applications shows usable
+# windows on Linux?
+#
+# Started by hand only (workflow_dispatch). It has no pull_request, push or
+# schedule trigger, so opening or updating a pull request starts nothing:
+# GitHub Actions is disabled for the owner's account after the project drove
+# too much CI load, and this spike must add none until the lead starts it.
+#
+# oracle     GitHub's macOS runner (the only macOS job; one at a time): builds
+#            TUR's probes and the ladder from source with Xcode's public
+#            toolchain, runs them, uploads the built programs and what macOS
+#            did. Skipped when `oracle_run` names an earlier run whose oracle
+#            artifact is reused: the fix loop's cycles need no Mac.
+# darling    Linux: Darling's packages at the pinned commit (ci/darling.lock),
+#            as upstream has them and, when the queue is used, with TUR's
+#            patch queue (tests/experiments/macfw/darling-patches).
+# candidate  Linux: the oracle's binaries under each Darling, on Xvfb.
+# score      Linux: the differ, the ladder scores and the scoreboard row.
+#
+# Every job is green when it produced its evidence; a difference or a failed
+# rung is a finding, not a failure.
+name: exp-macfw
+
+on:
+  workflow_dispatch:
+    inputs:
+      cycle:
+        description: "Cycle label for the scoreboard (c00 = baseline, no queue)"
+        required: true
+        default: "c00"
+      oracle_run:
+        description: "Reuse the oracle artifact of this earlier run id (empty: run the macOS job)"
+        required: false
+        default: ""
+      queue:
+        description: "Also measure Darling with TUR's patch queue"
+        type: boolean
+        default: false
+      rungs:
+        description: "Ladder rungs to build and run, e.g. 1-5 (empty: all)"
+        required: false
+        default: "1-5"
+      arm64:
+        description: "Also run the candidate on arm64 Linux (arm64 slices)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: read
+
+# One run of this workflow at a time, across all branches; a second dispatch
+# waits instead of cancelling a run that may be using the Mac.
+concurrency:
+  group: exp-macfw
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  oracle:
+    if: inputs.oracle_run == ''
+    # Apple hardware with macOS 26 and Xcode 26 (runner-images, 2 November
+    # 2026). The only macOS job in this workflow.
+    runs-on: macos-26
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and observe on macOS
+        run: tests/experiments/macfw/ci/oracle-macos.sh "$RUNNER_TEMP/oracle" "${{ inputs.rungs }}"
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## macfw oracle"
+            echo '```'; cat "$RUNNER_TEMP/oracle/env.txt" || true; echo '```'
+            echo '```'; cat "$RUNNER_TEMP/oracle/ladder-build.json" 2>/dev/null | head -80 || true; echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macfw-oracle
+          path: ${{ runner.temp }}/oracle
+          retention-days: 30
+          if-no-files-found: error
+
+  darling:
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        variant: ${{ fromJSON(inputs.queue && '["upstream","queue"]' || '["upstream"]') }}
+        arch: ${{ fromJSON(inputs.arm64 && '["x86_64","arm64"]' || '["x86_64"]') }}
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore ccache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.ccache
+          key: macfw-darling-${{ matrix.arch }}-${{ hashFiles('tests/experiments/macfw/ci/darling.lock') }}-${{ github.run_id }}
+          restore-keys: macfw-darling-${{ matrix.arch }}-${{ hashFiles('tests/experiments/macfw/ci/darling.lock') }}-
+      - name: Darling packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: tests/experiments/macfw/ci/darling-get.sh ${{ matrix.variant }} "$RUNNER_TEMP/debs"
+      - name: Save ccache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.ccache
+          key: macfw-darling-${{ matrix.arch }}-${{ hashFiles('tests/experiments/macfw/ci/darling.lock') }}-${{ github.run_id }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macfw-darling-${{ matrix.variant }}-${{ matrix.arch }}
+          path: ${{ runner.temp }}/debs
+          retention-days: 7
+
+  candidate:
+    needs: [oracle, darling]
+    if: always() && needs.darling.result == 'success' && (needs.oracle.result == 'success' || needs.oracle.result == 'skipped')
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        variant: ${{ fromJSON(inputs.queue && '["upstream","queue"]' || '["upstream"]') }}
+        arch: ${{ fromJSON(inputs.arm64 && '["x86_64","arm64"]' || '["x86_64"]') }}
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: macfw-darling-${{ matrix.variant }}-${{ matrix.arch }}
+          path: ${{ runner.temp }}/debs
+      - uses: actions/download-artifact@v4
+        with:
+          name: macfw-oracle
+          path: ${{ runner.temp }}/oracle
+          run-id: ${{ inputs.oracle_run || github.run_id }}
+          github-token: ${{ github.token }}
+      - name: Run under Darling
+        run: |
+          tests/experiments/macfw/ci/candidate-linux.sh "$RUNNER_TEMP/debs" "$RUNNER_TEMP/oracle" \
+            "$RUNNER_TEMP/cand" "${{ inputs.rungs }}"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macfw-candidate-${{ matrix.variant }}-${{ matrix.arch }}
+          path: ${{ runner.temp }}/cand
+          retention-days: 30
+
+  score:
+    needs: [candidate]
+    if: always() && needs.candidate.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: macfw-oracle
+          path: ${{ runner.temp }}/oracle
+          run-id: ${{ inputs.oracle_run || github.run_id }}
+          github-token: ${{ github.token }}
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: macfw-candidate-*
+          path: ${{ runner.temp }}/cand
+      - name: Diff, ladder, scoreboard row
+        run: |
+          set -euo pipefail
+          M=tests/experiments/macfw
+          O=$RUNNER_TEMP/oracle C=$RUNNER_TEMP/cand R=$RUNNER_TEMP/report
+          mkdir -p "$R"
+          . $M/ci/darling.lock
+          oracle=$O/results-macos-x86_64.json
+          [ -f "$oracle" ] || oracle=$O/results-macos-arm64.json
+          other=(); [ -f "$O/results-macos-arm64.json" ] && [ "$oracle" != "$O/results-macos-arm64.json" ] && other=(--oracle-other "$O/results-macos-arm64.json")
+          up=$C/macfw-candidate-upstream-x86_64
+          python3 $M/harness/diff.py --oracle "$oracle" "${other[@]}" --candidate "$up/results-darling-x86_64.json" \
+            --triage $M/triage.tsv --out "$R/upstream-x86_64"
+          args=(--board "$R/scoreboard.json" --cycle "${{ inputs.cycle }}" --run "${{ github.run_id }}" --darling "$DARLING_COMMIT")
+          q=$C/macfw-candidate-queue-x86_64
+          if [ -d "$q" ]; then
+            python3 $M/harness/diff.py --oracle "$oracle" "${other[@]}" --candidate "$q/results-darling-x86_64.json" \
+              --before "$up/results-darling-x86_64.json" --triage $M/triage.tsv --out "$R/queue-x86_64"
+            args+=(--diff "$R/queue-x86_64/diff.json" --diff-upstream "$R/upstream-x86_64/diff.json"
+                   --ladder "$q/ladder-darling/ladder-darling.json" --ladder-upstream "$up/ladder-darling/ladder-darling.json"
+                   --patches "$(grep -cv '^\s*\(#\|$\)' $M/darling-patches/series || true)")
+          else
+            args+=(--diff "$R/upstream-x86_64/diff.json" --diff-upstream "$R/upstream-x86_64/diff.json"
+                   --ladder "$up/ladder-darling/ladder-darling.json" --ladder-upstream "$up/ladder-darling/ladder-darling.json")
+          fi
+          cp $M/scoreboard.json "$R/scoreboard.json"
+          python3 $M/harness/scoreboard.py add "${args[@]}"
+          python3 $M/harness/scoreboard.py render --board "$R/scoreboard.json" > "$R/scoreboard.md"
+          {
+            cat "$R/scoreboard.md"; echo
+            head -40 "$R/upstream-x86_64/differences.md"
+            [ -f "$R/queue-x86_64/differences.md" ] && head -40 "$R/queue-x86_64/differences.md"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macfw-report
+          path: ${{ runner.temp }}/report
+          retention-days: 90

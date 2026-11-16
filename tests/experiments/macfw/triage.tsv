@@ -1,0 +1,6 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# macfw triage: one line per cause of probe differences, read by harness/diff.py.
+# cause<TAB>status<TAB>regex over check ids<TAB>note
+# status: open | fixed (by the patch named in the note) | known (Darling tracks it: issue or PR in the note)
+#         | irrelevant (real, but nothing an application depends on) | artifact (the set-up produced it)
+# Empty until the first measurement.

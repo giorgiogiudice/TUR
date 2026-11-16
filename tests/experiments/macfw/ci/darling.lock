@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# The Darling the experiment measures, pinned. Sourced by ci/*.sh.
+#
+# DARLING_COMMIT is master on 2026-11-16 08:08 UTC ("Merge pull request
+# #2185 ... Update submodules to latest commits"); its submodules are the
+# commits that tree records. Darling changes fast (about 1,400 commits to
+# the main repository and 1,700 to darling-cocotron, its AppKit, in the
+# first half of November 2026), so every cycle of the experiment names the
+# commit it measured, and the upstream control and TUR's queue are always
+# measured at the same commit.
+#
+# DARLING_CI_RUN is Darling's own CI run for that commit ("Darling CI",
+# push to master), whose `debs` and `debs-arm64` artifacts are Darling's
+# packages of exactly this tree. It was still pending when this file was
+# written; ci/darling-get.sh uses its packages for the upstream control when
+# the run succeeded and the artifacts are still kept (90 days), and builds
+# from source otherwise.
+DARLING_REPO=https://github.com/darlinghq/darling.git
+DARLING_COMMIT=41130df881387b1114af8466191c4c6c4c56ace2
+DARLING_CI_RUN=43826864895
