@@ -170,13 +170,21 @@ class Machine:
         self.tpm_dir.mkdir(parents=True, exist_ok=True)
         sock = self.run / "swtpm.sock"
         sock.unlink(missing_ok=True)
-        self.swtpm = subprocess.Popen(
-            ["swtpm", "socket", "--tpm2", "--tpmstate", f"dir={self.tpm_dir}", "--ctrl", f"type=unixio,path={sock}",
-             "--terminate", "--log", f"file={self.out / 'swtpm.log'},level=1"],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        errors = self.out / "swtpm.stderr"
+        with open(errors, "ab") as handle:
+            self.swtpm = subprocess.Popen(
+                ["swtpm", "socket", "--tpm2", "--tpmstate", f"dir={self.tpm_dir}", "--ctrl", f"type=unixio,path={sock}",
+                 "--terminate", "--log", f"file={self.out / 'swtpm.log'},level=1"],
+                stdout=handle, stderr=handle)
         deadline = time.time() + 10
-        while not sock.exists() and time.time() < deadline:
+        while not sock.exists() and time.time() < deadline and self.swtpm.poll() is None:
             time.sleep(0.1)
+        if not sock.exists():
+            # Run 43782185137: the socket never appeared and QEMU could not connect. Say why.
+            denied = subprocess.run(["sudo", "dmesg"], capture_output=True, text=True).stdout
+            denied = [line for line in denied.splitlines() if "apparmor" in line.lower() and "swtpm" in line.lower()]
+            raise RuntimeError(f"swtpm did not create its socket (exit {self.swtpm.poll()}): "
+                               f"{errors.read_text(errors='replace')[-400:]} | AppArmor: {denied[-3:]}")
         self.cfg["tpm_socket"] = str(sock)
 
     def start(self) -> None:

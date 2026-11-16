@@ -41,6 +41,18 @@ if [ "$mode" = heavy ]; then
   # Windows reads model-specific registers KVM does not know; without this
   # some processors make it stop with an error screen.
   echo 1 | sudo tee /sys/module/kvm/parameters/ignore_msrs >/dev/null || true
+  # Ubuntu confines swtpm with an AppArmor profile that allows only libvirt's and
+  # the user's own directories; the TPM state and socket live under the work
+  # directory (/mnt) on this disposable runner. Run 43782185137: swtpm never
+  # made its socket. Unload the profile here (runner only).
+  if [ -f /etc/apparmor.d/usr.bin.swtpm ]; then
+    if sudo apparmor_parser -R /etc/apparmor.d/usr.bin.swtpm; then
+      echo "apparmor: swtpm profile unloaded on this runner"
+    else
+      echo "apparmor: swtpm profile could not be unloaded"
+    fi
+  fi
+  swtpm --version || true
   qemu-system-x86_64 --version | head -1
   qemu-system-x86_64 -device help 2>/dev/null | grep -E 'hv-balloon|vmbus-bridge|"nvme"|tpm-crb' || true
   ls -la /usr/share/OVMF/ || true
