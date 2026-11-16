@@ -1,0 +1,4 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# The one package the experiment installs on the runner: comtypes (MIT),
+# the COM client through which Python reaches UI Automation. Pure Python.
+comtypes==1.4.17 --hash=sha256:4e0a221dde2c589b82977bed802efd71cd5eb67a380347b732e02735e597f586

@@ -1,0 +1,41 @@
+{
+  "$comment": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0. The real applications the inwin experiment reads on real Windows: the same builds the winsee experiment read under Wine (tests/windows-runtime/apps.json on main), each fetched from its publisher, refused unless its size and SHA-256 match, used and thrown away. Nothing fetched is committed or redistributed.",
+  "applications": [
+    {
+      "id": "putty-exe",
+      "name": "PuTTY",
+      "version": "0.85",
+      "licence": "MIT",
+      "url": "https://the.earth.li/~sgtatham/putty/0.85/w64/putty.exe",
+      "size": 1706136,
+      "sha256": "d01fdb5aae8f112526040a39b0bfb9e27d813003178645e65f8d1cfdb2a26c87"
+    },
+    {
+      "id": "notepadpp-zip",
+      "name": "Notepad++",
+      "version": "8.9.9.1",
+      "licence": "GPL-3.0-or-later",
+      "url": "https://github.com/notepad-plus-plus/notepad-plus-plus/releases/download/v8.9.9.1/npp.8.9.9.1.portable.x64.zip",
+      "size": 8369720,
+      "sha256": "cbcefa34677e10fe6dd19802f7d6b3b9860cd6de62afeaae7680e09c51b47779"
+    },
+    {
+      "id": "7zip-exe",
+      "name": "7-Zip",
+      "version": "26.06",
+      "licence": "LGPL-2.1-or-later and others",
+      "url": "https://github.com/ip7z/7zip/releases/download/26.06/7z2606-x64.exe",
+      "size": 1659704,
+      "sha256": "9b697f65ecc2d9b0152f5ee96d72dde522a7827690349d9307935dacf40f42ec"
+    },
+    {
+      "id": "innosetup",
+      "name": "Inno Setup",
+      "version": "7.1.1",
+      "licence": "Inno Setup License",
+      "url": "https://github.com/jrsoftware/issrc/releases/download/is-7_1_1/innosetup-7.1.1-x64.exe",
+      "size": 14336568,
+      "sha256": "8a5a6711c3766a6e5fb74f280ba0e3551e719ce94538d901fdbd1f8f9920b3f0"
+    }
+  ]
+}

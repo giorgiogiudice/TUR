@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0 -->
+<!-- A page of TUR's own for the inwin experiment: seven controls whose names
+     and kinds are known, and a button whose effect shows in the window's
+     title, where it can be checked without asking the browser's
+     accessibility tree. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>TUR inwin form</title>
+<style>body { font: 16px sans-serif; margin: 2em; } label, p { display: block; margin: 0.8em 0; }</style>
+</head>
+<body>
+<h1>TUR inwin form</h1>
+<label>Name <input id="name" type="text"></label>
+<label><input id="sub" type="checkbox"> Subscribe</label>
+<p>
+<label style="display:inline"><input type="radio" name="size" value="s"> Small</label>
+<label style="display:inline"><input type="radio" name="size" value="l"> Large</label>
+</p>
+<label>Colour <select id="colour"><option>Red</option><option>Green</option><option>Blue</option></select></label>
+<p><button id="send" onclick="document.title = 'sent:' + document.getElementById('name').value">Send</button></p>
+<p><a href="https://example.org/">TUR project</a></p>
+</body>
+</html>
