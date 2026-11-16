@@ -22,7 +22,12 @@ QString UiService::interfaceName()
 
 QStringList UiService::modes()
 {
-    return { QStringLiteral("ask"), QStringLiteral("panel"), QStringLiteral("activity"), QStringLiteral("setup") };
+    // "ask-held": the ask bar, opened by P@x's key, which may still be held:
+    // if it is, the bar listens until it is let go (push-to-talk;
+    // docs/architecture/pax-voice.md, section 7). Only the key's binding
+    // asks for it; the launcher and the tray ask for "ask".
+    return { QStringLiteral("ask"), QStringLiteral("ask-held"), QStringLiteral("panel"), QStringLiteral("activity"),
+             QStringLiteral("setup") };
 }
 
 UiService::UiService(QObject *parent)

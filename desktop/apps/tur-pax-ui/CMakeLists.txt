@@ -31,6 +31,9 @@ set(paxui_qml
     qml/SetupKey.qml
     qml/SetupSettings.qml
     qml/SetupConsent.qml
+    qml/SetupVoice.qml
+    qml/VoiceControl.qml
+    qml/MicGlyph.qml
 )
 
 # The sources are in qml/; the module is flat, so that every type sees every
@@ -75,7 +78,7 @@ tur_link_qml_modules(tur-pax-ui turkit turkitpax turpaxui)
 
 # The program loads each view and reports no QML warning, under the offscreen
 # platform, with no session bus: P@x's service is absent, which it says.
-foreach(shown ask panel activity setup)
+foreach(shown ask ask-held panel activity setup)
     add_test(NAME pax-ui-starts-${shown}
         COMMAND tur-pax-ui --standalone --check --no-dbus --mode ${shown})
     set_tests_properties(pax-ui-starts-${shown} PROPERTIES ENVIRONMENT "${TUR_TEST_ENVIRONMENT}" TIMEOUT 120)

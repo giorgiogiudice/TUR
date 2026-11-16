@@ -156,7 +156,9 @@ int main(int argc, char *argv[])
     parser.addHelpOption();
     parser.addVersionOption();
     const QCommandLineOption mode(QStringLiteral("mode"),
-                                  QStringLiteral("What to show: ask (the default), panel, activity or setup."),
+                                  QStringLiteral("What to show: ask (the default), ask-held (the ask bar, opened by "
+                                                 "P@x's key: it listens while the key is held), panel, activity "
+                                                 "or setup."),
                                   QStringLiteral("MODE"), QStringLiteral("ask"));
     const QCommandLineOption background(QStringLiteral("background"),
                                         QStringLiteral("Start with nothing shown and wait to be asked over "

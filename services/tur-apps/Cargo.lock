@@ -595,10 +595,12 @@ dependencies = [
 name = "tur-pax-providers"
 version = "0.1.0"
 dependencies = [
+ "rustls",
  "serde",
  "serde_json",
  "tur-core",
  "ureq",
+ "webpki-roots",
  "zeroize",
 ]
 

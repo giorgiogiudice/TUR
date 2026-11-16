@@ -32,15 +32,18 @@ use tur_pax::audit::{AuditRecord, AuditWriteError};
 use tur_pax::exec::{ExecOutput, ExecStatus, Executor};
 use tur_pax::interface::{Interface, NoInterface};
 use tur_pax::orchestrator::{
-    Control, NoAssistant, NoBudget, NoControl, NoObserver, Orchestrator, Signal, Situation,
-    TaskClock, TaskLimits, TaskReport, TaskRequest,
+    Control, LiveIo, NoAssistant, NoBudget, NoControl, NoObserver, Orchestrator, RequestOrigin,
+    Signal, Situation, TaskClock, TaskLimits, TaskReport, TaskRequest,
 };
 use tur_pax::registry::ToolRegistry;
 use tur_pax::sandbox::{Grant, GrantRules, SandboxPlan};
 use tur_pax::trail::{EventKind, MemoryTrail, Trail, TrailEvent};
+use tur_pax::voice::{Interjections, Source, TranscriptGate, Trigger};
 use tur_pax::{Timestamp, UserPolicy};
 use tur_pax_memory::RecalledNotes;
-use tur_pax_providers::{ApiKey, Message, Provider, ProviderConfig, SpendMeter, connect};
+use tur_pax_providers::{
+    ApiKey, LivePrices, LiveSession, Message, Provider, ProviderConfig, SpendMeter, connect,
+};
 
 /// The key every test uses. It is not a real key.
 pub const TEST_KEY: &str = "sk-test-KEY-7f3a9c2e5b1d4860";
@@ -1073,6 +1076,11 @@ pub struct Harness {
     pub history: Vec<Message>,
     /// If set, the trail fails after this many entries.
     pub trail_capacity: Option<usize>,
+    /// For a spoken request: where it came from, what started it, and the
+    /// gate its changes wait at. `None`: typed.
+    pub voice: Option<(Source, Trigger, Arc<TranscriptGate>)>,
+    /// What the person says during the task.
+    pub interjections: Option<Interjections>,
     tasks: u32,
 }
 
@@ -1102,6 +1110,8 @@ impl Harness {
             interface: Box::new(NoInterface),
             history: Vec::new(),
             trail_capacity: None,
+            voice: None,
+            interjections: None,
             tasks: 0,
         }
     }
@@ -1109,6 +1119,56 @@ impl Harness {
     /// Run one task against a scripted provider.
     pub fn run(&mut self, server: &FakeServer, request: &str) -> TaskReport {
         self.run_configured(&server.config(), request)
+    }
+
+    /// Run one live conversation against a scripted live engine. The text
+    /// provider of `server` is never asked.
+    pub fn run_live(
+        &mut self,
+        server: &FakeServer,
+        live: &mut dyn LiveSession,
+        io: &mut dyn LiveIo,
+        prices: Option<&LivePrices>,
+    ) -> TaskReport {
+        self.tasks += 1;
+        let task_id = format!("task-{}", self.tasks);
+        let config = server.config();
+        let provider = provider(&config);
+        let mut observer = NoObserver;
+        let mut budget = NoBudget;
+        let mut assistant = NoAssistant;
+        let origin = RequestOrigin {
+            source: Source::Live,
+            trigger: Some(Trigger::Live),
+            gate: None,
+            interjections: None,
+        };
+        let mut orchestrator = Orchestrator {
+            provider: &*provider,
+            config: &config,
+            registry: &self.registry,
+            policy: &self.policy,
+            situation: self.situation,
+            limits: self.limits,
+            rules: &self.rules,
+            grants: &self.grants,
+            executor: &mut self.executor,
+            trail: &mut self.trail,
+            clock: &self.clock,
+            control: &*self.control,
+            observer: &mut observer,
+            budget: &mut budget,
+            assistant: &mut assistant,
+            interface: &mut *self.interface,
+        };
+        let task = TaskRequest {
+            task_id: &task_id,
+            provider_id: None,
+            request: "",
+            recalled: &self.recalled,
+            origin,
+        };
+        orchestrator.run_live(&task, live, io, prices)
     }
 
     /// Run one task with the given provider configuration.
@@ -1120,6 +1180,18 @@ impl Harness {
         let mut observer = NoObserver;
         let mut budget = NoBudget;
         let mut assistant = NoAssistant;
+        let origin = match &self.voice {
+            Some((source, trigger, gate)) => RequestOrigin {
+                source: *source,
+                trigger: Some(*trigger),
+                gate: Some(&**gate),
+                interjections: self.interjections.as_ref(),
+            },
+            None => RequestOrigin {
+                interjections: self.interjections.as_ref(),
+                ..RequestOrigin::TYPED
+            },
+        };
         let mut failing;
         let trail: &mut dyn Trail = match self.trail_capacity {
             Some(left) => {
@@ -1154,6 +1226,7 @@ impl Harness {
             provider_id: None,
             request,
             recalled: &self.recalled,
+            origin,
         };
         orchestrator.run(&task, &mut self.history, &mut meter)
     }

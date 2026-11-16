@@ -64,7 +64,8 @@ Item {
             mouseClick(findChild(host.view, "consentCheck"))
             verify(switchOn.enabled)
             mouseClick(switchOn)
-            tryVerify(() => host.view.step === "ready", 5000, "P@x is ready")
+            // Voice is offered next (pax-voice.md); it switches nothing on.
+            tryVerify(() => host.view.step === "voice", 5000, "P@x is on, and voice is offered")
             const enabled = called("Enable")
             compare(enabled.length, 1)
             compare(enabled[0].args[0], shown, "the version of the text that was shown")

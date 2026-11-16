@@ -13,7 +13,8 @@ import Tur.Kit as Kit
 QtObject {
     id: main
 
-    // What is shown: "" (nothing), ask, panel, activity or setup.
+    // What is shown: "" (nothing), ask, panel, activity or setup ("ask-held"
+    // is taken as ask, by P@x's key).
     property string mode: "ask"
     // The bus P@x's service is on; empty for the session bus.
     property string busAddress
@@ -98,10 +99,17 @@ QtObject {
         }
     }
 
-    // Shows what is asked for, and gives it the keyboard.
-    function show(mode: string): void {
+    // Shows what is asked for, and gives it the keyboard. "ask-held" is the
+    // bar opened by P@x's key (the desktop file's action "ask"): if the key
+    // is still held, the bar listens (docs/architecture/pax-voice.md,
+    // section 7).
+    function show(asked: string): void {
+        const held = asked === "ask-held"
+        const mode = held ? "ask" : asked
         main.mode = mode
         if (mode === "ask") {
+            if (held)
+                bar.keyOpened()
             main.surface.requestActivate()
             bar.field.forceActiveFocus()
         } else if (mode === "panel" || mode === "activity") {
@@ -113,6 +121,11 @@ QtObject {
     }
 
     Component.onCompleted: {
+        if (main.mode === "ask-held") {
+            main.mode = "ask"
+            // Once the voice status is known; the key may still be held.
+            Qt.callLater(bar.keyOpened)
+        }
         if (main.variant === "light")
             Kit.Theme.light = true
         else if (main.variant === "dark")

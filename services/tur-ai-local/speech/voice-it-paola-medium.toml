@@ -1,0 +1,52 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR speech catalogue entry. Format: schemas/speech-model.schema.json.
+# How entries are written and sourced: services/tur-ai-local/speech/README.md.
+#
+# Sources read on 2026-11-16: the Hugging Face API tree of
+# rhasspy/piper-voices at the pinned revision (sizes and LFS SHA-256 of the
+# .onnx file); the .onnx.json file at that revision, hashed; the voice's
+# MODEL_CARD; piper1-gpl's docs/LICENSING.md and docs/COMMERCIAL_USE.md.
+
+schema_version = 1
+id = "voice-it-paola-medium"
+kind = "synthesis"
+name = "Italian: Paola"
+publisher = "Open Home Foundation (Piper voices)"
+engine = "piper"
+repository = "https://huggingface.co/rhasspy/piper-voices"
+revision = "e9ab671f2a0e50a701b34361136ba3e6a3a9eb0c"
+parameters = "medium quality (VITS)"
+languages = ["it"]
+default_for = ["it"]
+# Estimate: the voice and onnxruntime's working memory. Not measured.
+memory_bytes = 300000000
+speed_basis = "sherpa-onnx's published real-time factors for medium Piper voices on a Raspberry Pi 4 (0.36 to 0.77); not a TUR measurement"
+sample_rate = 22050
+note = "A natural voice that runs faster than real time on any computer TUR supports."
+credit = "Voice base trained on the Hi-Fi TTS dataset by NVIDIA (CC BY 4.0)."
+checked = "2026-11-16"
+
+[voice]
+locale = "it_IT"
+speaker = "paola"
+quality = "medium"
+
+[[files]]
+name = "it_IT-paola-medium.onnx"
+url = "https://huggingface.co/rhasspy/piper-voices/resolve/e9ab671f2a0e50a701b34361136ba3e6a3a9eb0c/it/it_IT/paola/medium/it_IT-paola-medium.onnx"
+size_bytes = 63221984
+sha256 = "f9b8658aa8c01f8280aa88488f6e7643a639b6225a81514c40440a01f6364a20"
+
+[[files]]
+name = "it_IT-paola-medium.onnx.json"
+url = "https://huggingface.co/rhasspy/piper-voices/resolve/e9ab671f2a0e50a701b34361136ba3e6a3a9eb0c/it/it_IT/paola/medium/it_IT-paola-medium.onnx.json"
+size_bytes = 5457
+sha256 = "41c062de55b3410bcc01e456ba6d037d56669ecbb68849ab8b330e30fc475c6e"
+
+[licence]
+id = "CC0-1.0 AND CC-BY-4.0"
+url = "https://creativecommons.org/licenses/by/4.0/"
+summary = "Its own recordings are CC0 (no conditions); it was trained from a base voice on the Hi-Fi TTS dataset (CC BY 4.0), which is credited. Use it for any purpose, commercial use included."
+restrictions = "none"
+evidence = "The voice's MODEL_CARD at the pinned revision: dataset OHF-Voice/voice-datasets, CC0, retrained on a different recording set than the earlier paola on 2026-11-13, from the hifi_tts_92 base (Hi-Fi TTS dataset (NVIDIA), CC BY 4.0); requires Piper 1.5 or higher. Listed in piper1-gpl's docs/COMMERCIAL_USE.md. A copy of it_IT-paola-medium from before 2026-11-13 is the older, research-only voice: only the SHA-256 here proves the retrained one."
+checked = "2026-11-16"

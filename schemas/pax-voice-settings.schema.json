@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/giorgiogiudice/TUR/schemas/pax-voice-settings.schema.json",
+  "$comment": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+  "title": "P@x voice settings",
+  "description": "P@x's voice, in $XDG_CONFIG_HOME/tur/pax/voice.json (docs/architecture/pax-voice.md, section 6.4). Written only by tur-pax serve, on SetVoiceSettings. Every member may be missing: a missing member is its default, and a missing file is all defaults, which is voice off. The loader in services/tur-pax (voice.rs) is authoritative and also enforces: a wake word cannot be on in this version; a recognition model or a voice is a catalogue identifier of local AI's speech catalogue; a live engine is local or the identifier of an entry of the list of live engines; a provider's live engine is used only with the current consent recorded for it.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "const": 1 },
+    "enabled": {
+      "description": "Whether the person switched voice on. Off by default.",
+      "type": "boolean"
+    },
+    "language": {
+      "description": "The language spoken to P@x and by it: auto, or one of the offered languages.",
+      "enum": ["auto", "en", "it", "de", "es", "fr"]
+    },
+    "recognition": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "model": {
+          "description": "A recognition model of local AI's speech catalogue, or null for the one local AI recommends for this computer.",
+          "type": ["string", "null"],
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+        }
+      }
+    },
+    "synthesis": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "voices": {
+          "description": "A voice per language; a language not named takes its default voice.",
+          "type": "object",
+          "propertyNames": { "enum": ["en", "it", "de", "es", "fr"] },
+          "additionalProperties": { "type": "string", "pattern": "^[A-Za-z0-9._-]{1,64}$" }
+        }
+      }
+    },
+    "spoken_replies": {
+      "description": "Whether P@x's answers are said out loud. Off by default.",
+      "type": "boolean"
+    },
+    "activation": {
+      "description": "How a turn is started. Push-to-talk is the only activation in this version.",
+      "const": "push-to-talk"
+    },
+    "wake_word": {
+      "description": "Whether a wake word is listened for. Off, and cannot be turned on in this version.",
+      "const": false
+    },
+    "transcript_check": {
+      "description": "What happens to what was heard on a push-to-talk turn: show (shown, and its first change waits show_seconds) or wait (kept until the person sends it). Sound from another program always waits.",
+      "enum": ["show", "wait"]
+    },
+    "show_seconds": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10
+    },
+    "live": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "engine": {
+          "description": "local, or the identifier of a provider's live engine.",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+        },
+        "model": { "type": ["string", "null"] },
+        "silence_timeout_seconds": { "type": "integer", "minimum": 10, "maximum": 3600 },
+        "narrate": { "type": "boolean" },
+        "consent": {
+          "description": "The person's acceptance of a provider's live engine: its identifier, the version of the text shown, and when.",
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "required": ["provider", "version", "at"],
+          "properties": {
+            "provider": { "type": "string" },
+            "version": { "type": "string" },
+            "at": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    }
+  }
+}

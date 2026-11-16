@@ -22,6 +22,9 @@
 //!   address it may listen on and its command line.
 //! * [`serve`]: starting the engine as a child process, stopping it when it
 //!   is idle or asked to, and its state for `status`.
+//! * [`speech`]: speech on this computer for P@x's voice: the speech
+//!   catalogue (`speech/*.toml`), tiers, the speech store, recognition with
+//!   whisper.cpp and synthesis with Piper, each run as a child process.
 //! * [`codes`]: the `TUR-AI-LOCAL-*` error-code registry.
 //! * [`cli`]: the `tur-ai-local` command line.
 
@@ -92,6 +95,7 @@ pub mod ensure;
 pub mod fit;
 pub mod hardware;
 pub mod serve;
+pub mod speech;
 pub mod store;
 
 pub use codes::{AiLocalCode, CodeEntry, Severity};

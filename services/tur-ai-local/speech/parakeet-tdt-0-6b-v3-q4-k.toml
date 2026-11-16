@@ -1,0 +1,54 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR speech catalogue entry. Format: schemas/speech-model.schema.json.
+# How entries are written and sourced: services/tur-ai-local/speech/README.md.
+#
+# Sources read on 2026-11-16: the Hugging Face API tree of
+# ggml-org/parakeet-GGUF at the pinned revision (size and LFS SHA-256); the
+# card of nvidia/parakeet-tdt-0.6b-v3 (CC BY 4.0, 25 European languages,
+# Italian FLEURS WER 3.00); whisper.cpp v1.9.5's examples/parakeet-cli.
+#
+# The owner's decision of 16 November 2026: offered as an optional, better
+# recogniser for Italian and other European languages. Never the default:
+# `speech recommend` lists it under `alternatives`, with its credit.
+
+schema_version = 1
+id = "parakeet-tdt-0-6b-v3-q4-k"
+kind = "recognition"
+name = "Parakeet TDT 0.6B v3 (4-bit), better for Italian and European languages"
+publisher = "NVIDIA (weights), ggml conversion by the ggml-org project"
+engine = "parakeet"
+repository = "https://huggingface.co/ggml-org/parakeet-GGUF"
+revision = "35156454d1a39de06863303dd209fd2bed6ee079"
+parameters = "0.6B, FastConformer-TDT, quantised to 4 bits (q4_k)"
+# The 25 languages of the model card. It finds the language itself:
+# parakeet-cli has no language option.
+languages = ["bg", "hr", "cs", "da", "nl", "en", "et", "fi", "fr", "de", "el", "hu", "it", "lv", "lt", "mt", "pl", "pt", "ro", "sk", "sl", "es", "sv", "ru", "uk"]
+# Estimate: the 415 MB file and the encoder's working memory for an
+# utterance of up to 30 seconds. Not measured.
+memory_bytes = 700000000
+# Estimate, not a TUR measurement and not a published figure: no CPU
+# timing of parakeet-cli is published. Parakeet's encoder (0.6B,
+# FastConformer with 8x subsampling) encodes only the audio there is, where
+# whisper.cpp encodes a whole 30-second window, so a short utterance costs
+# well under Whisper small's 4830 ms; set at about two thirds of it, between
+# Whisper base and small, until the pax-voice workflow measures it.
+encode_ms_8_threads = 3000
+speed_basis = "an estimate: no CPU figure for parakeet-cli is published; set between Whisper base (1480 ms) and small (4830 ms) because Parakeet encodes only the audio there is, not a 30-second window; to be replaced by the pax-voice workflow's measurement"
+wer_it_fleurs = 3.0
+note = "An optional recogniser, much better than Whisper for Italian and other European languages. A 416 MB download. Its licence asks for credit, which TUR shows."
+credit = "Parakeet TDT 0.6B v3 by NVIDIA, licensed under CC BY 4.0 (https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3); converted to ggml by the ggml-org project."
+checked = "2026-11-16"
+
+[[files]]
+name = "ggml-parakeet-tdt-0.6b-v3-q4_k.bin"
+url = "https://huggingface.co/ggml-org/parakeet-GGUF/resolve/35156454d1a39de06863303dd209fd2bed6ee079/ggml-parakeet-tdt-0.6b-v3-q4_k.bin"
+size_bytes = 415611879
+sha256 = "8b205b8b39c6535e153de6fb11c51db46125d45c4f16ba496fe41a0fe71b885e"
+
+[licence]
+id = "CC-BY-4.0"
+url = "https://creativecommons.org/licenses/by/4.0/"
+summary = "Creative Commons Attribution 4.0. You may use, share and adapt the model for any purpose, commercial use included, if you credit NVIDIA, link the licence and say if you changed it."
+restrictions = "none"
+evidence = "The card of nvidia/parakeet-tdt-0.6b-v3 declares CC-BY-4.0. The card of ggml-org/parakeet-GGUF declares MIT, but a conversion cannot change the licence of the weights, so TUR treats the file as CC BY 4.0. Attribution is a condition of sharing, not a restriction of use: TUR shows the credit wherever the model is offered or used."
+checked = "2026-11-16"

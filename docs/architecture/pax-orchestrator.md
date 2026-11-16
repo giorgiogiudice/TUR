@@ -671,7 +671,7 @@ nothing is started.
 | `TUR_AI_EVENT` | Written when | Fields beyond `MESSAGE`, `TUR_AI_TASK`, `TUR_AI_PROVIDER` |
 |---|---|---|
 | `decision` | The engine decided an action | Those of agent-policy.md section 8: `TUR_AI_ACTION`, `TUR_AI_CLASS`, `TUR_AI_DECISION`, `TUR_AI_TIER`, `TUR_AI_SANDBOX`, `TUR_AI_ATTENDED`, `TUR_ERROR_CODE` |
-| `task_started` | A task begins | `TUR_AI_PROVIDER_ID`, `TUR_AI_ATTENDED` |
+| `task_started` | A task begins | `TUR_AI_PROVIDER_ID`, `TUR_AI_ATTENDED`, `TUR_AI_SOURCE` (`typed`, `voice`, `voice_edited`, `live`: where the request came from, pax-voice.md), `TUR_AI_VOICE_TRIGGER` (`push-to-talk`, `button`, `live`) for a spoken one |
 | `proposal_rejected` | A tool call did not become an action | `TUR_AI_ACTION` (the name, if it is an identifier; otherwise `<invalid>`), `TUR_AI_REASON`, `TUR_ERROR_CODE` |
 | `approval_unavailable` | The engine asked, wanted authentication or deferred | `TUR_AI_ACTION`, `TUR_AI_CLASS`, `TUR_AI_DECISION`, `TUR_ERROR_CODE` |
 | `executed` | An allowed action was performed, or tried: the action-outcome event (`audit::ActionOutcome`) | `TUR_AI_ACTION`, `TUR_AI_RESULT` (`ok`, `failed`, `timed_out`, `not_started`), `TUR_AI_EXIT`, `TUR_AI_OUTPUT_BYTES`, `TUR_AI_TRUNCATED`, `TUR_AI_WITHHELD` (a count), `TUR_ERROR_CODE` if it did not end well |
@@ -679,7 +679,9 @@ nothing is started.
 | `response_discarded` | A response was discarded whole | `TUR_AI_REASON` (`refusal`, `error`, `output_limit`), `TUR_AI_DISCARDED_CALLS`, `TUR_ERROR_CODE` |
 | `task_finished` | A task ends | `TUR_AI_PROVIDER_ID`, `TUR_AI_OUTCOME`, `TUR_AI_STEPS`, `TUR_AI_REQUESTS`, `TUR_AI_TOKENS`, `TUR_ERROR_CODE` |
 
-`TUR_AI_PROVIDER` is the adapter family (`openai-chat`), on every record.
+`TUR_AI_PROVIDER` is the adapter family (`openai-chat`), on every record;
+for a live conversation with a provider's engine, the live family
+(`openai-realtime`, `gemini-live`).
 `TUR_AI_PROVIDER_ID` is the provider's identifier (`deepseek`, `local`): the
 model list's or the person's entry in the session service and in
 `tur-pax run --provider`; the family when `tur-pax run` was given only a

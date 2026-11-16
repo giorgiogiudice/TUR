@@ -1,0 +1,106 @@
+{
+  "hand_written": "Written by hand from docs/architecture/pax-voice.md, section 6 (the service's voice needs a microphone, so it cannot be recorded in CI); not recorded, not compared by desktop/tests/pax-ui/e2e.py.",
+  "licence": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+  "signals": [
+    {
+      "args": [
+        "",
+        {
+          "bytes_done": 0,
+          "bytes_to_download": 187356515,
+          "bytes_total": 187356515,
+          "event": "plan",
+          "model": ""
+        }
+      ],
+      "member": "VoiceProgress"
+    },
+    {
+      "args": [
+        "whisper-base-q5_1",
+        {
+          "bytes_done": 59707625,
+          "bytes_total": 187356515,
+          "event": "progress",
+          "model": "whisper-base-q5_1"
+        }
+      ],
+      "member": "VoiceProgress"
+    },
+    {
+      "args": [
+        "whisper-base-q5_1",
+        {
+          "event": "verified",
+          "model": "whisper-base-q5_1"
+        }
+      ],
+      "member": "VoiceProgress"
+    },
+    {
+      "args": [
+        "silero-vad-v6.2.0",
+        {
+          "event": "verified",
+          "model": "silero-vad-v6.2.0"
+        }
+      ],
+      "member": "VoiceProgress"
+    },
+    {
+      "args": [
+        "en_US-ljspeech-medium",
+        {
+          "bytes_done": 124129074,
+          "bytes_total": 187356515,
+          "event": "progress",
+          "model": "en_US-ljspeech-medium"
+        }
+      ],
+      "member": "VoiceProgress"
+    },
+    {
+      "args": [
+        "en_US-ljspeech-medium",
+        {
+          "event": "verified",
+          "model": "en_US-ljspeech-medium"
+        }
+      ],
+      "member": "VoiceProgress"
+    },
+    {
+      "args": [
+        "it_IT-paola-medium",
+        {
+          "bytes_done": 187356515,
+          "bytes_total": 187356515,
+          "event": "progress",
+          "model": "it_IT-paola-medium"
+        }
+      ],
+      "member": "VoiceProgress"
+    },
+    {
+      "args": [
+        "it_IT-paola-medium",
+        {
+          "event": "verified",
+          "model": "it_IT-paola-medium"
+        }
+      ],
+      "member": "VoiceProgress"
+    },
+    {
+      "args": [
+        "",
+        {
+          "event": "ready",
+          "message": "Voice is ready.",
+          "model": ""
+        }
+      ],
+      "member": "VoiceProgress"
+    }
+  ]
+}

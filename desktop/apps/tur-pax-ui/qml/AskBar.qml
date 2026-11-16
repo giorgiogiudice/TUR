@@ -9,7 +9,13 @@ import Tur.Kit.Pax as Pax
 // The ask bar (desktop-experience.md, 9.2): one line for one request, opened
 // by P@x's key (Meta+Space, from desktop/kit/pax/commands.json), closed by
 // Esc. Enter sends the request; the conversation panel then opens with the
-// task. Voice is not in this version, and the bar says so.
+// task.
+//
+// Voice (docs/architecture/pax-voice.md, section 7): the microphone under
+// the field (VoiceControl). Held, P@x's key speaks instead of opening the
+// bar for typing (keyOpened). What was heard comes into the field; Enter
+// sends it when it waits, Esc drops it. "Talk with P@x" starts a live
+// conversation, which the panel shows.
 //
 // When P@x cannot take a task, the bar says why instead (PaxStateNotice).
 Kit.Page {
@@ -22,16 +28,30 @@ Kit.Page {
     readonly property real naturalHeight: column.implicitHeight + bar.topPadding + bar.bottomPadding
     readonly property bool ready: !stateNotice.blocking
     property alias field: askField
+    property alias voice: voiceControl
 
     signal setupRequested()
     signal closeRequested()
 
     function send(): void {
+        if (voiceControl.send())
+            return
         const request = askField.text.trim()
         if (request.length === 0 || !bar.ready || bar.conversation.running || bar.conversation.starting)
             return
         bar.conversation.ask(request)
         askField.text = ""
+    }
+
+    function escape(): void {
+        if (voiceControl.cancel())
+            return
+        bar.closeRequested()
+    }
+
+    // The bar was opened by P@x's key, which may still be held.
+    function keyOpened(): void {
+        voiceControl.keyOpened()
     }
 
     implicitWidth: 640
@@ -47,7 +67,7 @@ Kit.Page {
         border.color: Kit.Theme.lineSubtle
     }
 
-    Keys.onEscapePressed: bar.closeRequested()
+    Keys.onEscapePressed: bar.escape()
 
     ColumnLayout {
         id: column
@@ -73,12 +93,15 @@ Kit.Page {
 
                 objectName: "askField"
                 Layout.fillWidth: true
-                placeholderText: Words.askPlaceholder
+                placeholderText: voiceControl.phase === "listening" ? Words.listening : Words.askPlaceholder
+                readOnly: voiceControl.active
                 focus: true
                 Accessible.name: Words.askField
                 Keys.onReturnPressed: bar.send()
                 Keys.onEnterPressed: bar.send()
-                Keys.onEscapePressed: bar.closeRequested()
+                Keys.onEscapePressed: bar.escape()
+                Keys.onPressed: event => voiceControl.keyPressed(event)
+                Keys.onReleased: event => voiceControl.keyReleased(event)
             }
 
             Kit.Button {
@@ -86,33 +109,23 @@ Kit.Page {
                 Layout.alignment: Qt.AlignVCenter
                 text: Words.send
                 kind: Kit.Button.Primary
-                enabled: askField.text.trim().length > 0 && !bar.conversation.running && !bar.conversation.starting
+                enabled: askField.text.trim().length > 0 && !voiceControl.active
+                         && !bar.conversation.running && !bar.conversation.starting
                 onClicked: bar.send()
             }
         }
 
-        // Voice is designed (9.1) and not built: the bar says so in words,
-        // with the control there and unavailable.
-        RowLayout {
+        VoiceControl {
+            id: voiceControl
+
+            objectName: "voiceControl"
             Layout.fillWidth: true
             visible: bar.ready
-            spacing: Kit.Theme.spaceRelated
-
-            Kit.Button {
-                objectName: "speakButton"
-                text: Words.speak
-                kind: Kit.Button.Quiet
-                enabled: false
-            }
-
-            Kit.Label {
-                objectName: "voiceLater"
-                Layout.fillWidth: true
-                text: Words.voiceLater
-                kind: Kit.Label.Small
-                tone: Kit.Label.Secondary
-                wrapMode: Text.Wrap
-            }
+            client: bar.client
+            conversation: bar.conversation
+            field: askField
+            allowed: bar.ready && !bar.conversation.running && !bar.conversation.starting
+            onSetupRequested: bar.setupRequested()
         }
 
         KeysLine {

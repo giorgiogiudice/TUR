@@ -27,6 +27,16 @@
 //!   checked, and the engine started; its progress as JSON lines.
 //! * `cancel`: ask a running `ensure` to stop.
 //!
+//! Speech, for P@x's voice (`speech`, `src/speech.rs`):
+//!
+//! * `speech models` and `speech recommend`: the speech catalogue, with
+//!   what is downloaded and how each suits this computer; what to use.
+//! * `speech ensure ID...`: download and check speech models and voices.
+//! * `speech cancel`, `speech remove ID`.
+//! * `speech stt FILE --model ID`: recognise a 16 kHz mono WAVE file.
+//! * `speech tts --voice ID --output FILE`: speak the text on standard
+//!   input into a WAVE file.
+//!
 //! Every command prints text, or JSON with `--json`
 //! (`schemas/ai-local-report.schema.json`). `serve --json` prints one JSON
 //! object per line: when the model is ready, and when it stopped.
@@ -98,6 +108,23 @@ pub struct Places {
     /// running it
     #[arg(long, global = true, value_name = "FILE")]
     pub vulkaninfo: Option<PathBuf>,
+    /// The speech catalogue directory
+    #[arg(long, global = true, value_name = "DIR")]
+    pub speech_catalogue: Option<PathBuf>,
+    /// whisper.cpp's recogniser, whisper-cli
+    #[arg(long, global = true, value_name = "FILE")]
+    pub whisper_cli: Option<PathBuf>,
+    /// Piper's command. Without it, the launcher of the Piper engine
+    /// installed in the speech store (speech ensure piper-tts-1-8-0)
+    #[arg(long, global = true, value_name = "FILE")]
+    pub piper: Option<PathBuf>,
+    /// whisper.cpp's Parakeet recogniser, parakeet-cli
+    #[arg(long, global = true, value_name = "FILE")]
+    pub parakeet_cli: Option<PathBuf>,
+    /// The Python that Piper's virtual environment is made with. Without it,
+    /// /usr/bin/python3
+    #[arg(long, global = true, value_name = "FILE")]
+    pub python: Option<PathBuf>,
 }
 
 /// The commands.
@@ -130,6 +157,100 @@ pub enum Command {
     Cancel(JsonArgs),
     /// List the TUR-AI-LOCAL error codes
     Codes(JsonArgs),
+    /// Speech on this computer: recognition and voices, for P@x
+    Speech(SpeechArgs),
+}
+
+/// The `speech` commands.
+#[derive(Debug, Args)]
+pub struct SpeechArgs {
+    /// The command.
+    #[command(subcommand)]
+    pub command: SpeechCommand,
+}
+
+/// The `speech` subcommands.
+#[derive(Debug, Subcommand)]
+pub enum SpeechCommand {
+    /// List the speech models and voices, what is downloaded and how each
+    /// suits this computer
+    Models(SpeechListArgs),
+    /// The recognition model, voice detector and voices that suit this
+    /// computer
+    Recommend(SpeechListArgs),
+    /// Download speech models or voices from their publisher and check them
+    Ensure(SpeechEnsureArgs),
+    /// Ask a running speech ensure to stop
+    Cancel(JsonArgs),
+    /// Delete a downloaded speech model or voice
+    Remove(ModelArgs),
+    /// Recognise what is said in a 16 kHz mono 16-bit WAVE file
+    Stt(SttArgs),
+    /// Speak the text on standard input into a WAVE file
+    Tts(TtsArgs),
+}
+
+/// Arguments of `speech models` and `speech recommend`.
+#[derive(Debug, Args)]
+pub struct SpeechListArgs {
+    /// Print JSON instead of text
+    #[arg(long)]
+    pub json: bool,
+    /// Only this language (a two-letter tag such as it)
+    #[arg(long, value_name = "LANGUAGE")]
+    pub language: Option<String>,
+}
+
+/// Arguments of `speech ensure`.
+#[derive(Debug, Args)]
+pub struct SpeechEnsureArgs {
+    /// The ids of the speech models or voices
+    #[arg(value_name = "ID", required = true, num_args = 1..)]
+    pub ids: Vec<String>,
+    /// Print one JSON object per line instead of text
+    #[arg(long)]
+    pub json: bool,
+    /// Accept the use restrictions of a licence, which the catalogue shows
+    #[arg(long)]
+    pub accept_licence: bool,
+}
+
+/// Arguments of `speech stt`.
+#[derive(Debug, Args)]
+pub struct SttArgs {
+    /// The WAVE file: 16-bit PCM, one channel, 16000 samples a second
+    #[arg(value_name = "FILE")]
+    pub file: PathBuf,
+    /// The recognition model's id
+    #[arg(long, value_name = "ID")]
+    pub model: String,
+    /// The language spoken, or auto
+    #[arg(long, value_name = "LANGUAGE", default_value = "auto")]
+    pub language: String,
+    /// Give the recogniser only the speech the voice detector finds, if the
+    /// detector is downloaded
+    #[arg(long)]
+    pub vad: bool,
+    /// Processor threads
+    #[arg(long, value_name = "N", value_parser = clap::value_parser!(u32).range(1..=64))]
+    pub threads: Option<u32>,
+    /// Print JSON instead of text
+    #[arg(long)]
+    pub json: bool,
+}
+
+/// Arguments of `speech tts`.
+#[derive(Debug, Args)]
+pub struct TtsArgs {
+    /// The voice's id
+    #[arg(long, value_name = "ID")]
+    pub voice: String,
+    /// The WAVE file to write
+    #[arg(long, value_name = "FILE")]
+    pub output: PathBuf,
+    /// Print JSON instead of text
+    #[arg(long)]
+    pub json: bool,
 }
 
 /// Only `--json`.
@@ -398,6 +519,7 @@ where
         Command::Ensure(args) => ensure_command(places, args, stdout),
         Command::Cancel(args) => cancel_command(places, args, stdout),
         Command::Codes(args) => codes_command(args, stdout),
+        Command::Speech(args) => speech_command(places, &args.command, stdout),
     };
     match result {
         Ok(()) => 0,
@@ -792,6 +914,8 @@ fn models_command(places: &Places, args: &ModelsArgs, out: &mut dyn Write) -> Re
                 .folders()
                 .into_iter()
                 .filter(|name| catalogue.get(name).is_none())
+                // The speech store lives beside the models (src/speech.rs).
+                .filter(|name| name != crate::speech::SPEECH_FOLDER)
                 .collect()
         })
         .unwrap_or_default();
@@ -1918,4 +2042,897 @@ fn codes_command(args: &JsonArgs, out: &mut dyn Write) -> Result<(), Failure> {
         ));
     }
     write_text(out, &text)
+}
+
+// ------------------------------------------------------------------ speech
+
+use crate::speech::{
+    self, SpeechCatalogue, SpeechEngine, SpeechEnsureEvent, SpeechEntry, SpeechKind, SpeechStore,
+    SpeechTier, VoiceInfo,
+};
+
+fn speech_command(
+    places: &Places,
+    command: &SpeechCommand,
+    out: &mut dyn Write,
+) -> Result<(), Failure> {
+    match command {
+        SpeechCommand::Models(args) => speech_models_command(places, args, out),
+        SpeechCommand::Recommend(args) => speech_recommend_command(places, args, out),
+        SpeechCommand::Ensure(args) => speech_ensure_command(places, args, out),
+        SpeechCommand::Cancel(args) => speech_cancel_command(places, args, out),
+        SpeechCommand::Remove(args) => speech_remove_command(places, args, out),
+        SpeechCommand::Stt(args) => speech_stt_command(places, args, out),
+        SpeechCommand::Tts(args) => speech_tts_command(places, args, out),
+    }
+}
+
+fn load_speech(places: &Places) -> Result<SpeechCatalogue, Failure> {
+    let directory = places
+        .speech_catalogue
+        .clone()
+        .unwrap_or_else(|| PathBuf::from(speech::INSTALLED_SPEECH_CATALOGUE));
+    SpeechCatalogue::load(&directory).map_err(|problems| {
+        Failure::coded(
+            AiLocalCode::CatalogueInvalid,
+            format!("{}:\n{}", directory.display(), problems.join("\n")),
+        )
+    })
+}
+
+fn find_speech<'a>(catalogue: &'a SpeechCatalogue, id: &str) -> Result<&'a SpeechEntry, Failure> {
+    catalogue.get(id).ok_or_else(|| {
+        Failure::coded(
+            AiLocalCode::UnknownModel,
+            format!(
+                "{id:?} is not in {}; the speech catalogue has {}",
+                catalogue.directory.display(),
+                catalogue
+                    .entries
+                    .iter()
+                    .map(|entry| entry.id.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        )
+    })
+}
+
+fn speech_store(places: &Places) -> Result<SpeechStore, Failure> {
+    let store = require_store(places)?;
+    Ok(SpeechStore::in_models_folder(&store.root))
+}
+
+fn optional_speech_store(places: &Places) -> Option<SpeechStore> {
+    models_store(places).map(|store| SpeechStore::in_models_folder(&store.root))
+}
+
+/// `auto`, or a two-letter language tag.
+fn check_language(language: &str) -> Result<(), Failure> {
+    if language == "auto" || (speech::is_language_tag(language) && language != "mul") {
+        Ok(())
+    } else {
+        Err(Failure::Usage(format!(
+            "{language:?} is not auto or a two-letter language tag such as it"
+        )))
+    }
+}
+
+fn speech_licence_view(entry: &SpeechEntry) -> LicenceView {
+    LicenceView {
+        id: entry.licence.id.clone(),
+        url: entry.licence.url.clone(),
+        summary: entry.licence.summary.clone(),
+        restrictions: entry.licence.restrictions.clone(),
+        restricts_use: entry.licence.restricts_use(),
+    }
+}
+
+fn engine_name(engine: SpeechEngine) -> &'static str {
+    match engine {
+        SpeechEngine::WhisperCpp => "whisper.cpp",
+        SpeechEngine::Piper => "piper",
+        SpeechEngine::Parakeet => "parakeet",
+    }
+}
+
+/// A speech model or voice, in a report.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct SpeechView<'a> {
+    /// Its id.
+    pub id: &'a str,
+    /// `recognition`, `synthesis` or `voice-activity`.
+    pub kind: &'static str,
+    /// Its name.
+    pub name: &'a str,
+    /// Its publisher.
+    pub publisher: &'a str,
+    /// `whisper.cpp` or `piper`.
+    pub engine: &'static str,
+    /// Its languages.
+    pub languages: &'a [String],
+    /// The languages it is the default voice for.
+    pub default_for: &'a [String],
+    /// The bytes of its files.
+    pub download_bytes: u64,
+    /// The memory it needs (an estimate).
+    pub memory_bytes: u64,
+    /// `installed`, `absent` or `damaged`.
+    pub installed: InstallState,
+    /// Why it is damaged.
+    pub problem: Option<String>,
+    /// How it suits this computer.
+    pub tier: SpeechTier,
+    /// Why, in sentences.
+    pub reasons: Vec<String>,
+    /// The expected wait for an utterance, for a recognition model.
+    pub expected_ms: Option<u64>,
+    /// Italian word error rate on FLEURS, where published.
+    pub wer_it_fleurs: Option<f64>,
+    /// A voice's sample rate.
+    pub sample_rate: Option<u32>,
+    /// A voice's speaker.
+    pub voice: Option<&'a VoiceInfo>,
+    /// Its licence.
+    pub licence: LicenceView,
+    /// The credit its licence asks for, or "none".
+    pub credit: &'a str,
+    /// What it is good for.
+    pub note: &'a str,
+    /// Its files.
+    pub files: &'a [crate::catalogue::ModelFile],
+}
+
+fn speech_view<'a>(
+    entry: &'a SpeechEntry,
+    store: Option<&SpeechStore>,
+    hardware: &Hardware,
+) -> SpeechView<'a> {
+    let (installed, problem) =
+        store.map_or((InstallState::Absent, None), |store| store.state(entry));
+    let judgement = speech::speech_tier(entry, hardware);
+    SpeechView {
+        id: &entry.id,
+        kind: entry.kind.as_str(),
+        name: &entry.name,
+        publisher: &entry.publisher,
+        engine: engine_name(entry.engine),
+        languages: &entry.languages,
+        default_for: &entry.default_for,
+        download_bytes: entry.download_bytes(),
+        memory_bytes: entry.memory_bytes,
+        installed,
+        problem,
+        tier: judgement.tier,
+        reasons: judgement.reasons,
+        expected_ms: judgement.expected_ms,
+        wer_it_fleurs: entry.wer_it_fleurs,
+        sample_rate: entry.sample_rate,
+        voice: entry.voice.as_ref(),
+        licence: speech_licence_view(entry),
+        credit: &entry.credit,
+        note: &entry.note,
+        files: &entry.files,
+    }
+}
+
+#[derive(Serialize)]
+struct SpeechModelsReport<'a> {
+    schema_version: u32,
+    kind: &'static str,
+    catalogue: String,
+    language: Option<&'a str>,
+    models: Vec<SpeechView<'a>>,
+}
+
+fn tier_words(tier: SpeechTier) -> &'static str {
+    match tier {
+        SpeechTier::RunsWell => "runs well",
+        SpeechTier::Slow => "slow",
+        SpeechTier::DoesNotFit => "does not fit",
+    }
+}
+
+fn speech_models_command(
+    places: &Places,
+    args: &SpeechListArgs,
+    out: &mut dyn Write,
+) -> Result<(), Failure> {
+    if let Some(language) = &args.language {
+        check_language(language)?;
+    }
+    let catalogue = load_speech(places)?;
+    let hardware = read_hardware(places)?;
+    let store = optional_speech_store(places);
+    let models: Vec<SpeechView<'_>> = catalogue
+        .entries
+        .iter()
+        .filter(|entry| {
+            args.language
+                .as_deref()
+                .is_none_or(|language| entry.offers_language(language))
+        })
+        .map(|entry| speech_view(entry, store.as_ref(), &hardware))
+        .collect();
+    if args.json {
+        return write_json(
+            out,
+            &SpeechModelsReport {
+                schema_version: SCHEMA_VERSION,
+                kind: "speech-models",
+                catalogue: catalogue.directory.to_string_lossy().into_owned(),
+                language: args.language.as_deref(),
+                models,
+            },
+        );
+    }
+    let mut text = String::new();
+    for view in &models {
+        text.push_str(&format!(
+            "{} ({}, {}): {}, {} download, {}.\n  {}\n  Licence: {}{}\n",
+            view.id,
+            view.kind,
+            view.languages.join(" "),
+            tier_words(view.tier),
+            human_bytes(view.download_bytes),
+            view.installed,
+            view.reasons.join(" "),
+            view.licence.id,
+            if view.credit == "none" {
+                String::new()
+            } else {
+                format!(". Credit: {}", view.credit)
+            }
+        ));
+    }
+    write_text(out, &text)
+}
+
+#[derive(Serialize)]
+struct RecommendedRecognition<'a> {
+    id: &'a str,
+    name: &'a str,
+    engine: &'static str,
+    tier: SpeechTier,
+    reasons: Vec<String>,
+    expected_ms: Option<u64>,
+    installed: bool,
+    download_bytes: u64,
+    memory_bytes: u64,
+    /// The offered languages it recognises poorly (Italian only can be
+    /// named: only Italian figures are published).
+    weak_in: Vec<&'static str>,
+    /// A plain sentence when it is weak in a language that may be spoken,
+    /// naming a better model.
+    warning: Option<String>,
+}
+
+/// A recognition model the person may choose instead of the recommended
+/// one.
+#[derive(Serialize)]
+struct AlternativeRecognition<'a> {
+    id: &'a str,
+    name: &'a str,
+    engine: &'static str,
+    installed: bool,
+    download_bytes: u64,
+    memory_bytes: u64,
+    tier: SpeechTier,
+    reasons: Vec<String>,
+    expected_ms: Option<u64>,
+    languages: &'a [String],
+    wer_it_fleurs: Option<f64>,
+    weak_in: Vec<&'static str>,
+    licence: LicenceView,
+    credit: &'a str,
+    note: &'a str,
+}
+
+/// A program the voices need, downloaded on first use.
+#[derive(Serialize)]
+struct RecommendedEngine<'a> {
+    id: &'a str,
+    name: &'a str,
+    installed: bool,
+    download_bytes: u64,
+    licence: LicenceView,
+    credit: &'a str,
+    source_url: Option<&'a str>,
+}
+
+#[derive(Serialize)]
+struct RecommendedPart<'a> {
+    id: &'a str,
+    name: &'a str,
+    installed: bool,
+    download_bytes: u64,
+}
+
+#[derive(Serialize)]
+struct RecommendedVoice<'a> {
+    language: String,
+    id: &'a str,
+    name: &'a str,
+    installed: bool,
+    download_bytes: u64,
+    licence: LicenceView,
+    credit: &'a str,
+}
+
+#[derive(Serialize)]
+struct SpeechRecommendReport<'a> {
+    schema_version: u32,
+    kind: &'static str,
+    language: Option<&'a str>,
+    recognition: Option<RecommendedRecognition<'a>>,
+    vad: Option<RecommendedPart<'a>>,
+    voices: Vec<RecommendedVoice<'a>>,
+    engines: Vec<RecommendedEngine<'a>>,
+    alternatives: Vec<AlternativeRecognition<'a>>,
+    download_bytes_needed: u64,
+    free: bool,
+    message: String,
+}
+
+fn speech_recommend_command(
+    places: &Places,
+    args: &SpeechListArgs,
+    out: &mut dyn Write,
+) -> Result<(), Failure> {
+    if let Some(language) = &args.language {
+        check_language(language)?;
+    }
+    let catalogue = load_speech(places)?;
+    let hardware = read_hardware(places)?;
+    let store = optional_speech_store(places);
+    let installed =
+        |entry: &SpeechEntry| store.as_ref().is_some_and(|store| store.is_installed(entry));
+    let chosen = speech::recommend(&catalogue, &hardware, args.language.as_deref());
+    let warning = chosen.warning(args.language.as_deref());
+    let mut needed: u64 = 0;
+    let alternatives: Vec<AlternativeRecognition<'_>> = chosen
+        .alternatives
+        .iter()
+        .map(|(entry, judgement)| AlternativeRecognition {
+            id: &entry.id,
+            name: &entry.name,
+            engine: engine_name(entry.engine),
+            installed: installed(*entry),
+            download_bytes: entry.download_bytes(),
+            memory_bytes: entry.memory_bytes,
+            tier: judgement.tier,
+            reasons: judgement.reasons.clone(),
+            expected_ms: judgement.expected_ms,
+            languages: &entry.languages,
+            wer_it_fleurs: entry.wer_it_fleurs,
+            weak_in: entry.weak_in(),
+            licence: speech_licence_view(entry),
+            credit: &entry.credit,
+            note: &entry.note,
+        })
+        .collect();
+    let engines: Vec<RecommendedEngine<'_>> = chosen
+        .engine
+        .map(|entry| {
+            let here = installed(entry);
+            if !here {
+                needed += entry.download_bytes();
+            }
+            RecommendedEngine {
+                id: &entry.id,
+                name: &entry.name,
+                installed: here,
+                download_bytes: entry.download_bytes(),
+                licence: speech_licence_view(entry),
+                credit: &entry.credit,
+                source_url: entry.source_url.as_deref(),
+            }
+        })
+        .into_iter()
+        .collect();
+    let recognition = chosen.recognition.map(|(entry, judgement)| {
+        let here = installed(entry);
+        if !here {
+            needed += entry.download_bytes();
+        }
+        RecommendedRecognition {
+            id: &entry.id,
+            name: &entry.name,
+            engine: engine_name(entry.engine),
+            tier: judgement.tier,
+            reasons: judgement.reasons,
+            expected_ms: judgement.expected_ms,
+            installed: here,
+            download_bytes: entry.download_bytes(),
+            memory_bytes: entry.memory_bytes,
+            weak_in: entry.weak_in(),
+            warning: warning.clone(),
+        }
+    });
+    let vad = chosen.vad.map(|entry| {
+        let here = installed(entry);
+        if !here {
+            needed += entry.download_bytes();
+        }
+        RecommendedPart {
+            id: &entry.id,
+            name: &entry.name,
+            installed: here,
+            download_bytes: entry.download_bytes(),
+        }
+    });
+    let mut voices: Vec<RecommendedVoice<'_>> = Vec::new();
+    for (language, entry) in chosen.voices {
+        let here = installed(entry);
+        if !here {
+            needed += entry.download_bytes();
+        }
+        voices.push(RecommendedVoice {
+            language,
+            id: &entry.id,
+            name: &entry.name,
+            installed: here,
+            download_bytes: entry.download_bytes(),
+            licence: speech_licence_view(entry),
+            credit: &entry.credit,
+        });
+    }
+    let message = match &recognition {
+        Some(found) if found.tier == SpeechTier::RunsWell => format!(
+            "{} recognises speech well on this computer. Everything runs here, at no cost.",
+            found.name
+        ),
+        Some(found) => format!(
+            "{} is the best this computer can do, and it will be slow. Everything runs here, \
+             at no cost.",
+            found.name
+        ),
+        None => "No speech recognition model fits this computer's memory.".to_owned(),
+    };
+    if args.json {
+        return write_json(
+            out,
+            &SpeechRecommendReport {
+                schema_version: SCHEMA_VERSION,
+                kind: "speech-recommend",
+                language: args.language.as_deref(),
+                recognition,
+                vad,
+                voices,
+                engines,
+                alternatives,
+                download_bytes_needed: needed,
+                free: true,
+                message,
+            },
+        );
+    }
+    let mut text = format!("{message}\n");
+    if let Some(found) = &recognition {
+        text.push_str(&format!(
+            "Recognition: {} ({}).\n",
+            found.id,
+            tier_words(found.tier)
+        ));
+        if let Some(warning) = &found.warning {
+            text.push_str(&format!("{warning}\n"));
+        }
+    }
+    for engine in &engines {
+        text.push_str(&format!("Voice engine: {}.\n", engine.id));
+    }
+    for other in &alternatives {
+        text.push_str(&format!(
+            "Also possible: {} ({}, {}).\n",
+            other.id,
+            tier_words(other.tier),
+            human_bytes(other.download_bytes)
+        ));
+    }
+    if let Some(found) = &vad {
+        text.push_str(&format!("Voice detector: {}.\n", found.id));
+    }
+    for voice in &voices {
+        text.push_str(&format!("Voice for {}: {}.\n", voice.language, voice.id));
+    }
+    text.push_str(&format!("To download: {}.\n", human_bytes(needed)));
+    write_text(out, &text)
+}
+
+fn speech_ensure_command(
+    places: &Places,
+    args: &SpeechEnsureArgs,
+    out: &mut dyn Write,
+) -> Result<(), Failure> {
+    let json = args.json;
+    let mut write_error: Option<Failure> = None;
+    let mut emit = |event: SpeechEnsureEvent| {
+        let result = if json {
+            write_line_json(out, &event)
+        } else {
+            write_text(out, &format!("{}\n", event.message))
+        };
+        if let Err(failure) = result {
+            write_error = Some(failure);
+        }
+    };
+    let outcome = match speech_ensure_steps(places, args, &mut emit) {
+        Ok(()) => Ok(()),
+        Err((id, failure)) => {
+            if let Failure::Coded { code, detail } = &failure {
+                let event = if *code == AiLocalCode::Cancelled {
+                    SpeechEnsureEvent::new("cancelled", &id, code.entry().user_message)
+                } else {
+                    SpeechEnsureEvent::new(
+                        "failed",
+                        &id,
+                        format!("{} {detail}", code.entry().user_message),
+                    )
+                };
+                emit(event.with_code(*code));
+            }
+            Err(failure)
+        }
+    };
+    drop(emit);
+    if let Some(failure) = write_error {
+        return Err(failure);
+    }
+    outcome
+}
+
+fn speech_ensure_steps(
+    places: &Places,
+    args: &SpeechEnsureArgs,
+    emit: &mut dyn FnMut(SpeechEnsureEvent),
+) -> Result<(), (String, Failure)> {
+    let first = args.ids.first().cloned().unwrap_or_default();
+    let catalogue = load_speech(places).map_err(|failure| (first.clone(), failure))?;
+    let hardware = read_hardware(places).map_err(|failure| (first.clone(), failure))?;
+    // Every id is checked before anything is downloaded.
+    let mut entries = Vec::new();
+    for id in &args.ids {
+        let entry = find_speech(&catalogue, id).map_err(|failure| (id.clone(), failure))?;
+        if entry.licence.restricts_use() && !args.accept_licence {
+            return Err((
+                id.clone(),
+                Failure::coded(
+                    AiLocalCode::LicenceNotAccepted,
+                    format!(
+                        "{} ({}): {}",
+                        entry.licence.id, entry.licence.url, entry.licence.restrictions
+                    ),
+                ),
+            ));
+        }
+        let judgement = speech::speech_tier(entry, &hardware);
+        if judgement.tier == SpeechTier::DoesNotFit {
+            return Err((
+                id.clone(),
+                Failure::coded(AiLocalCode::TooLarge, judgement.reasons.join(" ")),
+            ));
+        }
+        entries.push(entry);
+    }
+    let runtime = serve::runtime_dir(places.runtime_dir.as_deref());
+    if let Some(runtime) = &runtime {
+        store::create_private_dir(runtime)
+            .map_err(|error| (first.clone(), storage_failure(runtime, &error)))?;
+        // A stop asked of an earlier speech ensure is not this one's.
+        let _ = std::fs::remove_file(runtime.join(speech::SPEECH_CANCEL_FILE));
+    }
+    let cancel_file = runtime
+        .as_ref()
+        .map(|runtime| runtime.join(speech::SPEECH_CANCEL_FILE));
+    let cancelled = || cancel_file.as_ref().is_some_and(|file| file.exists());
+    let store = speech_store(places).map_err(|failure| (first.clone(), failure))?;
+    let agent = download::agent_for(download::Scheme::HttpsOnly);
+    let options = ensure::FetchOptions {
+        agent: &agent,
+        scheme: download::Scheme::HttpsOnly,
+        free_space: &ensure::free_space,
+        cancelled: &cancelled,
+    };
+    let python = places
+        .python
+        .clone()
+        .unwrap_or_else(|| PathBuf::from(speech::DEFAULT_PYTHON));
+    for entry in entries {
+        speech::fetch_speech(&store, entry, &options, &python, &mut *emit)
+            .map_err(|error| (entry.id.clone(), Failure::coded(error.code, error.detail)))?;
+    }
+    Ok(())
+}
+
+#[derive(Serialize)]
+struct SpeechCancelReport {
+    schema_version: u32,
+    kind: &'static str,
+    code: AiLocalCode,
+    message: String,
+}
+
+fn speech_cancel_command(
+    places: &Places,
+    args: &JsonArgs,
+    out: &mut dyn Write,
+) -> Result<(), Failure> {
+    let runtime = serve::runtime_dir(places.runtime_dir.as_deref()).ok_or_else(|| {
+        Failure::coded(
+            AiLocalCode::RuntimeDirMissing,
+            "XDG_RUNTIME_DIR is not set and no --runtime-dir was given",
+        )
+    })?;
+    store::create_private_dir(&runtime).map_err(|error| storage_failure(&runtime, &error))?;
+    let file = runtime.join(speech::SPEECH_CANCEL_FILE);
+    std::fs::write(&file, b"cancel\n").map_err(|error| storage_failure(&file, &error))?;
+    let message =
+        "A running speech download was asked to stop. What it downloaded is kept.".to_owned();
+    if args.json {
+        return write_json(
+            out,
+            &SpeechCancelReport {
+                schema_version: SCHEMA_VERSION,
+                kind: "speech-cancel",
+                code: AiLocalCode::Cancelled,
+                message,
+            },
+        );
+    }
+    write_text(out, &format!("{}\n{message}\n", AiLocalCode::Cancelled))
+}
+
+#[derive(Serialize)]
+struct SpeechRemoveReport {
+    schema_version: u32,
+    kind: &'static str,
+    model: String,
+    code: AiLocalCode,
+    message: String,
+    freed_bytes: u64,
+}
+
+fn speech_remove_command(
+    places: &Places,
+    args: &ModelArgs,
+    out: &mut dyn Write,
+) -> Result<(), Failure> {
+    if !crate::catalogue::is_model_id(&args.model) {
+        return Err(Failure::Usage(format!("{:?} is not an id", args.model)));
+    }
+    let store = speech_store(places)?;
+    let freed = store
+        .remove(&args.model)
+        .map_err(|error| storage_failure(&store.root.join(&args.model), &error))?;
+    let Some(freed) = freed else {
+        return Err(Failure::coded(
+            AiLocalCode::NotDownloaded,
+            format!("{} has no folder in {}", args.model, store.root.display()),
+        ));
+    };
+    let message = AiLocalCode::Removed.entry().user_message.to_owned();
+    if args.json {
+        return write_json(
+            out,
+            &SpeechRemoveReport {
+                schema_version: SCHEMA_VERSION,
+                kind: "speech-remove",
+                model: args.model.clone(),
+                code: AiLocalCode::Removed,
+                message,
+                freed_bytes: freed,
+            },
+        );
+    }
+    write_text(
+        out,
+        &format!(
+            "{}\n{} {} freed.\n",
+            AiLocalCode::Removed,
+            message,
+            human_bytes(freed)
+        ),
+    )
+}
+
+fn installed_entry<'a>(
+    catalogue: &'a SpeechCatalogue,
+    store: &SpeechStore,
+    id: &str,
+    kind: SpeechKind,
+) -> Result<&'a SpeechEntry, Failure> {
+    let entry = find_speech(catalogue, id)?;
+    if entry.kind != kind {
+        return Err(Failure::coded(
+            AiLocalCode::UnknownModel,
+            format!("{id} is not a {} entry", kind.as_str()),
+        ));
+    }
+    if !store.is_installed(entry) {
+        return Err(Failure::coded(
+            AiLocalCode::NotDownloaded,
+            format!(
+                "{id} is not downloaded or no longer matches the catalogue; run tur-ai-local \
+                 speech ensure {id}"
+            ),
+        ));
+    }
+    Ok(entry)
+}
+
+#[derive(Serialize)]
+struct SttReport<'a> {
+    schema_version: u32,
+    kind: &'static str,
+    model: &'a str,
+    language: &'a str,
+    text: String,
+    audio_seconds: f64,
+    seconds: f64,
+    vad: bool,
+}
+
+fn speech_stt_command(places: &Places, args: &SttArgs, out: &mut dyn Write) -> Result<(), Failure> {
+    check_language(&args.language)?;
+    let catalogue = load_speech(places)?;
+    let store = speech_store(places)?;
+    let entry = installed_entry(&catalogue, &store, &args.model, SpeechKind::Recognition)?;
+    if !entry.offers_language(&args.language) {
+        return Err(Failure::coded(
+            AiLocalCode::LanguageNotOffered,
+            format!("{} does not list {}", entry.id, args.language),
+        ));
+    }
+    let model_path = store
+        .file_path(entry, &entry.files[0].name)
+        .ok_or_else(|| Failure::coded(AiLocalCode::UnknownModel, "not an id"))?;
+    let parakeet = entry.engine == SpeechEngine::Parakeet;
+    // parakeet-cli takes no voice detector: --vad is ignored for it.
+    let vad_path = if args.vad && !parakeet {
+        catalogue
+            .of_kind(SpeechKind::VoiceActivity)
+            .find(|detector| store.is_installed(detector))
+            .and_then(|detector| store.file_path(detector, &detector.files[0].name))
+    } else {
+        None
+    };
+    let program = if parakeet {
+        places
+            .parakeet_cli
+            .clone()
+            .unwrap_or_else(|| PathBuf::from(speech::DEFAULT_PARAKEET_CLI))
+    } else {
+        places
+            .whisper_cli
+            .clone()
+            .unwrap_or_else(|| PathBuf::from(speech::DEFAULT_WHISPER_CLI))
+    };
+    let info = speech::wav_info(&args.file)
+        .map_err(|detail| Failure::coded(AiLocalCode::AudioNotUsable, detail))?;
+    let started = std::time::Instant::now();
+    let text = speech::recognise(&speech::Recognition {
+        engine: entry.engine,
+        program: &program,
+        model: &model_path,
+        vad_model: vad_path.as_deref(),
+        audio: &args.file,
+        language: &args.language,
+        threads: args.threads.unwrap_or_else(speech::default_threads),
+    })
+    .map_err(|(code, detail)| Failure::coded(code, detail))?;
+    let seconds = started.elapsed().as_secs_f64();
+    if args.json {
+        return write_json(
+            out,
+            &SttReport {
+                schema_version: SCHEMA_VERSION,
+                kind: "stt",
+                model: &entry.id,
+                language: &args.language,
+                text,
+                audio_seconds: info.seconds(),
+                seconds,
+                vad: vad_path.is_some(),
+            },
+        );
+    }
+    write_text(out, &format!("{text}\n"))
+}
+
+#[derive(Serialize)]
+struct TtsReport<'a> {
+    schema_version: u32,
+    kind: &'static str,
+    voice: &'a str,
+    output: String,
+    sample_rate: u32,
+    audio_seconds: f64,
+    seconds: f64,
+    credit: &'a str,
+}
+
+fn speech_tts_command(places: &Places, args: &TtsArgs, out: &mut dyn Write) -> Result<(), Failure> {
+    use std::io::Read as _;
+
+    let catalogue = load_speech(places)?;
+    let store = speech_store(places)?;
+    let entry = installed_entry(&catalogue, &store, &args.voice, SpeechKind::Synthesis)?;
+    let voice_file = entry
+        .file_ending(".onnx")
+        .and_then(|file| store.file_path(entry, &file.name));
+    let config_file = entry
+        .file_ending(".onnx.json")
+        .and_then(|file| store.file_path(entry, &file.name));
+    let (Some(voice_file), Some(config_file)) = (voice_file, config_file) else {
+        return Err(Failure::coded(
+            AiLocalCode::CatalogueInvalid,
+            format!("{} does not name its .onnx and .onnx.json files", entry.id),
+        ));
+    };
+    if let Some(parent) = args.output.parent()
+        && !parent.as_os_str().is_empty()
+        && !parent.is_dir()
+    {
+        return Err(Failure::coded(
+            AiLocalCode::StorageFailed,
+            format!("{} is not a folder", parent.display()),
+        ));
+    }
+    let mut bytes = Vec::new();
+    std::io::stdin()
+        .take(speech::MAX_SPEAK_BYTES as u64 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|error| Failure::coded(AiLocalCode::TextNotUsable, error.to_string()))?;
+    let text = String::from_utf8(bytes)
+        .map_err(|_| Failure::coded(AiLocalCode::TextNotUsable, "the text is not valid UTF-8"))?;
+    // Piper is not in the image: it is the engine of the speech store,
+    // downloaded with the voices.
+    let program = match &places.piper {
+        Some(program) => program.clone(),
+        None => catalogue
+            .voice_engine()
+            .and_then(|engine| store.launcher(engine))
+            .ok_or_else(|| {
+                Failure::coded(
+                    AiLocalCode::SpeechEngineMissing,
+                    "Piper is not on this computer yet; run tur-ai-local speech ensure \
+                     piper-tts-1-8-0",
+                )
+            })?,
+    };
+    let started = std::time::Instant::now();
+    let info = speech::synthesise(
+        &speech::Synthesis {
+            program: &program,
+            voice: &voice_file,
+            config: &config_file,
+            output: &args.output,
+        },
+        &text,
+    )
+    .map_err(|(code, detail)| Failure::coded(code, detail))?;
+    let seconds = started.elapsed().as_secs_f64();
+    if args.json {
+        return write_json(
+            out,
+            &TtsReport {
+                schema_version: SCHEMA_VERSION,
+                kind: "tts",
+                voice: &entry.id,
+                output: args.output.to_string_lossy().into_owned(),
+                sample_rate: info.sample_rate,
+                audio_seconds: info.seconds(),
+                seconds,
+                credit: &entry.credit,
+            },
+        );
+    }
+    write_text(
+        out,
+        &format!(
+            "{} ({:.1} s of speech).\n",
+            args.output.display(),
+            info.seconds()
+        ),
+    )
 }

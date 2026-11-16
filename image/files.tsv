@@ -18,3 +18,5 @@ services/tur-pax/units/tur-pax-catchup.service	/usr/lib/systemd/user
 services/tur-pax/units/tur-pax-catchup.timer	/usr/lib/systemd/user
 services/tur-pax/interfaces/org.tur.Agent1.xml	/usr/share/dbus-1/interfaces
 services/tur-ai-local/catalogue/*.toml	/usr/share/tur/ai-local/models
+services/tur-ai-local/speech/*.toml	/usr/share/tur/ai-local/speech
+services/tur-pax/data/live.json	/usr/share/tur/pax

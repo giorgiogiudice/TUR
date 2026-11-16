@@ -57,6 +57,19 @@ under MIT, Apache-2.0, MIT-0 or public domain, and the Unlicense; the texts and
 notices are in `/usr/share/licenses/llama.cpp/` in the image, and the SBOM
 lists it with its source archive and that archive's SHA-256.
 
+One more program of P@x's voice is not a Fedora package
+([pax-voice.md](docs/architecture/pax-voice.md), section 9):
+**whisper.cpp's `whisper-cli` and `parakeet-cli`**, built from its source at
+a pinned version like llama.cpp (MIT; `/usr/share/licenses/whisper.cpp/`).
+**Piper** (piper1-gpl, **GPL-3.0-or-later**, containing espeak-ng,
+GPL-3.0-or-later) is **not in the image**: `tur-ai-local` downloads its
+release wheel from PyPI when the person first asks for a voice, checks it
+against the SHA-256 in the speech catalogue (`piper-tts-1-8-0`), and runs it
+as a separate program, linking nothing of it. The catalogue entry and
+`image/engine/piper.lock` name the address and SHA-256 of its source
+archive. No speech model and no voice is in the image either: each is
+downloaded from its publisher when the person asks, with its licence shown.
+
 ### Fedora's marks
 
 The image does not contain Fedora's logo package `fedora-logos` or its

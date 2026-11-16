@@ -1,0 +1,89 @@
+{
+  "hand_written": "Written by hand from docs/architecture/pax-voice.md, section 6 (the service's voice needs a microphone, so it cannot be recorded in CI); not recorded, not compared by desktop/tests/pax-ui/e2e.py.",
+  "licence": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+  "signals": [
+    {
+      "args": [
+        "listening",
+        {
+          "indicator": "caller",
+          "microphone_open": true,
+          "state": "listening",
+          "trigger": "push-to-talk",
+          "turn": "v-1794571291-1"
+        }
+      ],
+      "member": "VoiceStateChanged"
+    },
+    {
+      "args": [
+        "v-1794571291-1",
+        0.2
+      ],
+      "member": "VoiceLevel"
+    },
+    {
+      "args": [
+        "v-1794571291-1",
+        0.55
+      ],
+      "member": "VoiceLevel"
+    },
+    {
+      "args": [
+        "v-1794571291-1",
+        0.4
+      ],
+      "member": "VoiceLevel"
+    },
+    {
+      "after_stop": true,
+      "args": [
+        "recognising",
+        {
+          "indicator": "caller",
+          "microphone_open": false,
+          "state": "recognising",
+          "trigger": "push-to-talk",
+          "turn": "v-1794571291-1"
+        }
+      ],
+      "member": "VoiceStateChanged"
+    },
+    {
+      "args": [
+        "v-1794571291-1",
+        {
+          "audio_seconds": 2.1,
+          "check": "wait",
+          "empty": false,
+          "final": true,
+          "language": "en",
+          "model": "whisper-base-q5_1",
+          "other_sound": true,
+          "reason": "other_sound",
+          "seconds": 0.8,
+          "task": null,
+          "text": "Set the value for the night."
+        }
+      ],
+      "member": "VoiceTranscript"
+    },
+    {
+      "args": [
+        "waiting",
+        {
+          "indicator": "caller",
+          "microphone_open": false,
+          "reason": "other_sound",
+          "state": "waiting",
+          "trigger": "push-to-talk",
+          "turn": "v-1794571291-1"
+        }
+      ],
+      "member": "VoiceStateChanged"
+    }
+  ],
+  "then_task": "two-tools",
+  "turn": "v-1794571291-1"
+}

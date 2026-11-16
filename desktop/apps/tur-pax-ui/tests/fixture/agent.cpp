@@ -18,6 +18,17 @@
 //    of local AI the same way, holding before "cancelled" until
 //    CancelLocalModel.
 //
+// Voice (docs/architecture/pax-voice.md, section 6) is the one part it does
+// not answer from a recording: the real service's voice needs a microphone,
+// so its documents are written by hand from the design, in fixtures/voice/
+// beside the recording (see fixtures/README.md), and the recorder neither
+// writes nor compares them. GetVoiceStatus answers with one of
+// fixtures/voice/status/; StartListening plays fixtures/voice/turns/<turn>
+// and holds where the person would stop speaking until StopListening;
+// SendTranscript plays the task the turn names; StartLiveSession plays
+// fixtures/voice/live.json and holds before its end until EndLiveSession;
+// PrepareVoice plays fixtures/voice/prepare.json.
+//
 // The tests steer it over org.tur.Agent1Fixture at /org/tur/Agent1Fixture:
 // Use(scenario), Calls(), KeyMatches(key), Release(). A key given to SetKey
 // is kept in memory to answer KeyMatches and never printed; Calls() reports
@@ -108,11 +119,14 @@ class Agent : public QObject, protected QDBusContext
     Q_PROPERTY(QString State READ state)
     Q_PROPERTY(bool Enabled READ enabled)
     Q_PROPERTY(uint InterfaceVersion READ interfaceVersion)
+    Q_PROPERTY(QString Voice READ voice)
+    Q_PROPERTY(bool MicrophoneOpen READ microphoneOpen)
 
 public:
     explicit Agent(const QString &fixture, QObject *parent = nullptr)
         : QObject(parent)
         , m_fixture(fixture)
+        , m_voiceDir(QDir(fixture).absoluteFilePath(QStringLiteral("../voice")))
     {
         m_replies = readObject(fixture + QStringLiteral("/replies.json")).value(QStringLiteral("replies")).toObject();
         m_timer.setSingleShot(true);
@@ -123,6 +137,8 @@ public:
     QString state() const { return status().value(QStringLiteral("state")).toString(); }
     bool enabled() const { return status().value(QStringLiteral("enabled")).toBool(); }
     uint interfaceVersion() const { return 1; }
+    QString voice() const { return voiceStatus().value(QStringLiteral("state")).toString(); }
+    bool microphoneOpen() const { return voiceStatus().value(QStringLiteral("microphone_open")).toBool(); }
 
     // The control side (org.tur.Agent1Fixture).
     void use(const QJsonObject &scenario)
@@ -138,6 +154,14 @@ public:
         m_key.clear();
         m_scenario = scenario;
         m_statusName = scenario.value(QStringLiteral("status")).toString(QStringLiteral("off"));
+        m_voiceName = scenario.value(QStringLiteral("voice")).toString(QStringLiteral("off"));
+        m_voiceState.clear();
+        m_microphone = false;
+        m_turn.clear();
+        m_waitingTurn.clear();
+        m_turnFile = QJsonObject();
+        m_session.clear();
+        m_preparing = false;
     }
 
     QJsonArray calls() const { return m_calls; }
@@ -190,6 +214,16 @@ public Q_SLOTS:
     void CancelTask(const QString &task)
     {
         note(QStringLiteral("CancelTask"), { task });
+        // The stop key also closes the microphone and ends a live session
+        // (pax-voice.md, 6.1).
+        if (m_running.isEmpty() && !m_session.isEmpty()) {
+            release();
+            return;
+        }
+        if (m_running.isEmpty() && !m_turn.isEmpty()) {
+            dropTurn(QStringLiteral("stop"));
+            return;
+        }
         if (m_running.isEmpty()) {
             refuse(QStringLiteral("TUR-AI-SERVICE-007"), QStringLiteral("no task with that identifier is running"));
             return;
@@ -343,6 +377,204 @@ public Q_SLOTS:
         return !recorded.isEmpty() && recorded.value(QStringLiteral("reply")).toArray().at(0).toBool();
     }
 
+    // --- voice, from the hand-written documents of fixtures/voice -------------
+
+    QString GetVoiceStatus()
+    {
+        return QString::fromUtf8(QJsonDocument(voiceStatus()).toJson(QJsonDocument::Compact));
+    }
+
+    void SetVoiceSettings(const QString &settings)
+    {
+        note(QStringLiteral("SetVoiceSettings"), { settings });
+        const QJsonObject given = QJsonDocument::fromJson(settings.toUtf8()).object();
+        if (given.isEmpty() && settings.trimmed() != QLatin1String("{}")) {
+            refuse(QStringLiteral("TUR-AI-SERVICE-006"), QStringLiteral("the settings are not one JSON object"));
+            return;
+        }
+        if (given.value(QStringLiteral("wake_word")).toBool()) {
+            refuse(QStringLiteral("TUR-AI-VOICE-005"), QStringLiteral("a wake word is not available in this version"));
+            return;
+        }
+        if (given.contains(QStringLiteral("enabled"))) {
+            const bool on = given.value(QStringLiteral("enabled")).toBool();
+            m_voiceName = on ? m_scenario.value(QStringLiteral("after_voice_enable")).toString(QStringLiteral("ready"))
+                             : QStringLiteral("off");
+            m_voiceState.clear();
+            const QString state = voice();
+            Q_EMIT VoiceStateChanged(state, compact(QJsonObject { { QStringLiteral("state"), state },
+                                                                  { QStringLiteral("microphone_open"), false } }));
+        }
+    }
+
+    QString PrepareVoice(const QString &options)
+    {
+        note(QStringLiteral("PrepareVoice"), { options });
+        if (m_preparing) {
+            refuse(QStringLiteral("TUR-AI-SERVICE-004"), QStringLiteral("voice is being made ready"));
+            return QString();
+        }
+        const QJsonObject asked = QJsonDocument::fromJson(options.toUtf8()).object();
+        const QJsonObject current = voiceStatus();
+        qint64 needed = qint64(current.value(QStringLiteral("download_bytes_needed")).toDouble());
+        // With the models named (a recognition model the person chose in
+        // place of the recommended one), the size is theirs: what of them is
+        // not on this computer, as the status lists each.
+        if (asked.contains(QStringLiteral("models")))
+            needed = bytesOf(current, asked.value(QStringLiteral("models")).toArray());
+        if (needed > 0 && qint64(asked.value(QStringLiteral("download_bytes")).toDouble()) != needed) {
+            refuse(QStringLiteral("TUR-AI-SERVICE-006"),
+                   QStringLiteral("the download size named is not the size of what would be downloaded (%1 bytes)").arg(needed));
+            return QString();
+        }
+        const QJsonArray steps = readObject(m_voiceDir + QStringLiteral("/prepare.json")).value(QStringLiteral("signals")).toArray();
+        int cancelled = -1;
+        for (qsizetype i = 0; i < steps.size(); ++i) {
+            const QJsonObject event = steps.at(i).toObject().value(QStringLiteral("args")).toArray().at(1).toObject();
+            if (event.value(QStringLiteral("event")).toString() == QLatin1String("cancelled"))
+                cancelled = int(i);
+        }
+        m_preparing = true;
+        const int held = m_scenario.contains(QStringLiteral("voice_prepare_hold_after"))
+                             ? m_scenario.value(QStringLiteral("voice_prepare_hold_after")).toInt() + 1
+                             : cancelled;
+        play(steps, held);
+        return QStringLiteral("v-prepare-1");
+    }
+
+    void CancelVoicePreparation()
+    {
+        note(QStringLiteral("CancelVoicePreparation"), {});
+        if (!m_preparing) {
+            refuse(QStringLiteral("TUR-AI-SERVICE-007"), QStringLiteral("nothing is being made ready"));
+            return;
+        }
+        // What was played up to the hold stays; the end is "cancelled".
+        const QJsonObject event { { QStringLiteral("event"), QStringLiteral("cancelled") },
+                                  { QStringLiteral("code"), QStringLiteral("TUR-AI-LOCAL-029") },
+                                  { QStringLiteral("message"), QStringLiteral("Stopped, as you asked.") } };
+        m_timer.stop();
+        m_sequence = QJsonArray();
+        m_holdAt = -1;
+        m_preparing = false;
+        Q_EMIT VoiceProgress(QString(), compact(event));
+    }
+
+    QString StartListening(const QString &options)
+    {
+        note(QStringLiteral("StartListening"), { options });
+        const QJsonObject current = voiceStatus();
+        const QJsonValue problem = current.value(QStringLiteral("problem"));
+        if (problem.isObject()) {
+            refuse(problem[QStringLiteral("error_code")].toString(), problem[QStringLiteral("message")].toString());
+            return QString();
+        }
+        if (!m_turn.isEmpty() || !m_session.isEmpty()) {
+            refuse(QStringLiteral("TUR-AI-SERVICE-004"), QStringLiteral("the microphone is already open"));
+            return QString();
+        }
+        const QString name = m_scenario.value(QStringLiteral("voice_turn")).toString(QStringLiteral("show"));
+        m_turnFile = readObject(m_voiceDir + QStringLiteral("/turns/") + name + QStringLiteral(".json"));
+        const QJsonArray steps = m_turnFile.value(QStringLiteral("signals")).toArray();
+        int stop = -1;
+        for (qsizetype i = 0; i < steps.size(); ++i) {
+            if (steps.at(i).toObject().value(QStringLiteral("after_stop")).toBool()) {
+                stop = int(i);
+                break;
+            }
+        }
+        m_turn = m_turnFile.value(QStringLiteral("turn")).toString();
+        m_waitingTurn.clear();
+        play(steps, stop);
+        return m_turn;
+    }
+
+    void StopListening(const QString &turn, bool send)
+    {
+        note(QStringLiteral("StopListening"), { turn, send });
+        if (m_turn.isEmpty() || turn != m_turn) {
+            refuse(QStringLiteral("TUR-AI-SERVICE-007"), QStringLiteral("no turn with that identifier is listening"));
+            return;
+        }
+        if (!send) {
+            dropTurn(QStringLiteral("discarded"));
+            return;
+        }
+        release();
+    }
+
+    QString SendTranscript(const QString &turn, const QString &text)
+    {
+        note(QStringLiteral("SendTranscript"), { turn, text });
+        if (m_waitingTurn.isEmpty() || turn != m_waitingTurn) {
+            refuse(QStringLiteral("TUR-AI-SERVICE-007"), QStringLiteral("no transcript with that identifier is waiting"));
+            return QString();
+        }
+        if (!m_running.isEmpty()) {
+            refuse(QStringLiteral("TUR-AI-SERVICE-004"), QStringLiteral("a task is running"));
+            return QString();
+        }
+        const QString named = m_turnFile.value(QStringLiteral("then_task")).toString();
+        const QJsonArray recorded = readObject(m_fixture + QStringLiteral("/tasks/") + named + QStringLiteral(".json"))
+                                        .value(QStringLiteral("signals"))
+                                        .toArray();
+        if (recorded.isEmpty()) {
+            refuseUnrecorded(QStringLiteral("SendTranscript ") + text);
+            return QString();
+        }
+        m_waitingTurn.clear();
+        QString id;
+        for (const QJsonValue &signal : recorded) {
+            const QJsonObject object = signal.toObject();
+            if (object.value(QStringLiteral("member")).toString() == QLatin1String("TaskStarted")) {
+                id = object.value(QStringLiteral("args")).toArray().at(0).toString();
+                break;
+            }
+        }
+        play(recorded, -1);
+        return id;
+    }
+
+    void Speak(const QString &text) { note(QStringLiteral("Speak"), { text }); }
+    void StopSpeaking() { note(QStringLiteral("StopSpeaking"), {}); }
+
+    QString StartLiveSession(const QString &options)
+    {
+        note(QStringLiteral("StartLiveSession"), { options });
+        const QJsonObject current = voiceStatus();
+        const QJsonValue problem = current.value(QStringLiteral("problem"));
+        if (problem.isObject()) {
+            refuse(problem[QStringLiteral("error_code")].toString(), problem[QStringLiteral("message")].toString());
+            return QString();
+        }
+        if (!m_session.isEmpty() || !m_turn.isEmpty()) {
+            refuse(QStringLiteral("TUR-AI-SERVICE-004"), QStringLiteral("the microphone is already open"));
+            return QString();
+        }
+        const QJsonObject live = readObject(m_voiceDir + QStringLiteral("/live.json"));
+        const QJsonArray steps = live.value(QStringLiteral("signals")).toArray();
+        int end = -1;
+        for (qsizetype i = 0; i < steps.size(); ++i) {
+            if (steps.at(i).toObject().value(QStringLiteral("after_end")).toBool()) {
+                end = int(i);
+                break;
+            }
+        }
+        m_session = live.value(QStringLiteral("session")).toString();
+        play(steps, end);
+        return m_session;
+    }
+
+    void EndLiveSession()
+    {
+        note(QStringLiteral("EndLiveSession"), {});
+        if (m_session.isEmpty()) {
+            refuse(QStringLiteral("TUR-AI-SERVICE-007"), QStringLiteral("no live session is running"));
+            return;
+        }
+        release();
+    }
+
 Q_SIGNALS:
     void TaskStarted(const QString &task, const QString &details);
     void TextAdded(const QString &task, const QString &kind, const QString &text);
@@ -354,8 +586,81 @@ Q_SIGNALS:
     void MemoryChanged();
     void StateChanged(const QString &state);
     void LocalModelProgress(const QString &model, const QString &event);
+    void VoiceStateChanged(const QString &state, const QString &details);
+    void VoiceLevel(const QString &turn, double level);
+    void VoiceTranscript(const QString &turn, const QString &details);
+    void VoiceProgress(const QString &model, const QString &event);
+    void LiveEvent(const QString &session, const QString &event);
 
 private:
+    static QString compact(const QJsonObject &object)
+    {
+        return QString::fromUtf8(QJsonDocument(object).toJson(QJsonDocument::Compact));
+    }
+
+    // What the named speech models download, from the status: every model,
+    // detector, engine and voice it lists, by its id.
+    static qint64 bytesOf(const QJsonObject &status, const QJsonArray &ids)
+    {
+        QJsonArray listed;
+        listed.append(status.value(QStringLiteral("recognition")));
+        listed.append(status.value(QStringLiteral("voice_activity")));
+        for (const QString &key : { QStringLiteral("alternatives"), QStringLiteral("engines") }) {
+            for (const QJsonValue &item : status.value(key).toArray())
+                listed.append(item);
+        }
+        for (const QJsonValue &item : status.value(QStringLiteral("synthesis")).toObject().value(QStringLiteral("voices")).toArray())
+            listed.append(item);
+        qint64 total = 0;
+        for (const QJsonValue &wanted : ids) {
+            for (const QJsonValue &item : listed) {
+                const QJsonObject model = item.toObject();
+                const QString id = model.value(QStringLiteral("id")).toString(
+                    model.value(QStringLiteral("model")).toString(model.value(QStringLiteral("voice")).toString()));
+                if (id.isEmpty() || id != wanted.toString())
+                    continue;
+                const QJsonValue installed = model.value(QStringLiteral("installed"));
+                if (installed.toBool() || installed.toString() == QLatin1String("installed"))
+                    break;
+                total += qint64(model.value(QStringLiteral("download_bytes")).toDouble());
+                break;
+            }
+        }
+        return total;
+    }
+
+    // The voice status of the scenario, with what is playing now.
+    QJsonObject voiceStatus() const
+    {
+        QJsonObject document = readObject(m_voiceDir + QStringLiteral("/status/") + m_voiceName + QStringLiteral(".json"))
+                                   .value(QStringLiteral("status"))
+                                   .toObject();
+        if (!m_voiceState.isEmpty()) {
+            document.insert(QStringLiteral("state"), m_voiceState);
+            document.insert(QStringLiteral("microphone_open"), m_microphone);
+        }
+        document.insert(QStringLiteral("turn"), m_turn.isEmpty() ? QJsonValue(QJsonValue::Null) : QJsonValue(m_turn));
+        document.insert(QStringLiteral("session"),
+                        m_session.isEmpty() ? QJsonValue(QJsonValue::Null) : QJsonValue(m_session));
+        return document;
+    }
+
+    // The microphone closes and what was heard is dropped.
+    void dropTurn(const QString &reason)
+    {
+        m_timer.stop();
+        m_sequence = QJsonArray();
+        m_holdAt = -1;
+        const QString turn = m_turn;
+        m_turn.clear();
+        m_voiceState = QStringLiteral("ready");
+        m_microphone = false;
+        Q_EMIT VoiceStateChanged(m_voiceState, compact(QJsonObject { { QStringLiteral("state"), m_voiceState },
+                                                                     { QStringLiteral("microphone_open"), false },
+                                                                     { QStringLiteral("turn"), turn },
+                                                                     { QStringLiteral("reason"), reason } }));
+    }
+
     QJsonObject status() const
     {
         QJsonObject document = readObject(m_fixture + QStringLiteral("/status/") + m_statusName + QStringLiteral(".json"))
@@ -462,6 +767,46 @@ private:
                 m_localRunning = false;
             }
             Q_EMIT LocalModelProgress(text(0), text(1));
+        } else if (member == QLatin1String("VoiceStateChanged")) {
+            const QJsonObject details = arguments.at(1).toObject();
+            m_voiceState = text(0);
+            m_microphone = details.value(QStringLiteral("microphone_open")).toBool();
+            if (m_voiceState == QLatin1String("waiting")) {
+                m_waitingTurn = m_turn;
+                m_turn.clear();
+            } else if (m_voiceState == QLatin1String("ready") || m_voiceState == QLatin1String("off")) {
+                if (details.contains(QStringLiteral("session")))
+                    m_session.clear();
+                m_turn.clear();
+            }
+            Q_EMIT VoiceStateChanged(text(0), text(1));
+        } else if (member == QLatin1String("VoiceLevel")) {
+            Q_EMIT VoiceLevel(text(0), arguments.at(1).toDouble());
+        } else if (member == QLatin1String("VoiceTranscript")) {
+            Q_EMIT VoiceTranscript(text(0), text(1));
+        } else if (member == QLatin1String("VoiceProgress")) {
+            const QString event = arguments.at(1).toObject().value(QStringLiteral("event")).toString();
+            if (event == QLatin1String("ready")) {
+                m_preparing = false;
+                m_voiceName = m_scenario.value(QStringLiteral("after_voice_prepare")).toString(m_voiceName);
+            } else if (event == QLatin1String("failed") || event == QLatin1String("cancelled")) {
+                m_preparing = false;
+            }
+            Q_EMIT VoiceProgress(text(0), text(1));
+        } else if (member == QLatin1String("LiveEvent")) {
+            if (arguments.at(1).toObject().value(QStringLiteral("kind")).toString() == QLatin1String("ended"))
+                m_session.clear();
+            Q_EMIT LiveEvent(text(0), text(1));
+        } else if (member == QLatin1String("PlayTask")) {
+            // A spoken request becomes the recorded task of that name: its
+            // signals are played next, in place.
+            const QJsonArray recorded = readObject(m_fixture + QStringLiteral("/tasks/") + text(0) + QStringLiteral(".json"))
+                                            .value(QStringLiteral("signals"))
+                                            .toArray();
+            for (qsizetype i = 0; i < recorded.size(); ++i)
+                m_sequence.insert(m_position + i, recorded.at(i));
+            if (m_holdAt >= m_position)
+                m_holdAt += int(recorded.size());
         }
     }
 
@@ -534,6 +879,7 @@ private:
     }
 
     QString m_fixture;
+    QString m_voiceDir;
     QJsonObject m_replies;
     QJsonObject m_scenario;
     QString m_statusName;
@@ -547,6 +893,16 @@ private:
     QString m_running;
     bool m_paused = false;
     bool m_localRunning = false;
+
+    // Voice.
+    QString m_voiceName = QStringLiteral("off");
+    QString m_voiceState;
+    bool m_microphone = false;
+    QString m_turn;
+    QString m_waitingTurn;
+    QJsonObject m_turnFile;
+    QString m_session;
+    bool m_preparing = false;
 };
 
 // How the tests steer the stand-in.

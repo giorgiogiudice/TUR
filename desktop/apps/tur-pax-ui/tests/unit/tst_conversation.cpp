@@ -227,6 +227,109 @@ private Q_SLOTS:
         QCOMPARE(scheduled.entry(0).value(QStringLiteral("kind")).toString(), QStringLiteral("system"));
         QCOMPARE(scheduled.entry(0).value(QStringLiteral("phase")).toString(), QStringLiteral("scheduled"));
     }
+
+    // A spoken request that a task follows ("show") is the person's words,
+    // marked spoken, and the task's TaskStarted finds it as it finds a typed
+    // one. One that waits ("wait") is not a row until it is sent; nothing
+    // heard is never a row. (Voice documents: fixtures/voice/, written by
+    // hand from docs/architecture/pax-voice.md, 6.2.)
+    void a_spoken_request_is_the_persons_words_marked_spoken()
+    {
+        const QJsonObject recorded = task(QStringLiteral("two-tools"));
+        const QString request = recorded.value(QStringLiteral("request")).toString();
+        Conversation conversation;
+        conversation.voiceTranscript(QStringLiteral("v-1"),
+                                     QVariantMap { { QStringLiteral("text"), request },
+                                                   { QStringLiteral("final"), true },
+                                                   { QStringLiteral("check"), QStringLiteral("show") },
+                                                   { QStringLiteral("empty"), false } });
+        QCOMPARE(kinds(conversation), QStringList({ QStringLiteral("you") }));
+        QVERIFY(conversation.entry(0).value(QStringLiteral("spoken")).toBool());
+        QCOMPARE(conversation.entry(0).value(QStringLiteral("phase")).toString(), QStringLiteral("pending"));
+        QVERIFY(conversation.starting());
+        feed(conversation, recorded);
+        QCOMPARE(conversation.entry(0).value(QStringLiteral("phase")).toString(), QStringLiteral("started"));
+        QVERIFY(conversation.entry(0).value(QStringLiteral("spoken")).toBool());
+        QCOMPARE(conversation.entriesOf(QStringLiteral("you")).size(), 1);
+        QCOMPARE(conversation.lastOutcome(), QStringLiteral("completed"));
+
+        Conversation waiting;
+        waiting.voiceTranscript(QStringLiteral("v-2"),
+                                QVariantMap { { QStringLiteral("text"), request },
+                                              { QStringLiteral("final"), true },
+                                              { QStringLiteral("check"), QStringLiteral("wait") },
+                                              { QStringLiteral("reason"), QStringLiteral("other_sound") } });
+        QCOMPARE(waiting.count(), 0);
+        QVERIFY(!waiting.starting());
+
+        Conversation nothing;
+        nothing.voiceTranscript(QStringLiteral("v-3"),
+                                QVariantMap { { QStringLiteral("text"), QString() },
+                                              { QStringLiteral("final"), true },
+                                              { QStringLiteral("check"), QStringLiteral("show") },
+                                              { QStringLiteral("empty"), true } });
+        QCOMPARE(nothing.count(), 0);
+    }
+
+    // A live conversation: started, the person's words and P@x's as they
+    // grow (one row each until final), P@x interrupted, ended; the session
+    // is known while it runs and gone when it ends.
+    void a_live_conversation_is_shown_as_it_happens()
+    {
+        Conversation conversation;
+        QSignalSpy live(&conversation, &Conversation::liveChanged);
+        const QString session = QStringLiteral("s-1");
+        const auto event = [&conversation, &session](const QVariantMap &said) {
+            conversation.liveEvent(session, said);
+        };
+        event({ { QStringLiteral("kind"), QStringLiteral("started") }, { QStringLiteral("name"), QStringLiteral("On this computer") } });
+        QVERIFY(conversation.live());
+        QCOMPARE(conversation.liveSession(), session);
+        event({ { QStringLiteral("kind"), QStringLiteral("heard") }, { QStringLiteral("text"), QStringLiteral("What is the") },
+                { QStringLiteral("final"), false } });
+        event({ { QStringLiteral("kind"), QStringLiteral("heard") }, { QStringLiteral("text"), QStringLiteral("What is the value?") },
+                { QStringLiteral("final"), true } });
+        event({ { QStringLiteral("kind"), QStringLiteral("said") }, { QStringLiteral("text"), QStringLiteral("The value") },
+                { QStringLiteral("final"), false } });
+        event({ { QStringLiteral("kind"), QStringLiteral("said") }, { QStringLiteral("text"), QStringLiteral("The value is 21.") },
+                { QStringLiteral("final"), true } });
+        event({ { QStringLiteral("kind"), QStringLiteral("interrupted") } });
+        event({ { QStringLiteral("kind"), QStringLiteral("ended") }, { QStringLiteral("reason"), QStringLiteral("person") },
+                { QStringLiteral("message"), QStringLiteral("The conversation ended.") } });
+
+        QCOMPARE(kinds(conversation), QStringList({ QStringLiteral("system"), QStringLiteral("you"), QStringLiteral("pax"),
+                                                    QStringLiteral("system") }));
+        const QVariantMap heard = conversation.entry(1);
+        QCOMPARE(heard.value(QStringLiteral("text")).toString(), QStringLiteral("What is the value?"));
+        QCOMPARE(heard.value(QStringLiteral("phase")).toString(), QStringLiteral("heard"));
+        QVERIFY(heard.value(QStringLiteral("spoken")).toBool());
+        const QVariantMap said = conversation.entry(2);
+        QCOMPARE(said.value(QStringLiteral("text")).toString(), QStringLiteral("The value is 21."));
+        QCOMPARE(said.value(QStringLiteral("phase")).toString(), QStringLiteral("said"));
+        QVERIFY(said.value(QStringLiteral("detail")).toMap().value(QStringLiteral("interrupted")).toBool());
+        QCOMPARE(conversation.entry(0).value(QStringLiteral("phase")).toString(), QStringLiteral("live-started"));
+        QCOMPARE(conversation.entry(3).value(QStringLiteral("phase")).toString(), QStringLiteral("live-ended"));
+        QVERIFY(!conversation.live());
+        QVERIFY(live.count() >= 2);
+    }
+
+    // What was heard in a live conversation becomes a task's request when
+    // the service starts one with it: the row is found, not repeated.
+    void words_heard_live_become_the_request_of_a_task()
+    {
+        const QJsonObject recorded = task(QStringLiteral("two-tools"));
+        Conversation conversation;
+        conversation.liveEvent(QStringLiteral("s-1"), QVariantMap { { QStringLiteral("kind"), QStringLiteral("started") } });
+        conversation.liveEvent(QStringLiteral("s-1"),
+                               QVariantMap { { QStringLiteral("kind"), QStringLiteral("heard") },
+                                             { QStringLiteral("text"), recorded.value(QStringLiteral("request")).toString() },
+                                             { QStringLiteral("final"), true } });
+        feed(conversation, recorded);
+        QCOMPARE(conversation.entriesOf(QStringLiteral("you")).size(), 1);
+        const QVariantMap you = conversation.entriesOf(QStringLiteral("you")).first().toMap();
+        QCOMPARE(you.value(QStringLiteral("phase")).toString(), QStringLiteral("started"));
+        QVERIFY(you.value(QStringLiteral("spoken")).toBool());
+    }
 };
 
 QTEST_GUILESS_MAIN(ConversationTest)

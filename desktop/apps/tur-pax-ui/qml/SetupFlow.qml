@@ -15,9 +15,12 @@ import Tur.Kit.Pax as Pax
 //
 //   on this computer:  model for this computer → making it ready (download,
 //                      with progress and Cancel) → how it answers → limits
-//                      → what will be sent → ready
+//                      → what will be sent → voice → ready
 //   with a provider:   provider (with its data terms) → key and model → how
-//                      it answers → limits → what will be sent → ready
+//                      it answers → limits → what will be sent → voice → ready
+//
+// Voice (docs/architecture/pax-voice.md) comes after P@x is switched on and
+// switches on nothing unless the person asks there.
 //
 // Screens 6 and 7 of the design (seeing the screen; the trusted screen) are
 // not here: the service cannot see the screen in this version, and the
@@ -29,7 +32,7 @@ Kit.Page {
     required property AgentClient client
 
     // welcome, where, local, download, provider, key, settings, limits,
-    // consent, ready
+    // consent, voice, ready
     property string step: "welcome"
     property string where: "local"
     // ListModels' answer.
@@ -43,8 +46,8 @@ Kit.Page {
     property var localEvents: []
 
     readonly property var path: flow.where === "local"
-                                ? ["welcome", "where", "local", "download", "settings", "limits", "consent", "ready"]
-                                : ["welcome", "where", "provider", "key", "settings", "limits", "consent", "ready"]
+                                ? ["welcome", "where", "local", "download", "settings", "limits", "consent", "voice", "ready"]
+                                : ["welcome", "where", "provider", "key", "settings", "limits", "consent", "voice", "ready"]
     readonly property int stepIndex: flow.path.indexOf(flow.step)
     readonly property string provider: flow.where === "local" ? "local" : String(flow.entry.id || "")
     readonly property string providerName: flow.where === "local" ? String(flow.localModel.name || qsTr("local AI"))
@@ -527,7 +530,19 @@ Kit.Page {
                 return entry ? String(entry.name) : ""
             }
             onBackRequested: flow.goTo("limits")
+            onDone: flow.goTo("voice")
+        }
+    }
+
+    // Speaking to P@x, offered once P@x is on: free and on this computer
+    // first; "Not now" leaves voice off (docs/architecture/pax-voice.md).
+    Component {
+        id: voiceScreen
+
+        SetupVoice {
+            client: flow.client
             onDone: flow.goTo("ready")
+            onSkipped: flow.goTo("ready")
         }
     }
 
@@ -631,6 +646,8 @@ Kit.Page {
                         return limitsScreen
                     case "consent":
                         return consentScreen
+                    case "voice":
+                        return voiceScreen
                     case "ready":
                         return readyScreen
                     default:

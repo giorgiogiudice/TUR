@@ -25,6 +25,12 @@
 //! one day ([`spending`]), and the schedule runner with its notifications
 //! and its timer ([`scheduler`], [`notify`], [`wake`]).
 //!
+//! The fourth part is P@x's voice, described in
+//! `docs/architecture/pax-voice.md`: its rules and the state of a turn
+//! ([`voice`]), the microphone, the speaker and local speech as separate
+//! programs ([`audio`]), and the live engines as configuration
+//! ([`livelist`]). A spoken request is an ordinary task.
+//!
 //! The central item is [`decide`], a pure function from a proposed [`Action`],
 //! its [`Context`], the [`UserPolicy`] and the current time to a [`Decision`].
 //! Nothing the model says can make a decision more permissive.
@@ -64,6 +70,7 @@
 
 pub mod action;
 pub mod adapter;
+pub mod audio;
 pub mod audit;
 pub mod bus;
 pub mod class;
@@ -79,6 +86,7 @@ pub mod exec;
 pub mod faults;
 pub mod interface;
 pub mod keyring;
+pub mod livelist;
 pub mod local;
 pub mod manifest;
 pub mod notify;
@@ -97,6 +105,7 @@ pub mod strict;
 pub mod textui;
 pub mod trail;
 pub mod tuning;
+pub mod voice;
 pub mod wake;
 
 pub use action::{

@@ -1,0 +1,236 @@
+{
+  "hand_written": "Written by hand from docs/architecture/pax-voice.md, section 6 (the service's voice needs a microphone, so it cannot be recorded in CI); not recorded, not compared by desktop/tests/pax-ui/e2e.py.",
+  "licence": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+  "status": {
+    "capture": {
+      "other_sound": false,
+      "program_found": true
+    },
+    "download_bytes_needed": 193933005,
+    "enabled": false,
+    "free": true,
+    "keys": {
+      "talk": "Hold Meta+Space"
+    },
+    "live": {
+      "available": false,
+      "engines": [
+        {
+          "built": true,
+          "consent_current": true,
+          "consent_text": "",
+          "currency": null,
+          "id": "local",
+          "key": "not_needed",
+          "kind": "local",
+          "name": "On this computer",
+          "paid": false,
+          "price_per_minute": null,
+          "transport": "local"
+        },
+        {
+          "built": true,
+          "company": "OpenAI",
+          "consent_current": false,
+          "consent_text": "While a live conversation with OpenAI Realtime runs, what your microphone hears is streamed to OpenAI, and OpenAI's voice answers. OpenAI bills your key per minute of audio. OpenAI's own terms govern what it keeps.",
+          "consent_version": "1",
+          "currency": "USD",
+          "id": "openai-realtime",
+          "key": "not_set",
+          "kind": "provider",
+          "name": "OpenAI Realtime",
+          "paid": true,
+          "price_per_minute": 0.03,
+          "transport": "websocket"
+        },
+        {
+          "built": true,
+          "company": "Google",
+          "consent_current": false,
+          "consent_text": "While a live conversation with Gemini Live runs, what your microphone hears is streamed to Google, and Google's voice answers. Google bills your key per minute of audio. Google's own terms govern what it keeps.",
+          "consent_version": "1",
+          "currency": "USD",
+          "id": "gemini-live",
+          "key": "not_set",
+          "kind": "provider",
+          "name": "Gemini Live",
+          "paid": true,
+          "price_per_minute": 0.03,
+          "transport": "websocket"
+        }
+      ],
+      "suggestion": null
+    },
+    "microphone_open": false,
+    "problem": {
+      "error_code": "TUR-AI-VOICE-001",
+      "message": "Speaking to P@x is switched off. Switch it on in P@x's setup."
+    },
+    "recognition": {
+      "id": "whisper-tiny-q5-1",
+      "model": "whisper-tiny-q5-1",
+      "name": "Whisper tiny (5-bit)",
+      "download_bytes": 32152673,
+      "installed": false,
+      "tier": "runs-well",
+      "expected_ms": 2480,
+      "reasons": [
+        "Fits in this computer's memory.",
+        "Expected wait after you stop speaking: about 2.5 s."
+      ],
+      "licence": {
+        "id": "MIT",
+        "restrictions": "none",
+        "restricts_use": false,
+        "summary": "MIT: free to use, change and share"
+      },
+      "weak_in": [
+        "it"
+      ],
+      "warning": "Whisper tiny is what this computer runs well, but it understands Italian poorly. Whisper base understands Italian better, and is slower here."
+    },
+    "session": null,
+    "settings": {
+      "activation": "push-to-talk",
+      "enabled": false,
+      "language": "auto",
+      "live": {
+        "consent": null,
+        "engine": "local",
+        "model": null,
+        "narrate": true,
+        "silence_timeout_seconds": 60
+      },
+      "recognition": {
+        "model": null
+      },
+      "schema_version": 1,
+      "show_seconds": 2,
+      "spoken_replies": false,
+      "synthesis": {
+        "voices": {}
+      },
+      "transcript_check": "show",
+      "wake_word": false
+    },
+    "state": "off",
+    "synthesis": {
+      "voices": [
+        {
+          "credit": "none",
+          "download_bytes": 63536351,
+          "installed": false,
+          "language": "en",
+          "licence": {
+            "id": "LicenseRef-Public-Domain",
+            "restrictions": "none",
+            "restricts_use": false,
+            "summary": "Public domain"
+          },
+          "name": "LJSpeech (US English)",
+          "voice": "en_US-ljspeech-medium"
+        },
+        {
+          "credit": "Base voice from Hi-Fi TTS (NVIDIA), CC BY 4.0",
+          "download_bytes": 63227441,
+          "installed": false,
+          "language": "it",
+          "licence": {
+            "id": "CC0-1.0 AND CC-BY-4.0",
+            "restrictions": "none",
+            "restricts_use": false,
+            "summary": "CC0, trained from a CC BY 4.0 voice"
+          },
+          "name": "Paola (Italian)",
+          "voice": "it_IT-paola-medium"
+        }
+      ]
+    },
+    "turn": null,
+    "voice_activity": {
+      "download_bytes": 885098,
+      "installed": false,
+      "model": "silero-vad-v6.2.0",
+      "name": "Silero voice activity detection"
+    },
+    "wake_word": {
+      "available": false,
+      "explanation": "A wake word would keep the microphone open and listen, on this computer only, for P@x's name. It is not in this version.",
+      "on": false
+    },
+    "language": {
+      "setting": "auto",
+      "system": null,
+      "effective": "auto"
+    },
+    "engines": [
+      {
+        "id": "piper-tts-1.8.0",
+        "name": "Piper 1.8.0",
+        "installed": false,
+        "download_bytes": 34131442,
+        "licence": {
+          "id": "GPL-3.0-or-later",
+          "restrictions": "none",
+          "restricts_use": false,
+          "summary": "GPL-3.0-or-later: a separate program that P@x runs; its source is offered"
+        },
+        "credit": "none"
+      }
+    ],
+    "alternatives": [
+      {
+        "id": "whisper-base-q5-1",
+        "name": "Whisper base (5-bit)",
+        "download_bytes": 59707625,
+        "installed": false,
+        "tier": "slow",
+        "reasons": [
+          "Fits in this computer's memory.",
+          "Expected wait after you stop speaking: about 6 s."
+        ],
+        "expected_ms": 5920,
+        "languages": [
+          "mul"
+        ],
+        "wer_it_fleurs": 17.9,
+        "licence": {
+          "id": "MIT",
+          "restrictions": "none",
+          "restricts_use": false,
+          "summary": "MIT: free to use, change and share"
+        },
+        "credit": "none",
+        "note": "Good English, fair Italian."
+      },
+      {
+        "id": "parakeet-tdt-0.6b-v3-q4-k",
+        "name": "Parakeet TDT 0.6B v3 (4-bit)",
+        "download_bytes": 415611879,
+        "installed": false,
+        "tier": "slow",
+        "reasons": [
+          "Fits in this computer's memory.",
+          "Expected wait after you stop speaking: about 4 s."
+        ],
+        "expected_ms": 4000,
+        "languages": [
+          "en",
+          "it",
+          "de",
+          "es",
+          "fr"
+        ],
+        "wer_it_fleurs": 3.0,
+        "licence": {
+          "id": "CC-BY-4.0",
+          "restrictions": "none",
+          "restricts_use": false,
+          "summary": "CC BY 4.0: free to use and share, with credit to NVIDIA"
+        },
+        "credit": "Parakeet TDT 0.6B v3 by NVIDIA, CC BY 4.0",
+        "note": "Much better Italian and other European languages."
+      }
+    ]
+  }
+}

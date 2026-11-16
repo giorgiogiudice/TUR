@@ -216,6 +216,51 @@ private Q_SLOTS:
         QVERIFY(m_bus->callNames().contains(QStringLiteral("StartTask")));
     }
 
+    // Voice (pax-voice.md, section 6): the status read at start, the
+    // microphone's state followed from VoiceStateChanged, the level as a
+    // number, the transcript parsed; StopListening carries its boolean.
+    void voice_signals_arrive_parsed_and_the_microphone_is_followed()
+    {
+        QVERIFY(m_bus->use({ { QStringLiteral("status"), QStringLiteral("ready") },
+                             { QStringLiteral("voice"), QStringLiteral("ready") },
+                             { QStringLiteral("voice_turn"), QStringLiteral("wait") },
+                             { QStringLiteral("pace_ms"), 20 } }));
+        auto agent = client();
+        QTRY_COMPARE_WITH_TIMEOUT(agent->voice(), QStringLiteral("ready"), 10000);
+        QVERIFY(!agent->microphoneOpen());
+        QVERIFY(agent->voiceStatus().value(QStringLiteral("download_bytes_needed")).isValid());
+        QSignalSpy levels(agent.get(), &AgentClient::voiceLevel);
+        QSignalSpy heard(agent.get(), &AgentClient::voiceTranscript);
+        const QVariantMap started = callAndWait(*agent, QStringLiteral("StartListening"),
+                                                { QStringLiteral("{\"trigger\":\"button\",\"shown_by_caller\":true}") });
+        QVERIFY2(started.value(QStringLiteral("ok")).toBool(), qPrintable(started.value(QStringLiteral("message")).toString()));
+        const QString turn = started.value(QStringLiteral("value")).toString();
+        QVERIFY(!turn.isEmpty());
+        QTRY_VERIFY_WITH_TIMEOUT(agent->microphoneOpen(), 10000);
+        QCOMPARE(agent->voice(), QStringLiteral("listening"));
+        QTRY_COMPARE_WITH_TIMEOUT(levels.count(), 3, 10000);
+        const double level = levels.at(1).at(1).toDouble();
+        QVERIFY(level > 0.0 && level <= 1.0);
+        QCOMPARE(heard.count(), 0);
+
+        const QVariantMap stopped = callAndWait(*agent, QStringLiteral("StopListening"), { turn, true });
+        QVERIFY(stopped.value(QStringLiteral("ok")).toBool());
+        QTRY_COMPARE_WITH_TIMEOUT(heard.count(), 1, 10000);
+        const QVariantMap details = heard.first().at(1).toMap();
+        QCOMPARE(details.value(QStringLiteral("text")).toString(), QStringLiteral("Set the value for the night."));
+        QCOMPARE(details.value(QStringLiteral("check")).toString(), QStringLiteral("wait"));
+        QTRY_COMPARE_WITH_TIMEOUT(agent->voice(), QStringLiteral("waiting"), 10000);
+        QVERIFY(!agent->microphoneOpen());
+        const QVariantList calls = m_bus->calls();
+        bool sentTrue = false;
+        for (const QVariant &call : calls) {
+            const QVariantMap map = call.toMap();
+            if (map.value(QStringLiteral("method")).toString() == QLatin1String("StopListening"))
+                sentTrue = map.value(QStringLiteral("args")).toList().value(1).toBool();
+        }
+        QVERIFY2(sentTrue, "StopListening was sent with send = true, as a boolean");
+    }
+
     void a_key_reaches_the_service_and_stays_nowhere_here()
     {
         auto agent = client();

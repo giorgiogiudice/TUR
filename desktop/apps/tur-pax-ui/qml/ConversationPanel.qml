@@ -13,6 +13,10 @@ import Tur.Kit.Pax as Pax
 // happens; the foot has the text field and, while a task runs, Stop and
 // Pause with their keys written on them. The panel also shows P@x's record
 // of what it did (Activity).
+//
+// Voice (docs/architecture/pax-voice.md, section 7): the microphone under
+// the field, as in the bar; and while a live conversation runs, a line that
+// says so with the microphone lit the whole time, and End.
 Kit.Page {
     id: panel
 
@@ -35,6 +39,8 @@ Kit.Page {
     signal closeRequested()
 
     function send(): void {
+        if (panelVoice.send())
+            return
         const request = input.text.trim()
         if (request.length === 0)
             return
@@ -84,8 +90,15 @@ Kit.Page {
     // the desktop file (data/org.tur.PaxUi.desktop).
     Shortcut {
         sequence: Pax.PaxCommands.stopKeys
-        enabled: panel.conversation.running
-        onActivated: panel.conversation.stop()
+        enabled: panel.conversation.running || panel.conversation.live
+        // The service's CancelTask also ends a live conversation and closes
+        // the microphone (pax-voice.md, 6.1).
+        onActivated: {
+            if (panel.conversation.running)
+                panel.conversation.stop()
+            else
+                panel.conversation.endLive()
+        }
     }
 
     ColumnLayout {
@@ -297,6 +310,38 @@ Kit.Page {
                 anchors.margins: Kit.Theme.spaceGroup
                 spacing: Kit.Theme.spaceRelated
 
+                // A live conversation: the microphone is on until it ends
+                // (pax-voice.md, section 5). End is the person's control,
+                // in the system's blue like Stop.
+                RowLayout {
+                    objectName: "liveBar"
+                    Layout.fillWidth: true
+                    visible: panel.conversation.live || panel.conversation.liveStarting
+                    spacing: Kit.Theme.spaceRelated
+
+                    MicGlyph {
+                        objectName: "liveMicMark"
+                        Layout.alignment: Qt.AlignVCenter
+                        lit: true
+                        size: 18
+                    }
+
+                    Kit.Label {
+                        objectName: "liveText"
+                        Layout.fillWidth: true
+                        text: Words.inConversation
+                        wrapMode: Text.Wrap
+                    }
+
+                    Kit.Button {
+                        objectName: "endLiveButton"
+                        text: Words.endConversation
+                        kind: Kit.Button.Primary
+                        Accessible.name: Words.endConversationName
+                        onClicked: panel.conversation.endLive()
+                    }
+                }
+
                 // Stop and Pause, always in the same place while a task runs,
                 // with the key on the button (9.2).
                 Flow {
@@ -336,10 +381,14 @@ Kit.Page {
                     objectName: "panelField"
                     Layout.fillWidth: true
                     visible: panel.ready
-                    placeholderText: Words.askPlaceholder
+                    placeholderText: panelVoice.phase === "listening" ? Words.listening : Words.askPlaceholder
+                    readOnly: panelVoice.active
                     Accessible.name: Words.askField
                     Keys.onReturnPressed: panel.send()
                     Keys.onEnterPressed: panel.send()
+                    Keys.onEscapePressed: event => {
+                        event.accepted = panelVoice.cancel()
+                    }
                 }
 
                 Flow {
@@ -350,25 +399,22 @@ Kit.Page {
                     Kit.Button {
                         objectName: "panelSendButton"
                         text: Words.send
-                        enabled: input.text.trim().length > 0 && !panel.conversation.starting
+                        enabled: input.text.trim().length > 0 && !panel.conversation.starting && !panelVoice.active
                         onClicked: panel.send()
-                    }
-
-                    Kit.Button {
-                        objectName: "panelSpeakButton"
-                        text: Words.speak
-                        kind: Kit.Button.Quiet
-                        enabled: false
                     }
                 }
 
-                Kit.Label {
+                VoiceControl {
+                    id: panelVoice
+
+                    objectName: "panelVoice"
                     Layout.fillWidth: true
-                    visible: panel.ready
-                    text: Words.voiceLater
-                    kind: Kit.Label.Small
-                    tone: Kit.Label.Secondary
-                    wrapMode: Text.Wrap
+                    visible: panel.ready && !panel.conversation.live && !panel.conversation.liveStarting
+                    client: panel.client
+                    conversation: panel.conversation
+                    field: input
+                    allowed: panel.ready && !panel.conversation.starting
+                    onSetupRequested: panel.setupRequested()
                 }
 
                 KeysLine {

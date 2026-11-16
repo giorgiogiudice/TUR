@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Speech recognition for P@x's voice: whisper.cpp, built from its source in
+# the image build (image/engine/whisper-cpp.sh; image/README.md, "Speech";
+# docs/architecture/pax-voice.md, sections 3.1 and 9). Read by the build
+# stage "speech" of image/Containerfile.
+#
+# Fedora 45's whisper-cpp-1.8.3-4.fc45 ships the libraries only (no
+# whisper-cli), with AVX, AVX2, FMA and F16C off and no Vulkan, so TUR builds
+# the release itself, as it does llama.cpp. The tag's commit is from GitHub's
+# API (refs/tags/v1.9.5, an annotated tag pointing at the commit below), the
+# archive's SHA-256 from the archive GitHub served on 16 November 2026 (read
+# twice, the same both times).
+WHISPER_CPP_VERSION=v1.9.5
+WHISPER_CPP_COMMIT=d1be6fde11ac6e0407606b4e42fe72d34add8037
+WHISPER_CPP_URL=https://github.com/ggml-org/whisper.cpp/archive/refs/tags/v1.9.5.tar.gz
+WHISPER_CPP_SHA256=ff1a9053feb509ff9d7729703355541ae9690073a6b1c40eb692c962e0dc1720
+# whisper.cpp and its ggml are MIT. What whisper-cli compiles in from the
+# examples' common code is checked by the build (whisper-cpp.sh, licences_of)
+# and its notices are copied out; the expression is completed there if the
+# source names more.
+WHISPER_CPP_LICENCE="MIT"

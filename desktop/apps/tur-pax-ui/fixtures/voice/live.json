@@ -1,0 +1,131 @@
+{
+  "hand_written": "Written by hand from docs/architecture/pax-voice.md, section 6 (the service's voice needs a microphone, so it cannot be recorded in CI); not recorded, not compared by desktop/tests/pax-ui/e2e.py.",
+  "licence": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+  "session": "s-1794571291-1",
+  "signals": [
+    {
+      "args": [
+        "live",
+        {
+          "indicator": "caller",
+          "microphone_open": true,
+          "session": "s-1794571291-1",
+          "state": "live"
+        }
+      ],
+      "member": "VoiceStateChanged"
+    },
+    {
+      "args": [
+        "s-1794571291-1",
+        {
+          "engine": "local",
+          "kind": "started",
+          "name": "On this computer"
+        }
+      ],
+      "member": "LiveEvent"
+    },
+    {
+      "args": [
+        "s-1794571291-1",
+        {
+          "final": false,
+          "kind": "heard",
+          "text": "What is the value"
+        }
+      ],
+      "member": "LiveEvent"
+    },
+    {
+      "args": [
+        "s-1794571291-1",
+        {
+          "final": true,
+          "kind": "heard",
+          "text": "What is the value now?"
+        }
+      ],
+      "member": "LiveEvent"
+    },
+    {
+      "args": [
+        "s-1794571291-1",
+        {
+          "final": false,
+          "kind": "said",
+          "text": "The value is 21."
+        }
+      ],
+      "member": "LiveEvent"
+    },
+    {
+      "args": [
+        "s-1794571291-1",
+        {
+          "final": true,
+          "kind": "said",
+          "text": "The value is 21. Shall I change it?"
+        }
+      ],
+      "member": "LiveEvent"
+    },
+    {
+      "args": [
+        "s-1794571291-1",
+        {
+          "final": true,
+          "kind": "heard",
+          "text": "No, leave it."
+        }
+      ],
+      "member": "LiveEvent"
+    },
+    {
+      "args": [
+        "s-1794571291-1",
+        {
+          "kind": "interrupted"
+        }
+      ],
+      "member": "LiveEvent"
+    },
+    {
+      "args": [
+        "s-1794571291-1",
+        {
+          "final": true,
+          "kind": "said",
+          "text": "I will leave it as it is."
+        }
+      ],
+      "member": "LiveEvent"
+    },
+    {
+      "after_end": true,
+      "args": [
+        "s-1794571291-1",
+        {
+          "error_code": null,
+          "kind": "ended",
+          "message": "The conversation ended.",
+          "reason": "person"
+        }
+      ],
+      "member": "LiveEvent"
+    },
+    {
+      "args": [
+        "ready",
+        {
+          "indicator": "caller",
+          "microphone_open": false,
+          "reason": "person",
+          "session": "s-1794571291-1",
+          "state": "ready"
+        }
+      ],
+      "member": "VoiceStateChanged"
+    }
+  ]
+}

@@ -1,0 +1,51 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR speech catalogue entry. Format: schemas/speech-model.schema.json.
+# How entries are written and sourced: services/tur-ai-local/speech/README.md.
+#
+# Sources read on 2026-11-16: https://pypi.org/pypi/piper-tts/1.8.0/json
+# (the wheel's size and SHA-256, the source archive's SHA-256, requires_dist:
+# onnxruntime and pathvalidate), github.com/OHF-Voice/piper1-gpl (licence,
+# release v1.8.0 of 2026-09-04).
+#
+# The owner's decision of 16 November 2026: Piper is not in the image. Its
+# wheel is downloaded on first use with the voices, checked by its size and
+# SHA-256 like a model, and installed in a private virtual environment of
+# the speech store that sees the system's Python packages: Fedora's
+# python3-onnxruntime and python3-pathvalidate, which the image keeps.
+
+schema_version = 1
+id = "piper-tts-1-8-0"
+kind = "engine"
+name = "Piper 1.8.0, the program that speaks the voices"
+publisher = "Open Home Foundation (piper1-gpl)"
+engine = "piper"
+repository = "https://pypi.org/project/piper-tts/1.8.0/"
+# A wheel of the Python Package Index has no commit: the release, and the
+# file pinned by its digest.
+revision = "1.8.0"
+parameters = "Python wheel with Piper and espeak-ng built in (x86-64, Python 3.9 and later)"
+languages = ["mul"]
+# Estimate: Piper, onnxruntime and one voice at work. Not measured.
+memory_bytes = 300000000
+speed_basis = "the size of the program and of onnxruntime's working memory with one medium voice; an estimate, not a TUR measurement"
+note = "Downloaded once with the first voice. A GPL program that TUR runs as a separate process; TUR links nothing of it."
+credit = "none"
+checked = "2026-11-16"
+# The source archive of the same release, offered with the program as the
+# GPL asks.
+source_url = "https://files.pythonhosted.org/packages/02/cc/95b18b58d9c235d8e0bcece7321b7a7347873c14f9fea2c734b31ef04ff2/piper_tts-1.8.0.tar.gz"
+source_sha256 = "830588aded347df579c91a32703e0fc2a3685d84f1e3533b14f2de69135d4904"
+
+[[files]]
+name = "piper_tts-1.8.0-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.manylinux_2_28_x86_64.whl"
+url = "https://files.pythonhosted.org/packages/84/81/0112a7d510911f33018dc24023d1655bb772f84a4e95fe7f0180f66bbd17/piper_tts-1.8.0-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.manylinux_2_28_x86_64.whl"
+size_bytes = 34131442
+sha256 = "25b4d3f31ff70c8fa7151908e00aaa5650cbdf16bca8fcf21299f3941b89a7d3"
+
+[licence]
+id = "GPL-3.0-or-later"
+url = "https://github.com/OHF-Voice/piper1-gpl/blob/main/COPYING"
+summary = "GNU General Public License 3.0 or later. You may run it for any purpose; whoever passes it on must offer its source under the same licence."
+restrictions = "none"
+evidence = "PyPI's metadata for piper-tts 1.8.0 gives GPL-3.0-or-later; the repository OHF-Voice/piper1-gpl is GPL-3.0; the wheel embeds espeak-ng, GPL-3.0-or-later. The GPL places conditions on passing the program on, not on running it, so running it restricts no use. TUR does not pass it on in the image: the person's computer downloads it from PyPI; the source archive of the same release is pinned above for anyone who distributes it."
+checked = "2026-11-16"

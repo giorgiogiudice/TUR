@@ -26,6 +26,13 @@ Item {
     //   expand    the first "Details" or "What it did" opened
     //   step      the setup screen; where, provider, model, local: what was
     //             chosen before it
+    //   voice     the voice status the service answers with
+    //             (fixtures/voice/status; "off" when not named)
+    //   listen    a spoken turn reached by pressing the microphone:
+    //             "listening" (the microphone open, held there) or "wait"
+    //             (heard, waiting to be sent); voiceTurn names the turn
+    //   live      a live conversation started, held before its end
+    //   chooseLive  on the voice setup screen, the live engine chosen
     readonly property var states: [
         { name: "absent", view: "panel", absent: true },
         { name: "off", view: "bar", status: "off" },
@@ -55,7 +62,18 @@ Item {
         { name: "setup-limits", view: "setup", status: "ready", step: "limits", where: "cloud", provider: "anthropic", model: "claude-opus-5-5" },
         { name: "setup-consent", view: "setup", status: "off", step: "consent", where: "cloud", provider: "anthropic", model: "claude-opus-5-5" },
         { name: "setup-consent-deepseek", view: "setup", status: "off", step: "consent", where: "cloud", provider: "deepseek", model: "deepseek-flash" },
-        { name: "setup-ready", view: "setup", status: "ready", step: "ready", where: "cloud", provider: "anthropic", model: "claude-opus-5-5" }
+        { name: "setup-ready", view: "setup", status: "ready", step: "ready", where: "cloud", provider: "anthropic", model: "claude-opus-5-5" },
+        // Voice (docs/architecture/pax-voice.md): hand-written fixtures,
+        // fixtures/voice.
+        { name: "ask-voice", view: "bar", status: "ready", voice: "ready" },
+        { name: "ask-listening", view: "bar", status: "ready", voice: "ready", voiceTurn: "show", listen: "listening" },
+        { name: "ask-transcript-wait", view: "bar", status: "ready", voice: "ready", voiceTurn: "wait", listen: "wait" },
+        { name: "live", view: "panel", status: "ready", voice: "ready", live: true },
+        { name: "setup-voice", view: "setup", status: "ready", voice: "off", step: "voice", where: "cloud", provider: "anthropic", model: "claude-opus-5-5" },
+        { name: "setup-voice-live", view: "setup", status: "ready", voice: "off", step: "voice", where: "cloud", provider: "anthropic", model: "claude-opus-5-5", chooseLive: "openai-realtime" },
+        // A 2-processor computer: Whisper tiny, weak in Italian, said
+        // plainly, with better models offered (fixtures/voice/status/small).
+        { name: "setup-voice-small", view: "setup", status: "ready", voice: "small", step: "voice", where: "cloud", provider: "anthropic", model: "claude-opus-5-5" }
     ]
 
     // What was asked in each recorded task (fixtures/agent1/tasks), so that
@@ -165,6 +183,10 @@ Item {
             scenario.local_hold_after = state.localHold
         if (state.after_enable)
             scenario.after_enable = state.after_enable
+        if (state.voice)
+            scenario.voice = state.voice
+        if (state.voiceTurn)
+            scenario.voice_turn = state.voiceTurn
         fixture.use(scenario)
         host.stage = stageComponent.createObject(host, { kind: state.view })
         host.client.start()
@@ -196,9 +218,28 @@ Item {
             test.tryVerify(() => host.client.statusKnown, 10000, "the status was read")
         test.wait(30)
 
+        if (state.voice)
+            test.tryVerify(() => host.client.voice === (state.voice === "off" || state.voice === "small" ? "off" : state.voice), 10000,
+                           "the voice status was read")
         if (state.view === "setup") {
             host.reachSetup(state, test)
             return
+        }
+        if (state.listen) {
+            const mic = test.findChild(host.view, "micButton")
+            test.verify(mic !== null && mic.visible && mic.enabled, "the microphone is offered")
+            test.mouseClick(mic)
+            test.tryVerify(() => host.client.microphoneOpen && host.view.voice.level > 0, 10000,
+                           "the microphone is open and hears something")
+            if (state.listen === "wait") {
+                test.mouseClick(test.findChild(host.view, "micButton"))
+                test.tryVerify(() => host.view.voice.phase === "wait", 10000, "what was heard waits to be sent")
+            }
+        }
+        if (state.live) {
+            host.conversation.startLive()
+            test.tryVerify(() => host.conversation.live && host.conversation.entriesOf("pax").length >= 2, 10000,
+                           "the conversation runs, heard and said")
         }
         if (state.task) {
             const request = state.ask || host.requests[state.task]
@@ -292,6 +333,15 @@ Item {
             break
         case "consent":
             test.tryVerify(() => screen.item.version.length > 0, 10000, "the consent text was read")
+            break
+        case "voice":
+            test.tryVerify(() => screen.item.loaded, 10000, "the voice status was read")
+            if (state.chooseLive) {
+                test.wait(30)
+                test.verify(test.findChild(flow, "liveEngine-" + state.chooseLive) !== null,
+                            "there is a live engine " + state.chooseLive)
+                screen.item.liveEngine = state.chooseLive
+            }
             break
         default:
             break

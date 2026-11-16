@@ -72,7 +72,8 @@ use crate::keyring::KeyStore;
 use crate::notify::{self, AwayOutcome, Notifier};
 use crate::orchestrator::{
     Assistant, AssistantOutcome, HeldAction, MEMORY_RECALL, Observer, Orchestrator, ProposalReport,
-    ReportItem, SharedControl, Situation, SystemTaskClock, TaskLimits, TaskOutcome, TaskRequest,
+    ReportItem, RequestOrigin, SharedControl, Situation, SystemTaskClock, TaskLimits, TaskOutcome,
+    TaskRequest,
 };
 use crate::policy::UserPolicy;
 use crate::registry::{ASSISTANT_TOOLS, AssistantCall, AssistantTools, COMMAND_TOOL, ToolRegistry};
@@ -86,7 +87,14 @@ use crate::spending::{Ledger, TaskBudget, Zone, day_of};
 use crate::textui::{DEFAULT_TOOLS_DIR, read_json_dir, read_tools};
 use crate::trail::{EventKind, FileTrail, TIME_FIELD, Trail, TrailEvent};
 use crate::tuning;
+use crate::voice::{Interjections, Source, TranscriptGate, Trigger};
 use crate::wake::Waker;
+
+#[path = "voice_service.rs"]
+mod voice_service;
+
+pub use voice_service::VOICE_INSTRUCTIONS;
+use voice_service::{LiveJob, VoiceCell};
 
 /// The version of the interface this service speaks.
 pub const INTERFACE_VERSION: u32 = 1;
@@ -171,12 +179,56 @@ pub enum Event {
         /// The event.
         event: Value,
     },
+    /// The voice state changed (`docs/architecture/pax-voice.md`).
+    VoiceStateChanged {
+        /// `off`, `unavailable`, `ready`, `listening`, `recognising`,
+        /// `waiting`, `speaking` or `live`.
+        state: &'static str,
+        /// What is known about it, `microphone_open` first of all.
+        details: Value,
+    },
+    /// The loudness while the microphone is open, 0 to 1. No sound.
+    VoiceLevel {
+        /// The turn or the live session.
+        turn: String,
+        /// The loudness.
+        level: f64,
+    },
+    /// What was heard.
+    VoiceTranscript {
+        /// The turn.
+        turn: String,
+        /// The words and what becomes of them.
+        details: Value,
+    },
+    /// A step of making the speech models ready.
+    VoiceProgress {
+        /// The speech model's catalogue id, or `all`.
+        model: String,
+        /// The event.
+        event: Value,
+    },
+    /// Something in a live conversation.
+    LiveEvent {
+        /// The session.
+        session: String,
+        /// What happened.
+        event: Value,
+    },
 }
 
 /// Receives the service's events.
 pub trait Events: Send + Sync {
     /// One event.
     fn emit(&self, event: &Event);
+
+    /// P@x's indicator, for the microphone: show (`true`) or take away
+    /// (`false`) "Listening…" under a lease of P@x's on
+    /// `org.tur.PaxOverlay1`. Returns whether the indicator shows it now.
+    /// Without an indicator, nothing shows it.
+    fn indicator_listening(&self, _on: bool) -> bool {
+        false
+    }
 }
 
 /// Events that go nowhere.
@@ -335,6 +387,32 @@ struct Job {
     resume: bool,
     control: SharedControl,
     stop: Arc<AtomicBool>,
+    origin: JobOrigin,
+}
+
+/// Where a job's request came from: typed, spoken or live. It adds no
+/// authority: a gate only holds changes back until the transcript was shown
+/// or sent, and words said during the task are added as the person's.
+#[derive(Clone)]
+struct JobOrigin {
+    source: Source,
+    trigger: Option<Trigger>,
+    gate: Option<Arc<TranscriptGate>>,
+    interjections: Option<Interjections>,
+    /// A live conversation with a provider's engine.
+    live: Option<LiveJob>,
+}
+
+impl JobOrigin {
+    fn typed() -> JobOrigin {
+        JobOrigin {
+            source: Source::Typed,
+            trigger: None,
+            gate: None,
+            interjections: None,
+            live: None,
+        }
+    }
 }
 
 /// How a job ended.
@@ -362,6 +440,9 @@ pub struct Core {
     to_tell: Mutex<Vec<notify::Notification>>,
     poked: Mutex<bool>,
     wake: Condvar,
+    /// The voice: its settings, its turn, the microphone, P@x's speech and
+    /// a live conversation (`voice_service.rs`).
+    voice: VoiceCell,
 }
 
 fn fault(code: TaskCode, detail: impl Into<String>) -> Fault {
@@ -793,6 +874,11 @@ impl Observer for TaskObserver<'_> {
             }
         };
         self.core.parts.events.emit(&event);
+        // In a live conversation P@x says what it is doing. Never while the
+        // service's state is locked.
+        if let ReportItem::Said { text } = item {
+            self.core.voice_narrate(self.task, text);
+        }
     }
 }
 
@@ -855,7 +941,7 @@ impl Core {
             Err(problem) => (ModelList::empty(), Some(problem)),
         };
         let ledger = Ledger::load(&parts.paths.spending).map(|ledger| Arc::new(Mutex::new(ledger)));
-        Arc::new(Core {
+        let core = Arc::new(Core {
             parts,
             state: Mutex::new(State {
                 settings,
@@ -876,7 +962,10 @@ impl Core {
             to_tell: Mutex::new(Vec::new()),
             poked: Mutex::new(false),
             wake: Condvar::new(),
-        })
+            voice: VoiceCell::new(),
+        });
+        core.voice.attach(&core);
+        core
     }
 
     fn state(&self) -> MutexGuard<'_, State> {
@@ -1004,6 +1093,7 @@ impl Core {
         let now = self.now().seconds();
         self.change_settings(|settings| settings.enable(consent_version, now))?;
         self.record_change("enabled", "on");
+        self.voice_follow_switch();
         self.emit(Event::StateChanged);
         self.poke();
         Ok(())
@@ -1023,6 +1113,7 @@ impl Core {
         self.record_change("enabled", "off");
         let _ = self.cancel_task("");
         let _ = self.parts.waker.arm(None);
+        self.voice_follow_switch();
         self.emit(Event::StateChanged);
         Ok(())
     }
@@ -1203,9 +1294,12 @@ impl Core {
     /// The state of the service in one word: `off`, `idle`, `working` or
     /// `paused`.
     pub fn state_name(&self) -> &'static str {
+        // The voice's lock is never taken while the state's is held.
+        let listening = self.microphone_open();
         let state = self.state();
         match &state.running {
             _ if !state.settings.enabled || state.settings_fault.is_some() => "off",
+            None if listening => "listening",
             None => "idle",
             Some(running) if running.paused || running.paused_by_lock => "paused",
             Some(_) => "working",
@@ -1381,6 +1475,10 @@ impl Core {
     /// asked for pauses while it is, and goes on when it no longer is; a
     /// task the person paused themselves stays paused.
     pub fn set_session_locked(&self, locked: Option<bool>) {
+        if locked == Some(true) {
+            // Nothing listens or speaks while the session is locked.
+            self.voice_stop_all("locked");
+        }
         let changed = {
             let mut state = self.state();
             state.locked = locked;
@@ -1426,12 +1524,24 @@ impl Core {
     /// (`TUR-AI-KEY-001`), or a folder cannot be granted
     /// (`TUR-AI-SANDBOX-002`).
     pub fn start_task(self: &Arc<Self>, request: &str, options: &str) -> Result<String, Fault> {
+        let (grant_paths, resume) = Core::task_options(options)?;
+        self.start_task_from(request, &grant_paths, resume, JobOrigin::typed())
+    }
+
+    /// Start a task for a person who is there, from wherever its words
+    /// came. Every request starts here: typed, spoken, or live.
+    fn start_task_from(
+        self: &Arc<Self>,
+        request: &str,
+        grant_paths: &[String],
+        resume: bool,
+        origin: JobOrigin,
+    ) -> Result<String, Fault> {
         if !is_request(request) {
             return Err(invalid(
                 "the request is empty, too long, or holds a control character",
             ));
         }
-        let (grant_paths, resume) = Core::task_options(options)?;
         let provider = {
             let state = self.state();
             if let Some(problem) = &state.settings_fault {
@@ -1481,7 +1591,7 @@ impl Core {
         }
         let rules = GrantRules::new(self.parts.paths.home.as_deref());
         let mut grants = Vec::new();
-        for path in &grant_paths {
+        for path in grant_paths {
             let grant = rules.admit(path).map_err(|refusal| {
                 fault(
                     TaskCode::SandboxGrantRefused,
@@ -1491,7 +1601,8 @@ impl Core {
             grants.push(grant);
         }
 
-        let job = self.begin(request, Situation::attended(), None, grants, resume)?;
+        let mut job = self.begin(request, Situation::attended(), None, grants, resume)?;
+        job.origin = origin;
         let id = job.id.clone();
         let core = Arc::clone(self);
         thread::Builder::new()
@@ -1599,6 +1710,7 @@ impl Core {
                     resume,
                     control,
                     stop,
+                    origin: JobOrigin::typed(),
                 },
                 info,
             )
@@ -1795,6 +1907,23 @@ impl Core {
             Vec::new()
         };
 
+        // A live conversation with a provider's engine: the engine is
+        // connected, with the same tools, before the loop is built. Its tool
+        // calls go through the same loop.
+        let mut live = match &job.origin.live {
+            Some(live) => match self.connect_live(live, &registry) {
+                Ok(connected) => Some(connected),
+                Err(problem) => return not_started(problem),
+            },
+            None => None,
+        };
+        let origin = RequestOrigin {
+            source: job.origin.source,
+            trigger: job.origin.trigger,
+            gate: job.origin.gate.as_deref(),
+            interjections: job.origin.interjections.as_ref(),
+        };
+
         let report = {
             let mut orchestrator = Orchestrator {
                 provider: &*provider,
@@ -1802,7 +1931,9 @@ impl Core {
                 registry: &registry,
                 policy: &policy,
                 situation: job.situation,
-                limits: TaskLimits::default().with_context(context_tokens),
+                limits: TaskLimits::default()
+                    .with_context(context_tokens)
+                    .for_live(live.is_some()),
                 rules: &rules,
                 grants: &job.grants,
                 executor: &mut *executor,
@@ -1821,8 +1952,17 @@ impl Core {
                 provider_id: Some(&entry.id),
                 request: &job.request,
                 recalled: &recalled,
+                origin,
             };
-            orchestrator.run(&request, &mut history, &mut meter)
+            match (&mut live, &job.origin.live) {
+                (Some((session, io)), Some(job_live)) => orchestrator.run_live(
+                    &request,
+                    &mut **session,
+                    io,
+                    job_live.prices.as_ref(),
+                ),
+                _ => orchestrator.run(&request, &mut history, &mut meter),
+            }
         };
 
         if report.outcome == TaskOutcome::Completed && !unattended {
@@ -1846,6 +1986,8 @@ impl Core {
     /// thread found afterwards only brings its usage up to date.
     fn finish(&self, job: &Job, ended: Ended) {
         let now = self.now().seconds();
+        let spoken_answer = (ended.outcome == TaskOutcome::Completed.as_str())
+            .then(|| ended.answer.clone());
         let events = {
             let mut state = self.state();
             if state
@@ -1891,6 +2033,7 @@ impl Core {
         for event in events {
             self.emit(event);
         }
+        self.voice_task_finished(job, spoken_answer.as_deref());
         // A schedule that came due while the task ran can have its turn.
         self.poke();
     }
@@ -1908,12 +2051,18 @@ impl Core {
     /// `TUR-AI-SERVICE-007` if no such task is running.
     pub fn cancel_task(&self, id: &str) -> Result<(), Fault> {
         let now = self.now().seconds();
+        // The stop key stops everything P@x does: the microphone, its
+        // speech and a live conversation, as well as the task.
+        let voice_stopped = id.is_empty() && self.voice_stop_all("stop");
         let event = {
             let mut state = self.state();
             let Some(running) = state
                 .running
                 .take_if(|running| id.is_empty() || running.id == id)
             else {
+                if voice_stopped {
+                    return Ok(());
+                }
                 return Err(not_found("running task"));
             };
             running.control.cancel();

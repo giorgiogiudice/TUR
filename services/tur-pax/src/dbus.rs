@@ -87,6 +87,17 @@ pub const METHODS: &[(&str, &str, &str)] = &[
     ("SetMemoryEnabled", "b", ""),
     ("ConfirmMemory", "s", ""),
     ("ForgetMemory", "s", ""),
+    ("GetVoiceStatus", "", "s"),
+    ("SetVoiceSettings", "s", ""),
+    ("PrepareVoice", "s", "s"),
+    ("CancelVoicePreparation", "", ""),
+    ("StartListening", "s", "s"),
+    ("StopListening", "sb", ""),
+    ("SendTranscript", "ss", "s"),
+    ("Speak", "s", ""),
+    ("StopSpeaking", "", ""),
+    ("StartLiveSession", "s", "s"),
+    ("EndLiveSession", "", ""),
 ];
 
 /// The signals of the interface: name and signature.
@@ -101,11 +112,21 @@ pub const SIGNALS: &[(&str, &str)] = &[
     ("MemoryChanged", ""),
     ("StateChanged", "s"),
     ("LocalModelProgress", "ss"),
+    ("VoiceStateChanged", "ss"),
+    ("VoiceLevel", "sd"),
+    ("VoiceTranscript", "ss"),
+    ("VoiceProgress", "ss"),
+    ("LiveEvent", "ss"),
 ];
 
 /// The properties of the interface: name and type. All read-only.
-pub const PROPERTIES: &[(&str, &str)] =
-    &[("State", "s"), ("Enabled", "b"), ("InterfaceVersion", "u")];
+pub const PROPERTIES: &[(&str, &str)] = &[
+    ("State", "s"),
+    ("Enabled", "b"),
+    ("InterfaceVersion", "u"),
+    ("Voice", "s"),
+    ("MicrophoneOpen", "b"),
+];
 
 /// The most calls that are worked on at one time. Calls beyond it are
 /// answered at once with `TUR-AI-SERVICE-004`.
@@ -119,6 +140,10 @@ const UNKNOWN_METHOD: &str = "org.freedesktop.DBus.Error.UnknownMethod";
 const UNKNOWN_OBJECT: &str = "org.freedesktop.DBus.Error.UnknownObject";
 const UNKNOWN_PROPERTY: &str = "org.freedesktop.DBus.Error.UnknownProperty";
 const PROPERTY_READ_ONLY: &str = "org.freedesktop.DBus.Error.PropertyReadOnly";
+
+/// P@x's indicator, which shows "Listening…" while the microphone is open.
+const OVERLAY_NAME: &str = "org.tur.PaxOverlay1";
+const OVERLAY_PATH: &str = "/org/tur/PaxOverlay1";
 
 /// The screen locker of the desktop, which says when the session is locked.
 const SCREENSAVER_NAME: &str = "org.freedesktop.ScreenSaver";
@@ -143,6 +168,8 @@ pub fn admits(own_user: Option<u32>, caller_user: Option<u32>) -> bool {
 pub struct BusEvents {
     bus: Connection,
     core: Mutex<Option<std::sync::Weak<Core>>>,
+    /// The lease on P@x's indicator while the microphone is open.
+    lease: Mutex<Option<String>>,
 }
 
 impl BusEvents {
@@ -151,6 +178,7 @@ impl BusEvents {
         BusEvents {
             bus,
             core: Mutex::new(None),
+            lease: Mutex::new(None),
         }
     }
 
@@ -166,6 +194,35 @@ impl BusEvents {
         let _ = self
             .bus
             .send(&Message::signal(PATH, INTERFACE, member, body));
+    }
+
+    fn overlay(&self, member: &str, body: Vec<Value>) -> Option<Message> {
+        self.bus
+            .call(
+                Message::method_call(OVERLAY_NAME, OVERLAY_PATH, OVERLAY_NAME, member, body),
+                std::time::Duration::from_secs(2),
+            )
+            .ok()
+    }
+
+    fn properties_changed(&self, core: &Core) {
+        let state = core.state_name();
+        self.signal("StateChanged", vec![Value::string(state)]);
+        let _ = self.bus.send(&Message::signal(
+            PATH,
+            PROPERTIES_INTERFACE,
+            "PropertiesChanged",
+            vec![
+                Value::string(INTERFACE),
+                Value::variant_map(vec![
+                    ("State", Value::string(state)),
+                    ("Enabled", Value::Bool(core.is_enabled())),
+                    ("Voice", Value::string(core.voice_name())),
+                    ("MicrophoneOpen", Value::Bool(core.microphone_open())),
+                ]),
+                Value::strings(Vec::<String>::new()),
+            ],
+        ));
     }
 }
 
@@ -215,22 +272,63 @@ impl Events for BusEvents {
                 let Some(core) = core else {
                     return;
                 };
-                let state = core.state_name();
-                self.signal("StateChanged", vec![Value::string(state)]);
-                let _ = self.bus.send(&Message::signal(
-                    PATH,
-                    PROPERTIES_INTERFACE,
-                    "PropertiesChanged",
-                    vec![
-                        Value::string(INTERFACE),
-                        Value::variant_map(vec![
-                            ("State", Value::string(state)),
-                            ("Enabled", Value::Bool(core.is_enabled())),
-                        ]),
-                        Value::strings(Vec::<String>::new()),
-                    ],
-                ));
+                self.properties_changed(&core);
             }
+            Event::VoiceStateChanged { state, details } => self.signal(
+                "VoiceStateChanged",
+                vec![Value::string(*state), text(details)],
+            ),
+            Event::VoiceLevel { turn, level } => self.signal(
+                "VoiceLevel",
+                vec![Value::string(turn), Value::Double(*level)],
+            ),
+            Event::VoiceTranscript { turn, details } => self.signal(
+                "VoiceTranscript",
+                vec![Value::string(turn), text(details)],
+            ),
+            Event::VoiceProgress { model, event } => {
+                self.signal("VoiceProgress", vec![Value::string(model), text(event)]);
+            }
+            Event::LiveEvent { session, event } => {
+                self.signal("LiveEvent", vec![Value::string(session), text(event)]);
+            }
+        }
+    }
+
+    fn indicator_listening(&self, on: bool) -> bool {
+        let mut lease = self
+            .lease
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if on {
+            if lease.is_none() {
+                *lease = self
+                    .overlay("Acquire", vec![Value::string("P@x is listening")])
+                    .and_then(|reply| {
+                        reply
+                            .body
+                            .first()
+                            .and_then(Value::as_str)
+                            .map(str::to_owned)
+                    });
+            }
+            let Some(held) = lease.as_ref() else {
+                return false;
+            };
+            self.overlay(
+                "SetActivity",
+                vec![
+                    Value::string(held.as_str()),
+                    Value::string("listening"),
+                    Value::variant_map(Vec::new()),
+                ],
+            )
+            .is_some()
+        } else {
+            if let Some(held) = lease.take() {
+                let _ = self.overlay("Release", vec![Value::string(held.as_str())]);
+            }
+            false
         }
     }
 }
@@ -246,6 +344,8 @@ fn property(core: &Core, name: &str) -> Option<Value> {
         "State" => Some(Value::string(core.state_name())),
         "Enabled" => Some(Value::Bool(core.is_enabled())),
         "InterfaceVersion" => Some(Value::U32(INTERFACE_VERSION)),
+        "Voice" => Some(Value::string(core.voice_name())),
+        "MicrophoneOpen" => Some(Value::Bool(core.microphone_open())),
         _ => None,
     }
 }
@@ -410,6 +510,35 @@ pub fn dispatch(core: &Arc<Core>, call: &Message) -> Reply {
         ),
         "ConfirmMemory" => done(core.confirm_memory(text(0))),
         "ForgetMemory" => done(core.forget_memory(text(0))),
+        "GetVoiceStatus" => Ok(json(core.voice_status())),
+        "SetVoiceSettings" => done(core.set_voice_settings(text(0))),
+        "PrepareVoice" => core
+            .prepare_voice(text(0))
+            .map(|job| vec![Value::string(job)])
+            .map_err(|f| refused(&f)),
+        "CancelVoicePreparation" => done(core.cancel_voice_preparation()),
+        "StartListening" => core
+            .start_listening(text(0))
+            .map(|turn| vec![Value::string(turn)])
+            .map_err(|f| refused(&f)),
+        "StopListening" => done(core.stop_listening(
+            text(0),
+            call.body.get(1).and_then(Value::as_bool).unwrap_or(false),
+        )),
+        "SendTranscript" => core
+            .send_transcript(text(0), text(1))
+            .map(|task| vec![Value::string(task)])
+            .map_err(|f| refused(&f)),
+        "Speak" => done(core.speak(text(0))),
+        "StopSpeaking" => {
+            core.stop_speaking();
+            Ok(Vec::new())
+        }
+        "StartLiveSession" => core
+            .start_live_session(text(0))
+            .map(|session| vec![Value::string(session)])
+            .map_err(|f| refused(&f)),
+        "EndLiveSession" => done(core.end_live_session()),
         _ => unknown(),
     }
 }

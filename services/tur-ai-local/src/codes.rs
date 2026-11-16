@@ -92,6 +92,18 @@ string_enum! {
         NoDiskSpace => "TUR-AI-LOCAL-028",
         /// The download was stopped on request.
         Cancelled => "TUR-AI-LOCAL-029",
+        /// The speech engine is not installed.
+        SpeechEngineMissing => "TUR-AI-LOCAL-030",
+        /// The audio file is not 16 kHz mono 16-bit WAV.
+        AudioNotUsable => "TUR-AI-LOCAL-031",
+        /// Speech recognition failed.
+        RecognitionFailed => "TUR-AI-LOCAL-032",
+        /// Speech synthesis failed.
+        SynthesisFailed => "TUR-AI-LOCAL-033",
+        /// The speech model or voice does not offer the language.
+        LanguageNotOffered => "TUR-AI-LOCAL-034",
+        /// The text to speak is empty or too long.
+        TextNotUsable => "TUR-AI-LOCAL-035",
     }
 }
 
@@ -473,6 +485,86 @@ impl AiLocalCode {
                                         checks the size and the SHA-256 digest of the whole \
                                         file before the model can be used.",
                 recovery_action: "No action is needed. Ask for the model again to go on.",
+            },
+            AiLocalCode::SpeechEngineMissing => CodeEntry {
+                code: self,
+                title: "Speech engine not installed",
+                severity: Severity::Error,
+                detection: "The speech recognition program (whisper.cpp's whisper-cli or \
+                            parakeet-cli) is not at its path, or the speech synthesis program \
+                            (Piper) is not installed in the speech store, or Python could not \
+                            install it.",
+                user_message: "Speech on this computer is not available because a part of it \
+                               is missing. Nothing was recognised or spoken.",
+                technical_explanation: "TUR's image installs whisper-cli and parakeet-cli under \
+                                        /usr/libexec/tur/whisper.cpp. Piper is not in the image: \
+                                        it is downloaded on first use with the voices (speech \
+                                        ensure piper-tts-1-8-0) and installed in a virtual \
+                                        environment of the speech store. The program named on \
+                                        the command line or the installed one was not found.",
+                recovery_action: "Download the voices again in P@x's voice settings, or run \
+                                  tur-ai-local speech ensure piper-tts-1-8-0. If it keeps \
+                                  happening, install the latest TUR updates.",
+            },
+            AiLocalCode::AudioNotUsable => CodeEntry {
+                code: self,
+                title: "Audio file not usable",
+                severity: Severity::Error,
+                detection: "The file to recognise is not a RIFF WAVE file of 16-bit PCM samples, \
+                            one channel, 16000 samples a second, or it holds no samples.",
+                user_message: "The recording could not be read, so nothing was recognised.",
+                technical_explanation: "The recogniser is given exactly the format Whisper models \
+                                        take, so that no conversion program is run on the \
+                                        audio.",
+                recovery_action: "Record again. If it keeps happening, create a support bundle.",
+            },
+            AiLocalCode::RecognitionFailed => CodeEntry {
+                code: self,
+                title: "Speech recognition failed",
+                severity: Severity::Error,
+                detection: "The recognition program ended with an error, was stopped by a \
+                            signal, or did not finish in time.",
+                user_message: "What you said could not be recognised. Nothing was sent to P@x.",
+                technical_explanation: "The detail holds the program's exit status and the last \
+                                        lines it wrote to standard error. The audio is not kept.",
+                recovery_action: "Try again. If it keeps happening, choose a smaller recognition \
+                                  model or create a support bundle.",
+            },
+            AiLocalCode::SynthesisFailed => CodeEntry {
+                code: self,
+                title: "Speech synthesis failed",
+                severity: Severity::Error,
+                detection: "The speech synthesis program ended with an error, was stopped by a \
+                            signal, did not finish in time, or wrote no usable WAVE file.",
+                user_message: "The text could not be spoken. It is still shown on screen.",
+                technical_explanation: "The detail holds the program's exit status and the last \
+                                        lines it wrote to standard error.",
+                recovery_action: "Try again. If it keeps happening, choose another voice or create \
+                                  a support bundle.",
+            },
+            AiLocalCode::LanguageNotOffered => CodeEntry {
+                code: self,
+                title: "Language not offered",
+                severity: Severity::Notice,
+                detection: "The language asked for is not one of the languages the catalogue \
+                            gives for the recognition model or the voice.",
+                user_message: "The chosen speech model or voice does not offer this language.",
+                technical_explanation: "Each speech entry lists its languages as the publisher \
+                                        states them; a recognition model may also be asked to \
+                                        find the language itself (auto).",
+                recovery_action: "Choose another language, or a model or voice that offers it.",
+            },
+            AiLocalCode::TextNotUsable => CodeEntry {
+                code: self,
+                title: "Text to speak not usable",
+                severity: Severity::Notice,
+                detection: "The text given to speak is empty, is not valid UTF-8, or is longer \
+                            than 4000 bytes.",
+                user_message: "There was nothing to speak, or the text was too long to speak at \
+                               once.",
+                technical_explanation: "Long answers are spoken a part at a time by the \
+                                        assistant; one request holds at most 4000 bytes.",
+                recovery_action: "Speak a shorter text, or let the assistant split it.",
             },
         }
     }

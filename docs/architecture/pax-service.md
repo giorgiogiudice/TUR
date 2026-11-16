@@ -706,3 +706,27 @@ Decisions taken where the designs were silent (the owner may reverse any):
    person has not confirmed.
 10. The service keeps the last 20 tasks in memory only; the trail is the
     lasting record.
+
+## 15. Voice
+
+Added on 16 November 2026: P@x's voice, described in
+[pax-voice.md](pax-voice.md), section 6. `org.tur.Agent1` gains eleven
+methods (`GetVoiceStatus`, `SetVoiceSettings`, `PrepareVoice`,
+`CancelVoicePreparation`, `StartListening`, `StopListening`,
+`SendTranscript`, `Speak`, `StopSpeaking`, `StartLiveSession`,
+`EndLiveSession`), five signals (`VoiceStateChanged`, `VoiceLevel`,
+`VoiceTranscript`, `VoiceProgress`, `LiveEvent`) and two properties
+(`Voice`, `MicrophoneOpen`); the interface version stays 1. `State` is now
+`listening` while the microphone is open and no task runs. `CancelTask("")`
+also closes the microphone, stops P@x's speech and ends a live
+conversation. A spoken request starts where a typed one does
+(`Core::start_task_from`) and runs in the one task loop; a live
+conversation with a provider's engine runs in the same loop
+(`Orchestrator::run_live`), its tool calls decided by the same engine. No
+method approves or confirms an action; `SendTranscript` sends the person's
+words, as `StartTask` does. The voice's files: `voice.json` beside the
+settings (`schemas/pax-voice-settings.schema.json`), the list of live
+engines at `/etc/tur/pax/live.json` or `/usr/share/tur/pax/live.json`
+(`schemas/pax-live-providers.schema.json`). New codes:
+`TUR-AI-VOICE-001` to `-009`. `tur-pax serve` takes `--pw-record`,
+`--pw-play`, `--pw-dump` and `--live` for tests.

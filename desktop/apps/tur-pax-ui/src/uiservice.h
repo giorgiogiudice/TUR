@@ -40,7 +40,8 @@ public:
     static bool forward(QDBusConnection bus, const QString &mode, QString *problem);
 
 public Q_SLOTS:
-    // ask, panel, activity or setup.
+    // ask, ask-held (opened by P@x's key, which may still be held), panel,
+    // activity or setup.
     void Show(const QString &mode);
     void Hide();
 

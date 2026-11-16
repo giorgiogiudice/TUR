@@ -597,6 +597,7 @@ impl Setup {
             provider_id: Some(&self.provider_id),
             request,
             recalled,
+            origin: crate::orchestrator::RequestOrigin::TYPED,
         };
         orchestrator.run(&task, history, &mut meter)
     }
