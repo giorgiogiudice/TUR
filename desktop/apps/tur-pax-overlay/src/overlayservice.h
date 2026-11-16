@@ -93,6 +93,12 @@ public:
     static constexpr int maxHighlightsPerLease = 16;
     static constexpr int maxTextLength = 300;
 
+    // What the pill says P@x is doing (design, 9.3): idle, listening,
+    // working, observing, acting, waiting or paused; empty while P@x is not
+    // on (no lease is held). org.tur.PaxOverlay1.Activity: what P@x's
+    // character on the bar follows, so that the two never disagree.
+    QString activity() const;
+
 Q_SIGNALS:
     void shownChanged(bool shown);
     void screensChanged();
@@ -101,6 +107,9 @@ Q_SIGNALS:
     void leaseEnded(const QString &owner, const QString &reason);
 
 private:
+    void updateActivity();
+    QString m_activitySaid;
+
     struct Lease
     {
         QString token;

@@ -26,6 +26,7 @@ class PaxOverlay1Adaptor : public QDBusAbstractAdaptor
     Q_PROPERTY(bool Shown READ shown)
     Q_PROPERTY(QStringList Screens READ screens)
     Q_PROPERTY(bool CommandsShown READ commandsShown)
+    Q_PROPERTY(QString Activity READ activity)
 
 public:
     explicit PaxOverlay1Adaptor(OverlayService *service);
@@ -33,6 +34,7 @@ public:
     bool shown() const;
     QStringList screens() const;
     bool commandsShown() const;
+    QString activity() const;
 
 public Q_SLOTS:
     QString Acquire(const QString &purpose, const QDBusMessage &message);

@@ -2,8 +2,9 @@
 # SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
 #
 # Render every page of the gallery, the toolchain proof, TUR's colour schemes, every state of the
-# application centre and of the settings, the states of P@x's overlay and
-# of P@x's window (tur-pax-ui), twice, and compare the pictures with the references in
+# application centre and of the settings, the states of P@x's overlay, of
+# P@x's window (tur-pax-ui) and of P@x's character on the bar
+# (tur-pax-companion), twice, and compare the pictures with the references in
 # desktop/tests/screenshots.
 # Runs inside the builder, after build.sh.
 #
@@ -23,6 +24,7 @@ centre=$build/apps/tur-centre/tests/tst_centre
 settings=$build/apps/tur-settings/tests/tst_settings
 overlay=$build/apps/tur-pax-overlay/tests/tst_pax_overlay
 paxui=$build/apps/tur-pax-ui/tests/tst_paxui
+companion=$build/apps/tur-pax-companion/tests/tst_pax_companion
 rm -rf "$out"
 mkdir -p "$out/actual" "$out/repeat" "$out/logs" "$out/empty-config"
 
@@ -62,6 +64,9 @@ for pass in actual repeat; do
     # P@x's window, against the stand-in for org.tur.Agent1 that its test
     # runner starts on a private bus, at a scale of 1.
     render "$out/$pass" 1 desktop/apps/tur-pax-ui/tests/shots/render_paxui.qml "$paxui"
+    # P@x's character on the bar: every state and what opens above it, over
+    # a stand-in bar, and one sheet of the states, at a scale of 1.
+    render "$out/$pass" 1 desktop/apps/tur-pax-companion/tests/shots/render_companion.qml "$companion"
 done
 
 python3 desktop/ci/compare_screenshots.py \

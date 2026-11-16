@@ -4,6 +4,7 @@
 #include <QDBusConnectionInterface>
 #include <QDBusError>
 #include <QDBusMessage>
+#include <QVariantMap>
 
 QString UiService::serviceName()
 {
@@ -46,7 +47,22 @@ bool UiService::registerOn(QDBusConnection bus, QString *problem)
         bus.unregisterObject(objectPath());
         return false;
     }
+    m_bus = bus;
+    m_registered = true;
     return true;
+}
+
+void UiService::setMode(const QString &mode)
+{
+    if (mode == m_mode)
+        return;
+    m_mode = mode;
+    if (!m_registered || !m_bus.isConnected())
+        return;
+    QDBusMessage changed = QDBusMessage::createSignal(objectPath(), QStringLiteral("org.freedesktop.DBus.Properties"),
+                                                      QStringLiteral("PropertiesChanged"));
+    changed << interfaceName() << QVariantMap { { QStringLiteral("Mode"), m_mode } } << QStringList();
+    m_bus.send(changed);
 }
 
 bool UiService::forward(QDBusConnection bus, const QString &mode, QString *problem)

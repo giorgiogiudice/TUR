@@ -193,17 +193,21 @@ private Q_SLOTS:
         QFile file(QStringLiteral(TUR_PAX_OVERLAY_SOURCE "/dbus/org.tur.PaxOverlay1.xml"));
         QVERIFY(file.open(QIODevice::ReadOnly));
         const QStringList stated = shapeOf(QString::fromUtf8(file.readAll())).value(interface);
-        QCOMPARE(stated.size(), 24);
+        QCOMPARE(stated.size(), 25);
         QCOMPARE(offered, stated);
     }
 
     void it_is_shown_and_says_so()
     {
         QCOMPARE(property(QStringLiteral("Shown")).toBool(), false);
+        // Activity: empty while P@x is not on, then what the pill says.
+        QCOMPARE(property(QStringLiteral("Activity")).toString(), QString());
         const QString lease = acquire(*m_a);
         QCOMPARE(lease.size(), 32);
+        QCOMPARE(property(QStringLiteral("Activity")).toString(), QStringLiteral("idle"));
         QCOMPARE(call(*m_a, QStringLiteral("SetActivity"), { lease, QStringLiteral("acting"), QVariantMap() }).type(),
                  QDBusMessage::ReplyMessage);
+        QCOMPARE(property(QStringLiteral("Activity")).toString(), QStringLiteral("acting"));
         QVERIFY2(shownBecomes(true), "Shown is true once the surface has been drawn on every screen");
         QVERIFY(!property(QStringLiteral("Screens")).toStringList().isEmpty());
 
@@ -214,6 +218,7 @@ private Q_SLOTS:
         QCOMPARE(property(QStringLiteral("Shown")).toBool(), true);
         QCOMPARE(call(*m_a, QStringLiteral("Release"), { lease }).type(), QDBusMessage::ReplyMessage);
         QVERIFY2(shownBecomes(false), "with no lease P@x is off and nothing is shown");
+        QCOMPARE(property(QStringLiteral("Activity")).toString(), QString());
     }
 
     // The list of P@x's keys: anyone may ask for it, and the command line

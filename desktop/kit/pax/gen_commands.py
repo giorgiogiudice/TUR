@@ -19,7 +19,9 @@ its actions) that has an X-KDE-Shortcuts line binds the command named by the
 same group's X-TUR-Pax-Command line, and must bind it to the keys
 commands.json gives. In a desktop file of one of P@x's programs (org.tur.Pax*)
 every group with a key must name its command. tur-pax-ui's desktop file
-(desktop/apps/tur-pax-ui/data/org.tur.PaxUi.desktop) binds three this way.
+(desktop/apps/tur-pax-ui/data/org.tur.PaxUi.desktop) binds three this way, and
+the character's (desktop/apps/tur-pax-companion/data/org.tur.PaxCompanion.desktop)
+binds the fifth, "attend".
 The check fails if a command marked bound has no group that binds it. Needs
 only the Python standard library.
 """

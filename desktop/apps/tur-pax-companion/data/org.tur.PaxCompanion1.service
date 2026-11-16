@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Starts tur-pax-companion when something calls org.tur.PaxCompanion1 on the
+# session bus and the character is not running: P@x's setup when it switches
+# P@x on, the launcher entry (docs/architecture/tur-pax-companion.md,
+# section 8). Started this way it changes nothing the person chose: a
+# character they hid stays hidden.
+# Installed as /usr/share/dbus-1/services/org.tur.PaxCompanion1.service.
+[D-BUS Service]
+Name=org.tur.PaxCompanion1
+Exec=/usr/bin/tur-pax-companion --background

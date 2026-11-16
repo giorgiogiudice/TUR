@@ -168,6 +168,29 @@ allow soname libturpaxui.so*      *                            LicenseRef-TUR-No
 allow cmake LayerShellQt          desktop/apps/tur-pax-ui/CMakeLists.txt   LGPL-2.1-only OR LGPL-3.0-only
 allow cmake LayerShellQt::Interface desktop/apps/tur-pax-ui/CMakeLists.txt LGPL-2.1-only OR LGPL-3.0-only
 
+# P@x's character on the bar, tur-pax-companion (docs/architecture/
+# tur-pax-companion.md): its own QML module and library, under the project
+# licence, a standalone program. Nothing of it runs inside Plasma: it is not
+# an applet and loads no KWin script (its section 2 says why not, and what
+# an applet would cost). It adds no library that was not already allowed:
+# Qt D-Bus (LGPL-3.0-only) for org.tur.Agent1, org.tur.PaxCompanion1 and the
+# three properties it follows; P@x's window's library, libturpaxui, for its
+# client of org.tur.Agent1; P@x's gold, Tur.Kit.Pax; and, by the program and
+# not by its module, LayerShellQt (LGPL, read file by file at Plasma 6.8.2
+# for the overlay, tur-pax-overlay.md section 8) for its surface on the bar.
+# It finds the bar's thickness from the layer-shell protocol itself, so it
+# needs neither KWayland nor anything of Plasma's. Its compositor test draws
+# a stand-in for the bar, a layer-shell surface of its own, with the same
+# library.
+allow qml Tur.PaxCompanion        desktop/apps/tur-pax-companion/**   LicenseRef-TUR-Noncommercial-1.0.0
+allow cmake turpaxcompanion       desktop/apps/tur-pax-companion/**,desktop/tests/compositor/**   LicenseRef-TUR-Noncommercial-1.0.0
+allow soname libturpaxcompanion.so* *                          LicenseRef-TUR-Noncommercial-1.0.0
+allow cmake turpaxui              desktop/apps/tur-pax-companion/**   LicenseRef-TUR-Noncommercial-1.0.0
+allow qml Tur.Kit.Pax             desktop/apps/tur-pax-companion/**   LicenseRef-TUR-Noncommercial-1.0.0
+allow cmake turkitpax             desktop/apps/tur-pax-companion/**   LicenseRef-TUR-Noncommercial-1.0.0
+allow cmake LayerShellQt          desktop/apps/tur-pax-companion/CMakeLists.txt,desktop/tests/compositor/CMakeLists.txt   LGPL-2.1-only OR LGPL-3.0-only
+allow cmake LayerShellQt::Interface desktop/apps/tur-pax-companion/CMakeLists.txt,desktop/tests/compositor/CMakeLists.txt LGPL-2.1-only OR LGPL-3.0-only
+
 # TUR's graphical installer, tur-installer (design, section 11.5; task D-23;
 # ADR-0018, amendment of 13 November 2026): its own QML module and library,
 # under the project licence. It adds no library: Qt D-Bus (LGPL-3.0-only),

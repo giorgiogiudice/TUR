@@ -1,0 +1,64 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+ "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<!-- SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0 -->
+<!--
+  org.tur.PaxCompanion1: P@x's character on the bar, as the person's other
+  programs reach it (docs/architecture/tur-pax-companion.md, section 6).
+  Implemented by tur-pax-companion. PROPOSED, NOT FROZEN.
+
+  Session bus. Well-known name org.tur.PaxCompanion1. Object path
+  /org/tur/PaxCompanion1. Interface version 1.
+
+  It brings the character back, hides it, gives it the keyboard and makes it
+  quiet, says where it is, and lets the healing service ask it to say one
+  of that service's notices. It carries no words: nothing can make the
+  character say anything through it. What the character says it has read
+  itself, from org.tur.Agent1 and from the healing service's own notices.
+-->
+<node name="/org/tur/PaxCompanion1">
+  <interface name="org.tur.PaxCompanion1">
+    <!-- Puts the character back on the bar after Hide. -->
+    <method name="Show"/>
+    <!-- Takes the character off the bar until Show. -->
+    <method name="Hide"/>
+    <!-- Puts the character on the bar if it was hidden and gives it the
+         keyboard: what it is saying, or its menu. Esc gives the keyboard
+         back. -->
+    <method name="Attend"/>
+    <!-- "hour", "tomorrow", "always" or "off". Anything else is refused
+         with InvalidArgs. -->
+    <method name="SetQuiet">
+      <arg name="mode" type="s" direction="in"/>
+    </method>
+    <!-- The healing service's `tur-diag heal notify` asks the character to
+         say the notice `id` (design, section 7; the owner's decision of 15
+         November 2026). "heal" is the only source; anything else is
+         refused with InvalidArgs. The character reads the notice itself
+         from the healing service's own program (tur-diag heal notices, as
+         JSON); no words travel in the call.
+         `taken` is true only once the bubble is on the screen; false, at
+         once, when the character is hidden, asleep, quiet, already
+         speaking, busy with the person, has spoken its number for the
+         hour, the person switched that kind off, or no such notice waits.
+         On false, no answer or an error the caller shows the desktop's
+         notification. The character never marks a notice seen. -->
+    <method name="Announce">
+      <arg name="source" type="s" direction="in"/>
+      <arg name="id" type="t" direction="in"/>
+      <arg name="taken" type="b" direction="out"/>
+    </method>
+    <property name="InterfaceVersion" type="u" access="read"/>
+    <!-- asleep, idle, noticing, listening, thinking, observing, acting,
+         waiting, paused, telling, refused or error. -->
+    <property name="State" type="s" access="read"/>
+    <!-- On the bar now: not hidden, and P@x on (or the person keeps the
+         character there asleep). -->
+    <property name="Shown" type="b" access="read"/>
+    <property name="Quiet" type="b" access="read"/>
+    <!-- Where the character is, for a surface that opens beside it (P@x's
+         ask bar): "screen" (s), "x" (d: the middle of the character from
+         the screen's left edge, logical pixels), "lift" (d: how far above
+         the bar's top edge such a surface should start) and "shown" (b). -->
+    <property name="Anchor" type="a{sv}" access="read"/>
+  </interface>
+</node>

@@ -18,6 +18,7 @@ QtObject {
         { id: "stop", keys: "Meta+Esc", action: qsTranslate("PaxCommands", "Stop P@x"), bound: true },
         { id: "ask", keys: "Meta+Space", action: qsTranslate("PaxCommands", "Ask P@x"), bound: true },
         { id: "talk", keys: "Hold Meta+Space", action: qsTranslate("PaxCommands", "Talk to P@x while held"), bound: false },
-        { id: "keys", keys: "Meta+/", action: qsTranslate("PaxCommands", "Show P@x's keys"), bound: true }
+        { id: "keys", keys: "Meta+/", action: qsTranslate("PaxCommands", "Show P@x's keys"), bound: true },
+        { id: "attend", keys: "Meta+Alt+Space", action: qsTranslate("PaxCommands", "Go to P@x on the bar"), bound: true }
     ]
 }

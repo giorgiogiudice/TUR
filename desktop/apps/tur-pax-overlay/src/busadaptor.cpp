@@ -42,6 +42,11 @@ bool PaxOverlay1Adaptor::commandsShown() const
     return m_service->commandsShown();
 }
 
+QString PaxOverlay1Adaptor::activity() const
+{
+    return m_service->activity();
+}
+
 void PaxOverlay1Adaptor::ShowCommands(bool shown)
 {
     m_service->showCommands(shown);

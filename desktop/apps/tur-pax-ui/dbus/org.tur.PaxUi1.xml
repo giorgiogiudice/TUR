@@ -23,6 +23,14 @@
     </method>
     <!-- Takes the bar and the panel away. -->
     <method name="Hide"/>
+    <!-- What the window shows now: "" (nothing), "ask", "panel", "activity"
+         or "setup". Added on 15 November 2026 for P@x's character on the bar
+         (docs/architecture/tur-pax-companion.md, section 6), which listens
+         and says nothing while the ask bar is open. An addition: nothing
+         that used version 1 changes. -->
+    <property name="Mode" type="s" access="read">
+      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="true"/>
+    </property>
     <property name="InterfaceVersion" type="u" access="read">
       <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="const"/>
     </property>

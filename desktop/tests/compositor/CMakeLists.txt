@@ -25,3 +25,24 @@ target_compile_definitions(tst_compositor PRIVATE
 target_link_libraries(tst_compositor PRIVATE
     Qt6::Core Qt6::Gui Qt6::DBus Qt6::Test Plasma::KWaylandClient turpaxoverlay)
 add_dependencies(tst_compositor tur-settings tur-pax-overlay tst_settings_helper)
+
+# P@x's character on the bar under KWin (docs/architecture/
+# tur-pax-companion.md, section 10): tst_compositor_companion draws a stand-in
+# for the bar, a layer-shell surface of its own (LayerShellQt, LGPL, as the
+# programs use it), starts the stand-in for org.tur.Agent1 of P@x's window's
+# tests, tur-pax-companion and tur-pax-ui, and tests the character where only
+# a compositor can: in the bar, taking no keyboard, blocking no click, over a
+# full-screen window. Like tst_compositor it is not a ctest test; the
+# `compositor` job runs it after tst_compositor, under the same KWin.
+find_package(LayerShellQt 6.0 CONFIG REQUIRED)
+
+qt_add_executable(tst_compositor_companion tst_companion.cpp probewindow.h probewindow.cpp)
+target_compile_definitions(tst_compositor_companion PRIVATE
+    TUR_COMPANION_PROGRAM="$<TARGET_FILE:tur-pax-companion>"
+    TUR_COMPANION_FIXTURES="${CMAKE_SOURCE_DIR}/apps/tur-pax-companion/fixtures"
+    TUR_PAX_UI_PROGRAM="$<TARGET_FILE:tur-pax-ui>"
+    TUR_PAX_UI_AGENT="$<TARGET_FILE:tur-pax-ui-fixture-agent>"
+    TUR_PAX_UI_FIXTURES="${CMAKE_SOURCE_DIR}/apps/tur-pax-ui/fixtures/agent1")
+target_link_libraries(tst_compositor_companion PRIVATE
+    Qt6::Core Qt6::Gui Qt6::DBus Qt6::Test Plasma::KWaylandClient LayerShellQt::Interface)
+add_dependencies(tst_compositor_companion tur-pax-companion tur-pax-ui tur-pax-ui-fixture-agent)
