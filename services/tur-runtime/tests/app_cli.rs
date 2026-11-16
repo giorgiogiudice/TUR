@@ -637,6 +637,11 @@ fn uninstall_runs_the_uninstaller_then_removes_everything_and_checks() {
     let app_dir = home.data("prefixes").join(APP);
     let launchers = home.data("launchers").join(APP);
     let logs = home.root.join("state/tur/runtime/logs").join(APP);
+    // The launcher entry among the user's applications goes too.
+    let entry = home
+        .root
+        .join("data/applications")
+        .join(format!("tur-wine-{APP}.desktop"));
     assert_eq!(
         removed,
         [
@@ -644,9 +649,10 @@ fn uninstall_runs_the_uninstaller_then_removes_everything_and_checks() {
             home.data("staging").join(APP).to_str().unwrap(),
             logs.to_str().unwrap(),
             launchers.to_str().unwrap(),
+            entry.to_str().unwrap(),
         ]
     );
-    assert_eq!(plans[2]["steps"].as_array().unwrap().len(), 4);
+    assert_eq!(plans[2]["steps"].as_array().unwrap().len(), 5);
     assert_eq!(plans[2]["steps"][0]["check"]["kind"], "absent");
     // The dry run removed nothing.
     assert!(app_dir.is_dir());
@@ -657,9 +663,9 @@ fn uninstall_runs_the_uninstaller_then_removes_everything_and_checks() {
     let report = outcome.json();
     assert_eq!(report["uninstaller"]["ran"], false);
     assert_eq!(report["left_behind"], Value::Array(Vec::new()));
-    assert_eq!(report["removed"].as_array().unwrap().len(), 4);
+    assert_eq!(report["removed"].as_array().unwrap().len(), 5);
     assert_eq!(report["kept"][0], backups.to_str().unwrap());
-    for gone in [&app_dir, &launchers, &logs] {
+    for gone in [&app_dir, &launchers, &logs, &entry] {
         assert!(!gone.exists(), "{}", gone.display());
     }
     assert!(!PathBuf::from(&record.main_executable).exists());

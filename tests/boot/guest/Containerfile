@@ -13,6 +13,10 @@
 # (tests/boot/signed-update.py). A second unit, tur-desktop-check, runs only
 # in the extra boot of tests/boot/splash.py (kernel argument
 # tur.desktop_check) and records what a new account's desktop got (task D-04).
+# Two more, tur-windows-autologin and tur-windows-check, run only in the
+# Windows boot of tests/boot/windows.py (kernel argument tur.windows_check):
+# real Windows applications installed, started and removed on the installed
+# system, in a signed-in session, with SELinux enforcing.
 #
 # The build context is the repository root, filtered by
 # Containerfile.containerignore beside this file.
@@ -53,15 +57,26 @@ COPY services/tur-update/agent-tools.json services/tur-update/agent-tools.adapte
      /usr/share/tur-pax-e2e/repo/services/tur-update/
 COPY services/tur-device-manager/tests/fixtures/laptop/ /usr/share/tur-pax-e2e/laptop/
 
+# What the Windows boot (tests/boot/windows.py) runs in the guest: the
+# real-application and autopilot drivers of tests/windows-runtime, unchanged
+# but for their --session mode, and the list of applications with their
+# publishers' addresses and pinned hashes. Nothing downloaded is in the image.
+COPY tests/windows-runtime/apps.py tests/windows-runtime/apps.json tests/windows-runtime/autopilot.py \
+     /usr/share/tur-windows-e2e/
+
 # What P@x's session-service test (tests/pax/service_e2e.py) starts besides
 # the service: a private bus (dbus-daemon; the image's own session bus is
 # dbus-broker) and a password store that speaks the Secret Service
 # interface (gnome-keyring; the desktop's own is KWallet, which the test
 # does not drive). Only in this test image, from the base's repositories,
 # with the versions they hold on the day of the build; what came is listed.
-RUN dnf -y --setopt=install_weak_deps=False install dbus-daemon gnome-keyring && \
+#
+# The Windows boot's drivers close an application's windows the way a window
+# manager's close button does, with wmctrl (EWMH, which KWin implements for
+# Xwayland's windows). xwininfo is in the TUR image itself.
+RUN dnf -y --setopt=install_weak_deps=False install dbus-daemon gnome-keyring wmctrl && \
     dnf clean all && \
-    rpm -q --qf '%{NAME}-%{VERSION}-%{RELEASE}.%{ARCH}\n' dbus-daemon gnome-keyring \
+    rpm -q --qf '%{NAME}-%{VERSION}-%{RELEASE}.%{ARCH}\n' dbus-daemon gnome-keyring wmctrl \
         > /usr/share/tur-pax-e2e/added-packages.txt && \
     cat /usr/share/tur-pax-e2e/added-packages.txt
 
@@ -82,6 +97,13 @@ RUN set -eu; \
     chmod 0755 /usr/libexec/tur-boot-test/desktop-check; \
     ln -s ../tur-desktop-check.service \
         /usr/lib/systemd/system/multi-user.target.wants/tur-desktop-check.service; \
+    # The Windows boot (tests/boot/windows.py).
+    chmod 0755 /usr/libexec/tur-boot-test/windows-check /usr/libexec/tur-boot-test/windows-preflight; \
+    chmod -R a+rX /usr/share/tur-windows-e2e; \
+    ln -s ../tur-windows-autologin.service \
+        /usr/lib/systemd/system/multi-user.target.wants/tur-windows-autologin.service; \
+    ln -s ../tur-windows-check.service \
+        /usr/lib/systemd/system/multi-user.target.wants/tur-windows-check.service; \
     bootc container lint
 
 LABEL org.tur.test-image="boot"

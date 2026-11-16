@@ -1,0 +1,221 @@
+#!/usr/bin/bash
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# TUR boot-test Windows applications check. Present only in the boot-test
+# image, and inert unless the kernel command line has tur.windows_check,
+# which only the Windows boot of tests/boot/windows.py sets.
+#
+# In that boot SELinux is enforcing, as installed, and the boot test's user is
+# signed in to Plasma (tur-windows-autologin.service). This waits for that
+# session, then runs, as that user and inside that user's own service
+# manager (so with the SELinux context of a login, as component-checks
+# does), in the session's display:
+#
+#   1. tests/windows-runtime/apps.py --session: real Windows applications
+#      downloaded from their publishers (pinned hashes), each installed,
+#      started from its launcher entry, used once and removed through
+#      tur-runtime; one of them also found and started in Plasma's launcher;
+#   2. tur-apps, the command-line route of the application centre, with an
+#      installer file the person has: plan, install, list, remove;
+#   3. tests/windows-runtime/autopilot.py --session --real-only: one real
+#      application with a fault injected, which the autopilot must find.
+#
+# Screenshots and key presses are the host's: the drivers write a request
+# into a FIFO, and this script prints it on the serial console, where
+# tests/boot/windows.py reads it. Everything recorded goes to the host as a
+# tar stream over the boot test's virtio-serial port. It decides nothing.
+set -u
+
+user=turtest
+out=/run/tur-windows-check
+port=/dev/virtio-ports/org.tur.boottest
+share=/usr/share/tur-windows-e2e
+fw=/sys/firmware/qemu_fw_cfg/by_name/opt/org.tur/windows-check
+
+say() { printf 'TUR-BOOT-TEST: %s\n' "$*" > /dev/ttyS0 2> /dev/null; printf '%s\n' "$*"; }
+uptime_s() { cut -d' ' -f1 /proc/uptime | cut -d. -f1; }
+
+rm -rf "${out}"
+mkdir -p "${out}"
+chmod 0755 "${out}"
+status="${out}/status"
+: > "${status}"
+: > "${out}/exit-status.tsv"
+put() { printf '%s=%s\n' "$1" "$2" >> "${status}"; }
+
+# The drivers' requests to the host: "SHOT <name>" and "KEY <qcode>".
+fifo="${out}/host.fifo"
+mkfifo -m 0666 "${fifo}"
+exec 3<> "${fifo}"
+(
+    while IFS= read -r line <&3; do
+        case "${line}" in
+            "SHOT "* | "KEY "*) say "WINDOWS-${line}" ;;
+        esac
+    done
+) &
+relay=$!
+
+modprobe qemu_fw_cfg 2> /dev/null
+only="7zip-exe,putty-exe,putty-exe-32,putty-msi,notepadpp-nsis,notepadpp-zip,7zip-msi,innosetup,vlc-nsis"
+if [ -e "${fw}/only/raw" ]; then only="$(tr -dc 'a-z0-9,-' < "${fw}/only/raw")"; fi
+put only "${only}"
+say "WINDOWS-CHECK-START user=${user} uptime=$(uptime_s) only=${only}"
+
+uid="$(id -u "${user}" 2> /dev/null)"
+home="$(getent passwd "${user}" | cut -d: -f6)"
+put uid "${uid}"
+put home "${home}"
+
+# ---- the system, before anything runs ------------------------------------------
+put selinux "$(getenforce 2>&1)"
+{
+    echo "== getenforce: $(getenforce 2>&1)"
+    echo "== sestatus"; sestatus 2>&1
+    echo "== os-release"; cat /usr/lib/os-release
+    echo "== wine --version: $(wine --version 2>&1)"
+    echo "== Wine's packages"; rpm -qa 'wine*' ntsync-autoload xwininfo 'mingw64-*' | LC_ALL=C sort
+    echo "== links"; ls -lZ /usr/bin/wine /usr/bin/wineserver /usr/bin/wine64 /usr/bin/wineserver64 /etc/alternatives/wine* 2>&1
+    echo "== ntsync"; lsmod | grep -w ntsync; ls -lZ /dev/ntsync 2>&1
+    echo "== bubblewrap: $(bwrap --version 2>&1)"
+    echo "== user namespaces: $(sysctl -n user.max_user_namespaces 2>&1)"
+    echo "== memory"; free -m
+    echo "== disk"; df -h / /var /home 2>&1
+} > "${out}/system.txt" 2>&1
+
+# ---- wait for the account's Plasma session --------------------------------------
+pid=""
+for _ in $(seq 1 300); do
+    pid="$(pgrep -u "${uid}" -x plasmashell | head -n1)"
+    if [ -n "${pid}" ]; then break; fi
+    sleep 1
+done
+put plasmashell_pid "${pid}"
+put plasmashell_seen_uptime "$(uptime_s)"
+if [ -z "${pid}" ]; then
+    say "WINDOWS-CHECK plasmashell did not start"
+fi
+session_env=()
+if [ -n "${pid}" ]; then
+    while IFS= read -r -d '' variable; do
+        case "${variable}" in
+            DISPLAY=* | WAYLAND_DISPLAY=* | XAUTHORITY=* | XDG_CURRENT_DESKTOP=* | XDG_SESSION_TYPE=* | LANG=*)
+                session_env+=("--setenv=${variable}")
+                ;;
+        esac
+    done < "/proc/${pid}/environ"
+fi
+printf '%s\n' "${session_env[@]}" > "${out}/session-environment.txt"
+# Let the session settle: the panel, the launcher's index.
+sleep 30
+say "WINDOWS-CHECK session ready uptime=$(uptime_s)"
+
+# as_session NAME SECONDS COMMAND...: run as the user, in the user's own
+# service manager, with the session's display; keep what it prints and its
+# exit status (written by the user's own shell, in files made for it here).
+as_session() {
+    local name="$1" seconds="$2" rc
+    shift 2
+    for suffix in out err rc; do
+        : > "${out}/${name}.${suffix}"
+        chown "${user}" "${out}/${name}.${suffix}"
+    done
+    # shellcheck disable=SC2016  # expanded by the user's shell
+    timeout "$((seconds + 60))" systemd-run --machine="${user}@.host" --user --wait --collect --quiet \
+        --unit="tur-windows-${name}" -p RuntimeMaxSec="${seconds}" "${session_env[@]}" -- \
+        /usr/bin/bash -c '"$@" > "$0.out" 2> "$0.err" < /dev/null; echo "$?" > "$0.rc"' "${out}/${name}" "$@" \
+        > "${out}/${name}.systemd-run.txt" 2>&1 < /dev/null
+    rc="$(tr -dc '0-9' < "${out}/${name}.rc")"
+    if [ -z "${rc}" ]; then rc=255; fi
+    printf '%s\t%s\n' "${name}" "${rc}" >> "${out}/exit-status.tsv"
+    return "${rc}"
+}
+
+# follow FILE: copy a driver's output to the serial console as it is
+# written, so that the host's log shows progress even if the guest never
+# finishes. The host ignores these lines.
+follow() {
+    tail -n +1 -F "$1" 2> /dev/null | sed -u "s/^/TUR-BOOT-TEST: WINDOWS-LOG $2: /" > /dev/ttyS0 &
+}
+
+# The session must stay visible and unlocked for an hour: no screen locking,
+# no display power saving (kde-inhibit holds Plasma's inhibition while it
+# runs), as a person working at it would have.
+as_session kscreenlocker 30 /usr/bin/kwriteconfig6 --file kscreenlockerrc --group Daemon --key Autolock false
+timeout 30 systemd-run --machine="${user}@.host" --user --quiet --unit=tur-windows-inhibit "${session_env[@]}" -- \
+    /usr/bin/kde-inhibit --power --screenSaver /usr/bin/sleep 10800 > "${out}/inhibit.txt" 2>&1 < /dev/null
+
+work="${home}/tur-windows"
+# shellcheck disable=SC2016  # expanded by the shell that runs the snippet
+as_session context 60 /usr/bin/bash -c 'id; id -Z; echo "DISPLAY=${DISPLAY:-} WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-}"; mkdir -p "$1"' _ "${work}"
+
+# ---- 0. Wine alone, then tur-runtime's prefix creation, with time limits --------
+say "WINDOWS-CHECK preflight start uptime=$(uptime_s)"
+: > "${out}/preflight.out"
+follow "${out}/preflight.out" preflight
+as_session preflight 900 /usr/libexec/tur-boot-test/windows-preflight "${work}/preflight"
+say "WINDOWS-CHECK preflight done uptime=$(uptime_s)"
+
+# ---- 1. real applications, through tur-runtime ----------------------------------
+say "WINDOWS-CHECK apps start uptime=$(uptime_s)"
+: > "${out}/apps.out"
+follow "${out}/apps.out" apps
+as_session apps 2400 /usr/bin/python3 "${share}/apps.py" --session --shot-fifo "${fifo}" \
+    --launcher-check 7zip-exe --only "${only}" --step-timeout 420 \
+    --tur-runtime /usr/bin/tur-runtime --apps "${share}/apps.json" \
+    --work-dir "${work}/apps" --downloads "${work}/downloads" --evidence "${work}/evidence/apps" \
+    --title "Real applications on the installed TUR system"
+put apps_status "$?"
+say "WINDOWS-CHECK apps done uptime=$(uptime_s)"
+
+# ---- 2. the application centre's route: tur-apps with an installer file ---------
+installer="$(find "${work}/downloads/7zip-exe" -name '*.exe' 2> /dev/null | head -n1)"
+put tur_apps_installer "${installer}"
+if [ -n "${installer}" ]; then
+    as_session tur-apps-plan 120 /usr/bin/tur-apps plan org.7-zip.7zip --route wine --file "${installer}" --json
+    as_session tur-apps-install 600 /usr/bin/tur-apps install org.7-zip.7zip --route wine --file "${installer}" --yes --events
+    as_session tur-apps-list 60 /usr/bin/tur-apps list --json
+    # shellcheck disable=SC2016  # expanded by the shell that runs the snippet
+    as_session tur-apps-entries 30 /usr/bin/bash -c 'ls -la "$HOME/.local/share/applications"; for f in "$HOME"/.local/share/applications/tur-wine-*.desktop; do echo "== $f"; cat "$f"; done'
+    as_session tur-apps-remove 300 /usr/bin/tur-apps remove org.7-zip.7zip --delete-data --events
+    # shellcheck disable=SC2016  # expanded by the shell that runs the snippet
+    as_session tur-apps-after 30 /usr/bin/bash -c 'ls -la "$HOME/.local/share/applications"; ls -la "$HOME/.local/share/tur/runtime/prefixes" "$HOME/.local/share/tur/runtime/launchers" 2>&1; tur-apps list --json'
+fi
+say "WINDOWS-CHECK tur-apps done uptime=$(uptime_s)"
+
+# ---- 3. the compatibility autopilot, on a real application with a fault ---------
+: > "${out}/autopilot.out"
+follow "${out}/autopilot.out" autopilot
+as_session autopilot 900 /usr/bin/python3 "${share}/autopilot.py" --session --real-only \
+    --shot-fifo "${fifo}" --real putty-exe \
+    --tur-runtime /usr/bin/tur-runtime --tur-catalogue /usr/bin/tur-catalogue \
+    --build-dir "${work}/no-build" --work-dir "${work}/autopilot" --apps "${share}/apps.json" \
+    --downloads "${work}/downloads" --evidence "${work}/evidence/autopilot"
+put autopilot_status "$?"
+say "WINDOWS-CHECK autopilot done uptime=$(uptime_s)"
+
+# ---- what SELinux and the journal say -------------------------------------------
+put selinux_after "$(getenforce 2>&1)"
+{
+    ausearch -m AVC,USER_AVC,SELINUX_ERR -ts boot 2>&1 || true
+} > "${out}/avc-ausearch.txt"
+journalctl -b --no-pager -o short-monotonic 2>&1 | grep -E 'avc: |AVC|SELinux is preventing' > "${out}/avc-journal.txt"
+journalctl -b --no-pager -o short-monotonic "_UID=${uid}" > "${out}/user-journal.txt" 2>&1
+journalctl -b --no-pager -o short-monotonic -k > "${out}/kernel.txt" 2>&1
+ls -laR "${home}/.local/share/applications" "${home}/.local/share/tur" > "${out}/user-data-after.txt" 2>&1
+pgrep -a -u "${uid}" -f 'wine|tur-runtime' > "${out}/left-running.txt" 2>&1
+cp -r "${work}/evidence" "${out}/evidence" 2> /dev/null
+find "${out}/evidence" -name '*.png' -size +2M -delete 2> /dev/null
+put finished_uptime "$(uptime_s)"
+
+# ---- send -----------------------------------------------------------------------
+kill "${relay}" 2> /dev/null
+pkill -f "tail -n \+1 -F ${out}/" 2> /dev/null
+exec 3>&-
+rm -f "${fifo}"
+chmod -R a+rX "${out}"
+if [ -e "${port}" ] && tar -C /run -cf - tur-windows-check > "${port}"; then
+    for _ in 1 2 3; do say "WINDOWS-CHECK-DONE sent uptime=$(uptime_s)"; sleep 1; done
+else
+    for _ in 1 2 3; do say "WINDOWS-CHECK-DONE not-sent uptime=$(uptime_s)"; sleep 1; done
+fi

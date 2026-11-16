@@ -702,7 +702,11 @@ fn remove_windows(
                 .map(|path| display(&PathBuf::from(path), dirs)),
         );
     }
-    for path in [dirs.runtime_app(app_id), dirs.runtime_launcher(app_id)] {
+    for path in [
+        dirs.runtime_app(app_id),
+        dirs.runtime_launcher(app_id),
+        dirs.runtime_desktop_entry(app_id),
+    ] {
         if exists(&path) {
             findings.push(format!("{} is still there", display(&path, dirs)));
         }

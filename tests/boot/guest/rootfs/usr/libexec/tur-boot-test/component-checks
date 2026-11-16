@@ -150,7 +150,7 @@ run catalogue-route-named tur-catalogue --catalogue /usr/share/tur/catalogue rou
 run catalogue-missing tur-catalogue show org.example.missing --json
 cd "${out}" || exit 1
 
-# ---- tur-runtime: a Windows program, on a system with no Windows runtime ---------------
+# ---- tur-runtime: a Windows program, on a system that carries Wine ----------------------
 run runtime-fixture /usr/libexec/tur-boot-test/make-pe-fixture "${out}/fixture-gui.exe"
 run runtime-inspect-windows tur-runtime inspect --json "${out}/fixture-gui.exe"
 run runtime-inspect-windows-text tur-runtime inspect "${out}/fixture-gui.exe"

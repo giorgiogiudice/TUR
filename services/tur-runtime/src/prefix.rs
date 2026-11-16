@@ -583,6 +583,7 @@ impl Planner<'_> {
             &self.app.staging,
             &self.app.logs,
             &self.app.launchers,
+            &self.app.desktop_entry,
         ]
         .into_iter()
         .map(|path| Step::RemoveTree { path: path.clone() })
@@ -1446,9 +1447,13 @@ pub(crate) mod tests {
                 Step::RemoveTree {
                     path: setup.app.logs.clone()
                 },
-                // The launcher entry of an installed application goes too.
+                // The launcher entry of an installed application goes too,
+                // with its icon.
                 Step::RemoveTree {
                     path: setup.app.launchers.clone()
+                },
+                Step::RemoveTree {
+                    path: setup.app.desktop_entry.clone()
                 },
             ]
         );
@@ -1464,6 +1469,7 @@ pub(crate) mod tests {
             assert!(
                 path.starts_with(setup.machine.dirs.data_root())
                     || path.starts_with(setup.machine.dirs.state_root())
+                    || crate::paths::is_application_entry(setup.machine.dirs.applications(), path)
             );
         }
         assert_eq!(
