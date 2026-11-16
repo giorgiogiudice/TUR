@@ -11,6 +11,9 @@
 //!   OUT_DIR/technical.tar.zst     a report made with the technical profile
 //!   OUT_DIR/duplicate-a.tar.zst   two reports with the same signature
 //!   OUT_DIR/duplicate-b.tar.zst
+//!   OUT_DIR/large.tar.zst         a report near the receiver's limits: a
+//!                                 journal of about 56 MiB unpacked, to
+//!                                 measure the receiver's memory and time
 //! ```
 
 use std::path::PathBuf;
@@ -34,6 +37,31 @@ fn report(title: &str, code: &str, component: &str) -> String {
     .to_string()
 }
 
+/// The unpacked size of the large report's journal.
+const LARGE_JOURNAL_BYTES: usize = 56 * 1024 * 1024;
+
+/// A journal of `LARGE_JOURNAL_BYTES`, every line different, with the kinds
+/// of value the receiver's scrubber looks for, so that the measurement
+/// includes the scrubbing.
+fn large_journal() -> String {
+    let mut text = String::with_capacity(LARGE_JOURNAL_BYTES + 256);
+    let mut line = 0_u64;
+    while text.len() < LARGE_JOURNAL_BYTES {
+        line += 1;
+        text.push_str(&format!(
+            "{{\"MESSAGE\":\"line {line}: unit-{} failed at 10.{}.{}.{} for uid={}\",\
+             \"PRIORITY\":\"{}\"}}\n",
+            line % 97,
+            line % 251,
+            (line / 251) % 251,
+            (line / 63_001) % 251,
+            1000 + line % 7,
+            line % 7,
+        ));
+    }
+    text
+}
+
 fn main() -> ExitCode {
     let Some(directory) = std::env::args_os().nth(1).map(PathBuf::from) else {
         eprintln!("usage: planted_bundle OUT_DIR");
@@ -45,6 +73,8 @@ fn main() -> ExitCode {
         .collect();
     let duplicate = report("Planted duplicate", "TUR-STORAGE-PLANT-001", "storage");
     let technical = report("Technical", "TUR-STORAGE-PLANT-002", "storage");
+    let large = report("Large", "TUR-STORAGE-PLANT-003", "storage");
+    let journal = large_journal();
     let files = [
         ("planted.tar.zst", testing::planted_bundle()),
         (
@@ -76,6 +106,14 @@ fn main() -> ExitCode {
             testing::bundle(
                 Some(&duplicate),
                 &[("system/kernel.txt", "b\n")],
+                Profile::Default,
+            ),
+        ),
+        (
+            "large.tar.zst",
+            testing::bundle(
+                Some(&large),
+                &[("boot/current-journal.jsonl", &journal)],
                 Profile::Default,
             ),
         ),

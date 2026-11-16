@@ -886,3 +886,118 @@ fn the_receiver_schema_and_the_client_types_agree() {
         "state",
     );
 }
+
+// ------------------------------------------------- hand-over, show, activity
+
+const FIXED_SCHEMA: &str = include_str!("../../../../schemas/report-fixed.schema.json");
+const ORIGIN_SCHEMA: &str = include_str!("../../../../schemas/report-origin.schema.json");
+
+fn prepared_by_pax() -> PreparedReport {
+    let mut request = request();
+    request.prepared_by = PreparedBy::Pax;
+    prepare(&host(), &request, false, EPOCH, known()).expect("the report is prepared")
+}
+
+#[test]
+fn a_preview_pax_made_hands_the_report_to_the_person() {
+    // P@x's preview saves nothing; it ends with the person's command.
+    let shown = preview(&prepared_by_pax(), Some(RECEIVER), None);
+    let handoff = shown.handoff.as_ref().expect("a hand-over");
+    assert_eq!(handoff.by, "person");
+    assert_eq!(handoff.argv[..3], ["tur-diag", "report", "submit"]);
+    // The texts are those of the bundle, after redaction: no user name.
+    assert!(!handoff.command.contains("alice"), "{}", handoff.command);
+    assert!(handoff.command.contains("<user-"), "{}", handoff.command);
+    assert!(render_preview(&shown).contains(&handoff.command));
+
+    // The person's own preview, and a saved report, have none.
+    assert_eq!(preview(&prepared(), Some(RECEIVER), None).handoff, None);
+    let saved = preview(&prepared_by_pax(), Some(RECEIVER), Some(Path::new("/r")));
+    assert_eq!(saved.handoff, None);
+
+    let schema: Value = serde_json::from_str(PREVIEW_SCHEMA).expect("JSON");
+    let instance = serde_json::to_value(&shown).expect("JSON");
+    same_shape(&schema, &instance, "preview");
+    same_shape(
+        &schema["properties"]["handoff"],
+        &instance["handoff"],
+        "handoff",
+    );
+}
+
+#[test]
+fn show_reads_back_exactly_what_prepare_showed() {
+    let prepared = prepared();
+    let file = Path::new("/state/prepared/report-x.tar.zst");
+    let shown = preview_of_archive(&prepared.archive, Some(RECEIVER), file).expect("shown");
+    let expected = preview(&prepared, Some(RECEIVER), Some(file));
+    assert_eq!(shown, expected);
+    let report_json = member(&prepared.inspected, REPORT_PATH).expect("report.json");
+    assert!(String::from_utf8_lossy(report_json).contains("<user-"));
+    assert_eq!(member(&prepared.inspected, "no/such/file"), None);
+    assert!(preview_of_archive(b"not a bundle", None, file).is_err());
+}
+
+#[test]
+fn pax_activity_travels_redacted_in_the_bundle() {
+    let trail = format!(
+        "{}\n",
+        json!({
+            "TUR_AI_TASK": "task-7",
+            "TUR_AI_ACTION": "command:read_only",
+            "TUR_AI_DECISION": "refused",
+            "TUR_ERROR_CODE": "TUR-AI-POLICY-004",
+            "TUR_AI_PROVIDER": "workstation-7",
+            "MESSAGE": "alice asked",
+        })
+    );
+    let extra = ExtraDocument {
+        path: PAX_ACTIVITY_PATH.to_owned(),
+        format: Format::JsonLines,
+        text: pax_activity(&trail),
+    };
+    let prepared = prepare_with(&host(), &request(), false, EPOCH, known(), &[extra])
+        .expect("the report is prepared");
+    let activity = member(&prepared.inspected, PAX_ACTIVITY_PATH).expect("the activity");
+    let text = String::from_utf8_lossy(activity);
+    assert!(text.contains("TUR-AI-POLICY-004"), "{text}");
+    assert!(!text.contains("MESSAGE"), "{text}");
+    assert!(!text.contains("alice"), "{text}");
+    assert!(!text.contains("workstation-7"), "the host name is redacted: {text}");
+}
+
+#[test]
+fn the_fixed_and_origin_schemas_and_the_rust_types_agree() {
+    let origin = SentOrigin {
+        schema_version: 1,
+        report_id: "R-0123456789abcdef".to_owned(),
+        error_code: Some("TUR-AUDIO-RESUME-001".to_owned()),
+        signature: "0123456789abcdef".to_owned(),
+        version: Some("0.1.0".to_owned()),
+        build_id: Some("20261112.g0123456789ab".to_owned()),
+    };
+    let schema: Value = serde_json::from_str(ORIGIN_SCHEMA).expect("JSON");
+    let instance = serde_json::to_value(&origin).expect("JSON");
+    same_shape(&schema, &instance, "origin");
+
+    let mut sent = record();
+    sent.state = "fixed".to_owned();
+    sent.fixed_in = Some("0.2.1".to_owned());
+    let running = crate::heal::Running {
+        build_id: Some("b2".to_owned()),
+        version: Some("0.2.1".to_owned()),
+        boot_id: None,
+    };
+    let fixes = crate::heal::Fixes::default();
+    let list = fixed_reports(&[sent], &[Some(origin)], &fixes, &running, &[]);
+    assert_eq!(list.fixed.len(), 1);
+    let instance = serde_json::to_value(&list).expect("JSON");
+    let schema: Value = serde_json::from_str(FIXED_SCHEMA).expect("JSON");
+    same_shape(&schema, &instance, "fixed");
+    same_shape(
+        &schema["properties"]["fixed"]["items"],
+        &instance["fixed"][0],
+        "fixed[]",
+    );
+    assert!(render_fixed(&list).starts_with("The problem you reported is fixed"));
+}

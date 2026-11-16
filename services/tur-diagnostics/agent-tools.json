@@ -15,7 +15,7 @@
     },
     {
       "name": "diag_report_prepare",
-      "description": "Prepare a problem report for TUR's developers and show exactly what it would contain: the report text after personal data is removed, every file of the diagnostic bundle with its size, and how many identifiers were replaced. Preview only: nothing is saved and nothing is sent. Give a title and a component, or from_boot_health to report a failed update that boot health recorded. Only the person can send a report, after reading it.",
+      "description": "Prepare a problem report for TUR's developers and show exactly what it would contain: the report text after personal data is removed, every file of the diagnostic bundle with its size, and how many identifiers were replaced. Preview only: nothing is saved and nothing is sent. Give a title and a component, or from_boot_health to report a failed update that boot health recorded. You can never send a report: only the person can, after reading it. Show the person what the report contains, then give them the command in handoff.command; it shows them everything again and sends only if they type yes.",
       "class": 0,
       "method": "PreviewReport",
       "input_schema": {
@@ -76,6 +76,34 @@
       "input_schema": {
         "type": "object",
         "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "diag_report_send",
+      "description": "Send a problem report to TUR's developers. Declared so that the policy holds it explicitly, and never offered: it has no adapter, because sending a report is the person's act (ADR-0024). P@x prepares and shows a report with diag_report_prepare; the person sends it with tur-diag report submit, after reading it and typing yes.",
+      "class": 2,
+      "method": "SendReport",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "One line that names the problem.",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "component": {
+            "type": "string",
+            "description": "The part of TUR concerned, as for diag_report_prepare.",
+            "maxLength": 32
+          },
+          "error_code": {
+            "type": "string",
+            "description": "A TUR error code, if one is known.",
+            "maxLength": 64
+          }
+        },
         "additionalProperties": false
       }
     },

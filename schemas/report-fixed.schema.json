@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/giorgiogiudice/TUR/schemas/report-fixed.schema.json",
+  "$comment": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+  "title": "TUR problem reports that are fixed",
+  "description": "What tur-diag report fixed --json prints: the reports sent from this account that are fixed, either because the running image lists the report's code in /usr/share/tur/heal/fixes.json and the report was made on another build ('update'), or because the receiver said so at the last tur-diag report status ('receiver'). It reads only local files and sends nothing. The Rust type tur_diag::report::FixedList is authoritative and a test compares the two.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "running_version", "running_build_id", "fixed"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "running_version": { "type": ["string", "null"] },
+    "running_build_id": { "type": ["string", "null"] },
+    "fixed": {
+      "description": "Newest first.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "report_id", "title", "error_code", "sent_utc", "reported_on", "fixed_in", "how",
+          "summary", "change", "rechecked_by_healing", "text"
+        ],
+        "properties": {
+          "report_id": { "type": "string", "pattern": "^R-[0-9a-f]{16}$" },
+          "title": { "type": "string" },
+          "error_code": { "type": ["string", "null"] },
+          "sent_utc": { "type": "string" },
+          "reported_on": { "description": "The TUR version the report was made on.", "type": ["string", "null"] },
+          "fixed_in": { "description": "The version that fixes it.", "type": ["string", "null"] },
+          "how": { "enum": ["update", "receiver"] },
+          "summary": { "description": "What changed, from fixes.json.", "type": ["string", "null"] },
+          "change": { "description": "The change that fixed it, from fixes.json.", "type": ["string", "null"] },
+          "rechecked_by_healing": {
+            "description": "The code is one of the self-healing catalogue: the healing service checks the fault again after the update and tells the person itself.",
+            "type": "boolean"
+          },
+          "text": { "description": "The sentence for the person.", "type": "string" }
+        }
+      }
+    }
+  }
+}

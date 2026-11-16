@@ -9,8 +9,14 @@
 #
 # No access log is configured: Caddy writes none unless told to, and an
 # access log would record every reporter's IP address.
+#
+# deploy/install.sh writes this file with the domain filled in. With
+# --tls-cert and --tls-key it replaces the "# tls:" line below with
+# "tls CERT KEY", so that Caddy serves the server's own certificate instead
+# of obtaining one from Let's Encrypt.
 
 reports.example.org {
+	# tls: written by install.sh when the server's own certificate is used
 	@receiver path /v1/reports /v1/reports/*
 	handle @receiver {
 		request_body {

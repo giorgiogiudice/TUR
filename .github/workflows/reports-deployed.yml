@@ -1,0 +1,124 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Problem reports as deployed (ADR-0024; report reports-e2e-1). Started by
+# hand only: it installs packages on the runner and takes about half an
+# hour, so it does not run on every change; the `reports` workflow keeps the
+# per-change checks.
+#
+# The runner plays the receiver's own server: the image CI builds here is
+# installed with server/report-receiver/deploy/install.sh, the one command
+# the owner runs (Podman, systemd, Caddy with the server's own certificate
+# from a CA made in the job). The client is TUR's pinned base image run as
+# a container, with tur-diag built here. A stand-in records what would be
+# filed on GitHub. server/report-receiver/ci/deployed_e2e.py lists every
+# check: P@x's preview and hand-over, a "no" that sends nothing, a send from
+# P@x's sandbox refused, the person's "yes", redaction on both sides, the
+# filed summary, mark-fixed and "the problem you reported is fixed" after an
+# update, two reports near the limits at once with the memory and CPU they
+# took, the logs, and installing again.
+#
+# Nothing here calls the real GitHub API or any other server, and no
+# repository, issue, domain or secret is created.
+name: reports-deployed
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: reports-deployed-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: never
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  deployed:
+    name: Receiver installed with install.sh, TUR base as the client
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: read   # TUR's mirrors of the pinned images (ghcr.io)
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      # The receiver's build images for docker, and the pinned TUR base
+      # (image/base.lock) for podman, from TUR's mirrors when upstream has
+      # dropped the digest.
+      - uses: ./.github/actions/use-base-mirror
+        with:
+          images: server/report-receiver/Containerfile
+
+      - name: Scratch directory and the client image
+        run: |
+          mkdir -p "$RUNNER_TEMP/deployed/material"
+          echo "WORK=$RUNNER_TEMP/deployed" >> "$GITHUB_ENV"
+          # shellcheck disable=SC1091
+          . image/base.lock
+          echo "CLIENT_IMAGE=${BASE_IMAGE}@${BASE_DIGEST}" >> "$GITHUB_ENV"
+
+      - name: Toolchain
+        run: |
+          rustup show active-toolchain || rustup toolchain install
+          rustc --version; cargo --version; podman --version; docker --version; openssl version
+
+      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            services/tur-diagnostics/target
+            server/report-receiver/target
+          key: reports-deployed-${{ hashFiles('rust-toolchain.toml', 'services/tur-diagnostics/Cargo.lock', 'server/report-receiver/Cargo.lock') }}
+          restore-keys: reports-deployed-
+
+      - name: Lint the scripts
+        run: |
+          shellcheck --version | sed -n 2p
+          shellcheck server/report-receiver/deploy/install.sh
+          python3 -m py_compile server/report-receiver/ci/deployed_e2e.py server/report-receiver/ci/answer.py
+
+      - name: Build tur-diag
+        working-directory: services/tur-diagnostics
+        run: cargo build --locked --release --bin tur-diag
+
+      - name: Build the test bundles
+        working-directory: server/report-receiver
+        run: cargo run --locked --release --example planted_bundle -- "$WORK/material"
+
+      - name: Build the receiver's image and its archive, as the reports workflow keeps it
+        run: |
+          # shellcheck disable=SC2086 # TUR_BUILD_CONTEXTS is a list of flags
+          docker build $TUR_BUILD_CONTEXTS --file server/report-receiver/Containerfile --tag tur-report-receiver:ci .
+          docker save tur-report-receiver:ci | gzip -9 > "$WORK/tur-report-receiver-image.tar.gz"
+          ( cd "$WORK" && sha256sum tur-report-receiver-image.tar.gz > tur-report-receiver-image.tar.gz.sha256 )
+
+      - name: Fetch the client image (TUR's pinned base)
+        run: sudo podman pull "$CLIENT_IMAGE"
+
+      - name: Run the deployed end-to-end test
+        run: |
+          python3 server/report-receiver/ci/deployed_e2e.py \
+            --tur-diag services/tur-diagnostics/target/release/tur-diag \
+            --image-archive "$WORK/tur-report-receiver-image.tar.gz" \
+            --client-image "$CLIENT_IMAGE" \
+            --material "$WORK/material" \
+            --work "$WORK" \
+            --out out/reports-deployed
+
+      - name: Summary
+        if: always()
+        run: |
+          if [ -f out/reports-deployed/summary.md ]; then cat out/reports-deployed/summary.md >> "$GITHUB_STEP_SUMMARY"; fi
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: reports-deployed
+          path: out/reports-deployed/
+          if-no-files-found: warn

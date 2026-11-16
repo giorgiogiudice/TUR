@@ -20,6 +20,9 @@
 //! * [`SentRecord`] is the local list of sent reports, which Settings reads.
 //! * [`request_from_boot_health`] turns a failed update recorded by boot
 //!   health into a report proposal.
+//! * [`handoff`] is how a report P@x previewed reaches the person, who alone
+//!   sends it; [`activity`] is what P@x did recently, for a report about
+//!   P@x; [`fixed`] links a sent report to the update that fixes it.
 //!
 //! Nothing in this module prints or logs a field's value in an error: error
 //! details name the field, never its content.
@@ -44,6 +47,17 @@ use crate::error::{DiagError, ErrorKind};
 use crate::host::{Host, Limits, RunError};
 use crate::manifest::Manifest;
 use crate::redact::{Format, KnownIdentifiers, Profile, RedactionReport};
+
+pub mod activity;
+pub mod fixed;
+pub mod handoff;
+
+pub use activity::{PAX_ACTIVITY_PATH, pax_activity};
+pub use fixed::{
+    FixedBy, FixedList, FixedReport, ORIGINS_DIR, SentOrigin, fixed_reports, read_origin,
+    render_fixed, write_origin,
+};
+pub use handoff::{Handoff, PAX_SANDBOX_HOSTNAME, handoff_for, in_pax_sandbox, shell_quote};
 
 /// The path of the report inside a bundle.
 pub const REPORT_PATH: &str = "report.json";
@@ -489,6 +503,20 @@ pub fn prepare(
     created_epoch_seconds: u64,
     known: KnownIdentifiers,
 ) -> Result<PreparedReport, DiagError> {
+    prepare_with(host, request, since_boot, created_epoch_seconds, known, &[])
+}
+
+/// As [`prepare`], with further documents in the bundle, such as P@x's
+/// recent activity ([`PAX_ACTIVITY_PATH`]). They are learnt from and
+/// redacted together with everything else.
+pub fn prepare_with(
+    host: &dyn Host,
+    request: &ReportRequest,
+    since_boot: bool,
+    created_epoch_seconds: u64,
+    known: KnownIdentifiers,
+    more: &[ExtraDocument],
+) -> Result<PreparedReport, DiagError> {
     request
         .validate(Strictness::Input)
         .map_err(|problem| DiagError::new(ErrorKind::ReportInvalid, problem))?;
@@ -505,11 +533,12 @@ pub fn prepare(
     // string decoded first (Format::JsonLines).
     let line = serde_json::to_string(request)
         .map_err(|error| DiagError::new(ErrorKind::Internal, error.to_string()))?;
-    let extras = [ExtraDocument {
+    let mut extras = vec![ExtraDocument {
         path: REPORT_PATH.to_owned(),
         format: Format::JsonLines,
         text: format!("{line}\n"),
     }];
+    extras.extend(more.iter().cloned());
     let built = build_bundle_with(host, &collect, &extras)?;
     let inspected = inspect_archive(&built.archive)?;
     Ok(PreparedReport {
@@ -576,6 +605,9 @@ pub struct Preview {
     pub bundle: PreviewBundle,
     /// What happens next, in words.
     pub notice: String,
+    /// For a report P@x previewed: how the person reads it in full and sends
+    /// it. `null` otherwise.
+    pub handoff: Option<Handoff>,
 }
 
 /// The notice every preview carries.
@@ -630,7 +662,48 @@ pub fn preview(
             identifiers_replaced,
         },
         notice: PREVIEW_NOTICE.to_owned(),
+        handoff: prepared_file
+            .is_none()
+            .then(|| handoff_for(&inspected.report))
+            .flatten(),
     }
+}
+
+/// The preview of a prepared report saved in `file`, read back from the
+/// bundle itself: what `tur-diag report show` prints, and exactly what
+/// `send` would send.
+pub fn preview_of_archive(
+    archive: &[u8],
+    receiver: Option<&str>,
+    file: &Path,
+) -> Result<Preview, DiagError> {
+    let inspected = inspect_archive(archive)?;
+    let redaction = inspected
+        .members
+        .iter()
+        .find(|(path, _)| path == REDACTION_REPORT_PATH)
+        .and_then(|(_, data)| serde_json::from_slice::<RedactionReport>(data).ok())
+        .ok_or_else(|| {
+            DiagError::new(
+                ErrorKind::ReportNotPrepared,
+                format!("{REDACTION_REPORT_PATH} is missing or unreadable"),
+            )
+        })?;
+    let prepared = PreparedReport {
+        archive: Vec::new(),
+        inspected,
+        redaction,
+    };
+    Ok(preview(&prepared, receiver, Some(file)))
+}
+
+/// The content of the member `path` of a verified report, if it has one.
+pub fn member<'a>(inspected: &'a InspectedReport, path: &str) -> Option<&'a [u8]> {
+    inspected
+        .members
+        .iter()
+        .find(|(name, _)| name == path)
+        .map(|(_, data)| data.as_slice())
 }
 
 fn indent(text: &str) -> String {
@@ -721,6 +794,13 @@ pub fn render_preview(preview: &Preview) -> String {
     out.push('\n');
     out.push_str(&preview.notice);
     out.push('\n');
+    if let Some(handoff) = &preview.handoff {
+        out.push('\n');
+        out.push_str(&handoff.text);
+        out.push_str("\n\n    ");
+        out.push_str(&handoff.command);
+        out.push('\n');
+    }
     out
 }
 

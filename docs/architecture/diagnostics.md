@@ -273,6 +273,7 @@ the `DIAG` family, is unique, and has not changed.
 | `TUR-DIAG-REPORT-010` | The directory of prepared and sent reports cannot be used. |
 | `TUR-DIAG-REPORT-011` | No sent report has that identifier. |
 | `TUR-DIAG-REPORT-012` | The prepared report is over 8 MiB, or expands beyond 64 MiB. |
+| `TUR-DIAG-REPORT-013` | `report send` or `submit` ran in P@x's read-only sandbox; only the person sends. |
 
 Command-line usage errors are reported by the argument parser with exit code 2 and
 have no TUR code.

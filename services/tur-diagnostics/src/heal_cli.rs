@@ -749,7 +749,7 @@ fn request(
 }
 
 /// The problem report for a fault TUR offers one for.
-fn report_request(code: &str, heal: &HealPlaces) -> Result<ReportRequest, DiagError> {
+pub(crate) fn report_request(code: &str, heal: &HealPlaces) -> Result<ReportRequest, DiagError> {
     let catalogue = catalogue()?;
     let fault = catalogue
         .fault(code)

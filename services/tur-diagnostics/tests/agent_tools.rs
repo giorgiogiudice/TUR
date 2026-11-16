@@ -9,7 +9,10 @@
 //! four of self-healing (ADR-0027): `heal_list_faults` and `heal_explain`,
 //! which read, and `heal_apply_remedy` and `heal_undo_remedy`, class 1,
 //! which are requests to TUR's healing service over its socket: the service
-//! decides and performs. Sending a report is not a tool (ADR-0024).
+//! decides and performs. Sending a report is declared, as `diag_report_send`
+//! of class 2, and never offered: it has no adapter, because sending is the
+//! person's act (ADR-0024). `tests/report_handoff.rs` holds the policy to
+//! that.
 //!
 //! The files are loaded with P@x's own loader (`tur-pax`, a development
 //! dependency of this test only), and every command line an adapter builds
@@ -138,16 +141,18 @@ const REQUESTS: [&str; 2] = ["heal_apply_remedy", "heal_undo_remedy"];
 /// The healing service's socket.
 const SOCKET: &str = "/run/tur/heal.socket";
 
-/// The tools the manifest declares that no program performs yet.
-const NOT_OFFERED: [&str; 0] = [];
+/// The tools the manifest declares that P@x never performs: sending a
+/// report is the person's act (ADR-0024), so it has no adapter.
+const NOT_OFFERED: [&str; 1] = ["diag_report_send"];
 
 /// Every tool with the class the manifest declares. Preparing a report is a
 /// preview and listing reports reads a local list: both observe. Sending is
-/// class 2 (ADR-0024) and is not a tool at all.
-const CLASSES: [(&str, u64); 7] = [
+/// class 2 (ADR-0024), declared and never offered.
+const CLASSES: [(&str, u64); 8] = [
     ("diag_get_status", 0),
     ("diag_report_prepare", 0),
     ("diag_report_list", 0),
+    ("diag_report_send", 2),
     ("heal_list_faults", 0),
     ("heal_explain", 0),
     ("heal_apply_remedy", 1),
