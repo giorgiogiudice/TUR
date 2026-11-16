@@ -6,8 +6,8 @@ TUR DEVELOPMENT REPORT
 Task ID:          windows-runtime-4 (issues #32, #98, #134: "Run on the TUR image")
 Subsystem:        OS image (image/wine), Universal Runtime Manager
                   (services/tur-runtime), tur-apps, boot test (tests/boot)
-Build ID:         @BUILD_ID@
-Source revision:  @REVISION@ (windows-on-image, pull request 136)
+Build ID:         20261115.g479ed7b2c141 (image workflow run 43755443830) and the build of e340597 (run 43774627368)
+Source revision:  8a6b352 (windows-on-image, pull request 136)
 
 SUMMARY
 - What changed: the TUR image carries Wine. Fedora 45's own packages,
@@ -21,6 +21,13 @@ SUMMARY
   and removed in a signed-in Plasma session with SELinux enforcing.
 - Why: tur-runtime was in the image and Wine was not, so on an installed
   TUR no Windows program ran (issue #134, the owner's definition of done).
+- STATE: NOT DONE. The image with Wine builds, passes its smoke test and is
+  reproducible. **No Windows application has yet been seen running on the
+  booted image**: the first Windows boot signed in to Plasma and then made
+  no visible progress for 75 minutes (nothing came back from the guest);
+  the second, with a preflight that would show where it stops, was
+  cancelled 15 minutes in, and since 01:37 UTC on 16 November GitHub
+  refuses every new run ("Actions has been disabled for this user").
 ```
 
 ## 1. How Wine gets into the system, and why
@@ -125,15 +132,69 @@ builds Wine with the Wine Staging patch set.
 
 ## 4. Measured on the installed, booted system
 
-@BOOT_RESULTS@
+**Not measured yet.** What the runs showed:
+
+| Run | What happened |
+|---|---|
+| boot 43755443779 (479ed7b) | Install, the three boots of the boot test and the splash boot passed. The Windows boot: SELinux enforcing, the test user signed in automatically to Plasma (picture [windows-boot-session.png](assets/windows-runtime-4/windows-boot-session.png): TUR's desktop and panel, 44 s after power-on, taken by the host). The guest then started `apps.py --session`, and for 75 minutes asked for no screenshot; the host stopped at its limit and nothing was sent back (the guest's own limits were longer than the host's: fixed). The last picture is "Display output is not active": Plasma had turned the display off (fixed: the session is kept unlocked and on with `kde-inhibit`) |
+| boot 43774627346 (e340597) | Cancelled 15 minutes into the Windows boot; no artifact. Its lint job also failed (a shellcheck note in the preflight: fixed in dfdaebe) |
+
+Where it stopped is not known. In `apps.py` the first steps are the
+download (urllib, 300 s limit), `tur-runtime installer identify`, and
+`tur-runtime app install`, whose prefix creation runs `wine wineboot --init`
+and then waits for the Wine server to exit (`supervise --settle`) without a
+time limit; a process that never exits in the prefix would stop it there,
+and `apps.py` gives each install 25 minutes, which matches three
+applications in 75 minutes. The next run has `windows-preflight` first:
+`wineboot --init` with no sandbox, then `tur-runtime prefix create`, each
+with a limit and a process listing half-way, with every line of output
+copied to the serial console as it happens, and a host picture every two
+minutes.
+
+What did run on Fedora's Wine package set: nothing on the image. The
+Ubuntu jobs of the `windows-runtime` workflow (Wine 9.0) ran with this
+change: all ten applications passed install, launch, check and uninstall,
+the new 32-bit PuTTY among them, except WinSCP's launch (both WinSCP
+installers), which fails on main too and has its own pull request
+(`fix/winscp-launch-window`); the launcher entry is now installed in
+`$XDG_DATA_HOME/applications` and found gone after removal by `apps.py`
+(run 43755443750).
 
 ## 5. Application centre and launcher
 
-@CENTRE_RESULTS@
+- **Launcher entries.** `tur-runtime app install` now installs the entry
+  where Plasma's launcher looks and removal deletes it. Measured on Ubuntu:
+  `apps.py` checks for every application that the record says
+  `installed: true`, that the entry is `$XDG_DATA_HOME/applications/tur-wine-<id>.desktop`
+  and that nothing named after the application is left after removal (run
+  43755443750, all pass); the `apps` workflow's Windows job saw tur-apps'
+  removal delete `~/.local/share/applications/tur-wine-org.notepad-plus-plus.notepad-plus-plus.desktop`
+  (run 43755443927; its check that `~/.local/share/applications` does not
+  exist then failed, because the directory stays: the check is corrected to
+  look for entries in it). **On the booted image, in Plasma's launcher: not
+  yet seen** (the Windows boot looks for 7-Zip in KRunner, takes a picture
+  and starts it with Return).
+- **The application centre's "I have the installer file" path.** PR #128
+  (the desktop programs in the image) is not merged, so the graphical path
+  cannot be shown on the image. The same route on the command line,
+  `tur-apps install org.7-zip.7zip --route wine --file <installer> --yes`,
+  then `list` and `remove --delete-data`, is in the Windows boot; not yet
+  measured there. Named follow-up: the centre's file path on the image once
+  #128 is in.
 
 ## 6. Runs
 
-@RUNS@
+| Workflow | Run | Commit | Result |
+|---|---|---|---|
+| image | 43748737452 | a86139e | Failed at `rpm -i`: `redhat-rpm-config` needs `(gpgverify if gnupg2)`, which the lock tool did not follow; fixed (lock.py follows conditional dependencies; Wine 11.21 had meanwhile replaced 11.20 in updates) |
+| image | 43755443830 | 479ed7b | Build, smoke test (every Wine check), reproducibility (same image ID twice), SBOM, manifest: pass. Fedora's marks: 5 findings (`/usr/bin/mingw64-*`, links to Fedora's MinGW scripts); fixed in the allow-list |
+| image | 43774627368 | e340597 | **Pass**, every step; image 2eb3a887… and its OCI archive |
+| boot | 43755443779 | 479ed7b | Boot test and splash: pass. Windows boot: no result (section 4) |
+| boot | 43774627346 | e340597 | Cancelled |
+| windows-runtime | 43755443750 | 479ed7b | Real applications on Ubuntu: 10 of 12 rows pass; WinSCP launch fails (as on main). Autopilot: pass |
+| apps | 43755443927 | 479ed7b | Windows job: one check expected the applications directory to be gone (corrected); Flatpak job: Flathub's application left a window and `flatpak uninstall` failed ("Directory not empty"); not touched by this change |
+| rust | — | — | Never started: queued behind 60–70 runs, cancelled by each push, then no runs at all |
+| all | — | 8a6b352 | Not started: GitHub answers "Actions has been disabled for this user" |
 
 ## 7. Decisions for the owner
 
@@ -170,4 +231,23 @@ builds Wine with the Wine Staging patch set.
 
 ## 9. Follow-ups
 
-@FOLLOWUPS@
+1. **Run the Windows boot** (`tests/boot/windows.py`) once Actions runs
+   again, read `windows/guest/tur-windows-check/preflight.out` and the
+   pictures, and fix what it shows. Until then nothing in this report says
+   a Windows application runs on TUR.
+2. The `rust` workflow has not compiled the tur-runtime and tur-apps
+   changes; expect rustfmt fixes (`scripts/dev/ci.py fixes`).
+3. `tur-runtime`'s prefix creation waits for the Wine server without a time
+   limit (`supervise --settle`); give it one.
+4. At the first launch after an update that changes Wine's version, Wine
+   updates the prefix with `mscoree` and `mshtml` enabled and, with no Mono
+   or Gecko installed, offers to download them from WineHQ. Disable them
+   for that launch too, or ship Mono (section 7).
+5. Ask Fedora to split debugging information out of Wine's PE DLLs (about
+   1 GB of the 1.5 GB).
+6. The installer medium carries the image; with +0.45 GB compressed, check
+   that it still fits an 8 GB stick (issue #99, "Store the image once").
+7. Refresh `image/wine/wine.lock` with every base re-pin.
+8. The application centre's installer-file path on the image after #128.
+9. Remaining from #32/#98: a GPU, sound heard, ntsync measured, Proton,
+   16-bit programs, .NET (with Mono), Wayland-native Wine.
