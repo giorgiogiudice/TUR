@@ -150,13 +150,37 @@ What the programs start is in the base image already: `bwrap` (bubblewrap)
 and `prlimit` (util-linux) for P@x's sandbox, `lsblk`, `udevadm`,
 `journalctl`, `fwupdmgr`, `bootc`, and the commands `tur-diag` collects with.
 No package is added. The smoke test checks each.
-`tur-rehost` uses what the base has: `bwrap`, `curl`, `podman` (native
-builds only), and to unpack archives `bsdtar` when it is there, otherwise
-`unzip` and GNU `tar`. 7-Zip, `innoextract` and `msitools` (NSIS and Inno
-Setup installers, MSI packages, disk images) are not in the base image and
-not added: `tur-rehost` refuses those packages on TUR with
-`TUR-REHOST-HOST-001` until a decision adds them. The boot test records
-which of these programs the installed system has.
+The one exception is the archive tools for re-hosting (below).
+
+## Archive tools for re-hosting
+
+`tur-rehost` opens a Windows or macOS application package without running
+it (docs/architecture/rehost.md), always inside its tool sandbox without
+network. From the base image it uses `bwrap`, `curl`, `podman` (native
+builds only), 7-Zip (`7zip`: `7zz`, for 7z archives, NSIS installers, disk
+images, xar and cpio), `unzip`, GNU `tar` and `xz`. The base has no
+`innoextract` and no `msitools`; **the image adds them** (the owner's
+decision of 16 November 2026), from Fedora 45, pinned:
+
+| File | What |
+|---|---|
+| `archive-tools/tools.lock` | Every package added, with the SHA-256 of the signed package, its size, its licence as the package states it, where it is in Fedora's repository and in Fedora's build system, and why it is needed. Written by `archive-tools/lock.py` |
+| `archive-tools/lock.py` | Resolves `innoextract` and `msitools` against the base's package list (`docs/dependencies/image-licences.csv`) and Fedora 45's repository metadata (release and updates, never updates-testing). Reads metadata only; may run on a development machine |
+| `archive-tools/tools.sh` | `fetch`: in the stage `archive-tools`, with network, downloads each package and checks its SHA-256. `install`: in the final stage, without network, checks each package and its licence tag again, installs them with `rpm` in one transaction, and checks that `innoextract`, `msiextract` and `7zz` run |
+
+Eleven packages, about 1.5 MB: `innoextract` (Zlib), `msitools` (LGPL-2.1-or-later
+AND GPL-2.0-or-later AND MS-RL), `libmsi1` (LGPL-2.1-or-later AND blessing),
+`libgcab1` (LGPL-2.1-or-later), `libgsf` (LGPL-2.1-only) and six Boost
+libraries (BSL-1.0 AND MIT AND Python-2.0.1). All are open-source licences
+Fedora ships; MS-RL (Microsoft Reciprocal License, OSI-approved) covers part
+of msitools' own source and is not a Microsoft binary. TUR's programs do not
+link any of them: `tur-rehost` starts them as separate programs.
+
+This is the mechanism of Wine's lock in pull request 136 (`image/wine/`),
+which had not merged when this was written; when it does, the two locks can
+share one script. The smoke test checks every package of the lock is
+installed at its version and that the three programs run; the boot test
+records which archive tools the installed system has.
 
 ## The local AI engine
 

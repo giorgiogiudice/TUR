@@ -45,8 +45,10 @@ FILES
   docs/architecture/rehost.md; docs/reports/rehost-route-1.md;
   catalogue/<20 entries>.toml; tests/rehost/{corpus.json,run.sh,
   integration.py}; .github/workflows/rehost.yml
+- Added (image): image/archive-tools/{lock.py,tools.lock,tools.sh}
 - Modified: image/{programs.tsv,Containerfile,Containerfile.containerignore,
-  README.md}; .github/workflows/{image,boot}.yml (triggers);
+  README.md}; docs/dependencies/image-licences.csv (the eleven added
+  packages); .github/workflows/{image,boot}.yml (triggers, shellcheck);
   tests/image/smoke.sh; tests/boot/{report.py,guest/Containerfile,
   guest/rootfs/usr/libexec/tur-boot-test/component-checks};
   docs/architecture/pax-orchestrator.md (tool table); crates/tur-core (REHOST family); services/tur-catalogue
@@ -251,11 +253,12 @@ the measured package.
   triggers), with its P@x tools installed (owner's decision 3). The boot
   test runs it on the installed system: `--version`, `index`, `list`, the
   archive tools present, and `detect` on a synthetic Qt program (must be
-  refused as native code). The base image adds no package: `tur-rehost`
-  opens zip and tar with `bsdtar`, or else `unzip` and GNU `tar`; NSIS, Inno
-  Setup, MSI, 7z and disk images need 7-Zip, innoextract or msitools, which
-  the base image does not carry, so on TUR those packages are refused with
-  `TUR-REHOST-HOST-001` until a decision adds them (section 8).
+  refused as native code). The archive tools: 7-Zip is in the base image;
+  `innoextract` and `msitools` are added, pinned by SHA-256 in
+  `image/archive-tools/tools.lock` and installed without network (owner's
+  decision 7, section 8); `bsdtar` is not in the image, so there
+  `tur-rehost` opens zip with `unzip`, tar with GNU `tar`, and xar and cpio
+  with 7-Zip.
 
 ## 6. Limits and what is NOT RUN
 
@@ -341,12 +344,50 @@ proprietary application before it is measured.
    Everything else shows who tested it, or says that nobody has yet.", N
    computed from the catalogue (20 today). Applied.
 
-Still open, raised by decision 3: the base image adds no package, so on
-TUR the packages that need 7-Zip, innoextract or msitools (NSIS and Inno
-Setup installers, MSI, 7z, disk images) are refused with
-`TUR-REHOST-HOST-001`. Adding those three Fedora packages to the image
-changes the rule that the image adds no package to its pinned base
-(image/README.md); it needs its own decision, and probably an ADR.
+7. **Archive tools in the image**: TUR's image carries Fedora's 7-Zip,
+   innoextract and msitools, pinned, so that re-hosting can open NSIS, Inno
+   Setup, MSI, 7z and disk-image packages on TUR. Applied:
+   - 7-Zip (`7zip`, 26.04) turned out to be **in the base image already**
+     (docs/dependencies/image-licences.csv); nothing is added for it.
+   - `innoextract` and `msitools`, with what they need that the base lacks
+     (eleven packages, about 1.5 MB), are pinned by the SHA-256 of the signed
+     package in `image/archive-tools/tools.lock`, written by
+     `image/archive-tools/lock.py`, downloaded and checked in a stage of
+     their own and installed with `rpm` without network
+     (`image/archive-tools/tools.sh`). Pull request 136 (Wine in the image)
+     had not merged, so this builds on its pattern (`image/wine/lock.py`,
+     `wine.sh`) instead of extending its lock; the two can share one script
+     once it merges.
+   - Licences, as each package states it and as the install step checks
+     again: innoextract `Zlib`; msitools `LGPL-2.1-or-later AND
+     GPL-2.0-or-later AND MS-RL`; libmsi1 `LGPL-2.1-or-later AND blessing`;
+     libgcab1 `LGPL-2.1-or-later`; libgsf `LGPL-2.1-only`; six Boost
+     libraries `BSL-1.0 AND MIT AND Python-2.0.1`. All are open-source
+     licences Fedora ships. MS-RL (the Microsoft Reciprocal License,
+     OSI-approved) covers part of msitools' own source; it is not a
+     Microsoft binary, and nothing of Microsoft's is bundled. TUR's programs
+     do not link any of them (they are separate programs `tur-rehost`
+     starts), so the licence boundary rules are kept.
+   - `bsdtar` is not in the base and not added: `tur-rehost` opens zip with
+     `unzip`, tar with GNU `tar`, and xar and cpio with 7-Zip there.
+   - The smoke test checks every package of the lock is installed at its
+     version and that `7zz`, `innoextract` and `msiextract` run.
+
+### Proposed decision-record text for the archive tools (not an ADR)
+
+> **Archive tools for re-hosting in the image.** TUR's image carries
+> Fedora's 7zip, innoextract and msitools, pinned, for opening application
+> packages without running them. 7-Zip comes with the base image;
+> innoextract and msitools, and only what they need that the base lacks,
+> are added from Fedora 45's release and updates repositories, each pinned
+> by the SHA-256 of the signed package in `image/archive-tools/tools.lock`,
+> downloaded and checked in a separate build stage and installed with rpm
+> without network, their licence tags checked against the lock. They are
+> run only by `tur-rehost`, inside its sandbox without network, never
+> registered to open files by themselves, and never linked into TUR's own
+> programs. This is an exception to the rule that the image adds no
+> package to its pinned base, made for the same reason and in the same way
+> as Wine's (pull request 136); the lock is renewed when the base pin moves.
 
 ## 9. Questions for the owner's lawyer (carried from exp-rehost-1, section 11)
 

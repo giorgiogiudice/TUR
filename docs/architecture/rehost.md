@@ -370,15 +370,12 @@ the computer: class 2, and not a tool, as with `tur-apps`.
   filtered session bus (`xdg-dbus-proxy`).
 - Installing the launcher entry where the desktop looks (the desktop
   bridge, as for `tur-runtime`).
-- The archive tools on TUR itself. `tur-rehost` is in the image
-  (`image/programs.tsv`, decided 16 November 2026), so the route needs no
-  prerequisite there. The base image adds no package (image/README.md):
-  zip and tar archives are opened with `bsdtar` when the base has it and
-  with `unzip` and GNU `tar` otherwise, but NSIS and Inno Setup installers,
-  MSI packages, 7z archives and disk images need 7-Zip, `innoextract` or
-  `msitools`, which the base does not carry; on TUR those packages are
-  refused with `TUR-REHOST-HOST-001` until a decision adds the packages. The
-  boot test records which of these programs the installed system has.
+- `bsdtar` on TUR itself: the base image does not carry it, so there zip
+  archives open with `unzip`, tar archives with GNU `tar`, and xar and cpio
+  (a macOS `.pkg`) with 7-Zip. `tur-rehost` is in the image, and so are
+  Fedora's `innoextract` and `msitools`, pinned (image/README.md, "Archive
+  tools for re-hosting"; the owner's decisions of 16 November 2026); 7-Zip
+  is in the base. None of this has run on the image yet.
 - Source builds of Rust and CMake modules; a cache of built modules.
 - ARM machines: x86-64 only, as measured.
 - A seccomp filter and resource limits, as for Windows applications.

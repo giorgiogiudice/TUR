@@ -144,7 +144,24 @@ pub fn extract_command(
             }
             Ok((tar.clone(), args))
         }
-        _ => Err(missing("bsdtar (libarchive), or unzip and tar", "this archive")),
+        // 7-Zip reads the rest that matters here: a xar (a macOS .pkg) and
+        // the cpio inside its payload. TUR's base image has 7-Zip and no
+        // bsdtar.
+        _ => match &tools.sevenzip {
+            Some(sevenzip) if strip.is_none() => Ok((
+                sevenzip.clone(),
+                vec![
+                    "x".to_owned(),
+                    "-y".to_owned(),
+                    "-bso0".to_owned(),
+                    "-bsp0".to_owned(),
+                    format!("-o{output_text}"),
+                    "--".to_owned(),
+                    archive_text,
+                ],
+            )),
+            _ => Err(missing("bsdtar (libarchive), or unzip, tar and 7-Zip", "this archive")),
+        },
     }
 }
 
@@ -846,6 +863,10 @@ mod tests {
         assert!(args.contains(&"--strip-components=1".to_owned()));
         tools.tar = None;
         tools.unzip = None;
+        // 7-Zip takes what is left (a xar, a cpio, and here the zip).
+        let (program, _) = extract_command(&tools, &zip, &out, None).unwrap();
+        assert_eq!(program, PathBuf::from("/usr/bin/7zz"));
+        tools.sevenzip = None;
         assert_eq!(
             extract_command(&tools, &zip, &out, None).unwrap_err().code,
             Code::ProgramMissing

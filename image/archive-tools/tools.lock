@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Archive tools for re-hosting (image/README.md, "Archive tools for
+# re-hosting"): Fedora's innoextract and msitools, and what they need that
+# the base image lacks, each pinned by the SHA-256 of the signed package.
+# Written by image/archive-tools/lock.py; do not edit by hand. The fetch
+# step (image/archive-tools/tools.sh) takes each from Fedora's repository
+# or, once the updates repository has moved on, from the signed copy in
+# Fedora's build system, and refuses one whose checksum differs.
+#
+# innoextract 1.9-25.fc45, msitools 0.106.73-1.fc45; 11 packages, 1480147 bytes to download.
+# Resolved on 2026-11-16 against the packages of image-licences.csv, from
+# Fedora 45 x86_64: updates revision 1794790190, release revision 1793218669.
+#
+# file	sha256	size	licence	path under https://dl.fedoraproject.org/pub/fedora/linux/	path under https://kojipkgs.fedoraproject.org/packages/	why
+boost-atomic-1.90.0-13.fc45.x86_64.rpm	e1fdab12c9fb31b1071d7e2b71d33aea04ad4be0fbddadafe2cf4652af6b6119	19525	BSL-1.0 AND MIT AND Python-2.0.1	releases/45/Everything/x86_64/os/Packages/b/boost-atomic-1.90.0-13.fc45.x86_64.rpm	boost/1.90.0/13.fc45/data/signed/f577861e/x86_64/boost-atomic-1.90.0-13.fc45.x86_64.rpm	boost-filesystem needs boost-atomic(x86-64)
+boost-container-1.90.0-13.fc45.x86_64.rpm	e9fbf1c3920448534fca6735550066132a9ac59c19aca74886204c762700be7b	40275	BSL-1.0 AND MIT AND Python-2.0.1	releases/45/Everything/x86_64/os/Packages/b/boost-container-1.90.0-13.fc45.x86_64.rpm	boost/1.90.0/13.fc45/data/signed/f577861e/x86_64/boost-container-1.90.0-13.fc45.x86_64.rpm	boost-program-options needs libboost_container.so.1.90.0()(64bit)
+boost-filesystem-1.90.0-13.fc45.x86_64.rpm	250d986bd7c352fb18a04f2e3e6ac938e48ac072bcac1a08b8b95a71e3d73dd1	74374	BSL-1.0 AND MIT AND Python-2.0.1	releases/45/Everything/x86_64/os/Packages/b/boost-filesystem-1.90.0-13.fc45.x86_64.rpm	boost/1.90.0/13.fc45/data/signed/f577861e/x86_64/boost-filesystem-1.90.0-13.fc45.x86_64.rpm	innoextract needs libboost_filesystem.so.1.90.0()(64bit)
+boost-iostreams-1.90.0-13.fc45.x86_64.rpm	248514904eeb17bd998690b30540ae1abe424b5ee81a102f901c295394b3530c	41499	BSL-1.0 AND MIT AND Python-2.0.1	releases/45/Everything/x86_64/os/Packages/b/boost-iostreams-1.90.0-13.fc45.x86_64.rpm	boost/1.90.0/13.fc45/data/signed/f577861e/x86_64/boost-iostreams-1.90.0-13.fc45.x86_64.rpm	innoextract needs libboost_iostreams.so.1.90.0()(64bit)
+boost-program-options-1.90.0-13.fc45.x86_64.rpm	6dd4828e636b79c05058cacf32d0f6f92bc227df2aaa4f5d7332856388e174ee	115893	BSL-1.0 AND MIT AND Python-2.0.1	releases/45/Everything/x86_64/os/Packages/b/boost-program-options-1.90.0-13.fc45.x86_64.rpm	boost/1.90.0/13.fc45/data/signed/f577861e/x86_64/boost-program-options-1.90.0-13.fc45.x86_64.rpm	innoextract needs libboost_program_options.so.1.90.0()(64bit)
+boost-random-1.90.0-13.fc45.x86_64.rpm	988fa91d634c6a6607a33e3914af6eaaca08c8342351a685a35011f5020e2d7d	23260	BSL-1.0 AND MIT AND Python-2.0.1	releases/45/Everything/x86_64/os/Packages/b/boost-random-1.90.0-13.fc45.x86_64.rpm	boost/1.90.0/13.fc45/data/signed/f577861e/x86_64/boost-random-1.90.0-13.fc45.x86_64.rpm	boost-iostreams needs libboost_random.so.1.90.0()(64bit)
+innoextract-1.9-25.fc45.x86_64.rpm	1dd69047fb2ddc14db1ee6205b5471e949103ab89fe7b847f9b10ae624dd460e	252736	Zlib	releases/45/Everything/x86_64/os/Packages/i/innoextract-1.9-25.fc45.x86_64.rpm	innoextract/1.9/25.fc45/data/signed/f577861e/x86_64/innoextract-1.9-25.fc45.x86_64.rpm	wanted
+libgcab1-1.6-12.fc45.x86_64.rpm	8a152d32abbea365f93381fb1d5e6b3694330ba9425ef09307a1a37b9c8234f1	89512	LGPL-2.1-or-later	releases/45/Everything/x86_64/os/Packages/l/libgcab1-1.6-12.fc45.x86_64.rpm	gcab/1.6/12.fc45/data/signed/f577861e/x86_64/libgcab1-1.6-12.fc45.x86_64.rpm	msitools needs libgcab-1.0.so.0()(64bit)
+libgsf-1.14.60-1.fc45.x86_64.rpm	5c8ed3b215b9fdf6d210c69c705e0658f8098e00d784d2fcd428af08a2cdaaa4	278598	LGPL-2.1-only	updates/45/Everything/x86_64/Packages/l/libgsf-1.14.60-1.fc45.x86_64.rpm	libgsf/1.14.60/1.fc45/data/signed/f577861e/x86_64/libgsf-1.14.60-1.fc45.x86_64.rpm	msitools needs libgsf
+libmsi1-0.106.73-1.fc45.x86_64.rpm	7b0a7736e8ed3e57e44bf2a1c79c270636711d514fc68dff3d34e92ce72eab8e	123295	LGPL-2.1-or-later AND blessing	releases/45/Everything/x86_64/os/Packages/l/libmsi1-0.106.73-1.fc45.x86_64.rpm	msitools/0.106.73/1.fc45/data/signed/f577861e/x86_64/libmsi1-0.106.73-1.fc45.x86_64.rpm	msitools needs libmsi-1.0.so.0()(64bit)
+msitools-0.106.73-1.fc45.x86_64.rpm	fc59b5bb17270361ae027c82d064d7a5486a7a7b4846e4ea29206928c23fd887	421180	LGPL-2.1-or-later AND GPL-2.0-or-later AND MS-RL	releases/45/Everything/x86_64/os/Packages/m/msitools-0.106.73-1.fc45.x86_64.rpm	msitools/0.106.73/1.fc45/data/signed/f577861e/x86_64/msitools-0.106.73-1.fc45.x86_64.rpm	wanted

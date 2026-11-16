@@ -97,7 +97,7 @@ jobs:
 
       - name: Lint scripts
         run: |
-          shellcheck -x scripts/*.sh tests/image/*.sh image/*.sh image/branding/*.sh image/engine/*.sh
+          shellcheck -x scripts/*.sh tests/image/*.sh image/*.sh image/branding/*.sh image/engine/*.sh image/archive-tools/*.sh
           python3 -m py_compile scripts/*.py tests/image/*.py
 
       - name: Runner environment
