@@ -827,6 +827,7 @@ pub fn assemble(invocation: &Invocation<'_>, task: Task<'_>) -> Result<Assembled
         working_directory,
         runtime_tree: None,
         prefix_alias: false,
+        overlay: None,
     })?;
 
     let working_directory = path_text(working_directory, "the working directory")?;

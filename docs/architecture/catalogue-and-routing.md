@@ -381,8 +381,8 @@ It never changes the order.
 | Android edition with ARM-only code | Blocked on a machine that is not ARM, unless the user supplied ARM translation: then a warning |
 | macOS edition and another edition | The other edition's routes. Darling last, and only if enabled |
 | macOS edition only, Darling not enabled | **No route.** Alternative: a Mac |
-| macOS edition only, Darling enabled, a `darling` record rated `good` or `usable` (measured to work) | Darling, doubtful, labelled experimental |
-| macOS edition only, Darling enabled, no such record | **No route.** Darling is listed, blocked: "TUR offers Darling only for applications measured to work in it" (`experimental.darling-not-measured`). Alternative: a Mac |
+| macOS edition only, Darling enabled, a `darling` record of TUR's own tests (`reported_by = "tur-test"`) rated `good` or `usable` | Darling, doubtful, labelled experimental |
+| macOS edition only, Darling enabled, no such record (outside reports such as Darling's AppDB are shown and do not count) | **No route.** Darling is listed, blocked: "TUR offers Darling only for applications its own tests have shown to work in it" (`experimental.darling-not-measured`). Alternative: a Mac |
 | Web edition, primary | Listed on rung 2, alongside the others |
 | Web edition, not primary | Listed only when nothing better is clear, or when pinned |
 | A route for x86-64 software (Proton, Wine, the guest, Darling) on another architecture | Blocked |
@@ -488,7 +488,7 @@ Each routing rule also has a named unit test in
 | Kernel anti-cheat in something that is not a game | Same answer: no route, dual boot |
 | Hardware-attested copy protection | An obstacle, not a blocker: such software often still runs at reduced quality |
 | A Linux edition rated poor against Darling rated good | Darling stays last. It is experimental |
-| When is Darling offered at all? | Only for an application measured to work in it: a `darling` record rated `good` or `usable`, from TUR's own test or an admissible external report such as Darling's AppDB. Otherwise it is listed blocked, so that the person sees why (decision of 16 November 2026, [macos-darling-1](../reports/macos-darling-1.md)) |
+| When is Darling offered at all? | Only for an application TUR's own tests measured to work in it: a `darling` record with `reported_by = "tur-test"` rated `good` or `usable`. Outside reports, Darling's AppDB among them, are shown as information and never enable it; without such a record Darling is listed blocked, so that the person sees why (owner's decision of 16 November 2026, [macos-darling-1](../reports/macos-darling-1.md)) |
 | Re-hosting a Mac package's portable payload | Before Darling, after every native edition: the order for a macOS package is Linux edition, re-hosting, measured Darling, no route. The router has no re-hosting route yet (it is being productised separately, [exp-rehost-1](../reports/exp-rehost-1.md)); `tur-runtime mac route` applies the order to a file the person has, with the re-hosting verdict as an input |
 | The 16 GB figure for the guest | Used as a caveat. Below about 15 GB of installed memory the guest is marked doubtful. ADR-0007 calls the figure indicative, to be measured |
 | Architectures other than x86-64 | Proton, Wine, the guest and Darling are blocked. Linux, Android and web editions are not checked for the architecture |

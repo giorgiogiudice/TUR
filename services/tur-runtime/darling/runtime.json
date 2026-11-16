@@ -1,5 +1,5 @@
 {
-  "$comment": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0. TUR's builds of Darling, compiled into tur-runtime (src/macos/darling.rs). Each is built from source by .github/workflows/darling-runtime.yml (scripts/darling/build-darling.sh, at the commit in scripts/darling/darling.lock with third-party/darling/patches applied, on the image's pinned base) and published to the repository's own package registry only when the lead dispatches it with publish set. sha256 and size stay null until the build is published; they are then copied here from the workflow's summary, and tur-runtime fetches nothing whose size and SHA-256 do not match. The id and tag name Darling's commit, the patch queue's SHA-256 and the Fedora release of the base.",
+  "$comment": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0. TUR's builds of Darling, compiled into tur-runtime (src/macos/darling.rs). Each is built from source by .github/workflows/darling-runtime.yml (scripts/darling/build-darling.sh, at the commit in scripts/darling/darling.lock with third-party/darling/patches applied, on the image's pinned base) and published to the repository's own package registry only when the lead dispatches it with publish set. sha256 and size (the archive) and source_sha256 and source_size (its corresponding source: Darling at the pinned commit with its submodules and TUR's patch queue, published beside it in the same package) stay null until the build is published; they are then copied here from the workflow's summary, and tur-runtime fetches nothing whose size and SHA-256 do not match. The id and tag name Darling's commit, the patch queue's SHA-256 and the Fedora release of the base.",
   "schema_version": 1,
   "artifacts": [
     {
@@ -14,6 +14,8 @@
       "sha256": null,
       "size": null,
       "unpacked_size": null,
+      "source_sha256": null,
+      "source_size": null,
       "install_prefix": "/opt/tur-darling",
       "licence": "GPL-3.0-or-later AND MIT AND LGPL-2.1-or-later AND APSL-2.0 AND BSD-2-Clause AND BSD-3-Clause AND Apache-2.0"
     }

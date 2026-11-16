@@ -5,13 +5,30 @@
 //! One application, one directory, as for Windows applications:
 //!
 //! ```text
-//! prefixes/<app-id>/prefix/darling/          the Darling prefix (DPREFIX)
+//! prefixes/<app-id>/prefix/layer/            the application's own layer (layered prefix)
+//! prefixes/<app-id>/prefix/layer.work/       overlayfs's work directory beside it
+//! prefixes/<app-id>/prefix/darling/          the Darling prefix (DPREFIX): the overlay's
+//!                                            mount point, or the whole prefix in the
+//!                                            `darling` layout
 //! prefixes/<app-id>/prefix/darling.workdir/  Darling's own scratch directory
 //! prefixes/<app-id>/prefix/unpacked/         a package while it is unpacked
 //! prefixes/<app-id>/home/                    the application's private HOME
 //! prefixes/<app-id>/mac-application.json     the record, written last
 //! launchers/<app-id>/tur-darling-<app-id>.desktop
 //! ```
+//!
+//! **Layered prefixes** ([`PrefixLayout::Layered`], the default). Darling's
+//! system is read-only (in the OS image, `/usr/lib/tur/darling`), so an
+//! application's prefix is not a copy of it: bubblewrap mounts an overlay of
+//! the application's own layer over Darling's `libexec/darling` at the
+//! prefix's path in the sandbox. The layer holds a copy of every directory of
+//! the system (empty, the user's own, so that the application can write where
+//! macOS lets it: [`Step::MirrorDirectories`], again at every launch for
+//! directories a newer Darling brought), the directories and account files
+//! Darling's own prefix set-up makes, and whatever the application writes.
+//! Darling in its nonroot mode then finds the prefix initialised and every
+//! system file in place with the original's time and mode, so its copy pass
+//! copies nothing (Darling's `prefix-setup.cpp`, read 16 November 2026).
 //!
 //! Every command runs in the sandbox of [`crate::sandbox`]: the system
 //! read-only, the prefix and the private home read-write, nothing else of the
@@ -29,7 +46,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use super::MacError;
-use super::darling::DarlingMode;
+use super::darling::{DarlingMode, PrefixLayout};
 use super::record::{MacAppRecord, record_path};
 use crate::codes::Code;
 use crate::desktop::{escape_value, is_plain_launcher, quote_argument};
@@ -38,10 +55,36 @@ use crate::launch_host::LaunchHost;
 use crate::paths::{AppPaths, plain_text};
 use crate::plan::{Check, CommandSpec, Operation, Plan, Step};
 use crate::runtime_cmd::{RUNTIME_PATH, check_arguments, check_extra_environment};
-use crate::sandbox::{self, PREFIX_ALIAS_PATH, RUNTIME_TREE_PATH, SandboxRequest, XAUTHORITY_PATH};
+use crate::sandbox::{
+    self, Overlay, PREFIX_ALIAS_PATH, RUNTIME_TREE_PATH, SandboxRequest, XAUTHORITY_PATH,
+};
 
 /// The Darling prefix's name inside the application's prefix directory.
 pub const PREFIX_DIRECTORY: &str = "darling";
+
+/// The application's own layer of a layered prefix, inside its prefix
+/// directory; overlayfs's work directory is beside it, with `.work` added.
+pub const LAYER_DIRECTORY: &str = "layer";
+
+/// The directories Darling's own prefix set-up makes in a new prefix
+/// (`setupPrefix` in Darling's `src/startup/darling.c`), which its launcher
+/// then looks for to tell an initialised prefix.
+pub const PREFIX_SKELETON: [&str; 14] = [
+    "Volumes",
+    "Applications",
+    "usr",
+    "usr/local",
+    "usr/local/share",
+    "private",
+    "private/var",
+    "private/var/log",
+    "private/var/db",
+    "private/etc",
+    "var",
+    "var/run",
+    "var/tmp",
+    "var/log",
+];
 
 /// Where a package is unpacked, inside the application's prefix directory.
 pub const UNPACKED_DIRECTORY: &str = "unpacked";
@@ -78,6 +121,11 @@ pub struct Setup<'a> {
     pub tree: &'a Path,
     /// How Darling runs.
     pub mode: DarlingMode,
+    /// How the prefix is made. [`PrefixLayout::Layered`] needs
+    /// [`DarlingMode::Nonroot`].
+    pub layout: PrefixLayout,
+    /// The user's group ID, for the prefix's account files.
+    pub gid: u32,
     /// Whether the application shares the host's network.
     pub network: bool,
 }
@@ -116,9 +164,29 @@ impl Setup<'_> {
         self.app.prefix.join(UNPACKED_DIRECTORY)
     }
 
-    /// The `Applications` directory of the Darling prefix.
+    /// The application's own layer of a layered prefix.
+    pub fn layer(&self) -> PathBuf {
+        self.app.prefix.join(LAYER_DIRECTORY)
+    }
+
+    /// Darling's system, which a layered prefix is layered over.
+    pub fn system(&self) -> PathBuf {
+        self.tree.join("libexec").join("darling")
+    }
+
+    /// Where the application's own files of the prefix are on this system:
+    /// its layer, or the whole prefix in the `darling` layout.
+    pub fn own_files(&self) -> PathBuf {
+        match self.layout {
+            PrefixLayout::Layered => self.layer(),
+            PrefixLayout::Darling => self.darling_prefix(),
+        }
+    }
+
+    /// The `Applications` directory of the prefix, where the application is
+    /// put, on this system.
     pub fn applications(&self) -> PathBuf {
-        self.darling_prefix().join("Applications")
+        self.own_files().join("Applications")
     }
 
     fn session_environment(&self) -> Result<BTreeMap<String, String>, MacError> {
@@ -160,6 +228,21 @@ impl Setup<'_> {
                 "macOS software is never run as root",
             ));
         }
+        if self.layout == PrefixLayout::Layered && self.mode != DarlingMode::Nonroot {
+            return Err(MacError::new(
+                Code::MacosRequestInvalid,
+                "a layered prefix is for Darling's nonroot mode; the rootless mode layers the \
+                 prefix itself",
+            ));
+        }
+        let system = self.system();
+        let layer = self.layer();
+        let target = format!("{PREFIX_ALIAS_PATH}/{PREFIX_DIRECTORY}");
+        let overlay = (darling && self.layout == PrefixLayout::Layered).then(|| Overlay {
+            lower: &system,
+            upper: &layer,
+            target: &target,
+        });
         let sandbox = sandbox::build(&SandboxRequest {
             host: self.host,
             app: self.app,
@@ -172,6 +255,7 @@ impl Setup<'_> {
             working_directory: &self.app.home,
             runtime_tree: darling.then_some(self.tree),
             prefix_alias: darling,
+            overlay,
         })
         .map_err(|error| MacError::new(error.code(), error.to_string()))?;
         let mut outer = sandbox.arguments;
@@ -343,6 +427,9 @@ pub fn plan_unpack_partitions(
 /// [`MacError`] when the command cannot be made.
 pub fn plan_initialise(setup: &Setup<'_>) -> Result<Plan, MacError> {
     let mut plan = Plan::new(Operation::Create, &setup.app.app_id);
+    if setup.layout == PrefixLayout::Layered {
+        seed_layer(setup, &mut plan)?;
+    }
     plan.steps.push(Step::RunBounded {
         label: "create the Darling prefix".to_owned(),
         command: setup.darling_command(
@@ -358,10 +445,76 @@ pub fn plan_initialise(setup: &Setup<'_>) -> Result<Plan, MacError> {
         },
     });
     plan.notes.push(format!(
-        "Darling runs in its {} mode, without set-user-ID and without a kernel module.",
-        setup.mode.as_str()
+        "Darling runs in its {} mode, without set-user-ID and without a kernel module; the \
+         prefix is {}.",
+        setup.mode.as_str(),
+        match setup.layout {
+            PrefixLayout::Layered => "the application's own layer over Darling's read-only system",
+            PrefixLayout::Darling => "made by Darling itself",
+        }
     ));
     Ok(plan)
+}
+
+/// Whether a login name can be written into the prefix's account files.
+fn plain_login(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 64
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.'))
+}
+
+/// The application's own layer of a new layered prefix: the user's own
+/// copy of every directory of Darling's system, the directories Darling's
+/// own set-up makes, overlayfs's work directory, and the account files
+/// Darling's set-up writes (the same lines, for this user). With them,
+/// Darling's launcher finds the prefix initialised and sets nothing up.
+fn seed_layer(setup: &Setup<'_>, plan: &mut Plan) -> Result<(), MacError> {
+    let user = &setup.host.user;
+    if !plain_login(user) {
+        return Err(MacError::new(
+            Code::MacosRequestInvalid,
+            "the login name cannot be written into the prefix's account files",
+        ));
+    }
+    let layer = setup.layer();
+    plan.steps.push(Step::MirrorDirectories {
+        from: setup.system(),
+        to: layer.clone(),
+    });
+    for directory in PREFIX_SKELETON {
+        plan.steps.push(Step::CreateDir {
+            path: layer.join(directory),
+        });
+    }
+    let mut work = layer.clone().into_os_string();
+    work.push(".work");
+    plan.steps.push(Step::CreateDir {
+        path: PathBuf::from(work),
+    });
+    let uid = setup.host.euid;
+    let gid = setup.gid;
+    let etc = layer.join("private").join("etc");
+    plan.steps.push(Step::WriteFile {
+        path: etc.join("passwd"),
+        contents: format!(
+            "root:*:0:0:System Administrator:/var/root:/bin/sh\n\
+             {user}:*:{uid}:{gid}:Darling User:/Users/{user}:/bin/zsh\n"
+        ),
+    });
+    plan.steps.push(Step::WriteFile {
+        path: etc.join("master.passwd"),
+        contents: format!(
+            "root:*:0:0::0:0:System Administrator:/var/root:/bin/sh\n\
+             {user}:*:{uid}:{gid}::0:0:Darling User:/Users/{user}:/bin/zsh\n"
+        ),
+    });
+    plan.steps.push(Step::WriteFile {
+        path: etc.join("group"),
+        contents: format!("wheel:*:0:root,{user}\n{user}:*:{gid}:{user}\n"),
+    });
+    Ok(())
 }
 
 /// Copies an application bundle into the prefix's `/Applications` and makes
@@ -561,6 +714,14 @@ pub fn plan_launch(
 ) -> Result<Plan, MacError> {
     let app = setup.app;
     let mut plan = Plan::new(Operation::Launch, &app.app_id);
+    if setup.layout == PrefixLayout::Layered {
+        // A newer Darling, arrived with an image update, may have brought
+        // directories the layer has no copy of yet.
+        plan.steps.push(Step::MirrorDirectories {
+            from: setup.system(),
+            to: setup.layer(),
+        });
+    }
     plan.steps.push(Step::Require {
         check: Check::Directory {
             path: setup.applications().join(&record.bundle),
@@ -641,6 +802,8 @@ mod tests {
             context: &world.context,
             tree: &world.tree,
             mode: DarlingMode::Nonroot,
+            layout: PrefixLayout::Layered,
+            gid: 1000,
             network: false,
         }
     }
@@ -675,6 +838,25 @@ mod tests {
             .find(|entry| entry.target == RUNTIME_TREE_PATH)
             .unwrap();
         assert_eq!(tree.option, "--ro-bind");
+        // The prefix is the application's layer over Darling's system: the
+        // system read-only, the layer inside the application's prefix.
+        let lower = entries
+            .iter()
+            .find(|entry| entry.option == "--overlay-src")
+            .unwrap();
+        assert_eq!(
+            lower.source.as_deref(),
+            world.tree.join("libexec/darling").to_str()
+        );
+        let overlay = entries
+            .iter()
+            .find(|entry| entry.option == "--overlay")
+            .unwrap();
+        assert_eq!(
+            overlay.source.as_deref(),
+            world.app.prefix.join("layer").to_str()
+        );
+        assert_eq!(overlay.target, "/run/tur-runtime/prefix/darling");
         let separator = spec.arguments.iter().position(|a| a == "--").unwrap();
         assert_eq!(
             spec.arguments[separator + 1],
@@ -694,6 +876,7 @@ mod tests {
         // Rootless mode may make user namespaces.
         let rootless = Setup {
             mode: DarlingMode::Rootless,
+            layout: PrefixLayout::Darling,
             ..setup
         };
         let spec = rootless
@@ -743,6 +926,69 @@ mod tests {
     }
 
     #[test]
+    fn a_layered_prefix_is_seeded_and_copies_nothing() {
+        let world = world("mac-layered");
+        let setup = setup(&world);
+        let plan = plan_initialise(&setup).unwrap();
+        let layer = world.app.prefix.join("layer");
+        // The user's own directories over the system, first.
+        assert_eq!(
+            plan.steps[0],
+            Step::MirrorDirectories {
+                from: world.tree.join("libexec/darling"),
+                to: layer.clone(),
+            }
+        );
+        for directory in PREFIX_SKELETON {
+            assert!(plan.steps.contains(&Step::CreateDir {
+                path: layer.join(directory)
+            }));
+        }
+        assert!(plan.steps.contains(&Step::CreateDir {
+            path: world.app.prefix.join("layer.work")
+        }));
+        let passwd = plan
+            .steps
+            .iter()
+            .find_map(|step| match step {
+                Step::WriteFile { path, contents } if path.ends_with("private/etc/passwd") => {
+                    Some(contents.clone())
+                }
+                _ => None,
+            })
+            .unwrap();
+        let user = &world.host.user;
+        assert!(passwd.contains(&format!("{user}:*:{}:1000:", world.host.euid)));
+        // Then Darling's first start, which finds the prefix initialised.
+        assert!(matches!(
+            plan.steps.iter().rev().nth(1),
+            Some(Step::RunBounded { .. })
+        ));
+        // The application goes into its own layer.
+        assert_eq!(setup.applications(), layer.join("Applications"));
+
+        // The rootless mode layers the prefix itself.
+        let wrong = Setup {
+            mode: DarlingMode::Rootless,
+            ..setup
+        };
+        assert_eq!(
+            plan_initialise(&wrong).unwrap_err().code,
+            Code::MacosRequestInvalid
+        );
+        let darling = Setup {
+            layout: PrefixLayout::Darling,
+            ..wrong
+        };
+        let plan = plan_initialise(&darling).unwrap();
+        assert!(matches!(plan.steps[0], Step::RunBounded { .. }));
+        assert_eq!(
+            darling.applications(),
+            world.app.prefix.join("darling/Applications")
+        );
+    }
+
+    #[test]
     fn root_is_refused() {
         let mut world = world("mac-root");
         world.host.euid = 0;
@@ -758,7 +1004,7 @@ mod tests {
         let world = world("mac-prepare");
         let setup = setup(&world);
         let package = world.machine.home.join("Downloads/TableTool.dmg");
-        let plan = plan_prepare(&setup, &package, Some(Path::new("/usr/bin/7z"))).unwrap();
+        let plan = plan_prepare(&setup, &package, Some(Path::new("/usr/bin/7zz"))).unwrap();
         let spec = command(plan.steps.last().unwrap());
         assert_boundary(&world.machine, &world.app, bwrap_part(&spec.arguments));
         let (_, entries) = parse(bwrap_part(&spec.arguments));
@@ -771,7 +1017,7 @@ mod tests {
         assert_eq!(shown.option, "--ro-bind");
         assert!(!entries.iter().any(|entry| entry.target == RUNTIME_TREE_PATH));
         let separator = spec.arguments.iter().position(|a| a == "--").unwrap();
-        assert_eq!(spec.arguments[separator + 1], "/usr/bin/7z");
+        assert_eq!(spec.arguments[separator + 1], "/usr/bin/7zz");
         assert!(spec.arguments.contains(&format!("-o{}", setup.unpacked().display())));
 
         // A bundle is not unpacked.
@@ -832,7 +1078,7 @@ mod tests {
         let record = sample("ch.jakob.tabletool");
         let log = world.app.logs.join("launch.log");
         let plan = plan_launch(&setup, &record, &["--flag".to_owned()], &[], log.clone()).unwrap();
-        let Step::Launch { command, log: written } = &plan.steps[2] else {
+        let Step::Launch { command, log: written } = &plan.steps[3] else {
             panic!("expected the launch");
         };
         assert_eq!(*written, log);

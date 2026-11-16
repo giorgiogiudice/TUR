@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Licence texts of Darling and its submodules that a person at TUR has read
+# (owner's decision, 16 November 2026: nothing is published until the
+# collected licence files have been read and summarised in
+# docs/reports/macos-darling-1.md, section 8). scripts/darling/publish.sh
+# refuses a build whose licences.json names a text whose SHA-256 is not
+# listed here, so a new or changed licence in a newer Darling stops the
+# update until it is read too.
+#
+# One line per text: <sha256>  <where it was first seen>  <what it is, in a
+# few words, as the reader found it>
+#
+# Empty: nobody has read them yet. The first darling-runtime build writes
+# licences.md (the texts, once each, with a table of every repository) for
+# the reader.

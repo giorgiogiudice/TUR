@@ -89,6 +89,21 @@ RUN /bin/sh /src/image/engine/llama-cpp.sh fetch
 # No network: compiled from the checked source with the tools above.
 RUN --network=none /bin/sh /src/image/engine/llama-cpp.sh build
 
+# ---- stage: Darling, prebuilt ---------------------------------------------------
+# Darling for macOS applications, installed by default (owner's decision, 16
+# November 2026; docs/reports/macos-darling-1.md). Never compiled here: TUR's
+# own build, made from source by the darling-runtime workflow and published
+# to the repository's package registry, is fetched by the SHA-256 pinned in
+# image/darling.lock, checked, and unpacked into /usr/lib/tur/darling. While
+# nothing is pinned the stage is empty and the image carries no Darling.
+FROM ${BASE_IMAGE}@${BASE_DIGEST} AS darling
+
+COPY image/darling.lock /src/image/darling.lock
+COPY image/darling/ /src/image/darling/
+
+# With network: the archive, by digest. Nothing is compiled.
+RUN /bin/sh /src/image/darling/darling.sh fetch
+
 # ---- the image ------------------------------------------------------------------
 FROM ${BASE_IMAGE}@${BASE_DIGEST}
 
@@ -114,6 +129,11 @@ COPY --from=programs /out/ /
 # its libraries and backends in /usr/libexec/tur/llama.cpp, the link
 # /usr/bin/llama-server, its licences, and /usr/lib/tur/built-from-source.tsv.
 COPY --from=engine /out/ /
+
+# What the Darling stage made (image/darling/darling.sh): /usr/lib/tur/darling,
+# /usr/lib/tur/darling.json and /usr/share/licenses/tur-darling, or nothing
+# while image/darling.lock pins no build.
+COPY --from=darling /out/ /
 
 # Boot-attempt counting (ADR-0014). bootupd concatenates every *.cfg in
 # configs.d, sorted by name, into /boot/grub2/grub.cfg at installation. The

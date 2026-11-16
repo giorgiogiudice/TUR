@@ -44,6 +44,7 @@ sudo podman run --rm --privileged \
     --security-opt label=disable \
     -e APPS="${APPS:-rung1-hello.app,Table Tool.app}" \
     -e MODES="${MODES:-nonroot}" \
+    -e STRICT="${STRICT:-0}" \
     -v "${root}:/src:ro" \
     -v "${work}:/work" \
     -v "${darling}:/darling:ro" \

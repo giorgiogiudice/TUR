@@ -16,7 +16,7 @@ use std::process::Command;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use serde_json::Value;
-use tur_runtime::macos::darling::DarlingMode;
+use tur_runtime::macos::darling::{DarlingMode, PrefixLayout};
 use tur_runtime::macos::record::{
     DarlingRecord, LauncherRecord, MacAppRecord, RECORD_FILE, RECORD_SCHEMA_VERSION,
     SourceRecord,
@@ -394,6 +394,7 @@ fn write_application(home: &Home, app_id: &str) -> MacAppRecord {
             artifact: "darling-3fcd2e1aa850-qc89ea8ce-fc45-x86_64".to_owned(),
             commit: "3fcd2e1aa85079789d19d82415695bdecc512241".to_owned(),
             mode: DarlingMode::Nonroot,
+            layout: PrefixLayout::Layered,
         },
         network: true,
         allowed_swift: false,

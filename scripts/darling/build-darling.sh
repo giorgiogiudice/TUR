@@ -20,6 +20,12 @@
 #                            file of Darling and its submodules, SOURCE.txt
 #                            (where the corresponding source is) and
 #                            PATCHES.txt (TUR's queue as applied)
+#   darling-source.tar.xz    the corresponding source: Darling at the commit
+#                            with every submodule, and TUR's patch queue;
+#                            published beside the build
+#   licences.md, .json       every licence file of Darling and its
+#                            submodules, for a person to read before the
+#                            build is published (licence-summary.py)
 #   build-record.json        what was built from what: commits, the queue's
 #                            SHA-256, the base, the archive's SHA-256 and
 #                            sizes, what was removed and why, and the check of
@@ -43,6 +49,11 @@ set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=scripts/darling/darling.lock
 . "${here}/darling.lock"
+# A newer commit to build instead of the pinned one: the update workflow
+# (darling-update) builds and tests a candidate before it proposes the pin.
+if [ -n "${DARLING_COMMIT_OVERRIDE:-}" ]; then
+    DARLING_COMMIT="${DARLING_COMMIT_OVERRIDE}"
+fi
 
 source_dir=/work/darling
 build_dir=/build
@@ -80,6 +91,7 @@ image() {
         --build-arg "BASE_IMAGE=${BASE_IMAGE}" \
         --build-arg "BASE_DIGEST=${BASE_DIGEST}" \
         --build-arg "DARLING_ALLOW_MISSING_HOST_LIBS=${DARLING_ALLOW_MISSING_HOST_LIBS:-0}" \
+        --build-arg "DARLING_COMMIT_OVERRIDE=${DARLING_COMMIT_OVERRIDE:-}" \
         --volume "${ccache}:/ccache:z" \
         --output "type=local,dest=${dest}" \
         "${root}"
@@ -177,10 +189,13 @@ licences() {
         echo "TUR's patch queue (SHA-256 $(queue_digest)): third-party/darling/patches in"
         echo "         https://github.com/giorgiogiudice/TUR, applied in the order of its series file"
         echo
-        echo "The corresponding source of this build is Darling's repository at the commit above,"
-        echo "with the submodules at the commits listed below, and TUR's patch queue. Darling's"
-        echo "licence is the GNU General Public License, version 3 or later; its components carry"
-        echo "the licences in this directory (MIT, LGPL-2.1, APSL-2.0, BSD and others)."
+        echo "Corresponding source: darling-source.tar.xz, SHA-256 $(cat "${meta}/source-sha256"),"
+        echo "published by TUR beside this build in ${DARLING_PACKAGE} (same tag), and fetchable"
+        echo "by that digest. It holds Darling at the commit above with every submodule at the"
+        echo "commit listed below, and TUR's patch queue (tur-patch-queue/). Darling's licence is"
+        echo "the GNU General Public License, version 3 or later; its components carry the"
+        echo "licences in this directory (MIT, LGPL-2.1, APSL-2.0, BSD and others). The parts that"
+        echo "are Apple's open-source releases are under the Apple Public Source License 2.0."
         echo
         echo "Submodules:"
         cat "${meta}/submodules.txt"
@@ -188,10 +203,37 @@ licences() {
     cp "${queue_dir}/series" "${dest}/PATCHES.txt"
 }
 
+# The corresponding source, published beside the build (owner's decision,
+# 16 November 2026): Darling at the pinned commit with every submodule,
+# before TUR's queue is applied, and the queue itself. Deterministic: sorted,
+# with fixed owners and the commit's time.
+source_archive() {
+    local epoch
+    epoch="$(cat "${meta}/epoch")"
+    local queue=/work/source-queue
+    rm -rf "${queue}"
+    mkdir -p "${queue}"
+    cp -a /src/third-party/darling "${queue}/tur-patch-queue"
+    tar --sort=name --mtime="@${epoch}" --owner=0 --group=0 --numeric-owner \
+        --pax-option=exthdr.name=%d/PaxHeaders/%f,delete=atime,delete=ctime \
+        --exclude=.git \
+        -cf - -C /work darling -C "${queue}" tur-patch-queue \
+        | xz -T0 -6 > "${out}/darling-source.tar.xz"
+    sha256sum "${out}/darling-source.tar.xz" | cut -d' ' -f1 > "${meta}/source-sha256"
+    stat -c %s "${out}/darling-source.tar.xz" > "${meta}/source-size"
+    rm -rf "${queue}"
+}
+
 build() {
     local prefix="${DARLING_INSTALL_PREFIX}"
     local tree="${stage}${prefix}"
     mkdir -p "${out}"
+    source_archive
+    # Darling's licence files, for a person to read before anything is
+    # published (owner's decision, 16 November 2026).
+    python3 -I /src/scripts/darling/licence-summary.py \
+        --source "${source_dir}" --submodules "${meta}/submodules.txt" \
+        --markdown "${out}/licences.md" --json "${out}/licences.json"
     apply_queue
 
     export CCACHE_DIR=/ccache
@@ -233,7 +275,6 @@ build() {
     done < <(find "${tree}" \( -name '*.h' -o -name '*.hpp' -o -name '*.modulemap' \
         -o -name '*.swiftinterface' -o -name '*.swiftmodule' -o -name '*.swiftdoc' \
         -o -name '*.tbd' -o -name '*.a' \) \( -type f -o -type l \) -print0)
-    find "${tree}" -depth -type d -empty -delete
     # The launcher and the server run unprivileged: no set-user-ID bit.
     chmod -R u-s,g-s "${tree}"
 
@@ -277,6 +318,9 @@ record = {
     "sha256": "${digest}",
     "size": ${size},
     "unpacked_size": ${unpacked},
+    "source_sha256": read("source-sha256").strip(),
+    "source_size": int(read("source-size").strip() or 0),
+    "licence_texts": sorted({f["sha256"] for r in json.loads(pathlib.Path("${out}/licences.json").read_text())["repositories"] for f in r["files"]}),
     "build_seconds": $((finished - started)),
     "submodules": read("submodules.txt").splitlines(),
     "build_packages": read("build-packages.txt").splitlines(),
@@ -289,7 +333,7 @@ record = {
 pathlib.Path(sys.argv[2]).write_text(json.dumps(record, indent=1) + "\n")
 print(json.dumps({k: record[k] for k in ("id", "sha256", "size", "unpacked_size", "build_seconds")}))
 EOF
-    # Only the archive and its record leave this step.
+    # Only the archives, the licence summary and the record leave this step.
     rm -rf "${build_dir}" "${stage}" "${source_dir}"
 }
 

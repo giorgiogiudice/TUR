@@ -131,14 +131,13 @@ class Harness:
         record = json.load(open(os.path.join(self.darling, "build-record.json")))
         self.results["darling_build"] = {key: record.get(key) for key in (
             "id", "darling_commit", "queue_sha256", "sha256", "size", "unpacked_size", "build_seconds")}
-        archive = os.path.join(self.darling, "darling-runtime.tar.xz")
-        fetched = self.tur_runtime("mac", "runtime", "fetch", "--from-file", archive,
-                                   "--sha256", record["sha256"], "--json")
-        ok = self.step("import TUR's Darling build", fetched, fetched["status"] == 0)
+        # in-container.sh put the build where the TUR image has it, with the
+        # image's own script: tur-runtime must find it there and fetch nothing.
         status = self.tur_runtime("mac", "runtime", "status", "--json")
         document = as_json(status) or {}
-        self.step("Darling is ready", status, document.get("state") == "ready")
-        self.results["darling_unpacked_bytes"] = du(os.path.join(self.data, "darling"))
+        ok = self.step("Darling is part of the system", status, document.get("state") == "system")
+        self.results["darling_system_bytes"] = du("/usr/lib/tur/darling")
+        self.results["fetched_anything"] = os.path.exists(os.path.join(self.data, "darling"))
         return ok
 
     def identify_all(self):
@@ -304,6 +303,9 @@ def main():
     parser.add_argument("--darling", required=True)
     parser.add_argument("--oracle", required=True)
     parser.add_argument("--results", required=True)
+    parser.add_argument("--expected", help="expected.json: what must keep working")
+    parser.add_argument("--strict", action="store_true",
+                        help="exit 1 when an expectation is not met (darling-update)")
     args = parser.parse_args()
     os.makedirs(args.results, exist_ok=True)
 
@@ -332,11 +334,39 @@ def main():
     finally:
         xvfb.terminate()
         harness.results["finished"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        harness.results["unmet"] = unmet(harness.results, args.expected)
         with open(os.path.join(args.results, "results.json"), "w") as handle:
             json.dump(harness.results, handle, indent=1)
         with open(os.path.join(args.results, "summary.md"), "w") as handle:
             handle.write(harness.summary())
+            for line in harness.results["unmet"]:
+                handle.write(f"- **Not met:** {line}\n")
+    if args.strict and harness.results["unmet"]:
+        print("\n".join(harness.results["unmet"]), file=sys.stderr)
+        return 1
     return 0
+
+
+def unmet(results, expected_path):
+    """What a build must do and this one did not: Darling found in the system,
+    every promised refusal, every removal clean, and every application that
+    expected.json says works (once measured) still showing its window."""
+    problems = []
+    if not any(step["name"] == "Darling is part of the system" and step["ok"] for step in results["steps"]):
+        problems.append("tur-runtime did not find Darling where the image puts it")
+    for entry in results["refusals"]:
+        if "expected" in entry and not entry.get("as_expected"):
+            problems.append(f"{entry['bundle']}: expected {entry['expected']}, got {entry.get('refusal')}")
+    for app in results["apps"]:
+        if app.get("install_status") == 0 and (app.get("uninstall_status") != 0 or app.get("left_behind")):
+            problems.append(f"{app['app_id']}: not removed cleanly")
+    expected = json.load(open(expected_path)) if expected_path and os.path.exists(expected_path) else {}
+    for wanted in expected.get("windows", []):
+        shown = any(app["bundle"] == wanted["bundle"] and app["package"] == wanted["package"]
+                    and app["mode"] == wanted["mode"] and app.get("window") for app in results["apps"])
+        if not shown:
+            problems.append(f"{wanted['bundle']} from {wanted['package']} ({wanted['mode']}) no longer shows a window")
+    return problems
 
 
 if __name__ == "__main__":

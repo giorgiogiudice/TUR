@@ -90,6 +90,11 @@ pub enum MountKind {
     Dev,
     /// A symbolic link created inside the sandbox.
     Link,
+    /// The read-only layer of the overlay that follows it.
+    OverlayLower,
+    /// An overlay: `source` is the writable layer; overlayfs's work
+    /// directory is beside it, the same path with `.work` added.
+    Overlay,
 }
 
 /// One entry of the sandbox's file-system view.
@@ -146,6 +151,19 @@ impl Mount {
             (MountKind::Proc, _) => "--proc",
             (MountKind::Dev, _) => "--dev",
             (MountKind::Link, _) => "--symlink",
+            (MountKind::OverlayLower, _) => {
+                arguments.extend(["--overlay-src".to_owned(), source]);
+                return;
+            }
+            (MountKind::Overlay, _) => {
+                arguments.extend([
+                    "--overlay".to_owned(),
+                    source.clone(),
+                    overlay_work(&source),
+                    self.target.clone(),
+                ]);
+                return;
+            }
         };
         arguments.push(option.to_owned());
         if self.source.is_some() {
@@ -233,6 +251,28 @@ pub struct SandboxRequest<'a> {
     pub runtime_tree: Option<&'a Path>,
     /// Whether the prefix is also shown at [`PREFIX_ALIAS_PATH`].
     pub prefix_alias: bool,
+    /// A layered prefix: an overlay of the application's own layer over a
+    /// read-only system, mounted at a path inside the sandbox.
+    pub overlay: Option<Overlay<'a>>,
+}
+
+/// An overlay file system made inside the sandbox (bubblewrap 0.11 or later,
+/// in its own user namespace): `lower` read-only, `upper` the application's
+/// own writable layer. overlayfs's work directory is `upper` with `.work`
+/// added ([`overlay_work`]), on the same file system.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Overlay<'a> {
+    /// The read-only layer, a host path.
+    pub lower: &'a Path,
+    /// The writable layer, a host path inside the application's prefix.
+    pub upper: &'a Path,
+    /// Where the merged tree appears inside the sandbox.
+    pub target: &'a str,
+}
+
+/// overlayfs's work directory for the writable layer `upper`.
+pub fn overlay_work(upper: &str) -> String {
+    format!("{upper}.work")
 }
 
 /// A sandbox: the bubblewrap command line up to and including `--`.
@@ -397,6 +437,29 @@ pub fn build(request: &SandboxRequest<'_>) -> Result<Sandbox, SandboxError> {
             purpose: "prefix, at a short path",
         });
     }
+    if let Some(overlay) = &request.overlay {
+        let upper = text(overlay.upper, "the prefix's own layer")?;
+        // The writable layer is the application's own: inside its prefix.
+        if !overlay.upper.starts_with(&request.app.prefix) {
+            return Err(SandboxError::Path {
+                role: "the prefix's own layer",
+            });
+        }
+        mounts.push(Mount {
+            kind: MountKind::OverlayLower,
+            source: Some(text(overlay.lower, "the read-only layer")?.to_owned()),
+            target: String::new(),
+            optional: false,
+            purpose: "the system the prefix is layered over, read-only",
+        });
+        mounts.push(Mount {
+            kind: MountKind::Overlay,
+            source: Some(upper.to_owned()),
+            target: overlay.target.to_owned(),
+            optional: false,
+            purpose: "layered prefix",
+        });
+    }
     if let Some(file) = request.program_file {
         let file = text(file, "the program file")?;
         mounts.push(Mount::host(
@@ -527,6 +590,25 @@ pub(crate) mod tests {
                     });
                     at += 3;
                 }
+                "--overlay-src" => {
+                    entries.push(Parsed {
+                        option: option.to_owned(),
+                        source: Some(operand(at + 1)),
+                        target: String::new(),
+                    });
+                    at += 2;
+                }
+                "--overlay" => {
+                    // RWSRC WORKDIR DEST; the work directory must be the
+                    // writable layer's sibling.
+                    assert_eq!(operand(at + 2), overlay_work(&operand(at + 1)));
+                    entries.push(Parsed {
+                        option: option.to_owned(),
+                        source: Some(operand(at + 1)),
+                        target: operand(at + 3),
+                    });
+                    at += 4;
+                }
                 other => panic!("unexpected bubblewrap option {other:?}"),
             }
         }
@@ -538,11 +620,13 @@ pub(crate) mod tests {
     pub(crate) fn host_paths(entries: &[Parsed]) -> Vec<(PathBuf, bool)> {
         entries
             .iter()
-            .filter(|entry| entry.option.contains("bind"))
+            .filter(|entry| entry.option.contains("bind") || entry.option.starts_with("--overlay"))
             .map(|entry| {
                 (
                     PathBuf::from(entry.source.clone().unwrap()),
-                    entry.option == "--bind" || entry.option.starts_with("--dev-bind"),
+                    entry.option == "--bind"
+                        || entry.option.starts_with("--dev-bind")
+                        || entry.option == "--overlay",
                 )
             })
             .collect()
@@ -598,6 +682,7 @@ pub(crate) mod tests {
                 assert!(
                     *source == app.prefix
                         || *source == app.home
+                        || source.starts_with(&app.prefix)
                         || (!*writable
                             && source.starts_with(machine.dirs.data_root().join("darling"))),
                     "{source:?} is another application's data"
@@ -661,6 +746,7 @@ pub(crate) mod tests {
             working_directory: &app.prefix,
             runtime_tree: None,
             prefix_alias: false,
+            overlay: None,
         }
     }
 

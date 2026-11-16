@@ -27,13 +27,17 @@
       "description": "The Darling build the application was installed with (services/tur-runtime/darling/runtime.json).",
       "type": "object",
       "additionalProperties": false,
-      "required": ["artifact", "commit", "mode"],
+      "required": ["artifact", "commit", "mode", "layout"],
       "properties": {
         "artifact": { "type": "string", "pattern": "^[a-z0-9._-]{1,128}$" },
         "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
         "mode": {
-          "description": "nonroot: no namespaces of Darling's own, the prefix a copy of Darling's system (the default, which fits tur-runtime's sandbox); rootless: Darling's own user, mount and PID namespaces.",
+          "description": "nonroot: no namespaces of Darling's own (the default, which fits tur-runtime's sandbox); rootless: Darling's own user, mount and PID namespaces.",
           "enum": ["nonroot", "rootless"]
+        },
+        "layout": {
+          "description": "layered: the application's own layer over Darling's read-only system, an overlay bubblewrap mounts (the default, with nonroot); darling: an empty directory Darling makes a prefix of itself (a full copy in nonroot, its own overlay in rootless).",
+          "enum": ["layered", "darling"]
         }
       }
     },

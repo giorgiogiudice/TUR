@@ -1228,38 +1228,60 @@ run: [macos-darling-1](../reports/macos-darling-1.md).
 
 ### Where Darling comes from
 
-Darling is not in the image. TUR's CI builds it from source at a pinned commit
-with TUR's patch queue, on the image's own pinned base so that it links against
-the image's libraries, and publishes it as one archive to the repository's
-package registry (workflow `darling-runtime`, dispatched by the lead). The
-manifest compiled into `tur-runtime` (`services/tur-runtime/darling/runtime.json`)
-names the archive by its SHA-256 and size. The person's computer fetches it
-when it first installs a macOS application: `curl` asks the registry for an
-anonymous pull token (written to a file of mode 0600, never on a command line),
-downloads the blob by its digest, `tur-runtime` checks size and SHA-256, and
-only then is it unpacked:
+**In the image, prebuilt, kept updated with it** (owner's decision, 16
+November 2026). TUR's CI builds Darling from source at a pinned commit with
+TUR's patch queue, on the image's own pinned base so that it links against the
+image's libraries, and publishes it, with its corresponding source, to the
+repository's package registry (workflow `darling-runtime`, dispatched by the
+lead). The image build never compiles Darling: its stage `darling` takes the
+published archive by the SHA-256 in `image/darling.lock`, checks it, and
+unpacks it read-only:
+
+```
+/usr/lib/tur/darling/          bin/darling, bin/darlingserver, libexec/darling (the guest system)
+/usr/lib/tur/darling.json      which build it is
+/usr/share/licenses/tur-darling/
+```
+
+So Darling is on every TUR computer from installation and arrives with TUR's
+signed image updates: a new Darling that misbehaves rolls back with the image.
+`darling-update` (dispatched; a weekly schedule is proposed) builds a newer
+Darling commit, runs the `macos-darling` tests on it strictly, publishes it,
+and opens a pull request that moves the pins; the image carries it once that is
+merged.
+
+**Fallback, for systems without Darling in their image** (an image built before
+the first publish, a plain Fedora system, a test container): the manifest
+compiled into `tur-runtime` (`services/tur-runtime/darling/runtime.json`) names
+the same archive by its SHA-256 and size, and `tur-runtime` fetches it when the
+first macOS application is installed: `curl` asks the registry for an anonymous
+pull token (written to a file of mode 0600, never on a command line), downloads
+the blob by its digest, `tur-runtime` checks size and SHA-256, and only then is
+it unpacked:
 
 ```
 $XDG_DATA_HOME/tur/runtime/darling/<build>/tree/opt/tur-darling/   the build, never written again
 $XDG_DATA_HOME/tur/runtime/darling/<build>/verified.json           written last
 ```
 
-`mac runtime fetch --from-file FILE --sha256 HEX` imports an archive instead;
-for a build the manifest does not yet name as published, the digest must be
-given. Removing the build (`mac runtime remove`) keeps installed applications,
-which need it fetched again to start. The build leaves out the Swift runtime,
-headers, SDK files and the applications Darling puts in the guest's
-`/Applications`, and is refused if anything Apple-signed is left
+`mac runtime fetch --from-file FILE --sha256 HEX` imports an archive instead.
+When the image has Darling, nothing is fetched and the image's build is used
+for every application, whichever build installed it. The build leaves out the
+Swift runtime, headers, SDK files and the applications Darling puts in the
+guest's `/Applications`, and is refused if anything Apple-signed is left
 (`third-party/darling/README.md`).
 
 ### The sandbox and Darling's mode
 
 Darling runs in the sandbox every runtime gets ([The sandbox](#the-sandbox)),
-with two additions: the build, read-only, at `/opt/tur-darling` (the path it was
-built for), and the prefix a second time at `/run/tur-runtime/prefix`, because
+with three additions: the build, read-only, at `/opt/tur-darling` (the path it
+was built for); the prefix a second time at `/run/tur-runtime/prefix`, because
 Darling makes Unix sockets inside its prefix and a socket's path holds at most
-107 bytes. Darling's view of "the host's root", `/Volumes/SystemRoot`, is
-therefore the sandbox and not the computer.
+107 bytes; and, for a layered prefix, an overlay that bubblewrap (0.11 or
+later; Fedora 45 has 0.12.0) mounts at `/run/tur-runtime/prefix/darling`: the
+application's own layer over Darling's read-only `libexec/darling`. Darling's
+view of "the host's root", `/Volumes/SystemRoot`, is therefore the sandbox and
+not the computer.
 
 Darling's launcher is installed set-user-ID root by Darling's own packages. Here
 it is not: an unprivileged launcher takes its mode from the environment
@@ -1270,11 +1292,34 @@ it is not: an unprivileged launcher takes its mode from the environment
 | `nonroot` (`DARLING_NONROOT=1`), the default | No namespaces of its own; the prefix is a copy of Darling's system; the guest's `/proc` is the sandbox's | Fits as it is: nested user namespaces stay forbidden (`--disable-userns`) |
 | `rootless` (`DARLING_ROOTLESS=1`) | A user, mount and PID namespace of its own; the prefix is an overlay on Darling's system; `/proc` mounted for its PID namespace | Needs nested user namespaces. Mounting `/proc` there is expected to be refused by the kernel under bubblewrap, whose `/proc` has read-only mounts over parts of it; offered so that it can be measured |
 
-The cost of `nonroot` is disk space: every application's prefix holds a copy of
-Darling's system (its size is in the build's record; not measured yet).
-Darling's copy skips a file whose modification time equals the original's, so a
-copy-on-write seed of an initialised prefix could make it nearly free on Btrfs;
-that is not built.
+**Layered prefixes** (`--prefix-layout layered`, the default with `nonroot`).
+Left to itself, `nonroot` would copy Darling's whole system into every
+application's prefix (0.3 to 0.7 GB each, estimated). It does not here.
+Darling's own prefix code (read 16 November 2026) decides two things the
+layout relies on: the launcher takes a prefix as initialised when it holds
+`var`, `private/etc`, `Volumes`, `usr`, `var/run` and the three account files,
+and then sets nothing up; and the copy pass leaves alone a file that exists with
+the original's modification time and mode. So `tur-runtime` gives each
+application only its own layer:
+
+| In the layer | Why |
+|---|---|
+| An empty copy of every directory of Darling's system, owned by the user (`mirror-directories`, a plan step; again at every launch, for directories a newer Darling brought) | The merged directories are the user's, so the application can write where macOS lets it; files stay in the read-only system |
+| The directories Darling's own set-up makes, and `private/etc/passwd`, `master.passwd`, `group` with the lines it writes for this user | Darling finds the prefix initialised |
+| Whatever the application and Darling write | overlayfs copies up only what is changed |
+
+The overlay's lower layer is the system's own files, so every file Darling's
+copy pass looks at is the original: it copies nothing. The per-application cost
+is the directory copies, the account files, the application and its data:
+estimated at 10 to 80 MB beside the application (directory entries: the
+integration test measures it), instead of a full copy. Because the system shows
+through, an image update's newer Darling serves existing applications
+directly.
+
+The `darling` layout (an empty directory that Darling makes a prefix of itself:
+a full copy in `nonroot`, its own overlay in `rootless`) remains, for
+`rootless` and in case the layered prefix fails where the integration test
+cannot see (`--prefix-layout darling`).
 
 ### Installing
 
@@ -1284,7 +1329,7 @@ that is not built.
 | Package | Recognised by | Put into the prefix by |
 |---|---|---|
 | Application bundle (`.app`) | A directory with `Contents/Info.plist` or `Contents/MacOS` | `cp --archive --no-dereference --reflink=auto` in the sandbox, the bundle shown read-only |
-| Disk image (`.dmg`) | The UDIF trailer `koly`; or an HFS+ or APFS signature (raw image) | 7-Zip (Fedora's `7zip`, 26.03 in Fedora 45: DMG, HFS+, APFS, zlib, bzip2, LZFSE, LZMA) unpacks it in the sandbox into the prefix's `unpacked/`; a partition image it leaves is unpacked in turn; then as a bundle |
+| Disk image (`.dmg`) | The UDIF trailer `koly`; or an HFS+ or APFS signature (raw image) | 7-Zip (`7zz`, from Fedora's `7zip` 26.04, which the base image already has; `7z` as a fallback: DMG, HFS+, APFS, zlib, bzip2, LZFSE, LZMA) unpacks it in the sandbox into the prefix's `unpacked/`; a partition image it leaves is unpacked in turn; then as a bundle |
 | Zip archive | `PK` | As a disk image |
 | Installer package (`.pkg`) | The xar signature `xar!` | Darling's own `installer -pkg ... -target /`, inside Darling and the sandbox: a package may carry scripts only a macOS-like system runs |
 
@@ -1324,8 +1369,8 @@ never a statement that it works.
 
 `mac launch <app-id>` starts the application through Darling's shell with its
 macOS path (`/Applications/<bundle>/Contents/MacOS/<program>`), so that its
-bundle is where macOS would have it, with the build the application was
-installed with. The environment is built as for Wine, plus `DPREFIX` and the
+bundle is where macOS would have it, with the image's Darling (on a system
+without it, the fetched build the application was installed with). The environment is built as for Wine, plus `DPREFIX` and the
 mode variable; a launch may not set `DPREFIX`, `DARLING_*` (except
 `DARLING_APPKIT_BACKEND`) or `LD_*`. One log per launch, as for Wine.
 
@@ -1337,9 +1382,10 @@ gone (`-015` otherwise). Only a directory with a macOS record is removed.
 
 For a macOS package the order is: the application's native Linux edition; then
 re-hosting its payload when it is portable (the re-hosting component's verdict,
-docs/reports/exp-rehost-1.md); then Darling, only when the catalogue records
-the application as measured to work in it (a `darling` record rated `good` or
-`usable`) and the analysis refuses nothing; otherwise no route, with every
+docs/reports/exp-rehost-1.md); then Darling, only when TUR's own tests have
+measured the application to work in it (a `darling` record of TUR's tests rated
+`good` or `usable`; outside reports such as Darling's AppDB are shown and never
+enable it) and the analysis refuses nothing; otherwise no route, with every
 reason (`-020`). `macos::route::decide` is this order for a file the person has
 (`mac route`); the catalogue router applies the same rule to a macOS edition
 ([catalogue-and-routing](catalogue-and-routing.md#decision-table)).
@@ -1486,7 +1532,8 @@ tur-runtime mac runtime status [--json]
 tur-runtime mac runtime fetch [--from-file FILE --sha256 HEX]
 tur-runtime mac runtime remove
 tur-runtime mac install <package> [--app-id ID] [--name NAME] [--app BUNDLE] [--allow-swift]
-        [--no-network] [--darling-mode nonroot|rootless] [--timeout SECONDS] [--no-fetch]
+        [--no-network] [--darling-mode nonroot|rootless] [--prefix-layout layered|darling]
+        [--timeout SECONDS] [--no-fetch]
         [--keep-failed] [--launcher PROGRAM]
 tur-runtime mac list [--json]
 tur-runtime mac show <app-id> [--json]
@@ -1611,7 +1658,8 @@ the Windows-guest route. Everything else is in
 - **Darling, beyond the plan.** The macOS route is built and unit-tested
   ([Running a macOS application](#running-a-macos-application)); nothing of
   it has run: no Darling build, no installation, no window. `inspect` still
-  looks for a `darling` program in `PATH` and does not know TUR's own build.
+  looks for a `darling` program in `PATH` and does not know TUR's own build
+  in `/usr/lib/tur/darling`.
 - **Application database.** No known-application lookup, so the recommendation
   uses the file's format and architecture and the host's runtimes only. User
   preferences and security policy (§7.4) are not inputs yet. Proton is never

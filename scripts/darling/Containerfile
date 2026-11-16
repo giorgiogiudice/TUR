@@ -26,6 +26,8 @@ ARG BASE_DIGEST
 # 1 lets a build whose host libraries are not all in the base finish, for a
 # look; such an archive is not to be published.
 ARG DARLING_ALLOW_MISSING_HOST_LIBS=0
+# A candidate commit instead of the pinned one (workflow darling-update).
+ARG DARLING_COMMIT_OVERRIDE=
 
 COPY scripts/darling/ /src/scripts/darling/
 COPY third-party/darling/ /src/third-party/darling/

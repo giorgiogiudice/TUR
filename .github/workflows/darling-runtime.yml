@@ -3,44 +3,65 @@
 # TUR's build of Darling (docs/reports/macos-darling-1.md): Darling built
 # from source at the commit pinned in scripts/darling/darling.lock, with
 # TUR's patch queue (third-party/darling/patches) applied, on the OS image's
-# pinned base, as one archive that a person's computer fetches when it first
-# installs a macOS application (tur-runtime mac runtime fetch), checked by
-# its SHA-256.
+# pinned base. The image build never compiles Darling: it takes this
+# workflow's published archive by the digest in image/darling.lock and
+# unpacks it into /usr/lib/tur/darling (owner's decision, 16 November 2026:
+# Darling is installed by default and kept updated through TUR's image
+# updates).
 #
-# Started by hand only (workflow_dispatch): no pull_request, push or schedule
-# trigger. A cold build of Darling takes an hour or more; GitHub Actions was
-# disabled for the owner's account after the project drove too much CI load,
-# and this workflow adds none until the lead starts it. One run at a time.
+# Started by hand only (workflow_dispatch), or by darling-update
+# (workflow_call): no pull_request, push or schedule trigger. A cold build of
+# Darling takes an hour or more; GitHub Actions was disabled for the owner's
+# account after the project drove too much CI load, and this workflow adds
+# none until the lead starts it. One run at a time.
 #
 # build    podman build of scripts/darling/Containerfile: fetch with network,
-#          compile without; the archive and build-record.json as an artifact.
-#          The build refuses the archive if anything Apple-signed, any header
-#          or SDK, or Apple's Swift runtime is left in it, or if a host
-#          library it needs is not in the base (scripts/darling/check-tree.py).
-# publish  only when the lead sets `publish`: pushes the archive to the
-#          repository's own package registry (ghcr.io) with ORAS, checks that
-#          the registry's digest is the archive's SHA-256, and prints the
-#          manifest entry for services/tur-runtime/darling/runtime.json.
+#          compile without; the archive, the corresponding source archive,
+#          the licence files for review (licences.md) and build-record.json
+#          as an artifact. The build refuses the archive if anything
+#          Apple-signed, any header or SDK, or Apple's Swift runtime is left
+#          in it, or if a host library it needs is not in the base.
+# publish  only when `publish` is set: scripts/darling/publish.sh, which
+#          refuses until every licence text has been read
+#          (scripts/darling/licences-reviewed.txt), pushes both archives to
+#          the repository's own package registry (ghcr.io), checks their
+#          digests and prints the pins for image/darling.lock and
+#          services/tur-runtime/darling/runtime.json.
 name: darling-runtime
 
 on:
   workflow_dispatch:
     inputs:
       publish:
-        description: "Publish the archive to the repository's package registry (ghcr.io)"
+        description: "Publish the archive and its source to the repository's package registry (ghcr.io)"
         type: boolean
         default: false
       allow_missing_host_libraries:
         description: "Finish a build whose host libraries are not all in the base, for a look (never published)"
         type: boolean
         default: false
+      darling_commit:
+        description: "Build this Darling commit instead of the pinned one (empty: the pin)"
+        required: false
+        default: ""
+  workflow_call:
+    inputs:
+      publish:
+        type: boolean
+        default: false
+      allow_missing_host_libraries:
+        type: boolean
+        default: false
+      darling_commit:
+        type: string
+        default: ""
 
 permissions:
   contents: read
   packages: read   # the pinned base from TUR's mirror (ghcr.io)
 
 concurrency:
-  group: darling-runtime
+  group: darling-runtime-${{ github.event_name }}
   cancel-in-progress: false
 
 defaults:
@@ -80,8 +101,12 @@ jobs:
         env:
           DARLING_PODMAN_ROOT: /mnt/darling-podman
           DARLING_ALLOW_MISSING_HOST_LIBS: ${{ inputs.allow_missing_host_libraries && '1' || '0' }}
+          DARLING_COMMIT_OVERRIDE: ${{ inputs.darling_commit }}
         run: |
           set -euo pipefail
+          if [ -n "$DARLING_COMMIT_OVERRIDE" ] && ! [[ "$DARLING_COMMIT_OVERRIDE" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::darling_commit must be a full commit id"; exit 1
+          fi
           export DARLING_CCACHE="$HOME/.ccache-darling"
           mkdir -p "$DARLING_CCACHE"
           scripts/darling/build-darling.sh image "$RUNNER_TEMP/out"
@@ -97,15 +122,21 @@ jobs:
       - name: Summary
         if: always()
         run: |
-          record="$RUNNER_TEMP/out/build-record.json"
+          out="$RUNNER_TEMP/out"
+          record="$out/build-record.json"
           {
             echo "## TUR's build of Darling"
             if [ -f "$record" ]; then
               echo '```json'
-              jq '{id, tag, darling_commit, queue_sha256, fedora_release, base_digest, sha256, size, unpacked_size, build_seconds, removed: (.removed | length), check: {macho_files: .check.macho_files, elf_files: .check.elf_files, violations: (.check.violations | length), missing_host_libraries: [.check.missing_host_libraries[]?.soname]}}' "$record"
+              jq '{id, tag, darling_commit, queue_sha256, fedora_release, base_digest, sha256, size, unpacked_size, source_sha256, source_size, build_seconds, licence_texts: (.licence_texts | length), removed: (.removed | length), check: {macho_files: .check.macho_files, elf_files: .check.elf_files, violations: (.check.violations | length), missing_host_libraries: [.check.missing_host_libraries[]?.soname]}}' "$record"
               echo '```'
             else
               echo "No build record: the build failed. See the log."
+            fi
+            if [ -f "$out/licences.md" ]; then
+              echo
+              echo "### Licence files, for review (the texts are in licences.md in the artifact)"
+              sed -n '/^| Repository/,/^$/p' "$out/licences.md" | head -200
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -121,7 +152,7 @@ jobs:
     needs: build
     if: inputs.publish && !inputs.allow_missing_host_libraries
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     permissions:
       contents: read
       packages: write   # pushing to ghcr.io, only when the lead asks for it
@@ -133,58 +164,29 @@ jobs:
           name: darling-runtime
           path: ${{ runner.temp }}/out
 
-      - name: ORAS, pinned and checked
-        run: |
-          set -euo pipefail
-          . scripts/darling/darling.lock
-          cd "$RUNNER_TEMP"
-          curl -fsSL --retry 4 -o oras.tar.gz "$ORAS_URL"
-          echo "$ORAS_SHA256  oras.tar.gz" | sha256sum -c -
-          curl -fsSL --retry 4 -o oras-checksums.txt "${ORAS_URL%/*}/oras_${ORAS_VERSION}_checksums.txt"
-          grep "  oras_${ORAS_VERSION}_linux_amd64.tar.gz$" oras-checksums.txt | sed "s/  oras_.*/  oras.tar.gz/" | sha256sum -c -
-          tar -xzf oras.tar.gz oras
-          ./oras version
-
-      - name: Push
+      - name: Publish
         env:
           TOKEN: ${{ github.token }}
           ACTOR: ${{ github.actor }}
+        run: scripts/darling/publish.sh "$RUNNER_TEMP/out"
+
+      - name: Summary
         run: |
-          set -euo pipefail
-          . scripts/darling/darling.lock
-          out="$RUNNER_TEMP/out"
-          record="$out/build-record.json"
-          tag=$(jq -r .tag "$record")
-          digest=$(jq -r .sha256 "$record")
-          size=$(jq -r .size "$record")
-          test "$(jq '.check.missing_host_libraries | length' "$record")" = 0
-          test "$(jq '.check.violations | length' "$record")" = 0
-          echo "$digest  $out/darling-runtime.tar.xz" | sha256sum -c -
-          test "$(stat -c %s "$out/darling-runtime.tar.xz")" = "$size"
-          printf '%s' "$TOKEN" | "$RUNNER_TEMP/oras" login ghcr.io --username "$ACTOR" --password-stdin
-          cd "$out"
-          "$RUNNER_TEMP/oras" push "$DARLING_PACKAGE:$tag" \
-            --artifact-type application/vnd.tur.darling.runtime.v1 \
-            --annotation "org.opencontainers.image.source=https://github.com/${{ github.repository }}" \
-            --annotation "org.opencontainers.image.revision=$GITHUB_SHA" \
-            --annotation "org.opencontainers.image.licenses=GPL-3.0-or-later AND MIT AND LGPL-2.1-or-later AND APSL-2.0 AND BSD-2-Clause AND BSD-3-Clause AND Apache-2.0" \
-            --annotation "org.tur.darling.commit=$DARLING_COMMIT" \
-            "darling-runtime.tar.xz:$DARLING_MEDIA_TYPE" \
-            "build-record.json:application/json"
-          # The registry holds the archive under its own SHA-256: that is what
-          # tur-runtime fetches it by.
-          "$RUNNER_TEMP/oras" manifest fetch "$DARLING_PACKAGE:$tag" > manifest.json
-          jq -e --arg d "sha256:$digest" --arg t "$DARLING_MEDIA_TYPE" \
-            '[.layers[] | select(.mediaType == $t and .digest == $d)] | length == 1' manifest.json
           {
             echo "## Published"
-            echo "\`$DARLING_PACKAGE:$tag\`, archive \`sha256:$digest\`, $size bytes."
             echo
-            echo "The package must be public for a computer to fetch it without signing in"
-            echo "(the package's settings on GitHub, once, after the first push)."
+            echo "The package must be public for TUR's image build (and computers without Darling in"
+            echo "their image) to fetch it without signing in: an owner action, once, after the"
+            echo "first push."
             echo
-            echo "Entry for services/tur-runtime/darling/runtime.json:"
+            echo "Entry for services/tur-runtime/darling/runtime.json, and the values of image/darling.lock:"
             echo '```json'
-            jq --arg repo "$DARLING_PACKAGE" '{id, architecture: "x86_64", fedora_release, base_digest, darling_commit, queue_sha256, repository: $repo, tag, sha256, size, unpacked_size, install_prefix}' "$record"
+            cat "$RUNNER_TEMP/out/manifest-entry.json"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: darling-published
+          path: ${{ runner.temp }}/out/manifest-entry.json
+          retention-days: 90

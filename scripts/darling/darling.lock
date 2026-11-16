@@ -34,6 +34,9 @@ DARLING_INSTALL_PREFIX=/opt/tur-darling
 # Where TUR publishes the archive: the repository's own package registry.
 DARLING_PACKAGE=ghcr.io/giorgiogiudice/tur-darling-runtime
 DARLING_MEDIA_TYPE=application/vnd.tur.darling.runtime.v1.tar+xz
+# The corresponding source, published beside each build in the same artifact
+# (owner's decision, 16 November 2026).
+DARLING_SOURCE_MEDIA_TYPE=application/vnd.tur.darling.source.v1.tar+xz
 
 # ORAS, which pushes the archive to the registry as an OCI artifact. Release
 # v1.3.6 of 24 October 2026; the SHA-256 is the digest GitHub publishes for

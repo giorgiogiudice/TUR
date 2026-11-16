@@ -999,12 +999,20 @@ fn evaluate(
             Params::new(),
             "Experimental: Darling comes with no promise that this application works, and it does not run mainstream macOS graphical applications.",
         ));
-        // Darling is offered only for an application measured to work in
-        // it: a record rated good or usable for this route
-        // (docs/reports/macos-darling-1.md). Without one it is listed,
-        // blocked, with the reason. With one it stays doubtful: it is
-        // experimental whatever the record says.
-        if rating.is_supporting() {
+        // Darling is offered only for an application TUR itself measured to
+        // work in it: a record of TUR's own tests rated good or usable for
+        // this route (owner's decision, 16 November 2026;
+        // docs/reports/macos-darling-1.md). Outside reports, such as
+        // Darling's AppDB, are shown as information and never enable it.
+        // Without such a record Darling is listed, blocked, with the
+        // reason. With one it stays doubtful: it is experimental whatever
+        // the record says.
+        let measured = edition.records.iter().any(|record| {
+            record.route == Route::Darling
+                && record.reported_by == Reporter::TurTest
+                && record.rating.is_supporting()
+        });
+        if measured {
             firm_obstacle = true;
         } else {
             caveats.push(caveat(
@@ -1012,7 +1020,7 @@ fn evaluate(
                 Severity::Blocker,
                 "experimental.darling-not-measured",
                 Params::new(),
-                "TUR offers Darling only for applications measured to work in it, and no test or report says this one does.",
+                "TUR offers Darling only for applications its own tests have shown to work in it, and this one has not been shown to.",
             ));
         }
     }
@@ -2346,11 +2354,35 @@ mod tests {
             AlternativeKind::Mac
         );
 
-        // Measured to work: offered, labelled experimental, doubtful.
-        let measured = self::entry(
+        // An outside report that it works (Darling's AppDB, say) is shown,
+        // and does not enable Darling: only TUR's own tests do.
+        let reported = self::entry(
             Category::Creative,
-            vec![rated(macos(), Route::Darling, Rating::Usable)],
+            vec![rated(macos(), Route::Darling, Rating::Good)],
         );
+        let options = run(&reported, &full_host(), &Preferences::default());
+        assert_eq!(routes(&options), [Route::NoRoute, Route::Darling]);
+        assert_eq!(options[1].rating, Rating::Good);
+
+        // Measured by TUR's own test: offered, labelled experimental,
+        // doubtful.
+        let mut tested = macos();
+        tested.records.push(Record {
+            route: Route::Darling,
+            rating: Rating::Usable,
+            reported_by: Reporter::TurTest,
+            source_name: None,
+            source_url: None,
+            source_rating: None,
+            test_report: Some("docs/reports/macos-darling-2.md".to_owned()),
+            version_tested: Some("1.2.1".to_owned()),
+            date: "2026-11-20".to_owned(),
+            notes: None,
+            remedies: Vec::new(),
+            runtime_version: None,
+            evidence_sha256: None,
+        });
+        let measured = self::entry(Category::Creative, vec![tested]);
         let options = run(&measured, &full_host(), &Preferences::default());
         assert_eq!(routes(&options), [Route::Darling]);
         let experimental = options[0]

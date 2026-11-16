@@ -103,6 +103,41 @@ impl DarlingMode {
     }
 }
 
+/// How an application's Darling prefix is made.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum PrefixLayout {
+    /// The application's own layer (its own copies of Darling's directories,
+    /// its account files, and whatever it writes) over Darling's read-only
+    /// system, as an overlay that bubblewrap mounts in the sandbox. Darling,
+    /// in its nonroot mode, finds every system file already in place and
+    /// copies nothing. The default.
+    Layered,
+    /// An empty directory that Darling makes a prefix of in its own way: a
+    /// full copy of its system in the nonroot mode, its own overlay in the
+    /// rootless mode.
+    Darling,
+}
+
+impl PrefixLayout {
+    /// The layout's name, as the command line takes it.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            PrefixLayout::Layered => "layered",
+            PrefixLayout::Darling => "darling",
+        }
+    }
+
+    /// The layout for a name.
+    pub fn from_name(name: &str) -> Option<Self> {
+        match name {
+            "layered" => Some(PrefixLayout::Layered),
+            "darling" => Some(PrefixLayout::Darling),
+            _ => None,
+        }
+    }
+}
+
 /// One published build of Darling.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -132,6 +167,13 @@ pub struct Artifact {
     pub size: Option<u64>,
     /// The size of the unpacked tree in bytes, when measured.
     pub unpacked_size: Option<u64>,
+    /// The SHA-256 of the corresponding source, published beside the
+    /// archive in the same registry package: Darling at the pinned commit
+    /// with its submodules, and TUR's patch queue (owner's decision, 16
+    /// November 2026). A published build always has it.
+    pub source_sha256: Option<String>,
+    /// The source archive's size in bytes.
+    pub source_size: Option<u64>,
     /// The path the build expects to be shown at.
     pub install_prefix: String,
     /// The licences of what is in the archive, as an SPDX expression.
@@ -253,6 +295,21 @@ impl Artifact {
             }
             _ => return Err(format!("{what}: sha256 and size go together")),
         }
+        match (&self.source_sha256, self.source_size) {
+            (None, None) => {
+                if self.sha256.is_some() {
+                    return Err(format!(
+                        "{what}: a published build is published with its source"
+                    ));
+                }
+            }
+            (Some(digest), Some(size)) => {
+                if !is_hex64(digest) || size == 0 {
+                    return Err(format!("{what}: the source's digest or size is not valid"));
+                }
+            }
+            _ => return Err(format!("{what}: source_sha256 and source_size go together")),
+        }
         if self.install_prefix != RUNTIME_TREE_PATH {
             return Err(format!(
                 "{what}: built for {}, not for {RUNTIME_TREE_PATH}",
@@ -286,6 +343,14 @@ impl Artifact {
     pub fn blob_url(&self) -> Option<String> {
         let (host, path) = self.registry_path();
         let digest = self.sha256.as_ref()?;
+        Some(format!("https://{host}/v2/{path}/blobs/sha256:{digest}"))
+    }
+
+    /// The address of the build's corresponding source, by digest, in the
+    /// same registry package.
+    pub fn source_url(&self) -> Option<String> {
+        let (host, path) = self.registry_path();
+        let digest = self.source_sha256.as_ref()?;
         Some(format!("https://{host}/v2/{path}/blobs/sha256:{digest}"))
     }
 }
@@ -375,10 +440,58 @@ pub struct VerifiedRecord {
     pub verified_at: String,
 }
 
+/// Where the OS image keeps Darling (image/darling/darling.sh): read-only,
+/// updated with the image.
+pub const SYSTEM_TREE: &str = "/usr/lib/tur/darling";
+
+/// The record of which build the image carries.
+pub const SYSTEM_BUILD_FILE: &str = "/usr/lib/tur/darling.json";
+
+/// The build of Darling that is part of the OS image.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SystemBuild {
+    /// The build's identifier, as in the manifest.
+    pub id: String,
+    /// Darling's commit.
+    pub darling_commit: String,
+    /// The archive's SHA-256, as the image build checked it.
+    pub sha256: String,
+    /// The corresponding source's SHA-256.
+    #[serde(default)]
+    pub source_sha256: String,
+    /// Where it is: [`SYSTEM_TREE`], or a test's tree.
+    #[serde(skip_deserializing)]
+    pub root: String,
+}
+
+/// The image's build of Darling, when the image carries one: its record
+/// parses, names a build, and the launcher is in the tree.
+pub fn system_build_at(record: &Path, tree: &Path) -> Option<SystemBuild> {
+    let file = fs::File::open(record).ok()?;
+    let mut text = String::new();
+    file.take(MAX_VERIFIED_BYTES).read_to_string(&mut text).ok()?;
+    let mut build: SystemBuild = serde_json::from_str(&text).ok()?;
+    let launcher = tree.join("bin").join("darling");
+    let present = fs::symlink_metadata(launcher).is_ok_and(|metadata| metadata.file_type().is_file());
+    if !present || !is_token(&build.id, 128, b".-_") || !is_hex64(&build.sha256) {
+        return None;
+    }
+    build.root = plain_text(tree)?.to_owned();
+    Some(build)
+}
+
+/// The image's build of Darling on this computer.
+pub fn system_build() -> Option<SystemBuild> {
+    system_build_at(Path::new(SYSTEM_BUILD_FILE), Path::new(SYSTEM_TREE))
+}
+
 /// The state of TUR's Darling on this computer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum RuntimeState {
+    /// Darling is part of the OS image and is updated with it. Nothing is
+    /// fetched.
+    System,
     /// This program knows no published build for this processor.
     NotPublished,
     /// A build is published and has not been fetched.
@@ -400,6 +513,8 @@ pub struct RuntimeStatus {
     pub verified: Option<VerifiedRecord>,
     /// Where the build is, when it is here.
     pub install_root: Option<String>,
+    /// The image's build, when the image carries Darling.
+    pub system: Option<SystemBuild>,
     /// The state in plain language.
     pub message: String,
 }
@@ -415,14 +530,35 @@ fn read_verified(store: &Store, id: &str) -> Option<VerifiedRecord> {
         .then_some(record)
 }
 
-/// The state of the build for `arch`.
-pub fn status(store: &Store, manifest: &Manifest, arch: Arch) -> RuntimeStatus {
+/// The state of Darling on this computer: the image's build when there is
+/// one; otherwise the fetched build for `arch`, the fallback.
+pub fn status(
+    store: &Store,
+    manifest: &Manifest,
+    arch: Arch,
+    system: Option<&SystemBuild>,
+) -> RuntimeStatus {
+    if let Some(system) = system {
+        return RuntimeStatus {
+            state: RuntimeState::System,
+            artifact: manifest.for_arch(arch).cloned(),
+            verified: None,
+            install_root: Some(system.root.clone()),
+            message: format!(
+                "Darling {} is part of this system, at {}, and is updated with it.",
+                short(&system.darling_commit),
+                system.root
+            ),
+            system: Some(system.clone()),
+        };
+    }
     let Some(artifact) = manifest.for_arch(arch).cloned() else {
         return RuntimeStatus {
             state: RuntimeState::NotPublished,
             artifact: None,
             verified: None,
             install_root: None,
+            system: None,
             message: format!(
                 "TUR has no build of Darling for {} processors.",
                 arch.as_str()
@@ -475,6 +611,7 @@ pub fn status(store: &Store, manifest: &Manifest, arch: Arch) -> RuntimeStatus {
         },
         install_root,
         artifact: Some(artifact),
+        system: None,
         message,
     }
 }
@@ -861,6 +998,8 @@ mod tests {
             sha256: Some("a".repeat(64)),
             size: Some(5),
             unpacked_size: None,
+            source_sha256: Some("f".repeat(64)),
+            source_size: Some(9),
             install_prefix: RUNTIME_TREE_PATH.to_owned(),
             licence: "GPL-3.0-or-later".to_owned(),
         }
@@ -886,7 +1025,7 @@ mod tests {
         let text = serde_json::to_string(&good).unwrap();
         assert_eq!(Manifest::parse(&text).unwrap(), good);
 
-        let broken: [fn(&mut Artifact); 8] = [
+        let broken: [fn(&mut Artifact); 10] = [
             |a| a.id = "../escape".to_owned(),
             |a| a.sha256 = Some("A".repeat(64)),
             |a| a.size = None,
@@ -895,6 +1034,11 @@ mod tests {
             |a| a.install_prefix = "/usr".to_owned(),
             |a| a.darling_commit = "main".to_owned(),
             |a| a.size = Some(MAX_ARCHIVE_BYTES + 1),
+            |a| {
+                a.source_sha256 = None;
+                a.source_size = None;
+            },
+            |a| a.source_size = None,
         ];
         for change in broken {
             let mut bad = artifact();
@@ -925,12 +1069,22 @@ mod tests {
                 "a".repeat(64)
             )
         );
+        assert_eq!(
+            build.source_url().unwrap(),
+            format!(
+                "https://ghcr.io/v2/giorgiogiudice/tur-darling-runtime/blobs/sha256:{}",
+                "f".repeat(64)
+            )
+        );
         let unpublished = Artifact {
             sha256: None,
             size: None,
+            source_sha256: None,
+            source_size: None,
             ..artifact()
         };
         assert!(unpublished.blob_url().is_none());
+        assert!(unpublished.source_url().is_none());
     }
 
     #[test]
@@ -1032,14 +1186,14 @@ mod tests {
             schema_version: 1,
             artifacts: vec![build.clone()],
         };
-        assert_eq!(status(&store, &manifest, Arch::X86_64).state, RuntimeState::NotFetched);
-        assert_eq!(status(&store, &manifest, Arch::Aarch64).state, RuntimeState::NotPublished);
+        assert_eq!(status(&store, &manifest, Arch::X86_64, None).state, RuntimeState::NotFetched);
+        assert_eq!(status(&store, &manifest, Arch::Aarch64, None).state, RuntimeState::NotPublished);
 
         // A tree without a record is not a build.
         let launcher = store.install_root(&build.id).join("bin");
         fs::create_dir_all(&launcher).unwrap();
         fs::write(launcher.join("darling"), b"").unwrap();
-        assert_eq!(status(&store, &manifest, Arch::X86_64).state, RuntimeState::Damaged);
+        assert_eq!(status(&store, &manifest, Arch::X86_64, None).state, RuntimeState::Damaged);
 
         let record = verified_record(
             &build,
@@ -1049,7 +1203,7 @@ mod tests {
             Timestamp::from_unix(1_794_478_500),
         );
         fs::write(store.verified(&build.id), serde_json::to_string(&record).unwrap()).unwrap();
-        let ready = status(&store, &manifest, Arch::X86_64);
+        let ready = status(&store, &manifest, Arch::X86_64, None);
         assert_eq!(ready.state, RuntimeState::Ready);
         assert_eq!(ready.verified.unwrap().source, Source::Registry);
         assert_eq!(kept(&store), [build.id.clone()]);
@@ -1060,7 +1214,50 @@ mod tests {
             ..record
         };
         fs::write(store.verified(&build.id), serde_json::to_string(&other).unwrap()).unwrap();
-        assert_eq!(status(&store, &manifest, Arch::X86_64).state, RuntimeState::Damaged);
+        assert_eq!(status(&store, &manifest, Arch::X86_64, None).state, RuntimeState::Damaged);
+    }
+
+    #[test]
+    fn the_image_s_build_wins_and_nothing_is_fetched() {
+        let scratch = TempDir::new("darling-system");
+        let tree = scratch.path().join("usr/lib/tur/darling");
+        let record = scratch.path().join("usr/lib/tur/darling.json");
+        // No record, or no launcher: no system build.
+        assert!(system_build_at(&record, &tree).is_none());
+        fs::create_dir_all(tree.join("bin")).unwrap();
+        fs::write(
+            &record,
+            format!(
+                "{{\"schema_version\":1,\"id\":\"darling-3fcd2e1aa850-qc89ea8ce-fc45-x86_64\",\
+                 \"darling_commit\":\"3fcd2e1aa85079789d19d82415695bdecc512241\",\
+                 \"queue_sha256\":\"{q}\",\"sha256\":\"{a}\",\"source_sha256\":\"{f}\",\
+                 \"repository\":\"ghcr.io/giorgiogiudice/tur-darling-runtime\",\"tag\":\"t\"}}",
+                q = "c".repeat(64),
+                a = "a".repeat(64),
+                f = "f".repeat(64)
+            ),
+        )
+        .unwrap();
+        assert!(system_build_at(&record, &tree).is_none());
+        fs::write(tree.join("bin/darling"), b"").unwrap();
+        let system = system_build_at(&record, &tree).unwrap();
+        assert_eq!(system.root, tree.to_str().unwrap());
+
+        let dirs = RuntimeDirs::new(&scratch.path().join("data"), &scratch.path().join("state"));
+        let store = Store::new(&dirs);
+        let manifest = Manifest {
+            comment: None,
+            schema_version: 1,
+            artifacts: vec![artifact()],
+        };
+        let found = status(&store, &manifest, Arch::X86_64, Some(&system));
+        assert_eq!(found.state, RuntimeState::System);
+        assert_eq!(found.install_root.as_deref(), tree.to_str());
+        assert!(!store.root().exists());
+
+        // An image record that names no valid build is ignored.
+        fs::write(&record, "{\"id\":\"../x\",\"darling_commit\":\"x\",\"sha256\":\"x\"}").unwrap();
+        assert!(system_build_at(&record, &tree).is_none());
     }
 
     #[test]

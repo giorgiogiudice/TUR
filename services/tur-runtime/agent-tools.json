@@ -99,7 +99,7 @@
     },
     {
       "name": "runtime_mac_status",
-      "description": "Say whether TUR's build of Darling is on this computer: not published for this processor, published and not fetched yet (it is fetched when the first macOS application is installed), ready, or damaged; which Darling commit it is. Reads only; fetches nothing.",
+      "description": "Say which Darling this computer has: part of the system (TUR installs it by default and updates it with the system), or, on a system without it, whether TUR's build has been fetched (it is fetched when the first macOS application is installed), is damaged, or is not published for this processor; which Darling commit it is. Reads only; fetches nothing.",
       "class": 0,
       "method": "MacStatus",
       "input_schema": {
@@ -110,7 +110,7 @@
     },
     {
       "name": "runtime_mac_install",
-      "description": "Install a macOS application the person has (a .app bundle, .dmg, .pkg or zip archive) into a Darling prefix of its own, inside the sandbox, fetching TUR's Darling build first when it is not here. Consequential: it downloads Darling (hundreds of megabytes) and uses disk space; it is the person's decision.",
+      "description": "Install a macOS application the person has (a .app bundle, .dmg, .pkg or zip archive) into a Darling prefix of its own (its own layer over the system's Darling), inside the sandbox; on a system without Darling it fetches TUR's build first. Consequential: it installs software and uses disk space; it is the person's decision.",
       "class": 2,
       "method": "MacInstall",
       "input_schema": {

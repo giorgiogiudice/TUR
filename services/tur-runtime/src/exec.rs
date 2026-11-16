@@ -547,8 +547,45 @@ impl Executor for SystemExecutor {
             } => self.run_bounded(label, command, *limit_seconds),
             Step::Launch { command, log } => self.launch(command, log),
             Step::Check { check: wanted } | Step::Require { check: wanted } => Ok(check(wanted)),
+            Step::MirrorDirectories { from, to } => {
+                self.guard(to)?;
+                mirror_directories(from, to)
+                    .map(|()| StepOutcome::Done)
+                    .map_err(|error| io_error("mirror the directories into", to, error))
+            }
         }
     }
+}
+
+/// The most directories [`Step::MirrorDirectories`] creates.
+const MAX_MIRRORED_DIRECTORIES: usize = 200_000;
+
+/// Creates under `to` every directory found under `from`, mode 0755, without
+/// following or copying symbolic links and without copying any file.
+fn mirror_directories(from: &Path, to: &Path) -> io::Result<()> {
+    DirBuilder::new().recursive(true).mode(0o755).create(to)?;
+    let mut pending = vec![PathBuf::new()];
+    let mut made = 0usize;
+    while let Some(relative) = pending.pop() {
+        for entry in fs::read_dir(from.join(&relative))? {
+            let entry = entry?;
+            if !entry.file_type()?.is_dir() {
+                continue;
+            }
+            made += 1;
+            if made > MAX_MIRRORED_DIRECTORIES {
+                return Err(io::Error::other("the tree has too many directories"));
+            }
+            let child = relative.join(entry.file_name());
+            match DirBuilder::new().mode(0o755).create(to.join(&child)) {
+                Ok(()) => {}
+                Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
+                Err(error) => return Err(error),
+            }
+            pending.push(child);
+        }
+    }
+    Ok(())
 }
 
 /// Runs `program` and waits for it, then runs `settle --wait` so that the

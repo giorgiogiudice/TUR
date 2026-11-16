@@ -19,7 +19,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use super::MacError;
-use super::darling::DarlingMode;
+use super::darling::{DarlingMode, PrefixLayout};
 use crate::codes::Code;
 use crate::paths::{AppPaths, RuntimeDirs};
 use crate::profile::is_app_id;
@@ -43,6 +43,8 @@ pub struct DarlingRecord {
     pub commit: String,
     /// How Darling runs.
     pub mode: DarlingMode,
+    /// How the prefix is made.
+    pub layout: PrefixLayout,
 }
 
 /// The file the application was installed from.
@@ -264,6 +266,7 @@ pub(crate) mod tests {
                 artifact: "darling-754fe00baf67-q0-fc45-x86_64".to_owned(),
                 commit: "754fe00baf67db29a39769a49abfb895490d8abc".to_owned(),
                 mode: DarlingMode::Nonroot,
+                layout: PrefixLayout::Layered,
             },
             network: false,
             allowed_swift: false,

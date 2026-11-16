@@ -33,7 +33,7 @@ use tur_runtime::macos::analysis::{
     AnalysisOptions, AppAnalysis, Verdict, analyse_bundle, analyse_program,
 };
 use tur_runtime::macos::darling::{
-    self, Artifact, DarlingMode, Manifest, Source, Store,
+    self, Artifact, DarlingMode, Manifest, PrefixLayout, Source, Store,
 };
 use tur_runtime::macos::package::{self, PackageKind};
 use tur_runtime::macos::plan::{self as mac_plan, Setup};
@@ -131,6 +131,12 @@ pub(crate) enum MacCommand {
         /// How Darling runs: nonroot (the default) or rootless.
         #[arg(long, value_name = "MODE", default_value = "nonroot")]
         darling_mode: String,
+        /// How the prefix is made: layered (the application's own layer over
+        /// Darling's read-only system; the default with nonroot) or darling
+        /// (Darling makes it: a full copy in nonroot, its own overlay in
+        /// rootless; the default with rootless).
+        #[arg(long, value_name = "LAYOUT")]
+        prefix_layout: Option<String>,
         /// How long an installer package may take, in seconds.
         #[arg(long, value_name = "SECONDS", default_value_t = 900)]
         timeout: u64,
@@ -265,6 +271,7 @@ pub(crate) fn run(command: MacCommand) -> u8 {
             allow_swift,
             no_network,
             darling_mode,
+            prefix_layout,
             timeout,
             no_fetch,
             keep_failed,
@@ -278,6 +285,7 @@ pub(crate) fn run(command: MacCommand) -> u8 {
             allow_swift,
             network: !no_network,
             mode: &darling_mode,
+            layout: prefix_layout.as_deref(),
             timeout,
             fetch: !no_fetch,
             keep_failed,
@@ -626,7 +634,8 @@ fn run_status(json: bool) -> u8 {
         schema_version: darling::MANIFEST_SCHEMA_VERSION,
         artifacts: Vec::new(),
     });
-    let status = darling::status(&context.store, &manifest, this_arch());
+    let system = darling::system_build();
+    let status = darling::status(&context.store, &manifest, this_arch(), system.as_ref());
     if json {
         print_json(&json!(status));
     } else {
@@ -765,6 +774,20 @@ fn ensure_runtime(
 
 fn run_fetch(from_file: Option<&Path>, sha256: Option<&str>, common: &MacCommon) -> u8 {
     let json = common.json;
+    // The fetch is the fallback for systems without Darling in their image.
+    if let Some(system) = darling::system_build()
+        && from_file.is_none()
+    {
+        if json {
+            print_json(&json!({ "dry_run": common.dry_run, "system": system, "plans": [] }));
+        } else {
+            print_line(&format!(
+                "Darling {} is part of this system ({}); nothing is fetched",
+                system.id, system.root
+            ));
+        }
+        return EXIT_OK;
+    }
     let result = Context::open().and_then(|context| {
         let artifact = context.artifact()?.clone();
         check_release(&artifact, common.any_system)?;
@@ -850,6 +873,7 @@ struct Install<'a> {
     allow_swift: bool,
     network: bool,
     mode: &'a str,
+    layout: Option<&'a str>,
     timeout: u64,
     fetch: bool,
     keep_failed: bool,
@@ -1001,6 +1025,24 @@ fn install(request: &Install<'_>, reports: &mut Vec<Value>) -> Result<Option<Mac
             EXIT_USAGE,
         ));
     };
+    let layout = match (request.layout, mode) {
+        (None, DarlingMode::Nonroot) => PrefixLayout::Layered,
+        (None, DarlingMode::Rootless) => PrefixLayout::Darling,
+        (Some(name), _) => PrefixLayout::from_name(name).ok_or_else(|| {
+            Failure::new(
+                Code::MacosRequestInvalid,
+                "--prefix-layout takes layered or darling",
+                EXIT_USAGE,
+            )
+        })?,
+    };
+    if layout == PrefixLayout::Layered && mode == DarlingMode::Rootless {
+        return Err(Failure::new(
+            Code::MacosRequestInvalid,
+            "a layered prefix is for the nonroot mode; the rootless mode layers the prefix itself",
+            EXIT_USAGE,
+        ));
+    }
     if request.timeout == 0 || request.timeout > tur_runtime::limits::MAX_INSTALLER_SECONDS {
         return Err(Failure::new(
             Code::MacosRequestInvalid,
@@ -1055,8 +1097,6 @@ fn install(request: &Install<'_>, reports: &mut Vec<Value>) -> Result<Option<Mac
     };
 
     let session = Session::open(common)?;
-    let artifact = session.context.artifact()?.clone();
-    check_release(&artifact, common.any_system)?;
     let app_id = match request.app_id {
         Some(id) => id.to_owned(),
         None => default_app_id(
@@ -1074,31 +1114,31 @@ fn install(request: &Install<'_>, reports: &mut Vec<Value>) -> Result<Option<Mac
         ));
     }
     let seven_zip = if kind.is_unpacked_by_7zip() {
-        Some(program(&["7z", "7zz", "7za"], "7-Zip")?)
+        Some(program(&["7zz", "7z", "7za"], "7-Zip")?)
     } else {
         None
     };
     let cp = program(&["cp"], "cp")?;
     let find = program(&["find"], "find")?;
 
-    // Darling, fetched now if it is not here: the first macOS application
-    // is when it is needed.
-    let ready = darling::is_ready(&session.context.store, &artifact.id);
-    if !ready && !request.fetch {
-        return Err(Failure::new(
-            Code::MacosRuntimeNotInstalled,
-            "Darling is not here; fetch it with `tur-runtime mac runtime fetch`",
-            EXIT_MISSING,
-        ));
-    }
-    let build = ensure_runtime(&session.context, None, None, common.dry_run, reports)?;
-    let tree = session.context.store.install_root(&build);
+    // Darling: the image's own, or on a system without it, TUR's build
+    // fetched now (the fallback).
+    let build = resolve_build(&session.context, common, request.fetch, reports)?;
+    let gid = effective_gid().ok_or_else(|| {
+        Failure::new(
+            Code::StorageUnusable,
+            "cannot read this process's group ID",
+            EXIT_REFUSED,
+        )
+    })?;
     let setup = Setup {
         host: &session.host,
         app: &app,
         context: &session.grants,
-        tree: &tree,
+        tree: &build.tree,
         mode,
+        layout,
+        gid,
         network: request.network,
     };
 
@@ -1120,7 +1160,7 @@ fn install(request: &Install<'_>, reports: &mut Vec<Value>) -> Result<Option<Mac
     let mut executor = executor(&session.context.dirs, app.operations_log(), Forward::LogOnly);
     let installed = put_in_place(&setup, request, kind, &package, &options, seven_zip.as_deref(), &cp, &find, &mut executor, reports)
         .and_then(|(analysis, bundle, method)| {
-            let record = make_record(request, &app, &artifact, mode, &package, kind, &analysis, &bundle, method)?;
+            let record = make_record(request, &app, &build, mode, layout, &package, kind, &analysis, &bundle, method)?;
             let entry = mac_plan::desktop_entry(&record, request.launcher)
                 .map_err(|error| Failure::from_mac(error, EXIT_USAGE))?;
             let plan = mac_plan::plan_record(&setup, &record, &entry)
@@ -1255,12 +1295,63 @@ fn put_in_place(
     Ok((analysis, name, "installer-package"))
 }
 
+/// The Darling an application is installed or started with.
+struct Build {
+    /// The build's identifier.
+    id: String,
+    /// Darling's commit.
+    commit: String,
+    /// Where it is on this system: what is shown at /opt/tur-darling.
+    tree: PathBuf,
+}
+
+/// The image's Darling, or on a system without Darling in its image, TUR's
+/// build fetched on demand (the fallback; `fetch` false refuses instead).
+fn resolve_build(
+    context: &Context,
+    common: &MacCommon,
+    fetch: bool,
+    reports: &mut Vec<Value>,
+) -> Result<Build, Failure> {
+    if let Some(system) = darling::system_build() {
+        return Ok(Build {
+            id: system.id,
+            commit: system.darling_commit,
+            tree: PathBuf::from(system.root),
+        });
+    }
+    let artifact = context.artifact()?.clone();
+    check_release(&artifact, common.any_system)?;
+    if !darling::is_ready(&context.store, &artifact.id) && !fetch {
+        return Err(Failure::new(
+            Code::MacosRuntimeNotInstalled,
+            "Darling is not part of this system and has not been fetched; fetch it with \
+             `tur-runtime mac runtime fetch`",
+            EXIT_MISSING,
+        ));
+    }
+    let id = ensure_runtime(context, None, None, common.dry_run, reports)?;
+    Ok(Build {
+        tree: context.store.install_root(&id),
+        id,
+        commit: artifact.darling_commit,
+    })
+}
+
+/// This process's effective group ID, from `/proc/self/status`.
+fn effective_gid() -> Option<u32> {
+    let status = fs::read_to_string("/proc/self/status").ok()?;
+    let line = status.lines().find_map(|line| line.strip_prefix("Gid:"))?;
+    line.split_whitespace().nth(1)?.parse().ok()
+}
+
 #[allow(clippy::too_many_arguments)]
 fn make_record(
     request: &Install<'_>,
     app: &AppPaths,
-    artifact: &Artifact,
+    build: &Build,
     mode: DarlingMode,
+    layout: PrefixLayout,
     package: &Path,
     kind: PackageKind,
     analysis: &AppAnalysis,
@@ -1307,9 +1398,10 @@ fn make_record(
         slice,
         runtime: "darling".to_owned(),
         darling: DarlingRecord {
-            artifact: artifact.id.clone(),
-            commit: artifact.darling_commit.clone(),
+            artifact: build.id.clone(),
+            commit: build.commit.clone(),
             mode,
+            layout,
         },
         network: request.network,
         allowed_swift: request.allow_swift,
@@ -1399,20 +1491,37 @@ fn run_launch(app_id: &str, environment: &[String], common: &MacCommon, argument
     };
     let planned = Session::open(common).and_then(|session| {
         let (app, record) = load_installed(&session.context.dirs, app_id)?;
-        let artifact = session.context.artifact()?.clone();
-        check_release(&artifact, common.any_system)?;
-        if !darling::is_ready(&session.context.store, &record.darling.artifact) {
-            return Err(Failure::new(
-                Code::MacosRuntimeNotInstalled,
-                format!(
-                    "the Darling build {app_id} was installed with ({}) is not here; fetch it \
-                     with `tur-runtime mac runtime fetch`",
-                    record.darling.artifact
-                ),
-                EXIT_MISSING,
-            ));
-        }
-        let tree = session.context.store.install_root(&record.darling.artifact);
+        // The image's Darling, whichever build the application was installed
+        // with: it is kept updated with the image, and a layered prefix
+        // holds only the application's own layer over it. Without it, the
+        // fetched build the application was installed with (the fallback).
+        let tree = match darling::system_build() {
+            Some(system) => PathBuf::from(system.root),
+            None => {
+                let artifact = session.context.artifact()?.clone();
+                check_release(&artifact, common.any_system)?;
+                if !darling::is_ready(&session.context.store, &record.darling.artifact) {
+                    return Err(Failure::new(
+                        Code::MacosRuntimeNotInstalled,
+                        format!(
+                            "Darling is not part of this system, and the build {app_id} was \
+                             installed with ({}) is not here; fetch it with \
+                             `tur-runtime mac runtime fetch`",
+                            record.darling.artifact
+                        ),
+                        EXIT_MISSING,
+                    ));
+                }
+                session.context.store.install_root(&record.darling.artifact)
+            }
+        };
+        let gid = effective_gid().ok_or_else(|| {
+            Failure::new(
+                Code::StorageUnusable,
+                "cannot read this process's group ID",
+                EXIT_REFUSED,
+            )
+        })?;
         let log = app.logs.join(format!(
             "{}-{}.log",
             Timestamp::now().compact(),
@@ -1425,6 +1534,8 @@ fn run_launch(app_id: &str, environment: &[String], common: &MacCommon, argument
                 context: &session.grants,
                 tree: &tree,
                 mode: record.darling.mode,
+                layout: record.darling.layout,
+                gid,
                 network: record.network,
             };
             mac_plan::plan_launch(&setup, &record, arguments, &extra, log)

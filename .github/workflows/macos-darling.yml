@@ -32,6 +32,29 @@ on:
         description: "Darling modes to try, comma-separated: nonroot, rootless"
         required: false
         default: "nonroot,rootless"
+      strict:
+        description: "Fail the job when an expectation is not met (tests/macos-darling/expected.json)"
+        type: boolean
+        default: false
+  # darling-update runs it on a candidate build, strictly, before it
+  # proposes the candidate for the image.
+  workflow_call:
+    inputs:
+      runtime_run:
+        type: string
+        required: true
+      macfw_run:
+        type: string
+        required: true
+      apps:
+        type: string
+        default: "rung1-hello.app,Table Tool.app"
+      modes:
+        type: string
+        default: "nonroot"
+      strict:
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -39,7 +62,7 @@ permissions:
   packages: read   # the pinned base from TUR's mirror (ghcr.io)
 
 concurrency:
-  group: macos-darling
+  group: macos-darling-${{ github.event_name }}
   cancel-in-progress: false
 
 defaults:
@@ -92,6 +115,7 @@ jobs:
         env:
           APPS: ${{ inputs.apps }}
           MODES: ${{ inputs.modes }}
+          STRICT: ${{ inputs.strict && '1' || '0' }}
         run: |
           tests/macos-darling/ci-run.sh \
             "services/tur-runtime/target/release/tur-runtime" \

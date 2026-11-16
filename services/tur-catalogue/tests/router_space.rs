@@ -844,9 +844,11 @@ fn macos_edition_space() {
                                         .iter()
                                         .any(|caveat| caveat.severity == Severity::Blocker)
                             );
-                            // Offered only for an application measured to
-                            // work in Darling; blocked otherwise.
-                            let measured = rating == Some(Rating::Good);
+                            // Offered only for an application TUR's own
+                            // tests measured to work in Darling; blocked
+                            // otherwise. The records here are outside
+                            // reports, which never enable it.
+                            let measured = false;
                             assert_eq!(
                                 darling.caveats.iter().any(|caveat| caveat.text_id
                                     == "experimental.darling-not-measured"
