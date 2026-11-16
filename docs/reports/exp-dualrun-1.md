@@ -549,8 +549,8 @@ What would make it plain, in the order this report would choose:
 3. Microsoft's own route for Windows in hosted CI: GitHub's Windows runners
    (Windows Server, licensed by GitHub). They cannot start one installed
    disk under two machine configurations (H1), but they can measure H5(b)'s
-   kill criterion: `inwin` measures it there (section 7.2; its first pass
-   was void).
+   kill criterion: `inwin` measured it there (section 7.2: covered windows
+   captured, second run).
 
 **The owner's decision, 16 November 2026** (relayed by the lead): **"I
 accept, run on GitHub."** He was shown paragraphs 2(a), 2(b), 2(c)(v),
@@ -1168,7 +1168,8 @@ dualrun measurements, and not inside a guest):
 | What does the top-level window list cost? | 0.6–0.9 ms (2–3 ms with icons); window changes arrive as WinEvents in 0.3–9 ms; 100 of 100 changes brought an event | The seamless desktop can be **event-driven**, not polled |
 | The channel | Messages on the 16550 serial port, pixels on the private link; a window read is 2–15 KB, an event about 60 bytes, a drag about 80 events/s (coalesce); Firefox and Chromium build their page tree on first request (read again after about 2 s) | Matches section 4.2's devices (serial port, e1000e link); no added driver |
 | Carrying the desktop over | Everything about the person's desktop is readable from the disk except Start pins (the agent reads those with `Export-StartLayout`); icon positions decode to grid cells; a manifest is proposed (a drive letter only if its volume exists; default apps shown, never written back) | "The desktop looks like theirs" can be built from the disk while Windows is down |
-| **The content of a covered window** (H5(b)'s kill criterion) | **Void in its first run** (run 43552339780: the cover did not reach the screen for four of five windows, and the lead's reading is that the fifth is not to be relied on either); fixed there, not yet measured | **H5(b) stays open.** Nothing here relies on it until `inwin`'s next run or scenario `seamless` in the guest |
+| **The content of a covered window** (H5(b)'s kill criterion) | Void in its first run (43552339780); **second run: it works without Remote Desktop.** `PrintWindow` with `PW_RENDERFULLCONTENT` returned the full content of a covered window, identical to the window in front, for classic Win32, Settings (XAML), Edge (Chromium) and Explorer, on all three runners (0 % different on Server 2022; elsewhere the window's own picture still equal); 16–63 ms per 760×560 capture, by polling. A minimised window gives only its caption: restore it off screen or behind to capture. Not measured: the Windows Graphics Capture API, games or video, the Home edition | **H5(b)'s kill criterion is not met on real Windows** (on GitHub's runners, not yet inside a guest). The agent supplies each window's own pixels; the host need not cut windows out of the guest's one screen (the VirtualBox limit). Scenario `seamless` checks the same inside the guest |
+| Elevated windows | The agent, at the person's normal level, cannot operate an elevated window: UI Automation sees 2 elements, typing, keys and closing are refused. It needs Windows' "UI access" right, which needs a signed agent | An elevated installer or settings dialog inside the person's Windows can be shown but not driven by P@x. **Owner decision: a code-signing identity for TUR's guest agent** (section 14) |
 
 ### 7.3 Around both routes
 
@@ -1398,6 +1399,9 @@ part and the summary (about 2,400), the workflow and CI helpers (about
    to the real table after confirmation when it touches only Windows' own
    entries, or always refuse and send the person to a native start?
 7. **The legal review** of section 11, before anything reaches a user.
+7a. **A code-signing identity for TUR's guest agent** (from `inwin`): without
+   Windows' "UI access" right, which needs a signed agent, P@x can show but
+   not operate elevated windows in the person's Windows (section 7.2).
 8. **The image**: QEMU, OVMF, swtpm and (for H5) FreeRDP's X11 client are
    needed in TUR's image for the owner's trial without a toolbox (ADR-0015
    already lists them); this spike could not edit `image/`.
