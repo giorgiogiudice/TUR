@@ -46,6 +46,7 @@ import json
 import math
 import os
 import pathlib
+import pwd
 import re
 import shlex
 import shutil
@@ -583,6 +584,153 @@ def check_vlc(context: Context) -> str:
             f"22.05 kHz and wrote {length:.2f} s of a {measured:.0f} Hz tone, measured from the samples")
 
 
+def free_port() -> int:
+    """A TCP port on the loopback interface that nothing listens on now."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.bind(("127.0.0.1", 0))
+        return probe.getsockname()[1]
+
+
+def wait_for_ssh(port: int, server: subprocess.Popen, log_path: pathlib.Path, timeout: float = 30) -> str:
+    """Waits until an SSH server answers on the port, and returns its banner."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if server.poll() is not None:
+            raise RuntimeError(f"sshd exited with {server.returncode} before it listened: "
+                               f"{tail(log_path.read_text(errors='replace'), 6)}")
+        try:
+            with socket.create_connection(("127.0.0.1", port), timeout=5) as connection:
+                banner = connection.recv(256).decode(errors="replace").strip()
+                if banner.startswith("SSH-2.0"):
+                    return banner
+        except OSError:
+            pass
+        time.sleep(0.25)
+    raise RuntimeError(f"sshd did not answer on 127.0.0.1:{port} within {timeout:.0f} s")
+
+
+def check_winscp(context: Context) -> str:
+    """WinSCP's console program, in the sandbox, opens an SFTP session to
+    OpenSSH's sshd on the runner's loopback interface (a throwaway host key,
+    a throwaway client key, a temporary directory), uploads a file, downloads
+    it back and downloads a file made on the server; every copy is compared
+    by SHA-256 with its original."""
+    tools = {name: shutil.which(name) for name in ("sshd", "ssh-keygen", "sftp", "puttygen")}
+    tools["sshd"] = tools["sshd"] or ("/usr/sbin/sshd" if os.access("/usr/sbin/sshd", os.X_OK) else None)
+    missing = [name for name, path in tools.items() if not path]
+    if missing:
+        raise RuntimeError(f"the runner lacks {', '.join(missing)} (openssh-server, openssh-client, putty-tools)")
+    context.grant()
+    user = pwd.getpwuid(os.getuid()).pw_name
+
+    # The server side, outside every sandbox: OpenSSH's sshd run as the
+    # user running the test, on a free port of the loopback interface. It
+    # serves a temporary directory and accepts one throwaway key.
+    server = context.world.work / "sftp-server" / context.app["id"]
+    shutil.rmtree(server, ignore_errors=True)
+    remote = server / "files"
+    remote.mkdir(parents=True)
+    for name, comment in (("host_key", "tur-test-host"), ("client_key", "tur-test-client")):
+        done = run([tools["ssh-keygen"], "-q", "-t", "ed25519", "-N", "", "-C", comment, "-f", str(server / name)])
+        if done.returncode != 0:
+            raise RuntimeError(f"ssh-keygen failed: {tail(done.stderr, 3)}")
+    (server / "authorized_keys").write_text((server / "client_key.pub").read_text())
+    # WinSCP reads PuTTY's key format; PuTTY's own puttygen converts the
+    # throwaway key. The key file is in the granted directory so that the
+    # sandboxed program can read it; it is never copied into the evidence.
+    (server / "empty").write_text("")
+    key = context.shared / "client.ppk"
+    done = run([tools["puttygen"], str(server / "client_key"), "-O", "private", "-o", str(key),
+                "--new-passphrase", str(server / "empty")])
+    if done.returncode != 0 or not key.is_file():
+        raise RuntimeError(f"puttygen could not convert the client key: {tail(done.stdout + done.stderr, 3)}")
+    fingerprint = run([tools["ssh-keygen"], "-l", "-E", "sha256", "-f", str(server / "host_key.pub")]).stdout.split()
+    if len(fingerprint) < 2 or not fingerprint[1].startswith("SHA256:"):
+        raise RuntimeError(f"no SHA-256 fingerprint of the host key: {fingerprint}")
+    # WinSCP's own form of the fingerprint: the key type, the key's size
+    # (WinSCP shows 255 for Ed25519; it compares only type and checksum)
+    # and the checksum in Base64.
+    host_key = f"ssh-ed25519 255 {fingerprint[1].removeprefix('SHA256:')}"
+    port = free_port()
+    config = server / "sshd_config"
+    config.write_text("\n".join([
+        "ListenAddress 127.0.0.1", f"Port {port}", f"HostKey {server / 'host_key'}",
+        f"PidFile {server / 'sshd.pid'}", f"AuthorizedKeysFile {server / 'authorized_keys'}",
+        "StrictModes no", "UsePAM no", "PubkeyAuthentication yes", "PasswordAuthentication no",
+        "KbdInteractiveAuthentication no", f"AllowUsers {user}", "Subsystem sftp internal-sftp",
+        "LogLevel VERBOSE", ""]))
+    sshd_log = context.evidence / "sshd.log"
+    with sshd_log.open("w") as written:
+        sshd = subprocess.Popen([tools["sshd"], "-D", "-e", "-f", str(config)], stdout=written,
+                                stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
+    try:
+        banner = wait_for_ssh(port, sshd, sshd_log)
+
+        # A control, outside the sandbox: OpenSSH's own sftp client against
+        # the same server, so that a WinSCP failure is WinSCP's.
+        (server / "known_hosts").write_text(f"[127.0.0.1]:{port} {(server / 'host_key.pub').read_text()}")
+        (server / "control.batch").write_text(f"ls {remote}\n")
+        control = run([tools["sftp"], "-F", "/dev/null", "-i", str(server / "client_key"), "-P", str(port),
+                       "-o", "IdentitiesOnly=yes", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes",
+                       "-o", f"UserKnownHostsFile={server / 'known_hosts'}", "-b", str(server / "control.batch"),
+                       f"{user}@127.0.0.1"], timeout=60)
+        if control.returncode != 0:
+            raise RuntimeError(f"the test's own SFTP server is not usable: OpenSSH's sftp client exited with "
+                               f"{control.returncode}: {tail(control.stdout + control.stderr, 4)}")
+
+        upload = context.shared / "upload.bin"
+        data = os.urandom(1_000_000) + b"Sent by WinSCP under tur-runtime.\r\n" * 1000
+        upload.write_bytes(data)
+        wanted = hashlib.sha256(data).hexdigest()
+        made_on_server = os.urandom(300_000)
+        (remote / "from-server.bin").write_bytes(made_on_server)
+        back = context.shared / "download.bin"
+        fetched = context.shared / "from-server.bin"
+        script = context.shared / "transfer.txt"
+        script.write_text("\r\n".join([
+            "option batch abort",
+            "option confirm off",
+            f'open sftp://{user}@127.0.0.1:{port}/ -hostkey="{host_key}" -privatekey="{windows_path(key)}"',
+            f'put -transfer=binary "{windows_path(upload)}" "{remote}/uploaded.bin"',
+            f'get -transfer=binary "{remote}/uploaded.bin" "{windows_path(back)}"',
+            f'get -transfer=binary "{remote}/from-server.bin" "{windows_path(fetched)}"',
+            f'ls "{remote}"',
+            "exit", ""]))
+        log_file = context.shared / "winscp.log"
+        tool = context.tool(context.app["check"]["tool"])
+        done = context.run_tool(tool, ["/ini=nul", "/nointeractiveinput", f"/log={windows_path(log_file)}",
+                                       f"/script={windows_path(script)}"], timeout=300)
+        (context.evidence / "winscp-output.txt").write_text(done.stdout + "\n--- stderr ---\n" + done.stderr)
+        copy_evidence(log_file, context.evidence / "winscp.log")
+        if done.returncode != 0:
+            raise RuntimeError(f"winscp.com exited with {done.returncode}: {tail(done.stdout + done.stderr, 6)}")
+        on_server = remote / "uploaded.bin"
+        if not on_server.is_file() or sha256_of(on_server) != wanted:
+            raise RuntimeError("the file WinSCP uploaded is missing on the server or differs from the original")
+        if not back.is_file() or sha256_of(back) != wanted:
+            raise RuntimeError("the file WinSCP downloaded back is missing or differs from the original")
+        if not fetched.is_file() or sha256_of(fetched) != hashlib.sha256(made_on_server).hexdigest():
+            raise RuntimeError("the file made on the server, downloaded by WinSCP, is missing or differs")
+        accepted = f"Accepted publickey for {user} from 127.0.0.1"
+        logins = sshd_log.read_text(errors="replace").count(accepted)
+        if logins < 2:
+            raise RuntimeError(f"sshd logged {logins} public-key logins; the control and WinSCP make two")
+    finally:
+        sshd.terminate()
+        try:
+            sshd.wait(timeout=20)
+        except subprocess.TimeoutExpired:
+            sshd.kill()
+        key.unlink(missing_ok=True)
+    metadata = json.loads((context.world.data / "tur/runtime/prefixes" / context.app["app_id"] /
+                           "metadata.json").read_text())
+    return (f"winscp.com, in the sandbox, opened an SFTP session to OpenSSH's sshd on 127.0.0.1:{port} "
+            f"({banner}; public-key login, host key pinned by its SHA-256 fingerprint), uploaded a "
+            f"{len(data) // 1000} kB file, downloaded it back and downloaded a {len(made_on_server) // 1000} kB "
+            f"file made on the server; the SHA-256 of every copy matched; sshd logged the login. The prefix "
+            f"shares the host's network: {metadata.get('network')} (tur-runtime's default)")
+
+
 CHECKS = {
     "seven-zip-round-trip": check_seven_zip,
     "open-file-title": check_open_file,
@@ -590,6 +738,7 @@ CHECKS = {
     "putty-raw": check_putty,
     "inno-compile": check_inno,
     "vlc-transcode": check_vlc,
+    "winscp-sftp": check_winscp,
 }
 
 
@@ -1021,7 +1170,8 @@ def describe_environment() -> dict:
         key, _, value = line.partition("=")
         release[key] = value.strip('"')
     packages = run(["dpkg-query", "-W", "-f", "${Package}:${Architecture} ${Version}\n", "wine", "wine64",
-                    "wine32", "libwine", "bubblewrap", "xvfb", "openbox", "unzip"], timeout=60).stdout
+                    "wine32", "libwine", "bubblewrap", "xvfb", "openbox", "unzip", "openssh-server",
+                    "putty-tools"], timeout=60).stdout
     return {"wine": first_line(["wine", "--version"]), "os": release.get("PRETTY_NAME", "unknown"),
             "kernel": first_line(["uname", "-r"]), "bubblewrap": first_line(["bwrap", "--version"]),
             "runner_image": f"{os.environ.get('ImageOS', '?')} {os.environ.get('ImageVersion', '?')}",

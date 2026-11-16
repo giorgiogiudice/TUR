@@ -13,9 +13,9 @@ hardware unless it says so.
 
 | Bet | The goal | Where it stands |
 |---|---|---|
-| [1. Windows drivers without a Windows kernel](#1-windows-drivers-without-a-windows-kernel) | A device that only has a Windows driver works on TUR, safely | **Breakthrough in the lab**: real Windows USB drivers, including Microsoft's own KMDF sample, run as ordinary sandboxed programs |
+| [1. Windows drivers without a Windows kernel](#1-windows-drivers-without-a-windows-kernel) | A device that only has a Windows driver works on TUR, safely | **Breakthrough in the lab**: real Windows USB drivers, including Microsoft's own KMDF sample, run as ordinary sandboxed programs; and **a native Linux driver written blind from recordings alone passed 18 of 18** |
 | [2. A compatibility autopilot](#2-a-compatibility-autopilot) | A Windows application that fails gets fixed by the computer, not by a forum search | **Working**: the right fix found in 12 of 12 fixable test cases, never touching the real copy |
-| [3. An assistant that can operate any application](#3-an-assistant-that-can-operate-any-application) | Say what you want; P@x does it in the applications you already use, within limits you can trust | **Working for Qt, GTK and Firefox**; **Windows applications measured in an experiment**: 95% of controls found, every action tried arrived |
+| [3. An assistant that can operate any application](#3-an-assistant-that-can-operate-any-application) | Say what you want; P@x does it in the applications you already use, within limits you can trust | **Working for Qt, GTK and Firefox**; **Windows applications: breakthrough in the lab**: every control found (172 of 172) and every action tried arrived; a local vision model finds controls in pictures, under a rule no painted label can fool |
 | [4. Private AI on your own computer](#4-private-ai-on-your-own-computer) | A capable assistant with no account, no bill and nothing leaving the machine | **Working**: models chosen to fit the hardware, downloaded on first use, P@x runs on them |
 | [5. A system that heals itself](#5-a-system-that-heals-itself) | A problem seen on one computer becomes a tested fix for every computer, automatically and with consent | **First loop working**: faults found, the safe one repaired and checked, the rest offered as a report you choose to send; signed updates and rollback proven |
 
@@ -81,6 +81,40 @@ As far as we know, KMDF drivers had not run in Wine before.
   section 10, was written before this was known and will be rewritten as a
   report of findings.
 
+### A driver learned from a recording (15 November 2026)
+
+Running a Windows driver in a sandbox still needs the Windows driver. The next
+question was bolder: can TUR learn a device from its Windows driver once, and
+give it a native Linux driver?
+
+The test ([report](reports/exp-drvsynth-1.md)): an invented USB desk gadget,
+with a protocol that exists nowhere else, was driven by its own Windows driver
+while every USB transfer was recorded, together with a plain list of what the
+owner did ("set brightness to 40", "read the temperature"). A fresh AI agent
+was then given **only those recordings and the list** of features a driver must
+provide: no documentation, no source, no device to try things on, no network.
+Its actions were audited afterwards; none left its folder.
+
+In about 18 minutes it worked out the start-up handshake (an answer computed
+from a random challenge), the framing and a non-standard checksum, every
+command, the modes, the note store, the button and alert events, and two
+quirks (a command that must be sent twice, a pause the device needs after a
+mode change), and wrote the driver. A hidden test suite then scored it once,
+on a unit with a different serial number and firmware, with values that
+appear in no recording: **18 of 18 features passed.** The same suite failed a
+driver that only replays the recordings (0 of 18) and one with subtle mistakes
+(10 of 18).
+
+**Limits, plainly.** One device, one trial, emulated rather than real
+hardware. The protocol was invented by one AI model and solved by another,
+which may share habits; its handshake used a well-known constant. A device
+whose secrets are per-unit keys could not be learned from recordings alone.
+The report proposes a harder, fairer round (protocols designed by others,
+several devices, with and without the driver binary, several blind attempts,
+then a real device), the pipeline that would make it a feature (record with
+consent, P@x guiding the person, test, sandbox, review), and the legal
+questions about reverse engineering for interoperability.
+
 ## 2. A compatibility autopilot
 
 **The goal.** When a Windows application fails under Wine today, the person is
@@ -135,29 +169,45 @@ What was shown:
 - P@x has carried out tasks with **the real Claude** and with **a real local
   model** (Qwen3 4B), besides hundreds of scripted checks on every change.
 
-**Windows applications: first measurement (14 November 2026).** Windows
+**Windows applications (14 and 15 November 2026).** Windows
 applications show nothing to the accessibility interface under Wine, and
 Wine's own versions of Windows' two accessibility interfaces turned out to be
 nearly empty. So TUR tried a third way: a small program of its own, started
 inside the application's Windows environment, that reads the plain window
 structure every classic Windows program has. On five real applications
 (Wine's notepad, PuTTY, Notepad++, 7-Zip and an Inno Setup wizard) it found
-**163 of the 172 controls a person sees (95%)**, and **all 35 actions tried
-arrived** (press, type, select, tabs, toolbar buttons, menu commands), each
-confirmed in the application. P@x's own task loop and policy engine ran on
-top unchanged: a Delete button, a password field and "Replace…" were refused.
-A window that painted "Cancel" over a real "Delete" button fooled a click by
-position; with the rule "a position proposed from a picture never acts
-alone", the press was refused ([experiment](https://github.com/giorgiogiudice/TUR/pull/126)).
+**all 172 controls a person sees**, each with the right kind (the first run
+found 163; a fix to font-dialog lists closed the gap), and **all 37 actions
+tried arrived** (press, type, select, tabs, toolbar buttons, menu commands),
+each confirmed in the application. P@x's own task loop and policy engine ran
+on top unchanged and passed **46 of 46 checks**: reading allowed; pressing,
+typing, selecting and menu commands allowed as ordinary actions; a Delete
+button, a password field, a typed line break and "Replace…" refused. It
+answers in 0.06 s next to a running application and costs about 6 MB of its
+own memory ([report](reports/exp-winsee-1.md)).
 
-This is one run. A confirming run with fixes to the test itself is waiting,
-and it has not been tried inside TUR's sandbox, on the TUR image, or on
-applications that draw their own controls (Electron, Qt, games).
+**Seeing without structure.** For windows that expose nothing (games, programs
+that draw their own controls), small vision models running on the computer's
+processor were asked to find named controls in pictures of real windows.
+Enlarged 1.5 times, Qwen3-VL 4B found the right spot in 97% of plain dialogs
+and Holo2 4B in 96%; at the windows' normal size Holo2 4B reached 76%. Each
+answer takes 17–50 s for a new picture on a processor, so this is a fallback,
+not the main route. Gemma 4's smallest model could not do it at all.
 
-**Not yet.** Finding controls from a picture with a local vision model
-(measurement waiting). Typing into Firefox is reported as done but does not
-arrive. Approving a dangerous action from the desktop and voice control are
-not built yet.
+**Safety with vision.** A window painted "Cancel" over a real "Delete" button
+and "Help" over "Turn off backups". The models were fooled every time they
+could see the buttons (12 of 12), and a click at their answer would have
+deleted and switched backups off. With the rule adopted by the owner, "a
+position proposed from a picture never acts alone; the application's real
+structure must confirm it", all 12 were refused, and the honest button was
+confirmed in 5 of 6.
+
+Not yet shown: inside TUR's sandbox, on the TUR image, 32-bit applications,
+applications that draw their own controls, a graphics card for the models.
+
+**Not yet.** Typing into Firefox is reported as done but does not arrive.
+Approving a dangerous action from the desktop and voice control are not built
+yet.
 
 ## 4. Private AI on your own computer
 
