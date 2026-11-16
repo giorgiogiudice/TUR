@@ -58,7 +58,7 @@ built to be. It is an ambitious project, and it is at the beginning.
 
 ## Breakthroughs
 
-TUR is betting on five things no desktop operating system does today. Each one
+TUR is betting on things no desktop operating system does today. Each one
 is being built in the open, and each claim below links to the test that shows
 it. The full story, with what is *not* proven yet, is in
 [Goals and breakthroughs](docs/breakthroughs.md). What is being tried next,
@@ -70,6 +70,7 @@ as hypotheses that may fail, is on [the frontier page](docs/frontier.md).
 | **A compatibility autopilot** | A Windows application that fails gets fixed by the computer, not by a forum search | Finds the right fix in **12 of 12 fixable test cases**, trying each one on a throwaway copy so your own setup is never touched ([report](docs/reports/autopilot-1.md)) |
 | **An assistant that operates your applications** | Say what you want; P@x does it in the applications you already use | P@x reads and operates Qt, GTK and Firefox windows, and **refuses "Send", "Delete" and similar unless you approve**. It stops the moment you switch it off ([report](docs/reports/pax-7.md)). **And now Windows applications:** a small helper of TUR's inside the Windows environment found **all 172 controls** a person sees in five real Windows applications, and **all 37 actions** tried arrived, under the same rules (46 of 46 policy checks). Where there is no structure to read, a small local vision model finds a named control in a picture of the window in up to 97% of plain dialogs, and a fake label painted over a real "Delete" button was refused every time ([report](docs/reports/exp-winsee-1.md)) |
 | **Private AI on your own computer** | A capable assistant with no account, no bill and nothing leaving the machine | TUR picks open models (Gemma 4, Qwen3, Ministral 3) that fit your hardware, downloads one when you choose it, and P@x runs on it ([report](docs/reports/pax-6.md)). On an installed TUR, P@x used a tool through a local model on TUR's own engine; on the test machine's two processor cores it was too slow to be useful ([report](docs/reports/TUR-010.md)) |
+| **Windows and Mac apps without Windows or a Mac** | Many "Windows-only" and "Mac-only" applications are really portable code (Electron, Java, .NET, Godot) in a thin native wrapper | TUR takes that code out of the person's own installer and runs it on the native Linux version of the same runtime: no Wine, no virtual machine. **20 of 24 Electron apps worked from their Windows package and 20 of 24 from their macOS package**, matching the official Linux build in content, start-up time and memory, and visible to P@x. TUR's first real route for Mac apps ([report](docs/reports/exp-rehost-1.md)) |
 | **A system that heals itself** | A problem seen on one computer becomes a tested fix for everyone | **The first loop works** on an installed TUR in a virtual machine: injected faults are found, the safe one is repaired automatically and checked again, the others wait for you, and a fault TUR cannot repair becomes a report that leaves the computer only if you send it ([report](docs/reports/heal-1.md)). Also built: **signed updates a computer checks before installing**, and automatic rollback of a bad update. Next: a desktop notice for every action, and a real update that carries a fix |
 
 <p align="center">
