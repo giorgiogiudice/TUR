@@ -906,6 +906,15 @@ entry; the copy of the boot files. A volume made by `mkfs.ntfs` is not one
 left by Windows: the same reader is run against real Windows in 5.2 and 5.3
 (NOT RUN).
 
+### Runs of the experiment stage (real Windows 11 evaluation, `remoteapp` excluded)
+
+| Run | Commit | How far it got | What broke / what it showed |
+|---|---|---|---|
+| 43782185137 | `f0aa549` | 10 s into the installation; every scenario "the installation did not finish" | **Harness:** QEMU could not connect to the software TPM: `swtpm` never created its socket. Ubuntu confines `swtpm` with an AppArmor profile that allows only libvirt's and the user's own directories, and the TPM state and socket were under `/mnt/dualrun`. The job ended green because a failed installation is recorded as a finding, not a job failure. The medium was downloaded (89 s), its SHA-256 matched `bc3f2408…c10e38`, and the artifact guard removed nothing (the artifact held only TUR's JSON, logs and the QEMU command) |
+| 43786779446 | `448915e` | **queued at hand-back** | Fix: `host-setup.sh` unloads the `swtpm` profile on the runner; `winvm.py` keeps `swtpm`'s output and, if its socket does not appear, stops with that output and the kernel's AppArmor lines |
+
+**No Windows has started yet, so H1 to H10 on a real Windows are still NOT RUN.**
+
 ### 5.0 Synthetic results (measured)
 
 GitHub-hosted Ubuntu 24.04 runner, job `lint` of workflow `exp-dualrun`,
