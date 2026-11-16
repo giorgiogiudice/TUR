@@ -137,6 +137,26 @@ image is built or a VM is started
   ```
 
 - A pull request is ready when every workflow on its head commit is green.
+
+### Never overload GitHub
+
+On 16 November 2026 GitHub disabled Actions for the owner's account after the
+project ran far too much CI at once (about a dozen agents pushing in
+parallel, over a hundred queued runs, multi-hour VM jobs, repeated large
+downloads). The project has no other CI. These limits are binding:
+
+- At most **two** agents push to GitHub at the same time, and at most **about
+  five** workflow runs are queued or running across the repository. Check the
+  queue before pushing or dispatching; if it is over the limit, wait.
+- Batch your commits. Never push only to retrigger CI, and do not push
+  documentation-only commits to a branch whose workflows are heavy.
+- Heavy jobs (VM boots, Windows, Android, Darling, model downloads,
+  experiments) run only by manual dispatch, one at a time, and only when they
+  serve the current goal in [docs/pending.md](docs/pending.md).
+- No scheduled heavy workflows, no repeated large downloads (cache or mirror
+  them), no force-cancel loops, no tight polling of the API.
+- Never work around a GitHub restriction (another account, organisation or
+  runner).
 - Do not merge your own pull request. Do not push to `main`.
 - Tests that need real hardware are recorded as **not run** until a hardware
   runner exists. Do not substitute a VM result for a bare-metal result.
