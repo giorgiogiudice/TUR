@@ -323,6 +323,7 @@ the [AI control layer design](docs/architecture/ai-control-layer.md) and the
 - [Decision records](docs/adr/README.md) — what was decided, and why
 - [Goals and breakthroughs](docs/breakthroughs.md) — the five bets, and what has been shown
 - [The frontier](docs/frontier.md) — hypotheses under test, and why TUR does not need a new kernel
+- [What is left to do](docs/pending.md) — every pending feature, breakthrough and owner decision in one list
 - [P@x: the AI control layer](docs/architecture/ai-control-layer.md) and its [policy engine](docs/architecture/agent-policy.md)
 - [P@x operating applications](docs/architecture/pax-accessibility.md) · [local AI](docs/architecture/local-ai.md)
 - [Compatibility autopilot](docs/architecture/compat-autopilot.md) · [Windows guest](docs/architecture/windows-guest.md) · [Android runtime](docs/architecture/android-runtime.md)
