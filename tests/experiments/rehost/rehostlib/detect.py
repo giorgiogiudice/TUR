@@ -824,6 +824,14 @@ def detect_jvm_dir(directory, names, depth):
                 # the class path (PDFsam: run 43754196480 took icu4j's own
                 # Main-Class for the application's).
                 finding["payload"].update(launcher)
+                # Its bundled runtime sits beside bin/ (PDFsam: runtime/,
+                # whose modules include JavaFX).
+                for runtime in ("runtime", "jre", "jdk"):
+                    release = java_release(os.path.join(os.path.dirname(directory), runtime))
+                    if release and not finding["payload"].get("bundled_runtime"):
+                        finding["payload"]["bundled_runtime"] = release
+                        finding["version"] = release["version"]
+                        finding["version_evidence"].append({"from": f"../{runtime}/release", "value": release["version"]})
     describe_jars(finding)
     return finding
 
@@ -836,7 +844,9 @@ def launcher_script(directory, jars):
             continue
         for name in sorted(os.listdir(bindir)):
             path = os.path.join(bindir, name)
-            if not os.path.isfile(path) or os.path.getsize(path) > (64 << 10):
+            # Windows batch files are not run here (run 43768570046 started
+            # PDFsam's pdfsam.bat with bash).
+            if not os.path.isfile(path) or os.path.getsize(path) > (64 << 10) or name.lower().endswith((".bat", ".cmd", ".ps1", ".exe")):
                 continue
             text = binfmt.read_at(path, 0, 64 << 10)
             if b"\0" in text or b"java" not in text:

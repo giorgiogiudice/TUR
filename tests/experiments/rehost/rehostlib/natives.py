@@ -49,6 +49,14 @@ PLATFORM_TOKENS = [
 LINUX_TOKENS = ["linux-x64-gnu", "linux-x64-glibc", "linux-x64"]
 
 
+def platform_token(name):
+    """The platform part of a per-platform package name, as a whole word:
+    "darwin-x64" contains "win-x64", which run 43768570046 replaced
+    (@vscode/ripgrep-darlinux-x64), so every darwin-x64 package was a dead
+    end."""
+    return next((token for token in PLATFORM_TOKENS if re.search(r"(?<![a-z0-9])" + re.escape(token) + r"(?![a-z0-9])", name)), None)
+
+
 def tar_members(path):
     """{relative path: TarInfo} of an npm tarball (members sit in package/)."""
     out = {}
@@ -124,7 +132,7 @@ class Resolver:
                 continue
             name = match.group(1)
             directory = path[: match.end() - 1]
-            token = next((token for token in PLATFORM_TOKENS if token in name), None)
+            token = platform_token(name)
             if not token or directory in seen:
                 continue
             seen.add(directory)
@@ -197,7 +205,7 @@ class Resolver:
                 self.over(foreign, data, result["applied"])
             return
 
-        token = next((token for token in PLATFORM_TOKENS if token in name), None)
+        token = platform_token(name)
         if token:
             for linux in LINUX_TOKENS:
                 sibling = name.replace(token, linux)

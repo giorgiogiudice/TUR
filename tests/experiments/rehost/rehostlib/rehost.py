@@ -234,6 +234,17 @@ def rehost_nwjs(finding, out, cache, log):
             # programs re-hosted from Windows lost main.html and showed
             # "ERR_FILE_NOT_FOUND").
             page = name.lower().endswith(".html") and name.lower() not in ("credits.html", "licenses.chromium.html")
+            # "locales" holds Chromium's .pak files and, for some programs,
+            # the application's own translations beside them (Betaflight's
+            # locales/<language>/messages.json; run 43768570046 showed its
+            # untranslated message keys): everything but the .pak files.
+            if name == "locales" and os.path.isdir(source):
+                for root, _, files in os.walk(source):
+                    for item in files:
+                        if not item.endswith(".pak"):
+                            path = os.path.join(root, item)
+                            copy_tree(path, os.path.join(target, os.path.relpath(path, where)))
+                continue
             if name in ELECTRON_RUNTIME_DIRS or name.lower() in ("pnacl", "lib") or (os.path.isfile(source) and ELECTRON_RUNTIME_FILES.search(name) and name != "package.json" and not page):
                 continue
             copy_tree(source, os.path.join(target, name))
@@ -618,6 +629,27 @@ def rehost_jvm(finding, out, cache, log):
             plan["steps"].append(f"{name} replaced by {artifact} {version} for Linux from Maven Central")
         else:
             plan["blockers"].append(f"no Linux build of {name} on Maven Central")
+    # JavaFX inside the bundled runtime (jlink'ed modules), not among the
+    # jars: Fedora's OpenJDK has no JavaFX, so the Linux builds of the same
+    # modules come from Maven Central (OpenJFX, GPL-2.0 with the Classpath
+    # Exception). Run 43768570046: PDFsam, NoClassDefFoundError
+    # javafx/scene/layout/HBox.
+    fx_modules = [name for name in (payload.get("bundled_runtime") or {}).get("modules", []) if name.startswith("javafx.")]
+    if fx_modules and not any(os.path.basename(item).startswith("javafx-") for item in classpath):
+        versions = [v for v in fetch.maven_versions("org.openjfx", "javafx-base") if re.match(r"^\d+(\.\d+)*$", v)]
+        fitting = [v for v in versions if int(v.split(".")[0]) <= (major or 0)]
+        version = sorted(fitting or versions, key=lambda v: [int(x) for x in v.split(".")])[-1] if (fitting or versions) else None
+        added = []
+        for module in fx_modules:
+            artifact = "javafx-" + module.split(".", 1)[1]
+            jar = fetch.maven_artifact("org.openjfx", artifact, version, cache, classifier="linux") if version else None
+            if jar:
+                classpath.append(jar)
+                added.append(artifact)
+            else:
+                plan["blockers"].append(f"no Linux build of {artifact} {version} on Maven Central")
+        if added:
+            plan["steps"].append(f"JavaFX of the bundled runtime supplied from Maven Central: OpenJFX {version} for Linux ({', '.join(added)})")
     classpath = list(dict.fromkeys(classpath))
     if not classpath:
         plan["blockers"].append("no class path could be built")
