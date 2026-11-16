@@ -1,0 +1,385 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+"""Native Node modules: finding the Linux build of each one a Windows or
+macOS Electron payload carries, and putting it where the payload looks.
+
+For every package that owns a foreign .node file, in this order:
+
+  carried            the package already holds a Linux x86-64 build (packages
+                     built with prebuildify ship every platform)
+  platform-package   the binary lives in a per-platform npm package
+                     (@scope/name-win32-x64-msvc): the linux-x64 package of
+                     the same version is fetched from the npm registry
+  npm-prebuild       the package's own npm tarball, same version, holds a
+                     Linux prebuild
+  release-prebuild   the package publishes prebuilds as release assets
+                     (prebuild-install, node-pre-gyp): the Linux asset for
+                     N-API or for this Electron's ABI is fetched
+  source-build       none of those, but the source in the npm tarball was
+                     compiled for this Electron (rehostlib/build.py; only
+                     when the resolver is asked to build, in CI)
+  needs-build        none of those, and the source in the npm tarball was
+                     not built, or did not build
+  dead-end           the package cannot be identified, or is not on npm
+
+Everything fetched is the module's own published build or source, at the
+version the payload names.
+"""
+
+import io
+import os
+import re
+import tarfile
+
+from . import fetch
+from .detect import kind_from_head
+
+PLATFORM_TOKENS = [
+    "win32-x64-msvc",
+    "win32-x64-gnu",
+    "win32-x64",
+    "windows-x64",
+    "win-x64",
+    "darwin-x64",
+    "darwin-arm64",
+    "darwin-universal",
+    "macos-x64",
+    "macos-arm64",
+    "osx-x64",
+]
+LINUX_TOKENS = ["linux-x64-gnu", "linux-x64-glibc", "linux-x64"]
+
+
+def platform_token(name):
+    """The platform part of a per-platform package name, as a whole word:
+    "darwin-x64" contains "win-x64", which run 43768570046 replaced
+    (@vscode/ripgrep-darlinux-x64), so every darwin-x64 package was a dead
+    end."""
+    return next((token for token in PLATFORM_TOKENS if re.search(r"(?<![a-z0-9])" + re.escape(token) + r"(?![a-z0-9])", name)), None)
+
+
+def tar_members(path):
+    """{relative path: TarInfo} of an npm tarball (members sit in package/)."""
+    out = {}
+    try:
+        archive = tarfile.open(path)
+    except (tarfile.TarError, OSError):
+        return None, {}
+    for member in archive.getmembers():
+        if member.isfile():
+            out[member.name.split("/", 1)[1] if "/" in member.name else member.name] = member
+    return archive, out
+
+
+def is_linux_x64(data):
+    kind = kind_from_head(data[:4096])
+    return bool(kind) and kind[0] == "elf" and "x86_64" in kind[1]
+
+
+def rank(path, abi):
+    """Lower is better among candidate Linux builds of one module."""
+    lower = path.lower()
+    if "musl" in lower or "arm" in lower or "ia32" in lower:
+        return 99
+    score = 10
+    if "napi" in lower:
+        score = 1
+    if abi and (f"abi{abi}" in lower or f"-v{abi}-" in lower):
+        score = 0 if "electron" in lower else 2
+    elif "abi" in lower:
+        score = 50  # built for one ABI, and not this one
+    if "electron" in lower and score > 2:
+        score = 3
+    return score
+
+
+class Resolver:
+    def __init__(self, payload, electron_version, cache, log=print, runtime="electron", build=False):
+        self.payload = payload
+        self.version = electron_version
+        self.cache = cache
+        self.log = log
+        self.runtime = runtime
+        self.build = build
+        self.abi = fetch.electron_abi(electron_version, cache) if runtime == "electron" and electron_version else ""
+        self.changed = False
+
+    def put(self, rel, data, executable=None):
+        if executable is None:
+            executable = rel.endswith(".node")
+        if self.payload.asar:
+            self.payload.asar.put_unpacked(rel, data, executable=executable)
+        else:
+            target = os.path.join(self.payload.directory, rel)
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+            with open(target, "wb") as handle:
+                handle.write(data)
+            if executable:
+                os.chmod(target, 0o755)
+        self.changed = True
+
+    def helper_packages(self, sidecars):
+        """Per-platform npm packages that carry a program rather than a Node
+        module (@vscode/ripgrep-win32-x64 holds rg.exe): the linux-x64
+        package of the same version is fetched from npm and laid beside it.
+        (Run 43754196480: MarkText died with "Could not find
+        @vscode/ripgrep-linux-x64".) sidecars: paths of foreign programs
+        relative to the payload."""
+        results = []
+        seen = set()
+        for path in sidecars:
+            match = re.search(r"(?:^|/)node_modules/((?:@[^/]+/)?[^/]+)/", path)
+            if not match:
+                continue
+            name = match.group(1)
+            directory = path[: match.end() - 1]
+            token = platform_token(name)
+            if not token or directory in seen:
+                continue
+            seen.add(directory)
+            version = (self.payload.read_json(directory + "/package.json") or {}).get("version")
+            result = {"package": name, "version": version, "status": "dead-end", "detail": "", "applied": []}
+            for linux in LINUX_TOKENS:
+                sibling = name.replace(token, linux)
+                tarball, _ = fetch.npm_tarball(sibling, version, self.cache) if version else (None, None)
+                if not tarball:
+                    continue
+                archive, members = tar_members(tarball)
+                if not members:
+                    continue
+                base = directory[: -len(name)] + sibling
+                for rel, member in members.items():
+                    data = archive.extractfile(member).read()
+                    self.put(f"{base}/{rel}", data, executable=data[:4] == b"\x7fELF")
+                result.update(status="platform-package", detail=f"{sibling}@{version} from npm ({len(members)} files) at {base}", applied=[base])
+                break
+            else:
+                result["detail"] = f"no Linux sibling of {name}@{version} on npm"
+            self.log(f"    helper package {name}@{version}: {result['status']} {result['detail']}")
+            results.append(result)
+        if self.changed and self.payload.asar:
+            self.payload.asar.save()
+        return results
+
+    def over(self, foreign, data, applied):
+        """Replace foreign builds that sit where a build-from-source would
+        put them (build/Release): loaders look there first."""
+        for item in foreign:
+            if "/build/" in "/" + item["path"] or "/bin/" in "/" + item["path"]:
+                self.put(item["path"], data)
+                applied.append(item["path"])
+
+    def resolve_all(self, natives):
+        groups = {}
+        for item in natives:
+            groups.setdefault(item["package_dir"] or "?" + item["path"], []).append(item)
+        results = []
+        for directory, items in sorted(groups.items()):
+            foreign = [item for item in items if item["format"] != "elf"]
+            if not foreign:
+                continue
+            first = foreign[0]
+            result = {"package": first["package"], "version": first["version"], "dir": first["package_dir"], "files": [item["path"] for item in foreign], "status": "dead-end", "detail": "", "applied": []}
+            try:
+                self.resolve(result, foreign, [item for item in items if item["format"] == "elf" and "x86_64" in item["archs"]])
+            except (fetch.FetchError, OSError, tarfile.TarError, ValueError, KeyError) as problem:
+                result["detail"] = f"error while resolving: {problem}"
+            self.log(f"    native {result['package']}@{result['version']}: {result['status']} {result['detail']}")
+            results.append(result)
+        if self.changed and self.payload.asar:
+            self.payload.asar.save()
+        return results
+
+    def resolve(self, result, foreign, carried):
+        name, version, directory = result["package"], result["version"], result["dir"]
+        if not name or directory is None:
+            result["detail"] = "no package.json above the file"
+            return
+        package = self.payload.read_json(directory + "/package.json") or {}
+
+        carried = sorted((item for item in carried if rank(item["path"], self.abi) < 50), key=lambda item: rank(item["path"], self.abi))
+        if carried:
+            result["status"] = "carried"
+            result["detail"] = carried[0]["path"]
+            data = self.payload.read(carried[0]["path"], 256 << 20)
+            if data:
+                self.over(foreign, data, result["applied"])
+            return
+
+        token = platform_token(name)
+        if token:
+            for linux in LINUX_TOKENS:
+                sibling = name.replace(token, linux)
+                tarball, _ = fetch.npm_tarball(sibling, version, self.cache)
+                if not tarball:
+                    continue
+                archive, members = tar_members(tarball)
+                if not members:
+                    continue
+                base = directory[: -len(name)] + sibling if directory.endswith(name) else os.path.dirname(directory) + "/" + sibling.split("/")[-1]
+                base = base.lstrip("/")  # never outside the payload (run 43754196480)
+                count = 0
+                for rel, member in members.items():
+                    self.put(f"{base}/{rel}", archive.extractfile(member).read())
+                    count += 1
+                result["status"] = "platform-package"
+                result["detail"] = f"{sibling}@{version} from npm ({count} files) at {base}"
+                result["applied"].append(base)
+                return
+            result["detail"] = f"no Linux sibling of {name}@{version} on npm; "
+
+        tarball, meta = fetch.npm_tarball(name, version, self.cache)
+        members = {}
+        archive = None
+        if tarball:
+            archive, members = tar_members(tarball)
+        candidates = []
+        for rel, member in members.items():
+            lower = rel.lower()
+            if lower.endswith(".node") and "linux" in lower and ("x64" in lower or "x86_64" in lower):
+                candidates.append(rel)
+        candidates.sort(key=lambda rel: rank(rel, self.abi))
+        if candidates and rank(candidates[0], self.abi) < 50:
+            data = archive.extractfile(members[candidates[0]]).read()
+            if is_linux_x64(data):
+                for rel in candidates:
+                    if rank(rel, self.abi) < 50:
+                        self.put(f"{directory}/{rel}", archive.extractfile(members[rel]).read())
+                        result["applied"].append(f"{directory}/{rel}")
+                self.over(foreign, data, result["applied"])
+                result["status"] = "npm-prebuild"
+                result["detail"] = f"{candidates[0]} in the npm tarball of {name}@{version}"
+                return
+
+        found = self.release_prebuild(name, version, package or (meta or {}))
+        if found:
+            url, files, values = found
+            binary = package.get("binary") if isinstance(package.get("binary"), dict) else {}
+            for rel, data in files.items():
+                targets = []
+                # node-pre-gyp says where its loader looks on each platform
+                # (run 43544136201: sqlite3's Linux build was written over
+                # the Windows path, and the loader never looked there).
+                text = binary.get("module_path") or ""
+                for key, value in values.items():
+                    text = text.replace("{" + key + "}", value)
+                if text and "{" not in text:
+                    targets.append(os.path.normpath(f"{directory}/{text}/{os.path.basename(rel)}"))
+                for item in foreign:
+                    if os.path.basename(item["path"]) == os.path.basename(rel) and "/build/" in "/" + item["path"]:
+                        targets.append(item["path"])
+                if not targets:
+                    targets.append(f"{directory}/{rel}")
+                for target in dict.fromkeys(targets):
+                    self.put(target, data)
+                    result["applied"].append(target)
+            result["status"] = "release-prebuild"
+            result["detail"] = url
+            return
+
+        if meta is None and not tarball:
+            result["status"] = "dead-end"
+            result["detail"] += f"{name}@{version} is not on the npm registry"
+        elif any(rel in members for rel in ("binding.gyp", "Cargo.toml", "CMakeLists.txt")) or (meta or {}).get("gypfile"):
+            result["status"] = "needs-build"
+            result["detail"] += "no Linux prebuild published; the source is in the npm tarball" + (" (N-API)" if "napi" in str(package.get("dependencies", {})) or "node-addon-api" in str(package.get("dependencies", {})) else "")
+            if self.build and self.runtime == "electron" and self.version:
+                from . import build
+
+                files, detail = build.build(name, version, self.version, tarball, self.cache, self.log)
+                result["build"] = detail
+                if files:
+                    binary = package.get("binary") if isinstance(package.get("binary"), dict) else {}
+                    for base, data in files.items():
+                        # Where a build from source puts it (bindings,
+                        # node-gyp-build and most hand-written loaders look
+                        # there first), and over any foreign file of the same
+                        # name the payload carries.
+                        targets = [f"{directory}/build/Release/{base}"]
+                        if binary.get("module_path") and "{" not in binary["module_path"]:
+                            targets.append(os.path.normpath(f"{directory}/{binary['module_path']}/{base}"))
+                        targets += [item["path"] for item in foreign if os.path.basename(item["path"]) == base]
+                        if len(files) == 1:
+                            targets += [item["path"] for item in foreign if "/build/" in "/" + item["path"]]
+                        for target in dict.fromkeys(targets):
+                            self.put(target, data)
+                            result["applied"].append(target)
+                    result["status"] = "source-build"
+                    result["detail"] = detail
+        else:
+            result["status"] = "dead-end"
+            result["detail"] += "no Linux prebuild and no source in the npm tarball"
+
+    def release_prebuild(self, name, version, package):
+        """prebuild-install's and node-pre-gyp's naming of release assets."""
+        urls = []
+        values_of = {}
+        short = name.split("/")[-1]
+        repository = package.get("repository")
+        repository = repository.get("url") if isinstance(repository, dict) else repository
+        match = re.search(r"github\.com[/:]([^/]+/[^/#.]+)", repository or "")
+        binary = package.get("binary") if isinstance(package.get("binary"), dict) else {}
+        napi = [str(value) for value in (binary.get("napi_versions") or [])][::-1] or ["9", "8", "6", "4", "3"]
+        runtimes = [f"napi-v{value}" for value in napi[:5]]
+        if self.abi:
+            runtimes.append(f"electron-v{self.abi}")
+        if binary.get("host") and (binary.get("package_name") or binary.get("remote_path")):
+            for runtime in runtimes:
+                values = {
+                    "version": version,
+                    "name": short,
+                    "module_name": binary.get("module_name", short),
+                    "platform": "linux",
+                    "arch": "x64",
+                    "libc": "glibc",
+                    "configuration": "Release",
+                    "node_abi": runtime if runtime.startswith("electron") else "napi",
+                    "napi_build_version": runtime.split("-v")[-1],
+                    "node_abi_napi": "napi",
+                    "toolset": "",
+                }
+                text = "/".join(part.strip("/") for part in (binary["host"], binary.get("remote_path", ""), binary.get("package_name", "{module_name}-v{version}-{node_abi}-{platform}-{arch}.tar.gz")) if part)
+                for key, value in values.items():
+                    text = text.replace("{" + key + "}", value)
+                if "{" not in text:
+                    urls.append(text)
+                    values_of[text] = values
+        if match and ("prebuild-install" in str(package.get("dependencies", {})) or "prebuild-install" in str(package.get("scripts", {})) or not urls):
+            for tag in (f"v{version}", version):
+                for runtime in runtimes:
+                    url = f"https://github.com/{match.group(1)}/releases/download/{tag}/{short}-v{version}-{runtime}-linux-x64.tar.gz"
+                    urls.append(url)
+                    values_of[url] = {"platform": "linux", "arch": "x64", "libc": "glibc", "napi_build_version": runtime.split("-v")[-1], "node_abi": runtime if runtime.startswith("electron") else "napi", "configuration": "Release", "module_name": binary.get("module_name", short)}
+        seen = set()
+        for url in urls[:14]:
+            if url in seen:
+                continue
+            seen.add(url)
+            dest = os.path.join(self.cache, "prebuilds", re.sub(r"[^A-Za-z0-9._-]", "_", url)[-180:])
+            try:
+                fetch.download(url, dest, attempts=1, what=f"prebuild of {name}@{version}")
+            except fetch.FetchError:
+                continue
+            files = {}
+            try:
+                with tarfile.open(dest) as archive:
+                    for member in archive.getmembers():
+                        if member.isfile() and member.name.endswith(".node"):
+                            data = archive.extractfile(member).read()
+                            if is_linux_x64(data):
+                                files[member.name.lstrip("./")] = data
+            except (tarfile.TarError, OSError):
+                continue
+            if files:
+                return url, files, values_of.get(url, {})
+        return None
+
+
+def summarise(results):
+    counts = {}
+    for result in results:
+        counts[result["status"]] = counts.get(result["status"], 0) + 1
+    return counts
+
+
+def read_tar_bytes(data):
+    return tarfile.open(fileobj=io.BytesIO(data))

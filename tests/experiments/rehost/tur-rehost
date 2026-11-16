@@ -1,0 +1,98 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+"""Prototype command line of the re-hosting experiment
+(docs/reports/exp-rehost-1.md). Not a TUR service, and not installed in the
+image; it shows the shape `tur-runtime` could take.
+
+    tur-rehost detect  FILE [--json]              what runtime is inside; nothing is run
+    tur-rehost plan    FILE --out DIR [--cache DIR] [--json]
+                                                   open the package, lay the payload under the
+                                                   Linux runtime, print the launch command
+    tur-rehost run     FILE --out DIR [--cache DIR] [-- ARGS...]
+                                                   plan, then start it (no sandbox: a prototype)
+
+`plan` and `run` download the Linux runtime from its project's own release
+location. Run this in CI or in a disposable container, never on a
+development machine (AGENTS.md).
+"""
+
+import argparse
+import json
+import os
+import subprocess
+import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+
+from rehostlib import detect, fetch, rehost, unpack  # noqa: E402
+
+
+def slim(finding):
+    """A finding without its long lists."""
+    out = {key: value for key, value in finding.items() if key not in ("natives", "sidecars")}
+    out["natives"] = len(finding.get("natives") or [])
+    out["sidecars"] = len(finding.get("sidecars") or [])
+    return out
+
+
+def open_package(path, out, log):
+    unpacker = unpack.Unpacker(log=log)
+    tree = os.path.join(out, "package")
+    kind = unpacker.unpack(os.path.abspath(path), tree)
+    findings = detect.detect(tree)
+    for finding in findings:
+        if finding["runtime"] == "nwjs":
+            detect.resolve_nw_version(finding, fetch.nwjs_versions(os.path.join(out, "cache")))
+    return kind, unpacker, findings
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("command", choices=["detect", "plan", "run"])
+    parser.add_argument("file")
+    parser.add_argument("--out", default=None)
+    parser.add_argument("--cache", default=None)
+    parser.add_argument("--json", action="store_true")
+    parser.add_argument("--pretend", choices=["darwin", "win32"], default=None, help="experiment: tell an Electron payload it runs on its own platform")
+    parser.add_argument("arguments", nargs="*")
+    options = parser.parse_args()
+    out = os.path.abspath(options.out or (options.file + ".rehost"))
+    cache = os.path.abspath(options.cache or os.path.join(out, "cache"))
+    log = (lambda text: print(text, file=sys.stderr)) if options.json else print
+    kind, unpacker, findings = open_package(options.file, out, log)
+    primary = findings[0] if findings else None
+    report = {"file": options.file, "container": kind, "layers": unpacker.layers, "problems": unpacker.problems, "findings": [slim(f) for f in findings]}
+    if options.command == "detect":
+        if options.json:
+            print(json.dumps(report, indent=2, default=str))
+        else:
+            print(f"{options.file}: {' > '.join(unpacker.layers) or kind}")
+            print("  " + detect.summary(primary))
+            for note in (primary or {}).get("notes", []):
+                print("  - " + note)
+        return 0 if primary else 1
+    if not primary:
+        print("nothing recognised in this package", file=sys.stderr)
+        return 1
+    extra = {"spoof": options.pretend} if options.pretend and primary["runtime"] == "electron" else {}
+    plan = rehost.rehost(primary, os.path.join(out, "app"), cache, log, **extra)
+    report["plan"] = plan
+    if options.json:
+        print(json.dumps(report, indent=2, default=str))
+    else:
+        print("  " + detect.summary(primary))
+        for step in plan["steps"]:
+            print("  + " + step)
+        for blocker in plan["blockers"]:
+            print("  ! " + blocker)
+        if plan["ok"]:
+            print("  start with: " + " ".join(plan["argv"]))
+    if options.command == "plan" or not plan["ok"]:
+        return 0 if plan["ok"] else 2
+    environment = dict(os.environ, **plan["env"])
+    return subprocess.call(plan["argv"] + options.arguments, cwd=plan["cwd"], env=environment)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
