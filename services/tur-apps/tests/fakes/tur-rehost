@@ -1,0 +1,126 @@
+#!/bin/sh
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# A stand-in for tur-rehost in the tests of tur-apps (tests/cli.rs). It keeps
+# the directory layout of services/tur-rehost (apps/<id>/{app,home,record.json}
+# and launchers/<id>/tur-rehost-<id>.desktop under $XDG_DATA_HOME/tur/rehost),
+# prints the JSON tur-rehost prints, and fetches and runs nothing: a re-hosted
+# application is a directory. Every call is logged to $FAKE_STATE/rehost.log.
+#
+# Files in $FAKE_STATE change what it does:
+#   rehost-needs-builds  plan and install refuse without --allow-builds
+#                        (TUR-REHOST-NATIVE-002, exit 4)
+#   rehost-fail          install fails (TUR-REHOST-APP-003, exit 7)
+#   rehost-leave         uninstall leaves the launcher entry (exit 8)
+# The real tur-rehost has its own tests (services/tur-rehost/tests).
+set -eu
+state="${FAKE_STATE:?}"
+echo "$*" >> "$state/rehost.log"
+root="${XDG_DATA_HOME:-$HOME/.local/share}/tur/rehost"
+[ $# -gt 0 ] || exit 2
+command="$1"
+shift
+digest=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+error() {
+    printf '{"error":{"code":"%s","title":"t","message":"%s"}}\n' "$1" "$2"
+    exit "$3"
+}
+
+# The plan, as `tur-rehost plan --json` prints it: $1 ready (true or false),
+# $2 whether native modules are built here, $3 the blockers.
+plan_json() {
+    printf '{"package":"%s","app_id":"%s","container":"zip","layers":["zip"],"problems":[],"finding":null,"other_findings":0,' "$package" "$id"
+    printf '"runtime":{"family":"electron","version":"44.10.2","abi":140,"codecs":"upstream","notice":"TUR downloads Electron'"'"'s own Linux build from the Electron project'"'"'s releases on GitHub, unchanged, and checks it against the SHA-256 TUR pinned. It is not part of TUR. It contains media codecs (H.264 and AAC) that TUR does not ship; the download is made by this computer, at your request, as with Proton."},'
+    printf '"modules":[],"downloads":[{"what":"Electron 44.10.2 for Linux (x64)","url":"https://github.com/electron/electron/releases/download/v44.10.2/electron-v44.10.2-linux-x64.zip","size":110000000,"sha256":"%s","licence":"MIT"}],' "$digest"
+    printf '"download_bytes":110000000,"needs_build_environment":%s,"blockers":[%s],"ready":%s}' "$2" "$3" "$1"
+}
+
+case "$command" in
+plan | install)
+    package="$1"
+    shift
+    id=""
+    name=""
+    builds=0
+    while [ $# -gt 0 ]; do
+        case "$1" in
+        --app-id)
+            id="$2"
+            shift 2
+            ;;
+        --name)
+            name="$2"
+            shift 2
+            ;;
+        --allow-unresolved)
+            shift 2
+            ;;
+        --allow-builds)
+            builds=1
+            shift
+            ;;
+        *) shift ;;
+        esac
+    done
+    [ -f "$package" ] || error TUR-REHOST-DETECT-001 "no such file" 1
+    needs=false
+    if [ -e "$state/rehost-needs-builds" ]; then
+        if [ "$builds" = 0 ]; then
+            plan_json false false '{"code":"TUR-REHOST-NATIVE-002","title":"Some parts must be built on this computer first","message":"12 native modules must be built from source on this computer"}'
+            echo
+            exit 4
+        fi
+        needs=true
+    fi
+    if [ "$command" = plan ]; then
+        plan_json true "$needs" ""
+        echo
+        exit 0
+    fi
+    if [ -e "$state/rehost-fail" ]; then
+        error TUR-REHOST-APP-003 "the runtime could not be laid out; nothing was left behind" 7
+    fi
+    if [ -e "$root/apps/$id" ]; then
+        error TUR-REHOST-APP-002 "already set up" 6
+    fi
+    cp "$package" "$state/rehosted-file"
+    mkdir -p "$root/apps/$id/app" "$root/apps/$id/home" "$root/launchers/$id"
+    echo "the runtime and the payload" > "$root/apps/$id/app/payload"
+    printf '{"app_id":"%s","name":"%s","app_version":"1.0","runtime":"electron 44.10.2","platform":"windows","installed_at":"2026-11-16T10:00:00Z"}\n' "$id" "$name" > "$root/apps/$id/record.json"
+    entry="$root/launchers/$id/tur-rehost-$id.desktop"
+    printf '[Desktop Entry]\nName=%s\nExec=/usr/bin/tur-rehost launch %s\n' "$name" "$id" > "$entry"
+    printf '{"plan":'
+    plan_json true "$needs" ""
+    printf ',"record":{"app_id":"%s","name":"%s","app_version":"1.0","runtime":{"family":"electron","version":"44.10.2","url":"u","sha256":"s","codecs":"upstream"},"package":{"file_name":"f","size":1,"sha256":"s","platform":"windows","layers":[]},"updater":"off","desktop_entry":"%s"},"directory":"%s"}\n' "$id" "$name" "$entry" "$root/apps/$id"
+    ;;
+uninstall)
+    id="$1"
+    if [ ! -e "$root/apps/$id" ] && [ ! -e "$root/launchers/$id" ]; then
+        error TUR-REHOST-APP-004 "no application $id is re-hosted" 6
+    fi
+    rm -rf "${root:?}/apps/$id"
+    if [ -e "$state/rehost-leave" ]; then
+        error TUR-REHOST-APP-007 "still there after the removal: $root/launchers/$id" 8
+    fi
+    rm -rf "${root:?}/launchers/$id"
+    printf '{"app_id":"%s","deleted":["%s","%s"],"left_behind":[]}\n' "$id" "$root/apps/$id" "$root/launchers/$id"
+    ;;
+list)
+    printf '{"applications":['
+    first=1
+    for record in "$root"/apps/*/record.json; do
+        [ -f "$record" ] || continue
+        [ "$first" = 1 ] || printf ','
+        first=0
+        tr -d '\n' < "$record"
+    done
+    printf ']}\n'
+    ;;
+launch)
+    exit 0
+    ;;
+*)
+    exit 2
+    ;;
+esac

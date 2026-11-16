@@ -1,0 +1,1178 @@
+{
+ "schema_version": 1,
+ "checked": "2026-11-16",
+ "generated_by": "services/tur-rehost/data/pin-index.py; do not edit by hand",
+ "electron": {
+  "35.2.0": {
+   "abi": 133,
+   "chromium": "134.0.6998.205",
+   "node": "22.14.0",
+   "linux_x64": {
+    "url": "https://github.com/electron/electron/releases/download/v35.2.0/electron-v35.2.0-linux-x64.zip",
+    "sha256": "c3bc0fefe238e092ab2a26276d6c4bd5d70b85d08d8bb298c5f7499a4456a119",
+    "size": 110086027,
+    "hash_source": "https://github.com/electron/electron/releases/download/v35.2.0/SHASUMS256.txt"
+   },
+   "ffmpeg_open_codecs": {
+    "url": "https://github.com/electron/electron/releases/download/v35.2.0/ffmpeg-v35.2.0-linux-x64.zip",
+    "sha256": "c9faac57f5388d9ee280bfbd82eafab64955149eed99ee47e0e6f03316486fba",
+    "size": 1399844,
+    "hash_source": "https://github.com/electron/electron/releases/download/v35.2.0/SHASUMS256.txt"
+   },
+   "headers": {
+    "url": "https://artifacts.electronjs.org/headers/dist/v35.2.0/node-v35.2.0-headers.tar.gz",
+    "sha256": "507b134ec492138488c3392c4130cbf3008c1a93781cabb0e88bc50a03870617",
+    "size": 331163,
+    "hash_source": "https://artifacts.electronjs.org/headers/dist/v35.2.0/SHASUMS256.txt"
+   }
+  },
+  "37.6.1": {
+   "abi": 136,
+   "chromium": "138.0.7204.251",
+   "node": "22.19.0",
+   "linux_x64": {
+    "url": "https://github.com/electron/electron/releases/download/v37.6.1/electron-v37.6.1-linux-x64.zip",
+    "sha256": "d2bf4fe94de47fb28d45911fbbadb91acf42ee64dc96033797a80515dbec3965",
+    "size": 114154741,
+    "hash_source": "https://github.com/electron/electron/releases/download/v37.6.1/SHASUMS256.txt and GitHub's asset digest"
+   },
+   "ffmpeg_open_codecs": {
+    "url": "https://github.com/electron/electron/releases/download/v37.6.1/ffmpeg-v37.6.1-linux-x64.zip",
+    "sha256": "561a7685536c133d2072e2e2b5a64ca3897bb8c71624158a6fe8e07cae9116c9",
+    "size": 1399286,
+    "hash_source": "https://github.com/electron/electron/releases/download/v37.6.1/SHASUMS256.txt and GitHub's asset digest"
+   },
+   "headers": {
+    "url": "https://artifacts.electronjs.org/headers/dist/v37.6.1/node-v37.6.1-headers.tar.gz",
+    "sha256": "9436cc46b45139cba2bc785776abd9884bc927ee43140a387c6574242d7ff05b",
+    "size": 334169,
+    "hash_source": "https://artifacts.electronjs.org/headers/dist/v37.6.1/SHASUMS256.txt"
+   }
+  },
+  "39.2.7": {
+   "abi": 140,
+   "chromium": "142.0.7444.235",
+   "node": "22.21.1",
+   "linux_x64": {
+    "url": "https://github.com/electron/electron/releases/download/v39.2.7/electron-v39.2.7-linux-x64.zip",
+    "sha256": "2f5285ef563dca154aa247696dddef545d3d895dd9b227ed423ea0d43737c22c",
+    "size": 113423396,
+    "hash_source": "https://github.com/electron/electron/releases/download/v39.2.7/SHASUMS256.txt and GitHub's asset digest"
+   },
+   "ffmpeg_open_codecs": {
+    "url": "https://github.com/electron/electron/releases/download/v39.2.7/ffmpeg-v39.2.7-linux-x64.zip",
+    "sha256": "a201a2a64a49ab39def2d38a73e92358ebb57ecae99b0bbc8058353c4be23ea1",
+    "size": 1394799,
+    "hash_source": "https://github.com/electron/electron/releases/download/v39.2.7/SHASUMS256.txt and GitHub's asset digest"
+   },
+   "headers": {
+    "url": "https://artifacts.electronjs.org/headers/dist/v39.2.7/node-v39.2.7-headers.tar.gz",
+    "sha256": "70395b88591386c168ea14fe48bdbb334f59cf38db0f28f75c004a9bb01c9ebf",
+    "size": 338432,
+    "hash_source": "https://artifacts.electronjs.org/headers/dist/v39.2.7/SHASUMS256.txt"
+   }
+  },
+  "42.1.0": {
+   "abi": 146,
+   "chromium": "148.0.7778.97",
+   "node": "24.15.0",
+   "linux_x64": {
+    "url": "https://github.com/electron/electron/releases/download/v42.1.0/electron-v42.1.0-linux-x64.zip",
+    "sha256": "882047343a9e203c6cfc5d39b166ea9e025dd256943e0d3711f86725ad0e3bd9",
+    "size": 119043087,
+    "hash_source": "https://github.com/electron/electron/releases/download/v42.1.0/SHASUMS256.txt and GitHub's asset digest"
+   },
+   "ffmpeg_open_codecs": {
+    "url": "https://github.com/electron/electron/releases/download/v42.1.0/ffmpeg-v42.1.0-linux-x64.zip",
+    "sha256": "ffb78ccf0b2cbf1a1c0da2a69d8021337ae5352642a2d84adae951f95c771696",
+    "size": 1479792,
+    "hash_source": "https://github.com/electron/electron/releases/download/v42.1.0/SHASUMS256.txt and GitHub's asset digest"
+   },
+   "headers": {
+    "url": "https://artifacts.electronjs.org/headers/dist/v42.1.0/node-v42.1.0-headers.tar.gz",
+    "sha256": "0cfc1d20f252d6c29bdd14b1f3caa30edc6477db93e5a6620674424b38dcddfd",
+    "size": 344516,
+    "hash_source": "https://artifacts.electronjs.org/headers/dist/v42.1.0/SHASUMS256.txt"
+   }
+  },
+  "42.3.0": {
+   "abi": 146,
+   "chromium": "148.0.7778.180",
+   "node": "24.15.0",
+   "linux_x64": {
+    "url": "https://github.com/electron/electron/releases/download/v42.3.0/electron-v42.3.0-linux-x64.zip",
+    "sha256": "487a667ca6a734b958c16cff1df74d9d44d2c18a6cccdb4dd51f6301a356c420",
+    "size": 118813109,
+    "hash_source": "https://github.com/electron/electron/releases/download/v42.3.0/SHASUMS256.txt and GitHub's asset digest"
+   },
+   "ffmpeg_open_codecs": {
+    "url": "https://github.com/electron/electron/releases/download/v42.3.0/ffmpeg-v42.3.0-linux-x64.zip",
+    "sha256": "082c743adc25b3396437a37a007638c08008da5a4f22a98bc3496373f23fb8b7",
+    "size": 1479743,
+    "hash_source": "https://github.com/electron/electron/releases/download/v42.3.0/SHASUMS256.txt and GitHub's asset digest"
+   },
+   "headers": {
+    "url": "https://artifacts.electronjs.org/headers/dist/v42.3.0/node-v42.3.0-headers.tar.gz",
+    "sha256": "821009f9c1830050d894aef9e61906cb0a537b2000b2d9bbed9985fff1d5e0d0",
+    "size": 344619,
+    "hash_source": "https://artifacts.electronjs.org/headers/dist/v42.3.0/SHASUMS256.txt"
+   }
+  },
+  "42.11.15": {
+   "abi": 146,
+   "chromium": "148.0.7778.280",
+   "node": "24.19.0",
+   "linux_x64": {
+    "url": "https://github.com/electron/electron/releases/download/v42.11.15/electron-v42.11.15-linux-x64.zip",
+    "sha256": "5624ebaa0055cee6ea624e41ba9012e1ac76857448d197dbaf36c4d1812cc681",
+    "size": 124909142,
+    "hash_source": "https://github.com/electron/electron/releases/download/v42.11.15/SHASUMS256.txt and GitHub's asset digest"
+   },
+   "ffmpeg_open_codecs": {
+    "url": "https://github.com/electron/electron/releases/download/v42.11.15/ffmpeg-v42.11.15-linux-x64.zip",
+    "sha256": "1d2e809db55a6b052b85229d454d1c1274655c0fb76f8ae5b5b950666b0cb13e",
+    "size": 1459450,
+    "hash_source": "https://github.com/electron/electron/releases/download/v42.11.15/SHASUMS256.txt and GitHub's asset digest"
+   },
+   "headers": {
+    "url": "https://artifacts.electronjs.org/headers/dist/v42.11.15/node-v42.11.15-headers.tar.gz",
+    "sha256": "7666821e187bb7ae0dcc092c827ae7af534f691341271d2f4760f7aba6bd13b1",
+    "size": 347005,
+    "hash_source": "https://artifacts.electronjs.org/headers/dist/v42.11.15/SHASUMS256.txt"
+   }
+  },
+  "42.11.18": {
+   "abi": 146,
+   "chromium": "148.0.7778.280",
+   "node": "24.19.0",
+   "linux_x64": {
+    "url": "https://github.com/electron/electron/releases/download/v42.11.18/electron-v42.11.18-linux-x64.zip",
+    "sha256": "c703693e5df41a413dd0464888bbabc8537a7000fb6d6e4f027fea0e90481a96",
+    "size": 124970294,
+    "hash_source": "https://github.com/electron/electron/releases/download/v42.11.18/SHASUMS256.txt and GitHub's asset digest"
+   },
+   "ffmpeg_open_codecs": {
+    "url": "https://github.com/electron/electron/releases/download/v42.11.18/ffmpeg-v42.11.18-linux-x64.zip",
+    "sha256": "6fd4ceaf58656cdc27b96c1b655b1fd6256acd9e55c38e3ce09367a774ffdacb",
+    "size": 1459398,
+    "hash_source": "https://github.com/electron/electron/releases/download/v42.11.18/SHASUMS256.txt and GitHub's asset digest"
+   },
+   "headers": {
+    "url": "https://artifacts.electronjs.org/headers/dist/v42.11.18/node-v42.11.18-headers.tar.gz",
+    "sha256": "9f248dcd75f1e7813b9ba3b6d233abe8ae3a4c0d32361c945717609d30b07e71",
+    "size": 347005,
+    "hash_source": "https://artifacts.electronjs.org/headers/dist/v42.11.18/SHASUMS256.txt"
+   }
+  },
+  "43.1.1": {
+   "abi": 148,
+   "chromium": "150.0.7871.114",
+   "node": "24.18.0",
+   "linux_x64": {
+    "url": "https://github.com/electron/electron/releases/download/v43.1.1/electron-v43.1.1-linux-x64.zip",
+    "sha256": "c1f479c52747caf1510e17500e1c8a556d0e40802837bd48c5647a84688a3880",
+    "size": 124861804,
+    "hash_source": "https://github.com/electron/electron/releases/download/v43.1.1/SHASUMS256.txt and GitHub's asset digest"
+   },
+   "ffmpeg_open_codecs": {
+    "url": "https://github.com/electron/electron/releases/download/v43.1.1/ffmpeg-v43.1.1-linux-x64.zip",
+    "sha256": "fb3499800abf7d508bb15f98e61fb9573e5b9ce3a66d3d4be5ea6b5e9fcf9852",
+    "size": 1481602,
+    "hash_source": "https://github.com/electron/electron/releases/download/v43.1.1/SHASUMS256.txt and GitHub's asset digest"
+   },
+   "headers": {
+    "url": "https://artifacts.electronjs.org/headers/dist/v43.1.1/node-v43.1.1-headers.tar.gz",
+    "sha256": "b1112989ad4c4807a6bf59bfc96ce8d0f0b16962efe9818fa768e5908cc24d21",
+    "size": 344774,
+    "hash_source": "https://artifacts.electronjs.org/headers/dist/v43.1.1/SHASUMS256.txt"
+   }
+  },
+  "43.4.1": {
+   "abi": 148,
+   "chromium": "150.0.7871.224",
+   "node": "24.18.1",
+   "linux_x64": {
+    "url": "https://github.com/electron/electron/releases/download/v43.4.1/electron-v43.4.1-linux-x64.zip",
+    "sha256": "79d4efd69f0ccf1fc11891ea5075329c7b3faddad79a08d9fb395bbd63169acf",
+    "size": 125642505,
+    "hash_source": "https://github.com/electron/electron/releases/download/v43.4.1/SHASUMS256.txt and GitHub's asset digest"
+   },
+   "ffmpeg_open_codecs": {
+    "url": "https://github.com/electron/electron/releases/download/v43.4.1/ffmpeg-v43.4.1-linux-x64.zip",
+    "sha256": "8ba33625e83e884809d41ddfc9e80640392e11f2126d0181b72a547ea20bb3f3",
+    "size": 1481972,
+    "hash_source": "https://github.com/electron/electron/releases/download/v43.4.1/SHASUMS256.txt and GitHub's asset digest"
+   },
+   "headers": {
+    "url": "https://artifacts.electronjs.org/headers/dist/v43.4.1/node-v43.4.1-headers.tar.gz",
+    "sha256": "0b2cdc011775f86856afc103ec70585b63180feb607ada9914c91a8af686bf0d",
+    "size": 344699,
+    "hash_source": "https://artifacts.electronjs.org/headers/dist/v43.4.1/SHASUMS256.txt"
+   }
+  },
+  "43.7.0": {
+   "abi": 148,
+   "chromium": "150.0.7871.250",
+   "node": "24.21.0",
+   "linux_x64": {
+    "url": "https://github.com/electron/electron/releases/download/v43.7.0/electron-v43.7.0-linux-x64.zip",
+    "sha256": "f304195f1c50e6e8b8ce5a6d8907105cb7d2764b25aa74a1d43f6159176a2a9b",
+    "size": 127113832,
+    "hash_source": "https://github.com/electron/electron/releases/download/v43.7.0/SHASUMS256.txt and GitHub's asset digest"
+   },
+   "ffmpeg_open_codecs": {
+    "url": "https://github.com/electron/electron/releases/download/v43.7.0/ffmpeg-v43.7.0-linux-x64.zip",
+    "sha256": "b68213bf2fe0cfd48deae38baeb1e141f4a7c0c58adea41d4efb62688e2cdbd3",
+    "size": 1481982,
+    "hash_source": "https://github.com/electron/electron/releases/download/v43.7.0/SHASUMS256.txt and GitHub's asset digest"
+   },
+   "headers": {
+    "url": "https://artifacts.electronjs.org/headers/dist/v43.7.0/node-v43.7.0-headers.tar.gz",
+    "sha256": "b82c12cc4cc09794e3c0ddc7609f2738f3e927207809d4198296b9e8618043bf",
+    "size": 347202,
+    "hash_source": "https://artifacts.electronjs.org/headers/dist/v43.7.0/SHASUMS256.txt"
+   }
+  },
+  "43.7.7": {
+   "abi": 148,
+   "chromium": "150.0.7871.250",
+   "node": "24.21.0",
+   "linux_x64": {
+    "url": "https://github.com/electron/electron/releases/download/v43.7.7/electron-v43.7.7-linux-x64.zip",
+    "sha256": "4d0a48398c444258dbcf2f5f83b49ca5bc53583130f354e0c299dad5b22b5271",
+    "size": 127045472,
+    "hash_source": "https://github.com/electron/electron/releases/download/v43.7.7/SHASUMS256.txt and GitHub's asset digest"
+   },
+   "ffmpeg_open_codecs": {
+    "url": "https://github.com/electron/electron/releases/download/v43.7.7/ffmpeg-v43.7.7-linux-x64.zip",
+    "sha256": "6638429b92e6d213b78114923585526aff88dbe25f91ace7f2bd5228fac08de5",
+    "size": 1482055,
+    "hash_source": "https://github.com/electron/electron/releases/download/v43.7.7/SHASUMS256.txt and GitHub's asset digest"
+   },
+   "headers": {
+    "url": "https://artifacts.electronjs.org/headers/dist/v43.7.7/node-v43.7.7-headers.tar.gz",
+    "sha256": "f697ced9453e4366258ed0ff3571122da37ba3ec9d349bd16d91856914e140f0",
+    "size": 346855,
+    "hash_source": "https://artifacts.electronjs.org/headers/dist/v43.7.7/SHASUMS256.txt"
+   }
+  },
+  "43.8.1": {
+   "abi": 148,
+   "chromium": "150.0.7871.250",
+   "node": "24.22.0",
+   "linux_x64": {
+    "url": "https://github.com/electron/electron/releases/download/v43.8.1/electron-v43.8.1-linux-x64.zip",
+    "sha256": "7e11ff34c837de9ffcdfad2a73be1905704a6c17eb6baf5763428f20e4975a79",
+    "size": 127181173,
+    "hash_source": "https://github.com/electron/electron/releases/download/v43.8.1/SHASUMS256.txt and GitHub's asset digest"
+   },
+   "ffmpeg_open_codecs": {
+    "url": "https://github.com/electron/electron/releases/download/v43.8.1/ffmpeg-v43.8.1-linux-x64.zip",
+    "sha256": "53e7f7ef20ab264ceec4280c865ca25bf33379433bc4413fd84282f46a2e1928",
+    "size": 1482076,
+    "hash_source": "https://github.com/electron/electron/releases/download/v43.8.1/SHASUMS256.txt and GitHub's asset digest"
+   },
+   "headers": {
+    "url": "https://artifacts.electronjs.org/headers/dist/v43.8.1/node-v43.8.1-headers.tar.gz",
+    "sha256": "f58c89ed15655b3abb9af6077df5534999d707cc1c9de4cd92b1c4ff20e57632",
+    "size": 347329,
+    "hash_source": "https://artifacts.electronjs.org/headers/dist/v43.8.1/SHASUMS256.txt"
+   }
+  },
+  "43.8.3": {
+   "abi": 148,
+   "chromium": "150.0.7871.250",
+   "node": "24.22.0",
+   "linux_x64": {
+    "url": "https://github.com/electron/electron/releases/download/v43.8.3/electron-v43.8.3-linux-x64.zip",
+    "sha256": "73d7d6fe120c998db75834c23c8ce7ce8390607c198b2e167a28acd7937bef22",
+    "size": 127277783,
+    "hash_source": "https://github.com/electron/electron/releases/download/v43.8.3/SHASUMS256.txt and GitHub's asset digest"
+   },
+   "ffmpeg_open_codecs": {
+    "url": "https://github.com/electron/electron/releases/download/v43.8.3/ffmpeg-v43.8.3-linux-x64.zip",
+    "sha256": "53e7f7ef20ab264ceec4280c865ca25bf33379433bc4413fd84282f46a2e1928",
+    "size": 1482076,
+    "hash_source": "https://github.com/electron/electron/releases/download/v43.8.3/SHASUMS256.txt and GitHub's asset digest"
+   },
+   "headers": {
+    "url": "https://artifacts.electronjs.org/headers/dist/v43.8.3/node-v43.8.3-headers.tar.gz",
+    "sha256": "d23630d0b98161bec7860dcc482187aca380b1e0da264c1ed5efb42bce79d604",
+    "size": 347211,
+    "hash_source": "https://artifacts.electronjs.org/headers/dist/v43.8.3/SHASUMS256.txt"
+   }
+  },
+  "44.4.2": {
+   "abi": 149,
+   "chromium": "152.0.7977.130",
+   "node": "24.21.0",
+   "linux_x64": {
+    "url": "https://github.com/electron/electron/releases/download/v44.4.2/electron-v44.4.2-linux-x64.zip",
+    "sha256": "ad71063e77da29a647f872b090478f9fa9ccffd67de7b2ae6315409cf1f13436",
+    "size": 123013732,
+    "hash_source": "https://github.com/electron/electron/releases/download/v44.4.2/SHASUMS256.txt and GitHub's asset digest"
+   },
+   "ffmpeg_open_codecs": {
+    "url": "https://github.com/electron/electron/releases/download/v44.4.2/ffmpeg-v44.4.2-linux-x64.zip",
+    "sha256": "1080159c1be067c2e4a517b7bd566bccbe7b690a9919263a51a32c7033d7c13b",
+    "size": 1508058,
+    "hash_source": "https://github.com/electron/electron/releases/download/v44.4.2/SHASUMS256.txt and GitHub's asset digest"
+   },
+   "headers": {
+    "url": "https://artifacts.electronjs.org/headers/dist/v44.4.2/node-v44.4.2-headers.tar.gz",
+    "sha256": "90a39e5649bee14dfb5b4ca588b58756e129bc7e24b7e1844da30fc2a45d0a0b",
+    "size": 349139,
+    "hash_source": "https://artifacts.electronjs.org/headers/dist/v44.4.2/SHASUMS256.txt"
+   }
+  },
+  "44.9.1": {
+   "abi": 149,
+   "chromium": "152.0.7977.167",
+   "node": "24.22.0",
+   "linux_x64": {
+    "url": "https://github.com/electron/electron/releases/download/v44.9.1/electron-v44.9.1-linux-x64.zip",
+    "sha256": "994bc3664cc3ac55b50c21a58d345cf8322003d37f5439a81801e3267e6145e2",
+    "size": 123084231,
+    "hash_source": "https://github.com/electron/electron/releases/download/v44.9.1/SHASUMS256.txt and GitHub's asset digest"
+   },
+   "ffmpeg_open_codecs": {
+    "url": "https://github.com/electron/electron/releases/download/v44.9.1/ffmpeg-v44.9.1-linux-x64.zip",
+    "sha256": "ab6f31b527c36109921874a15f0e8db6e1a4c640f3c4d09a4d2231813ee860df",
+    "size": 1508258,
+    "hash_source": "https://github.com/electron/electron/releases/download/v44.9.1/SHASUMS256.txt and GitHub's asset digest"
+   },
+   "headers": {
+    "url": "https://artifacts.electronjs.org/headers/dist/v44.9.1/node-v44.9.1-headers.tar.gz",
+    "sha256": "761d2595a05d3d41b129d8fd9b7ad45a6175a0ccce311fe20341d21f8275007a",
+    "size": 349913,
+    "hash_source": "https://artifacts.electronjs.org/headers/dist/v44.9.1/SHASUMS256.txt"
+   }
+  },
+  "44.10.0": {
+   "abi": 149,
+   "chromium": "152.0.7977.169",
+   "node": "24.22.1",
+   "linux_x64": {
+    "url": "https://github.com/electron/electron/releases/download/v44.10.0/electron-v44.10.0-linux-x64.zip",
+    "sha256": "62df9375ef035f2835a18cd7f9bff1959a185da22f2ecba1daa37cd9caee1dc5",
+    "size": 123108344,
+    "hash_source": "https://github.com/electron/electron/releases/download/v44.10.0/SHASUMS256.txt and GitHub's asset digest"
+   },
+   "ffmpeg_open_codecs": {
+    "url": "https://github.com/electron/electron/releases/download/v44.10.0/ffmpeg-v44.10.0-linux-x64.zip",
+    "sha256": "dbd9c2d4597ed14f92133ebc754bcbd44b5fcba327723f2466884332ccf6564a",
+    "size": 1508215,
+    "hash_source": "https://github.com/electron/electron/releases/download/v44.10.0/SHASUMS256.txt and GitHub's asset digest"
+   },
+   "headers": {
+    "url": "https://artifacts.electronjs.org/headers/dist/v44.10.0/node-v44.10.0-headers.tar.gz",
+    "sha256": "d83d7c06561206e8015adf9b5576e8f1537ada8e420c390f4e765a9ea61f566c",
+    "size": 349275,
+    "hash_source": "https://artifacts.electronjs.org/headers/dist/v44.10.0/SHASUMS256.txt"
+   }
+  },
+  "44.10.2": {
+   "abi": 149,
+   "chromium": "152.0.7977.169",
+   "node": "24.22.2",
+   "linux_x64": {
+    "url": "https://github.com/electron/electron/releases/download/v44.10.2/electron-v44.10.2-linux-x64.zip",
+    "sha256": "d2f9319dc81d6786c684a80f63d728421761f55a27a3ae3bd373250f0f40fdca",
+    "size": 123133586,
+    "hash_source": "https://github.com/electron/electron/releases/download/v44.10.2/SHASUMS256.txt and GitHub's asset digest"
+   },
+   "ffmpeg_open_codecs": {
+    "url": "https://github.com/electron/electron/releases/download/v44.10.2/ffmpeg-v44.10.2-linux-x64.zip",
+    "sha256": "1b2c6ee345199ece8c85982546f0f47add31d799551f1ba8539343c0d4bc2ac6",
+    "size": 1508138,
+    "hash_source": "https://github.com/electron/electron/releases/download/v44.10.2/SHASUMS256.txt and GitHub's asset digest"
+   },
+   "headers": {
+    "url": "https://artifacts.electronjs.org/headers/dist/v44.10.2/node-v44.10.2-headers.tar.gz",
+    "sha256": "4ce7509de63a2ce3455a3c59061c87d28417776fa6a9e0a435e3a54f6e818383",
+    "size": 350106,
+    "hash_source": "https://artifacts.electronjs.org/headers/dist/v44.10.2/SHASUMS256.txt"
+   }
+  },
+  "45.1.0": {
+   "abi": 150,
+   "chromium": "156.0.8078.49",
+   "node": "24.22.1",
+   "linux_x64": {
+    "url": "https://github.com/electron/electron/releases/download/v45.1.0/electron-v45.1.0-linux-x64.zip",
+    "sha256": "9dafab2c57ce209f8f716f8f3e4fddd8ffe0820e2455bfbbfc00b0fc13e03a3b",
+    "size": 123917468,
+    "hash_source": "https://github.com/electron/electron/releases/download/v45.1.0/SHASUMS256.txt and GitHub's asset digest"
+   },
+   "ffmpeg_open_codecs": {
+    "url": "https://github.com/electron/electron/releases/download/v45.1.0/ffmpeg-v45.1.0-linux-x64.zip",
+    "sha256": "ca21ece98f479c45e7a07380e5db9c0568067364d6907c18dcd3ef0d0276332b",
+    "size": 1508707,
+    "hash_source": "https://github.com/electron/electron/releases/download/v45.1.0/SHASUMS256.txt and GitHub's asset digest"
+   },
+   "headers": {
+    "url": "https://artifacts.electronjs.org/headers/dist/v45.1.0/node-v45.1.0-headers.tar.gz",
+    "sha256": "f0ae8b907889783b88e264e6fb234f78408218717f3836cb92261df9da91d236",
+    "size": 350470,
+    "hash_source": "https://artifacts.electronjs.org/headers/dist/v45.1.0/SHASUMS256.txt"
+   }
+  },
+  "45.2.3": {
+   "abi": 150,
+   "chromium": "156.0.8078.80",
+   "node": "24.22.2",
+   "linux_x64": {
+    "url": "https://github.com/electron/electron/releases/download/v45.2.3/electron-v45.2.3-linux-x64.zip",
+    "sha256": "a87fe741f6d121285117e574da6c9a2e65210d410123bbc04713b099add0263b",
+    "size": 124080623,
+    "hash_source": "https://github.com/electron/electron/releases/download/v45.2.3/SHASUMS256.txt and GitHub's asset digest"
+   },
+   "ffmpeg_open_codecs": {
+    "url": "https://github.com/electron/electron/releases/download/v45.2.3/ffmpeg-v45.2.3-linux-x64.zip",
+    "sha256": "4aad7c8c2ec6d7b227d3191ae9bd6f2fd736bd0a4990d1b1d17602d4e6894b61",
+    "size": 1508883,
+    "hash_source": "https://github.com/electron/electron/releases/download/v45.2.3/SHASUMS256.txt and GitHub's asset digest"
+   },
+   "headers": {
+    "url": "https://artifacts.electronjs.org/headers/dist/v45.2.3/node-v45.2.3-headers.tar.gz",
+    "sha256": "5300f8e7965734f7cc1aec0c89ce8c0b68644129b858fb0a530ebbd9cd4a4284",
+    "size": 350118,
+    "hash_source": "https://artifacts.electronjs.org/headers/dist/v45.2.3/SHASUMS256.txt"
+   }
+  }
+ },
+ "modules": {
+  "@cbor-extract/cbor-extract-linux-x64@2.1.1": {
+   "tier": "npm-package",
+   "licence": "MIT",
+   "artifact": {
+    "url": "https://registry.npmjs.org/@cbor-extract/cbor-extract-linux-x64/-/cbor-extract-linux-x64-2.1.1.tgz",
+    "sha256": "4677bec342761462e2ce0ab126808bc6fc602ed320e76de9c3a95b1255d715fe",
+    "size": 8616,
+    "npm_integrity": "sha512-GVK+8fNIE9lJQHAlhOROYiI0Yd4bAZ4u++C2ZjlkS3YmO6hi+FUxe6Dqm+OKWTcMpL/l71N6CQAmaRcb4zyJuA==",
+    "hash_source": "computed by pin-index.py; the npm registry's SHA-512 integrity matched"
+   }
+  },
+  "@koromix/koffi-linux-x64@3.1.1": {
+   "tier": "npm-package",
+   "licence": "MIT",
+   "artifact": {
+    "url": "https://registry.npmjs.org/@koromix/koffi-linux-x64/-/koffi-linux-x64-3.1.1.tgz",
+    "sha256": "0b4038a46282a354aab77d6d05059ac8a8fccb0dfd231b4c18acb8623953d1fe",
+    "size": 614185,
+    "npm_integrity": "sha512-pyTcX5fePeYbt7TZAwRby69wdlRx3PT+g15ra5IYdat/Pgh3qAKEYeZ+uu7WpPGOy43p/oSRqqZoa2kORzozlA==",
+    "hash_source": "computed by pin-index.py; the npm registry's SHA-512 integrity matched"
+   }
+  },
+  "@lydell/node-pty-linux-x64@1.1.0": {
+   "tier": "npm-package",
+   "licence": "MIT",
+   "artifact": {
+    "url": "https://registry.npmjs.org/@lydell/node-pty-linux-x64/-/node-pty-linux-x64-1.1.0.tgz",
+    "sha256": "8d2e043026672f11aafd5f1a831f794a90d8fdd9d5e3255e8bc121df64b9d8e4",
+    "size": 27201,
+    "npm_integrity": "sha512-NcNqRTD14QT+vXcEuqSSvmWY+0+WUBn2uRE8EN0zKtDpIEr9d+YiFj16Uqds6QfcLCHfZmC+Ls7YzwTaqDnanA==",
+    "hash_source": "computed by pin-index.py; the npm registry's SHA-512 integrity matched"
+   }
+  },
+  "@vscodium/os-proxy-resolver-linux-x64-gnu@0.4.0-265898": {
+   "tier": "npm-package",
+   "licence": "MIT",
+   "artifact": {
+    "url": "https://registry.npmjs.org/@vscodium/os-proxy-resolver-linux-x64-gnu/-/os-proxy-resolver-linux-x64-gnu-0.4.0-265898.tgz",
+    "sha256": "f28e6ce825a2e663e5e9b8bd843bf0312c4d931777d49ec6ae992e900053f64d",
+    "size": 2961849,
+    "npm_integrity": "sha512-7s0ExWUrFbn/npY9PFYDVFEbp+EN7iHgUyIC8RMYlJ9JHEpdzLhhP1N8nnCNUOR1VVXoXtPUhk/LSlxWikIcCg==",
+    "hash_source": "computed by pin-index.py; the npm registry's SHA-512 integrity matched"
+   }
+  },
+  "@zvec/bindings-linux-x64@0.5.0": {
+   "tier": "npm-package",
+   "licence": "Apache-2.0",
+   "artifact": {
+    "url": "https://registry.npmjs.org/@zvec/bindings-linux-x64/-/bindings-linux-x64-0.5.0.tgz",
+    "sha256": "8f0462a334e0a9717b8b9fe26919f79e25f52fd2cd3d0e9f5ac53cc647c1c911",
+    "size": 21214420,
+    "npm_integrity": "sha512-08Cj0xJgOmr0GFAWlUFPyJYq6ysLurcA7Enx4WClCBcbtwQaZ9SHc3A2VRqLZ8dgIm5Dei9ZbDnwMwgMO2yV0w==",
+    "hash_source": "computed by pin-index.py; the npm registry's SHA-512 integrity matched"
+   }
+  },
+  "sherpa-onnx-linux-x64@2.0.1": {
+   "tier": "npm-package",
+   "licence": "Apache-2.0",
+   "artifact": {
+    "url": "https://registry.npmjs.org/sherpa-onnx-linux-x64/-/sherpa-onnx-linux-x64-2.0.1.tgz",
+    "sha256": "08c6fe2b65838febbd0c260aaa9991990d2d592e503e758bfd2f5db6cbc79338",
+    "size": 11005484,
+    "npm_integrity": "sha512-w5mRRrIvPvcNWac7rQ8AN/t/cwElPGoRpH+ceCRBV7XfjCIQ9Rcr3Ig/kXcJLNOxgK4bGmef+Y47lIWiesDODw==",
+    "hash_source": "computed by pin-index.py; the npm registry's SHA-512 integrity matched"
+   }
+  },
+  "sqlite-vec-linux-x64@0.1.9": {
+   "tier": "npm-package",
+   "licence": "MIT OR Apache",
+   "artifact": {
+    "url": "https://registry.npmjs.org/sqlite-vec-linux-x64/-/sqlite-vec-linux-x64-0.1.9.tgz",
+    "sha256": "d75c33662b3ce690d122a5f4285a3acf2f6ba288c46331a7b1fad593b6da2908",
+    "size": 61837,
+    "npm_integrity": "sha512-w3tCH8xK2finW8fQJ/m8uqKodXUZ9KAuAar2UIhz4BHILfpE0WM/MTGCRfa7RjYbrYim5Luk3guvMOGI7T7JQA==",
+    "hash_source": "computed by pin-index.py; the npm registry's SHA-512 integrity matched"
+   }
+  },
+  "@vscode/ripgrep-linux-x64@1.18.0": {
+   "tier": "npm-package",
+   "licence": "MIT",
+   "artifact": {
+    "url": "https://registry.npmjs.org/@vscode/ripgrep-linux-x64/-/ripgrep-linux-x64-1.18.0.tgz",
+    "sha256": "8cc06e25e29f9c258ee9a09eecd7707c1ea2e99d9e76151e53dbe39f8d6b4a09",
+    "size": 2351856,
+    "npm_integrity": "sha512-mQ3bVrUpnD2vs7QT0vX90Lt0cnUq467uFtEktIdsJJmW296RoSULRGqWgzG1AKxyBpNDD6l4ZO4qKf6SgyC23Q==",
+    "hash_source": "computed by pin-index.py; the npm registry's SHA-512 integrity matched"
+   }
+  },
+  "better-sqlite3@13.0.3": {
+   "tier": "npm-prebuild",
+   "licence": "MIT",
+   "artifact": {
+    "url": "https://registry.npmjs.org/better-sqlite3/-/better-sqlite3-13.0.3.tgz",
+    "sha256": "77e0513dc1a469fb3bceec4c7fb5ad3f403109787eda05be047ec17fd56868cb",
+    "size": 11402131,
+    "npm_integrity": "sha512-RbOBxmLBG8uvFUc15X9+9SFemKcQ0WBuISBVkpuiaUB2qblC8UWlHEjdWVoZ8AdhSwmoEgsiXKfopX0CQxaACQ==",
+    "hash_source": "computed by pin-index.py; the npm registry's SHA-512 integrity matched"
+   },
+   "files": [
+    "prebuilds/linux-x64.node"
+   ]
+  },
+  "node-pty@1.2.0-beta.15": {
+   "tier": "npm-prebuild",
+   "licence": "MIT",
+   "artifact": {
+    "url": "https://registry.npmjs.org/node-pty/-/node-pty-1.2.0-beta.15.tgz",
+    "sha256": "114ac80c3fe075eff76217a4122d135576582695f49c03a5da3835cdfc2f89c5",
+    "size": 7150506,
+    "npm_integrity": "sha512-vORSzHXi4Ofl7HemVWpuudLqCPdaQb4LfpRCUpE5HPxhp4JYscl8zZwxh11p26v2wvW24WMwnMfLjhRLixrfxA==",
+    "hash_source": "computed by pin-index.py; the npm registry's SHA-512 integrity matched"
+   },
+   "files": [
+    "prebuilds/linux-x64/pty.node"
+   ]
+  },
+  "node-pty@1.2.0-beta.18": {
+   "tier": "npm-prebuild",
+   "licence": "MIT",
+   "artifact": {
+    "url": "https://registry.npmjs.org/node-pty/-/node-pty-1.2.0-beta.18.tgz",
+    "sha256": "4e7c9c3028e636e941d90d59a831100bebf3431ccce8ca00399752c1664aa399",
+    "size": 7152900,
+    "npm_integrity": "sha512-3Rej3788OnasAwoSmTZhlCeUraJ9CQldtL5b571b9+3Nv47+PaxA5VPIGOOs+16OYQePTrC1Lrs8a9/df5WPRg==",
+    "hash_source": "computed by pin-index.py; the npm registry's SHA-512 integrity matched"
+   },
+   "files": [
+    "prebuilds/linux-x64/pty.node"
+   ]
+  },
+  "onnxruntime-node@1.24.3": {
+   "tier": "npm-prebuild",
+   "licence": "MIT",
+   "artifact": {
+    "url": "https://registry.npmjs.org/onnxruntime-node/-/onnxruntime-node-1.24.3.tgz",
+    "sha256": "aa1bb5fa261ea68de05dd53efbba210cd7adf2d2850f4c3a201054c74cc78040",
+    "size": 85987774,
+    "npm_integrity": "sha512-JH7+czbc8ALA819vlTgcV+Q214/+VjGeBHDjX81+ZCD0PCVCIFGFNtT0V4sXG/1JXypKPgScQcB3ij/hk3YnTg==",
+    "hash_source": "computed by pin-index.py; the npm registry's SHA-512 integrity matched"
+   },
+   "files": [
+    "bin/napi-v6/linux/x64/libonnxruntime.so.1",
+    "bin/napi-v6/linux/x64/onnxruntime_binding.node"
+   ]
+  },
+  "keytar@7.9.0": {
+   "tier": "release-prebuild",
+   "licence": "MIT",
+   "artifact": {
+    "url": "https://github.com/atom/node-keytar/releases/download/v7.9.0/keytar-v7.9.0-napi-v3-linux-x64.tar.gz",
+    "sha256": "2d75753fabf9dceb49537ae231e1897de53727bc0fadbc2a01e6374a1443c67c",
+    "size": 25980,
+    "hash_source": "computed by pin-index.py: the release publishes no digest"
+   },
+   "files": [
+    "build/Release/keytar.node"
+   ]
+  },
+  "sqlite3@5.1.6": {
+   "tier": "release-prebuild",
+   "licence": "BSD-3-Clause",
+   "artifact": {
+    "url": "https://github.com/TryGhost/node-sqlite3/releases/download/v5.1.6/napi-v6-linux-glibc-x64.tar.gz",
+    "sha256": "d31475a48731bda50747d4187f46f028565e84086473b55e165e9e4447430164",
+    "size": 1039243,
+    "hash_source": "computed by pin-index.py: the release publishes no digest"
+   },
+   "files": [
+    "napi-v6-linux-glibc-x64/node_sqlite3.node"
+   ]
+  },
+  "kerberos@2.1.1": {
+   "tier": "release-prebuild",
+   "licence": "Apache-2.0",
+   "artifact": {
+    "url": "https://github.com/mongodb-js/kerberos/releases/download/v2.1.1/kerberos-v2.1.1-napi-v4-linux-x64.tar.gz",
+    "sha256": "1a54a433e296c223ab2d6a4e24f938504f970934cd0c663fc289a088a365a84e",
+    "size": 70683,
+    "hash_source": "computed by pin-index.py: the release publishes no digest"
+   },
+   "files": [
+    "build/Release/kerberos.node"
+   ]
+  },
+  "@jitsi/electron-sdk@10.0.3": {
+   "tier": "source-build",
+   "licence": "Apache-2.0",
+   "artifact": {
+    "url": "https://registry.npmjs.org/@jitsi/electron-sdk/-/electron-sdk-10.0.3.tgz",
+    "sha256": "4f5dc6fc24b6f810c022398fe62abf71f17a7a6c118e329962af0609787e9234",
+    "size": 215510,
+    "npm_integrity": "sha512-X3ZNIDfLJsQRvqeNqNy8B7cyqN7WR+2XziGqy2PPrq880alXBxicJPT5KggQOIl+hsZh/WJ0xmbr5xMtZeTHTw==",
+    "hash_source": "computed by pin-index.py; the npm registry's SHA-512 integrity matched"
+   },
+   "node_gyp": true,
+   "os": [],
+   "build_packages": []
+  },
+  "@parcel/watcher@2.5.6": {
+   "tier": "source-build",
+   "licence": "MIT",
+   "artifact": {
+    "url": "https://registry.npmjs.org/@parcel/watcher/-/watcher-2.5.6.tgz",
+    "sha256": "8daa7285bee7e10bebce179007afcf07108c1b8ce9dbe5081f3db319d5453648",
+    "size": 34609,
+    "npm_integrity": "sha512-tmmZ3lQxAe/k/+rNnXQRawJ4NjxO2hqiOLTHvWchtGZULp4RyFeh6aU4XdOYBFe2KE1oShQTv4AblOs2iOrNnQ==",
+    "hash_source": "computed by pin-index.py; the npm registry's SHA-512 integrity matched"
+   },
+   "node_gyp": true,
+   "os": [],
+   "build_packages": [
+    {
+     "package": "node-addon-api@7.1.1",
+     "range": "^7.0.0",
+     "licence": "MIT",
+     "artifact": {
+      "url": "https://registry.npmjs.org/node-addon-api/-/node-addon-api-7.1.1.tgz",
+      "sha256": "b10455d15a977c0cd17a1cb0eb679e03d939f8ef8d4302eb33e1f78dacc71f82",
+      "size": 60031,
+      "npm_integrity": "sha512-5m3bsyrjFWE1xf7nz7YXdN4udnVtXK6/Yfgn5qnahL6bCkf2yKt4k3nuTKAtT4r3IG8JNR2ncsIMdZuAzJjHQQ==",
+      "hash_source": "computed by pin-index.py; the npm registry's SHA-512 integrity matched"
+     }
+    }
+   ]
+  },
+  "@tabby-gang/windows-process-tree@0.6.1": {
+   "tier": "source-build",
+   "licence": "MIT",
+   "artifact": {
+    "url": "https://registry.npmjs.org/@tabby-gang/windows-process-tree/-/windows-process-tree-0.6.1.tgz",
+    "sha256": "05be1614ce18425acbc7b338ae1a7b61ea2ebc7c2421154cc2787fb61c07590b",
+    "size": 31609,
+    "npm_integrity": "sha512-I7AwncTXTmo1+WPfV+O+jYRJzjCMJznIjC/ycl4dP/n2HAocuXCIjTZfoMmL+rgjN2nRFpTyn6P+EhuIPMACbQ==",
+    "hash_source": "computed by pin-index.py; the npm registry's SHA-512 integrity matched"
+   },
+   "node_gyp": true,
+   "os": [],
+   "build_packages": [
+    {
+     "package": "node-addon-api@7.1.0",
+     "range": "7.1.0",
+     "licence": "MIT",
+     "artifact": {
+      "url": "https://registry.npmjs.org/node-addon-api/-/node-addon-api-7.1.0.tgz",
+      "sha256": "8e621f150678b183225c394c0faca7338396eb4fa620b447b88995f8990af522",
+      "size": 60055,
+      "npm_integrity": "sha512-mNcltoe1R8o7STTegSOHdnJNN7s5EUvhoS7ShnTHDyOSd+8H+UdWODq6qSv67PjC8Zc5JRT8+oLAMCr0SIXw7g==",
+      "hash_source": "computed by pin-index.py; the npm registry's SHA-512 integrity matched"
+     }
+    }
+   ]
+  },
+  "@vscode/deviceid@0.1.5": {
+   "tier": "source-build",
+   "licence": "MIT",
+   "artifact": {
+    "url": "https://registry.npmjs.org/@vscode/deviceid/-/deviceid-0.1.5.tgz",
+    "sha256": "3298cbb0c9ca1976c8c993407db1a6f00d1b9309641317bd9d018cb0d0bc5597",
+    "size": 13474,
+    "npm_integrity": "sha512-D0be67wWo7WyyBqHnRkL2bK7lp7CDH/EMN4kMV6INoKc7kxRL3nsTtngt9JZrOcZdnW59gquGRk+6KFIDyD3QA==",
+    "hash_source": "computed by pin-index.py; the npm registry's SHA-512 integrity matched"
+   },
+   "node_gyp": true,
+   "os": [],
+   "build_packages": []
+  },
+  "@vscode/native-watchdog@1.4.6": {
+   "tier": "source-build",
+   "licence": "MIT",
+   "artifact": {
+    "url": "https://registry.npmjs.org/@vscode/native-watchdog/-/native-watchdog-1.4.6.tgz",
+    "sha256": "1ce4a2d165e48560fcf2bc8bf4c9c2f8790567ea2cb2e08f6b473df71d2e608d",
+    "size": 5353,
+    "npm_integrity": "sha512-C2hsQFVYF2hBv7sa7OztRBimrMsEofGNh/lYs7MIPpKdhyJpYSpDb5iu/bilgLqSO61PLBCJ5xw6iFI21LI+9Q==",
+    "hash_source": "computed by pin-index.py; the npm registry's SHA-512 integrity matched"
+   },
+   "node_gyp": true,
+   "os": [],
+   "build_packages": []
+  },
+  "@vscode/spdlog@0.15.8": {
+   "tier": "source-build",
+   "licence": "MIT",
+   "artifact": {
+    "url": "https://registry.npmjs.org/@vscode/spdlog/-/spdlog-0.15.8.tgz",
+    "sha256": "f3bcfb2f64cab4c032f94668db5573654a8074b1ee2e8e56bc52c52dc3f7c0fb",
+    "size": 263048,
+    "npm_integrity": "sha512-Jh8M6b2vJfBmQua9aAiYa9sdd/htw+/71b7GZlI3v2DGbsAXIYo7gIokrfx1/0XtQPTPoJ8RKtQ9hNSPlnfXUQ==",
+    "hash_source": "computed by pin-index.py; the npm registry's SHA-512 integrity matched"
+   },
+   "node_gyp": true,
+   "os": [],
+   "build_packages": [
+    {
+     "package": "node-addon-api@7.1.0",
+     "range": "7.1.0",
+     "licence": "MIT",
+     "artifact": {
+      "url": "https://registry.npmjs.org/node-addon-api/-/node-addon-api-7.1.0.tgz",
+      "sha256": "8e621f150678b183225c394c0faca7338396eb4fa620b447b88995f8990af522",
+      "size": 60055,
+      "npm_integrity": "sha512-mNcltoe1R8o7STTegSOHdnJNN7s5EUvhoS7ShnTHDyOSd+8H+UdWODq6qSv67PjC8Zc5JRT8+oLAMCr0SIXw7g==",
+      "hash_source": "computed by pin-index.py; the npm registry's SHA-512 integrity matched"
+     }
+    }
+   ]
+  },
+  "@vscode/sqlite3@5.1.12-vscode": {
+   "tier": "source-build",
+   "licence": "BSD-3-Clause",
+   "artifact": {
+    "url": "https://registry.npmjs.org/@vscode/sqlite3/-/sqlite3-5.1.12-vscode.tgz",
+    "sha256": "521675e4de9714e91862d1aff6d10cf88351e3c03ad9b699062b7b754ccb9144",
+    "size": 3100613,
+    "npm_integrity": "sha512-WLTftbMtK3Ni0s+q46qtKJ2CFtA3YrS5N4GcrETDCxqNTQAvk1LlYlG3RwGE6vZLcUqPt3TCHobijYeNUhEQ9Q==",
+    "hash_source": "computed by pin-index.py; the npm registry's SHA-512 integrity matched"
+   },
+   "node_gyp": true,
+   "os": [],
+   "build_packages": [
+    {
+     "package": "node-addon-api@8.9.2",
+     "range": "^8.2.0",
+     "licence": "MIT",
+     "artifact": {
+      "url": "https://registry.npmjs.org/node-addon-api/-/node-addon-api-8.9.2.tgz",
+      "sha256": "4cd65698541b19a33f798f1dc25c02c6ed1c9d7749b8824b1a1ccecdd197c8ea",
+      "size": 62490,
+      "npm_integrity": "sha512-VijLXbi3UACN69I0JVXJsX4tjACjNoQDgv2gTF6sx2wWEi8tkSg2eX8p5gSIFi8z2+DL3oHmY6OyKce38SDolg==",
+      "hash_source": "computed by pin-index.py; the npm registry's SHA-512 integrity matched"
+     }
+    }
+   ]
+  },
+  "@vscode/windows-mutex@0.5.3": {
+   "tier": "source-build",
+   "licence": "MIT",
+   "artifact": {
+    "url": "https://registry.npmjs.org/@vscode/windows-mutex/-/windows-mutex-0.5.3.tgz",
+    "sha256": "9ef3f4010e01e01f7f313ea3c154fc547c1cf418174c2d615693fbe0151e1a20",
+    "size": 4526,
+    "npm_integrity": "sha512-hWNmD+AzINR57jWuc/iW53kA+BghI4iOuicxhAEeeJLPOeMm9X5IUD0ttDwJFEib+D8H/2T9pT/8FeB/xcqbRw==",
+    "hash_source": "computed by pin-index.py; the npm registry's SHA-512 integrity matched"
+   },
+   "node_gyp": true,
+   "os": [],
+   "build_packages": [
+    {
+     "package": "node-addon-api@7.1.0",
+     "range": "7.1.0",
+     "licence": "MIT",
+     "artifact": {
+      "url": "https://registry.npmjs.org/node-addon-api/-/node-addon-api-7.1.0.tgz",
+      "sha256": "8e621f150678b183225c394c0faca7338396eb4fa620b447b88995f8990af522",
+      "size": 60055,
+      "npm_integrity": "sha512-mNcltoe1R8o7STTegSOHdnJNN7s5EUvhoS7ShnTHDyOSd+8H+UdWODq6qSv67PjC8Zc5JRT8+oLAMCr0SIXw7g==",
+      "hash_source": "computed by pin-index.py; the npm registry's SHA-512 integrity matched"
+     }
+    }
+   ]
+  },
+  "@vscode/windows-process-tree@0.8.0": {
+   "tier": "source-build",
+   "licence": "MIT",
+   "artifact": {
+    "url": "https://registry.npmjs.org/@vscode/windows-process-tree/-/windows-process-tree-0.8.0.tgz",
+    "sha256": "019b2e4cb383ffbfa195e571d9a87a31331df95e4a5d4a5c09ca990c3bb3f401",
+    "size": 3896090,
+    "npm_integrity": "sha512-TI+h2GRwX+igD/YYJMQQVAFcsCNSg7Te2yYxQpKMzwto5RsJ8d2KKgOeur/p/6sAOQwZvopiTDOClyTHEn9MhQ==",
+    "hash_source": "computed by pin-index.py; the npm registry's SHA-512 integrity matched"
+   },
+   "node_gyp": true,
+   "os": [],
+   "build_packages": [
+    {
+     "package": "node-addon-api@7.1.0",
+     "range": "7.1.0",
+     "licence": "MIT",
+     "artifact": {
+      "url": "https://registry.npmjs.org/node-addon-api/-/node-addon-api-7.1.0.tgz",
+      "sha256": "8e621f150678b183225c394c0faca7338396eb4fa620b447b88995f8990af522",
+      "size": 60055,
+      "npm_integrity": "sha512-mNcltoe1R8o7STTegSOHdnJNN7s5EUvhoS7ShnTHDyOSd+8H+UdWODq6qSv67PjC8Zc5JRT8+oLAMCr0SIXw7g==",
+      "hash_source": "computed by pin-index.py; the npm registry's SHA-512 integrity matched"
+     }
+    }
+   ]
+  },
+  "@vscode/windows-registry@1.3.0": {
+   "tier": "source-build",
+   "licence": "MIT",
+   "artifact": {
+    "url": "https://registry.npmjs.org/@vscode/windows-registry/-/windows-registry-1.3.0.tgz",
+    "sha256": "88cfbd84fe5e9d138a572ec0f903b430c233b8e866d99208591812ba316af8ec",
+    "size": 5242,
+    "npm_integrity": "sha512-HGzILM/WfT/iFQs58q5+sj7bn+MfYD2pvTwbd9U11Faup9G/ZVAdYNi/d5Mmw0NKKupEHOpiyx/Ld92NkiYTaw==",
+    "hash_source": "computed by pin-index.py; the npm registry's SHA-512 integrity matched"
+   },
+   "node_gyp": true,
+   "os": [],
+   "build_packages": []
+  },
+  "@vscodium/native-keymap@3.3.9-260952": {
+   "tier": "source-build",
+   "licence": "MIT",
+   "artifact": {
+    "url": "https://registry.npmjs.org/@vscodium/native-keymap/-/native-keymap-3.3.9-260952.tgz",
+    "sha256": "c976e0fd3360103d4779f6365cadb76eac0223b15071583e00b09cd918e53a21",
+    "size": 42862,
+    "npm_integrity": "sha512-Nk+eD2+57FKS+y/sKMMNc7hreuuM67kR/fChcQabK+azUvJ3GnWPP+LVixeBzR1/Fh+1xiXM5mh/6+8+vYpc4w==",
+    "hash_source": "computed by pin-index.py; the npm registry's SHA-512 integrity matched"
+   },
+   "node_gyp": true,
+   "os": [],
+   "build_packages": []
+  },
+  "@vscodium/policy-watcher@1.6.0-267136": {
+   "tier": "source-build",
+   "licence": "MIT",
+   "artifact": {
+    "url": "https://registry.npmjs.org/@vscodium/policy-watcher/-/policy-watcher-1.6.0-267136.tgz",
+    "sha256": "bab533c0574fc4f84d35f9a47a3fbb0d9cf7848c74ed1abca346b83fc43c9857",
+    "size": 9820,
+    "npm_integrity": "sha512-LI/eiTLn4OFqjMEJjAC1rdi86QZPsoKgss2dqRtmWL3oEmBbvA1By9kdw0Qvk48JeHKUN0ePh3PQnRgw/G4Nng==",
+    "hash_source": "computed by pin-index.py; the npm registry's SHA-512 integrity matched"
+   },
+   "node_gyp": true,
+   "os": [],
+   "build_packages": [
+    {
+     "package": "node-addon-api@8.9.2",
+     "range": "^8.2.0",
+     "licence": "MIT",
+     "artifact": {
+      "url": "https://registry.npmjs.org/node-addon-api/-/node-addon-api-8.9.2.tgz",
+      "sha256": "4cd65698541b19a33f798f1dc25c02c6ed1c9d7749b8824b1a1ccecdd197c8ea",
+      "size": 62490,
+      "npm_integrity": "sha512-VijLXbi3UACN69I0JVXJsX4tjACjNoQDgv2gTF6sx2wWEi8tkSg2eX8p5gSIFi8z2+DL3oHmY6OyKce38SDolg==",
+      "hash_source": "computed by pin-index.py; the npm registry's SHA-512 integrity matched"
+     }
+    }
+   ]
+  },
+  "cbor-extract@2.1.1": {
+   "tier": "source-build",
+   "licence": "MIT",
+   "artifact": {
+    "url": "https://registry.npmjs.org/cbor-extract/-/cbor-extract-2.1.1.tgz",
+    "sha256": "41d8c61ec4e3b7031204fe6195bab4d55cda0de09b69f720e7bbf8422d7fb8bf",
+    "size": 4435,
+    "npm_integrity": "sha512-1UX977+L+zOJHsp0mWFG13GLwO6ucKgSmSW6JTl8B9GUvACvHeIVpFqhU92299Z6PfD09aTXDell5p+lp1rUFA==",
+    "hash_source": "computed by pin-index.py; the npm registry's SHA-512 integrity matched"
+   },
+   "node_gyp": true,
+   "os": [],
+   "build_packages": []
+  },
+  "ced@2.0.0": {
+   "tier": "source-build",
+   "licence": "(ISC AND Apache-2.0)",
+   "artifact": {
+    "url": "https://registry.npmjs.org/ced/-/ced-2.0.0.tgz",
+    "sha256": "d6af33f18dd18ab1972b43c274d7b3c756371d48aca6514ad44cffe3d98252b9",
+    "size": 303218,
+    "npm_integrity": "sha512-d5j+xsZDbSarov5iA8wrCoKNDeszm8qZqAYrSG+KxqX8X3RbVxCFAGtQJLo9yoquTWRbWlwPwdMqa/De99i3ew==",
+    "hash_source": "computed by pin-index.py; the npm registry's SHA-512 integrity matched"
+   },
+   "node_gyp": true,
+   "os": [],
+   "build_packages": []
+  },
+  "cf-prefs@2.0.1": {
+   "tier": "source-build",
+   "licence": "MIT",
+   "artifact": {
+    "url": "https://registry.npmjs.org/cf-prefs/-/cf-prefs-2.0.1.tgz",
+    "sha256": "c6e7a893321ad2e537b419406b3708da0dc7ee6819f4c3782dbee41f55d64223",
+    "size": 4663,
+    "npm_integrity": "sha512-NXDgfvvKu5SinwdIWWSh2iCf36ADiV/oxgaJsYD59wnj0dBxduH37oUjCHfbkEKufswkTk+G0A8HrPvYQDQMgg==",
+    "hash_source": "computed by pin-index.py; the npm registry's SHA-512 integrity matched"
+   },
+   "node_gyp": true,
+   "os": [],
+   "build_packages": [
+    {
+     "package": "node-addon-api@3.2.1",
+     "range": "^3.0.2",
+     "licence": "MIT",
+     "artifact": {
+      "url": "https://registry.npmjs.org/node-addon-api/-/node-addon-api-3.2.1.tgz",
+      "sha256": "1b91635d718d4980ac560a4d598921d18447f927f48bbd073342cf5c7a4b0c2d",
+      "size": 67002,
+      "npm_integrity": "sha512-mmcei9JghVNDYydghQmeDX8KoAm0FAiYyIcUt/N4nhyAipB17pllZQDOJD2fotxABnt4Mdz+dKTO7eftLg4d0A==",
+      "hash_source": "computed by pin-index.py; the npm registry's SHA-512 integrity matched"
+     }
+    }
+   ]
+  },
+  "fontmanager-redux@1.1.0": {
+   "tier": "source-build",
+   "licence": "MIT",
+   "artifact": {
+    "url": "https://registry.npmjs.org/fontmanager-redux/-/fontmanager-redux-1.1.0.tgz",
+    "sha256": "4532bac06ebd0b3b4ad99117fba6f8210a9f8fd604f2e821af49dea2051f4d4d",
+    "size": 234488,
+    "npm_integrity": "sha512-cQtSfi7ZCW831XuGwoKIrO/cCBLhOvWK56adSr/Yl/fzB5omunW+XQmXlYHNKS7qWzOZe2Z6xQ8ZFt120Uj2lA==",
+    "hash_source": "computed by pin-index.py; the npm registry's SHA-512 integrity matched"
+   },
+   "node_gyp": true,
+   "os": [],
+   "build_packages": [
+    {
+     "package": "node-addon-api@3.2.1",
+     "range": "^3.0.2",
+     "licence": "MIT",
+     "artifact": {
+      "url": "https://registry.npmjs.org/node-addon-api/-/node-addon-api-3.2.1.tgz",
+      "sha256": "1b91635d718d4980ac560a4d598921d18447f927f48bbd073342cf5c7a4b0c2d",
+      "size": 67002,
+      "npm_integrity": "sha512-mmcei9JghVNDYydghQmeDX8KoAm0FAiYyIcUt/N4nhyAipB17pllZQDOJD2fotxABnt4Mdz+dKTO7eftLg4d0A==",
+      "hash_source": "computed by pin-index.py; the npm registry's SHA-512 integrity matched"
+     }
+    }
+   ]
+  },
+  "fs-xattr@0.3.1": {
+   "tier": "source-build",
+   "licence": "MIT",
+   "artifact": {
+    "url": "https://registry.npmjs.org/fs-xattr/-/fs-xattr-0.3.1.tgz",
+    "sha256": "7ffa656d19f21b81970bba32ef69ae68064a8d6a53687907419bbc5c3424eb89",
+    "size": 6094,
+    "npm_integrity": "sha512-UVqkrEW0GfDabw4C3HOrFlxKfx0eeigfRne69FxSBdHIP8Qt5Sq6Pu3RM9KmMlkygtC4pPKkj5CiPO5USnj2GA==",
+    "hash_source": "computed by pin-index.py; the npm registry's SHA-512 integrity matched"
+   },
+   "node_gyp": true,
+   "os": [
+    "!win32"
+   ],
+   "build_packages": []
+  },
+  "glasstron@0.1.1": {
+   "tier": "source-build",
+   "licence": "Apache-2.0",
+   "artifact": {
+    "url": "https://registry.npmjs.org/glasstron/-/glasstron-0.1.1.tgz",
+    "sha256": "85f0a6ab8bc00181885559463f810d2775ae271e352885d13c04c9911a79f321",
+    "size": 545179,
+    "npm_integrity": "sha512-oLEMQM5wwdAQ44NrXD3wjk+b3dsfQG1XtkLn5pCxQNa3ri1AtWvvzpnhFUd88ZTmguHvkY4c3JKzcPSYaJAKKA==",
+    "hash_source": "computed by pin-index.py; the npm registry's SHA-512 integrity matched"
+   },
+   "node_gyp": true,
+   "os": [],
+   "build_packages": [
+    {
+     "package": "node-addon-api@4.3.0",
+     "range": "^4.0.0",
+     "licence": "MIT",
+     "artifact": {
+      "url": "https://registry.npmjs.org/node-addon-api/-/node-addon-api-4.3.0.tgz",
+      "sha256": "3760f2d172ef44b950ae8d3e2f932ca97f28ea8d5cc5f717451ebffd771f5cd1",
+      "size": 57446,
+      "npm_integrity": "sha512-73sE9+3UaLYYFmDsFZnqCInzPyh3MqIwZO9cw58yIqAZhONrrabrYyYe3TuIqtIiOuTXVhsGau8hcrhhwSsDIQ==",
+      "hash_source": "computed by pin-index.py; the npm registry's SHA-512 integrity matched"
+     }
+    }
+   ]
+  },
+  "macos-notification-state@3.0.0": {
+   "tier": "source-build",
+   "licence": "MIT",
+   "artifact": {
+    "url": "https://registry.npmjs.org/macos-notification-state/-/macos-notification-state-3.0.0.tgz",
+    "sha256": "a3ba47daae5a97d79859899d1901ad97b87358bcf2d208d59c4895b7880a6de3",
+    "size": 8531,
+    "npm_integrity": "sha512-tvFDZajIcwIsYg1WQAXGtrJFljlL1PEOK2cCoPDrN//XxIwTiVNvaXznxLjV4mYkyXctIDVs0ujGdrbGzeOY/w==",
+    "hash_source": "computed by pin-index.py; the npm registry's SHA-512 integrity matched"
+   },
+   "node_gyp": true,
+   "os": [],
+   "build_packages": [
+    {
+     "package": "node-addon-api@3.0.0",
+     "range": "3.0.0",
+     "licence": "MIT",
+     "artifact": {
+      "url": "https://registry.npmjs.org/node-addon-api/-/node-addon-api-3.0.0.tgz",
+      "sha256": "03038ea553554e28b2c158e9d46f1ec056d4ae7a20a6eb61fc0d3de47180ca7d",
+      "size": 133550,
+      "npm_integrity": "sha512-sSHCgWfJ+Lui/u+0msF3oyCgvdkhxDbkCS6Q8uiJquzOimkJBvX6hl5aSSA7DR1XbMpdM8r7phjcF63sF4rkKg==",
+      "hash_source": "computed by pin-index.py; the npm registry's SHA-512 integrity matched"
+     }
+    }
+   ]
+  },
+  "native-is-elevated@0.9.0": {
+   "tier": "source-build",
+   "licence": "MIT",
+   "artifact": {
+    "url": "https://registry.npmjs.org/native-is-elevated/-/native-is-elevated-0.9.0.tgz",
+    "sha256": "66c994aa409ef7f84fe5ee1e6c8dd9553208467606f57e01a765555a4a4dbafc",
+    "size": 3225,
+    "npm_integrity": "sha512-DTPZixwPTtWHU9g46hXMyK6eW77e8L69uZNkB/cjY00BF8NCXQ5cyJEDim91WmxHruJoIQzLdZBb4TEjrI+PQw==",
+    "hash_source": "computed by pin-index.py; the npm registry's SHA-512 integrity matched"
+   },
+   "node_gyp": true,
+   "os": [],
+   "build_packages": []
+  },
+  "native-keymap@3.3.9": {
+   "tier": "source-build",
+   "licence": "MIT",
+   "artifact": {
+    "url": "https://registry.npmjs.org/native-keymap/-/native-keymap-3.3.9.tgz",
+    "sha256": "f6f3844be47e4cf8b6f8b9cc7d9b4b1d76922485d5897e77e0e1119168609935",
+    "size": 41338,
+    "npm_integrity": "sha512-d/ydQ5x+GM5W0dyAjFPwexhtc9CDH1g/xWZESS5CXk16ThyFzSBLvlBJq1+FyzUIFf/F2g1MaHdOpa6G9150YQ==",
+    "hash_source": "computed by pin-index.py; the npm registry's SHA-512 integrity matched"
+   },
+   "node_gyp": true,
+   "os": [],
+   "build_packages": []
+  },
+  "native-process-working-directory@1.0.2": {
+   "tier": "source-build",
+   "licence": "MIT",
+   "artifact": {
+    "url": "https://registry.npmjs.org/native-process-working-directory/-/native-process-working-directory-1.0.2.tgz",
+    "sha256": "3c86bc5444580da9bc6f10b19203515cd7a5e12581b0145e2b608c9af6cbc1d2",
+    "size": 3587,
+    "npm_integrity": "sha512-3a67QQV8r3YMUTSOgvtMOCjPDgCpb/8xjv93L8Cqb8bv3hOKsWis4/+8HCu3bgj8ADQV75SCYFSsAGM5G0cXmQ==",
+    "hash_source": "computed by pin-index.py; the npm registry's SHA-512 integrity matched"
+   },
+   "node_gyp": true,
+   "os": [],
+   "build_packages": [
+    {
+     "package": "node-addon-api@3.2.1",
+     "range": "^3.1.0",
+     "licence": "MIT",
+     "artifact": {
+      "url": "https://registry.npmjs.org/node-addon-api/-/node-addon-api-3.2.1.tgz",
+      "sha256": "1b91635d718d4980ac560a4d598921d18447f927f48bbd073342cf5c7a4b0c2d",
+      "size": 67002,
+      "npm_integrity": "sha512-mmcei9JghVNDYydghQmeDX8KoAm0FAiYyIcUt/N4nhyAipB17pllZQDOJD2fotxABnt4Mdz+dKTO7eftLg4d0A==",
+      "hash_source": "computed by pin-index.py; the npm registry's SHA-512 integrity matched"
+     }
+    }
+   ]
+  },
+  "native-reg@1.1.1": {
+   "tier": "source-build",
+   "licence": "MIT",
+   "artifact": {
+    "url": "https://registry.npmjs.org/native-reg/-/native-reg-1.1.1.tgz",
+    "sha256": "30de53471d88d84b5f30f81d5aab8d320a535554b49933c431483e9ba3b6e27c",
+    "size": 352936,
+    "npm_integrity": "sha512-DmqwT6XC8MLwo8HaZey3bASf0aa/gHC7FAuKMjuf7fXa7FLXwz/khXGouKcmD1rXAfJME1XveKSM4+86wLkb1w==",
+    "hash_source": "computed by pin-index.py; the npm registry's SHA-512 integrity matched"
+   },
+   "node_gyp": true,
+   "os": [],
+   "build_packages": [
+    {
+     "package": "node-addon-api@4.3.0",
+     "range": "4",
+     "licence": "MIT",
+     "artifact": {
+      "url": "https://registry.npmjs.org/node-addon-api/-/node-addon-api-4.3.0.tgz",
+      "sha256": "3760f2d172ef44b950ae8d3e2f932ca97f28ea8d5cc5f717451ebffd771f5cd1",
+      "size": 57446,
+      "npm_integrity": "sha512-73sE9+3UaLYYFmDsFZnqCInzPyh3MqIwZO9cw58yIqAZhONrrabrYyYe3TuIqtIiOuTXVhsGau8hcrhhwSsDIQ==",
+      "hash_source": "computed by pin-index.py; the npm registry's SHA-512 integrity matched"
+     }
+    }
+   ]
+  },
+  "registry-js@1.16.1": {
+   "tier": "source-build",
+   "licence": "MIT",
+   "artifact": {
+    "url": "https://registry.npmjs.org/registry-js/-/registry-js-1.16.1.tgz",
+    "sha256": "6e2d14061819e6461f3d8b2035f2bab3932825fc764b051bb937cba9a80f7073",
+    "size": 9232,
+    "npm_integrity": "sha512-pQ2kD36lh+YNtpaXm6HCCb0QZtV/zQEeKnkfEIj5FDSpF/oFts7pwizEUkWSvP8IbGb4A4a5iBhhS9eUearMmQ==",
+    "hash_source": "computed by pin-index.py; the npm registry's SHA-512 integrity matched"
+   },
+   "node_gyp": true,
+   "os": [],
+   "build_packages": []
+  },
+  "windows-focus-assist@1.4.0": {
+   "tier": "source-build",
+   "licence": "MIT",
+   "artifact": {
+    "url": "https://registry.npmjs.org/windows-focus-assist/-/windows-focus-assist-1.4.0.tgz",
+    "sha256": "31362d11c0df401a031e51ded779038d21fb0d8c700b3b4d9f9cc82af67a1b7d",
+    "size": 7561,
+    "npm_integrity": "sha512-AmiJc0FVjOFNij+eDfEObS+j9fJ1eWkNyxSjxx+jLMr87996WsscZ9WgsoQg6CizPmxxfHnxYhv5DCuTJldoPg==",
+    "hash_source": "computed by pin-index.py; the npm registry's SHA-512 integrity matched"
+   },
+   "node_gyp": true,
+   "os": [],
+   "build_packages": [
+    {
+     "package": "node-addon-api@8.9.2",
+     "range": "*",
+     "licence": "MIT",
+     "artifact": {
+      "url": "https://registry.npmjs.org/node-addon-api/-/node-addon-api-8.9.2.tgz",
+      "sha256": "4cd65698541b19a33f798f1dc25c02c6ed1c9d7749b8824b1a1ccecdd197c8ea",
+      "size": 62490,
+      "npm_integrity": "sha512-VijLXbi3UACN69I0JVXJsX4tjACjNoQDgv2gTF6sx2wWEi8tkSg2eX8p5gSIFi8z2+DL3oHmY6OyKce38SDolg==",
+      "hash_source": "computed by pin-index.py; the npm registry's SHA-512 integrity matched"
+     }
+    }
+   ]
+  },
+  "windows-foreground-love@0.6.1": {
+   "tier": "source-build",
+   "licence": "MIT",
+   "artifact": {
+    "url": "https://registry.npmjs.org/windows-foreground-love/-/windows-foreground-love-0.6.1.tgz",
+    "sha256": "c8a15cdbd12361f55d523cc188f74270df1b596658b15d4bc16870247c4705f4",
+    "size": 3521,
+    "npm_integrity": "sha512-uusaXCkDfifZkV/EJMnfJ/i9hsY1BGS9YIQs7LGGRrg1+au7er4ONADtMp6svQWlwgztTgWu31g0nT5OPyYLwg==",
+    "hash_source": "computed by pin-index.py; the npm registry's SHA-512 integrity matched"
+   },
+   "node_gyp": true,
+   "os": [],
+   "build_packages": []
+  }
+ }
+}

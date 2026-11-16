@@ -1,0 +1,95 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR application catalogue entry. Format: schemas/app-catalogue-entry.schema.json.
+# How entries are written and sourced: catalogue/README.md.
+# The two rehost records are TUR's own measurements, with their report
+# (docs/reports/exp-rehost-1.md) and the run that holds the evidence.
+# Nothing is claimed about the publisher's Linux edition: it has no record.
+
+schema_version = 1
+id = "com.mattermost.desktop"
+name = "Mattermost"
+publisher = "Mattermost"
+category = "communication"
+summary = "Desktop client for Mattermost team chat."
+homepage = "https://github.com/mattermost/desktop"
+
+[[editions]]
+kind = "linux-native"
+obtain = "publisher-page"
+download_page = "https://github.com/mattermost/desktop/releases"
+licence = "open-source"
+
+[[editions.references]]
+title = "Mattermost 6.3.2 release on GitHub, with its Linux, Windows and macOS packages"
+url = "https://github.com/mattermost/desktop/releases/tag/v6.3.2"
+checked = "2026-11-16"
+
+[[editions]]
+kind = "windows"
+obtain = "publisher-page"
+download_page = "https://github.com/mattermost/desktop/releases"
+licence = "open-source"
+
+[[editions.records]]
+route = "rehost"
+rating = "starts"
+reported_by = "tur-test"
+test_report = "docs/reports/exp-rehost-1.md"
+version_tested = "6.3.2"
+date = "2026-11-16"
+notes = "Measured by TUR's re-hosting experiment: the application's own first window, the same as the official Linux build's, and typed text; no feature beyond that was exercised (exp-rehost-1, section 3.1)."
+
+[editions.records.rehost]
+package = "mattermost-desktop-6.3.2-win-x64.zip"
+package_sha256 = "71742332c490901b772f67be16ce9dfc713d9ee3dde697aaa4fc9dc774080673"
+package_size = 152618348
+runtime = "electron"
+runtime_version = "43.8.3"
+evidence = "https://github.com/giorgiogiudice/TUR/actions/runs/43778332673"
+native_builds = [
+    "cf-prefs@2.0.1",
+    "macos-notification-state@3.0.0",
+    "registry-js@1.16.1",
+    "windows-focus-assist@1.4.0",
+]
+unresolved = []
+
+[[editions.references]]
+title = "Mattermost 6.3.2 release on GitHub, with its Linux, Windows and macOS packages"
+url = "https://github.com/mattermost/desktop/releases/tag/v6.3.2"
+checked = "2026-11-16"
+
+[[editions]]
+kind = "macos"
+obtain = "publisher-page"
+download_page = "https://github.com/mattermost/desktop/releases"
+licence = "open-source"
+
+[[editions.records]]
+route = "rehost"
+rating = "starts"
+reported_by = "tur-test"
+test_report = "docs/reports/exp-rehost-1.md"
+version_tested = "6.3.2"
+date = "2026-11-16"
+notes = "Measured by TUR's re-hosting experiment: the application's own first window, the same as the official Linux build's, and typed text; no feature beyond that was exercised (exp-rehost-1, section 3.1)."
+
+[editions.records.rehost]
+package = "mattermost-desktop-6.3.2-mac-x64.zip"
+package_sha256 = "c256f69c8d57c1e527bee27205015f0fcc22da2590d11e55afd8d73bce55c5e6"
+package_size = 129934708
+runtime = "electron"
+runtime_version = "43.8.3"
+evidence = "https://github.com/giorgiogiudice/TUR/actions/runs/43778332673"
+native_builds = [
+    "cf-prefs@2.0.1",
+    "macos-notification-state@3.0.0",
+    "registry-js@1.16.1",
+    "windows-focus-assist@1.4.0",
+]
+unresolved = []
+
+[[editions.references]]
+title = "Mattermost 6.3.2 release on GitHub, with its Linux, Windows and macOS packages"
+url = "https://github.com/mattermost/desktop/releases/tag/v6.3.2"
+checked = "2026-11-16"

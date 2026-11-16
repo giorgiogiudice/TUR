@@ -25,6 +25,9 @@ expect_tool_sets="$(grep -v '^#' image/programs.tsv | cut -f1 | while read -r co
     if [ -f "${component}/agent-tools.json" ]; then basename "${component}"; fi
 done | LC_ALL=C sort | tr '\n' ' ')"
 echo "expected: ${expect_programs} programs; tool sets: ${expect_tool_sets}"
+# The packages of the archive tools' lock, as name-version-release.arch.
+expect_archive_packages="$(grep -v '^#' image/archive-tools/tools.lock | cut -f1 | sed 's/\.rpm$//' | tr '\n' ' ')"
+echo "expected: $(echo "${expect_archive_packages}" | wc -w) archive-tool packages"
 
 "${podman[@]}" run --rm -i --network none \
     -e "EXPECT_BUILD_ID=${expected_build_id}" \
@@ -33,6 +36,7 @@ echo "expected: ${expect_programs} programs; tool sets: ${expect_tool_sets}"
     -e "EXPECT_PROGRAMS=${expect_programs}" \
     -e "EXPECT_TOOL_SETS=${expect_tool_sets}" \
     -e "EXPECT_LLAMA_CPP_BUILD=${LLAMA_CPP_BUILD_NUMBER}" \
+    -e "EXPECT_ARCHIVE_PACKAGES=${expect_archive_packages}" \
     "${image}" /bin/bash -s <<'INNER'
 set -u
 fail=0
@@ -217,7 +221,7 @@ assert not missing, f"not in the image: {missing}"
 done < "${programs}"
 check "programs a person or an adapter starts are in /usr/bin" bash -c \
     'for p in tur-diag tur-device tur-storage tur-catalogue tur-runtime tur-update tur-pax tur-pax-memory tur-boot-health \
-              tur-apps tur-ai-local llama-server; do
+              tur-apps tur-ai-local tur-rehost llama-server; do
          [ -x "/usr/bin/$p" ] || { echo "$p"; exit 1; }; done'
 check "every component of the list that ships assistant tools has them installed, and no other" bash -c \
     '[ "$(ls -1 /usr/share/tur/pax/tools | LC_ALL=C sort | tr "\n" " ")" = "$1" ] || { ls -1 /usr/share/tur/pax/tools; exit 1; }' \
@@ -285,6 +289,13 @@ for tool in uname systemd-analyze dmesg lspci lsusb vulkaninfo wpctl nmcli bluet
 done
 check "bubblewrap and util-linux are packages of the base" rpm -q bubblewrap util-linux
 check "bubblewrap is not set-user-ID"         bash -c '[ ! -u /usr/bin/bwrap ]'
+# Archive tools for re-hosting (image/README.md): Fedora's innoextract and
+# msitools at their pinned versions, and 7-Zip from the base.
+check "every package of image/archive-tools/tools.lock is installed at its pinned version" bash -c \
+    'for nevra in ${EXPECT_ARCHIVE_PACKAGES}; do rpm -q "${nevra}" > /dev/null || { echo "${nevra} is not installed"; exit 1; }; done
+     [ "$(echo ${EXPECT_ARCHIVE_PACKAGES} | wc -w)" -ge 2 ]'
+check "tur-rehost's archive tools run: 7zz, innoextract, msiextract" bash -c \
+    'command -v 7zz && innoextract --version > /dev/null && msiextract --version > /dev/null'
 check "no Windows, Android or macOS runtime is in the image" bash -c \
     'for name in wine wine64 wineserver umu-run waydroid darling; do
          if command -v "${name}"; then exit 1; fi

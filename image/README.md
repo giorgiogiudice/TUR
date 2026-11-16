@@ -56,6 +56,7 @@ TUR's own programs are compiled inside the image build, in a build stage of the
 | `tur-installer` | `installer/tur-installer-core` | `/usr/libexec/tur/` | – |
 | `tur-apps` | `services/tur-apps` | `/usr/bin/` | `tur-apps` |
 | `tur-ai-local` | `services/tur-ai-local` | `/usr/bin/` | `tur-ai-local` |
+| `tur-rehost` | `services/tur-rehost` | `/usr/bin/` | `tur-rehost` |
 
 `/usr/bin` holds what a person types and what an assistant tool adapter
 starts by path; `/usr/libexec/tur` holds what units and other programs start.
@@ -81,9 +82,9 @@ What goes with the programs:
 | `/usr/share/licenses/tur-third-party/` | the crates, as fetched | `crates.tsv`: which program holds which crate, with version, declared licence and checksum; `<crate>-<version>/`: the licence files that crate ships; `rust-std-<version>/`: those of the Rust standard library |
 
 Every component of the list that has `agent-tools.json` at its top level has
-its tools installed: eight today (`tur-ai-local`, `tur-apps`,
-`tur-catalogue`, `tur-device-manager`, `tur-diagnostics`, `tur-runtime`,
-`tur-storage`, `tur-update`). The smoke test and the boot test derive that
+its tools installed: nine today (`tur-ai-local`, `tur-apps`,
+`tur-catalogue`, `tur-device-manager`, `tur-diagnostics`, `tur-rehost`,
+`tur-runtime`, `tur-storage`, `tur-update`). The smoke test and the boot test derive that
 list, and the number of programs, from `programs.tsv`.
 
 How the stage works, and why:
@@ -149,6 +150,37 @@ What the programs start is in the base image already: `bwrap` (bubblewrap)
 and `prlimit` (util-linux) for P@x's sandbox, `lsblk`, `udevadm`,
 `journalctl`, `fwupdmgr`, `bootc`, and the commands `tur-diag` collects with.
 No package is added. The smoke test checks each.
+The one exception is the archive tools for re-hosting (below).
+
+## Archive tools for re-hosting
+
+`tur-rehost` opens a Windows or macOS application package without running
+it (docs/architecture/rehost.md), always inside its tool sandbox without
+network. From the base image it uses `bwrap`, `curl`, `podman` (native
+builds only), 7-Zip (`7zip`: `7zz`, for 7z archives, NSIS installers, disk
+images, xar and cpio), `unzip`, GNU `tar` and `xz`. The base has no
+`innoextract` and no `msitools`; **the image adds them** (the owner's
+decision of 16 November 2026), from Fedora 45, pinned:
+
+| File | What |
+|---|---|
+| `archive-tools/tools.lock` | Every package added, with the SHA-256 of the signed package, its size, its licence as the package states it, where it is in Fedora's repository and in Fedora's build system, and why it is needed. Written by `archive-tools/lock.py` |
+| `archive-tools/lock.py` | Resolves `innoextract` and `msitools` against the base's package list (`docs/dependencies/image-licences.csv`) and Fedora 45's repository metadata (release and updates, never updates-testing). Reads metadata only; may run on a development machine |
+| `archive-tools/tools.sh` | `fetch`: in the stage `archive-tools`, with network, downloads each package and checks its SHA-256. `install`: in the final stage, without network, checks each package and its licence tag again, installs them with `rpm` in one transaction, and checks that `innoextract`, `msiextract` and `7zz` run |
+
+Eleven packages, about 1.5 MB: `innoextract` (Zlib), `msitools` (LGPL-2.1-or-later
+AND GPL-2.0-or-later AND MS-RL), `libmsi1` (LGPL-2.1-or-later AND blessing),
+`libgcab1` (LGPL-2.1-or-later), `libgsf` (LGPL-2.1-only) and six Boost
+libraries (BSL-1.0 AND MIT AND Python-2.0.1). All are open-source licences
+Fedora ships; MS-RL (Microsoft Reciprocal License, OSI-approved) covers part
+of msitools' own source and is not a Microsoft binary. TUR's programs do not
+link any of them: `tur-rehost` starts them as separate programs.
+
+This is the mechanism of Wine's lock in pull request 136 (`image/wine/`),
+which had not merged when this was written; when it does, the two locks can
+share one script. The smoke test checks every package of the lock is
+installed at its version and that the three programs run; the boot test
+records which archive tools the installed system has.
 
 ## The local AI engine
 

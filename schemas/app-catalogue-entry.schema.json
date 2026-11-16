@@ -32,15 +32,76 @@
       ]
     },
     "route": {
-      "description": "A way of running an edition. flatpak: a Flatpak on the host. native: a native Linux program that is not a Flatpak. distro-container: a package of another distribution, in a container of it. proton: Proton through umu-launcher, for games. wine: Wine, for other Windows applications. windows-guest: the seamless Windows guest, a virtual machine. android-runtime: the Android runtime. darling: Darling, experimental. web: the web application in the host's browser.",
+      "description": "A way of running an edition. flatpak: a Flatpak on the host. native: a native Linux program that is not a Flatpak. distro-container: a package of another distribution, in a container of it. rehost: the publisher's Windows or macOS package re-hosted on the official Linux build of the runtime it is made with, such as Electron; no compatibility layer and no virtual machine; only TUR's own test can rate it. proton: Proton through umu-launcher, for games. wine: Wine, for other Windows applications. windows-guest: the seamless Windows guest, a virtual machine. android-runtime: the Android runtime. darling: Darling, experimental. web: the web application in the host's browser.",
       "enum": [
-        "flatpak", "native", "distro-container", "proton", "wine", "windows-guest",
+        "flatpak", "native", "distro-container", "rehost", "proton", "wine", "windows-guest",
         "android-runtime", "darling", "web"
       ]
     },
+    "moduleVersion": {
+      "description": "A native module and its version, name@version; the name may be scoped (@scope/name@version).",
+      "type": "string",
+      "maxLength": 214,
+      "pattern": "^(@[A-Za-z0-9._~-]+/)?[A-Za-z0-9._~-]+@[A-Za-z0-9.+-]{1,64}$"
+    },
+    "rehost": {
+      "description": "What TUR measured when it re-hosted an edition (docs/reports/exp-rehost-1.md): the publisher's file, the runtime it ran on and the run that holds the evidence. Required on a record of the rehost route, refused on any other.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["package", "package_sha256", "package_size", "runtime", "runtime_version", "evidence"],
+      "properties": {
+        "package": {
+          "description": "The publisher's file that was measured: a file name, without a directory.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "pattern": "^[^/\\\\\\u0000-\\u001f\\u007f-\\u009f]+$"
+        },
+        "package_sha256": {
+          "description": "The SHA-256 of that file, as 64 lower-case hexadecimal digits.",
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "package_size": {
+          "description": "The size of that file in bytes.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "runtime": {
+          "description": "The runtime family the edition was re-hosted on.",
+          "enum": ["electron", "nwjs", "dotnet", "jvm", "godot", "love", "renpy", "pyinstaller"]
+        },
+        "runtime_version": {
+          "description": "The version of the runtime's Linux build it ran on, for example 43.7.7.",
+          "type": "string",
+          "pattern": "^[A-Za-z0-9.+-]{1,64}$"
+        },
+        "evidence": {
+          "description": "The https address of the run that measured it.",
+          "$ref": "#/$defs/httpsUrl"
+        },
+        "native_builds": {
+          "description": "Native modules that had to be built from source for Linux.",
+          "type": "array",
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/moduleVersion" }
+        },
+        "unresolved": {
+          "description": "Native modules with no Linux build that the measured version did not load when it started: name@version, or file:<file name> for a native module whose package cannot be identified.",
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "anyOf": [
+              { "$ref": "#/$defs/moduleVersion" },
+              { "type": "string", "maxLength": 260, "pattern": "^file:[^/\\\\\\u0000-\\u001f\\u007f-\\u009f]+\\.node$" }
+            ]
+          }
+        }
+      }
+    },
     "rating": {
-      "description": "How well a route runs an edition. good: runs as intended, with no workaround worth mentioning. usable: runs and is usable; needs tweaks or has minor problems. poor: runs, with problems that get in the way of normal use. broken: does not start, or cannot be used for its purpose. unknown: not known; the only rating that needs no source.",
-      "enum": ["good", "usable", "poor", "broken", "unknown"]
+      "description": "How well a route runs an edition. good: runs as intended, with no workaround worth mentioning. usable: runs and is usable; needs tweaks or has minor problems. starts: starts and shows its first window, measured by TUR; nothing beyond that was tested; only TUR's own test gives it, no external source's scale maps onto it. poor: runs, with problems that get in the way of normal use. broken: does not start, or cannot be used for its purpose. unknown: not known; the only rating that needs no source.",
+      "enum": ["good", "usable", "starts", "poor", "broken", "unknown"]
     },
     "record": {
       "description": "What is known about how well one route runs one edition.",
@@ -108,9 +169,28 @@
           "description": "TUR autopilot: the SHA-256 of the evidence in the autopilot's result (its attempts, serialised as compact JSON with times in whole milliseconds).",
           "type": "string",
           "pattern": "^[0-9a-f]{64}$"
+        },
+        "rehost": {
+          "description": "Re-hosted: what was measured. Required on a record of the rehost route and refused on any other.",
+          "$ref": "#/$defs/rehost"
         }
       },
       "allOf": [
+        {
+          "if": { "properties": { "rating": { "const": "starts" } }, "required": ["rating"] },
+          "then": { "properties": { "reported_by": { "const": "tur-test" } } }
+        },
+        {
+          "if": { "properties": { "route": { "const": "rehost" } } },
+          "then": { "required": ["rehost"] },
+          "else": { "properties": { "rehost": false } }
+        },
+        {
+          "if": {
+            "properties": { "route": { "const": "rehost" }, "reported_by": { "const": "external" } }
+          },
+          "then": { "properties": { "rating": { "const": "unknown" } } }
+        },
         {
           "if": { "properties": { "reported_by": { "const": "tur-autopilot" } } },
           "then": {
@@ -370,7 +450,7 @@
               "flatpak_id": false, "remote": false, "package": false, "distribution": false,
               "stores": false, "url": false, "primary": { "const": false }, "packaging": false,
               "obtain": { "enum": ["steam", "epic", "gog", "publisher-page", "microsoft-store"] },
-              "records": { "items": { "properties": { "route": { "enum": ["proton", "wine", "windows-guest"] } } } }
+              "records": { "items": { "properties": { "route": { "enum": ["proton", "wine", "windows-guest", "rehost"] } } } }
             }
           }
         },
@@ -404,7 +484,7 @@
               "stores": false, "url": false, "primary": { "const": false }, "packaging": false,
               "installer": false,
               "obtain": { "enum": ["mac-app-store", "publisher-page", "steam"] },
-              "records": { "items": { "properties": { "route": { "const": "darling" } } } }
+              "records": { "items": { "properties": { "route": { "enum": ["darling", "rehost"] } } } }
             }
           }
         },

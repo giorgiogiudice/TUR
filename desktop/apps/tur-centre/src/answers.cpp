@@ -143,7 +143,7 @@ const QStringList &Answers::routes()
 {
     static const QStringList values {
         QStringLiteral("flatpak"), QStringLiteral("native"), QStringLiteral("distro-container"),
-        QStringLiteral("proton"), QStringLiteral("wine"), QStringLiteral("windows-guest"),
+        QStringLiteral("rehost"), QStringLiteral("proton"), QStringLiteral("wine"), QStringLiteral("windows-guest"),
         QStringLiteral("android-runtime"), QStringLiteral("darling"), QStringLiteral("web"),
         QStringLiteral("no-route"),
     };
@@ -153,8 +153,8 @@ const QStringList &Answers::routes()
 const QStringList &Answers::ratings()
 {
     static const QStringList values {
-        QStringLiteral("good"), QStringLiteral("usable"), QStringLiteral("poor"), QStringLiteral("broken"),
-        QStringLiteral("unknown"),
+        QStringLiteral("good"), QStringLiteral("usable"), QStringLiteral("starts"), QStringLiteral("poor"),
+        QStringLiteral("broken"), QStringLiteral("unknown"),
     };
     return values;
 }

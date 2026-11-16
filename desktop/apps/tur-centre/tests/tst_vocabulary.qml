@@ -59,6 +59,9 @@ Item {
                   explanation: "Made for Linux. Runs directly." },
                 { tag: "native", route: "native", label: "Linux application",
                   explanation: "Made for Linux. Runs directly." },
+                { tag: "rehost", route: "rehost", label: "Runs on its own runtime",
+                  explanation: "The Windows or Mac package, running natively on Linux's build of the runtime it was made "
+                               + "with. Tested by TUR; not supported by the publisher." },
                 { tag: "proton", route: "proton", label: "Windows game, through Proton",
                   explanation: "Runs without Windows, through Proton, the compatibility layer used by the Steam Deck." },
                 { tag: "wine", route: "wine", label: "Windows application, in the compatibility layer",
@@ -94,6 +97,11 @@ Item {
             compare(sorted(Object.keys(Words.ratingLabels)), sorted(router.ratings))
             compare(Words.ratingLabel("good"), "Works well")
             compare(Words.ratingLabel("usable"), "Works, with minor problems")
+            // TUR saw the first window, and nothing more: not "works".
+            compare(Words.ratingLabel("starts"), "Starts")
+            compare(Words.ratingExplanation("starts"),
+                    "TUR saw it start and show its first window. Nothing beyond that was tested.")
+            compare(Words.ratingExplanation("good"), "")
             compare(Words.ratingLabel("poor"), "Works badly")
             compare(Words.ratingLabel("broken"), "Does not work")
             // Unknown is unknown. It is not "works", and it is not "does

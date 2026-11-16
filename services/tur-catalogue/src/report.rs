@@ -46,6 +46,15 @@ pub fn render_hits(hits: &[SearchHit<'_>]) -> String {
     out
 }
 
+/// A rating as the text report writes it: its name, and for `starts` what
+/// it does and does not say.
+fn rating_words(rating: Rating) -> &'static str {
+    match rating {
+        Rating::Starts => "starts (it shows its first window; nothing beyond that was tested)",
+        other => other.as_str(),
+    }
+}
+
 /// A rating and where it comes from, in one line. The wording always says
 /// who reported it, and says so plainly when it was not TUR.
 pub fn describe_rating(rating: Rating, source: &RatingSource) -> String {
@@ -60,7 +69,7 @@ pub fn describe_rating(rating: Rating, source: &RatingSource) -> String {
             version_tested,
             date,
         } => {
-            let mut text = format!("{}, reported by {name}", rating.as_str());
+            let mut text = format!("{}, reported by {name}", rating_words(rating));
             if let Some(words) = source_rating {
                 let _ = write!(text, " as \"{words}\"");
             }
@@ -75,7 +84,7 @@ pub fn describe_rating(rating: Rating, source: &RatingSource) -> String {
             version_tested,
             date,
         } => {
-            let mut text = format!("{}, tested by TUR on {date}", rating.as_str());
+            let mut text = format!("{}, tested by TUR on {date}", rating_words(rating));
             if let Some(version) = version_tested {
                 let _ = write!(text, " with version {version}");
             }
@@ -181,6 +190,18 @@ pub fn render_entry(entry: &Entry) -> String {
             );
             if let Some(notes) = &record.notes {
                 let _ = writeln!(out, "      {notes}");
+            }
+            if let Some(evidence) = &record.rehost {
+                let _ = writeln!(
+                    out,
+                    "      Measured: {} ({} bytes, SHA-256 {}) on {} {} for Linux; evidence {}",
+                    evidence.package,
+                    evidence.package_size,
+                    evidence.package_sha256,
+                    evidence.runtime,
+                    evidence.runtime_version,
+                    evidence.evidence
+                );
             }
         }
         for reference in &edition.references {
@@ -347,6 +368,11 @@ url = "https://app.example.org/"
             describe_rating(Rating::Good, &own),
             "good, tested by TUR on 2026-11-12 with version 1.2 (docs/reports/compat/x.md)"
         );
+        // `starts` says what it covers, and no more.
+        assert_eq!(
+            describe_rating(Rating::Starts, &own),
+            "starts (it shows its first window; nothing beyond that was tested), tested by TUR on 2026-11-12 with version 1.2 (docs/reports/compat/x.md)"
+        );
     }
 
     #[test]
@@ -427,6 +453,7 @@ url = "https://app.example.org/"
             records: 4,
             rated_by_external_sources: 3,
             rated_by_tur_tests: 0,
+            applications_tested_by_tur: 0,
             unknown: 1,
         };
         assert_eq!(

@@ -1,0 +1,85 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR application catalogue entry. Format: schemas/app-catalogue-entry.schema.json.
+# How entries are written and sourced: catalogue/README.md.
+# The two rehost records are TUR's own measurements, with their report
+# (docs/reports/exp-rehost-1.md) and the run that holds the evidence.
+# Nothing is claimed about the publisher's Linux edition: it has no record.
+
+schema_version = 1
+id = "org.standardnotes.desktop"
+name = "Standard Notes"
+publisher = "Standard Notes"
+category = "productivity"
+summary = "End-to-end encrypted note-taking application."
+homepage = "https://github.com/standardnotes/app"
+
+[[editions]]
+kind = "linux-native"
+obtain = "publisher-page"
+download_page = "https://github.com/standardnotes/app/releases"
+licence = "open-source"
+
+[[editions.references]]
+title = "Standard Notes 3.202.11 release on GitHub, with its Linux, Windows and macOS packages"
+url = "https://github.com/standardnotes/app/releases/tag/%40standardnotes%2Fdesktop%403.202.11"
+checked = "2026-11-16"
+
+[[editions]]
+kind = "windows"
+obtain = "publisher-page"
+download_page = "https://github.com/standardnotes/app/releases"
+licence = "open-source"
+
+[[editions.records]]
+route = "rehost"
+rating = "starts"
+reported_by = "tur-test"
+test_report = "docs/reports/exp-rehost-1.md"
+version_tested = "3.202.11"
+date = "2026-11-16"
+notes = "Measured by TUR's re-hosting experiment: the application's own first window, the same as the official Linux build's, and typed text; no feature beyond that was exercised (exp-rehost-1, section 3.1)."
+
+[editions.records.rehost]
+package = "standard-notes-3.202.11-win-x64.exe"
+package_sha256 = "63167dadf3f370a1b2055303e8f7754eefac6a10a07c9896ad7b8f5c36d6af6d"
+package_size = 123772360
+runtime = "electron"
+runtime_version = "35.2.0"
+evidence = "https://github.com/giorgiogiudice/TUR/actions/runs/43778332673"
+native_builds = []
+unresolved = []
+
+[[editions.references]]
+title = "Standard Notes 3.202.11 release on GitHub, with its Linux, Windows and macOS packages"
+url = "https://github.com/standardnotes/app/releases/tag/%40standardnotes%2Fdesktop%403.202.11"
+checked = "2026-11-16"
+
+[[editions]]
+kind = "macos"
+obtain = "publisher-page"
+download_page = "https://github.com/standardnotes/app/releases"
+licence = "open-source"
+
+[[editions.records]]
+route = "rehost"
+rating = "starts"
+reported_by = "tur-test"
+test_report = "docs/reports/exp-rehost-1.md"
+version_tested = "3.202.11"
+date = "2026-11-16"
+notes = "Measured by TUR's re-hosting experiment: the application's own first window, the same as the official Linux build's, and typed text; no feature beyond that was exercised (exp-rehost-1, section 3.1)."
+
+[editions.records.rehost]
+package = "standard-notes-3.202.11-mac-x64.zip"
+package_sha256 = "6eadbf68056ceed370ddac11c68a6ef18ca46721f02813a36209c1292d9958bd"
+package_size = 166374733
+runtime = "electron"
+runtime_version = "35.2.0"
+evidence = "https://github.com/giorgiogiudice/TUR/actions/runs/43778332673"
+native_builds = ["cbor-extract@2.1.1"]
+unresolved = []
+
+[[editions.references]]
+title = "Standard Notes 3.202.11 release on GitHub, with its Linux, Windows and macOS packages"
+url = "https://github.com/standardnotes/app/releases/tag/%40standardnotes%2Fdesktop%403.202.11"
+checked = "2026-11-16"

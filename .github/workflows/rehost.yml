@@ -1,0 +1,96 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+#
+# Integration test of tur-rehost (docs/architecture/rehost.md): five of the
+# open-source packages the re-hosting experiment measured
+# (tests/rehost/corpus.json) are detected, planned, re-hosted with the
+# runtime fetched and verified against TUR's pinned index, started on a
+# headless X server until a window maps, and removed.
+#
+# The unit and command-line tests of services/tur-rehost run in the rust
+# workflow with every other component. This one downloads about 1 GB
+# (five packages and four Electron runtimes) and is started by hand only:
+# never on a pull request. Native builds (podman inside the container) only
+# with the input 'builds'.
+name: rehost
+
+on:
+  workflow_dispatch:
+    inputs:
+      only:
+        description: "Comma-separated corpus keys (empty: all five)"
+        required: false
+        default: ""
+      builds:
+        description: "Also re-host the package that needs a native module built from source (podman in the container)"
+        required: false
+        default: "false"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rehost-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  # Fedora 45's container image, by digest (tag 45 on 13 November 2026), the
+  # one exp-rehost.yml and windows-drivers.yml use.
+  FEDORA_IMAGE: registry.fedoraproject.org/fedora:45@sha256:fa773d10382c082ff2cccaf7982a5c162f11f296f91274b994357f2d3d473770
+  CARGO_TERM_COLOR: never
+
+jobs:
+  integration:
+    name: Re-host five packages
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Work directory
+        run: |
+          echo "WORK=$RUNNER_TEMP/rehost" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/rehost/bin" "$RUNNER_TEMP/rehost/out"
+
+      - name: Build tur-rehost
+        working-directory: services/tur-rehost
+        run: |
+          rustup show active-toolchain || rustup toolchain install
+          cargo build --release --locked || cargo build --release
+          install -m 0755 target/release/tur-rehost "$WORK/bin/tur-rehost"
+
+      - name: Let an unprivileged user in the container make user namespaces
+        # Ubuntu 24.04 denies them to unconfined programs; bubblewrap and
+        # Chromium's own sandbox need them. A throw-away runner.
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+
+      - name: Integration in Fedora 45
+        env:
+          REHOST_ONLY: ${{ github.event.inputs.only }}
+          REHOST_BUILDS: ${{ github.event.inputs.builds }}
+        run: |
+          docker run --rm --privileged --network host --shm-size=2g \
+            -e REHOST_ONLY -e REHOST_BUILDS \
+            -v "$GITHUB_WORKSPACE:/src:ro" -v "$WORK:/work" \
+            "$FEDORA_IMAGE" bash /src/tests/rehost/run.sh
+
+      - name: Results
+        if: always()
+        run: |
+          sudo chown -R "$(id -u):$(id -g)" "$WORK" || true
+          if [ -f "$WORK/out/results.md" ]; then
+            cat "$WORK/out/results.md" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No results were written." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: rehost-integration
+          path: |
+            ${{ runner.temp }}/rehost/out/
+          if-no-files-found: warn

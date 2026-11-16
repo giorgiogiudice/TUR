@@ -1,0 +1,85 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR application catalogue entry. Format: schemas/app-catalogue-entry.schema.json.
+# How entries are written and sourced: catalogue/README.md.
+# The two rehost records are TUR's own measurements, with their report
+# (docs/reports/exp-rehost-1.md) and the run that holds the evidence.
+# Nothing is claimed about the publisher's Linux edition: it has no record.
+
+schema_version = 1
+id = "io.balena.etcher"
+name = "balenaEtcher"
+publisher = "balena"
+category = "utility"
+summary = "Writes disk images to USB drives and SD cards."
+homepage = "https://github.com/balena-io/etcher"
+
+[[editions]]
+kind = "linux-native"
+obtain = "publisher-page"
+download_page = "https://github.com/balena-io/etcher/releases"
+licence = "open-source"
+
+[[editions.references]]
+title = "balenaEtcher 2.1.9 release on GitHub, with its Linux, Windows and macOS packages"
+url = "https://github.com/balena-io/etcher/releases/tag/v2.1.9"
+checked = "2026-11-16"
+
+[[editions]]
+kind = "windows"
+obtain = "publisher-page"
+download_page = "https://github.com/balena-io/etcher/releases"
+licence = "open-source"
+
+[[editions.records]]
+route = "rehost"
+rating = "starts"
+reported_by = "tur-test"
+test_report = "docs/reports/exp-rehost-1.md"
+version_tested = "2.1.9"
+date = "2026-11-16"
+notes = "Measured by TUR's re-hosting experiment: the application's own first window, the same as the official Linux build's, and typed text; no feature beyond that was exercised (exp-rehost-1, section 3.1)."
+
+[editions.records.rehost]
+package = "balenaEtcher-2.1.9.Setup.exe"
+package_sha256 = "3fa63ea453e75c0338f8f1444b511f38decdd002e17922a910aec5e29b85b751"
+package_size = 274253464
+runtime = "electron"
+runtime_version = "44.9.1"
+evidence = "https://github.com/giorgiogiudice/TUR/actions/runs/43778332673"
+native_builds = []
+unresolved = ["file:node.napi.node", "file:node.napi1.node"]
+
+[[editions.references]]
+title = "balenaEtcher 2.1.9 release on GitHub, with its Linux, Windows and macOS packages"
+url = "https://github.com/balena-io/etcher/releases/tag/v2.1.9"
+checked = "2026-11-16"
+
+[[editions]]
+kind = "macos"
+obtain = "publisher-page"
+download_page = "https://github.com/balena-io/etcher/releases"
+licence = "open-source"
+
+[[editions.records]]
+route = "rehost"
+rating = "starts"
+reported_by = "tur-test"
+test_report = "docs/reports/exp-rehost-1.md"
+version_tested = "2.1.9"
+date = "2026-11-16"
+notes = "Measured by TUR's re-hosting experiment: the application's own first window, the same as the official Linux build's, and typed text; no feature beyond that was exercised (exp-rehost-1, section 3.1)."
+
+[editions.records.rehost]
+package = "balenaEtcher-darwin-x64-2.1.9.zip"
+package_sha256 = "0298a1a450d9ce81b0eed41b18d9a4bd6ca5111a1283c2143871bc8b5ae04510"
+package_size = 210949669
+runtime = "electron"
+runtime_version = "44.9.1"
+evidence = "https://github.com/giorgiogiudice/TUR/actions/runs/43778332673"
+native_builds = []
+unresolved = []
+
+[[editions.references]]
+title = "balenaEtcher 2.1.9 release on GitHub, with its Linux, Windows and macOS packages"
+url = "https://github.com/balena-io/etcher/releases/tag/v2.1.9"
+checked = "2026-11-16"

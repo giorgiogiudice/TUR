@@ -11,10 +11,115 @@ use serde_json::Value;
 
 use tur_catalogue::{
     AlternativeKind, AndroidStore, Catalogue, Category, CaveatCode, Date, Edition, EditionKind,
-    Entry, EntryKind, HostFacts, Licence, Obtain, Outlook, Packaging, Preferences, Rating,
-    RatingSource, Record, Reference, Reporter, Requirement, Route, RouteOption, RouteRequest,
-    SCHEMA_VERSION, recommended, route, search,
+    Entry, EntryKind, HostFacts, Licence, Obtain, Outlook, Packaging, Preferences,
+    PrerequisiteCode, Rating, RatingSource, Record, Reference, RehostEvidence, Reporter, Requirement, Route, RouteOption,
+    RouteRequest, SCHEMA_VERSION, recommended, route, search,
 };
+
+/// The report of TUR's re-hosting experiment, which the re-hosted seed
+/// records cite.
+const REHOST_REPORT: &str = "docs/reports/exp-rehost-1.md";
+
+/// The applications whose Windows and macOS packages the experiment
+/// re-hosted to a working window (exp-rehost-1, section 3.1).
+const REHOSTED: [&str; 20] = [
+    "app.freelens.freelens",
+    "chat.rocket.desktop",
+    "com.emqx.mqttx",
+    "com.github.marktext",
+    "com.github.minbrowser.min",
+    "com.heroicgameslauncher.heroic",
+    "com.jgraph.drawio",
+    "com.logseq.logseq",
+    "com.mattermost.desktop",
+    "com.triliumnext.trilium",
+    "com.usebruno.bruno",
+    "com.vscodium.vscodium",
+    "io.balena.etcher",
+    "io.podman-desktop.podman-desktop",
+    "net.cozic.joplin",
+    "no.mifi.losslesscut",
+    "org.jitsi.jitsi-meet-electron",
+    "org.standardnotes.desktop",
+    "org.tabby.tabby",
+    "org.zulip.desktop",
+];
+
+#[test]
+fn the_re_hosted_seed_applications_are_tur_s_measurements_and_route_so() {
+    let catalogue = seed();
+    let mut rehost_records = 0;
+    for entry in catalogue.entries() {
+        for edition in &entry.editions {
+            for record in &edition.records {
+                if record.route != Route::Rehost {
+                    continue;
+                }
+                rehost_records += 1;
+                assert!(REHOSTED.contains(&entry.id.as_str()), "{}", entry.id);
+                assert_eq!(record.reported_by, Reporter::TurTest, "{}", entry.id);
+                // The first window and typed text, nothing more: `starts`.
+                assert_eq!(record.rating, Rating::Starts, "{}", entry.id);
+                assert_eq!(record.test_report.as_deref(), Some(REHOST_REPORT));
+                let evidence = record.rehost.as_ref().unwrap();
+                assert_eq!(evidence.runtime, "electron", "{}", entry.id);
+                assert!(
+                    evidence
+                        .evidence
+                        .starts_with("https://github.com/giorgiogiudice/TUR/actions/runs/"),
+                    "{}",
+                    entry.id
+                );
+            }
+        }
+    }
+    assert_eq!(rehost_records, 2 * REHOSTED.len());
+
+    let stock = HostFacts::default();
+    let nothing_pinned = Preferences::default();
+    for id in REHOSTED {
+        let app = entry(&catalogue, id);
+        let kinds: Vec<EditionKind> = app.editions.iter().map(|edition| edition.kind).collect();
+        assert_eq!(
+            kinds,
+            [
+                EditionKind::LinuxNative,
+                EditionKind::Windows,
+                EditionKind::Macos
+            ],
+            "{id}"
+        );
+        // The publisher's Linux edition is entered with no record: nothing
+        // is claimed about it.
+        assert!(app.editions[0].records.is_empty(), "{id}");
+
+        // The Linux edition first; the two re-hosted packages next, before
+        // Wine; Darling, when enabled, last.
+        let options = run(app, &full_host(), &nothing_pinned);
+        assert_eq!(
+            routes(&options),
+            [
+                Route::Native,
+                Route::Rehost,
+                Route::Rehost,
+                Route::Wine,
+                Route::Darling
+            ],
+            "{id}"
+        );
+        assert!(options[0].recommended, "{id}");
+        // On a stock machine, tur-rehost must be installed first.
+        let options = run(app, &stock, &nothing_pinned);
+        assert_eq!(options[1].route, Route::Rehost, "{id}");
+        assert!(
+            options[1]
+                .prerequisites
+                .iter()
+                .any(|prerequisite| prerequisite.code == PrerequisiteCode::InstallRehost),
+            "{id}"
+        );
+    }
+}
 
 /// The sources a seed rating may name. Each is described, with what it was
 /// used for, in `catalogue/README.md` and in the architecture document.
@@ -428,15 +533,17 @@ fn every_seed_application_gets_an_answer_on_every_sample_machine() {
                         if preferences.never_use_virtual_machine {
                             assert_ne!(option.route, Route::WindowsGuest, "{}", entry.id);
                         }
-                        // No rating is presented as TUR's own: TUR's own
-                        // test records (docs/reports/windows-runtime-2.md)
-                        // carry no rating yet.
-                        assert!(
-                            !matches!(option.rating_source, RatingSource::TurTest { .. })
-                                || option.rating == Rating::Unknown,
-                            "{}",
-                            entry.id
-                        );
+                        // The only ratings from TUR's own tests are those
+                        // of the re-hosting experiment
+                        // (docs/reports/exp-rehost-1.md); TUR's tests of
+                        // Wine (docs/reports/windows-runtime-2.md) carry
+                        // no rating yet.
+                        if let RatingSource::TurTest { report, .. } = &option.rating_source
+                            && option.rating != Rating::Unknown
+                        {
+                            assert_eq!(option.route, Route::Rehost, "{}", entry.id);
+                            assert_eq!(report, REHOST_REPORT, "{}", entry.id);
+                        }
                     }
                 }
             }
@@ -524,6 +631,16 @@ fn the_schema_and_the_rust_types_name_the_same_fields() {
         remedies: vec!["windows-version-win11".to_owned()],
         runtime_version: Some("wine-9.0".to_owned()),
         evidence_sha256: Some("0".repeat(64)),
+        rehost: Some(RehostEvidence {
+            package: "Example.zip".to_owned(),
+            package_sha256: "0".repeat(64),
+            package_size: 1,
+            runtime: "electron".to_owned(),
+            runtime_version: "43.7.7".to_owned(),
+            evidence: "https://example.org/run".to_owned(),
+            native_builds: vec!["a@1".to_owned()],
+            unresolved: vec!["b@1".to_owned()],
+        }),
     });
     edition.references.push(Reference {
         title: "A page".to_owned(),
@@ -558,6 +675,10 @@ fn the_schema_and_the_rust_types_name_the_same_fields() {
         keys(&edition["references"][0]),
         keys(&schema["$defs"]["reference"]["properties"])
     );
+    assert_eq!(
+        keys(&edition["records"][0]["rehost"]),
+        keys(&schema["$defs"]["rehost"]["properties"])
+    );
 
     // Unknown fields are refused at every level, in the schema as in Rust.
     for object in [
@@ -565,6 +686,7 @@ fn the_schema_and_the_rust_types_name_the_same_fields() {
         &schema["$defs"]["edition"],
         &schema["$defs"]["record"],
         &schema["$defs"]["reference"],
+        &schema["$defs"]["rehost"],
     ] {
         assert_eq!(object["additionalProperties"], Value::Bool(false));
     }
@@ -594,6 +716,17 @@ fn the_schema_and_the_rust_types_name_the_same_fields() {
     assert_eq!(
         names(&schema["$defs"]["reference"]["required"]),
         sorted(&["title", "url", "checked"])
+    );
+    assert_eq!(
+        names(&schema["$defs"]["rehost"]["required"]),
+        sorted(&[
+            "package",
+            "package_sha256",
+            "package_size",
+            "runtime",
+            "runtime_version",
+            "evidence"
+        ])
     );
 }
 
@@ -679,6 +812,13 @@ fn the_schema_and_the_rust_types_list_the_same_values() {
             (
                 names(&record["reported_by"]["enum"]),
                 sorted(&Reporter::EVERY.map(Reporter::as_str)),
+            ),
+        ),
+        (
+            "rehost runtime",
+            (
+                names(&schema["$defs"]["rehost"]["properties"]["runtime"]["enum"]),
+                sorted(&RehostEvidence::RUNTIMES),
             ),
         ),
     ]);

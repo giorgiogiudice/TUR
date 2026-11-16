@@ -200,7 +200,8 @@ class Catalogue : public QObject
     // The catalogue's counts, `tur-catalogue validate --json`'s
     // "statistics", once checkStatistics() has been answered; empty while
     // they are not known. Home says that TUR has rated nothing itself only
-    // while `rated_by_tur_tests` is 0 (desktop-experience.md, 8.1).
+    // while `rated_by_tur_tests` is 0, and otherwise how many applications
+    // it has tested, `applications_tested_by_tur` (desktop-experience.md, 8.1).
     Q_PROPERTY(QVariantMap statistics READ statistics NOTIFY statisticsChanged FINAL)
     Q_PROPERTY(bool checkingStatistics READ checkingStatistics NOTIFY statisticsChanged FINAL)
 

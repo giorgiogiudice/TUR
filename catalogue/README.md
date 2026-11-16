@@ -12,18 +12,24 @@ that breaks a rule breaks CI.
 
 ## The honesty rule
 
-**TUR has rated nothing yet.** Its first automated tests of Windows
+**TUR's own ratings are those of one experiment.** Forty records rate the
+`rehost` route `starts`: the Windows and macOS packages of 20 open-source
+Electron applications that TUR's re-hosting experiment
+(`docs/reports/exp-rehost-1.md`, section 3.1) measured reaching their own
+first window on the Linux build of Electron; nothing beyond that window
+and typed text was tested, so none says `usable`. Each names its report and the
+run that holds the evidence. TUR's first automated tests of Windows
 applications (`docs/reports/windows-runtime-2.md`) are recorded as
-`reported_by = "tur-test"` with the rating `unknown`, because the application
-centre still says that every rating is a named source's (see
-`docs/architecture/catalogue-and-routing.md`, "Not built"). A rating may be
-entered only
+`reported_by = "tur-test"` with the rating `unknown` (see
+`docs/architecture/catalogue-and-routing.md`, "Not built"). Every other
+rating is a named source's. A rating may be entered only
 
 - as `unknown`, or by leaving the record out, which means the same; or
 - attributed to a **named public source that the author opened and read**,
   with its URL, the date it was checked and the source's own rating in its own
   words. Such a record is `reported_by = "external"`. It says what the source
-  reports. It never says that TUR tested anything.
+  reports. It never says that TUR tested anything; or
+- from **TUR's own test**, `reported_by = "tur-test"`, with its report.
 
 A record with `reported_by = "tur-test"` must give `test_report`, the path of
 the test report in this repository, and the report must exist. Without it the
@@ -60,6 +66,48 @@ the route (`settings` in `tur-catalogue route --json`). The three fields are
 refused on any other kind of record (`TUR-DESKTOP-CATALOGUE-003`), and a
 rating on a `tur-autopilot` record is refused as unsourced
 (`TUR-DESKTOP-CATALOGUE-006`).
+
+### Records of a re-host
+
+The `rehost` route runs the publisher's Windows or macOS package on the
+official Linux build of the runtime it is made with (Electron, NW.js, .NET,
+the JVM, Godot, LÖVE, Ren'Py, frozen Python), through TUR's `tur-rehost`.
+Its record carries what was measured:
+
+```toml
+[[editions.records]]
+route = "rehost"
+rating = "starts"
+reported_by = "tur-test"
+test_report = "docs/reports/exp-rehost-1.md"
+version_tested = "1.143.17232"
+date = "2026-11-16"
+notes = "..."
+
+[editions.records.rehost]
+package = "VSCodium-win32-x64-1.143.17232.zip"
+package_sha256 = "<64 hexadecimal digits>"
+package_size = 231406156
+runtime = "electron"
+runtime_version = "43.7.7"
+evidence = "https://github.com/giorgiogiudice/TUR/actions/runs/43778332673"
+native_builds = ["@parcel/watcher@2.5.6"]
+unresolved = ["microsoft-authentication@0.0.1"]
+```
+
+`package` is the file's name, without a directory; `runtime` is one of
+`electron`, `nwjs`, `dotnet`, `jvm`, `godot`, `love`, `renpy`,
+`pyinstaller`; `evidence` is the `https` address of the run.
+`native_builds` lists the native modules that had to be built from source,
+`unresolved` those with no Linux build that the measured version did not
+load when it started; each item is `name@version` (the name may be scoped,
+`@scope/name`), and an unresolved module whose package cannot be identified
+is written `file:<file name>`, such as `file:node.napi.node`. At most 64 in
+each list. The table is required on a `rehost` record and refused on any
+other (`TUR-DESKTOP-CATALOGUE-003`). Only TUR's own test can rate the route:
+an external source cannot have measured TUR's re-host
+(`TUR-DESKTOP-CATALOGUE-006`). The router offers the route only when the
+record says `good`, `usable` or `starts`.
 
 An entry with every route unknown is a good entry. An invented rating is not.
 The same holds for requirements and editions: enter what a reference shows,
@@ -98,8 +146,8 @@ and say in `notes` what could not be checked.
   only when a reference supports it.
 - A compatibility record names a route that can run its edition: `flatpak` for
   a Flatpak; `native` or `distro-container` for a native Linux edition;
-  `proton`, `wine` or `windows-guest` for a Windows edition; `android-runtime`;
-  `web`; `darling` for a macOS edition.
+  `proton`, `wine`, `windows-guest` or `rehost` for a Windows edition;
+  `android-runtime`; `web`; `darling` or `rehost` for a macOS edition.
 
 ## The rating scale and how sources map onto it
 
@@ -107,6 +155,7 @@ and say in `notes` what could not be checked.
 |---|---|---|---|---|---|
 | `good` | Runs as intended, with no workaround worth mentioning | platinum | Platinum | Verified | |
 | `usable` | Runs and is usable; needs tweaks or has minor problems | gold, silver | Gold, Silver | Playable | |
+| `starts` | Starts and shows its first window, measured by TUR; nothing beyond that was tested | (none) | (none) | (none) | (none) |
 | `poor` | Runs, with problems that get in the way of normal use | bronze | Bronze | | |
 | `broken` | Does not start, or cannot be used for its purpose | borked | Garbage | Unsupported | Denied, Broken |
 | `unknown` | Not known | no tier | no test result | Unknown | |
@@ -119,12 +168,26 @@ own word is always kept in `source_rating`, so the mapping can be checked and
 changed. AreWeAntiCheatYet's statuses "Supported" and "Running" describe the
 anti-cheat, not the whole game, and are used as references only.
 
+`starts` is TUR's own word for what TUR itself saw: the application started
+and showed its first window, and nothing beyond that was tested. No
+external source's scale maps onto it, not even a source's "it starts": a
+record that says `starts` must be `reported_by = "tur-test"`, with its
+report (`TUR-DESKTOP-CATALOGUE-006`).
+
 A rating from one of these sources describes what that source's contributors
 saw on their machines, with their versions. It is evidence, not a promise.
 
 ## Sources used for the seed entries
 
-All checked on 12 November 2026.
+The 20 re-hosted applications (Bruno, draw.io, balenaEtcher, Freelens,
+Heroic Games Launcher, Jitsi Meet, Joplin, Logseq, LosslessCut, MarkText,
+Mattermost, Min, MQTTX, Podman Desktop, Rocket.Chat, Standard Notes, Tabby,
+Trilium Notes, VSCodium, Zulip) were entered on 16 November 2026 from
+TUR's re-hosting experiment and each application's release page on GitHub.
+Their Linux edition, the publisher's own, has no record: nothing is claimed
+about it.
+
+The other entries were all checked on 12 November 2026.
 
 | Source | What it was used for |
 |---|---|

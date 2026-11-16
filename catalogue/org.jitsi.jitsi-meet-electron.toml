@@ -1,0 +1,85 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR application catalogue entry. Format: schemas/app-catalogue-entry.schema.json.
+# How entries are written and sourced: catalogue/README.md.
+# The two rehost records are TUR's own measurements, with their report
+# (docs/reports/exp-rehost-1.md) and the run that holds the evidence.
+# Nothing is claimed about the publisher's Linux edition: it has no record.
+
+schema_version = 1
+id = "org.jitsi.jitsi-meet-electron"
+name = "Jitsi Meet"
+publisher = "Jitsi"
+category = "communication"
+summary = "Desktop application for Jitsi Meet video conferences."
+homepage = "https://github.com/jitsi/jitsi-meet-electron"
+
+[[editions]]
+kind = "linux-native"
+obtain = "publisher-page"
+download_page = "https://github.com/jitsi/jitsi-meet-electron/releases"
+licence = "open-source"
+
+[[editions.references]]
+title = "Jitsi Meet 2026.10.0 release on GitHub, with its Linux, Windows and macOS packages"
+url = "https://github.com/jitsi/jitsi-meet-electron/releases/tag/v2026.10.0"
+checked = "2026-11-16"
+
+[[editions]]
+kind = "windows"
+obtain = "publisher-page"
+download_page = "https://github.com/jitsi/jitsi-meet-electron/releases"
+licence = "open-source"
+
+[[editions.records]]
+route = "rehost"
+rating = "starts"
+reported_by = "tur-test"
+test_report = "docs/reports/exp-rehost-1.md"
+version_tested = "2026.10.0"
+date = "2026-11-16"
+notes = "Measured by TUR's re-hosting experiment: the application's own first window, the same as the official Linux build's, and typed text; no feature beyond that was exercised (exp-rehost-1, section 3.1)."
+
+[editions.records.rehost]
+package = "jitsi-meet.exe"
+package_sha256 = "30e56ea530efd1eeee44ef9ef9f8db9e3d2890f1543024574de5d56bffe5d9dc"
+package_size = 323096616
+runtime = "electron"
+runtime_version = "43.8.3"
+evidence = "https://github.com/giorgiogiudice/TUR/actions/runs/43778332673"
+native_builds = ["@jitsi/electron-sdk@10.0.3"]
+unresolved = []
+
+[[editions.references]]
+title = "Jitsi Meet 2026.10.0 release on GitHub, with its Linux, Windows and macOS packages"
+url = "https://github.com/jitsi/jitsi-meet-electron/releases/tag/v2026.10.0"
+checked = "2026-11-16"
+
+[[editions]]
+kind = "macos"
+obtain = "publisher-page"
+download_page = "https://github.com/jitsi/jitsi-meet-electron/releases"
+licence = "open-source"
+
+[[editions.records]]
+route = "rehost"
+rating = "starts"
+reported_by = "tur-test"
+test_report = "docs/reports/exp-rehost-1.md"
+version_tested = "2026.10.0"
+date = "2026-11-16"
+notes = "Measured by TUR's re-hosting experiment: the application's own first window, the same as the official Linux build's, and typed text; no feature beyond that was exercised (exp-rehost-1, section 3.1)."
+
+[editions.records.rehost]
+package = "jitsi-meet.zip"
+package_sha256 = "d028522c8a8ed5a86d9fc9e209c1a1320e47f6381ddf2fe4c87c10b0f67ef2b9"
+package_size = 219431099
+runtime = "electron"
+runtime_version = "43.8.3"
+evidence = "https://github.com/giorgiogiudice/TUR/actions/runs/43778332673"
+native_builds = ["@jitsi/electron-sdk@10.0.3"]
+unresolved = ["fsevents@2.3.2"]
+
+[[editions.references]]
+title = "Jitsi Meet 2026.10.0 release on GitHub, with its Linux, Windows and macOS packages"
+url = "https://github.com/jitsi/jitsi-meet-electron/releases/tag/v2026.10.0"
+checked = "2026-11-16"

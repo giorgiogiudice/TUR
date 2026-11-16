@@ -1,0 +1,85 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR application catalogue entry. Format: schemas/app-catalogue-entry.schema.json.
+# How entries are written and sourced: catalogue/README.md.
+# The two rehost records are TUR's own measurements, with their report
+# (docs/reports/exp-rehost-1.md) and the run that holds the evidence.
+# Nothing is claimed about the publisher's Linux edition: it has no record.
+
+schema_version = 1
+id = "io.podman-desktop.podman-desktop"
+name = "Podman Desktop"
+publisher = "Podman Desktop"
+category = "development"
+summary = "Graphical tool for containers and Kubernetes, with Podman."
+homepage = "https://github.com/podman-desktop/podman-desktop"
+
+[[editions]]
+kind = "linux-native"
+obtain = "publisher-page"
+download_page = "https://github.com/podman-desktop/podman-desktop/releases"
+licence = "open-source"
+
+[[editions.references]]
+title = "Podman Desktop 1.30.5 release on GitHub, with its Linux, Windows and macOS packages"
+url = "https://github.com/podman-desktop/podman-desktop/releases/tag/v1.30.5"
+checked = "2026-11-16"
+
+[[editions]]
+kind = "windows"
+obtain = "publisher-page"
+download_page = "https://github.com/podman-desktop/podman-desktop/releases"
+licence = "open-source"
+
+[[editions.records]]
+route = "rehost"
+rating = "starts"
+reported_by = "tur-test"
+test_report = "docs/reports/exp-rehost-1.md"
+version_tested = "1.30.5"
+date = "2026-11-16"
+notes = "Measured by TUR's re-hosting experiment: the application's own first window, the same as the official Linux build's, and typed text; no feature beyond that was exercised (exp-rehost-1, section 3.1)."
+
+[editions.records.rehost]
+package = "podman-desktop-1.30.5-x64.exe"
+package_sha256 = "d1e877d5e004bda0c0a7a2f18ea5f7fed7a536efe34a998c4cccb345330f7e2e"
+package_size = 162555496
+runtime = "electron"
+runtime_version = "44.4.2"
+evidence = "https://github.com/giorgiogiudice/TUR/actions/runs/43778332673"
+native_builds = []
+unresolved = []
+
+[[editions.references]]
+title = "Podman Desktop 1.30.5 release on GitHub, with its Linux, Windows and macOS packages"
+url = "https://github.com/podman-desktop/podman-desktop/releases/tag/v1.30.5"
+checked = "2026-11-16"
+
+[[editions]]
+kind = "macos"
+obtain = "publisher-page"
+download_page = "https://github.com/podman-desktop/podman-desktop/releases"
+licence = "open-source"
+
+[[editions.records]]
+route = "rehost"
+rating = "starts"
+reported_by = "tur-test"
+test_report = "docs/reports/exp-rehost-1.md"
+version_tested = "1.30.5"
+date = "2026-11-16"
+notes = "Measured by TUR's re-hosting experiment: the application's own first window, the same as the official Linux build's, and typed text; no feature beyond that was exercised (exp-rehost-1, section 3.1)."
+
+[editions.records.rehost]
+package = "podman-desktop-1.30.5-x64.zip"
+package_sha256 = "cf9f3de044ce6384de9b13a7da1b1589821415694a70803b8af8ace8297d9118"
+package_size = 248445352
+runtime = "electron"
+runtime_version = "44.4.2"
+evidence = "https://github.com/giorgiogiudice/TUR/actions/runs/43778332673"
+native_builds = []
+unresolved = ["fsevents@2.3.3"]
+
+[[editions.references]]
+title = "Podman Desktop 1.30.5 release on GitHub, with its Linux, Windows and macOS packages"
+url = "https://github.com/podman-desktop/podman-desktop/releases/tag/v1.30.5"
+checked = "2026-11-16"

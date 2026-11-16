@@ -47,6 +47,10 @@ pub struct Statistics {
     pub rated_by_external_sources: usize,
     /// Records that carry a rating from TUR's own tests.
     pub rated_by_tur_tests: usize,
+    /// Applications with at least one record that carries a rating from
+    /// TUR's own tests: the number the application centre's Home view says
+    /// TUR has tested.
+    pub applications_tested_by_tur: usize,
     /// Records whose rating is unknown.
     pub unknown: usize,
 }
@@ -197,20 +201,26 @@ impl Catalogue {
             records: 0,
             rated_by_external_sources: 0,
             rated_by_tur_tests: 0,
+            applications_tested_by_tur: 0,
             unknown: 0,
         };
-        for edition in self.entries.iter().flat_map(|entry| entry.editions.iter()) {
-            statistics.editions += 1;
-            for record in &edition.records {
-                statistics.records += 1;
-                if record.rating == Rating::Unknown {
-                    statistics.unknown += 1;
-                } else if record.reported_by == Reporter::TurTest {
-                    statistics.rated_by_tur_tests += 1;
-                } else {
-                    statistics.rated_by_external_sources += 1;
+        for entry in &self.entries {
+            let mut tested_by_tur = false;
+            for edition in &entry.editions {
+                statistics.editions += 1;
+                for record in &edition.records {
+                    statistics.records += 1;
+                    if record.rating == Rating::Unknown {
+                        statistics.unknown += 1;
+                    } else if record.reported_by == Reporter::TurTest {
+                        statistics.rated_by_tur_tests += 1;
+                        tested_by_tur = true;
+                    } else {
+                        statistics.rated_by_external_sources += 1;
+                    }
                 }
             }
+            statistics.applications_tested_by_tur += usize::from(tested_by_tur);
         }
         statistics
     }
@@ -340,6 +350,7 @@ mod tests {
         assert_eq!(statistics.applications, 2);
         assert_eq!(statistics.editions, 2);
         assert_eq!(statistics.records, 0);
+        assert_eq!(statistics.applications_tested_by_tur, 0);
     }
 
     #[test]
@@ -441,6 +452,7 @@ mod tests {
         std::fs::write(catalogue_dir.join("org.example.a.toml"), text).unwrap();
         let catalogue = Catalogue::load(&catalogue_dir, today()).unwrap();
         assert_eq!(catalogue.statistics().rated_by_tur_tests, 1);
+        assert_eq!(catalogue.statistics().applications_tested_by_tur, 1);
 
         let missing = catalogue.missing_test_reports(&scratch.path);
         assert_eq!(missing.len(), 1);

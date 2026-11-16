@@ -6,7 +6,8 @@
 //!
 //! The record ties the catalogue's identifier to what was installed by which
 //! route: the Flatpak reference and the references the installation brought
-//! in, or the identifier `tur-runtime` keeps the Windows application under.
+//! in, the identifier `tur-runtime` keeps the Windows application under, or
+//! the identifier `tur-rehost` keeps a re-hosted application under.
 //! Removing an application removes its record last.
 
 use std::fs;
@@ -81,6 +82,34 @@ pub struct WindowsPart {
     pub main_executable: Option<String>,
 }
 
+/// What a re-hosted installation consists of: the publisher's Windows or
+/// macOS package, laid by `tur-rehost` under the Linux build of its own
+/// runtime.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RehostPart {
+    /// The identifier `tur-rehost` keeps it under.
+    pub app_id: String,
+    /// The package's platform: `windows` or `macos`, when known.
+    #[serde(default)]
+    pub platform: Option<String>,
+    /// The runtime it runs on, as `electron 44.10.2`, when known.
+    #[serde(default)]
+    pub runtime: Option<String>,
+    /// Whether the package was the one TUR measured: its SHA-256 equals
+    /// the one in the catalogue's record of TUR's test.
+    pub measured: bool,
+    /// Whether the person allowed native modules to be built from source
+    /// on this computer.
+    #[serde(default)]
+    pub builds_allowed: bool,
+    /// The native modules with no Linux build it was allowed to run
+    /// without, because TUR's measurement of this package showed that it
+    /// starts without them.
+    #[serde(default)]
+    pub allowed_unresolved: Vec<String>,
+}
+
 /// The record of one installed application.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -91,7 +120,7 @@ pub struct Record {
     pub id: String,
     /// The name, as the catalogue gives it.
     pub name: String,
-    /// The route: `flatpak` or `wine`.
+    /// The route: `flatpak`, `wine` or `rehost`.
     pub route: String,
     /// What it was installed from.
     pub source: Source,
@@ -106,6 +135,9 @@ pub struct Record {
     /// For the Windows route.
     #[serde(default)]
     pub windows: Option<WindowsPart>,
+    /// For the re-hosted route.
+    #[serde(default)]
+    pub rehost: Option<RehostPart>,
 }
 
 impl Record {
@@ -123,15 +155,20 @@ impl Record {
                 self.id
             ));
         }
-        match (self.route.as_str(), &self.flatpak, &self.windows) {
-            ("flatpak", Some(part), None) => {
+        match (self.route.as_str(), &self.flatpak, &self.windows, &self.rehost) {
+            ("flatpak", Some(part), None, None) => {
                 if !part.reference.starts_with("app/") {
                     return Err("its Flatpak reference is not an application's".to_owned());
                 }
             }
-            ("wine", None, Some(part)) => {
+            ("wine", None, Some(part), None) => {
                 if !is_app_id(&part.runtime_app_id) {
                     return Err("its tur-runtime identifier is not valid".to_owned());
+                }
+            }
+            ("rehost", None, None, Some(part)) => {
+                if !is_app_id(&part.app_id) {
+                    return Err("its tur-rehost identifier is not valid".to_owned());
                 }
             }
             _ => {
@@ -339,7 +376,63 @@ mod tests {
                 added_refs: vec!["app/net.sourceforge.Klavaro/x86_64/stable".to_owned()],
             }),
             windows: None,
+            rehost: None,
         }
+    }
+
+    fn rehost_record() -> Record {
+        Record {
+            schema_version: RECORD_VERSION,
+            id: "com.jgraph.drawio".to_owned(),
+            name: "draw.io".to_owned(),
+            route: "rehost".to_owned(),
+            source: Source {
+                kind: "user-file".to_owned(),
+                remote: None,
+                url: None,
+                file_name: Some("draw.io-32.6.10.msi".to_owned()),
+                sha256: Some("d".repeat(64)),
+                size: Some(149_065_728),
+                pinned: true,
+            },
+            version: Some("32.6.10".to_owned()),
+            installed_at: "2026-11-16T10:00:00Z".to_owned(),
+            flatpak: None,
+            windows: None,
+            rehost: Some(RehostPart {
+                app_id: "com.jgraph.drawio".to_owned(),
+                platform: Some("windows".to_owned()),
+                runtime: Some("electron 44.10.2".to_owned()),
+                measured: true,
+                builds_allowed: false,
+                allowed_unresolved: Vec::new(),
+            }),
+        }
+    }
+
+    #[test]
+    fn a_rehost_record_is_written_and_read_back() {
+        let dirs = scratch("rehost");
+        let record = rehost_record();
+        save(&dirs, &record).unwrap();
+        assert_eq!(load(&dirs, &record.id).unwrap(), Some(record.clone()));
+        // A record of another route that also holds a re-host is refused.
+        let mut mixed = rehost_record();
+        mixed.route = "wine".to_owned();
+        assert!(mixed.check("com.jgraph.drawio").is_err());
+        let mut both = flatpak_record();
+        both.rehost = record.rehost.clone();
+        assert!(both.check("net.sourceforge.klavaro").is_err());
+        // A record written before the re-hosted route existed has no
+        // "rehost" field, and is still read.
+        let path = dirs.record("net.sourceforge.klavaro");
+        let mut old = serde_json::to_value(flatpak_record()).unwrap();
+        old.as_object_mut().unwrap().remove("rehost");
+        fs::write(&path, old.to_string()).unwrap();
+        assert_eq!(
+            load(&dirs, "net.sourceforge.klavaro").unwrap(),
+            Some(flatpak_record())
+        );
     }
 
     #[test]

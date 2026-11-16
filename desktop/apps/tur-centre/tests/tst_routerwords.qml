@@ -89,7 +89,9 @@ Item {
             const vocabulary = Testing.Harness.readJson(centreFixtures + "/vocabulary.json")
             for (const code of vocabulary.reason_codes) {
                 const part = { code: code, params: { rating: "broken", route: "wine", better_rating: "good",
-                                                     name: "Example", caveat: "community-package" } }
+                                                     name: "Example", caveat: "community-package",
+                                                     platform: "windows", runtime: "electron",
+                                                     runtime_version: "43.7.7", date: "2026-11-16" } }
                 const option = { caveats: [{ text_id: "community-package", params: {},
                                              text: "This package is maintained by its packagers, not by the application's publisher." }] }
                 verify(RouterWords.reasonPart(part, option) !== undefined, "the reason code " + code)

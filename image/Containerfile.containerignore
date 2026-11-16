@@ -33,6 +33,7 @@ branding/render.py
 !services/tur-pax/
 !services/tur-pax-memory/
 !services/tur-pax-providers/
+!services/tur-rehost/
 !services/tur-runtime/
 !services/tur-storage/
 !services/tur-update/

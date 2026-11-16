@@ -29,6 +29,7 @@ QtObject {
         "flatpak": qsTr("Flatpak"),
         "native": qsTr("Native Linux"),
         "distro-container": qsTr("Container of another distribution"),
+        "rehost": qsTr("Re-hosted on its own runtime's Linux build"),
         "proton": qsTr("Proton (through umu-launcher)"),
         "wine": qsTr("Wine"),
         "windows-guest": qsTr("Windows guest (virtual machine)"),
@@ -42,9 +43,17 @@ QtObject {
     readonly property var ratingNames: ({
         "good": qsTr("good"),
         "usable": qsTr("usable"),
+        "starts": qsTr("starts"),
         "poor": qsTr("poor"),
         "broken": qsTr("broken"),
         "unknown": qsTr("unknown")
+    })
+
+    // The edition a re-hosted package belongs to, inside the router's
+    // sentence, as the router writes it.
+    readonly property var platformNames: ({
+        "windows": qsTr("Windows"),
+        "macos": qsTr("macOS")
     })
 
     readonly property string guestTail: qsTr("It runs in real Windows, in a virtual machine, and its windows appear on the desktop.")
@@ -60,6 +69,13 @@ QtObject {
             return qsTr("A native Linux edition exists: a native Linux edition comes first.")
         case "linux-other-distribution":
             return qsTr("A Linux edition exists as a package of another distribution: it runs in a container of that distribution.")
+        case "rehost-measured":
+            if (!(p.platform in router.platformNames) || typeof p.runtime !== "string"
+                    || typeof p.runtime_version !== "string" || typeof p.date !== "string")
+                return undefined
+            //: %1 is Windows or macOS; %2 a runtime as the router names it, for example electron; %3 its version; %4 a date.
+            return qsTr("TUR measured this application's %1 package running on the Linux build of its own runtime (%2 %3) on %4: no compatibility layer and no virtual machine. It is not the publisher's Linux version.")
+                .arg(router.platformNames[p.platform]).arg(p.runtime).arg(p.runtime_version).arg(p.date)
         case "windows-game-proton":
             return qsTr("A Windows edition exists and this is a game: Proton, through umu-launcher, is the first route for games.")
         case "windows-wine":
@@ -142,7 +158,9 @@ QtObject {
         "enable-android-runtime": qsTr("The Android runtime must be enabled: it is off by default."),
         "opt-into-google-play": qsTr("The catalogue lists this package on Google Play only: Google Play must be opted into, under Google's terms."),
         "set-up-windows-guest": qsTr("The Windows guest must be set up."),
-        "provide-windows-licence": qsTr("You must supply a Windows licence: TUR does not include one.")
+        "provide-windows-licence": qsTr("You must supply a Windows licence: TUR does not include one."),
+        "install-rehost": qsTr("TUR's re-hosting component, tur-rehost, must be installed."),
+        "allow-rehost-builds": qsTr("Some of its native modules must be built from source on this computer, without network access, with Fedora's compiler: allow TUR to do this (it downloads Fedora's build tools once).")
     })
 
     function prerequisite(item: var): string {

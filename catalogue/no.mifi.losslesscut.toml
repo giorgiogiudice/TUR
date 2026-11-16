@@ -1,0 +1,85 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR application catalogue entry. Format: schemas/app-catalogue-entry.schema.json.
+# How entries are written and sourced: catalogue/README.md.
+# The two rehost records are TUR's own measurements, with their report
+# (docs/reports/exp-rehost-1.md) and the run that holds the evidence.
+# Nothing is claimed about the publisher's Linux edition: it has no record.
+
+schema_version = 1
+id = "no.mifi.losslesscut"
+name = "LosslessCut"
+publisher = "Mikael Finstad"
+category = "media"
+summary = "Cuts and trims video and audio files without re-encoding them."
+homepage = "https://github.com/mifi/lossless-cut"
+
+[[editions]]
+kind = "linux-native"
+obtain = "publisher-page"
+download_page = "https://github.com/mifi/lossless-cut/releases"
+licence = "open-source"
+
+[[editions.references]]
+title = "LosslessCut 3.70.2 release on GitHub, with its Linux, Windows and macOS packages"
+url = "https://github.com/mifi/lossless-cut/releases/tag/v3.70.2"
+checked = "2026-11-15"
+
+[[editions]]
+kind = "windows"
+obtain = "publisher-page"
+download_page = "https://github.com/mifi/lossless-cut/releases"
+licence = "open-source"
+
+[[editions.records]]
+route = "rehost"
+rating = "starts"
+reported_by = "tur-test"
+test_report = "docs/reports/exp-rehost-1.md"
+version_tested = "3.70.2"
+date = "2026-11-15"
+notes = "Measured by TUR's re-hosting experiment: the application's own first window, the same as the official Linux build's, and typed text; no feature beyond that was exercised (exp-rehost-1, section 3.1)."
+
+[editions.records.rehost]
+package = "LosslessCut-win-x64.7z"
+package_sha256 = "1740c5f17b952c04cf1b1612cf32f56c68a88105c045199526c7ea9678d309b0"
+package_size = 151717535
+runtime = "electron"
+runtime_version = "42.11.15"
+evidence = "https://github.com/giorgiogiudice/TUR/actions/runs/43768570046"
+native_builds = []
+unresolved = []
+
+[[editions.references]]
+title = "LosslessCut 3.70.2 release on GitHub, with its Linux, Windows and macOS packages"
+url = "https://github.com/mifi/lossless-cut/releases/tag/v3.70.2"
+checked = "2026-11-15"
+
+[[editions]]
+kind = "macos"
+obtain = "publisher-page"
+download_page = "https://github.com/mifi/lossless-cut/releases"
+licence = "open-source"
+
+[[editions.records]]
+route = "rehost"
+rating = "starts"
+reported_by = "tur-test"
+test_report = "docs/reports/exp-rehost-1.md"
+version_tested = "3.70.2"
+date = "2026-11-15"
+notes = "Measured by TUR's re-hosting experiment: the application's own first window, the same as the official Linux build's, and typed text; no feature beyond that was exercised (exp-rehost-1, section 3.1)."
+
+[editions.records.rehost]
+package = "LosslessCut-mac-x64.dmg"
+package_sha256 = "5504f5b1ed485d694929f64db9c41516cfe866f5dc5f8bb2afaad7d9a99d975c"
+package_size = 177945549
+runtime = "electron"
+runtime_version = "42.11.15"
+evidence = "https://github.com/giorgiogiudice/TUR/actions/runs/43768570046"
+native_builds = []
+unresolved = []
+
+[[editions.references]]
+title = "LosslessCut 3.70.2 release on GitHub, with its Linux, Windows and macOS packages"
+url = "https://github.com/mifi/lossless-cut/releases/tag/v3.70.2"
+checked = "2026-11-15"

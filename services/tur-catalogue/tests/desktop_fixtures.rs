@@ -354,6 +354,7 @@ fn vocabulary() -> String {
         CaveatCode::GuestNotOffered,
         CaveatCode::GuestUnsuitableForGames,
         CaveatCode::PinUnavailable,
+        CaveatCode::Rehost,
     ];
     let count = |value: &CaveatCode| match value {
         CaveatCode::Requirement
@@ -365,9 +366,10 @@ fn vocabulary() -> String {
         | CaveatCode::ReportedInadequate
         | CaveatCode::GuestNotOffered
         | CaveatCode::GuestUnsuitableForGames
-        | CaveatCode::PinUnavailable => 1usize,
+        | CaveatCode::PinUnavailable
+        | CaveatCode::Rehost => 1usize,
     };
-    assert_eq!(caveat_codes.iter().map(count).sum::<usize>(), 10);
+    assert_eq!(caveat_codes.iter().map(count).sum::<usize>(), 11);
 
     let prerequisite_codes = [
         PrerequisiteCode::InstallFlatpak,
@@ -378,6 +380,8 @@ fn vocabulary() -> String {
         PrerequisiteCode::OptIntoGooglePlay,
         PrerequisiteCode::SetUpWindowsGuest,
         PrerequisiteCode::ProvideWindowsLicence,
+        PrerequisiteCode::InstallRehost,
+        PrerequisiteCode::AllowRehostBuilds,
     ];
     let count = |value: &PrerequisiteCode| match value {
         PrerequisiteCode::InstallFlatpak
@@ -387,9 +391,11 @@ fn vocabulary() -> String {
         | PrerequisiteCode::EnableAndroidRuntime
         | PrerequisiteCode::OptIntoGooglePlay
         | PrerequisiteCode::SetUpWindowsGuest
-        | PrerequisiteCode::ProvideWindowsLicence => 1usize,
+        | PrerequisiteCode::ProvideWindowsLicence
+        | PrerequisiteCode::InstallRehost
+        | PrerequisiteCode::AllowRehostBuilds => 1usize,
     };
-    assert_eq!(prerequisite_codes.iter().map(count).sum::<usize>(), 8);
+    assert_eq!(prerequisite_codes.iter().map(count).sum::<usize>(), 10);
 
     let alternative_kinds = [
         AlternativeKind::DualBoot,
@@ -710,21 +716,21 @@ fn a_fixture_file_keeps_the_router_s_text_and_carries_the_licence_identifier() {
 
     let vocabulary: Value = serde_json::from_str(&vocabulary()).unwrap();
     assert_eq!(vocabulary["licence"], LICENCE);
-    assert_eq!(vocabulary["routes"].as_array().unwrap().len(), 10);
-    assert_eq!(vocabulary["ratings"].as_array().unwrap().len(), 5);
+    assert_eq!(vocabulary["routes"].as_array().unwrap().len(), 11);
+    assert_eq!(vocabulary["ratings"].as_array().unwrap().len(), 6);
     assert_eq!(
         vocabulary["rating_source_kinds"],
         serde_json::json!(["unrated", "external", "tur-test"])
     );
 }
 
-/// The application centre's Home view carries one standing sentence "for as
-/// long as it is true": "TUR has not tested applications itself yet. Every
-/// rating here is what the named source reports." (desktop-experience.md,
-/// section 8.1). `tur-centre` shows it only while `tur-catalogue validate
-/// --json` counts no rating from TUR's own tests (task D-11). Its recorded
-/// answer must be the catalogue's count, so that the pictures of Home say
-/// what is true of the seed catalogue.
+/// The application centre's Home view carries one standing sentence
+/// (desktop-experience.md, section 8.1): "TUR has not tested applications
+/// itself yet. ..." while `tur-catalogue validate --json` counts no rating
+/// from TUR's own tests (task D-11), and "TUR has tested N applications
+/// itself. ..." once it does, N being `applications_tested_by_tur`. Its
+/// recorded answer must be the catalogue's counts, so that the pictures of
+/// Home say what is true of the seed catalogue.
 #[test]
 fn the_home_view_reads_whether_tur_has_rated_anything() {
     let recorded: Value = serde_json::from_str(&invoke_validate().stdout).unwrap();
@@ -740,5 +746,10 @@ fn the_home_view_reads_whether_tur_has_rated_anything() {
         recorded["statistics"]["rated_by_tur_tests"].as_u64(),
         Some(catalogue.statistics().rated_by_tur_tests as u64),
         "validate --json gives the count the application centre's Home view decides on"
+    );
+    assert_eq!(
+        recorded["statistics"]["applications_tested_by_tur"].as_u64(),
+        Some(catalogue.statistics().applications_tested_by_tur as u64),
+        "validate --json gives the number of applications the Home view names"
     );
 }

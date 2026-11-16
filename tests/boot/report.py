@@ -890,6 +890,30 @@ def check_components(ev: Evidence, checks: Checks, args) -> dict:
         f"text: {first_line('apps-plan-text.out') or first_line('apps-plan-text.err')}",
     )
 
+    # ---- tur-rehost -----------------------------------------------------------------------------
+    rehost_index = document("rehost-index.out") or {}
+    rehost_list = document("rehost-list.out") or {}
+    rehost_detect = document("rehost-detect.out") or {}
+    rehost_finding = (rehost_detect.get("findings") or [{}])[0] or {}
+    add(
+        "rehost",
+        "tur-rehost runs, loads its pinned index, lists re-hosted applications and refuses a synthetic native "
+        "program as native code, without fetching anything",
+        codes.get("rehost-version") == 0
+        and text("rehost-version.out").startswith("tur-rehost ")
+        and codes.get("rehost-index") == 0
+        and len(rehost_index.get("electron") or {}) >= 1
+        and codes.get("rehost-list") == 0
+        and isinstance(rehost_list.get("applications"), list)
+        and codes.get("rehost-detect") == 3
+        and rehost_finding.get("family") == "native",
+        f"version: {first_line('rehost-version.out') or first_line('rehost-version.err')}; index: exit status "
+        f"{codes.get('rehost-index')}, {len(rehost_index.get('electron') or {})} Electron versions; list: exit status "
+        f"{codes.get('rehost-list')}; detect: exit status {codes.get('rehost-detect')}, "
+        f"{rehost_finding.get('family')} {rehost_finding.get('toolkit')}; tools: "
+        f"{' '.join(line.replace(chr(9), '=') for line in text('rehost-tools.out').splitlines())[:300]}",
+    )
+
     # ---- tur-ai-local and its engine ---------------------------------------------------------------
     hardware = document("ai-hardware.out") or {}
     engine = hardware.get("engine") or {}

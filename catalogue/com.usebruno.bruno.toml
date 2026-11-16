@@ -1,0 +1,85 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR application catalogue entry. Format: schemas/app-catalogue-entry.schema.json.
+# How entries are written and sourced: catalogue/README.md.
+# The two rehost records are TUR's own measurements, with their report
+# (docs/reports/exp-rehost-1.md) and the run that holds the evidence.
+# Nothing is claimed about the publisher's Linux edition: it has no record.
+
+schema_version = 1
+id = "com.usebruno.bruno"
+name = "Bruno"
+publisher = "Bruno (usebruno)"
+category = "development"
+summary = "Open-source client for testing and exploring APIs."
+homepage = "https://github.com/usebruno/bruno"
+
+[[editions]]
+kind = "linux-native"
+obtain = "publisher-page"
+download_page = "https://github.com/usebruno/bruno/releases"
+licence = "open-source"
+
+[[editions.references]]
+title = "Bruno 4.3.0 release on GitHub, with its Linux, Windows and macOS packages"
+url = "https://github.com/usebruno/bruno/releases/tag/v4.3.0"
+checked = "2026-11-16"
+
+[[editions]]
+kind = "windows"
+obtain = "publisher-page"
+download_page = "https://github.com/usebruno/bruno/releases"
+licence = "open-source"
+
+[[editions.records]]
+route = "rehost"
+rating = "starts"
+reported_by = "tur-test"
+test_report = "docs/reports/exp-rehost-1.md"
+version_tested = "4.3.0"
+date = "2026-11-16"
+notes = "Measured by TUR's re-hosting experiment: the application's own first window, the same as the official Linux build's, and typed text; no feature beyond that was exercised (exp-rehost-1, section 3.1)."
+
+[editions.records.rehost]
+package = "bruno_4.3.0_x64_win.zip"
+package_sha256 = "d00a649e0120168f26b630aa3253c36f2fdc9a84b1a13ff6fd96abc48f7be3f0"
+package_size = 185171111
+runtime = "electron"
+runtime_version = "37.6.1"
+evidence = "https://github.com/giorgiogiudice/TUR/actions/runs/43778332673"
+native_builds = ["native-reg@1.1.1"]
+unresolved = []
+
+[[editions.references]]
+title = "Bruno 4.3.0 release on GitHub, with its Linux, Windows and macOS packages"
+url = "https://github.com/usebruno/bruno/releases/tag/v4.3.0"
+checked = "2026-11-16"
+
+[[editions]]
+kind = "macos"
+obtain = "publisher-page"
+download_page = "https://github.com/usebruno/bruno/releases"
+licence = "open-source"
+
+[[editions.records]]
+route = "rehost"
+rating = "starts"
+reported_by = "tur-test"
+test_report = "docs/reports/exp-rehost-1.md"
+version_tested = "4.3.0"
+date = "2026-11-16"
+notes = "Measured by TUR's re-hosting experiment: the application's own first window, the same as the official Linux build's, and typed text; no feature beyond that was exercised (exp-rehost-1, section 3.1)."
+
+[editions.records.rehost]
+package = "bruno_4.3.0_x64_mac.zip"
+package_sha256 = "d3c1f4a7ad358a7b7256a5bb59982a9596fda1c3517961ca74609aed7b29409d"
+package_size = 166584685
+runtime = "electron"
+runtime_version = "37.6.1"
+evidence = "https://github.com/giorgiogiudice/TUR/actions/runs/43778332673"
+native_builds = ["native-reg@1.1.1"]
+unresolved = ["fsevents@2.3.3", "iconv-corefoundation@1.1.7"]
+
+[[editions.references]]
+title = "Bruno 4.3.0 release on GitHub, with its Linux, Windows and macOS packages"
+url = "https://github.com/usebruno/bruno/releases/tag/v4.3.0"
+checked = "2026-11-16"

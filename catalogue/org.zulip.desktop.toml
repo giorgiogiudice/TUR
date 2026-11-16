@@ -1,0 +1,85 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR application catalogue entry. Format: schemas/app-catalogue-entry.schema.json.
+# How entries are written and sourced: catalogue/README.md.
+# The two rehost records are TUR's own measurements, with their report
+# (docs/reports/exp-rehost-1.md) and the run that holds the evidence.
+# Nothing is claimed about the publisher's Linux edition: it has no record.
+
+schema_version = 1
+id = "org.zulip.desktop"
+name = "Zulip"
+publisher = "Kandra Labs"
+category = "communication"
+summary = "Desktop client for Zulip team chat."
+homepage = "https://github.com/zulip/zulip-desktop"
+
+[[editions]]
+kind = "linux-native"
+obtain = "publisher-page"
+download_page = "https://github.com/zulip/zulip-desktop/releases"
+licence = "open-source"
+
+[[editions.references]]
+title = "Zulip 5.14.2 release on GitHub, with its Linux, Windows and macOS packages"
+url = "https://github.com/zulip/zulip-desktop/releases/tag/v5.14.2"
+checked = "2026-11-16"
+
+[[editions]]
+kind = "windows"
+obtain = "publisher-page"
+download_page = "https://github.com/zulip/zulip-desktop/releases"
+licence = "open-source"
+
+[[editions.records]]
+route = "rehost"
+rating = "starts"
+reported_by = "tur-test"
+test_report = "docs/reports/exp-rehost-1.md"
+version_tested = "5.14.2"
+date = "2026-11-16"
+notes = "Measured by TUR's re-hosting experiment: the application's own first window, the same as the official Linux build's, and typed text; no feature beyond that was exercised (exp-rehost-1, section 3.1)."
+
+[editions.records.rehost]
+package = "zulip-5.14.2-x64.nsis.7z"
+package_sha256 = "dac946cc395a171e3ef76485c986feac0e1c7dcfa715422ff4139c8586db83d3"
+package_size = 122985858
+runtime = "electron"
+runtime_version = "45.1.0"
+evidence = "https://github.com/giorgiogiudice/TUR/actions/runs/43778332673"
+native_builds = []
+unresolved = []
+
+[[editions.references]]
+title = "Zulip 5.14.2 release on GitHub, with its Linux, Windows and macOS packages"
+url = "https://github.com/zulip/zulip-desktop/releases/tag/v5.14.2"
+checked = "2026-11-16"
+
+[[editions]]
+kind = "macos"
+obtain = "publisher-page"
+download_page = "https://github.com/zulip/zulip-desktop/releases"
+licence = "open-source"
+
+[[editions.records]]
+route = "rehost"
+rating = "starts"
+reported_by = "tur-test"
+test_report = "docs/reports/exp-rehost-1.md"
+version_tested = "5.14.2"
+date = "2026-11-16"
+notes = "Measured by TUR's re-hosting experiment: the application's own first window, the same as the official Linux build's, and typed text; no feature beyond that was exercised (exp-rehost-1, section 3.1)."
+
+[editions.records.rehost]
+package = "Zulip-5.14.2-x64.zip"
+package_sha256 = "486cadfd38a5c94dafc1d3bf97a416b697bb427a58605d9bf5615e210196a513"
+package_size = 125838128
+runtime = "electron"
+runtime_version = "45.1.0"
+evidence = "https://github.com/giorgiogiudice/TUR/actions/runs/43778332673"
+native_builds = ["fs-xattr@0.3.1"]
+unresolved = []
+
+[[editions.references]]
+title = "Zulip 5.14.2 release on GitHub, with its Linux, Windows and macOS packages"
+url = "https://github.com/zulip/zulip-desktop/releases/tag/v5.14.2"
+checked = "2026-11-16"

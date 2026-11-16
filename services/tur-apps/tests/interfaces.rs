@@ -16,7 +16,8 @@ use serde_json::Value;
 use tur_apps::cli::{Cli, DBUS_METHODS};
 use tur_apps::codes::Code;
 use tur_apps::events::Event;
-use tur_apps::records::{FlatpakPart, RECORD_VERSION, Record, Source, WindowsPart};
+use tur_apps::plan::BUILT_ROUTES;
+use tur_apps::records::{FlatpakPart, RECORD_VERSION, Record, RehostPart, Source, WindowsPart};
 
 fn component() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -140,6 +141,14 @@ fn the_record_schema_names_the_record_s_fields() {
             runtime_app_id: "a.b".to_owned(),
             main_executable: None,
         }),
+        rehost: Some(RehostPart {
+            app_id: "a.b".to_owned(),
+            platform: None,
+            runtime: None,
+            measured: false,
+            builds_allowed: false,
+            allowed_unresolved: Vec::new(),
+        }),
     };
     let written = serde_json::to_value(&record).unwrap();
     assert_eq!(keys(&written), keys(&schema["properties"]));
@@ -156,14 +165,23 @@ fn the_record_schema_names_the_record_s_fields() {
         keys(&schema["$defs"]["windows"]["properties"])
     );
     assert_eq!(
+        keys(&written["rehost"]),
+        keys(&schema["$defs"]["rehost"]["properties"])
+    );
+    assert_eq!(
         schema["properties"]["schema_version"]["const"],
         RECORD_VERSION
+    );
+    assert_eq!(
+        schema["properties"]["route"]["enum"],
+        serde_json::json!(["flatpak", "wine", "rehost"])
     );
     for object in [
         &schema,
         &schema["$defs"]["source"],
         &schema["$defs"]["flatpak"],
         &schema["$defs"]["windows"],
+        &schema["$defs"]["rehost"],
     ] {
         assert_eq!(object["additionalProperties"], Value::Bool(false));
     }
@@ -280,9 +298,21 @@ fn the_plan_schema_names_the_plan_s_fields() {
     .collect();
     assert_eq!(keys(&schema["properties"]), fields);
     assert_eq!(required, fields);
+    // The routes this program installs by, and no other.
+    let built: BTreeSet<String> = BUILT_ROUTES
+        .iter()
+        .map(|route| route.as_str().to_owned())
+        .collect();
+    let listed: BTreeSet<String> = schema["properties"]["route"]["enum"]
+        .as_array()
+        .expect("the routes")
+        .iter()
+        .map(|route| route.as_str().unwrap().to_owned())
+        .collect();
+    assert_eq!(listed, built);
     assert_eq!(
         schema["properties"]["route"]["enum"],
-        serde_json::json!(["flatpak", "wine"])
+        serde_json::json!(["flatpak", "wine", "rehost"])
     );
     assert_eq!(
         schema["properties"]["removal"]["properties"]["data_kept_by_default"]["const"],

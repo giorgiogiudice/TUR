@@ -8,7 +8,7 @@
 //! this computer; [`plan::make`] turns that answer into a plan that says,
 //! before anything is done, what is downloaded from where, what is
 //! installed where, what the application may reach and how it is removed.
-//! [`ops`] carries a plan out by one of two routes:
+//! [`ops`] carries a plan out by one of three routes:
 //!
 //! * **Flatpak**: per-user, from a remote the user has switched on, through
 //!   the `flatpak` command line ([`flatpak`]);
@@ -16,7 +16,11 @@
 //!   catalogue pins its address, size and SHA-256 for freely redistributable
 //!   software, or a file the user supplies; checked before anything in it
 //!   runs ([`download`], [`digest`]); and handed to `tur-runtime app
-//!   install` ([`runtime`]).
+//!   install` ([`runtime`]);
+//! * **Re-hosted**: the Windows or macOS package the user supplies, hashed
+//!   and compared with the package TUR measured, and handed to
+//!   `tur-rehost install`, which lays it under the Linux build of its own
+//!   runtime ([`rehost`]).
 //!
 //! Every other route is refused with a stable code and a plain sentence.
 //! Progress and results are events ([`events`]); what was installed is
@@ -37,6 +41,7 @@ pub mod ops;
 pub mod paths;
 pub mod plan;
 pub mod records;
+pub mod rehost;
 pub mod runtime;
 pub mod tree;
 

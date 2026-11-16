@@ -12,11 +12,12 @@
       "stdout": {
         "valid": true,
         "statistics": {
-          "applications": 36,
-          "editions": 94,
-          "records": 16,
+          "applications": 56,
+          "editions": 154,
+          "records": 56,
           "rated_by_external_sources": 12,
-          "rated_by_tur_tests": 0,
+          "rated_by_tur_tests": 40,
+          "applications_tested_by_tur": 20,
           "unknown": 4
         }
       }

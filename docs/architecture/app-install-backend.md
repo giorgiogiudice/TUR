@@ -22,7 +22,12 @@ router chose:
   where the catalogue pins its address, size and SHA-256 for freely
   redistributable software, or a file the user supplies; checked before
   anything in it runs; handed to `tur-runtime app install`, which is used as
-  it is.
+  it is;
+- **Re-hosted** (the `rehost` route): the Windows or macOS package of an
+  application the person has, run on Linux's own build of its portable
+  runtime (Electron) by `tur-rehost`, where TUR measured that it starts or
+  works ([exp-rehost-1](../reports/exp-rehost-1.md)); see
+  [The re-hosted route](#the-re-hosted-route).
 
 Every other route is refused before anything is done, with a stable code and
 a plain sentence: the Windows guest, the Android runtime, Darling, games
@@ -31,7 +36,7 @@ and web applications.
 
 Not built here: the D-Bus service (the interface is proposed, below), the
 application centre's screens, and installing the launcher entry of a Windows
-application (still staged by `tur-runtime`).
+or re-hosted application (still staged by `tur-runtime` and `tur-rehost`).
 
 ## The flow
 
@@ -49,6 +54,10 @@ tur-apps plan|install <id>
   ├─ wine route: a file given? ── yes ─► hash it; must equal the pin when there is one ─► else 006
   │                              no ──► a pin on an open-source edition? ── no ─► TUR-DESKTOP-APPS-005
   │
+  ├─ rehost route: a file given? ── no ─► TUR-DESKTOP-APPS-005 (TUR never downloads the package)
+  │     hash it: the package TUR measured, or not (said plainly; both go on)
+  │     tur-rehost plan --json: not ready ─► 009 / 006 / 017, tur-rehost's own blockers
+  │
   ├─ the plan, shown (text, --json, or the first event)
   ├─ confirmation (--yes, or a question on a terminal) ── none ─► TUR-DESKTOP-APPS-013
   │
@@ -56,6 +65,7 @@ tur-apps plan|install <id>
   │     what it added is recorded; a failure takes it back
   ├─ wine: curl → file.part → size + SHA-256 → rename → tur-runtime app install
   │     a mismatch deletes the file; tur-runtime never runs ─► TUR-DESKTOP-APPS-006
+  ├─ rehost: the file hashed again → tur-rehost install --json
   └─ the record: $XDG_DATA_HOME/tur/apps/installed/<id>.json
 ```
 
@@ -68,9 +78,14 @@ and the apps workflow compares `tur-apps` with the `tur-catalogue` binary.
 
 ### Host facts
 
-Without `--host`, `tur-apps` looks at three facts and leaves the rest at the
-router's defaults: the architecture, whether `flatpak` is installed, and
-whether Wine is (`/usr/bin/wine`). The plan says which (`host.how`:
+Without `--host`, `tur-apps` looks at four facts and leaves the rest at the
+router's defaults: the architecture, whether `flatpak` is installed, whether
+Wine is (`/usr/bin/wine`), and whether `tur-rehost` is (`rehost`). One more
+is the person's answer, not a look at the computer: `--allow-builds` on
+`plan` and `install` is the fact `rehost_builds` (they allow a re-hosted
+application's native modules to be built from source here). With `--host`,
+the file states every fact, `rehost_builds` included, and `--allow-builds`
+is only passed on to `tur-rehost`. The plan says which (`host.how`:
 `detected` or `stated`). Host detection proper is still the router's open
 item (issue #28).
 
@@ -81,7 +96,7 @@ done:
 
 | Field | Content |
 |---|---|
-| `application`, `route`, `chosen_by` | The application; `flatpak` or `wine`; `router` or `you` (with `--route`) |
+| `application`, `route`, `chosen_by` | The application; `flatpak`, `wine` or `rehost`; `router` or `you` (with `--route`) |
 | `router` | The router's option: reason, `reason_code`, `reason_parts`, rating and its source, caveats with `text_id` and `params`, prerequisites |
 | `host` | The facts the router was given, and how |
 | `source` | Where it comes from, and **how it is verified**: Flatpak's check against the remote's signing key; the SHA-256 the catalogue pins (with where the digest was taken from and when); or, for a user's file with no pin, the sentence that TUR cannot check it and records its digest |
@@ -249,13 +264,133 @@ Updating a Windows application is not built: `tur-runtime` has no update
 *check* is: an application installed from a pinned download has an update
 when the catalogue now pins another digest.
 
+## The re-hosted route
+
+The `rehost` route runs the publisher's Windows or macOS package on the
+official Linux build of the portable runtime it is made with (Electron in
+this version): no compatibility layer and no virtual machine. The router
+offers it only for an edition whose record of TUR's own test says it works,
+after every Linux edition and before Wine
+([catalogue-and-routing.md](catalogue-and-routing.md),
+[exp-rehost-1](../reports/exp-rehost-1.md)). `tur-apps` hands the work to
+`tur-rehost` (`services/tur-rehost`), through its command line, used as it
+is; `src/rehost.rs` builds its command lines and reads its JSON.
+
+This slice is the "I have the installer file" path.
+
+### The person's file
+
+TUR never downloads these packages: they are the publisher's, proprietary
+or not pinned. `--installer FILE` is required, or the plan is refused with
+TUR-DESKTOP-APPS-005 (the publisher's page, and the command). The file is
+hashed in the plan and again just before it is used.
+
+| The file | What the plan says and does |
+|---|---|
+| Its SHA-256 and size are the record's `package_sha256` and `package_size` | "This is the package TUR measured", with the record's evidence. The record's `unresolved` modules are passed as `--allow-unresolved`: the measurement showed the application starts without them, and the plan lists them as features that will not work |
+| Any other file | Installed all the same, and the plan says plainly that this file was not measured by TUR and is not tested. No module is allowed unresolved: if one is missing, `tur-rehost` refuses |
+
+The record keeps the digest, `source.pinned` (the package TUR measured or
+not), and `rehost.measured`.
+
+How it runs, the first note of every re-hosted plan, in plain words:
+"Runs natively through its portable runtime: the Windows package, on
+Linux's own build of Electron 44.10.2. Not the publisher's Linux version;
+the publisher does not support it. Tested by TUR on 2026-11-16 with
+version 32.6.10: its first window." The router's caveats say the same in
+its own words.
+
+### What is downloaded
+
+Only the runtime (and, for an application that needs them, native modules
+or Fedora's build tools), by `tur-rehost`, each checked against the SHA-256
+in TUR's pinned index. The plan runs `tur-rehost plan <file> --app-id <id>
+--json [--allow-builds] [--allow-unresolved M]...` and lists its downloads
+with their exact size and digest; `tur-rehost` opens the file in its
+sandbox to do this, and runs nothing in it. A plan that is not ready is
+refused with `tur-rehost`'s own blockers: TUR-DESKTOP-APPS-009 when
+something must be allowed or installed (exit status 4, for example
+TUR-REHOST-NATIVE-002, with "add --allow-builds"), TUR-DESKTOP-APPS-006 when
+the file cannot be re-hosted (3), TUR-DESKTOP-APPS-012 when `tur-rehost`
+already holds it, TUR-DESKTOP-APPS-017 for an input it refuses (1).
+
+With `--offline`, `tur-rehost` is not asked: the runtime the record names
+is listed without size or digest, and the plan says why (the assistant's
+`apps_plan` tool is offline).
+
+A note says that Electron's Linux build is downloaded by this computer from
+the Electron project, at the person's request, and includes media codecs
+(H.264 and AAC) that TUR does not ship (`tur-rehost`'s own notice when it
+was asked).
+
+### Source builds
+
+An application whose record lists `native_builds` needs the person's
+permission to build them from source on this computer, without network
+access, with Fedora's compiler: the router's prerequisite
+`allow-rehost-builds` (TUR-DESKTOP-APPS-009, "add --allow-builds"). With
+`--allow-builds`, the fact is set (when the facts are detected) and
+`tur-rehost` gets `--allow-builds`; the record keeps `builds_allowed`.
+
+### Installing, access and starting
+
+`tur-rehost install <file> --app-id <catalogue id> --name <catalogue name>
+--json [options]`: it downloads and checks the runtime, unpacks the
+package without running anything in it, lays its files under the runtime
+and stages the launcher entry. It rolls a failure back itself (exit status
+7, TUR-REHOST-APP-003); `tur-apps` reports TUR-DESKTOP-APPS-010 and records
+nothing.
+
+| Installs | Path |
+|---|---|
+| The application, its private home and `tur-rehost`'s record | `$XDG_DATA_HOME/tur/rehost/apps/<id>/` (`app/`, `home/`, `record.json`) |
+| The launcher entry, staged and not yet added to the launcher | `$XDG_DATA_HOME/tur/rehost/launchers/<id>/tur-rehost-<id>.desktop` |
+
+What it may reach, from `tur-rehost`'s application sandbox: its own
+directory (read-only) and its private home, none of the person's files;
+the network, shared; its windows through Wayland or X11, as its runtime
+chooses; sound through the session's sound server; the accessibility bus,
+so that P@x and screen readers see it as they see a Linux application
+(`tur-apps launch` runs `tur-rehost launch <id> --accessibility`). Not the
+session bus or the keyring.
+
+The application's own updater is off (it would fetch a Windows or macOS
+update); the plan says so.
+
+### Removing
+
+`tur-rehost uninstall` deletes the private home with the application,
+without asking. `tur-apps remove` keeps the data by default as for a
+Windows application: the private home is **copied** to
+`$XDG_DATA_HOME/tur/apps/kept/<id>/<UTC time>/home` first, and if that
+fails nothing is removed; `--delete-data` copies nothing. Then
+`tur-rehost uninstall <id> --json`; `tur-apps` checks again that the
+application's directory and its launcher directory are gone. What
+`tur-rehost` leaves (its exit status 8, TUR-REHOST-APP-007) or `tur-apps`
+finds is TUR-DESKTOP-APPS-015. An application `tur-rehost` no longer holds
+(its exit status 6) was removed outside `tur-apps`: its record is dropped.
+
+### Not built
+
+- Updating a re-hosted application: TUR-DESKTOP-APPS-004 says to remove it
+  (its data is kept) and install the newer package. The update check does
+  not look at re-hosted applications.
+- The application centre's screens for this route (the router's caveats,
+  the measured-or-not sentence, "Choose the package…", the builds
+  question): a follow-up, because the desktop programs (pull request #128)
+  are not merged.
+- Choosing the open-codecs build (`tur-rehost --codecs open-only`); the
+  macOS route through Darling.
+
 ## One list
 
 `tur-apps list [--check-updates] [--json]` lists, for this user, every
-application `tur-apps` installed, and also the per-user Flatpaks and the
-`tur-runtime` applications installed without it (`installed_by`: `tur-apps`,
-`flatpak`, `tur-runtime`). For each: identifier (the catalogue's when it
-knows the application), name, route, where it came from, version, size in
+application `tur-apps` installed, and also the per-user Flatpaks, the
+`tur-runtime` applications and the `tur-rehost` applications installed
+without it (`installed_by`: `tur-apps`, `flatpak`, `tur-runtime`,
+`tur-rehost`). For each: identifier (the catalogue's when it knows the
+application), name, route (`flatpak`, `wine` or `rehost`: how it runs),
+where it came from, version, size in
 bytes, where its data is, `installed` or `missing`, and the update state
 (`checked`, `available`, `version`, from where). System-wide Flatpaks are not
 listed in this slice.
@@ -320,9 +455,10 @@ and the tools in `/usr/share/tur/pax/tools/tur-apps/` (report TUR-010).
 
 ```
 tur-apps [--catalogue DIR] [--host FILE] [--prefs FILE] [--download-dir DIR]
-         [--flatpak-program P] [--curl-program P] [--tur-runtime-program P] [--wine-program P]
-tur-apps plan <id> [--route flatpak|wine] [--installer FILE] [--offline] [--json]
-tur-apps install <id> [--route R] [--installer FILE] [--yes] [--events]
+         [--flatpak-program P] [--curl-program P] [--tur-runtime-program P]
+         [--tur-rehost-program P] [--wine-program P]
+tur-apps plan <id> [--route flatpak|wine|rehost] [--installer FILE] [--allow-builds] [--offline] [--json]
+tur-apps install <id> [--route R] [--installer FILE] [--allow-builds] [--yes] [--events]
 tur-apps list [--check-updates] [--json]
 tur-apps update <id> [--events]
 tur-apps remove <id> [--keep-data | --delete-data] [--events]
@@ -331,7 +467,8 @@ tur-apps sources [enable NAME | disable NAME] [--json]
 ```
 
 `--catalogue` defaults to `/usr/share/tur/catalogue`. Programs are looked for
-in `/usr/bin` (and `tur-runtime` in `/usr/local/bin`), not in `PATH`.
+in `/usr/bin` (and `tur-runtime` and `tur-rehost` in `/usr/local/bin`), not
+in `PATH`.
 
 | Exit status | Meaning |
 |---|---|
@@ -383,6 +520,7 @@ These are not yet registry entries in the sense of §29.3.
 | A user's file is checked from the hash on | `a_file_you_give_is_checked_from_the_hash_on` |
 | Removal keeps documents by default and leaves nothing | `a_windows_application_is_downloaded_checked_installed_and_removed_keeping_documents`, `a_windows_application_removed_with_its_data_leaves_nothing`, `a_flatpak_is_planned_installed_listed_and_removed_keeping_its_data` |
 | A failed Flatpak installation takes back what it added | `a_failed_flatpak_installation_takes_back_what_it_added` |
+| The re-hosted route against a stand-in for `tur-rehost`: your file required, measured or not, the downloads from `tur-rehost`'s plan, offline; refused until `tur-rehost` is installed; install, list, launch, update refused, removal keeping and deleting data, what is left behind; the measured package's allowed modules; `--allow-builds` reaching `tur-rehost` | `a_rehost_is_planned_from_your_package_and_says_when_it_was_not_measured`, `the_rehost_route_is_refused_until_tur_rehost_is_installed`, `a_rehosted_application_is_installed_listed_started_and_removed_keeping_its_data`, `the_package_tur_measured_runs_without_the_modules_the_measurement_allows`, `allowing_builds_reaches_tur_rehost_for_vscodium` |
 | The D-Bus XML, the command line, the schemas, this note and the codes agree; one module downloads | `tests/interfaces.rs` |
 | The assistant's tools | `tests/agent_tools.rs` |
 | The real programs | the `apps` workflow, `services/tur-apps/ci/e2e.py`; results in [apps-1](../reports/apps-1.md) |
@@ -390,8 +528,12 @@ These are not yet registry entries in the sense of §29.3.
 ## Not built
 
 - The D-Bus service; cancelling a running job.
-- Installing a Windows application's launcher entry (staged by
-  `tur-runtime`); updating a Windows application.
+- Installing a Windows or re-hosted application's launcher entry (staged by
+  `tur-runtime` and `tur-rehost`); updating a Windows or re-hosted
+  application.
+- The application centre's screens for the re-hosted route (after the
+  desktop programs, pull request #128); the real `tur-rehost` in the apps
+  workflow.
 - Flathub switched on by default for each user (needs `image/` or the
   first-run setup).
 - System-wide Flatpaks in the list; Flatpak bundles and `.flatpakref` files

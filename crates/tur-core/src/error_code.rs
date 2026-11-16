@@ -56,11 +56,14 @@ pub enum Family {
     /// catalogue's codes; see `services/tur-catalogue/src/codes.rs` for why
     /// they have not moved to it yet.
     Catalogue,
+    /// Re-hosting: a Windows or macOS package's portable payload run on the
+    /// Linux build of its own runtime (`services/tur-rehost`).
+    Rehost,
 }
 
 impl Family {
     /// Every registered family, in registry order.
-    pub const ALL: [Family; 17] = [
+    pub const ALL: [Family; 18] = [
         Family::Boot,
         Family::Install,
         Family::Update,
@@ -78,6 +81,7 @@ impl Family {
         Family::Ai,
         Family::Runtime,
         Family::Catalogue,
+        Family::Rehost,
     ];
 
     /// The family's segment as it appears in a code, for example `STORAGE`.
@@ -100,6 +104,7 @@ impl Family {
             Family::Ai => "AI",
             Family::Runtime => "RUNTIME",
             Family::Catalogue => "CATALOGUE",
+            Family::Rehost => "REHOST",
         }
     }
 
@@ -406,6 +411,11 @@ mod tests {
         );
         assert_eq!(Family::Runtime.as_str(), "RUNTIME");
         assert_eq!(Family::Catalogue.as_str(), "CATALOGUE");
+        assert_eq!(Family::Rehost.as_str(), "REHOST");
+        assert_eq!(
+            ErrorCode::from_static("TUR-REHOST-DETECT-001").family(),
+            Family::Rehost
+        );
 
         // The same words as a topic of another family are still topics: the
         // codes that existed before the families did keep their meaning.
@@ -417,10 +427,11 @@ mod tests {
         assert_eq!(android.family(), Family::Android);
 
         // The registry grew at its end: no earlier family changed place.
-        assert_eq!(Family::ALL.len(), 17);
+        assert_eq!(Family::ALL.len(), 18);
         assert_eq!(Family::ALL[14], Family::Ai);
         assert_eq!(Family::ALL[15], Family::Runtime);
         assert_eq!(Family::ALL[16], Family::Catalogue);
+        assert_eq!(Family::ALL[17], Family::Rehost);
         // No family's segment is the beginning of another's, so the first
         // segment of a code names one family only.
         for family in Family::ALL {

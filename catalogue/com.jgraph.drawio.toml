@@ -1,0 +1,85 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR application catalogue entry. Format: schemas/app-catalogue-entry.schema.json.
+# How entries are written and sourced: catalogue/README.md.
+# The two rehost records are TUR's own measurements, with their report
+# (docs/reports/exp-rehost-1.md) and the run that holds the evidence.
+# Nothing is claimed about the publisher's Linux edition: it has no record.
+
+schema_version = 1
+id = "com.jgraph.drawio"
+name = "draw.io"
+publisher = "JGraph"
+category = "productivity"
+summary = "Diagram editor."
+homepage = "https://github.com/jgraph/drawio-desktop"
+
+[[editions]]
+kind = "linux-native"
+obtain = "publisher-page"
+download_page = "https://github.com/jgraph/drawio-desktop/releases"
+licence = "open-source"
+
+[[editions.references]]
+title = "draw.io 32.6.10 release on GitHub, with its Linux, Windows and macOS packages"
+url = "https://github.com/jgraph/drawio-desktop/releases/tag/v32.6.10"
+checked = "2026-11-16"
+
+[[editions]]
+kind = "windows"
+obtain = "publisher-page"
+download_page = "https://github.com/jgraph/drawio-desktop/releases"
+licence = "open-source"
+
+[[editions.records]]
+route = "rehost"
+rating = "starts"
+reported_by = "tur-test"
+test_report = "docs/reports/exp-rehost-1.md"
+version_tested = "32.6.10"
+date = "2026-11-16"
+notes = "Measured by TUR's re-hosting experiment: the application's own first window, the same as the official Linux build's, and typed text; no feature beyond that was exercised (exp-rehost-1, section 3.1)."
+
+[editions.records.rehost]
+package = "draw.io-32.6.10.msi"
+package_sha256 = "d6781bce32c199b51f246deb2a816d6c5f07319b9c868ecd357b8c6c5e771ed0"
+package_size = 149065728
+runtime = "electron"
+runtime_version = "44.10.2"
+evidence = "https://github.com/giorgiogiudice/TUR/actions/runs/43778332673"
+native_builds = []
+unresolved = []
+
+[[editions.references]]
+title = "draw.io 32.6.10 release on GitHub, with its Linux, Windows and macOS packages"
+url = "https://github.com/jgraph/drawio-desktop/releases/tag/v32.6.10"
+checked = "2026-11-16"
+
+[[editions]]
+kind = "macos"
+obtain = "publisher-page"
+download_page = "https://github.com/jgraph/drawio-desktop/releases"
+licence = "open-source"
+
+[[editions.records]]
+route = "rehost"
+rating = "starts"
+reported_by = "tur-test"
+test_report = "docs/reports/exp-rehost-1.md"
+version_tested = "32.6.10"
+date = "2026-11-16"
+notes = "Measured by TUR's re-hosting experiment: the application's own first window, the same as the official Linux build's, and typed text; no feature beyond that was exercised (exp-rehost-1, section 3.1)."
+
+[editions.records.rehost]
+package = "draw.io-x64-32.6.10.zip"
+package_sha256 = "8994cd728b5fd6eac5da62fa622e68882eeb51ed5d0bec019de4d4a8672b73d0"
+package_size = 158950581
+runtime = "electron"
+runtime_version = "44.10.2"
+evidence = "https://github.com/giorgiogiudice/TUR/actions/runs/43778332673"
+native_builds = []
+unresolved = []
+
+[[editions.references]]
+title = "draw.io 32.6.10 release on GitHub, with its Linux, Windows and macOS packages"
+url = "https://github.com/jgraph/drawio-desktop/releases/tag/v32.6.10"
+checked = "2026-11-16"

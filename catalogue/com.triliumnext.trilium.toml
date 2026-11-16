@@ -1,0 +1,85 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR application catalogue entry. Format: schemas/app-catalogue-entry.schema.json.
+# How entries are written and sourced: catalogue/README.md.
+# The two rehost records are TUR's own measurements, with their report
+# (docs/reports/exp-rehost-1.md) and the run that holds the evidence.
+# Nothing is claimed about the publisher's Linux edition: it has no record.
+
+schema_version = 1
+id = "com.triliumnext.trilium"
+name = "Trilium Notes"
+publisher = "TriliumNext"
+category = "productivity"
+summary = "Hierarchical note-taking application."
+homepage = "https://github.com/TriliumNext/Trilium"
+
+[[editions]]
+kind = "linux-native"
+obtain = "publisher-page"
+download_page = "https://github.com/TriliumNext/Trilium/releases"
+licence = "open-source"
+
+[[editions.references]]
+title = "Trilium Notes 0.107.0 release on GitHub, with its Linux, Windows and macOS packages"
+url = "https://github.com/TriliumNext/Trilium/releases/tag/v0.107.0"
+checked = "2026-11-16"
+
+[[editions]]
+kind = "windows"
+obtain = "publisher-page"
+download_page = "https://github.com/TriliumNext/Trilium/releases"
+licence = "open-source"
+
+[[editions.records]]
+route = "rehost"
+rating = "starts"
+reported_by = "tur-test"
+test_report = "docs/reports/exp-rehost-1.md"
+version_tested = "0.107.0"
+date = "2026-11-16"
+notes = "Measured by TUR's re-hosting experiment: the application's own first window, the same as the official Linux build's, and typed text; no feature beyond that was exercised (exp-rehost-1, section 3.1)."
+
+[editions.records.rehost]
+package = "TriliumNotes-v0.107.0-windows-x64.zip"
+package_sha256 = "f79d9e063a68c783206132e7845d9b2801c9e1da7c9fba78ea9cdcf57477613c"
+package_size = 225672170
+runtime = "electron"
+runtime_version = "45.2.3"
+evidence = "https://github.com/giorgiogiudice/TUR/actions/runs/43778332673"
+native_builds = []
+unresolved = []
+
+[[editions.references]]
+title = "Trilium Notes 0.107.0 release on GitHub, with its Linux, Windows and macOS packages"
+url = "https://github.com/TriliumNext/Trilium/releases/tag/v0.107.0"
+checked = "2026-11-16"
+
+[[editions]]
+kind = "macos"
+obtain = "publisher-page"
+download_page = "https://github.com/TriliumNext/Trilium/releases"
+licence = "open-source"
+
+[[editions.records]]
+route = "rehost"
+rating = "starts"
+reported_by = "tur-test"
+test_report = "docs/reports/exp-rehost-1.md"
+version_tested = "0.107.0"
+date = "2026-11-16"
+notes = "Measured by TUR's re-hosting experiment: the application's own first window, the same as the official Linux build's, and typed text; no feature beyond that was exercised (exp-rehost-1, section 3.1)."
+
+[editions.records.rehost]
+package = "TriliumNotes-v0.107.0-macos-x64.zip"
+package_sha256 = "2fd712c935c94962d20c2d36519114440badcfbd64491e8d9ed9af66ce842c90"
+package_size = 203401307
+runtime = "electron"
+runtime_version = "45.2.3"
+evidence = "https://github.com/giorgiogiudice/TUR/actions/runs/43778332673"
+native_builds = []
+unresolved = []
+
+[[editions.references]]
+title = "Trilium Notes 0.107.0 release on GitHub, with its Linux, Windows and macOS packages"
+url = "https://github.com/TriliumNext/Trilium/releases/tag/v0.107.0"
+checked = "2026-11-16"

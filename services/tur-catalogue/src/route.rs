@@ -19,11 +19,12 @@
 //! | 1 | Flatpak, then native Linux | A Linux edition exists |
 //! | 2 | Web application, primary | The web application is the publisher's primary form |
 //! | 3 | Container of another distribution | The Linux edition is another distribution's package |
-//! | 4 | Proton (games) or Wine (other Windows applications) | A Windows edition exists |
-//! | 4 | Windows guest, directly after its compatibility layer | Not a game; and the layer is rated poor or broken, or is unrated with a known obstacle, or the user asks; and virtual machines are not forbidden |
-//! | 5 | Android runtime | An Android edition exists |
-//! | 6 | Web application, not primary | No better route is free of known obstacles, or the user pinned it |
-//! | 7 | Darling | A macOS edition exists and the user has enabled Darling |
+//! | 4 | Re-hosted on the Linux build of its own runtime | A Windows or macOS edition exists and TUR's own test says its re-host starts or works |
+//! | 5 | Proton (games) or Wine (other Windows applications) | A Windows edition exists |
+//! | 5 | Windows guest, directly after its compatibility layer | Not a game; and the layer is rated poor or broken, or is unrated with a known obstacle, or the user asks; and virtual machines are not forbidden |
+//! | 6 | Android runtime | An Android edition exists |
+//! | 7 | Web application, not primary | No better route is free of known obstacles, or the user pinned it |
+//! | 8 | Darling | A macOS edition exists and the user has enabled Darling |
 //!
 //! A Linux edition whose record says it is clearly worse than another route
 //! is listed after that route. Routes that cannot work on this machine are
@@ -38,7 +39,7 @@ use serde::Serialize;
 use crate::host::{Arch, GpuClass, HostFacts, Preferences};
 use crate::model::{
     AndroidStore, Category, Edition, EditionKind, Entry, Licence, Obtain, Packaging, Rating,
-    Record, Reporter, Requirement, Route,
+    Record, RehostEvidence, Reporter, Requirement, Route,
 };
 
 /// The memory, in mebibytes, the Windows guest tier is expected to need in
@@ -124,6 +125,10 @@ pub enum CaveatCode {
     GuestUnsuitableForGames,
     /// The route the user pinned for this application is not available.
     PinUnavailable,
+    /// What a re-hosted route is and is not: the publisher's package on
+    /// the Linux build of its runtime, the runtime TUR fetches, and the
+    /// native modules that have no Linux build.
+    Rehost,
 }
 
 /// The values a sentence was written with, by name, so that a user
@@ -156,12 +161,13 @@ pub struct Caveat {
 /// An identifier names one English sentence, with its parameters left open.
 /// The identifiers are stable: a sentence may be reworded, and its
 /// identifier stays; a sentence that says something else gets a new one.
-pub const CAVEAT_TEXT_IDS: [&str; 46] = [
+pub const CAVEAT_TEXT_IDS: [&str; 50] = [
     "requirement.kernel-anti-cheat.proton",
     "requirement.kernel-anti-cheat.wine",
     "requirement.kernel-anti-cheat.windows-guest",
     "requirement.kernel-anti-cheat.android-runtime",
     "requirement.kernel-anti-cheat.darling",
+    "requirement.kernel-anti-cheat.rehost",
     "requirement.kernel-anti-cheat.linux",
     "requirement.kernel-anti-cheat.web",
     "requirement.hardware-attested-drm.linux-or-web",
@@ -193,6 +199,9 @@ pub const CAVEAT_TEXT_IDS: [&str; 46] = [
     "closed-store.not-integrated",
     "community-package",
     "experimental.darling",
+    "rehost.not-publisher-supported",
+    "rehost.runtime-fetched",
+    "rehost.unresolved-modules",
     "guest-memory.too-little",
     "guest-memory.enough",
     "guest-memory.unknown",
@@ -225,6 +234,12 @@ pub enum PrerequisiteCode {
     SetUpWindowsGuest,
     /// A Windows licence must be supplied.
     ProvideWindowsLicence,
+    /// TUR's re-hosting component, `tur-rehost`, must be installed.
+    InstallRehost,
+    /// The person must allow TUR to build the application's native modules
+    /// from source on this computer, without network access, with Fedora's
+    /// compiler.
+    AllowRehostBuilds,
 }
 
 /// Something that must be installed or enabled before a route can be used.
@@ -321,6 +336,10 @@ pub enum ReasonCode {
     LinuxNative,
     /// A Linux edition exists as a package of another distribution.
     LinuxOtherDistribution,
+    /// TUR's own test measured the Windows or macOS edition re-hosted on the
+    /// Linux build of its runtime. Parameters: `platform` (`windows` or
+    /// `macos`), `runtime`, `runtime_version` and `date`.
+    RehostMeasured,
     /// A Windows edition exists and the application is a game: Proton.
     WindowsGameProton,
     /// A Windows edition exists: Wine comes before a virtual machine.
@@ -363,10 +382,11 @@ pub enum ReasonCode {
 
 impl ReasonCode {
     /// Every reason code.
-    pub const ALL: [ReasonCode; 18] = [
+    pub const ALL: [ReasonCode; 19] = [
         ReasonCode::LinuxFlatpak,
         ReasonCode::LinuxNative,
         ReasonCode::LinuxOtherDistribution,
+        ReasonCode::RehostMeasured,
         ReasonCode::WindowsGameProton,
         ReasonCode::WindowsWine,
         ReasonCode::GuestLayerRated,
@@ -391,6 +411,7 @@ impl ReasonCode {
             ReasonCode::LinuxFlatpak => "linux-flatpak",
             ReasonCode::LinuxNative => "linux-native",
             ReasonCode::LinuxOtherDistribution => "linux-other-distribution",
+            ReasonCode::RehostMeasured => "rehost-measured",
             ReasonCode::WindowsGameProton => "windows-game-proton",
             ReasonCode::WindowsWine => "windows-wine",
             ReasonCode::GuestLayerRated => "guest-layer-rated",
@@ -573,6 +594,7 @@ fn requirement_text_id(requirement: Requirement, route: Route, host: &HostFacts)
             Route::WindowsGuest => "requirement.kernel-anti-cheat.windows-guest",
             Route::AndroidRuntime => "requirement.kernel-anti-cheat.android-runtime",
             Route::Darling => "requirement.kernel-anti-cheat.darling",
+            Route::Rehost => "requirement.kernel-anti-cheat.rehost",
             Route::Flatpak | Route::Native | Route::DistroContainer => {
                 "requirement.kernel-anti-cheat.linux"
             }
@@ -584,7 +606,8 @@ fn requirement_text_id(requirement: Requirement, route: Route, host: &HostFacts)
             | Route::DistroContainer
             | Route::Web
             | Route::NoRoute => "requirement.hardware-attested-drm.linux-or-web",
-            Route::Proton
+            Route::Rehost
+            | Route::Proton
             | Route::Wine
             | Route::WindowsGuest
             | Route::AndroidRuntime
@@ -611,16 +634,20 @@ fn requirement_text_id(requirement: Requirement, route: Route, host: &HostFacts)
         Requirement::KernelDriver => match route {
             Route::Proton | Route::Wine => "requirement.kernel-driver.compatibility-layer",
             Route::WindowsGuest => "requirement.kernel-driver.windows-guest",
-            Route::AndroidRuntime | Route::Darling => "requirement.kernel-driver.never-loaded",
+            Route::Rehost | Route::AndroidRuntime | Route::Darling => {
+                "requirement.kernel-driver.never-loaded"
+            }
             Route::Flatpak | Route::Native | Route::DistroContainer => {
                 "requirement.kernel-driver.linux"
             }
             Route::Web | Route::NoRoute => "requirement.kernel-driver.web",
         },
         Requirement::HardwareDongle => match route {
-            Route::Proton | Route::Wine | Route::AndroidRuntime | Route::Darling => {
-                "requirement.hardware-dongle.not-expected"
-            }
+            Route::Rehost
+            | Route::Proton
+            | Route::Wine
+            | Route::AndroidRuntime
+            | Route::Darling => "requirement.hardware-dongle.not-expected",
             Route::WindowsGuest => "requirement.hardware-dongle.windows-guest",
             Route::Flatpak | Route::Native | Route::DistroContainer => {
                 "requirement.hardware-dongle.linux"
@@ -667,6 +694,10 @@ fn requirement_caveat_text(
                 Severity::Blocker,
                 "Its anti-cheat needs a kernel component that Darling cannot load.",
             ),
+            Route::Rehost => (
+                Severity::Blocker,
+                "Its anti-cheat needs a Windows or macOS kernel component, which TUR never loads: it cannot work when re-hosted.",
+            ),
             Route::Flatpak | Route::Native | Route::DistroContainer => (
                 Severity::Warning,
                 "The catalogue lists kernel-level anti-cheat for this edition; check the publisher's notes for Linux before relying on it.",
@@ -685,7 +716,8 @@ fn requirement_caveat_text(
                 Severity::Warning,
                 "Its copy protection asks for hardware attestation: on Linux, protected content may be limited to a lower quality or refused.",
             ),
-            Route::Proton
+            Route::Rehost
+            | Route::Proton
             | Route::Wine
             | Route::WindowsGuest
             | Route::AndroidRuntime
@@ -740,7 +772,7 @@ fn requirement_caveat_text(
                 Severity::Note,
                 "Its Windows kernel driver is installed inside the Windows guest, not on TUR.",
             ),
-            Route::AndroidRuntime | Route::Darling => (
+            Route::Rehost | Route::AndroidRuntime | Route::Darling => (
                 Severity::Blocker,
                 "Needs a kernel driver of its own operating system; TUR never loads one into its kernel.",
             ),
@@ -754,7 +786,11 @@ fn requirement_caveat_text(
             ),
         },
         Requirement::HardwareDongle => match route {
-            Route::Proton | Route::Wine | Route::AndroidRuntime | Route::Darling => (
+            Route::Rehost
+            | Route::Proton
+            | Route::Wine
+            | Route::AndroidRuntime
+            | Route::Darling => (
                 Severity::Obstacle,
                 "Needs a hardware dongle, whose driver is not expected to work on this route.",
             ),
@@ -918,7 +954,7 @@ fn evaluate(
 
     let needs_x86_64 = matches!(
         route,
-        Route::Proton | Route::Wine | Route::WindowsGuest | Route::Darling
+        Route::Rehost | Route::Proton | Route::Wine | Route::WindowsGuest | Route::Darling
     );
     if needs_x86_64 && host.arch != Arch::X86_64 {
         caveats.push(caveat(
@@ -998,6 +1034,12 @@ fn evaluate(
             Params::new(),
             "Experimental: Darling comes with no promise that this application works, and it does not run mainstream macOS graphical applications.",
         ));
+    }
+
+    if route == Route::Rehost
+        && let Some(evidence) = rehost_evidence(edition)
+    {
+        caveats.extend(rehost_caveats(edition.kind, evidence));
     }
 
     if route == Route::WindowsGuest {
@@ -1197,9 +1239,123 @@ fn prerequisites(route: Route, edition: &Edition, host: &HostFacts) -> Vec<Prere
                 ));
             }
         }
+        Route::Rehost => {
+            if !host.rehost {
+                list.push(prerequisite(
+                    PrerequisiteCode::InstallRehost,
+                    "TUR's re-hosting component, tur-rehost, must be installed.",
+                ));
+            }
+            let builds = rehost_evidence(edition)
+                .is_some_and(|evidence| !evidence.native_builds.is_empty());
+            if builds && !host.rehost_builds {
+                list.push(prerequisite(
+                    PrerequisiteCode::AllowRehostBuilds,
+                    "Some of its native modules must be built from source on this computer, without network access, with Fedora's compiler: allow TUR to do this (it downloads Fedora's build tools once).",
+                ));
+            }
+        }
         Route::Native | Route::Darling | Route::Web | Route::NoRoute => {}
     }
     list
+}
+
+/// The evidence that makes the router offer the re-hosted route for an
+/// edition: that of its best `rehost` record (TUR's own test first, then
+/// the most recent), when that record says the re-host at least starts
+/// (`good`, `usable` or `starts`) and states what was measured. `None` for
+/// every other edition: an unmeasured re-host is never offered.
+pub fn rehost_evidence(edition: &Edition) -> Option<&RehostEvidence> {
+    if !matches!(edition.kind, EditionKind::Windows | EditionKind::Macos) {
+        return None;
+    }
+    let record = best_record(edition, Route::Rehost)?;
+    if !record.rating.shows_it_starts() {
+        return None;
+    }
+    record.rehost.as_ref()
+}
+
+/// The caveats every re-hosted option carries: whose package it is, the
+/// runtime TUR fetches, and the native modules that have no Linux build.
+fn rehost_caveats(kind: EditionKind, evidence: &RehostEvidence) -> Vec<Caveat> {
+    let runtime = evidence.runtime.as_str();
+    let version = evidence.runtime_version.as_str();
+    let mut list = vec![caveat(
+        CaveatCode::Rehost,
+        Severity::Note,
+        "rehost.not-publisher-supported",
+        Params::from([
+            ("platform", kind.as_str().to_owned()),
+            ("runtime", runtime.to_owned()),
+            ("runtime_version", version.to_owned()),
+        ]),
+        format!(
+            "This is the publisher's {} package running on Linux's own build of {runtime} {version}: not the publisher's Linux version, and the publisher does not support it.",
+            kind.label()
+        ),
+    )];
+    // Electron and NW.js are Chromium, whose official builds carry media
+    // codecs that Fedora, and so TUR, does not ship.
+    let codecs = if matches!(runtime, "electron" | "nwjs") {
+        ", and it includes media codecs TUR does not ship"
+    } else {
+        ""
+    };
+    list.push(caveat(
+        CaveatCode::Rehost,
+        Severity::Note,
+        "rehost.runtime-fetched",
+        Params::from([
+            ("runtime", runtime.to_owned()),
+            ("runtime_version", version.to_owned()),
+        ]),
+        format!(
+            "On first use TUR downloads {runtime} {version} for Linux from the project's own releases and checks it against the digest TUR pinned; it is not part of TUR{codecs}."
+        ),
+    ));
+    let count = evidence.unresolved.len();
+    if count > 0 {
+        let text = if count == 1 {
+            "1 native module of this application has no Linux build; the measured version did not load it when it started, but features that need it will not work.".to_owned()
+        } else {
+            format!(
+                "{count} native modules of this application have no Linux build; the measured version did not load them when it started, but features that need them will not work."
+            )
+        };
+        list.push(caveat(
+            CaveatCode::Rehost,
+            Severity::Warning,
+            "rehost.unresolved-modules",
+            Params::from([("count", count.to_string())]),
+            text,
+        ));
+    }
+    list
+}
+
+/// The re-hosted option for a Windows or macOS edition, when TUR's own test
+/// says the re-host works; `None` otherwise.
+fn rehost_option(index: usize, edition: &Edition, host: &HostFacts) -> Option<RouteOption> {
+    let evidence = rehost_evidence(edition)?;
+    let record = best_record(edition, Route::Rehost)?;
+    let why = Why {
+        code: ReasonCode::RehostMeasured,
+        params: Params::from([
+            ("platform", edition.kind.as_str().to_owned()),
+            ("runtime", evidence.runtime.clone()),
+            ("runtime_version", evidence.runtime_version.clone()),
+            ("date", record.date.clone()),
+        ]),
+        text: format!(
+            "TUR measured this application's {} package running on the Linux build of its own runtime ({} {}) on {}: no compatibility layer and no virtual machine. It is not the publisher's Linux version.",
+            edition.kind.label(),
+            evidence.runtime,
+            evidence.runtime_version,
+            record.date
+        ),
+    };
+    Some(evaluate(Route::Rehost, index, edition, host, why))
 }
 
 /// The options for a Windows edition: the compatibility layer, and the
@@ -1264,7 +1420,9 @@ fn windows_options(
                 layer.rating.as_str()
             ),
         ))
-    } else if layer.rating == Rating::Unknown && known_obstacle {
+    } else if !layer.rating.is_supporting() && known_obstacle {
+        // Unknown, or `starts`: seeing the first window says nothing about
+        // the part a known requirement stands in the way of.
         Some((
             ReasonCode::GuestKnownObstacle,
             Params::new(),
@@ -1324,11 +1482,12 @@ fn ladder_key(
         Route::Flatpak | Route::Native => 0,
         Route::Web if primary => 1,
         Route::DistroContainer => 2,
-        Route::Proton | Route::Wine | Route::WindowsGuest => 3,
-        Route::AndroidRuntime => 4,
-        Route::Web => 5,
-        Route::Darling => 6,
-        Route::NoRoute => 7,
+        Route::Rehost => 3,
+        Route::Proton | Route::Wine | Route::WindowsGuest => 4,
+        Route::AndroidRuntime => 5,
+        Route::Web => 6,
+        Route::Darling => 7,
+        Route::NoRoute => 8,
     };
     let open_source = edition.is_some_and(|edition| edition.licence == Some(Licence::OpenSource));
     let licence_order = u8::from(preferences.prefer_open_source && !open_source);
@@ -1426,7 +1585,13 @@ fn no_route(entry: &Entry, host: &HostFacts, blocked: &[RouteOption]) -> RouteOp
         }
     }
     let has_edition = |kind: EditionKind| entry.editions.iter().any(|edition| edition.kind == kind);
-    let macos_without_darling = has_edition(EditionKind::Macos) && !host.darling_enabled;
+    // A macOS edition that is re-hosted has a route, even when it is
+    // blocked here: the sentence about Darling would not be true.
+    let macos_rehosted = blocked.iter().any(|option| {
+        option.route == Route::Rehost && option.edition_kind == Some(EditionKind::Macos)
+    });
+    let macos_without_darling =
+        has_edition(EditionKind::Macos) && !host.darling_enabled && !macos_rehosted;
     if macos_without_darling {
         reason.push_str(
             " The macOS edition has no route: Darling, TUR's experimental macOS layer, is not enabled, and a macOS virtual machine is not an option, because Apple's licence allows macOS guests only on Apple hardware.",
@@ -1580,6 +1745,7 @@ pub fn route(
                 }
             }
             EditionKind::Windows => {
+                options.extend(rehost_option(index, edition, host));
                 options.extend(windows_options(request, index, edition, host, preferences));
             }
             EditionKind::Android => options.push(evaluate(
@@ -1612,6 +1778,8 @@ pub fn route(
                 options.push(evaluate(Route::Web, index, edition, host, reason));
             }
             EditionKind::Macos => {
+                // Re-hosting does not need Darling: offered when measured.
+                options.extend(rehost_option(index, edition, host));
                 if host.darling_enabled {
                     options.push(evaluate(
                         Route::Darling,
@@ -1801,6 +1969,7 @@ mod tests {
             remedies: Vec::new(),
             runtime_version: None,
             evidence_sha256: None,
+            rehost: None,
         });
         edition
     }
@@ -1821,7 +1990,55 @@ mod tests {
             darling_enabled: true,
             gpu: GpuClass::Discrete,
             memory_mib: Some(32 * 1024),
+            rehost: true,
+            rehost_builds: true,
         }
+    }
+
+    /// A Windows or macOS edition whose re-host TUR's own test rated
+    /// `rating`, with the native modules it built and could not resolve.
+    fn measured(
+        mut edition: Edition,
+        rating: Rating,
+        native_builds: &[&str],
+        unresolved: &[&str],
+    ) -> Edition {
+        let list = |items: &[&str]| -> Vec<String> {
+            items.iter().map(|item| (*item).to_owned()).collect()
+        };
+        edition.records.push(Record {
+            route: Route::Rehost,
+            rating,
+            reported_by: Reporter::TurTest,
+            source_name: None,
+            source_url: None,
+            source_rating: None,
+            test_report: Some("docs/reports/exp-rehost-1.md".to_owned()),
+            version_tested: Some("1.2".to_owned()),
+            date: "2026-11-16".to_owned(),
+            notes: None,
+            remedies: Vec::new(),
+            runtime_version: None,
+            evidence_sha256: None,
+            rehost: Some(RehostEvidence {
+                package: "Example-1.2-x64.zip".to_owned(),
+                package_sha256: "ab".repeat(32),
+                package_size: 1234,
+                runtime: "electron".to_owned(),
+                runtime_version: "43.7.7".to_owned(),
+                evidence: "https://github.com/example/example/actions/runs/1".to_owned(),
+                native_builds: list(native_builds),
+                unresolved: list(unresolved),
+            }),
+        });
+        edition
+    }
+
+    fn mac_page() -> Edition {
+        let mut edition = Edition::new(EditionKind::Macos);
+        edition.obtain = Some(Obtain::PublisherPage);
+        edition.download_page = Some("https://example.org/mac".to_owned());
+        edition
     }
 
     fn run(entry: &Entry, host: &HostFacts, preferences: &Preferences) -> Vec<RouteOption> {
@@ -2629,6 +2846,7 @@ mod tests {
             remedies: Vec::new(),
             runtime_version: None,
             evidence_sha256: None,
+            rehost: None,
         });
         let entry = super::tests::entry(Category::Productivity, vec![edition]);
         let options = run(&entry, &full_host(), &Preferences::default());
@@ -2663,6 +2881,7 @@ mod tests {
             remedies: remedies.iter().map(|remedy| (*remedy).to_owned()).collect(),
             runtime_version: Some("wine-9.0".to_owned()),
             evidence_sha256: Some("cd".repeat(32)),
+            rehost: None,
         };
         edition.records.push(measured("2026-11-01", &["dpi-120"]));
         edition
@@ -2774,6 +2993,333 @@ mod tests {
         );
         assert_eq!(guest.outlook, Outlook::Doubtful);
         assert_eq!(recommended(&options).route, Route::Wine);
+    }
+
+    fn caveat_ids(option: &RouteOption) -> Vec<&'static str> {
+        option.caveats.iter().map(|caveat| caveat.text_id).collect()
+    }
+
+    #[test]
+    fn a_measured_rehost_is_offered_after_linux_and_before_wine() {
+        let rehosted = measured(windows(), Rating::Usable, &[], &[]);
+        let app = entry(
+            Category::Productivity,
+            vec![rehosted.clone(), flatpak()],
+        );
+        let options = run(&app, &full_host(), &Preferences::default());
+        assert_eq!(
+            routes(&options),
+            [Route::Flatpak, Route::Rehost, Route::Wine]
+        );
+        assert_eq!(recommended(&options).route, Route::Flatpak);
+
+        let rehost = &options[1];
+        assert_eq!(rehost.edition_kind, Some(EditionKind::Windows));
+        assert_eq!(rehost.outlook, Outlook::Clear);
+        assert_eq!(rehost.rating, Rating::Usable);
+        assert!(matches!(
+            rehost.rating_source,
+            RatingSource::TurTest { .. }
+        ));
+        assert_eq!(rehost.reason_code, ReasonCode::RehostMeasured);
+        let params = &rehost.reason_parts[0].params;
+        assert_eq!(params["platform"], "windows");
+        assert_eq!(params["runtime"], "electron");
+        assert_eq!(params["runtime_version"], "43.7.7");
+        assert_eq!(params["date"], "2026-11-16");
+        assert_eq!(
+            rehost.reason,
+            "TUR measured this application's Windows package running on the Linux build of its own runtime (electron 43.7.7) on 2026-11-16: no compatibility layer and no virtual machine. It is not the publisher's Linux version."
+        );
+        assert_eq!(
+            caveat_ids(rehost),
+            ["rehost.not-publisher-supported", "rehost.runtime-fetched"]
+        );
+        assert!(rehost.caveats.iter().all(|caveat| {
+            caveat.code == CaveatCode::Rehost && caveat.severity == Severity::Note
+        }));
+        assert!(
+            rehost.caveats[0]
+                .text
+                .contains("not the publisher's Linux version")
+        );
+        assert!(rehost.caveats[1].text.contains("media codecs"));
+        assert!(rehost.prerequisites.is_empty());
+
+        // Without a Linux edition it leads: ahead of Wine, and of Proton
+        // for a game.
+        let alone = entry(Category::Productivity, vec![rehosted.clone()]);
+        let options = run(&alone, &full_host(), &Preferences::default());
+        assert_eq!(routes(&options), [Route::Rehost, Route::Wine]);
+        assert!(options[0].recommended);
+        let game = entry(Category::Game, vec![rehosted.clone()]);
+        let options = run(&game, &full_host(), &Preferences::default());
+        assert_eq!(routes(&options), [Route::Rehost, Route::Proton]);
+
+        // A Linux edition rated broken is listed after it.
+        let worse = entry(
+            Category::Productivity,
+            vec![rated(flatpak(), Route::Flatpak, Rating::Broken), rehosted],
+        );
+        let options = run(&worse, &full_host(), &Preferences::default());
+        assert_eq!(
+            routes(&options),
+            [Route::Rehost, Route::Flatpak, Route::Wine]
+        );
+        assert!(options[1].reason.contains("Listed after Re-hosted"));
+    }
+
+    #[test]
+    fn an_unmeasured_rehost_is_never_offered() {
+        let mut said_nothing = measured(windows(), Rating::Unknown, &[], &[]);
+        said_nothing.records[0].reported_by = Reporter::Nobody;
+        said_nothing.records[0].test_report = None;
+        let mut unproven = measured(windows(), Rating::Good, &[], &[]);
+        unproven.records[0].rehost = None;
+        for edition in [
+            windows(),
+            said_nothing,
+            unproven,
+            measured(windows(), Rating::Unknown, &[], &[]),
+            measured(windows(), Rating::Poor, &[], &[]),
+            measured(windows(), Rating::Broken, &[], &[]),
+        ] {
+            assert!(rehost_evidence(&edition).is_none());
+            let app = entry(Category::Productivity, vec![edition]);
+            let options = run(&app, &full_host(), &Preferences::default());
+            assert_eq!(routes(&options), [Route::Wine]);
+        }
+
+        // A macOS edition whose re-host does not work: no route without
+        // Darling, and Darling is what the statement names.
+        let mut host = full_host();
+        host.darling_enabled = false;
+        let mac = entry(
+            Category::Creative,
+            vec![measured(mac_page(), Rating::Broken, &[], &[])],
+        );
+        let options = run(&mac, &host, &Preferences::default());
+        assert_eq!(routes(&options), [Route::NoRoute]);
+        assert!(
+            options[0]
+                .reason_parts
+                .iter()
+                .any(|part| part.code == ReasonCode::MacosNoDarling)
+        );
+
+        // A Linux edition is never re-hosted.
+        assert!(rehost_evidence(&measured(flatpak(), Rating::Good, &[], &[])).is_none());
+    }
+
+    #[test]
+    fn a_rehost_needing_builds_asks_for_them_first() {
+        let needs = measured(
+            windows(),
+            Rating::Usable,
+            &["@parcel/watcher@2.5.6"],
+            &["microsoft-authentication@0.0.1", "fsevents@2.3.3"],
+        );
+        let app = entry(Category::Development, vec![needs]);
+        let codes = |host: &HostFacts| -> Vec<PrerequisiteCode> {
+            let options = run(&app, host, &Preferences::default());
+            assert_eq!(options[0].route, Route::Rehost);
+            options[0]
+                .prerequisites
+                .iter()
+                .map(|prerequisite| prerequisite.code)
+                .collect()
+        };
+        let bare = HostFacts::default();
+        let installed = HostFacts {
+            rehost: true,
+            ..HostFacts::default()
+        };
+        let allowed = HostFacts {
+            rehost: true,
+            rehost_builds: true,
+            ..HostFacts::default()
+        };
+        assert_eq!(
+            codes(&bare),
+            [
+                PrerequisiteCode::InstallRehost,
+                PrerequisiteCode::AllowRehostBuilds
+            ]
+        );
+        assert_eq!(codes(&installed), [PrerequisiteCode::AllowRehostBuilds]);
+        assert!(codes(&allowed).is_empty());
+        let options = run(&app, &bare, &Preferences::default());
+        assert!(options[0].prerequisites[0].text.contains("tur-rehost"));
+        assert!(
+            options[0].prerequisites[1]
+                .text
+                .contains("without network access")
+        );
+
+        // The modules with no Linux build are a warning, counted; it does
+        // not make the route doubtful.
+        let options = run(&app, &allowed, &Preferences::default());
+        let unresolved = options[0]
+            .caveats
+            .iter()
+            .find(|caveat| caveat.text_id == "rehost.unresolved-modules")
+            .unwrap();
+        assert_eq!(unresolved.severity, Severity::Warning);
+        assert_eq!(unresolved.params["count"], "2");
+        assert!(unresolved.text.starts_with("2 native modules"));
+        assert_eq!(options[0].outlook, Outlook::Clear);
+
+        // Nothing to build: nothing asked, and no warning without modules.
+        let plain = entry(
+            Category::Development,
+            vec![measured(windows(), Rating::Usable, &[], &[])],
+        );
+        let options = run(&plain, &installed, &Preferences::default());
+        assert!(options[0].prerequisites.is_empty());
+        assert!(
+            !caveat_ids(&options[0]).contains(&"rehost.unresolved-modules")
+        );
+    }
+
+    #[test]
+    fn a_macos_only_application_with_a_measured_rehost_has_a_route_without_darling() {
+        let mac = entry(
+            Category::Productivity,
+            vec![measured(mac_page(), Rating::Usable, &[], &["fsevents@2.3.3"])],
+        );
+        let mut host = full_host();
+        host.darling_enabled = false;
+        let options = run(&mac, &host, &Preferences::default());
+        assert_eq!(routes(&options), [Route::Rehost]);
+        assert!(options[0].recommended);
+        assert_eq!(options[0].reason_parts[0].params["platform"], "macos");
+        assert!(options[0].reason.contains("this application's macOS package"));
+        assert_eq!(options[0].caveats[0].params["platform"], "macos");
+        assert!(options[0].caveats[2].text.starts_with("1 native module "));
+
+        // With Darling enabled, Darling is listed after it.
+        let options = run(&mac, &full_host(), &Preferences::default());
+        assert_eq!(routes(&options), [Route::Rehost, Route::Darling]);
+        assert!(options[0].recommended);
+
+        // A pin to it is honoured.
+        let options = run(&mac, &host, &pinned(Route::Rehost));
+        assert!(options[0].pinned && options[0].recommended);
+    }
+
+    #[test]
+    fn rehost_is_blocked_on_a_machine_that_is_not_x86_64() {
+        let mut arm = full_host();
+        arm.arch = Arch::Aarch64;
+        let win = entry(
+            Category::Productivity,
+            vec![measured(windows(), Rating::Usable, &[], &[])],
+        );
+        let options = run(&win, &arm, &Preferences::default());
+        assert_eq!(
+            routes(&options),
+            [Route::NoRoute, Route::Rehost, Route::Wine]
+        );
+        assert_eq!(options[1].outlook, Outlook::Blocked);
+        let blocker = options[1]
+            .caveats
+            .iter()
+            .find(|caveat| caveat.severity == Severity::Blocker)
+            .unwrap();
+        assert_eq!(blocker.text_id, "architecture.not-x86-64");
+
+        // A macOS-only application: no route, and the statement names the
+        // re-host's blocker, not Darling.
+        let mut host = arm.clone();
+        host.darling_enabled = false;
+        let mac = entry(
+            Category::Productivity,
+            vec![measured(mac_page(), Rating::Usable, &[], &[])],
+        );
+        let options = run(&mac, &host, &Preferences::default());
+        assert_eq!(routes(&options), [Route::NoRoute, Route::Rehost]);
+        let codes: Vec<ReasonCode> = options[0]
+            .reason_parts
+            .iter()
+            .map(|part| part.code)
+            .collect();
+        assert_eq!(codes, [ReasonCode::NoRoute, ReasonCode::RouteBlocked]);
+        assert_eq!(options[0].reason_parts[1].params["route"], "rehost");
+        assert_eq!(
+            options[0].alternative.as_ref().unwrap().kind,
+            AlternativeKind::Mac
+        );
+
+        // Kernel anti-cheat and a kernel driver block it on any machine.
+        for requirement in [Requirement::KernelAntiCheat, Requirement::KernelDriver] {
+            let edition = requiring(
+                measured(windows(), Rating::Usable, &[], &[]),
+                &[requirement],
+            );
+            let app = entry(Category::Productivity, vec![edition]);
+            let options = run(&app, &full_host(), &Preferences::default());
+            let rehost = options
+                .iter()
+                .find(|option| option.route == Route::Rehost)
+                .unwrap();
+            assert_eq!(rehost.outlook, Outlook::Blocked);
+            assert_eq!(
+                rehost.caveat_for(requirement).unwrap().severity,
+                Severity::Blocker
+            );
+        }
+    }
+
+    #[test]
+    fn a_rehost_that_only_starts_is_offered_and_overtakes_nothing() {
+        // `starts`: offered, clear when nothing is known against it.
+        let started = measured(windows(), Rating::Starts, &[], &[]);
+        let alone = entry(Category::Productivity, vec![started.clone()]);
+        let options = run(&alone, &full_host(), &Preferences::default());
+        assert_eq!(routes(&options), [Route::Rehost, Route::Wine]);
+        assert_eq!(options[0].rating, Rating::Starts);
+        assert_eq!(options[0].outlook, Outlook::Clear);
+        assert!(options[0].recommended);
+
+        // It does not move a Linux edition rated broken behind it: only
+        // `good` or `usable` is "clearly better".
+        let worse = entry(
+            Category::Productivity,
+            vec![rated(flatpak(), Route::Flatpak, Rating::Broken), started.clone()],
+        );
+        let options = run(&worse, &full_host(), &Preferences::default());
+        assert_eq!(
+            routes(&options),
+            [Route::Flatpak, Route::Rehost, Route::Wine]
+        );
+        assert_eq!(recommended(&options).route, Route::Rehost);
+
+        // It does not outweigh a known obstacle.
+        let dongle = entry(
+            Category::Productivity,
+            vec![requiring(started, &[Requirement::HardwareDongle])],
+        );
+        let options = run(&dongle, &full_host(), &Preferences::default());
+        let rehost = options
+            .iter()
+            .find(|option| option.route == Route::Rehost)
+            .unwrap();
+        assert_eq!(rehost.outlook, Outlook::Doubtful);
+
+        // On Wine, a known obstacle still brings the guest.
+        let layer = entry(
+            Category::Productivity,
+            vec![rated(
+                requiring(windows(), &[Requirement::KernelDriver]),
+                Route::Wine,
+                Rating::Starts,
+            )],
+        );
+        let options = run(&layer, &full_host(), &Preferences::default());
+        assert_eq!(routes(&options), [Route::Wine, Route::WindowsGuest]);
+        assert_eq!(options[1].reason_code, ReasonCode::GuestKnownObstacle);
+        assert!(!Rating::Starts.is_adverse() && !Rating::Starts.is_supporting());
+        assert!(Rating::Starts.shows_it_starts());
     }
 
     #[test]

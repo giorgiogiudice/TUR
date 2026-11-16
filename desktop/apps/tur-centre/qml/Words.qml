@@ -24,6 +24,8 @@ QtObject {
         "native": qsTr("Linux application"),
         //: An application packaged for another Linux system, when the catalogue does not name the system.
         "distro-container": qsTr("Linux application, from another Linux system"),
+        //: The publisher's Windows or Mac package, re-hosted on the Linux build of the runtime it was made with, such as Electron.
+        "rehost": qsTr("Runs on its own runtime"),
         "proton": qsTr("Windows game, through Proton"),
         "wine": qsTr("Windows application, in the compatibility layer"),
         "windows-guest": qsTr("Windows application, in Windows"),
@@ -37,6 +39,7 @@ QtObject {
         "flatpak": qsTr("Made for Linux. Runs directly."),
         "native": qsTr("Made for Linux. Runs directly."),
         "distro-container": qsTr("Made for another Linux system. Runs in a small copy of that system."),
+        "rehost": qsTr("The Windows or Mac package, running natively on Linux's build of the runtime it was made with. Tested by TUR; not supported by the publisher."),
         "proton": qsTr("Runs without Windows, through Proton, the compatibility layer used by the Steam Deck."),
         "wine": qsTr("Runs without Windows. Fastest and lightest, but not every application works."),
         "windows-guest": qsTr("Runs inside a real Windows that TUR starts in the background (a virtual machine). Needs your own Windows licence and more memory."),
@@ -52,9 +55,17 @@ QtObject {
     readonly property var ratingLabels: ({
         "good": qsTr("Works well"),
         "usable": qsTr("Works, with minor problems"),
+        //: TUR's own measurement: the application started and showed its first window; nothing more was tested.
+        "starts": qsTr("Starts"),
         "poor": qsTr("Works badly"),
         "broken": qsTr("Does not work"),
         "unknown": qsTr("No reports")
+    })
+
+    // What a rating does not say by its label alone. Only `starts` needs it:
+    // it is not "works".
+    readonly property var ratingExplanations: ({
+        "starts": qsTr("TUR saw it start and show its first window. Nothing beyond that was tested.")
     })
 
     // --- What stands in the way: the option's `outlook` --------------------
@@ -123,6 +134,10 @@ QtObject {
 
     function ratingLabel(rating: string): string {
         return words.lookUp(words.ratingLabels, rating)
+    }
+
+    function ratingExplanation(rating: string): string {
+        return words.lookUp(words.ratingExplanations, rating)
     }
 
     function outlookLabel(outlook: string): string {
@@ -335,6 +350,20 @@ QtObject {
 
     function sourceState(state: string): string {
         return words.lookUp(words.sourceStates, state) || state
+    }
+
+    // --- Home's standing sentence (section 8.1) ----------------------------
+    //
+    // Who has tested what: nothing by TUR itself (0), or the number of
+    // applications TUR has rated itself, from the catalogue's counts.
+    function testedByTurSentence(applications: int): string {
+        if (applications <= 0)
+            return qsTr("TUR has not tested applications itself yet. Every rating here is what the named source reports.")
+        if (applications === 1)
+            return qsTr("TUR has tested 1 application itself. Everything else shows who tested it, or says that nobody has yet.")
+        //: %1 is the number of applications TUR has tested itself, more than one.
+        return qsTr("TUR has tested %1 applications itself. Everything else shows who tested it, or says that nobody has yet.")
+            .arg(applications)
     }
 
     // --- Chrome, for people coming from Windows (section 17.1, answer 4) ---

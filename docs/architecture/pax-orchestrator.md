@@ -290,6 +290,10 @@ event.
 | `heal_undo_remedy` | 1 | the same, to undo | the same |
 | `apps_list_installed` | 0 | `tur-apps list --json` | `services/tur-apps` |
 | `apps_plan` | 0 | `tur-apps --catalogue /usr/share/tur/catalogue plan --offline --json -- <id>` | the same |
+| `rehost_detect` | 0 | `tur-rehost detect --json -- <path>` (the package is opened in a sandbox without network; nothing is fetched) | `services/tur-rehost` |
+| `rehost_plan` | 0 | `tur-rehost plan --json -- <path>` (nothing is fetched or installed) | the same |
+| `rehost_list` | 0 | `tur-rehost list --json` | the same |
+| `rehost_show` | 0 | `tur-rehost show --json -- <app-id>` | the same |
 | `ai_local_status` | 0 | `tur-ai-local status --json` | `services/tur-ai-local` |
 | `ai_local_models` | 0 | `tur-ai-local models --json --catalogue-only` | the same |
 | `ai_local_recommend` | 0 | `tur-ai-local recommend --json` | the same |

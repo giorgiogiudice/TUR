@@ -1367,6 +1367,33 @@ the Windows-guest route. Everything else is in
 [compat-autopilot](compat-autopilot.md); the measurements in
 [autopilot-1](../reports/autopilot-1.md).
 
+## Re-hosting, beside this runtime manager
+
+A Windows or macOS package whose payload is portable (Electron's
+`app.asar`) can also run on the Linux build of its own runtime, without
+Wine: the route `rehost`, measured in [exp-rehost-1](../reports/exp-rehost-1.md)
+and built as a separate program, `tur-rehost` ([rehost](rehost.md)). It is
+not part of `tur-runtime` because it must open containers and fetch a
+runtime, and this program promises to do neither (see
+[Installing a Windows application](#installing-a-windows-application):
+"Nothing is fetched"). The two share the model, not the code:
+
+| | `tur-runtime` (Wine, Proton) | `tur-rehost` |
+|---|---|---|
+| One application, one directory | `prefixes/<app-id>/` | `apps/<app-id>/` under `$XDG_DATA_HOME/tur/rehost` |
+| What the application sees | its prefix and private home | its runtime and payload (read-only) and private home |
+| Record beside it, not shown to it | `application.json`, `metadata.json` | `record.json` |
+| Sandbox | bubblewrap, user namespaces disabled inside for Wine | the same boundary; user namespaces stay available for Chromium's own sandbox |
+| Installer | run unattended, in the sandbox | never run: opened by archive tools in a sandbox without network |
+| Fetches | nothing | the runtime at the payload's exact version, pinned by SHA-256 in TUR's index |
+| Removal | delete the directory, check nothing is left | the same |
+
+`tur-runtime inspect` still answers "Wine" for an Electron application's
+Windows program: it reads one file, not a package, and knows nothing of
+measurements. The router decides between the two from the catalogue's
+records (catalogue-and-routing.md); `tur-rehost detect` answers for a
+package.
+
 ## Not done yet
 
 - **Case-insensitive prefixes beyond the first measurement.** Off by

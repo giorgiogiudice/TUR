@@ -1,0 +1,95 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR application catalogue entry. Format: schemas/app-catalogue-entry.schema.json.
+# How entries are written and sourced: catalogue/README.md.
+# The two rehost records are TUR's own measurements, with their report
+# (docs/reports/exp-rehost-1.md) and the run that holds the evidence.
+# Nothing is claimed about the publisher's Linux edition: it has no record.
+
+schema_version = 1
+id = "org.tabby.tabby"
+name = "Tabby"
+publisher = "Tabby (Eugeny)"
+category = "development"
+summary = "Terminal emulator and SSH client."
+homepage = "https://github.com/Eugeny/tabby"
+
+[[editions]]
+kind = "linux-native"
+obtain = "publisher-page"
+download_page = "https://github.com/Eugeny/tabby/releases"
+licence = "open-source"
+
+[[editions.references]]
+title = "Tabby 1.0.238 release on GitHub, with its Linux, Windows and macOS packages"
+url = "https://github.com/Eugeny/tabby/releases/tag/v1.0.238"
+checked = "2026-11-15"
+
+[[editions]]
+kind = "windows"
+obtain = "publisher-page"
+download_page = "https://github.com/Eugeny/tabby/releases"
+licence = "open-source"
+
+[[editions.records]]
+route = "rehost"
+rating = "starts"
+reported_by = "tur-test"
+test_report = "docs/reports/exp-rehost-1.md"
+version_tested = "1.0.238"
+date = "2026-11-15"
+notes = "Measured by TUR's re-hosting experiment: the application's own first window, the same as the official Linux build's, and typed text; no feature beyond that was exercised (exp-rehost-1, section 3.1)."
+
+[editions.records.rehost]
+package = "tabby-1.0.238-portable-x64.zip"
+package_sha256 = "56de045fbb5a74d586903367d3f7227276d538281b0068d8132de3318cdd5019"
+package_size = 185884613
+runtime = "electron"
+runtime_version = "43.7.0"
+evidence = "https://github.com/giorgiogiudice/TUR/actions/runs/43768570046"
+native_builds = [
+    "@tabby-gang/windows-process-tree@0.6.1",
+    "fontmanager-redux@1.1.0",
+    "glasstron@0.1.1",
+    "native-process-working-directory@1.0.2",
+]
+unresolved = ["windows-native-registry@3.2.2"]
+
+[[editions.references]]
+title = "Tabby 1.0.238 release on GitHub, with its Linux, Windows and macOS packages"
+url = "https://github.com/Eugeny/tabby/releases/tag/v1.0.238"
+checked = "2026-11-15"
+
+[[editions]]
+kind = "macos"
+obtain = "publisher-page"
+download_page = "https://github.com/Eugeny/tabby/releases"
+licence = "open-source"
+
+[[editions.records]]
+route = "rehost"
+rating = "starts"
+reported_by = "tur-test"
+test_report = "docs/reports/exp-rehost-1.md"
+version_tested = "1.0.238"
+date = "2026-11-15"
+notes = "Measured by TUR's re-hosting experiment: the application's own first window, the same as the official Linux build's, and typed text; no feature beyond that was exercised (exp-rehost-1, section 3.1)."
+
+[editions.records.rehost]
+package = "tabby-1.0.238-macos-x86_64.zip"
+package_sha256 = "93935cc99fed5ff76a4cceaef15fdd15802aa7f49e9227f9c883df6eeebee9b4"
+package_size = 163103385
+runtime = "electron"
+runtime_version = "43.7.0"
+evidence = "https://github.com/giorgiogiudice/TUR/actions/runs/43768570046"
+native_builds = [
+    "@tabby-gang/windows-process-tree@0.6.1",
+    "fontmanager-redux@1.1.0",
+    "glasstron@0.1.1",
+    "native-process-working-directory@1.0.2",
+]
+unresolved = ["macos-native-processlist@2.1.0"]
+
+[[editions.references]]
+title = "Tabby 1.0.238 release on GitHub, with its Linux, Windows and macOS packages"
+url = "https://github.com/Eugeny/tabby/releases/tag/v1.0.238"
+checked = "2026-11-15"

@@ -17,14 +17,15 @@ use serde_json::{Value, json};
 
 use crate::cancel;
 use crate::codes::{Code, Failure};
-use crate::digest::hash_file;
+use crate::digest::{Hashed, hash_file};
 use crate::download::fetch_installer;
 use crate::events::{Emitter, Event};
 use crate::exec::{Program, Stream};
 use crate::flatpak;
 use crate::paths::display;
 use crate::plan::{self, Context, Execution, Plan, Request, WindowsFile};
-use crate::records::{self, FlatpakPart, Record, Source, WindowsPart, exists};
+use crate::records::{self, FlatpakPart, Record, RehostPart, Source, WindowsPart, exists};
+use crate::rehost::{self, RehostOptions};
 use crate::runtime;
 use crate::tree;
 
@@ -32,7 +33,7 @@ use crate::tree;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum DataChoice {
-    /// Keep it: a Flatpak's data stays where it is; a Windows
+    /// Keep it: a Flatpak's data stays where it is; a Windows or re-hosted
     /// application's documents and settings are copied aside first.
     Keep,
     /// Delete it with the application.
@@ -151,6 +152,24 @@ pub fn install(
             file,
             portable,
         } => install_windows(context, &plan, runtime_app_id, file, *portable, emitter)?,
+        Execution::Rehost {
+            app_id,
+            package,
+            hashed,
+            measured,
+            options,
+        } => install_rehost(
+            context,
+            &plan,
+            &Rehosting {
+                app_id,
+                package,
+                hashed,
+                measured: *measured,
+                options,
+            },
+            emitter,
+        )?,
     };
     emitter.started("record", "Recording the installation");
     records::save(dirs, &record)?;
@@ -164,6 +183,7 @@ pub fn install(
         "record": display(&dirs.record(&record.id), dirs),
         "flatpak": record.flatpak,
         "windows": record.windows,
+        "rehost": record.rehost,
     }))
 }
 
@@ -267,6 +287,7 @@ fn install_flatpak(
             added_refs: added,
         }),
         windows: None,
+        rehost: None,
     })
 }
 
@@ -414,6 +435,109 @@ fn install_windows(
             runtime_app_id: runtime_app_id.to_owned(),
             main_executable: installed.main_executable,
         }),
+        rehost: None,
+    })
+}
+
+/// What a re-hosting plan carries out.
+struct Rehosting<'a> {
+    app_id: &'a str,
+    package: &'a std::path::Path,
+    hashed: &'a Hashed,
+    measured: bool,
+    options: &'a RehostOptions,
+}
+
+fn install_rehost(
+    context: &Context,
+    plan: &Plan,
+    rehosting: &Rehosting<'_>,
+    emitter: &mut Emitter,
+) -> Result<Record, Failure> {
+    context
+        .tur_rehost
+        .require("to re-host an application on its runtime's Linux build")?;
+    let package = rehosting.package;
+    // The file is hashed again just before it is used: it is the person's
+    // file, and it may have changed since the plan.
+    emitter.started("verify", format!("Checking {} again", package.display()));
+    let now = hash_file(package)?;
+    if &now != rehosting.hashed {
+        emitter.finished("verify", false);
+        return Err(Failure::new(
+            Code::NotVerified,
+            format!(
+                "{} changed after the plan was made (its SHA-256 is now {}). Nothing was installed.",
+                package.display(),
+                now.sha256
+            ),
+        ));
+    }
+    emitter.finished("verify", true);
+    // The last moment a cancel is honoured: tur-rehost is not stopped once
+    // it has started (it rolls a failed installation back itself).
+    if cancel::requested() {
+        return Err(cancel::cancelled("Nothing of the package was used."));
+    }
+    emitter.started(
+        "install",
+        format!(
+            "Re-hosting {} with tur-rehost on its runtime's Linux build",
+            plan.application.name
+        ),
+    );
+    let arguments = rehost::install_arguments(
+        package,
+        rehosting.app_id,
+        &plan.application.name,
+        rehosting.options,
+    );
+    let outcome = {
+        let mut forward = forward_lines(emitter, "install", false);
+        context.tur_rehost.run_streaming(&arguments, &mut forward)?
+    };
+    if !outcome.success() {
+        emitter.finished("install", false);
+        let why = rehost::parse_failure(&outcome.stdout).unwrap_or_else(|| outcome.tail());
+        return Err(Failure::new(
+            Code::StepFailed,
+            format!(
+                "tur-rehost did not re-host {} ({why}); it removes what it had staged, and nothing was recorded.",
+                plan.application.name
+            ),
+        ));
+    }
+    emitter.finished("install", true);
+    let installed = rehost::parse_install_report(&outcome.stdout);
+    Ok(Record {
+        schema_version: records::RECORD_VERSION,
+        id: plan.application.id.clone(),
+        name: plan.application.name.clone(),
+        route: "rehost".to_owned(),
+        source: Source {
+            kind: "user-file".to_owned(),
+            remote: None,
+            url: None,
+            file_name: package
+                .file_name()
+                .and_then(|name| name.to_str())
+                .map(str::to_owned),
+            sha256: Some(rehosting.hashed.sha256.clone()),
+            size: Some(rehosting.hashed.size),
+            pinned: rehosting.measured,
+        },
+        version: installed.app_version,
+        installed_at: records::now_rfc3339(),
+        flatpak: None,
+        windows: None,
+        rehost: Some(RehostPart {
+            app_id: rehosting.app_id.to_owned(),
+            platform: installed.platform,
+            runtime: installed.runtime,
+            measured: rehosting.measured,
+            builds_allowed: rehosting.options.allow_builds,
+            allowed_unresolved: rehosting.options.allow_unresolved.clone(),
+        }),
     })
 }
 
@@ -433,10 +557,11 @@ pub fn remove(
 ) -> Result<Value, Failure> {
     let dirs = &context.dirs;
     let record = records::load(dirs, id)?.ok_or_else(|| not_installed(id))?;
-    let (removed, kept, findings) = match (&record.flatpak, &record.windows) {
-        (Some(part), _) => remove_flatpak(context, &record, part, choice, emitter)?,
-        (None, Some(part)) => remove_windows(context, &record, part, choice, emitter)?,
-        (None, None) => {
+    let (removed, kept, findings) = match (&record.flatpak, &record.windows, &record.rehost) {
+        (Some(part), _, _) => remove_flatpak(context, &record, part, choice, emitter)?,
+        (None, Some(part), _) => remove_windows(context, &record, part, choice, emitter)?,
+        (None, None, Some(part)) => remove_rehost(context, &record, part, choice, emitter)?,
+        (None, None, None) => {
             return Err(Failure::new(
                 Code::RecordInvalid,
                 format!("the record of {id} names nothing installed"),
@@ -598,63 +723,22 @@ fn remove_windows(
         .tur_runtime
         .require("to remove a Windows application")?;
     let app_id = &part.runtime_app_id;
-    let mut kept = Vec::new();
-    if choice == DataChoice::Keep {
-        // tur-runtime deletes the private home with the application. What
-        // the user made in it is copied aside first; if that fails, nothing
-        // is removed.
-        let target = dirs.kept(&record.id).join(records::stamp());
-        emitter.started(
-            "keep",
-            format!(
-                "Copying {}'s documents and settings to {}",
-                record.name,
-                display(&target, dirs)
-            ),
-        );
-        let mut copied_any = false;
-        for (source, name) in [
-            (dirs.runtime_home(app_id), "home"),
-            (dirs.runtime_profiles(app_id), "windows-profiles"),
-        ] {
-            if !exists(&source) {
-                continue;
-            }
-            match tree::copy(&source, &target.join(name)) {
-                Ok(copied) => {
-                    copied_any = true;
-                    emitter.activity(
-                        "keep",
-                        format!(
-                            "{name}: {} file(s), {} byte(s){}",
-                            copied.files,
-                            copied.bytes,
-                            if copied.skipped.is_empty() {
-                                String::new()
-                            } else {
-                                format!("; links not followed: {}", copied.skipped.join(", "))
-                            }
-                        ),
-                    );
-                }
-                Err(failure) => {
-                    emitter.finished("keep", false);
-                    let _ = fs::remove_dir_all(&target);
-                    return Err(Failure::new(
-                        Code::StepFailed,
-                        format!(
-                            "{}'s data could not be copied aside, so nothing was removed: {}",
-                            record.name, failure.message
-                        ),
-                    ));
-                }
-            }
-        }
-        emitter.finished("keep", true);
-        if copied_any {
-            kept.push(display(&target, dirs));
-        }
-    }
+    // tur-runtime deletes the private home with the application. What the
+    // user made in it is copied aside first; if that fails, nothing is
+    // removed.
+    let mut kept = if choice == DataChoice::Keep {
+        keep_aside(
+            context,
+            record,
+            &[
+                (dirs.runtime_home(app_id), "home"),
+                (dirs.runtime_profiles(app_id), "windows-profiles"),
+            ],
+            emitter,
+        )?
+    } else {
+        Vec::new()
+    };
 
     emitter.started(
         "uninstall",
@@ -720,11 +804,160 @@ fn remove_windows(
     Ok((removed, kept, findings))
 }
 
+/// Copies an application's documents and settings aside, before a program
+/// that deletes them with the application runs: each source that exists,
+/// to `kept/<id>/<UTC time>/<name>`. Returns the directory, when anything
+/// was copied. If a copy fails, what was copied is deleted again and the
+/// failure says that nothing was removed.
+fn keep_aside(
+    context: &Context,
+    record: &Record,
+    sources: &[(PathBuf, &str)],
+    emitter: &mut Emitter,
+) -> Result<Vec<String>, Failure> {
+    let dirs = &context.dirs;
+    let target = dirs.kept(&record.id).join(records::stamp());
+    emitter.started(
+        "keep",
+        format!(
+            "Copying {}'s documents and settings to {}",
+            record.name,
+            display(&target, dirs)
+        ),
+    );
+    let mut copied_any = false;
+    for (source, name) in sources {
+        if !exists(source) {
+            continue;
+        }
+        match tree::copy(source, &target.join(name)) {
+            Ok(copied) => {
+                copied_any = true;
+                emitter.activity(
+                    "keep",
+                    format!(
+                        "{name}: {} file(s), {} byte(s){}",
+                        copied.files,
+                        copied.bytes,
+                        if copied.skipped.is_empty() {
+                            String::new()
+                        } else {
+                            format!("; links not followed: {}", copied.skipped.join(", "))
+                        }
+                    ),
+                );
+            }
+            Err(failure) => {
+                emitter.finished("keep", false);
+                let _ = fs::remove_dir_all(&target);
+                return Err(Failure::new(
+                    Code::StepFailed,
+                    format!(
+                        "{}'s data could not be copied aside, so nothing was removed: {}",
+                        record.name, failure.message
+                    ),
+                ));
+            }
+        }
+    }
+    emitter.finished("keep", true);
+    Ok(if copied_any {
+        vec![display(&target, dirs)]
+    } else {
+        Vec::new()
+    })
+}
+
+fn remove_rehost(
+    context: &Context,
+    record: &Record,
+    part: &RehostPart,
+    choice: DataChoice,
+    emitter: &mut Emitter,
+) -> Result<Removed, Failure> {
+    let dirs = &context.dirs;
+    context
+        .tur_rehost
+        .require("to remove a re-hosted application")?;
+    let app_id = &part.app_id;
+    // tur-rehost deletes the private home with the application, without
+    // asking. What the person made in it is copied aside first; if that
+    // fails, nothing is removed.
+    let kept = if choice == DataChoice::Keep {
+        keep_aside(
+            context,
+            record,
+            &[(dirs.rehost_home(app_id), "home")],
+            emitter,
+        )?
+    } else {
+        Vec::new()
+    };
+
+    emitter.started(
+        "uninstall",
+        format!("Removing {} with tur-rehost", record.name),
+    );
+    let outcome = {
+        let mut forward = forward_lines(emitter, "uninstall", false);
+        context
+            .tur_rehost
+            .run_streaming(&rehost::uninstall_arguments(app_id), &mut forward)?
+    };
+    let report: Value = serde_json::from_str(outcome.stdout.trim()).unwrap_or(Value::Null);
+    let mut findings: Vec<String> = Vec::new();
+    match outcome.status {
+        Some(0) => {}
+        // Something of it is still there (TUR-REHOST-APP-007).
+        Some(8) => findings
+            .push(rehost::parse_failure(&outcome.stdout).unwrap_or_else(|| outcome.tail())),
+        // Not set up (TUR-REHOST-APP-004): it was removed outside tur-apps.
+        Some(6) => emitter.activity(
+            "uninstall",
+            "tur-rehost has no such application: it was already removed",
+        ),
+        _ => {
+            emitter.finished("uninstall", false);
+            let why = rehost::parse_failure(&outcome.stdout).unwrap_or_else(|| outcome.tail());
+            return Err(Failure::new(
+                Code::StepFailed,
+                format!("tur-rehost did not remove {} ({why})", record.name),
+            ));
+        }
+    }
+    emitter.finished("uninstall", findings.is_empty());
+    for path in [dirs.rehost_app(app_id), dirs.rehost_launcher(app_id)] {
+        if exists(&path) {
+            findings.push(format!("{} is still there", display(&path, dirs)));
+        }
+    }
+    let removed = report["deleted"]
+        .as_array()
+        .map(|paths| {
+            paths
+                .iter()
+                .filter_map(Value::as_str)
+                .map(|path| display(&PathBuf::from(path), dirs))
+                .collect()
+        })
+        .unwrap_or_else(|| vec![display(&dirs.rehost_app(app_id), dirs)]);
+    Ok((removed, kept, findings))
+}
+
 /// Updates an application.
 pub fn update(context: &Context, id: &str, emitter: &mut Emitter) -> Result<Value, Failure> {
     let dirs = &context.dirs;
     let mut record = records::load(dirs, id)?.ok_or_else(|| not_installed(id))?;
     let Some(part) = record.flatpak.clone() else {
+        if record.rehost.is_some() {
+            return Err(Failure::new(
+                Code::RouteNotBuilt,
+                format!(
+                    "Updating a re-hosted application is not built yet: its own updater is off, and tur-rehost has no update. To move {} to a newer version, remove it (its data is kept) and install the newer package.",
+                    record.name
+                ),
+            ));
+        }
         return Err(Failure::new(
             Code::RouteNotBuilt,
             format!(
@@ -825,10 +1058,10 @@ pub struct Listed {
     pub id: String,
     /// Its name.
     pub name: String,
-    /// `flatpak` or `wine`.
+    /// How it runs: `flatpak`, `wine` or `rehost`.
     pub route: String,
-    /// `tur-apps` when this program installed it; `flatpak` or
-    /// `tur-runtime` when it was installed with that program directly.
+    /// `tur-apps` when this program installed it; `flatpak`, `tur-runtime`
+    /// or `tur-rehost` when it was installed with that program directly.
     pub installed_by: String,
     /// Where it came from, in a few words.
     pub from: String,
@@ -871,7 +1104,8 @@ fn flatpak_updates(flatpak: &Program) -> Result<BTreeMap<String, Option<String>>
 ///
 /// With `check_updates`, the Flatpak remotes are asked for updates, and a
 /// Windows application installed from a pinned download is compared with
-/// the catalogue's current pin.
+/// the catalogue's current pin. A re-hosted application is listed with the
+/// route `rehost`; its updates are not checked.
 pub fn list(context: &Context, check_updates: bool) -> Result<Value, Failure> {
     let dirs = &context.dirs;
     let (records, mut problems) = records::load_all(dirs);
@@ -888,6 +1122,17 @@ pub fn list(context: &Context, check_updates: bool) -> Result<Value, Failure> {
             .ok()
             .filter(|outcome| outcome.success())
             .map(|outcome| runtime::parse_list(&outcome.stdout))
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+    let rehost_listed = if context.tur_rehost.exists() {
+        context
+            .tur_rehost
+            .run(&rehost::list_arguments())
+            .ok()
+            .filter(|outcome| outcome.success())
+            .map(|outcome| rehost::parse_list(&outcome.stdout))
             .unwrap_or_default()
     } else {
         Vec::new()
@@ -918,6 +1163,7 @@ pub fn list(context: &Context, check_updates: bool) -> Result<Value, Failure> {
     let mut applications = Vec::new();
     let mut managed_flatpaks = BTreeSet::new();
     let mut managed_windows = BTreeSet::new();
+    let mut managed_rehost = BTreeSet::new();
     for record in &records {
         if let Some(part) = &record.flatpak {
             managed_flatpaks.insert(part.app_id.clone());
@@ -1006,6 +1252,41 @@ pub fn list(context: &Context, check_updates: bool) -> Result<Value, Failure> {
                 .to_owned(),
                 update,
             });
+        } else if let Some(part) = &record.rehost {
+            managed_rehost.insert(part.app_id.clone());
+            let live = rehost_listed
+                .iter()
+                .find(|listed| listed.app_id == part.app_id);
+            let package = record
+                .source
+                .file_name
+                .as_deref()
+                .map_or_else(|| "a package".to_owned(), str::to_owned);
+            let runtime = live
+                .map(|listed| listed.runtime.clone())
+                .filter(|runtime| !runtime.is_empty())
+                .or_else(|| part.runtime.clone())
+                .unwrap_or_else(|| "its runtime".to_owned());
+            applications.push(Listed {
+                id: record.id.clone(),
+                name: record.name.clone(),
+                route: record.route.clone(),
+                installed_by: "tur-apps".to_owned(),
+                from: format!("your file {package}, re-hosted on {runtime}"),
+                version: live
+                    .and_then(|listed| listed.app_version.clone())
+                    .or_else(|| record.version.clone()),
+                size: exists(&dirs.rehost_app(&part.app_id))
+                    .then(|| tree::size(&dirs.rehost_app(&part.app_id))),
+                data: vec![display(&dirs.rehost_home(&part.app_id), dirs)],
+                state: if live.is_some() {
+                    "installed"
+                } else {
+                    "missing"
+                }
+                .to_owned(),
+                update: UpdateState::not_checked(),
+            });
         }
     }
     // What was installed with flatpak or tur-runtime directly.
@@ -1062,6 +1343,26 @@ pub fn list(context: &Context, check_updates: bool) -> Result<Value, Failure> {
             update: UpdateState::not_checked(),
         });
     }
+    for listed in rehost_listed
+        .iter()
+        .filter(|listed| !managed_rehost.contains(&listed.app_id))
+    {
+        applications.push(Listed {
+            id: listed.app_id.clone(),
+            name: listed.name.clone(),
+            route: "rehost".to_owned(),
+            installed_by: "tur-rehost".to_owned(),
+            from: format!(
+                "a {} package given to tur-rehost, re-hosted on {}",
+                listed.platform, listed.runtime
+            ),
+            version: listed.app_version.clone(),
+            size: Some(tree::size(&dirs.rehost_app(&listed.app_id))),
+            data: vec![display(&dirs.rehost_home(&listed.app_id), dirs)],
+            state: "installed".to_owned(),
+            update: UpdateState::not_checked(),
+        });
+    }
     applications.sort_by(|a, b| {
         a.name
             .to_lowercase()
@@ -1081,13 +1382,17 @@ pub fn list(context: &Context, check_updates: bool) -> Result<Value, Failure> {
 /// status.
 pub fn launch(context: &Context, id: &str) -> Result<i32, Failure> {
     let record = records::load(&context.dirs, id)?.ok_or_else(|| not_installed(id))?;
-    let (program, arguments) = match (&record.flatpak, &record.windows) {
-        (Some(part), _) => (&context.flatpak, flatpak::run_arguments(&part.app_id)),
-        (None, Some(part)) => (
+    let (program, arguments) = match (&record.flatpak, &record.windows, &record.rehost) {
+        (Some(part), _, _) => (&context.flatpak, flatpak::run_arguments(&part.app_id)),
+        (None, Some(part), _) => (
             &context.tur_runtime,
             runtime::launch_arguments(&part.runtime_app_id),
         ),
-        (None, None) => {
+        (None, None, Some(part)) => (
+            &context.tur_rehost,
+            rehost::launch_arguments(&part.app_id),
+        ),
+        (None, None, None) => {
             return Err(Failure::new(
                 Code::RecordInvalid,
                 format!("the record of {id} names nothing installed"),

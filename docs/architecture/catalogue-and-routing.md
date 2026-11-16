@@ -56,10 +56,16 @@ Each edition has a `kind` and the identifiers of that kind:
 |---|---|---|
 | `flatpak` | `flatpak_id`, `remote` (default `flathub`) | `flatpak` |
 | `linux-native` | `obtain`: `fedora-package` with `package`; `other-distribution-package` with `distribution` and `package`; `steam` with `store_id`; `publisher-page` with `download_page` | `native`; `distro-container` for another distribution's package |
-| `windows` | `obtain`: `steam`, `epic`, `gog` or `microsoft-store` with `store_id`; `publisher-page` with `download_page` | `proton`, `wine`, `windows-guest` |
+| `windows` | `obtain`: `steam`, `epic`, `gog` or `microsoft-store` with `store_id`; `publisher-page` with `download_page` | `proton`, `wine`, `windows-guest`, `rehost` |
 | `android` | `package`; `stores`: `f-droid`, `google-play`, `publisher-page` (with `download_page`) | `android-runtime` |
 | `web` | `url`; `primary` when the web application is the publisher's primary form | `web` |
-| `macos` | `obtain`: `mac-app-store` or `steam` with `store_id`; `publisher-page` with `download_page` | `darling` |
+| `macos` | `obtain`: `mac-app-store` or `steam` with `store_id`; `publisher-page` with `download_page` | `darling`, `rehost` |
+
+`rehost` runs the publisher's Windows or macOS package on the official Linux
+build of the runtime it is made with (Electron and others), through
+`tur-rehost`: no compatibility layer and no virtual machine
+([exp-rehost-1](../reports/exp-rehost-1.md)). It is not a virtual machine,
+not a compatibility layer and not a Linux edition.
 
 A Windows edition says where it is obtained: a store identifier, or the
 publisher's download page. `download_page` is a page for a person to read. A
@@ -112,6 +118,21 @@ three lists.
 reported it, the `date`, and optionally `version_tested` and `notes`. A route
 without a record is unknown.
 
+A record of the `rehost` route carries `[editions.records.rehost]`, what was
+measured; the table is required there and refused on any other record:
+
+| Field | Content |
+|---|---|
+| `package` | The publisher's file that was measured: a file name, without a directory, at most 255 bytes |
+| `package_sha256`, `package_size` | 64 lower-case hexadecimal digits; bytes |
+| `runtime` | The runtime family: `electron`, `nwjs`, `dotnet`, `jvm`, `godot`, `love`, `renpy` or `pyinstaller` |
+| `runtime_version` | The version of its Linux build: digits, letters, `.`, `-`, `+`, at most 64 |
+| `evidence` | The `https` address of the run that measured it |
+| `native_builds` | Native modules that had to be built from source, `name@version` (the name may be `@scope/name`); may be empty |
+| `unresolved` | Native modules with no Linux build that the measured version did not load when it started: `name@version`, or `file:<file name>` for one whose package cannot be identified; may be empty |
+
+Each list holds at most 64 items of at most 214 bytes.
+
 **`references`**, the public pages the edition's facts were checked against,
 each with a title, a URL and the date it was checked.
 
@@ -121,20 +142,36 @@ each with a title, a URL and the date it was checked.
 |---|---|
 | `good` | Runs as intended, with no workaround worth mentioning |
 | `usable` | Runs and is usable; needs tweaks or has minor problems |
+| `starts` | Starts and shows its first window, measured by TUR; nothing beyond that was tested. Only from TUR's own test |
 | `poor` | Runs, with problems that get in the way of normal use |
 | `broken` | Does not start, or cannot be used for its purpose |
 | `unknown` | Not known. The only rating that needs no source |
 
 How each external source's own scale maps onto this one is in
 [`catalogue/README.md`](../../catalogue/README.md). The source's own word is
-always kept beside the mapped rating.
+always kept beside the mapped rating. No source's scale maps onto `starts`:
+a record that says `starts` must be `tur-test` (`TUR-DESKTOP-CATALOGUE-006`).
+
+How the router reads `starts`:
+
+| Question | `starts` |
+|---|---|
+| Is it adverse (`poor`, `broken`)? | No: no "reported inadequate" caveat, and it never moves a route down |
+| Is the outlook clear? | Yes when nothing known stands in the way. It does not outweigh a known obstacle the way `good` or `usable` does: the first window says nothing about the part the obstacle affects, so the option is then doubtful |
+| Does it offer a re-host? | Yes: a re-host is offered when its best record says `good`, `usable` or `starts` |
+| Can the route it rates overtake a Linux edition rated `poor` or `broken`? | No: only `good` or `usable` is "clearly better" |
+| On Wine with a known obstacle, is the guest offered? | Yes, as for an unrated Wine: no rating says Wine runs it in use |
+| Is it counted as TUR's own rating (`rated_by_tur_tests`)? | Yes |
 
 ## Sourcing and the honesty rule
 
-TUR has rated nothing yet. The catalogue therefore holds only what a public
-source reports, attributed to that source, and `unknown` everywhere else.
-TUR's own automated tests of four Windows applications are recorded, with
-their report, as `unknown` (see [Not built](#not-built)).
+TUR's own ratings come from one experiment: the re-hosting experiment
+([exp-rehost-1](../reports/exp-rehost-1.md), section 3.1) rates the `rehost`
+route of 40 packages `starts`: each reached its own first window, and
+nothing beyond that was tested. Everything else the catalogue rates is what a
+public source reports, attributed to that source, and `unknown` everywhere
+else. TUR's own automated tests of four Windows applications are recorded,
+with their report, as `unknown` (see [Not built](#not-built)).
 
 A record states who it comes from in `reported_by`:
 
@@ -142,7 +179,7 @@ A record states who it comes from in `reported_by`:
 |---|---|---|---|
 | `nobody` | `unknown` only | | Any source field |
 | `external` | Any | `source_name`, `source_url`; and `source_rating`, the source's own words, unless the rating is `unknown` | `test_report`; a source name that is TUR itself |
-| `tur-test` | Any | `test_report`, a path under `docs/reports/` or `tests/`; `version_tested` | Any external source field |
+| `tur-test` | Any; the only reporter that may say `starts` | `test_report`, a path under `docs/reports/` or `tests/`; `version_tested` | Any external source field |
 
 The rules are enforced, not only written down:
 
@@ -159,6 +196,8 @@ The rules are enforced, not only written down:
 - An external record never reads as TUR's. The router's output carries the
   source's name, URL, own rating and date; the text report prints "reported by
   ... ; not tested by TUR".
+- Only TUR's own test can rate the `rehost` route: an external source cannot
+  have measured TUR's re-host (`TUR-DESKTOP-CATALOGUE-006`).
 
 An entry with every route unknown is acceptable. An invented rating is not.
 
@@ -168,11 +207,23 @@ is entered on an edition without a reference
 (`every_seed_edition_and_requirement_is_backed_by_a_reference`). A test cannot
 check that a reference really supports a fact; a reviewer has to.
 
-The seed catalogue holds 35 entries: the 32 of the first slice, and
-Notepad++, PuTTY and Chromium B.S.U., added with `tur-apps`. Twelve records carry a
-rating, each from one of four sources; every other route is unknown. Four
-further records are TUR's own tests, all `unknown` (see [Not
-built](#not-built)). The sources, all checked on 12 November 2026:
+The seed catalogue holds 56 entries with 154 editions and 56 records: 36
+entries from before (the 32 of the first slice; Notepad++, PuTTY and
+Chromium B.S.U., added with `tur-apps`; Google Chrome, added with task
+D-11), and 20 re-hosted
+applications. Twelve records carry a rating from one of four external
+sources. Forty are TUR's own, from the re-hosting experiment: for each of
+Bruno, draw.io, balenaEtcher, Freelens, Heroic Games Launcher, Jitsi Meet,
+Joplin, Logseq, LosslessCut, MarkText, Mattermost, Min, MQTTX, Podman
+Desktop, Rocket.Chat, Standard Notes, Tabby, Trilium Notes, VSCodium and
+Zulip, the `rehost` route of its Windows and of its macOS edition is
+`starts`, with the run that measured it. `validate --json` counts these 40
+records in `rated_by_tur_tests` and the 20 applications in
+`applications_tested_by_tur`, the number the application centre's Home view
+gives. Their Linux edition, the
+publisher's own, has no record. Four further records are TUR's own tests of
+Wine, all `unknown` (see [Not built](#not-built)); every other route is
+unknown. The external sources, all checked on 12 November 2026:
 
 | Source | Used for |
 |---|---|
@@ -217,9 +268,10 @@ subdirectory is an error. Every problem is reported, with its file and code.
 | An edition, a requirement or a store is not listed twice | `-003` |
 | Application IDs are unique | `-004` |
 | No name or alias reads the same as another, in the entry or across entries, ignoring case, punctuation and spacing | `-005` |
-| The honesty rule (above) | `-006` |
+| A `rehost` record carries its `rehost` table, in the formats above; no other record does | `-003` |
+| The honesty rule (above), including that only TUR's own test rates `rehost` | `-006` |
 | A record names a route that can run its edition | `-007` |
-| Sizes: 256 KiB per file, 16 editions, 32 aliases, 32 records and 32 references per edition, text lengths | `-008` |
+| Sizes: 256 KiB per file, 16 editions, 32 aliases, 32 records and 32 references per edition, 64 modules in each list of a `rehost` table, text lengths | `-008` |
 
 The test `the_seed_catalogue_loads_and_validates` loads the real `catalogue/`
 directory, so a bad entry breaks CI. The schema file is kept in step with the
@@ -266,7 +318,12 @@ container tool for other distributions, Wine, Proton through `umu-launcher`
 and the Android runtime are present; whether the user has supplied ARM
 translation and opted into Google Play; whether a Windows guest is set up and
 a Windows licence is present; whether Darling is enabled; the GPU class
-(`none`, `integrated`, `discrete`, `unknown`); and memory. Preferences are:
+(`none`, `integrated`, `discrete`, `unknown`); memory; whether `tur-rehost` is
+installed (`rehost`); and whether the person has allowed native modules to be
+built from source on this computer, in a sandbox without network, with
+Fedora's compiler (`rehost_builds`). The last two are left out of the JSON
+the program writes while they are false, so that earlier output is
+unchanged. Preferences are:
 never use a virtual machine; prefer open source; and a pinned route per
 application.
 
@@ -291,7 +348,8 @@ English field is still there, unchanged.
 | `text_id` (alternative) | The identifier of the alternative's sentence |
 
 Reason codes: `linux-flatpak`, `linux-native`, `linux-other-distribution`,
-`windows-game-proton`, `windows-wine`, `guest-layer-rated` (`rating`),
+`rehost-measured` (`platform`: `windows` or `macos`, `runtime`,
+`runtime_version`, `date`), `windows-game-proton`, `windows-wine`, `guest-layer-rated` (`rating`),
 `guest-known-obstacle`, `guest-asked`, `android`, `web-primary`, `web-pinned`,
 `web-nothing-better`, `macos-darling`, `listed-after-better-route` (`route`,
 `rating`, `better_rating`), `no-route` (`name`), `route-blocked` (`route`,
@@ -304,7 +362,10 @@ requirement caveats (`requirement.kernel-anti-cheat.proton`,
 `requirement.heavy-gpu.integrated`, …, none with parameters), and
 `architecture.not-x86-64` (`arch`), `closed-store.windows-guest` and
 `closed-store.not-integrated` (`store`), `community-package`,
-`experimental.darling`, `guest-memory.too-little` (`needed_gb`,
+`experimental.darling`, `rehost.not-publisher-supported` (`platform`,
+`runtime`, `runtime_version`), `rehost.runtime-fetched` (`runtime`,
+`runtime_version`), `rehost.unresolved-modules` (`count`),
+`guest-memory.too-little` (`needed_gb`,
 `available_gb`), `guest-memory.enough` and `guest-memory.unknown`
 (`needed_gb`), `reported-inadequate.external` (`rating`, `source`,
 `source_rating`, `date`), `reported-inadequate.external-unquoted`,
@@ -340,12 +401,20 @@ Options are listed in this order.
 | 1 | Flatpak, then native Linux | A Linux edition exists |
 | 2 | Web application, primary | The web application is the publisher's primary form |
 | 3 | Container of another distribution | The Linux edition is another distribution's package |
-| 4 | Proton for a game; Wine for any other Windows application | A Windows edition exists |
-| 4 | Windows guest, directly after its compatibility layer | See the decision table below |
-| 5 | Android runtime | An Android edition exists |
-| 6 | Web application, not primary | No route other than a guest or Darling has a clear outlook; or the user pinned it |
-| 7 | Darling | A macOS edition exists and the user has enabled Darling |
+| 4 | Re-hosted on the Linux build of its own runtime | A Windows or macOS edition exists and its best `rehost` record, TUR's own test, says `good`, `usable` or `starts` |
+| 5 | Proton for a game; Wine for any other Windows application | A Windows edition exists |
+| 5 | Windows guest, directly after its compatibility layer | See the decision table below |
+| 6 | Android runtime | An Android edition exists |
+| 7 | Web application, not primary | No route other than a guest or Darling has a clear outlook; or the user pinned it |
+| 8 | Darling | A macOS edition exists and the user has enabled Darling |
 | last | Any route that is blocked | Always listed, with the caveat that says why |
+
+Re-hosted sits below any Linux edition, because the publisher supports,
+updates and tests its Linux build and not a re-host, and above Wine,
+because a working re-host is a Linux process with Linux windows and no
+Windows emulation ([exp-rehost-1](../reports/exp-rehost-1.md), 9.1). An
+unmeasured re-host is never offered: a package that looks re-hostable can
+still fail for reasons nothing sees before it runs.
 
 Then:
 
@@ -379,12 +448,15 @@ It never changes the order.
 | Android edition | Android runtime |
 | Android edition needing Play Integrity | **No route** unless another edition has one. The Android runtime is listed, blocked: "needs a phone certified by Google: it will refuse to run" |
 | Android edition with ARM-only code | Blocked on a machine that is not ARM, unless the user supplied ARM translation: then a warning |
+| Windows or macOS edition whose re-host TUR measured starting or working (`good`, `usable` or `starts`) | Re-hosted, after any Linux edition and before Wine, Proton and the guest, with what it is, the runtime TUR fetches and any module with no Linux build |
+| Windows or macOS edition whose re-host is unmeasured, unknown, `poor` or `broken` | Not re-hosted |
 | macOS edition and another edition | The other edition's routes. Darling last, and only if enabled |
-| macOS edition only, Darling not enabled | **No route.** Alternative: a Mac |
-| macOS edition only, Darling enabled | Darling, doubtful, labelled experimental |
+| macOS edition only, measured re-host | Re-hosted; Darling after it if enabled |
+| macOS edition only, no measured re-host, Darling not enabled | **No route.** Alternative: a Mac |
+| macOS edition only, no measured re-host, Darling enabled | Darling, doubtful, labelled experimental |
 | Web edition, primary | Listed on rung 2, alongside the others |
 | Web edition, not primary | Listed only when nothing better is clear, or when pinned |
-| A route for x86-64 software (Proton, Wine, the guest, Darling) on another architecture | Blocked |
+| A route for x86-64 software (re-hosted, Proton, Wine, the guest, Darling) on another architecture | Blocked |
 | Nothing listed can work, or the entry has no edition | **No route**, with the reason and the least-bad alternative. Never an empty list |
 
 ### Requirements on each route
@@ -392,20 +464,20 @@ It never changes the order.
 `requirement_severity` gives the weight of a requirement on a route. A
 **blocker** means the route cannot work. An **obstacle** means the route does
 not meet the requirement and the application probably will not work fully; a
-record that says `good` or `usable` outweighs an obstacle, except where the
+record that says `good` or `usable` (not `starts`) outweighs an obstacle, except where the
 obstacle comes from the machine. Every option carries a caveat for every
 requirement of its edition.
 
-| Requirement | Linux routes | Proton, Wine | Windows guest | Android runtime | Darling | Web |
-|---|---|---|---|---|---|---|
-| `kernel-anti-cheat` | warning | **blocker** | **blocker** | **blocker** | **blocker** | note |
-| `hardware-attested-drm` | warning | obstacle | obstacle | obstacle | obstacle | warning |
-| `play-integrity` | note | note | note | **blocker** | note | note |
-| `arm-only-native-code`, on a machine that is not ARM | **blocker** | **blocker** | **blocker** | **blocker**; warning with ARM translation | **blocker** | note |
-| `kernel-driver` | warning | obstacle | note | **blocker** | **blocker** | note |
-| `hardware-dongle` | note | obstacle | warning | obstacle | obstacle | note |
-| `heavy-gpu` | by GPU class | by GPU class | obstacle | by GPU class | by GPU class | by GPU class |
-| `online-account` | note | note | note | note | note | note |
+| Requirement | Linux routes | Re-hosted | Proton, Wine | Windows guest | Android runtime | Darling | Web |
+|---|---|---|---|---|---|---|---|
+| `kernel-anti-cheat` | warning | **blocker** | **blocker** | **blocker** | **blocker** | **blocker** | note |
+| `hardware-attested-drm` | warning | obstacle | obstacle | obstacle | obstacle | obstacle | warning |
+| `play-integrity` | note | note | note | note | **blocker** | note | note |
+| `arm-only-native-code`, on a machine that is not ARM | **blocker** | **blocker** | **blocker** | **blocker** | **blocker**; warning with ARM translation | **blocker** | note |
+| `kernel-driver` | warning | **blocker** | obstacle | note | **blocker** | **blocker** | note |
+| `hardware-dongle` | note | obstacle | obstacle | warning | obstacle | obstacle | note |
+| `heavy-gpu` | by GPU class | by GPU class | by GPU class | obstacle | by GPU class | by GPU class | by GPU class |
+| `online-account` | note | note | note | note | note | note | note |
 
 "By GPU class": an obstacle with no GPU, a warning with integrated graphics, a
 note otherwise. On an ARM machine `arm-only-native-code` is a note.
@@ -418,17 +490,27 @@ Other caveats: the memory the guest needs ("about 16 GB", ADR-0007's
 indicative figure, compared with the machine's memory when it is known); the
 experimental status of Darling; a closed store; a package maintained by
 someone other than the publisher; a record that says `poor` or `broken`, with
-its source; and a pin that could not be honoured.
+its source; and a pin that could not be honoured. Every re-hosted option
+says, as notes, that it is the publisher's Windows or macOS package on
+Linux's own build of its runtime, not the publisher's Linux version and not
+supported by the publisher; and that TUR downloads that runtime on first use
+from the project's own releases, checked against the digest TUR pinned, and
+that it is not part of TUR (for Electron and NW.js: with media codecs TUR
+does not ship). When the record lists native modules with no Linux build, a
+warning gives their number: features that need them will not work.
 
 Prerequisites name what is missing: Flatpak, a container tool, Wine,
 `umu-launcher` with a Proton build (which the user's machine fetches: TUR
 does not ship Proton), the Android runtime, Google Play when the catalogue
-lists the package there only, the Windows guest, a Windows licence.
+lists the package there only, the Windows guest, a Windows licence,
+`tur-rehost` (`install-rehost`), and, when the record lists native modules
+built from source, the person's permission to build them on this computer
+without network access, with Fedora's compiler (`allow-rehost-builds`).
 
 ### Invariants and their tests
 
 The invariants are asserted over an enumerated input space in
-`services/tur-catalogue/tests/router_space.rs`. Five tests walk the space:
+`services/tur-catalogue/tests/router_space.rs`. Six tests walk the space:
 
 | Test | Space | Cases |
 |---|---|---|
@@ -437,6 +519,7 @@ The invariants are asserted over an enumerated input space in
 | `macos_edition_space` | 256 requirement sets; two sources; three ratings; 12 hosts; pinned or not | 36 864 |
 | `linux_and_web_edition_space` | Five edition templates; 256 requirement sets; three ratings; three hosts; three preference sets | 34 560 |
 | `mixed_edition_space` | All 127 combinations of seven editions; web primary or not; game or not; no requirement or one of the eight on every edition; four rating patterns; three hosts; eight preference sets | 438 912 |
+| `rehost_edition_space` | A Windows or a macOS edition; a Linux edition beside it or not; 256 requirement sets; no record or six records of TUR's test of the re-host (`good`, `usable`, `starts`, `unknown`, `poor`, `broken`); 16 hosts (architecture, `tur-rehost`, builds allowed, Darling); pinned or not | 229 376 |
 
 Every case is checked against every invariant:
 
@@ -444,7 +527,7 @@ Every case is checked against every invariant:
 |---|---|---|
 | The result is never empty; "no route" is stated exactly when nothing listed can work, first, with a reason that repeats each blocker and with an alternative | `never_empty_and_no_route_is_explicit` | `an_empty_result_is_detected`, `a_silent_best_guess_is_detected` |
 | A guest never precedes a compatibility layer for the same edition, and is never listed without it | `guest_never_precedes_its_layer` | `a_guest_before_its_layer_is_detected` |
-| A forbidden route never appears: no guest when virtual machines are forbidden or for a game; no Darling unless enabled; Proton only for games, Wine only for the rest | `forbidden_routes_never_appear` | `a_forbidden_route_is_detected` |
+| A forbidden route never appears: no guest when virtual machines are forbidden or for a game; no Darling unless enabled; Proton only for games, Wine only for the rest; no re-host unless TUR's own test says it works | `forbidden_routes_never_appear` | `a_forbidden_route_is_detected` |
 | Every option carries a caveat for every requirement of its edition, with the severity of the table; an option is blocked exactly when it carries a blocker | `requirements_carry_their_caveats` | `a_missing_blocking_caveat_is_detected` |
 | Exactly one option is recommended; never a blocked one; the pinned one when it is usable; an unused pin is explained | `one_sound_recommendation` | |
 | Blocked options come last; no option is listed twice | `blocked_last_and_no_duplicates` | |
@@ -469,6 +552,8 @@ Each routing rule also has a named unit test in
 | Android: the runtime, with the Play Integrity and ARM-only caveats | `an_android_application_runs_in_the_android_runtime_with_its_caveats` |
 | macOS only: other editions first; Darling only if enabled, experimental | `a_macos_application_prefers_its_windows_linux_or_web_edition`, `a_macos_only_application_has_no_route_unless_darling_is_enabled` |
 | Web when nothing better exists, or alongside when primary | `a_web_edition_is_offered_when_nothing_better_exists`, `a_primary_web_edition_is_offered_alongside` |
+| Re-hosted: after Linux, before Wine, only when measured | `a_measured_rehost_is_offered_after_linux_and_before_wine`, `an_unmeasured_rehost_is_never_offered` |
+| Re-hosted: what must be done first; macOS without Darling; x86-64 only | `a_rehost_needing_builds_asks_for_them_first`, `a_macos_only_application_with_a_measured_rehost_has_a_route_without_darling`, `rehost_is_blocked_on_a_machine_that_is_not_x86_64` |
 | Nothing workable: an explicit no route | `nothing_workable_gives_an_explicit_no_route_never_an_empty_list` |
 | The router never launches or installs anything | `the_router_source_has_no_process_file_or_network_access` |
 
@@ -483,12 +568,14 @@ Each routing rule also has a named unit test in
 | Is the Windows guest "better" than a web edition? | Not for deciding whether to list the web edition: the guest costs a Windows licence and memory. Both are listed |
 | What does "prefer open source" change? | The order within a rung only |
 | A game pinned to Wine, or another application pinned to Proton | Not honoured; the option list says so. Proton is for games and Wine for the rest |
-| "Unknown with a known blocker" | The layer is unrated and carries an obstacle the guest would get round: a kernel driver, a dongle, hardware-attested copy protection, a closed store. Heavy GPU use is not one: the guest has no usable GPU acceleration either |
+| "Unknown with a known blocker" | The layer is unrated, or rated only `starts`, and carries an obstacle the guest would get round: a kernel driver, a dongle, hardware-attested copy protection, a closed store. Heavy GPU use is not one: the guest has no usable GPU acceleration either |
 | Kernel anti-cheat in something that is not a game | Same answer: no route, dual boot |
 | Hardware-attested copy protection | An obstacle, not a blocker: such software often still runs at reduced quality |
 | A Linux edition rated poor against Darling rated good | Darling stays last. It is experimental |
 | The 16 GB figure for the guest | Used as a caveat. Below about 15 GB of installed memory the guest is marked doubtful. ADR-0007 calls the figure indicative, to be measured |
-| Architectures other than x86-64 | Proton, Wine, the guest and Darling are blocked. Linux, Android and web editions are not checked for the architecture |
+| Architectures other than x86-64 | Re-hosted, Proton, Wine, the guest and Darling are blocked (the measured packages and their native modules are x86-64). Linux, Android and web editions are not checked for the architecture |
+| Where does a re-host rank, and when is it offered? (Not in ADR-0007: proposed by exp-rehost-1, 9.1 and 12) | After every Linux edition, before Wine and Proton; only when TUR's own test says it starts or works |
+| A record that saw the first window and nothing more (decided 16 November 2026) | Its own rating, `starts`, never `usable`. Not adverse; clear when nothing known stands in the way, but it outweighs no obstacle and overtakes no Linux edition; enough to offer a re-host. See the table under [Rating scale](#rating-scale) |
 | The Android "then" column is empty | Where an Android edition is blocked, the alternative is a certified phone or tablet |
 
 ## Relation to `tur-runtime`
@@ -520,7 +607,7 @@ profile from a chosen route:
 | `windows-guest` | `windows-vm` |
 | `android-runtime` | `android` |
 | `darling` | `darling` |
-| `distro-container`, `web` | None yet |
+| `distro-container`, `rehost`, `web` | None yet |
 
 `tur-runtime` never recommends Proton, because that needs the application
 database. This crate is that database.
@@ -543,7 +630,8 @@ default.
 { "arch": "x86_64", "flatpak": true, "distro_containers": false, "wine": true,
   "proton": true, "android_runtime": false, "arm_translation": false,
   "google_play": false, "windows_guest": false, "windows_licence": false,
-  "darling_enabled": false, "gpu": "discrete", "memory_mib": 32768 }
+  "darling_enabled": false, "gpu": "discrete", "memory_mib": 32768,
+  "rehost": true, "rehost_builds": false }
 ```
 
 ```json
@@ -600,22 +688,34 @@ These are not yet registry entries in the sense of §29.3.
   ([app-install-backend.md](app-install-backend.md)); Steam, Google Play
   and the rest are not integrated.
 - **Installation and launching** in this crate. `tur-apps` acts on the
-  Flatpak and Wine routes; no container, guest or Android image is created
-  by anything.
+  Flatpak, Wine and re-hosted routes; no container, guest or Android image
+  is created by anything.
 - **The application centre's service.** No D-Bus service. The library is
   linked by this command-line tool and by `tur-apps`.
 - **Live updates of the catalogue.** The catalogue is the directory in this
   repository. There is no update channel, signature or merge of local
   additions.
-- **A rating from TUR's own tests.** Four records are TUR's own
+- **A rating from TUR's own tests of Wine.** Four records are TUR's own
   (`reported_by = "tur-test"`, report `docs/reports/windows-runtime-2.md`):
   the Wine route of 7-Zip, Notepad++, PuTTY and VLC. All four are `unknown`:
   VLC because playback was not tried; the other three because, when they
   were entered, the application centre's Home view said unconditionally
   that TUR had tested nothing. Since task D-11 the sentence is conditional:
   `tur-centre` shows it only while `tur-catalogue validate --json` counts
-  no rating from TUR's own tests, so a rating from TUR can now be entered.
-  Every rating in the catalogue is still an external report.
+  no rating from TUR's own tests. The 40 `rehost` records of the
+  re-hosting experiment are such ratings, so for the seed catalogue Home
+  says instead "TUR has tested 20 applications itself. Everything else
+  shows who tested it, or says that nobody has yet.", the number being
+  `applications_tested_by_tur`.
+- **Re-hosting itself.** The router offers the `rehost` route and says what
+  it needs; `tur-rehost` does the re-hosting, and `tur-apps` installs by
+  this route from the person's own package
+  ([app-install-backend.md](app-install-backend.md#the-re-hosted-route)).
+  A person's own successful re-host is not an input:
+  only a catalogue record of TUR's test is. The 40 records say `starts`:
+  the application's own first window and typed text, nothing more
+  (exp-rehost-1, 3.1). A re-host is rated `good` or `usable` only after a
+  test of its use.
 - **Host detection.** Host facts are stated by the caller. The detection in
   `tur-runtime` is not used.
 - **Fallback to inspection.** An application that is not in the catalogue is

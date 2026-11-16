@@ -25,6 +25,12 @@ const PROGRAM: &str = env!("CARGO_BIN_EXE_tur-apps");
 const REPOSITORY_CATALOGUE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../catalogue");
 const HOST: &str = r#"{ "arch": "x86_64", "flatpak": true, "wine": true }"#;
 const BODY: &[u8] = b"MZ this stands in for a Windows installer";
+/// A computer with tur-rehost, where source builds are not allowed.
+const REHOST_HOST: &str =
+    r#"{ "arch": "x86_64", "flatpak": true, "wine": true, "rehost": true }"#;
+/// A computer with tur-rehost, where the person allowed source builds.
+const BUILDS_HOST: &str = r#"{ "arch": "x86_64", "flatpak": true, "wine": true, "rehost": true, "rehost_builds": true }"#;
+const PACKAGE: &[u8] = b"PK this stands in for the Windows package of an Electron application";
 
 /// A scratch world: a home, the stand-ins, a catalogue.
 struct World {
@@ -72,6 +78,7 @@ impl World {
             ("flatpak", include_str!("fakes/flatpak")),
             ("curl", include_str!("fakes/curl")),
             ("tur-runtime", include_str!("fakes/tur-runtime")),
+            ("tur-rehost", include_str!("fakes/tur-rehost")),
         ] {
             let path = root.join("bin").join(name);
             fs::write(&path, text).unwrap();
@@ -130,6 +137,8 @@ impl World {
             .arg(bin.join("curl"))
             .arg("--tur-runtime-program")
             .arg(bin.join("tur-runtime"))
+            .arg("--tur-rehost-program")
+            .arg(bin.join("tur-rehost"))
             .arg("--download-dir")
             .arg(self.root.join("downloads"))
             .args(arguments)
@@ -148,6 +157,43 @@ impl World {
     fn log(&self, name: &str) -> String {
         fs::read_to_string(self.state(name)).unwrap_or_default()
     }
+
+    /// States other facts about the computer.
+    fn set_host(&self, text: &str) {
+        fs::write(self.root.join("host.json"), text).unwrap();
+    }
+
+    /// A file the person has, by its path.
+    fn file(&self, name: &str, body: &[u8]) -> String {
+        let path = self.root.join(name);
+        fs::write(&path, body).unwrap();
+        path.to_str().unwrap().to_owned()
+    }
+
+    /// Where tur-rehost keeps one application.
+    fn rehosted(&self, id: &str) -> PathBuf {
+        self.data().join("tur/rehost/apps").join(id)
+    }
+}
+
+/// The strings of a JSON array.
+fn strings(value: &Value) -> Vec<String> {
+    value
+        .as_array()
+        .unwrap_or_else(|| panic!("not an array: {value}"))
+        .iter()
+        .map(|item| item.as_str().unwrap().to_owned())
+        .collect()
+}
+
+/// The `step` of every step of a plan.
+fn step_ids(plan: &Value) -> Vec<String> {
+    plan["steps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|step| step["id"].as_str().unwrap().to_owned())
+        .collect()
 }
 
 impl Drop for World {
@@ -156,14 +202,26 @@ impl Drop for World {
     }
 }
 
-/// A catalogue of four invented applications: a Flatpak; a free Windows
+/// A catalogue of five invented applications: a Flatpak; a free Windows
 /// application whose installer is pinned to `BODY`; a proprietary Windows
-/// application with no pin; and a game with kernel anti-cheat.
+/// application with no pin; a game with kernel anti-cheat; and a Windows
+/// application whose re-host TUR measured with the package `PACKAGE`, which
+/// started without one native module.
 fn test_world(label: &str) -> World {
     let world = World::new(label, Some("own"));
     let body = world.root.join("body");
     fs::write(&body, BODY).unwrap();
     let hashed = hash_file(&body).unwrap();
+    let package = world.root.join("package");
+    fs::write(&package, PACKAGE).unwrap();
+    let measured = hash_file(&package).unwrap();
+    world.write_entry(
+        "org.example.rehosted",
+        &format!(
+            "name = \"Example Rehosted\"\npublisher = \"Example\"\ncategory = \"productivity\"\n\n[[editions]]\nkind = \"windows\"\nobtain = \"publisher-page\"\ndownload_page = \"https://example.org/rehosted\"\nlicence = \"open-source\"\n\n[[editions.records]]\nroute = \"rehost\"\nrating = \"usable\"\nreported_by = \"tur-test\"\ntest_report = \"docs/reports/exp-rehost-1.md\"\nversion_tested = \"1.0\"\ndate = \"2026-11-12\"\n\n[editions.records.rehost]\npackage = \"rehosted-1.0.zip\"\npackage_sha256 = \"{}\"\npackage_size = {}\nruntime = \"electron\"\nruntime_version = \"44.10.2\"\nevidence = \"https://github.com/giorgiogiudice/TUR/actions/runs/43778332673\"\nnative_builds = []\nunresolved = [\"left-out@1.0.0\"]\n",
+            measured.sha256, measured.size
+        ),
+    );
     world.write_entry(
         "org.example.viewer",
         "name = \"Example Viewer\"\npublisher = \"Example\"\ncategory = \"utility\"\n\n[[editions]]\nkind = \"flatpak\"\nflatpak_id = \"org.example.Viewer\"\nlicence = \"open-source\"\n",
@@ -852,4 +910,535 @@ fn sources_are_listed_switched_on_and_off() {
     assert_eq!(run.json()["sources"][0]["state"], "off");
     let run = world.run(&["sources", "enable", "nowhere", "--json"]);
     assert_eq!(run.status, 1);
+}
+
+#[test]
+fn a_rehost_is_planned_from_your_package_and_says_when_it_was_not_measured() {
+    let world = World::new("rehost-plan", None);
+    world.set_host(REHOST_HOST);
+    // draw.io's own Linux edition comes first; the router also offers the
+    // re-host, which this program installs by.
+    let run = world.run(&["plan", "com.jgraph.drawio", "--json"]);
+    assert_eq!(run.status, 3, "{}", run.stdout);
+    let error = &run.json()["error"];
+    assert_eq!(error["code"], "TUR-DESKTOP-APPS-004");
+    assert!(
+        error["message"].as_str().unwrap().contains("--route rehost"),
+        "{error}"
+    );
+
+    // TUR never downloads the package: the person's own file is needed.
+    let run = world.run(&["plan", "com.jgraph.drawio", "--route", "rehost", "--json"]);
+    assert_eq!(run.status, 3, "{}", run.stdout);
+    let error = &run.json()["error"];
+    assert_eq!(error["code"], "TUR-DESKTOP-APPS-005");
+    assert!(error["message"].as_str().unwrap().contains("--installer FILE"));
+    assert_eq!(world.log("rehost.log"), "");
+
+    // A file that is not the package TUR measured: planned, and said so.
+    let package = world.file("draw.io-32.6.10.msi", PACKAGE);
+    let run = world.run(&[
+        "plan",
+        "com.jgraph.drawio",
+        "--route",
+        "rehost",
+        "--installer",
+        &package,
+        "--json",
+    ]);
+    assert_eq!(run.status, 0, "{}{}", run.stdout, run.stderr);
+    let plan = run.json();
+    assert_eq!(plan["route"], "rehost");
+    assert_eq!(plan["chosen_by"], "you");
+    assert_eq!(plan["router"]["route"], "rehost");
+    assert_eq!(plan["router"]["reason_code"], "rehost-measured");
+    assert_eq!(plan["host"]["facts"]["rehost"], true);
+    assert_eq!(plan["source"]["kind"], "user-file");
+    assert_eq!(plan["source"]["file"], package.as_str());
+    let verification = plan["source"]["verification"].as_str().unwrap();
+    assert!(
+        verification.starts_with("This file was not measured by TUR"),
+        "{verification}"
+    );
+    assert!(verification.contains("draw.io-32.6.10.msi"));
+    let notes = strings(&plan["notes"]);
+    assert!(
+        notes[0].starts_with(
+            "Runs natively through its portable runtime: the Windows package, on Linux's own build of Electron 44.10.2. Not the publisher's Linux version; the publisher does not support it. Tested by TUR on 2026-11-16"
+        ),
+        "{notes:#?}"
+    );
+    assert!(notes.iter().any(|note| note.contains("not the package TUR measured")));
+    assert!(notes.iter().any(|note| note.contains("(H.264 and AAC)")));
+    assert!(notes.iter().any(|note| note.starts_with("Its own updater is off")));
+    // The downloads are tur-rehost's, from TUR's pinned index.
+    let download = &plan["downloads"][0];
+    assert_eq!(download["size"], 110_000_000);
+    assert_eq!(download["sha256"], "a".repeat(64));
+    assert!(
+        download["from"]
+            .as_str()
+            .unwrap()
+            .starts_with("https://github.com/electron/electron/releases/")
+    );
+    assert_eq!(step_ids(&plan), ["verify", "install", "record"]);
+    let install = strings(&plan["steps"][1]["command"]);
+    assert_eq!(
+        install[1..],
+        [
+            "install",
+            package.as_str(),
+            "--app-id",
+            "com.jgraph.drawio",
+            "--name",
+            "draw.io",
+            "--json"
+        ]
+    );
+    let kinds: Vec<&str> = plan["access"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|access| access["kind"].as_str().unwrap())
+        .collect();
+    assert_eq!(kinds, ["files", "network", "display", "sound", "services"]);
+    assert_eq!(plan["removal"]["data_kept_by_default"], true);
+    assert!(
+        plan["removal"]["data"][0]["path"]
+            .as_str()
+            .unwrap()
+            .ends_with("tur/rehost/apps/com.jgraph.drawio/home")
+    );
+    // tur-rehost was asked for its plan, and nothing was installed.
+    let log = world.log("rehost.log");
+    assert_eq!(
+        log,
+        format!("plan {package} --app-id com.jgraph.drawio --json\n")
+    );
+    assert!(!world.rehosted("com.jgraph.drawio").exists());
+
+    // Offline, tur-rehost is not asked, and the runtime's size is not known.
+    let run = world.run(&[
+        "plan",
+        "com.jgraph.drawio",
+        "--route",
+        "rehost",
+        "--installer",
+        &package,
+        "--offline",
+        "--json",
+    ]);
+    assert_eq!(run.status, 0, "{}{}", run.stdout, run.stderr);
+    let plan = run.json();
+    assert_eq!(plan["downloads"][0]["size"], Value::Null);
+    assert!(
+        plan["downloads"][0]["size_source"]
+            .as_str()
+            .unwrap()
+            .starts_with("not known")
+    );
+    assert_eq!(world.log("rehost.log").lines().count(), 1);
+
+    // The text form says the same things.
+    let run = world.run(&[
+        "plan",
+        "com.jgraph.drawio",
+        "--route",
+        "rehost",
+        "--installer",
+        &package,
+    ]);
+    assert_eq!(run.status, 0, "{}", run.stderr);
+    assert!(run.stdout.contains("Runs natively through its portable runtime"));
+    assert!(run.stdout.contains("Removing it:"));
+}
+
+#[test]
+fn the_rehost_route_is_refused_until_tur_rehost_is_installed() {
+    // The router is told tur-rehost is not installed.
+    let world = World::new("rehost-missing", None);
+    let package = world.file("draw.io-32.6.10.msi", PACKAGE);
+    let run = world.run(&[
+        "plan",
+        "com.jgraph.drawio",
+        "--route",
+        "rehost",
+        "--installer",
+        &package,
+        "--json",
+    ]);
+    assert_eq!(run.status, 3, "{}", run.stdout);
+    let error = &run.json()["error"];
+    assert_eq!(error["code"], "TUR-DESKTOP-APPS-009");
+    assert_eq!(error["detail"]["route"], "rehost");
+    assert_eq!(error["detail"]["prerequisites"][0]["code"], "install-rehost");
+    assert!(
+        error["message"]
+            .as_str()
+            .unwrap()
+            .contains("tur-rehost, must be installed"),
+        "{error}"
+    );
+    let run = world.run(&[
+        "install",
+        "com.jgraph.drawio",
+        "--route",
+        "rehost",
+        "--installer",
+        &package,
+        "--yes",
+        "--events",
+    ]);
+    assert_eq!(run.status, 3, "{}", run.stdout);
+    assert_eq!(
+        run.events().last().unwrap()["error"]["code"],
+        "TUR-DESKTOP-APPS-009"
+    );
+    // Nothing was asked of tur-rehost, and nothing is recorded.
+    assert_eq!(world.log("rehost.log"), "");
+    assert!(
+        !world
+            .data()
+            .join("tur/apps/installed/com.jgraph.drawio.json")
+            .exists()
+    );
+}
+
+#[test]
+fn a_rehosted_application_is_installed_listed_started_and_removed_keeping_its_data() {
+    let world = World::new("rehost", None);
+    world.set_host(REHOST_HOST);
+    let package = world.file("draw.io-32.6.10.msi", PACKAGE);
+    let install = [
+        "install",
+        "com.jgraph.drawio",
+        "--route",
+        "rehost",
+        "--installer",
+        package.as_str(),
+        "--yes",
+        "--events",
+    ];
+    let run = world.run(&install);
+    assert_eq!(run.status, 0, "{}{}", run.stdout, run.stderr);
+    let events = run.events();
+    assert_eq!(events[0]["event"], "plan");
+    assert_eq!(events[0]["plan"]["route"], "rehost");
+    let kinds: Vec<String> = events
+        .iter()
+        .map(|event| {
+            format!(
+                "{}:{}",
+                event["event"].as_str().unwrap(),
+                event["step"].as_str().unwrap_or("")
+            )
+        })
+        .collect();
+    let position = |wanted: &str| kinds.iter().position(|kind| kind == wanted).unwrap();
+    // Checked again, then re-hosted, then recorded.
+    assert!(position("step-finished:verify") < position("step-started:install"));
+    assert!(position("step-finished:install") < position("step-finished:record"));
+    let result = &events.last().unwrap()["result"];
+    assert_eq!(result["route"], "rehost");
+    assert_eq!(result["version"], "1.0");
+    assert_eq!(result["source"]["kind"], "user-file");
+    assert_eq!(result["source"]["pinned"], false);
+    assert_eq!(result["source"]["size"], PACKAGE.len());
+    assert_eq!(result["rehost"]["app_id"], "com.jgraph.drawio");
+    assert_eq!(result["rehost"]["measured"], false);
+    assert_eq!(result["rehost"]["runtime"], "electron 44.10.2");
+    assert_eq!(result["rehost"]["platform"], "windows");
+    // tur-rehost was given the person's file, under the catalogue's id.
+    let log = world.log("rehost.log");
+    assert!(
+        log.contains(&format!(
+            "install {package} --app-id com.jgraph.drawio --name draw.io --json\n"
+        )),
+        "{log}"
+    );
+    assert_eq!(fs::read(world.state("rehosted-file")).unwrap(), PACKAGE);
+    // The person's own file is left where it was.
+    assert!(Path::new(&package).is_file());
+
+    // Installing again is refused.
+    let run = world.run(&install);
+    assert_eq!(run.status, 3);
+
+    // The list says how it runs.
+    let run = world.run(&["list", "--json"]);
+    assert_eq!(run.status, 0, "{}", run.stderr);
+    let applications = run.json()["applications"].as_array().unwrap().clone();
+    assert_eq!(applications.len(), 1, "{applications:#?}");
+    let listed = &applications[0];
+    assert_eq!(listed["id"], "com.jgraph.drawio");
+    assert_eq!(listed["route"], "rehost");
+    assert_eq!(listed["installed_by"], "tur-apps");
+    assert_eq!(listed["state"], "installed");
+    assert_eq!(listed["version"], "1.0");
+    assert!(listed["size"].as_u64().unwrap() > 0);
+    assert_eq!(listed["update"]["checked"], false);
+
+    // Started through tur-rehost, visible to P@x and screen readers.
+    let run = world.run(&["launch", "com.jgraph.drawio"]);
+    assert_eq!(run.status, 0, "{}", run.stderr);
+    assert!(
+        world
+            .log("rehost.log")
+            .contains("launch com.jgraph.drawio --accessibility\n")
+    );
+
+    // Updating is not built: remove, then install the newer package.
+    let run = world.run(&["update", "com.jgraph.drawio", "--events"]);
+    assert_eq!(run.status, 3);
+    let error = run.events().last().unwrap()["error"].clone();
+    assert_eq!(error["code"], "TUR-DESKTOP-APPS-004");
+    assert!(error["message"].as_str().unwrap().contains("re-hosted"));
+
+    // The application keeps a document in its private home; removal keeps
+    // it by default.
+    let home = world.rehosted("com.jgraph.drawio").join("home");
+    fs::create_dir_all(home.join("Documents")).unwrap();
+    fs::write(home.join("Documents/diagram.drawio"), b"<mxfile/>").unwrap();
+    let run = world.run(&["remove", "com.jgraph.drawio", "--events"]);
+    assert_eq!(run.status, 0, "{}{}", run.stdout, run.stderr);
+    let result = run.events().last().unwrap()["result"].clone();
+    assert_eq!(result["data"], "keep");
+    assert_eq!(result["route"], "rehost");
+    assert_eq!(result["left_behind"].as_array().unwrap().len(), 0);
+    let kept_root = world.data().join("tur/apps/kept/com.jgraph.drawio");
+    let kept: Vec<PathBuf> = fs::read_dir(&kept_root)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .collect();
+    assert_eq!(kept.len(), 1);
+    assert_eq!(
+        fs::read(kept[0].join("home/Documents/diagram.drawio")).unwrap(),
+        b"<mxfile/>"
+    );
+    assert!(
+        world
+            .log("rehost.log")
+            .contains("uninstall com.jgraph.drawio --json\n")
+    );
+    assert!(!world.rehosted("com.jgraph.drawio").exists());
+    assert!(
+        !world
+            .data()
+            .join("tur/rehost/launchers/com.jgraph.drawio")
+            .exists()
+    );
+    assert!(
+        !world
+            .data()
+            .join("tur/apps/installed/com.jgraph.drawio.json")
+            .exists()
+    );
+    let run = world.run(&["remove", "com.jgraph.drawio", "--events"]);
+    assert_eq!(run.status, 6);
+
+    // Installed again and removed with its data: nothing is copied, and
+    // nothing is left.
+    let run = world.run(&install);
+    assert_eq!(run.status, 0, "{}{}", run.stdout, run.stderr);
+    let run = world.run(&["remove", "com.jgraph.drawio", "--delete-data", "--events"]);
+    assert_eq!(run.status, 0, "{}{}", run.stdout, run.stderr);
+    assert_eq!(fs::read_dir(&kept_root).unwrap().count(), 1);
+    assert!(!world.rehosted("com.jgraph.drawio").exists());
+
+    // What tur-rehost leaves behind is reported, with exit status 8.
+    let run = world.run(&install);
+    assert_eq!(run.status, 0, "{}{}", run.stdout, run.stderr);
+    fs::write(world.state("rehost-leave"), b"").unwrap();
+    let run = world.run(&["remove", "com.jgraph.drawio", "--delete-data", "--events"]);
+    assert_eq!(run.status, 8, "{}{}", run.stdout, run.stderr);
+    let error = run.events().last().unwrap()["error"].clone();
+    assert_eq!(error["code"], "TUR-DESKTOP-APPS-015");
+    assert!(
+        error["message"]
+            .as_str()
+            .unwrap()
+            .contains("tur/rehost/launchers/com.jgraph.drawio"),
+        "{error}"
+    );
+}
+
+#[test]
+fn the_package_tur_measured_runs_without_the_modules_the_measurement_allows() {
+    let world = test_world("rehost-measured");
+    world.set_host(REHOST_HOST);
+    let measured = world.file("rehosted-1.0.zip", PACKAGE);
+    let run = world.run(&[
+        "plan",
+        "org.example.rehosted",
+        "--route",
+        "rehost",
+        "--installer",
+        &measured,
+        "--json",
+    ]);
+    assert_eq!(run.status, 0, "{}{}", run.stdout, run.stderr);
+    let plan = run.json();
+    let verification = plan["source"]["verification"].as_str().unwrap();
+    assert!(
+        verification.starts_with("This is the package TUR measured: rehosted-1.0.zip"),
+        "{verification}"
+    );
+    let install = strings(&plan["steps"][1]["command"]);
+    assert!(
+        install.ends_with(&["--allow-unresolved".to_owned(), "left-out@1.0.0".to_owned()]),
+        "{install:?}"
+    );
+    let notes = strings(&plan["notes"]);
+    assert!(
+        notes
+            .iter()
+            .any(|note| note.contains("starts without these native modules")
+                && note.contains("left-out@1.0.0")),
+        "{notes:#?}"
+    );
+    assert!(
+        world
+            .log("rehost.log")
+            .contains("--allow-unresolved left-out@1.0.0\n")
+    );
+
+    // Any other file is not allowed to leave a module out.
+    let other = world.file("rehosted-1.0-other.zip", b"PK another file");
+    let run = world.run(&[
+        "plan",
+        "org.example.rehosted",
+        "--route",
+        "rehost",
+        "--installer",
+        &other,
+        "--json",
+    ]);
+    assert_eq!(run.status, 0, "{}{}", run.stdout, run.stderr);
+    let plan = run.json();
+    assert!(
+        !strings(&plan["steps"][1]["command"]).contains(&"--allow-unresolved".to_owned())
+    );
+    assert!(
+        strings(&plan["notes"])
+            .iter()
+            .any(|note| note.contains("is not allowed to leave out"))
+    );
+
+    // A failure in tur-rehost is a failed step, and nothing is recorded.
+    fs::write(world.state("rehost-fail"), b"").unwrap();
+    let arguments = [
+        "install",
+        "org.example.rehosted",
+        "--route",
+        "rehost",
+        "--installer",
+        measured.as_str(),
+        "--yes",
+        "--events",
+    ];
+    let run = world.run(&arguments);
+    assert_eq!(run.status, 7, "{}", run.stdout);
+    let error = run.events().last().unwrap()["error"].clone();
+    assert_eq!(error["code"], "TUR-DESKTOP-APPS-010");
+    assert!(
+        error["message"]
+            .as_str()
+            .unwrap()
+            .contains("TUR-REHOST-APP-003")
+    );
+    assert!(
+        !world
+            .data()
+            .join("tur/apps/installed/org.example.rehosted.json")
+            .exists()
+    );
+
+    fs::remove_file(world.state("rehost-fail")).unwrap();
+    let run = world.run(&arguments);
+    assert_eq!(run.status, 0, "{}{}", run.stdout, run.stderr);
+    let result = run.events().last().unwrap()["result"].clone();
+    assert_eq!(result["source"]["pinned"], true);
+    assert_eq!(result["rehost"]["measured"], true);
+    assert_eq!(
+        result["rehost"]["allowed_unresolved"],
+        serde_json::json!(["left-out@1.0.0"])
+    );
+}
+
+#[test]
+fn allowing_builds_reaches_tur_rehost_for_vscodium() {
+    let world = World::new("rehost-builds", None);
+    let package = world.file("VSCodium-win32-x64-1.143.17232.zip", PACKAGE);
+    let plan = |extra: &[&str]| {
+        let mut arguments = vec![
+            "plan",
+            "com.vscodium.vscodium",
+            "--route",
+            "rehost",
+            "--installer",
+            package.as_str(),
+            "--json",
+        ];
+        arguments.extend_from_slice(extra);
+        world.run(&arguments)
+    };
+
+    // The router asks for the person's permission first.
+    world.set_host(REHOST_HOST);
+    let run = plan(&[]);
+    assert_eq!(run.status, 3, "{}", run.stdout);
+    let error = &run.json()["error"];
+    assert_eq!(error["code"], "TUR-DESKTOP-APPS-009");
+    assert_eq!(
+        error["detail"]["prerequisites"][0]["code"],
+        "allow-rehost-builds"
+    );
+    assert!(error["message"].as_str().unwrap().contains("--allow-builds"));
+    assert_eq!(world.log("rehost.log"), "");
+
+    // Stated as allowed, but tur-rehost was not told: it refuses, and the
+    // refusal says how to allow the builds.
+    world.set_host(BUILDS_HOST);
+    fs::write(world.state("rehost-needs-builds"), b"").unwrap();
+    let run = plan(&[]);
+    assert_eq!(run.status, 3, "{}", run.stdout);
+    let error = &run.json()["error"];
+    assert_eq!(error["code"], "TUR-DESKTOP-APPS-009");
+    let message = error["message"].as_str().unwrap();
+    assert!(message.contains("TUR-REHOST-NATIVE-002"), "{message}");
+    assert!(message.contains("--allow-builds"), "{message}");
+
+    // Allowed: tur-rehost is told, for the plan and for the installation.
+    let run = plan(&["--allow-builds"]);
+    assert_eq!(run.status, 0, "{}{}", run.stdout, run.stderr);
+    let notes = strings(&run.json()["notes"]);
+    assert!(
+        notes.iter().any(|note| note.contains("built from source")),
+        "{notes:#?}"
+    );
+    let run = world.run(&[
+        "install",
+        "com.vscodium.vscodium",
+        "--route",
+        "rehost",
+        "--installer",
+        &package,
+        "--allow-builds",
+        "--yes",
+        "--events",
+    ]);
+    assert_eq!(run.status, 0, "{}{}", run.stdout, run.stderr);
+    let result = run.events().last().unwrap()["result"].clone();
+    assert_eq!(result["rehost"]["builds_allowed"], true);
+    // Not the package TUR measured: no module may be left out.
+    assert_eq!(result["rehost"]["allowed_unresolved"], serde_json::json!([]));
+    let log = world.log("rehost.log");
+    let installed = log
+        .lines()
+        .find(|line| line.starts_with("install "))
+        .expect("an installation");
+    assert!(
+        installed.ends_with("--app-id com.vscodium.vscodium --name VSCodium --json --allow-builds"),
+        "{installed}"
+    );
 }

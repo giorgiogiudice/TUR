@@ -220,10 +220,15 @@ impl Edition {
                     &[Route::Native]
                 }
             }
-            EditionKind::Windows => &[Route::Proton, Route::Wine, Route::WindowsGuest],
+            EditionKind::Windows => &[
+                Route::Proton,
+                Route::Wine,
+                Route::WindowsGuest,
+                Route::Rehost,
+            ],
             EditionKind::Android => &[Route::AndroidRuntime],
             EditionKind::Web => &[Route::Web],
-            EditionKind::Macos => &[Route::Darling],
+            EditionKind::Macos => &[Route::Darling, Route::Rehost],
         }
     }
 
@@ -648,6 +653,11 @@ pub enum Route {
     Native,
     /// A package of another distribution, in a container of that distribution.
     DistroContainer,
+    /// The publisher's Windows or macOS package, re-hosted on the official
+    /// Linux build of the runtime it is made with (Electron and others):
+    /// no compatibility layer and no virtual machine. Offered only where
+    /// TUR has measured it (`docs/reports/exp-rehost-1.md`).
+    Rehost,
     /// Proton through `umu-launcher`: the compatibility layer for games.
     Proton,
     /// Wine: the compatibility layer for other Windows applications.
@@ -667,10 +677,11 @@ pub enum Route {
 
 impl Route {
     /// Every route, in ladder order, ending with [`Route::NoRoute`].
-    pub const ALL: [Route; 10] = [
+    pub const ALL: [Route; 11] = [
         Route::Flatpak,
         Route::Native,
         Route::DistroContainer,
+        Route::Rehost,
         Route::Proton,
         Route::Wine,
         Route::WindowsGuest,
@@ -682,10 +693,11 @@ impl Route {
 
     /// The routes a catalogue record or a pin may name: all but
     /// [`Route::NoRoute`].
-    pub const RUNNABLE: [Route; 9] = [
+    pub const RUNNABLE: [Route; 10] = [
         Route::Flatpak,
         Route::Native,
         Route::DistroContainer,
+        Route::Rehost,
         Route::Proton,
         Route::Wine,
         Route::WindowsGuest,
@@ -700,6 +712,7 @@ impl Route {
             Route::Flatpak => "flatpak",
             Route::Native => "native",
             Route::DistroContainer => "distro-container",
+            Route::Rehost => "rehost",
             Route::Proton => "proton",
             Route::Wine => "wine",
             Route::WindowsGuest => "windows-guest",
@@ -716,6 +729,7 @@ impl Route {
             Route::Flatpak => "Flatpak",
             Route::Native => "Native Linux",
             Route::DistroContainer => "Container of another distribution",
+            Route::Rehost => "Re-hosted on its own runtime's Linux build",
             Route::Proton => "Proton (through umu-launcher)",
             Route::Wine => "Wine",
             Route::WindowsGuest => "Windows guest (virtual machine)",
@@ -758,6 +772,10 @@ pub enum Rating {
     Good,
     /// Runs and is usable; needs tweaks or has minor problems.
     Usable,
+    /// Starts and shows its first window, measured by TUR; nothing beyond
+    /// that was tested. Only TUR's own test gives it: no external source's
+    /// scale maps onto it.
+    Starts,
     /// Runs, with problems that get in the way of normal use.
     Poor,
     /// Does not start, or cannot be used for its purpose.
@@ -768,9 +786,10 @@ pub enum Rating {
 
 impl Rating {
     /// Every rating, best first, ending with [`Rating::Unknown`].
-    pub const ALL: [Rating; 5] = [
+    pub const ALL: [Rating; 6] = [
         Rating::Good,
         Rating::Usable,
+        Rating::Starts,
         Rating::Poor,
         Rating::Broken,
         Rating::Unknown,
@@ -781,15 +800,23 @@ impl Rating {
         match self {
             Rating::Good => "good",
             Rating::Usable => "usable",
+            Rating::Starts => "starts",
             Rating::Poor => "poor",
             Rating::Broken => "broken",
             Rating::Unknown => "unknown",
         }
     }
 
-    /// Whether the rating says the route works: `good` or `usable`.
+    /// Whether the rating says the route works in use: `good` or `usable`.
+    /// `starts` is not enough: only the first window was seen.
     pub const fn is_supporting(self) -> bool {
         matches!(self, Rating::Good | Rating::Usable)
+    }
+
+    /// Whether the rating says the application at least starts on the
+    /// route: `good`, `usable` or `starts`.
+    pub const fn shows_it_starts(self) -> bool {
+        matches!(self, Rating::Good | Rating::Usable | Rating::Starts)
     }
 
     /// Whether the rating says the route is inadequate: `poor` or `broken`.
@@ -883,6 +910,59 @@ pub struct Record {
     /// TUR autopilot: the SHA-256 of the evidence in its result.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub evidence_sha256: Option<String>,
+    /// Re-hosted: what was measured, on which runtime, and where the
+    /// measurement's run is. Required on a record of the `rehost` route and
+    /// refused on any other.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rehost: Option<RehostEvidence>,
+}
+
+/// What TUR measured when it re-hosted an edition: the publisher's file, the
+/// runtime it ran on, and the run that holds the evidence
+/// (`[editions.records.rehost]`, docs/reports/exp-rehost-1.md).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RehostEvidence {
+    /// The publisher's file that was measured: a file name, without a
+    /// directory, for example `VSCodium-win32-x64-1.143.17232.zip`.
+    pub package: String,
+    /// The SHA-256 of that file, as 64 lower-case hexadecimal digits.
+    pub package_sha256: String,
+    /// The size of that file in bytes.
+    pub package_size: u64,
+    /// The runtime family the edition was re-hosted on: one of
+    /// [`RehostEvidence::RUNTIMES`], for example `electron`.
+    pub runtime: String,
+    /// The version of the runtime's Linux build it ran on, for example
+    /// `43.7.7`.
+    pub runtime_version: String,
+    /// The `https` address of the run that measured it.
+    pub evidence: String,
+    /// Native modules that had to be built from source for Linux, as
+    /// `name@version`. May be empty.
+    #[serde(default)]
+    pub native_builds: Vec<String>,
+    /// Native modules with no Linux build that the measured version did not
+    /// load when it started, as `name@version`, or as `file:<file name>`
+    /// for a native module whose package cannot be identified, such as
+    /// `file:node.napi.node`. May be empty.
+    #[serde(default)]
+    pub unresolved: Vec<String>,
+}
+
+impl RehostEvidence {
+    /// The runtime families TUR's re-hosting component knows, in the order
+    /// the experiment measured them.
+    pub const RUNTIMES: [&'static str; 8] = [
+        "electron",
+        "nwjs",
+        "dotnet",
+        "jvm",
+        "godot",
+        "love",
+        "renpy",
+        "pyinstaller",
+    ];
 }
 
 /// A public page that a fact of an edition was checked against.
@@ -1122,6 +1202,62 @@ checked = "2026-11-12"
         assert_eq!(bare.host(), "");
     }
 
+    const WITH_REHOST: &str = r#"
+schema_version = 1
+id = "org.example.app"
+name = "Example"
+publisher = "Example Project"
+category = "utility"
+
+[[editions]]
+kind = "windows"
+obtain = "publisher-page"
+download_page = "https://example.org/download"
+
+[[editions.records]]
+route = "rehost"
+rating = "usable"
+reported_by = "tur-test"
+test_report = "docs/reports/exp-rehost-1.md"
+version_tested = "1.2"
+date = "2026-11-16"
+
+[editions.records.rehost]
+package = "Example-1.2-win-x64.zip"
+package_sha256 = "a1090868af8a0000000000000000000000000000000000000000000000000000"
+package_size = 1234
+runtime = "electron"
+runtime_version = "43.7.7"
+evidence = "https://github.com/example/example/actions/runs/1"
+native_builds = ["@parcel/watcher@2.5.6"]
+"#;
+
+    #[test]
+    fn parses_a_rehost_record_with_its_evidence() {
+        let entry = parse_entry(WITH_REHOST).unwrap();
+        let record = &entry.editions[0].records[0];
+        assert_eq!(record.route, Route::Rehost);
+        let evidence = record.rehost.as_ref().unwrap();
+        assert_eq!(evidence.package, "Example-1.2-win-x64.zip");
+        assert_eq!(evidence.package_size, 1234);
+        assert_eq!(evidence.runtime, "electron");
+        assert_eq!(evidence.native_builds, ["@parcel/watcher@2.5.6"]);
+        assert!(evidence.unresolved.is_empty());
+        assert!(RehostEvidence::RUNTIMES.contains(&evidence.runtime.as_str()));
+
+        let unknown = WITH_REHOST.replace("runtime = ", "colour = \"red\"\nruntime = ");
+        assert!(parse_entry(&unknown).unwrap_err().contains("colour"));
+        let missing = WITH_REHOST.replace("package_size = 1234\n", "");
+        assert!(parse_entry(&missing).unwrap_err().contains("package_size"));
+
+        // Written back only where it is present.
+        let json = serde_json::to_value(record).unwrap();
+        assert_eq!(json["rehost"]["runtime_version"], "43.7.7");
+        let mut plain = record.clone();
+        plain.rehost = None;
+        assert!(serde_json::to_value(&plain).unwrap().get("rehost").is_none());
+    }
+
     #[test]
     fn linux_native_routes_depend_on_where_the_edition_comes_from() {
         let mut edition = Edition::new(EditionKind::LinuxNative);
@@ -1131,14 +1267,22 @@ checked = "2026-11-12"
         assert_eq!(edition.routes(), [Route::DistroContainer]);
         assert_eq!(
             Edition::new(EditionKind::Windows).routes(),
-            [Route::Proton, Route::Wine, Route::WindowsGuest]
+            [
+                Route::Proton,
+                Route::Wine,
+                Route::WindowsGuest,
+                Route::Rehost
+            ]
         );
         assert_eq!(
             Edition::new(EditionKind::Android).routes(),
             [Route::AndroidRuntime]
         );
         assert_eq!(Edition::new(EditionKind::Web).routes(), [Route::Web]);
-        assert_eq!(Edition::new(EditionKind::Macos).routes(), [Route::Darling]);
+        assert_eq!(
+            Edition::new(EditionKind::Macos).routes(),
+            [Route::Darling, Route::Rehost]
+        );
     }
 
     #[test]

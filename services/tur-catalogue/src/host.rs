@@ -100,6 +100,22 @@ pub struct HostFacts {
     pub gpu: GpuClass,
     /// Installed memory in mebibytes, when known.
     pub memory_mib: Option<u64>,
+    /// TUR's re-hosting component, `tur-rehost`, is installed. Left out of
+    /// the JSON written when it is false.
+    #[serde(skip_serializing_if = "is_false")]
+    pub rehost: bool,
+    /// The person has allowed TUR to build an application's native modules
+    /// from source on this computer: in a sandbox without network access,
+    /// with Fedora's compiler. Left out of the JSON written when it is
+    /// false.
+    #[serde(skip_serializing_if = "is_false")]
+    pub rehost_builds: bool,
+}
+
+/// Whether a flag is off: such a fact is left out of the JSON written, so
+/// that output made before the fact existed does not change.
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 impl Default for HostFacts {
@@ -118,6 +134,8 @@ impl Default for HostFacts {
             darling_enabled: false,
             gpu: GpuClass::Unknown,
             memory_mib: None,
+            rehost: false,
+            rehost_builds: false,
         }
     }
 }
@@ -185,7 +203,24 @@ mod tests {
         assert!(!host.windows_licence && !host.darling_enabled && !host.distro_containers);
         assert_eq!(host.gpu, GpuClass::Unknown);
         assert_eq!(host.memory_mib, None);
+        assert!(!host.rehost && !host.rehost_builds);
         assert_eq!(parse_host_facts("{}").unwrap(), host);
+    }
+
+    #[test]
+    fn the_rehost_facts_are_read_and_written_only_when_true() {
+        let host = parse_host_facts(r#"{"rehost": true, "rehost_builds": true}"#).unwrap();
+        assert!(host.rehost && host.rehost_builds);
+        let json = serde_json::to_value(&host).unwrap();
+        assert_eq!(json["rehost"], true);
+        assert_eq!(json["rehost_builds"], true);
+        assert_eq!(parse_host_facts(&json.to_string()).unwrap(), host);
+
+        // Off, they are left out, so what was written before is unchanged.
+        let json = serde_json::to_value(HostFacts::default()).unwrap();
+        assert!(json.get("rehost").is_none());
+        assert!(json.get("rehost_builds").is_none());
+        assert!(parse_host_facts(r#"{"rehost": "yes"}"#).is_err());
     }
 
     #[test]

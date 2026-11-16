@@ -1,0 +1,85 @@
+# SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0
+# TUR application catalogue entry. Format: schemas/app-catalogue-entry.schema.json.
+# How entries are written and sourced: catalogue/README.md.
+# The two rehost records are TUR's own measurements, with their report
+# (docs/reports/exp-rehost-1.md) and the run that holds the evidence.
+# Nothing is claimed about the publisher's Linux edition: it has no record.
+
+schema_version = 1
+id = "com.emqx.mqttx"
+name = "MQTTX"
+publisher = "EMQ"
+category = "development"
+summary = "MQTT client for testing and debugging."
+homepage = "https://github.com/emqx/MQTTX"
+
+[[editions]]
+kind = "linux-native"
+obtain = "publisher-page"
+download_page = "https://github.com/emqx/MQTTX/releases"
+licence = "open-source"
+
+[[editions.references]]
+title = "MQTTX 1.13.3 release on GitHub, with its Linux, Windows and macOS packages"
+url = "https://github.com/emqx/MQTTX/releases/tag/v1.13.3"
+checked = "2026-11-16"
+
+[[editions]]
+kind = "windows"
+obtain = "publisher-page"
+download_page = "https://github.com/emqx/MQTTX/releases"
+licence = "open-source"
+
+[[editions.records]]
+route = "rehost"
+rating = "starts"
+reported_by = "tur-test"
+test_report = "docs/reports/exp-rehost-1.md"
+version_tested = "1.13.3"
+date = "2026-11-16"
+notes = "Measured by TUR's re-hosting experiment: the application's own first window, the same as the official Linux build's, and typed text; no feature beyond that was exercised (exp-rehost-1, section 3.1)."
+
+[editions.records.rehost]
+package = "MQTTX-1.13.3-x64-win.zip"
+package_sha256 = "f242df2240b933cf1eb1542343c2547f459f5714f7040be47744d8a403814c56"
+package_size = 149545001
+runtime = "electron"
+runtime_version = "39.2.7"
+evidence = "https://github.com/giorgiogiudice/TUR/actions/runs/43778332673"
+native_builds = []
+unresolved = []
+
+[[editions.references]]
+title = "MQTTX 1.13.3 release on GitHub, with its Linux, Windows and macOS packages"
+url = "https://github.com/emqx/MQTTX/releases/tag/v1.13.3"
+checked = "2026-11-16"
+
+[[editions]]
+kind = "macos"
+obtain = "publisher-page"
+download_page = "https://github.com/emqx/MQTTX/releases"
+licence = "open-source"
+
+[[editions.records]]
+route = "rehost"
+rating = "starts"
+reported_by = "tur-test"
+test_report = "docs/reports/exp-rehost-1.md"
+version_tested = "1.13.3"
+date = "2026-11-16"
+notes = "Measured by TUR's re-hosting experiment: the application's own first window, the same as the official Linux build's, and typed text; no feature beyond that was exercised (exp-rehost-1, section 3.1)."
+
+[editions.records.rehost]
+package = "MQTTX-1.13.3-mac.zip"
+package_sha256 = "41e8a6d7652bb6a34e962aa4daa701c811579a802df7c5d94a353f7a380e02e2"
+package_size = 137789185
+runtime = "electron"
+runtime_version = "39.2.7"
+evidence = "https://github.com/giorgiogiudice/TUR/actions/runs/43778332673"
+native_builds = []
+unresolved = []
+
+[[editions.references]]
+title = "MQTTX 1.13.3 release on GitHub, with its Linux, Windows and macOS packages"
+url = "https://github.com/emqx/MQTTX/releases/tag/v1.13.3"
+checked = "2026-11-16"

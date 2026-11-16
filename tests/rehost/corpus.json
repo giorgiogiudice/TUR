@@ -1,0 +1,60 @@
+{
+  "$comment": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0. The integration corpus of tur-rehost (.github/workflows/rehost.yml): five of the 40 package variants the re-hosting experiment measured working (docs/reports/exp-rehost-1.md, 3.1), each an open-source application's own release asset, pinned by the SHA-256 the experiment recorded (runs 43778332673 and 43768570046). Chosen to cover the containers and tiers once each, small: a zip (Windows), a macOS zip, an electron-builder NSIS installer with its app-64.7z, a release prebuild of a native module, and one module built from source (only with the workflow's 'builds' input).",
+  "variants": [
+    {
+      "key": "min",
+      "app_id": "com.github.minbrowser.min",
+      "platform": "windows",
+      "url": "https://github.com/minbrowser/min/releases/download/v1.35.7/Min-v1.35.7-windows.zip",
+      "size": 162454550,
+      "sha256": "6659766134e4d45bd75ac385390b02cea8284a58b37a9f60af2e193a9e04b3d5",
+      "electron": "43.4.1",
+      "program": "Min",
+      "needs_builds": false
+    },
+    {
+      "key": "drawio",
+      "app_id": "com.jgraph.drawio",
+      "platform": "macos",
+      "url": "https://github.com/jgraph/drawio-desktop/releases/download/v32.6.10/draw.io-x64-32.6.10.zip",
+      "size": 158950581,
+      "sha256": "8994cd728b5fd6eac5da62fa622e68882eeb51ed5d0bec019de4d4a8672b73d0",
+      "electron": "44.10.2",
+      "program": "draw.io",
+      "needs_builds": false
+    },
+    {
+      "key": "rocketchat",
+      "app_id": "chat.rocket.desktop",
+      "platform": "windows",
+      "url": "https://github.com/RocketChat/Rocket.Chat.Electron/releases/download/4.19.3/rocketchat-4.19.3-win-x64.exe",
+      "size": 119101904,
+      "sha256": "3e0a321dc4cd04504d867e900d01ed3c7dc5637aac9c6ae63f6230aa1eb788d3",
+      "electron": "43.8.1",
+      "program": "Rocket.Chat",
+      "needs_builds": false
+    },
+    {
+      "key": "mqttx",
+      "app_id": "com.emqx.mqttx",
+      "platform": "windows",
+      "url": "https://github.com/emqx/MQTTX/releases/download/v1.13.3/MQTTX-1.13.3-x64-win.zip",
+      "size": 149545001,
+      "sha256": "f242df2240b933cf1eb1542343c2547f459f5714f7040be47744d8a403814c56",
+      "electron": "39.2.7",
+      "program": "MQTTX",
+      "needs_builds": false
+    },
+    {
+      "key": "bruno",
+      "app_id": "com.usebruno.bruno",
+      "platform": "windows",
+      "url": "https://github.com/usebruno/bruno/releases/download/v4.3.0/bruno_4.3.0_x64_win.zip",
+      "size": 185171111,
+      "sha256": "d00a649e0120168f26b630aa3253c36f2fdc9a84b1a13ff6fd96abc48f7be3f0",
+      "electron": "37.6.1",
+      "program": "Bruno",
+      "needs_builds": true
+    }
+  ]
+}
