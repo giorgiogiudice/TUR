@@ -6,14 +6,22 @@ As built for [ADR-0024](../adr/0024-problem-reports.md). Specification §6.5
 [diagnostics.md](diagnostics.md) (the bundle and the client's redaction);
 [ai-control-layer.md](ai-control-layer.md) §5, §22, §23 (classes).
 
-- Client: `services/tur-diagnostics/` — `tur-diag report prepare|send|list|status`,
-  module `tur_diag::report`.
+- Client: `services/tur-diagnostics/` — `tur-diag report
+  prepare|submit|show|send|list|status|fixed`, module `tur_diag::report`
+  (with `report::handoff`, `report::activity`, `report::fixed`).
 - Receiver: `server/report-receiver/` — program `tur-report-receiver`.
 - Schemas: `schemas/report-request.schema.json` (report.json),
   `report-preview.schema.json`, `report-record.schema.json`,
+  `report-origin.schema.json`, `report-fixed.schema.json`,
   `report-receiver.schema.json`.
-- Proof: `.github/workflows/reports.yml`, report [reports-1](../reports/reports-1.md).
-- Deployment: [deploy-report-receiver.md](../guides/deploy-report-receiver.md).
+- Proof: `.github/workflows/reports.yml` (every change) and
+  `reports-deployed.yml` (started by hand: the receiver installed with
+  `install.sh`, TUR's base image as the client); report
+  [reports-e2e-1](../reports/reports-e2e-1.md). (The first slice's report,
+  reports-1, was never committed.)
+- Deployment: `server/report-receiver/deploy/install.sh`, one command;
+  [deploy-report-receiver.md](../guides/deploy-report-receiver.md).
+- From a report to a fix: [fix-a-reported-problem.md](../guides/fix-a-reported-problem.md).
 
 ## 1. The flow
 
@@ -34,7 +42,10 @@ As built for [ADR-0024](../adr/0024-problem-reports.md). Specification §6.5
 ```
 
 Nothing is sent in the background, nothing is retried by the client on its
-own, and nothing can be sent while no receiver is configured.
+own, and nothing can be sent while no receiver is configured. The person's
+usual command is `tur-diag report submit`, which prepares, shows and sends
+in one step and asks before it sends; `prepare` then `send` are the same in
+two steps (section 2.3).
 
 ## 2. Client: `tur-diag report`
 
@@ -42,10 +53,36 @@ own, and nothing can be sent while no receiver is configured.
 tur-diag report prepare (--title T --component C | --from-boot-health) [--description D | --description-file F]
                         [--error-code CODE] [--kind K] [--since-boot] [--prepared-by person|pax]
                         [--preview | --output FILE] [--json] [--state-dir DIR] [--config FILE]
+tur-diag report submit [the fields of prepare] [--from-heal CODE] [--state-dir DIR] [--config FILE]
+tur-diag report show [--file PATH | --json] REPORT [--config FILE]
 tur-diag report send --to URL [--yes] [--json] FILE [--state-dir DIR] [--config FILE]
 tur-diag report list [--json] [--state-dir DIR]
 tur-diag report status REPORT_ID [--json] [--state-dir DIR] [--config FILE]
+tur-diag report fixed [--json] [--state-dir DIR]
 ```
+
+`prepare` and `submit` also take `--include-pax-activity`: a summary of P@x's
+audit trail (`$XDG_STATE_HOME/tur/pax/audit.jsonl`, the newest 200 entries)
+as `pax/activity.jsonl`, with only the fields that name when, which task,
+which action, its class, tier and sandbox, the decision, the outcome and the
+codes. `MESSAGE` and the statement of a privileged request are left out, and
+the rest is redacted with the bundle. P@x's hand-over adds it when the
+report is about P@x.
+
+**submit** refuses at once when no receiver is configured or there is no
+terminal to ask on (it has no `--yes`), asks for a title and a component
+when they are not given, prepares and saves the report, prints all of it as
+`prepare` does, and then runs `send` on the saved file, which shows the
+summary and asks "Type yes to send". Any other answer sends nothing and
+leaves the report prepared (`report list`). `--from-heal CODE` makes the
+report from a fault the healing service offers one for, like `tur-diag heal
+report CODE`.
+
+**show** prints a saved report exactly as it would be sent (the preview of
+`prepare`, read back from the bundle), or one of its files with `--file`,
+with control characters shown as escapes.
+
+**fixed** reads only local files: see section 2.4.
 
 **prepare** collects a bundle with the collectors of `tur-diag collect`,
 except that each journal is limited to its newest 5 000 entries and each
@@ -64,6 +101,8 @@ is configured), and where the bundle was saved
 **send** refuses, before anything leaves the computer, unless all of these
 hold:
 
+0. it does not run in P@x's read-only sandbox (`TUR-DIAG-REPORT-013`,
+   section 2.2);
 1. a receiver is configured (`TUR-DIAG-REPORT-002` otherwise);
 2. `--to` names exactly that receiver (`TUR-DIAG-REPORT-003`), so that a
    suggested or mistyped address never receives a report;
@@ -77,8 +116,12 @@ It then shows a short description of what is sent and to whom, runs one
 `curl` (the system's, so Fedora's trust store and crypto policy apply; only
 `https`, or `http` to this computer for tests; no redirects; 300 s), checks
 that the receipt's status address is on the configured receiver, writes
-`sent/<report_id>.json` (`report-record.schema.json`, mode 0600) and removes
-the prepared file if it lies in the reports directory. A failure leaves the
+`sent/<report_id>.json` (`report-record.schema.json`, mode 0600) and
+`origins/<report_id>.json` (`report-origin.schema.json`: the code, the
+signature, the version and build the report was made on), and removes the
+prepared file if it lies in the reports directory. The origin is a file of
+its own so that the record's format does not change and an older tur-diag,
+after a rollback, still reads every record. A failure leaves the
 prepared file in place, to be sent again later by the person.
 
 **list** shows sent reports (newest first) and prepared ones. It never shows
@@ -119,21 +162,113 @@ about a field name the field, never its value.
 
 ### 2.2 P@x
 
-Two read-only tools are written, both class 0: `diag_report_prepare` runs
-`tur-diag report prepare --preview --json --prepared-by=pax ...` (nothing is
-saved, nothing is sent) and `diag_report_list` runs `tur-diag report list
---json`. **There is no tool that sends**; a test fails if an adapter names
-`send`, `--yes` or `--output`. Sending a report P@x proposes is class 2, and
-P@x performs nothing above class 1 until the approval sheet exists (§23,
-item 1); the person sends with the command line, later in Settings.
+Three tools in `services/tur-diagnostics/agent-tools.json`:
 
-They are in the shipped `services/tur-diagnostics/agent-tools.json` and
-`agent-tools.adapter.json` (they were first in `agent-tools.next*.json`,
-promoted in pax-5 when P@x's tests stopped listing every tool by name), and
-are installed in the image with the rest of tur-diagnostics' tools. Inside P@x's read-only sandbox the home
-directory is hidden, so `diag_report_list` there reports
-`directory_found: false` until a D-Bus service (`org.tur.Diagnostics1`)
-performs it.
+| Tool | Class | Performed by |
+|---|---|---|
+| `diag_report_prepare` | 0 | `tur-diag report prepare --preview --json --prepared-by=pax ...`: nothing saved, nothing sent |
+| `diag_report_list` | 0 | `tur-diag report list --json` |
+| `diag_report_send` | 2 | **nothing**: declared, never offered |
+
+**P@x never sends a report.** `diag_report_send` is declared so that the
+policy holds sending explicitly, and it has no adapter, so the registry
+never offers it to a model and a call of it by name becomes no action
+(`TUR-AI-TOOL-001`). `tests/report_handoff.rs` holds P@x's own policy
+engine to this: the call is class 2 and never allowed in any mode, presence
+or lock, and refused outright while no trusted session is proven; pressing
+a "Send" control in Settings or a notification, or typing into a terminal,
+through the accessibility tree or the screen, is class 2 and refused; no
+adapter may name the tool. A test in `agent_tools.rs` still fails if an
+adapter names `send`, `--yes` or `--output`.
+
+One way remains in which P@x could name `tur-diag report send`: its
+read-only command tool, which the engine classes by sandbox, not by text
+(class 0). Two barriers stop it there. The sandbox has no network
+(`--unshare-net`), and it has a host name of its own (`tur-pax-sandbox`,
+in its own UTS namespace, which the command has no capability to change);
+`send` and `submit` refuse to run under that name (`TUR-DIAG-REPORT-013`)
+before they read anything.
+
+**The hand-over.** A preview P@x makes carries `handoff`
+(`report-preview.schema.json`): the person's command, `tur-diag report
+submit` with the report's fields as they stand in the bundle, after
+redaction, quoted for a shell, and the words to tell the person. P@x shows
+the person what the report contains and gives them that command. It does
+not matter what P@x says about it: the command collects the logs again,
+shows everything, and sends only after the person types yes.
+
+Inside P@x's sandbox the home directory is hidden, so `diag_report_list`
+there reports `directory_found: false` until a D-Bus service
+(`org.tur.Diagnostics1`) performs it, and `--include-pax-activity` cannot
+be used there: it is the person's command that adds P@x's activity.
+
+### 2.3 Who sends, by every route
+
+Every route to a report ends in the same act: the person, in a program of
+their own, reads the report and confirms. P@x prepares and shows; it never
+confirms.
+
+| Route | What the person does | What sends | Today |
+|---|---|---|---|
+| Command line | `tur-diag report submit` (or `prepare`, `show`, `send`) | `send`, after "yes" typed on the terminal, or `--yes` given by the person | built |
+| P@x ("report this", "send this to TUR") | P@x previews with `diag_report_prepare` and gives the hand-over command; the person runs it | `submit` → `send`, after "yes" | built |
+| A notice of the healing service (desktop notification or the companion's bubble) | "Show me" shows the notice's command as text; the person runs `tur-diag report submit --from-heal CODE` (or `tur-diag heal report CODE`, then `send`) | `submit` → `send`, after "yes" | built (the notice's words name `heal report`; see section 10) |
+| Settings, "Problem reports" | reads the preview (`prepare --json`, `show --file`), presses Send | Settings runs `send --to URL --yes FILE` | not built |
+| A one-press Send in a notice or the companion | | | not built, and not wanted until the approval sheet exists |
+
+Why these are surfaces P@x cannot operate, on KWin as it is (ai-control-layer.md,
+section 19: no surface ignores emulated input): P@x has no tool that sends;
+its commands cannot reach the network or the session bus and are refused by
+`send`; and every way P@x could act on someone else's surface is classed by
+the engine. A terminal is sensitive (section 17, item 1 there), and a
+control named Send, or one that merely affirms ("OK", "Yes"), is
+consequential: both are class 2, refused while no trusted session is
+proven. Once the approval sheet of section 23, item 1 there (desktop task
+D-18) exists, such a step would be shown on it, protected by TUR's own
+code, and approved by the person: still the person's act. Until then
+nothing above class 1 runs. A Settings page for reports, when it is built,
+needs no new rule: its Send control is a TUR program run by the person.
+
+**The companion.** Its `Announce(source, id)` handshake
+(tur-pax-companion.md, section 7) carries only an identifier of a notice of
+the healing service, and the companion runs nothing (its rule R10): a
+`report-offered` notice in its bubble shows the command as text, and "Ask
+P@x to explain" starts a task under P@x's rules, which can preview and hand
+over but not send. A Send action in the bubble would be a surface of the
+desktop, not protected from emulated input; it is not proposed.
+
+**Standing consent** (ADR-0024 item 2, "send problem reports automatically")
+is still not built. Any such switch must go through `send` with the same
+checks, need its own decision record, and be the person's setting in
+Settings, never P@x's.
+
+### 2.4 The fix that comes back
+
+1. A report carries its fault code (`error_code`) and gets a report ID
+   (`R-…`) and a signature. The filed issue's title names the code, the
+   component and the version; its body names the report ID, which is how a
+   maintainer reads the full bundle within 90 days (`decrypt`).
+2. The pull request that fixes it adds the code to
+   `image/rootfs/usr/share/tur/heal/fixes.json` (checked by
+   `scripts/check-fixes.py` in the `reports` workflow), and the release
+   that contains it is signed and published as usual (ADR-0023).
+3. The maintainer runs `mark-fixed --issue N --version V` on the receiver:
+   every report filed under the issue reads `fixed`, `fixed_in: V`, and
+   `tur-diag report status` shows it.
+4. On the person's computer, after the update:
+   - a fault of the healing catalogue is checked again by the healing
+     service, which says "The problem you reported is fixed" or "it happened
+     again" (self-healing.md, section 7);
+   - any other code: `tur-diag report fixed` lists every sent report whose
+     code the running image's `fixes.json` names and that was made on
+     another build (from its origin), and every report the receiver said is
+     fixed; each with the sentence "The problem you reported is fixed: …".
+     It reads only local files. Codes of the healing catalogue are marked
+     `rechecked_by_healing`, so that whoever shows these leaves them to the
+     healing service's own notice.
+
+A report without a code reaches the person's computer as fixed only through
+the receiver (step 3 and `report status`).
 
 ## 3. Receiver API
 
@@ -346,7 +481,10 @@ from a report is ever logged; the tests scan the logs for all of them.
 > the part of TUR concerned, the TUR version, and a diagnostic bundle: system
 > logs of the current and, where relevant, the previous start, the list of
 > failed services, and technical facts about the hardware and the system's
-> configuration. It does not contain your documents, browser data,
+> configuration. If you choose, and for a problem with P@x, it also contains
+> a summary of what P@x did recently: which kinds of action it took and what
+> TUR decided about each, never what you said to P@x, what it answered, or
+> what was on your screen. It does not contain your documents, browser data,
 > passwords, keys, or anything else from your home folder.
 >
 > **What is removed before it leaves your computer.** User names, the
@@ -392,10 +530,21 @@ from a report is ever logged; the tests scan the logs for all of them.
 
 ## 10. Not done here
 
-- The image does not install a `problem-reports.conf`; Settings has no page
-  for reports yet; the "send problem reports automatically" switch (ADR-0024,
-  item 2) does not exist — when it does, it must go through the same
-  `send` path with the same checks.
+- The image does not install a `problem-reports.conf`: nothing can be sent
+  from TUR until the owner's receiver exists and a change to the image names
+  it (`RECEIVER_URL=`). The receiver is not deployed (issue #75; the owner's
+  steps are in the deployment guide).
+- Settings has no page for reports, and P@x's window does not show the
+  hand-over as a button: the command is the interface they will call.
+- `tur-diag report fixed` is not yet shown as a desktop notice: `tur-diag
+  heal notify` (pull request #117 rewrites it) should add the entries that
+  are not `rechecked_by_healing`, once each, with the same rules as its own
+  notices. The healing service's `report-offered` notice names `tur-diag
+  heal report CODE`; it should name `tur-diag report submit --from-heal
+  CODE`, the one-step command. Both are #117's component and are left to it.
+- The "send problem reports automatically" switch (ADR-0024, item 2) does
+  not exist; see section 2.3.
 - Opening a public issue without personal data (ADR-0024, item 5) is left
   to maintainers.
-- The receiver has not been deployed; see the guide.
+- `tur-update` does not show, before an update, which of the person's
+  reports it fixes.

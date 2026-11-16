@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/giorgiogiudice/TUR/schemas/report-origin.schema.json",
+  "$comment": "SPDX-License-Identifier: LicenseRef-TUR-Noncommercial-1.0.0",
+  "title": "TUR sent problem report origin",
+  "description": "Where a sent problem report came from, kept by tur-diag beside its record in $XDG_STATE_HOME/tur/reports/origins/<report_id>.json (mode 0600) when the report is sent. tur-diag report fixed compares it with the running image's list of fixed codes (/usr/share/tur/heal/fixes.json): a report whose code is listed, made on another build, is fixed by the update now running. It is a separate file so that the record format stays unchanged and an older tur-diag, after a rollback, still reads every record. The Rust type tur_diag::report::SentOrigin is authoritative and a test compares the two.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "report_id", "error_code", "signature", "version", "build_id"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "report_id": { "type": "string", "pattern": "^R-[0-9a-f]{16}$" },
+    "error_code": {
+      "description": "The report's error code, or null.",
+      "type": ["string", "null"]
+    },
+    "signature": {
+      "description": "The duplicate signature the receiver files the report under (tur_diag::report::signature).",
+      "type": "string",
+      "pattern": "^[0-9a-f]{16}$"
+    },
+    "version": {
+      "description": "TUR_VERSION of the bundle that was sent.",
+      "type": ["string", "null"]
+    },
+    "build_id": {
+      "description": "TUR_BUILD_ID of the bundle that was sent.",
+      "type": ["string", "null"]
+    }
+  }
+}

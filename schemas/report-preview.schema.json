@@ -2,10 +2,10 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/giorgiogiudice/TUR/schemas/report-preview.schema.json",
   "title": "TUR problem report preview",
-  "description": "What tur-diag report prepare --json prints: exactly what would be sent. P@x's diag_report_prepare tool returns it (with --preview, so prepared_file is null). The Rust type tur_diag::report::Preview is authoritative and a test compares the two.",
+  "description": "What tur-diag report prepare --json prints: exactly what would be sent. P@x's diag_report_prepare tool returns it (with --preview, so prepared_file is null, and with handoff, the person's command). The Rust type tur_diag::report::Preview is authoritative and a test compares the two.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "sent", "receiver", "prepared_file", "report", "bundle", "notice"],
+  "required": ["schema_version", "sent", "receiver", "prepared_file", "report", "bundle", "notice", "handoff"],
   "properties": {
     "schema_version": { "const": 1 },
     "sent": { "description": "Always false: preparing never sends.", "const": false },
@@ -66,6 +66,23 @@
         }
       }
     },
-    "notice": { "description": "What happens next, in words.", "type": "string" }
+    "notice": { "description": "What happens next, in words.", "type": "string" },
+    "handoff": {
+      "description": "For a report P@x previewed (prepared_by pax, nothing saved): how the person reads it in full and sends it. P@x never sends a report; the person runs the command, which shows everything again and sends only after the person types yes (docs/architecture/problem-reports.md, section 2.3). null otherwise.",
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["by", "argv", "command", "text"],
+      "properties": {
+        "by": { "description": "Who sends.", "const": "person" },
+        "argv": {
+          "description": "The command, one argument per item: tur-diag report submit with the report's redacted fields.",
+          "type": "array",
+          "minItems": 3,
+          "items": { "type": "string" }
+        },
+        "command": { "description": "The same command, quoted for a POSIX shell.", "type": "string" },
+        "text": { "description": "What to tell the person.", "type": "string" }
+      }
+    }
   }
 }

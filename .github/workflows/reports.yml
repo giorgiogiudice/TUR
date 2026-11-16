@@ -13,6 +13,13 @@
 #              the GitHub API (a local script that records calls), and
 #              tur-diag built in the same job as the client. See
 #              server/report-receiver/ci/e2e.py for every check.
+# fixes        the image's list of fixed codes (fixes.json), which tells a
+#              person "the problem you reported is fixed", and the
+#              receiver's install script (shellcheck). Seconds.
+#
+# The receiver installed with deploy/install.sh and TUR's base image as the
+# client are proven by the separate, hand-started `reports-deployed`
+# workflow.
 #
 # Nothing here calls the real GitHub API or any other server, and no
 # repository, issue or secret is created.
@@ -28,6 +35,8 @@ on:
       - "schemas/report-*.json"
       - "schemas/diag-bundle-manifest.schema.json"
       - "docs/dependencies/receiver-crates.csv"
+      - "image/rootfs/usr/share/tur/heal/fixes.json"
+      - "scripts/check-fixes.py"
       - "rust-toolchain.toml"
       - ".github/workflows/reports.yml"
   pull_request:
@@ -38,6 +47,8 @@ on:
       - "schemas/report-*.json"
       - "schemas/diag-bundle-manifest.schema.json"
       - "docs/dependencies/receiver-crates.csv"
+      - "image/rootfs/usr/share/tur/heal/fixes.json"
+      - "scripts/check-fixes.py"
       - "rust-toolchain.toml"
       - ".github/workflows/reports.yml"
   workflow_dispatch:
@@ -54,6 +65,19 @@ env:
   CARGO_INCREMENTAL: "0"
 
 jobs:
+  fixes:
+    name: Fixed codes and the install script
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: The image's list of fixed codes
+        run: python3 -I scripts/check-fixes.py image/rootfs/usr/share/tur/heal/fixes.json
+      - name: The receiver's install script
+        run: |
+          shellcheck --version | sed -n 2p
+          shellcheck server/report-receiver/deploy/install.sh
+
   receiver:
     name: Receiver tests and dependency licences
     runs-on: ubuntu-24.04

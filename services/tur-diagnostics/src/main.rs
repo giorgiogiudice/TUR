@@ -13,6 +13,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
 mod heal_cli;
+mod report_cli;
 
 use tur_diag::manifest::format_utc;
 use tur_diag::report::{
@@ -93,45 +94,57 @@ struct Places {
     config: Option<PathBuf>,
 }
 
+/// What a report says, and what goes into its bundle.
+#[derive(Debug, Clone, Args)]
+struct ReportFields {
+    /// One line that names the problem.
+    #[arg(long)]
+    title: Option<String>,
+    /// What happened, in words.
+    #[arg(long)]
+    description: Option<String>,
+    /// Read the description from this file.
+    #[arg(long, value_name = "FILE", conflicts_with = "description")]
+    description_file: Option<PathBuf>,
+    /// The component concerned, for example update, audio or network.
+    #[arg(long)]
+    component: Option<String>,
+    /// The TUR error code involved, for example TUR-BOOT-GATE-003.
+    #[arg(long, value_name = "CODE")]
+    error_code: Option<String>,
+    /// What kind of problem this is. Default: request, or what boot
+    /// health recorded.
+    #[arg(long, value_enum)]
+    kind: Option<KindArg>,
+    /// Make the report from boot health's notice of a failed update or a
+    /// failed start.
+    #[arg(long)]
+    from_boot_health: bool,
+    /// Read boot health's status from this file instead of running
+    /// tur-boot-health status --json.
+    #[arg(long, value_name = "FILE", requires = "from_boot_health")]
+    boot_health_status: Option<PathBuf>,
+    /// Leave out data from earlier boots.
+    #[arg(long)]
+    since_boot: bool,
+    /// Who wrote the report's text.
+    #[arg(long, value_enum, default_value_t = PreparedByArg::Person)]
+    prepared_by: PreparedByArg,
+    /// Add a summary of what P@x did recently (its audit trail: actions,
+    /// decisions and codes, never what was said or shown), redacted like
+    /// the rest.
+    #[arg(long)]
+    include_pax_activity: bool,
+}
+
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Subcommand)]
 enum ReportCommand {
     /// Collect a bundle for a problem and show exactly what would be sent.
     /// Nothing is sent.
     Prepare {
-        /// One line that names the problem.
-        #[arg(long)]
-        title: Option<String>,
-        /// What happened, in words.
-        #[arg(long)]
-        description: Option<String>,
-        /// Read the description from this file.
-        #[arg(long, value_name = "FILE", conflicts_with = "description")]
-        description_file: Option<PathBuf>,
-        /// The component concerned, for example update, audio or network.
-        #[arg(long)]
-        component: Option<String>,
-        /// The TUR error code involved, for example TUR-BOOT-GATE-003.
-        #[arg(long, value_name = "CODE")]
-        error_code: Option<String>,
-        /// What kind of problem this is. Default: request, or what boot
-        /// health recorded.
-        #[arg(long, value_enum)]
-        kind: Option<KindArg>,
-        /// Make the report from boot health's notice of a failed update or a
-        /// failed start.
-        #[arg(long)]
-        from_boot_health: bool,
-        /// Read boot health's status from this file instead of running
-        /// tur-boot-health status --json.
-        #[arg(long, value_name = "FILE", requires = "from_boot_health")]
-        boot_health_status: Option<PathBuf>,
-        /// Leave out data from earlier boots.
-        #[arg(long)]
-        since_boot: bool,
-        /// Who wrote the report's text.
-        #[arg(long, value_enum, default_value_t = PreparedByArg::Person)]
-        prepared_by: PreparedByArg,
+        #[command(flatten)]
+        fields: ReportFields,
         /// Show what would be sent without saving anything.
         #[arg(long)]
         preview: bool,
@@ -158,6 +171,49 @@ enum ReportCommand {
         /// The prepared report, as written by `tur-diag report prepare`.
         #[arg(value_name = "FILE")]
         file: PathBuf,
+        #[command(flatten)]
+        places: Places,
+    },
+    /// Prepare a report, show everything in it, and send it to TUR's
+    /// receiver if you type yes. Asks on a terminal; nothing is sent
+    /// without your answer.
+    Submit {
+        #[command(flatten)]
+        fields: ReportFields,
+        /// Make the report from a problem TUR's healing service offers a
+        /// report for, by its code.
+        #[arg(long, value_name = "CODE", conflicts_with = "from_boot_health")]
+        from_heal: Option<String>,
+        #[command(flatten)]
+        places: Places,
+        #[command(flatten)]
+        heal: heal_cli::HealPlaces,
+    },
+    /// Show a prepared report exactly as it would be sent, or one of its files.
+    Show {
+        /// Print this file of the report, for example report.json or
+        /// boot/current-journal.jsonl.
+        #[arg(long, value_name = "PATH")]
+        file: Option<String>,
+        /// Print JSON instead of text.
+        #[arg(long, conflicts_with = "file")]
+        json: bool,
+        /// The prepared report.
+        #[arg(value_name = "REPORT")]
+        report: PathBuf,
+        #[command(flatten)]
+        places: Places,
+    },
+    /// List the reports sent from this account that are fixed: by the TUR
+    /// version now running, or as the receiver last said. Reads local files
+    /// only.
+    Fixed {
+        /// Print JSON instead of text.
+        #[arg(long)]
+        json: bool,
+        /// The list of fixed codes instead of /usr/share/tur/heal/fixes.json.
+        #[arg(long, value_name = "FILE", hide = true)]
+        fixes: Option<PathBuf>,
         #[command(flatten)]
         places: Places,
     },
@@ -372,86 +428,115 @@ fn state_dir(places: &Places) -> Result<PathBuf, DiagError> {
         })
 }
 
+/// The request the fields describe, on top of `base` (from the healing
+/// service) when there is one.
+fn request_from_fields(
+    host: &SystemHost,
+    fields: &ReportFields,
+    base: Option<ReportRequest>,
+) -> Result<ReportRequest, DiagError> {
+    let prepared_by = PreparedBy::from(fields.prepared_by);
+    let mut request = if let Some(base) = base {
+        base
+    } else if fields.from_boot_health {
+        let status = match &fields.boot_health_status {
+            Some(path) => fs::read_to_string(path).map_err(|error| {
+                DiagError::new(
+                    ErrorKind::ReportNothingFromBootHealth,
+                    format!("{}: {error}", path.display()),
+                )
+            })?,
+            None => report::read_boot_health(host)?,
+        };
+        report::request_from_boot_health(&status, prepared_by)?
+    } else {
+        let missing = if fields.title.is_none() {
+            Some("--title")
+        } else if fields.component.is_none() {
+            Some("--component")
+        } else {
+            None
+        };
+        if let Some(option) = missing {
+            return Err(DiagError::new(
+                ErrorKind::ReportInvalid,
+                format!("give {option}, or --from-boot-health"),
+            ));
+        }
+        ReportRequest {
+            schema_version: REPORT_SCHEMA_VERSION,
+            kind: ReportKind::Request,
+            title: String::new(),
+            description: String::new(),
+            error_code: None,
+            component: String::new(),
+            affected_version: None,
+            prepared_by,
+            boot_health: None,
+        }
+    };
+    request.prepared_by = prepared_by;
+    if let Some(title) = &fields.title {
+        request.title.clone_from(title);
+    }
+    if let Some(path) = &fields.description_file {
+        request.description = fs::read_to_string(path).map_err(|error| {
+            DiagError::new(
+                ErrorKind::ReportInvalid,
+                format!("{}: {error}", path.display()),
+            )
+        })?;
+    } else if let Some(description) = &fields.description {
+        request.description.clone_from(description);
+    }
+    if let Some(component) = &fields.component {
+        request.component.clone_from(component);
+    }
+    if let Some(code) = &fields.error_code {
+        request.error_code = Some(code.clone());
+    }
+    if let Some(kind) = fields.kind {
+        request.kind = kind.into();
+    }
+    Ok(request)
+}
+
 fn run_report(host: &SystemHost, command: ReportCommand) -> Result<(), DiagError> {
     match command {
         ReportCommand::Prepare {
-            title,
-            description,
-            description_file,
-            component,
-            error_code,
-            kind,
-            from_boot_health,
-            boot_health_status,
-            since_boot,
-            prepared_by,
+            fields,
             preview,
             output,
             json,
             places,
         } => {
-            let prepared_by = PreparedBy::from(prepared_by);
-            let mut request = if from_boot_health {
-                let status = match &boot_health_status {
-                    Some(path) => fs::read_to_string(path).map_err(|error| {
-                        DiagError::new(
-                            ErrorKind::ReportNothingFromBootHealth,
-                            format!("{}: {error}", path.display()),
-                        )
-                    })?,
-                    None => report::read_boot_health(host)?,
-                };
-                report::request_from_boot_health(&status, prepared_by)?
-            } else {
-                let missing = if title.is_none() {
-                    Some("--title")
-                } else if component.is_none() {
-                    Some("--component")
-                } else {
-                    None
-                };
-                if let Some(option) = missing {
-                    return Err(DiagError::new(
-                        ErrorKind::ReportInvalid,
-                        format!("give {option}, or --from-boot-health"),
-                    ));
-                }
-                ReportRequest {
-                    schema_version: REPORT_SCHEMA_VERSION,
-                    kind: ReportKind::Request,
-                    title: String::new(),
-                    description: String::new(),
-                    error_code: None,
-                    component: String::new(),
-                    affected_version: None,
-                    prepared_by,
-                    boot_health: None,
-                }
+            let request = request_from_fields(host, &fields, None)?;
+            let options = report_cli::PrepareOptions {
+                since_boot: fields.since_boot,
+                preview,
+                output,
+                json,
+                more: report_cli::extra_documents(&fields)?,
             };
-            if let Some(title) = title {
-                request.title = title;
-            }
-            if let Some(path) = &description_file {
-                request.description = fs::read_to_string(path).map_err(|error| {
-                    DiagError::new(
-                        ErrorKind::ReportInvalid,
-                        format!("{}: {error}", path.display()),
-                    )
-                })?;
-            } else if let Some(description) = description {
-                request.description = description;
-            }
-            if let Some(component) = component {
-                request.component = component;
-            }
-            if let Some(code) = error_code {
-                request.error_code = Some(code);
-            }
-            if let Some(kind) = kind {
-                request.kind = kind.into();
-            }
-            prepare_and_show(host, &request, since_boot, preview, output, json, &places)
+            report_cli::prepare_show_save(host, &request, &options, &places).map(|_| ())
         }
+        ReportCommand::Submit {
+            fields,
+            from_heal,
+            places,
+            heal,
+        } => report_cli::submit(host, &fields, from_heal.as_deref(), &places, &heal),
+        ReportCommand::Show {
+            file,
+            json,
+            report,
+            places,
+        } => report_cli::show(&report, file.as_deref(), json, &places),
+        ReportCommand::Fixed {
+            json,
+            fixes,
+            places,
+        } => report_cli::fixed(json, fixes.as_deref(), &places),
         ReportCommand::Send {
             to,
             yes,
@@ -488,34 +573,14 @@ fn prepare_and_show(
     json: bool,
     places: &Places,
 ) -> Result<(), DiagError> {
-    // A configuration that cannot be read does not stop a report from
-    // being prepared; it is reported when sending.
-    let receiver = report::load_config(places.config.as_deref())
-        .ok()
-        .and_then(|config| config.receiver_url);
-    let known = gather_known_identifiers(host, &session_users());
-    let prepared = report::prepare(host, request, since_boot, now(), known)?;
-    let saved = if preview {
-        None
-    } else {
-        let path = match output {
-            Some(path) => path,
-            None => {
-                let directory = state_dir(places)?.join(PREPARED_DIR);
-                report::ensure_private_dir(&directory)?;
-                directory.join(report::prepared_file_name(&prepared))
-            }
-        };
-        write_bundle(&path, &prepared.archive)?;
-        Some(path)
+    let options = report_cli::PrepareOptions {
+        since_boot,
+        preview,
+        output,
+        json,
+        more: Vec::new(),
     };
-    let shown = report::preview(&prepared, receiver.as_deref(), saved.as_deref());
-    if json {
-        print_json(&shown)
-    } else {
-        print!("{}", report::render_preview(&shown));
-        Ok(())
-    }
+    report_cli::prepare_show_save(host, request, &options, places).map(|_| ())
 }
 
 /// Shows what is about to be sent, briefly; the full list is what
@@ -580,6 +645,7 @@ fn send(
     file: &Path,
     places: &Places,
 ) -> Result<(), DiagError> {
+    report_cli::refuse_in_pax_sandbox(host)?;
     let config = report::load_config(places.config.as_deref())?;
     let source = config.source.as_ref().map_or_else(
         || "no configuration file".to_owned(),
@@ -637,6 +703,11 @@ fn send(
         state_checked_utc: None,
     };
     report::write_record(&directory, &record)?;
+    // Where it came from, for "the problem you reported is fixed" after an
+    // update. The report is sent and recorded either way.
+    if let Err(error) = report_cli::keep_origin(&directory, &record, &inspected) {
+        eprintln!("{error}");
+    }
 
     // A prepared file in the reports directory has done its job; a file
     // elsewhere belongs to the person and is left alone.
@@ -779,19 +850,18 @@ mod tests {
             Command::Report {
                 command:
                     ReportCommand::Prepare {
+                        fields,
                         preview,
                         json,
-                        prepared_by,
-                        title,
-                        component,
                         output,
                         ..
                     },
             } => {
                 assert!(preview && json);
-                assert_eq!(prepared_by, PreparedByArg::Pax);
-                assert_eq!(title.as_deref(), Some("No sound"));
-                assert_eq!(component.as_deref(), Some("audio"));
+                assert_eq!(fields.prepared_by, PreparedByArg::Pax);
+                assert_eq!(fields.title.as_deref(), Some("No sound"));
+                assert_eq!(fields.component.as_deref(), Some("audio"));
+                assert!(!fields.include_pax_activity);
                 assert_eq!(output, None);
             }
             other => panic!("unexpected command: {other:?}"),
@@ -875,5 +945,136 @@ mod tests {
         // There is no way to send in the background or automatically.
         assert!(Cli::try_parse_from(["tur-diag", "report", "send", "--background"]).is_err());
         assert!(Cli::try_parse_from(["tur-diag", "report", "auto-send"]).is_err());
+        // Submitting always asks: it has no --yes.
+        assert!(
+            Cli::try_parse_from(["tur-diag", "report", "submit", "--title=t", "--yes"]).is_err()
+        );
+        // A report comes from the healing service or boot health, not both.
+        assert!(
+            Cli::try_parse_from([
+                "tur-diag",
+                "report",
+                "submit",
+                "--from-heal=TUR-DIAG-CRASH-001",
+                "--from-boot-health"
+            ])
+            .is_err()
+        );
+        // Showing one file prints that file, not JSON.
+        assert!(
+            Cli::try_parse_from(["tur-diag", "report", "show", "--json", "--file=x", "r"])
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn the_persons_report_commands_parse_as_documented() {
+        let cli = Cli::try_parse_from([
+            "tur-diag",
+            "report",
+            "submit",
+            "--prepared-by=pax",
+            "--kind=crash",
+            "--title=P@x stopped",
+            "--component=pax",
+            "--include-pax-activity",
+        ])
+        .expect("submit parses");
+        match cli.command {
+            Command::Report {
+                command:
+                    ReportCommand::Submit {
+                        fields,
+                        from_heal,
+                        ..
+                    },
+            } => {
+                assert_eq!(fields.prepared_by, PreparedByArg::Pax);
+                assert_eq!(fields.kind, Some(KindArg::Crash));
+                assert!(fields.include_pax_activity);
+                assert_eq!(from_heal, None);
+            }
+            other => panic!("unexpected command: {other:?}"),
+        }
+        let cli = Cli::try_parse_from([
+            "tur-diag",
+            "report",
+            "submit",
+            "--from-heal",
+            "TUR-DIAG-CRASH-001",
+        ])
+        .expect("submit from the healing service parses");
+        assert!(matches!(
+            cli.command,
+            Command::Report {
+                command: ReportCommand::Submit {
+                    from_heal: Some(_),
+                    ..
+                }
+            }
+        ));
+        let cli = Cli::try_parse_from([
+            "tur-diag",
+            "report",
+            "show",
+            "--file",
+            "report.json",
+            "r.tar.zst",
+        ])
+        .expect("show parses");
+        match cli.command {
+            Command::Report {
+                command: ReportCommand::Show { file, report, .. },
+            } => {
+                assert_eq!(file.as_deref(), Some("report.json"));
+                assert_eq!(report, PathBuf::from("r.tar.zst"));
+            }
+            other => panic!("unexpected command: {other:?}"),
+        }
+        let cli = Cli::try_parse_from(["tur-diag", "report", "fixed", "--json"]).expect("fixed");
+        assert!(matches!(
+            cli.command,
+            Command::Report {
+                command: ReportCommand::Fixed { json: true, .. }
+            }
+        ));
+    }
+
+    #[test]
+    fn the_hand_over_is_a_command_line_this_program_accepts() {
+        // What a P@x preview tells the person to run must parse here, and
+        // must ask before sending.
+        let mut request = ReportRequest {
+            schema_version: REPORT_SCHEMA_VERSION,
+            kind: ReportKind::FailedUpdate,
+            title: "The update to 0.2.0 was undone".to_owned(),
+            description: "It's back on 0.1.0; <user-1> saw a blank screen.".to_owned(),
+            error_code: Some("TUR-BOOT-GATE-003".to_owned()),
+            component: "pax".to_owned(),
+            affected_version: None,
+            prepared_by: PreparedBy::Pax,
+            boot_health: None,
+        };
+        for _ in 0..2 {
+            let handoff = report::handoff_for(&request).expect("a hand-over");
+            let cli = Cli::try_parse_from(&handoff.argv).expect("the hand-over parses");
+            let Command::Report {
+                command: ReportCommand::Submit { fields, .. },
+            } = cli.command
+            else {
+                panic!("the hand-over is not submit: {:?}", handoff.argv);
+            };
+            assert_eq!(fields.title.as_deref(), Some(request.title.as_str()));
+            assert_eq!(fields.kind, Some(KindArg::FailedUpdate));
+            assert_eq!(fields.prepared_by, PreparedByArg::Pax);
+            assert!(fields.include_pax_activity);
+            request.boot_health = Some(report::BootHealthEvidence {
+                notice_kind: "fallback".to_owned(),
+                error_code: None,
+                text: String::new(),
+                failed_check: None,
+                rejected_version: None,
+            });
+        }
     }
 }

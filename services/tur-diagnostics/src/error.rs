@@ -77,6 +77,8 @@ pub enum ErrorKind {
     ReportUnknown,
     /// The prepared report is larger than a receiver accepts.
     ReportTooLarge,
+    /// Sending was asked for inside P@x's read-only sandbox.
+    ReportInPaxSandbox,
     /// No such fault or remedy in the self-healing catalogue.
     HealUnknown,
     /// The fault a remedy was asked for is not present.
@@ -124,7 +126,7 @@ pub struct RegistryEntry {
 
 impl ErrorKind {
     /// Every kind, in registry order.
-    pub const ALL: [ErrorKind; 35] = [
+    pub const ALL: [ErrorKind; 36] = [
         ErrorKind::OutputWrite,
         ErrorKind::OutputExists,
         ErrorKind::BundleRead,
@@ -149,6 +151,7 @@ impl ErrorKind {
         ErrorKind::ReportRecordsUnavailable,
         ErrorKind::ReportUnknown,
         ErrorKind::ReportTooLarge,
+        ErrorKind::ReportInPaxSandbox,
         ErrorKind::HealUnknown,
         ErrorKind::HealNotPresent,
         ErrorKind::HealNeedsApproval,
@@ -455,6 +458,22 @@ impl ErrorKind {
                 recovery: "Prepare the report again with --since-boot, or share a bundle made \
                            with 'tur-diag collect' yourself.",
             },
+            ErrorKind::ReportInPaxSandbox => RegistryEntry {
+                kind: self,
+                code: "TUR-DIAG-REPORT-013",
+                title: "Reports are not sent from P@x's sandbox",
+                severity: Severity::Error,
+                detection: "'tur-diag report send' or 'submit' ran with the host name of P@x's \
+                            read-only sandbox (tur-pax-sandbox).",
+                user_message: "A problem report is sent only by you, never by P@x. Nothing was \
+                               sent.",
+                explanation: "P@x's commands run in a sandbox with its own host name and no \
+                              network. P@x can prepare and show a report; sending it is the \
+                              person's act (ADR-0024), so tur-diag refuses to send from there \
+                              even before the missing network would stop it.",
+                recovery: "Run 'tur-diag report submit' yourself, in a terminal, read the \
+                           report and type yes.",
+            },
             ErrorKind::HealUnknown => RegistryEntry {
                 kind: self,
                 code: "TUR-DIAG-HEAL-001",
@@ -730,6 +749,7 @@ mod tests {
             (ErrorKind::ReportRecordsUnavailable, "TUR-DIAG-REPORT-010"),
             (ErrorKind::ReportUnknown, "TUR-DIAG-REPORT-011"),
             (ErrorKind::ReportTooLarge, "TUR-DIAG-REPORT-012"),
+            (ErrorKind::ReportInPaxSandbox, "TUR-DIAG-REPORT-013"),
             (ErrorKind::HealUnknown, "TUR-DIAG-HEAL-001"),
             (ErrorKind::HealNotPresent, "TUR-DIAG-HEAL-002"),
             (ErrorKind::HealNeedsApproval, "TUR-DIAG-HEAL-003"),
