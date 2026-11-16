@@ -18,7 +18,7 @@ Subsystem:        application compatibility: a new route between native
                   router (services/tur-catalogue), the installer back end
                   (services/tur-apps), the application centre's vocabulary
 Build ID:         none: nothing was built (CI unavailable)
-Source revision:  feat/rehost-route (pull request PR_NUMBER)
+Source revision:  feat/rehost-route (pull request 146)
 
 SUMMARY
 - What changed: the experiment's prototype became a TUR component,
